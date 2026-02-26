@@ -64,6 +64,17 @@ function normalizeStored(raw: StoredProposedPlan): StoredPlan {
       }
     : raw.plan;
 
+  // Backward compat: old plans may not have plan_markdown.
+  // Generate a minimal fallback so the frontend can render something.
+  if (!normalizedPlan.plan_markdown) {
+    const title = normalizedPlan.title || normalizedPlan.dataset_name || 'Plan';
+    const objective = normalizedPlan.objective ? `> ${normalizedPlan.objective}\n\n` : '';
+    const steps = (normalizedPlan.execution_steps ?? [])
+      .map(s => `- [ ] ${s.step}`)
+      .join('\n');
+    normalizedPlan.plan_markdown = `# ${title}\n\n${objective}${steps || '_No steps configured_'}`;
+  }
+
   return {
     datasetId: raw.datasetId,
     plan: normalizedPlan,
@@ -310,6 +321,43 @@ export async function failPlan(
     });
   } catch (error) {
     console.error("[proposed-plan-store] Failed to mark plan as failed:", error);
+  }
+}
+
+/**
+ * Update only the plan_markdown field (preserves status, executionProgress, etc.)
+ * Used by the update_plan_markdown tool during agent-driven execution.
+ */
+export async function updateStoredPlanMarkdown(
+  datasetId: string,
+  planMarkdown: string,
+): Promise<void> {
+  try {
+    const stored = await getStoredPlan(datasetId);
+    if (!stored) {
+      console.warn("[proposed-plan-store] No plan found to update markdown for:", datasetId);
+      return;
+    }
+
+    const db = await getDB();
+    if (!hasStore(db)) return;
+
+    const updated: StoredPlan = {
+      ...stored,
+      plan: { ...stored.plan, plan_markdown: planMarkdown },
+      updatedAt: Date.now(),
+    };
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("proposedPlans", "readwrite");
+      const store = tx.objectStore("proposedPlans");
+      const request = store.put(updated);
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.error("[proposed-plan-store] Failed to update plan markdown:", error);
   }
 }
 

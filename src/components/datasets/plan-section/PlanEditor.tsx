@@ -22,12 +22,9 @@ import {
 } from '@/components/ui/alert-dialog';
 import type { Plan } from '@/lib/distri-finetune-tools/steps/propose-plan';
 import LazyMarkdownRenderer from '@/components/chat/LazyMarkdownRenderer';
-import { planToMarkdown, markdownToPlan } from './plan-markdown-utils';
+import { markdownToPlan } from './plan-markdown-utils';
 import { PlanHeaderActions } from './PlanHeaderActions';
 import { PlanModeToggle } from './PlanModeToggle';
-
-// Re-export for backwards compatibility
-export { planToMarkdown } from './plan-markdown-utils';
 
 interface PlanEditorProps {
   plan: Plan;
@@ -36,12 +33,14 @@ interface PlanEditorProps {
 }
 
 export function PlanEditor({ plan, onApprove, onDismiss }: PlanEditorProps) {
-  const initialMarkdown = useMemo(() => planToMarkdown(plan), [plan]);
+  const initialMarkdown = useMemo(() => plan.plan_markdown, [plan]);
   const [markdown, setMarkdown] = useState(initialMarkdown);
   const [isPreview, setIsPreview] = useState(true);
 
   const handleApprove = useCallback(() => {
+    // Parse structured fields from edited markdown, then persist the raw markdown
     const updatedPlan = markdownToPlan(markdown, plan);
+    updatedPlan.plan_markdown = markdown;
     onApprove(updatedPlan);
   }, [markdown, plan, onApprove]);
 

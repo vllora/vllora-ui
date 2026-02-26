@@ -10,15 +10,14 @@
  */
 
 import { Eye, Pencil, Sparkles, Loader2, FolderOpen, AlertCircle, CheckCircle2, XCircle, ArrowLeftRight } from "lucide-react";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { useChatStateStore } from "@distri/react";
-import { PlanEditor, planToMarkdown } from "./plan-section/PlanEditor";
+import { PlanEditor } from "./plan-section/PlanEditor";
 import LazyMarkdownRenderer from "@/components/chat/LazyMarkdownRenderer";
 import { emitter } from "@/utils/eventEmitter";
 import type { Plan } from "@/lib/distri-finetune-tools/steps/propose-plan";
 import type { PlanStatus } from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
-import type { ExecutionProgress, ExecutionStep, ExecutionStepStatus } from "@/lib/distri-finetune-tools/steps/execute-plan";
 import type { PlanDiff } from "./plan-section/plan-markdown-utils";
 import { WorkspaceTabsConsumer } from "@/contexts/WorkspaceTabsContext";
 
@@ -34,7 +33,6 @@ interface PlanPreviewProps {
   isGenerating: boolean;
   isLoadingPlan: boolean;
   isExecuting: boolean;
-  executionProgress?: ExecutionProgress | null;
   hasKnowledgeSources: boolean;
 }
 
@@ -50,7 +48,6 @@ export function PlanPreview({
   isGenerating,
   isLoadingPlan,
   isExecuting,
-  executionProgress,
   hasKnowledgeSources,
 }: PlanPreviewProps) {
   // Show loading spinner while IndexedDB is being read on mount
@@ -86,7 +83,6 @@ export function PlanPreview({
             onModeChange={onModeChange}
             onApprove={onApprove}
             isExecuting={isExecuting}
-            executionProgress={executionProgress}
             isActionable={isActionable}
           />
         )
@@ -102,322 +98,11 @@ export function PlanPreview({
 }
 
 // ---------------------------------------------------------------------------
-// Plan markdown with live checkbox updates during execution
+// Plan markdown — pure renderer of agent-authored plan_markdown
 // ---------------------------------------------------------------------------
 
-/**
- * Maps execution progress step IDs to plan execution_step indices.
- *
- * Preferred: uses the explicit `step_id` field on each execution_step (added in Feb 2026).
- * Fallback: keyword matching on the step name for legacy plans without step_id.
- */
-function buildCompletedStepIndices(
-  executionSteps: Plan['execution_steps'],
-  progress: ExecutionProgress | null | undefined
-): Set<number> | undefined {
-  if (!progress || !executionSteps) return undefined;
-
-  // Treat both 'completed' and 'skipped' as done — skipped means the step
-  // was already completed in a prior run and didn't need to re-execute
-  const doneIds = new Set(
-    progress.steps
-      .filter(s => s.status === 'completed' || s.status === 'skipped')
-      .map(s => s.id)
-  );
-
-  if (doneIds.size === 0) return undefined;
-
-  const indices = new Set<number>();
-  executionSteps.forEach((step, index) => {
-    // Preferred: explicit step_id mapping (reliable, 1:1)
-    if (step.step_id) {
-      if (doneIds.has(step.step_id)) {
-        indices.add(index);
-      }
-      return;
-    }
-
-    // Fallback: keyword matching for legacy plans without step_id
-    const lower = step.step.toLowerCase();
-    const matched =
-      (lower.includes('topic') && (doneIds.has('topics') || doneIds.has('adjust_topics'))) ||
-      ((lower.includes('generate') || lower.includes('data')) && doneIds.has('generate')) ||
-      ((lower.includes('evaluat') || lower.includes('configur') || lower.includes('grader')) && doneIds.has('grader')) ||
-      ((lower.includes('dry') || lower.includes('evaluation')) && doneIds.has('dryrun')) ||
-      (lower.includes('upload') && doneIds.has('upload')) ||
-      ((lower.includes('fine') || lower.includes('train') || lower.includes('setup')) && doneIds.has('finetune'));
-
-    if (matched) indices.add(index);
-  });
-
-  return indices.size > 0 ? indices : undefined;
-}
-
-/**
- * Format detail strings for display.
- * - Converts legacy "Job ID: {full-uuid}" → clickable markdown links
- * - Strips redundant "Topics: ..." and "Criteria: ..." lines (shown in sections below)
- * New executions already produce clean details from buildCompletedStepDetails.
- */
-function formatStepDetails(details: string[], stepId: string): string[] {
-  const UUID_RE = /^Job ID:\s*(([0-9a-f]{6})[0-9a-f-]+)$/i;
-  return details
-    .filter(d => !d.startsWith('Topics:') && !d.startsWith('Criteria:') && !d.startsWith('Status:'))
-    .map(d => {
-      const match = d.match(UUID_RE);
-      if (match) {
-        const fullId = match[1];
-        const short = match[2];
-        if (stepId === 'dryrun') return `[eval-${short}](evaluations/jobs/${fullId})`;
-        if (stepId === 'finetune') return `[ft-${short}](finetune/${fullId})`;
-        return `Job: ${short}`;
-      }
-      return d;
-    });
-}
-
-/**
- * Maps execution step indices → detail sub-items + status.
- * Uses progress data when available, falls back to plan data for pending steps.
- */
-function buildStepDetails(
-  executionSteps: Plan['execution_steps'],
-  progress: ExecutionProgress | null | undefined,
-  plan: Plan
-): Map<number, { details: string[]; status: ExecutionStepStatus }> | undefined {
-  if (!executionSteps?.length) return undefined;
-
-  const result = new Map<number, { details: string[]; status: ExecutionStepStatus }>();
-
-  // Build lookup: step_id → progress step (for matching)
-  const progressById = new Map<string, ExecutionStep>();
-  if (progress?.steps) {
-    for (const s of progress.steps) {
-      progressById.set(s.id, s);
-    }
-  }
-
-  // Keyword-based matching for legacy plans without step_id.
-  // Order matters: "dryrun" must come before "grader" because
-  // "Run evaluation" contains "evaluat" which would match the grader keywords.
-  const STEP_KEYWORDS: [string, string[]][] = [
-    ['topics', ['topic']],
-    ['adjust_topics', ['adjust']],
-    ['categorize', ['categoriz']],
-    ['generate', ['generate', 'data']],
-    ['dryrun', ['dry', 'run evaluation', 'run eval']],
-    ['grader', ['evaluat', 'configur', 'grader', 'quality']],
-    ['upload', ['upload']],
-    ['finetune', ['fine', 'train', 'setup']],
-  ];
-
-  executionSteps.forEach((step, index) => {
-    // Find matching progress step
-    let progressStep: ExecutionStep | undefined;
-    let matchedStepId = step.step_id || '';
-
-    if (step.step_id) {
-      progressStep = progressById.get(step.step_id);
-    } else {
-      // Keyword fallback
-      const lower = step.step.toLowerCase();
-      for (const [stepId, keywords] of STEP_KEYWORDS) {
-        if (keywords.some(k => lower.includes(k))) {
-          progressStep = progressById.get(stepId);
-          matchedStepId = stepId;
-          break;
-        }
-      }
-    }
-
-    // If we have progress data with details, use it (formatted for display)
-    if (progressStep?.details?.length) {
-      result.set(index, {
-        details: formatStepDetails(progressStep.details, matchedStepId),
-        status: progressStep.status,
-      });
-      return;
-    }
-
-    // For failed steps, show error as detail
-    if (progressStep?.status === 'failed' && progressStep.error) {
-      result.set(index, {
-        details: [progressStep.error],
-        status: 'failed',
-      });
-      return;
-    }
-
-    // For running steps, show the message
-    if (progressStep?.status === 'running') {
-      result.set(index, {
-        details: [progressStep.message || 'In progress...'],
-        status: 'running',
-      });
-      return;
-    }
-
-    // For pending steps (no progress yet), generate "Target: ..." from plan data
-    if (!progressStep || progressStep.status === 'pending') {
-      const pendingDetails = buildPendingDetails(step, plan);
-      if (pendingDetails.length > 0) {
-        result.set(index, {
-          details: pendingDetails,
-          status: 'pending',
-        });
-      }
-    }
-  });
-
-  return result.size > 0 ? result : undefined;
-}
-
-/** Generate "Target: ..." detail lines from plan data for pending steps */
-function buildPendingDetails(
-  step: NonNullable<Plan['execution_steps']>[number],
-  plan: Plan
-): string[] {
-  const lower = step.step.toLowerCase();
-  const stepId = step.step_id || '';
-
-  if (stepId === 'topics' || lower.includes('topic')) {
-    const count = plan.total_topic_count || plan.proposed_topics?.length || 0;
-    return count > 0 ? [`Target: ${count} topics`] : [];
-  }
-
-  if (stepId === 'generate' || (lower.includes('generate') || lower.includes('data'))) {
-    const records = plan.estimated_records || 0;
-    const topicCount = plan.total_topic_count || plan.proposed_topics?.length || 0;
-    if (records > 0 && topicCount > 0) {
-      return [`Target: ${records} records across ${topicCount} topics`];
-    } else if (records > 0) {
-      return [`Target: ${records} records`];
-    }
-    return [];
-  }
-
-  // "Run evaluation" / "dry run" must be checked BEFORE generic "evaluat"/"configur"
-  // because "Run evaluation" contains "evaluat" which would match the grader branch
-  if (stepId === 'dryrun' || lower.includes('dry') || lower.includes('run evaluation') || lower.includes('run eval')) {
-    return ['Will evaluate a sample of records'];
-  }
-
-  if (stepId === 'grader' || lower.includes('evaluat') || lower.includes('configur') || lower.includes('grader') || lower.includes('quality')) {
-    const criteria = plan.grader_config?.criteria ?? [];
-    if (criteria.length > 0) {
-      const names = criteria.map(c => c.name);
-      const display = names.length <= 4
-        ? names.join(', ')
-        : names.slice(0, 4).join(', ') + `, +${names.length - 4} more`;
-      return [`${criteria.length} criteria: ${display}`];
-    }
-    return [];
-  }
-
-  return [];
-}
-
-/** User-friendly labels for step IDs not already in execution_steps */
-const STEP_DISPLAY_NAMES: Record<string, string> = {
-  topics: 'Apply Topics',
-  adjust_topics: 'Adjust Topics',
-  categorize: 'Categorize Records',
-  generate: 'Generate Data',
-  grader: 'Configure Evaluator',
-  upload: 'Upload Dataset',
-  dryrun: 'Run Evaluation',
-  finetune: 'Start Finetune Job',
-};
-
-/** Steps that are internal/technical and should not appear in the user-facing checklist */
-const HIDDEN_STEPS = new Set(['upload', 'adjust_topics', 'categorize']);
-
-/**
- * Augment plan.execution_steps with any executed steps that the agent
- * omitted (e.g. finetune). Returns the original array if nothing
- * is missing, or a new array with synthetic entries appended.
- * Internal steps (upload, adjust_topics, categorize) are excluded.
- */
-function augmentExecutionSteps(
-  executionSteps: Plan['execution_steps'],
-  progress: ExecutionProgress | null | undefined,
-  plan: Plan
-): Plan['execution_steps'] {
-  if (!executionSteps?.length) return executionSteps;
-
-  // Collect step_ids already present in the plan checklist
-  const existingIds = new Set<string>();
-  for (const s of executionSteps) {
-    if (s.step_id) existingIds.add(s.step_id);
-  }
-
-  // Collect step_ids that actually ran (from progress) or are scheduled (from plan)
-  const executedIds: string[] = [];
-  if (progress?.steps) {
-    for (const s of progress.steps) {
-      // Only include steps that actually did something (not skipped idle steps)
-      if (s.status !== 'skipped' && s.status !== 'pending') {
-        executedIds.push(s.id);
-      }
-    }
-  }
-  // Also check steps_to_execute from the plan (for pre-execution view)
-  const plannedIds = (plan.steps_to_execute as string[] | undefined) ?? [];
-
-  // Merge: prefer executed (live) over planned
-  const allIds = new Set([...executedIds, ...plannedIds]);
-
-  // Find missing steps (skip hidden internal steps)
-  const missing: NonNullable<Plan['execution_steps']> = [];
-  for (const id of allIds) {
-    if (HIDDEN_STEPS.has(id)) continue;
-    if (!existingIds.has(id)) {
-      missing.push({
-        step: STEP_DISPLAY_NAMES[id] || id,
-        step_id: id,
-        description: '',
-        estimated_time: '',
-      });
-    }
-  }
-
-  // Filter out any existing execution_steps that are hidden internal steps
-  const visible = executionSteps.filter(s => !s.step_id || !HIDDEN_STEPS.has(s.step_id));
-
-  if (missing.length === 0 && visible.length === executionSteps.length) return executionSteps;
-  return [...visible, ...missing];
-}
-
-function PlanMarkdownContent({ plan, executionProgress }: { plan: Plan; executionProgress?: ExecutionProgress | null }) {
+function PlanMarkdownContent({ plan }: { plan: Plan }) {
   const { openTab } = WorkspaceTabsConsumer();
-
-  // Augment execution_steps with any missing steps the agent omitted
-  // (e.g. upload, finetune) so they appear in the checklist
-  const fullExecutionSteps = useMemo(
-    () => augmentExecutionSteps(plan.execution_steps, executionProgress, plan),
-    [plan.execution_steps, executionProgress, plan]
-  );
-
-  const completedStepIndices = useMemo(
-    () => buildCompletedStepIndices(fullExecutionSteps, executionProgress),
-    [fullExecutionSteps, executionProgress]
-  );
-
-  const stepDetails = useMemo(
-    () => buildStepDetails(fullExecutionSteps, executionProgress, plan),
-    [fullExecutionSteps, executionProgress, plan]
-  );
-
-  // Create a plan copy with augmented steps for markdown rendering
-  const planForMarkdown = useMemo(
-    () => fullExecutionSteps === plan.execution_steps ? plan : { ...plan, execution_steps: fullExecutionSteps },
-    [plan, fullExecutionSteps]
-  );
-
-  const markdownContent = useMemo(
-    () => planToMarkdown(planForMarkdown, { completedStepIndices, stepDetails }),
-    [planForMarkdown, completedStepIndices, stepDetails]
-  );
 
   // Intercept clicks on internal navigation links (eval/finetune jobs)
   // and route them through the workspace tab system instead of browser navigation.
@@ -438,7 +123,7 @@ function PlanMarkdownContent({ plan, executionProgress }: { plan: Plan; executio
     <div className="flex-1 overflow-auto p-6" onClick={handleClick}>
       <div className="max-w-3xl mx-auto">
         <div className="text-sm [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_table]:text-xs [&_p]:text-sm [&_li]:text-sm [&_blockquote]:text-sm">
-          <LazyMarkdownRenderer content={markdownContent} />
+          <LazyMarkdownRenderer content={plan.plan_markdown} />
         </div>
       </div>
     </div>
@@ -456,7 +141,6 @@ function PlanDisplayView({
   onModeChange,
   onApprove,
   isExecuting,
-  executionProgress,
   isActionable,
 }: {
   plan: Plan;
@@ -465,7 +149,6 @@ function PlanDisplayView({
   onModeChange: (mode: "display" | "edit") => void;
   onApprove: (plan: Plan) => void;
   isExecuting: boolean;
-  executionProgress?: ExecutionProgress | null;
   isActionable: boolean;
 }) {
   // Build human-readable diff summary for banner.
@@ -500,8 +183,8 @@ function PlanDisplayView({
         </div>
       )}
 
-      {/* Plan content — checkboxes update live during execution */}
-      <PlanMarkdownContent plan={plan} executionProgress={executionProgress} />
+      {/* Plan content — agent updates plan_markdown via update_plan_markdown tool */}
+      <PlanMarkdownContent plan={plan} />
 
       {/* Sticky footer — action buttons + status */}
       {(isActionable || isExecuting || planStatus === 'completed' || planStatus === 'failed') && (

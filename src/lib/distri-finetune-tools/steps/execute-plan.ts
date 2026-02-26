@@ -15,6 +15,9 @@ import * as workflowDB from '@/services/finetune-workflow-db';
 import type { ToolHandler } from '../types';
 import type { Plan } from './propose-plan';
 import type { TopicHierarchyNode } from '@/types/dataset-types';
+// NOTE: executeFinetuneTool is imported lazily (dynamic import) inside
+// executeDynamicSteps() to avoid a circular dependency:
+//   execute-plan → ../index → ./steps/index → get-dataset-state → execute-plan
 
 // Import step handlers
 import { applyTopicHierarchyHandler } from './apply-hierarchy';
@@ -628,7 +631,7 @@ export function validatePlanForExecution(
 ): PlanValidationResult {
   const errors: string[] = [];
 
-  // Validate all step IDs are known
+  // Validate step IDs and prerequisites
   for (const id of stepsToRun) {
     if (!STEP_ORDER.includes(id)) {
       errors.push(`Unknown step: '${id}'`);
@@ -676,6 +679,105 @@ const STEP_REGISTRY: Record<ExecutionStepId, StepExecutor> = {
   dryrun:        { name: 'Run Evaluation',          workflowStep: 'dry_run',             execute: executeDryRun,   nonFatal: true },
   finetune:      { name: 'Start Finetune Job',                                           execute: executeFinetune, nonFatal: true },
 };
+
+// =============================================================================
+// Dynamic Execution (for generic plans)
+// =============================================================================
+
+/**
+ * Execute a generic plan's dynamic_steps by dispatching tools by name.
+ * Emits the same vllora_plan_progress events as finetune execution.
+ */
+async function executeDynamicSteps(
+  datasetId: string,
+  plan: Plan,
+  progress: ExecutionProgress,
+): Promise<{ success: boolean; error?: string }> {
+  const dynamicSteps = plan.dynamic_steps ?? [];
+
+  const updateStep = (stepId: string, updates: Partial<ExecutionStep>): void => {
+    const step = progress.steps.find((s) => s.id === stepId);
+    if (step) {
+      Object.assign(step, updates);
+      emitProgress(progress);
+    }
+  };
+
+  // Build a set of completed step IDs for dependency resolution
+  const completedStepIds = new Set<string>();
+
+  for (let i = 0; i < dynamicSteps.length; i++) {
+    const ds = dynamicSteps[i];
+
+    // Check cancellation
+    if (isExecutionCancelled(datasetId)) {
+      clearCancellation(datasetId);
+      for (const s of progress.steps) {
+        if (s.status === 'pending') s.status = 'skipped';
+      }
+      progress.is_complete = true;
+      progress.has_error = true;
+      emitProgress(progress);
+      return { success: false, error: 'Execution cancelled by user' };
+    }
+
+    // Check dependencies
+    if (ds.depends_on?.length) {
+      const unmet = ds.depends_on.filter(dep => !completedStepIds.has(dep));
+      if (unmet.length > 0) {
+        updateStep(ds.id, {
+          status: 'failed',
+          error: `Unmet dependencies: ${unmet.join(', ')}`,
+          details: [`Blocked by: ${unmet.join(', ')}`],
+        });
+        progress.has_error = true;
+        continue; // Skip this step but continue with others
+      }
+    }
+
+    progress.current_step = i;
+    updateStep(ds.id, { status: 'running', message: `${ds.label}...` });
+
+    try {
+      // Lazy import to break circular dependency (see comment at top of file)
+      const { executeFinetuneTool } = await import('../index');
+      // Dispatch the tool by name with its params
+      const result = await executeFinetuneTool(ds.tool_name, {
+        ...ds.tool_params,
+        dataset_id: datasetId,
+      });
+
+      const resultObj = result as Record<string, unknown>;
+      if (resultObj && resultObj.success === false) {
+        throw new Error((resultObj.error as string) || `${ds.tool_name} failed`);
+      }
+
+      // Extract detail strings from result if available
+      const details: string[] = [];
+      if (resultObj?.message) details.push(resultObj.message as string);
+
+      updateStep(ds.id, {
+        status: 'completed',
+        message: `${ds.label} completed`,
+        result,
+        details: details.length > 0 ? details : undefined,
+      });
+      completedStepIds.add(ds.id);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      updateStep(ds.id, {
+        status: 'failed',
+        error: errorMessage,
+        details: [errorMessage],
+      });
+      progress.has_error = true;
+      // For generic plans, a failed step aborts the pipeline
+      return { success: false, error: `Step "${ds.label}" failed: ${errorMessage}` };
+    }
+  }
+
+  return { success: true };
+}
 
 // =============================================================================
 // Main Handler (registry-based loop)
@@ -737,6 +839,67 @@ export const executePlanHandler: ToolHandler = async (
     if (!dataset) {
       return { success: false, error: `Dataset ${dataset_id} not found` };
     }
+
+    // =========================================================================
+    // Generic plan execution path (dynamic steps)
+    // =========================================================================
+    if (plan.plan_type === 'generic') {
+      const dynamicSteps = plan.dynamic_steps ?? [];
+      if (dynamicSteps.length === 0) {
+        return { success: false, error: 'Generic plan has no dynamic_steps to execute.' };
+      }
+
+      updatePlanStatus(dataset_id, 'executing');
+
+      // Build progress from dynamic_steps
+      progress = {
+        dataset_id,
+        current_step: 0,
+        total_steps: dynamicSteps.length,
+        steps: dynamicSteps.map((ds) => ({
+          id: ds.id,
+          name: ds.label,
+          status: 'pending' as const,
+        })),
+        is_complete: false,
+        has_error: false,
+      };
+
+      summary = {
+        topics_created: 0,
+        records_generated: 0,
+        grader_configured: false,
+        dry_run_completed: false,
+        ready_to_finetune: false,
+      };
+
+      emitProgress(progress);
+
+      const dynamicResult = await executeDynamicSteps(dataset_id, plan, progress);
+
+      progress.is_complete = true;
+      progress.has_error = !dynamicResult.success;
+      emitProgress(progress);
+
+      if (dynamicResult.success) {
+        await completePlanInDB(dataset_id, progress);
+        emitter.emit('vllora_workflow_updated', { datasetId: dataset_id });
+      } else {
+        await failPlanInDB(dataset_id, progress);
+      }
+
+      return {
+        success: dynamicResult.success,
+        error: dynamicResult.error,
+        execution_id: executionId,
+        final_status: progress,
+        summary,
+      };
+    }
+
+    // =========================================================================
+    // Finetune plan execution path (step registry)
+    // =========================================================================
 
     // Get or create workflow
     let workflow = await workflowDB.getWorkflowByDataset(dataset_id);
@@ -976,14 +1139,11 @@ export const executePlanHandler: ToolHandler = async (
 
 export const executePlanTool: DistriFnTool = {
   name: 'execute_plan',
-  description: `Execute an approved plan. Runs steps from the plan's steps_to_execute in order.
+  description: `DEPRECATED: Prefer calling tools directly (apply_topic_hierarchy, generate_initial_data, etc.) + update_plan_markdown after each step.
 
-Available steps: ${STEP_ORDER.join(', ')}
+This tool still works for backward compatibility. It runs steps from the plan's steps_to_execute in order.
 
-The plan embeds which steps to run (steps_to_execute) and parameter overrides.
-For fresh execution after plan approval, call with just dataset_id.
-For smart resume, first call get_dataset_state, then pass only
-the remaining steps via steps_to_execute.`,
+Available steps: ${STEP_ORDER.join(', ')}`,
   type: 'function',
   parameters: {
     type: 'object',

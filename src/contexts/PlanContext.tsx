@@ -349,16 +349,19 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
 
   // Actions
   const approvePlan = useCallback((plan: Plan) => {
-    // Validate before approving
-    const stepsToRun = new Set<ExecutionStepId>(plan.steps_to_execute ?? STEP_ORDER);
-    const validation = validatePlanForExecution(plan, stepsToRun, plan.overrides);
-    if (!validation.valid) {
-      const errorMsg = validation.errors.join('; ');
-      toast.error('Plan has issues', { description: validation.errors[0] });
-      emitter.emit('vllora_lucy_prompt', {
-        prompt: `The plan failed validation and cannot be approved. Error: "${errorMsg}". Please fix the plan and re-propose it using adjust_plan followed by save_plan.`,
-      });
-      return; // Block approval
+    // Validate before approving (only if steps_to_execute is present —
+    // agent-driven plans don't use it, the agent calls tools directly)
+    if (plan.steps_to_execute?.length) {
+      const stepsToRun = new Set<ExecutionStepId>(plan.steps_to_execute ?? STEP_ORDER);
+      const validation = validatePlanForExecution(plan, stepsToRun, plan.overrides);
+      if (!validation.valid) {
+        const errorMsg = validation.errors.join('; ');
+        toast.error('Plan has issues', { description: validation.errors[0] });
+        emitter.emit('vllora_lucy_prompt', {
+          prompt: `The plan failed validation and cannot be approved. Error: "${errorMsg}". Please fix the plan and re-propose it using adjust_plan followed by save_plan.`,
+        });
+        return; // Block approval
+      }
     }
 
     // Update plan status to 'approved' in IndexedDB (keep the plan data!)

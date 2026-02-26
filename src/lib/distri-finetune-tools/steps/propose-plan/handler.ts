@@ -98,7 +98,17 @@ export const proposePlanHandler: ToolHandler = async (
       objective: agentPlan.objective || dataset.datasetObjective || '',
     };
 
-    // --- Normalize topics (LLMs often get counts wrong) ---
+    // plan_markdown is required — the agent must provide the full markdown
+    if (!plan.plan_markdown?.trim()) {
+      return {
+        success: false,
+        error: 'plan_markdown is required. Write the full plan as markdown with a checklist (- [ ] Step 1, etc.).',
+      };
+    }
+
+    // --- Normalize finetune data fields if present ---
+
+    // Normalize topics (LLMs often get counts wrong)
     if (plan.proposed_topics?.length) {
       plan.proposed_topics = normalizeTargetCounts(plan.proposed_topics);
       const leafCount = countLeafs(plan.proposed_topics);
@@ -113,35 +123,26 @@ export const proposePlanHandler: ToolHandler = async (
       plan.estimated_records = calcRecords(plan.proposed_topics);
     }
 
-    // --- Validate output_format ---
+    // Validate output_format
     validateOutputFormat(plan);
 
-    // --- Normalize execution step IDs (legacy compatibility + unknown filtering) ---
-    const rawSteps = Array.isArray(plan.steps_to_execute)
-      ? (plan.steps_to_execute as unknown as string[])
-      : undefined;
-    const stepNormalization = normalizePlanSteps(rawSteps, { fallbackToDefaultWhenEmpty: true });
-    if (stepNormalization.hadInput) {
-      if (stepNormalization.strippedLegacySteps.length > 0) {
-        console.log(
-          `[proposePlan] Stripped legacy steps: ${stepNormalization.strippedLegacySteps.join(', ')}`
-        );
+    // Normalize execution step IDs if provided (backward compat)
+    if (plan.steps_to_execute?.length) {
+      const rawSteps = plan.steps_to_execute as unknown as string[];
+      const stepNormalization = normalizePlanSteps(rawSteps, { fallbackToDefaultWhenEmpty: true });
+      if (stepNormalization.hadInput) {
+        if (stepNormalization.strippedLegacySteps.length > 0) {
+          console.log(
+            `[proposePlan] Stripped legacy steps: ${stepNormalization.strippedLegacySteps.join(', ')}`
+          );
+        }
+        if (stepNormalization.unknownSteps.length > 0) {
+          console.warn(
+            `[proposePlan] Removed unknown step IDs: ${stepNormalization.unknownSteps.join(', ')}`
+          );
+        }
+        plan.steps_to_execute = stepNormalization.steps as unknown as Plan['steps_to_execute'];
       }
-      if (stepNormalization.unknownSteps.length > 0) {
-        console.warn(
-          `[proposePlan] Removed unknown step IDs: ${stepNormalization.unknownSteps.join(', ')}`
-        );
-      }
-      plan.steps_to_execute = stepNormalization.steps as unknown as Plan['steps_to_execute'];
-    }
-
-    // --- Default execution_steps if missing ---
-    if (!plan.execution_steps?.length) {
-      plan.execution_steps = (plan.steps_to_execute ?? []).map((id) => ({
-        step: id,
-        description: id,
-        estimated_time: '~1 min',
-      }));
     }
 
     // Persist to IndexedDB so it survives page refresh

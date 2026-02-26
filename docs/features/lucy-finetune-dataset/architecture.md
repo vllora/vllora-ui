@@ -14,7 +14,7 @@ The Lucy Dataset Agent follows a **3-tier architecture** with tools executing lo
 │  ┌────────────────────────┐   ┌─────────────────────────────────────┐  │
 │  │ LucyDatasetAssistant   │   │    distri-finetune-tools/           │  │
 │  │ - Sidebar UI           │   │    - Workflow tools (4)             │  │
-│  │ - Auto-analysis        │   │    - Step tools (34)                │  │
+│  │ - Auto-analysis        │   │    - Step tools (35)                │  │
 │  │ - Quick actions        │   │    - Execute locally in browser     │  │
 │  └────────────────────────┘   └─────────────────────────────────────┘  │
 │           │                              │                              │
@@ -44,7 +44,7 @@ The Lucy Dataset Agent follows a **3-tier architecture** with tools executing lo
 │  ┌───────────────────────┐   ┌────────────────────────────────────────┐│
 │  │   AgentOrchestrator   │   │     vllora-finetune-agent.md           ││
 │  │   - Loads agent defs  │◄──│     - Model: gpt-4.1                   ││
-│  │   - Tool execution    │   │     - 13 external + 3 builtin tools    ││
+│  │   - Tool execution    │   │     - 14 external + 3 builtin tools    ││
 │  │   - Message routing   │   │     - max_iterations: 30               ││
 │  │   - Sub-agent mgmt    │   │     - 3 sub-agents (topics, workflow,  ││
 │  │                       │   │       data_generation)                  ││
@@ -72,7 +72,7 @@ The Lucy Dataset Agent follows a **3-tier architecture** with tools executing lo
 | External Tool Timeout | `600s` (10 min for user responses) |
 | Sub-Agents | `finetune_topics`, `finetune_workflow`, `data_generation` |
 | Builtin Tools | 3 (`final`, `write_todos`, `transfer_to_agent`) |
-| External Tools | 13 (`ask_follow_up`, `get_workflow_status`, `get_dataset_state`, `get_dataset_records`, `update_objective`, `analyze_knowledge_sources`, `search_knowledge`, `generate_topics`, `generate_grader`, `propose_plan`, `adjust_plan`, `save_plan`, `execute_plan`) |
+| External Tools | 14 (`ask_follow_up`, `get_workflow_status`, `get_dataset_state`, `get_dataset_records`, `update_objective`, `analyze_knowledge_sources`, `search_knowledge`, `generate_topics`, `generate_grader`, `propose_plan`, `adjust_plan`, `save_plan`, `execute_plan`, `update_plan_markdown`) |
 
 The orchestrator is the main agent users interact with. It handles plan-first routing (detecting when to create plans from knowledge sources), delegates specialized work to sub-agents via `transfer_to_agent`, and calls some tools directly (plan system, knowledge analysis, dataset access).
 
@@ -117,7 +117,7 @@ vllora_finetune_agent (Orchestrator)
 - **Tool overlap**: Some tools appear on multiple agents (e.g., `get_dataset_records` on orchestrator + topics + data_generation) to allow each agent to access what it needs
 
 **Agent Definition Files** (`gateway/agents/finetune/`):
-- `vllora-finetune-agent.md` — Orchestrator (13 external + 3 builtin tools)
+- `vllora-finetune-agent.md` — Orchestrator (14 external + 3 builtin tools)
 - `finetune-topics-agent.md` — Topics specialist (5 external tools)
 - `finetune-workflow-agent.md` — Workflow executor (22 external tools)
 - `data-generation-agent.md` — Data generation specialist (12 external tools)
@@ -265,7 +265,7 @@ const tools = useMemo<DistriAnyTool[]>(
 );
 ```
 
-- `finetuneTools`: All 38 function tools (4 workflow + 34 step tools)
+- `finetuneTools`: All 39 function tools (4 workflow + 35 step tools)
 - `createAskFollowUpTool()`: UI tool for presenting options to users
 
 **Context Injection Pattern:**
@@ -289,7 +289,7 @@ distri-finetune-tools/
 ├── workflow/
 │   └── index.ts          # 4 workflow control tools
 ├── steps/
-│   ├── index.ts                  # Aggregates all 34 step tools
+│   ├── index.ts                  # Aggregates all 35 step tools
 │   ├── generate-topics/          # Topic generation (frontend + backend)
 │   │   ├── frontend.ts           # LLM-based generation
 │   │   ├── backend.ts            # Template-based generation
@@ -333,7 +333,8 @@ distri-finetune-tools/
 │   ├── update-objective.ts       # Update dataset objective/goals
 │   ├── regenerate-readme.ts      # README regeneration tool
 │   ├── save-plan.ts              # Persist plan to IndexedDB
-│   ├── execute-plan.ts           # Registry-based plan execution
+│   ├── execute-plan.ts           # Registry-based plan execution (deprecated)
+│   ├── update-plan-markdown.ts   # Agent updates plan display during execution
 │   ├── plan-step-normalization.ts  # Step ID normalization utilities
 │   ├── execution-state-store.ts  # In-memory execution cache (write-through to IndexedDB)
 │   ├── proposed-plan-store.ts    # IndexedDB plan persistence with lifecycle status tracking
@@ -356,7 +357,7 @@ distri-finetune-tools/
 | `advance_to_step` | Move to next step (with skip support) |
 | `rollback_to_step` | Return to previous step via snapshots |
 
-#### Step Tools (34)
+#### Step Tools (35)
 
 | Category | Tools |
 |----------|-------|
@@ -369,7 +370,7 @@ distri-finetune-tools/
 | **Dry Run (Step 5)** | `run_evaluation` |
 | **Training (Step 6)** | `start_training`, `check_training_status` |
 | **Deploy (Step 7)** | `deploy_model` |
-| **Plan** | `propose_plan`, `adjust_plan`, `save_plan`, `execute_plan` |
+| **Plan** | `propose_plan`, `adjust_plan`, `save_plan`, `execute_plan` (deprecated), `update_plan_markdown` |
 | **Data Access** | `get_dataset_records`, `get_dataset_state`, `update_record`, `update_objective`, `validate_records` |
 | **Documentation** | `regenerate_readme` |
 
@@ -446,7 +447,7 @@ interface FinetuneWorkflowState {
 ## Key Design Decisions
 
 ### 1. Frontend Tool Execution
-All 38 tools execute in the browser via JavaScript handlers. This allows:
+All 39 tools execute in the browser via JavaScript handlers. This allows:
 - Direct access to IndexedDB
 - No backend API needed for data operations
 - Real-time UI updates via emitter events
@@ -516,7 +517,7 @@ Workflow snapshots stored in IndexedDB enable:
 
    These must stay in sync manually across 4 agent definition files.
 
-2. **Browser-Only Execution** - All 38 tools execute in browser. For operations like `start_training` or `deploy_model`, consider:
+2. **Browser-Only Execution** - All 39 tools execute in browser. For operations like `start_training` or `deploy_model`, consider:
    - Access to GPU resources
    - Long-running jobs
    - Secure API key handling

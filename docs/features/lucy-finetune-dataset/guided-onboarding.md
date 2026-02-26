@@ -19,14 +19,14 @@ assess state → (analyze if needed) → construct plan → propose → approve 
 3. **Construct plan**: Lucy builds a `Plan` object based on state + analysis + user intent
 4. **Propose**: Lucy calls `propose_plan({ dataset_id, plan })` — tool persists to IndexedDB, emits event, UI shows plan card
 5. **Approve**: User reviews plan in UI, clicks "Approve & Execute"
-6. **Execute**: Lucy calls `execute_plan` — runs steps sequentially, emits progress
+6. **Execute**: Lucy calls individual tools directly (apply_topic_hierarchy, generate_initial_data, etc.) and updates the plan checklist via `update_plan_markdown` after each step
 
 ### Plan Lifecycle
 
 ```
-propose → [UI shows plan card] → approve → validate → execute → complete/fail
-                                    ↑           ↓
-                               adjust (edit)  toast.error (if invalid)
+propose → [UI renders plan_markdown] → approve → agent calls tools directly → complete/fail
+                                          ↑                    ↓
+                                     adjust (edit)    update_plan_markdown (check off steps)
 ```
 
 ### Step Registry

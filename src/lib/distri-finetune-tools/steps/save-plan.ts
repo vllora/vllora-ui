@@ -50,20 +50,18 @@ function validatePlan(plan: Plan): string[] {
     errors.push('objective must not be empty');
   }
 
-  const rawSteps = Array.isArray(plan.steps_to_execute)
-    ? (plan.steps_to_execute as unknown as string[])
-    : undefined;
-  const stepNormalization = normalizePlanSteps(rawSteps);
-  if (stepNormalization.unknownSteps.length > 0) {
-    errors.push(`steps_to_execute contains unknown IDs: ${stepNormalization.unknownSteps.join(', ')}`);
+  // plan_markdown is required — the agent must provide the full markdown
+  if (!plan.plan_markdown?.trim()) {
+    errors.push('plan_markdown must not be empty');
   }
 
-  if (!plan.steps_to_execute?.length) {
-    errors.push('steps_to_execute must not be empty');
-  }
-
-  if (!plan.execution_steps?.length) {
-    errors.push('execution_steps must not be empty');
+  // Validate steps_to_execute if present (optional — agent may drive execution directly)
+  if (plan.steps_to_execute?.length) {
+    const rawSteps = plan.steps_to_execute as unknown as string[];
+    const stepNormalization = normalizePlanSteps(rawSteps);
+    if (stepNormalization.unknownSteps.length > 0) {
+      errors.push(`steps_to_execute contains unknown IDs: ${stepNormalization.unknownSteps.join(', ')}`);
+    }
   }
 
   // Validate proposed_topics if present
@@ -172,19 +170,19 @@ export const savePlanHandler: ToolHandler = async (
       }
     }
 
-    // Normalize step IDs before validation so legacy plans don't fail approval.
-    const rawSteps = Array.isArray(draft.steps_to_execute)
-      ? (draft.steps_to_execute as unknown as string[])
-      : undefined;
-    const stepNormalization = normalizePlanSteps(rawSteps, { fallbackToDefaultWhenEmpty: true });
-    if (stepNormalization.hadInput) {
-      const normalizedStepIds = stepNormalization.steps as unknown as string[];
-      if (!areStepListsEqual(rawSteps, normalizedStepIds)) {
-        draft = {
-          ...draft,
-          steps_to_execute: stepNormalization.steps as unknown as Plan['steps_to_execute'],
-        };
-        await saveProposedPlan(dataset_id, draft);
+    // Normalize step IDs before validation (only if steps_to_execute is present)
+    if (draft.steps_to_execute?.length) {
+      const rawSteps = draft.steps_to_execute as unknown as string[];
+      const stepNormalization = normalizePlanSteps(rawSteps, { fallbackToDefaultWhenEmpty: true });
+      if (stepNormalization.hadInput) {
+        const normalizedStepIds = stepNormalization.steps as unknown as string[];
+        if (!areStepListsEqual(rawSteps, normalizedStepIds)) {
+          draft = {
+            ...draft,
+            steps_to_execute: stepNormalization.steps as unknown as Plan['steps_to_execute'],
+          };
+          await saveProposedPlan(dataset_id, draft);
+        }
       }
     }
 

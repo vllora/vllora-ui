@@ -12,15 +12,18 @@ export const proposePlanTool: DistriFnTool = {
 This tool validates, persists, and displays the plan in the UI for user review.
 It does NOT generate the plan — you (the agent) construct the plan yourself.
 
+IMPORTANT: You MUST provide plan_markdown with the full plan content as markdown.
+The frontend renders this markdown directly. Include a checklist with - [ ] for
+each step you plan to execute. After approval, call tools directly and use
+update_plan_markdown to check off completed steps.
+
 Workflow:
 1. Assess dataset state (use get_dataset_state)
 2. If needed, analyze knowledge sources (use analyze_knowledge_sources)
-3. Construct a plan with execution_steps, steps_to_execute, and any overrides
+3. Construct a plan with plan_markdown containing the full plan + checklist
 4. Call this tool to show the plan to the user
-5. After user approves, call execute_plan
-
-Use this for any complex multi-step operation: initial setup, data augmentation,
-regrading, retraining, bulk topic changes, etc.`,
+5. After user approves, call tools directly (apply_topic_hierarchy, generate_initial_data, etc.)
+6. After each tool, call update_plan_markdown to check off the step`,
   type: 'function',
   parameters: {
     type: 'object',
@@ -37,6 +40,10 @@ regrading, retraining, bulk topic changes, etc.`,
           objective: { type: 'string', description: 'Training objective' },
           title: { type: 'string', description: 'Plan title' },
           description: { type: 'string', description: 'Plan description' },
+          plan_markdown: {
+            type: 'string',
+            description: 'REQUIRED. Full plan content as markdown. Include a checklist with - [ ] for each execution step. The frontend renders this directly.',
+          },
           proposed_topics: {
             type: 'array',
             description: 'Topic hierarchy. Each topic: { name, description, target_count, subtopics? }. Parent target_count=0, leaf target_count=30.',
@@ -101,29 +108,9 @@ regrading, retraining, bulk topic changes, etc.`,
               },
             },
           },
-          execution_steps: {
-            type: 'array',
-            description: 'Human-readable steps shown in the UI. Each step MUST include step_id matching the corresponding entry in steps_to_execute.',
-            items: {
-              type: 'object',
-              properties: {
-                step: { type: 'string' },
-                description: { type: 'string' },
-                estimated_time: { type: 'string' },
-                step_id: { type: 'string', description: 'The technical step ID from steps_to_execute (e.g. "topics", "generate", "grader", "dryrun", "finetune")' },
-              },
-              required: ['step', 'description', 'estimated_time', 'step_id'],
-            },
-          },
-          steps_to_execute: {
-            type: 'array',
-            description: 'Step IDs to run: topics, adjust_topics, categorize, generate, grader, upload, dryrun, finetune',
-            items: { type: 'string' },
-          },
           estimated_records: { type: 'number' },
-          estimated_duration: { type: 'string' },
         },
-        required: ['dataset_name', 'objective', 'proposed_topics', 'grader_config', 'execution_steps', 'steps_to_execute', 'estimated_records', 'estimated_duration'],
+        required: ['dataset_name', 'objective', 'plan_markdown'],
       },
     },
     required: ['dataset_id', 'plan'],

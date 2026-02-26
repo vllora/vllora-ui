@@ -11,6 +11,9 @@ export type {
   ProposedTopic,
   GraderCriterion,
   Plan,
+  PlanType,
+  DynamicExecutionStep,
+  DynamicStepStatus,
   ProposePlanResult,
   OutputFormat,
 } from './types';
