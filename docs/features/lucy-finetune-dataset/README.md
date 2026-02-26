@@ -66,7 +66,7 @@ This document outlines the architecture and implementation plan for refactoring 
 │  • advance_step       • analyze_coverage   • get_stats      │
 │  • rollback_step      • generate_data                       │
 │  • complete_workflow  • configure_grader                    │
-│                       • run_dry_run                         │
+│                       • run_evaluation                         │
 │                       • start_training                      │
 │                       • deploy_model                        │
 │                                                              │
@@ -387,7 +387,7 @@ interface Dataset {
   // Coverage stats - calculated by analyze_coverage, displayed in UI
   coverageStats?: CoverageStats;
 
-  // Dry run stats - calculated by run_dry_run, displayed in UI
+  // Dry run stats - calculated by run_evaluation, displayed in UI
   dryRunStats?: DryRunStats;
 
   // Backend dataset ID - set after upload_dataset
@@ -766,7 +766,7 @@ external = [
   "test_grader_sample",
   "upload_dataset",
   "sync_evaluator",
-  "run_dry_run",
+  "run_evaluation",
   "start_training",
   "check_training_status",
   "deploy_model",
@@ -1228,10 +1228,10 @@ not_started → topics_config → categorize → coverage_generation → grader_
 
 ### Step 5: Dry Run Tools
 
-#### `run_dry_run`
+#### `run_evaluation`
 ```typescript
 {
-  name: "run_dry_run",
+  name: "run_evaluation",
   description: "Execute dry run validation to test dataset + grader quality. Critical step before training! Dataset must be uploaded first.",
   parameters: {
     type: "object",
@@ -1505,7 +1505,7 @@ AGENT: Smart addition! Over-promising is a common issue in support responses.
 
 USER: Yes
 
-AGENT: [Calls run_dry_run with sample_size=200]
+AGENT: [Calls run_evaluation with sample_size=200]
 
        **Dry Run Results:**
 
@@ -1966,7 +1966,7 @@ bg-[rgba(var(--theme-500),0.5)]
 4. Implement `analyze_coverage` tool
 5. Implement `generate_synthetic_data` tool (reuse existing)
 6. Implement `configure_grader` tool
-7. Implement `run_dry_run` tool
+7. Implement `run_evaluation` tool
 8. Implement `start_training` tool
 9. Implement `deploy_model` tool
 

@@ -51,8 +51,8 @@ export const regenerateReadmeHandler: ToolHandler = async (
     // Get records
     const records = await datasetsDB.getRecordsByDatasetId(dataset_id);
 
-    // Get workflow if available
-    const workflow = await workflowDB.getWorkflow(dataset_id);
+    // Get workflow if available (look up by dataset ID, not workflow ID)
+    const workflow = await workflowDB.getWorkflowByDataset(dataset_id);
 
     // Get knowledge sources
     const sources = await knowledgeDB.getKnowledgeSourcesByDataset(dataset_id);

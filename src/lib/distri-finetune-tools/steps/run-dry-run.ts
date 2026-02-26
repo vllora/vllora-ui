@@ -1,8 +1,8 @@
 /**
- * Run Dry Run Tool
+ * Run Evaluation Tool
  *
- * Starts a dry run validation on a sample of the dataset.
- * The dry run runs in the background - use get_dry_run_status to check progress.
+ * Starts an evaluation on a sample of the dataset.
+ * The evaluation runs in the background - use get_dry_run_status to check progress.
  * Uses the shared dry run polling manager for consistent behavior with the UI.
  */
 
@@ -51,8 +51,8 @@ export const runDryRunHandler: ToolHandler = async (params) => {
 };
 
 export const runDryRunTool: DistriFnTool = {
-  name: 'run_dry_run',
-  description: 'Start a dry run validation on a sample of the dataset. The dry run runs in the background - use get_dry_run_status to check progress and results. Automatically uploads dataset to backend if not already uploaded.',
+  name: 'run_evaluation',
+  description: 'Start an evaluation on a sample of the dataset. The evaluation runs in the background - use get_dry_run_status to check progress and results. Automatically uploads dataset to backend if not already uploaded.',
   type: 'function',
   parameters: {
     type: 'object',

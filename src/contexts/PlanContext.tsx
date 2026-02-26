@@ -299,7 +299,12 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
             // Guard: if user navigated to a different dataset, skip stale update
             if (datasetIdRef.current !== progress.dataset_id) return;
             setIsExecuting(false);
-            setExecutionProgress(null);
+            // For failed plans, keep executionProgress so checkboxes show which
+            // steps succeeded before the failure. For completed plans, clear it
+            // since the overlay is dismissed anyway.
+            if (!progress.has_error) {
+              setExecutionProgress(null);
+            }
             // Get plan from execution store for executedPlan reference
             const planFromStore = getExecutingPlan(datasetIdRef.current);
             if (planFromStore) {

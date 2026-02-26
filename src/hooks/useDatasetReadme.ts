@@ -66,9 +66,9 @@ export function useDatasetReadme({
 
     try {
       // Get workflow if available (best-effort; never block README generation)
-      let workflow: Awaited<ReturnType<typeof workflowDB.getWorkflow>> = null;
+      let workflow: Awaited<ReturnType<typeof workflowDB.getWorkflowByDataset>> = null;
       try {
-        workflow = await workflowDB.getWorkflow(dataset.id);
+        workflow = await workflowDB.getWorkflowByDataset(dataset.id);
       } catch (error) {
         console.warn('[useDatasetReadme] Failed to load workflow for README generation:', error);
       }

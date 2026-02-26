@@ -10,7 +10,7 @@
  */
 
 import { Eye, Pencil, Sparkles, Loader2, FolderOpen, AlertCircle, CheckCircle2, XCircle, ArrowLeftRight } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -29,6 +29,7 @@ import LazyMarkdownRenderer from "@/components/chat/LazyMarkdownRenderer";
 import { emitter } from "@/utils/eventEmitter";
 import type { Plan } from "@/lib/distri-finetune-tools/steps/propose-plan";
 import type { PlanStatus } from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
+import type { ExecutionProgress } from "@/lib/distri-finetune-tools/steps/execute-plan";
 import type { PlanDiff } from "./plan-section/plan-markdown-utils";
 
 interface PlanPreviewProps {
@@ -43,6 +44,7 @@ interface PlanPreviewProps {
   isGenerating: boolean;
   isLoadingPlan: boolean;
   isExecuting: boolean;
+  executionProgress?: ExecutionProgress | null;
   hasKnowledgeSources: boolean;
 }
 
@@ -58,6 +60,7 @@ export function PlanPreview({
   isGenerating,
   isLoadingPlan,
   isExecuting,
+  executionProgress,
   hasKnowledgeSources,
 }: PlanPreviewProps) {
   // Show loading spinner while IndexedDB is being read on mount
@@ -93,6 +96,7 @@ export function PlanPreview({
             onModeChange={onModeChange}
             onApprove={onApprove}
             isExecuting={isExecuting}
+            executionProgress={executionProgress}
             isActionable={isActionable}
           />
         )
@@ -108,6 +112,80 @@ export function PlanPreview({
 }
 
 // ---------------------------------------------------------------------------
+// Plan markdown with live checkbox updates during execution
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps execution progress step IDs to plan execution_step indices.
+ *
+ * Preferred: uses the explicit `step_id` field on each execution_step (added in Feb 2026).
+ * Fallback: keyword matching on the step name for legacy plans without step_id.
+ */
+function buildCompletedStepIndices(
+  executionSteps: Plan['execution_steps'],
+  progress: ExecutionProgress | null | undefined
+): Set<number> | undefined {
+  if (!progress || !executionSteps) return undefined;
+
+  // Treat both 'completed' and 'skipped' as done — skipped means the step
+  // was already completed in a prior run and didn't need to re-execute
+  const doneIds = new Set(
+    progress.steps
+      .filter(s => s.status === 'completed' || s.status === 'skipped')
+      .map(s => s.id)
+  );
+
+  if (doneIds.size === 0) return undefined;
+
+  const indices = new Set<number>();
+  executionSteps.forEach((step, index) => {
+    // Preferred: explicit step_id mapping (reliable, 1:1)
+    if (step.step_id) {
+      if (doneIds.has(step.step_id)) {
+        indices.add(index);
+      }
+      return;
+    }
+
+    // Fallback: keyword matching for legacy plans without step_id
+    const lower = step.step.toLowerCase();
+    const matched =
+      (lower.includes('topic') && (doneIds.has('topics') || doneIds.has('adjust_topics'))) ||
+      ((lower.includes('generate') || lower.includes('data')) && doneIds.has('generate')) ||
+      ((lower.includes('evaluat') || lower.includes('configur') || lower.includes('grader')) && doneIds.has('grader')) ||
+      ((lower.includes('dry') || lower.includes('evaluation')) && doneIds.has('dryrun')) ||
+      (lower.includes('upload') && doneIds.has('upload')) ||
+      ((lower.includes('fine') || lower.includes('train') || lower.includes('setup')) && doneIds.has('finetune'));
+
+    if (matched) indices.add(index);
+  });
+
+  return indices.size > 0 ? indices : undefined;
+}
+
+function PlanMarkdownContent({ plan, executionProgress }: { plan: Plan; executionProgress?: ExecutionProgress | null }) {
+  const completedStepIndices = useMemo(
+    () => buildCompletedStepIndices(plan.execution_steps, executionProgress),
+    [plan.execution_steps, executionProgress]
+  );
+
+  const markdownContent = useMemo(
+    () => planToMarkdown(plan, { completedStepIndices }),
+    [plan, completedStepIndices]
+  );
+
+  return (
+    <div className="flex-1 overflow-auto p-6">
+      <div className="max-w-3xl mx-auto">
+        <div className="text-sm [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_table]:text-xs [&_p]:text-sm [&_li]:text-sm [&_blockquote]:text-sm">
+          <LazyMarkdownRenderer content={markdownContent} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Sub-views
 // ---------------------------------------------------------------------------
 
@@ -118,6 +196,7 @@ function PlanDisplayView({
   onModeChange,
   onApprove,
   isExecuting,
+  executionProgress,
   isActionable,
 }: {
   plan: Plan;
@@ -126,6 +205,7 @@ function PlanDisplayView({
   onModeChange: (mode: "display" | "edit") => void;
   onApprove: (plan: Plan) => void;
   isExecuting: boolean;
+  executionProgress?: ExecutionProgress | null;
   isActionable: boolean;
 }) {
   // Build human-readable diff summary for banner.
@@ -160,14 +240,8 @@ function PlanDisplayView({
         </div>
       )}
 
-      {/* Plan content */}
-      <div className="flex-1 overflow-auto p-6">
-        <div className="max-w-3xl mx-auto">
-          <div className="text-sm [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_table]:text-xs [&_p]:text-sm [&_li]:text-sm [&_blockquote]:text-sm">
-            <LazyMarkdownRenderer content={planToMarkdown(plan)} />
-          </div>
-        </div>
-      </div>
+      {/* Plan content — checkboxes update live during execution */}
+      <PlanMarkdownContent plan={plan} executionProgress={executionProgress} />
 
       {/* Sticky footer — action buttons + status */}
       {(isActionable || isExecuting || planStatus === 'completed' || planStatus === 'failed') && (

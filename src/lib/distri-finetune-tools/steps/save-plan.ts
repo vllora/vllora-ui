@@ -21,6 +21,7 @@ import {
 } from './proposed-plan-store';
 import { diffPlans, type PlanDiff } from '@/components/datasets/plan-section/plan-markdown-utils';
 import { normalizePlanSteps, areStepListsEqual } from './plan-step-normalization';
+import * as datasetsDB from '@/services/datasets-db';
 
 // =============================================================================
 // Types
@@ -149,6 +150,27 @@ export const savePlanHandler: ToolHandler = async (
       };
     }
     let draft = stored.plan;
+
+    // Auto-fill objective and dataset_name from the dataset if not set on the plan.
+    // Agents often set the objective via update_objective (on the dataset) but
+    // forget to mirror it into the plan object — this prevents a validation loop.
+    if (!draft.objective?.trim() || !draft.dataset_name?.trim()) {
+      const dataset = await datasetsDB.getDatasetById(dataset_id);
+      if (dataset) {
+        let patched = false;
+        if (!draft.objective?.trim() && dataset.datasetObjective?.trim()) {
+          draft = { ...draft, objective: dataset.datasetObjective.trim() };
+          patched = true;
+        }
+        if (!draft.dataset_name?.trim() && dataset.name?.trim()) {
+          draft = { ...draft, dataset_name: dataset.name.trim() };
+          patched = true;
+        }
+        if (patched) {
+          await saveProposedPlan(dataset_id, draft);
+        }
+      }
+    }
 
     // Normalize step IDs before validation so legacy plans don't fail approval.
     const rawSteps = Array.isArray(draft.steps_to_execute)

@@ -515,26 +515,31 @@ export const adjustPlanHandler: ToolHandler = async (
       execution_steps: [
         {
           step: 'Apply Topic Hierarchy',
+          step_id: 'topics',
           description: `Configure ${totalTopicCount} topics for organizing training data`,
           estimated_time: '~5 seconds',
         },
         {
           step: 'Generate Initial Data',
+          step_id: 'generate',
           description: `Generate ${estimatedRecords} training examples distributed across topics`,
           estimated_time: estimatedRecords > 100 ? '~3-5 minutes' : '~1-2 minutes',
         },
         {
           step: 'Configure Evaluator',
+          step_id: 'grader',
           description: 'Set up the grading criteria for evaluating model responses',
           estimated_time: '~5 seconds',
         },
         {
           step: 'Run Evaluation',
+          step_id: 'dryrun',
           description: 'Test the training data with the current model to establish baseline',
           estimated_time: '~1-2 minutes',
         },
         {
           step: 'Setup Fine-tune Job',
+          step_id: 'finetune',
           description: 'Prepare the fine-tuning job (you can start it when ready)',
           estimated_time: '~10 seconds',
         },

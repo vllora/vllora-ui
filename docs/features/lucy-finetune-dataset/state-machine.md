@@ -292,15 +292,15 @@ interface GraderConfig {
 |----------|-------|
 | Required | **No** (recommended but can skip) |
 | Can Skip To | `training` directly |
-| Tools | `upload_dataset`, `sync_evaluator`, `run_dry_run` |
+| Tools | `upload_dataset`, `sync_evaluator`, `run_evaluation` |
 | Output | `dryRun` object stored in workflow |
 
 **Prerequisites:**
-- Must call `upload_dataset` before `run_dry_run`
+- Must call `upload_dataset` before `run_evaluation`
 - Use `sync_evaluator` to update grader after upload
 
 **State Transitions:**
-- `pending` -> `in_progress`: When dry run is started via `run_dry_run` tool or UI
+- `pending` -> `in_progress`: When dry run is started via `run_evaluation` tool or UI
 - `in_progress` -> `completed`: When polling detects successful backend evaluation
 - `in_progress` -> `failed`: When polling times out (~12 min), consecutive errors occur (5 failures), or backend reports failure
 - `pending` -> `skipped`: When user skips dry run via `advance_to_step` to `training`

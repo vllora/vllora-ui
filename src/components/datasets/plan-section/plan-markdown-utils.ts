@@ -8,9 +8,18 @@
 import type { Plan } from '@/lib/distri-finetune-tools/steps/propose-plan';
 
 /**
+ * Options for rendering plan markdown.
+ * Pass `completedStepIndices` during execution to check off completed steps.
+ */
+export interface PlanMarkdownOptions {
+  /** Indices of execution steps that are completed (0-based) */
+  completedStepIndices?: Set<number>;
+}
+
+/**
  * Convert Plan to editable markdown with professional formatting
  */
-export function planToMarkdown(plan: Plan): string {
+export function planToMarkdown(plan: Plan, options?: PlanMarkdownOptions): string {
   const topics = plan.proposed_topics ?? [];
   const criteria = plan.grader_config?.criteria ?? [];
 
@@ -54,21 +63,27 @@ ${topics.map((t) => {
     : '_No evaluation criteria configured_';
 
   // Map execution step labels to user-friendly names and normalize "Dry Run" to "Evaluation"
+  // Order matters: more specific checks must come before broader ones
   const friendlyStepName = (step: string): string => {
     const lower = step.toLowerCase();
     if (lower.includes('topic')) return 'Set up training categories';
     if (lower.includes('generate') && lower.includes('data')) return 'Generate training data';
-    if (lower.includes('evaluat') || lower.includes('configur')) return 'Configure quality checks';
-    if (lower.includes('dry') || lower.includes('run evaluation')) return 'Run evaluation';
+    // "Run evaluation" / "dry run" must be checked BEFORE generic "evaluat"/"configur"
+    if (lower.includes('dry') || lower.includes('run evaluation') || lower.includes('run eval')) return 'Run evaluation';
+    if (lower.includes('evaluat') || lower.includes('configur') || lower.includes('grader')) return 'Configure quality checks';
     if (lower.includes('fine') || lower.includes('setup')) return 'Prepare finetune job';
+    if (lower.includes('upload') || lower.includes('re-upload')) return 'Upload data';
     return step;
   };
 
   // Build execution steps as checkbox task list (Claude Code style)
+  // Completed steps are checked off during execution
+  const completedIndices = options?.completedStepIndices;
   const executionSteps = plan.execution_steps ?? [];
-  const stepsContent = executionSteps.map((s) =>
-    `- [ ] **${friendlyStepName(s.step)}** — ${s.estimated_time}`
-  ).join('\n');
+  const stepsContent = executionSteps.map((s, i) => {
+    const checked = completedIndices?.has(i) ? 'x' : ' ';
+    return `- [${checked}] **${friendlyStepName(s.step)}** — ${s.estimated_time}`;
+  }).join('\n');
 
   // Build response schema section if applicable
   const outputFormatSection = plan.output_format
@@ -106,11 +121,18 @@ ${(plan.knowledge_sources ?? []).map((s) => `- \`${s.name}\``).join('\n')}
     ? 'Based on your uploaded documents.'
     : 'Generated from general knowledge.';
 
-  const md = `# ${plan.dataset_name}
+  // Plan title + description subtitle (if provided by agent)
+  const planSubtitle = plan.title
+    ? `**${plan.title}**${plan.description ? ` — ${plan.description}` : ''}\n\n`
+    : '';
 
-> ${plan.objective}
+  // Use title as heading fallback when dataset_name isn't set (common in agent-proposed plans)
+  const heading = plan.dataset_name || plan.title || 'Finetune Plan';
+  const objectiveLine = plan.objective ? `> ${plan.objective}\n\n` : '';
 
----
+  const md = `# ${heading}
+
+${objectiveLine}${planSubtitle}---
 
 ${knowledgeSection}${outputFormatSection}## Training Topics
 

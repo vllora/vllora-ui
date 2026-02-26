@@ -366,7 +366,7 @@ distri-finetune-tools/
 | **Knowledge Sources** | `upload_knowledge_source`, `list_knowledge_sources`, `extract_topics_from_source`, `search_knowledge`, `analyze_knowledge_sources` |
 | **Grader (Step 4)** | `configure_grader`, `generate_grader`, `test_grader_sample` |
 | **Upload/Sync** | `upload_dataset`, `sync_evaluator` |
-| **Dry Run (Step 5)** | `run_dry_run` |
+| **Dry Run (Step 5)** | `run_evaluation` |
 | **Training (Step 6)** | `start_training`, `check_training_status` |
 | **Deploy (Step 7)** | `deploy_model` |
 | **Plan** | `propose_plan`, `adjust_plan`, `save_plan`, `execute_plan` |

@@ -103,15 +103,16 @@ regrading, retraining, bulk topic changes, etc.`,
           },
           execution_steps: {
             type: 'array',
-            description: 'Human-readable steps shown in the UI',
+            description: 'Human-readable steps shown in the UI. Each step MUST include step_id matching the corresponding entry in steps_to_execute.',
             items: {
               type: 'object',
               properties: {
                 step: { type: 'string' },
                 description: { type: 'string' },
                 estimated_time: { type: 'string' },
+                step_id: { type: 'string', description: 'The technical step ID from steps_to_execute (e.g. "topics", "generate", "grader", "dryrun", "finetune")' },
               },
-              required: ['step', 'description', 'estimated_time'],
+              required: ['step', 'description', 'estimated_time', 'step_id'],
             },
           },
           steps_to_execute: {

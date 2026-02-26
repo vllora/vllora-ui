@@ -202,6 +202,7 @@ export function DatasetDetailContentV2() {
     isGeneratingPlan,
     isLoadingPlan,
     isExecuting,
+    executionProgress,
     setIsPlanPreviewActive,
     setPlanEditMode,
     approvePlan,
@@ -730,6 +731,7 @@ export function DatasetDetailContentV2() {
               isGenerating={isGeneratingPlan}
               isLoadingPlan={isLoadingPlan}
               isExecuting={isExecuting}
+              executionProgress={executionProgress}
               hasKnowledgeSources={knowledgeSourcesCount > 0}
             />
           )}

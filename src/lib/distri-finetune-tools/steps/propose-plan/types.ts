@@ -84,6 +84,8 @@ export interface Plan {
     step: string;
     description: string;
     estimated_time: string;
+    /** Maps to the technical step ID in steps_to_execute for progress tracking */
+    step_id?: string;
   }[];
 
   // Estimated totals

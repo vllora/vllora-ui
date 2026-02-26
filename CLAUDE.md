@@ -64,7 +64,7 @@ The main feature. An AI assistant (Lucy) in the sidebar guides users through bui
 Topics Config → Categorization → Coverage & Generation → Grader Config → Evaluation → Training → Deployment
 ```
 
-> **Naming note**: The "Evaluation" step is called "Dry Run" in internal code (variable names, file names, DB stores, tool names like `run_dry_run`, `dryRunPollingManager`). Only user-facing display text says "Evaluation".
+> **Naming note**: The "Evaluation" step is called "Dry Run" in internal code (variable names, file names, DB stores, internal identifiers like `dryRunPollingManager`). The tool name is `run_evaluation`. Only user-facing display text says "Evaluation".
 
 ### Architecture (6 Layers, 3 Repos)
 

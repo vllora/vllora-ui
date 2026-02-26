@@ -313,7 +313,7 @@ export interface Dataset {
   evalScript?: string;
   // Coverage statistics for UI display (updated by analyze_coverage)
   coverageStats?: CoverageStats;
-  // Dry run statistics for UI display (updated by run_dry_run)
+  // Dry run statistics for UI display (updated by run_evaluation)
   dryRunStats?: DryRunStats;
   // Dataset statistics for UI display (updated by get_dataset_state)
   stats?: DatasetStats;
