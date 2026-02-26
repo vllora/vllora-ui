@@ -2,21 +2,20 @@
  * ApiInitializeTab
  *
  * Tab content for initializing dataset via API.
- * Features curl command on left, live trace feed on right.
- * Now supports file uploads for knowledge sources.
+ * Features objective input card on left, live trace feed on right.
+ * Uses shared ObjectiveInputCard for the input UI.
  */
 
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Sparkles, Wand2, Loader2 } from "lucide-react";
+import { Sparkles, Wand2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { LiveTraceFeed, type Trace } from "./LiveTraceFeed";
 import { CollapsibleCurlCommand } from "./CollapsibleCurlCommand";
 import { inferObjectiveFromTraces } from "./infer-objective";
 import * as datasetsDB from "@/services/datasets-db";
-import { useKnowledgeSourcesUpload, DragOverlay, FileList, AddDocsButton } from "./KnowledgeSourcesUpload";
+import { ObjectiveInputCard } from "./ObjectiveInputCard";
 
 export const CHESS_TUTOR_INIT_PART_1= "You are an expert chess tutor helping a student improve their chess skills. Your role is to:"
 export const CHESS_TUTOR_INIT_PART_2 = `You are an expert chess tutor helping a student improve their chess skills. Your role is to:
@@ -78,16 +77,7 @@ export function ApiInitializeTab({ hasBackendSpans, traces, onClear }: ApiInitia
   const [datasetObjective, setDatasetObjective] = useState("");
   const [isInferring, setIsInferring] = useState(false);
   const hasAutoInferred = useRef(false);
-
-  const {
-    files,
-    isDragOver,
-    handleDrop,
-    handleDragOver,
-    handleDragLeave,
-    handleFileInput,
-    removeFile,
-  } = useKnowledgeSourcesUpload();
+  const [isCreating, setIsCreating] = useState(false);
 
   const handleInferObjective = async () => {
     if (traces.length === 0) return;
@@ -110,8 +100,6 @@ export function ApiInitializeTab({ hasBackendSpans, traces, onClear }: ApiInitia
       handleInferObjective();
     }
   }, [traces.length]);
-
-  const [isCreating, setIsCreating] = useState(false);
 
   const handleStartFinetune = async () => {
     if (traces.length === 0) return;
@@ -162,34 +150,25 @@ export function ApiInitializeTab({ hasBackendSpans, traces, onClear }: ApiInitia
 
   return (
     <div className="w-full h-full flex-1 flex flex-col gap-4">
-      {/* Top Row: Dataset Objective + Live Trace Feed - grows to fill space */}
+      {/* Top Row: Objective Card + Live Trace Feed */}
       <div className="flex-1 flex gap-4 min-h-0 h-[calc(100%-100px)]">
-        {/* Left: Dataset Objective - with gradient border effect */}
-        <div
-          className={`group flex-1 relative rounded-2xl p-[1px] bg-gradient-to-b from-border/80 via-border/40 to-border/80 hover:from-[rgba(var(--theme-500),0.3)] hover:via-border/40 hover:to-[rgba(var(--theme-500),0.3)] transition-all duration-500 ${isDragOver ? "from-[rgba(var(--theme-500),0.5)] via-[rgba(var(--theme-500),0.3)] to-[rgba(var(--theme-500),0.5)]" : ""}`}
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-        >
-          <div className="h-full rounded-2xl bg-card/95 backdrop-blur-md overflow-hidden flex flex-col relative">
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 pt-4 pb-2 shrink-0">
-              <label className="flex items-center gap-2.5 text-sm font-medium">
-                <div className="relative">
-                  <Sparkles className="w-4 h-4 text-[rgba(var(--theme-500),0.9)] transition-transform duration-300 group-hover:scale-110" />
-                  <div className="absolute inset-0 text-[rgba(var(--theme-500),0.4)] animate-pulse">
-                    <Sparkles className="w-4 h-4" />
-                  </div>
-                </div>
-                Dataset Objective
-              </label>
-              {traces.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
+        {/* Left: Objective Card */}
+        <ObjectiveInputCard
+          value={datasetObjective}
+          onChange={setDatasetObjective}
+          placeholder="Describe what you want your model to do..."
+          fillHeight
+          className="flex-1"
+          footerExtra={
+            traces.length > 0 ? (
+              <>
+                <div className="w-px h-4 bg-border/30 mx-1" />
+                <button
+                  type="button"
                   onClick={handleInferObjective}
                   disabled={isInferring}
-                  className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-[rgba(var(--theme-500),0.1)]"
+                  className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors disabled:opacity-50"
+                  title="Auto-suggest objective from traces"
                 >
                   {isInferring ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -197,68 +176,32 @@ export function ApiInitializeTab({ hasBackendSpans, traces, onClear }: ApiInitia
                     <Wand2 className="w-3.5 h-3.5" />
                   )}
                   {isInferring ? "Suggesting..." : "Suggest"}
-                </Button>
-              )}
-            </div>
-
-            {/* Textarea */}
-            <div className="relative flex-1 px-5">
-              <Textarea
-                value={datasetObjective}
-                onChange={(e) => setDatasetObjective(e.target.value)}
-                placeholder="Describe what you want the fine-tuned model to do..."
-                className="h-full min-h-[100px] resize-none bg-transparent border-0 border-none outline-none focus:outline-none focus:ring-0 focus:border-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none text-[15px] leading-relaxed placeholder:text-muted-foreground/60"
-              />
-              {/* Subtle gradient overlay at bottom for depth */}
-              <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-card/80 to-transparent pointer-events-none" />
-            </div>
-
-            {/* Drag overlay */}
-            {isDragOver && <DragOverlay />}
-
-            {/* File upload area - shown when files exist */}
-            <FileList files={files} onRemove={removeFile} className="shrink-0" />
-
-            {/* Footer */}
-            <div className="flex items-center justify-between px-5 py-4 border-t border-border/30 bg-muted/20 shrink-0">
-              {/* Left side: file upload button + hint */}
-              <div className="flex items-center gap-3">
-                <AddDocsButton onFileInput={handleFileInput} />
-                <span className="text-xs text-muted-foreground/40">|</span>
-                <span className="text-xs text-muted-foreground/60">
-                  {hasContent ? (
-                    <span className="text-muted-foreground/80">
-                      {datasetObjective.length} characters
-                    </span>
-                  ) : (
-                    "Guides data generation and evaluation"
-                  )}
-                </span>
-              </div>
-
-              {/* Start Button - shown when traces exist */}
-              {traces.length > 0 && (
-                <Button
-                  onClick={handleStartFinetune}
-                  disabled={isCreating}
-                  className="group/btn bg-[rgba(var(--theme-500),1)] hover:bg-[rgba(var(--theme-400),1)] text-white gap-2 px-5 h-10 rounded-lg font-medium shadow-lg shadow-[rgba(var(--theme-500),0.25)] hover:shadow-[rgba(var(--theme-500),0.35)] hover:shadow-xl transition-all duration-200 disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed animate-in fade-in"
-                >
-                  {isCreating ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Creating...
-                    </>
-                  ) : (
-                    <>
-                      Start Finetune
-                      <ArrowRight className="w-4 h-4 transition-transform duration-200 group-hover/btn:translate-x-0.5" />
-                    </>
-                  )}
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
+                </button>
+              </>
+            ) : undefined
+          }
+          actionButton={
+            traces.length > 0 ? (
+              <Button
+                onClick={handleStartFinetune}
+                disabled={isCreating || (!hasContent && traces.length === 0)}
+                className="group/btn bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-400))] text-white gap-2 px-6 h-10 rounded-xl text-[13px] font-semibold shadow-md shadow-[rgba(var(--theme-500),0.25)] hover:shadow-lg hover:shadow-[rgba(var(--theme-500),0.3)] transition-all duration-200 disabled:opacity-25 disabled:shadow-none disabled:cursor-not-allowed"
+              >
+                {isCreating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    Start Finetune
+                    <Sparkles className="w-3.5 h-3.5 transition-transform duration-200 group-hover/btn:rotate-12" />
+                  </>
+                )}
+              </Button>
+            ) : undefined
+          }
+        />
 
         {/* Right: Live Trace Feed */}
         <LiveTraceFeed

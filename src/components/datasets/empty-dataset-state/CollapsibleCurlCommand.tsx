@@ -15,14 +15,16 @@ import { CodeBlock } from "@/components/chat/traces/components/CodeBlock";
 interface CollapsibleCurlCommandProps {
   command: string;
   className?: string;
+  defaultExpanded?: boolean;
 }
 
 export function CollapsibleCurlCommand({
   command,
   className,
+  defaultExpanded = false,
 }: CollapsibleCurlCommandProps) {
   const [copied, setCopied] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(command);
