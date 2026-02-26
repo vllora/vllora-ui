@@ -506,7 +506,7 @@ export function LucyChat({
           isStreaming={isStreaming}
           disabled={isLoading || hasPendingToolCalls()}
           placeholder={
-            isStreaming ? 'Message will be queued...' : getPlaceholderForSection(activeSection)
+            isStreaming ? 'Lucy is working… your message will be queued' : getPlaceholderForSection(activeSection)
           }
           // File attachments (images, PDFs, documents)
           attachedImages={attachedImages}

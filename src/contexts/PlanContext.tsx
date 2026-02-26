@@ -314,19 +314,14 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
             }
             // Keep proposedPlan intact so the user can still view it.
             // Plan is only cleared on explicit dismiss or new plan generation.
-            setIsPlanPreviewActive(false);
-            // Auto-switch to the tab most relevant to the last completed step
+
+            // Don't auto-switch tabs — the user is on the plan tab watching
+            // checkboxes update in real-time. Let them see the final all-green
+            // state and navigate away when ready. A toast message guides them.
             if (!progress.has_error) {
-              type SwitchTab = 'records' | 'evaluator' | 'jobs' | 'deploy';
-              const lastCompleted = [...progress.steps].reverse().find(s => s.status === 'completed');
-              const stepTabMap: Record<string, SwitchTab> = {
-                topics: 'records', adjust_topics: 'records', categorize: 'records',
-                generate: 'records', upload: 'records',
-                grader: 'evaluator', dryrun: 'evaluator',
-                finetune: 'jobs',
-              };
-              const tab: SwitchTab = stepTabMap[lastCompleted?.id ?? ''] ?? 'records';
-              emitter.emit('vllora_switch_tab', { datasetId: progress.dataset_id, tab });
+              toast.success('Plan executed successfully!', {
+                description: 'View your generated data in the Records tab.',
+              });
             }
           }, 2000);
         }

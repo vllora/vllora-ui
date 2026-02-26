@@ -179,9 +179,17 @@ export const getDatasetStateHandler: ToolHandler = async (params) => {
   }
 
   try {
-    const dataset = await datasetsDB.getDatasetById(dataset_id);
+    // Retry once after a short delay if the dataset is not found.
+    // This handles the race where the agent calls get_dataset_state
+    // immediately after creating an experiment (IndexedDB write may
+    // not have committed yet).
+    let dataset = await datasetsDB.getDatasetById(dataset_id);
     if (!dataset) {
-      return { success: false, error: `Dataset ${dataset_id} not found` };
+      await new Promise(resolve => setTimeout(resolve, 500));
+      dataset = await datasetsDB.getDatasetById(dataset_id);
+    }
+    if (!dataset) {
+      return { success: false, error: `Dataset ${dataset_id} not found. It may still be initializing — try again in a moment.` };
     }
 
     // Fetch records, workflow, and plan state in parallel

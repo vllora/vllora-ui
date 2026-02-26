@@ -535,12 +535,13 @@ export function isWorkflowTool(name: string): name is WorkflowToolName {
   return WORKFLOW_TOOL_NAMES.includes(name as WorkflowToolName);
 }
 
+// All workflow tools auto-execute — they operate on local IndexedDB state.
 export const workflowTools: DistriFnTool[] = [
   startFinetuneWorkflowTool,
   getWorkflowStatusTool,
   advanceToStepTool,
   rollbackToStepTool,
-];
+].map(tool => ({ ...tool, autoExecute: true }));
 
 export const workflowToolHandlers: Record<string, ToolHandler> = {
   start_finetune_workflow: startFinetuneWorkflowHandler,

@@ -208,6 +208,9 @@ export function isStepTool(name: string): name is StepToolName {
   return STEP_TOOL_NAMES.includes(name as StepToolName);
 }
 
+// All step tools auto-execute without user confirmation — they run locally
+// in the browser (IndexedDB reads/writes, local computation) and the user
+// has already opted in to using the Lucy agent.
 export const stepTools: DistriFnTool[] = [
   generateTopicsTool,
   applyTopicHierarchyTool,
@@ -245,7 +248,7 @@ export const stepTools: DistriFnTool[] = [
   executePlanTool,
   // Note: Stockfish tools are NOT included here - they are conditionally added
   // via stockfishTools in useFineTuneAgentChat for chess datasets only
-];
+].map(tool => ({ ...tool, autoExecute: true }));
 
 export const stepToolHandlers: Record<string, ToolHandler> = {
   generate_topics: generateTopicsHandler,
