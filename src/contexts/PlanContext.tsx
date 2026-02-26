@@ -203,9 +203,14 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
             }
             case 'completed':
               setExecutedPlan(storedPlan.plan);
+              // Restore progress so plan checkboxes show all steps as completed
+              if (storedPlan.executionProgress) {
+                setExecutionProgress(storedPlan.executionProgress);
+              }
               break;
             case 'failed':
               setExecutedPlan(storedPlan.plan);
+              // Restore progress so plan checkboxes show which steps succeeded
               if (storedPlan.executionProgress) {
                 setExecutionProgress(storedPlan.executionProgress);
               }
@@ -299,12 +304,9 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
             // Guard: if user navigated to a different dataset, skip stale update
             if (datasetIdRef.current !== progress.dataset_id) return;
             setIsExecuting(false);
-            // For failed plans, keep executionProgress so checkboxes show which
-            // steps succeeded before the failure. For completed plans, clear it
-            // since the overlay is dismissed anyway.
-            if (!progress.has_error) {
-              setExecutionProgress(null);
-            }
+            // Keep executionProgress so plan checkboxes remain checked when the
+            // user navigates back to the plan tab. For both success and failure,
+            // preserving progress shows which steps completed.
             // Get plan from execution store for executedPlan reference
             const planFromStore = getExecutingPlan(datasetIdRef.current);
             if (planFromStore) {
