@@ -48,27 +48,29 @@ export function ObjectiveInputTab({
   const hasContent = objective.trim().length > 0;
 
   return (
-    <div className="w-3/4 mx-auto space-y-6">
-      <ObjectiveInputCard
-        ref={cardRef}
-        value={objective}
-        onChange={onObjectiveChange}
-        placeholder="Describe what you want your model to do... e.g. 'A specialized assistant for React performance optimization that speaks in a concise, technical tone.'"
-        actionButton={
-          <StartFinetuneButton
-            onClick={handleStart}
-            disabled={!hasContent}
-            isLoading={isLoading}
-          />
-        }
-      />
+    <div className="space-y-6">
+      <div className="w-full max-w-[50vw] mx-auto">
+        <ObjectiveInputCard
+          ref={cardRef}
+          value={objective}
+          onChange={onObjectiveChange}
+          placeholder="Describe what you want your model to do... e.g. 'A specialized assistant for React performance optimization that speaks in a concise, technical tone.'"
+          actionButton={
+            <StartFinetuneButton
+              onClick={handleStart}
+              disabled={!hasContent}
+              isLoading={isLoading}
+            />
+          }
+        />
+      </div>
 
-      {/* Quick-Start Suggestions */}
-      <div className="space-y-3">
+      {/* Ideas to get started */}
+      <div className="space-y-3 flex flex-col items-center">
         <span className="text-[11px] font-semibold text-muted-foreground/40 tracking-widest uppercase">
-          Quick-start suggestions
+          Ideas to get started
         </span>
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-2.5 flex-wrap justify-center">
           {OBJECTIVE_SUGGESTIONS.map((suggestion) => {
             const Icon = SUGGESTION_ICONS[suggestion.summary] || Sparkles;
             return (
