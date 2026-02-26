@@ -19,7 +19,7 @@ export function FinetuneStudioTab() {
 
   const handleStartFinetune = useCallback(() => {
     if (objective.trim()) {
-      navigate(`/finetune/new?objective=${encodeURIComponent(objective.trim())}`);
+      navigate(`/finetune/new?objective=${encodeURIComponent(objective.trim())}&autoStart=true`);
     } else {
       navigate("/finetune/new");
     }

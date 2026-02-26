@@ -9,7 +9,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { Database, FlaskConical, Sparkles, Radio } from "lucide-react";
+import { Sparkles, Radio } from "lucide-react";
 import { DatasetsConsumer } from "@/contexts/DatasetsContext";
 import { ProjectEventsConsumer } from "@/contexts/project-events";
 import { listSpans, type Span } from "@/services/spans-api";
@@ -21,7 +21,6 @@ import { tryParseJson } from "@/utils/modelUtils";
 import { emitter } from "@/utils/eventEmitter";
 import { uploadKnowledgeSourceHandler } from "@/lib/distri-finetune-tools/steps/knowledge-sources";
 import type { KnowledgeSourceType } from "@/types/dataset-types";
-import { LucyAvatar } from "@/components/agent/lucy-agent";
 import { FinetuneHero } from "./FinetuneHero";
 
 type TabType = "objective" | "api";
@@ -109,23 +108,25 @@ export function EmptyDatasetsState() {
   const tabParam = searchParams.get("tab");
   const activeTab: TabType = isValidTab(tabParam) ? tabParam : "objective";
 
-  // Support ?objective= param from homepage use-case cards
+  // Support ?objective= and ?autoStart= params from homepage
   const objectiveParam = searchParams.get("objective");
+  const autoStartParam = searchParams.get("autoStart");
   const [objective, setObjective] = useState(objectiveParam ?? "");
 
-  // Clean up the objective param from URL after reading it
+  // Clean up query params from URL after reading them
   useEffect(() => {
-    if (objectiveParam) {
+    if (objectiveParam || autoStartParam) {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
         next.delete("objective");
+        next.delete("autoStart");
         return next;
       }, { replace: true });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
   const [isCreating, setIsCreating] = useState(false);
-  const [transition, setTransition] = useState<{ datasetId: string; hasFiles: boolean } | null>(null);
 
   const handleObjectiveChange = useCallback((value: string) => {
     setObjective(value);
@@ -229,21 +230,11 @@ export function EmptyDatasetsState() {
         // Emit update so KnowledgeSourcesPanel refreshes
         emitter.emit("vllora_knowledge_source_updated", { datasetId: dataset.id });
 
-        // Show transition screen before navigating
-        // With files: 2.5s to let document processing start in background
-        // Without files: 800ms brief animation, nothing to process
         setIsCreating(false);
-        setTransition({ datasetId: dataset.id, hasFiles: true });
-        setTimeout(() => {
-          navigate(`/finetune/${dataset.id}?autoGeneratePlan=true`);
-        }, 2500);
+        navigate(`/finetune/${dataset.id}?autoGeneratePlan=true`);
       } else {
-        // Show transition screen before navigating
         setIsCreating(false);
-        setTransition({ datasetId: dataset.id, hasFiles: false });
-        setTimeout(() => {
-          navigate(`/finetune/${dataset.id}`);
-        }, 800);
+        navigate(`/finetune/${dataset.id}`);
       }
     } catch (error) {
       console.error("Failed to create dataset:", error);
@@ -252,88 +243,15 @@ export function EmptyDatasetsState() {
     }
   };
 
-  // Show fallback "Continue" button if transition navigation hasn't happened after 5s
-  const [showContinue, setShowContinue] = useState(false);
+  // Auto-start finetuning when arriving from homepage with autoStart=true
+  const autoStartTriggered = useRef(false);
   useEffect(() => {
-    if (!transition) return;
-    const timer = setTimeout(() => setShowContinue(true), 5000);
-    return () => clearTimeout(timer);
-  }, [transition]);
-
-  const handleSkipTransition = useCallback(() => {
-    if (!transition) return;
-    const url = transition.hasFiles
-      ? `/finetune/${transition.datasetId}?autoGeneratePlan=true`
-      : `/finetune/${transition.datasetId}`;
-    navigate(url);
-  }, [transition, navigate]);
-
-  // Show onboarding transition before navigating to dataset detail
-  if (transition) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center p-8 animate-in fade-in duration-500">
-        <div className="flex flex-col items-center text-center max-w-md space-y-8">
-          {/* Lucy introduction */}
-          <LucyAvatar size="lg" animated />
-          <div className="space-y-2">
-            <h2 className="text-2xl font-semibold text-foreground">
-              Meet Lucy, your finetune assistant
-            </h2>
-            <p className="text-muted-foreground">
-              Lucy will guide you through preparing data, evaluating quality, and training your model.
-            </p>
-          </div>
-
-          {/* Steps overview */}
-          <div className="flex items-center gap-6 text-sm text-muted-foreground">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-[rgba(var(--theme-500),0.15)] flex items-center justify-center">
-                <Database className="w-4 h-4 text-[rgb(var(--theme-500))]" />
-              </div>
-              <span>Data</span>
-            </div>
-            <span className="text-border">→</span>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-[rgba(var(--theme-500),0.15)] flex items-center justify-center">
-                <FlaskConical className="w-4 h-4 text-[rgb(var(--theme-500))]" />
-              </div>
-              <span>Evaluation</span>
-            </div>
-            <span className="text-border">→</span>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-[rgba(var(--theme-500),0.15)] flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-[rgb(var(--theme-500))]" />
-              </div>
-              <span>Finetune</span>
-            </div>
-          </div>
-
-          {/* Loading indicator */}
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <div className="w-1.5 h-1.5 rounded-full bg-[rgb(var(--theme-500))] animate-pulse" />
-            <span>{transition.hasFiles ? "Processing your documents..." : "Setting up your project..."}</span>
-          </div>
-
-          {/* Skip / Continue fallback */}
-          {showContinue ? (
-            <button
-              onClick={handleSkipTransition}
-              className="text-sm font-medium text-[rgb(var(--theme-500))] hover:underline"
-            >
-              Continue to dataset →
-            </button>
-          ) : (
-            <button
-              onClick={handleSkipTransition}
-              className="text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
-            >
-              Skip
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
+    if (autoStartParam === "true" && objectiveParam && !autoStartTriggered.current) {
+      autoStartTriggered.current = true;
+      handleStartFinetune();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="flex-1 flex flex-col items-center justify-start px-6 pb-8 relative overflow-auto">

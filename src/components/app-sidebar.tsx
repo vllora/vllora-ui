@@ -10,7 +10,6 @@ import {
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { ProjectsConsumer } from "@/contexts/ProjectContext"
-import { SidebarAgentButton } from "@/components/agent/SidebarAgentButton"
 import {
   Tooltip,
   TooltipContent,
@@ -138,10 +137,6 @@ export function AppSidebar({ isCollapsed, currentProjectId }: AppSidebarProps) {
 
         <div className="border-t border-border/40 p-4">
           <ul className="space-y-1.5">
-            {/* AI Assistant button - hide on datasets page (has embedded Lucy) */}
-            {!location.pathname.startsWith("/finetune") && (
-              <SidebarAgentButton isCollapsed={isCollapsed} />
-            )}
             {bottomMenuItems.map((item) => {
               const Icon = item.icon
               const isActive = location.pathname === item.path
