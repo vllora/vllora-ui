@@ -29,7 +29,7 @@ import LazyMarkdownRenderer from "@/components/chat/LazyMarkdownRenderer";
 import { emitter } from "@/utils/eventEmitter";
 import type { Plan } from "@/lib/distri-finetune-tools/steps/propose-plan";
 import type { PlanStatus } from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
-import type { ExecutionProgress } from "@/lib/distri-finetune-tools/steps/execute-plan";
+import type { ExecutionProgress, ExecutionStep, ExecutionStepStatus } from "@/lib/distri-finetune-tools/steps/execute-plan";
 import type { PlanDiff } from "./plan-section/plan-markdown-utils";
 
 interface PlanPreviewProps {
@@ -163,15 +163,159 @@ function buildCompletedStepIndices(
   return indices.size > 0 ? indices : undefined;
 }
 
+/**
+ * Maps execution step indices → detail sub-items + status.
+ * Uses progress data when available, falls back to plan data for pending steps.
+ */
+function buildStepDetails(
+  executionSteps: Plan['execution_steps'],
+  progress: ExecutionProgress | null | undefined,
+  plan: Plan
+): Map<number, { details: string[]; status: ExecutionStepStatus }> | undefined {
+  if (!executionSteps?.length) return undefined;
+
+  const result = new Map<number, { details: string[]; status: ExecutionStepStatus }>();
+
+  // Build lookup: step_id → progress step (for matching)
+  const progressById = new Map<string, ExecutionStep>();
+  if (progress?.steps) {
+    for (const s of progress.steps) {
+      progressById.set(s.id, s);
+    }
+  }
+
+  // Keyword-based matching for legacy plans without step_id.
+  // Order matters: "dryrun" must come before "grader" because
+  // "Run evaluation" contains "evaluat" which would match the grader keywords.
+  const STEP_KEYWORDS: [string, string[]][] = [
+    ['topics', ['topic']],
+    ['adjust_topics', ['adjust']],
+    ['categorize', ['categoriz']],
+    ['generate', ['generate', 'data']],
+    ['dryrun', ['dry', 'run evaluation', 'run eval']],
+    ['grader', ['evaluat', 'configur', 'grader', 'quality']],
+    ['upload', ['upload']],
+    ['finetune', ['fine', 'train', 'setup']],
+  ];
+
+  executionSteps.forEach((step, index) => {
+    // Find matching progress step
+    let progressStep: ExecutionStep | undefined;
+
+    if (step.step_id) {
+      progressStep = progressById.get(step.step_id);
+    } else {
+      // Keyword fallback
+      const lower = step.step.toLowerCase();
+      for (const [stepId, keywords] of STEP_KEYWORDS) {
+        if (keywords.some(k => lower.includes(k))) {
+          progressStep = progressById.get(stepId);
+          break;
+        }
+      }
+    }
+
+    // If we have progress data with details, use it
+    if (progressStep?.details?.length) {
+      result.set(index, {
+        details: progressStep.details,
+        status: progressStep.status,
+      });
+      return;
+    }
+
+    // For failed steps, show error as detail
+    if (progressStep?.status === 'failed' && progressStep.error) {
+      result.set(index, {
+        details: [progressStep.error],
+        status: 'failed',
+      });
+      return;
+    }
+
+    // For running steps, show the message
+    if (progressStep?.status === 'running') {
+      result.set(index, {
+        details: [progressStep.message || 'In progress...'],
+        status: 'running',
+      });
+      return;
+    }
+
+    // For pending steps (no progress yet), generate "Target: ..." from plan data
+    if (!progressStep || progressStep.status === 'pending') {
+      const pendingDetails = buildPendingDetails(step, plan);
+      if (pendingDetails.length > 0) {
+        result.set(index, {
+          details: pendingDetails,
+          status: 'pending',
+        });
+      }
+    }
+  });
+
+  return result.size > 0 ? result : undefined;
+}
+
+/** Generate "Target: ..." detail lines from plan data for pending steps */
+function buildPendingDetails(
+  step: NonNullable<Plan['execution_steps']>[number],
+  plan: Plan
+): string[] {
+  const lower = step.step.toLowerCase();
+  const stepId = step.step_id || '';
+
+  if (stepId === 'topics' || lower.includes('topic')) {
+    const count = plan.total_topic_count || plan.proposed_topics?.length || 0;
+    return count > 0 ? [`Target: ${count} topics`] : [];
+  }
+
+  if (stepId === 'generate' || (lower.includes('generate') || lower.includes('data'))) {
+    const records = plan.estimated_records || 0;
+    const topicCount = plan.total_topic_count || plan.proposed_topics?.length || 0;
+    if (records > 0 && topicCount > 0) {
+      return [`Target: ${records} records across ${topicCount} topics`];
+    } else if (records > 0) {
+      return [`Target: ${records} records`];
+    }
+    return [];
+  }
+
+  // "Run evaluation" / "dry run" must be checked BEFORE generic "evaluat"/"configur"
+  // because "Run evaluation" contains "evaluat" which would match the grader branch
+  if (stepId === 'dryrun' || lower.includes('dry') || lower.includes('run evaluation') || lower.includes('run eval')) {
+    return ['Will evaluate a sample of records'];
+  }
+
+  if (stepId === 'grader' || lower.includes('evaluat') || lower.includes('configur') || lower.includes('grader') || lower.includes('quality')) {
+    const criteria = plan.grader_config?.criteria ?? [];
+    if (criteria.length > 0) {
+      const names = criteria.map(c => c.name);
+      const display = names.length <= 4
+        ? names.join(', ')
+        : names.slice(0, 4).join(', ') + `, +${names.length - 4} more`;
+      return [`${criteria.length} criteria: ${display}`];
+    }
+    return [];
+  }
+
+  return [];
+}
+
 function PlanMarkdownContent({ plan, executionProgress }: { plan: Plan; executionProgress?: ExecutionProgress | null }) {
   const completedStepIndices = useMemo(
     () => buildCompletedStepIndices(plan.execution_steps, executionProgress),
     [plan.execution_steps, executionProgress]
   );
 
+  const stepDetails = useMemo(
+    () => buildStepDetails(plan.execution_steps, executionProgress, plan),
+    [plan.execution_steps, executionProgress, plan]
+  );
+
   const markdownContent = useMemo(
-    () => planToMarkdown(plan, { completedStepIndices }),
-    [plan, completedStepIndices]
+    () => planToMarkdown(plan, { completedStepIndices, stepDetails }),
+    [plan, completedStepIndices, stepDetails]
   );
 
   return (

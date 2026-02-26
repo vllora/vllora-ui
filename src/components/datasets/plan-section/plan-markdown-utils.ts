@@ -6,14 +6,18 @@
  */
 
 import type { Plan } from '@/lib/distri-finetune-tools/steps/propose-plan';
+import type { ExecutionStepStatus } from '@/lib/distri-finetune-tools/steps/execute-plan';
 
 /**
  * Options for rendering plan markdown.
  * Pass `completedStepIndices` during execution to check off completed steps.
+ * Pass `stepDetails` to render sub-checkboxes with progress details under each step.
  */
 export interface PlanMarkdownOptions {
   /** Indices of execution steps that are completed (0-based) */
   completedStepIndices?: Set<number>;
+  /** Per-step detail sub-items with their execution status */
+  stepDetails?: Map<number, { details: string[]; status: ExecutionStepStatus }>;
 }
 
 /**
@@ -78,11 +82,33 @@ ${topics.map((t) => {
 
   // Build execution steps as checkbox task list (Claude Code style)
   // Completed steps are checked off during execution
+  // Sub-details appear as indented sub-checkboxes
   const completedIndices = options?.completedStepIndices;
+  const stepDetailsMap = options?.stepDetails;
   const executionSteps = plan.execution_steps ?? [];
   const stepsContent = executionSteps.map((s, i) => {
     const checked = completedIndices?.has(i) ? 'x' : ' ';
-    return `- [${checked}] **${friendlyStepName(s.step)}** — ${s.estimated_time}`;
+    const line = `- [${checked}] **${friendlyStepName(s.step)}**`;
+
+    // Add sub-details if available
+    const stepInfo = stepDetailsMap?.get(i);
+    if (stepInfo?.details?.length) {
+      const subItems = stepInfo.details.map(d => {
+        if (stepInfo.status === 'completed' || stepInfo.status === 'skipped') {
+          return `  - [x] ${d}`;
+        }
+        if (stepInfo.status === 'failed') {
+          return `  - ❌ ${d}`;
+        }
+        if (stepInfo.status === 'running') {
+          return `  - ⏳ ${d}`;
+        }
+        // pending — unchecked
+        return `  - [ ] ${d}`;
+      }).join('\n');
+      return `${line}\n${subItems}`;
+    }
+    return line;
   }).join('\n');
 
   // Build response schema section if applicable
@@ -134,6 +160,14 @@ ${(plan.knowledge_sources ?? []).map((s) => `- \`${s.name}\``).join('\n')}
 
 ${objectiveLine}${planSubtitle}---
 
+## Execution Steps
+
+${stepsContent}
+
+**Estimated output:** \`${plan.estimated_records ?? 0} records\` · **Duration:** \`${plan.estimated_duration}\`
+
+---
+
 ${knowledgeSection}${outputFormatSection}## Training Topics
 
 **${leafTopicCount} topics · ${totalExamples} examples**
@@ -151,16 +185,6 @@ ${dataGenStrategy} ${dataGenSource}
 ## Evaluation Criteria
 
 ${criteriaList}
-
----
-
-## Execution Steps
-
-${stepsContent}
-
----
-
-**Estimated output:** \`${plan.estimated_records ?? 0} records\` · **Duration:** \`${plan.estimated_duration}\`
 `;
   return md;
 }

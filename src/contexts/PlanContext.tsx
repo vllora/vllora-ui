@@ -275,8 +275,9 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
         // Only transition if execution is complete
         if (executionProgress?.is_complete) {
           setIsExecuting(false);
-          setExecutionProgress(null);
-          // Keep proposedPlan and hasPlanProposed so the plan is still viewable
+          // Keep executionProgress so plan checkboxes remain checked.
+          // (It's persisted to IndexedDB by handleExecutionProgress and
+          // restored on mount — clearing it here would blank the checkboxes.)
         }
       }
     };

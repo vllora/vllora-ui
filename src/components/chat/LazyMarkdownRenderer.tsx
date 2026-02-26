@@ -130,7 +130,7 @@ const staticComponents: Partial<Components> = {
     const className = (props as any).className || '';
     const isTaskItem = className.includes('task-list-item');
     return (
-      <li {...props} className={`my-0.5 ${isTaskItem ? 'flex items-start gap-2 list-none' : ''} ${className}`}>
+      <li {...props} className={`my-0.5 ${isTaskItem ? 'flex flex-wrap items-start gap-2 list-none [&>.contains-task-list]:basis-full [&>.contains-task-list]:pl-6 [&>.contains-task-list]:mt-0.5' : ''} ${className}`}>
         {children}
       </li>
     );

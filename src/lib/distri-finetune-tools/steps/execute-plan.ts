@@ -95,6 +95,8 @@ export interface ExecutionStep {
   message?: string;
   result?: unknown;
   error?: string;
+  /** Sub-item labels for detailed progress (e.g. "Applied 8 topics", "Generated 30/30 records") */
+  details?: string[];
 }
 
 export interface ExecutionProgress {
@@ -180,6 +182,96 @@ function emitProgress(progress: ExecutionProgress): void {
 
 function generateTopicId(): string {
   return `topic-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+/**
+ * Build human-readable detail sub-items for a completed step.
+ * These appear as indented sub-checkboxes in the plan markdown.
+ */
+function buildCompletedStepDetails(
+  stepId: ExecutionStepId,
+  result: StepResult,
+  summary: ExecutionSummary,
+  plan: Plan
+): string[] {
+  const details: string[] = [];
+  const res = result.result as Record<string, unknown> | undefined;
+
+  switch (stepId) {
+    case 'topics': {
+      const count = summary.topics_created || plan.total_topic_count || 0;
+      details.push(`Applied ${count} topics`);
+      // Show first few topic names from the plan
+      const topicNames = plan.proposed_topics?.map(t => t.name) ?? [];
+      if (topicNames.length > 0) {
+        const display = topicNames.length <= 5
+          ? topicNames.join(', ')
+          : topicNames.slice(0, 5).join(', ') + `, +${topicNames.length - 5} more`;
+        details.push(`Topics: ${display}`);
+      }
+      break;
+    }
+    case 'adjust_topics': {
+      const changes = (res as any)?.changes_made as string[] | undefined;
+      if (changes?.length) {
+        details.push(`Changes: ${changes.slice(0, 3).join(', ')}${changes.length > 3 ? '...' : ''}`);
+      }
+      const count = summary.topics_created;
+      if (count > 0) details.push(`${count} topics total`);
+      break;
+    }
+    case 'categorize': {
+      const assigned = (res as any)?.categorization?.assigned_count;
+      if (typeof assigned === 'number') details.push(`Categorized ${assigned} records`);
+      break;
+    }
+    case 'generate': {
+      const generated = summary.records_generated || (res as any)?.records_created || 0;
+      const planned = plan.estimated_records || 0;
+      if (planned > 0) {
+        const pct = Math.round((generated / planned) * 100);
+        details.push(`Generated ${generated}/${planned} records (${pct}%)`);
+      } else {
+        details.push(`Generated ${generated} records`);
+      }
+      break;
+    }
+    case 'grader': {
+      const criteriaCount = plan.grader_config?.criteria?.length ?? 0;
+      details.push(`Configured ${criteriaCount} evaluation criteria`);
+      const names = plan.grader_config?.criteria?.map(c => c.name) ?? [];
+      if (names.length > 0 && names.length <= 4) {
+        details.push(`Criteria: ${names.join(', ')}`);
+      }
+      break;
+    }
+    case 'upload': {
+      const uploaded = (res as any)?.records_uploaded;
+      if (typeof uploaded === 'number') {
+        details.push(`Uploaded ${uploaded} records`);
+      } else {
+        details.push('Dataset uploaded to backend');
+      }
+      break;
+    }
+    case 'dryrun': {
+      const jobId = (res as any)?.dry_run_job_id as string | undefined;
+      if (jobId) details.push(`Evaluation: eval-${jobId.slice(0, 6)}`);
+      const passRate = summary.dry_run_pass_rate;
+      if (typeof passRate === 'number') {
+        details.push(`Pass rate: ${Math.round(passRate * 100)}%`);
+      }
+      break;
+    }
+    case 'finetune': {
+      const ftId = summary.finetune_job_id;
+      if (ftId) details.push(`Finetune: ft-${ftId.slice(0, 6)}`);
+      if (summary.finetune_job_status) details.push(`Status: ${summary.finetune_job_status}`);
+      break;
+    }
+  }
+
+  return details;
 }
 
 function convertToHierarchyNodes(
@@ -792,10 +884,14 @@ export const executePlanHandler: ToolHandler = async (
       try {
         const result = await executor.execute(ctx);
 
+        // Build detailed sub-items for this step's completion
+        const details = buildCompletedStepDetails(stepId, result, summary, ctx.plan);
+
         updateStep(stepId, {
           status: 'completed',
           message: result.message,
           result: result.result,
+          details: details.length > 0 ? details : undefined,
         });
 
         if (executor.workflowStep) {
@@ -803,7 +899,7 @@ export const executePlanHandler: ToolHandler = async (
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        updateStep(stepId, { status: 'failed', error: errorMessage });
+        updateStep(stepId, { status: 'failed', error: errorMessage, details: [errorMessage] });
 
         if (executor.nonFatal) {
           // Non-fatal: log and continue
