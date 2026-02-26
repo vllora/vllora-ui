@@ -78,11 +78,11 @@ export function DatasetsListHeader({
       {/* Sort dropdown */}
       <DatasetSortDropdown activeSort={activeSort} onSortChange={onSortChange} />
 
-      {/* Count + New Dataset button */}
+      {/* Count + New Experiment button */}
       <div className="flex items-center gap-3 ml-auto">
         {totalCount !== undefined && (
           <span className="text-xs text-muted-foreground/50 tabular-nums">
-            {totalCount} dataset{totalCount !== 1 ? "s" : ""}
+            {totalCount} experiment{totalCount !== 1 ? "s" : ""}
           </span>
         )}
         <Link
@@ -90,7 +90,7 @@ export function DatasetsListHeader({
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--theme-500))] text-white hover:bg-[rgb(var(--theme-600))] transition-colors shrink-0"
         >
           <Plus className="w-3.5 h-3.5" />
-          New Dataset
+          New Experiment
         </Link>
       </div>
     </div>

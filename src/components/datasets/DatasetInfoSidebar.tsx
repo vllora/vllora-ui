@@ -64,12 +64,12 @@ export function DatasetInfoSidebar({
       ) : disabledReason ? (
         <>
           <AlertCircle className="h-4 w-4" />
-          Create Dataset
+          Create Experiment
         </>
       ) : (
         <>
           <Database className="h-4 w-4" />
-          Create Dataset
+          Create Experiment
         </>
       )}
     </Button>
