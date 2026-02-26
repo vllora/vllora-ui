@@ -22,6 +22,7 @@ import { emitter } from "@/utils/eventEmitter";
 import { uploadKnowledgeSourceHandler } from "@/lib/distri-finetune-tools/steps/knowledge-sources";
 import type { KnowledgeSourceType } from "@/types/dataset-types";
 import { LucyAvatar } from "@/components/agent/lucy-agent";
+import { FinetuneHero } from "./FinetuneHero";
 
 type TabType = "objective" | "api";
 
@@ -108,7 +109,21 @@ export function EmptyDatasetsState() {
   const tabParam = searchParams.get("tab");
   const activeTab: TabType = isValidTab(tabParam) ? tabParam : "objective";
 
-  const [objective, setObjective] = useState("");
+  // Support ?objective= param from homepage use-case cards
+  const objectiveParam = searchParams.get("objective");
+  const [objective, setObjective] = useState(objectiveParam ?? "");
+
+  // Clean up the objective param from URL after reading it
+  useEffect(() => {
+    if (objectiveParam) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("objective");
+        return next;
+      }, { replace: true });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [isCreating, setIsCreating] = useState(false);
   const [transition, setTransition] = useState<{ datasetId: string; hasFiles: boolean } | null>(null);
 
@@ -337,18 +352,7 @@ export function EmptyDatasetsState() {
           </span>
         </div>
 
-        {/* Heading */}
-        <h1 className="text-[2.25rem] leading-[1.15] font-bold tracking-tight text-foreground mb-4">
-          From idea to{" "}
-          <span className="bg-gradient-to-r from-[rgb(var(--theme-400))] to-[rgb(var(--theme-600))] bg-clip-text text-transparent">
-            finetuned model
-          </span>
-        </h1>
-
-        {/* Subtitle */}
-        <p className="text-[15px] text-muted-foreground/60">
-          Define the vision. We handle the pipeline.
-        </p>
+        <FinetuneHero />
       </div>
 
       {/* Pathway Toggle */}

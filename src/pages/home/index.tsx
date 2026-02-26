@@ -31,7 +31,7 @@ const HOME_TABS: {
   {
     tab: "gateway",
     icon: Radio,
-    label: "AI Gateway",
+    label: "LLM Gateway",
     hint: "Route & monitor 200+ models",
   },
 ];
