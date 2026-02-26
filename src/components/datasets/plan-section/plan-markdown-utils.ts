@@ -64,10 +64,10 @@ ${topics.map((t) => {
     return step;
   };
 
-  // Build execution steps as numbered list
+  // Build execution steps as checkbox task list (Claude Code style)
   const executionSteps = plan.execution_steps ?? [];
-  const stepsContent = executionSteps.map((s, i) =>
-    `${i + 1}. **${friendlyStepName(s.step)}** — ${s.estimated_time}`
+  const stepsContent = executionSteps.map((s) =>
+    `- [ ] **${friendlyStepName(s.step)}** — ${s.estimated_time}`
   ).join('\n');
 
   // Build response schema section if applicable

@@ -111,21 +111,50 @@ const staticComponents: Partial<Components> = {
       {children}
     </h6>
   ),
-  ul: ({ children, ...props }) => (
-    <ul {...props} className={`list-disc list-inside my-2 space-y-1 ${(props as any).className || ''}`}>
-      {children}
-    </ul>
-  ),
+  ul: ({ children, ...props }) => {
+    const className = (props as any).className || '';
+    // GFM task lists get "contains-task-list" class from remark-gfm
+    const isTaskList = className.includes('contains-task-list');
+    return (
+      <ul {...props} className={`${isTaskList ? 'list-none pl-0' : 'list-disc list-inside'} my-2 space-y-1 ${className}`}>
+        {children}
+      </ul>
+    );
+  },
   ol: ({ children, ...props }) => (
     <ol {...props} className={`list-decimal list-inside my-2 space-y-1 ${(props as any).className || ''}`}>
       {children}
     </ol>
   ),
-  li: ({ children, ...props }) => (
-    <li {...props} className={`my-0.5 ${(props as any).className || ''}`}>
-      {children}
-    </li>
-  ),
+  li: ({ children, ...props }) => {
+    const className = (props as any).className || '';
+    const isTaskItem = className.includes('task-list-item');
+    return (
+      <li {...props} className={`my-0.5 ${isTaskItem ? 'flex items-start gap-2 list-none' : ''} ${className}`}>
+        {children}
+      </li>
+    );
+  },
+  input: ({ ...props }) => {
+    if ((props as any).type === 'checkbox') {
+      return (
+        <span
+          className={`inline-flex items-center justify-center w-4 h-4 rounded border mt-0.5 shrink-0 ${
+            (props as any).checked
+              ? 'bg-[rgb(var(--theme-500))] border-[rgb(var(--theme-500))] text-white'
+              : 'border-muted-foreground/40 bg-transparent'
+          }`}
+        >
+          {(props as any).checked && (
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          )}
+        </span>
+      );
+    }
+    return <input {...props} />;
+  },
   a: ({ children, ...props }) => (
     <a className="text-blue-500 hover:underline hover:text-blue-600" {...props}>
       {children}
