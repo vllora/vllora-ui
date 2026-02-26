@@ -24,12 +24,18 @@ interface EvaluationBottomPanelProps {
   onToggleCollapse: () => void;
   /** When true, skip the Activity header bar (used when panel is the full-height content) */
   standalone?: boolean;
+  /**
+   * Optional external selection (e.g., explorer path `evaluations/jobs/<jobId>`).
+   * `undefined` = unmanaged (legacy behavior), `null` = jobs folder (use fallback selection).
+   */
+  selectedJobIdOverride?: string | null;
 }
 
 export function EvaluationBottomPanel({
   isCollapsed,
   onToggleCollapse,
   standalone = false,
+  selectedJobIdOverride,
 }: EvaluationBottomPanelProps) {
   const {
     datasetId,
@@ -42,19 +48,36 @@ export function EvaluationBottomPanel({
 
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
+  // External selection from explorer path (jobs folder vs specific run).
+  useEffect(() => {
+    if (selectedJobIdOverride === undefined) return;
+
+    if (selectedJobIdOverride) {
+      const hasRequestedJob = jobs.some((job) => job.id === selectedJobIdOverride);
+      if (hasRequestedJob) {
+        setSelectedJobId(selectedJobIdOverride);
+        return;
+      }
+    }
+
+    setSelectedJobId(lastCompletedJob?.id ?? jobs[0]?.id ?? null);
+  }, [selectedJobIdOverride, jobs, lastCompletedJob]);
+
   // Set initial selection
   useEffect(() => {
+    if (selectedJobIdOverride !== undefined) return;
     if (lastCompletedJob && !selectedJobId) {
       setSelectedJobId(lastCompletedJob.id);
     }
-  }, [lastCompletedJob, selectedJobId]);
+  }, [lastCompletedJob, selectedJobId, selectedJobIdOverride]);
 
   // Auto-select when running job completes
   useEffect(() => {
+    if (selectedJobIdOverride !== undefined) return;
     if (!runningJob && lastCompletedJob) {
       setSelectedJobId(lastCompletedJob.id);
     }
-  }, [runningJob, lastCompletedJob]);
+  }, [runningJob, lastCompletedJob, selectedJobIdOverride]);
 
   // Allow other screens (e.g., Overview activity timeline) to open a specific dry-run job.
   useEffect(() => {

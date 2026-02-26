@@ -59,3 +59,17 @@ export function mapTabPathToSection(path: string | null): ContentSection {
 
   return null;
 }
+
+/**
+ * Extract dry-run job ID from an explorer path like `evaluations/jobs/<jobId>`.
+ * Returns null for the jobs folder path (`evaluations/jobs`) or non-job paths.
+ */
+export function getDryRunJobIdFromPath(path: string | null): string | null {
+  if (!path) return null;
+  const prefix = "evaluations/jobs/";
+  if (!path.startsWith(prefix)) return null;
+
+  const jobId = path.slice(prefix.length).trim();
+  if (!jobId || jobId.includes("/")) return null;
+  return jobId;
+}

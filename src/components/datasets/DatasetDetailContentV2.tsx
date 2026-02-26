@@ -42,7 +42,11 @@ import { PlanConsumer } from "@/contexts/PlanContext";
 import { DeployGuidancePanel } from "./DeployGuidancePanel";
 import { WorkspaceTabsProvider, WorkspaceTabsConsumer } from "@/contexts/WorkspaceTabsContext";
 import { WorkspaceTabManager } from "./WorkspaceTabManager";
-import { mapTabPathToSection, type ContentSection } from "./TabContentRouter";
+import {
+  mapTabPathToSection,
+  getDryRunJobIdFromPath,
+  type ContentSection,
+} from "./TabContentRouter";
 import { WorkspaceWelcome } from "./WorkspaceWelcome";
 import type { CoverageStats } from "@/types/dataset-types";
 
@@ -166,6 +170,10 @@ export function DatasetDetailContentV2() {
   }, []);
   const [tabContentSection, setTabContentSection] = useState<ContentSection>(null);
   const [activeTabPath, setActiveTabPath] = useState<string | null>(null);
+  const selectedDryRunJobId = useMemo(
+    () => getDryRunJobIdFromPath(activeTabPath),
+    [activeTabPath]
+  );
 
   // Finetune jobs sidebar
   const { setCurrentBackendDatasetId } = FinetuneJobsConsumer();
@@ -692,6 +700,7 @@ export function DatasetDetailContentV2() {
                 onSave={handleSaveEvaluationConfig}
                 recordCount={sortedRecords.length}
                 view="jobs"
+                selectedDryRunJobId={selectedDryRunJobId}
               />
             </div>
           )}

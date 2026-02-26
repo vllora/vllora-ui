@@ -193,10 +193,19 @@ interface EvaluationConfigPanelProps {
   recordCount: number;
   /** Which sub-view to render: "script" = editor only, "jobs" = runs only, undefined = both */
   view?: "script" | "jobs";
+  /** When provided in jobs view, preselect a specific dry-run job from explorer path. */
+  selectedDryRunJobId?: string | null;
 }
 
 export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, EvaluationConfigPanelProps>(
-  function EvaluationConfigPanel({ evalScript, onSave, hideHeaderActions = false, recordCount, view }, ref) {
+  function EvaluationConfigPanel({
+    evalScript,
+    onSave,
+    hideHeaderActions = false,
+    recordCount,
+    view,
+    selectedDryRunJobId,
+  }, ref) {
   const [script, setScript] = useState(evalScript || PLACEHOLDER_SCRIPT);
   const [isSaving, setIsSaving] = useState(false);
   const [isBottomCollapsed, setIsBottomCollapsed] = useState(false);
@@ -454,6 +463,7 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
           isCollapsed={false}
           onToggleCollapse={() => {}}
           standalone
+          selectedJobIdOverride={selectedDryRunJobId}
         />
       </div>
     );
@@ -490,6 +500,7 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
           <EvaluationBottomPanel
             isCollapsed={isBottomCollapsed}
             onToggleCollapse={handleToggleBottomPanel}
+            selectedJobIdOverride={selectedDryRunJobId}
           />
         </ResizablePanel>
       </ResizablePanelGroup>
