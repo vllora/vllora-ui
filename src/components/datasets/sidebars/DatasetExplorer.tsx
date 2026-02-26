@@ -295,6 +295,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       children: topicChildren,
       isExpandable: topicChildren.length > 0,
       isSection: true,
+      emptyText: "No training data yet",
     });
 
     // --- evaluations/ (always shown) ---
@@ -388,6 +389,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         children: evalChildren,
         isExpandable: true,
         isSection: true,
+        emptyText: "No evaluations run yet",
       });
     }
 
@@ -447,6 +449,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         children: finetuneChildren,
         isExpandable: true,
         isSection: true,
+        emptyText: "No finetune jobs yet",
         actions: [
           {
             key: "new-job",
@@ -494,6 +497,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         children: statsChildren,
         isExpandable: true,
         isSection: true,
+        emptyText: "Generate data to see insights",
       });
     }
 

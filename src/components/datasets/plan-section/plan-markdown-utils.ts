@@ -31,36 +31,48 @@ export function planToMarkdown(plan: Plan): string {
   };
   const leafTopicCount = countLeafTopics(topics);
 
-  // Build topics table
+  // Build topics table — show subtotal for parents instead of 0
   const topicsTable = topics.length > 0
     ? `| Topic | Examples | Description |
 |:------|:--------:|:------------|
 ${topics.map((t) => {
+  const parentCount = t.subtopics && t.subtopics.length > 0
+    ? t.subtopics.reduce((s, sub) => s + sub.target_count, 0)
+    : t.target_count;
   const subtopicRows = t.subtopics?.map((s) =>
     `| ↳ ${s.name} | ${s.target_count} | ${s.description || '-'} |`
   ).join('\n') || '';
-  return `| **${t.name}** | ${t.target_count} | ${t.description} |${subtopicRows ? '\n' + subtopicRows : ''}`;
+  return `| **${t.name}** | ${parentCount} | ${t.description} |${subtopicRows ? '\n' + subtopicRows : ''}`;
 }).join('\n')}`
     : '_No topics configured_';
 
-  // Build criteria table (simple list, all equally weighted)
-  const criteriaTable = criteria.length > 0
-    ? `| Criterion | Description |
-|:----------|:------------|
-${criteria.map((c) =>
-  `| ${c.name} | ${c.description} |`
-).join('\n')}`
+  // Build criteria as bullet list for readability
+  const criteriaList = criteria.length > 0
+    ? criteria.map((c) =>
+      `- **${c.name}** — ${c.description}`
+    ).join('\n')
     : '_No evaluation criteria configured_';
 
-  // Build execution steps
+  // Map execution step labels to user-friendly names and normalize "Dry Run" to "Evaluation"
+  const friendlyStepName = (step: string): string => {
+    const lower = step.toLowerCase();
+    if (lower.includes('topic')) return 'Set up training categories';
+    if (lower.includes('generate') && lower.includes('data')) return 'Generate training data';
+    if (lower.includes('evaluat') || lower.includes('configur')) return 'Configure quality checks';
+    if (lower.includes('dry') || lower.includes('run evaluation')) return 'Run evaluation';
+    if (lower.includes('fine') || lower.includes('setup')) return 'Prepare finetune job';
+    return step;
+  };
+
+  // Build execution steps as numbered list
   const executionSteps = plan.execution_steps ?? [];
   const stepsContent = executionSteps.map((s, i) =>
-    `| ${i + 1} | ${s.step} | ${s.estimated_time} |`
+    `${i + 1}. **${friendlyStepName(s.step)}** — ${s.estimated_time}`
   ).join('\n');
 
   // Build response schema section if applicable
   const outputFormatSection = plan.output_format
-    ? `## 🔍 Response Schema
+    ? `## Response Schema
 
 **System Prompt Template:**
 \`\`\`json
@@ -77,56 +89,56 @@ ${JSON.stringify(plan.output_format.schema, null, 2)}
 `
     : '';
 
-  const md = `# 📋 ${plan.dataset_name}
+  // Knowledge sources section — only show when there are sources
+  const knowledgeSection = (plan.knowledge_sources ?? []).length > 0
+    ? `## Knowledge Sources
+
+${(plan.knowledge_sources ?? []).map((s) => `- \`${s.name}\``).join('\n')}
+
+---
+
+`
+    : '';
+
+  // Data generation — inline text instead of table
+  const dataGenStrategy = plan.data_generation?.strategy ?? 'N/A';
+  const dataGenSource = plan.data_generation?.grounded_in_knowledge
+    ? 'Based on your uploaded documents.'
+    : 'Generated from general knowledge.';
+
+  const md = `# ${plan.dataset_name}
 
 > ${plan.objective}
 
 ---
 
-## 📚 Knowledge Sources
+${knowledgeSection}${outputFormatSection}## Training Topics
 
-${(plan.knowledge_sources ?? []).length > 0
-  ? (plan.knowledge_sources ?? []).map((s) => `- 📄 \`${s.name}\``).join('\n')
-  : '_No knowledge sources uploaded_'}
-
----
-
-${outputFormatSection}## 🎯 Training Topics
-
-**Total:** ${leafTopicCount} topics · ${totalExamples} examples
+**${leafTopicCount} topics · ${totalExamples} examples**
 
 ${topicsTable}
 
 ---
 
-## ⚙️ Data Generation
+## Data Generation
 
-| Setting | Value |
-|:--------|:------|
-| **Strategy** | ${plan.data_generation?.strategy ?? 'N/A'} |
-| **Based on Docs** | ${plan.data_generation?.grounded_in_knowledge ? '✅ Yes - uses your uploaded documents' : '❌ No - generates from general knowledge'} |
+${dataGenStrategy} ${dataGenSource}
 
 ---
 
-## 📊 Evaluation Criteria
+## Evaluation Criteria
 
-${criteriaTable}
+${criteriaList}
 
 ---
 
-## 🚀 Execution Steps
+## Execution Steps
 
-| Step | Action | Time |
-|:----:|:-------|:-----|
 ${stepsContent}
 
 ---
 
-<div align="center">
-
-**📈 Estimated Output:** \`${plan.estimated_records ?? 0} records\` · **⏱️ Duration:** \`${plan.estimated_duration}\`
-
-</div>
+**Estimated output:** \`${plan.estimated_records ?? 0} records\` · **Duration:** \`${plan.estimated_duration}\`
 `;
   return md;
 }
@@ -203,27 +215,36 @@ export function markdownToPlan(md: string, originalPlan: Plan): Plan {
     plan.proposed_topics = topics;
   }
 
-  // Parse criteria from table rows: | Criterion Name | Description |
-  const criteriaTableRegex = /\|\s*([^|*]+)\s*\|\s*([^|]+)\|/g;
+  // Parse criteria from bullet list: - **Name** — Description
+  // Also handles legacy table format: | Name | Description |
   const parsedCriteria: NonNullable<typeof plan.grader_config>['criteria'] = [];
-  let criteriaMatch;
 
-  // Find the criteria section
-  const criteriaSection = md.match(/## 📊 Evaluation Criteria[\s\S]*?(?=---|$)/);
+  // Find the criteria section (handles both with and without emoji prefix)
+  const criteriaSection = md.match(/## (?:📊 )?Evaluation Criteria[\s\S]*?(?=---|$)/);
   if (criteriaSection) {
     const section = criteriaSection[0];
-    while ((criteriaMatch = criteriaTableRegex.exec(section)) !== null) {
-      const name = criteriaMatch[1].trim();
-      const description = criteriaMatch[2].trim();
 
-      // Skip header rows and separator rows
-      if (name.toLowerCase() === 'criterion' || name.startsWith(':') || name.startsWith('-')) continue;
-      if (description.toLowerCase() === 'description' || description.startsWith(':') || description.startsWith('-')) continue;
-
+    // Try bullet list format first: - **Name** — Description
+    const bulletRegex = /- \*\*([^*]+)\*\*\s*[—–-]\s*(.+)/g;
+    let bulletMatch;
+    while ((bulletMatch = bulletRegex.exec(section)) !== null) {
       parsedCriteria.push({
-        name,
-        description,
+        name: bulletMatch[1].trim(),
+        description: bulletMatch[2].trim(),
       });
+    }
+
+    // Fallback to table format if no bullets found
+    if (parsedCriteria.length === 0) {
+      const criteriaTableRegex = /\|\s*([^|*]+)\s*\|\s*([^|]+)\|/g;
+      let criteriaMatch;
+      while ((criteriaMatch = criteriaTableRegex.exec(section)) !== null) {
+        const name = criteriaMatch[1].trim();
+        const description = criteriaMatch[2].trim();
+        if (name.toLowerCase() === 'criterion' || name.startsWith(':') || name.startsWith('-')) continue;
+        if (description.toLowerCase() === 'description' || description.startsWith(':') || description.startsWith('-')) continue;
+        parsedCriteria.push({ name, description });
+      }
     }
   }
 

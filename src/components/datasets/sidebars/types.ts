@@ -54,4 +54,6 @@ export interface FileTreeNode {
   actions?: FileTreeAction[];
   /** Render as a VS Code-style collapsible section header (uppercase, bold, full-width bar) */
   isSection?: boolean;
+  /** Custom empty state text when section is expanded with no children */
+  emptyText?: string;
 }

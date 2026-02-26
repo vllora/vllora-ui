@@ -40,7 +40,7 @@ const PATHWAYS: { tab: TabType; icon: typeof Sparkles; label: string; hint: stri
     tab: "api",
     icon: Radio,
     label: "Route existing calls",
-    hint: "Capture & enhance real traces",
+    hint: "Capture and enhance real traces",
   },
 ];
 

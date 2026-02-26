@@ -186,7 +186,7 @@ export function FileTreeItem({
               className="text-[11px] text-muted-foreground/40 italic select-none"
               style={{ paddingLeft: `${BASE_PX + (level + 1) * INDENT_PX + 20}px` }}
             >
-              No items yet
+              {node.emptyText || "No items yet"}
             </div>
           )
         )}
