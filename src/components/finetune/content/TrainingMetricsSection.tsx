@@ -2,7 +2,7 @@
  * TrainingMetricsSection
  *
  * Wrapper around TrainingMetricsChart with loading / error / empty states.
- * Refresh button is now in the parent header, so this just renders the chart or a status message.
+ * Passes isLive flag to the chart for the live indicator badge.
  */
 
 import { cn } from "@/lib/utils";
@@ -16,6 +16,8 @@ interface TrainingMetricsSectionProps {
   isRefreshing: boolean;
   error: string | null;
   onRefresh: () => void;
+  /** Whether the training job is currently running (shows Live badge on chart) */
+  isLive?: boolean;
 }
 
 export function TrainingMetricsSection({
@@ -24,6 +26,7 @@ export function TrainingMetricsSection({
   isRefreshing,
   error,
   onRefresh,
+  isLive,
 }: TrainingMetricsSectionProps) {
   if (isLoading) {
     return (
@@ -58,7 +61,12 @@ export function TrainingMetricsSection({
   }
 
   if (evalResults && evalResults.results.length > 0) {
-    return <TrainingMetricsChart results={evalResults.results} />;
+    return (
+      <TrainingMetricsChart
+        results={evalResults.results}
+        isLive={isLive}
+      />
+    );
   }
 
   return (

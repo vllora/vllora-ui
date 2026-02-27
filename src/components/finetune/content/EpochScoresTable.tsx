@@ -86,14 +86,26 @@ export function EpochScoresTable({
                         {formatScore(e.score)}
                       </span>
                       {delta != null && delta !== 0 && (
-                        <span
-                          className={cn(
-                            "text-[9px] font-mono",
-                            delta > 0 ? "text-emerald-500" : "text-red-400"
-                          )}
-                        >
-                          {delta > 0 ? "+" : ""}{(delta * 100).toFixed(0)}%
-                        </span>
+                        <TooltipProvider delayDuration={200}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span
+                                className={cn(
+                                  "text-[9px] font-mono cursor-help",
+                                  delta > 0 ? "text-emerald-500" : "text-red-400"
+                                )}
+                              >
+                                {delta > 0 ? "+" : ""}{(delta * 100).toFixed(0)}%
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent
+                              side="top"
+                              className="text-[10px] bg-zinc-900 border-zinc-700/60"
+                            >
+                              Score change from previous evaluation ({delta > 0 ? "+" : ""}{delta.toFixed(2)})
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       )}
                     </span>
                   </td>

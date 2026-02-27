@@ -236,7 +236,7 @@ export function ResultsTable({
         <div className="flex items-center text-[10px] font-medium uppercase tracking-wider text-zinc-500 border-b border-zinc-800/60 shrink-0 bg-zinc-900/20">
           <div className="w-6 shrink-0 py-2" />
           <div className="w-12 shrink-0 py-2 pr-2">#</div>
-          {onRecordIdClick && <div className="w-24 shrink-0 py-2 pr-2">Record</div>}
+          {onRecordIdClick && <div className="flex-1 min-w-[96px] py-2 pr-2">Record</div>}
           <div className="w-16 shrink-0 py-2 pr-2">
             <UITooltipProvider delayDuration={200}>
               <UITooltip>
@@ -261,7 +261,7 @@ export function ResultsTable({
             </UITooltipProvider>
           </div>
           <div className="w-12 shrink-0 py-2 pr-2">Status</div>
-          <div className="flex-1 py-2 pr-2">Reasoning</div>
+          <div className="flex-[2] min-w-0 py-2 pr-2">Reasoning</div>
           <div className="w-10 shrink-0 py-2 text-center">Logs</div>
         </div>
 
