@@ -21,8 +21,6 @@ interface DatasetReadmeViewerProps {
   readmeUpdatedAt: number | null;
   /** Callback to export README as file */
   onExport: () => void;
-  /** Callback to regenerate README */
-  onRegenerate: () => Promise<void>;
   /** Optional header label (defaults to "Overview") */
   headerLabel?: string;
   /** Optional className for container */
@@ -33,7 +31,6 @@ export const DatasetReadmeViewer = memo(function DatasetReadmeViewer({
   readme,
   readmeUpdatedAt,
   onExport,
-  onRegenerate,
   headerLabel = "Overview",
   className,
 }: DatasetReadmeViewerProps) {
@@ -67,7 +64,6 @@ export const DatasetReadmeViewer = memo(function DatasetReadmeViewer({
         </div>
         <ReadmeHeaderActions
           readme={readme}
-          onRegenerate={onRegenerate}
           onExport={onExport}
         />
       </div>

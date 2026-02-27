@@ -155,12 +155,35 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 |------|------|
 | `propose-plan/handler.ts` (tool) | Plan generated successfully |
 | `propose-plan/adjust-plan.ts` (tool) | Adjusted plan ready |
+| `save-plan.ts` (tool) | Plan validated and committed |
+
+> **Note:** `update-plan-markdown.ts` used to emit this event but now emits `vllora_plan_markdown_updated` instead (see below). The `vllora_plan_proposed` event resets plan status to `'proposed'`, which is wrong during execution.
 
 **Listeners:**
 | File | What it does |
 |------|-------------|
-| `PlanContext.tsx` | Clears loading state, sets `hasPlanProposed=true` |
-| `PlanPreview.tsx` | Displays PlanEditor with the plan |
+| `PlanContext.tsx` | Resets status to `'proposed'`, clears loading state, sets `hasPlanProposed=true`, opens plan preview |
+
+---
+
+### 4b. `vllora_plan_markdown_updated`
+
+**Purpose:** Content-only plan markdown update during agent-driven execution. Unlike `vllora_plan_proposed`, this does NOT reset plan status or execution state — it only updates the displayed markdown (e.g., checking off steps in the checklist). Optionally transitions plan status.
+
+| | Details |
+|---|---|
+| **Data** | `{ datasetId: string; plan: Plan; status?: 'executing' \| 'completed' \| 'failed' }` |
+| **Direction** | Tool handler → React |
+
+**Emitters:**
+| File | When |
+|------|------|
+| `update-plan-markdown.ts` (tool) | Agent checked off a step or updated plan display during execution |
+
+**Listeners:**
+| File | What it does |
+|------|-------------|
+| `PlanContext.tsx` | Updates `proposedPlan` content. Auto-transitions `'proposed'`/`'approved'` → `'executing'`. If `status` is `'completed'`/`'failed'`, transitions to final state. |
 
 ---
 
@@ -412,7 +435,7 @@ Previously 3 components independently called `knowledgeDB.getKnowledgeSourcesByD
 
 ### `PlanContext` (`src/contexts/PlanContext.tsx`)
 
-**Listens to:** `vllora_plan_generating`, `vllora_plan_proposed`, `vllora_plan_dismissed`, `vllora_workflow_updated`, `vllora_plan_progress`
+**Listens to:** `vllora_plan_generating`, `vllora_plan_proposed`, `vllora_plan_markdown_updated`, `vllora_plan_dismissed`, `vllora_workflow_updated`, `vllora_plan_progress`
 **Provides:** `isGeneratingPlan`, `hasPlanProposed`
 **Consumers:** `DatasetDetailContentV2`
 **Provider:** `PlanProvider` wraps `DatasetDetailContentV2` in `DatasetDetailView.tsx`

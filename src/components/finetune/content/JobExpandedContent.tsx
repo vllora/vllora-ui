@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Info, BarChart3, List } from "lucide-react";
 import { FinetuneJob, FinetuneEvalResultsResponse } from "@/services/finetune-api";
 import { ErrorLogSection } from "./ErrorLogSection";
-import { FinetuneJobDetailsSection } from "./FinetuneJobDetailsSection";
+import { FinetuneJobDetailsSection } from "./finetune-job-detail/FinetuneJobDetailsSection";
 import { PerRowDetailsSection } from "./PerRowDetailsSection";
 import { TrainingMetricsSection } from "./TrainingMetricsSection";
 

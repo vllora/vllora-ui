@@ -70,7 +70,7 @@ export { getDatasetStateHandler, getDatasetStateTool, computeDatasetStats, type 
 export { updateRecordHandler, updateRecordTool } from './update-record';
 
 // README
-export { regenerateReadmeHandler, regenerateReadmeTool } from './regenerate-readme';
+export { updateDatasetReadmeHandler, updateDatasetReadmeTool } from './update-dataset-readme';
 
 // Objective
 export { updateObjectiveHandler, updateObjectiveTool } from './update-objective';
@@ -96,6 +96,7 @@ export {
   type ExecutionStepStatus,
   type ExecutionStepId,
 } from './execute-plan';
+export { updatePlanMarkdownHandler, updatePlanMarkdownTool } from './update-plan-markdown';
 
 // Stockfish Chess Analysis (conditionally used for chess datasets only)
 export {
@@ -149,13 +150,14 @@ import { deployModelHandler, deployModelTool } from './deploy-model';
 import { getDatasetRecordsHandler, getDatasetRecordsTool } from './get-dataset-records';
 import { getDatasetStateHandler, getDatasetStateTool } from './get-dataset-state';
 import { updateRecordHandler, updateRecordTool } from './update-record';
-import { regenerateReadmeHandler, regenerateReadmeTool } from './regenerate-readme';
+import { updateDatasetReadmeHandler, updateDatasetReadmeTool } from './update-dataset-readme';
 import { updateObjectiveHandler, updateObjectiveTool } from './update-objective';
 import { analyzeKnowledgeSourcesHandler, analyzeKnowledgeSourcesTool } from './analyze-knowledge-sources';
 import { generateGraderHandler, generateGraderTool } from './generate-grader';
 import { proposePlanHandler, proposePlanTool, adjustPlanHandler, adjustPlanTool } from './propose-plan';
 import { savePlanHandler, savePlanTool } from './save-plan';
 import { executePlanHandler, executePlanTool } from './execute-plan';
+import { updatePlanMarkdownHandler, updatePlanMarkdownTool } from './update-plan-markdown';
 // Note: Stockfish tools (analyzeChessPositionTool, classifyChessMoveTool) are NOT imported here
 // They are conditionally added via stockfishTools in useFineTuneAgentChat for chess datasets only
 
@@ -190,7 +192,7 @@ export const STEP_TOOL_NAMES = [
   'get_dataset_records',
   'get_dataset_state',
   'update_record',
-  'regenerate_readme',
+  'update_dataset_readme',
   'update_objective',
   'analyze_knowledge_sources',
   'generate_grader',
@@ -198,6 +200,7 @@ export const STEP_TOOL_NAMES = [
   'adjust_plan',
   'save_plan',
   'execute_plan',
+  'update_plan_markdown',
   // Note: Stockfish tools ('analyze_chess_position', 'classify_chess_move') are NOT in this list
   // They are conditionally available for chess datasets only via stockfishTools export
 ] as const;
@@ -238,7 +241,7 @@ export const stepTools: DistriFnTool[] = [
   getDatasetRecordsTool,
   getDatasetStateTool,
   updateRecordTool,
-  regenerateReadmeTool,
+  updateDatasetReadmeTool,
   updateObjectiveTool,
   analyzeKnowledgeSourcesTool,
   generateGraderTool,
@@ -246,6 +249,7 @@ export const stepTools: DistriFnTool[] = [
   adjustPlanTool,
   savePlanTool,
   executePlanTool,
+  updatePlanMarkdownTool,
   // Note: Stockfish tools are NOT included here - they are conditionally added
   // via stockfishTools in useFineTuneAgentChat for chess datasets only
 ].map(tool => ({ ...tool, autoExecute: true }));
@@ -277,7 +281,7 @@ export const stepToolHandlers: Record<string, ToolHandler> = {
   get_dataset_records: getDatasetRecordsHandler,
   get_dataset_state: getDatasetStateHandler,
   update_record: updateRecordHandler,
-  regenerate_readme: regenerateReadmeHandler,
+  update_dataset_readme: updateDatasetReadmeHandler,
   update_objective: updateObjectiveHandler,
   analyze_knowledge_sources: analyzeKnowledgeSourcesHandler,
   generate_grader: generateGraderHandler,
@@ -285,5 +289,6 @@ export const stepToolHandlers: Record<string, ToolHandler> = {
   adjust_plan: adjustPlanHandler,
   save_plan: savePlanHandler,
   execute_plan: executePlanHandler,
+  update_plan_markdown: updatePlanMarkdownHandler,
   // Note: Stockfish handlers are in stockfishToolHandlers export, not here
 };

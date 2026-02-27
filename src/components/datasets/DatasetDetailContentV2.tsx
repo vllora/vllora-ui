@@ -204,16 +204,16 @@ export function DatasetDetailContentV2() {
   const {
     proposedPlan,
     planStatus,
-    planDiff,
     isPlanPreviewActive,
     planEditMode,
     isGeneratingPlan,
     isLoadingPlan,
     isExecuting,
-    executionProgress,
+    planErrorMessage,
     setIsPlanPreviewActive,
     setPlanEditMode,
     approvePlan,
+    submitEditedPlan,
     dismissPlan,
   } = PlanConsumer();
 
@@ -398,11 +398,9 @@ export function DatasetDetailContentV2() {
     return () => clearTimeout(timeoutId);
   }, [docsProcessing, shouldAutoGenerate, datasetId]);
 
-  // README auto-generation hook
-  const { readme, readmeUpdatedAt, regenerateReadme, exportReadme } = useDatasetReadme({
+  // README hook — agent-authored only, no auto-generation
+  const { readme, readmeUpdatedAt, exportReadme } = useDatasetReadme({
     dataset,
-    records: sortedRecords,
-    autoUpdate: true,
   });
 
   // Compute insights for stats cards
@@ -643,7 +641,6 @@ export function DatasetDetailContentV2() {
               readme={readme}
               readmeUpdatedAt={readmeUpdatedAt}
               onExport={exportReadme}
-              onRegenerate={regenerateReadme}
               datasetId={datasetId}
               onOverviewClick={() => setAnalyticsDialogOpen(true)}
             />
@@ -731,17 +728,17 @@ export function DatasetDetailContentV2() {
             <PlanPreview
               plan={proposedPlan}
               planStatus={planStatus}
-              planDiff={planDiff}
               mode={planEditMode}
               onModeChange={setPlanEditMode}
               onApprove={approvePlan}
+              onSubmitEdited={submitEditedPlan}
               onDismiss={dismissPlan}
               onOpenDocs={() => openTabRef.current("documents", "Documents", false)}
               isGenerating={isGeneratingPlan}
               isLoadingPlan={isLoadingPlan}
               isExecuting={isExecuting}
-              executionProgress={executionProgress}
               hasKnowledgeSources={knowledgeSourcesCount > 0}
+              planErrorMessage={planErrorMessage}
             />
           )}
           {contentSection === "readme" && (
@@ -750,7 +747,6 @@ export function DatasetDetailContentV2() {
                 readme={readme}
                 readmeUpdatedAt={readmeUpdatedAt}
                 onExport={exportReadme}
-                onRegenerate={regenerateReadme}
                 className="h-full"
               />
             </div>

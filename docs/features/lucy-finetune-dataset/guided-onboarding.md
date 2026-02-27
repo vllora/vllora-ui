@@ -19,14 +19,18 @@ assess state → (analyze if needed) → construct plan → propose → approve 
 3. **Construct plan**: Lucy builds a `Plan` object based on state + analysis + user intent
 4. **Propose**: Lucy calls `propose_plan({ dataset_id, plan })` — tool persists to IndexedDB, emits event, UI shows plan card
 5. **Approve**: User reviews plan in UI, clicks "Approve & Execute"
-6. **Execute**: Lucy calls `execute_plan` — runs steps sequentially, emits progress
+6. **Execute**: Lucy calls individual tools directly (apply_topic_hierarchy, generate_initial_data, etc.) and updates the plan checklist via `update_plan_markdown` after each step
 
 ### Plan Lifecycle
 
 ```
-propose → [UI shows plan card] → approve → validate → execute → complete/fail
-                                    ↑           ↓
-                               adjust (edit)  toast.error (if invalid)
+propose → [UI renders plan_markdown] → approve → agent calls tools directly → complete/fail
+                                          ↑                    ↓
+                                     adjust (edit)    update_plan_markdown (check off steps)
+
+Two approval paths:
+  Unedited plan → "Approve & Execute" → immediate execution
+  Edited plan   → "Submit for Review" → Lucy re-interprets → re-proposes → user reviews again
 ```
 
 ### Step Registry
@@ -151,7 +155,7 @@ The UI renders plan sections based on what's present:
 | `src/lib/distri-finetune-tools/steps/propose-plan/handler.ts` | Validates, persists, emits plan (no LLM) |
 | `src/lib/distri-finetune-tools/steps/save-plan.ts` | Persist plan to IndexedDB |
 | `src/lib/distri-finetune-tools/steps/execute-plan.ts` | Registry-based orchestrator with STEP_REGISTRY |
-| `src/contexts/PlanContext.tsx` | Plan lifecycle state (generating, proposed, executing, completed) |
+| `src/contexts/PlanContext.tsx` | Plan lifecycle state (generating, proposed, executing, completed) + `submitEditedPlan()` |
 | `src/components/datasets/PlanPreview.tsx` | Plan workspace tab (reads from PlanContext) |
 | `src/components/datasets/plan-section/PlanCard.tsx` | Full plan card with conditional sections |
 | `src/components/datasets/plan-section/PlanEditor.tsx` | Markdown-based plan editor |
@@ -209,13 +213,20 @@ User uploads documents to empty dataset
                                               │
                           ┌───────────────────┼───────────────────┐
                           │                   │                   │
-                          ▼ (User requests    │                   ▼ (User clicks
-                             changes)         │                      Approve)
-               ┌─────────────────────────┐    │
-               │  adjust_plan tool  │    │
-               │  - Takes user feedback   │    │
-               │  - Regenerates plan      │    │
-               │  - Emits updated plan    │────┘
+                          ▼ (User edits       │                   ▼ (User clicks
+                             markdown)        │               "Approve & Execute"
+               ┌─────────────────────────┐    │                — no edits)
+               │  "Submit for Review"    │    │
+               │  - Sends original +     │    │
+               │    edited markdown to   │    │
+               │    Lucy (any format!)   │    │
+               │  - Lucy interprets ALL  │    │
+               │    changes via AI       │    │
+               │  - Lucy calls           │    │
+               │    propose_plan with    │    │
+               │    updated struct data  │────┘
+               │  - Or: adjust_plan via  │
+               │    chat feedback        │
                └─────────────────────────┘
                                ┌─────────────────────────────────────┐
                                │  execute_plan tool            │
@@ -505,24 +516,24 @@ This is achieved by:
 Located at: `/ui/src/components/datasets/plan-section/PlanEditor.tsx`
 
 The primary component for viewing and editing plans. Displayed in the main content area (right panel) when a plan is proposed. Features:
-- **Markdown view** - Plan rendered as readable markdown
-- **Edit mode** - Toggle to edit the markdown directly
-- **Approve & Execute** - Button to proceed with the plan
-- **Dismiss** - Button to close and discard the plan
+- **Markdown view** - Plan rendered as readable markdown (default)
+- **Edit mode** - Toggle to edit the markdown directly (any format)
+- **Conditional footer button**:
+  - **Unedited** → "Approve & Execute" (proceeds with original plan)
+  - **Edited** → "Submit for Review" (sends to Lucy for AI interpretation)
+- **Discard Plan** - AlertDialog to dismiss the plan
 
 **Props:**
 ```typescript
 interface PlanEditorProps {
   plan: Plan;
   onApprove: (plan: Plan) => void;
+  onSubmitEdited: (editedMarkdown: string) => void;
   onDismiss?: () => void;
 }
 ```
 
-The editor converts the Plan to markdown for editing and parses changes back when approved. Key editable fields:
-- Seed count
-- Passing threshold
-- Topic target counts
+**AI-Interpreted Editing:** Users can edit the plan markdown freely — change topics, record counts, execution steps, evaluation criteria, add custom instructions, or even paste content from another LLM in a completely different format. There is no mechanical markdown parsing. When the user clicks "Submit for Review", the `submitEditedPlan()` function in `PlanContext` sends both the original and edited markdown to Lucy, who interprets ALL changes and re-proposes a proper structured plan via `propose_plan`. If any user edits are infeasible, Lucy explains what can't be done and proposes the closest alternative.
 
 ### PlanCard (Legacy/Compact)
 
@@ -735,9 +746,9 @@ When triggered, the orchestrator runs a 5-step sequence directly:
 | PlanCompletedState | `/ui/src/components/datasets/plan-section/PlanCompletedState.tsx` |
 | DocsProcessingState | `/ui/src/components/datasets/plan-section/DocsProcessingState.tsx` |
 | ExecutionProgressCard | `/ui/src/components/datasets/plan-section/ExecutionProgressCard.tsx` |
-| plan-markdown-utils | `/ui/src/components/datasets/plan-section/plan-markdown-utils.ts` |
+| plan-markdown-utils | `/ui/src/components/datasets/plan-section/plan-markdown-utils.ts` (diffPlans only — markdownToPlan removed) |
 | **Contexts & State** | |
-| PlanContext | `/ui/src/contexts/PlanContext.tsx` |
+| PlanContext | `/ui/src/contexts/PlanContext.tsx` (includes `submitEditedPlan()`) |
 | **Other UI** | |
 | Tool Renderers | `/ui/src/components/agent/lucy-agent/LucyToolRenderer.tsx` |
 | RecordsSectionHeader | `/ui/src/components/datasets/dataset-detail-header/RecordsSectionHeader.tsx` |

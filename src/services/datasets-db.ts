@@ -2,7 +2,7 @@ import { Dataset, DatasetEvaluation, DatasetRecord, TopicHierarchyConfig } from 
 import { Span } from '@/types/common-type';
 import { extractDataInfoFromSpan } from '@/utils/modelUtils';
 import { emitter } from '@/utils/eventEmitter';
-import { generateDatasetReadme } from './dataset-readme-generator';
+
 
 // Event type for dataset changes - context listens for this to refresh
 export const DATASET_REFRESH_EVENT = 'vllora_dataset_refresh';
@@ -182,17 +182,8 @@ export async function createDataset(name: string, datasetObjective?: string): Pr
     updatedAt: now,
     ...(datasetObjective?.trim() && { datasetObjective: datasetObjective.trim() }),
   };
-  const initialReadme = generateDatasetReadme({
-    dataset: baseDataset,
-    records: [],
-    workflow: null,
-    knowledgeSources: [],
-    planSummary: undefined,
-  });
   const dataset: Dataset = {
     ...baseDataset,
-    readme: initialReadme,
-    readmeUpdatedAt: now,
   };
 
   // First, save the dataset to IndexedDB
@@ -1371,11 +1362,12 @@ export async function updateDatasetTrainingConfig(
 }
 
 /**
- * Update the auto-generated README for a dataset
+ * Update the README for a dataset
  */
 export async function updateDatasetReadme(
   datasetId: string,
-  readme: string
+  readme: string,
+  source?: 'template' | 'agent'
 ): Promise<void> {
   const db = await getDB();
   const now = Date.now();
@@ -1391,6 +1383,7 @@ export async function updateDatasetReadme(
         dataset.readme = readme;
         dataset.readmeUpdatedAt = now;
         dataset.updatedAt = now;
+        if (source) dataset.readmeSource = source;
         store.put(dataset);
       }
     };

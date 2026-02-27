@@ -121,7 +121,6 @@ export function PerRowDetailsSection({ results, datasetId }: PerRowDetailsSectio
   return (
     <ResultsTable
       results={flatResults}
-      fillHeight
       expandedRowId={expandedRowId}
       onRowClick={handleRowClick}
       renderExpandedContent={renderExpandedContent}

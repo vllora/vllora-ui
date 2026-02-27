@@ -33,7 +33,6 @@ import { getCurrentExecution, getExecutingPlan, cancelExecution as cancelExecuti
 import type { Plan } from "@/lib/distri-finetune-tools/steps/propose-plan";
 import { STEP_ORDER, validatePlanForExecution } from "@/lib/distri-finetune-tools/steps/execute-plan";
 import type { ExecutionProgress, ExecutionStepId } from "@/lib/distri-finetune-tools/steps/execute-plan";
-import type { PlanDiff } from "@/components/datasets/plan-section/plan-markdown-utils";
 
 // ============================================================================
 // Types
@@ -57,9 +56,6 @@ interface PlanContextType {
   // Plan data
   /** The currently proposed plan (null if no plan) */
   proposedPlan: Plan | null;
-  /** Diff between the current plan and the previous committed plan (null if first proposal or no diff) */
-  planDiff: PlanDiff | null;
-
   // Execution state
   /** Whether plan execution is in progress */
   isExecuting: boolean;
@@ -67,6 +63,8 @@ interface PlanContextType {
   executionProgress: ExecutionProgress | null;
   /** The plan that was last executed (shown after completion) */
   executedPlan: Plan | null;
+  /** Error message when plan status is 'failed' — shown in plan footer */
+  planErrorMessage: string | null;
 
   // Workspace overlay state
   /** Whether the plan preview is shown in workspace (replaces tab content) */
@@ -78,6 +76,8 @@ interface PlanContextType {
   setIsPlanPreviewActive: (active: boolean) => void;
   setPlanEditMode: (mode: "display" | "edit") => void;
   approvePlan: (plan: Plan) => void;
+  /** Submit an edited plan for Lucy to review and re-propose */
+  submitEditedPlan: (editedMarkdown: string) => void;
   dismissPlan: () => void;
   cancelExecution: () => void;
 }
@@ -110,20 +110,21 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
 
   // Plan data
   const [proposedPlan, setProposedPlan] = useState<Plan | null>(null);
-  const [planDiff, setPlanDiff] = useState<PlanDiff | null>(null);
-
   // Execution state
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionProgress, setExecutionProgress] = useState<ExecutionProgress | null>(null);
   const [executedPlan, setExecutedPlan] = useState<Plan | null>(null);
+  const [planErrorMessage, setPlanErrorMessage] = useState<string | null>(null);
 
   // Workspace overlay state
   const [isPlanPreviewActive, setIsPlanPreviewActive] = useState(false);
   const [planEditMode, setPlanEditMode] = useState<"display" | "edit">("display");
 
-  // Ref to track current datasetId for use in setTimeout callbacks
+  // Refs to track current values for use in event handlers (avoids stale closures)
   const datasetIdRef = useRef(datasetId);
   datasetIdRef.current = datasetId;
+  const planStatusRef = useRef(planStatus);
+  planStatusRef.current = planStatus;
 
   // Check for persisted state on mount (IndexedDB + in-memory stores)
   // Uses a cancelled flag for proper cleanup — safe with React strict mode
@@ -241,13 +242,12 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
       }
     };
 
-    const handleProposed = ({ datasetId: id, plan, diff }: { datasetId: string; plan: unknown; diff?: PlanDiff }) => {
+    const handleProposed = ({ datasetId: id, plan }: { datasetId: string; plan: unknown }) => {
       if (id === datasetId) {
         setPlanStatus('proposed');
         setIsGeneratingPlan(false);
         setHasPlanProposed(true);
         setProposedPlan(plan as Plan);
-        setPlanDiff(diff ?? null);
         setIsExecuting(false);
         setExecutionProgress(null);
         // Clear executed plan when new plan is proposed
@@ -280,6 +280,54 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
           // restored on mount — clearing it here would blank the checkboxes.)
         }
       }
+    };
+
+    // Content-only plan markdown updates (during agent-driven execution).
+    // Unlike vllora_plan_proposed, this does NOT reset status/isExecuting.
+    const handleMarkdownUpdated = ({ datasetId: id, plan, status: newStatus, error_message }: {
+      datasetId: string;
+      plan: unknown;
+      status?: 'executing' | 'completed' | 'failed';
+      error_message?: string;
+    }) => {
+      if (id !== datasetId) return;
+
+      // Update plan content so PlanPreview re-renders with new checkboxes
+      setProposedPlan(plan as Plan);
+
+      // Auto-transition from 'proposed'/'approved' → 'executing' on first update
+      const currentStatus = planStatusRef.current;
+      if (!newStatus && (currentStatus === 'proposed' || currentStatus === 'approved')) {
+        setPlanStatus('executing');
+        setIsExecuting(true);
+        setPlanErrorMessage(null);
+        updatePlanStatus(datasetId, 'executing');
+      }
+
+      // Explicit status transition from the agent
+      if (newStatus) {
+        setPlanStatus(newStatus);
+        if (newStatus === 'completed' || newStatus === 'failed') {
+          // Store error message for display in plan footer
+          if (newStatus === 'failed' && error_message) {
+            setPlanErrorMessage(error_message);
+          }
+          // Delay clearing isExecuting briefly so the user sees the final state
+          setTimeout(() => {
+            if (datasetIdRef.current !== id) return;
+            setIsExecuting(false);
+            if (newStatus === 'completed') {
+              toast.success('Plan executed successfully!', {
+                description: 'View your generated data in the Records tab.',
+              });
+            }
+          }, 2000);
+        } else if (newStatus === 'executing') {
+          setIsExecuting(true);
+          setPlanErrorMessage(null);
+        }
+      }
+
     };
 
     const handleExecutionProgress = ({ progress }: { progress: ExecutionProgress }) => {
@@ -337,6 +385,7 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
     emitter.on("vllora_plan_dismissed", handleDismissed);
     emitter.on("vllora_workflow_updated", handleWorkflowUpdated);
     emitter.on("vllora_plan_progress", handleExecutionProgress);
+    emitter.on("vllora_plan_markdown_updated", handleMarkdownUpdated);
 
     return () => {
       emitter.off("vllora_plan_generating", handleGenerating);
@@ -344,21 +393,25 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
       emitter.off("vllora_plan_dismissed", handleDismissed);
       emitter.off("vllora_workflow_updated", handleWorkflowUpdated);
       emitter.off("vllora_plan_progress", handleExecutionProgress);
+      emitter.off("vllora_plan_markdown_updated", handleMarkdownUpdated);
     };
   }, [datasetId, executionProgress?.is_complete]);
 
   // Actions
   const approvePlan = useCallback((plan: Plan) => {
-    // Validate before approving
-    const stepsToRun = new Set<ExecutionStepId>(plan.steps_to_execute ?? STEP_ORDER);
-    const validation = validatePlanForExecution(plan, stepsToRun, plan.overrides);
-    if (!validation.valid) {
-      const errorMsg = validation.errors.join('; ');
-      toast.error('Plan has issues', { description: validation.errors[0] });
-      emitter.emit('vllora_lucy_prompt', {
-        prompt: `The plan failed validation and cannot be approved. Error: "${errorMsg}". Please fix the plan and re-propose it using adjust_plan followed by save_plan.`,
-      });
-      return; // Block approval
+    // Validate before approving (only if steps_to_execute is present —
+    // agent-driven plans don't use it, the agent calls tools directly)
+    if (plan.steps_to_execute?.length) {
+      const stepsToRun = new Set<ExecutionStepId>(plan.steps_to_execute ?? STEP_ORDER);
+      const validation = validatePlanForExecution(plan, stepsToRun, plan.overrides);
+      if (!validation.valid) {
+        const errorMsg = validation.errors.join('; ');
+        toast.error('Plan has issues', { description: validation.errors[0] });
+        emitter.emit('vllora_lucy_prompt', {
+          prompt: `The plan failed validation and cannot be approved. Error: "${errorMsg}". Please fix the plan and re-propose it using adjust_plan followed by save_plan.`,
+        });
+        return; // Block approval
+      }
     }
 
     // Update plan status to 'approved' in IndexedDB (keep the plan data!)
@@ -375,6 +428,34 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
     // Hide plan preview during execution (workspace returns to tabs)
     setIsPlanPreviewActive(false);
   }, [datasetId]);
+
+  const submitEditedPlan = useCallback((editedMarkdown: string) => {
+    if (!proposedPlan) return;
+    const originalMarkdown = proposedPlan.plan_markdown;
+
+    // Send full prompt as text so the server/LLM receives the plan content.
+    // The chat UI detects the [PLAN_EDIT_REVIEW] marker and renders a compact version.
+    emitter.emit("vllora_lucy_prompt", {
+      prompt: `[PLAN_EDIT_REVIEW]
+I've edited the plan before approving. Please review ALL my changes — I may have modified topics, record counts, execution steps, evaluation criteria, or added custom instructions. The format may differ from the original.
+
+Compare and interpret my changes, then call propose_plan with updated structured data that reflects my edits, followed by save_plan to commit. If any changes aren't feasible, explain what can't be done and propose the closest alternative.
+
+ORIGINAL PLAN:
+"""
+${originalMarkdown}
+"""
+
+MY EDITED VERSION:
+"""
+${editedMarkdown}
+"""`,
+    });
+
+    // Switch back to display mode, show generating state while Lucy re-proposes
+    setPlanEditMode("display");
+    setIsGeneratingPlan(true);
+  }, [proposedPlan]);
 
   const dismissPlan = useCallback(() => {
     clearProposedPlan(datasetId);
@@ -397,15 +478,16 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
     isGeneratingPlan,
     hasPlanProposed,
     proposedPlan,
-    planDiff,
     isExecuting,
     executionProgress,
     executedPlan,
+    planErrorMessage,
     isPlanPreviewActive,
     planEditMode,
     setIsPlanPreviewActive,
     setPlanEditMode,
     approvePlan,
+    submitEditedPlan,
     dismissPlan,
     cancelExecution,
   };

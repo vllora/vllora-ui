@@ -168,8 +168,6 @@ export function getFriendlyToolMessage(toolName: string, input: any): string {
       return 'Loading records...';
     case 'update_objective':
       return 'Updating objective...';
-    case 'regenerate_readme':
-      return 'Regenerating README...';
 
     // Workflow tools
     case 'start_finetune_workflow':

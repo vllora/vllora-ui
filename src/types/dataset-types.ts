@@ -323,6 +323,8 @@ export interface Dataset {
   readme?: string;
   // Last time README was updated
   readmeUpdatedAt?: number;
+  // Whether the README was written by the agent or auto-generated from template
+  readmeSource?: 'template' | 'agent';
 }
 
 // Combined view for UI (dataset + its records)

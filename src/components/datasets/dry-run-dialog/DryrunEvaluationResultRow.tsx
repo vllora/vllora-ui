@@ -101,7 +101,7 @@ function RecordIdCell({ recordId, onNavigate }: { recordId: string; onNavigate: 
   }, [recordId]);
 
   return (
-    <div className="w-24 shrink-0 py-1 pr-2 group/id">
+    <div className="flex-1 min-w-[96px] py-1 pr-2 group/id">
       <div className="flex items-center gap-0.5">
         <button
           className="font-mono text-[11px] text-[rgb(var(--theme-400))] hover:text-[rgb(var(--theme-300))] hover:underline transition-colors truncate"
@@ -209,7 +209,7 @@ export function DryrunEvaluationResultRow({
       </div>
 
       {/* Message/Reasoning column */}
-      <div className="flex-1 py-1.5 pr-2 text-[11px] text-zinc-500 truncate min-w-0">
+      <div className="flex-[2] py-1.5 pr-2 text-[11px] text-zinc-500 truncate min-w-0">
         {isFailed ? <HighlightedText text={message} /> : message}
       </div>
 

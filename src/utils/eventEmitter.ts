@@ -105,6 +105,15 @@ type VlloraEvents = {
     plan: unknown;
     diff?: import('@/components/datasets/plan-section/plan-markdown-utils').PlanDiff;
   };
+  // plan markdown updated (content-only update during execution — does NOT reset plan status)
+  vllora_plan_markdown_updated: {
+    datasetId: string;
+    plan: unknown;
+    /** Optional status transition: 'executing' during steps, 'completed'/'failed' on final call */
+    status?: 'executing' | 'completed' | 'failed';
+    /** Optional error message when status is 'failed' — shown in plan footer */
+    error_message?: string;
+  };
   // plan dismissed (user closed the card without approving)
   vllora_plan_dismissed: { datasetId: string };
   // plan approved (user approved, triggers execution)

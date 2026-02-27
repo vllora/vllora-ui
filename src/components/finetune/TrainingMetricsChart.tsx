@@ -2,6 +2,7 @@
  * TrainingMetricsChart
  *
  * Visualizes training evaluation metrics with epoch-over-epoch progress charts.
+ * Wrapped in a Stitch-style card with AVG SCORE header, Live badge, and legend footer.
  * Uses area gradients, score-zone bands, and per-criteria breakdowns.
  */
 
@@ -17,6 +18,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
   ReferenceArea,
+  Label,
 } from "recharts";
 import { cn } from "@/lib/utils";
 import type { FinetuneEvalResultsResponse } from "@/services/finetune-api";
@@ -24,7 +26,6 @@ import {
   parseScoreBreakdown,
   getAllCriteriaNames,
   averageCriteriaScores,
-  getScoreColorClass,
   formatScore,
   type ScoreBreakdown,
 } from "@/utils/parse-score-breakdown";
@@ -32,12 +33,14 @@ import {
 interface TrainingMetricsChartProps {
   results: FinetuneEvalResultsResponse["results"];
   className?: string;
+  /** Whether the training job is currently running (shows Live badge) */
+  isLive?: boolean;
 }
 
-// Criteria line colors (distinct, dark-theme friendly)
+// Criteria line colors (distinct, dark-theme friendly) — matches Stitch tokens
 const CRITERIA_COLORS = [
-  "#6366f1", // Indigo
-  "#f59e0b", // Amber
+  "#6366f1", // Indigo (chart-indigo)
+  "#f59e0b", // Amber (chart-amber)
   "#ec4899", // Pink
   "#8b5cf6", // Purple
   "#06b6d4", // Cyan
@@ -52,7 +55,11 @@ interface EpochData {
 }
 
 // Custom tooltip with dark styling
-function ChartTooltip({ active, payload, label }: {
+function ChartTooltip({
+  active,
+  payload,
+  label,
+}: {
   active?: boolean;
   payload?: Array<{ dataKey: string; value: number; color: string }>;
   label?: string;
@@ -60,22 +67,27 @@ function ChartTooltip({ active, payload, label }: {
   if (!active || !payload?.length) return null;
 
   return (
-    <div className="rounded-lg border border-zinc-700/80 bg-zinc-900/95 px-3 py-2 shadow-xl backdrop-blur-sm">
-      <p className="text-[11px] font-medium text-zinc-300 mb-1.5">{label}</p>
+    <div className="rounded-lg border border-[#262626] bg-[#141414]/95 px-3 py-2 shadow-xl backdrop-blur-sm">
+      <p className="text-[10px] font-mono text-slate-500 mb-1.5 border-b border-[#262626] pb-1">
+        {label}
+      </p>
       <div className="space-y-1">
         {payload.map((entry) => (
-          <div key={entry.dataKey} className="flex items-center gap-2 text-[11px]">
+          <div
+            key={entry.dataKey}
+            className="flex items-center justify-between gap-3 text-[11px]"
+          >
+            <span className="flex items-center gap-1.5">
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ backgroundColor: entry.color }}
+              />
+              <span className="text-slate-400">{entry.dataKey}</span>
+            </span>
             <span
-              className="w-2 h-2 rounded-full shrink-0"
-              style={{ backgroundColor: entry.color }}
-            />
-            <span className="text-zinc-400">{entry.dataKey}</span>
-            <span className={cn(
-              "ml-auto font-mono font-medium",
-              entry.dataKey === "Avg Score"
-                ? getScoreColorClass(entry.value)
-                : "text-zinc-200"
-            )}>
+              className="font-mono font-bold"
+              style={{ color: entry.color }}
+            >
               {entry.value.toFixed(2)}
             </span>
           </div>
@@ -90,16 +102,22 @@ function ScoreDot(props: { cx?: number; cy?: number; value?: number }) {
   const { cx, cy, value } = props;
   if (cx === undefined || cy === undefined || value === undefined) return null;
 
-  const color = value >= 0.8 ? "#34d399" : value >= 0.6 ? "#fbbf24" : "#f87171";
-
   return (
     <g>
-      {/* Glow */}
-      <circle cx={cx} cy={cy} r={8} fill={color} opacity={0.15} />
+      {/* Glow ring */}
+      <circle cx={cx} cy={cy} r={8} fill="#10b981" opacity={0.1} />
       {/* Outer ring */}
-      <circle cx={cx} cy={cy} r={5} fill="none" stroke={color} strokeWidth={1.5} opacity={0.4} />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={5}
+        fill="none"
+        stroke="#10b981"
+        strokeWidth={1.5}
+        opacity={0.3}
+      />
       {/* Inner dot */}
-      <circle cx={cx} cy={cy} r={3} fill={color} />
+      <circle cx={cx} cy={cy} r={3} fill="#10b981" />
     </g>
   );
 }
@@ -107,12 +125,13 @@ function ScoreDot(props: { cx?: number; cy?: number; value?: number }) {
 export function TrainingMetricsChart({
   results,
   className,
+  isLive,
 }: TrainingMetricsChartProps) {
   // Process data for charts
   const { epochData, criteriaNames, latestCriteriaAvg } = useMemo(() => {
     const epochMap = new Map<
       number,
-      { scores: number[]; breakdowns: ScoreBreakdown[] }
+      { scores: number[]; breakdowns: ScoreBreakdown[]; uniqueRows: Set<number> }
     >();
 
     for (const row of results) {
@@ -120,7 +139,7 @@ export function TrainingMetricsChart({
         const epoch = parseInt(epochStr, 10);
 
         if (!epochMap.has(epoch)) {
-          epochMap.set(epoch, { scores: [], breakdowns: [] });
+          epochMap.set(epoch, { scores: [], breakdowns: [], uniqueRows: new Set() });
         }
         const epochStats = epochMap.get(epoch)!;
 
@@ -130,6 +149,7 @@ export function TrainingMetricsChart({
           if (typeof result.score === "number") {
             epochStats.scores.push(result.score);
             epochStats.breakdowns.push(breakdown);
+            epochStats.uniqueRows.add(row.row_index);
           }
         }
       }
@@ -145,7 +165,7 @@ export function TrainingMetricsChart({
           : 0;
       const criteriaAvg = averageCriteriaScores(stats.breakdowns);
 
-      return { epoch, avgScore, rowCount: stats.scores.length, criteriaAvg };
+      return { epoch, avgScore, rowCount: stats.uniqueRows.size, criteriaAvg };
     });
 
     const criteriaNamesList = getAllCriteriaNames(
@@ -194,22 +214,38 @@ export function TrainingMetricsChart({
   const yTicks = [0, 0.2, 0.4, 0.6, 0.8, 1.0];
 
   return (
-    <div className={cn("space-y-4", className)}>
-      {/* Score header */}
-      <div className="flex items-baseline gap-3">
-        <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
-          Avg Score
-        </span>
-        <span className={cn("text-2xl font-semibold font-mono tabular-nums", getScoreColorClass(latestScore))}>
-          {formatScore(latestScore)}
-        </span>
-        <span className="text-[11px] text-zinc-600">
-          Epoch {latestEpoch ? latestEpoch.epoch + 1 : "-"} &middot; {latestEpoch?.rowCount} rows
-        </span>
+    <div
+      className={cn(
+        "rounded-lg bg-[#111] overflow-hidden",
+        className
+      )}
+    >
+      {/* ── Card Header ── AVG SCORE + Live badge */}
+      <div className="px-5 py-4 border-b border-white/5 flex items-start justify-between">
+        <div>
+          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+            Avg Score
+          </p>
+          <div className="flex items-baseline gap-3">
+            <h2 className="text-3xl font-mono font-bold text-[#10b981]">
+              {formatScore(latestScore)}
+            </h2>
+            <span className="text-xs font-medium text-slate-400">
+              Epoch {latestEpoch ? latestEpoch.epoch + 1 : "-"} ·{" "}
+              {latestEpoch?.rowCount} rows
+            </span>
+          </div>
+        </div>
+        {isLive && (
+          <div className="flex items-center gap-2 bg-[#10b981]/10 border border-[#10b981]/20 px-3 py-1 rounded text-xs text-[#10b981] font-medium">
+            <span className="size-1.5 rounded-full bg-[#10b981] animate-pulse" />
+            Live
+          </div>
+        )}
       </div>
 
-      {/* Chart area */}
-      <div className="h-[220px] w-full rounded-lg border border-zinc-800/60 bg-zinc-900/30 p-2 pr-0">
+      {/* ── Chart Area ── */}
+      <div className="h-[260px] w-full p-4 pr-2">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart
             data={chartData}
@@ -218,31 +254,78 @@ export function TrainingMetricsChart({
             <defs>
               {/* Main score gradient fill */}
               <linearGradient id="scoreGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="rgb(var(--theme-500))" stopOpacity={0.3} />
-                <stop offset="100%" stopColor="rgb(var(--theme-500))" stopOpacity={0.02} />
+                <stop offset="0%" stopColor="#10b981" stopOpacity={0.3} />
+                <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
               </linearGradient>
             </defs>
 
             {/* Score zone bands (subtle background) */}
-            <ReferenceArea y1={0.8} y2={1.0} fill="#22c55e" fillOpacity={0.04} />
-            <ReferenceArea y1={0.6} y2={0.8} fill="#eab308" fillOpacity={0.03} />
-            <ReferenceArea y1={0} y2={0.6} fill="#ef4444" fillOpacity={0.02} />
+            <ReferenceArea
+              y1={0.8}
+              y2={1.0}
+              fill="#10b981"
+              fillOpacity={0.05}
+            >
+              <Label
+                value="TARGET"
+                position="insideTopRight"
+                fill="#10b981"
+                fontSize={9}
+                opacity={0.4}
+                fontWeight={700}
+              />
+            </ReferenceArea>
+            <ReferenceArea
+              y1={0.6}
+              y2={0.8}
+              fill="#eab308"
+              fillOpacity={0.04}
+            >
+              <Label
+                value="ACCEPTABLE"
+                position="insideTopRight"
+                fill="#eab308"
+                fontSize={9}
+                opacity={0.3}
+                fontWeight={700}
+              />
+            </ReferenceArea>
+            <ReferenceArea y1={0} y2={0.6} fill="#ef4444" fillOpacity={0.03}>
+              <Label
+                value="CRITICAL"
+                position="insideBottomRight"
+                fill="#ef4444"
+                fontSize={9}
+                opacity={0.3}
+                fontWeight={700}
+              />
+            </ReferenceArea>
 
             {/* Reference lines at score thresholds */}
-            <ReferenceLine y={0.8} stroke="#22c55e" strokeOpacity={0.15} strokeDasharray="4 4" />
-            <ReferenceLine y={0.6} stroke="#eab308" strokeOpacity={0.15} strokeDasharray="4 4" />
+            <ReferenceLine
+              y={0.8}
+              stroke="#10b981"
+              strokeOpacity={0.2}
+              strokeDasharray="4 4"
+            />
+            <ReferenceLine
+              y={0.6}
+              stroke="#eab308"
+              strokeOpacity={0.15}
+              strokeDasharray="4 4"
+            />
 
             <CartesianGrid
               strokeDasharray="3 3"
-              stroke="hsl(0 0% 20%)"
-              strokeOpacity={0.4}
+              stroke="#262626"
+              strokeOpacity={0.6}
               vertical={false}
             />
             <XAxis
               dataKey="name"
               axisLine={false}
               tickLine={false}
-              tick={{ fontSize: 10, fill: "hsl(0 0% 45%)" }}
+              tick={{ fontSize: 10, fill: "#64748b" }}
               dy={8}
             />
             <YAxis
@@ -250,24 +333,29 @@ export function TrainingMetricsChart({
               ticks={yTicks}
               axisLine={false}
               tickLine={false}
-              tick={{ fontSize: 10, fill: "hsl(0 0% 40%)" }}
+              tick={{ fontSize: 10, fill: "#475569" }}
               tickFormatter={(v: number) => v.toFixed(1)}
               dx={-4}
             />
             <RechartsTooltip
               content={<ChartTooltip />}
-              cursor={{ stroke: "hsl(0 0% 30%)", strokeDasharray: "4 4" }}
+              cursor={{ stroke: "#334155", strokeDasharray: "4 4" }}
             />
 
             {/* Main score area + line */}
             <Area
               type="monotone"
               dataKey="Avg Score"
-              stroke="rgb(var(--theme-500))"
+              stroke="#10b981"
               strokeWidth={2}
               fill="url(#scoreGradient)"
               dot={<ScoreDot />}
-              activeDot={{ r: 6, fill: "rgb(var(--theme-400))", stroke: "rgb(var(--theme-300))", strokeWidth: 2 }}
+              activeDot={{
+                r: 6,
+                fill: "#10b981",
+                stroke: "#34d399",
+                strokeWidth: 2,
+              }}
               isAnimationActive={!isSinglePoint}
             />
 
@@ -281,7 +369,11 @@ export function TrainingMetricsChart({
                   stroke={CRITERIA_COLORS[idx % CRITERIA_COLORS.length]}
                   strokeWidth={1.5}
                   strokeDasharray="4 3"
-                  dot={{ r: 2.5, fill: CRITERIA_COLORS[idx % CRITERIA_COLORS.length] }}
+                  strokeOpacity={0.7}
+                  dot={{
+                    r: 2.5,
+                    fill: CRITERIA_COLORS[idx % CRITERIA_COLORS.length],
+                  }}
                   activeDot={{ r: 4 }}
                   isAnimationActive={!isSinglePoint}
                 />
@@ -290,56 +382,62 @@ export function TrainingMetricsChart({
         </ResponsiveContainer>
       </div>
 
-      {/* Legend + Criteria pills */}
-      <div className="flex items-center gap-4 flex-wrap">
-        {/* Main legend */}
-        <div className="flex items-center gap-1.5 text-[11px] text-zinc-400">
-          <span className="w-3 h-[2px] rounded-full bg-[rgb(var(--theme-500))]" />
-          Avg Score
-        </div>
-
-        {/* Criteria legends */}
-        {hasBreakdown && criteriaNames.map((name, idx) => (
-          <div key={name} className="flex items-center gap-1.5 text-[11px] text-zinc-500">
-            <span
-              className="w-3 h-[2px] rounded-full opacity-70"
-              style={{ backgroundColor: CRITERIA_COLORS[idx % CRITERIA_COLORS.length], borderTop: "1px dashed" }}
-            />
-            {name}
+      {/* ── Legend Footer ── Stitch style with dark bg */}
+      <div className="px-5 py-3 bg-black/20 border-t border-white/5 flex flex-wrap items-center justify-between gap-3">
+        {/* Left: Line legends */}
+        <div className="flex items-center gap-4">
+          {/* Main score legend */}
+          <div className="flex items-center gap-2">
+            <span className="block w-3 h-0.5 bg-[#10b981]" />
+            <span className="size-1.5 rounded-full bg-[#10b981]" />
+            <span className="text-xs text-slate-300 font-medium">
+              Score Trend
+            </span>
           </div>
-        ))}
 
-        {/* Score zone guide (right-aligned) */}
-        <div className="ml-auto flex items-center gap-2 text-[10px] text-zinc-600">
-          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500/60" /> &ge;0.8</span>
-          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-yellow-500/60" /> &ge;0.6</span>
-          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-500/60" /> &lt;0.6</span>
+          {/* Criteria legends */}
+          {hasBreakdown &&
+            criteriaNames.map((name, idx) => (
+              <div
+                key={name}
+                className="flex items-center gap-2 opacity-75"
+              >
+                <span
+                  className="block w-3 h-0.5"
+                  style={{
+                    backgroundColor:
+                      CRITERIA_COLORS[idx % CRITERIA_COLORS.length],
+                  }}
+                />
+                <span className="text-xs text-slate-400">{name}</span>
+              </div>
+            ))}
         </div>
+
+        {/* Right: Criteria pills */}
+        {hasBreakdown && Object.keys(latestCriteriaAvg).length > 0 && (
+          <div className="flex items-center gap-2">
+            {Object.entries(latestCriteriaAvg).map(([key, val]) => {
+              const idx = criteriaNames.indexOf(key);
+              const color = CRITERIA_COLORS[idx >= 0 ? idx % CRITERIA_COLORS.length : 0];
+              return (
+                <div
+                  key={key}
+                  className="px-2 py-1 rounded text-[10px] font-mono"
+                  style={{
+                    backgroundColor: `${color}15`,
+                    borderWidth: 1,
+                    borderColor: `${color}30`,
+                    color: color,
+                  }}
+                >
+                  {key}: {formatScore(val)}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
-
-      {/* Criteria Breakdown Pills */}
-      {hasBreakdown && Object.keys(latestCriteriaAvg).length > 0 && (
-        <div className="flex flex-wrap gap-2 pt-1 border-t border-zinc-800/60">
-          <span className="text-[10px] uppercase tracking-wider text-zinc-600 self-center mr-1">
-            Epoch {latestEpoch ? latestEpoch.epoch + 1 : "-"}
-          </span>
-          {Object.entries(latestCriteriaAvg).map(([key, val]) => (
-            <div
-              key={key}
-              className={cn(
-                "px-2 py-0.5 rounded-md text-[11px] font-medium border",
-                val >= 0.8
-                  ? "bg-green-500/10 text-green-400 border-green-500/20"
-                  : val >= 0.6
-                    ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
-                    : "bg-red-500/10 text-red-400 border-red-500/20"
-              )}
-            >
-              {key}: {formatScore(val)}
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

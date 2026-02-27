@@ -2,429 +2,90 @@
 
 ## Overview
 
-Auto-generate and maintain a README markdown file for each dataset that summarizes its current state, structure, and quality metrics. This gives users a clear, exportable overview of their finetune project - similar to how code projects have README files.
+Each dataset can have a README — a markdown document authored by the Lucy agent that provides a narrative overview of the dataset, its structure, quality, and provenance.
 
-## Problem Statement
+## How It Works
 
-Users currently have no easy way to:
-- Get a quick overview of their dataset's structure and progress
-- Share dataset information with team members
-- Export a summary for documentation purposes
-- Track changes over time
+The README is **agent-authored only**. Lucy writes it via the `update_dataset_readme` tool. There is no template generator or auto-update fallback — if Lucy hasn't written a README, the dataset shows an empty state.
 
-## Solution
+### `readmeSource` Field
 
-Generate a `README.md` content that:
-- Updates automatically when dataset changes
-- Includes all key metrics and structure
-- Is viewable in the UI and exportable as a file
-- Follows a consistent, readable format
+The `Dataset.readmeSource` field is always `'agent'` for READMEs written by Lucy via `update_dataset_readme`. Datasets without a README have `readme` as `undefined`.
 
-## README Structure
+## Agent README Flow
 
-```markdown
-# {Dataset Name}
+During plan execution:
+1. Agent executes all plan steps (topics -> data -> grader -> eval -> training)
+2. As the **final step**, agent writes a comprehensive README based on its execution context
+3. Calls `update_dataset_readme({ dataset_id, readme_content: "..." })`
+4. Content is saved to IndexedDB with `readmeSource: 'agent'`
 
-> {Training Objective}
-
-## Overview
-
-| Metric | Value |
-|--------|-------|
-| Training Mode | RFT |
-| Total Records | 156 |
-| Generated Records | 89 (57%) |
-| Topics | 12 |
-| Coverage Score | 0.78 |
-| Quality Score | 0.85 |
-
-## Topic Hierarchy
-
-```
-Chess Tutoring
-├── Openings (45 records)
-│   ├── Italian Game (12)
-│   ├── Sicilian Defense (18)
-│   └── Queen's Gambit (15)
-├── Tactics (38 records)
-│   ├── Pins (10)
-│   ├── Forks (15)
-│   └── Discovered Attacks (13)
-├── Endgames (23 records)
-│   ├── King + Pawn (8)
-│   ├── Rook Endings (10)
-│   └── Basic Mates (5)
-└── Strategy (28 records)
-    ├── Pawn Structure (12)
-    └── Piece Activity (16)
-```
-
-## Coverage Analysis
-
-| Topic | Records | Coverage | Status |
-|-------|---------|----------|--------|
-| Openings | 45 | 29% | ✓ Good |
-| Tactics | 38 | 24% | ✓ Good |
-| Endgames | 23 | 15% | ⚠️ Medium |
-| Strategy | 28 | 18% | ✓ OK |
-| Unassigned | 22 | 14% | ⚠️ Needs categorization |
-
-**Balance Score:** 0.78 (Good - topics are reasonably balanced)
-
-## Quality Metrics
-
-*Last evaluated: 2024-01-15 14:30*
-
-| Metric | Score | Notes |
-|--------|-------|-------|
-| Average Score | 0.85 | Based on 50 sample evaluations |
-| Pass Rate | 92% | 46/50 samples passed threshold |
-| Min Score | 0.45 | 1 outlier flagged for review |
-| Max Score | 0.98 | |
-
-### Score Distribution
-
-```
-0.9-1.0: ████████████████ 32 (64%)
-0.8-0.9: ██████████ 12 (24%)
-0.7-0.8: ████ 4 (8%)
-0.6-0.7: █ 1 (2%)
-< 0.6:   █ 1 (2%)
-```
-
-## Workflow Status
-
-**Current Step:** `grader_config`
-
-| Step | Status | Details |
-|------|--------|---------|
-| Topics Config | ✓ Complete | 12 topics defined |
-| Coverage Generation | ✓ Complete | 89 records generated |
-| Grader Config | → In Progress | Configuring evaluation criteria |
-| Dry Run | ○ Pending | - |
-| Training | ○ Pending | - |
-
-## Generation History
-
-| Date | Action | Records | Notes |
-|------|--------|---------|-------|
-| 2024-01-15 | Initial generation | +25 | Seed data from objective |
-| 2024-01-15 | Synthetic generation | +40 | Coverage balancing |
-| 2024-01-14 | Variant generation | +24 | From 6 seed records |
-
-## Data Sources
-
-The following knowledge sources were used to generate the topic hierarchy and ground the training data:
-
-| Document | Type | Size | Topics Extracted |
-|----------|------|------|-----------------|
-| My_System_Nimzowitsch.pdf | pdf | 2.4 MB | Chess strategy, Positional play, Prophylaxis... |
-| chess_tactics_workbook.pdf | pdf | 1.1 MB | Pins, Forks, Discovered attacks... |
-
-Training data is grounded in these source materials to ensure accuracy and relevance.
-
-## Plan Execution
-
-*Executed: Jan 15, 2024 2:30 PM*
-
-| Step | Result |
-|------|--------|
-| Topics Created | 12 |
-| Records Generated | 89 |
-| Evaluator Configured | ✓ Yes |
-| Dry Run | ✓ Completed |
-
-Records were generated with topics pre-assigned based on the topic hierarchy structure. Each topic received a proportional distribution of training examples.
-
-## Configuration
-
-```json
-{
-  "grader": {
-    "model": "gpt-4o-mini",
-    "pass_threshold": 0.7,
-    "criteria": ["accuracy", "teaching_quality", "appropriate_level"]
-  },
-  "training": {
-    "base_model": "unsloth/Qwen3-4B",
-    "epochs": 2,
-    "learning_rate": 0.00001
-  }
-}
-```
-
----
-*Generated by Lucy Finetune • Last updated: 2024-01-15 14:45:23*
-```
+Outside plan execution (user asks "update the readme" or clicks regenerate button):
+1. The regenerate button in `ReadmeHeaderActions` (or the CTA in `ReadmeEmptyState`) emits `vllora_lucy_prompt` with a prompt asking Lucy to write/update the README
+2. Agent calls `get_dataset_state` to gather context
+3. Writes the README
+4. Calls `update_dataset_readme`
 
 ## Data Model
-
-Add to `Dataset` type:
 
 ```typescript
 interface Dataset {
   // ... existing fields
 
-  /** Auto-generated README markdown content */
+  /** Agent-written README markdown content */
   readme?: string;
 
   /** Last time README was updated */
   readmeUpdatedAt?: number;
+
+  /** Source of the README content — always 'agent' */
+  readmeSource?: 'agent';
 }
 ```
 
-## Update Triggers
+## Hook: `useDatasetReadme`
 
-The README should be regenerated when:
+Located at `src/hooks/useDatasetReadme.ts`. A minimal hook (~45 lines) that exposes:
 
-| Event | What Updates |
-|-------|--------------|
-| Dataset created | Full README |
-| Objective changed | Overview section |
-| Records added/removed | Overview, Coverage sections |
-| Topics changed | Topic Hierarchy, Coverage sections |
-| Records categorized | Topic Hierarchy, Coverage sections |
-| Dry run completed | Quality Metrics section |
-| Workflow step changes | Workflow Status section |
-| Grader configured | Configuration section |
-| Training started/completed | Workflow Status section |
-| **Plan executed** | **Full README with data provenance** |
-| Knowledge sources added | Data Sources section |
+- `readme: string | null` — from `dataset.readme`
+- `readmeUpdatedAt: number | null` — from `dataset.readmeUpdatedAt`
+- `exportReadme()` — downloads the README as a `.md` file
 
-## Implementation
+No auto-generation, no data watchers, no event listeners.
 
-### 1. README Generator Service
+## UI Components
+
+### README Viewer (`src/components/datasets/readme-viewer/`)
+
+- `DatasetReadmeViewer` — renders the markdown with header actions
+- `ReadmeHeaderActions` — copy to clipboard + export as file + "Ask Lucy to rewrite" buttons
+- `ReadmeEmptyState` — shown when no README exists, with CTA to ask Lucy to write one
+
+### Where It Appears
+
+1. **Overview tab** (`DatasetOverviewPanel`) — dual-pane layout with Overview + README tabs on the left
+2. **readme.md tab** — standalone full-height viewer opened from the explorer sidebar
+
+## Tool: `update_dataset_readme`
+
+Located at `src/lib/distri-finetune-tools/steps/update-dataset-readme.ts`.
 
 ```typescript
-// /ui/src/services/dataset-readme-generator.ts
-
-interface KnowledgeSourceInfo {
-  name: string;
-  type: string;
-  topics_extracted: string[];
-  size?: number;
-}
-
-interface PlanSummary {
-  executed_at: number;
-  topics_created: number;
-  records_generated: number;
-  grader_configured: boolean;
-  dry_run_completed: boolean;
-}
-
-interface ReadmeGeneratorOptions {
-  dataset: Dataset;
-  records: DatasetRecord[];
-  workflow?: FinetuneWorkflow;
-  /** Knowledge sources used to generate topics and data */
-  knowledgeSources?: KnowledgeSourceInfo[];
-  /** Summary from plan execution */
-  planSummary?: PlanSummary;
-}
-
-export function generateDatasetReadme(
-  options: ReadmeGeneratorOptions
-): string {
-  const { dataset, records, workflow, knowledgeSources, planSummary } = options;
-
-  const sections = [
-    generateHeaderSection(dataset),
-    generateOverviewSection(dataset, records),
-    // Data provenance: where the data came from
-    generateKnowledgeSourcesSection(knowledgeSources),
-    // Plan execution summary (if applicable)
-    generatePlanSection(planSummary),
-    // Dataset structure
-    generateTopicHierarchySection(dataset, records),
-    generateCoverageSection(dataset, records),
-    // Quality metrics
-    dataset.dryRunStats ? generateQualitySection(dataset.dryRunStats) : null,
-    // Workflow status
-    workflow ? generateWorkflowSection(workflow) : null,
-    generateGenerationHistorySection(workflow),
-    // Configuration
-    generateConfigSection(dataset, workflow),
-    generateFooter(),
-  ];
-
-  return sections.filter(Boolean).join('\n\n');
+// Parameters
+{
+  dataset_id: string;
+  readme_content: string;  // Full markdown content
 }
 ```
 
-### 2. Auto-Update Hook
+Saves the README to IndexedDB and emits a refresh event.
 
-```typescript
-// Hook that regenerates README on relevant changes
-export function useDatasetReadme(datasetId: string) {
-  const { dataset, records } = useDataset(datasetId);
-  const { workflow } = useWorkflow(datasetId);
+## Files
 
-  // Regenerate when dependencies change
-  useEffect(() => {
-    if (!dataset) return;
-
-    const readme = generateDatasetReadme({
-      dataset,
-      records,
-      workflow,
-    });
-
-    // Save to dataset
-    updateDataset(datasetId, {
-      readme,
-      readmeUpdatedAt: Date.now()
-    });
-  }, [
-    dataset?.datasetObjective,
-    dataset?.topicHierarchy,
-    records.length,
-    workflow?.currentStep,
-  ]);
-}
-```
-
-### 3. UI Components
-
-#### README Viewer Tab
-
-Add a "README" tab to the dataset detail view:
-
-```typescript
-// In DatasetDetailContentV2.tsx tabs
-<TabsContent value="readme">
-  <DatasetReadmeViewer
-    readme={dataset.readme}
-    onExport={() => downloadAsFile(dataset.readme, `${dataset.name}-README.md`)}
-  />
-</TabsContent>
-```
-
-#### README Preview Card
-
-Show a summary card in the dataset overview:
-
-```typescript
-<Card>
-  <CardHeader>
-    <CardTitle>Dataset Summary</CardTitle>
-    <Button variant="ghost" size="sm" onClick={onViewFullReadme}>
-      View Full README
-    </Button>
-  </CardHeader>
-  <CardContent>
-    <div className="prose prose-sm dark:prose-invert max-w-none">
-      <ReactMarkdown>{dataset.readme?.slice(0, 1000)}...</ReactMarkdown>
-    </div>
-  </CardContent>
-</Card>
-```
-
-### 4. Export Functionality
-
-```typescript
-export function exportDatasetReadme(dataset: Dataset): void {
-  const blob = new Blob([dataset.readme || ''], { type: 'text/markdown' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${dataset.name.replace(/\s+/g, '-')}-README.md`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-```
-
-## Helper Functions
-
-### Topic Tree Formatter
-
-```typescript
-function formatTopicTree(
-  hierarchy: TopicHierarchyNode[],
-  recordsByTopic: Map<string, number>,
-  prefix = ''
-): string {
-  let result = '';
-
-  hierarchy.forEach((node, index) => {
-    const isLast = index === hierarchy.length - 1;
-    const connector = isLast ? '└── ' : '├── ';
-    const childPrefix = isLast ? '    ' : '│   ';
-
-    const count = recordsByTopic.get(node.id) || 0;
-    result += `${prefix}${connector}${node.name} (${count} records)\n`;
-
-    if (node.children?.length) {
-      result += formatTopicTree(
-        node.children,
-        recordsByTopic,
-        prefix + childPrefix
-      );
-    }
-  });
-
-  return result;
-}
-```
-
-### Coverage Status Indicator
-
-```typescript
-function getCoverageStatus(percentage: number, recordCount: number): string {
-  if (percentage >= 20 && recordCount >= 50) return '✓ Good';
-  if (percentage >= 10 && recordCount >= 20) return '✓ OK';
-  if (percentage >= 5 && recordCount >= 10) return '⚠️ Medium';
-  return '❌ Low';
-}
-```
-
-### Score Distribution Formatter
-
-```typescript
-function formatScoreDistribution(scores: number[]): string {
-  const buckets = [
-    { min: 0.9, max: 1.0, count: 0 },
-    { min: 0.8, max: 0.9, count: 0 },
-    { min: 0.7, max: 0.8, count: 0 },
-    { min: 0.6, max: 0.7, count: 0 },
-    { min: 0, max: 0.6, count: 0 },
-  ];
-
-  scores.forEach(score => {
-    const bucket = buckets.find(b => score >= b.min && score < b.max);
-    if (bucket) bucket.count++;
-  });
-
-  const maxCount = Math.max(...buckets.map(b => b.count));
-  const barWidth = 20;
-
-  return buckets.map(b => {
-    const bars = '█'.repeat(Math.round((b.count / maxCount) * barWidth));
-    const pct = ((b.count / scores.length) * 100).toFixed(0);
-    return `${b.min.toFixed(1)}-${b.max.toFixed(1)}: ${bars.padEnd(barWidth)} ${b.count} (${pct}%)`;
-  }).join('\n');
-}
-```
-
-## Files to Create/Modify
-
-### New Files
-
-1. `/ui/src/services/dataset-readme-generator.ts` - Core generation logic
-2. `/ui/src/components/datasets/DatasetReadmeViewer.tsx` - Markdown viewer component
-3. `/ui/src/hooks/useDatasetReadme.ts` - Auto-update hook
-
-### Files to Modify
-
-1. `/ui/src/types/dataset-types.ts` - Add `readme` and `readmeUpdatedAt` fields
-2. `/ui/src/components/datasets/DatasetDetailContentV2.tsx` - Add README tab
-3. `/ui/src/services/datasets-db.ts` - Handle readme field in updates
-
-## UI/UX Considerations
-
-1. **Tab Placement**: Add "README" as a tab alongside "Records", "Topics", etc.
-2. **Export Button**: Prominent download button in the README viewer
-3. **Copy Button**: Quick copy-to-clipboard for sharing
-4. **Auto-collapse**: Long sections (like topic trees) can be collapsible
-5. **Syntax Highlighting**: Code blocks should have proper highlighting
-6. **Print-friendly**: README should render well when printed
+| File | Purpose |
+|------|---------|
+| `src/hooks/useDatasetReadme.ts` | Hook exposing readme + export |
+| `src/components/datasets/readme-viewer/index.tsx` | Main viewer component |
+| `src/components/datasets/readme-viewer/ReadmeHeaderActions.tsx` | Copy + export + regenerate (via Lucy) buttons |
+| `src/components/datasets/readme-viewer/ReadmeEmptyState.tsx` | Empty state with CTA to ask Lucy |
+| `src/lib/distri-finetune-tools/steps/update-dataset-readme.ts` | Agent tool to write README |

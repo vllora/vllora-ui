@@ -1,5 +1,8 @@
 /**
- * Types for Propose plan
+ * Types for Plan system
+ *
+ * The agent writes ALL plan content as markdown (plan_markdown).
+ * The frontend is a pure markdown renderer — no template assembly.
  */
 
 import type { ExecutionStepId } from '../execute-plan';
@@ -29,6 +32,32 @@ export interface GraderCriterion {
   description: string;
 }
 
+// =============================================================================
+// Dynamic Execution Steps
+// =============================================================================
+
+/** @deprecated Agent drives execution directly; these are no longer needed */
+export type DynamicStepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
+
+/** @deprecated Agent drives execution directly via individual tool calls */
+export interface DynamicExecutionStep {
+  id: string;
+  label: string;
+  tool_name: string;
+  tool_params: Record<string, unknown>;
+  depends_on?: string[];
+  status: DynamicStepStatus;
+  details?: string[];
+  error?: string;
+}
+
+// =============================================================================
+// Plan
+// =============================================================================
+
+/** @deprecated All plans are agent-driven now; plan_type is ignored */
+export type PlanType = 'finetune' | 'generic';
+
 export interface Plan {
   dataset_id: string;
   dataset_name: string;
@@ -38,7 +67,20 @@ export interface Plan {
   title?: string;
   description?: string;
 
-  // Execution config embedded in plan
+  // REQUIRED: Agent-authored markdown — the single source of rendering truth.
+  // The frontend renders this directly. Agent updates it during execution
+  // to check off completed steps.
+  plan_markdown: string;
+
+  /** @deprecated Ignored — all plans are agent-driven now */
+  plan_type?: PlanType;
+
+  /** @deprecated Agent drives execution directly via individual tool calls */
+  dynamic_steps?: DynamicExecutionStep[];
+
+  // --- Finetune data fields (still used by individual tool handlers) ---
+
+  /** @deprecated Agent calls tools directly instead of execute_plan */
   steps_to_execute?: ExecutionStepId[];
   overrides?: {
     adjust_topics?: { instruction?: string };
@@ -50,47 +92,42 @@ export interface Plan {
   adjust_topics_instruction?: string;
 
   // Structured output schema (null for free-form/conversational responses)
-  // Optional: only present for plans that touch output format
   output_format?: OutputFormat | null;
 
   // Knowledge sources analysis
-  // Optional: only present for plans that analyze knowledge sources
   knowledge_sources?: {
     name: string;
     section_headings: string[];
   }[];
 
-  // Proposed topic hierarchy
-  // Optional: only present for plans that configure topics
+  // Proposed topic hierarchy (used by topic tools)
   proposed_topics?: ProposedTopic[];
   total_topic_count?: number;
 
-  // Data generation plan
-  // Optional: only present for plans that generate data
+  // Data generation plan (used by generation tools)
   data_generation?: {
     strategy: string;
     grounded_in_knowledge: boolean;
   };
 
-  // Grader configuration
-  // Optional: only present for plans that configure grader
+  // Grader configuration (used by grader tools)
   grader_config?: {
     criteria: GraderCriterion[];
-    template_preview?: string;  // only generated at execution time, not stored in proposal
+    template_preview?: string;
   };
 
-  // Execution steps (what the user sees)
-  execution_steps: {
+  /** @deprecated Agent writes checklist in plan_markdown instead */
+  execution_steps?: {
     step: string;
     description: string;
     estimated_time: string;
-    /** Maps to the technical step ID in steps_to_execute for progress tracking */
     step_id?: string;
   }[];
 
   // Estimated totals
   estimated_records?: number;
-  estimated_duration: string;
+  /** @deprecated Agent includes estimates in plan_markdown */
+  estimated_duration?: string;
 }
 
 export interface ProposePlanResult {

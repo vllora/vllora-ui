@@ -284,7 +284,7 @@ export function PlanCard({
         {expandedSections.has('steps') && (
           <div className="px-4 pb-3">
             <div className="space-y-2">
-              {plan.execution_steps.map((step, i) => (
+              {(plan.execution_steps ?? []).map((step, i) => (
                 <div
                   key={i}
                   className="flex items-start gap-3 text-xs"

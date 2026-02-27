@@ -45,9 +45,15 @@ function normalizeHierarchy(
     }
     seenIds.add(id);
 
-    // Process children recursively
-    const children = Array.isArray(node.children)
-      ? normalizeHierarchy(node.children, currentPath)
+    // Process children recursively — support both "children" (canonical) and
+    // "subtopics" (used by plan's proposed_topics) field names
+    const rawChildren = Array.isArray(node.children)
+      ? node.children
+      : Array.isArray(node.subtopics)
+        ? node.subtopics
+        : undefined;
+    const children = rawChildren
+      ? normalizeHierarchy(rawChildren as unknown[], currentPath)
       : undefined;
 
     // Preserve optional fields from the incoming node

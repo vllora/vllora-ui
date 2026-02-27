@@ -68,6 +68,7 @@ const REQUEST_BODY = JSON.stringify({
 
 const CURL_COMMAND = `curl http://localhost:9090/v1/chat/completions \\
   -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer $OPENAI_API_KEY'}" \\
   -d '${REQUEST_BODY.replace(/'/g, "'\\''")}'`;
 
 

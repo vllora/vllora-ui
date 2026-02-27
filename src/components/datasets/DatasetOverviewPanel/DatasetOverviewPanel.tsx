@@ -43,7 +43,6 @@ export function DatasetOverviewPanel({
   readme,
   readmeUpdatedAt,
   onExport,
-  onRegenerate,
   datasetId,
   onOverviewClick,
 }: DatasetOverviewPanelProps) {
@@ -325,7 +324,6 @@ export function DatasetOverviewPanel({
                 readme={readme}
                 readmeUpdatedAt={readmeUpdatedAt}
                 onExport={onExport}
-                onRegenerate={onRegenerate}
                 headerLabel="README"
                 className="h-full"
               />
