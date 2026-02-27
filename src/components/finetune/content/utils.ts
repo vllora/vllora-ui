@@ -3,6 +3,7 @@
  */
 
 import { formatDistanceToNow, differenceInSeconds, differenceInMinutes, differenceInHours } from "date-fns";
+import { toast } from "sonner";
 import { BASE_MODELS } from "./constants";
 
 /**
@@ -166,6 +167,15 @@ export function triggerFileDownload(url: string, filename?: string) {
     // The server's Content-Disposition header will trigger the download
     window.open(url, "_blank", "noopener,noreferrer");
   }
+}
+
+/**
+ * Show a toast after weights download starts.
+ */
+export function showWeightsDownloadToast() {
+  toast.success("Weights download started", {
+    description: "Click the info icon next to Weights for usage instructions.",
+  });
 }
 
 /**

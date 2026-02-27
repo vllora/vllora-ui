@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { useState, useCallback } from "react";
 import { FinetuneJob, getWeightsDownloadUrl } from "@/services/finetune-api";
-import { triggerFileDownload } from "./content/utils";
+import { triggerFileDownload, showWeightsDownloadToast } from "./content/utils";
 import { toast } from "sonner";
 
 interface FinetuneJobsPanelProps {
@@ -37,6 +37,7 @@ function JobItem({ job }: { job: FinetuneJob }) {
     try {
       const { download_url } = await getWeightsDownloadUrl(job.provider_job_id);
       triggerFileDownload(download_url, `weights-${job.provider_job_id}.tar.gz`);
+      showWeightsDownloadToast();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to get download URL');
     } finally {

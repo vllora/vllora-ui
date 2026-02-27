@@ -18,6 +18,7 @@ import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { FinetuneJobStatusBadge } from "../../FinetuneJobStatusBadge";
 import { EpochProgressBar } from "./EpochProgressSection";
 import { FinetuneJobDetailsSection } from "./FinetuneJobDetailsSection";
+import { UsageGuideDialog } from "./UsageGuideSection";
 import { TrainingMetricsSection } from "../TrainingMetricsSection";
 import { PerRowDetailsSection } from "../PerRowDetailsSection";
 import { ErrorLogSection } from "../ErrorLogSection";
@@ -26,6 +27,7 @@ import {
   getModelDisplayName,
   computeTrainingSummary,
   triggerFileDownload,
+  showWeightsDownloadToast,
 } from "../utils";
 import {
   cancelReinforcementJob,
@@ -105,6 +107,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
         download_url,
         `weights-${job.provider_job_id}.tar.gz`
       );
+      showWeightsDownloadToast();
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -208,18 +211,24 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
               </button>
             )}
             {job.status === "succeeded" && (
-              <button
-                onClick={handleDownloadWeights}
-                disabled={isDownloading}
-                className="flex items-center gap-1.5 rounded bg-[#10b981] px-3 py-1.5 text-xs font-bold text-[#0a0a0a] hover:bg-[#10b981]/90 transition-colors disabled:opacity-50"
-              >
-                {isDownloading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Download className="h-3.5 w-3.5" />
-                )}
-                Weights
-              </button>
+              <>
+                <button
+                  onClick={handleDownloadWeights}
+                  disabled={isDownloading}
+                  className="flex items-center gap-1.5 rounded bg-[#10b981] px-3 py-1.5 text-xs font-bold text-[#0a0a0a] hover:bg-[#10b981]/90 transition-colors disabled:opacity-50"
+                >
+                  {isDownloading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5" />
+                  )}
+                  Weights
+                </button>
+                <UsageGuideDialog
+                  jobId={job.provider_job_id}
+                  baseModel={job.base_model}
+                />
+              </>
             )}
           </div>
         </div>

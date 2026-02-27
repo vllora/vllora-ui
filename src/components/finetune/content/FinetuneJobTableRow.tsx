@@ -25,7 +25,7 @@ import {
 import { toast } from "sonner";
 import { FinetuneJobStatusBadge } from "../FinetuneJobStatusBadge";
 import { JobExpandedContent } from "./JobExpandedContent";
-import { formatFinetuneJobDate, formatDuration, getModelDisplayName, triggerFileDownload } from "./utils";
+import { formatFinetuneJobDate, formatDuration, getModelDisplayName, triggerFileDownload, showWeightsDownloadToast } from "./utils";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 
 interface FinetuneJobTableRowProps {
@@ -113,6 +113,7 @@ export function FinetuneJobTableRow({ job, onJobAction }: FinetuneJobTableRowPro
     try {
       const { download_url } = await getWeightsDownloadUrl(job.provider_job_id);
       triggerFileDownload(download_url, `weights-${job.provider_job_id}.tar.gz`);
+      showWeightsDownloadToast();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to get download URL');
     } finally {

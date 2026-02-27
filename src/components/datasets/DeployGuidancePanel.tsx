@@ -40,6 +40,9 @@ export function DeployGuidancePanel() {
         {/* API usage */}
         <ApiUsageSection modelId={latestSucceeded.fine_tuned_model ?? latestSucceeded.provider_job_id} />
 
+        {/* Local inference guide */}
+        <LocalInferenceSection jobId={latestSucceeded.provider_job_id} baseModel={latestSucceeded.base_model} />
+
         {/* Other succeeded models */}
         {succeededJobs.length > 1 && (
           <section>
@@ -191,6 +194,73 @@ print(message.content[0].text)`;
       <p className="text-xs text-muted-foreground flex items-center gap-1.5">
         <ExternalLink className="w-3 h-3" />
         Replace <code className="px-1 py-0.5 rounded bg-muted font-mono text-[10px]">$ANTHROPIC_API_KEY</code> with your API key.
+      </p>
+    </section>
+  );
+}
+
+function LocalInferenceSection({ jobId, baseModel }: { jobId: string; baseModel: string }) {
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const copyToClipboard = useCallback((text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(label);
+    toast.success(`Copied ${label}`);
+    setTimeout(() => setCopied(null), 2000);
+  }, []);
+
+  const installSnippet = `pip install vllm transformers`;
+
+  const extractSnippet = `tar -xzf weights-${jobId}.tar.gz`;
+
+  const inferenceSnippet = `from vllm import LLM, SamplingParams
+from vllm.lora.request import LoRARequest
+
+llm = LLM(
+    model="${baseModel}",
+    enable_lora=True,
+    max_lora_rank=64,
+    dtype="bfloat16",
+)
+
+output = llm.generate(
+    ["Explain what machine learning is in one sentence."],
+    SamplingParams(max_tokens=256, temperature=0.7),
+    lora_request=LoRARequest("adapter", 1, "./weights-${jobId}"),
+)
+print(output[0].outputs[0].text)`;
+
+  return (
+    <section className="space-y-3">
+      <h3 className="text-sm font-medium text-foreground">Local Inference</h3>
+      <p className="text-xs text-muted-foreground">
+        Run your fine-tuned model locally using vLLM with the downloaded LoRA adapter weights.
+      </p>
+
+      <CodeBlock
+        label="1. Install"
+        code={installSnippet}
+        copied={copied === "install"}
+        onCopy={() => copyToClipboard(installSnippet, "install")}
+      />
+
+      <CodeBlock
+        label="2. Extract weights"
+        code={extractSnippet}
+        copied={copied === "extract"}
+        onCopy={() => copyToClipboard(extractSnippet, "extract")}
+      />
+
+      <CodeBlock
+        label="3. Run inference (Python)"
+        code={inferenceSnippet}
+        copied={copied === "inference"}
+        onCopy={() => copyToClipboard(inferenceSnippet, "inference")}
+      />
+
+      <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+        <ExternalLink className="w-3 h-3" />
+        The downloaded file contains LoRA adapter weights. The base model (<code className="px-1 py-0.5 rounded bg-muted font-mono text-[10px]">{baseModel}</code>) will be downloaded automatically on first run.
       </p>
     </section>
   );
