@@ -69,6 +69,8 @@ export interface LucyChatProps {
   autoTriggerPrompt?: string | null;
   /** Active section for context-aware chat placeholder */
   activeSection?: string;
+  /** Status summary for existing datasets (rendered in welcome slot) */
+  statusSummary?: React.ReactNode;
 }
 
 // ============================================================================
@@ -136,6 +138,7 @@ export function LucyChat({
   proactivePrompt,
   autoTriggerPrompt,
   activeSection,
+  statusSummary,
 }: LucyChatProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState('');
@@ -416,6 +419,7 @@ export function LucyChat({
               quickActions={quickActions}
               onQuickAction={handleQuickAction}
               proactivePrompt={proactivePrompt}
+              statusSummary={statusSummary}
             />
           ) : isAutoAnalyzing && messages.length === 0 ? (
             /* Lucy "reviewing" indicator before first auto-analysis */

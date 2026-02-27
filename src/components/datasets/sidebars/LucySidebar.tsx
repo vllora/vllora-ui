@@ -42,6 +42,7 @@ import {
 } from "@/components/agent/lucy-agent";
 
 import type { QuickAction } from "@/components/agent/lucy-agent/LucyWelcome";
+import { DatasetStatusSummary } from "@/components/agent/lucy-agent/DatasetStatusSummary";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { buildDatasetAnalysisPrompt } from "../lucy-prompt-utils";
@@ -188,6 +189,9 @@ export function LucySidebar() {
   const recordsRef = useRef(records);
   recordsRef.current = records;
 
+  const planStatusRef = useRef(planStatus);
+  planStatusRef.current = planStatus;
+
   // Knowledge sources from context
   const { count: knowledgeSourcesCount, isProcessing: docsProcessing } = KnowledgeSourcesConsumer();
   const knowledgeSourcesCountRef = useRef(knowledgeSourcesCount);
@@ -219,6 +223,14 @@ export function LucySidebar() {
     const timer = setTimeout(() => {
       if (lastAnalyzedDatasetRef.current !== targetDatasetId && messagesRef.current.length === 0) {
         lastAnalyzedDatasetRef.current = targetDatasetId;
+        // Check if Lucy has previously analyzed this dataset
+        const hasBeenAnalyzed = workflowRef.current !== null ||
+          (planStatusRef.current && planStatusRef.current !== 'dismissed');
+        if (hasBeenAnalyzed) {
+          // Previously analyzed — show status summary instead of LLM call
+          return;
+        }
+        // New dataset — trigger Lucy analysis (works for both empty and trace-imported)
         setAutoTriggerPrompt(buildDatasetAnalysisPrompt(recordsRef.current.length === 0));
       }
     }, 300);
@@ -293,6 +305,22 @@ export function LucySidebar() {
     () => getContextualQuickActions(records.length, !!currentDataset?.evalScript, filteredJobs.length),
     [records.length, currentDataset?.evalScript, filteredJobs.length]
   );
+
+  // Status summary for previously-analyzed datasets (shown instead of LLM auto-trigger)
+  const statusSummary = useMemo(() => {
+    const hasBeenAnalyzed = workflow !== null ||
+      (planStatus && planStatus !== 'dismissed');
+    if (!hasBeenAnalyzed) return undefined;
+    return (
+      <DatasetStatusSummary
+        recordCount={records.length}
+        workflow={workflow}
+        hasEvalScript={!!currentDataset?.evalScript}
+        jobCount={filteredJobs.length}
+        planStatus={planStatus}
+      />
+    );
+  }, [records.length, workflow, currentDataset?.evalScript, filteredJobs.length, planStatus]);
 
   const getKnowledgeSourceType = useCallback((mimeType: string, fileName: string): KnowledgeSourceType => {
     if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) return 'pdf';
@@ -406,6 +434,7 @@ export function LucySidebar() {
             proactivePrompt="Hi! I'm Lucy, your fine-tuning assistant. I can help you organize training data, set up evaluation criteria, and run training jobs. What would you like to work on?"
             autoTriggerPrompt={autoTriggerPrompt}
             activeSection={activeSection}
+            statusSummary={statusSummary}
           />
         </div>
       ) : (

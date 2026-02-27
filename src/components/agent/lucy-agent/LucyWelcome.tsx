@@ -9,6 +9,7 @@ import type { ReactNode } from 'react';
 import { LucyAvatar } from './LucyAvatar';
 import { cn } from '@/lib/utils';
 
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -33,6 +34,8 @@ export interface LucyWelcomeProps {
   className?: string;
   /** Proactive prompt to show instead of default greeting */
   proactivePrompt?: string | null;
+  /** Status summary for existing datasets (takes priority over proactivePrompt) */
+  statusSummary?: ReactNode;
 }
 
 // ============================================================================
@@ -44,6 +47,7 @@ export function LucyWelcome({
   onQuickAction,
   className,
   proactivePrompt,
+  statusSummary,
 }: LucyWelcomeProps) {
   return (
     <div className={cn('flex flex-col items-start gap-1', className)}>
@@ -57,8 +61,10 @@ export function LucyWelcome({
 
       {/* Welcome message — flat, no bubble */}
       <div className="max-w-[100%] space-y-2">
-        {/* Greeting text - use proactivePrompt if provided */}
-        {proactivePrompt ? (
+        {/* Greeting text - statusSummary > proactivePrompt > default */}
+        {statusSummary ? (
+          statusSummary
+        ) : proactivePrompt ? (
           <p className="text-sm">{proactivePrompt}</p>
         ) : (
           <>
