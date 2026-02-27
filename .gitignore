@@ -11,3 +11,6 @@ CLAUDE.md
 .claude/settings.local.json
 .playwright-mcp/*
 .playwright-mcp/record-detail.html
+AGENTS.md
+GEMINI.md
+.agent/*
