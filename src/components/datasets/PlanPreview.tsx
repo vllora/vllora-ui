@@ -9,7 +9,7 @@
  * Empty state: prompt to generate a plan.
  */
 
-import { Sparkles, Loader2, FolderOpen, AlertCircle, CheckCircle2, XCircle, ArrowLeftRight, Pencil } from "lucide-react";
+import { Sparkles, Loader2, FolderOpen, AlertCircle, CheckCircle2, XCircle, Pencil } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { useChatStateStore } from "@distri/react";
@@ -18,13 +18,11 @@ import LazyMarkdownRenderer from "@/components/chat/LazyMarkdownRenderer";
 import { emitter } from "@/utils/eventEmitter";
 import type { Plan } from "@/lib/distri-finetune-tools/steps/propose-plan";
 import type { PlanStatus } from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
-import type { PlanDiff } from "./plan-section/plan-markdown-utils";
 import { WorkspaceTabsConsumer } from "@/contexts/WorkspaceTabsContext";
 
 interface PlanPreviewProps {
   plan: Plan | null;
   planStatus: PlanStatus | null;
-  planDiff?: PlanDiff | null;
   mode: "display" | "edit";
   onModeChange: (mode: "display" | "edit") => void;
   onApprove: (plan: Plan) => void;
@@ -41,7 +39,6 @@ interface PlanPreviewProps {
 export function PlanPreview({
   plan,
   planStatus,
-  planDiff,
   mode,
   onModeChange,
   onApprove,
@@ -83,7 +80,6 @@ export function PlanPreview({
           <PlanDisplayView
             plan={plan}
             planStatus={planStatus}
-            planDiff={planDiff}
             onModeChange={onModeChange}
             onApprove={onApprove}
             isExecuting={isExecuting}
@@ -142,7 +138,6 @@ function PlanMarkdownContent({ plan }: { plan: Plan }) {
 function PlanDisplayView({
   plan,
   planStatus,
-  planDiff,
   onModeChange,
   onApprove,
   isExecuting,
@@ -151,45 +146,14 @@ function PlanDisplayView({
 }: {
   plan: Plan;
   planStatus: PlanStatus | null;
-  planDiff?: PlanDiff | null;
   onModeChange: (mode: "display" | "edit") => void;
   onApprove: (plan: Plan) => void;
   isExecuting: boolean;
   isActionable: boolean;
   planErrorMessage?: string | null;
 }) {
-  // Build human-readable diff summary for banner.
-  // Skip the banner on the first plan proposal (only additions, no removals/modifications)
-  // since "Updated: 6 topics changed" is misleading when nothing existed before.
-  const diffParts: string[] = [];
-  if (planDiff?.hasChanges) {
-    const hasRemovalsOrMods =
-      planDiff.topicsRemoved.length > 0 ||
-      planDiff.topicsModified.length > 0 ||
-      planDiff.criteriaRemoved.length > 0 ||
-      planDiff.criteriaModified.length > 0;
-
-    if (hasRemovalsOrMods) {
-      const t = planDiff.topicsAdded.length + planDiff.topicsRemoved.length + planDiff.topicsModified.length;
-      const c = planDiff.criteriaAdded.length + planDiff.criteriaRemoved.length + planDiff.criteriaModified.length;
-      if (t > 0) diffParts.push(`${t} topic${t > 1 ? 's' : ''} changed`);
-      if (c > 0) diffParts.push(`${c} ${c > 1 ? 'criteria' : 'criterion'} changed`);
-    }
-  }
-
   return (
     <>
-      {/* Diff banner — shown when save_plan committed a plan with changes */}
-      {planDiff?.hasChanges && diffParts.length > 0 && (
-        <div className="mx-4 mt-3 flex items-center gap-2 px-3 py-2 rounded-md border border-blue-500/30 bg-blue-500/10 text-xs">
-          <ArrowLeftRight className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-          <span className="text-blue-600 dark:text-blue-400">
-            <span className="font-medium">Updated: </span>
-            {diffParts.join(', ')}
-          </span>
-        </div>
-      )}
-
       {/* Plan content — agent updates plan_markdown via update_plan_markdown tool */}
       <PlanMarkdownContent plan={plan} />
 

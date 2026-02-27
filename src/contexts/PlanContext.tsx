@@ -33,7 +33,6 @@ import { getCurrentExecution, getExecutingPlan, cancelExecution as cancelExecuti
 import type { Plan } from "@/lib/distri-finetune-tools/steps/propose-plan";
 import { STEP_ORDER, validatePlanForExecution } from "@/lib/distri-finetune-tools/steps/execute-plan";
 import type { ExecutionProgress, ExecutionStepId } from "@/lib/distri-finetune-tools/steps/execute-plan";
-import type { PlanDiff } from "@/components/datasets/plan-section/plan-markdown-utils";
 
 // ============================================================================
 // Types
@@ -57,9 +56,6 @@ interface PlanContextType {
   // Plan data
   /** The currently proposed plan (null if no plan) */
   proposedPlan: Plan | null;
-  /** Diff between the current plan and the previous committed plan (null if first proposal or no diff) */
-  planDiff: PlanDiff | null;
-
   // Execution state
   /** Whether plan execution is in progress */
   isExecuting: boolean;
@@ -114,8 +110,6 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
 
   // Plan data
   const [proposedPlan, setProposedPlan] = useState<Plan | null>(null);
-  const [planDiff, setPlanDiff] = useState<PlanDiff | null>(null);
-
   // Execution state
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionProgress, setExecutionProgress] = useState<ExecutionProgress | null>(null);
@@ -248,13 +242,12 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
       }
     };
 
-    const handleProposed = ({ datasetId: id, plan, diff }: { datasetId: string; plan: unknown; diff?: PlanDiff }) => {
+    const handleProposed = ({ datasetId: id, plan }: { datasetId: string; plan: unknown }) => {
       if (id === datasetId) {
         setPlanStatus('proposed');
         setIsGeneratingPlan(false);
         setHasPlanProposed(true);
         setProposedPlan(plan as Plan);
-        setPlanDiff(diff ?? null);
         setIsExecuting(false);
         setExecutionProgress(null);
         // Clear executed plan when new plan is proposed
@@ -485,7 +478,6 @@ ${editedMarkdown}
     isGeneratingPlan,
     hasPlanProposed,
     proposedPlan,
-    planDiff,
     isExecuting,
     executionProgress,
     executedPlan,
