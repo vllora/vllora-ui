@@ -142,17 +142,30 @@ export function computeTrainingSummary(
 }
 
 /**
- * Trigger a file download via an invisible anchor element.
- * Works with pre-signed URLs from cloud storage (S3, GCS, etc.).
+ * Trigger a file download from a URL.
+ * For cross-origin URLs (e.g. pre-signed S3/GCS), opens in a new tab since
+ * the `download` attribute on `<a>` tags is ignored by browsers for cross-origin.
  */
 export function triggerFileDownload(url: string, filename?: string) {
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename || "";
-  link.rel = "noopener noreferrer";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  let isSameOrigin = false;
+  try {
+    isSameOrigin = new URL(url).origin === window.location.origin;
+  } catch {
+    // Invalid URL — fall through to window.open
+  }
+
+  if (isSameOrigin) {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename || "";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } else {
+    // Cross-origin: download attribute is ignored, open in new tab
+    // The server's Content-Disposition header will trigger the download
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
 }
 
 /**
