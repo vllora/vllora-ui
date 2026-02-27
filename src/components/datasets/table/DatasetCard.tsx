@@ -166,6 +166,7 @@ export function DatasetCard({
           "hover:shadow-[0_4px_24px_-4px_rgba(var(--theme-500),0.15)] hover:-translate-y-0.5",
           accent.hoverBorder
         )}
+        onClick={onSelect}
       >
         <div className="p-4 h-full flex flex-col">
           {/* Top section */}
@@ -178,7 +179,7 @@ export function DatasetCard({
                 </div>
                 <div className="min-w-0 flex-1">
                   {isEditing ? (
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                       <Input
                         value={editingName}
                         onChange={(e) => onEditNameChange(e.target.value)}
@@ -199,12 +200,11 @@ export function DatasetCard({
                   ) : (
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <button
+                        <span
                           className="font-semibold text-sm text-muted-foreground truncate block w-full text-left group-hover:text-foreground transition-colors"
-                          onClick={onSelect}
                         >
                           {name}
-                        </button>
+                        </span>
                       </TooltipTrigger>
                       <TooltipContent side="top" sideOffset={4}>
                         <p className="text-xs">{name}</p>
@@ -384,56 +384,57 @@ export function DatasetCard({
               </div>
 
               <div className="flex items-center gap-3 shrink-0">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-[10px] text-muted-foreground/40 font-mono">
-                    {formatDate(updatedAt)}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" sideOffset={4}>
-                  <p className="text-xs">Last updated: {formatFullDate(updatedAt)}</p>
-                </TooltipContent>
-              </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="text-[10px] text-muted-foreground/40 font-mono">
+                      {formatDate(updatedAt)}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" sideOffset={4}>
+                    <p className="text-xs">Last updated: {formatFullDate(updatedAt)}</p>
+                  </TooltipContent>
+                </Tooltip>
 
-              {/* Menu */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-5 w-5 p-0 flex-shrink-0 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
-                  >
-                    <MoreHorizontal className="w-3.5 h-3.5 text-muted-foreground" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-[140px] p-1">
-                  <DropdownMenuItem onClick={onStartRename} className="text-xs px-2 py-1.5 gap-2">
-                    <Pencil className="w-3 h-3" />
-                    Rename
-                  </DropdownMenuItem>
-                  {onImport && (
-                    <DropdownMenuItem onClick={onImport} className="text-xs px-2 py-1.5 gap-2">
-                      <Upload className="w-3 h-3" />
-                      Import Data
+                {/* Menu */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-5 w-5 p-0 flex-shrink-0 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MoreHorizontal className="w-3.5 h-3.5 text-muted-foreground" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-[140px] p-1">
+                    <DropdownMenuItem onClick={onStartRename} className="text-xs px-2 py-1.5 gap-2">
+                      <Pencil className="w-3 h-3" />
+                      Rename
                     </DropdownMenuItem>
-                  )}
-                  {onDownload && (
-                    <DropdownMenuItem onClick={onDownload} className="text-xs px-2 py-1.5 gap-2">
-                      <Download className="w-3 h-3" />
-                      Download
+                    {onImport && (
+                      <DropdownMenuItem onClick={onImport} className="text-xs px-2 py-1.5 gap-2">
+                        <Upload className="w-3 h-3" />
+                        Import Data
+                      </DropdownMenuItem>
+                    )}
+                    {onDownload && (
+                      <DropdownMenuItem onClick={onDownload} className="text-xs px-2 py-1.5 gap-2">
+                        <Download className="w-3 h-3" />
+                        Download
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator className="my-1" />
+                    <DropdownMenuItem
+                      className="text-xs px-2 py-1.5 gap-2 text-red-500 focus:text-red-500"
+                      onClick={onDelete}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      Delete
                     </DropdownMenuItem>
-                  )}
-                  <DropdownMenuSeparator className="my-1" />
-                  <DropdownMenuItem
-                    className="text-xs px-2 py-1.5 gap-2 text-red-500 focus:text-red-500"
-                    onClick={onDelete}
-                  >
-                    <Trash2 className="w-3 h-3" />
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
           </div>
         </div>
