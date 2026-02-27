@@ -372,7 +372,7 @@ distri-finetune-tools/
 | **Deploy (Step 7)** | `deploy_model` |
 | **Plan** | `propose_plan`, `adjust_plan`, `save_plan`, `execute_plan` (deprecated), `update_plan_markdown` |
 | **Data Access** | `get_dataset_records`, `get_dataset_state`, `update_record`, `update_objective`, `validate_records` |
-| **Documentation** | `regenerate_readme` |
+| **Documentation** | `update_dataset_readme` (agent-authored), `regenerate_readme` (template fallback, internal) |
 
 ---
 

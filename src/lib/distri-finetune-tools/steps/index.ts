@@ -71,6 +71,7 @@ export { updateRecordHandler, updateRecordTool } from './update-record';
 
 // README
 export { regenerateReadmeHandler, regenerateReadmeTool } from './regenerate-readme';
+export { updateDatasetReadmeHandler, updateDatasetReadmeTool } from './update-dataset-readme';
 
 // Objective
 export { updateObjectiveHandler, updateObjectiveTool } from './update-objective';
@@ -151,6 +152,7 @@ import { getDatasetRecordsHandler, getDatasetRecordsTool } from './get-dataset-r
 import { getDatasetStateHandler, getDatasetStateTool } from './get-dataset-state';
 import { updateRecordHandler, updateRecordTool } from './update-record';
 import { regenerateReadmeHandler, regenerateReadmeTool } from './regenerate-readme';
+import { updateDatasetReadmeHandler, updateDatasetReadmeTool } from './update-dataset-readme';
 import { updateObjectiveHandler, updateObjectiveTool } from './update-objective';
 import { analyzeKnowledgeSourcesHandler, analyzeKnowledgeSourcesTool } from './analyze-knowledge-sources';
 import { generateGraderHandler, generateGraderTool } from './generate-grader';
@@ -193,6 +195,7 @@ export const STEP_TOOL_NAMES = [
   'get_dataset_state',
   'update_record',
   'regenerate_readme',
+  'update_dataset_readme',
   'update_objective',
   'analyze_knowledge_sources',
   'generate_grader',
@@ -242,6 +245,7 @@ export const stepTools: DistriFnTool[] = [
   getDatasetStateTool,
   updateRecordTool,
   regenerateReadmeTool,
+  updateDatasetReadmeTool,
   updateObjectiveTool,
   analyzeKnowledgeSourcesTool,
   generateGraderTool,
@@ -282,6 +286,7 @@ export const stepToolHandlers: Record<string, ToolHandler> = {
   get_dataset_state: getDatasetStateHandler,
   update_record: updateRecordHandler,
   regenerate_readme: regenerateReadmeHandler,
+  update_dataset_readme: updateDatasetReadmeHandler,
   update_objective: updateObjectiveHandler,
   analyze_knowledge_sources: analyzeKnowledgeSourcesHandler,
   generate_grader: generateGraderHandler,

@@ -2,23 +2,44 @@
 
 ## Overview
 
-Auto-generate and maintain a README markdown file for each dataset that summarizes its current state, structure, and quality metrics. This gives users a clear, exportable overview of their finetune project - similar to how code projects have README files.
+Generate and maintain a README markdown file for each dataset. The README is **authored by the Lucy agent** (LLM-generated) for rich, narrative documentation — not just mechanical tables.
 
-## Problem Statement
+## Two Generation Modes
 
-Users currently have no easy way to:
-- Get a quick overview of their dataset's structure and progress
-- Share dataset information with team members
-- Export a summary for documentation purposes
-- Track changes over time
+| Mode | Tool | When Used | Content Quality |
+|------|------|-----------|-----------------|
+| **Agent-authored** | `update_dataset_readme` | During plan execution, or when user asks Lucy | Narrative, insightful — the agent writes the content |
+| **Template fallback** | `regenerate_readme` (internal) | Auto-update hook for non-agent scenarios | Mechanical tables and metrics |
 
-## Solution
+### How `readmeSource` Works
 
-Generate a `README.md` content that:
-- Updates automatically when dataset changes
-- Includes all key metrics and structure
-- Is viewable in the UI and exportable as a file
-- Follows a consistent, readable format
+The `Dataset.readmeSource` field tracks who wrote the README:
+- `'agent'` — Lucy wrote it via `update_dataset_readme`. The auto-update hook will NOT overwrite it.
+- `'template'` or `undefined` — Template-generated. The auto-update hook may overwrite it when data changes.
+- The "Regenerate Overview" button in the UI always uses the template and resets `readmeSource` to `'template'`.
+
+## Agent README Flow (Primary)
+
+During plan execution:
+1. Agent executes all plan steps (topics → data → grader → eval → training)
+2. As the **final step**, agent writes a comprehensive README based on its execution context
+3. Calls `update_dataset_readme({ dataset_id, readme_content: "..." })`
+4. Content is saved to IndexedDB with `readmeSource: 'agent'`
+
+Outside plan execution (user asks "update the readme"):
+1. Agent calls `get_dataset_state` to gather context
+2. Writes the README
+3. Calls `update_dataset_readme`
+
+## Template Fallback Flow
+
+The `useDatasetReadme` hook auto-regenerates a template-based README when:
+- Records are added/removed
+- Topics change
+- Coverage stats update
+- Dry run completes
+
+**Guard:** If `dataset.readmeSource === 'agent'`, the hook skips regeneration to preserve the agent-authored content.
 
 ## README Structure
 

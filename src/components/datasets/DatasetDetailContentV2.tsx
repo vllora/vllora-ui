@@ -397,6 +397,9 @@ export function DatasetDetailContentV2() {
     autoUpdate: true,
   });
 
+  // Force-regenerate README (overrides agent-authored content) — used by UI buttons
+  const forceRegenerateReadme = useCallback(() => regenerateReadme(true), [regenerateReadme]);
+
   // Compute insights for stats cards
   const insights = useMemo(() => computeDatasetInsights(sortedRecords), [sortedRecords]);
   const cardCoverageStats = useMemo(() => computeCoverageStats({
@@ -635,7 +638,7 @@ export function DatasetDetailContentV2() {
               readme={readme}
               readmeUpdatedAt={readmeUpdatedAt}
               onExport={exportReadme}
-              onRegenerate={regenerateReadme}
+              onRegenerate={forceRegenerateReadme}
               datasetId={datasetId}
               onOverviewClick={() => setAnalyticsDialogOpen(true)}
             />
@@ -741,7 +744,7 @@ export function DatasetDetailContentV2() {
                 readme={readme}
                 readmeUpdatedAt={readmeUpdatedAt}
                 onExport={exportReadme}
-                onRegenerate={regenerateReadme}
+                onRegenerate={forceRegenerateReadme}
                 className="h-full"
               />
             </div>

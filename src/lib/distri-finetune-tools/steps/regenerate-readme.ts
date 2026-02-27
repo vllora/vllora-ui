@@ -96,8 +96,8 @@ export const regenerateReadmeHandler: ToolHandler = async (
       planSummary,
     });
 
-    // Save to IndexedDB
-    await datasetsDB.updateDatasetReadme(dataset_id, readme);
+    // Save to IndexedDB (mark as template-generated so agent READMEs aren't overwritten)
+    await datasetsDB.updateDatasetReadme(dataset_id, readme, 'template');
 
     // Extract section headers for summary
     const sectionMatches = readme.match(/^## .+$/gm) || [];

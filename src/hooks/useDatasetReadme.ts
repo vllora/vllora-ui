@@ -31,8 +31,8 @@ interface UseDatasetReadmeReturn {
   readme: string | null;
   /** Last time README was updated */
   readmeUpdatedAt: number | null;
-  /** Manually regenerate the README */
-  regenerateReadme: () => Promise<void>;
+  /** Manually regenerate the README. Pass `true` to force-override agent-authored README. */
+  regenerateReadme: (force?: boolean) => Promise<void>;
   /** Export README as a .md file */
   exportReadme: () => void;
 }
@@ -58,10 +58,15 @@ export function useDatasetReadme({
   } | null>(null);
 
   /**
-   * Regenerate the README and save to IndexedDB
+   * Regenerate the README and save to IndexedDB.
+   * When `force` is true (manual button click), overrides agent-authored README.
+   * When false (auto-update), respects agent-authored content.
    */
-  const regenerateReadme = useCallback(async () => {
+  const regenerateReadme = useCallback(async (force = false) => {
     if (!dataset || isUpdating.current) return;
+
+    // Don't overwrite agent-authored README with template (unless user forces it)
+    if (!force && dataset.readmeSource === 'agent') return;
 
     isUpdating.current = true;
 
@@ -130,7 +135,7 @@ export function useDatasetReadme({
       }
 
       // Save to IndexedDB
-      await datasetsDB.updateDatasetReadme(dataset.id, readme);
+      await datasetsDB.updateDatasetReadme(dataset.id, readme, 'template');
     } catch (error) {
       console.error('[useDatasetReadme] Failed to regenerate README:', error);
     } finally {
@@ -220,6 +225,9 @@ export function useDatasetReadme({
 
     const handlePlanProgress = ({ progress }: { progress: { dataset_id: string; is_complete: boolean } }) => {
       if (progress.dataset_id === dataset.id && progress.is_complete) {
+        // Agent handles README during plan execution via update_dataset_readme
+        if (dataset.readmeSource === 'agent') return;
+
         // Wait for data writes to settle, then regenerate
         setTimeout(() => {
           // Reset change tracking so next render triggers regeneration

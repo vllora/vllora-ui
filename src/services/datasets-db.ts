@@ -1371,11 +1371,12 @@ export async function updateDatasetTrainingConfig(
 }
 
 /**
- * Update the auto-generated README for a dataset
+ * Update the README for a dataset
  */
 export async function updateDatasetReadme(
   datasetId: string,
-  readme: string
+  readme: string,
+  source?: 'template' | 'agent'
 ): Promise<void> {
   const db = await getDB();
   const now = Date.now();
@@ -1391,6 +1392,7 @@ export async function updateDatasetReadme(
         dataset.readme = readme;
         dataset.readmeUpdatedAt = now;
         dataset.updatedAt = now;
+        if (source) dataset.readmeSource = source;
         store.put(dataset);
       }
     };
