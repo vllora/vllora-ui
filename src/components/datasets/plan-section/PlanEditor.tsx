@@ -3,10 +3,14 @@
  *
  * Markdown-based plan editor for easy modification.
  * Users can edit the plan directly in markdown format.
+ *
+ * When edits are detected, the button changes to "Submit for Review" —
+ * Lucy (the AI) interprets ALL changes and re-proposes a proper plan.
+ * This avoids fragile text parsing; the AI understands any format.
  */
 
 import { useState, useCallback, useMemo } from 'react';
-import { Check, Trash2, Sparkles, AlertTriangle } from 'lucide-react';
+import { Check, Trash2, Sparkles, Send, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -22,27 +26,30 @@ import {
 } from '@/components/ui/alert-dialog';
 import type { Plan } from '@/lib/distri-finetune-tools/steps/propose-plan';
 import LazyMarkdownRenderer from '@/components/chat/LazyMarkdownRenderer';
-import { markdownToPlan } from './plan-markdown-utils';
 import { PlanHeaderActions } from './PlanHeaderActions';
 import { PlanModeToggle } from './PlanModeToggle';
 
 interface PlanEditorProps {
   plan: Plan;
   onApprove: (plan: Plan) => void;
+  onSubmitEdited: (editedMarkdown: string) => void;
   onDismiss?: () => void;
 }
 
-export function PlanEditor({ plan, onApprove, onDismiss }: PlanEditorProps) {
+export function PlanEditor({ plan, onApprove, onSubmitEdited, onDismiss }: PlanEditorProps) {
   const initialMarkdown = useMemo(() => plan.plan_markdown, [plan]);
   const [markdown, setMarkdown] = useState(initialMarkdown);
-  const [isPreview, setIsPreview] = useState(true);
+  const [isPreview, setIsPreview] = useState(false);
+
+  const hasEdits = markdown !== initialMarkdown;
 
   const handleApprove = useCallback(() => {
-    // Parse structured fields from edited markdown, then persist the raw markdown
-    const updatedPlan = markdownToPlan(markdown, plan);
-    updatedPlan.plan_markdown = markdown;
-    onApprove(updatedPlan);
-  }, [markdown, plan, onApprove]);
+    onApprove(plan);
+  }, [plan, onApprove]);
+
+  const handleSubmitEdited = useCallback(() => {
+    onSubmitEdited(markdown);
+  }, [markdown, onSubmitEdited]);
 
   return (
     <div className="flex flex-col h-full">
@@ -70,12 +77,12 @@ export function PlanEditor({ plan, onApprove, onDismiss }: PlanEditorProps) {
           </div>
         ) : (
           <div className="flex flex-col h-full">
-            {/* Warning banner for edit mode */}
-            <div className="mx-4 mt-3 mb-2 flex items-start gap-2 px-3 py-2 rounded-md border border-amber-500/30 bg-amber-500/10 text-xs">
-              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-              <p className="text-amber-600 dark:text-amber-400">
-                <span className="font-medium">Editing the raw plan may affect its structure.</span>
-                {' '}For safer modifications, use Lucy chat to make changes instead.
+            {/* Info banner for edit mode */}
+            <div className="mx-4 mt-3 mb-2 flex items-start gap-2 px-3 py-2 rounded-md border border-blue-500/30 bg-blue-500/10 text-xs">
+              <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+              <p className="text-blue-600 dark:text-blue-400">
+                <span className="font-medium">Edit freely</span>
+                {' '}&mdash; topics, record counts, steps, criteria, or add custom instructions. Lucy will review your changes.
               </p>
             </div>
             <Textarea
@@ -117,14 +124,25 @@ export function PlanEditor({ plan, onApprove, onDismiss }: PlanEditorProps) {
             </AlertDialogContent>
           </AlertDialog>
         )}
-        <Button
-          size="sm"
-          onClick={handleApprove}
-          className="h-8 gap-1 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
-        >
-          <Check className="w-4 h-4" />
-          Approve & Execute
-        </Button>
+        {hasEdits ? (
+          <Button
+            size="sm"
+            onClick={handleSubmitEdited}
+            className="h-8 gap-1 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
+          >
+            <Send className="w-4 h-4" />
+            Submit for Review
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            onClick={handleApprove}
+            className="h-8 gap-1 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
+          >
+            <Check className="w-4 h-4" />
+            Approve & Execute
+          </Button>
+        )}
       </div>
     </div>
   );

@@ -9,7 +9,7 @@
  * Empty state: prompt to generate a plan.
  */
 
-import { Eye, Pencil, Sparkles, Loader2, FolderOpen, AlertCircle, CheckCircle2, XCircle, ArrowLeftRight } from "lucide-react";
+import { Sparkles, Loader2, FolderOpen, AlertCircle, CheckCircle2, XCircle, ArrowLeftRight, Pencil } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { useChatStateStore } from "@distri/react";
@@ -28,6 +28,7 @@ interface PlanPreviewProps {
   mode: "display" | "edit";
   onModeChange: (mode: "display" | "edit") => void;
   onApprove: (plan: Plan) => void;
+  onSubmitEdited: (editedMarkdown: string) => void;
   onDismiss: () => void;
   onOpenDocs?: () => void;
   isGenerating: boolean;
@@ -44,6 +45,7 @@ export function PlanPreview({
   mode,
   onModeChange,
   onApprove,
+  onSubmitEdited,
   onDismiss,
   onOpenDocs,
   isGenerating,
@@ -73,8 +75,8 @@ export function PlanPreview({
         mode === "edit" && isActionable && !isExecuting ? (
           <PlanEditView
             plan={plan}
-            onModeChange={onModeChange}
             onApprove={onApprove}
+            onSubmitEdited={onSubmitEdited}
             onDismiss={onDismiss}
           />
         ) : (
@@ -240,43 +242,22 @@ function PlanDisplayView({
 
 function PlanEditView({
   plan,
-  onModeChange,
   onApprove,
+  onSubmitEdited,
   onDismiss,
 }: {
   plan: Plan;
-  onModeChange: (mode: "display" | "edit") => void;
   onApprove: (plan: Plan) => void;
+  onSubmitEdited: (editedMarkdown: string) => void;
   onDismiss: () => void;
 }) {
   return (
-    <>
-      {/* Header toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border">
-        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <Pencil className="w-4 h-4 text-[rgb(var(--theme-500))]" />
-          Editing Plan
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs gap-1"
-            onClick={() => onModeChange("display")}
-          >
-            <Eye className="w-3.5 h-3.5" />
-            Preview
-          </Button>
-        </div>
-      </div>
-
-      {/* Editor */}
-      <PlanEditor
-        plan={plan}
-        onApprove={onApprove}
-        onDismiss={onDismiss}
-      />
-    </>
+    <PlanEditor
+      plan={plan}
+      onApprove={onApprove}
+      onSubmitEdited={onSubmitEdited}
+      onDismiss={onDismiss}
+    />
   );
 }
 

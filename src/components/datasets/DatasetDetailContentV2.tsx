@@ -206,6 +206,7 @@ export function DatasetDetailContentV2() {
     setIsPlanPreviewActive,
     setPlanEditMode,
     approvePlan,
+    submitEditedPlan,
     dismissPlan,
   } = PlanConsumer();
 
@@ -723,6 +724,7 @@ export function DatasetDetailContentV2() {
               mode={planEditMode}
               onModeChange={setPlanEditMode}
               onApprove={approvePlan}
+              onSubmitEdited={submitEditedPlan}
               onDismiss={dismissPlan}
               onOpenDocs={() => openTabRef.current("documents", "Documents", false)}
               isGenerating={isGeneratingPlan}

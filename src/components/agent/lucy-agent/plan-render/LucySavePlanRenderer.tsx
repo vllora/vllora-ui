@@ -7,7 +7,7 @@
 
 import { ToolCall, extractToolResultData } from '@distri/core';
 import { ToolCallState } from '@distri/react';
-import { CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import { tryParseJson } from '@/utils/modelUtils';
 import { SimpleFallbackRenderer } from './SimpleFallbackRenderer';
 
@@ -58,19 +58,9 @@ export function LucySavePlanRenderer({ toolCall, state }: ToolRendererProps) {
   }
 
   if (result?.success) {
-    const diffSummary = typeof result.diff_summary === 'string' ? result.diff_summary : '';
-
-    return (
-      <div className="rounded-lg border border-border bg-card p-3 space-y-1">
-        <div className="flex items-center gap-2 text-xs text-foreground">
-          <CheckCircle2 className="w-3.5 h-3.5 text-[rgb(var(--theme-500))]" />
-          <span className="font-medium">Plan saved</span>
-        </div>
-        {diffSummary && (
-          <div className="text-[11px] text-muted-foreground">{diffSummary}</div>
-        )}
-      </div>
-    );
+    // Plan is already visible in the workspace with a diff banner — no need to
+    // duplicate a "Plan saved" card in the chat.
+    return null;
   }
 
   return <SimpleFallbackRenderer toolCall={toolCall} state={state} />;

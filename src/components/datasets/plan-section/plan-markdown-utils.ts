@@ -1,128 +1,15 @@
 /**
  * Plan Markdown Utilities
  *
- * Functions for parsing user edits back to Plan objects and computing plan diffs.
+ * Plan diff computation for the diff banner.
  * The agent writes all plan markdown directly (plan_markdown field) —
  * the frontend is a pure renderer with no template assembly.
+ *
+ * Note: markdownToPlan() was removed — Lucy (the AI) now handles all
+ * interpretation of user edits via the "Submit for Review" flow.
  */
 
 import type { Plan } from '@/lib/distri-finetune-tools/steps/propose-plan';
-
-/**
- * Parse markdown back to Plan (best effort)
- * Handles table format for topics and criteria
- */
-export function markdownToPlan(md: string, originalPlan: Plan): Plan {
-  const plan = JSON.parse(JSON.stringify(originalPlan)) as Plan;
-
-  // Parse topics from table rows
-  // Main topic: | **Topic Name** | 40 | Description |
-  // Subtopic: | ↳ Subtopic Name | 20 | Description |
-  type TopicArray = NonNullable<typeof plan.proposed_topics>;
-  const topics: TopicArray = [];
-  const topicTableRegex = /\|\s*\*\*([^*|]+)\*\*\s*\|\s*(\d+)\s*\|\s*([^|]*)\|/g;
-  const subtopicTableRegex = /\|\s*↳\s*([^|]+)\|\s*(\d+)\s*\|\s*([^|]*)\|/g;
-
-  let currentTopic: TopicArray[0] | null = null;
-  let topicMatch;
-
-  // First pass: get all main topics
-  while ((topicMatch = topicTableRegex.exec(md)) !== null) {
-    const topicName = topicMatch[1].trim();
-    const targetCount = parseInt(topicMatch[2], 10);
-    const description = topicMatch[3].trim();
-
-    // Skip table headers and non-topic rows
-    if (topicName.toLowerCase() === 'topic' || topicName.toLowerCase() === 'criterion') continue;
-
-    currentTopic = {
-      name: topicName,
-      description,
-      target_count: targetCount,
-      subtopics: [],
-    };
-    topics.push(currentTopic);
-  }
-
-  // Second pass: get subtopics and assign to nearest preceding topic
-  let subtopicMatch;
-  const subtopics: { name: string; count: number; desc: string; index: number }[] = [];
-  while ((subtopicMatch = subtopicTableRegex.exec(md)) !== null) {
-    subtopics.push({
-      name: subtopicMatch[1].trim(),
-      count: parseInt(subtopicMatch[2], 10),
-      desc: subtopicMatch[3].trim(),
-      index: subtopicMatch.index,
-    });
-  }
-
-  // Assign subtopics to topics based on position
-  for (const sub of subtopics) {
-    // Find the topic that appears before this subtopic
-    let parentTopic = null;
-    for (const topic of topics) {
-      const topicIndex = md.indexOf(`**${topic.name}**`);
-      if (topicIndex !== -1 && topicIndex < sub.index) {
-        parentTopic = topic;
-      }
-    }
-    if (parentTopic) {
-      parentTopic.subtopics = parentTopic.subtopics || [];
-      parentTopic.subtopics.push({
-        name: sub.name,
-        description: sub.desc || '',
-        target_count: sub.count,
-      });
-    }
-  }
-
-  if (topics.length > 0) {
-    plan.proposed_topics = topics;
-  }
-
-  // Parse criteria from bullet list: - **Name** — Description
-  // Also handles legacy table format: | Name | Description |
-  const parsedCriteria: NonNullable<typeof plan.grader_config>['criteria'] = [];
-
-  // Find the criteria section (handles both with and without emoji prefix)
-  const criteriaSection = md.match(/## (?:📊 )?Evaluation Criteria[\s\S]*?(?=---|$)/);
-  if (criteriaSection) {
-    const section = criteriaSection[0];
-
-    // Try bullet list format first: - **Name** — Description
-    const bulletRegex = /- \*\*([^*]+)\*\*\s*[—–-]\s*(.+)/g;
-    let bulletMatch;
-    while ((bulletMatch = bulletRegex.exec(section)) !== null) {
-      parsedCriteria.push({
-        name: bulletMatch[1].trim(),
-        description: bulletMatch[2].trim(),
-      });
-    }
-
-    // Fallback to table format if no bullets found
-    if (parsedCriteria.length === 0) {
-      const criteriaTableRegex = /\|\s*([^|*]+)\s*\|\s*([^|]+)\|/g;
-      let criteriaMatch;
-      while ((criteriaMatch = criteriaTableRegex.exec(section)) !== null) {
-        const name = criteriaMatch[1].trim();
-        const description = criteriaMatch[2].trim();
-        if (name.toLowerCase() === 'criterion' || name.startsWith(':') || name.startsWith('-')) continue;
-        if (description.toLowerCase() === 'description' || description.startsWith(':') || description.startsWith('-')) continue;
-        parsedCriteria.push({ name, description });
-      }
-    }
-  }
-
-  if (parsedCriteria.length > 0) {
-    if (!plan.grader_config) {
-      plan.grader_config = { criteria: parsedCriteria };
-    } else {
-      plan.grader_config.criteria = parsedCriteria;
-    }
-  }
-
-  return plan;
-}
 
 // =============================================================================
 // Plan Diff

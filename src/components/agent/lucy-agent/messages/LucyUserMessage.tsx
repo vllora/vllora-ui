@@ -27,6 +27,10 @@ export function LucyUserMessage({ message }: LucyUserMessageProps) {
 
   if (!content.text && content.imageParts.length === 0) return null;
 
+  // Compact display for plan edit review messages (full content sent to LLM,
+  // but we show a short summary in the chat UI to avoid a wall of markdown).
+  const isPlanEditReview = content.text?.startsWith('[PLAN_EDIT_REVIEW]');
+
   return (
     <div className="flex flex-col items-start gap-1">
       {/* Header — left-aligned, no avatar */}
@@ -36,7 +40,11 @@ export function LucyUserMessage({ message }: LucyUserMessageProps) {
 
       {/* Message content — no bubble */}
       <div className="overflow-hidden">
-        {content.text && <LucyTextRenderer text={content.text} />}
+        {isPlanEditReview ? (
+          <LucyTextRenderer text="I've edited the plan. Please review my changes and re-propose." />
+        ) : (
+          content.text && <LucyTextRenderer text={content.text} />
+        )}
         <LucyImageRenderer imageParts={content.imageParts} />
       </div>
     </div>

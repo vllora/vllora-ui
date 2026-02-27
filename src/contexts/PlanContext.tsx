@@ -80,6 +80,8 @@ interface PlanContextType {
   setIsPlanPreviewActive: (active: boolean) => void;
   setPlanEditMode: (mode: "display" | "edit") => void;
   approvePlan: (plan: Plan) => void;
+  /** Submit an edited plan for Lucy to review and re-propose */
+  submitEditedPlan: (editedMarkdown: string) => void;
   dismissPlan: () => void;
   cancelExecution: () => void;
 }
@@ -434,6 +436,34 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
     setIsPlanPreviewActive(false);
   }, [datasetId]);
 
+  const submitEditedPlan = useCallback((editedMarkdown: string) => {
+    if (!proposedPlan) return;
+    const originalMarkdown = proposedPlan.plan_markdown;
+
+    // Send full prompt as text so the server/LLM receives the plan content.
+    // The chat UI detects the [PLAN_EDIT_REVIEW] marker and renders a compact version.
+    emitter.emit("vllora_lucy_prompt", {
+      prompt: `[PLAN_EDIT_REVIEW]
+I've edited the plan before approving. Please review ALL my changes — I may have modified topics, record counts, execution steps, evaluation criteria, or added custom instructions. The format may differ from the original.
+
+Compare and interpret my changes, then call propose_plan with updated structured data that reflects my edits, followed by save_plan to commit. If any changes aren't feasible, explain what can't be done and propose the closest alternative.
+
+ORIGINAL PLAN:
+"""
+${originalMarkdown}
+"""
+
+MY EDITED VERSION:
+"""
+${editedMarkdown}
+"""`,
+    });
+
+    // Switch back to display mode, show generating state while Lucy re-proposes
+    setPlanEditMode("display");
+    setIsGeneratingPlan(true);
+  }, [proposedPlan]);
+
   const dismissPlan = useCallback(() => {
     clearProposedPlan(datasetId);
     emitter.emit("vllora_plan_dismissed", { datasetId });
@@ -465,6 +495,7 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
     setIsPlanPreviewActive,
     setPlanEditMode,
     approvePlan,
+    submitEditedPlan,
     dismissPlan,
     cancelExecution,
   };
