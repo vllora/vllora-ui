@@ -23,6 +23,7 @@ npm run build         # Type-check + production build
 npx tsc --noEmit      # Type-check only (run after every change)
 npm test              # Run tests
 scripts/sync-distrijs.sh  # Sync vendored @distri packages from distri repo
+scripts/restart-backend.sh  # Restart Distri server + vLLora gateway (required after agent md changes)
 ```
 
 Backend (Rust gateway) runs at `localhost:9090`. Start via `npm run start:backend` or from the gateway repo.
@@ -273,3 +274,7 @@ Multi-agent teams for complex tasks. Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TE
 7. **Cross-repo tool contracts**: Tool definitions in agent md files (gateway repo) must match tool implementations in `distri-finetune-tools/` (this repo). Mismatches cause silent failures.
 
 8. **Auth for E2E testing**: Set `localStorage.setItem('vlora_user_email', 'test@e2e.local')` — no login UI needed.
+
+9. **Backend restart after agent md changes**: When you modify any agent definition file in `gateway/agents/finetune/` (e.g., `vllora-finetune-agent.md`, `finetune-workflow-agent.md`), the backend must be restarted to pick up changes. Run `scripts/restart-backend.sh` — this kills ports 8081/9090/9091, cleans the Distri cache, and restarts both the Distri server and vLLora gateway. Warn the user that a restart is needed after editing agent files.
+
+10. **Testing with Chrome MCP browser**: When verifying UI changes, use the **Claude in Chrome** MCP tools (`mcp__Claude_in_Chrome__*`) instead of Preview tools. The user's Chrome browser already has existing data (datasets, jobs, evaluations) which makes testing realistic. Use `tabs_context_mcp` first to get available tabs, then navigate to `localhost:5173` and use `computer` (screenshot), `read_page` (accessibility tree), `find` (element search), and `javascript_tool` (DOM inspection) to verify changes. Do NOT use `preview_*` tools for visual verification.
