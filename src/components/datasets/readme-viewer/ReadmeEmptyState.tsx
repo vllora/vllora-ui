@@ -1,10 +1,12 @@
 /**
  * ReadmeEmptyState
  *
- * Empty state shown before the first README sync lands.
+ * Empty state shown when Lucy hasn't written a README yet.
  */
 
 import { FileText } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { emitter } from '@/utils/eventEmitter';
 import { EmptyStateTemplate } from '../EmptyStateTemplate';
 
 interface ReadmeEmptyStateProps {
@@ -15,9 +17,22 @@ export function ReadmeEmptyState({ className }: ReadmeEmptyStateProps) {
   return (
     <EmptyStateTemplate
       icon={FileText}
-      heading="Experiment Overview"
-      description="Overview is initialized automatically and updated as your experiment changes."
-      helperText="Add records, topics, or evaluator configuration to expand this overview."
+      heading="No README yet"
+      description="Lucy will write a README as the final step of plan execution, summarizing your dataset's structure, quality, and provenance."
+      action={
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            emitter.emit('vllora_lucy_prompt', {
+              prompt: 'Please write a README for this dataset based on its current state.',
+            })
+          }
+        >
+          Ask Lucy to write README
+        </Button>
+      }
+      helperText="Or ask Lucy anytime in chat: &quot;update the readme&quot;"
       className={className}
     />
   );

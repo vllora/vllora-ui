@@ -99,7 +99,6 @@ export interface DatasetOverviewPanelProps {
   readme: string | null;
   readmeUpdatedAt: number | null;
   onExport: () => void;
-  onRegenerate: () => Promise<void>;
   datasetId: string;
   onOverviewClick?: () => void;
 }

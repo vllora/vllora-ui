@@ -2,8 +2,7 @@
  * Update Dataset README Tool
  *
  * Saves agent-written README content for a dataset.
- * Unlike regenerate_readme (which uses templates), this tool accepts
- * markdown content authored by the LLM agent for richer, more insightful READMEs.
+ * Accepts markdown content authored by the LLM agent.
  */
 
 import type { DistriFnTool } from '@distri/core';

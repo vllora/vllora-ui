@@ -1,7 +1,7 @@
 /**
  * ReadmeHeaderActions
  *
- * Action buttons for the README header: refresh, copy, and export.
+ * Action buttons for the README header: copy, export, and regenerate (via Lucy).
  */
 
 import { useState, useCallback } from 'react';
@@ -13,20 +13,18 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { emitter } from '@/utils/eventEmitter';
 
 interface ReadmeHeaderActionsProps {
   readme: string;
-  onRegenerate: () => Promise<void>;
   onExport: () => void;
 }
 
 export function ReadmeHeaderActions({
   readme,
-  onRegenerate,
   onExport,
 }: ReadmeHeaderActionsProps) {
   const [copied, setCopied] = useState(false);
-  const [isRegenerating, setIsRegenerating] = useState(false);
 
   const handleCopy = useCallback(async () => {
     if (!readme) return;
@@ -40,39 +38,15 @@ export function ReadmeHeaderActions({
     }
   }, [readme]);
 
-  const handleRegenerate = useCallback(async () => {
-    setIsRegenerating(true);
-    try {
-      await onRegenerate();
-    } finally {
-      setIsRegenerating(false);
-    }
-  }, [onRegenerate]);
+  const handleRegenerate = useCallback(() => {
+    emitter.emit('vllora_lucy_prompt', {
+      prompt: 'Please write or update the README for this dataset based on its current state.',
+    });
+  }, []);
 
   return (
     <TooltipProvider delayDuration={300}>
       <div className="flex items-center gap-1">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleRegenerate}
-              disabled={isRegenerating}
-              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-            >
-              {isRegenerating ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <RefreshCw className="w-3.5 h-3.5" />
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
-            <p>Regenerate Overview</p>
-          </TooltipContent>
-        </Tooltip>
-
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -106,6 +80,22 @@ export function ReadmeHeaderActions({
           </TooltipTrigger>
           <TooltipContent side="bottom">
             <p>Export as file</p>
+          </TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRegenerate}
+              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p>Ask Lucy to rewrite</p>
           </TooltipContent>
         </Tooltip>
       </div>

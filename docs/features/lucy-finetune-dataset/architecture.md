@@ -331,7 +331,7 @@ distri-finetune-tools/
 │   ├── get-dataset-state.ts      # Dataset state + computed stats
 │   ├── update-record.ts
 │   ├── update-objective.ts       # Update dataset objective/goals
-│   ├── regenerate-readme.ts      # README regeneration tool
+│   ├── update-dataset-readme.ts  # Agent-authored README tool
 │   ├── save-plan.ts              # Persist plan to IndexedDB
 │   ├── execute-plan.ts           # Registry-based plan execution (deprecated)
 │   ├── update-plan-markdown.ts   # Agent updates plan display during execution
@@ -372,7 +372,7 @@ distri-finetune-tools/
 | **Deploy (Step 7)** | `deploy_model` |
 | **Plan** | `propose_plan`, `adjust_plan`, `save_plan`, `execute_plan` (deprecated), `update_plan_markdown` |
 | **Data Access** | `get_dataset_records`, `get_dataset_state`, `update_record`, `update_objective`, `validate_records` |
-| **Documentation** | `update_dataset_readme` (agent-authored), `regenerate_readme` (template fallback, internal) |
+| **Documentation** | `update_dataset_readme` (agent-authored) |
 
 ---
 

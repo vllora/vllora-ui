@@ -70,7 +70,6 @@ export { getDatasetStateHandler, getDatasetStateTool, computeDatasetStats, type 
 export { updateRecordHandler, updateRecordTool } from './update-record';
 
 // README
-export { regenerateReadmeHandler, regenerateReadmeTool } from './regenerate-readme';
 export { updateDatasetReadmeHandler, updateDatasetReadmeTool } from './update-dataset-readme';
 
 // Objective
@@ -151,7 +150,6 @@ import { deployModelHandler, deployModelTool } from './deploy-model';
 import { getDatasetRecordsHandler, getDatasetRecordsTool } from './get-dataset-records';
 import { getDatasetStateHandler, getDatasetStateTool } from './get-dataset-state';
 import { updateRecordHandler, updateRecordTool } from './update-record';
-import { regenerateReadmeHandler, regenerateReadmeTool } from './regenerate-readme';
 import { updateDatasetReadmeHandler, updateDatasetReadmeTool } from './update-dataset-readme';
 import { updateObjectiveHandler, updateObjectiveTool } from './update-objective';
 import { analyzeKnowledgeSourcesHandler, analyzeKnowledgeSourcesTool } from './analyze-knowledge-sources';
@@ -194,7 +192,6 @@ export const STEP_TOOL_NAMES = [
   'get_dataset_records',
   'get_dataset_state',
   'update_record',
-  'regenerate_readme',
   'update_dataset_readme',
   'update_objective',
   'analyze_knowledge_sources',
@@ -244,7 +241,6 @@ export const stepTools: DistriFnTool[] = [
   getDatasetRecordsTool,
   getDatasetStateTool,
   updateRecordTool,
-  regenerateReadmeTool,
   updateDatasetReadmeTool,
   updateObjectiveTool,
   analyzeKnowledgeSourcesTool,
@@ -285,7 +281,6 @@ export const stepToolHandlers: Record<string, ToolHandler> = {
   get_dataset_records: getDatasetRecordsHandler,
   get_dataset_state: getDatasetStateHandler,
   update_record: updateRecordHandler,
-  regenerate_readme: regenerateReadmeHandler,
   update_dataset_readme: updateDatasetReadmeHandler,
   update_objective: updateObjectiveHandler,
   analyze_knowledge_sources: analyzeKnowledgeSourcesHandler,

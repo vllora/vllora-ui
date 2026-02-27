@@ -390,15 +390,10 @@ export function DatasetDetailContentV2() {
     return () => clearTimeout(timeoutId);
   }, [docsProcessing, shouldAutoGenerate, datasetId]);
 
-  // README auto-generation hook
-  const { readme, readmeUpdatedAt, regenerateReadme, exportReadme } = useDatasetReadme({
+  // README hook — agent-authored only, no auto-generation
+  const { readme, readmeUpdatedAt, exportReadme } = useDatasetReadme({
     dataset,
-    records: sortedRecords,
-    autoUpdate: true,
   });
-
-  // Force-regenerate README (overrides agent-authored content) — used by UI buttons
-  const forceRegenerateReadme = useCallback(() => regenerateReadme(true), [regenerateReadme]);
 
   // Compute insights for stats cards
   const insights = useMemo(() => computeDatasetInsights(sortedRecords), [sortedRecords]);
@@ -638,7 +633,6 @@ export function DatasetDetailContentV2() {
               readme={readme}
               readmeUpdatedAt={readmeUpdatedAt}
               onExport={exportReadme}
-              onRegenerate={forceRegenerateReadme}
               datasetId={datasetId}
               onOverviewClick={() => setAnalyticsDialogOpen(true)}
             />
@@ -744,7 +738,6 @@ export function DatasetDetailContentV2() {
                 readme={readme}
                 readmeUpdatedAt={readmeUpdatedAt}
                 onExport={exportReadme}
-                onRegenerate={forceRegenerateReadme}
                 className="h-full"
               />
             </div>
