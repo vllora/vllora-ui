@@ -41,6 +41,7 @@ import { useChatStateStore } from "@distri/react";
 import { toast } from "sonner";
 import { FileTreeItem } from "./FileTreeItem";
 import { NewJobDialog } from "@/components/finetune/content/NewJobDialog";
+import { NewEvaluationDialog } from "@/components/datasets/evaluation-dialog/NewEvaluationDialog";
 import type { FileTreeNode, FileTreeBadge } from "./types";
 import type { TopicHierarchyNode } from "@/types/dataset-types";
 
@@ -123,6 +124,8 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
   // New finetune job dialog
   const [showNewJobDialog, setShowNewJobDialog] = useState(false);
+  // New evaluation dialog
+  const [showNewEvalDialog, setShowNewEvalDialog] = useState(false);
 
   const toggleExpand = useCallback((nodeId: string) => {
     setExpandedNodes((prev) => {
@@ -319,9 +322,9 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         badge: dataset?.evalScript
           ? undefined
           : {
-            label: "empty", variant: "default",
-            icon: <Circle className={`${BADGE_CLS} opacity-40`} />,
-            tooltip: "No grader script yet",
+            label: "configure", variant: "warning" as const,
+            icon: <AlertTriangle className={BADGE_CLS} />,
+            tooltip: "Required — configure a grader script to run evaluations",
           },
       });
 
@@ -379,12 +382,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
               } else if (runningEval) {
                 toast.info("An evaluation is already running. Wait for it to finish.");
               } else {
-                const sampleSize = records.length <= 50 ? records.length : 50;
-                startDryRun(sampleSize).then(() => {
-                  toast.success(`Evaluation started with ${sampleSize} samples.`);
-                }).catch(() => {
-                  toast.error("Failed to start evaluation.");
-                });
+                setShowNewEvalDialog(true);
               }
             },
           },
@@ -602,6 +600,17 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
           initialConfig={dataset.trainingConfig}
         />
       )}
+
+      {/* New evaluation dialog (triggered from jobs folder "+" action) */}
+      <NewEvaluationDialog
+        recordCount={records.length}
+        open={showNewEvalDialog}
+        onOpenChange={setShowNewEvalDialog}
+        onRun={async (sampleSize, rolloutModel) => {
+          await startDryRun(sampleSize, rolloutModel);
+          toast.success(`Evaluation started with ${sampleSize} samples.`);
+        }}
+      />
     </div>
   );
 }
