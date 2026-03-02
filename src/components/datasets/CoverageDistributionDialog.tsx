@@ -37,6 +37,13 @@ import {
 import { cn } from "@/lib/utils";
 import { TopicHierarchyNode } from "@/types/dataset-types";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
+import { buildTopicSystemPrompt } from "@/lib/distri-finetune-tools/steps/shared/topic-system-prompt";
+import {
+  Tooltip as RadixTooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface CoverageDistributionDialogProps {
   open: boolean;
@@ -56,6 +63,8 @@ interface TreeNodeData {
   percentage: number;
   isLeaf: boolean;
   depth: number;
+  /** Full path from root to this node (used to build topic system prompts) */
+  path: string[];
   children?: TreeNodeData[];
 }
 
@@ -109,15 +118,17 @@ function buildTreeData(
   nodes: TopicHierarchyNode[] | undefined,
   topicCounts: Record<string, number>,
   totalRecords: number,
-  depth: number = 0
+  depth: number = 0,
+  parentPath: string[] = [],
 ): TreeNodeData[] {
   if (!nodes || nodes.length === 0) return [];
 
   return nodes.map((node) => {
+    const currentPath = [...parentPath, node.name];
     const isLeaf = !node.children || node.children.length === 0;
     const children = isLeaf
       ? undefined
-      : buildTreeData(node.children, topicCounts, totalRecords, depth + 1);
+      : buildTreeData(node.children, topicCounts, totalRecords, depth + 1, currentPath);
 
     // For leaf nodes, use the count directly
     // For parent nodes, aggregate children counts
@@ -134,6 +145,7 @@ function buildTreeData(
       percentage,
       isLeaf,
       depth,
+      path: currentPath,
       children,
     };
   });
@@ -183,6 +195,7 @@ function TreeNode({
   avgPercentage,
   expandedNodes,
   onToggleExpand,
+  datasetObjective,
 }: {
   node: TreeNodeData;
   selectedTopic: string | null;
@@ -190,6 +203,7 @@ function TreeNode({
   avgPercentage: number;
   expandedNodes: Set<string>;
   onToggleExpand: (id: string) => void;
+  datasetObjective?: string;
 }) {
   const isExpanded = expandedNodes.has(node.id);
   const isSelected = selectedTopic === node.name;
@@ -227,20 +241,40 @@ function TreeNode({
           <div className="w-5" /> // Spacer for leaf nodes
         )}
 
-        {/* Topic name */}
-        <span
-          className={cn(
-            "flex-1 text-sm",
-            node.isLeaf ? "font-medium" : "font-semibold text-muted-foreground"
-          )}
-        >
-          {node.name}
-          {!node.isLeaf && (
-            <span className="ml-1 text-xs text-muted-foreground font-normal">
-              ({node.children?.length} subtopics)
-            </span>
-          )}
-        </span>
+        {/* Topic name — leaf topics show system prompt tooltip on hover */}
+        {node.isLeaf && datasetObjective ? (
+          <TooltipProvider delayDuration={300}>
+            <RadixTooltip>
+              <TooltipTrigger asChild>
+                <span className="flex-1 text-sm font-medium cursor-help">
+                  {node.name}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="start" className="max-w-md p-3">
+                <div className="space-y-1">
+                  <div className="text-xs font-medium text-muted-foreground">System Prompt</div>
+                  <div className="text-xs font-mono whitespace-pre-wrap leading-relaxed">
+                    {buildTopicSystemPrompt(node.path, datasetObjective)}
+                  </div>
+                </div>
+              </TooltipContent>
+            </RadixTooltip>
+          </TooltipProvider>
+        ) : (
+          <span
+            className={cn(
+              "flex-1 text-sm",
+              node.isLeaf ? "font-medium" : "font-semibold text-muted-foreground"
+            )}
+          >
+            {node.name}
+            {!node.isLeaf && (
+              <span className="ml-1 text-xs text-muted-foreground font-normal">
+                ({node.children?.length} subtopics)
+              </span>
+            )}
+          </span>
+        )}
 
         {/* Count badge */}
         <span
@@ -289,6 +323,7 @@ function TreeNode({
               avgPercentage={avgPercentage}
               expandedNodes={expandedNodes}
               onToggleExpand={onToggleExpand}
+              datasetObjective={datasetObjective}
             />
           ))}
         </div>
@@ -306,6 +341,7 @@ export function CoverageDistributionDialog({
 }: CoverageDistributionDialogProps) {
   const { dataset } = DatasetDetailConsumer();
   const knowledgeCoverageStats = dataset?.knowledgeCoverageStats ?? null;
+  const datasetObjective = dataset?.datasetObjective || '';
 
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
@@ -668,6 +704,7 @@ export function CoverageDistributionDialog({
                         avgPercentage={avgPercentage}
                         expandedNodes={expandedNodes}
                         onToggleExpand={handleToggleExpand}
+                        datasetObjective={datasetObjective}
                       />
                     ))
                   ) : (

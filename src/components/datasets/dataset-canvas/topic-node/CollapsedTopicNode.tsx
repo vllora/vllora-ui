@@ -10,6 +10,18 @@
 import { cn } from "@/lib/utils";
 import { TopicNodeHeader } from "../TopicNodeHeader";
 import { TopicCanvasConsumer } from "../TopicCanvasContext";
+import {
+  getTopicPromptSegmentParts,
+  getRoleSentenceParts,
+  buildAccumulatedPromptSegments,
+  type PromptTextSegment,
+} from "@/lib/distri-finetune-tools/steps/shared/topic-system-prompt";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface CollapsedTopicNodeProps {
   name: string;
@@ -23,6 +35,10 @@ interface CollapsedTopicNodeProps {
   /** Coverage percentage from coverageStats (0-100) */
   coveragePercentage?: number;
   onRename?: (newName: string) => void;
+  /** 0-based depth in hierarchy (for system prompt segment display) */
+  depth?: number;
+  /** Full hierarchical path (e.g., "culinary_fundamentals/knife_skills") for accumulated prompt tooltip */
+  fullPath?: string;
 }
 
 // Fixed width for collapsed state; compact when panel is open
@@ -37,8 +53,10 @@ export function CollapsedTopicNode({
   isSelected,
   coveragePercentage,
   onRename,
+  depth = 0,
+  fullPath,
 }: CollapsedTopicNodeProps) {
-  const { generatingTopicName, viewingTopicId, isFullDialogMode, getMatchingCount, isFilterActive } = TopicCanvasConsumer();
+  const { generatingTopicName, viewingTopicId, isFullDialogMode, getMatchingCount, isFilterActive, datasetObjective } = TopicCanvasConsumer();
 
   // Shrink nodes when panel is open to give more canvas space
   const isPanelOpen = viewingTopicId !== null && !isFullDialogMode;
@@ -76,6 +94,50 @@ export function CollapsedTopicNode({
         onRename={onRename}
         filteredCount={matchingCount}
       />
+      {/* System prompt segment — color-coded: template in dim gray, topic name in accent */}
+      {datasetObjective && (() => {
+        const parts = isRoot
+          ? getRoleSentenceParts(datasetObjective)
+          : getTopicPromptSegmentParts(name, depth);
+        // Build accumulated prompt segments for the tooltip (non-root only)
+        const tooltipSegments: PromptTextSegment[] | null = !isRoot && fullPath
+          ? buildAccumulatedPromptSegments(fullPath.split('/'), name, datasetObjective)
+          : null;
+        return (
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <p className="px-3 pb-2 -mt-1 text-[10px] font-mono truncate leading-tight cursor-help">
+                  <span className="text-muted-foreground/40">{parts.template}</span>
+                  <span className="text-[rgb(var(--theme-500))]">{parts.topicName}</span>
+                  <span className="text-muted-foreground/40">{parts.suffix}</span>
+                </p>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-md">
+                {tooltipSegments ? (
+                  <p className="text-xs font-mono whitespace-pre-wrap">
+                    {tooltipSegments.map((seg, i) => (
+                      <span key={i} className={cn(
+                        seg.type === 'template' && 'text-muted-foreground',
+                        seg.type === 'topicName' && 'text-[rgb(var(--theme-500))]',
+                        seg.type === 'currentTopicName' && 'text-[rgb(var(--theme-500))] font-semibold underline underline-offset-2',
+                      )}>
+                        {seg.text}
+                      </span>
+                    ))}
+                  </p>
+                ) : (
+                  <p className="text-xs font-mono">
+                    <span className="text-muted-foreground">{parts.template}</span>
+                    <span className="text-[rgb(var(--theme-500))]">{parts.topicName}</span>
+                    <span className="text-muted-foreground">{parts.suffix}</span>
+                  </p>
+                )}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        );
+      })()}
     </div>
   );
 }

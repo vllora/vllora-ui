@@ -34,6 +34,9 @@ Proposed: Knowledge → Skill Package → Foundation Model + Context → Special
 | [Analysis](./analysis.md) | Deep comparison of Finetune vs Skills approaches, quality bottleneck breakdown |
 | [Architecture](./architecture.md) | Technical architecture, skill package spec, system design |
 | [Pipeline](./pipeline.md) | Step-by-step skill generation pipeline, reuse of existing infrastructure |
+| [Expected Output](./expected-output.md) | What the user gets: 3 core outputs, JSONL dataset, deployment options |
+| [Evaluation](./evaluation.md) | How we prove the skill works: delta testing, grounding checks, ablation |
+| [Research](./research.md) | Prior art, academic papers, industry products validating this approach |
 | [Migration Strategy](./migration-strategy.md) | How to evolve from current finetune-only to Skills + optional Finetune |
 
 ---

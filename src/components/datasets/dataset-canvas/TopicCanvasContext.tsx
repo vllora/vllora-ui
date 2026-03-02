@@ -59,6 +59,8 @@ export interface TopicCanvasProviderProps {
   onSelectRecordId?: (id: string | null) => void;
   /** Called when user wants to view the current topic in table view */
   onViewInTable?: (topicId: string) => void;
+  /** Dataset training objective (used for system prompt segment display on nodes) */
+  datasetObjective?: string;
 }
 
 // ============================================================================
@@ -82,6 +84,7 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
     onCreateChildTopic,
     onGenerateForTopic,
     onGenerateSubtopics,
+    datasetObjective,
   } = props;
 
   // Compute available topics from hierarchy (only leaf topics for assignment)
@@ -420,6 +423,8 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
     onSelectRecordId: props.onSelectRecordId,
     // View in table
     onViewInTable: props.onViewInTable,
+    // Dataset objective (for system prompt segment display)
+    datasetObjective,
   };
 }
 

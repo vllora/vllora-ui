@@ -22,6 +22,7 @@ export interface TopicNodeData extends Record<string, unknown> {
   isRoot?: boolean;
   hasChildren?: boolean;
   fullPath?: string; // Full hierarchical path (e.g., "Openings/Principles")
+  depth?: number; // 0-based depth in hierarchy (for system prompt segment display)
 }
 
 // Define the full node type for React Flow
@@ -39,6 +40,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
     isRoot = false,
     hasChildren = false,
     fullPath,
+    depth = 0,
   } = data;
 
   // Get state and handlers from context
@@ -151,6 +153,8 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
         isSelected={isSelected}
         coveragePercentage={coveragePercentage}
         onRename={handleRename}
+        depth={depth}
+        fullPath={fullPath}
       />
     </div>
   );

@@ -5,11 +5,12 @@
  * Used by TopicRecordTree to display hierarchical topic groupings.
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import { RecordRow } from "./RecordRow";
 import { TopicNodeHeader } from "./TopicNodeHeader";
 import type { AvailableTopic } from "../record-utils";
+import { buildTopicSystemPrompt, buildAccumulatedPromptSegments } from "@/lib/distri-finetune-tools/steps/shared/topic-system-prompt";
 
 // Re-export for convenience
 export { TopicNodeHeader } from "./TopicNodeHeader";
@@ -46,6 +47,8 @@ export interface TopicTreeNodeRowProps {
   generatingTopic?: string | null;
   /** Progress of data generation (completed/total) */
   generatingProgress?: { completed: number; total: number } | null;
+  /** Dataset training objective (for computing shared system prompts per topic) */
+  datasetObjective?: string;
 }
 
 /** Check if a target topic exists anywhere in a node's subtree */
@@ -81,6 +84,7 @@ export function TopicTreeNodeRow({
   setRecordRef,
   generatingTopic,
   generatingProgress,
+  datasetObjective,
 }: TopicTreeNodeRowProps) {
   const [isExpanded, setIsExpanded] = useState(true); // Expand all by default
   const [isHighlightedTopic, setIsHighlightedTopic] = useState(false);
@@ -132,6 +136,18 @@ export function TopicTreeNodeRow({
   // Build the full path including this node
   const currentPath = [...parentPath, node.name];
 
+  // Compute shared system prompt for leaf topics (only leaves have direct records)
+  const systemPrompt = useMemo(() => {
+    if (!datasetObjective || hasChildren) return undefined;
+    return buildTopicSystemPrompt(currentPath, datasetObjective);
+  }, [datasetObjective, hasChildren, currentPath]);
+
+  // Compute structured prompt segments for color-coded rendering
+  const systemPromptSegments = useMemo(() => {
+    if (!datasetObjective || hasChildren) return undefined;
+    return buildAccumulatedPromptSegments(currentPath, node.name, datasetObjective);
+  }, [datasetObjective, hasChildren, currentPath, node.name]);
+
   return (
     <div className="relative">
       <div ref={headerRef}>
@@ -150,6 +166,8 @@ export function TopicTreeNodeRow({
           isGenerating={node.name === generatingTopic}
           generatingProgress={node.name === generatingTopic ? generatingProgress : undefined}
           highlighted={isHighlightedTopic}
+          systemPrompt={systemPrompt}
+          systemPromptSegments={systemPromptSegments}
         />
       </div>
 
@@ -183,6 +201,7 @@ export function TopicTreeNodeRow({
                 setRecordRef={setRecordRef}
                 generatingTopic={generatingTopic}
                 generatingProgress={generatingProgress}
+                datasetObjective={datasetObjective}
               />
             ))}
 

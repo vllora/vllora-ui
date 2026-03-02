@@ -44,3 +44,8 @@ export {
   parseChunkRef,
   type ResolvedChunk,
 } from './chunk-lookup';
+
+export {
+  buildTopicSystemPrompt,
+  buildGenericSystemPrompt,
+} from './topic-system-prompt';

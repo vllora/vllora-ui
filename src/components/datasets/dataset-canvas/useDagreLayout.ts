@@ -19,7 +19,7 @@ export type CanvasNode = TopicNode | TopicInputNode | RootNode;
 
 // Layout constants - must match TopicNodeComponent sizes
 const NODE_WIDTH_EXPANDED = 700;
-const NODE_HEIGHT_COLLAPSED = 80;
+const NODE_HEIGHT_COLLAPSED = 95; // Includes space for system prompt segment line
 const NODE_HEIGHT_EXPANDED = 500;
 const NODE_SPACING = 50;
 const RANK_SPACING = 100;
@@ -330,7 +330,8 @@ export function useDagreLayout(
       const processNode = (
         node: TopicHierarchyNode,
         parentId: string,
-        parentPath: string // Track the full path from root
+        parentPath: string, // Track the full path from root
+        nodeDepth: number, // 0-based depth for system prompt segment display
       ) => {
         // Ensure node has valid id and name
         if (!node || (!node.id && !node.name)) {
@@ -370,6 +371,7 @@ export function useDagreLayout(
             isRoot: false,
             hasChildren,
             fullPath, // Full hierarchical path for prompts
+            depth: nodeDepth, // For system prompt segment display
           },
         });
 
@@ -385,14 +387,14 @@ export function useDagreLayout(
         // Process children recursively
         if (hasChildren) {
           node.children!.forEach((child) => {
-            processNode(child, nodeId, fullPath);
+            processNode(child, nodeId, fullPath, nodeDepth + 1);
           });
         }
       };
 
       // Process all top-level topics (start with empty parent path)
       hierarchy.forEach((topLevelNode) => {
-        processNode(topLevelNode, "root", "");
+        processNode(topLevelNode, "root", "", 0);
       });
     }
 

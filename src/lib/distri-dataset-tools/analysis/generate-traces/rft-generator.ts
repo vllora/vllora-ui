@@ -92,6 +92,8 @@ export async function generateRFTRecord(
   tools: any[],
   personaCache: Map<string, string[]>,
   knowledgeContext?: string,
+  /** Pre-built shared system prompt for this topic */
+  topicSystemPrompt?: string,
 ): Promise<SyntheticTraceRecord | null> {
   const topicStr = topicPath.join(' -> ');
   const topicKey = topicPath.join('/');
@@ -119,7 +121,7 @@ export async function generateRFTRecord(
     console.log(`[generateRFTRecord] No user message found in seed, falling back to basic generation`);
     // Fallback: generate a fresh first message
     const persona = await ensurePersona(personaCache, topicKey, contextStr);
-    const systemPrompt = seedSystemPrompt || `You are a helpful assistant specializing in ${topicStr}.`;
+    const systemPrompt = topicSystemPrompt || seedSystemPrompt || `You are a helpful assistant specializing in ${topicStr}.`;
     const firstUserMsg = await generateFirstUserMessage(contextStr, persona, systemPrompt, tools);
 
     const messages: SyntheticMessage[] = [
@@ -152,8 +154,8 @@ export async function generateRFTRecord(
   // Build messages: system (if any) + context + varied user message
   const messages: SyntheticMessage[] = [];
 
-  // Add system message
-  const systemPrompt = seedSystemPrompt || `You are a helpful assistant specializing in ${topicStr}.`;
+  // Add system message — topic system prompt takes priority over per-record seed
+  const systemPrompt = topicSystemPrompt || seedSystemPrompt || `You are a helpful assistant specializing in ${topicStr}.`;
   messages.push({ role: 'system', content: systemPrompt, tool_calls: null, tool_call_id: null });
 
   // Add context messages (excluding system, it's already added)

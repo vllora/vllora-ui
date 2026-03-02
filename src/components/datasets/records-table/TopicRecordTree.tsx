@@ -48,6 +48,8 @@ interface TopicRecordTreeProps {
   highlightedRecordId?: string | null;
   /** Callback to set record ref for scrolling */
   setRecordRef?: (recordId: string) => (el: HTMLDivElement | null) => void;
+  /** Dataset training objective (for computing shared system prompts per topic) */
+  datasetObjective?: string;
 }
 
 /**
@@ -91,6 +93,7 @@ export function TopicRecordTree({
   onGenerateSubtopics,
   highlightedRecordId,
   setRecordRef,
+  datasetObjective,
 }: TopicRecordTreeProps) {
   // Track which topic is currently being generated and progress
   const [generatingTopic, setGeneratingTopic] = useState<string | null>(null);
@@ -194,6 +197,7 @@ export function TopicRecordTree({
           setRecordRef={setRecordRef}
           generatingTopic={generatingTopic}
           generatingProgress={generatingProgress}
+          datasetObjective={datasetObjective}
         />
       ))}
     </div>

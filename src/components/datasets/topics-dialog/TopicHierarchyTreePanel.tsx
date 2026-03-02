@@ -4,11 +4,13 @@
  * Left panel of TopicHierarchyDialog showing searchable topic tree.
  */
 
-import { useMemo } from "react";
+import { useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
-import { Search, Plus, Sparkles } from "lucide-react";
+import { Search, Plus, Sparkles, MessageSquare, ChevronDown } from "lucide-react";
 import { TopicHierarchyNode } from "@/types/dataset-types";
 import { TopicTreeNode } from "./TopicTreeNode";
+import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
+import { buildTopicSystemPrompt } from "@/lib/distri-finetune-tools/steps/shared/topic-system-prompt";
 
 export interface TopicHierarchyTreePanelProps {
   hierarchy: TopicHierarchyNode[];
@@ -37,6 +39,27 @@ export function TopicHierarchyTreePanel({
   maxDepth,
   topicCounts,
 }: TopicHierarchyTreePanelProps) {
+  const { dataset } = DatasetDetailConsumer();
+  const datasetObjective = dataset?.datasetObjective || '';
+  const [showPromptPreview, setShowPromptPreview] = useState(false);
+
+  // Collect leaf topics with full paths for system prompt preview
+  const leafTopics = useMemo(() => {
+    const leaves: { name: string; path: string[] }[] = [];
+    const collect = (nodes: TopicHierarchyNode[], parentPath: string[]) => {
+      for (const node of nodes) {
+        const currentPath = [...parentPath, node.name];
+        if (node.children && node.children.length > 0) {
+          collect(node.children, currentPath);
+        } else {
+          leaves.push({ name: node.name, path: currentPath });
+        }
+      }
+    };
+    collect(hierarchy, []);
+    return leaves;
+  }, [hierarchy]);
+
   // Filter hierarchy based on search query
   const filteredHierarchy = useMemo(() => {
     if (!searchQuery.trim()) return hierarchy;
@@ -119,6 +142,32 @@ export function TopicHierarchyTreePanel({
           </div>
         )}
       </div>
+
+      {/* System Prompt Preview — collapsible footer */}
+      {leafTopics.length > 0 && datasetObjective && (
+        <div className="border-t border-border">
+          <button
+            className="w-full flex items-center gap-2 px-4 py-2 text-xs text-muted-foreground hover:bg-muted/30 transition-colors"
+            onClick={() => setShowPromptPreview(!showPromptPreview)}
+          >
+            <ChevronDown className={`w-3 h-3 transition-transform ${showPromptPreview ? '' : '-rotate-90'}`} />
+            <MessageSquare className="w-3 h-3" />
+            <span>System Prompt Preview ({leafTopics.length} topics)</span>
+          </button>
+          {showPromptPreview && (
+            <div className="px-4 pb-3 max-h-[200px] overflow-y-auto space-y-2">
+              {leafTopics.map((leaf) => (
+                <div key={leaf.name} className="text-[11px] space-y-0.5">
+                  <div className="font-medium text-foreground/80">{leaf.name}</div>
+                  <div className="font-mono text-muted-foreground/70 leading-tight bg-muted/30 rounded px-2 py-1">
+                    {buildTopicSystemPrompt(leaf.path, datasetObjective)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

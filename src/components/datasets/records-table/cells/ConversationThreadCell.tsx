@@ -20,10 +20,15 @@ interface ConversationThreadCellProps {
   className?: string;
   /** If this record is a variant, show the source record ID */
   sourceRecordId?: string;
+  /** Hide the system message (when shown at topic group level instead) */
+  hideSystemMessage?: boolean;
 }
 
-export function ConversationThreadCell({ data, className, sourceRecordId }: ConversationThreadCellProps) {
-  const messages = extractMessages(data);
+export function ConversationThreadCell({ data, className, sourceRecordId, hideSystemMessage }: ConversationThreadCellProps) {
+  let messages = extractMessages(data);
+  if (hideSystemMessage) {
+    messages = messages.filter(m => m.role.toLowerCase() !== 'system');
+  }
 
   const displayMessagesCount = Math.min(messages.length, 2);
   if (messages.length === 0) {

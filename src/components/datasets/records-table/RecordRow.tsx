@@ -133,6 +133,7 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
           data={record.data}
           className={COLUMN_WIDTHS.thread}
           sourceRecordId={record.sourceRecordId}
+          hideSystemMessage={hideTopic}
         />
 
         {/* AI-generated indicator */}

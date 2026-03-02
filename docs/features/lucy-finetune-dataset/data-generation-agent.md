@@ -64,6 +64,42 @@ Generated data must follow the RFT format:
 }
 ```
 
+## Shared System Prompt Per Topic
+
+All records within a topic share the **same system prompt**, constructed from the topic hierarchy and training objective. Variation lives in user messages, not system prompts.
+
+### How It Works
+
+The utility `buildTopicSystemPrompt(topicPath, trainingObjective)` in `src/lib/distri-finetune-tools/steps/shared/topic-system-prompt.ts` constructs prompts from the hierarchy path:
+
+```
+Topic path:  ["progressive_chess_rules_and_fundamentals", "piece_values_and_decision_making"]
+Objective:   "a chess tutor that teaches progressive chess tactics"
+
+Result:      "You are a chess tutor that teaches progressive chess tactics.
+              You specialize in progressive chess rules and fundamentals,
+              with deep expertise in piece values and decision making.
+              Provide clear explanations, relevant examples, and practical guidance."
+```
+
+### Priority Order
+
+Both generation code paths (`generate_initial_data` and `generate_synthetic_data` via `generateTraces`) use this priority:
+
+```
+topicSystemPrompt  ||  seedSystemPrompt  ||  fallback
+     ^                       ^                   ^
+  Constructed from       From seed record     Generic fallback
+  topic hierarchy        (if available)
+```
+
+### Visualization
+
+Users can preview constructed system prompts in three places:
+- **Coverage Distribution Dialog** — hover tooltip on leaf topics in the Hierarchy tab
+- **Topic Hierarchy Dialog** — collapsible "System Prompt Preview" section at the bottom of the tree panel
+- **Plan Card** — inline preview below each leaf subtopic in the Topics section
+
 ## Knowledge Sources
 
 ### Supported Types

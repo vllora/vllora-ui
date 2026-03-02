@@ -45,6 +45,7 @@ import { simulateConversation } from "./sft-generator";
 
 // Import chunk resolution utilities
 import { resolveChunkRefs, buildChunkContextSection } from "@/lib/distri-finetune-tools/steps/shared/chunk-lookup";
+import { buildTopicSystemPrompt, buildGenericSystemPrompt } from "@/lib/distri-finetune-tools/steps/shared/topic-system-prompt";
 
 // Re-export types for external use
 export type { GenerateTracesParams, GenerateTracesResult } from "./types";
@@ -81,6 +82,7 @@ async function generateSingleRecord(
         task.tools,
         personaCache,
         task.knowledgeContext,
+        task.topicSystemPrompt,
       );
 
       if (!simulated) {
@@ -119,6 +121,7 @@ async function generateSingleRecord(
         turns,
         personaCache,
         task.knowledgeContext,
+        task.topicSystemPrompt,
       );
 
       if (!simulated) {
@@ -437,6 +440,17 @@ export async function generateTraces(
       }
     }
 
+    // Pre-compute shared system prompts for each topic
+    const trainingObjective = dataset.datasetObjective || '';
+    const topicSystemPromptMap = new Map<string, string>();
+    for (const topic of targetLeafTopics) {
+      if (trainingObjective) {
+        topicSystemPromptMap.set(topic.id, buildTopicSystemPrompt(topic.path, trainingObjective));
+      } else {
+        topicSystemPromptMap.set(topic.id, buildGenericSystemPrompt(topic.path.join(' > ')));
+      }
+    }
+
     // Create one task per topic with full path and ID
     const topicTasks: TopicGenerationTask[] = targetLeafTopics.map((topic) => {
       // In seed-based mode, filter seed records to those matching this topic
@@ -467,6 +481,7 @@ export async function generateTraces(
         generationMode: generation_mode,
         knowledgeContext: topicKnowledgeContexts.get(topic.id),
         sourceChunkRefs: topic.sourceChunkRefs,
+        topicSystemPrompt: topicSystemPromptMap.get(topic.id),
       };
     });
     const personaCache = new Map<string, string[]>();

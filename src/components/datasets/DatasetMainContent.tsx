@@ -240,6 +240,7 @@ export function DatasetMainContent({
           onGenerateSubtopics={onGenerateSubtopics}
           onSelectRecordId={onSelectRecordId}
           onViewInTable={handleViewInTable}
+          datasetObjective={datasetObjective}
         />
       ) : (
         <RecordsTable
@@ -261,6 +262,7 @@ export function DatasetMainContent({
           onGenerateSubtopics={onGenerateSubtopics}
           roleFilter={roleFilter}
           onRoleFilterChange={setRoleFilter}
+          datasetObjective={datasetObjective}
         />
       )}
       </div>

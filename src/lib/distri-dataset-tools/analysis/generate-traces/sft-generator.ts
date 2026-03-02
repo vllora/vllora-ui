@@ -141,6 +141,8 @@ export async function simulateConversation(
   maxTurns: number,
   personaCache: Map<string, string[]>,
   knowledgeContext?: string,
+  /** Pre-built shared system prompt for this topic */
+  topicSystemPrompt?: string,
 ): Promise<SyntheticTraceRecord | null> {
   const topicStr = topicPath.join(' -> ');
   const topicKey = topicPath.join('/');
@@ -148,12 +150,12 @@ export async function simulateConversation(
 
   console.log(`[simulateConversation] Starting for topic: ${topicStr}`);
 
-  // Use seed system prompt if available, otherwise use a fallback
+  // Use seed system prompt if available, then topic system prompt, then fallback
   console.log(`[simulateConversation] Generating persona...`);
   const persona = await ensurePersona(personaCache, topicKey, contextStr);
   console.log(`[simulateConversation] Persona: ${persona.substring(0, 50)}...`);
 
-  const systemPrompt = seedSystemPrompt || `You are a helpful assistant specializing in ${topicStr}.`;
+  const systemPrompt = topicSystemPrompt || seedSystemPrompt || `You are a helpful assistant specializing in ${topicStr}.`;
   console.log(`[simulateConversation] Generating first user message...`);
   const firstUserMsg = await generateFirstUserMessage(contextStr, persona, systemPrompt, tools);
   console.log(`[simulateConversation] First user message generated (${firstUserMsg.length} chars)`);

@@ -20,6 +20,7 @@ import {
 } from "./shared/lucy-client";
 import { buildKnowledgeContentBlocks } from "./shared/knowledge-context";
 import { resolveChunkRefs, buildChunkContextSection } from "./shared/chunk-lookup";
+import { buildTopicSystemPrompt, buildGenericSystemPrompt } from "./shared/topic-system-prompt";
 import { extractSeedTools, extractSeedMessages, extractSeedSystemPrompt } from "@/lib/distri-dataset-tools/analysis/generate-traces/utils";
 
 // =============================================================================
@@ -114,7 +115,8 @@ interface GenerateInitialDataParams {
 }
 
 interface GeneratedExample {
-  system_prompt: string;
+  /** Optional — only present in legacy/structured output mode */
+  system_prompt?: string;
   user_message: string;
   assistant_response?: string;
 }
@@ -271,6 +273,13 @@ Rules:
 - Reference specific concepts, terminology, and scenarios from the knowledge sources
 - Output MUST be valid JSON matching the schema`;
 
+const DIVERSITY_GUIDELINES = `Make the user messages diverse across:
+- Complexity: beginner questions to advanced scenarios
+- Question type: factual, explanatory, scenario-based, comparative, how-to
+- Tone: casual learner, focused student, curious beginner, professional
+- Length: brief one-liners to detailed multi-sentence requests
+- Specificity: broad questions to very specific sub-aspects`;
+
 const INITIAL_DATA_GENERATION_USER_RFT = `Generate {{count}} diverse training examples for the following objective:
 
 Training Objective:
@@ -279,23 +288,17 @@ Training Objective:
 {{system_prompt_section}}
 {{topic_context}}
 {{knowledge_context}}
-Generate a JSON array of examples. Each example should be a realistic user query/prompt that would be sent to an AI assistant being trained for this objective.
+Generate a JSON array of user messages. Each should be a realistic query/prompt that a real user would send to the assistant described above.
 
 For each example, provide:
-- system_prompt: A concise system prompt that defines the assistant's role for this specific scenario
 - user_message: A realistic user message/query
 
-Make the examples diverse in:
-- Complexity (simple to complex queries)
-- Length (brief to detailed)
-- Tone (formal, casual, technical)
-- Scenario type (different aspects of the objective)
+${DIVERSITY_GUIDELINES}
 
 Output Format:
 {
   "examples": [
     {
-      "system_prompt": "You are a helpful assistant that...",
       "user_message": "User's question or request..."
     },
     ...
@@ -315,21 +318,15 @@ Training Objective:
 Generate a JSON array of complete conversation examples. Each example should demonstrate the ideal assistant behavior for this objective.
 
 For each example, provide:
-- system_prompt: A concise system prompt that defines the assistant's role for this specific scenario
 - user_message: A realistic user message/query
 - assistant_response: An ideal, helpful response from the assistant
 
-Make the examples diverse in:
-- Complexity (simple to complex queries)
-- Length (brief to detailed)
-- Tone (formal, casual, technical)
-- Scenario type (different aspects of the objective)
+${DIVERSITY_GUIDELINES}
 
 Output Format:
 {
   "examples": [
     {
-      "system_prompt": "You are a helpful assistant that...",
       "user_message": "User's question or request...",
       "assistant_response": "Helpful and accurate response..."
     },
@@ -399,10 +396,9 @@ const INITIAL_DATA_RESPONSE_SCHEMA_RFT = {
           items: {
             type: "object",
             properties: {
-              system_prompt: { type: "string" },
               user_message: { type: "string" },
             },
-            required: ["system_prompt", "user_message"],
+            required: ["user_message"],
             additionalProperties: false,
           },
         },
@@ -426,11 +422,10 @@ const INITIAL_DATA_RESPONSE_SCHEMA_SFT = {
           items: {
             type: "object",
             properties: {
-              system_prompt: { type: "string" },
               user_message: { type: "string" },
               assistant_response: { type: "string" },
             },
-            required: ["system_prompt", "user_message", "assistant_response"],
+            required: ["user_message", "assistant_response"],
             additionalProperties: false,
           },
         },
@@ -491,6 +486,8 @@ async function callLLMForInitialData(
   fileContentBlocks?: FileContentBlock[],
   seedSystemPrompt?: string,
   topicChunkContext?: string,
+  /** Pre-built topic system prompt (shared across all records in this topic) */
+  topicSystemPrompt?: string,
 ): Promise<GeneratedExample[]> {
   // Select prompt template: structured output RFT when response schema is present
   let userPromptTemplate: string;
@@ -522,9 +519,11 @@ async function callLLMForInitialData(
     ? JSON.stringify(outputFormatConfig.schema, null, 2)
     : "";
 
-  // Build seed system prompt section if available
-  const systemPromptSection = seedSystemPrompt
-    ? `\n--- FIXED SYSTEM PROMPT ---\nUse this EXACT system prompt for ALL examples (copy it verbatim):\n${seedSystemPrompt}\n--- END FIXED SYSTEM PROMPT ---\n`
+  // Build system prompt section: tells the LLM about the assistant role (for context)
+  // but does NOT ask it to generate system prompts — those are pre-built per topic
+  const effectiveSystemPrompt = seedSystemPrompt || topicSystemPrompt;
+  const systemPromptSection = effectiveSystemPrompt
+    ? `\n--- ASSISTANT ROLE ---\nThe assistant uses this system prompt:\n"${effectiveSystemPrompt}"\nGenerate user messages a real user would ask this assistant.\n--- END ASSISTANT ROLE ---\n`
     : "";
 
   const userPrompt = userPromptTemplate
@@ -585,10 +584,11 @@ function exampleToDataInfo(
   example: GeneratedExample,
   mode: "rft" | "sft",
   tools: any[],
-  seedSystemPrompt?: string,
+  /** The shared system prompt for this topic (always provided, never from example) */
+  systemPrompt: string,
 ): DataInfo {
   const inputMessages = [
-    { role: "system" as const, content: seedSystemPrompt ?? example.system_prompt },
+    { role: "system" as const, content: systemPrompt },
     { role: "user" as const, content: example.user_message },
   ];
 
@@ -752,6 +752,15 @@ export const generateInitialDataHandler: ToolHandler = async (
       // =========================================================================
       const topicDistribution = distributeCountAcrossTopics(effectiveCount, leafTopics);
 
+      // Pre-compute a shared system prompt for each topic
+      const topicSystemPrompts = new Map<string, string>();
+      for (const [topic] of topicDistribution) {
+        topicSystemPrompts.set(
+          topic.name,
+          seedSystemPrompt || buildTopicSystemPrompt(topic.path, objective),
+        );
+      }
+
       // Build a flat list of all batch jobs
       interface BatchJob {
         topic: LeafTopic;
@@ -834,6 +843,7 @@ export const generateInitialDataHandler: ToolHandler = async (
             chunkFileBlocks,
             seedSystemPrompt,
             topicChunkContexts.get(job.topic.name),
+            topicSystemPrompts.get(job.topic.name),
           ).then(examples => ({ job, examples }))
             .catch(err => {
               console.error(`[generateInitialData] Topic "${job.topic.name}" batch ${job.batchIndex + 1} failed:`, err);
@@ -858,8 +868,9 @@ export const generateInitialDataHandler: ToolHandler = async (
           topicProgress.set(job.topic.name, currentTopicProgress);
 
           // Convert to records with topic already assigned
+          const topicPrompt = topicSystemPrompts.get(job.topic.name)!;
           const topicRecords = examples.map((example) => ({
-            data: exampleToDataInfo(example, generation_mode, seedTools, seedSystemPrompt),
+            data: exampleToDataInfo(example, generation_mode, seedTools, topicPrompt),
             is_generated: true,
             topic: job.topic.name,
             metadata: {
@@ -901,6 +912,9 @@ export const generateInitialDataHandler: ToolHandler = async (
       // =========================================================================
       totalBatches = Math.ceil(count / BATCH_SIZE);
 
+      // Pre-compute a generic system prompt (shared across all records)
+      const genericSystemPrompt = seedSystemPrompt || buildGenericSystemPrompt(objective);
+
       // Emit started event
       emitter.emit("vllora_data_generation_progress", {
         datasetId: dataset_id,
@@ -941,6 +955,8 @@ export const generateInitialDataHandler: ToolHandler = async (
               output_format,
               chunkFileBlocks,
               seedSystemPrompt,
+              undefined,
+              genericSystemPrompt,
             ).then(examples => ({ batchIndex, examples }))
               .catch(err => {
                 console.error(`[generateInitialData] Batch ${batchIndex + 1} failed:`, err);
@@ -959,7 +975,7 @@ export const generateInitialDataHandler: ToolHandler = async (
           totalGenerated += examples.length;
 
           const batchRecords = examples.map((example) => ({
-            data: exampleToDataInfo(example, generation_mode, seedTools, seedSystemPrompt),
+            data: exampleToDataInfo(example, generation_mode, seedTools, genericSystemPrompt),
             is_generated: true,
             metadata: {
               generation_source: "initial_data",

@@ -205,12 +205,15 @@ Generate:
 Generate high-quality examples, grade them, and curate the best ones into the skill package.
 
 ### Key Difference from Current
-Current pipeline generates bulk data for training (quantity matters). Skills pipeline generates curated examples for few-shot context (quality matters, quantity secondary).
+Current pipeline generates bulk data for training. Skills pipeline generates examples for few-shot retrieval at runtime — **all examples are kept**, quality scores are used as a retrieval ranking signal.
 
 ```
-Current:  Generate 500 examples → Use all for training
-Skills:   Generate 100 examples → Grade all → Keep top 30 → Organize by topic + difficulty
+Current (SFT):  Generate 500 examples → Filter bad outputs → Train on the rest
+Current (RFT):  Generate 500 inputs → Model generates own outputs → Grader rewards
+Skills:         Generate 500 examples → Grade all → Keep ALL → Score ranks retrieval priority
 ```
+
+**Why keep everything**: Unlike SFT where the model copies bad outputs, in Skills the model only *sees* retrieved examples at inference time. Higher-scored conversations are retrieved first. Low-scored conversations serve as fallback coverage or can be surfaced as negative examples ("avoid responses like this").
 
 ### Flow
 ```
@@ -225,11 +228,14 @@ For each topic area:
      - Score 0-1 on: accuracy, clarity, groundedness
      - NEW: Also check citation accuracy (does the example correctly reference sources?)
 
-  3. Curate (NEW)
-     - Filter: keep only score > 0.7
-     - Diversity selection: ensure variety in question types, difficulty, reasoning style
-     - Annotate: add selection_reason, source_chunk_refs, difficulty label
-     - Target: 3-5 examples per topic
+  3. Organize & Rank (NEW)
+     - Keep ALL conversations — scores are retrieval ranking signals, not discard thresholds
+     - Tag each with quality_score, topic, difficulty, question_type
+     - Diversity check: ensure coverage across question types, difficulty levels, reasoning styles
+     - Annotate: add source_chunk_refs, difficulty label, question_type
+     - High-score examples (>0.8): preferred in retrieval
+     - Mid-score examples (0.5-0.8): used when topic coverage is thin
+     - Low-score examples (<0.5): can serve as negative examples ("avoid this pattern")
 
   4. Format for few-shot (NEW)
      - Convert to full conversation format (system + user + assistant)
@@ -245,8 +251,6 @@ For each topic area:
   parameters: {
     dataset_id: string,
     candidates_per_topic?: number,    // Default: 15
-    quality_threshold?: number,       // Default: 0.7
-    target_per_topic?: number,        // Default: 5
     difficulty_distribution?: {       // Default: even split
       beginner: number,
       intermediate: number,
@@ -256,12 +260,15 @@ For each topic area:
   returns: {
     total_generated: number,
     total_graded: number,
-    total_selected: number,
     by_topic: Record<string, {
       generated: number,
-      selected: number,
       avg_score: number
     }>,
+    quality_distribution: {
+      high: number,    // score > 0.8 — preferred in retrieval
+      medium: number,  // score 0.5-0.8 — fallback coverage
+      low: number      // score < 0.5 — negative examples
+    },
     quality_summary: {
       avg_score: number,
       min_score: number,
@@ -572,7 +579,7 @@ Lucy: Great! I'll generate your skill package. Here's the plan:
 
   ☐ Build knowledge index (embed 150 chunks)
   ☐ Generate expert system prompt
-  ☐ Create curated examples (15 per topic, keep best 5)
+  ☐ Generate & grade examples (15 per topic, all kept, ranked by score)
   ☐ Extract reasoning templates
   ☐ Assemble and test skill
   ☐ Publish

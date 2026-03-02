@@ -294,6 +294,7 @@ function convertToHierarchyNodes(
     const result: TopicHierarchyNode = {
       id: `topic_${++nodeIdCounter}`,
       name: node.name.toLowerCase().replace(/\s+/g, '_'),
+      description: node.description || undefined,
       sourceChunkRefs: node.source_chunks?.length ? node.source_chunks : undefined,
     };
     if (node.children && node.children.length > 0) {

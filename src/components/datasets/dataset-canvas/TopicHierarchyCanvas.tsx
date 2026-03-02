@@ -79,6 +79,8 @@ interface TopicHierarchyCanvasProps {
   onSelectRecordId?: (id: string | null) => void;
   /** Called when user wants to view the current topic in table view */
   onViewInTable?: (topicId: string) => void;
+  /** Dataset training objective (for system prompt segment display on nodes) */
+  datasetObjective?: string;
 }
 
 // Inner component that uses the context
@@ -346,6 +348,7 @@ export function TopicHierarchyCanvas({
   onGenerateSubtopics,
   onSelectRecordId,
   onViewInTable,
+  datasetObjective,
 }: TopicHierarchyCanvasProps) {
   return (
     <TopicCanvasProvider
@@ -366,6 +369,7 @@ export function TopicHierarchyCanvas({
       onGenerateSubtopics={onGenerateSubtopics}
       onSelectRecordId={onSelectRecordId}
       onViewInTable={onViewInTable}
+      datasetObjective={datasetObjective}
     >
       <CanvasWithPanel hierarchy={hierarchy} />
       <TopicRecordsDialogWrapper />

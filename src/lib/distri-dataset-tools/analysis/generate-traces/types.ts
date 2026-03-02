@@ -85,6 +85,8 @@ export interface TopicGenerationTask {
   knowledgeContext?: string;
   /** Original chunk refs for lineage tracking on generated records */
   sourceChunkRefs?: string[];
+  /** Pre-built shared system prompt for this topic (from buildTopicSystemPrompt) */
+  topicSystemPrompt?: string;
 }
 
 export interface TopicGenerationResult {
