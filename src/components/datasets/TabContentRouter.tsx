@@ -46,6 +46,7 @@ export function mapTabPathToSection(path: string | null): ContentSection {
   if (path === "logs.md") return "logs";
 
   // Folder/file prefix matches
+  if (path === "insights") return "insights";
   if (path.startsWith("insights/")) return "insights";
   if (path === "data") return "records";
   if (path.startsWith("data/")) return "records";

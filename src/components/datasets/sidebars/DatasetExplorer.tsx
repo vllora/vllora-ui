@@ -538,7 +538,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         children: statsChildren,
         isExpandable: true,
         isSection: true,
-        emptyText: "Generate data to see insights",
+        emptyText: "Insights will appear as you progress",
       });
     }
 

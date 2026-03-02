@@ -651,8 +651,8 @@ export function DatasetDetailContentV2() {
               onOverviewClick={() => setAnalyticsDialogOpen(true)}
             />
           )}
-          {contentSection === "insights" && activeInsightType && (
-            <InsightsPane insightType={activeInsightType} />
+          {contentSection === "insights" && (
+            <InsightsPane insightType={activeInsightType ?? "coverage"} />
           )}
           {contentSection === "records" && (
             <DatasetMainContent
