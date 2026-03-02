@@ -25,6 +25,43 @@ import { getWorkflowByDataset, updateStepData, markStepFailed } from './finetune
 import { toast } from 'sonner';
 
 // =============================================================================
+// Error helpers
+// =============================================================================
+
+/** Turn a raw API error into a short, user-friendly message. */
+function friendlyEvalError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+
+  // Common patterns → friendly messages
+  if (/not\s*found/i.test(raw) && /dataset/i.test(raw)) {
+    return 'Dataset not found on the evaluation server. Try re-uploading.';
+  }
+  if (/not\s*found/i.test(raw) && /evaluation/i.test(raw)) {
+    return 'Evaluation run not found. It may have expired — try running again.';
+  }
+  if (/timeout|timed?\s*out/i.test(raw)) {
+    return 'Evaluation server timed out. Try again with a smaller sample size.';
+  }
+  if (/unauthorized|forbidden|401|403/i.test(raw)) {
+    return 'Authentication error. Check your API key in settings.';
+  }
+  if (/network|fetch|econnrefused/i.test(raw)) {
+    return 'Cannot reach evaluation server. Is the backend running?';
+  }
+  if (/grader|eval\s*script/i.test(raw)) {
+    return 'Grader script error. Check your script and try again.';
+  }
+
+  // Strip noisy prefixes like "API error 400 Bad Request: {...}"
+  const jsonMatch = raw.match(/\{.*"error"\s*:\s*"([^"]+)"/);
+  if (jsonMatch) return jsonMatch[1];
+
+  // Fallback: truncate if too long
+  if (raw.length > 120) return raw.slice(0, 117) + '…';
+  return raw;
+}
+
+// =============================================================================
 // Constants
 // =============================================================================
 
@@ -170,14 +207,15 @@ class DryRunPollingManager {
 
       return job.id;
     } catch (error) {
+      const friendly = friendlyEvalError(error);
       // Mark job as failed
       await updateDryRunJob(job.id, {
         status: 'failed',
-        error: error instanceof Error ? error.message : 'Failed to start evaluation',
+        error: friendly,
         completedAt: Date.now(),
       });
 
-      toast.error('Failed to start evaluation');
+      toast.error('Failed to start evaluation', { description: friendly });
       throw error;
     }
   }
@@ -457,13 +495,14 @@ class DryRunPollingManager {
       }
     } catch (error) {
       console.error('[DryRunPollingManager] Failed to process results:', error);
+      const friendly = friendlyEvalError(error);
       await updateDryRunJob(jobId, {
         status: 'failed',
-        error: error instanceof Error ? error.message : 'Failed to process results',
+        error: friendly,
         completedAt: Date.now(),
       });
       await this.markWorkflowStepFailed(job.datasetId);
-      toast.error('Failed to process evaluation results');
+      toast.error('Failed to process evaluation results', { description: friendly });
     }
   }
 

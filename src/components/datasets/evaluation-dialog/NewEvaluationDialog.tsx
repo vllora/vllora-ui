@@ -1,8 +1,8 @@
 /**
  * NewEvaluationDialog
  *
- * Dialog for starting a new evaluation run with configurable sample size
- * and rollout model. Mirrors the finetune NewJobDialog pattern.
+ * Lightweight dialog for starting a new evaluation run.
+ * Two inline fields (sample size + model) with a clean, minimal layout.
  */
 
 import { useState, useCallback } from "react";
@@ -21,7 +21,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
 import { Loader2, FlaskConical } from "lucide-react";
 
 const ROLLOUT_MODEL_OPTIONS = [
@@ -99,26 +98,26 @@ export function NewEvaluationDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md flex flex-col">
+      <DialogContent className="max-w-sm gap-5">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FlaskConical className="h-5 w-5" />
-            New Evaluation
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <FlaskConical className="h-4 w-4 text-muted-foreground" />
+            Run Evaluation
           </DialogTitle>
-          <DialogDescription>
-            Run your grader script against a sample of training records.
+          <DialogDescription className="text-xs">
+            Test your grader script on a sample of records.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 space-y-4 py-2">
-          {/* Sample Size */}
-          <div>
-            <label className="text-sm text-zinc-400 mb-2 block">Sample Size</label>
+        {/* Inline config row */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground">Samples</label>
             <Select
               value={String(sampleSize)}
               onValueChange={(v) => setSampleSize(Number(v))}
             >
-              <SelectTrigger className="w-full bg-zinc-800/50 border-zinc-700 text-zinc-300 ring-0 ring-offset-0 focus:ring-0 focus:ring-offset-0 focus:outline-none">
+              <SelectTrigger className="h-8 text-xs border-border/50 bg-muted/30 focus:ring-0 focus:ring-offset-0">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -129,16 +128,12 @@ export function NewEvaluationDialog({
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-zinc-500 mt-2">
-              Number of records to evaluate
-            </p>
           </div>
 
-          {/* Rollout Model */}
-          <div>
-            <label className="text-sm text-zinc-400 mb-2 block">Rollout Model</label>
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground">Model</label>
             <Select value={rolloutModel} onValueChange={setRolloutModel}>
-              <SelectTrigger className="w-full bg-zinc-800/50 border-zinc-700 text-zinc-300 ring-0 ring-offset-0 focus:ring-0 focus:ring-offset-0 focus:outline-none">
+              <SelectTrigger className="h-8 text-xs border-border/50 bg-muted/30 focus:ring-0 focus:ring-offset-0">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -149,42 +144,37 @@ export function NewEvaluationDialog({
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-zinc-500 mt-2">
-              Model used for generating rollout responses
-            </p>
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="shrink-0 pt-2">
-          <Separator className="bg-zinc-800 mb-4" />
-          <div className="flex items-center justify-between">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onOpenChange(false)}
-              className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-              className="gap-1.5 bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-500))] text-white"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Starting...
-                </>
-              ) : (
-                <>
-                  <FlaskConical className="h-4 w-4" />
-                  Run Evaluation
-                </>
-              )}
-            </Button>
-          </div>
+        {/* Actions */}
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onOpenChange(false)}
+            className="text-muted-foreground"
+          >
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleSubmit}
+            disabled={isSubmitting}
+            className="gap-1.5 bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-500))] text-white"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Starting...
+              </>
+            ) : (
+              <>
+                <FlaskConical className="h-3.5 w-3.5" />
+                Run
+              </>
+            )}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

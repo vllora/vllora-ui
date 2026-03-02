@@ -1,14 +1,13 @@
 /**
  * NewJobDialog
  *
- * Dialog component for creating a new finetune job with configurable parameters.
- * Styled consistently with DryRunDialog for visual coherence.
+ * Compact dialog for creating a new finetune job.
+ * Styled consistently with NewEvaluationDialog for visual coherence.
  */
 
 import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -28,7 +27,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Separator } from "@/components/ui/separator";
 import {
   ChevronDown,
   ChevronRight,
@@ -47,6 +45,12 @@ import { toast } from "sonner";
 import { BASE_MODELS } from "./constants";
 import type { SampleTrainingConfig } from "@/types/dataset-types";
 
+/* ── Shared input classes (matches NewEvaluationDialog) ── */
+const SELECT_CLS =
+  "h-8 text-xs border-border/50 bg-muted/30 focus:ring-0 focus:ring-offset-0";
+const INPUT_CLS =
+  "h-8 text-xs border-border/50 bg-muted/30 focus-visible:ring-0 focus-visible:ring-offset-0";
+
 interface NewJobDialogProps {
   datasetId: string;
   onSuccess: () => void;
@@ -57,15 +61,33 @@ interface NewJobDialogProps {
   initialConfig?: SampleTrainingConfig;
 }
 
-export function NewJobDialog({ datasetId, onSuccess, disabled, open, onOpenChange, initialConfig }: NewJobDialogProps) {
+export function NewJobDialog({
+  datasetId,
+  onSuccess,
+  disabled,
+  open,
+  onOpenChange,
+  initialConfig,
+}: NewJobDialogProps) {
   // Use initial config from sample dataset if available, otherwise use defaults
   const defaultBaseModel = initialConfig?.base_model || "unsloth/Qwen3-4B";
-  const defaultLearningRate = initialConfig?.training_config?.learning_rate ?? DEFAULT_TRAINING_CONFIG.learning_rate;
-  const defaultEpochs = initialConfig?.training_config?.epochs ?? DEFAULT_TRAINING_CONFIG.epochs;
-  const defaultBatchSize = initialConfig?.training_config?.batch_size ?? DEFAULT_TRAINING_CONFIG.batch_size;
-  const defaultLoraRank = initialConfig?.training_config?.lora_rank ?? DEFAULT_TRAINING_CONFIG.lora_rank;
-  const defaultMaxOutputTokens = initialConfig?.inference_parameters?.max_output_tokens ?? DEFAULT_INFERENCE_PARAMETERS.max_output_tokens;
-  const defaultTemperature = initialConfig?.inference_parameters?.temperature ?? DEFAULT_INFERENCE_PARAMETERS.temperature;
+  const defaultLearningRate =
+    initialConfig?.training_config?.learning_rate ??
+    DEFAULT_TRAINING_CONFIG.learning_rate;
+  const defaultEpochs =
+    initialConfig?.training_config?.epochs ?? DEFAULT_TRAINING_CONFIG.epochs;
+  const defaultBatchSize =
+    initialConfig?.training_config?.batch_size ??
+    DEFAULT_TRAINING_CONFIG.batch_size;
+  const defaultLoraRank =
+    initialConfig?.training_config?.lora_rank ??
+    DEFAULT_TRAINING_CONFIG.lora_rank;
+  const defaultMaxOutputTokens =
+    initialConfig?.inference_parameters?.max_output_tokens ??
+    DEFAULT_INFERENCE_PARAMETERS.max_output_tokens;
+  const defaultTemperature =
+    initialConfig?.inference_parameters?.temperature ??
+    DEFAULT_INFERENCE_PARAMETERS.temperature;
 
   const [baseModel, setBaseModel] = useState(defaultBaseModel);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -78,7 +100,9 @@ export function NewJobDialog({ datasetId, onSuccess, disabled, open, onOpenChang
   const [loraRank, setLoraRank] = useState(String(defaultLoraRank));
 
   // Inference parameters
-  const [maxOutputTokens, setMaxOutputTokens] = useState(String(defaultMaxOutputTokens));
+  const [maxOutputTokens, setMaxOutputTokens] = useState(
+    String(defaultMaxOutputTokens),
+  );
   const [temperature, setTemperature] = useState(String(defaultTemperature));
 
   const handleSubmit = useCallback(async () => {
@@ -87,7 +111,7 @@ export function NewJobDialog({ datasetId, onSuccess, disabled, open, onOpenChang
     setIsSubmitting(true);
 
     try {
-      // Build training config (only include values that differ from defaults or are set)
+      // Build training config (only include values that differ from defaults)
       const trainingConfig: Partial<ReinforcementTrainingConfig> = {};
       const lr = parseFloat(learningRate);
       if (!isNaN(lr) && lr !== DEFAULT_TRAINING_CONFIG.learning_rate) {
@@ -109,7 +133,10 @@ export function NewJobDialog({ datasetId, onSuccess, disabled, open, onOpenChang
       // Build inference parameters
       const inferenceParameters: Partial<ReinforcementInferenceParameters> = {};
       const mot = parseInt(maxOutputTokens, 10);
-      if (!isNaN(mot) && mot !== DEFAULT_INFERENCE_PARAMETERS.max_output_tokens) {
+      if (
+        !isNaN(mot) &&
+        mot !== DEFAULT_INFERENCE_PARAMETERS.max_output_tokens
+      ) {
         inferenceParameters.max_output_tokens = mot;
       }
       const temp = parseFloat(temperature);
@@ -120,8 +147,12 @@ export function NewJobDialog({ datasetId, onSuccess, disabled, open, onOpenChang
       const result = await quickFinetune({
         datasetId,
         baseModel,
-        trainingConfig: Object.keys(trainingConfig).length > 0 ? trainingConfig : undefined,
-        inferenceParameters: Object.keys(inferenceParameters).length > 0 ? inferenceParameters : undefined,
+        trainingConfig:
+          Object.keys(trainingConfig).length > 0 ? trainingConfig : undefined,
+        inferenceParameters:
+          Object.keys(inferenceParameters).length > 0
+            ? inferenceParameters
+            : undefined,
       });
 
       if (result.success) {
@@ -132,179 +163,190 @@ export function NewJobDialog({ datasetId, onSuccess, disabled, open, onOpenChang
         toast.error(result.error || "Failed to start finetune job");
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to start finetune job");
+      toast.error(
+        error instanceof Error ? error.message : "Failed to start finetune job",
+      );
     } finally {
       setIsSubmitting(false);
     }
-  }, [datasetId, baseModel, learningRate, epochs, batchSize, loraRank, maxOutputTokens, temperature, isSubmitting, onSuccess, onOpenChange]);
+  }, [
+    datasetId,
+    baseModel,
+    learningRate,
+    epochs,
+    batchSize,
+    loraRank,
+    maxOutputTokens,
+    temperature,
+    isSubmitting,
+    onSuccess,
+    onOpenChange,
+  ]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[70vw] flex flex-col">
+      <DialogContent className="max-w-sm gap-5">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5" />
-            New Finetune Job
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Sparkles className="h-4 w-4 text-muted-foreground" />
+            Start Training
           </DialogTitle>
-          <DialogDescription>
-            Configure and start a new fine-tuning job for your dataset.
+          <DialogDescription className="text-xs">
+            Fine-tune a model with your dataset.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 space-y-4 py-2">
-          {/* Base Model Selection */}
-          <div>
-            <label className="text-sm text-zinc-400 mb-2 block">Base Model</label>
-            <Select value={baseModel} onValueChange={setBaseModel}>
-              <SelectTrigger className="w-full bg-zinc-800/50 border-zinc-700 text-zinc-300 ring-0 ring-offset-0 focus:ring-0 focus:ring-offset-0 focus:outline-none">
-                <SelectValue placeholder="Select base model" />
-              </SelectTrigger>
-              <SelectContent>
-                {BASE_MODELS.map((model) => (
-                  <SelectItem key={model.value} value={model.value}>
-                    {model.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-zinc-500 mt-2">
-              Model to fine-tune with your dataset
-            </p>
-          </div>
-
-          {/* Advanced Settings Toggle */}
-          <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-1.5 text-sm px-0 text-zinc-400 hover:text-zinc-200 hover:bg-transparent">
-                <Settings2 className="h-4 w-4" />
-                {showAdvanced ? "Hide" : "Show"} Advanced Settings
-                {showAdvanced ? (
-                  <ChevronDown className="h-3.5 w-3.5" />
-                ) : (
-                  <ChevronRight className="h-3.5 w-3.5" />
-                )}
-              </Button>
-            </CollapsibleTrigger>
-
-            <CollapsibleContent className="pt-4 space-y-4">
-              {/* Training Config */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Training Configuration</h4>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="learning-rate" className="text-xs text-zinc-400">Learning Rate</Label>
-                    <Input
-                      id="learning-rate"
-                      type="number"
-                      step="0.00001"
-                      value={learningRate}
-                      onChange={(e) => setLearningRate(e.target.value)}
-                      className="h-9 bg-zinc-800/50 border-zinc-700 text-zinc-300 focus-visible:ring-zinc-600"
-                      placeholder="0.00001"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="epochs" className="text-xs text-zinc-400">Epochs</Label>
-                    <Input
-                      id="epochs"
-                      type="number"
-                      step="0.5"
-                      value={epochs}
-                      onChange={(e) => setEpochs(e.target.value)}
-                      className="h-9 bg-zinc-800/50 border-zinc-700 text-zinc-300 focus-visible:ring-zinc-600"
-                      placeholder="3"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="batch-size" className="text-xs text-zinc-400">Batch Size</Label>
-                    <Input
-                      id="batch-size"
-                      type="number"
-                      value={batchSize}
-                      onChange={(e) => setBatchSize(e.target.value)}
-                      className="h-9 bg-zinc-800/50 border-zinc-700 text-zinc-300 focus-visible:ring-zinc-600"
-                      placeholder="10"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="lora-rank" className="text-xs text-zinc-400">LoRA Rank</Label>
-                    <Input
-                      id="lora-rank"
-                      type="number"
-                      value={loraRank}
-                      onChange={(e) => setLoraRank(e.target.value)}
-                      className="h-9 bg-zinc-800/50 border-zinc-700 text-zinc-300 focus-visible:ring-zinc-600"
-                      placeholder="8"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Inference Parameters */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Inference Parameters</h4>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="max-output-tokens" className="text-xs text-zinc-400">Max Output Tokens</Label>
-                    <Input
-                      id="max-output-tokens"
-                      type="number"
-                      value={maxOutputTokens}
-                      onChange={(e) => setMaxOutputTokens(e.target.value)}
-                      className="h-9 bg-zinc-800/50 border-zinc-700 text-zinc-300 focus-visible:ring-zinc-600"
-                      placeholder="1000"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="temperature" className="text-xs text-zinc-400">Temperature</Label>
-                    <Input
-                      id="temperature"
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      max="2"
-                      value={temperature}
-                      onChange={(e) => setTemperature(e.target.value)}
-                      className="h-9 bg-zinc-800/50 border-zinc-700 text-zinc-300 focus-visible:ring-zinc-600"
-                      placeholder="0.7"
-                    />
-                  </div>
-                </div>
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
+        {/* Base Model */}
+        <div className="space-y-1.5">
+          <label className="text-xs text-muted-foreground">Base Model</label>
+          <Select value={baseModel} onValueChange={setBaseModel}>
+            <SelectTrigger className={SELECT_CLS}>
+              <SelectValue placeholder="Select base model" />
+            </SelectTrigger>
+            <SelectContent>
+              {BASE_MODELS.map((model) => (
+                <SelectItem key={model.value} value={model.value}>
+                  {model.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
-        {/* Footer */}
-        <div className="shrink-0 pt-2">
-          <Separator className="bg-zinc-800 mb-4" />
-          <div className="flex items-center justify-between">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onOpenChange(false)}
-              className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={isSubmitting || disabled}
-              className="gap-1.5 bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-500))] text-white"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Starting...
-                </>
+        {/* Advanced Settings */}
+        <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
+          <CollapsibleTrigger asChild>
+            <button className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60 hover:text-muted-foreground transition-colors">
+              <Settings2 className="h-3 w-3" />
+              Advanced settings
+              {showAdvanced ? (
+                <ChevronDown className="h-3 w-3" />
               ) : (
-                <>
-                  <Sparkles className="h-4 w-4" />
-                  Start Training
-                </>
+                <ChevronRight className="h-3 w-3" />
               )}
-            </Button>
-          </div>
+            </button>
+          </CollapsibleTrigger>
+
+          <CollapsibleContent className="pt-3 space-y-3">
+            {/* Training Config */}
+            <div className="space-y-2">
+              <span className="text-[10px] font-medium text-muted-foreground/50 uppercase tracking-wider">
+                Training
+              </span>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[11px] text-muted-foreground">
+                    Learning Rate
+                  </label>
+                  <Input
+                    type="number"
+                    step="0.00001"
+                    value={learningRate}
+                    onChange={(e) => setLearningRate(e.target.value)}
+                    className={INPUT_CLS}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] text-muted-foreground">
+                    Epochs
+                  </label>
+                  <Input
+                    type="number"
+                    step="0.5"
+                    value={epochs}
+                    onChange={(e) => setEpochs(e.target.value)}
+                    className={INPUT_CLS}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] text-muted-foreground">
+                    Batch Size
+                  </label>
+                  <Input
+                    type="number"
+                    value={batchSize}
+                    onChange={(e) => setBatchSize(e.target.value)}
+                    className={INPUT_CLS}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] text-muted-foreground">
+                    LoRA Rank
+                  </label>
+                  <Input
+                    type="number"
+                    value={loraRank}
+                    onChange={(e) => setLoraRank(e.target.value)}
+                    className={INPUT_CLS}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Inference Parameters */}
+            <div className="space-y-2">
+              <span className="text-[10px] font-medium text-muted-foreground/50 uppercase tracking-wider">
+                Inference
+              </span>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[11px] text-muted-foreground">
+                    Max Tokens
+                  </label>
+                  <Input
+                    type="number"
+                    value={maxOutputTokens}
+                    onChange={(e) => setMaxOutputTokens(e.target.value)}
+                    className={INPUT_CLS}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] text-muted-foreground">
+                    Temperature
+                  </label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="2"
+                    value={temperature}
+                    onChange={(e) => setTemperature(e.target.value)}
+                    className={INPUT_CLS}
+                  />
+                </div>
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+
+        {/* Actions */}
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onOpenChange(false)}
+            className="text-muted-foreground"
+          >
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleSubmit}
+            disabled={isSubmitting || disabled}
+            className="gap-1.5 bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-500))] text-white"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Starting...
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-3.5 w-3.5" />
+                Start Training
+              </>
+            )}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
