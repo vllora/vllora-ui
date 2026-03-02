@@ -87,3 +87,17 @@ export function getDryRunJobIdFromPath(path: string | null): string | null {
   if (!jobId || jobId.includes("/")) return null;
   return jobId;
 }
+
+/**
+ * Extract finetune job ID from an explorer path like `finetune/<jobId>`.
+ * Returns null for the folder path (`finetune`) or non-job paths.
+ */
+export function getFinetuneJobIdFromPath(path: string | null): string | null {
+  if (!path) return null;
+  const prefix = "finetune/";
+  if (!path.startsWith(prefix)) return null;
+
+  const jobId = path.slice(prefix.length).trim();
+  if (!jobId || jobId.includes("/")) return null;
+  return jobId;
+}

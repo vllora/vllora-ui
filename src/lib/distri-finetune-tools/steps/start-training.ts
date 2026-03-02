@@ -152,7 +152,7 @@ export const startTrainingTool: DistriFnTool = {
           temperature: { type: 'number', description: 'Temperature for rollouts (default: 0.7)' },
           top_p: { type: 'number', description: 'Top-p sampling (default: 0.9)' },
           top_k: { type: 'number', description: 'Top-k sampling' },
-          response_candidates_count: { type: 'number', description: 'Number of response candidates per prompt (default: 4)' },
+          response_candidates_count: { type: 'number', description: 'Number of response candidates per prompt (default: 2)' },
         },
       },
     },

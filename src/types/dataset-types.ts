@@ -231,6 +231,7 @@ export interface SampleTrainingConfig {
     max_output_tokens?: number;
     temperature?: number;
     top_p?: number;
+    response_candidates_count?: number;
   };
 }
 
