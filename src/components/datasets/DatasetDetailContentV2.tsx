@@ -45,8 +45,10 @@ import { WorkspaceTabManager } from "./WorkspaceTabManager";
 import {
   mapTabPathToSection,
   getDryRunJobIdFromPath,
+  getInsightTypeFromPath,
   type ContentSection,
 } from "./TabContentRouter";
+import { InsightsPane } from "./InsightsPane";
 import { WorkspaceWelcome } from "./WorkspaceWelcome";
 import type { CoverageStats } from "@/types/dataset-types";
 
@@ -172,6 +174,10 @@ export function DatasetDetailContentV2() {
   const [activeTabPath, setActiveTabPath] = useState<string | null>(null);
   const selectedDryRunJobId = useMemo(
     () => getDryRunJobIdFromPath(activeTabPath),
+    [activeTabPath]
+  );
+  const activeInsightType = useMemo(
+    () => getInsightTypeFromPath(activeTabPath),
     [activeTabPath]
   );
 
@@ -644,6 +650,9 @@ export function DatasetDetailContentV2() {
               datasetId={datasetId}
               onOverviewClick={() => setAnalyticsDialogOpen(true)}
             />
+          )}
+          {contentSection === "insights" && activeInsightType && (
+            <InsightsPane insightType={activeInsightType} />
           )}
           {contentSection === "records" && (
             <DatasetMainContent

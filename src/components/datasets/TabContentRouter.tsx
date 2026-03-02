@@ -22,6 +22,7 @@ export type ContentSection =
   | "documents"
   | "tasks"
   | "logs"
+  | "insights"
   | null;
 
 /**
@@ -45,7 +46,7 @@ export function mapTabPathToSection(path: string | null): ContentSection {
   if (path === "logs.md") return "logs";
 
   // Folder/file prefix matches
-  if (path.startsWith("insights/")) return "overview";
+  if (path.startsWith("insights/")) return "insights";
   if (path === "data") return "records";
   if (path.startsWith("data/")) return "records";
   if (path === "evaluations/grader-script.ts") return "evaluator-script";
@@ -57,6 +58,18 @@ export function mapTabPathToSection(path: string | null): ContentSection {
   if (path === "documents") return "documents";
   if (path.startsWith("documents/")) return "documents";
 
+  return null;
+}
+
+/**
+ * Extract insight type from an explorer path like `insights/coverage.md`.
+ * Returns the insight type ("coverage", "balance", "quality-scores") or null.
+ */
+export function getInsightTypeFromPath(path: string | null): "coverage" | "balance" | "quality-scores" | null {
+  if (!path) return null;
+  if (path === "insights/coverage.md") return "coverage";
+  if (path === "insights/balance.md") return "balance";
+  if (path === "insights/quality-scores.md") return "quality-scores";
   return null;
 }
 

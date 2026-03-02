@@ -107,7 +107,7 @@ interface DatasetExplorerProps {
 }
 
 export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
-  const { dataset, records } = DatasetDetailConsumer();
+  const { dataset, records, isGeneratingTraces } = DatasetDetailConsumer();
   const { sources } = KnowledgeSourcesConsumer();
   const { jobs: dryRunJobs, runningJob: runningEval, startDryRun } = DryRunJobsConsumer();
   const { filteredJobs: finetuneJobs, loadJobs: loadFinetuneJobs } = FinetuneJobsConsumer();
@@ -285,13 +285,21 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       ? buildTopicChildren(topicHierarchy, "", topicCounts, expandedNodes)
       : [];
 
+    const dataBadge: FileTreeBadge | undefined = isGeneratingTraces
+      ? {
+        label: "generating", variant: "loading" as const,
+        icon: <Loader2 className={`${BADGE_CLS} animate-spin`} />,
+        tooltip: "Generating training data",
+      }
+      : records.length > 0
+        ? { label: String(records.length), variant: "count" }
+        : undefined;
+
     nodes.push({
       id: "data",
       name: "data",
       type: "folder",
-      badge: records.length > 0
-        ? { label: String(records.length), variant: "count" }
-        : undefined,
+      badge: dataBadge,
       children: topicChildren,
       isExpandable: topicChildren.length > 0,
       isSection: true,
@@ -382,10 +390,19 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         ],
       });
 
+      const evalSectionBadge: FileTreeBadge | undefined = runningEval
+        ? {
+          label: "running", variant: "loading" as const,
+          icon: <Loader2 className={`${BADGE_CLS} animate-spin`} />,
+          tooltip: "Evaluation running",
+        }
+        : undefined;
+
       nodes.push({
         id: "evaluations",
         name: "evaluations",
         type: "folder",
+        badge: evalSectionBadge,
         children: evalChildren,
         isExpandable: true,
         isSection: true,
@@ -439,13 +456,21 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         (j) => j.status === "running" || j.status === "pending"
       );
 
+      const finetuneSectionBadge: FileTreeBadge | undefined = hasActiveJob
+        ? {
+          label: "training", variant: "loading" as const,
+          icon: <Loader2 className={`${BADGE_CLS} animate-spin`} />,
+          tooltip: "Finetune job in progress",
+        }
+        : finetuneJobs.length > 0
+          ? { label: String(finetuneJobs.length), variant: "count" }
+          : undefined;
+
       nodes.push({
         id: "finetune",
         name: "finetune",
         type: "folder",
-        badge: finetuneJobs.length > 0
-          ? { label: String(finetuneJobs.length), variant: "count" }
-          : undefined,
+        badge: finetuneSectionBadge,
         children: finetuneChildren,
         isExpandable: true,
         isSection: true,
@@ -467,28 +492,44 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       });
     }
 
-    // --- insights/ (always shown) ---
+    // --- insights/ (always shown, children are data-driven) ---
     {
-      const statsChildren: FileTreeNode[] = [
-        {
+      const statsChildren: FileTreeNode[] = [];
+
+      // coverage.md — shown when there are records with topics (coverage can be computed)
+      const hasCoverage = records.length > 0 && !!dataset?.topicHierarchy?.hierarchy;
+      if (hasCoverage) {
+        statsChildren.push({
           id: "insights/coverage.md",
           name: "coverage.md",
           type: "file",
           icon: <BarChart3 className={`${ICON_CLS} text-cyan-500`} />,
-        },
-        {
+          badge: dataset?.coverageStats
+            ? { label: "ready", variant: "success" as const, icon: <CheckCircle2 className={BADGE_CLS} />, tooltip: "Coverage analysis available" }
+            : { label: "pending", variant: "default" as const, icon: <Circle className={`${BADGE_CLS} opacity-40`} />, tooltip: "Run coverage analysis to populate" },
+        });
+      }
+
+      // balance.md — shown when coverage stats exist (balance score is computed)
+      if (dataset?.coverageStats?.balanceScore != null) {
+        statsChildren.push({
           id: "insights/balance.md",
           name: "balance.md",
           type: "file",
           icon: <BarChart3 className={`${ICON_CLS} text-cyan-500`} />,
-        },
-        {
+        });
+      }
+
+      // quality-scores.md — shown when evaluations have been completed
+      const hasCompletedEval = dryRunJobs.some((j) => j.status === "completed");
+      if (hasCompletedEval) {
+        statsChildren.push({
           id: "insights/quality-scores.md",
           name: "quality-scores.md",
           type: "file",
           icon: <Sparkles className={`${ICON_CLS} text-cyan-500`} />,
-        },
-      ];
+        });
+      }
 
       nodes.push({
         id: "insights",
@@ -505,7 +546,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
   }, [
     dataset, records, sources, dryRunJobs, finetuneJobs,
     proposedPlan, planStatus, hasPlanProposed, todos,
-    topicCounts, expandedNodes,
+    topicCounts, expandedNodes, isGeneratingTraces,
   ]);
 
   // ============================================================================

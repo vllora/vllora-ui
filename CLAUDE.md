@@ -192,11 +192,24 @@ When investigating issues, check the relevant layer(s). File paths are absolute 
 
 ### Code Rules
 
-- Run `npx tsc --noEmit` after every change
+- Run `npx tsc --noEmit` after every change (**automated** — PostToolUse hook runs this after `.ts`/`.tsx` edits)
 - @distri/react and @distri/core are **vendored** — changes must be made in the distri repo and synced via `scripts/sync-distrijs.sh`
 - Tools execute **locally in the browser**, not on the server
 - IndexedDB is the primary persistence layer (datasets, workflows, jobs)
 - Auth: localStorage key `vlora_user_email` (for E2E testing: set to `test@e2e.local`)
+
+### Hooks (`.claude/settings.json`)
+
+Automated guardrails that run on every file edit — no manual steps needed.
+
+| Hook | Trigger | What it does |
+|------|---------|-------------|
+| `post-edit-typecheck.sh` | After `Write`/`Edit` on `.ts`/`.tsx` | Runs `npx tsc --noEmit`, feeds errors back as context |
+| `doc-sync-reminder.sh` | After `Write`/`Edit` on key source dirs | Reminds to update feature docs per the Documentation Sync Rule |
+
+Deny rules: `Edit(vendor/**)` and `Write(vendor/**)` are blocked at the tool level.
+
+Hook scripts live in `.claude/hooks/`. Configuration is in `.claude/settings.json`.
 
 ---
 
@@ -261,7 +274,7 @@ Multi-agent teams for complex tasks. Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TE
 
 1. **"Evaluation" vs "Dry Run"**: Display text says "Evaluation" but all internal code uses `dryRun` / `dry_run` naming (file names, variables, DB stores, tool names). Don't rename internal identifiers.
 
-2. **Vendored @distri packages**: These live in `vendor/` and are NOT editable in this repo. To change them: edit in the distri repo → build → run `scripts/sync-distrijs.sh`.
+2. **Vendored @distri packages**: These live in `vendor/` and are NOT editable in this repo. `Edit` and `Write` on `vendor/**` are **denied** in `.claude/settings.json`. To change them: edit in the distri repo → build → run `scripts/sync-distrijs.sh`.
 
 3. **IndexedDB is the source of truth**: Datasets, workflows, evaluation jobs, and knowledge sources are all stored in IndexedDB. There is no backend database — the backend only handles API calls to external services (OpenAI, eval server).
 
