@@ -9,9 +9,11 @@
 import type { DistriFnTool } from '@distri/core';
 import { DistriClient, type DistriMessage } from '@distri/core';
 import * as datasetsDB from '@/services/datasets-db';
-import * as knowledgeDB from '@/services/knowledge-sources-db';
 import { getDistriUrl } from '@/config/api';
 import { fetchLucyConfig, type LucyConfig } from '@/lib/agent-sync';
+import { resolveChunkRefs, buildChunkContextSection } from './shared/chunk-lookup';
+import { buildKnowledgeContext } from './shared/knowledge-context';
+import type { TopicHierarchyNode } from '@/types/dataset-types';
 import type { ToolHandler } from '../types';
 
 // Cache for Lucy config
@@ -226,6 +228,25 @@ async function callLLMForPreview(
 }
 
 // =============================================================================
+// Helpers
+// =============================================================================
+
+/** Find a topic node in the hierarchy by name (case-insensitive match) */
+function findTopicNodeByName(
+  nodes: TopicHierarchyNode[],
+  name: string,
+): TopicHierarchyNode | null {
+  for (const node of nodes) {
+    if (node.name.toLowerCase() === name.toLowerCase()) return node;
+    if (node.children?.length) {
+      const found = findTopicNodeByName(node.children, name);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+// =============================================================================
 // Main Handler
 // =============================================================================
 
@@ -267,26 +288,39 @@ export const generatePreviewHandler: ToolHandler = async (
       };
     }
 
-    // Get knowledge context if enabled
+    // Get knowledge context if enabled — chunk-aware resolution
     let knowledgeContext: string | undefined;
     const knowledgeSourcesUsed: string[] = [];
 
     if (use_knowledge) {
-      const sources = await knowledgeDB.getKnowledgeSourcesByDataset(dataset_id);
-      const readySources = sources.filter((s) => s.status === 'ready');
-
-      if (readySources.length > 0) {
-        // Combine relevant content from sources
-        const contextParts: string[] = [];
-        for (const source of readySources.slice(0, 3)) {
-          // Limit to 3 sources
-          if (source.extractedContent?.text) {
-            contextParts.push(`[${source.name}]: ${source.extractedContent.text.substring(0, 1000)}...`);
-            knowledgeSourcesUsed.push(source.name);
+      // Strategy 1: If topic is specified and hierarchy has sourceChunkRefs, resolve topic-specific chunks
+      if (topic && dataset.topicHierarchy?.hierarchy?.length) {
+        const topicNode = findTopicNodeByName(dataset.topicHierarchy.hierarchy, topic);
+        if (topicNode?.sourceChunkRefs?.length) {
+          try {
+            const resolvedChunks = await resolveChunkRefs(dataset_id, topicNode.sourceChunkRefs);
+            if (resolvedChunks.length > 0) {
+              knowledgeContext = buildChunkContextSection(resolvedChunks);
+              // Collect unique source names
+              const sourceNames = new Set(resolvedChunks.map(c => c.sourceName));
+              knowledgeSourcesUsed.push(...sourceNames);
+            }
+          } catch (err) {
+            console.warn('[generatePreview] Failed to resolve topic chunks, falling back:', err);
           }
         }
-        if (contextParts.length > 0) {
-          knowledgeContext = contextParts.join('\n\n');
+      }
+
+      // Strategy 2: Fallback to structured knowledge context (full sources)
+      if (!knowledgeContext) {
+        try {
+          const knowledgeCtx = await buildKnowledgeContext(dataset_id);
+          if (knowledgeCtx.readyCount > 0 && knowledgeCtx.contextString) {
+            knowledgeContext = knowledgeCtx.contextString;
+            knowledgeSourcesUsed.push(...knowledgeCtx.sourcesSummary.map(s => s.name));
+          }
+        } catch (err) {
+          console.warn('[generatePreview] Failed to build knowledge context:', err);
         }
       }
     }

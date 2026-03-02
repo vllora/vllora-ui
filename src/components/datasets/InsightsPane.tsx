@@ -12,6 +12,7 @@
 import { useMemo } from "react";
 import LazyMarkdownRenderer from "@/components/chat/LazyMarkdownRenderer";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
+import type { KnowledgeCoverageStats } from "@/types/dataset-types";
 import { DryRunJobsConsumer } from "@/contexts/DryRunJobsContext";
 import { BALANCE_RATING_DESCRIPTIONS } from "@/types/coverage-types";
 import type { BalanceRating } from "@/types/coverage-types";
@@ -33,11 +34,12 @@ function generateCoverageMarkdown(opts: {
   uncategorizedCount: number;
   balanceScore?: number;
   balanceRating?: BalanceRating;
+  knowledgeCoverage?: KnowledgeCoverageStats | null;
 }): string {
   const {
     totalRecords, generatedRecords, originalRecords,
     topicDistribution, uncategorizedCount,
-    balanceScore, balanceRating,
+    balanceScore, balanceRating, knowledgeCoverage,
   } = opts;
 
   const lines: string[] = [];
@@ -76,6 +78,31 @@ function generateCoverageMarkdown(opts: {
     lines.push("");
   }
 
+  // Knowledge source coverage section
+  if (knowledgeCoverage) {
+    lines.push("## Knowledge Source Coverage");
+    lines.push("");
+    lines.push(`| Source | Covered | Total | % |`);
+    lines.push(`|--------|---------|-------|---|`);
+    for (const [, info] of Object.entries(knowledgeCoverage.bySource)) {
+      lines.push(`| ${info.sourceName} | ${info.coveredChunks} | ${info.totalChunks} | ${info.coveragePercent}% |`);
+    }
+    lines.push("");
+    lines.push(`**Overall:** ${knowledgeCoverage.coveredChunks} of ${knowledgeCoverage.totalChunks} chunks covered (${knowledgeCoverage.coveragePercent}%)`);
+    lines.push("");
+
+    // List uncovered content as recommendations
+    const uncoveredSources = Object.values(knowledgeCoverage.bySource)
+      .filter((s) => s.uncoveredChunkIds.length > 0);
+    if (uncoveredSources.length > 0) {
+      lines.push("*Uncovered content:*");
+      for (const source of uncoveredSources) {
+        lines.push(`- **${source.sourceName}**: ${source.uncoveredChunkIds.length} chunk${source.uncoveredChunkIds.length !== 1 ? "s" : ""} not yet in training data`);
+      }
+      lines.push("");
+    }
+  }
+
   // Recommendations
   lines.push("## Recommendations");
   lines.push("");
@@ -95,6 +122,9 @@ function generateCoverageMarkdown(opts: {
     }
     if (uncategorizedCount > 0) {
       lines.push(`- ${uncategorizedCount} record${uncategorizedCount > 1 ? "s" : ""} are uncategorized. Assign topics to improve coverage analysis.`);
+    }
+    if (knowledgeCoverage && knowledgeCoverage.coveragePercent < 70) {
+      lines.push(`- Knowledge coverage is ${knowledgeCoverage.coveragePercent}%. Generate more data to cover remaining knowledge source chunks.`);
     }
   }
 
@@ -266,6 +296,7 @@ export function InsightsPane({ insightType }: InsightsPaneProps) {
           uncategorizedCount,
           balanceScore: dataset?.coverageStats?.balanceScore,
           balanceRating: dataset?.coverageStats?.balanceRating,
+          knowledgeCoverage: dataset?.knowledgeCoverageStats,
         });
 
       case "balance":

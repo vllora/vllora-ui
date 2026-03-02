@@ -162,6 +162,8 @@ export function DatasetDetailContentV2() {
     handleImportRecords,
     handleExport,
     recordsWithTopicsCount,
+    sourceDocumentFilter,
+    setSourceDocumentFilter,
   } = DatasetDetailConsumer();
 
   // Workspace tab bridge: ref exposes openTab(), state receives tab-driven content section
@@ -201,10 +203,17 @@ export function DatasetDetailContentV2() {
 
   // Knowledge sources from context (single source of truth)
   const {
+    sources: knowledgeSources,
     count: knowledgeSourcesCount,
     isProcessing: docsProcessing,
     processingCount: docsProcessingCount,
+    hasLoaded: knowledgeSourcesLoaded,
   } = KnowledgeSourcesConsumer();
+
+  // Resolve source document filter name for UI display
+  const sourceDocumentFilterName = sourceDocumentFilter
+    ? knowledgeSources.find(s => s.id === sourceDocumentFilter)?.name ?? null
+    : null;
 
   // plan state from context
   const {
@@ -368,9 +377,12 @@ export function DatasetDetailContentV2() {
     };
   }, [shouldAutoGenerate, datasetId, searchParams, setSearchParams]);
 
-  // When docs finish processing (or were never processing), trigger plan generation
+  // When docs finish processing (or were never processing), trigger plan generation.
+  // Guard: wait for KnowledgeSourcesContext to load from IndexedDB first —
+  // otherwise docsProcessing is falsely `false` before sources are fetched.
   useEffect(() => {
     if (!shouldAutoGenerate || !datasetId || hasTriggeredAutoGenerate.current) return;
+    if (!knowledgeSourcesLoaded) return; // Haven't loaded from IndexedDB yet — wait
     if (docsProcessing) return; // Still processing — wait
 
     hasTriggeredAutoGenerate.current = true;
@@ -383,11 +395,13 @@ export function DatasetDetailContentV2() {
     emitter.emit("vllora_lucy_prompt", {
       prompt: `Please analyze the uploaded documents and create a plan for this dataset using the propose_plan tool.`,
     });
-  }, [docsProcessing, shouldAutoGenerate, datasetId]);
+  }, [docsProcessing, shouldAutoGenerate, datasetId, knowledgeSourcesLoaded]);
 
-  // Timeout fallback: if docs are still processing after 60s, generate plan anyway
+  // Timeout fallback: if docs are still processing after 60s, generate plan anyway.
+  // Also requires knowledgeSourcesLoaded to avoid firing before sources are fetched.
   useEffect(() => {
-    if (!shouldAutoGenerate || !datasetId || hasTriggeredAutoGenerate.current || !docsProcessing) return;
+    if (!shouldAutoGenerate || !datasetId || hasTriggeredAutoGenerate.current) return;
+    if (!knowledgeSourcesLoaded || !docsProcessing) return;
 
     const timeoutId = setTimeout(() => {
       if (hasTriggeredAutoGenerate.current) return;
@@ -402,7 +416,7 @@ export function DatasetDetailContentV2() {
     }, 60000);
 
     return () => clearTimeout(timeoutId);
-  }, [docsProcessing, shouldAutoGenerate, datasetId]);
+  }, [docsProcessing, shouldAutoGenerate, datasetId, knowledgeSourcesLoaded]);
 
   // README hook — agent-authored only, no auto-generation
   const { readme, readmeUpdatedAt, exportReadme } = useDatasetReadme({
@@ -687,6 +701,8 @@ export function DatasetDetailContentV2() {
               docsProcessing={docsProcessing}
               docsProcessingCount={docsProcessingCount}
               docsTotal={knowledgeSourcesCount}
+              sourceDocumentFilterName={sourceDocumentFilterName}
+              onClearSourceDocumentFilter={() => setSourceDocumentFilter(null)}
             />
           )}
           {contentSection === "evaluator-script" && (
@@ -748,6 +764,7 @@ export function DatasetDetailContentV2() {
               isExecuting={isExecuting}
               hasKnowledgeSources={knowledgeSourcesCount > 0}
               planErrorMessage={planErrorMessage}
+              docsProcessing={docsProcessing && shouldAutoGenerate}
             />
           )}
           {contentSection === "readme" && (

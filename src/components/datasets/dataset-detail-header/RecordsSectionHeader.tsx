@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useRef } from "react";
-import { Download, Loader2, X, Search } from "lucide-react";
+import { Download, Loader2, X, Search, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ViewModeToggle, type ViewMode } from "./ViewModeToggle";
 import type { DatasetRecord } from "@/types/dataset-types";
@@ -28,6 +28,10 @@ export interface RecordsSectionHeaderProps {
   searchQuery?: string;
   /** Called when search query changes */
   onSearchChange?: (query: string) => void;
+  /** Active source document filter name (for showing dismissible chip) */
+  sourceDocumentFilterName?: string | null;
+  /** Called to clear the source document filter */
+  onClearSourceDocumentFilter?: () => void;
 }
 
 export function RecordsSectionHeader({
@@ -40,6 +44,8 @@ export function RecordsSectionHeader({
   onStatFilterChange,
   searchQuery = "",
   onSearchChange,
+  sourceDocumentFilterName,
+  onClearSourceDocumentFilter,
 }: RecordsSectionHeaderProps) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [generationProgress, setGenerationProgress] = useState<{
@@ -143,6 +149,20 @@ export function RecordsSectionHeader({
               onClick={() => handleStatClick("evaluated")}
               clickable={!!onStatFilterChange}
             />
+            {/* Source document filter chip */}
+            {sourceDocumentFilterName && onClearSourceDocumentFilter && (
+              <>
+                <span className="text-border">·</span>
+                <button
+                  onClick={onClearSourceDocumentFilter}
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400"
+                >
+                  <FileText className="w-3 h-3" />
+                  <span className="text-xs truncate max-w-[120px]">{sourceDocumentFilterName}</span>
+                  <X className="w-3 h-3 ml-0.5" />
+                </button>
+              </>
+            )}
             {/* Show clear filter indicator when a filter is active */}
             {activeStatFilter !== "all" && onStatFilterChange && (
               <>

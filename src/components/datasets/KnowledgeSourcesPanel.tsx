@@ -6,13 +6,17 @@
  * Supports file upload with optional comment/objective.
  */
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { RefreshCw, Upload, Loader2, Plus, X, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { emitter } from "@/utils/eventEmitter";
 import * as knowledgeDB from "@/services/knowledge-sources-db";
 import type { KnowledgeSource, KnowledgeSourceType } from "@/types/dataset-types";
+import { toast } from "sonner";
+import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
+import { PlanConsumer } from "@/contexts/PlanContext";
+import { computeSourceRecordStats } from "@/lib/distri-finetune-tools/steps/shared/source-record-counts";
 import { KnowledgeSourceCard } from "./KnowledgeSourceCard";
 import { uploadKnowledgeSourceHandler } from "@/lib/distri-finetune-tools/steps/knowledge-sources";
 
@@ -57,6 +61,14 @@ export function KnowledgeSourcesPanel({ datasetId, className }: KnowledgeSources
   const [uploading, setUploading] = useState(false);
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Access records and dataset for source-to-record stats
+  const { records, dataset } = DatasetDetailConsumer();
+  const { planStatus } = PlanConsumer();
+  const sourceRecordStats = useMemo(
+    () => computeSourceRecordStats(records, dataset?.knowledgeCoverageStats),
+    [records, dataset?.knowledgeCoverageStats],
+  );
 
   // Staged upload state: files selected but not yet uploaded
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
@@ -139,6 +151,15 @@ export function KnowledgeSourcesPanel({ datasetId, className }: KnowledgeSources
         });
       }
       await fetchSources();
+
+      // Plan-status-aware feedback after successful upload
+      if (planStatus === "executing") {
+        toast.info("Document uploaded. Lucy will incorporate it in the next round.");
+      } else if (planStatus === "completed") {
+        emitter.emit("vllora_lucy_prompt", {
+          prompt: "I've uploaded new documents. Please analyze them and suggest how to incorporate them into my existing dataset.",
+        });
+      }
     } catch (error) {
       console.error("[KnowledgeSourcesPanel] Upload error:", error);
     } finally {
@@ -146,7 +167,7 @@ export function KnowledgeSourcesPanel({ datasetId, className }: KnowledgeSources
       setStagedFiles([]);
       setComment("");
     }
-  }, [stagedFiles, comment, datasetId, fetchSources]);
+  }, [stagedFiles, comment, datasetId, fetchSources, planStatus]);
 
   // Toggle source expansion
   const toggleExpand = (sourceId: string) => {
@@ -303,15 +324,23 @@ export function KnowledgeSourcesPanel({ datasetId, className }: KnowledgeSources
           </div>
         ) : (
           <div className="space-y-3">
-            {sources.map((source) => (
-              <KnowledgeSourceCard
-                key={source.id}
-                source={source}
-                isExpanded={expandedSources.has(source.id)}
-                onToggleExpand={() => toggleExpand(source.id)}
-                onDelete={() => handleDelete(source.id)}
-              />
-            ))}
+            {sources.map((source) => {
+              const stats = sourceRecordStats.get(source.id);
+              return (
+                <KnowledgeSourceCard
+                  key={source.id}
+                  source={source}
+                  isExpanded={expandedSources.has(source.id)}
+                  onToggleExpand={() => toggleExpand(source.id)}
+                  onDelete={() => handleDelete(source.id)}
+                  recordCount={stats?.recordCount}
+                  coveragePercent={stats?.coveragePercent}
+                  onFilterBySource={() => {
+                    emitter.emit("vllora_filter_by_source", { datasetId, sourceId: source.id });
+                  }}
+                />
+              );
+            })}
           </div>
         )}
       </div>

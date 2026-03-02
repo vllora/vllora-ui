@@ -110,6 +110,28 @@ export interface DatasetStats {
   lastCalculatedAt: number;
 }
 
+// Knowledge-level coverage statistics (which chunks are covered by training data)
+export interface KnowledgeCoverageStats {
+  /** Total chunks across all knowledge sources */
+  totalChunks: number;
+  /** Chunks that appear in at least one record's sourceChunkRefs */
+  coveredChunks: number;
+  /** Coverage percentage (0-100) */
+  coveragePercent: number;
+  /** Per-source breakdown */
+  bySource: Record<string, {
+    sourceName: string;
+    totalChunks: number;
+    coveredChunks: number;
+    coveragePercent: number;
+    /** Chunk IDs not yet covered by any record */
+    uncoveredChunkIds: string[];
+  }>;
+  /** Per-chunk usage count: "sourceId:chunkId" → record count */
+  chunkUsageCounts: Record<string, number>;
+  lastCalculatedAt: number;
+}
+
 // Coverage statistics stored on dataset for UI display
 export interface CoverageStats {
   // Balance score (0-1, where 1 is perfectly balanced) - undefined when no topics configured
@@ -313,6 +335,8 @@ export interface Dataset {
   evalScript?: string;
   // Coverage statistics for UI display (updated by analyze_coverage)
   coverageStats?: CoverageStats;
+  // Knowledge source coverage stats (which chunks are covered by training data)
+  knowledgeCoverageStats?: KnowledgeCoverageStats;
   // Dry run statistics for UI display (updated by run_evaluation)
   dryRunStats?: DryRunStats;
   // Dataset statistics for UI display (updated by get_dataset_state)

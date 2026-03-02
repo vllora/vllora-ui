@@ -61,6 +61,10 @@ export interface DatasetMainContentProps {
   docsProcessing?: boolean;
   docsProcessingCount?: number;
   docsTotal?: number;
+
+  // Source document filter (from context)
+  sourceDocumentFilterName?: string | null;
+  onClearSourceDocumentFilter?: () => void;
 }
 
 export function DatasetMainContent({
@@ -93,6 +97,8 @@ export function DatasetMainContent({
   docsProcessing,
   docsProcessingCount,
   docsTotal,
+  sourceDocumentFilterName,
+  onClearSourceDocumentFilter,
 }: DatasetMainContentProps) {
   // P0-19: Stat filter state for RecordsSectionHeader clickable chips
   const [activeStatFilter, setActiveStatFilter] = useState<StatFilter>("all");
@@ -208,6 +214,8 @@ export function DatasetMainContent({
           onStatFilterChange={setActiveStatFilter}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
+          sourceDocumentFilterName={sourceDocumentFilterName}
+          onClearSourceDocumentFilter={onClearSourceDocumentFilter}
         />
       </div>
 

@@ -306,11 +306,12 @@ export function LucySidebar() {
     [records.length, currentDataset?.evalScript, filteredJobs.length]
   );
 
-  // Status summary for previously-analyzed datasets (shown instead of LLM auto-trigger)
+  // Status summary for previously-analyzed datasets (shown instead of LLM auto-trigger).
+  // Also shown when docs are processing so Lucy acknowledges the activity.
   const statusSummary = useMemo(() => {
     const hasBeenAnalyzed = workflow !== null ||
       (planStatus && planStatus !== 'dismissed');
-    if (!hasBeenAnalyzed) return undefined;
+    if (!hasBeenAnalyzed && !docsProcessing) return undefined;
     return (
       <DatasetStatusSummary
         recordCount={records.length}
@@ -318,9 +319,10 @@ export function LucySidebar() {
         hasEvalScript={!!currentDataset?.evalScript}
         jobCount={filteredJobs.length}
         planStatus={planStatus}
+        docsProcessing={docsProcessing}
       />
     );
-  }, [records.length, workflow, currentDataset?.evalScript, filteredJobs.length, planStatus]);
+  }, [records.length, workflow, currentDataset?.evalScript, filteredJobs.length, planStatus, docsProcessing]);
 
   const getKnowledgeSourceType = useCallback((mimeType: string, fileName: string): KnowledgeSourceType => {
     if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) return 'pdf';
@@ -385,12 +387,32 @@ export function LucySidebar() {
 
         if (uploadedFiles.length > 0) {
           emitter.emit("vllora_knowledge_source_updated", { datasetId: selectedDatasetId });
-          pendingDocsPlanTriggerRef.current = true;
 
-          if (!userText.trim()) {
-            userText = `I've uploaded ${uploadedFiles.length} document(s): ${uploadedFiles.join(', ')}. They are being processed now — I'll let you know when they're ready so you can create a plan.`;
+          const currentPlanStatus = planStatusRef.current;
+          if (currentPlanStatus === "executing") {
+            // Mid-workflow: docs will be incorporated in the next round
+            pendingDocsPlanTriggerRef.current = false;
+            if (!userText.trim()) {
+              userText = `I've uploaded ${uploadedFiles.length} document(s): ${uploadedFiles.join(', ')}. Since a plan is currently executing, they'll be incorporated after this round completes.`;
+            } else {
+              userText += `\n\n[Knowledge sources uploaded: ${uploadedFiles.join(', ')}. Plan is executing — documents will be incorporated after this round.]`;
+            }
+          } else if (currentPlanStatus === "completed") {
+            // Post-workflow: suggest re-analysis
+            pendingDocsPlanTriggerRef.current = true;
+            if (!userText.trim()) {
+              userText = `I've uploaded new document(s): ${uploadedFiles.join(', ')}. Please analyze them and suggest how to incorporate them into my existing dataset.`;
+            } else {
+              userText += `\n\n[New knowledge sources uploaded: ${uploadedFiles.join(', ')}. Please analyze and suggest integration into the existing dataset.]`;
+            }
           } else {
-            userText += `\n\n[Knowledge sources uploaded: ${uploadedFiles.join(', ')}. Documents are being processed — plan creation will be triggered automatically when extraction completes.]`;
+            // No plan or proposed/dismissed: default behavior (auto-plan trigger)
+            pendingDocsPlanTriggerRef.current = true;
+            if (!userText.trim()) {
+              userText = `I've uploaded ${uploadedFiles.length} document(s): ${uploadedFiles.join(', ')}. They are being processed now — I'll let you know when they're ready so you can create a plan.`;
+            } else {
+              userText += `\n\n[Knowledge sources uploaded: ${uploadedFiles.join(', ')}. Documents are being processed — plan creation will be triggered automatically when extraction completes.]`;
+            }
           }
         }
       }

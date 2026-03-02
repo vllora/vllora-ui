@@ -6,11 +6,13 @@
  */
 
 import { useMemo } from "react";
-import { GitBranch, Coins, MessageSquare } from "lucide-react";
+import { GitBranch, Coins, MessageSquare, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DatasetRecord, DataInfo } from "@/types/dataset-types";
 import { ToolDefinitionsViewer } from "@/components/chat/traces/TraceRow/span-info/DetailView/tool-definitions-viewer";
 import type { ToolInfoCall } from "@/components/chat/traces/TraceRow/span-info/DetailView/spans-display/tool-display";
+import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
+import { getRecordSourceAttributions } from "@/lib/distri-finetune-tools/steps/shared/source-attribution";
 import { estimateTokens, countTurns } from "./StatsBadge";
 import { countTools } from "./ToolsBadge";
 
@@ -21,6 +23,16 @@ interface MetadataPanelProps {
 
 export function MetadataPanel({ record, topicPath }: MetadataPanelProps) {
   const dataInfo = record.data as DataInfo | undefined;
+  const { sources } = KnowledgeSourcesConsumer();
+
+  // Resolve source document attributions
+  const sourceAttributions = useMemo(
+    () => getRecordSourceAttributions(
+      record.metadata?.sourceChunkRefs as string[] | undefined,
+      sources,
+    ),
+    [record.metadata, sources],
+  );
 
   // Convert tools to ToolInfoCall format for ToolDefinitionsViewer
   const toolInfoCalls = useMemo((): ToolInfoCall[] => {
@@ -85,6 +97,26 @@ export function MetadataPanel({ record, topicPath }: MetadataPanelProps) {
           <p className="text-xs text-zinc-500 mt-1 font-mono">
             {record.sourceRecordId}
           </p>
+        </div>
+      )}
+
+      {/* Source Documents */}
+      {sourceAttributions.length > 0 && (
+        <div>
+          <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+            Source Documents
+          </h4>
+          <div className="space-y-1.5">
+            {sourceAttributions.map((attr) => (
+              <div key={attr.sourceId} className="flex items-center gap-2 text-xs">
+                <FileText className="w-3 h-3 text-blue-400 shrink-0" />
+                <span className="text-foreground font-medium truncate">{attr.sourceName}</span>
+                <span className="text-muted-foreground shrink-0">
+                  {attr.chunkCount} chunk{attr.chunkCount !== 1 ? 's' : ''}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

@@ -123,6 +123,12 @@ export interface AnalyzeCoverageResult {
     }>;
     recommendations: string[];
     uncategorized_count: number;
+    knowledge_coverage?: {
+      total_chunks: number;
+      covered_chunks: number;
+      coverage_percent: number;
+      by_source: Record<string, { name: string; covered: number; total: number; percent: number }>;
+    };
   };
 }
 

@@ -286,6 +286,24 @@ export function FileTreeItem({
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+          ) : node.badge.tooltip ? (
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className={cn(
+                      "text-[11px] shrink-0 tabular-nums",
+                      badgeClasses(node.badge.variant)
+                    )}
+                  >
+                    {node.badge.label}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  {node.badge.tooltip}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           ) : (
             <span
               className={cn(

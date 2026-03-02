@@ -9,7 +9,7 @@
  * Empty state: prompt to generate a plan.
  */
 
-import { Sparkles, Loader2, FolderOpen, AlertCircle, CheckCircle2, XCircle, Pencil } from "lucide-react";
+import { Sparkles, Loader2, FolderOpen, AlertCircle, CheckCircle2, XCircle, Pencil, FileText } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { useChatStateStore } from "@distri/react";
@@ -19,6 +19,7 @@ import { emitter } from "@/utils/eventEmitter";
 import type { Plan } from "@/lib/distri-finetune-tools/steps/propose-plan";
 import type { PlanStatus } from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
 import { WorkspaceTabsConsumer } from "@/contexts/WorkspaceTabsContext";
+import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 
 interface PlanPreviewProps {
   plan: Plan | null;
@@ -34,6 +35,8 @@ interface PlanPreviewProps {
   isExecuting: boolean;
   hasKnowledgeSources: boolean;
   planErrorMessage?: string | null;
+  /** Documents are being processed and plan will auto-generate when ready */
+  docsProcessing?: boolean;
 }
 
 export function PlanPreview({
@@ -50,6 +53,7 @@ export function PlanPreview({
   isExecuting,
   hasKnowledgeSources,
   planErrorMessage,
+  docsProcessing,
 }: PlanPreviewProps) {
   // Show loading spinner while IndexedDB is being read on mount
   if (isLoadingPlan) {
@@ -92,6 +96,7 @@ export function PlanPreview({
           isGenerating={isGenerating}
           hasKnowledgeSources={hasKnowledgeSources}
           onOpenDocs={onOpenDocs}
+          docsProcessing={docsProcessing}
         />
       )}
     </div>
@@ -229,10 +234,12 @@ function PlanEmptyView({
   isGenerating,
   hasKnowledgeSources,
   onOpenDocs,
+  docsProcessing,
 }: {
   isGenerating: boolean;
   hasKnowledgeSources: boolean;
   onOpenDocs?: () => void;
+  docsProcessing?: boolean;
 }) {
   const [isRequesting, setIsRequesting] = useState(false);
   const [hasTimedOut, setHasTimedOut] = useState(false);
@@ -242,6 +249,9 @@ function PlanEmptyView({
   // asking for a plan and Lucy actually calling propose_plan — e.g. she may
   // run get_dataset_state or analyze_knowledge_sources first).
   const isLucyStreaming = useChatStateStore((state) => state.isStreaming);
+
+  // Get processing source details for progress display
+  const { processingSources } = KnowledgeSourcesConsumer();
 
   useEffect(() => {
     if (isGenerating) {
@@ -299,7 +309,42 @@ function PlanEmptyView({
       {/* Empty state */}
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="max-w-sm text-center space-y-5">
-          {showLoading ? (
+          {docsProcessing ? (
+            /* Documents are still being processed — show a clear processing state
+               so the user knows the system is working, not stuck. */
+            <>
+              <div className="mx-auto w-12 h-12 rounded-full bg-[rgba(var(--theme-500),0.1)] flex items-center justify-center relative">
+                <FileText className="w-6 h-6 text-[rgb(var(--theme-500))]" />
+                <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-background flex items-center justify-center">
+                  <Loader2 className="w-3 h-3 animate-spin text-[rgb(var(--theme-500))]" />
+                </div>
+              </div>
+              <div>
+                <h3 className="text-base font-medium text-foreground mb-1">
+                  Processing your documents
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Lucy will create a plan once extraction is ready.
+                </p>
+              </div>
+              {/* Per-source progress */}
+              {processingSources.length > 0 && (
+                <div className="space-y-2">
+                  {processingSources.map((source) => (
+                    <div key={source.id} className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                      <span className="truncate">{source.name}</span>
+                      {source.progress?.percent != null && (
+                        <span className="text-[rgb(var(--theme-500))] shrink-0">
+                          {Math.round(source.progress.percent)}%
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : showLoading ? (
             <>
               <div className="mx-auto w-12 h-12 rounded-full bg-[rgba(var(--theme-500),0.1)] flex items-center justify-center">
                 <Loader2 className="w-6 h-6 animate-spin text-[rgb(var(--theme-500))]" />

@@ -1,13 +1,19 @@
 /**
- * Semantic PDF Extractor — LLM-Primary with Embeddings Fallback
+ * Semantic PDF Extractor — Local-First with LLM Enrichment
  *
  * Pipeline:
- *   PDF (base64) → pdfjs-dist text extraction
- *     → text cleanup → wink-nlp sentence splitting
- *     → PRIMARY: LLM section identification (native PDF file block)
- *       → match sections to sentences → structured markdown
- *     → FALLBACK (on LLM failure): local embeddings + clustering + LLM enrichment
- *       → structured markdown
+ *   PDF (base64) → pdfjs-dist text extraction (local)
+ *     → text cleanup → wink-nlp sentence splitting (local)
+ *     → heading-based section detection (local, regex)
+ *     → FALLBACK: embedding clustering if no headings found (local)
+ *     → batch LLM enrichment for chunk headings + summaries (small calls)
+ *     → structured markdown
+ *
+ * This approach:
+ *   - Extracts text 100% locally (pdfjs, no LLM)
+ *   - Chunks locally by detecting heading patterns (no LLM)
+ *   - Only uses LLM for lightweight per-chunk enrichment (small batched calls)
+ *   - Falls back to embedding-based clustering for unstructured documents
  *
  * Exports:
  *   - extractPdfContentLocal()  — main entry point
@@ -26,9 +32,6 @@ import {
 import {
   callLucy,
   type LucyMessage,
-  type FileContentBlock,
-  type TextContentBlock,
-  type ContentBlock,
 } from './shared/lucy-client';
 
 // Configure pdf.js worker (use bundled worker from pdfjs-dist)
@@ -68,9 +71,10 @@ export async function extractPdfContentLocal(
   const {
     onProgress,
     similarityThreshold,
-    objective,
-    comment,
-    allowFallback = true,
+    // objective and comment reserved for future per-chunk context enrichment
+    objective: _objective,
+    comment: _comment,
+    allowFallback: _allowFallback = true,
   } = options;
 
   // Step 1: Decode base64 → load PDF
@@ -152,95 +156,53 @@ export async function extractPdfContentLocal(
   }
 
   // -------------------------------------------------------------------------
-  // PRIMARY PATH: LLM section identification with native PDF
+  // LOCAL CHUNKING: heading detection → fallback to embeddings
   // -------------------------------------------------------------------------
-  try {
-    onProgress?.({ step: 'Analyzing document structure with AI...', percent: 40 });
 
-    const sections = await extractSectionsWithLLM(
-      sentences, totalPages, objective, comment, base64Data, filename,
-    );
+  // Step 4: Try heading-based section detection (purely local, no LLM)
+  onProgress?.({ step: 'Detecting document structure...', percent: 40 });
 
-    if (sections.length === 0) {
-      throw new Error('LLM returned no sections');
-    }
+  let chunks: SemanticChunk[] = chunkByHeadings(sentences);
+  let chunkingMethod: 'headings' | 'embeddings' = 'headings';
 
-    onProgress?.({ step: 'Mapping sections to text...', percent: 75 });
+  console.log(`[semantic-pdf-extractor] Heading detection found ${chunks.length} chunks`);
 
-    const chunks = buildChunksFromSections(sections, sentences);
+  // If heading detection found too few sections, fall back to embeddings
+  if (chunks.length < 3) {
+    chunkingMethod = 'embeddings';
+    console.log(`[semantic-pdf-extractor] Too few heading-based chunks (${chunks.length}), falling back to embedding clustering`);
 
-    if (chunks.length === 0) {
-      throw new Error('Could not match any LLM sections to document text');
-    }
+    onProgress?.({ step: 'Generating embeddings...', percent: 45 });
 
-    onProgress?.({ step: 'Generating structured markdown...', percent: 90 });
-    const markdown = generateMarkdown(filename, chunks, totalPages);
+    const sentenceTexts = sentences.map((s) => s.text);
+    const embeddings = await embed(sentenceTexts, (info) => {
+      if (info.status === 'progress' && info.progress !== undefined) {
+        onProgress?.({
+          step: `Loading embedding model... ${Math.round(info.progress)}%`,
+          percent: 45 + Math.round(info.progress * 0.2),
+        });
+      }
+    });
 
-    onProgress?.({ step: 'Complete', percent: 100 });
-
-    return {
-      text: markdown,
-      sections: chunks.map((c) => ({
-        title: c.heading,
-        content: c.summary,
-        level: 1,
-      })),
-      sectionHeadings: chunks.map((c) => c.heading),
-      metadata: {
-        type: 'pdf',
-        extractionMethod: 'local-semantic',
-        extractionPhase: 'enhanced',
-        totalChunks: chunks.length,
-        totalPages,
-        chunks,
-      },
-    };
-  } catch (llmError) {
-    console.warn(
-      `[semantic-pdf-extractor] LLM primary path failed, falling back to embeddings:`,
-      llmError,
-    );
-    if (!allowFallback) {
-      throw llmError;
-    }
+    onProgress?.({ step: 'Clustering sentences...', percent: 65 });
+    chunks = clusterSentences(sentences, embeddings, similarityThreshold);
   }
 
-  // -------------------------------------------------------------------------
-  // FALLBACK: Embeddings + clustering + LLM enrichment
-  // -------------------------------------------------------------------------
-  onProgress?.({
-    step: 'Generating embeddings (fallback)...',
-    percent: 45,
-  });
-
-  const sentenceTexts = sentences.map((s) => s.text);
-  const embeddings = await embed(sentenceTexts, (info) => {
-    if (info.status === 'progress' && info.progress !== undefined) {
-      onProgress?.({
-        step: `Loading embedding model... ${Math.round(info.progress)}%`,
-        percent: 45 + Math.round(info.progress * 0.2),
-      });
-    }
-  });
-
-  onProgress?.({ step: 'Clustering sentences (fallback)...', percent: 65 });
-
-  const chunks = clusterSentences(sentences, embeddings, similarityThreshold);
-
-  onProgress?.({ step: 'Summarizing chunks (fallback)...', percent: 70 });
+  // Step 5: Batch LLM enrichment — small per-chunk calls for headings + summaries
+  onProgress?.({ step: 'Analyzing chunks...', percent: 70 });
 
   await enrichChunksWithLLM(chunks, (completed, total) => {
-    const pct = 70 + Math.round((completed / total) * 15);
+    const pct = 70 + Math.round((completed / total) * 20);
     onProgress?.({
-      step: `Summarizing chunks (${completed}/${total}, fallback)...`,
+      step: `Analyzing chunks (${completed}/${total})...`,
       current: completed,
       total,
       percent: pct,
     });
   });
 
-  onProgress?.({ step: 'Generating structured markdown...', percent: 90 });
-
+  // Step 6: Generate structured markdown
+  onProgress?.({ step: 'Generating structured markdown...', percent: 92 });
   const markdown = generateMarkdown(filename, chunks, totalPages);
 
   onProgress?.({ step: 'Complete', percent: 100 });
@@ -256,6 +218,7 @@ export async function extractPdfContentLocal(
     metadata: {
       type: 'pdf',
       extractionMethod: 'local-semantic',
+      chunkingMethod,
       totalChunks: chunks.length,
       totalPages,
       chunks,
@@ -268,7 +231,7 @@ export async function extractPdfContentLocal(
 // ---------------------------------------------------------------------------
 
 const CHUNK_ENRICH_MODEL = 'openai/gpt-5-nano';
-const CHUNK_ENRICH_BATCH_SIZE = 5;
+const CHUNK_ENRICH_BATCH_SIZE = 10;
 
 const CHUNK_ENRICH_SYSTEM = `You summarize document chunks. Given a text chunk from a PDF, produce:
 - "heading": A short, descriptive title (max 10 words) that captures the main topic of this chunk. Do NOT just repeat the first sentence.
@@ -386,201 +349,236 @@ function generateMarkdown(filename: string, chunks: SemanticChunk[], totalPages:
 }
 
 // ---------------------------------------------------------------------------
-// Indexed Text Builder
+// Heading-Based Chunking (Local, No LLM)
 // ---------------------------------------------------------------------------
+
+/** Target ~500 words per chunk; hard-split at 1000 words; merge chunks below 150. */
+const TARGET_CHUNK_WORDS = 500;
+const MAX_CHUNK_WORDS = 1000;
+const MIN_CHUNK_WORDS = 150;
+const MIN_HEADING_SECTIONS = 3;
 
 /**
- * Build a numbered text representation of sentences for LLM consumption.
- * Format: "[0] First sentence\n[1] Second sentence\n..."
+ * Patterns that identify heading-like sentences in extracted PDF text.
+ *
+ * Order matters — earlier patterns are more specific and checked first.
  */
-function buildIndexedText(sentences: SentenceWithPage[]): string {
-  return sentences.map((s, i) => `[${i}] ${s.text}`).join('\n');
-}
-
-// ---------------------------------------------------------------------------
-// LLM Section Extraction (used by primary path)
-// ---------------------------------------------------------------------------
-
-const SECTION_LLM_MODEL = 'openai/gpt-5-mini';
-
-const SECTION_LLM_SYSTEM = `You are a document structure analyzer.
-
-{{OBJECTIVE_BLOCK}}
-
-You will receive the document's sentences in numbered format:
-[0] First sentence text
-[1] Second sentence text
-...
-
-Identify the logical sections of this document. For each section provide:
-- "heading": short descriptive title (max 10 words)
-- "summary": 4-5 sentence summary
-- "start_index": the integer index of the first sentence in this section
-- "end_index": the integer index of the last sentence in this section (inclusive)
-
-Rules:
-- 5-20 sections depending on document length
-- Follow the document's own structure (Articles, Chapters, Sections)
-- Group content by what's relevant to the training objective
-- Sections must be contiguous: no gaps between sections, no overlapping indices
-- Sections must be in document order (ascending start_index)
-- Each section must contain at least 3 sentences
-- The first section should start at index 0
-- The last section should end at the last sentence index`;
-
-const SECTION_LLM_RESPONSE_FORMAT = {
-  type: 'json_schema',
-  json_schema: {
-    name: 'document_sections',
-    strict: true,
-    schema: {
-      type: 'object',
-      properties: {
-        sections: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              heading: { type: 'string', description: 'Short descriptive title (max 10 words)' },
-              summary: { type: 'string', description: '4-5 sentence summary' },
-              start_index: { type: 'integer', description: 'Index of the first sentence in this section' },
-              end_index: { type: 'integer', description: 'Index of the last sentence in this section (inclusive)' },
-            },
-            required: ['heading', 'summary', 'start_index', 'end_index'],
-            additionalProperties: false,
-          },
-        },
-      },
-      required: ['sections'],
-      additionalProperties: false,
-    },
-  },
-};
-
-interface LLMSection {
-  heading: string;
-  summary: string;
-  start_index: number;
-  end_index: number;
-}
+const HEADING_PATTERNS: RegExp[] = [
+  /^#{1,3}\s+.+/,                             // Markdown: # Heading
+  /^(?:chapter|part)\s+[\divxlc]+/i,          // Chapter / Part markers
+  /^(?:section|article|appendix)\s+\d+/i,     // Section / Article / Appendix
+  /^\d+(?:\.\d+)*\s+[A-Z]/,                   // Numbered: "1.2 Title" or "3.1.4 Details"
+  /^[A-Z][A-Z\s]{8,}$/,                       // ALL CAPS (≥ ~3 words)
+];
 
 /**
- * Single LLM call to identify proper document sections from indexed sentences.
- * Returns section boundaries as start_index / end_index integers.
+ * Heuristic: does `text` look like a section heading?
+ *
+ * Checks explicit patterns first, then falls back to a length / punctuation
+ * heuristic for short, capitalised lines without sentence-ending punctuation.
  */
-async function extractSectionsWithLLM(
-  sentences: SentenceWithPage[],
-  totalPages: number,
-  objective?: string,
-  comment?: string,
-  pdfBase64?: string,
-  filename?: string,
-): Promise<LLMSection[]> {
-  // Build objective block for the system prompt
-  const objectiveLines: string[] = [];
-  if (objective) objectiveLines.push(`Training objective: ${objective}`);
-  if (comment) objectiveLines.push(`Document purpose: ${comment}`);
-  const objectiveBlock = objectiveLines.length > 0
-    ? objectiveLines.join('\n')
-    : 'Identify the most logical and useful sections of this document.';
+function isLikelyHeading(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.length < 3 || trimmed.length > 150) return false;
 
-  const systemPrompt = SECTION_LLM_SYSTEM.replace('{{OBJECTIVE_BLOCK}}', objectiveBlock);
-
-  // Build indexed text from sentences
-  const indexedText = buildIndexedText(sentences);
-
-  // Build user content: when PDF is available, send BOTH the native PDF (visual context)
-  // AND the indexed text (for index references)
-  let userContent: string | ContentBlock[];
-  if (pdfBase64) {
-    const base64Only = pdfBase64.startsWith('data:')
-      ? pdfBase64.replace(/^data:[^;]+;base64,/, '')
-      : pdfBase64;
-    userContent = [
-      {
-        type: 'file',
-        file: {
-          filename: filename || 'document.pdf',
-          file_data: `data:application/pdf;base64,${base64Only}`,
-        },
-      } as FileContentBlock,
-      {
-        type: 'text',
-        text: `Analyze this ${totalPages}-page document and identify its sections.\n\nHere are the numbered sentences — use these indices in your response:\n\n${indexedText}`,
-      } as TextContentBlock,
-    ];
-    console.log(`[extraction] Sending PDF file block + ${sentences.length} indexed sentences`);
-  } else {
-    userContent = `Document (${totalPages} pages, ${sentences.length} sentences):\n\n${indexedText}`;
+  // Check explicit heading patterns
+  for (const pattern of HEADING_PATTERNS) {
+    if (pattern.test(trimmed)) return true;
   }
 
-  const messages: LucyMessage[] = [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: userContent },
-  ];
+  // Short line, starts with a capital, no sentence-ending punctuation → possible heading.
+  // Be conservative: max 60 chars, 3-8 words, must have at least one letter after first word
+  // to avoid matching chess moves, figure captions, and other short fragments.
+  if (
+    trimmed.length < 60 &&
+    !/[.!?;,:]$/.test(trimmed) &&
+    /^[A-Z]/.test(trimmed)
+  ) {
+    const wordCount = trimmed.split(/\s+/).length;
+    if (wordCount >= 3 && wordCount <= 8) return true;
+  }
 
-  const response = await callLucy(messages, {
-    model: SECTION_LLM_MODEL,
-    temperature: 0.2,
-    response_format: SECTION_LLM_RESPONSE_FORMAT,
-    label: 'section_extraction',
-  });
-
-  const parsed = JSON.parse(response) as { sections: LLMSection[] };
-  return parsed.sections;
+  return false;
 }
 
 /**
- * Build chunks from LLM sections using deterministic index-based slicing.
- * Sections reference sentence indices directly — no string matching needed.
+ * Build a SemanticChunk from a slice of sentences.
+ *
+ * heading / summary are preliminary — the LLM enrichment step (enrichChunksWithLLM)
+ * will overwrite them with better versions.
  */
-function buildChunksFromSections(
-  sections: LLMSection[],
+function buildChunkFromSentences(
   sentences: SentenceWithPage[],
-): SemanticChunk[] {
-  if (sections.length === 0 || sentences.length === 0) return [];
+  index: number,
+  headingText?: string,
+): SemanticChunk {
+  const texts = sentences.map((s) => s.text);
+  const fullText = texts.join(' ');
+  const pageStart = Math.min(...sentences.map((s) => s.pageNumber));
+  const pageEnd = Math.max(...sentences.map((s) => s.pageNumber));
 
-  const maxIdx = sentences.length - 1;
+  const heading = headingText
+    ? (headingText.length > 80 ? headingText.slice(0, 77) + '...' : headingText)
+    : (texts[0].length > 80 ? texts[0].slice(0, 77) + '...' : texts[0]);
 
-  // Pre-sort sections by start_index for robustness
-  const sorted = [...sections].sort((a, b) => a.start_index - b.start_index);
+  const summary = texts.slice(0, 2).join(' ');
 
-  const chunks: SemanticChunk[] = [];
-  let prevEndIndex = -1;
+  return {
+    id: `chunk-${index}`,
+    sentences: texts,
+    text: fullText,
+    pageStart,
+    pageEnd,
+    heading,
+    summary,
+  };
+}
 
-  for (const section of sorted) {
-    // Clamp indices to valid range
-    let startIdx = Math.max(0, Math.min(section.start_index, maxIdx));
-    let endIdx = Math.max(0, Math.min(section.end_index, maxIdx));
+/**
+ * Chunk sentences by detecting heading patterns in the text.
+ *
+ * 1. Scan sentences for heading-like patterns (ALL CAPS, numbered sections, etc.)
+ * 2. Split at heading boundaries
+ * 3. Sub-split sections > MAX_CHUNK_WORDS at ~TARGET_CHUNK_WORDS boundaries
+ * 4. Return SemanticChunk[] with preliminary headings/summaries
+ *
+ * Returns [] (empty) when fewer than MIN_HEADING_SECTIONS headings are found,
+ * signalling to the caller to fall back to embedding-based clustering.
+ */
+function chunkByHeadings(sentences: SentenceWithPage[]): SemanticChunk[] {
+  if (sentences.length === 0) return [];
 
-    // Contiguity failsafe: adjust start if it overlaps with previous section
-    if (startIdx <= prevEndIndex) {
-      startIdx = prevEndIndex + 1;
+  // Step 1: Find heading indices
+  const headingIndices: number[] = [];
+  for (let i = 0; i < sentences.length; i++) {
+    if (isLikelyHeading(sentences[i].text)) {
+      headingIndices.push(i);
     }
+  }
 
-    // Skip sections that are empty after adjustment
-    if (endIdx < startIdx) {
-      console.warn(`[buildChunksFromSections] Skipping "${section.heading}": endIdx ${endIdx} < startIdx ${startIdx} after adjustment`);
-      continue;
-    }
+  // Not enough structure detected → signal caller to use fallback
+  if (headingIndices.length < MIN_HEADING_SECTIONS) {
+    return [];
+  }
 
-    const chunkSentences = sentences.slice(startIdx, endIdx + 1);
-    const texts = chunkSentences.map((s) => s.text);
-    const pageStart = Math.min(...chunkSentences.map((s) => s.pageNumber));
-    const pageEnd = Math.max(...chunkSentences.map((s) => s.pageNumber));
+  // Step 2: Split at heading boundaries into raw sections
+  const rawSections: Array<{ headingSentence: string; sentences: SentenceWithPage[] }> = [];
 
-    chunks.push({
-      id: `chunk-${chunks.length + 1}`,
-      sentences: texts,
-      text: texts.join(' '),
-      pageStart,
-      pageEnd,
-      heading: section.heading,
-      summary: section.summary,
+  // Include any sentences before the first heading as a preamble
+  if (headingIndices[0] > 0) {
+    const preambleSentences = sentences.slice(0, headingIndices[0]);
+    rawSections.push({
+      headingSentence: preambleSentences[0].text,
+      sentences: preambleSentences,
     });
+  }
 
-    console.log(`[buildChunksFromSections] Section "${section.heading}": indices [${startIdx}–${endIdx}], ${chunkSentences.length} sentences, pages ${pageStart}–${pageEnd}`);
-    prevEndIndex = endIdx;
+  for (let h = 0; h < headingIndices.length; h++) {
+    const start = headingIndices[h];
+    const end = h + 1 < headingIndices.length ? headingIndices[h + 1] : sentences.length;
+    const sectionSentences = sentences.slice(start, end);
+    rawSections.push({
+      headingSentence: sentences[start].text,
+      sentences: sectionSentences,
+    });
+  }
+
+  // Step 3: Sub-split large sections at ~TARGET_CHUNK_WORDS boundaries
+  const rawChunks: SemanticChunk[] = [];
+
+  for (const section of rawSections) {
+    const wordCount = section.sentences.reduce(
+      (sum, s) => sum + s.text.split(/\s+/).length, 0,
+    );
+
+    if (wordCount <= MAX_CHUNK_WORDS) {
+      // Section fits in one chunk
+      rawChunks.push(
+        buildChunkFromSentences(section.sentences, rawChunks.length + 1, section.headingSentence),
+      );
+    } else {
+      // Sub-split at ~TARGET_CHUNK_WORDS boundaries
+      let currentBatch: SentenceWithPage[] = [];
+      let currentWords = 0;
+      let isFirst = true;
+
+      for (const sentence of section.sentences) {
+        const sentenceWords = sentence.text.split(/\s+/).length;
+
+        if (currentWords + sentenceWords > TARGET_CHUNK_WORDS && currentBatch.length >= 3) {
+          const heading = isFirst ? section.headingSentence : currentBatch[0].text;
+          rawChunks.push(buildChunkFromSentences(currentBatch, rawChunks.length + 1, heading));
+          currentBatch = [sentence];
+          currentWords = sentenceWords;
+          isFirst = false;
+        } else {
+          currentBatch.push(sentence);
+          currentWords += sentenceWords;
+        }
+      }
+
+      if (currentBatch.length > 0) {
+        const heading = isFirst ? section.headingSentence : currentBatch[0].text;
+        rawChunks.push(buildChunkFromSentences(currentBatch, rawChunks.length + 1, heading));
+      }
+    }
+  }
+
+  // Step 4: Merge small chunks (< MIN_CHUNK_WORDS) with their next neighbor.
+  // This handles false-positive headings (chess moves, captions, etc.) that
+  // create tiny chunks. Merging keeps the chunk count reasonable for LLM enrichment.
+  const chunks: SemanticChunk[] = [];
+  let pendingSentences: SentenceWithPage[] = [];
+  let pendingHeading: string | undefined;
+
+  for (const chunk of rawChunks) {
+    const chunkWords = chunk.text.split(/\s+/).length;
+
+    if (chunkWords < MIN_CHUNK_WORDS && chunks.length > 0) {
+      // Too small — accumulate sentences for merging into next chunk
+      if (pendingSentences.length === 0) {
+        pendingHeading = chunks[chunks.length - 1].heading;
+      }
+      // Append current small chunk's sentences to pending
+      const chunkSentenceObjs: SentenceWithPage[] = chunk.sentences.map((text, idx) => ({
+        text,
+        pageNumber: chunk.pageStart + Math.floor(idx / Math.max(1, chunk.sentences.length) * (chunk.pageEnd - chunk.pageStart)),
+      }));
+
+      if (pendingSentences.length === 0) {
+        // Pull the previous chunk back for merging
+        const prev = chunks.pop()!;
+        pendingHeading = prev.heading;
+        pendingSentences = prev.sentences.map((text, idx) => ({
+          text,
+          pageNumber: prev.pageStart + Math.floor(idx / Math.max(1, prev.sentences.length) * (prev.pageEnd - prev.pageStart)),
+        }));
+      }
+
+      pendingSentences.push(...chunkSentenceObjs);
+    } else if (pendingSentences.length > 0) {
+      // We have pending sentences from a merge — combine with this chunk
+      const chunkSentenceObjs: SentenceWithPage[] = chunk.sentences.map((text, idx) => ({
+        text,
+        pageNumber: chunk.pageStart + Math.floor(idx / Math.max(1, chunk.sentences.length) * (chunk.pageEnd - chunk.pageStart)),
+      }));
+      const allSentences = [...pendingSentences, ...chunkSentenceObjs];
+      chunks.push(buildChunkFromSentences(allSentences, chunks.length + 1, pendingHeading));
+      pendingSentences = [];
+      pendingHeading = undefined;
+    } else {
+      chunks.push(chunk);
+    }
+  }
+
+  // Flush any remaining pending sentences
+  if (pendingSentences.length > 0) {
+    chunks.push(buildChunkFromSentences(pendingSentences, chunks.length + 1, pendingHeading));
+  }
+
+  // Re-number chunk IDs
+  for (let i = 0; i < chunks.length; i++) {
+    chunks[i].id = `chunk-${i + 1}`;
   }
 
   return chunks;

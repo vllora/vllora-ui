@@ -6,6 +6,7 @@
 import { DatasetRecord } from "@/types/dataset-types";
 import { getLabel, getDataAsObject } from "./record-utils";
 import { extractMessages } from "./records-table/cells/ConversationThreadCell.utilities";
+import { parseChunkRef } from "@/lib/distri-finetune-tools/steps/shared/chunk-lookup";
 
 export type SortField = "timestamp" | "topic" | "evaluation";
 export type SortDirection = "asc" | "desc";
@@ -38,6 +39,8 @@ export interface RecordFilterOptions {
   role?: RecordRole;
   /** Filter by stat category (P0-19: clickable stats navigation) */
   statFilter?: StatFilter;
+  /** Filter by source document ID (show only records generated from this knowledge source) */
+  sourceDocumentId?: string;
 }
 
 export interface RecordSortOptions {
@@ -84,6 +87,15 @@ export function filterRecords(
     filtered = filtered.filter(r => !!r.topic);
   } else if (options.statFilter === "evaluated") {
     filtered = filtered.filter(r => r.evaluation?.score !== undefined);
+  }
+
+  // Filter by source document
+  if (options.sourceDocumentId) {
+    const targetSourceId = options.sourceDocumentId;
+    filtered = filtered.filter(r => {
+      const refs = (r.metadata?.sourceChunkRefs as string[]) || [];
+      return refs.some(ref => parseChunkRef(ref)?.sourceId === targetSourceId);
+    });
   }
 
   // Filter by search query (searches in label, topic, spanId, and message content)

@@ -20,6 +20,12 @@ interface KnowledgeSourceCardProps {
   onDelete: () => void;
   /** Compact mode: hides delete button and expand controls */
   compact?: boolean;
+  /** Number of records generated from this source */
+  recordCount?: number;
+  /** Coverage percentage (0-100) of this source's chunks */
+  coveragePercent?: number;
+  /** Callback to filter records table by this source */
+  onFilterBySource?: () => void;
 }
 
 /**
@@ -52,6 +58,9 @@ export function KnowledgeSourceCard({
   onToggleExpand,
   onDelete,
   compact = false,
+  recordCount,
+  coveragePercent,
+  onFilterBySource,
 }: KnowledgeSourceCardProps) {
   const hasContent =
     source.extractedContent &&
@@ -90,11 +99,30 @@ export function KnowledgeSourceCard({
           <p className="text-sm font-medium truncate">{source.name}</p>
           <p className="text-xs text-muted-foreground">
             {source.type.toUpperCase()}
-            {source.extractedContent?.sectionHeadings && source.extractedContent.sectionHeadings.length > 0 && (
-              <> &middot; {source.extractedContent.sectionHeadings.length} sections</>
-            )}
-            {source.extractedContent?.sections && source.extractedContent.sections.length > 0 && (
+            {/* Show section count — prefer sections over sectionHeadings to avoid duplication */}
+            {source.extractedContent?.sections && source.extractedContent.sections.length > 0 ? (
               <> &middot; {source.extractedContent.sections.length} sections</>
+            ) : source.extractedContent?.sectionHeadings && source.extractedContent.sectionHeadings.length > 0 ? (
+              <> &middot; {source.extractedContent.sectionHeadings.length} sections</>
+            ) : null}
+            {recordCount != null && recordCount > 0 && (
+              <>
+                {' '}&middot;{' '}
+                {onFilterBySource ? (
+                  <button
+                    type="button"
+                    className="text-blue-400 hover:underline"
+                    onClick={(e) => { e.stopPropagation(); onFilterBySource(); }}
+                  >
+                    {recordCount} record{recordCount !== 1 ? 's' : ''}
+                  </button>
+                ) : (
+                  <span>{recordCount} record{recordCount !== 1 ? 's' : ''}</span>
+                )}
+              </>
+            )}
+            {coveragePercent != null && (
+              <> &middot; {coveragePercent}% covered</>
             )}
           </p>
         </div>

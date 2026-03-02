@@ -5,11 +5,13 @@
  * Clicking opens the record detail sidebar via onExpand.
  */
 
-import { useState, forwardRef, useCallback } from "react";
-import { Sparkles } from "lucide-react";
+import { useState, forwardRef, useCallback, useMemo } from "react";
+import { Sparkles, FileText } from "lucide-react";
 import { DatasetRecord } from "@/types/dataset-types";
 import { cn } from "@/lib/utils";
 import { emitter } from "@/utils/eventEmitter";
+import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
+import { getRecordSourceAttributions } from "@/lib/distri-finetune-tools/steps/shared/source-attribution";
 import { ConversationThreadCell, TopicCell, RecordActions, SelectionCheckbox, QualityIndicator, StatsBadge } from "./cells";
 import { RecordDataDialog } from "./RecordDataDialog";
 import { COLUMN_WIDTHS } from "../table-columns";
@@ -64,6 +66,16 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
   isHighlighted = false,
 }, ref) {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const { sources } = KnowledgeSourcesConsumer();
+
+  // Resolve source document attributions from record metadata
+  const sourceAttributions = useMemo(
+    () => getRecordSourceAttributions(
+      record.metadata?.sourceChunkRefs as string[] | undefined,
+      sources,
+    ),
+    [record.metadata, sources],
+  );
 
   const handleClick = onExpand ? () => onExpand(record) : undefined;
 
@@ -128,6 +140,17 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
           <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))] shrink-0">
             <Sparkles className="w-2.5 h-2.5" />
             AI
+          </span>
+        )}
+
+        {/* Source document badge */}
+        {sourceAttributions.length > 0 && (
+          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-400 shrink-0 max-w-[120px]">
+            <FileText className="w-2.5 h-2.5 shrink-0" />
+            <span className="truncate">{sourceAttributions[0].sourceName.replace(/\.[^.]+$/, '')}</span>
+            {sourceAttributions.length > 1 && (
+              <span className="text-blue-400/60 ml-0.5 shrink-0">+{sourceAttributions.length - 1}</span>
+            )}
           </span>
         )}
 

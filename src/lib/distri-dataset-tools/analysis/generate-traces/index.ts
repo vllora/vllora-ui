@@ -144,6 +144,7 @@ async function generateSingleRecord(
         seed_record_id: seedRecord?.id,
         seed_topic_path: task.topicPath,
         generated_at_ms: Date.now(),
+        sourceChunkRefs: task.sourceChunkRefs || [],
       },
       topic: task.topicId, // Use topic ID (not name) for consistent lookup in UI
       is_generated: true,
@@ -465,6 +466,7 @@ export async function generateTraces(
         tools: effectiveTools,
         generationMode: generation_mode,
         knowledgeContext: topicKnowledgeContexts.get(topic.id),
+        sourceChunkRefs: topic.sourceChunkRefs,
       };
     });
     const personaCache = new Map<string, string[]>();

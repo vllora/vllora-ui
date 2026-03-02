@@ -21,6 +21,7 @@ import {
   ChevronDown,
   FolderTree,
   BarChart3,
+  BookOpen,
   Info,
 } from "lucide-react";
 import {
@@ -35,6 +36,7 @@ import {
 } from "recharts";
 import { cn } from "@/lib/utils";
 import { TopicHierarchyNode } from "@/types/dataset-types";
+import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 
 interface CoverageDistributionDialogProps {
   open: boolean;
@@ -302,6 +304,9 @@ export function CoverageDistributionDialog({
   totalRecords,
   topicHierarchy,
 }: CoverageDistributionDialogProps) {
+  const { dataset } = DatasetDetailConsumer();
+  const knowledgeCoverageStats = dataset?.knowledgeCoverageStats ?? null;
+
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
@@ -420,9 +425,9 @@ export function CoverageDistributionDialog({
 
         <div className="flex-1 overflow-y-auto space-y-4 py-2">
           {/* Summary stats */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className={cn("grid gap-4", knowledgeCoverageStats ? "grid-cols-4" : "grid-cols-3")}>
             <div className="rounded-lg border bg-card p-3">
-              <p className="text-xs text-muted-foreground">Coverage</p>
+              <p className="text-xs text-muted-foreground">Topic Coverage</p>
               <p className="text-2xl font-bold">
                 {coveredTopics}/{totalLeafTopics}
               </p>
@@ -455,6 +460,29 @@ export function CoverageDistributionDialog({
                 min/max ratio
               </p>
             </div>
+            {knowledgeCoverageStats && (
+              <div className="rounded-lg border bg-card p-3">
+                <p className="text-xs text-muted-foreground">Knowledge Coverage</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-2xl font-bold">{knowledgeCoverageStats.coveragePercent}%</p>
+                  <span
+                    className={cn(
+                      "px-2 py-0.5 rounded-full text-xs font-medium",
+                      knowledgeCoverageStats.coveragePercent >= 70
+                        ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                        : knowledgeCoverageStats.coveragePercent >= 40
+                        ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                        : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                    )}
+                  >
+                    {knowledgeCoverageStats.coveredChunks}/{knowledgeCoverageStats.totalChunks}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  chunks covered
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Balance Score Explanation */}
@@ -473,17 +501,23 @@ export function CoverageDistributionDialog({
             </div>
           </div>
 
-          {/* Tabs for Distribution Chart and Topic Hierarchy */}
+          {/* Tabs for Distribution Chart, Topic Hierarchy, and Knowledge */}
           <Tabs defaultValue="chart" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className={cn("grid w-full", knowledgeCoverageStats ? "grid-cols-3" : "grid-cols-2")}>
               <TabsTrigger value="chart" className="flex items-center gap-2">
                 <BarChart3 className="h-4 w-4" />
-                Distribution Chart
+                Distribution
               </TabsTrigger>
               <TabsTrigger value="hierarchy" className="flex items-center gap-2">
                 <FolderTree className="h-4 w-4" />
-                Topic Hierarchy
+                Hierarchy
               </TabsTrigger>
+              {knowledgeCoverageStats && (
+                <TabsTrigger value="knowledge" className="flex items-center gap-2">
+                  <BookOpen className="h-4 w-4" />
+                  Knowledge
+                </TabsTrigger>
+              )}
             </TabsList>
 
             {/* Distribution Chart Tab */}
@@ -644,6 +678,103 @@ export function CoverageDistributionDialog({
                 </div>
               </div>
             </TabsContent>
+
+            {/* Knowledge Coverage Tab */}
+            {knowledgeCoverageStats && (
+              <TabsContent value="knowledge" className="mt-4">
+                <div className="rounded-lg border bg-card p-4 space-y-4">
+                  {/* Overall knowledge progress */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-medium">Overall Knowledge Coverage</span>
+                      <span className="text-muted-foreground">
+                        {knowledgeCoverageStats.coveredChunks} of {knowledgeCoverageStats.totalChunks} chunks covered
+                      </span>
+                    </div>
+                    <div className="h-3 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className={cn(
+                          "h-full rounded-full transition-all",
+                          knowledgeCoverageStats.coveragePercent >= 70
+                            ? "bg-green-500"
+                            : knowledgeCoverageStats.coveragePercent >= 40
+                            ? "bg-amber-500"
+                            : "bg-red-500"
+                        )}
+                        style={{ width: `${knowledgeCoverageStats.coveragePercent}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {knowledgeCoverageStats.coveragePercent}% of your knowledge base is represented in training data
+                    </p>
+                  </div>
+
+                  {/* Per-source breakdown */}
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Per-Source Breakdown</p>
+                    <div className="border rounded-md divide-y bg-muted/20">
+                      {Object.entries(knowledgeCoverageStats.bySource).map(([sourceId, source]) => (
+                        <div key={sourceId} className="px-3 py-2.5 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span className="text-sm font-medium">{source.sourceName}</span>
+                            </div>
+                            <span className={cn(
+                              "text-xs px-2 py-0.5 rounded-full font-medium",
+                              source.coveragePercent >= 70
+                                ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                                : source.coveragePercent >= 40
+                                ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                                : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                            )}>
+                              {source.coveredChunks}/{source.totalChunks} ({source.coveragePercent}%)
+                            </span>
+                          </div>
+                          <div className="h-2 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className={cn(
+                                "h-full rounded-full transition-all",
+                                source.coveragePercent >= 70
+                                  ? "bg-green-500"
+                                  : source.coveragePercent >= 40
+                                  ? "bg-amber-500"
+                                  : "bg-red-500"
+                              )}
+                              style={{ width: `${source.coveragePercent}%` }}
+                            />
+                          </div>
+                          {source.uncoveredChunkIds.length > 0 && (
+                            <p className="text-xs text-muted-foreground">
+                              {source.uncoveredChunkIds.length} uncovered chunk{source.uncoveredChunkIds.length !== 1 ? "s" : ""} — generate more data targeting this source
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Explanation */}
+                  <div className="rounded-md bg-muted/30 border p-3">
+                    <div className="flex items-start gap-2">
+                      <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                      <div className="text-xs text-muted-foreground space-y-1">
+                        <p className="font-medium text-foreground">What is knowledge coverage?</p>
+                        <p>
+                          Knowledge sources are split into chunks. Each chunk represents a piece of your source material.
+                          When training data is generated, it references specific chunks. Coverage shows what percentage
+                          of your knowledge base has corresponding training data.
+                        </p>
+                        <p>
+                          High coverage means your model will be trained on content from across your entire knowledge base.
+                          Low coverage indicates gaps — run more data generation to fill them.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+            )}
           </Tabs>
 
           {/* Under-represented warnings */}

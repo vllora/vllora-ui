@@ -94,6 +94,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
   });
   const [groupByTopic, setGroupByTopic] = useState(false);
   const [generatedFilter, setGeneratedFilter] = useState<GeneratedFilter>("all");
+  const [sourceDocumentFilter, setSourceDocumentFilter] = useState<string | null>(null);
 
   // Column visibility with localStorage persistence
   const [columnVisibility, setColumnVisibilityState] = useState<ColumnVisibility>(() => {
@@ -216,10 +217,10 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     () =>
       filterAndSortRecords(
         records,
-        { search: searchQuery, generated: generatedFilter },
+        { search: searchQuery, generated: generatedFilter, sourceDocumentId: sourceDocumentFilter || undefined },
         { field: sortConfig.field, direction: sortConfig.direction }
       ),
-    [records, searchQuery, generatedFilter, sortConfig]
+    [records, searchQuery, generatedFilter, sourceDocumentFilter, sortConfig]
   );
 
   // Load dataset and records (with loading indicator for initial load)
@@ -321,6 +322,22 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
       emitter.off("vllora_dataset_records_deleted" as any, handleRecordsDeleted);
     };
   }, [datasetId, selectedRecordIds, setSelectedRecordIds]);
+
+  // Listen for source document filter events (from KnowledgeSourceCard clicks)
+  useEffect(() => {
+    const handleFilterBySource = (event: { datasetId: string; sourceId: string | null }) => {
+      if (event.datasetId !== datasetId) return;
+      setSourceDocumentFilter(event.sourceId);
+      if (event.sourceId) {
+        // Switch to records tab (uses existing vllora_switch_tab → workspace tab system)
+        emitter.emit("vllora_switch_tab", { datasetId, tab: "records" });
+      }
+    };
+    emitter.on("vllora_filter_by_source", handleFilterBySource);
+    return () => {
+      emitter.off("vllora_filter_by_source", handleFilterBySource);
+    };
+  }, [datasetId]);
 
   // Update dataset from context when it changes
   useEffect(() => {
@@ -1284,6 +1301,8 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     setGroupByTopic,
     generatedFilter,
     setGeneratedFilter,
+    sourceDocumentFilter,
+    setSourceDocumentFilter,
 
     // Column visibility
     columnVisibility,

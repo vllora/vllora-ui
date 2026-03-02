@@ -36,6 +36,8 @@ interface KnowledgeSourcesContextType {
   isProcessing: boolean;
   /** Sources that are currently processing (for per-doc status UI) */
   processingSources: KnowledgeSource[];
+  /** Whether the initial fetch from IndexedDB has completed */
+  hasLoaded: boolean;
   /** Manually trigger a refresh */
   refreshSources: () => void;
 }
@@ -57,14 +59,17 @@ interface KnowledgeSourcesProviderProps {
 
 export function KnowledgeSourcesProvider({ datasetId, children }: KnowledgeSourcesProviderProps) {
   const [sources, setSources] = useState<KnowledgeSource[]>([]);
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   const fetchSources = useCallback(async () => {
     if (!datasetId) return;
     try {
       const result = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
       setSources(result);
+      setHasLoaded(true);
     } catch (error) {
       console.error("[KnowledgeSourcesContext] Error fetching sources:", error);
+      setHasLoaded(true); // Mark loaded even on error to unblock consumers
     }
   }, [datasetId]);
 
@@ -96,6 +101,7 @@ export function KnowledgeSourcesProvider({ datasetId, children }: KnowledgeSourc
     processingCount,
     isProcessing,
     processingSources,
+    hasLoaded,
     refreshSources: fetchSources,
   };
 

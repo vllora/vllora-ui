@@ -83,6 +83,8 @@ export interface TopicGenerationTask {
   generationMode: 'rft' | 'sft';
   /** Resolved knowledge source text for prompt injection (from sourceChunkRefs) */
   knowledgeContext?: string;
+  /** Original chunk refs for lineage tracking on generated records */
+  sourceChunkRefs?: string[];
 }
 
 export interface TopicGenerationResult {

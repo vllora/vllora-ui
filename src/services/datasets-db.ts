@@ -1263,6 +1263,38 @@ export async function updateDatasetCoverageStats(
 }
 
 /**
+ * Update knowledge coverage statistics for a dataset
+ */
+export async function updateDatasetKnowledgeCoverageStats(
+  datasetId: string,
+  knowledgeCoverageStats: import('@/types/dataset-types').KnowledgeCoverageStats
+): Promise<void> {
+  const db = await getDB();
+  const now = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('datasets', 'readwrite');
+    const store = tx.objectStore('datasets');
+
+    const getRequest = store.get(datasetId);
+    getRequest.onsuccess = () => {
+      const dataset = getRequest.result;
+      if (dataset) {
+        dataset.knowledgeCoverageStats = knowledgeCoverageStats;
+        dataset.updatedAt = now;
+        store.put(dataset);
+      }
+    };
+
+    tx.oncomplete = () => {
+      emitter.emit(DATASET_REFRESH_EVENT as any, { datasetId });
+      resolve();
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/**
  * Update dry run statistics for a dataset
  */
 export async function updateDatasetDryRunStats(

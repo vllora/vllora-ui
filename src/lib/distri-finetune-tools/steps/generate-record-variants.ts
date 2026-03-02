@@ -363,6 +363,7 @@ export const generateRecordVariantsHandler: ToolHandler = async (
 
     // Resolve knowledge source chunks for the record's topic
     let knowledgeContext: string | undefined;
+    let resolvedChunkRefs: string[] = [];
     if (sourceRecord.topic) {
       try {
         const dataset = await datasetsDB.getDatasetById(dataset_id);
@@ -383,6 +384,7 @@ export const generateRecordVariantsHandler: ToolHandler = async (
           }
           console.log(`[generateRecordVariants] Topic node lookup: ${topicNode ? `found "${topicNode.name}" with ${topicNode.sourceChunkRefs?.length ?? 0} chunk refs` : 'not found'}`);
           if (topicNode?.sourceChunkRefs?.length) {
+            resolvedChunkRefs = topicNode.sourceChunkRefs;
             const resolvedChunks = await resolveChunkRefs(dataset_id, topicNode.sourceChunkRefs);
             console.log(`[generateRecordVariants] Resolved ${resolvedChunks.length} chunks from ${topicNode.sourceChunkRefs.length} refs for topic "${sourceRecord.topic}"`);
             if (resolvedChunks.length > 0) {
@@ -419,6 +421,7 @@ export const generateRecordVariantsHandler: ToolHandler = async (
         generation_source: "record_variant",
         source_record_id: record_id,
         generated_at_ms: Date.now(),
+        sourceChunkRefs: resolvedChunkRefs,
       },
     }));
 

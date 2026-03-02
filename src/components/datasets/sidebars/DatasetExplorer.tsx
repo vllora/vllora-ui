@@ -44,6 +44,7 @@ import { NewJobDialog } from "@/components/finetune/content/NewJobDialog";
 import { NewEvaluationDialog } from "@/components/datasets/evaluation-dialog/NewEvaluationDialog";
 import type { FileTreeNode, FileTreeBadge } from "./types";
 import type { TopicHierarchyNode } from "@/types/dataset-types";
+import { computeSourceRecordStats } from "@/lib/distri-finetune-tools/steps/shared/source-record-counts";
 
 // ============================================================================
 // Icon helpers (consistent sizing for tree items)
@@ -121,6 +122,12 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
     () => new Set(["documents", "data", "evaluations", "finetune", "insights"])
   );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  // Per-source record counts for document node badges
+  const sourceRecordStats = useMemo(
+    () => computeSourceRecordStats(records, dataset?.knowledgeCoverageStats),
+    [records, dataset?.knowledgeCoverageStats],
+  );
 
   // New finetune job dialog
   const [showNewJobDialog, setShowNewJobDialog] = useState(false);
@@ -244,11 +251,20 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
             icon: <Loader2 className={`${BADGE_CLS} animate-spin`} />,
             tooltip: "Processing document",
           };
-          if (src.status === "ready") return {
-            label: "done", variant: "success" as const,
-            icon: <CheckCircle2 className={BADGE_CLS} />,
-            tooltip: "Document ready",
-          };
+          if (src.status === "ready") {
+            const recCount = sourceRecordStats.get(src.id)?.recordCount;
+            if (recCount && recCount > 0) {
+              return {
+                label: `${recCount} rec`, variant: "count" as const,
+                tooltip: `${recCount} record${recCount !== 1 ? "s" : ""} generated from this document`,
+              };
+            }
+            return {
+              label: "done", variant: "success" as const,
+              icon: <CheckCircle2 className={BADGE_CLS} />,
+              tooltip: "Document ready",
+            };
+          }
           if (src.status === "failed") return {
             label: "error", variant: "error" as const,
             icon: <XCircle className={BADGE_CLS} />,

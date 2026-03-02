@@ -147,6 +147,8 @@ type VlloraEvents = {
   };
   // Docs are still processing — UI should auto-prompt Lucy when they're done
   vllora_docs_awaiting_plan: { datasetId: string };
+  // Filter records table by source document (from KnowledgeSourceCard clicks)
+  vllora_filter_by_source: { datasetId: string; sourceId: string | null };
 };
 
 // ============================================================================

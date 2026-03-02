@@ -1,6 +1,6 @@
 # Lucy Finetune Dataset — Event Emitter Guide
 
-> Last updated: 2026-02-12
+> Last updated: 2026-03-02
 
 ## Why Events?
 
@@ -417,6 +417,27 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 | File | What it does |
 |------|-------------|
 | `LucyDatasetAssistant.tsx` | Sets `pendingDocsPlanTriggerRef` so Lucy auto-triggers plan proposal when docs finish processing |
+
+---
+
+### 15. `vllora_filter_by_source`
+
+**Purpose:** Filter the records table to show only records generated from a specific knowledge source document.
+
+| | Details |
+|---|---|
+| **Data** | `{ datasetId: string; sourceId: string \| null }` |
+| **Direction** | React → React |
+
+**Emitters:**
+| File | When |
+|------|------|
+| `KnowledgeSourcesPanel.tsx` | User clicks record count link on a `KnowledgeSourceCard` |
+
+**Listener:**
+| File | What it does |
+|------|-------------|
+| `DatasetDetailContext.tsx` | Sets `sourceDocumentFilter` state and switches to records tab. The filter is passed to `filterAndSortRecords()` which uses `parseChunkRef()` to match records by their `metadata.sourceChunkRefs`. |
 
 ---
 

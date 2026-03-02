@@ -10,11 +10,12 @@ import * as workflowDB from '@/services/finetune-workflow-db';
 import * as datasetsDB from '@/services/datasets-db';
 import type { ToolHandler, AnalyzeCoverageResult } from '../types';
 
-// Import shared analysis function
+// Import shared analysis functions
 import {
   analyzeCoverage as existingAnalyzeCoverage,
   calculateAndSaveCoverageStats,
 } from '@/lib/distri-dataset-tools/analysis/analyze-coverage';
+import { analyzeKnowledgeCoverage } from '@/lib/distri-dataset-tools/analysis/analyze-knowledge-coverage';
 
 export const analyzeCoverageHandler: ToolHandler = async (params): Promise<AnalyzeCoverageResult> => {
   try {
@@ -38,6 +39,12 @@ export const analyzeCoverageHandler: ToolHandler = async (params): Promise<Analy
 
     // Use shared function to calculate and save coverage stats to dataset
     const coverageStats = await calculateAndSaveCoverageStats(workflow.datasetId);
+
+    // Calculate and save knowledge coverage stats (which chunks are used)
+    const knowledgeCoverage = await analyzeKnowledgeCoverage(workflow.datasetId);
+    if (knowledgeCoverage) {
+      await datasetsDB.updateDatasetKnowledgeCoverageStats(workflow.datasetId, knowledgeCoverage);
+    }
 
     // Get full coverage report for response (includes distribution details)
     const records = await datasetsDB.getRecordsByDatasetId(workflow.datasetId);
@@ -83,6 +90,17 @@ export const analyzeCoverageHandler: ToolHandler = async (params): Promise<Analy
         distribution,
         recommendations: coverageReport.recommendations,
         uncategorized_count: coverageStats.uncategorizedCount,
+        knowledge_coverage: knowledgeCoverage ? {
+          total_chunks: knowledgeCoverage.totalChunks,
+          covered_chunks: knowledgeCoverage.coveredChunks,
+          coverage_percent: knowledgeCoverage.coveragePercent,
+          by_source: Object.fromEntries(
+            Object.entries(knowledgeCoverage.bySource).map(([id, s]) => [
+              id,
+              { name: s.sourceName, covered: s.coveredChunks, total: s.totalChunks, percent: s.coveragePercent },
+            ]),
+          ),
+        } : undefined,
       },
     };
   } catch (error) {

@@ -215,6 +215,43 @@ async function getKnowledgeContext(datasetId: string): Promise<KnowledgeContext>
   }
 }
 
+/**
+ * Get all chunk refs for a dataset's knowledge sources.
+ * Used as fallback when topic-level sourceChunkRefs are empty but documents exist.
+ * Returns refs in "sourceId:chunkId" format.
+ */
+async function getAllSourceChunkRefs(datasetId: string): Promise<string[]> {
+  try {
+    const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
+    const readySources = sources.filter(s => s.status === "ready" && s.extractedContent);
+    const refs: string[] = [];
+
+    for (const source of readySources) {
+      const metadata = source.extractedContent?.metadata as Record<string, unknown> | undefined;
+      const extractionMethod = metadata?.extractionMethod as string | undefined;
+
+      if (extractionMethod === "local-semantic") {
+        // Semantic chunks have explicit IDs
+        const chunks = (metadata?.chunks as Array<{ id: string }>) || [];
+        for (const chunk of chunks) {
+          refs.push(`${source.id}:${chunk.id}`);
+        }
+      } else {
+        // Legacy sections: use section-N format
+        const sections = source.extractedContent?.sections || [];
+        for (let i = 0; i < sections.length; i++) {
+          refs.push(`${source.id}:section-${i}`);
+        }
+      }
+    }
+
+    return refs;
+  } catch (err) {
+    console.warn("[generateInitialData] Failed to get all source chunk refs:", err);
+    return [];
+  }
+}
+
 // =============================================================================
 // Prompts
 // =============================================================================
@@ -659,6 +696,10 @@ export const generateInitialDataHandler: ToolHandler = async (
 
     // Fetch knowledge sources for grounded generation
     const knowledgeContext = await getKnowledgeContext(dataset_id);
+    // Pre-compute fallback chunk refs for when topic-level refs are empty
+    const fallbackChunkRefs = knowledgeContext.hasKnowledge
+      ? await getAllSourceChunkRefs(dataset_id)
+      : [];
     if (knowledgeContext.hasKnowledge) {
       console.log(
         "[generateInitialData] Using knowledge sources:",
@@ -667,6 +708,10 @@ export const generateInitialDataHandler: ToolHandler = async (
       console.log(
         "[generateInitialData] Knowledge topics:",
         knowledgeContext.topics.slice(0, 5).join(", "),
+      );
+      console.log(
+        "[generateInitialData] Fallback chunk refs:",
+        fallbackChunkRefs.length,
       );
     }
 
@@ -822,6 +867,9 @@ export const generateInitialDataHandler: ToolHandler = async (
               generation_mode,
               generated_at_ms: Date.now(),
               topic_path: job.topic.path.join(" > "),
+              sourceChunkRefs: job.topic.sourceChunkRefs?.length
+                ? job.topic.sourceChunkRefs
+                : fallbackChunkRefs,
             },
           }));
 
@@ -918,6 +966,7 @@ export const generateInitialDataHandler: ToolHandler = async (
               generation_mode,
               generated_at_ms: Date.now(),
               batch_index: batchIndex,
+              sourceChunkRefs: fallbackChunkRefs,
             },
           }));
 

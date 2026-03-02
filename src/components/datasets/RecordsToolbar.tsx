@@ -30,6 +30,8 @@ import {
   Star,
   Layers,
   Columns,
+  FileText,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BulkActionButtons } from "./BulkActionButtons";
@@ -84,6 +86,12 @@ interface RecordsToolbarProps {
   columnVisibility?: ColumnVisibility;
   /** Column visibility change handler */
   onColumnVisibilityChange?: (visibility: ColumnVisibility) => void;
+  /** Currently active source document filter (source ID or null) */
+  sourceDocumentFilter?: string | null;
+  /** Change handler for source document filter */
+  onSourceDocumentFilterChange?: (sourceId: string | null) => void;
+  /** Available knowledge sources for the filter dropdown */
+  knowledgeSources?: { id: string; name: string }[];
 }
 
 
@@ -119,8 +127,14 @@ export function RecordsToolbar({
   onDeleteSelected,
   columnVisibility,
   onColumnVisibilityChange,
+  sourceDocumentFilter,
+  onSourceDocumentFilterChange,
+  knowledgeSources,
 }: RecordsToolbarProps) {
   const hasSelection = selectedCount > 0;
+  const activeSourceName = sourceDocumentFilter
+    ? knowledgeSources?.find(s => s.id === sourceDocumentFilter)?.name
+    : null;
   const currentSort = sortConfig || { field: "timestamp", direction: "desc" };
 
   const handleSortFieldChange = (field: SortField) => {
@@ -194,6 +208,56 @@ export function RecordsToolbar({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* Source document filter */}
+          {knowledgeSources && knowledgeSources.length > 0 && (
+            <>
+              {activeSourceName ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1.5 px-2 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 hover:text-blue-400"
+                  onClick={() => onSourceDocumentFilterChange?.(null)}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span className="text-xs truncate max-w-[100px]">{activeSourceName}</span>
+                  <X className="w-3 h-3 ml-0.5" />
+                </Button>
+              ) : (
+                <DropdownMenu>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <FileText className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Filter by source document</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <DropdownMenuContent align="start" className="w-56">
+                    <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                      Source Document
+                    </div>
+                    {knowledgeSources.map((source) => (
+                      <DropdownMenuItem
+                        key={source.id}
+                        onClick={() => onSourceDocumentFilterChange?.(source.id)}
+                        className="gap-2"
+                      >
+                        <FileText className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                        <span className="flex-1 truncate">{source.name}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </>
+          )}
 
           {/* Sort dropdown */}
           <DropdownMenu>

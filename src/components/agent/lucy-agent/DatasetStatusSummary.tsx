@@ -6,6 +6,7 @@
  * All data is read from local contexts (zero LLM calls).
  */
 
+import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { FinetuneWorkflowState } from '@/services/finetune-workflow-db';
 import type { PlanStatus } from '@/lib/distri-finetune-tools/steps/proposed-plan-store';
@@ -20,6 +21,8 @@ export interface DatasetStatusSummaryProps {
   hasEvalScript: boolean;
   jobCount: number;
   planStatus: PlanStatus | null;
+  /** Whether documents are currently being processed/extracted */
+  docsProcessing?: boolean;
 }
 
 // ============================================================================
@@ -27,7 +30,7 @@ export interface DatasetStatusSummaryProps {
 // ============================================================================
 
 export function DatasetStatusSummary(props: DatasetStatusSummaryProps) {
-  const { recordCount, workflow, hasEvalScript, planStatus } = props;
+  const { recordCount, workflow, hasEvalScript, planStatus, docsProcessing } = props;
 
   const topicCount = workflow?.topicsConfig?.topicCount;
   const dryRun = workflow?.dryRun;
@@ -54,7 +57,14 @@ export function DatasetStatusSummary(props: DatasetStatusSummaryProps) {
 
   return (
     <div className="space-y-2">
-      <p className="text-sm">Welcome back!</p>
+      {docsProcessing ? (
+        <p className="text-sm flex items-center gap-1.5">
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-[rgb(var(--theme-500))]" />
+          Processing your documents...
+        </p>
+      ) : (
+        <p className="text-sm">Welcome back!</p>
+      )}
 
       <div className="rounded-lg bg-zinc-900/50 border border-zinc-800 px-3 py-2.5">
         <div className="flex items-center gap-4 text-[11px]">
@@ -99,7 +109,11 @@ export function DatasetStatusSummary(props: DatasetStatusSummaryProps) {
         </div>
       </div>
 
-      {planStatus === 'executing' ? (
+      {docsProcessing ? (
+        <p className="text-sm text-muted-foreground">
+          I'll create a plan once your documents are ready.
+        </p>
+      ) : planStatus === 'executing' ? (
         <p className="text-sm text-muted-foreground">
           A plan is currently executing — ask me about the progress.
         </p>
