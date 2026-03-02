@@ -300,20 +300,29 @@ export function FileTreeItem({
       </div>
 
       {/* Children (expanded folders) */}
-      {isExpanded && hasChildren && (
-        <>
-          {node.children!.map((child) => (
-            <FileTreeItem
-              key={child.id}
-              node={child}
-              level={level + 1}
-              expandedNodes={expandedNodes}
-              selectedNodeId={selectedNodeId}
-              onToggle={onToggle}
-              onSelect={onSelect}
-            />
-          ))}
-        </>
+      {isExpanded && (
+        hasChildren ? (
+          <>
+            {node.children!.map((child) => (
+              <FileTreeItem
+                key={child.id}
+                node={child}
+                level={level + 1}
+                expandedNodes={expandedNodes}
+                selectedNodeId={selectedNodeId}
+                onToggle={onToggle}
+                onSelect={onSelect}
+              />
+            ))}
+          </>
+        ) : node.emptyText ? (
+          <div
+            className="text-[11px] text-muted-foreground/40 italic select-none"
+            style={{ paddingLeft: `${BASE_PX + (level + 1) * INDENT_PX + 20}px` }}
+          >
+            {node.emptyText}
+          </div>
+        ) : null
       )}
     </>
   );

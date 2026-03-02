@@ -367,6 +367,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         icon: folderIcon(expandedNodes, "evaluations/jobs"),
         children: jobChildren,
         isExpandable: true,
+        emptyText: "No evaluation runs yet",
         actions: [
           {
             key: "run-eval",
