@@ -10,7 +10,7 @@
 
 import { useCallback, useRef, useState, useMemo } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Trash2, ChevronRight, Coins, MessageSquare, Sparkles } from "lucide-react";
+import { Trash2, ChevronRight, Coins, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -18,10 +18,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { extractMessages, getRoleLabel, getRoleStyle, cleanText } from "../records-table/cells/ConversationThreadCell.utilities";
-import { estimateTokens, countTurns } from "../records-table/cells/StatsBadge";
-import { countTools } from "../records-table/cells/ToolsBadge";
-import { CoverageIndicator } from "./CoverageIndicator";
+import { extractMessages, cleanText } from "../records-table/cells/ConversationThreadCell.utilities";
+import { estimateTokens } from "../records-table/cells/StatsBadge";
 import type { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 
 // Row heights for virtualizer
@@ -46,23 +44,23 @@ interface CompactRecordListProps {
 
 function CompactRecordRow({ record, onDelete, onSelectRecord }: { record: DatasetRecord; onDelete?: (id: string) => void; onSelectRecord?: (record: DatasetRecord) => void }) {
   const messages = extractMessages(record.data);
-  const previewMessages = messages.slice(0, 2);
   const tokens = estimateTokens(record.data);
-  const turns = countTurns(record.data);
-  const tools = countTools(record.data);
+
+  // Find first user message and first assistant message
+  const userMsg = messages.find((m) => m.role === "user");
+  const assistantMsg = messages.find((m) => m.role === "assistant");
+  const userText = userMsg ? cleanText(userMsg.content) : "";
+  const assistantText = assistantMsg ? cleanText(assistantMsg.content) : "";
 
   const score = record.evaluation?.score ?? record.evaluation?.dryRunScore;
   const scoreDotColor = score != null
     ? score >= 0.8 ? "bg-emerald-400" : score >= 0.6 ? "bg-amber-400" : "bg-red-400"
     : null;
-  const scoreDotGlow = score != null
-    ? score >= 0.8 ? "shadow-[0_0_4px_rgba(16,185,129,0.5)]" : score >= 0.6 ? "shadow-[0_0_4px_rgba(245,158,11,0.5)]" : "shadow-[0_0_4px_rgba(248,113,113,0.5)]"
-    : null;
 
   return (
     <div
       className={cn(
-        "group/row relative py-2.5 px-4 transition-all border-b border-border/20",
+        "group/row relative py-2 px-3 transition-all border-b border-border/20",
         "hover:bg-muted/30",
         onSelectRecord && "cursor-pointer"
       )}
@@ -71,36 +69,21 @@ function CompactRecordRow({ record, onDelete, onSelectRecord }: { record: Datase
       {/* Hover accent line */}
       <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-[rgba(var(--theme-500),0.3)] opacity-0 group-hover/row:opacity-100 transition-opacity" />
 
-      {/* Message previews */}
-      <div className="flex flex-col gap-1.5 mb-1.5">
-        {previewMessages.map((msg, i) => {
-          const roleLabel = getRoleLabel(msg.role);
-          const { badgeClass, contentClass } = getRoleStyle(msg.role);
-          const text = cleanText(msg.content);
-          const truncated = text.length > 90 ? text.slice(0, 90) + "..." : text;
+      {/* Content-first: user message with 2-line clamp */}
+      <p className="text-xs text-foreground leading-relaxed line-clamp-2 mb-1">
+        {userText || <span className="text-muted-foreground/50 italic">No user message</span>}
+      </p>
 
-          return (
-            <div key={i} className="flex items-baseline gap-2 overflow-hidden">
-              <span className={cn(
-                "shrink-0 text-[10px] font-bold tracking-wider uppercase px-1.5 py-0.5 rounded text-center",
-                badgeClass
-              )}>
-                {roleLabel}
-              </span>
-              <span className={cn("text-xs truncate leading-relaxed", contentClass)}>
-                {truncated || "(empty)"}
-              </span>
-            </div>
-          );
-        })}
-        {previewMessages.length === 0 && (
-          <span className="text-xs text-muted-foreground/50 italic">No messages</span>
-        )}
-      </div>
+      {/* Dimmed assistant preview */}
+      {assistantText && (
+        <p className="text-[11px] text-muted-foreground/50 truncate mb-1.5">
+          → {assistantText}
+        </p>
+      )}
 
-      {/* Stats footer */}
+      {/* Stats footer: tokens + score + delete */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3 text-[10px] tabular-nums text-muted-foreground/50">
+        <div className="flex items-center gap-2 text-[10px] tabular-nums text-muted-foreground/50">
           {record.is_generated && (
             <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-medium bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]">
               <Sparkles className="w-2 h-2" />
@@ -111,26 +94,13 @@ function CompactRecordRow({ record, onDelete, onSelectRecord }: { record: Datase
             <Coins className="w-2.5 h-2.5" />
             {tokens.toLocaleString()}
           </span>
-          <span className="flex items-center gap-1">
-            <MessageSquare className="w-2.5 h-2.5" />
-            {turns} turns
-          </span>
-          {tools > 0 && (
-            <span className="flex items-center gap-1">
-              <span className="italic font-serif text-[9px]">fx</span>
-              {tools}
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-1.5">
           {score != null && (
             <TooltipProvider delayDuration={200}>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1.5 bg-muted/50 px-2 py-0.5 rounded-full border border-border/50 cursor-help">
-                    <div className={cn("w-1.5 h-1.5 rounded-full", scoreDotColor, scoreDotGlow)} />
-                    <span className="text-[10px] tabular-nums text-muted-foreground">{score.toFixed(2)}</span>
+                  <div className="flex items-center gap-1 cursor-help">
+                    <div className={cn("w-1.5 h-1.5 rounded-full", scoreDotColor)} />
+                    <span className="text-[10px] tabular-nums">{score.toFixed(2)}</span>
                   </div>
                 </TooltipTrigger>
                 <TooltipContent side="top">
@@ -139,22 +109,22 @@ function CompactRecordRow({ record, onDelete, onSelectRecord }: { record: Datase
               </Tooltip>
             </TooltipProvider>
           )}
-
-          {/* Delete — hover only */}
-          {onDelete && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(record.id);
-              }}
-              className="p-1 rounded text-muted-foreground/0 group-hover/row:text-muted-foreground hover:!text-destructive hover:bg-destructive/10 transition-colors"
-              title="Delete record"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          )}
         </div>
+
+        {/* Delete — hover only */}
+        {onDelete && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(record.id);
+            }}
+            className="p-1 rounded text-muted-foreground/0 group-hover/row:text-muted-foreground hover:!text-destructive hover:bg-destructive/10 transition-colors"
+            title="Delete record"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -173,7 +143,6 @@ function CompactTopicHeader({
   isExpanded,
   onToggle,
   totalCount,
-  percentage,
   hasChildren,
 }: {
   name: string;
@@ -181,7 +150,6 @@ function CompactTopicHeader({
   isExpanded: boolean;
   onToggle: () => void;
   totalCount: number;
-  percentage: number;
   hasChildren: boolean;
 }) {
   return (
@@ -220,17 +188,11 @@ function CompactTopicHeader({
         {name}
       </span>
 
-      {/* Count + coverage — hide when expanded with children */}
+      {/* Count badge — hide when expanded with children */}
       {(!isExpanded || !hasChildren) && totalCount > 0 && (
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span className="text-xs tabular-nums px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-            {totalCount}
-          </span>
-          <CoverageIndicator
-            coveragePercentage={percentage}
-            recordCount={totalCount}
-          />
-        </div>
+        <span className="text-xs tabular-nums px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0">
+          {totalCount}
+        </span>
       )}
     </div>
   );
@@ -431,7 +393,6 @@ function VirtualizedTreeList({
                   isExpanded={item.isExpanded}
                   onToggle={() => toggleNode(item.nodeKey)}
                   totalCount={item.totalCount}
-                  percentage={item.percentage}
                   hasChildren={item.hasChildren}
                 />
               </div>

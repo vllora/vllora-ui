@@ -582,6 +582,7 @@ export function TopicTreeNodeRow({
           isGenerating={node.name === generatingTopic}
           generatingProgress={node.name === generatingTopic ? generatingProgress : undefined}
           highlighted={isHighlightedTopic}
+          generatedCount={directRecords.filter(r => r.is_generated).length}
         />
       </div>
 

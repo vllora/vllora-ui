@@ -51,7 +51,7 @@ import {
 } from "./TabContentRouter";
 import { InsightsPane } from "./InsightsPane";
 import { WorkspaceWelcome } from "./WorkspaceWelcome";
-import type { CoverageStats } from "@/types/dataset-types";
+import type { CoverageStats, TopicHierarchyNode } from "@/types/dataset-types";
 
 // Side-effect: registers plan approval event listener
 import "@/lib/distri-finetune-tools/steps/execute-plan";
@@ -475,6 +475,78 @@ export function DatasetDetailContentV2() {
     return undefined;
   }, [dataset?.coverageStats, dataset?.stats]);
 
+  // Compute per-topic quality scores for canvas nodes.
+  // Leaf topics get scores from their records directly.
+  // Parent topics aggregate scores from all descendant leaves (since records
+  // are only assigned to leaf topics, parents would otherwise show "Not evaluated").
+  const topicQualityScores = useMemo(() => {
+    const scores: Record<string, { avg: number; count: number; evaluated: number }> = {};
+    const buckets: Record<string, { total: number; evalCount: number; sum: number }> = {};
+
+    // Step 1: Bucket scores from records (leaf topics only)
+    for (const record of sortedRecords) {
+      const topic = record.topic;
+      if (!topic) continue;
+      if (!buckets[topic]) {
+        buckets[topic] = { total: 0, evalCount: 0, sum: 0 };
+      }
+      buckets[topic].total++;
+      const score = record.evaluation?.score;
+      if (score !== undefined && score !== null) {
+        buckets[topic].evalCount++;
+        buckets[topic].sum += score;
+      }
+    }
+
+    // Convert leaf buckets to scores
+    for (const [topic, bucket] of Object.entries(buckets)) {
+      scores[topic] = {
+        avg: bucket.evalCount > 0 ? bucket.sum / bucket.evalCount : 0,
+        count: bucket.total,
+        evaluated: bucket.evalCount,
+      };
+    }
+
+    // Step 2: Walk hierarchy bottom-up to aggregate parent scores
+    const hierarchy = dataset?.topicHierarchy?.hierarchy;
+    if (hierarchy) {
+      const aggregate = (node: TopicHierarchyNode): { count: number; evaluated: number; sum: number } => {
+        const key = node.id || node.name;
+        const leaf = buckets[key] || (node.id !== node.name ? buckets[node.name] : undefined);
+        let totalCount = leaf?.total ?? 0;
+        let totalEval = leaf?.evalCount ?? 0;
+        let totalSum = leaf?.sum ?? 0;
+
+        if (node.children) {
+          for (const child of node.children) {
+            const childAgg = aggregate(child);
+            totalCount += childAgg.count;
+            totalEval += childAgg.evaluated;
+            totalSum += childAgg.sum;
+          }
+        }
+
+        // Set aggregated score for parent nodes (overwrite if already a leaf)
+        const name = node.name || node.id;
+        if (name && totalCount > 0) {
+          scores[name] = {
+            avg: totalEval > 0 ? totalSum / totalEval : 0,
+            count: totalCount,
+            evaluated: totalEval,
+          };
+        }
+
+        return { count: totalCount, evaluated: totalEval, sum: totalSum };
+      };
+
+      for (const node of hierarchy) {
+        aggregate(node);
+      }
+    }
+
+    return scores;
+  }, [sortedRecords, dataset?.topicHierarchy?.hierarchy]);
+
   // Wrapper for auto-tagging that closes the dialog when done
   const handleAutoTagSelected = async () => {
     await handleAutoTagRecords();
@@ -710,6 +782,7 @@ export function DatasetDetailContentV2() {
               sourceDocumentFilterName={sourceDocumentFilterName}
               onClearSourceDocumentFilter={() => setSourceDocumentFilter(null)}
               onUpdatePromptTemplate={handleUpdatePromptTemplate}
+              topicQualityScores={topicQualityScores}
             />
           )}
           {contentSection === "evaluator-script" && (

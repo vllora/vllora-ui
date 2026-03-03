@@ -20,12 +20,20 @@ interface QualityIndicatorProps {
   className?: string;
   /** Called when user clicks a score — navigate to evaluation/jobs tab */
   onNavigate?: (target: "evaluator" | "jobs") => void;
+  /** Compact mode: colored dot + small score number */
+  compact?: boolean;
 }
 
 function getScoreColor(score: number): string {
   if (score >= 0.8) return "text-emerald-400";
   if (score >= 0.6) return "text-amber-400";
   return "text-red-400";
+}
+
+function getScoreDotColor(score: number): string {
+  if (score >= 0.8) return "bg-emerald-400";
+  if (score >= 0.6) return "bg-amber-400";
+  return "bg-red-400";
 }
 
 function ScoreLine({
@@ -54,7 +62,7 @@ function ScoreLine({
   );
 }
 
-export function QualityIndicator({ evaluation, className, onNavigate }: QualityIndicatorProps) {
+export function QualityIndicator({ evaluation, className, onNavigate, compact }: QualityIndicatorProps) {
   // Normalize: legacy records only have `score` (set by old dry-run code).
   const dryRunLatest = evaluation?.dryRunScore ?? (
     evaluation?.score != null && !evaluation?.finetuneScore ? evaluation.score : undefined
@@ -68,21 +76,13 @@ export function QualityIndicator({ evaluation, className, onNavigate }: QualityI
   const hasDryRun = dryRunLatest != null;
   const hasFinetune = finetuneLatest != null;
 
-  if (!hasDryRun && !hasFinetune) {
-    return (
-      <div className={cn("flex items-center justify-center", className)}>
-        <span className="text-[10px] text-zinc-600">&mdash;</span>
-      </div>
-    );
-  }
-
   // Determine display values and labels
-  const drScore = dryRunCount > 1 && dryRunAvg != null ? dryRunAvg : dryRunLatest!;
+  const drScore = hasDryRun ? (dryRunCount > 1 && dryRunAvg != null ? dryRunAvg : dryRunLatest!) : undefined;
   const drLabel = dryRunCount > 1 ? "Avg Evaluation" : "Evaluation";
-  const ftScore = finetuneCount > 1 && finetuneAvg != null ? finetuneAvg : finetuneLatest!;
+  const ftScore = hasFinetune ? (finetuneCount > 1 && finetuneAvg != null ? finetuneAvg : finetuneLatest!) : undefined;
   const ftLabel = finetuneCount > 1 ? "Avg Finetune" : "Finetune";
 
-  // Tooltip with full detail
+  // Tooltip with full detail (shared between modes)
   const tooltipLines: string[] = [];
   if (hasDryRun) {
     if (dryRunCount > 1 && dryRunAvg != null) {
@@ -104,6 +104,65 @@ export function QualityIndicator({ evaluation, className, onNavigate }: QualityI
     tooltipLines.push("Click to view jobs →");
   }
 
+  // ─── No scores at all ───────────────────────────────────────────────────────
+  if (!hasDryRun && !hasFinetune) {
+    if (compact) {
+      return (
+        <div className={cn("flex items-center gap-1 shrink-0", className)}>
+          <span className="w-1.5 h-1.5 rounded-full bg-zinc-600" />
+        </div>
+      );
+    }
+    return (
+      <div className={cn("flex items-center justify-center", className)}>
+        <span className="text-[10px] text-zinc-600">&mdash;</span>
+      </div>
+    );
+  }
+
+  // ─── Compact mode: colored dot + score number ───────────────────────────────
+  if (compact) {
+    // Pick the primary score to display (prefer dry run, fallback to finetune)
+    const primaryScore = drScore ?? ftScore!;
+    const primaryTarget = hasDryRun ? "evaluator" as const : "jobs" as const;
+
+    return (
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={onNavigate ? (e) => { e.stopPropagation(); onNavigate(primaryTarget); } : undefined}
+              className={cn(
+                "flex items-center gap-1.5 shrink-0 cursor-pointer",
+                onNavigate && "hover:underline",
+                className
+              )}
+            >
+              <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", getScoreDotColor(primaryScore))} />
+              <span className={cn("text-[10px] tabular-nums font-medium", getScoreColor(primaryScore))}>
+                {primaryScore.toFixed(2)}
+              </span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" sideOffset={4}>
+            <div className="text-xs space-y-0.5">
+              {tooltipLines.map((line, i) =>
+                line === "" ? (
+                  <hr key={i} className="border-zinc-700 my-1" />
+                ) : line.startsWith("Click") ? (
+                  <p key={i} className="text-zinc-500 text-[10px]">{line}</p>
+                ) : (
+                  <p key={i}>{line}</p>
+                )
+              )}
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  // ─── Default mode: full score lines ─────────────────────────────────────────
   return (
     <TooltipProvider delayDuration={300}>
       <Tooltip>
@@ -112,14 +171,14 @@ export function QualityIndicator({ evaluation, className, onNavigate }: QualityI
             {hasDryRun && (
               <ScoreLine
                 label={drLabel}
-                score={drScore}
+                score={drScore!}
                 onClick={onNavigate ? () => onNavigate("evaluator") : undefined}
               />
             )}
             {hasFinetune && (
               <ScoreLine
                 label={ftLabel}
-                score={ftScore}
+                score={ftScore!}
                 onClick={onNavigate ? () => onNavigate("jobs") : undefined}
               />
             )}

@@ -138,13 +138,15 @@ Original User Message:
 {{original_message}}
 
 Topic Context: {{subtopics}}
+Assistant System Prompt: {{system_prompt}}
 Persona: {{persona}}
 {{tools_section}}
 Generate a new user message that:
 1. Conveys the same core intent/request as the original
 2. Uses language and tone consistent with the persona
 3. May rephrase, add context, or adjust complexity based on the persona
-4. Should feel natural and realistic
+4. Should feel natural and realistic — like something a real user would ask the assistant described above
+5. Should be appropriate for the assistant's role and expertise as defined in the system prompt
 
 Output only the varied user message, nothing else.`;
 
@@ -160,14 +162,16 @@ Original User Message (use as a reference for the topic/intent):
 {{original_message}}
 
 Topic Context: {{subtopics}}
+Assistant System Prompt: {{system_prompt}}
 {{tools_section}}{{knowledge_context}}
-Generate {{count}} diverse user messages that a real user would ask an assistant about this topic.
+Generate {{count}} diverse user messages that a real user would ask the assistant described above.
 
 Each message should:
 1. Be about the same general topic/domain as the original
 2. Use different language, tone, complexity, and specificity
 3. Cover different angles, sub-aspects, or scenarios within the topic
 4. Feel natural and realistic — like messages from different real users
+5. Be appropriate for the assistant's role and expertise as defined in the system prompt
 
 Diversity guidelines:
 - Complexity: beginner questions to advanced scenarios

@@ -19,14 +19,14 @@ export type CanvasNode = TopicNode | TopicInputNode | RootNode;
 
 // Layout constants - must match TopicNodeComponent sizes
 const NODE_WIDTH_EXPANDED = 700;
-const NODE_HEIGHT_COLLAPSED = 95; // Includes space for system prompt segment line
+const NODE_HEIGHT_COLLAPSED = 105; // Includes quality row + description line
 const NODE_HEIGHT_EXPANDED = 500;
 const NODE_SPACING = 50;
 const RANK_SPACING = 100;
 
-// Root node size (circle with label below)
-const ROOT_NODE_WIDTH = 64;
-const ROOT_NODE_HEIGHT = 90;
+// Root node size (wider pill with objective + stats)
+const ROOT_NODE_WIDTH = 200;
+const ROOT_NODE_HEIGHT = 70;
 
 interface DagreLayoutOptions {
   direction?: "TB" | "LR";
@@ -372,6 +372,7 @@ export function useDagreLayout(
             hasChildren,
             fullPath, // Full hierarchical path for prompts
             depth: nodeDepth, // For system prompt segment display
+            description: node.description, // Topic description for node display
           },
         });
 

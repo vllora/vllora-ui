@@ -1,7 +1,9 @@
 /**
  * ConversationThreadCell
  *
- * Displays conversation thread preview with SYS/USR/AST message labels.
+ * Displays conversation thread preview.
+ * - Default mode: role badges (SYS/USR/AST) with single-line truncation
+ * - Compact mode: content-first cards without badges, 2-line user message, dimmed assistant preview
  */
 
 import { cn } from "@/lib/utils";
@@ -22,15 +24,16 @@ interface ConversationThreadCellProps {
   sourceRecordId?: string;
   /** Hide the system message (when shown at topic group level instead) */
   hideSystemMessage?: boolean;
+  /** Compact mode: content-first, no role badges, 2-line message preview */
+  compact?: boolean;
 }
 
-export function ConversationThreadCell({ data, className, sourceRecordId, hideSystemMessage }: ConversationThreadCellProps) {
+export function ConversationThreadCell({ data, className, sourceRecordId, hideSystemMessage, compact }: ConversationThreadCellProps) {
   let messages = extractMessages(data);
-  if (hideSystemMessage) {
+  if (hideSystemMessage || compact) {
     messages = messages.filter(m => m.role.toLowerCase() !== 'system');
   }
 
-  const displayMessagesCount = Math.min(messages.length, 2);
   if (messages.length === 0) {
     return (
       <div className={cn("flex-1 min-w-0", className)}>
@@ -39,7 +42,54 @@ export function ConversationThreadCell({ data, className, sourceRecordId, hideSy
     );
   }
 
-  // Show first 2 messages with "+X more..." at the bottom
+  // ─── Compact mode: content-first data card ─────────────────────────────────
+  if (compact) {
+    // Find first user message and first assistant message
+    const userMsg = messages.find(m => {
+      const r = m.role.toLowerCase();
+      return r === 'user' || r === 'human';
+    });
+    const assistantMsg = messages.find(m => {
+      const r = m.role.toLowerCase();
+      return r === 'assistant' || r === 'ai' || r === 'model';
+    });
+
+    const userContent = userMsg ? cleanText(userMsg.content) : cleanText(messages[0].content);
+    const assistantContent = assistantMsg ? cleanText(assistantMsg.content) : null;
+
+    return (
+      <div className={cn("flex-1 min-w-0 flex flex-col gap-0.5", className)}>
+        {/* User message: 2-line clamp for more visible content */}
+        <span className="text-[11px] text-foreground line-clamp-2 leading-relaxed">
+          {userContent}
+        </span>
+        {/* Assistant response preview (SFT records) */}
+        {assistantContent && (
+          <span className="text-[10px] text-muted-foreground/60 truncate min-w-0 leading-relaxed">
+            → {assistantContent}
+          </span>
+        )}
+        {/* Variant indicator */}
+        {sourceRecordId && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              window.dispatchEvent(new CustomEvent('vllora_highlight_record', {
+                detail: { recordId: sourceRecordId }
+              }));
+            }}
+            className="text-[10px] text-violet-400/80 hover:text-violet-300 hover:underline cursor-pointer text-left"
+          >
+            ↳ variant of {sourceRecordId.slice(0, 8)}...
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // ─── Default mode: role badges with single-line truncation ─────────────────
+  const displayMessagesCount = Math.min(messages.length, 2);
   const displayMessages = messages.slice(0, displayMessagesCount);
 
   return (

@@ -5,7 +5,7 @@
  * Shows breadcrumb path, record count, coverage indicator, and action buttons.
  */
 
-import { ChevronRight, Trash2, GitBranch, Grid2X2Plus, Loader2 } from "lucide-react";
+import { ChevronRight, Trash2, GitBranch, Grid2X2Plus, Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CoverageIndicator } from "../dataset-canvas/CoverageIndicator";
 import { BreadcrumbPath } from "./BreadcrumbPath";
@@ -47,6 +47,8 @@ export interface TopicNodeHeaderProps {
   generatingProgress?: { completed: number; total: number } | null;
   /** Whether this header is temporarily highlighted (e.g., from canvas "View in Table") */
   highlighted?: boolean;
+  /** Count of AI-generated records under this topic (shown as ✨ indicator) */
+  generatedCount?: number;
 }
 
 export function TopicNodeHeader({
@@ -65,6 +67,7 @@ export function TopicNodeHeader({
   isGenerating,
   generatingProgress,
   highlighted,
+  generatedCount,
 }: TopicNodeHeaderProps) {
   const isUnassigned = variant === "unassigned";
   const topicPath = path.join("/");
@@ -208,7 +211,10 @@ export function TopicNodeHeader({
             <>
               {totalCount > 0 ? (
                 <>
-                  <span className="text-xs tabular-nums px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                  <span className="inline-flex items-center gap-1 text-xs tabular-nums px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                    {generatedCount != null && generatedCount > 0 && (
+                      <Sparkles className="w-2.5 h-2.5 text-[rgb(var(--theme-500))]" />
+                    )}
                     {totalCount}
                   </span>
                   <CoverageIndicator

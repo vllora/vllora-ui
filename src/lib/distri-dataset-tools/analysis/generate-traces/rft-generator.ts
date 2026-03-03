@@ -46,7 +46,8 @@ export async function generateVariedUserMessage(
   originalMessage: string,
   contextStr: string,
   persona: string,
-  tools: any[] = []
+  tools: any[] = [],
+  systemPrompt?: string,
 ): Promise<string> {
   console.log(`[generateVariedUserMessage] Called with:`);
   console.log(`  - originalMessage: "${originalMessage.substring(0, 100)}${originalMessage.length > 100 ? '...' : ''}"`);
@@ -56,6 +57,7 @@ export async function generateVariedUserMessage(
   const prompt = RFT_USER_VARIATION_PROMPT
     .replace('{{original_message}}', originalMessage)
     .replace('{{subtopics}}', contextStr)
+    .replace('{{system_prompt}}', systemPrompt || `You are a helpful assistant specializing in ${contextStr}.`)
     .replace('{{persona}}', persona)
     .replace('{{tools_section}}', buildToolsSection(tools));
 
@@ -151,18 +153,18 @@ export async function generateRFTRecord(
   console.log(`[generateRFTRecord] Last user message object:`, JSON.stringify(lastUserMsg, null, 2).substring(0, 200));
   console.log(`[generateRFTRecord] Original user message to vary (${originalUserMessage.length} chars): "${originalUserMessage.substring(0, 100)}${originalUserMessage.length > 100 ? '...' : ''}"`);
 
+  // Resolve system prompt — topic system prompt takes priority over per-record seed
+  const systemPrompt = topicSystemPrompt || seedSystemPrompt || `You are a helpful assistant specializing in ${topicStr}.`;
+
   // Generate persona and varied user message
   const persona = await ensurePersona(personaCache, topicKey, contextStr);
   console.log(`[generateRFTRecord] Persona: ${persona.substring(0, 50)}...`);
 
-  const variedUserMessage = await generateVariedUserMessage(originalUserMessage, contextStr, persona, tools);
+  const variedUserMessage = await generateVariedUserMessage(originalUserMessage, contextStr, persona, tools, systemPrompt);
   console.log(`[generateRFTRecord] Varied message generated (${variedUserMessage.length} chars)`);
 
   // Build messages: system (if any) + context + varied user message
   const messages: SyntheticMessage[] = [];
-
-  // Add system message — topic system prompt takes priority over per-record seed
-  const systemPrompt = topicSystemPrompt || seedSystemPrompt || `You are a helpful assistant specializing in ${topicStr}.`;
   messages.push({ role: 'system', content: systemPrompt, tool_calls: null, tool_call_id: null });
 
   // Add context messages (excluding system, it's already added)
@@ -233,7 +235,7 @@ export async function generateBatchRFTRecords(
     const actualLastUserIndex = seedMessages.length - 1 - lastUserMsgIndex;
     const originalUserMessage = seedMessages[actualLastUserIndex]?.content || '';
     console.log(`[generateBatchRFTRecords] Generating ${count} variations of: "${originalUserMessage.substring(0, 80)}..."`);
-    userMessages = await generateBatchVariations(originalUserMessage, contextStr, tools, count, knowledgeContext);
+    userMessages = await generateBatchVariations(originalUserMessage, contextStr, tools, count, knowledgeContext, systemPrompt);
   }
 
   console.log(`[generateBatchRFTRecords] LLM returned ${userMessages.length} user messages`);
@@ -273,6 +275,7 @@ async function generateBatchVariations(
   tools: any[],
   count: number,
   knowledgeContext?: string,
+  systemPrompt?: string,
 ): Promise<string[]> {
   const knowledgeSection = knowledgeContext
     ? `\nKnowledge Context (ground your messages in this material):\n${knowledgeContext}\n`
@@ -282,6 +285,7 @@ async function generateBatchVariations(
     .replace(/\{\{count\}\}/g, String(count))
     .replace('{{original_message}}', originalMessage)
     .replace('{{subtopics}}', contextStr)
+    .replace('{{system_prompt}}', systemPrompt || `You are a helpful assistant specializing in ${contextStr}.`)
     .replace('{{tools_section}}', buildToolsSection(tools))
     .replace('{{knowledge_context}}', knowledgeSection);
 

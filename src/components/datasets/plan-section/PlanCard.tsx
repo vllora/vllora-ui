@@ -23,7 +23,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { Plan } from '@/lib/distri-finetune-tools/steps/propose-plan';
-import { buildTopicSystemPrompt } from '@/lib/distri-finetune-tools/steps/shared/topic-system-prompt';
+import { resolveTopicSystemPrompt } from '@/lib/distri-finetune-tools/steps/shared/topic-system-prompt';
 
 interface PlanCardProps {
   plan: Plan;
@@ -204,8 +204,8 @@ export function PlanCard({
                           </div>
                           {/* System prompt preview for leaf subtopics */}
                           {plan.objective && (
-                            <div className="ml-4 text-[10px] text-muted-foreground/70 font-mono leading-tight truncate max-w-[400px]" title={buildTopicSystemPrompt([topic.name, sub.name], plan.objective)}>
-                              {buildTopicSystemPrompt([topic.name, sub.name], plan.objective)}
+                            <div className="ml-4 text-[10px] text-muted-foreground/70 font-mono leading-tight truncate max-w-[400px]" title={resolveTopicSystemPrompt([topic.name, sub.name], plan.objective)}>
+                              {resolveTopicSystemPrompt([topic.name, sub.name], plan.objective)}
                             </div>
                           )}
                         </div>

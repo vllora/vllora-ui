@@ -61,6 +61,8 @@ export interface TopicCanvasProviderProps {
   onViewInTable?: (topicId: string) => void;
   /** Dataset training objective (used for system prompt segment display on nodes) */
   datasetObjective?: string;
+  /** Per-topic quality scores for canvas node display */
+  topicQualityScores?: Record<string, { avg: number; count: number; evaluated: number }>;
 }
 
 // ============================================================================
@@ -85,6 +87,7 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
     onGenerateForTopic,
     onGenerateSubtopics,
     datasetObjective,
+    topicQualityScores,
   } = props;
 
   // Compute available topics from hierarchy (only leaf topics for assignment)
@@ -425,6 +428,8 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
     onViewInTable: props.onViewInTable,
     // Dataset objective (for system prompt segment display)
     datasetObjective,
+    // Per-topic quality scores for node display
+    topicQualityScores,
   };
 }
 

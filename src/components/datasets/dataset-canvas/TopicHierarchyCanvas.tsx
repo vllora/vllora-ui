@@ -81,6 +81,8 @@ interface TopicHierarchyCanvasProps {
   onViewInTable?: (topicId: string) => void;
   /** Dataset training objective (for system prompt segment display on nodes) */
   datasetObjective?: string;
+  /** Per-topic quality scores for canvas node display */
+  topicQualityScores?: Record<string, { avg: number; count: number; evaluated: number }>;
 }
 
 // Inner component that uses the context
@@ -349,6 +351,7 @@ export function TopicHierarchyCanvas({
   onSelectRecordId,
   onViewInTable,
   datasetObjective,
+  topicQualityScores,
 }: TopicHierarchyCanvasProps) {
   return (
     <TopicCanvasProvider
@@ -370,6 +373,7 @@ export function TopicHierarchyCanvas({
       onSelectRecordId={onSelectRecordId}
       onViewInTable={onViewInTable}
       datasetObjective={datasetObjective}
+      topicQualityScores={topicQualityScores}
     >
       <CanvasWithPanel hierarchy={hierarchy} />
       <TopicRecordsDialogWrapper />

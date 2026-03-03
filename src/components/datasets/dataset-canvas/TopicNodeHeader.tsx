@@ -1,8 +1,9 @@
 /**
  * TopicNodeHeader
  *
- * Header section for TopicNodeComponent displaying icon, name, record count, and view records button.
+ * Header section for TopicNodeComponent displaying name and record count badge.
  * Supports inline renaming on double-click (non-root nodes only).
+ * Names are displayed in human-readable title case (e.g., "Move Evaluation").
  */
 
 import { useState, useRef, useEffect } from "react";
@@ -14,16 +15,15 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { CoverageIndicator } from "./CoverageIndicator";
 
 interface TopicNodeHeaderProps {
   name: string;
   recordCount: number;
-  /** For parent nodes: aggregated count of all descendants (used for coverage calculation) */
+  /** For parent nodes: aggregated count of all descendants */
   aggregatedRecordCount?: number;
   isRoot: boolean;
   isExpanded: boolean;
-  /** Coverage percentage from coverageStats (0-100) */
+  /** Coverage percentage from coverageStats (0-100) — shown in record count tooltip */
   coveragePercentage?: number;
   /** Called when the topic is renamed. Only available for non-root nodes. */
   onRename?: (newName: string) => void;
@@ -31,7 +31,17 @@ interface TopicNodeHeaderProps {
   filteredCount?: number | null;
 }
 
-const HEADER_HEIGHT = 60;
+const HEADER_HEIGHT = 44;
+
+/**
+ * Convert snake_case topic names to human-readable Title Case.
+ * e.g., "move_evaluation" → "Move Evaluation"
+ */
+export function formatTopicName(name: string): string {
+  return name
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 export function TopicNodeHeader({
   name,
@@ -109,15 +119,37 @@ export function TopicNodeHeader({
     }
   };
 
+  // Human-readable display name (title case)
+  const formattedDisplayName = formatTopicName(displayName);
+
+  // Record count for display
+  const displayCount = aggregatedRecordCount ?? recordCount;
+  const isAggregated = aggregatedRecordCount !== undefined && aggregatedRecordCount !== recordCount;
+  const hasFilter = filteredCount != null;
+
+  // Build tooltip for record count badge (includes coverage info)
+  const countTooltipLines: string[] = [];
+  if (hasFilter) {
+    countTooltipLines.push(`${filteredCount} of ${displayCount} matching filter`);
+  }
+  countTooltipLines.push(
+    isAggregated
+      ? `${displayCount} records across all child topics`
+      : `${displayCount} records assigned to this topic`
+  );
+  if (coveragePercentage !== undefined) {
+    countTooltipLines.push(`Coverage: ${coveragePercentage.toFixed(1)}% of dataset`);
+  }
+
   return (
     <div
       className={cn(
-        "flex items-center gap-2 px-3 py-2",
+        "flex items-center gap-2 px-3 py-1.5",
         isExpanded && "border-b border-border"
       )}
       style={{ height: HEADER_HEIGHT }}
     >
-      {/* Title - with inline editing */}
+      {/* Title — formatted name with inline editing */}
       <div
         className="flex-1 min-w-0"
         onMouseEnter={() => setIsHovered(true)}
@@ -135,7 +167,7 @@ export function TopicNodeHeader({
             className="font-semibold text-sm w-full bg-transparent border-b border-[rgb(var(--theme-500))] outline-none text-foreground nodrag"
           />
         ) : (
-          <div className="flex items-center gap-1.5 group">
+          <div className="flex items-center gap-1.5">
             <TooltipProvider delayDuration={300}>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -149,15 +181,14 @@ export function TopicNodeHeader({
                       canRename && "cursor-text"
                     )}
                   >
-                    {displayName}
+                    {formattedDisplayName}
                   </span>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">
-                  {displayName}
+                  <p className="text-xs font-mono">{displayName}</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            {/* Edit icon on hover */}
             {canRename && isHovered && (
               <button
                 type="button"
@@ -170,50 +201,30 @@ export function TopicNodeHeader({
             )}
           </div>
         )}
-        {!isExpanded && !isEditing && (
-          (() => {
-            if (isEmptyRoot) {
-              return <p className="text-xs text-muted-foreground">All records assigned</p>;
-            }
-            // For parent nodes, show aggregated count with tooltip; for leaf nodes, show direct count
-            const isAggregated = aggregatedRecordCount !== undefined && aggregatedRecordCount !== recordCount;
-            const displayCount = aggregatedRecordCount ?? recordCount;
-            // 7.4: Show "N of M records" when stat filter is active
-            const hasFilter = filteredCount != null;
-            const countText = hasFilter
-              ? `${filteredCount} of ${displayCount.toLocaleString()} record${displayCount !== 1 ? "s" : ""}`
-              : `${displayCount.toLocaleString()} record${displayCount !== 1 ? "s" : ""}`;
-
-            const tooltipText = hasFilter
-              ? "Matching records based on active filter"
-              : isAggregated
-                ? "Total records across all child topics"
-                : "Records assigned to this topic";
-
-            return (
-              <TooltipProvider delayDuration={200}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <p className="text-xs text-muted-foreground cursor-help">{countText}</p>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    <p className="text-xs">{tooltipText}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            );
-          })()
-        )}
       </div>
 
-      {/* Coverage indicator - show in both expanded and collapsed states */}
-      {coveragePercentage !== undefined && !isEmptyRoot && !isRoot && (
-        <CoverageIndicator
-          coveragePercentage={coveragePercentage}
-          recordCount={aggregatedRecordCount ?? recordCount}
-        />
+      {/* Record count badge (right-aligned) — with coverage info in tooltip */}
+      {!isEditing && !isEmptyRoot && displayCount > 0 && (
+        <TooltipProvider delayDuration={200}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] tabular-nums font-medium bg-muted text-muted-foreground cursor-help shrink-0">
+                {hasFilter ? `${filteredCount}/${displayCount}` : displayCount}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <div className="text-xs space-y-0.5">
+                {countTooltipLines.map((line, i) => (
+                  <p key={i}>{line}</p>
+                ))}
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       )}
-
+      {isEmptyRoot && (
+        <span className="text-[10px] text-muted-foreground/60 shrink-0">All assigned</span>
+      )}
     </div>
   );
 }

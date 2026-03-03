@@ -68,6 +68,9 @@ export interface DatasetMainContentProps {
 
   /** Handler for updating a topic's custom prompt template */
   onUpdatePromptTemplate?: (topicId: string, template: string | undefined) => void;
+
+  /** Per-topic quality scores for canvas node display */
+  topicQualityScores?: Record<string, { avg: number; count: number; evaluated: number }>;
 }
 
 export function DatasetMainContent({
@@ -103,6 +106,7 @@ export function DatasetMainContent({
   sourceDocumentFilterName,
   onClearSourceDocumentFilter,
   onUpdatePromptTemplate,
+  topicQualityScores,
 }: DatasetMainContentProps) {
   // P0-19: Stat filter state for RecordsSectionHeader clickable chips
   const [activeStatFilter, setActiveStatFilter] = useState<StatFilter>("all");
@@ -245,6 +249,7 @@ export function DatasetMainContent({
           onSelectRecordId={onSelectRecordId}
           onViewInTable={handleViewInTable}
           datasetObjective={datasetObjective}
+          topicQualityScores={topicQualityScores}
         />
       ) : (
         <RecordsTable

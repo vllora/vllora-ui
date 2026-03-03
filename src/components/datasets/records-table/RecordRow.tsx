@@ -1,7 +1,10 @@
 /**
  * RecordRow
  *
- * Displays a single record row as a conversational thread with stats, strategy, quality, and actions.
+ * Displays a single record row with two rendering modes:
+ * - Default: conversational thread with badges, full stats, quality text, topic selector
+ * - Compact (in topic tree): content-first card — no role badges, minimal stats, score dot
+ *
  * Clicking opens the record detail sidebar via onExpand.
  */
 
@@ -68,6 +71,9 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const { sources } = KnowledgeSourcesConsumer();
 
+  // Compact mode: content-first display in grouped/topic tree views
+  const compact = hideTopic;
+
   // Resolve source document attributions from record metadata
   const sourceAttributions = useMemo(
     () => getRecordSourceAttributions(
@@ -116,36 +122,49 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
       )}
     >
       {/* Main row */}
-      <div className="px-2 py-1.5 flex items-center gap-3 transition-colors">
-      
+      <div className={cn(
+        "px-2 py-1.5 flex gap-3 transition-colors",
+        compact ? "items-start" : "items-center"
+      )}>
 
         {/* Checkbox */}
         {selectable && (
           <SelectionCheckbox
             checked={selected}
             onChange={(checked) => onSelect?.(checked)}
-            className={COLUMN_WIDTHS.checkbox}
+            className={cn(COLUMN_WIDTHS.checkbox, compact && "mt-0.5")}
           />
         )}
 
-        {/* Conversational Thread */}
+        {/* Score dot (compact mode: leading indicator) */}
+        {compact && (
+          <QualityIndicator
+            evaluation={record.evaluation}
+            compact
+            onNavigate={handleScoreNavigate}
+            className="mt-0.5"
+          />
+        )}
+
+        {/* Conversational Thread / Content */}
         <ConversationThreadCell
           data={record.data}
           className={COLUMN_WIDTHS.thread}
           sourceRecordId={record.sourceRecordId}
           hideSystemMessage={hideTopic}
+          compact={compact}
         />
 
-        {/* AI-generated indicator */}
-        {record.is_generated && (
+        {/* AI-generated indicator (hidden in compact mode — shown at topic level) */}
+        {!compact && record.is_generated && (
           <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))] shrink-0">
             <Sparkles className="w-2.5 h-2.5" />
             AI
           </span>
         )}
 
-        {/* Source document badge */}
-        {sourceAttributions.length > 0 && (
+        {/* Source document badge (hidden in compact mode) */}
+        {!compact && sourceAttributions.length > 0 && (
           <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-400 shrink-0 max-w-[120px]">
             <FileText className="w-2.5 h-2.5 shrink-0" />
             <span className="truncate">{sourceAttributions[0].sourceName.replace(/\.[^.]+$/, '')}</span>
@@ -158,10 +177,11 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
         {/* Stats (tokens, turns, tools) */}
         <StatsBadge
           data={record.data}
-          className={COLUMN_WIDTHS.stats}
+          className={compact ? "shrink-0 mt-0.5" : COLUMN_WIDTHS.stats}
+          compact={compact}
         />
 
-        {/* Strategy (Topic) - hidden in grouped mode */}
+        {/* Strategy (Topic) - hidden in grouped/compact mode */}
         {!hideTopic && (
           <div className={cn("flex items-center justify-center", COLUMN_WIDTHS.strategy)}>
             <TopicCell
@@ -173,17 +193,20 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
           </div>
         )}
 
-        {/* Quality score — click navigates to evaluator/jobs tab */}
-        <QualityIndicator
-          evaluation={record.evaluation}
-          className={COLUMN_WIDTHS.quality}
-          onNavigate={handleScoreNavigate}
-        />
+        {/* Quality score — full display in default mode, already shown as dot in compact */}
+        {!compact && (
+          <QualityIndicator
+            evaluation={record.evaluation}
+            className={COLUMN_WIDTHS.quality}
+            onNavigate={handleScoreNavigate}
+          />
+        )}
 
         {/* Actions - shown on hover */}
         <div className={cn(
           "flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity",
-          COLUMN_WIDTHS.deepDiveActions
+          COLUMN_WIDTHS.deepDiveActions,
+          compact && "mt-0.5"
         )}>
           <RecordActions
             onEdit={onSave ? () => setEditDialogOpen(true) : undefined}
