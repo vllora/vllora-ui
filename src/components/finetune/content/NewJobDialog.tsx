@@ -88,6 +88,9 @@ export function NewJobDialog({
   const defaultTemperature =
     initialConfig?.inference_parameters?.temperature ??
     DEFAULT_INFERENCE_PARAMETERS.temperature;
+  const defaultResponseCandidatesCount =
+    initialConfig?.inference_parameters?.response_candidates_count ??
+    DEFAULT_INFERENCE_PARAMETERS.response_candidates_count;
 
   const [baseModel, setBaseModel] = useState(defaultBaseModel);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -104,6 +107,7 @@ export function NewJobDialog({
     String(defaultMaxOutputTokens),
   );
   const [temperature, setTemperature] = useState(String(defaultTemperature));
+  const [responseCandidatesCount, setResponseCandidatesCount] = useState(String(defaultResponseCandidatesCount));
 
   const handleSubmit = useCallback(async () => {
     if (!datasetId || isSubmitting) return;
@@ -143,6 +147,10 @@ export function NewJobDialog({
       if (!isNaN(temp) && temp !== DEFAULT_INFERENCE_PARAMETERS.temperature) {
         inferenceParameters.temperature = temp;
       }
+      const rcc = parseInt(responseCandidatesCount, 10);
+      if (!isNaN(rcc) && rcc !== DEFAULT_INFERENCE_PARAMETERS.response_candidates_count) {
+        inferenceParameters.response_candidates_count = rcc;
+      }
 
       const result = await quickFinetune({
         datasetId,
@@ -178,6 +186,7 @@ export function NewJobDialog({
     loraRank,
     maxOutputTokens,
     temperature,
+    responseCandidatesCount,
     isSubmitting,
     onSuccess,
     onOpenChange,
@@ -311,6 +320,18 @@ export function NewJobDialog({
                     max="2"
                     value={temperature}
                     onChange={(e) => setTemperature(e.target.value)}
+                    className={INPUT_CLS}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] text-muted-foreground">
+                    Response Candidates
+                  </label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={responseCandidatesCount}
+                    onChange={(e) => setResponseCandidatesCount(e.target.value)}
                     className={INPUT_CLS}
                   />
                 </div>

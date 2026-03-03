@@ -10,7 +10,15 @@ import { JobDetailPanel } from "./JobDetailPanel";
 
 const OPEN_FINETUNE_JOB_EVENT = "vllora_select_finetune_job";
 
-export function FinetuneJobsPanel() {
+interface FinetuneJobsPanelProps {
+  /**
+   * Optional external selection (e.g., explorer path `finetune/<jobId>`).
+   * `undefined` = unmanaged (legacy behavior), `null` = folder path (use fallback selection).
+   */
+  selectedJobIdOverride?: string | null;
+}
+
+export function FinetuneJobsPanel({ selectedJobIdOverride }: FinetuneJobsPanelProps) {
   const { filteredJobs } = FinetuneJobsConsumer();
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
@@ -19,20 +27,38 @@ export function FinetuneJobsPanel() {
     [filteredJobs, selectedJobId]
   );
 
+  // External selection from explorer path (folder vs specific job).
+  useEffect(() => {
+    if (selectedJobIdOverride === undefined) return;
+
+    if (selectedJobIdOverride) {
+      const hasRequestedJob = filteredJobs.some((job) => job.id === selectedJobIdOverride);
+      if (hasRequestedJob) {
+        setSelectedJobId(selectedJobIdOverride);
+        return;
+      }
+    }
+
+    const runningJob = filteredJobs.find((job) => job.status === "running" || job.status === "pending");
+    setSelectedJobId(runningJob?.id ?? filteredJobs[0]?.id ?? null);
+  }, [selectedJobIdOverride, filteredJobs]);
+
   // Auto-select latest job on first load
   useEffect(() => {
+    if (selectedJobIdOverride !== undefined) return;
     if (!selectedJobId && filteredJobs.length > 0) {
       setSelectedJobId(filteredJobs[0].id);
     }
-  }, [filteredJobs, selectedJobId]);
+  }, [filteredJobs, selectedJobId, selectedJobIdOverride]);
 
   // Auto-select running job when it starts
   useEffect(() => {
+    if (selectedJobIdOverride !== undefined) return;
     const runningJob = filteredJobs.find((j) => j.status === "running" || j.status === "pending");
     if (runningJob) {
       setSelectedJobId(runningJob.id);
     }
-  }, [filteredJobs]);
+  }, [filteredJobs, selectedJobIdOverride]);
 
   // Allow Overview activity timeline to navigate and open a specific finetune job.
   useEffect(() => {

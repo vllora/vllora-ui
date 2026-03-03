@@ -554,7 +554,7 @@ export const DEFAULT_INFERENCE_PARAMETERS: ReinforcementInferenceParameters = {
   max_output_tokens: 1000,
   temperature: 0.7,
   top_p: 0.9,
-  response_candidates_count: 4,
+  response_candidates_count: 2,
 };
 
 export interface CreateFinetuneJobOptions {

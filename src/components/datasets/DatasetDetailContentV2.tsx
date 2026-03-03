@@ -46,6 +46,7 @@ import {
   mapTabPathToSection,
   getDryRunJobIdFromPath,
   getInsightTypeFromPath,
+  getFinetuneJobIdFromPath,
   type ContentSection,
 } from "./TabContentRouter";
 import { InsightsPane } from "./InsightsPane";
@@ -181,6 +182,10 @@ export function DatasetDetailContentV2() {
   );
   const activeInsightType = useMemo(
     () => getInsightTypeFromPath(activeTabPath),
+    [activeTabPath]
+  );
+  const selectedFinetuneJobId = useMemo(
+    () => getFinetuneJobIdFromPath(activeTabPath),
     [activeTabPath]
   );
 
@@ -743,6 +748,7 @@ export function DatasetDetailContentV2() {
                 datasetId={datasetId}
                 canStartJob={hasRecords && hasEvaluator}
                 initialConfig={dataset.trainingConfig}
+                selectedFinetuneJobId={selectedFinetuneJobId}
               />
             </div>
           )}
