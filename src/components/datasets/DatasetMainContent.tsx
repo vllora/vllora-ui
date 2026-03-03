@@ -56,6 +56,7 @@ export interface DatasetMainContentProps {
 
   // Empty state
   datasetObjective?: string;
+  normalizedObjective?: string;
 
   // Docs processing state
   docsProcessing?: boolean;
@@ -100,6 +101,7 @@ export function DatasetMainContent({
   onGenerateForTopic,
   onGenerateSubtopics,
   datasetObjective,
+  normalizedObjective,
   docsProcessing,
   docsProcessingCount,
   docsTotal,
@@ -249,6 +251,7 @@ export function DatasetMainContent({
           onSelectRecordId={onSelectRecordId}
           onViewInTable={handleViewInTable}
           datasetObjective={datasetObjective}
+          normalizedObjective={normalizedObjective}
           topicQualityScores={topicQualityScores}
         />
       ) : (
@@ -272,6 +275,7 @@ export function DatasetMainContent({
           roleFilter={roleFilter}
           onRoleFilterChange={setRoleFilter}
           datasetObjective={datasetObjective}
+          normalizedObjective={normalizedObjective}
           onUpdatePromptTemplate={onUpdatePromptTemplate}
         />
       )}

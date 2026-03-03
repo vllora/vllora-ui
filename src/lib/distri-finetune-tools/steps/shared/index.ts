@@ -49,6 +49,7 @@ export {
   buildTopicSystemPrompt,
   buildGenericSystemPrompt,
   resolveTopicSystemPrompt,
+  normalizeObjectiveToRole,
   buildTemplateContext,
   buildAncestorSpecialization,
   buildTemplateVariables,

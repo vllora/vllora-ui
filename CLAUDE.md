@@ -206,6 +206,7 @@ Automated guardrails that run on every file edit — no manual steps needed.
 |------|---------|-------------|
 | `post-edit-typecheck.sh` | After `Write`/`Edit` on `.ts`/`.tsx` | Runs `npx tsc --noEmit`, feeds errors back as context |
 | `doc-sync-reminder.sh` | After `Write`/`Edit` on key source dirs | Reminds to update feature docs per the Documentation Sync Rule |
+| `console-log-warning.sh` | After `Write`/`Edit` on `.ts`/`.tsx` | Warns if `console.log`/`console.debug` left in non-test files |
 
 Deny rules: `Edit(vendor/**)` and `Write(vendor/**)` are blocked at the tool level.
 
@@ -291,3 +292,24 @@ Multi-agent teams for complex tasks. Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TE
 9. **Backend restart after agent md changes**: When you modify any agent definition file in `gateway/agents/finetune/` (e.g., `vllora-finetune-agent.md`, `finetune-workflow-agent.md`), the backend must be restarted to pick up changes. Run `scripts/restart-backend.sh` — this kills ports 8081/9090/9091, cleans the Distri cache, and restarts both the Distri server and vLLora gateway. Warn the user that a restart is needed after editing agent files.
 
 10. **Testing with Chrome MCP browser**: When verifying UI changes, use the **Claude in Chrome** MCP tools (`mcp__Claude_in_Chrome__*`) instead of Preview tools. The user's Chrome browser already has existing data (datasets, jobs, evaluations) which makes testing realistic. Use `tabs_context_mcp` first to get available tabs, then navigate to `localhost:5173` and use `computer` (screenshot), `read_page` (accessibility tree), `find` (element search), and `javascript_tool` (DOM inspection) to verify changes. Do NOT use `preview_*` tools for visual verification.
+
+11. **Browser MCP context efficiency**: MCP browser tools return large responses that fill the context window fast. Follow these rules to stay efficient:
+
+    **Prefer lightweight tools first** (ordered by context cost):
+    | Tool | Context Cost | When to Use |
+    |------|-------------|-------------|
+    | `find(query)` | ~200 tokens | Finding specific elements — **use this first** |
+    | `computer(screenshot)` | ~2-3k tokens | Visual verification ("does it look right?") |
+    | `read_page(filter:"interactive")` | ~2-5k tokens | Need to interact with forms/buttons |
+    | `read_page(ref_id, depth:3)` | ~1-3k tokens | Inspect one specific subtree |
+    | `browser_snapshot` | ~10-15k tokens | **Last resort** — full page tree |
+    | `read_page` (no filters) | ~10-20k tokens | **Avoid** — almost never needed |
+
+    **Rules:**
+    - NEVER call `read_page` or `browser_snapshot` without filters. Always pass `filter`, `depth`, `max_chars`, or `ref_id`
+    - Use `find(query)` for locating elements, not `read_page`
+    - Use `computer(screenshot)` for visual checks, not `browser_snapshot`
+    - Save large outputs to files: `browser_snapshot(filename: "state.md")` — read later only if needed
+    - Set `max_chars: 5000` on `read_page` unless you specifically need more
+    - Run `/compact` after every 3-4 browser interactions during heavy E2E sessions
+    - For clicking: `find` → get ref → `computer(left_click, coordinate)` (2 small calls, not 1 giant snapshot)

@@ -75,7 +75,15 @@
       "WebFetch(domain:arxiv.org)",
       "WebSearch",
       "Bash(npx tsx -e \":*)",
-      "Bash(./node_modules/.bin/tsc --noEmit)"
+      "Bash(./node_modules/.bin/tsc --noEmit)",
+      "mcp__playwright__browser_mouse_click_xy",
+      "mcp__playwright__browser_mouse_wheel",
+      "mcp__playwright__browser_press_key",
+      "Bash(gh repo view affaan-m/everything-claude-code --json description,name)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(chmod +x /Users/anhthuduong/Documents/GitHub/vllora/ui/.claude/hooks/console-log-warning.sh)",
+      "mcp__playwright__browser_evaluate"
     ],
     "deny": [],
     "ask": [],

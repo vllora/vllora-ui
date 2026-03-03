@@ -50,6 +50,8 @@ interface TopicRecordTreeProps {
   setRecordRef?: (recordId: string) => (el: HTMLDivElement | null) => void;
   /** Dataset training objective (for computing shared system prompts per topic) */
   datasetObjective?: string;
+  /** LLM-normalized "You are ..." role sentence (cached on dataset) */
+  normalizedObjective?: string;
   /** Handler for updating a topic's custom prompt template */
   onUpdatePromptTemplate?: (topicId: string, template: string | undefined) => void;
 }
@@ -96,6 +98,7 @@ export function TopicRecordTree({
   highlightedRecordId,
   setRecordRef,
   datasetObjective,
+  normalizedObjective,
   onUpdatePromptTemplate,
 }: TopicRecordTreeProps) {
   // Track which topic is currently being generated and progress
@@ -201,6 +204,7 @@ export function TopicRecordTree({
           generatingTopic={generatingTopic}
           generatingProgress={generatingProgress}
           datasetObjective={datasetObjective}
+          normalizedObjective={normalizedObjective}
           onUpdatePromptTemplate={onUpdatePromptTemplate}
         />
       ))}

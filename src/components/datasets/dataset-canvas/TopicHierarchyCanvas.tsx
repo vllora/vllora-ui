@@ -81,6 +81,8 @@ interface TopicHierarchyCanvasProps {
   onViewInTable?: (topicId: string) => void;
   /** Dataset training objective (for system prompt segment display on nodes) */
   datasetObjective?: string;
+  /** LLM-normalized "You are ..." role sentence (cached on dataset) */
+  normalizedObjective?: string;
   /** Per-topic quality scores for canvas node display */
   topicQualityScores?: Record<string, { avg: number; count: number; evaluated: number }>;
 }
@@ -332,6 +334,7 @@ export function TopicHierarchyCanvas({
   onSelectRecordId,
   onViewInTable,
   datasetObjective,
+  normalizedObjective: _normalizedObjective,
   topicQualityScores,
 }: TopicHierarchyCanvasProps) {
   return (

@@ -68,6 +68,8 @@ interface RecordsTableProps {
   onRoleFilterChange?: (role: RecordRole) => void;
   /** Dataset training objective (for computing shared system prompts per topic) */
   datasetObjective?: string;
+  /** LLM-normalized "You are ..." role sentence (cached on dataset) */
+  normalizedObjective?: string;
   /** Handler for updating a topic's custom prompt template */
   onUpdatePromptTemplate?: (topicId: string, template: string | undefined) => void;
 }
@@ -109,6 +111,7 @@ export function RecordsTable({
   roleFilter,
   onRoleFilterChange,
   datasetObjective,
+  normalizedObjective,
   onUpdatePromptTemplate,
 }: RecordsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
@@ -325,6 +328,7 @@ export function RecordsTable({
               highlightedRecordId={highlightedRecordId}
               setRecordRef={setRecordRef}
               datasetObjective={datasetObjective}
+              normalizedObjective={normalizedObjective}
               onUpdatePromptTemplate={onUpdatePromptTemplate}
             />
           </div>

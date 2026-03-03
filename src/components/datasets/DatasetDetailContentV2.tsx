@@ -776,6 +776,7 @@ export function DatasetDetailContentV2() {
               onGenerateForTopic={handleGenerateForTopic}
               onGenerateSubtopics={handleGenerateSubtopics}
               datasetObjective={dataset.datasetObjective}
+              normalizedObjective={dataset.normalizedObjective}
               docsProcessing={docsProcessing}
               docsProcessingCount={docsProcessingCount}
               docsTotal={knowledgeSourcesCount}

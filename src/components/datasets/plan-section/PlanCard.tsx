@@ -30,6 +30,8 @@ interface PlanCardProps {
   onApprove: (plan: Plan) => void;
   onEdit?: (plan: Plan) => void;
   isExecuting?: boolean;
+  /** Pre-normalized "You are ..." role sentence for system prompt display */
+  normalizedObjective?: string;
 }
 
 export function PlanCard({
@@ -37,6 +39,7 @@ export function PlanCard({
   onApprove,
   onEdit,
   isExecuting = false,
+  normalizedObjective,
 }: PlanCardProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(['topics', 'steps'])
@@ -204,8 +207,8 @@ export function PlanCard({
                           </div>
                           {/* System prompt preview for leaf subtopics */}
                           {plan.objective && (
-                            <div className="ml-4 text-[10px] text-muted-foreground/70 font-mono leading-tight truncate max-w-[400px]" title={resolveTopicSystemPrompt([topic.name, sub.name], plan.objective)}>
-                              {resolveTopicSystemPrompt([topic.name, sub.name], plan.objective)}
+                            <div className="ml-4 text-[10px] text-muted-foreground/70 font-mono leading-tight truncate max-w-[400px]" title={resolveTopicSystemPrompt([topic.name, sub.name], plan.objective, undefined, undefined, normalizedObjective)}>
+                              {resolveTopicSystemPrompt([topic.name, sub.name], plan.objective, undefined, undefined, normalizedObjective)}
                             </div>
                           )}
                         </div>

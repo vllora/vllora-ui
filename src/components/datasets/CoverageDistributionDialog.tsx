@@ -199,6 +199,7 @@ function TreeNode({
   expandedNodes,
   onToggleExpand,
   datasetObjective,
+  normalizedObjective,
 }: {
   node: TreeNodeData;
   selectedTopic: string | null;
@@ -207,6 +208,7 @@ function TreeNode({
   expandedNodes: Set<string>;
   onToggleExpand: (id: string) => void;
   datasetObjective?: string;
+  normalizedObjective?: string;
 }) {
   const isExpanded = expandedNodes.has(node.id);
   const isSelected = selectedTopic === node.name;
@@ -257,7 +259,7 @@ function TreeNode({
                 <div className="space-y-1">
                   <div className="text-xs font-medium text-muted-foreground">System Prompt</div>
                   <div className="text-xs font-mono whitespace-pre-wrap leading-relaxed">
-                    {resolveTopicSystemPrompt(node.path, datasetObjective, undefined, node.promptTemplate)}
+                    {resolveTopicSystemPrompt(node.path, datasetObjective, undefined, node.promptTemplate, normalizedObjective)}
                   </div>
                 </div>
               </TooltipContent>
@@ -327,6 +329,7 @@ function TreeNode({
               expandedNodes={expandedNodes}
               onToggleExpand={onToggleExpand}
               datasetObjective={datasetObjective}
+              normalizedObjective={normalizedObjective}
             />
           ))}
         </div>
@@ -345,6 +348,7 @@ export function CoverageDistributionDialog({
   const { dataset } = DatasetDetailConsumer();
   const knowledgeCoverageStats = dataset?.knowledgeCoverageStats ?? null;
   const datasetObjective = dataset?.datasetObjective || '';
+  const normalizedObjective = dataset?.normalizedObjective;
 
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
@@ -708,6 +712,7 @@ export function CoverageDistributionDialog({
                         expandedNodes={expandedNodes}
                         onToggleExpand={handleToggleExpand}
                         datasetObjective={datasetObjective}
+                        normalizedObjective={normalizedObjective}
                       />
                     ))
                   ) : (

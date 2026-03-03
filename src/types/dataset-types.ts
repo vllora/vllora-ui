@@ -330,6 +330,8 @@ export interface Dataset {
   state?: DatasetState;
   // Training objective describing specific behaviors to reinforce or suppress
   datasetObjective?: string;
+  // LLM-normalized "You are ..." role sentence derived from datasetObjective
+  normalizedObjective?: string;
   // Backend dataset ID from the cloud provider (set after first finetune upload)
   backendDatasetId?: string;
   // Topic hierarchy configuration

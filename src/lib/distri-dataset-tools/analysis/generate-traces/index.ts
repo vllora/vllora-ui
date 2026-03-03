@@ -560,10 +560,11 @@ export async function generateTraces(
 
     // Pre-compute shared system prompts for each topic
     const trainingObjective = dataset.datasetObjective || '';
+    const normalizedRole = dataset.normalizedObjective;
     const topicSystemPromptMap = new Map<string, string>();
     for (const topic of targetLeafTopics) {
       if (trainingObjective) {
-        topicSystemPromptMap.set(topic.id, resolveTopicSystemPrompt(topic.path, trainingObjective, undefined, topic.promptTemplate));
+        topicSystemPromptMap.set(topic.id, resolveTopicSystemPrompt(topic.path, trainingObjective, undefined, topic.promptTemplate, normalizedRole));
       } else {
         topicSystemPromptMap.set(topic.id, buildGenericSystemPrompt(topic.path.join(' > ')));
       }

@@ -41,6 +41,7 @@ export function TopicHierarchyTreePanel({
 }: TopicHierarchyTreePanelProps) {
   const { dataset } = DatasetDetailConsumer();
   const datasetObjective = dataset?.datasetObjective || '';
+  const normalizedObjective = dataset?.normalizedObjective;
   const [showPromptPreview, setShowPromptPreview] = useState(false);
 
   // Collect leaf topics with full paths for system prompt preview
@@ -160,7 +161,7 @@ export function TopicHierarchyTreePanel({
                 <div key={leaf.name} className="text-[11px] space-y-0.5">
                   <div className="font-medium text-foreground/80">{leaf.name}</div>
                   <div className="font-mono text-muted-foreground/70 leading-tight bg-muted/30 rounded px-2 py-1">
-                    {resolveTopicSystemPrompt(leaf.path, datasetObjective, undefined, leaf.promptTemplate)}
+                    {resolveTopicSystemPrompt(leaf.path, datasetObjective, undefined, leaf.promptTemplate, normalizedObjective)}
                   </div>
                 </div>
               ))}

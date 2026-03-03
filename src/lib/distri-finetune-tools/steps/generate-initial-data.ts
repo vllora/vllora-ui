@@ -679,8 +679,9 @@ export const generateInitialDataHandler: ToolHandler = async (
       console.log(`[generateInitialData] Found seed system prompt (${seedSystemPrompt.length} chars)`);
     }
 
-    // Get training objective
+    // Get training objective and optional LLM-normalized role
     const objective = dataset.datasetObjective;
+    const normalizedRole = dataset.normalizedObjective;
     if (!objective || !objective.trim()) {
       return {
         success: false,
@@ -759,7 +760,7 @@ export const generateInitialDataHandler: ToolHandler = async (
       for (const [topic] of topicDistribution) {
         topicSystemPrompts.set(
           topic.name,
-          seedSystemPrompt || resolveTopicSystemPrompt(topic.path, objective, undefined, topic.promptTemplate),
+          seedSystemPrompt || resolveTopicSystemPrompt(topic.path, objective, undefined, topic.promptTemplate, normalizedRole),
         );
       }
 
@@ -915,7 +916,7 @@ export const generateInitialDataHandler: ToolHandler = async (
       totalBatches = Math.ceil(count / BATCH_SIZE);
 
       // Pre-compute a generic system prompt (shared across all records)
-      const genericSystemPrompt = seedSystemPrompt || buildGenericSystemPrompt(objective);
+      const genericSystemPrompt = seedSystemPrompt || buildGenericSystemPrompt(objective, normalizedRole);
 
       // Emit started event
       emitter.emit("vllora_data_generation_progress", {

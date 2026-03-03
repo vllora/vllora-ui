@@ -53,6 +53,8 @@ export interface TopicTreeNodeRowProps {
   generatingProgress?: { completed: number; total: number } | null;
   /** Dataset training objective (for computing shared system prompts per topic) */
   datasetObjective?: string;
+  /** LLM-normalized "You are ..." role sentence (cached on dataset) */
+  normalizedObjective?: string;
   /** Accumulated descriptions from parent topics (for prompt construction) */
   parentDescriptions?: (string | undefined)[];
   /** Handler for updating a topic's custom prompt template */
@@ -498,6 +500,7 @@ export function TopicTreeNodeRow({
   generatingTopic,
   generatingProgress,
   datasetObjective,
+  normalizedObjective,
   parentDescriptions = [],
   onUpdatePromptTemplate,
 }: TopicTreeNodeRowProps) {
@@ -555,14 +558,14 @@ export function TopicTreeNodeRow({
   // Compute shared system prompt for leaf topics (only leaves have direct records)
   const systemPrompt = useMemo(() => {
     if (!datasetObjective || hasChildren) return undefined;
-    return resolveTopicSystemPrompt(currentPath, datasetObjective, currentDescriptions, node.promptTemplate);
-  }, [datasetObjective, hasChildren, currentPath, currentDescriptions, node.promptTemplate]);
+    return resolveTopicSystemPrompt(currentPath, datasetObjective, currentDescriptions, node.promptTemplate, normalizedObjective);
+  }, [datasetObjective, hasChildren, currentPath, currentDescriptions, node.promptTemplate, normalizedObjective]);
 
   // Compute structured prompt segments for color-coded rendering
   const systemPromptSegments = useMemo(() => {
     if (!datasetObjective || hasChildren) return undefined;
-    return buildAccumulatedPromptSegments(currentPath, node.name, datasetObjective, currentDescriptions);
-  }, [datasetObjective, hasChildren, currentPath, node.name, currentDescriptions]);
+    return buildAccumulatedPromptSegments(currentPath, node.name, datasetObjective, currentDescriptions, normalizedObjective);
+  }, [datasetObjective, hasChildren, currentPath, node.name, currentDescriptions, normalizedObjective]);
 
   return (
     <div className="relative">
@@ -630,6 +633,7 @@ export function TopicTreeNodeRow({
                 generatingTopic={generatingTopic}
                 generatingProgress={generatingProgress}
                 datasetObjective={datasetObjective}
+                normalizedObjective={normalizedObjective}
                 parentDescriptions={currentDescriptions}
                 onUpdatePromptTemplate={onUpdatePromptTemplate}
               />

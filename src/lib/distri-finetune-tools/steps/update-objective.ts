@@ -9,6 +9,7 @@ import type { DistriFnTool } from '@distri/core';
 import * as datasetsDB from '@/services/datasets-db';
 import * as workflowDB from '@/services/finetune-workflow-db';
 import type { ToolHandler } from '../types';
+import { normalizeObjectiveToRole } from './shared/topic-system-prompt';
 
 // =============================================================================
 // Types
@@ -54,7 +55,15 @@ export const updateObjectiveHandler: ToolHandler = async (
 
     const previousObjective = dataset.datasetObjective;
 
-    await datasetsDB.updateDatasetObjective(dataset_id, trimmedObjective);
+    // Normalize the objective to a "You are ..." role sentence via LLM
+    let normalizedRole: string | undefined;
+    try {
+      normalizedRole = await normalizeObjectiveToRole(trimmedObjective);
+    } catch (err) {
+      console.warn('[updateObjective] Failed to normalize objective via LLM, will use heuristic fallback:', err);
+    }
+
+    await datasetsDB.updateDatasetObjective(dataset_id, trimmedObjective, normalizedRole);
 
     let workflowSynced = false;
     try {

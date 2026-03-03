@@ -970,7 +970,7 @@ export async function renameDataset(datasetId: string, newName: string): Promise
   });
 }
 
-export async function updateDatasetObjective(datasetId: string, objective: string): Promise<void> {
+export async function updateDatasetObjective(datasetId: string, objective: string, normalizedObjective?: string): Promise<void> {
   const db = await getDB();
   const now = Date.now();
 
@@ -987,6 +987,9 @@ export async function updateDatasetObjective(datasetId: string, objective: strin
           dataset.datasetObjective = trimmed;
         } else {
           delete dataset.datasetObjective;
+        }
+        if (normalizedObjective !== undefined) {
+          dataset.normalizedObjective = normalizedObjective;
         }
         dataset.updatedAt = now;
         store.put(dataset);

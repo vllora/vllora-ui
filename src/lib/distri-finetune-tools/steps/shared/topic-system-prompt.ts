@@ -29,12 +29,39 @@
  * e.g. the depth-4 prompt is the first two sentences of the depth-6 prompt.
  */
 
+import { callLucy } from './lucy-client';
+
 /**
  * Convert a snake_case topic name to human-readable text.
  * e.g. "progressive_chess_rules" → "progressive chess rules"
  */
 function humanize(s: string): string {
   return s.replace(/_/g, ' ');
+}
+
+/**
+ * Heuristic fallback: naively prepend "You are " to objectives that don't
+ * already start with it. Works for noun-phrase objectives ("a chess tutor")
+ * but breaks for verb-phrase ones ("Train a chess tutor").
+ *
+ * Used as fallback when no LLM-normalized role is available.
+ */
+function heuristicNormalize(trainingObjective: string): string {
+  const trimmed = trainingObjective.trim().replace(/\.$/, '');
+  return trimmed.toLowerCase().startsWith('you are')
+    ? trimmed
+    : `You are ${trimmed.charAt(0).toLowerCase()}${trimmed.slice(1)}`;
+}
+
+/**
+ * Extract the role description (without "You are " prefix) from a training
+ * objective using heuristic normalization. Used for template variable context.
+ */
+function heuristicExtractRole(trainingObjective: string): string {
+  const trimmed = trainingObjective.trim().replace(/\.$/, '');
+  return trimmed.toLowerCase().startsWith('you are')
+    ? trimmed.slice(8).trim()
+    : `${trimmed.charAt(0).toLowerCase()}${trimmed.slice(1)}`;
 }
 
 /** Sentence starters that progressively narrow the scope */
@@ -67,14 +94,14 @@ export function buildTopicSystemPrompt(
   topicPath: string[],
   trainingObjective: string,
   descriptions?: (string | undefined)[],
+  normalizedRole?: string,
 ): string {
   const path = topicPath.map(humanize);
 
-  // Normalize the objective into a "You are ..." prefix
-  const trimmed = trainingObjective.trim().replace(/\.$/, '');
-  const role = trimmed.toLowerCase().startsWith('you are')
-    ? trimmed
-    : `You are ${trimmed.charAt(0).toLowerCase()}${trimmed.slice(1)}`;
+  // Use pre-normalized role if available, otherwise fall back to heuristic
+  const role = normalizedRole
+    ? normalizedRole.trim().replace(/\.$/, '')
+    : heuristicNormalize(trainingObjective);
 
   // Helper: get description suffix for a topic at given index
   const descSuffix = (idx: number) => {
@@ -153,11 +180,10 @@ export function getTopicPromptSegment(
  * @param trainingObjective - The dataset's training objective text
  * @returns The normalized role sentence (e.g. "You are a cooking instructor.")
  */
-export function getRoleSentence(trainingObjective: string): string {
-  const trimmed = trainingObjective.trim().replace(/\.$/, '');
-  const role = trimmed.toLowerCase().startsWith('you are')
-    ? trimmed
-    : `You are ${trimmed.charAt(0).toLowerCase()}${trimmed.slice(1)}`;
+export function getRoleSentence(trainingObjective: string, normalizedRole?: string): string {
+  const role = normalizedRole
+    ? normalizedRole.trim().replace(/\.$/, '')
+    : heuristicNormalize(trainingObjective);
   return `${role}.`;
 }
 
@@ -215,7 +241,15 @@ export function getTopicPromptSegmentParts(
  * @param trainingObjective - The dataset's training objective text
  * @returns Structured parts: { template: "You are ", topicName: "...", suffix: "." }
  */
-export function getRoleSentenceParts(trainingObjective: string): PromptSegmentParts {
+export function getRoleSentenceParts(trainingObjective: string, normalizedRole?: string): PromptSegmentParts {
+  if (normalizedRole) {
+    const trimmed = normalizedRole.trim().replace(/\.$/, '');
+    // Normalized role is always "You are ...", so strip the prefix for the topicName part
+    if (trimmed.toLowerCase().startsWith('you are')) {
+      return { template: 'You are ', topicName: trimmed.slice(8), suffix: '.' };
+    }
+    return { template: '', topicName: trimmed, suffix: '.' };
+  }
   const trimmed = trainingObjective.trim().replace(/\.$/, '');
   if (trimmed.toLowerCase().startsWith('you are')) {
     return { template: 'You are ', topicName: trimmed.slice(8), suffix: '.' };
@@ -244,6 +278,7 @@ export function buildAccumulatedPromptSegments(
   currentNodeName: string,
   trainingObjective: string,
   descriptions?: (string | undefined)[],
+  normalizedRole?: string,
 ): PromptTextSegment[] {
   const path = topicPath.map(humanize);
   const currentName = humanize(currentNodeName);
@@ -256,7 +291,7 @@ export function buildAccumulatedPromptSegments(
   };
 
   // Role sentence: "You are [goal/training objective]."
-  const roleParts = getRoleSentenceParts(trainingObjective);
+  const roleParts = getRoleSentenceParts(trainingObjective, normalizedRole);
   segments.push({ text: roleParts.template, type: 'template', semantic: 'role' });
   segments.push({ text: roleParts.topicName, type: 'goal', semantic: 'role' });
   segments.push({ text: `${roleParts.suffix} `, type: 'template', semantic: 'role' });
@@ -310,11 +345,10 @@ export function buildAccumulatedPromptSegments(
  * @param trainingObjective - The dataset's training objective text
  * @returns A generic system prompt string
  */
-export function buildGenericSystemPrompt(trainingObjective: string): string {
-  const trimmed = trainingObjective.trim().replace(/\.$/, '');
-  const role = trimmed.toLowerCase().startsWith('you are')
-    ? trimmed
-    : `You are ${trimmed.charAt(0).toLowerCase()}${trimmed.slice(1)}`;
+export function buildGenericSystemPrompt(trainingObjective: string, normalizedRole?: string): string {
+  const role = normalizedRole
+    ? normalizedRole.trim().replace(/\.$/, '')
+    : heuristicNormalize(trainingObjective);
   return `${role}. Provide clear, helpful, and accurate responses.`;
 }
 
@@ -453,15 +487,21 @@ export function buildTemplateContext(
   topicPath: string[],
   trainingObjective: string,
   descriptions?: (string | undefined)[],
+  normalizedRole?: string,
 ): Record<string, string> {
   const humanPath = topicPath.map(humanize);
   const leafIndex = humanPath.length - 1;
 
   // Objective: strip "You are " prefix since template has "You are " as plain text
-  const trimmed = trainingObjective.trim().replace(/\.$/, '');
-  const objective = trimmed.toLowerCase().startsWith('you are')
-    ? trimmed.slice(8).trim()
-    : `${trimmed.charAt(0).toLowerCase()}${trimmed.slice(1)}`;
+  let objective: string;
+  if (normalizedRole) {
+    const trimmed = normalizedRole.trim().replace(/\.$/, '');
+    objective = trimmed.toLowerCase().startsWith('you are')
+      ? trimmed.slice(8).trim()
+      : trimmed;
+  } else {
+    objective = heuristicExtractRole(trainingObjective);
+  }
 
   const descSuffix = (idx: number) => {
     const desc = descriptions?.[idx];
@@ -478,7 +518,7 @@ export function buildTemplateContext(
   // Backward compat: keep old variable names for existing templates
   const ancestorPath = humanPath.slice(0, leafIndex);
   const ancestorDescs = descriptions?.slice(0, leafIndex);
-  context.role = getRoleSentence(trainingObjective);
+  context.role = getRoleSentence(trainingObjective, normalizedRole);
   context.topic = humanPath[leafIndex] ?? '';
   context.topic_description = descriptions?.[leafIndex]?.replace(/\.$/, '') ?? '';
   context.topic_path = humanPath.join(' › ');
@@ -516,12 +556,13 @@ export function resolveTopicSystemPrompt(
   trainingObjective: string,
   descriptions?: (string | undefined)[],
   customTemplate?: string,
+  normalizedRole?: string,
 ): string {
   if (!customTemplate) {
-    return buildTopicSystemPrompt(topicPath, trainingObjective, descriptions);
+    return buildTopicSystemPrompt(topicPath, trainingObjective, descriptions, normalizedRole);
   }
 
-  const context = buildTemplateContext(topicPath, trainingObjective, descriptions);
+  const context = buildTemplateContext(topicPath, trainingObjective, descriptions, normalizedRole);
   const hasVariables = /\{\{\w+\}\}/.test(customTemplate);
 
   if (!hasVariables) {
@@ -530,4 +571,38 @@ export function resolveTopicSystemPrompt(
   }
 
   return interpolateTemplate(customTemplate, context);
+}
+
+// ─── LLM-based objective normalization ──────────────────────────────────────
+
+/**
+ * Use a quick LLM call to normalize a free-form training objective into
+ * a natural "You are ..." role sentence. Called once when the objective
+ * is first set/updated, and the result is cached on the dataset.
+ *
+ * If the objective already starts with "You are", it passes through unchanged.
+ *
+ * @param objective - The raw training objective text
+ * @returns A "You are ..." role sentence
+ */
+export async function normalizeObjectiveToRole(objective: string): Promise<string> {
+  const trimmed = objective.trim();
+  if (!trimmed) return trimmed;
+
+  // Skip LLM call if already well-formed
+  if (trimmed.toLowerCase().startsWith('you are')) {
+    return trimmed;
+  }
+
+  const messages = [
+    {
+      role: 'system' as const,
+      content:
+        'Convert the given training objective into a natural "You are ..." role description for an AI assistant. Return ONLY the converted sentence, nothing else. Keep the full meaning intact.',
+    },
+    { role: 'user' as const, content: trimmed },
+  ];
+
+  const result = await callLucy(messages, { temperature: 0, label: 'normalize_objective' });
+  return result.trim();
 }
