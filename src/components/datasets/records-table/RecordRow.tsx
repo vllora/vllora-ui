@@ -116,7 +116,7 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
       ref={ref}
       onClick={handleClick}
       className={cn(
-        "group flex flex-col rounded-md overflow-hidden transition-colors bg-card/30 cursor-pointer hover:bg-muted/50",
+        "group flex flex-col rounded-md overflow-hidden transition-colors bg-card/30 cursor-pointer hover:bg-muted/50 border-b border-border/20",
         selected && "bg-[rgba(var(--theme-500),0.1)] ring-1 ring-[rgba(var(--theme-500),0.3)]",
         isHighlighted && "animate-record-highlight"
       )}
@@ -202,10 +202,9 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
           />
         )}
 
-        {/* Actions - shown on hover */}
+        {/* Actions — three-dot menu (appears on hover) */}
         <div className={cn(
-          "flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity",
-          COLUMN_WIDTHS.deepDiveActions,
+          "shrink-0 opacity-0 group-hover:opacity-100 transition-opacity",
           compact && "mt-0.5"
         )}>
           <RecordActions

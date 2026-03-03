@@ -183,7 +183,7 @@ export function RecordsPanel() {
   const recordCountText = `${filteredRecords.length}${filteredRecords.length !== topicRecords.length ? ` of ${topicRecords.length}` : ""} record${topicRecords.length !== 1 ? "s" : ""}`;
 
   return (
-    <div className="w-[clamp(320px,35%,500px)] border-l border-border flex flex-col h-full bg-background animate-in slide-in-from-right-5 duration-200">
+    <div className="absolute right-0 top-0 bottom-0 z-20 w-[clamp(320px,35%,500px)] border-l border-border flex flex-col bg-background/95 backdrop-blur-sm shadow-[-8px_0_24px_rgba(0,0,0,0.15)] animate-in slide-in-from-right-5 duration-200">
       {/* Header + Search (Stitch dense-list style) */}
       <div className="flex-shrink-0 px-6 py-4 border-b border-border">
         {/* Breadcrumb path */}
@@ -322,22 +322,29 @@ export function RecordsPanel() {
   );
 }
 
-/** Recursively collect all records under a node */
+/** Recursively collect all records under a node, including its own direct records */
 function collectAllRecordsUnder(
   node: { id: string; name: string; children?: { id: string; name: string; children?: unknown[] }[] },
   recordsByTopic: Record<string, DatasetRecord[]>,
 ): DatasetRecord[] {
+  // Always collect direct records on this node (by id or name)
+  const directRecords: DatasetRecord[] = [];
+  const byId = recordsByTopic[node.id || node.name] || [];
+  if (byId.length > 0) {
+    directRecords.push(...byId);
+  } else if (node.id && node.id !== node.name) {
+    const byName = recordsByTopic[node.name] || [];
+    directRecords.push(...byName);
+  }
+
   if (!node.children || node.children.length === 0) {
-    const byId = recordsByTopic[node.id || node.name] || [];
-    if (byId.length > 0) return byId;
-    if (node.id && node.id !== node.name) {
-      return recordsByTopic[node.name] || [];
-    }
-    return [];
+    return directRecords;
   }
-  const records: DatasetRecord[] = [];
+
+  // Recurse into children and combine with direct records
+  const childRecords: DatasetRecord[] = [];
   for (const child of node.children) {
-    records.push(...collectAllRecordsUnder(child as typeof node, recordsByTopic));
+    childRecords.push(...collectAllRecordsUnder(child as typeof node, recordsByTopic));
   }
-  return records;
+  return [...directRecords, ...childRecords];
 }

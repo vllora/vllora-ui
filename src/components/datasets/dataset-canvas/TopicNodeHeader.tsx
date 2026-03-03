@@ -208,7 +208,7 @@ export function TopicNodeHeader({
         <TooltipProvider delayDuration={200}>
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] tabular-nums font-medium bg-muted text-muted-foreground cursor-help shrink-0">
+              <span className="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 rounded-md text-[10px] tabular-nums font-semibold text-muted-foreground/70 border border-border/60 cursor-help shrink-0">
                 {hasFilter ? `${filteredCount}/${displayCount}` : displayCount}
               </span>
             </TooltipTrigger>

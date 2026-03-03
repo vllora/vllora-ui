@@ -10,6 +10,7 @@
  * - P0-15: Shows pulsing border when data is being generated for this topic
  */
 
+import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TopicNodeHeader } from "../TopicNodeHeader";
 import { TopicCanvasConsumer } from "../TopicCanvasContext";
@@ -43,9 +44,8 @@ interface CollapsedTopicNodeProps {
   description?: string;
 }
 
-// Fixed width for collapsed state; compact when panel is open
+// Fixed width for collapsed state
 export const COLLAPSED_WIDTH = 300;
-export const COLLAPSED_WIDTH_COMPACT = 260;
 
 /** Get color class for quality score */
 function getScoreColor(avg: number): string {
@@ -75,15 +75,10 @@ export function CollapsedTopicNode({
 }: CollapsedTopicNodeProps) {
   const {
     generatingTopicName,
-    viewingTopicId,
-    isFullDialogMode,
     getMatchingCount,
     isFilterActive,
     topicQualityScores,
   } = TopicCanvasConsumer();
-
-  // Shrink nodes when panel is open to give more canvas space
-  const isPanelOpen = viewingTopicId !== null && !isFullDialogMode;
 
   // P0-15: Check if this topic is currently generating
   const isGenerating = generatingTopicName === name;
@@ -115,7 +110,7 @@ export function CollapsedTopicNode({
         isGenerating && "animate-pulse border-[rgba(var(--theme-500),0.6)]"
       )}
       style={{
-        width: isPanelOpen ? COLLAPSED_WIDTH_COMPACT : COLLAPSED_WIDTH,
+        width: COLLAPSED_WIDTH,
         boxShadow: isSelected
           ? '0 0 15px rgba(var(--theme-500), 0.15), 0 0 30px rgba(var(--theme-500), 0.08)'
           : undefined,
@@ -168,21 +163,44 @@ export function CollapsedTopicNode({
 
       {/* Description line — topic description or parent path context */}
       {!isRoot && (
-        <div className="px-3 pb-2 mt-0.5 flex items-center gap-1.5">
-          {descriptionText ? (
-            <p className="text-[10px] text-muted-foreground/60 truncate leading-tight">
-              {descriptionText}
-            </p>
-          ) : (
-            <p className="text-[10px] text-muted-foreground/30 italic truncate leading-tight">
-              No description
-            </p>
-          )}
-          {/* Parent indicator — shows child count */}
-          {hasChildren && aggregatedRecordCount !== undefined && (
-            <span className="text-[9px] text-muted-foreground/50 bg-muted/50 px-1.5 py-0.5 rounded shrink-0">
-              parent
-            </span>
+        <div className="px-3 pb-2 mt-0.5 flex flex-col gap-1">
+          <div className="flex items-center gap-1.5">
+            {descriptionText ? (
+              <p className="text-[10px] text-muted-foreground/60 truncate leading-tight flex-1 min-w-0">
+                {descriptionText}
+              </p>
+            ) : (
+              <p className="text-[10px] text-muted-foreground/30 italic truncate leading-tight flex-1 min-w-0">
+                No description
+              </p>
+            )}
+            {/* Parent indicator */}
+            {hasChildren && aggregatedRecordCount !== undefined && (
+              <span className="text-[9px] text-muted-foreground/50 bg-muted/50 px-1.5 py-0.5 rounded shrink-0">
+                parent
+              </span>
+            )}
+          </div>
+          {/* Reassignment nudge — parent node has direct records that should be on leaves */}
+          {hasChildren && recordCount > 0 && (
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1 cursor-help">
+                    <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />
+                    <span className="text-[10px] text-amber-500/80">
+                      {recordCount} records need reassignment
+                    </span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[240px]">
+                  <p className="text-xs">
+                    This topic has {recordCount} records assigned directly, but it also has
+                    child topics. Move these records to a child topic for proper organization.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </div>
       )}

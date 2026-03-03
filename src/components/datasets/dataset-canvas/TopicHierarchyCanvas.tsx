@@ -91,7 +91,7 @@ function TopicHierarchyCanvasInner({
 }: {
   hierarchy?: TopicHierarchyNode[];
 }) {
-  const { records, expandedNodes, nodeSizes, selectedTopic, setSelectedTopic, pendingAddParentId, layoutVersion, operationProgress, viewingTopicId, isFullDialogMode } = TopicCanvasConsumer();
+  const { records, expandedNodes, nodeSizes, selectedTopic, setSelectedTopic, pendingAddParentId, layoutVersion, operationProgress } = TopicCanvasConsumer();
 
   // Compute record counts by topic
   const recordCountsByTopic = useMemo(() => {
@@ -219,25 +219,6 @@ function TopicHierarchyCanvasInner({
     }
   };
 
-  // Track panel open/close to trigger fitView
-  const panelOpen = viewingTopicId !== null && !isFullDialogMode;
-  const [prevPanelOpen, setPrevPanelOpen] = useState(panelOpen);
-
-  useEffect(() => {
-    if (prevPanelOpen !== panelOpen) {
-      setPrevPanelOpen(panelOpen);
-      // Give flex layout time to settle, then fit view
-      if (reactFlowInstance.current) {
-        setTimeout(() => {
-          reactFlowInstance.current?.fitView({
-            padding: 0.2,
-            duration: 300,
-          });
-        }, 50);
-      }
-    }
-  }, [panelOpen, prevPanelOpen]);
-
   // 3.7: Banner dismiss state — reset when new operation starts
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const prevOperationRef = useRef(operationProgress);
@@ -318,13 +299,13 @@ function TopicHierarchyCanvasInner({
   );
 }
 
-// Flex layout wrapper: canvas + optional records panel
+// Layout wrapper: canvas (full width) + optional records panel overlay
 function CanvasWithPanel({ hierarchy }: { hierarchy?: TopicHierarchyNode[] }) {
   const { viewingTopicId, isFullDialogMode } = TopicCanvasConsumer();
   const showPanel = viewingTopicId !== null && !isFullDialogMode;
 
   return (
-    <div className="flex h-full w-full">
+    <div className="relative flex h-full w-full">
       <TopicHierarchyCanvasInner hierarchy={hierarchy} />
       {showPanel && <RecordsPanel />}
     </div>

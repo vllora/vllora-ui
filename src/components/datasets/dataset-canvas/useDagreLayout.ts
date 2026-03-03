@@ -37,7 +37,9 @@ interface DagreLayoutOptions {
 /**
  * Compute aggregated record counts for all nodes in the hierarchy.
  * For leaf nodes, this equals the direct count.
- * For non-leaf nodes, this is the sum of all descendant leaves.
+ * For non-leaf nodes, this is direct records + sum of all descendants.
+ * (Records normally live on leaves, but if a leaf gains children the
+ *  direct records persist — we must not silently drop them.)
  */
 function computeAggregatedCounts(
   nodes: TopicHierarchyNode[],
@@ -58,14 +60,15 @@ function computeAggregatedCounts(
       return directCount;
     }
 
-    // Non-leaf node: sum of children totals only (leaf-only assignment rule)
-    // Records should only be assigned to leaves, so directCount should be 0 here
+    // Non-leaf node: direct records + sum of all descendants
+    // (matches table view's calculateDescendantCounts behavior)
     const childrenSum = node.children.reduce(
       (sum, child) => sum + traverse(child),
       0
     );
-    aggregated[nodeTopicId] = childrenSum;
-    return childrenSum;
+    const total = directCount + childrenSum;
+    aggregated[nodeTopicId] = total;
+    return total;
   }
 
   for (const node of nodes) {
