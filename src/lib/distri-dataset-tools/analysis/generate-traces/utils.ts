@@ -48,13 +48,18 @@ export function parsePersonaList(raw: string): string[] {
 // Topic Hierarchy
 // ============================================================================
 
-export function extractLeafTopicsFromHierarchy(nodes: TopicHierarchyNode[], parentPath: string[] = []): LeafTopic[] {
+export function extractLeafTopicsFromHierarchy(
+  nodes: TopicHierarchyNode[],
+  parentPath: string[] = [],
+  parentSegments: (string | undefined)[] = [],
+): LeafTopic[] {
   const leaves: LeafTopic[] = [];
   for (const node of nodes) {
     const currentPath = [...parentPath, node.name];
+    const currentSegments = [...parentSegments, node.normalizedPromptSegment];
     if (node.children && node.children.length > 0) {
-      // Recurse into children with current path
-      leaves.push(...extractLeafTopicsFromHierarchy(node.children, currentPath));
+      // Recurse into children with current path and segments
+      leaves.push(...extractLeafTopicsFromHierarchy(node.children, currentPath, currentSegments));
     } else {
       // Leaf node - add with full path and ID
       // Use node.id if available, otherwise fallback to node.name
@@ -64,6 +69,7 @@ export function extractLeafTopicsFromHierarchy(nodes: TopicHierarchyNode[], pare
         path: currentPath,
         sourceChunkRefs: node.sourceChunkRefs,
         promptTemplate: node.promptTemplate,
+        normalizedSegments: currentSegments,
       });
     }
   }

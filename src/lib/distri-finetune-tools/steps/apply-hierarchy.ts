@@ -10,6 +10,7 @@ import * as datasetsDB from '@/services/datasets-db';
 import type { TopicHierarchyNode } from '@/types/dataset-types';
 import type { ToolHandler } from '../types';
 import { countLeafTopics, calculateMaxDepth } from './helpers';
+import { normalizeTopicSegments, normalizeObjectiveToRole } from './shared';
 
 /**
  * Normalize and validate hierarchy nodes.
@@ -64,6 +65,9 @@ function normalizeHierarchy(
     const promptTemplate = typeof node.promptTemplate === 'string' && node.promptTemplate.trim()
       ? node.promptTemplate
       : undefined;
+    const normalizedPromptSegment = typeof node.normalizedPromptSegment === 'string' && node.normalizedPromptSegment.trim()
+      ? node.normalizedPromptSegment
+      : undefined;
 
     result.push({
       id,
@@ -71,6 +75,7 @@ function normalizeHierarchy(
       description,
       sourceChunkRefs,
       promptTemplate,
+      normalizedPromptSegment,
       children: children && children.length > 0 ? children : undefined,
     });
   }
@@ -109,7 +114,7 @@ export const applyTopicHierarchyHandler: ToolHandler = async (params) => {
     }
 
     // Normalize and validate hierarchy structure (ensures IDs exist)
-    const validHierarchy = normalizeHierarchy(hierarchy);
+    let validHierarchy = normalizeHierarchy(hierarchy);
     const topicCount = countLeafTopics(validHierarchy);
 
     if (topicCount === 0) {
@@ -117,6 +122,31 @@ export const applyTopicHierarchyHandler: ToolHandler = async (params) => {
     }
 
     const depth = calculateMaxDepth(validHierarchy);
+
+    // Ensure the objective has a normalized "You are ..." role sentence
+    const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
+    let normalizedObjective = dataset?.normalizedObjective;
+    if (dataset?.datasetObjective && !normalizedObjective) {
+      try {
+        normalizedObjective = await normalizeObjectiveToRole(dataset.datasetObjective);
+        await datasetsDB.updateDatasetObjective(workflow.datasetId, dataset.datasetObjective, normalizedObjective);
+      } catch {
+        console.warn('[apply-hierarchy] Objective normalization failed, will use heuristic fallback');
+      }
+    }
+
+    // Generate LLM-normalized prompt segments for natural system prompts
+    if (dataset?.datasetObjective) {
+      try {
+        validHierarchy = await normalizeTopicSegments(
+          validHierarchy,
+          dataset.datasetObjective,
+          normalizedObjective,
+        );
+      } catch {
+        console.warn('[apply-hierarchy] Segment normalization failed, falling back to heuristic');
+      }
+    }
 
     // Save hierarchy to dataset (single source of truth)
     await datasetsDB.updateDatasetTopicHierarchy(workflow.datasetId, {

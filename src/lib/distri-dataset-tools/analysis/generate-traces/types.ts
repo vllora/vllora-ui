@@ -65,6 +65,7 @@ export interface TopicHierarchyNode {
   children?: TopicHierarchyNode[];
   sourceChunkRefs?: string[];
   promptTemplate?: string;
+  normalizedPromptSegment?: string;
 }
 
 export interface LeafTopic {
@@ -73,6 +74,7 @@ export interface LeafTopic {
   path: string[];
   sourceChunkRefs?: string[];
   promptTemplate?: string;
+  normalizedSegments?: (string | undefined)[];
 }
 
 export interface TopicGenerationTask {

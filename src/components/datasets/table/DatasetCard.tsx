@@ -408,18 +408,18 @@ export function DatasetCard({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="min-w-[140px] p-1">
-                    <DropdownMenuItem onClick={onStartRename} className="text-xs px-2 py-1.5 gap-2">
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onStartRename(); }} className="text-xs px-2 py-1.5 gap-2">
                       <Pencil className="w-3 h-3" />
                       Rename
                     </DropdownMenuItem>
                     {onImport && (
-                      <DropdownMenuItem onClick={onImport} className="text-xs px-2 py-1.5 gap-2">
+                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onImport(); }} className="text-xs px-2 py-1.5 gap-2">
                         <Upload className="w-3 h-3" />
                         Import Data
                       </DropdownMenuItem>
                     )}
                     {onDownload && (
-                      <DropdownMenuItem onClick={onDownload} className="text-xs px-2 py-1.5 gap-2">
+                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDownload(); }} className="text-xs px-2 py-1.5 gap-2">
                         <Download className="w-3 h-3" />
                         Download
                       </DropdownMenuItem>
@@ -427,7 +427,7 @@ export function DatasetCard({
                     <DropdownMenuSeparator className="my-1" />
                     <DropdownMenuItem
                       className="text-xs px-2 py-1.5 gap-2 text-red-500 focus:text-red-500"
-                      onClick={onDelete}
+                      onClick={(e) => { e.stopPropagation(); onDelete(); }}
                     >
                       <Trash2 className="w-3 h-3" />
                       Delete

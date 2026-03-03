@@ -44,20 +44,21 @@ export function TopicHierarchyTreePanel({
   const normalizedObjective = dataset?.normalizedObjective;
   const [showPromptPreview, setShowPromptPreview] = useState(false);
 
-  // Collect leaf topics with full paths for system prompt preview
+  // Collect leaf topics with full paths and segments for system prompt preview
   const leafTopics = useMemo(() => {
-    const leaves: { name: string; path: string[]; promptTemplate?: string }[] = [];
-    const collect = (nodes: TopicHierarchyNode[], parentPath: string[]) => {
+    const leaves: { name: string; path: string[]; promptTemplate?: string; normalizedSegments: (string | undefined)[] }[] = [];
+    const collect = (nodes: TopicHierarchyNode[], parentPath: string[], parentSegments: (string | undefined)[]) => {
       for (const node of nodes) {
         const currentPath = [...parentPath, node.name];
+        const currentSegments = [...parentSegments, node.normalizedPromptSegment];
         if (node.children && node.children.length > 0) {
-          collect(node.children, currentPath);
+          collect(node.children, currentPath, currentSegments);
         } else {
-          leaves.push({ name: node.name, path: currentPath, promptTemplate: node.promptTemplate });
+          leaves.push({ name: node.name, path: currentPath, promptTemplate: node.promptTemplate, normalizedSegments: currentSegments });
         }
       }
     };
-    collect(hierarchy, []);
+    collect(hierarchy, [], []);
     return leaves;
   }, [hierarchy]);
 
@@ -161,7 +162,7 @@ export function TopicHierarchyTreePanel({
                 <div key={leaf.name} className="text-[11px] space-y-0.5">
                   <div className="font-medium text-foreground/80">{leaf.name}</div>
                   <div className="font-mono text-muted-foreground/70 leading-tight bg-muted/30 rounded px-2 py-1">
-                    {resolveTopicSystemPrompt(leaf.path, datasetObjective, undefined, leaf.promptTemplate, normalizedObjective)}
+                    {resolveTopicSystemPrompt(leaf.path, datasetObjective, undefined, leaf.promptTemplate, normalizedObjective, leaf.normalizedSegments)}
                   </div>
                 </div>
               ))}

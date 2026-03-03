@@ -95,7 +95,23 @@ export function buildTopicSystemPrompt(
   trainingObjective: string,
   descriptions?: (string | undefined)[],
   normalizedRole?: string,
+  normalizedSegments?: (string | undefined)[],
 ): string {
+  // If ALL normalized segments are present, use natural concatenation
+  if (
+    normalizedSegments &&
+    normalizedSegments.length === topicPath.length &&
+    normalizedSegments.every((s): s is string => s != null)
+  ) {
+    const role = normalizedRole
+      ? normalizedRole.trim().replace(/\.$/, '')
+      : heuristicNormalize(trainingObjective);
+    const parts = [`${role}.`, ...normalizedSegments];
+    parts.push('Provide clear explanations, relevant examples, and practical guidance.');
+    return parts.join(' ');
+  }
+
+  // Fallback to PAIR-based heuristic
   const path = topicPath.map(humanize);
 
   // Use pre-normalized role if available, otherwise fall back to heuristic
@@ -157,7 +173,10 @@ export function buildTopicSystemPrompt(
 export function getTopicPromptSegment(
   nodeName: string,
   depth: number,
+  normalizedSegment?: string,
 ): string {
+  if (normalizedSegment) return normalizedSegment;
+
   const name = humanize(nodeName);
   const pairIdx = Math.floor(depth / 2);
   const isSecondInPair = depth % 2 === 1;
@@ -220,7 +239,12 @@ export interface PromptTextSegment {
 export function getTopicPromptSegmentParts(
   nodeName: string,
   depth: number,
+  normalizedSegment?: string,
 ): PromptSegmentParts {
+  if (normalizedSegment) {
+    return { template: '', topicName: normalizedSegment, suffix: '' };
+  }
+
   const name = humanize(nodeName);
   const pairIdx = Math.floor(depth / 2);
   const isSecondInPair = depth % 2 === 1;
@@ -279,22 +303,50 @@ export function buildAccumulatedPromptSegments(
   trainingObjective: string,
   descriptions?: (string | undefined)[],
   normalizedRole?: string,
+  normalizedSegments?: (string | undefined)[],
 ): PromptTextSegment[] {
-  const path = topicPath.map(humanize);
   const currentName = humanize(currentNodeName);
   const segments: PromptTextSegment[] = [];
-
-  // Helper: get description suffix for a topic at given index
-  const descSuffix = (idx: number) => {
-    const desc = descriptions?.[idx];
-    return desc ? ` — ${desc.replace(/\.$/, '')}` : '';
-  };
 
   // Role sentence: "You are [goal/training objective]."
   const roleParts = getRoleSentenceParts(trainingObjective, normalizedRole);
   segments.push({ text: roleParts.template, type: 'template', semantic: 'role' });
   segments.push({ text: roleParts.topicName, type: 'goal', semantic: 'role' });
   segments.push({ text: `${roleParts.suffix} `, type: 'template', semantic: 'role' });
+
+  // If ALL normalized segments are present, emit one segment per node
+  if (
+    normalizedSegments &&
+    normalizedSegments.length === topicPath.length &&
+    normalizedSegments.every((s): s is string => s != null)
+  ) {
+    for (let i = 0; i < normalizedSegments.length; i++) {
+      const name = humanize(topicPath[i]);
+      segments.push({
+        text: normalizedSegments[i],
+        type: name === currentName ? 'currentTopicName' : 'topicName',
+        semantic: 'specialization',
+        topicDepth: i,
+      });
+      segments.push({ text: ' ', type: 'template', semantic: 'specialization' });
+    }
+
+    segments.push({
+      text: 'Provide clear explanations, relevant examples, and practical guidance.',
+      type: 'template',
+      semantic: 'instruction',
+    });
+    return segments;
+  }
+
+  // Fallback: PAIR-based heuristic segments
+  const path = topicPath.map(humanize);
+
+  // Helper: get description suffix for a topic at given index
+  const descSuffix = (idx: number) => {
+    const desc = descriptions?.[idx];
+    return desc ? ` — ${desc.replace(/\.$/, '')}` : '';
+  };
 
   // Topic sentences — grouped into pairs
   for (let i = 0; i < path.length; i += 2) {
@@ -442,8 +494,18 @@ export function buildDefaultTemplate(topicPath: string[]): string {
 export function buildAncestorSpecialization(
   ancestorPath: string[],
   descriptions?: (string | undefined)[],
+  normalizedSegments?: (string | undefined)[],
 ): string {
   if (ancestorPath.length === 0) return '';
+
+  // If all ancestor segments are present, concatenate them
+  if (
+    normalizedSegments &&
+    normalizedSegments.length === ancestorPath.length &&
+    normalizedSegments.every((s): s is string => s != null)
+  ) {
+    return normalizedSegments.join(' ');
+  }
 
   const descSuffix = (idx: number) => {
     const desc = descriptions?.[idx];
@@ -488,6 +550,7 @@ export function buildTemplateContext(
   trainingObjective: string,
   descriptions?: (string | undefined)[],
   normalizedRole?: string,
+  normalizedSegments?: (string | undefined)[],
 ): Record<string, string> {
   const humanPath = topicPath.map(humanize);
   const leafIndex = humanPath.length - 1;
@@ -524,8 +587,18 @@ export function buildTemplateContext(
   context.topic_path = humanPath.join(' › ');
   context.parent_topic = leafIndex > 0 ? humanPath[leafIndex - 1] : '';
   context.root_topic = humanPath[0] ?? '';
-  context.ancestor_specialization = buildAncestorSpecialization(ancestorPath, ancestorDescs);
+  const ancestorSegments = normalizedSegments?.slice(0, leafIndex);
+  context.ancestor_specialization = buildAncestorSpecialization(ancestorPath, ancestorDescs, ancestorSegments);
   context.closing = CLOSING_INSTRUCTION;
+
+  // Natural prompt: full prompt built from normalized segments (if all present)
+  if (
+    normalizedSegments &&
+    normalizedSegments.length === topicPath.length &&
+    normalizedSegments.every((s): s is string => s != null)
+  ) {
+    context.natural_prompt = buildTopicSystemPrompt(topicPath, trainingObjective, descriptions, normalizedRole, normalizedSegments);
+  }
 
   return context;
 }
@@ -557,12 +630,13 @@ export function resolveTopicSystemPrompt(
   descriptions?: (string | undefined)[],
   customTemplate?: string,
   normalizedRole?: string,
+  normalizedSegments?: (string | undefined)[],
 ): string {
   if (!customTemplate) {
-    return buildTopicSystemPrompt(topicPath, trainingObjective, descriptions, normalizedRole);
+    return buildTopicSystemPrompt(topicPath, trainingObjective, descriptions, normalizedRole, normalizedSegments);
   }
 
-  const context = buildTemplateContext(topicPath, trainingObjective, descriptions, normalizedRole);
+  const context = buildTemplateContext(topicPath, trainingObjective, descriptions, normalizedRole, normalizedSegments);
   const hasVariables = /\{\{\w+\}\}/.test(customTemplate);
 
   if (!hasVariables) {
@@ -571,6 +645,146 @@ export function resolveTopicSystemPrompt(
   }
 
   return interpolateTemplate(customTemplate, context);
+}
+
+// ─── LLM-based topic segment normalization ──────────────────────────────────
+
+import type { TopicHierarchyNode } from '@/types/dataset-types';
+
+/**
+ * Walk a topic hierarchy BFS (parent before children, siblings in parallel chunks)
+ * and generate a natural `normalizedPromptSegment` for each node via LLM.
+ *
+ * Each segment is one sentence describing the specialization this node adds,
+ * building on the accumulated context of its ancestors.
+ *
+ * Returns a **new** hierarchy (immutable) with `normalizedPromptSegment` populated.
+ * Skips nodes that already have a segment.
+ *
+ * @param hierarchy - The root-level topic nodes
+ * @param trainingObjective - Dataset training objective
+ * @param normalizedRole - Optional LLM-normalized "You are ..." role sentence
+ * @returns New hierarchy with segments populated
+ */
+export async function normalizeTopicSegments(
+  hierarchy: TopicHierarchyNode[],
+  trainingObjective: string,
+  normalizedRole?: string,
+): Promise<TopicHierarchyNode[]> {
+  const role = normalizedRole
+    ? normalizedRole.trim().replace(/\.$/, '')
+    : heuristicNormalize(trainingObjective);
+
+  // BFS queue: each item carries accumulated context from ancestors
+  interface QueueItem {
+    node: TopicHierarchyNode;
+    ancestorContext: string;
+    parentRef: TopicHierarchyNode[] | undefined;
+    indexInParent: number;
+  }
+
+  // Deep-clone hierarchy to avoid mutation
+  const result: TopicHierarchyNode[] = JSON.parse(JSON.stringify(hierarchy));
+
+  // Build BFS queue from the cloned tree
+  const queue: QueueItem[] = [];
+  const enqueue = (nodes: TopicHierarchyNode[], ancestorContext: string) => {
+    for (let i = 0; i < nodes.length; i++) {
+      queue.push({
+        node: nodes[i],
+        ancestorContext,
+        parentRef: nodes,
+        indexInParent: i,
+      });
+    }
+  };
+
+  enqueue(result, `${role}.`);
+
+  // Process BFS level-by-level: parent segments must be set before children
+  while (queue.length > 0) {
+    // Take all items at the current level
+    const currentLevel = queue.splice(0, queue.length);
+
+    // Process siblings in parallel chunks of 3
+    const CHUNK_SIZE = 3;
+    for (let chunkStart = 0; chunkStart < currentLevel.length; chunkStart += CHUNK_SIZE) {
+      const chunk = currentLevel.slice(chunkStart, chunkStart + CHUNK_SIZE);
+
+      const promises = chunk.map(async (item) => {
+        // Skip if already has a segment
+        if (item.node.normalizedPromptSegment) return;
+
+        const topicName = humanize(item.node.name);
+        const description = item.node.description || '';
+
+        const messages = [
+          {
+            role: 'system' as const,
+            content:
+              'You generate a single natural English sentence that narrows the specialization of an AI assistant to a specific topic. The sentence builds on the context already established. Return ONLY the sentence ending with a period. Do not repeat what the context already says.',
+          },
+          {
+            role: 'user' as const,
+            content: `Context so far:\n"${item.ancestorContext}"\n\nTopic name: ${topicName}${description ? `\nTopic description: ${description}` : ''}\n\nGenerate one sentence that narrows the assistant's specialization to this topic.`,
+          },
+        ];
+
+        try {
+          const segment = await callLucy(messages, {
+            temperature: 0,
+            label: 'normalize_topic_segment',
+          });
+          item.node.normalizedPromptSegment = segment.trim();
+        } catch {
+          // Leave segment undefined — fallback to heuristic
+        }
+      });
+
+      await Promise.all(promises);
+    }
+
+    // Enqueue children of all current-level nodes
+    for (const item of currentLevel) {
+      if (item.node.children && item.node.children.length > 0) {
+        const childContext = item.node.normalizedPromptSegment
+          ? `${item.ancestorContext} ${item.node.normalizedPromptSegment}`
+          : item.ancestorContext;
+        enqueue(item.node.children, childContext);
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Walk a hierarchy following a topic path and collect `normalizedPromptSegment`
+ * from each node along the way.
+ *
+ * @param hierarchy - The root-level topic nodes
+ * @param topicPath - Path of snake_case topic names from root to leaf
+ * @returns Array parallel to `topicPath` with segments (undefined if missing)
+ */
+export function extractNormalizedSegments(
+  hierarchy: TopicHierarchyNode[],
+  topicPath: string[],
+): (string | undefined)[] {
+  const segments: (string | undefined)[] = [];
+  let currentLevel = hierarchy;
+
+  for (const name of topicPath) {
+    const node = currentLevel.find((n) => n.name === name);
+    if (!node) {
+      // Path doesn't match hierarchy — fill rest with undefined
+      segments.push(...new Array(topicPath.length - segments.length).fill(undefined));
+      break;
+    }
+    segments.push(node.normalizedPromptSegment);
+    currentLevel = node.children || [];
+  }
+
+  return segments;
 }
 
 // ─── LLM-based objective normalization ──────────────────────────────────────

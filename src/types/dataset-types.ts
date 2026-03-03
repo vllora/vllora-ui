@@ -65,6 +65,8 @@ export interface TopicHierarchyNode {
   sourceChunkRefs?: string[];
   /** Custom mustache template for system prompt construction. If absent, auto-generated from hierarchy. */
   promptTemplate?: string;
+  /** LLM-generated natural language sentence describing this node's specialization. Cached per node, used to build natural system prompts instead of formulaic PAIR patterns. */
+  normalizedPromptSegment?: string;
 }
 
 // Topic hierarchy configuration stored at dataset level

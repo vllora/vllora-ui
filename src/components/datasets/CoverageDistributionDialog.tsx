@@ -67,6 +67,8 @@ interface TreeNodeData {
   path: string[];
   /** Custom prompt template (if set on this topic) */
   promptTemplate?: string;
+  /** Accumulated LLM-normalized prompt segments from root to this node */
+  normalizedSegments: (string | undefined)[];
   children?: TreeNodeData[];
 }
 
@@ -122,15 +124,17 @@ function buildTreeData(
   totalRecords: number,
   depth: number = 0,
   parentPath: string[] = [],
+  parentSegments: (string | undefined)[] = [],
 ): TreeNodeData[] {
   if (!nodes || nodes.length === 0) return [];
 
   return nodes.map((node) => {
     const currentPath = [...parentPath, node.name];
+    const currentSegments = [...parentSegments, node.normalizedPromptSegment];
     const isLeaf = !node.children || node.children.length === 0;
     const children = isLeaf
       ? undefined
-      : buildTreeData(node.children, topicCounts, totalRecords, depth + 1, currentPath);
+      : buildTreeData(node.children, topicCounts, totalRecords, depth + 1, currentPath, currentSegments);
 
     // For leaf nodes, use the count directly
     // For parent nodes, aggregate children counts
@@ -149,6 +153,7 @@ function buildTreeData(
       depth,
       path: currentPath,
       promptTemplate: node.promptTemplate,
+      normalizedSegments: currentSegments,
       children,
     };
   });
@@ -259,7 +264,7 @@ function TreeNode({
                 <div className="space-y-1">
                   <div className="text-xs font-medium text-muted-foreground">System Prompt</div>
                   <div className="text-xs font-mono whitespace-pre-wrap leading-relaxed">
-                    {resolveTopicSystemPrompt(node.path, datasetObjective, undefined, node.promptTemplate, normalizedObjective)}
+                    {resolveTopicSystemPrompt(node.path, datasetObjective, undefined, node.promptTemplate, normalizedObjective, node.normalizedSegments)}
                   </div>
                 </div>
               </TooltipContent>

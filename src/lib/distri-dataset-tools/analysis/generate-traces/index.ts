@@ -564,7 +564,7 @@ export async function generateTraces(
     const topicSystemPromptMap = new Map<string, string>();
     for (const topic of targetLeafTopics) {
       if (trainingObjective) {
-        topicSystemPromptMap.set(topic.id, resolveTopicSystemPrompt(topic.path, trainingObjective, undefined, topic.promptTemplate, normalizedRole));
+        topicSystemPromptMap.set(topic.id, resolveTopicSystemPrompt(topic.path, trainingObjective, undefined, topic.promptTemplate, normalizedRole, topic.normalizedSegments));
       } else {
         topicSystemPromptMap.set(topic.id, buildGenericSystemPrompt(topic.path.join(' > ')));
       }

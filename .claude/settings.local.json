@@ -83,7 +83,8 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(chmod +x /Users/anhthuduong/Documents/GitHub/vllora/ui/.claude/hooks/console-log-warning.sh)",
-      "mcp__playwright__browser_evaluate"
+      "mcp__playwright__browser_evaluate",
+      "Bash(npm test -- --run 2>&1 | tail -20)"
     ],
     "deny": [],
     "ask": [],

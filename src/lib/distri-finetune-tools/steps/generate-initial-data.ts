@@ -32,17 +32,23 @@ interface LeafTopic {
   path: string[]; // Full path from root to leaf
   sourceChunkRefs?: string[];
   promptTemplate?: string;
+  normalizedSegments?: (string | undefined)[];
 }
 
 /**
  * Extract all leaf topics from a hierarchy tree.
  * A leaf topic is one with no children or empty children array.
  */
-function getLeafTopics(hierarchy: TopicHierarchyNode[], parentPath: string[] = []): LeafTopic[] {
+function getLeafTopics(
+  hierarchy: TopicHierarchyNode[],
+  parentPath: string[] = [],
+  parentSegments: (string | undefined)[] = [],
+): LeafTopic[] {
   const leaves: LeafTopic[] = [];
 
   for (const node of hierarchy) {
     const currentPath = [...parentPath, node.name];
+    const currentSegments = [...parentSegments, node.normalizedPromptSegment];
 
     if (!node.children || node.children.length === 0) {
       // This is a leaf node
@@ -51,10 +57,11 @@ function getLeafTopics(hierarchy: TopicHierarchyNode[], parentPath: string[] = [
         path: currentPath,
         sourceChunkRefs: node.sourceChunkRefs,
         promptTemplate: node.promptTemplate,
+        normalizedSegments: currentSegments,
       });
     } else {
       // Recurse into children
-      leaves.push(...getLeafTopics(node.children, currentPath));
+      leaves.push(...getLeafTopics(node.children, currentPath, currentSegments));
     }
   }
 
@@ -760,7 +767,7 @@ export const generateInitialDataHandler: ToolHandler = async (
       for (const [topic] of topicDistribution) {
         topicSystemPrompts.set(
           topic.name,
-          seedSystemPrompt || resolveTopicSystemPrompt(topic.path, objective, undefined, topic.promptTemplate, normalizedRole),
+          seedSystemPrompt || resolveTopicSystemPrompt(topic.path, objective, undefined, topic.promptTemplate, normalizedRole, topic.normalizedSegments),
         );
       }
 

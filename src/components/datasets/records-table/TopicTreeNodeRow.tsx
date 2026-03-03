@@ -57,6 +57,8 @@ export interface TopicTreeNodeRowProps {
   normalizedObjective?: string;
   /** Accumulated descriptions from parent topics (for prompt construction) */
   parentDescriptions?: (string | undefined)[];
+  /** Accumulated LLM-normalized prompt segments from parent topics */
+  parentSegments?: (string | undefined)[];
   /** Handler for updating a topic's custom prompt template */
   onUpdatePromptTemplate?: (topicId: string, template: string | undefined) => void;
 }
@@ -502,6 +504,7 @@ export function TopicTreeNodeRow({
   datasetObjective,
   normalizedObjective,
   parentDescriptions = [],
+  parentSegments = [],
   onUpdatePromptTemplate,
 }: TopicTreeNodeRowProps) {
   const [isExpanded, setIsExpanded] = useState(true); // Expand all by default
@@ -551,21 +554,22 @@ export function TopicTreeNodeRow({
   const totalCount = descendantCounts.get(node.id) || 0;
   const percentage = totalRecords > 0 ? (totalCount / totalRecords) * 100 : 0;
 
-  // Build the full path and descriptions including this node
+  // Build the full path, descriptions, and segments including this node
   const currentPath = [...parentPath, node.name];
   const currentDescriptions = [...parentDescriptions, node.description];
+  const currentSegments = [...parentSegments, node.normalizedPromptSegment];
 
   // Compute shared system prompt for leaf topics (only leaves have direct records)
   const systemPrompt = useMemo(() => {
     if (!datasetObjective || hasChildren) return undefined;
-    return resolveTopicSystemPrompt(currentPath, datasetObjective, currentDescriptions, node.promptTemplate, normalizedObjective);
-  }, [datasetObjective, hasChildren, currentPath, currentDescriptions, node.promptTemplate, normalizedObjective]);
+    return resolveTopicSystemPrompt(currentPath, datasetObjective, currentDescriptions, node.promptTemplate, normalizedObjective, currentSegments);
+  }, [datasetObjective, hasChildren, currentPath, currentDescriptions, node.promptTemplate, normalizedObjective, currentSegments]);
 
   // Compute structured prompt segments for color-coded rendering
   const systemPromptSegments = useMemo(() => {
     if (!datasetObjective || hasChildren) return undefined;
-    return buildAccumulatedPromptSegments(currentPath, node.name, datasetObjective, currentDescriptions, normalizedObjective);
-  }, [datasetObjective, hasChildren, currentPath, node.name, currentDescriptions, normalizedObjective]);
+    return buildAccumulatedPromptSegments(currentPath, node.name, datasetObjective, currentDescriptions, normalizedObjective, currentSegments);
+  }, [datasetObjective, hasChildren, currentPath, node.name, currentDescriptions, normalizedObjective, currentSegments]);
 
   return (
     <div className="relative">
@@ -635,6 +639,7 @@ export function TopicTreeNodeRow({
                 datasetObjective={datasetObjective}
                 normalizedObjective={normalizedObjective}
                 parentDescriptions={currentDescriptions}
+                parentSegments={currentSegments}
                 onUpdatePromptTemplate={onUpdatePromptTemplate}
               />
             ))}

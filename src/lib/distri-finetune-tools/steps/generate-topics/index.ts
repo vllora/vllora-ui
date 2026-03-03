@@ -12,6 +12,7 @@ import type { ToolHandler } from "../../types";
 import type { TopicHierarchyNode } from "@/types/dataset-types";
 import { countLeafTopics } from "../helpers";
 import type { ProposedTopic } from "../propose-plan/types";
+import { normalizeTopicSegments, normalizeObjectiveToRole } from "../shared/topic-system-prompt";
 
 import { generateTopicsViaBackend } from "./backend";
 import { generateTopicsViaFrontend } from "./frontend";
@@ -236,6 +237,26 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
         }
       }
 
+      // Ensure the objective has a normalized "You are ..." role sentence
+      let suggestNormalized = dataset.normalizedObjective;
+      if (dataset.datasetObjective && !suggestNormalized) {
+        try {
+          suggestNormalized = await normalizeObjectiveToRole(dataset.datasetObjective);
+          await datasetsDB.updateDatasetObjective(dataset.id, dataset.datasetObjective, suggestNormalized);
+        } catch {
+          console.warn("[generate_topics] Objective normalization failed, will use heuristic fallback");
+        }
+      }
+
+      // Generate LLM-normalized prompt segments for natural system prompts
+      if (dataset.datasetObjective) {
+        try {
+          hierarchy = await normalizeTopicSegments(hierarchy, dataset.datasetObjective, suggestNormalized);
+        } catch {
+          console.warn("[generate_topics] Segment normalization failed, falling back to heuristic");
+        }
+      }
+
       return {
         success: true,
         hierarchy,
@@ -302,6 +323,28 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
         console.log("[generate_topics] Append mode: merged with existing hierarchy");
       }
     }
+
+    // Ensure the objective has a normalized "You are ..." role sentence
+    if (workflow.trainingGoals) {
+      const workflowDataset = await datasetsDB.getDatasetById(workflow.datasetId);
+      let normalizedObj = workflowDataset?.normalizedObjective;
+      if (!normalizedObj) {
+        try {
+          normalizedObj = await normalizeObjectiveToRole(workflow.trainingGoals);
+          await datasetsDB.updateDatasetObjective(workflow.datasetId, workflow.trainingGoals, normalizedObj);
+        } catch {
+          console.warn("[generate_topics] Objective normalization failed, will use heuristic fallback");
+        }
+      }
+
+      // Generate LLM-normalized prompt segments for natural system prompts
+      try {
+        hierarchy = await normalizeTopicSegments(hierarchy, workflow.trainingGoals, normalizedObj);
+      } catch {
+        console.warn("[generate_topics] Segment normalization failed, falling back to heuristic");
+      }
+    }
+
     const topicCount = countLeafTopics(hierarchy);
 
     // Save hierarchy to dataset (single source of truth)

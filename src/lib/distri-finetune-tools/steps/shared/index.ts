@@ -50,6 +50,8 @@ export {
   buildGenericSystemPrompt,
   resolveTopicSystemPrompt,
   normalizeObjectiveToRole,
+  normalizeTopicSegments,
+  extractNormalizedSegments,
   buildTemplateContext,
   buildAncestorSpecialization,
   buildTemplateVariables,
