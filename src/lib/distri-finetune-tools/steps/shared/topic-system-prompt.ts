@@ -60,11 +60,13 @@ const PAIR_CONNECTORS = [
  *
  * @param topicPath - Full path from root to leaf topic (snake_case names)
  * @param trainingObjective - The dataset's training objective text
+ * @param descriptions - Optional descriptions for each topic in the path (parallel array)
  * @returns A system prompt string shared by all records in this topic
  */
 export function buildTopicSystemPrompt(
   topicPath: string[],
   trainingObjective: string,
+  descriptions?: (string | undefined)[],
 ): string {
   const path = topicPath.map(humanize);
 
@@ -74,6 +76,12 @@ export function buildTopicSystemPrompt(
     ? trimmed
     : `You are ${trimmed.charAt(0).toLowerCase()}${trimmed.slice(1)}`;
 
+  // Helper: get description suffix for a topic at given index
+  const descSuffix = (idx: number) => {
+    const desc = descriptions?.[idx];
+    return desc ? ` — ${desc.replace(/\.$/, '')}` : '';
+  };
+
   // Group path into pairs → each pair becomes one narrowing sentence
   const sentences: string[] = [`${role}.`];
 
@@ -81,11 +89,11 @@ export function buildTopicSystemPrompt(
     const pairIdx = Math.floor(i / 2);
     const prefix = PAIR_PREFIXES[pairIdx % PAIR_PREFIXES.length];
     const connector = PAIR_CONNECTORS[pairIdx % PAIR_CONNECTORS.length];
-    const first = path[i];
+    const first = path[i] + descSuffix(i);
 
     if (i + 1 < path.length) {
       // Full pair: "You specialize in X, particularly Y."
-      sentences.push(`${prefix} ${first}${connector}${path[i + 1]}.`);
+      sentences.push(`${prefix} ${first}${connector}${path[i + 1]}${descSuffix(i + 1)}.`);
     } else {
       // Odd one out: "Your focus is on X."
       sentences.push(`${prefix} ${first}.`);
@@ -162,10 +170,17 @@ export interface PromptSegmentParts {
   suffix: string;     // e.g., "" or "."
 }
 
+/** Semantic section that a prompt segment belongs to */
+export type PromptSemanticSection = 'role' | 'specialization' | 'instruction';
+
 /** A tagged piece of the full accumulated prompt (for color-coded rendering) */
 export interface PromptTextSegment {
   text: string;
-  type: 'template' | 'topicName' | 'currentTopicName';
+  type: 'template' | 'topicName' | 'currentTopicName' | 'goal';
+  /** Optional semantic section for annotated visualization */
+  semantic?: PromptSemanticSection;
+  /** For topic names: 0-based index in the topic path (for hierarchy visualization) */
+  topicDepth?: number;
 }
 
 /**
@@ -215,56 +230,76 @@ export function getRoleSentenceParts(trainingObjective: string): PromptSegmentPa
 /**
  * Build the full accumulated prompt as structured segments for color-coded rendering.
  * Each topic name is tagged so it can be highlighted, with the current node's name
- * getting extra emphasis via the 'currentTopicName' type.
+ * getting extra emphasis via the 'currentTopicName' type. The training objective is
+ * tagged as 'goal' so the UI can highlight it distinctly.
  *
  * @param topicPath - Full path from root to current topic (snake_case names)
  * @param currentNodeName - The current node's snake_case name (for emphasis)
  * @param trainingObjective - The dataset's training objective text
+ * @param descriptions - Optional descriptions for each topic in the path (parallel array)
  * @returns Array of tagged text segments
  */
 export function buildAccumulatedPromptSegments(
   topicPath: string[],
   currentNodeName: string,
   trainingObjective: string,
+  descriptions?: (string | undefined)[],
 ): PromptTextSegment[] {
   const path = topicPath.map(humanize);
   const currentName = humanize(currentNodeName);
   const segments: PromptTextSegment[] = [];
 
-  // Role sentence: "You are [role description]."
+  // Helper: get description suffix for a topic at given index
+  const descSuffix = (idx: number) => {
+    const desc = descriptions?.[idx];
+    return desc ? ` — ${desc.replace(/\.$/, '')}` : '';
+  };
+
+  // Role sentence: "You are [goal/training objective]."
   const roleParts = getRoleSentenceParts(trainingObjective);
-  segments.push({ text: roleParts.template, type: 'template' });
-  segments.push({ text: roleParts.topicName, type: 'topicName' });
-  segments.push({ text: `${roleParts.suffix} `, type: 'template' });
+  segments.push({ text: roleParts.template, type: 'template', semantic: 'role' });
+  segments.push({ text: roleParts.topicName, type: 'goal', semantic: 'role' });
+  segments.push({ text: `${roleParts.suffix} `, type: 'template', semantic: 'role' });
 
   // Topic sentences — grouped into pairs
   for (let i = 0; i < path.length; i += 2) {
     const pairIdx = Math.floor(i / 2);
     const prefix = PAIR_PREFIXES[pairIdx % PAIR_PREFIXES.length];
     const connector = PAIR_CONNECTORS[pairIdx % PAIR_CONNECTORS.length];
-    const first = path[i];
+    const first = path[i] + descSuffix(i);
 
     // Prefix: "You specialize in "
-    segments.push({ text: `${prefix} `, type: 'template' });
-    // First topic name
+    segments.push({ text: `${prefix} `, type: 'template', semantic: 'specialization' });
+    // First topic name + description (tagged with its depth in the hierarchy)
     segments.push({
       text: first,
-      type: first === currentName ? 'currentTopicName' : 'topicName',
+      type: path[i] === currentName ? 'currentTopicName' : 'topicName',
+      semantic: 'specialization',
+      topicDepth: i,
     });
 
     if (i + 1 < path.length) {
-      // Connector + second topic: ", particularly [name]."
-      segments.push({ text: connector, type: 'template' });
+      // Connector + second topic: ", particularly [name — desc]."
+      segments.push({ text: connector, type: 'template', semantic: 'specialization' });
       segments.push({
-        text: path[i + 1],
+        text: path[i + 1] + descSuffix(i + 1),
         type: path[i + 1] === currentName ? 'currentTopicName' : 'topicName',
+        semantic: 'specialization',
+        topicDepth: i + 1,
       });
-      segments.push({ text: '. ', type: 'template' });
+      segments.push({ text: '. ', type: 'template', semantic: 'specialization' });
     } else {
-      // Odd one out: "."
-      segments.push({ text: '. ', type: 'template' });
+      // Odd one out — already has description appended above
+      segments.push({ text: '. ', type: 'template', semantic: 'specialization' });
     }
   }
+
+  // Closing instruction sentence
+  segments.push({
+    text: 'Provide clear explanations, relevant examples, and practical guidance.',
+    type: 'template',
+    semantic: 'instruction',
+  });
 
   return segments;
 }
