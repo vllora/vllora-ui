@@ -147,3 +147,97 @@ Generate a new user message that:
 4. Should feel natural and realistic
 
 Output only the varied user message, nothing else.`;
+
+// ─── Batch RFT Mode: Generate multiple user messages in a single call ───
+
+/**
+ * Prompt for generating N varied user messages from a seed message in one LLM call.
+ * Used by generateBatchRFTRecords() to replace per-record LLM calls.
+ */
+export const BATCH_RFT_VARIATION_PROMPT = `You are generating diverse user messages for LLM fine-tuning training data.
+
+Original User Message (use as a reference for the topic/intent):
+{{original_message}}
+
+Topic Context: {{subtopics}}
+{{tools_section}}{{knowledge_context}}
+Generate {{count}} diverse user messages that a real user would ask an assistant about this topic.
+
+Each message should:
+1. Be about the same general topic/domain as the original
+2. Use different language, tone, complexity, and specificity
+3. Cover different angles, sub-aspects, or scenarios within the topic
+4. Feel natural and realistic — like messages from different real users
+
+Diversity guidelines:
+- Complexity: beginner questions to advanced scenarios
+- Question type: factual, explanatory, scenario-based, comparative, how-to
+- Tone: casual learner, focused student, curious beginner, professional
+- Length: brief one-liners to detailed multi-sentence requests
+- Specificity: broad questions to very specific sub-aspects
+
+Output Format:
+{
+  "user_messages": [
+    "First user message...",
+    "Second user message...",
+    ...
+  ]
+}
+
+Generate exactly {{count}} diverse user messages.`;
+
+/**
+ * Prompt for generating N fresh first user messages when no seed record exists.
+ * Used as a fallback by generateBatchRFTRecords().
+ */
+export const BATCH_RFT_FIRST_MESSAGE_PROMPT = `You are generating diverse initial user messages for LLM fine-tuning training data.
+
+Topic Context: {{subtopics}}
+Assistant System Prompt: {{system_prompt}}
+{{tools_section}}{{knowledge_context}}
+Generate {{count}} diverse first messages that different real users would send to the assistant described above.
+
+Each message should:
+1. Be a natural, realistic opening message to the assistant
+2. Cover a different aspect or scenario within the topic
+3. Vary in tone, complexity, length, and specificity
+
+Diversity guidelines:
+- Complexity: beginner questions to advanced scenarios
+- Question type: factual, explanatory, scenario-based, comparative, how-to
+- Tone: casual learner, focused student, curious beginner, professional
+- Length: brief one-liners to detailed multi-sentence requests
+
+Output Format:
+{
+  "user_messages": [
+    "First user message...",
+    "Second user message...",
+    ...
+  ]
+}
+
+Generate exactly {{count}} diverse user messages.`;
+
+/**
+ * JSON schema for batch RFT response — enforces array of user_messages.
+ */
+export const BATCH_RFT_RESPONSE_SCHEMA = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'batch_rft_variations',
+    strict: true,
+    schema: {
+      type: 'object',
+      properties: {
+        user_messages: {
+          type: 'array',
+          items: { type: 'string' },
+        },
+      },
+      required: ['user_messages'],
+      additionalProperties: false,
+    },
+  },
+};

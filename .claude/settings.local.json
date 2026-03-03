@@ -74,7 +74,8 @@
       "WebFetch(domain:developers.openai.com)",
       "WebFetch(domain:arxiv.org)",
       "WebSearch",
-      "Bash(npx tsx -e \":*)"
+      "Bash(npx tsx -e \":*)",
+      "Bash(./node_modules/.bin/tsc --noEmit)"
     ],
     "deny": [],
     "ask": [],

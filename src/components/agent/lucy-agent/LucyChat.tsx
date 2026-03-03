@@ -277,9 +277,12 @@ export function LucyChat({
       return;
     }
 
-    // Mark as pending to prevent duplicate triggers from rapid effect re-runs
+    // Mark as pending to prevent duplicate triggers from rapid effect re-runs.
+    // NOTE: lastAutoTriggeredPromptRef is set INSIDE the timer callback (after sendMessage),
+    // not here. This prevents a race condition where a dependency change (e.g., sendMessage
+    // reference updating during useChat initialization) cancels the timer via cleanup,
+    // but the ref was already set — making the effect think the prompt was already sent.
     autoTriggerPendingRef.current = true;
-    lastAutoTriggeredPromptRef.current = autoTriggerPrompt;
 
     // Detect if this is an initial analysis prompt (longer delay to show indicator)
     const isAnalysisPrompt = messages.length === 0 && (
@@ -308,7 +311,8 @@ export function LucyChat({
         useChatStateStore.getState().resetStreamingStates();
       }
       sendMessage([{ part_type: 'text', data: autoTriggerPrompt }]);
-      // Reset pending after send completes
+      // Mark as triggered AFTER send — only now is it safe to deduplicate
+      lastAutoTriggeredPromptRef.current = autoTriggerPrompt;
       autoTriggerPendingRef.current = false;
     }, isAnalysisPrompt ? 800 : 100);
 

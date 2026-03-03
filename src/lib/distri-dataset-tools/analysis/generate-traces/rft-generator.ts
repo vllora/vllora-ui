@@ -9,13 +9,20 @@
 
 import type { DatasetRecord, DataInfo } from '@/types/dataset-types';
 import type { SyntheticMessage, SyntheticTraceRecord } from './types';
-import { callLLMText } from './llm';
-import { RFT_USER_VARIATION_PROMPT, SIMULATED_USER_PROMPT } from './prompts';
+import { callLLMText, callLLM, initMessage } from './llm';
+import {
+  RFT_USER_VARIATION_PROMPT,
+  SIMULATED_USER_PROMPT,
+  BATCH_RFT_VARIATION_PROMPT,
+  BATCH_RFT_FIRST_MESSAGE_PROMPT,
+  BATCH_RFT_RESPONSE_SCHEMA,
+} from './prompts';
 import {
   extractSeedMessages,
   extractSeedSystemPrompt,
   ensurePersona,
   normalizeAndValidateMessages,
+  tryParseJson,
 } from './utils';
 
 /**
@@ -178,6 +185,151 @@ export async function generateRFTRecord(
   const result = { topic_path: topicPath, persona, messages };
   console.log(`[generateRFTRecord] Returning valid record object`);
   return result;
+}
+
+// ─── Batch RFT Generation (multiple user messages per LLM call) ───
+
+/**
+ * Generate N varied user messages in a single LLM call for a topic.
+ * This is the batch equivalent of calling generateVariedUserMessage() N times.
+ *
+ * Returns an array of SyntheticTraceRecord, each with the shared system prompt
+ * + context messages + one unique varied user message.
+ */
+export async function generateBatchRFTRecords(
+  topicPath: string[],
+  seedRecord: DatasetRecord | undefined,
+  tools: any[],
+  personaCache: Map<string, string[]>,
+  count: number,
+  knowledgeContext?: string,
+  topicSystemPrompt?: string,
+): Promise<SyntheticTraceRecord[]> {
+  const topicStr = topicPath.join(' -> ');
+  const topicKey = topicPath.join('/');
+  const contextStr = knowledgeContext ? `${topicStr}\n\n${knowledgeContext}` : topicStr;
+
+  console.log(`[generateBatchRFTRecords] Starting batch for topic: ${topicStr}, count: ${count}`);
+
+  // Extract seed messages
+  const seedMessages = extractSeedMessages(seedRecord);
+  const seedSystemPrompt = extractSeedSystemPrompt(seedMessages);
+  const systemPrompt = topicSystemPrompt || seedSystemPrompt || `You are a helpful assistant specializing in ${topicStr}.`;
+
+  // Find the last user message to use as variation seed
+  const lastUserMsgIndex = [...seedMessages].reverse().findIndex((m: any) => m?.role === 'user');
+
+  // Generate a persona for metadata (batch shares a persona pool internally)
+  const persona = await ensurePersona(personaCache, topicKey, contextStr);
+
+  let userMessages: string[];
+
+  if (lastUserMsgIndex === -1 || seedMessages.length === 0) {
+    // No seed user message — generate fresh first messages
+    console.log(`[generateBatchRFTRecords] No seed user message, generating ${count} fresh messages`);
+    userMessages = await generateBatchFirstMessages(contextStr, systemPrompt, tools, count, knowledgeContext);
+  } else {
+    // Have a seed user message — generate variations
+    const actualLastUserIndex = seedMessages.length - 1 - lastUserMsgIndex;
+    const originalUserMessage = seedMessages[actualLastUserIndex]?.content || '';
+    console.log(`[generateBatchRFTRecords] Generating ${count} variations of: "${originalUserMessage.substring(0, 80)}..."`);
+    userMessages = await generateBatchVariations(originalUserMessage, contextStr, tools, count, knowledgeContext);
+  }
+
+  console.log(`[generateBatchRFTRecords] LLM returned ${userMessages.length} user messages`);
+
+  // Build context messages (everything before the last user message, excluding system)
+  const contextMsgs: SyntheticMessage[] = [];
+  if (lastUserMsgIndex !== -1 && seedMessages.length > 0) {
+    const actualLastUserIndex = seedMessages.length - 1 - lastUserMsgIndex;
+    for (const msg of seedMessages.slice(0, actualLastUserIndex)) {
+      if (msg?.role === 'system') continue;
+      contextMsgs.push({
+        role: msg.role,
+        content: msg.content ?? null,
+        tool_calls: msg.tool_calls ?? null,
+        tool_call_id: msg.tool_call_id ?? null,
+      });
+    }
+  }
+
+  // Assemble each user message into a full SyntheticTraceRecord
+  return userMessages.map((userMsg) => {
+    const messages: SyntheticMessage[] = [
+      { role: 'system', content: systemPrompt, tool_calls: null, tool_call_id: null },
+      ...contextMsgs,
+      { role: 'user', content: userMsg, tool_calls: null, tool_call_id: null },
+    ];
+    return { topic_path: topicPath, persona, messages };
+  });
+}
+
+/**
+ * Generate N varied user messages from a seed message in one LLM call.
+ */
+async function generateBatchVariations(
+  originalMessage: string,
+  contextStr: string,
+  tools: any[],
+  count: number,
+  knowledgeContext?: string,
+): Promise<string[]> {
+  const knowledgeSection = knowledgeContext
+    ? `\nKnowledge Context (ground your messages in this material):\n${knowledgeContext}\n`
+    : '';
+
+  const prompt = BATCH_RFT_VARIATION_PROMPT
+    .replace(/\{\{count\}\}/g, String(count))
+    .replace('{{original_message}}', originalMessage)
+    .replace('{{subtopics}}', contextStr)
+    .replace('{{tools_section}}', buildToolsSection(tools))
+    .replace('{{knowledge_context}}', knowledgeSection);
+
+  const response = await callLLM(
+    [initMessage('user', prompt)],
+    { responseFormat: BATCH_RFT_RESPONSE_SCHEMA },
+  );
+
+  const parsed = tryParseJson<{ user_messages: string[] }>(response);
+  if (!parsed?.user_messages?.length) {
+    console.warn(`[generateBatchVariations] Failed to parse batch response, falling back to empty`);
+    return [];
+  }
+  return parsed.user_messages;
+}
+
+/**
+ * Generate N fresh first user messages when no seed record exists, in one LLM call.
+ */
+async function generateBatchFirstMessages(
+  contextStr: string,
+  systemPrompt: string,
+  tools: any[],
+  count: number,
+  knowledgeContext?: string,
+): Promise<string[]> {
+  const knowledgeSection = knowledgeContext
+    ? `\nKnowledge Context (ground your messages in this material):\n${knowledgeContext}\n`
+    : '';
+
+  const prompt = BATCH_RFT_FIRST_MESSAGE_PROMPT
+    .replace(/\{\{count\}\}/g, String(count))
+    .replace('{{subtopics}}', contextStr)
+    .replace('{{system_prompt}}', systemPrompt)
+    .replace('{{tools_section}}', buildToolsSection(tools))
+    .replace('{{knowledge_context}}', knowledgeSection);
+
+  const response = await callLLM(
+    [initMessage('user', prompt)],
+    { responseFormat: BATCH_RFT_RESPONSE_SCHEMA },
+  );
+
+  const parsed = tryParseJson<{ user_messages: string[] }>(response);
+  if (!parsed?.user_messages?.length) {
+    console.warn(`[generateBatchFirstMessages] Failed to parse batch response, falling back to empty`);
+    return [];
+  }
+  return parsed.user_messages;
 }
 
 /**

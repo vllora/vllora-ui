@@ -223,15 +223,19 @@ export function LucySidebar() {
     const timer = setTimeout(() => {
       if (lastAnalyzedDatasetRef.current !== targetDatasetId && messagesRef.current.length === 0) {
         lastAnalyzedDatasetRef.current = targetDatasetId;
-        // Check if Lucy has previously analyzed this dataset
-        const hasBeenAnalyzed = workflowRef.current !== null ||
+        // Check if Lucy has previously analyzed this dataset.
+        // A workflow at 'not_started' doesn't count — it's auto-created when the dataset
+        // is created (with an objective) but hasn't been touched by Lucy yet.
+        const wf = workflowRef.current;
+        const hasBeenAnalyzed = (wf !== null && wf.currentStep !== 'not_started') ||
           (planStatusRef.current && planStatusRef.current !== 'dismissed');
         if (hasBeenAnalyzed) {
-          // Previously analyzed — show status summary instead of LLM call
           return;
         }
         // New dataset — trigger Lucy analysis (works for both empty and trace-imported)
-        setAutoTriggerPrompt(buildDatasetAnalysisPrompt(recordsRef.current.length === 0));
+        const isEmpty = recordsRef.current.length === 0;
+        const prompt = buildDatasetAnalysisPrompt(isEmpty);
+        setAutoTriggerPrompt(prompt);
       }
     }, 300);
 
@@ -308,8 +312,9 @@ export function LucySidebar() {
 
   // Status summary for previously-analyzed datasets (shown instead of LLM auto-trigger).
   // Also shown when docs are processing so Lucy acknowledges the activity.
+  // A workflow at 'not_started' doesn't count — it's auto-created with the dataset.
   const statusSummary = useMemo(() => {
-    const hasBeenAnalyzed = workflow !== null ||
+    const hasBeenAnalyzed = (workflow !== null && workflow.currentStep !== 'not_started') ||
       (planStatus && planStatus !== 'dismissed');
     if (!hasBeenAnalyzed && !docsProcessing) return undefined;
     return (

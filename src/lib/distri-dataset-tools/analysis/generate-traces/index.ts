@@ -40,7 +40,7 @@ import {
 } from "./utils";
 
 // Import generators
-import { generateRFTRecord, buildRFTDataInfo } from "./rft-generator";
+import { generateRFTRecord, buildRFTDataInfo, generateBatchRFTRecords } from "./rft-generator";
 import { simulateConversation } from "./sft-generator";
 
 // Import chunk resolution utilities
@@ -229,12 +229,124 @@ async function generateSingleRecord(
   }
 }
 
-/** Number of records to generate in parallel within each topic */
+/** Number of records to generate in parallel within each topic (SFT mode) */
 const RECORDS_BATCH_SIZE = 10;
 
 /**
- * Generate multiple records for a single topic
- * Generates records in batches to avoid overwhelming the queue
+ * Generate multiple RFT records for a single topic using batch LLM call.
+ *
+ * Instead of making N individual LLM calls (one per record), this generates
+ * all N user messages in a single structured JSON call. All records under a
+ * topic share the same system prompt, so only user messages need to vary.
+ *
+ * ~5× fewer LLM calls compared to the per-record approach.
+ */
+async function generateRFTRecordsForTopic(
+  task: TopicGenerationTask,
+  personaCache: Map<string, string[]>,
+  callbacks: GenerationCallbacks,
+): Promise<TopicGenerationResult> {
+  console.log(
+    `[generateRFTRecordsForTopic] Starting batch RFT for topic "${task.topicName}" - ${task.recordsToGenerate} records in 1 LLM call`,
+  );
+
+  const records: TopicGenerationResult["records"] = [];
+  const errors: string[] = [];
+
+  try {
+    const seedRecord = task.seedRecords[0];
+
+    // Single LLM call to generate all user messages for this topic
+    const syntheticRecords = await generateBatchRFTRecords(
+      task.topicPath,
+      seedRecord,
+      task.tools,
+      personaCache,
+      task.recordsToGenerate,
+      task.knowledgeContext,
+      task.topicSystemPrompt,
+    );
+
+    if (syntheticRecords.length === 0) {
+      const errMsg = `${task.topicName}: Batch RFT generation returned no records`;
+      console.warn(`[generateRFTRecordsForTopic] ${errMsg}`);
+      errors.push(errMsg);
+      return { topicName: task.topicName, records, errors };
+    }
+
+    console.log(
+      `[generateRFTRecordsForTopic] Got ${syntheticRecords.length} records from batch LLM call, saving to DB...`,
+    );
+
+    // Build record data for all generated records
+    const allRecordData = syntheticRecords.map((simulated) => ({
+      data: buildRFTDataInfo(simulated, task.tools),
+      metadata: {
+        persona: simulated.persona,
+        seed_record_id: seedRecord?.id,
+        seed_topic_path: task.topicPath,
+        generated_at_ms: Date.now(),
+        sourceChunkRefs: task.sourceChunkRefs || [],
+      },
+      topic: task.topicId,
+      is_generated: true,
+      evaluation: undefined,
+    }));
+
+    // Save all records to DB in one batch write
+    try {
+      const addedRecords = await datasetsDB.addRecordsToDataset(
+        callbacks.datasetId,
+        allRecordData,
+      );
+
+      console.log(
+        `[generateRFTRecordsForTopic] DB saved ${addedRecords.length} records for topic "${task.topicName}"`,
+      );
+
+      // Update shared progress counter atomically
+      callbacks.progressCounter.count += addedRecords.length;
+
+      // Collect records for result
+      for (const recordData of allRecordData) {
+        records.push(recordData);
+      }
+
+      // Notify UI with all newly created records
+      if (callbacks.on_records_added && addedRecords.length > 0) {
+        await callbacks.on_records_added(addedRecords);
+      }
+
+      // Report progress
+      if (callbacks.on_progress) {
+        await callbacks.on_progress({
+          completed: callbacks.progressCounter.count,
+          total: callbacks.totalExpectedRecords,
+        });
+      }
+    } catch (dbErr) {
+      const errMsg = `${task.topicName}: DB batch save failed - ${dbErr instanceof Error ? dbErr.message : String(dbErr)}`;
+      console.error(`[generateRFTRecordsForTopic] ${errMsg}`);
+      errors.push(errMsg);
+    }
+  } catch (err) {
+    const errMsg = `${task.topicName}: ${err instanceof Error ? err.message : String(err)}`;
+    console.error(`[generateRFTRecordsForTopic] Error:`, err);
+    errors.push(errMsg);
+  }
+
+  console.log(
+    `[generateRFTRecordsForTopic] Completed topic "${task.topicName}" - ${records.length} records, ${errors.length} errors`,
+  );
+  return { topicName: task.topicName, records, errors };
+}
+
+/**
+ * Generate multiple records for a single topic.
+ *
+ * Routes to the appropriate strategy:
+ * - RFT mode: Batch generation (1 LLM call per topic via generateRFTRecordsForTopic)
+ * - SFT mode: Per-record generation (multi-turn conversation simulation)
  */
 async function generateRecordsForTopic(
   task: TopicGenerationTask,
@@ -242,8 +354,14 @@ async function generateRecordsForTopic(
   personaCache: Map<string, string[]>,
   callbacks: GenerationCallbacks,
 ): Promise<TopicGenerationResult> {
+  // RFT mode: use batch path (1 LLM call per topic)
+  if (task.generationMode === "rft") {
+    return generateRFTRecordsForTopic(task, personaCache, callbacks);
+  }
+
+  // SFT mode: per-record generation (multi-turn requires sequential LLM calls)
   console.log(
-    `[generateRecordsForTopic] Starting topic "${task.topicName}" - generating ${task.recordsToGenerate} records in batches of ${RECORDS_BATCH_SIZE}`,
+    `[generateRecordsForTopic] Starting SFT topic "${task.topicName}" - generating ${task.recordsToGenerate} records in batches of ${RECORDS_BATCH_SIZE}`,
   );
 
   const records: TopicGenerationResult["records"] = [];
