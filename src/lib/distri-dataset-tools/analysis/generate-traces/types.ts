@@ -64,6 +64,7 @@ export interface TopicHierarchyNode {
   name: string;
   children?: TopicHierarchyNode[];
   sourceChunkRefs?: string[];
+  promptTemplate?: string;
 }
 
 export interface LeafTopic {
@@ -71,6 +72,7 @@ export interface LeafTopic {
   name: string; // Topic name for display/matching
   path: string[];
   sourceChunkRefs?: string[];
+  promptTemplate?: string;
 }
 
 export interface TopicGenerationTask {

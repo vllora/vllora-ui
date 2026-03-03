@@ -317,3 +317,217 @@ export function buildGenericSystemPrompt(trainingObjective: string): string {
     : `You are ${trimmed.charAt(0).toLowerCase()}${trimmed.slice(1)}`;
   return `${role}. Provide clear, helpful, and accurate responses.`;
 }
+
+// ─── Custom template support ───────────────────────────────────────────────
+
+/** Standard closing instruction used in default prompts */
+const CLOSING_INSTRUCTION = 'Provide clear explanations, relevant examples, and practical guidance.';
+
+/** A single template variable with its key, display label, and type */
+export interface TemplateVariable {
+  key: string;
+  label: string;
+  description: string;
+  type: 'objective' | 'topic' | 'leaf_topic';
+}
+
+/**
+ * Build template variables dynamically from the topic path.
+ * Each topic in the path becomes its own `{{topic_name}}` variable,
+ * plus `{{objective}}` for the training objective.
+ *
+ * @param topicPath - Full path from root to leaf (snake_case names)
+ * @param descriptions - Optional descriptions parallel to topicPath
+ * @returns Array of template variables matching the hierarchy structure
+ */
+export function buildTemplateVariables(
+  topicPath: string[],
+  descriptions?: (string | undefined)[],
+): TemplateVariable[] {
+  const vars: TemplateVariable[] = [
+    { key: 'objective', label: 'objective', description: 'Dataset training objective', type: 'objective' },
+  ];
+
+  topicPath.forEach((name, i) => {
+    const humanName = humanize(name);
+    const isLeaf = i === topicPath.length - 1;
+    const desc = descriptions?.[i];
+    vars.push({
+      key: name,
+      label: humanName,
+      description: desc ? `${humanName} — ${desc.replace(/\.$/, '')}` : humanName,
+      type: isLeaf ? 'leaf_topic' : 'topic',
+    });
+  });
+
+  return vars;
+}
+
+/**
+ * Build the default template string that mirrors the pair-grouping algorithm.
+ * Each topic in the path becomes a `{{topic_name}}` placeholder, with
+ * structural connectors as plain editable text.
+ *
+ * Example for path ["fen_position_analysis", "material_evaluation"]:
+ *   "You are {{objective}}. You specialize in {{fen_position_analysis}},
+ *    particularly {{material_evaluation}}. Provide clear explanations,
+ *    relevant examples, and practical guidance."
+ *
+ * @param topicPath - Full path from root to leaf (snake_case names)
+ * @returns Template string with {{variable}} placeholders
+ */
+export function buildDefaultTemplate(topicPath: string[]): string {
+  const sentences: string[] = ['You are {{objective}}.'];
+
+  for (let i = 0; i < topicPath.length; i += 2) {
+    const pairIdx = Math.floor(i / 2);
+    const prefix = PAIR_PREFIXES[pairIdx % PAIR_PREFIXES.length];
+    const connector = PAIR_CONNECTORS[pairIdx % PAIR_CONNECTORS.length];
+    const first = `{{${topicPath[i]}}}`;
+
+    if (i + 1 < topicPath.length) {
+      sentences.push(`${prefix} ${first}${connector}{{${topicPath[i + 1]}}}.`);
+    } else {
+      sentences.push(`${prefix} ${first}.`);
+    }
+  }
+
+  sentences.push('Provide clear explanations, relevant examples, and practical guidance.');
+  return sentences.join(' ');
+}
+
+/**
+ * Build narrowing prose from ancestor topics (everything except the leaf).
+ * Reuses the same pair-grouping algorithm as buildTopicSystemPrompt but
+ * only for the ancestor portion of the path.
+ *
+ * @param ancestorPath - Humanized ancestor topic names (excludes the leaf)
+ * @param descriptions - Optional descriptions parallel to the ancestor path
+ * @returns Narrowing sentences, e.g. "You specialize in chess, particularly openings."
+ */
+export function buildAncestorSpecialization(
+  ancestorPath: string[],
+  descriptions?: (string | undefined)[],
+): string {
+  if (ancestorPath.length === 0) return '';
+
+  const descSuffix = (idx: number) => {
+    const desc = descriptions?.[idx];
+    return desc ? ` — ${desc.replace(/\.$/, '')}` : '';
+  };
+
+  const sentences: string[] = [];
+  for (let i = 0; i < ancestorPath.length; i += 2) {
+    const pairIdx = Math.floor(i / 2);
+    const prefix = PAIR_PREFIXES[pairIdx % PAIR_PREFIXES.length];
+    const connector = PAIR_CONNECTORS[pairIdx % PAIR_CONNECTORS.length];
+    const first = ancestorPath[i] + descSuffix(i);
+
+    if (i + 1 < ancestorPath.length) {
+      sentences.push(`${prefix} ${first}${connector}${ancestorPath[i + 1]}${descSuffix(i + 1)}.`);
+    } else {
+      sentences.push(`${prefix} ${first}.`);
+    }
+  }
+
+  return sentences.join(' ');
+}
+
+/**
+ * Build the template variable context for custom template interpolation.
+ *
+ * Each topic in the path becomes a variable keyed by its snake_case name,
+ * resolving to "humanized name" or "humanized name — description" if present.
+ * The `objective` variable resolves to the training objective description
+ * (without the "You are" prefix, since "You are" is plain text in templates).
+ *
+ * Also includes backward-compat keys (role, topic, ancestor_specialization, etc.)
+ * so older templates continue to work.
+ *
+ * @param topicPath - Full path from root to leaf (snake_case)
+ * @param trainingObjective - Dataset training objective
+ * @param descriptions - Optional descriptions parallel to topicPath
+ * @returns Record of variable name → resolved value
+ */
+export function buildTemplateContext(
+  topicPath: string[],
+  trainingObjective: string,
+  descriptions?: (string | undefined)[],
+): Record<string, string> {
+  const humanPath = topicPath.map(humanize);
+  const leafIndex = humanPath.length - 1;
+
+  // Objective: strip "You are " prefix since template has "You are " as plain text
+  const trimmed = trainingObjective.trim().replace(/\.$/, '');
+  const objective = trimmed.toLowerCase().startsWith('you are')
+    ? trimmed.slice(8).trim()
+    : `${trimmed.charAt(0).toLowerCase()}${trimmed.slice(1)}`;
+
+  const descSuffix = (idx: number) => {
+    const desc = descriptions?.[idx];
+    return desc ? ` — ${desc.replace(/\.$/, '')}` : '';
+  };
+
+  const context: Record<string, string> = { objective };
+
+  // Each topic in the path gets its own variable, keyed by snake_case name
+  topicPath.forEach((name, i) => {
+    context[name] = humanPath[i] + descSuffix(i);
+  });
+
+  // Backward compat: keep old variable names for existing templates
+  const ancestorPath = humanPath.slice(0, leafIndex);
+  const ancestorDescs = descriptions?.slice(0, leafIndex);
+  context.role = getRoleSentence(trainingObjective);
+  context.topic = humanPath[leafIndex] ?? '';
+  context.topic_description = descriptions?.[leafIndex]?.replace(/\.$/, '') ?? '';
+  context.topic_path = humanPath.join(' › ');
+  context.parent_topic = leafIndex > 0 ? humanPath[leafIndex - 1] : '';
+  context.root_topic = humanPath[0] ?? '';
+  context.ancestor_specialization = buildAncestorSpecialization(ancestorPath, ancestorDescs);
+  context.closing = CLOSING_INSTRUCTION;
+
+  return context;
+}
+
+/**
+ * Interpolate a custom template string with the given context.
+ * Replaces {{variable}} placeholders with their values.
+ * Unknown variables are replaced with empty string.
+ */
+function interpolateTemplate(template: string, context: Record<string, string>): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => context[key] ?? '');
+}
+
+/**
+ * Resolve a topic's system prompt, supporting custom templates.
+ *
+ * If customTemplate is provided, interpolates it with template variables.
+ * Otherwise, delegates to the built-in buildTopicSystemPrompt algorithm.
+ *
+ * @param topicPath - Full path from root to leaf topic (snake_case names)
+ * @param trainingObjective - The dataset's training objective text
+ * @param descriptions - Optional descriptions for each topic in the path
+ * @param customTemplate - Optional custom mustache template
+ * @returns The resolved system prompt string
+ */
+export function resolveTopicSystemPrompt(
+  topicPath: string[],
+  trainingObjective: string,
+  descriptions?: (string | undefined)[],
+  customTemplate?: string,
+): string {
+  if (!customTemplate) {
+    return buildTopicSystemPrompt(topicPath, trainingObjective, descriptions);
+  }
+
+  const context = buildTemplateContext(topicPath, trainingObjective, descriptions);
+  const hasVariables = /\{\{\w+\}\}/.test(customTemplate);
+
+  if (!hasVariables) {
+    // Plain text mode — use as the complete prompt (no interpolation)
+    return customTemplate;
+  }
+
+  return interpolateTemplate(customTemplate, context);
+}

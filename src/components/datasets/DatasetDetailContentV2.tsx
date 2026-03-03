@@ -164,6 +164,7 @@ export function DatasetDetailContentV2() {
     recordsWithTopicsCount,
     sourceDocumentFilter,
     setSourceDocumentFilter,
+    handleUpdatePromptTemplate,
   } = DatasetDetailConsumer();
 
   // Workspace tab bridge: ref exposes openTab(), state receives tab-driven content section
@@ -703,6 +704,7 @@ export function DatasetDetailContentV2() {
               docsTotal={knowledgeSourcesCount}
               sourceDocumentFilterName={sourceDocumentFilterName}
               onClearSourceDocumentFilter={() => setSourceDocumentFilter(null)}
+              onUpdatePromptTemplate={handleUpdatePromptTemplate}
             />
           )}
           {contentSection === "evaluator-script" && (

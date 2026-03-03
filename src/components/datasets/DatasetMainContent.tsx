@@ -65,6 +65,9 @@ export interface DatasetMainContentProps {
   // Source document filter (from context)
   sourceDocumentFilterName?: string | null;
   onClearSourceDocumentFilter?: () => void;
+
+  /** Handler for updating a topic's custom prompt template */
+  onUpdatePromptTemplate?: (topicId: string, template: string | undefined) => void;
 }
 
 export function DatasetMainContent({
@@ -99,6 +102,7 @@ export function DatasetMainContent({
   docsTotal,
   sourceDocumentFilterName,
   onClearSourceDocumentFilter,
+  onUpdatePromptTemplate,
 }: DatasetMainContentProps) {
   // P0-19: Stat filter state for RecordsSectionHeader clickable chips
   const [activeStatFilter, setActiveStatFilter] = useState<StatFilter>("all");
@@ -263,6 +267,7 @@ export function DatasetMainContent({
           roleFilter={roleFilter}
           onRoleFilterChange={setRoleFilter}
           datasetObjective={datasetObjective}
+          onUpdatePromptTemplate={onUpdatePromptTemplate}
         />
       )}
       </div>

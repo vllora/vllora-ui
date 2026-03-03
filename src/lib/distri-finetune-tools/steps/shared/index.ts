@@ -48,4 +48,10 @@ export {
 export {
   buildTopicSystemPrompt,
   buildGenericSystemPrompt,
+  resolveTopicSystemPrompt,
+  buildTemplateContext,
+  buildAncestorSpecialization,
+  buildTemplateVariables,
+  buildDefaultTemplate,
+  type TemplateVariable,
 } from './topic-system-prompt';

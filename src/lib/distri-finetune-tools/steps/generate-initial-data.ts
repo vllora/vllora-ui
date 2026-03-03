@@ -20,7 +20,7 @@ import {
 } from "./shared/lucy-client";
 import { buildKnowledgeContentBlocks } from "./shared/knowledge-context";
 import { resolveChunkRefs, buildChunkContextSection } from "./shared/chunk-lookup";
-import { buildTopicSystemPrompt, buildGenericSystemPrompt } from "./shared/topic-system-prompt";
+import { resolveTopicSystemPrompt, buildGenericSystemPrompt } from "./shared/topic-system-prompt";
 import { extractSeedTools, extractSeedMessages, extractSeedSystemPrompt } from "@/lib/distri-dataset-tools/analysis/generate-traces/utils";
 
 // =============================================================================
@@ -31,6 +31,7 @@ interface LeafTopic {
   name: string;
   path: string[]; // Full path from root to leaf
   sourceChunkRefs?: string[];
+  promptTemplate?: string;
 }
 
 /**
@@ -49,6 +50,7 @@ function getLeafTopics(hierarchy: TopicHierarchyNode[], parentPath: string[] = [
         name: node.name,
         path: currentPath,
         sourceChunkRefs: node.sourceChunkRefs,
+        promptTemplate: node.promptTemplate,
       });
     } else {
       // Recurse into children
@@ -757,7 +759,7 @@ export const generateInitialDataHandler: ToolHandler = async (
       for (const [topic] of topicDistribution) {
         topicSystemPrompts.set(
           topic.name,
-          seedSystemPrompt || buildTopicSystemPrompt(topic.path, objective),
+          seedSystemPrompt || resolveTopicSystemPrompt(topic.path, objective, undefined, topic.promptTemplate),
         );
       }
 

@@ -37,7 +37,7 @@ import {
 import { cn } from "@/lib/utils";
 import { TopicHierarchyNode } from "@/types/dataset-types";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
-import { buildTopicSystemPrompt } from "@/lib/distri-finetune-tools/steps/shared/topic-system-prompt";
+import { resolveTopicSystemPrompt } from "@/lib/distri-finetune-tools/steps/shared/topic-system-prompt";
 import {
   Tooltip as RadixTooltip,
   TooltipContent,
@@ -65,6 +65,8 @@ interface TreeNodeData {
   depth: number;
   /** Full path from root to this node (used to build topic system prompts) */
   path: string[];
+  /** Custom prompt template (if set on this topic) */
+  promptTemplate?: string;
   children?: TreeNodeData[];
 }
 
@@ -146,6 +148,7 @@ function buildTreeData(
       isLeaf,
       depth,
       path: currentPath,
+      promptTemplate: node.promptTemplate,
       children,
     };
   });
@@ -254,7 +257,7 @@ function TreeNode({
                 <div className="space-y-1">
                   <div className="text-xs font-medium text-muted-foreground">System Prompt</div>
                   <div className="text-xs font-mono whitespace-pre-wrap leading-relaxed">
-                    {buildTopicSystemPrompt(node.path, datasetObjective)}
+                    {resolveTopicSystemPrompt(node.path, datasetObjective, undefined, node.promptTemplate)}
                   </div>
                 </div>
               </TooltipContent>

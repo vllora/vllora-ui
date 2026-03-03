@@ -63,6 +63,8 @@ export interface TopicHierarchyNode {
   selected?: boolean;
   /** Composite refs to knowledge source chunks: "sourceId:chunkId" */
   sourceChunkRefs?: string[];
+  /** Custom mustache template for system prompt construction. If absent, auto-generated from hierarchy. */
+  promptTemplate?: string;
 }
 
 // Topic hierarchy configuration stored at dataset level

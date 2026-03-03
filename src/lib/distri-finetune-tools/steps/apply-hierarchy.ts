@@ -61,12 +61,16 @@ function normalizeHierarchy(
     const sourceChunkRefs = Array.isArray(node.sourceChunkRefs) && node.sourceChunkRefs.length > 0
       ? (node.sourceChunkRefs as string[])
       : undefined;
+    const promptTemplate = typeof node.promptTemplate === 'string' && node.promptTemplate.trim()
+      ? node.promptTemplate
+      : undefined;
 
     result.push({
       id,
       name,
       description,
       sourceChunkRefs,
+      promptTemplate,
       children: children && children.length > 0 ? children : undefined,
     });
   }

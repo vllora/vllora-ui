@@ -68,6 +68,8 @@ interface RecordsTableProps {
   onRoleFilterChange?: (role: RecordRole) => void;
   /** Dataset training objective (for computing shared system prompts per topic) */
   datasetObjective?: string;
+  /** Handler for updating a topic's custom prompt template */
+  onUpdatePromptTemplate?: (topicId: string, template: string | undefined) => void;
 }
 
 /** Represents a group of records by topic */
@@ -107,6 +109,7 @@ export function RecordsTable({
   roleFilter,
   onRoleFilterChange,
   datasetObjective,
+  onUpdatePromptTemplate,
 }: RecordsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -322,6 +325,7 @@ export function RecordsTable({
               highlightedRecordId={highlightedRecordId}
               setRecordRef={setRecordRef}
               datasetObjective={datasetObjective}
+              onUpdatePromptTemplate={onUpdatePromptTemplate}
             />
           </div>
         </div>

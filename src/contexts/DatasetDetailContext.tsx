@@ -1278,6 +1278,48 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     [records]
   );
 
+  // Handle updating a topic's custom prompt template
+  const handleUpdatePromptTemplate = useCallback(async (topicId: string, template: string | undefined) => {
+    if (!dataset?.topicHierarchy?.hierarchy) return;
+
+    // Deep clone hierarchy to avoid mutating state
+    const clonedHierarchy = JSON.parse(JSON.stringify(dataset.topicHierarchy.hierarchy)) as TopicHierarchyNode[];
+
+    // Walk hierarchy to find node by ID and update its promptTemplate
+    const updateNode = (nodes: TopicHierarchyNode[]): boolean => {
+      for (const node of nodes) {
+        if (node.id === topicId) {
+          if (template === undefined) {
+            delete node.promptTemplate;
+          } else {
+            node.promptTemplate = template;
+          }
+          return true;
+        }
+        if (node.children && updateNode(node.children)) return true;
+      }
+      return false;
+    };
+
+    if (!updateNode(clonedHierarchy)) {
+      console.warn(`[handleUpdatePromptTemplate] Node not found: ${topicId}`);
+      return;
+    }
+
+    const updatedConfig = {
+      ...dataset.topicHierarchy,
+      hierarchy: clonedHierarchy,
+    };
+
+    try {
+      await updateDatasetTopicHierarchy(dataset.id, updatedConfig);
+      setDataset((prev) => (prev ? { ...prev, topicHierarchy: updatedConfig } : null));
+    } catch (err) {
+      console.error("Failed to update prompt template:", err);
+      toast.error("Failed to save prompt template");
+    }
+  }, [dataset]);
+
   return {
     // Core data
     dataset,
@@ -1385,6 +1427,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     handleRenameTopic,
     handleCreateChildTopic,
     handleSaveEvaluationConfig,
+    handleUpdatePromptTemplate,
   };
 }
 

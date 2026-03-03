@@ -63,6 +63,7 @@ export function extractLeafTopicsFromHierarchy(nodes: TopicHierarchyNode[], pare
         name: node.name,
         path: currentPath,
         sourceChunkRefs: node.sourceChunkRefs,
+        promptTemplate: node.promptTemplate,
       });
     }
   }

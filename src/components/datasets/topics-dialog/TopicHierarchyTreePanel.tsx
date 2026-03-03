@@ -10,7 +10,7 @@ import { Search, Plus, Sparkles, MessageSquare, ChevronDown } from "lucide-react
 import { TopicHierarchyNode } from "@/types/dataset-types";
 import { TopicTreeNode } from "./TopicTreeNode";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
-import { buildTopicSystemPrompt } from "@/lib/distri-finetune-tools/steps/shared/topic-system-prompt";
+import { resolveTopicSystemPrompt } from "@/lib/distri-finetune-tools/steps/shared/topic-system-prompt";
 
 export interface TopicHierarchyTreePanelProps {
   hierarchy: TopicHierarchyNode[];
@@ -45,14 +45,14 @@ export function TopicHierarchyTreePanel({
 
   // Collect leaf topics with full paths for system prompt preview
   const leafTopics = useMemo(() => {
-    const leaves: { name: string; path: string[] }[] = [];
+    const leaves: { name: string; path: string[]; promptTemplate?: string }[] = [];
     const collect = (nodes: TopicHierarchyNode[], parentPath: string[]) => {
       for (const node of nodes) {
         const currentPath = [...parentPath, node.name];
         if (node.children && node.children.length > 0) {
           collect(node.children, currentPath);
         } else {
-          leaves.push({ name: node.name, path: currentPath });
+          leaves.push({ name: node.name, path: currentPath, promptTemplate: node.promptTemplate });
         }
       }
     };
@@ -160,7 +160,7 @@ export function TopicHierarchyTreePanel({
                 <div key={leaf.name} className="text-[11px] space-y-0.5">
                   <div className="font-medium text-foreground/80">{leaf.name}</div>
                   <div className="font-mono text-muted-foreground/70 leading-tight bg-muted/30 rounded px-2 py-1">
-                    {buildTopicSystemPrompt(leaf.path, datasetObjective)}
+                    {resolveTopicSystemPrompt(leaf.path, datasetObjective, undefined, leaf.promptTemplate)}
                   </div>
                 </div>
               ))}

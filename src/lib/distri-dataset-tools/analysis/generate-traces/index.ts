@@ -45,7 +45,7 @@ import { simulateConversation } from "./sft-generator";
 
 // Import chunk resolution utilities
 import { resolveChunkRefs, buildChunkContextSection } from "@/lib/distri-finetune-tools/steps/shared/chunk-lookup";
-import { buildTopicSystemPrompt, buildGenericSystemPrompt } from "@/lib/distri-finetune-tools/steps/shared/topic-system-prompt";
+import { resolveTopicSystemPrompt, buildGenericSystemPrompt } from "@/lib/distri-finetune-tools/steps/shared/topic-system-prompt";
 
 // Re-export types for external use
 export type { GenerateTracesParams, GenerateTracesResult } from "./types";
@@ -563,7 +563,7 @@ export async function generateTraces(
     const topicSystemPromptMap = new Map<string, string>();
     for (const topic of targetLeafTopics) {
       if (trainingObjective) {
-        topicSystemPromptMap.set(topic.id, buildTopicSystemPrompt(topic.path, trainingObjective));
+        topicSystemPromptMap.set(topic.id, resolveTopicSystemPrompt(topic.path, trainingObjective, undefined, topic.promptTemplate));
       } else {
         topicSystemPromptMap.set(topic.id, buildGenericSystemPrompt(topic.path.join(' > ')));
       }
