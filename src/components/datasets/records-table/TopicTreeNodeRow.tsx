@@ -5,12 +5,14 @@
  * Used by TopicRecordTree to display hierarchical topic groupings.
  */
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { MessageSquareText, Copy, Check } from "lucide-react";
 import { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
+import { cn } from "@/lib/utils";
 import { RecordRow } from "./RecordRow";
 import { TopicNodeHeader } from "./TopicNodeHeader";
 import type { AvailableTopic } from "../record-utils";
-import { buildTopicSystemPrompt, buildAccumulatedPromptSegments } from "@/lib/distri-finetune-tools/steps/shared/topic-system-prompt";
+import { buildTopicSystemPrompt, buildAccumulatedPromptSegments, type PromptTextSegment } from "@/lib/distri-finetune-tools/steps/shared/topic-system-prompt";
 
 // Re-export for convenience
 export { TopicNodeHeader } from "./TopicNodeHeader";
@@ -59,6 +61,67 @@ function hasDescendant(node: TopicHierarchyNode, targetId: string, targetName: s
     if (hasDescendant(child, targetId, targetName)) return true;
   }
   return false;
+}
+
+// ============================================================================
+// SystemPromptCard — Compact card showing the shared system prompt for a leaf topic
+// ============================================================================
+
+function SystemPromptCard({
+  systemPrompt,
+  systemPromptSegments,
+}: {
+  systemPrompt: string;
+  systemPromptSegments?: PromptTextSegment[];
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(systemPrompt);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }, [systemPrompt]);
+
+  return (
+    <div className="mx-3 mt-1.5 mb-2 rounded-md border border-border/50 bg-muted/20 overflow-hidden">
+      {/* Header bar */}
+      <div className="flex items-center justify-between px-3 py-1 border-b border-border/30">
+        <div className="flex items-center gap-1.5">
+          <MessageSquareText className="w-3 h-3 text-muted-foreground/60" />
+          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
+            System Prompt
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="flex items-center justify-center w-5 h-5 rounded hover:bg-muted transition-colors text-muted-foreground/50 hover:text-muted-foreground"
+        >
+          {copied ? (
+            <Check className="w-3 h-3 text-emerald-500" />
+          ) : (
+            <Copy className="w-3 h-3" />
+          )}
+        </button>
+      </div>
+      {/* Prompt content */}
+      <div className="px-3 py-2">
+        <p className="text-[11px] font-mono leading-relaxed whitespace-pre-wrap">
+          {systemPromptSegments ? systemPromptSegments.map((seg, i) => (
+            <span key={i} className={cn(
+              seg.type === 'template' && 'text-muted-foreground/70',
+              seg.type === 'topicName' && 'text-[rgb(var(--theme-500))]',
+              seg.type === 'currentTopicName' && 'text-[rgb(var(--theme-500))] font-semibold',
+            )}>
+              {seg.text}
+            </span>
+          )) : (
+            <span className="text-muted-foreground/70">{systemPrompt}</span>
+          )}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 export function TopicTreeNodeRow({
@@ -166,14 +229,20 @@ export function TopicTreeNodeRow({
           isGenerating={node.name === generatingTopic}
           generatingProgress={node.name === generatingTopic ? generatingProgress : undefined}
           highlighted={isHighlightedTopic}
-          systemPrompt={systemPrompt}
-          systemPromptSegments={systemPromptSegments}
         />
       </div>
 
       {/* Expanded content */}
       {isExpanded && hasContent && (
         <div className="bg-transparent">
+          {/* System prompt card — shown for expanded leaf topics */}
+          {systemPrompt && !hasChildren && (
+            <SystemPromptCard
+              systemPrompt={systemPrompt}
+              systemPromptSegments={systemPromptSegments}
+            />
+          )}
+
           {/* Child nodes */}
           {hasChildren &&
             node.children!.map((child) => (

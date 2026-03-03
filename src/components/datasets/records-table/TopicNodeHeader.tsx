@@ -9,7 +9,6 @@ import { ChevronRight, Trash2, GitBranch, Grid2X2Plus, Loader2 } from "lucide-re
 import { cn } from "@/lib/utils";
 import { CoverageIndicator } from "../dataset-canvas/CoverageIndicator";
 import { BreadcrumbPath } from "./BreadcrumbPath";
-import type { PromptTextSegment } from "@/lib/distri-finetune-tools/steps/shared/topic-system-prompt";
 import {
   Tooltip,
   TooltipContent,
@@ -48,10 +47,6 @@ export interface TopicNodeHeaderProps {
   generatingProgress?: { completed: number; total: number } | null;
   /** Whether this header is temporarily highlighted (e.g., from canvas "View in Table") */
   highlighted?: boolean;
-  /** Shared system prompt for all records in this topic (shown once at group level) */
-  systemPrompt?: string;
-  /** Structured prompt segments for color-coded rendering (template vs topic names) */
-  systemPromptSegments?: PromptTextSegment[];
 }
 
 export function TopicNodeHeader({
@@ -70,8 +65,6 @@ export function TopicNodeHeader({
   isGenerating,
   generatingProgress,
   highlighted,
-  systemPrompt,
-  systemPromptSegments,
 }: TopicNodeHeaderProps) {
   const isUnassigned = variant === "unassigned";
   const topicPath = path.join("/");
@@ -232,46 +225,6 @@ export function TopicNodeHeader({
           )}
         </div>
       </div>
-      {/* Shared system prompt — shown once per topic group instead of per-record */}
-      {systemPrompt && !isUnassigned && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="px-3 pb-1.5 -mt-0.5 bg-muted/60 border-l-2 border-l-[rgba(var(--theme-500),0.4)]">
-              <p className="text-[10px] font-mono truncate leading-tight pl-6 cursor-help">
-                <span className="text-muted-foreground/50">SYS: </span>
-                {systemPromptSegments ? systemPromptSegments.map((seg, i) => (
-                  <span key={i} className={cn(
-                    seg.type === 'template' && 'text-muted-foreground/50',
-                    (seg.type === 'topicName' || seg.type === 'currentTopicName')
-                      && 'text-[rgba(var(--theme-500),0.7)]',
-                  )}>
-                    {seg.text}
-                  </span>
-                )) : (
-                  <span className="text-muted-foreground/50">{systemPrompt}</span>
-                )}
-              </p>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" align="start" className="max-w-md">
-            {systemPromptSegments ? (
-              <p className="text-xs font-mono whitespace-pre-wrap">
-                {systemPromptSegments.map((seg, i) => (
-                  <span key={i} className={cn(
-                    seg.type === 'template' && 'text-muted-foreground',
-                    seg.type === 'topicName' && 'text-[rgb(var(--theme-500))]',
-                    seg.type === 'currentTopicName' && 'text-[rgb(var(--theme-500))] font-semibold underline underline-offset-2',
-                  )}>
-                    {seg.text}
-                  </span>
-                ))}
-              </p>
-            ) : (
-              <p className="text-xs font-mono whitespace-pre-wrap">{systemPrompt}</p>
-            )}
-          </TooltipContent>
-        </Tooltip>
-      )}
     </TooltipProvider>
   );
 }
