@@ -29,16 +29,23 @@ import {
   type SemanticChunk,
   type SentenceWithPage,
 } from './shared/semantic-chunker';
-import {
-  callLucy,
-  type LucyMessage,
-} from './shared/lucy-client';
-
 // Configure pdf.js worker (use bundled worker from pdfjs-dist)
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url
 ).toString();
+
+// ---------------------------------------------------------------------------
+// Chunk limits
+// ---------------------------------------------------------------------------
+
+/**
+ * Maximum number of chunks sent to LLM enrichment.
+ * Embedding clustering can produce hundreds of tiny chunks for large PDFs
+ * (e.g. 201 chunks for a 2.7 MB PDF). Each chunk costs one LLM call,
+ * so we cap and merge the smallest adjacent pairs to stay under budget.
+ */
+const MAX_ENRICHED_CHUNKS = 50;
 
 // ---------------------------------------------------------------------------
 // Options
@@ -97,10 +104,35 @@ export async function extractPdfContentLocal(
     const page = await pdf.getPage(i);
     const textContent = await page.getTextContent();
 
-    // Build page text preserving line structure using hasEOL flag
+    // Build page text, deduplicating overlapping text items.
+    // Some PDFs render each glyph twice at the same position (fake bold
+    // via double-strike). We skip items whose position matches the
+    // previous item within a 0.5 pt tolerance.
     const parts: string[] = [];
+    let prevItemX = -Infinity;
+    let prevItemY = -Infinity;
+    let prevItemStr = '';
+
     for (const item of textContent.items) {
       if (!('str' in item)) continue;
+
+      // Position-based dedup for overlapping text
+      const transform = 'transform' in item ? (item.transform as number[]) : null;
+      if (transform) {
+        const x = transform[4];
+        const y = transform[5];
+        if (
+          Math.abs(x - prevItemX) < 0.5 &&
+          Math.abs(y - prevItemY) < 0.5 &&
+          item.str === prevItemStr
+        ) {
+          continue; // skip duplicate at same position
+        }
+        prevItemX = x;
+        prevItemY = y;
+        prevItemStr = item.str;
+      }
+
       parts.push(item.str);
       if ('hasEOL' in item && item.hasEOL) {
         parts.push('\n');
@@ -186,23 +218,22 @@ export async function extractPdfContentLocal(
 
     onProgress?.({ step: 'Clustering sentences...', percent: 65 });
     chunks = clusterSentences(sentences, embeddings, similarityThreshold);
+
+    // Cap chunk count — embedding clustering can produce 200+ tiny chunks
+    // for large PDFs. Merge smallest adjacent pairs to stay under budget.
+    if (chunks.length > MAX_ENRICHED_CHUNKS) {
+      console.log(
+        `[semantic-pdf-extractor] Merging ${chunks.length} clusters → ${MAX_ENRICHED_CHUNKS} max`,
+      );
+      chunks = mergeChunksToLimit(chunks, MAX_ENRICHED_CHUNKS);
+    }
   }
 
-  // Step 5: Batch LLM enrichment — small per-chunk calls for headings + summaries
-  onProgress?.({ step: 'Analyzing chunks...', percent: 70 });
-
-  await enrichChunksWithLLM(chunks, (completed, total) => {
-    const pct = 70 + Math.round((completed / total) * 20);
-    onProgress?.({
-      step: `Analyzing chunks (${completed}/${total})...`,
-      current: completed,
-      total,
-      percent: pct,
-    });
-  });
-
-  // Step 6: Generate structured markdown
-  onProgress?.({ step: 'Generating structured markdown...', percent: 92 });
+  // Step 5: Generate structured markdown
+  // Headings and summaries are already set by buildChunk() (heuristic: first
+  // sentence as heading, first 1-2 sentences as summary). Research shows this
+  // matches what LangChain, LlamaIndex, and Unstructured use — no LLM needed.
+  onProgress?.({ step: 'Generating structured markdown...', percent: 90 });
   const markdown = generateMarkdown(filename, chunks, totalPages);
 
   onProgress?.({ step: 'Complete', percent: 100 });
@@ -227,92 +258,77 @@ export async function extractPdfContentLocal(
 }
 
 // ---------------------------------------------------------------------------
-// LLM Chunk Enrichment
+// Chunk Merging (cap embedding-clustered chunks)
 // ---------------------------------------------------------------------------
 
-const CHUNK_ENRICH_MODEL = 'openai/gpt-5-nano';
-const CHUNK_ENRICH_BATCH_SIZE = 10;
-
-const CHUNK_ENRICH_SYSTEM = `You summarize document chunks. Given a text chunk from a PDF, produce:
-- "heading": A short, descriptive title (max 10 words) that captures the main topic of this chunk. Do NOT just repeat the first sentence.
-- "summary": A 4-5 sentence summary covering the chunk's key concepts, arguments, and details. Be specific — mention names, terms, and relationships found in the text.
-
-Respond in JSON only.`;
-
-const CHUNK_ENRICH_RESPONSE_FORMAT = {
-  type: 'json_schema',
-  json_schema: {
-    name: 'chunk_enrichment',
-    strict: true,
-    schema: {
-      type: 'object',
-      properties: {
-        heading: { type: 'string', description: 'Short descriptive title (max 10 words)' },
-        summary: { type: 'string', description: 'Specific 4-5 sentence summary' },
-      },
-      required: ['heading', 'summary'],
-      additionalProperties: false,
-    },
-  },
-};
-
 /**
- * Enrich chunks in-place with LLM-generated headings and summaries.
- * Sends parallel requests in batches to avoid overwhelming the API.
- * Falls back to original heading/summary on failure.
+ * Merge adjacent chunks until count ≤ limit.
+ *
+ * Strategy: repeatedly find the smallest chunk (by word count) and merge it
+ * with its smaller neighbor (left or right). This preserves document order
+ * while eliminating the tiniest fragments first.
  */
-async function enrichChunksWithLLM(
-  chunks: SemanticChunk[],
-  onProgress?: (completed: number, total: number) => void,
-): Promise<void> {
-  let completed = 0;
+function mergeChunksToLimit(
+  input: readonly SemanticChunk[],
+  limit: number,
+): SemanticChunk[] {
+  const chunks = input.map((c) => ({ ...c, sentences: [...c.sentences] }));
 
-  for (let i = 0; i < chunks.length; i += CHUNK_ENRICH_BATCH_SIZE) {
-    const batch = chunks.slice(i, i + CHUNK_ENRICH_BATCH_SIZE);
-
-    const results = await Promise.allSettled(
-      batch.map(async (chunk) => {
-        // Truncate chunk text to ~2000 chars to keep requests small
-        const text = chunk.text.length > 2000
-          ? chunk.text.slice(0, 2000) + '...'
-          : chunk.text;
-
-        const messages: LucyMessage[] = [
-          { role: 'system', content: CHUNK_ENRICH_SYSTEM },
-          { role: 'user', content: text },
-        ];
-
-        const response = await callLucy(messages, {
-          model: CHUNK_ENRICH_MODEL,
-          temperature: 0.2,
-          max_tokens: 350,
-          response_format: CHUNK_ENRICH_RESPONSE_FORMAT,
-          label: 'chunk_enrichment',
-        });
-
-        return JSON.parse(response) as { heading: string; summary: string };
-      }),
-    );
-
-    // Apply results to chunks (in-place mutation)
-    for (let j = 0; j < results.length; j++) {
-      const result = results[j];
-      if (result.status === 'fulfilled' && result.value) {
-        const chunkIdx = i + j;
-        chunks[chunkIdx].heading = result.value.heading;
-        chunks[chunkIdx].summary = result.value.summary;
-      } else {
-        const reason = result.status === 'rejected' ? result.reason : 'empty response';
-        console.error(`[semantic-pdf-extractor] Chunk ${i + j + 1} enrichment failed:`, reason);
+  while (chunks.length > limit) {
+    // Find the smallest chunk by word count
+    let minIdx = 0;
+    let minWords = Infinity;
+    for (let i = 0; i < chunks.length; i++) {
+      const words = chunks[i].text.split(/\s+/).length;
+      if (words < minWords) {
+        minWords = words;
+        minIdx = i;
       }
-      completed++;
     }
 
-    onProgress?.(completed, chunks.length);
+    // Pick merge direction: prefer smaller neighbor, fallback to right then left
+    const leftIdx = minIdx - 1;
+    const rightIdx = minIdx + 1;
+    const leftWords =
+      leftIdx >= 0 ? chunks[leftIdx].text.split(/\s+/).length : Infinity;
+    const rightWords =
+      rightIdx < chunks.length
+        ? chunks[rightIdx].text.split(/\s+/).length
+        : Infinity;
+
+    const mergeWithIdx = leftWords <= rightWords ? leftIdx : rightIdx;
+    const [keepIdx, removeIdx] =
+      mergeWithIdx < minIdx
+        ? [mergeWithIdx, minIdx]
+        : [minIdx, mergeWithIdx];
+
+    // Merge: append remove into keep (preserves order)
+    const keep = chunks[keepIdx];
+    const remove = chunks[removeIdx];
+    chunks[keepIdx] = {
+      id: keep.id,
+      sentences: [...keep.sentences, ...remove.sentences],
+      text: keep.text + ' ' + remove.text,
+      pageStart: Math.min(keep.pageStart, remove.pageStart),
+      pageEnd: Math.max(keep.pageEnd, remove.pageEnd),
+      heading: keep.heading,
+      summary: keep.summary,
+    };
+    chunks.splice(removeIdx, 1);
   }
 
-  console.log(`[semantic-pdf-extractor] Enriched ${completed}/${chunks.length} chunks with LLM summaries`);
+  // Re-number chunk IDs
+  for (let i = 0; i < chunks.length; i++) {
+    chunks[i] = { ...chunks[i], id: `chunk-${i + 1}` };
+  }
+
+  return chunks;
 }
+
+// NOTE: LLM enrichment removed — research showed that heuristic headings
+// (first sentence) + heuristic summaries (first 1-2 sentences) from buildChunk
+// match what LangChain, LlamaIndex, and Unstructured use in production.
+// This makes extraction 100% local with zero API calls.
 
 // ---------------------------------------------------------------------------
 // Markdown Generation

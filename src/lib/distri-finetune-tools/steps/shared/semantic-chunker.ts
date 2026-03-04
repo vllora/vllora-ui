@@ -34,12 +34,119 @@ export interface SemanticChunk {
 // Text Preprocessing
 // ---------------------------------------------------------------------------
 
+/** Minimum non-space characters to attempt doubled-character detection. */
+const MIN_DOUBLED_DETECT_CHARS = 6;
+
 /**
- * Clean raw PDF text: fix hyphenated line breaks, normalize whitespace,
- * remove common header/footer patterns.
+ * Ratio threshold for doubled-character detection.
+ * If >70% of consecutive character-pairs in a line are identical,
+ * the line is treated as a pdfjs duplicate-glyph artifact.
+ */
+const DOUBLED_RATIO_THRESHOLD = 0.7;
+
+/**
+ * Ratio threshold for garbage-line detection.
+ * If <40% of a line's characters are recognisable text (letters, digits,
+ * common punctuation, whitespace), the line is stripped.
+ */
+const GARBAGE_LINE_THRESHOLD = 0.4;
+
+/**
+ * Detect and fix doubled characters from pdfjs overlapping text extraction.
+ *
+ * Some PDFs render each glyph twice at the same position (fake bold, shadow).
+ * pdfjs concatenates both, producing "TTeenn sstteeppss" instead of
+ * "Ten steps". We detect lines where ≥70 % of character-pairs are duplicates
+ * and collapse them.
+ */
+function fixDoubledCharacters(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => {
+      const chars = line.replace(/\s/g, '');
+      if (chars.length < MIN_DOUBLED_DETECT_CHARS) return line;
+
+      const totalPairs = Math.floor(chars.length / 2);
+      let doubledPairs = 0;
+      for (let i = 0; i < chars.length - 1; i += 2) {
+        if (chars[i] === chars[i + 1]) doubledPairs++;
+      }
+
+      if (doubledPairs / totalPairs <= DOUBLED_RATIO_THRESHOLD) return line;
+
+      // Collapse consecutive same-character pairs: "TTeenn" → "Ten"
+      return line.replace(/(.)\1/g, '$1');
+    })
+    .join('\n');
+}
+
+/**
+ * Strip inline garbage that appears mixed with valid text:
+ *   - Control characters (\x00–\x08, \x0B, \x0C, \x0E–\x1F)
+ *   - Runs of 3+ identical non-alphanumeric characters (diagram borders: `"""""""`)
+ *   - Sequences of 4+ consecutive special characters (diagram fonts: `$H*E@'*;%`)
+ *
+ * This runs before line-level filtering so garbage fragments inside otherwise
+ * valid lines are cleaned first.
+ */
+function stripInlineGarbage(text: string): string {
+  let result = text;
+
+  // Remove control characters (keep \t, \n, \r)
+  result = result.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+
+  // Remove runs of 3+ identical non-alphanumeric characters ("""""", ###, etc.)
+  result = result.replace(/([^a-zA-Z0-9\s])\1{2,}/g, '');
+
+  // Remove sequences of 4+ special characters in a row (chess diagram font bytes).
+  // Allows letters/digits between specials: "$H*E@'*;%" is 60% special → caught.
+  result = result.replace(
+    /(?:[^a-zA-Z0-9\s.,;:!?()\-–—]{2,}[a-zA-Z0-9]?){2,}/g,
+    ' ',
+  );
+
+  return result;
+}
+
+/**
+ * Remove lines that are mostly non-alphanumeric characters.
+ *
+ * Chess PDFs (and others using symbol fonts for diagrams) extract as ASCII
+ * garbage like "$H*E@'*;% & < <*< <%". Lines where <40 % of characters are
+ * recognisable text are stripped.
+ */
+function removeGarbageLines(text: string): string {
+  return text
+    .split('\n')
+    .filter((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return true; // keep blank lines for paragraph structure
+
+      // Count recognisable characters (letters, digits, common punctuation)
+      const recognisable = trimmed.replace(
+        /[^a-zA-Z0-9\s.,;:!?'"()\-–—]/g,
+        '',
+      );
+      return recognisable.length / trimmed.length >= GARBAGE_LINE_THRESHOLD;
+    })
+    .join('\n');
+}
+
+/**
+ * Clean raw PDF text: strip inline garbage, deduplicate glyphs,
+ * strip garbage lines, fix hyphenated line breaks, and normalise whitespace.
  */
 export function preprocessText(raw: string): string {
   let text = raw;
+
+  // Strip inline garbage (control chars, diagram font sequences) first
+  text = stripInlineGarbage(text);
+
+  // Fix doubled characters from pdfjs overlapping text
+  text = fixDoubledCharacters(text);
+
+  // Strip lines that are mostly non-alphanumeric (diagram fonts, etc.)
+  text = removeGarbageLines(text);
 
   // Fix hyphenated line breaks (e.g., "docu-\nment" → "document")
   text = text.replace(/(\w)-\n(\w)/g, '$1$2');

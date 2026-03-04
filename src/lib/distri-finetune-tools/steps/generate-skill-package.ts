@@ -9,7 +9,7 @@
  *   ├── SKILL.md                     (YAML frontmatter + directive orchestrator)
  *   ├── examples/
  *   │   ├── index.md                 (topic map table)
- *   │   └── {topic-slug}.jsonl       (one per leaf topic, sorted by baseScore desc)
+ *   │   └── {topic-slug}.jsonl       (one per leaf topic)
  *   └── knowledge/
  *       └── domain-knowledge.md      (from knowledge sources, optional)
  */
@@ -223,7 +223,18 @@ function groupByTopic(
 // ─── Build per-topic JSONL content ───
 
 function buildTopicJsonl(rows: readonly SkillJsonlRow[]): string {
-  return rows.map((row) => JSON.stringify(row)).join('\n');
+  return rows
+    .map((row) => {
+      const clean: Record<string, unknown> = {
+        system: row.system,
+        user: row.user,
+      };
+      if (row.assistant) clean.assistant = row.assistant;
+      if (Object.keys(row.eval_scores).length > 0) clean.eval_scores = row.eval_scores;
+      if (row.sources.length > 0) clean.sources = row.sources;
+      return JSON.stringify(clean);
+    })
+    .join('\n');
 }
 
 // ─── Build examples/index.md ───
@@ -232,25 +243,43 @@ function buildExamplesIndex(
   topicGroups: readonly TopicGroup[],
   totalCount: number,
 ): string {
+  const hasDiversity = topicGroups.some((g) => g.diversityScore !== null);
+  const hasEvalScores = topicGroups.some((g) =>
+    g.rows.some((r) => Object.keys(r.eval_scores).length > 0),
+  );
+
   const lines: string[] = [
     '# Examples Index',
     '',
     `${totalCount} examples across ${topicGroups.length} topics.`,
-    'Each example includes eval_scores (external grader scores, per evaluation job).',
-    '',
-    '## Topic Map',
-    '',
-    '| Topic | File | Examples | Diversity |',
-    '|-------|------|----------|-----------|',
   ];
 
+  if (hasEvalScores) {
+    lines.push('Each example includes eval_scores (external grader scores, per evaluation job).');
+  }
+
+  lines.push('', '## Topic Map', '');
+
+  // Header — conditionally include Diversity column
+  if (hasDiversity) {
+    lines.push('| Topic | File | Examples | Diversity |');
+    lines.push('|-------|------|----------|-----------|');
+  } else {
+    lines.push('| Topic | File | Examples |');
+    lines.push('|-------|------|----------|');
+  }
+
   for (const group of topicGroups) {
-    const diversity =
-      group.diversityScore !== null ? group.diversityScore.toFixed(2) : 'N/A';
     const leafSlug = slugifySegment(group.topicPath.split('/').pop() ?? group.topicPath);
-    lines.push(
-      `| ${humanizePath(group.topicPath)} | [${leafSlug}.jsonl](${group.slug}.jsonl) | ${group.rows.length} | ${diversity} |`,
-    );
+    const baseCols = `| ${humanizePath(group.topicPath)} | [${leafSlug}.jsonl](${group.slug}.jsonl) | ${group.rows.length}`;
+
+    if (hasDiversity) {
+      const diversity =
+        group.diversityScore !== null ? group.diversityScore.toFixed(2) : 'N/A';
+      lines.push(`${baseCols} | ${diversity} |`);
+    } else {
+      lines.push(`${baseCols} |`);
+    }
   }
 
   return lines.join('\n');
@@ -369,6 +398,21 @@ function buildPackageTree(
   return lines.join('\n');
 }
 
+/**
+ * Strip "Train a {name} that " prefix from the objective to get a capability description.
+ * "Train a chess tutor that analyzes positions..." → "Analyze positions..."
+ */
+function objectiveToCapability(objective: string, skillName: string): string {
+  // Match "Train a/an {name} that/to/which ..." (case-insensitive)
+  const escaped = skillName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`^train\\s+(?:a|an)\\s+${escaped}\\s+(?:that|to|which)\\s+`, 'i');
+  let stripped = objective.replace(pattern, '');
+  // Convert training-style "It should ..." to direct capability voice
+  stripped = stripped.replace(/\.\s+It should\s+/g, '. ');
+  // Capitalize first letter
+  return stripped.charAt(0).toUpperCase() + stripped.slice(1);
+}
+
 function buildSkillMarkdown(params: {
   readonly skillName: string;
   readonly skillSlug: string;
@@ -378,18 +422,19 @@ function buildSkillMarkdown(params: {
   readonly sourceCount: number;
   readonly topicHierarchyMd: string;
   readonly criteria: readonly GraderCriterion[];
-  readonly examplesIndex: string;
   readonly hasKnowledge: boolean;
   readonly topicGroups: readonly TopicGroup[];
 }): string {
   const lines: string[] = [];
 
+  const capability = objectiveToCapability(params.objective, params.skillName);
+
   // YAML frontmatter
   lines.push(
     '---',
     `name: ${params.skillSlug}`,
-    `description: ${params.objective}`,
-    `argument-hint: "<your question about ${params.skillName}>"`,
+    `description: ${capability}`,
+    `argument-hint: "Ask about ${params.skillName.toLowerCase()}"`,
     '---',
     '',
   );
@@ -400,7 +445,7 @@ function buildSkillMarkdown(params: {
     '',
     '## Role & Objective',
     '',
-    `You are an expert in this domain. ${params.objective}`,
+    `You are a ${params.skillName}. ${capability}`,
     `You have deep knowledge across ${params.topicCount} topics, backed by ${params.exampleCount} curated examples${params.sourceCount > 0 ? ` and ${params.sourceCount} reference documents` : ''}.`,
     '',
   );
@@ -440,17 +485,12 @@ function buildSkillMarkdown(params: {
     );
   }
 
-  // Available Examples — topic map table + reference link
-  // Strip the "# Examples Index" header but keep the table (Claude needs it)
-  const indexContent = params.examplesIndex
-    .replace(/^# Examples Index\n*/, '')
-    .trim();
+  // Available Examples — brief summary, link to full index
   lines.push(
     '## Available Examples',
     '',
-    'See [examples/index.md](examples/index.md) for the full topic index.',
-    '',
-    indexContent,
+    `${params.exampleCount} curated examples across ${params.topicCount} topics.`,
+    'See [examples/index.md](examples/index.md) for the full topic map.',
     '',
   );
 
@@ -541,7 +581,6 @@ export async function assembleSkillPackageFiles(
     sourceCount: readySources.length,
     topicHierarchyMd,
     criteria: graderCriteria,
-    examplesIndex,
     hasKnowledge: knowledgeDoc !== null,
     topicGroups,
   });
