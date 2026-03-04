@@ -47,7 +47,6 @@ function resolveFileContent(
   filePath: string,
 ): string | null {
   if (filePath === "SKILL.md") return files.skillMd;
-  if (filePath === "rules/response-guidelines.md") return files.rulesDoc;
   if (filePath === "examples/index.md") return files.examplesIndex;
   if (filePath === "knowledge/domain-knowledge.md") return files.knowledgeDoc;
 
@@ -71,10 +70,6 @@ async function buildZipWithEdits(
 
   // Use edited content where available, otherwise original
   root.file("SKILL.md", editedFiles.get("SKILL.md") ?? files.skillMd);
-  root.file(
-    "rules/response-guidelines.md",
-    editedFiles.get("rules/response-guidelines.md") ?? files.rulesDoc,
-  );
   root.file(
     "examples/index.md",
     editedFiles.get("examples/index.md") ?? files.examplesIndex,

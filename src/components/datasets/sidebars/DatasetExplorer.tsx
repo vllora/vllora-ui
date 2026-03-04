@@ -164,7 +164,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
   // Expanded/selected state
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(
-    () => new Set(["documents", "data", "evaluations", "finetune", "skill", "skill/examples", "skill/rules", "insights"])
+    () => new Set(["documents", "data", "evaluations", "finetune", "skill", "skill/examples", "insights"])
   );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
@@ -563,23 +563,6 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
           name: "SKILL.md",
           type: "file",
           icon: <FileText className={`${ICON_CLS} text-purple-400`} />,
-        });
-
-        // rules/
-        skillChildren.push({
-          id: "skill/rules",
-          name: "rules",
-          type: "folder",
-          icon: folderIcon(expandedNodes, "skill/rules"),
-          isExpandable: true,
-          children: [
-            {
-              id: "skill/rules/response-guidelines.md",
-              name: "response-guidelines.md",
-              type: "file",
-              icon: <FileText className={`${ICON_CLS} text-purple-400`} />,
-            },
-          ],
         });
 
         // examples/ — build hierarchical tree from topic hierarchy (or flat fallback)

@@ -7,13 +7,11 @@
  * ZIP structure:
  *   {skill-name}/
  *   ├── SKILL.md                     (YAML frontmatter + directive orchestrator)
- *   ├── knowledge/
- *   │   └── domain-knowledge.md      (from knowledge sources, optional)
  *   ├── examples/
  *   │   ├── index.md                 (topic map table)
  *   │   └── {topic-slug}.jsonl       (one per leaf topic, sorted by baseScore desc)
- *   └── rules/
- *       └── response-guidelines.md   (behavioral rules from grader criteria)
+ *   └── knowledge/
+ *       └── domain-knowledge.md      (from knowledge sources, optional)
  */
 
 import JSZip from 'jszip';
@@ -72,7 +70,6 @@ export interface SkillPackageFiles {
   readonly examplesIndex: string;
   readonly topicFiles: ReadonlyMap<string, string>;
   readonly knowledgeDoc: string | null;
-  readonly rulesDoc: string;
 }
 
 // ─── Helpers ───
@@ -272,61 +269,6 @@ function buildExamplesIndex(
   return lines.join('\n');
 }
 
-// ─── Build rules/response-guidelines.md ───
-
-function buildResponseGuidelines(
-  criteria: readonly GraderCriterion[],
-  objective: string | undefined,
-): string {
-  const lines: string[] = ['# Response Guidelines', ''];
-
-  lines.push('## Core Principles', '');
-  if (objective) {
-    lines.push(objective, '');
-  } else {
-    lines.push('Provide helpful, accurate, and concise responses.', '');
-  }
-
-  lines.push('## Quality Criteria', '');
-  if (criteria.length > 0) {
-    lines.push(
-      'Responses are evaluated on the following criteria:',
-      '',
-    );
-    for (const criterion of criteria) {
-      lines.push(`- **${criterion.name}** — ${criterion.description}`);
-    }
-    lines.push('');
-  } else {
-    lines.push(
-      '- Be helpful, accurate, and concise',
-      '- Provide clear explanations with relevant examples',
-      '- Acknowledge uncertainty when appropriate',
-      '- Stay within the scope of your expertise',
-      '',
-    );
-  }
-
-  lines.push('## Tone and Style', '');
-  if (objective) {
-    lines.push(
-      `Respond in a manner consistent with the role: ${objective}`,
-      '',
-      '- Use clear, accessible language',
-      '- Provide concrete examples over abstract principles',
-      '- Acknowledge when multiple valid approaches exist',
-    );
-  } else {
-    lines.push(
-      '- Conversational but precise',
-      '- Use concrete examples over abstract principles',
-      '- Acknowledge when multiple valid approaches exist',
-    );
-  }
-
-  return lines.join('\n');
-}
-
 // ─── Build knowledge/domain-knowledge.md ───
 
 function buildKnowledgeDoc(
@@ -414,8 +356,6 @@ function buildPackageTree(
   const lines: string[] = [
     `${skillSlug}/`,
     '├── SKILL.md                              ← You are here',
-    '├── rules/',
-    '│   └── response-guidelines.md            ← Quality criteria & tone guidelines',
     '├── examples/',
     '│   ├── index.md                          ← Topic map with scores',
   ];
@@ -498,16 +438,12 @@ function buildSkillMarkdown(params: {
     '',
   );
 
-  // Response Guidelines — brief summary + link (NOT inlined)
+  // Response Guidelines — inlined criteria
   lines.push('## Response Guidelines', '');
-  lines.push(
-    'See [rules/response-guidelines.md](rules/response-guidelines.md) for full guidelines.',
-    '',
-  );
   if (params.criteria.length > 0) {
     lines.push('Responses are evaluated on:', '');
     for (const c of params.criteria) {
-      lines.push(`- **${c.name}**`);
+      lines.push(`- **${c.name}**: ${c.description}`);
     }
     lines.push('');
   } else {
@@ -600,11 +536,6 @@ export async function assembleSkillPackageFiles(
 
   const examplesIndex = buildExamplesIndex(topicGroups, totalRows);
 
-  const rulesDoc = buildResponseGuidelines(
-    graderCriteria,
-    dataset.datasetObjective ?? undefined,
-  );
-
   const knowledgeDoc = buildKnowledgeDoc(knowledgeSources);
 
   const topicHierarchyMd =
@@ -640,7 +571,6 @@ export async function assembleSkillPackageFiles(
     examplesIndex,
     topicFiles,
     knowledgeDoc,
-    rulesDoc,
   };
 }
 
@@ -673,7 +603,6 @@ export const generateSkillPackageHandler: ToolHandler = async (params) => {
     const root = zip.folder(skillSlug)!;
 
     root.file('SKILL.md', packageFiles.skillMd);
-    root.file('rules/response-guidelines.md', packageFiles.rulesDoc);
     root.file('examples/index.md', packageFiles.examplesIndex);
 
     for (const [topicSlug, jsonlContent] of packageFiles.topicFiles) {
@@ -729,10 +658,9 @@ export const generateSkillPackageTool: DistriFnTool = {
 Zero LLM calls — pure data assembly from IndexedDB records.
 
 The package follows the Agent Skills standard and includes:
-- SKILL.md — Directive orchestrator with YAML frontmatter, inlined rules and topic map
+- SKILL.md — Directive orchestrator with YAML frontmatter, inlined criteria and topic map
 - examples/index.md — Topic map table
 - examples/{topic}.jsonl — Per-topic examples sorted by score (one file per leaf topic)
-- rules/response-guidelines.md — Behavioral rules from grader criteria
 - knowledge/domain-knowledge.md — Extracted content from uploaded documents (if any)
 
 After generating, use download_skill_package to save the ZIP file.`,
