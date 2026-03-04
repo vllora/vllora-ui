@@ -15,7 +15,8 @@ import { cn } from "@/lib/utils";
 import { emitter } from "@/utils/eventEmitter";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { getRecordSourceAttributions } from "@/lib/distri-finetune-tools/steps/shared/source-attribution";
-import { ConversationThreadCell, TopicCell, RecordActions, SelectionCheckbox, QualityIndicator, StatsBadge } from "./cells";
+import { ConversationThreadCell, extractMessages, TopicCell, RecordActions, SelectionCheckbox, QualityIndicator, StatsBadge } from "./cells";
+import { cleanText } from "./cells/ConversationThreadCell.utilities";
 import { RecordDataDialog } from "./RecordDataDialog";
 import { COLUMN_WIDTHS } from "../table-columns";
 import type { AvailableTopic } from "../record-utils";
@@ -83,6 +84,35 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
     [record.metadata, sources],
   );
 
+  // Extract user/assistant text for compact column layout
+  const { userText, assistantText } = useMemo(() => {
+    if (!compact) return { userText: "", assistantText: "" };
+
+    const msgs = extractMessages(record.data).filter(
+      (m) => m.role.toLowerCase() !== "system",
+    );
+    const userMsg = msgs.find((m) => {
+      const r = m.role.toLowerCase();
+      return r === "user" || r === "human";
+    });
+    const assistantMsg = msgs.find((m) => {
+      const r = m.role.toLowerCase();
+      return r === "assistant" || r === "ai" || r === "model";
+    });
+
+    const fallback =
+      typeof record.metadata?.skillResponse === "string"
+        ? record.metadata.skillResponse
+        : undefined;
+
+    return {
+      userText: userMsg ? cleanText(userMsg.content) : (msgs[0] ? cleanText(msgs[0].content) : ""),
+      assistantText: assistantMsg
+        ? cleanText(assistantMsg.content)
+        : (fallback ? cleanText(fallback) : ""),
+    };
+  }, [compact, record.data, record.metadata]);
+
   const handleClick = onExpand ? () => onExpand(record) : undefined;
 
   // Handler for QualityIndicator click — navigate to evaluator or jobs tab and highlight record
@@ -122,103 +152,139 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
       )}
     >
       {/* Main row */}
-      <div className={cn(
-        "px-2 py-1.5 flex gap-3 transition-colors",
-        compact ? "items-start" : "items-center"
-      )}>
+      {compact ? (
+        /* ─── Compact mode: separate columns (user | assistant | score | tokens) ─── */
+        <div className="flex gap-3 px-2 py-2.5 items-start transition-colors">
+          {/* Checkbox */}
+          {selectable && (
+            <SelectionCheckbox
+              checked={selected}
+              onChange={(checked) => onSelect?.(checked)}
+              className={cn(COLUMN_WIDTHS.checkbox, "mt-0.5")}
+            />
+          )}
 
-        {/* Checkbox */}
-        {selectable && (
-          <SelectionCheckbox
-            checked={selected}
-            onChange={(checked) => onSelect?.(checked)}
-            className={cn(COLUMN_WIDTHS.checkbox, compact && "mt-0.5")}
-          />
-        )}
+          {/* User message column */}
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] text-foreground line-clamp-2 leading-relaxed">
+              {userText}
+            </p>
+          </div>
 
-        {/* Score dot (compact mode: leading indicator) */}
-        {compact && (
+          {/* Assistant message column */}
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] text-muted-foreground/70 line-clamp-2 leading-relaxed">
+              {assistantText}
+            </p>
+          </div>
+
+          {/* Score (right side, like JSONL table) */}
           <QualityIndicator
             evaluation={record.evaluation}
             compact
             onNavigate={handleScoreNavigate}
-            className="mt-0.5"
+            className="shrink-0 mt-0.5"
           />
-        )}
 
-        {/* Conversational Thread / Content */}
-        <ConversationThreadCell
-          data={record.data}
-          className={COLUMN_WIDTHS.thread}
-          sourceRecordId={record.sourceRecordId}
-          hideSystemMessage={hideTopic}
-          compact={compact}
-          assistantFallback={typeof record.metadata?.skillResponse === "string" ? record.metadata.skillResponse : undefined}
-        />
+          {/* Tokens */}
+          <StatsBadge
+            data={record.data}
+            className="shrink-0 mt-0.5"
+            compact
+            assistantFallback={typeof record.metadata?.skillResponse === "string" ? record.metadata.skillResponse : undefined}
+          />
 
-        {/* AI-generated indicator (hidden in compact mode — shown at topic level) */}
-        {!compact && record.is_generated && (
-          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))] shrink-0">
-            <Sparkles className="w-2.5 h-2.5" />
-            AI
-          </span>
-        )}
-
-        {/* Source document badge (hidden in compact mode) */}
-        {!compact && sourceAttributions.length > 0 && (
-          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-400 shrink-0 max-w-[120px]">
-            <FileText className="w-2.5 h-2.5 shrink-0" />
-            <span className="truncate">{sourceAttributions[0].sourceName.replace(/\.[^.]+$/, '')}</span>
-            {sourceAttributions.length > 1 && (
-              <span className="text-blue-400/60 ml-0.5 shrink-0">+{sourceAttributions.length - 1}</span>
-            )}
-          </span>
-        )}
-
-        {/* Stats (tokens, turns, tools) */}
-        <StatsBadge
-          data={record.data}
-          className={compact ? "shrink-0 mt-0.5" : COLUMN_WIDTHS.stats}
-          compact={compact}
-          assistantFallback={typeof record.metadata?.skillResponse === "string" ? record.metadata.skillResponse : undefined}
-        />
-
-        {/* Strategy (Topic) - hidden in grouped/compact mode */}
-        {!hideTopic && (
-          <div className={cn("flex items-center justify-center", COLUMN_WIDTHS.strategy)}>
-            <TopicCell
-              topic={record.topic}
-              onUpdate={(topic, isNew) => onUpdateTopic(record.id, topic, isNew)}
-              tableLayout
-              availableTopics={availableTopics}
+          {/* Actions — three-dot menu */}
+          <div className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity mt-0.5">
+            <RecordActions
+              onEdit={onSave ? () => setEditDialogOpen(true) : undefined}
+              onDelete={() => onDelete(record.id)}
+              onGenerateVariants={handleGenerateVariants}
+              onCopyId={() => {
+                navigator.clipboard.writeText(record.id);
+              }}
             />
           </div>
-        )}
+        </div>
+      ) : (
+        /* ─── Default mode: full layout with badges, topic, quality ─── */
+        <div className="flex gap-3 px-2 py-1.5 items-center transition-colors">
+          {/* Checkbox */}
+          {selectable && (
+            <SelectionCheckbox
+              checked={selected}
+              onChange={(checked) => onSelect?.(checked)}
+              className={COLUMN_WIDTHS.checkbox}
+            />
+          )}
 
-        {/* Quality score — full display in default mode, already shown as dot in compact */}
-        {!compact && (
+          {/* Conversational Thread / Content */}
+          <ConversationThreadCell
+            data={record.data}
+            className={COLUMN_WIDTHS.thread}
+            sourceRecordId={record.sourceRecordId}
+            hideSystemMessage={hideTopic}
+            assistantFallback={typeof record.metadata?.skillResponse === "string" ? record.metadata.skillResponse : undefined}
+          />
+
+          {/* AI-generated indicator */}
+          {record.is_generated && (
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))] shrink-0">
+              <Sparkles className="w-2.5 h-2.5" />
+              AI
+            </span>
+          )}
+
+          {/* Source document badge */}
+          {sourceAttributions.length > 0 && (
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-400 shrink-0 max-w-[120px]">
+              <FileText className="w-2.5 h-2.5 shrink-0" />
+              <span className="truncate">{sourceAttributions[0].sourceName.replace(/\.[^.]+$/, '')}</span>
+              {sourceAttributions.length > 1 && (
+                <span className="text-blue-400/60 ml-0.5 shrink-0">+{sourceAttributions.length - 1}</span>
+              )}
+            </span>
+          )}
+
+          {/* Stats (tokens, turns, tools) */}
+          <StatsBadge
+            data={record.data}
+            className={COLUMN_WIDTHS.stats}
+            assistantFallback={typeof record.metadata?.skillResponse === "string" ? record.metadata.skillResponse : undefined}
+          />
+
+          {/* Strategy (Topic) */}
+          {!hideTopic && (
+            <div className={cn("flex items-center justify-center", COLUMN_WIDTHS.strategy)}>
+              <TopicCell
+                topic={record.topic}
+                onUpdate={(topic, isNew) => onUpdateTopic(record.id, topic, isNew)}
+                tableLayout
+                availableTopics={availableTopics}
+              />
+            </div>
+          )}
+
+          {/* Quality score */}
           <QualityIndicator
             evaluation={record.evaluation}
             className={COLUMN_WIDTHS.quality}
             onNavigate={handleScoreNavigate}
           />
-        )}
 
-        {/* Actions — three-dot menu (appears on hover) */}
-        <div className={cn(
-          "shrink-0 opacity-0 group-hover:opacity-100 transition-opacity",
-          compact && "mt-0.5"
-        )}>
-          <RecordActions
-            onEdit={onSave ? () => setEditDialogOpen(true) : undefined}
-            onDelete={() => onDelete(record.id)}
-            onGenerateVariants={handleGenerateVariants}
-            onCopyId={() => {
-              navigator.clipboard.writeText(record.id);
-            }}
-          />
+          {/* Actions — three-dot menu */}
+          <div className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+            <RecordActions
+              onEdit={onSave ? () => setEditDialogOpen(true) : undefined}
+              onDelete={() => onDelete(record.id)}
+              onGenerateVariants={handleGenerateVariants}
+              onCopyId={() => {
+                navigator.clipboard.writeText(record.id);
+              }}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Edit dialog */}
       {onSave && (

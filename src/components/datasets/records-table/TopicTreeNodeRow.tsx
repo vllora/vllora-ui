@@ -647,6 +647,15 @@ export function TopicTreeNodeRow({
           {/* Records at this node */}
           {hasRecords && (
             <div className="p-2 space-y-1">
+              {/* Column header — mirrors RecordRow compact column layout */}
+              <div className="flex gap-3 items-center px-2 pb-1 border-b border-border/20 text-[10px] text-muted-foreground/50 uppercase tracking-wider font-medium">
+                <span className="flex-1 min-w-0">user</span>
+                <span className="flex-1 min-w-0">assistant</span>
+                <span className="w-[52px] shrink-0 text-right">score</span>
+                <span className="shrink-0">tokens</span>
+                {/* Spacer for actions column */}
+                <span className="w-6 shrink-0" />
+              </div>
               {directRecords.map((record) => (
                 <RecordRow
                   key={record.id}
