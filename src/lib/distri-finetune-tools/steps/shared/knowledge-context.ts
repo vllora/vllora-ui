@@ -24,6 +24,10 @@ export interface KnowledgeSourceContext {
   readyCount: number;
   /** Number of processing sources */
   processingCount: number;
+  /** All valid chunk refs (sourceId:chunkId) for validation and fallback */
+  validRefs: Set<string>;
+  /** Map heading (lowercase) → refs for heading-based topic→chunk fallback */
+  headingToRefs: Map<string, string[]>;
 }
 
 export interface ExtractedSection {
@@ -46,6 +50,8 @@ export async function buildKnowledgeContext(
   const sourcesSummary: Array<{ name: string; section_headings: string[] }> = [];
   const allSectionHeadings: string[] = [];
   const contextParts: string[] = [];
+  const validRefs = new Set<string>();
+  const headingToRefs = new Map<string, string[]>();
 
   for (const source of readySources) {
     const extracted = source.extractedContent;
@@ -95,13 +101,19 @@ export async function buildKnowledgeContext(
 
       if (chunks.length > 0) {
         sourceParts.push(`\n### Document Chunks (semantic sections):`);
+        sourceParts.push(`Use ref format "sourceId:chunkId" in source_chunks (e.g. "${source.id}:${chunks[0].id}")`);
         for (const chunk of chunks) {
+          const ref = `${source.id}:${chunk.id}`;
+          validRefs.add(ref);
+          const headingKey = chunk.heading.toLowerCase().trim();
+          if (!headingToRefs.has(headingKey)) headingToRefs.set(headingKey, []);
+          headingToRefs.get(headingKey)!.push(ref);
           const pageRange = chunk.pageStart === chunk.pageEnd
             ? `p.${chunk.pageStart}`
             : `pp.${chunk.pageStart}–${chunk.pageEnd}`;
           const sentenceCount = chunk.sentences?.length || 0;
           sourceParts.push(
-            `- [ref:${source.id}:${chunk.id}] **${chunk.heading}** [${pageRange}, ${sentenceCount} sentences]: ${chunk.summary}`
+            `- [ref:${ref}] **${chunk.heading}** [${pageRange}, ${sentenceCount} sentences]: ${chunk.summary}`
           );
         }
       }
@@ -127,12 +139,18 @@ export async function buildKnowledgeContext(
 
       if (sections.length > 0) {
         sourceParts.push(`\n### Document Sections (USE THESE FOR TOPIC GENERATION):`);
+        sourceParts.push(`Use ref format "sourceId:chunkId" in source_chunks (e.g. "${source.id}:section-0")`);
         for (let i = 0; i < Math.min(sections.length, 10); i++) {
           const section = sections[i];
+          const ref = `${source.id}:section-${i}`;
+          validRefs.add(ref);
           const sectionTitle = section.title || 'Untitled';
+          const headingKey = sectionTitle.toLowerCase().trim();
+          if (!headingToRefs.has(headingKey)) headingToRefs.set(headingKey, []);
+          headingToRefs.get(headingKey)!.push(ref);
           const contentPreview = section.content?.substring(0, 150) || '';
           sourceParts.push(
-            `- [ref:${source.id}:section-${i}] **${sectionTitle}**: ${contentPreview}${contentPreview.length >= 150 ? '...' : ''}`
+            `- [ref:${ref}] **${sectionTitle}**: ${contentPreview}${contentPreview.length >= 150 ? '...' : ''}`
           );
         }
         if (sections.length > 10) {
@@ -153,6 +171,8 @@ export async function buildKnowledgeContext(
     allSectionHeadings: uniqueSectionHeadings,
     readyCount: readySources.length,
     processingCount: processingSources.length,
+    validRefs,
+    headingToRefs,
   };
 }
 

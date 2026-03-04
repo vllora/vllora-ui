@@ -26,6 +26,8 @@ interface AnalyzeKnowledgeSourcesParams {
 
 interface ChunkInfo {
   id: string;
+  /** Composite ref for topic→chunk linking: "sourceId:chunkId" */
+  ref: string;
   heading: string;
   pages: string;
 }
@@ -44,7 +46,7 @@ interface KnowledgeSourceInfo {
   /** Chunk-level structure (for local-semantic extraction) */
   chunks?: ChunkInfo[];
   /** Legacy section-level structure (for LLM extraction) */
-  sections?: { title: string; content_preview: string }[];
+  sections?: { title: string; content_preview: string; ref: string }[];
   section_headings: string[];
 }
 
@@ -169,6 +171,7 @@ export const analyzeKnowledgeSourcesHandler: ToolHandler = async (
               : `${c.pageStart}–${c.pageEnd}`;
             return {
               id: c.id,
+              ref: `${source.id}:${c.id}`,
               heading: c.heading,
               pages: pageRange,
             };
@@ -188,9 +191,10 @@ export const analyzeKnowledgeSourcesHandler: ToolHandler = async (
         comment: source.comment,
         document_type: (metadata?.document_type as string) || '',
         summary: (metadata?.document_summary as string) || (metadata?.documentSummary as string) || '',
-        sections: sections.map((s) => ({
+        sections: sections.map((s, i) => ({
           title: s.title || 'Untitled',
           content_preview: s.content?.substring(0, 200) || '',
+          ref: `${source.id}:section-${i}`,
         })),
         section_headings: topics,
       };
