@@ -150,13 +150,13 @@ Generate a new user message that:
 
 Output only the varied user message, nothing else.`;
 
-// ─── Batch RFT Mode: Generate multiple user messages in a single call ───
+// ─── Batch Generation: Generate multiple training examples in a single call ───
 
 /**
- * Prompt for generating N varied user messages from a seed message in one LLM call.
- * Used by generateBatchRFTRecords() to replace per-record LLM calls.
+ * Prompt for generating N training examples from a seed message in one LLM call.
+ * Each example includes user_message + assistant_response + expected_score.
  */
-export const BATCH_RFT_VARIATION_PROMPT = `You are generating diverse user messages for LLM fine-tuning training data.
+export const BATCH_VARIATION_PROMPT = `You are generating diverse training examples for LLM fine-tuning.
 
 Original User Message (use as a reference for the topic/intent):
 {{original_message}}
@@ -164,14 +164,24 @@ Original User Message (use as a reference for the topic/intent):
 Topic Context: {{subtopics}}
 Assistant System Prompt: {{system_prompt}}
 {{tools_section}}{{knowledge_context}}
-Generate {{count}} diverse user messages that a real user would ask the assistant described above.
+Generate {{count}} diverse training examples based on the topic above.
 
-Each message should:
+For each example, produce:
+1. **user_message**: A realistic user message about the topic
+2. **assistant_response**: The ideal assistant response following the system prompt
+3. **expected_score**: Quality score from 0.0 to 1.0 (how well the response follows the system prompt and meets user needs)
+
+Each user message should:
 1. Be about the same general topic/domain as the original
 2. Use different language, tone, complexity, and specificity
 3. Cover different angles, sub-aspects, or scenarios within the topic
 4. Feel natural and realistic — like messages from different real users
 5. Be appropriate for the assistant's role and expertise as defined in the system prompt
+
+Each assistant response should:
+1. Follow the system prompt's instructions and persona
+2. Be helpful, accurate, and appropriately detailed
+3. Match the complexity level of the user message
 
 Diversity guidelines:
 - Complexity: beginner questions to advanced scenarios
@@ -182,30 +192,43 @@ Diversity guidelines:
 
 Output Format:
 {
-  "user_messages": [
-    "First user message...",
-    "Second user message...",
+  "examples": [
+    {
+      "user_message": "First user message...",
+      "assistant_response": "Ideal assistant response...",
+      "expected_score": 0.85
+    },
     ...
   ]
 }
 
-Generate exactly {{count}} diverse user messages.`;
+Generate exactly {{count}} diverse examples.`;
 
 /**
- * Prompt for generating N fresh first user messages when no seed record exists.
- * Used as a fallback by generateBatchRFTRecords().
+ * Prompt for generating N fresh training examples when no seed record exists.
+ * Each example includes user_message + assistant_response + expected_score.
  */
-export const BATCH_RFT_FIRST_MESSAGE_PROMPT = `You are generating diverse initial user messages for LLM fine-tuning training data.
+export const BATCH_FIRST_MESSAGE_PROMPT = `You are generating diverse training examples for LLM fine-tuning.
 
 Topic Context: {{subtopics}}
 Assistant System Prompt: {{system_prompt}}
 {{tools_section}}{{knowledge_context}}
-Generate {{count}} diverse first messages that different real users would send to the assistant described above.
+Generate {{count}} diverse training examples for the topic above.
 
-Each message should:
+For each example, produce:
+1. **user_message**: A realistic first message from a user to the assistant
+2. **assistant_response**: The ideal assistant response following the system prompt
+3. **expected_score**: Quality score from 0.0 to 1.0 (how well the response follows the system prompt and meets user needs)
+
+Each user message should:
 1. Be a natural, realistic opening message to the assistant
 2. Cover a different aspect or scenario within the topic
 3. Vary in tone, complexity, length, and specificity
+
+Each assistant response should:
+1. Follow the system prompt's instructions and persona
+2. Be helpful, accurate, and appropriately detailed
+3. Match the complexity level of the user message
 
 Diversity guidelines:
 - Complexity: beginner questions to advanced scenarios
@@ -215,32 +238,44 @@ Diversity guidelines:
 
 Output Format:
 {
-  "user_messages": [
-    "First user message...",
-    "Second user message...",
+  "examples": [
+    {
+      "user_message": "First user message...",
+      "assistant_response": "Ideal assistant response...",
+      "expected_score": 0.85
+    },
     ...
   ]
 }
 
-Generate exactly {{count}} diverse user messages.`;
+Generate exactly {{count}} diverse examples.`;
 
 /**
- * JSON schema for batch RFT response — enforces array of user_messages.
+ * JSON schema for batch generation response — enforces array of examples with 3 fields.
  */
-export const BATCH_RFT_RESPONSE_SCHEMA = {
+export const BATCH_GENERATION_RESPONSE_SCHEMA = {
   type: 'json_schema',
   json_schema: {
-    name: 'batch_rft_variations',
+    name: 'batch_generation_examples',
     strict: true,
     schema: {
       type: 'object',
       properties: {
-        user_messages: {
+        examples: {
           type: 'array',
-          items: { type: 'string' },
+          items: {
+            type: 'object',
+            properties: {
+              user_message: { type: 'string' },
+              assistant_response: { type: 'string' },
+              expected_score: { type: 'number' },
+            },
+            required: ['user_message', 'assistant_response', 'expected_score'],
+            additionalProperties: false,
+          },
         },
       },
-      required: ['user_messages'],
+      required: ['examples'],
       additionalProperties: false,
     },
   },

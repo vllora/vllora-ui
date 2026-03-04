@@ -46,10 +46,11 @@ Each step is a `StepExecutor` with `name`, `execute`, optional `workflowStep`, a
 | `grader` | Configure Evaluator | `grader_config` | No |
 | `upload` | Upload Dataset | — | No |
 | `dryrun` | Run Dry Run | `dry_run` | Yes |
+| `package` | Generate Skill Package | `skill_packaging` | Yes |
 | `readme` | Generate README | — | Yes |
 | `finetune` | Start Finetune Job | — | Yes |
 
-Execution order is fixed: `topics → adjust_topics → categorize → generate → grader → upload → dryrun → readme → finetune`. Steps not in `steps_to_execute` are skipped. Non-fatal steps log errors and continue. Fatal steps abort the pipeline.
+Execution order is fixed: `topics → adjust_topics → categorize → generate → grader → upload → dryrun → package → readme → finetune`. Steps not in `steps_to_execute` are skipped. Non-fatal steps log errors and continue. Fatal steps abort the pipeline.
 
 To add a new step: define an executor function, add it to `STEP_REGISTRY` and `STEP_ORDER` in `execute-plan.ts`.
 
@@ -90,7 +91,7 @@ interface Plan {
 ### Execution Types
 
 ```typescript
-type ExecutionStepId = 'topics' | 'adjust_topics' | 'categorize' | 'generate' | 'grader' | 'upload' | 'dryrun' | 'readme' | 'finetune';
+type ExecutionStepId = 'topics' | 'adjust_topics' | 'categorize' | 'generate' | 'grader' | 'upload' | 'dryrun' | 'package' | 'readme' | 'finetune';
 
 interface StepExecutor {
   name: string;

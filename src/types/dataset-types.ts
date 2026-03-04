@@ -35,6 +35,15 @@ export interface DatasetRecord {
   is_generated?: boolean;      // True for synthetic/generated traces
   sourceRecordId?: string;     // ID of parent record this was generated from (for variant tracking)
   evaluation?: DatasetEvaluation;
+  /** Per-job evaluation scores — keyed by evaluation job ID.
+   *  Coexists with `evaluation` (flat) for backward compat.
+   *  - `evaluation` = UI display, running averages
+   *  - `evaluations` = per-job scores for skill package JSONL output */
+  evaluations?: Record<string, {
+    score: number;
+    model?: string;
+    evaluatedAt?: number;
+  }>;
   createdAt: number;
   updatedAt: number;           // Last modified timestamp
 }

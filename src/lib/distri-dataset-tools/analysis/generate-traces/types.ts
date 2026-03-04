@@ -24,6 +24,10 @@ export interface SyntheticTraceRecord {
   topic_path: string[];
   persona: string;
   messages: SyntheticMessage[];
+  /** Ideal assistant response for skill package JSONL */
+  skillResponse?: string;
+  /** LLM-assigned quality score (0.0-1.0) for skill package */
+  baseScore?: number;
 }
 
 export interface AssistantTurnOutput {
@@ -55,8 +59,6 @@ export interface GenerateTracesParams {
   on_progress?: (progress: { completed: number; total: number }) => void | Promise<void>;
   /** Callback when new records are added - receives the created records */
   on_records_added?: (records: DatasetRecord[]) => void | Promise<void>;
-  /** Generation mode: 'rft' for varied prompts (empty output), 'sft' for full conversations */
-  generation_mode?: 'rft' | 'sft';
 }
 
 export interface TopicHierarchyNode {
@@ -84,7 +86,6 @@ export interface TopicGenerationTask {
   recordsToGenerate: number;
   seedRecords: (DatasetRecord | undefined)[];
   tools: any[];
-  generationMode: 'rft' | 'sft';
   /** Resolved knowledge source text for prompt injection (from sourceChunkRefs) */
   knowledgeContext?: string;
   /** Original chunk refs for lineage tracking on generated records */

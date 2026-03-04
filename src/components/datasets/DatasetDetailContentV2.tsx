@@ -47,9 +47,11 @@ import {
   getDryRunJobIdFromPath,
   getInsightTypeFromPath,
   getFinetuneJobIdFromPath,
+  getSkillFileFromPath,
   type ContentSection,
 } from "./TabContentRouter";
 import { InsightsPane } from "./InsightsPane";
+import { SkillFileViewer } from "./SkillFileViewer";
 import { WorkspaceWelcome } from "./WorkspaceWelcome";
 import type { CoverageStats, TopicHierarchyNode } from "@/types/dataset-types";
 
@@ -847,6 +849,7 @@ export function DatasetDetailContentV2() {
               hasKnowledgeSources={knowledgeSourcesCount > 0}
               planErrorMessage={planErrorMessage}
               docsProcessing={docsProcessing && shouldAutoGenerate}
+              datasetId={datasetId}
             />
           )}
           {contentSection === "readme" && (
@@ -875,6 +878,11 @@ export function DatasetDetailContentV2() {
           {contentSection === "logs" && (
             <div className="flex-1 flex flex-col overflow-hidden">
               <LogsViewer />
+            </div>
+          )}
+          {contentSection === "skill" && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <SkillFileViewer filePath={getSkillFileFromPath(activeTabPath) ?? "SKILL.md"} />
             </div>
           )}
         </div>

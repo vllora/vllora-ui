@@ -438,6 +438,7 @@ class DryRunPollingManager {
                 dryRunScore: row.score,
                 dryRunModel: job.rolloutModel,
                 incrementDryRunCount: true,
+                jobId: job.id,
               }
             );
           }

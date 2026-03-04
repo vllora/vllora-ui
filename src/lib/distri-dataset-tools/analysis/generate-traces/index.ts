@@ -1,15 +1,14 @@
 /**
  * Generate Traces - Main Entry Point
  *
- * Generates synthetic trace records and adds them to a dataset.
- * Supports two modes:
- * - RFT (default): Varied prompts with empty output for reinforcement learning
- * - SFT: Complete multi-turn conversations for supervised fine-tuning
+ * Generates synthetic training examples and adds them to a dataset.
+ * Each example includes user_message + assistant_response + expected_score.
+ * Output DataInfo has empty output (rollout handled during training).
  */
 
 import type { DistriFnTool } from "@distri/core";
 import * as datasetsDB from "@/services/datasets-db";
-import type { DataInfo, DatasetRecord } from "@/types/dataset-types";
+import type { DatasetRecord } from "@/types/dataset-types";
 import type { ToolHandler } from "../../types";
 
 // Import types
@@ -19,11 +18,9 @@ import type {
   TopicGenerationTask,
   TopicGenerationResult,
   GenerationCallbacks,
-  SyntheticTraceRecord,
   LeafTopic,
 } from "./types";
 import {
-  DEFAULT_MAX_TURNS,
   DEFAULT_CONCURRENCY,
   DEFAULT_RECORDS_PER_TOPIC,
   DEFAULT_BATCH_SIZE,
@@ -34,14 +31,10 @@ import { setLLMConcurrency } from "./llm";
 import {
   extractLeafTopicsFromHierarchy,
   extractSeedTools,
-  extractSeedMessages,
-  extractSeedSystemPrompt,
-  buildSyntheticTraceDataInfo,
 } from "./utils";
 
 // Import generators
-import { generateRFTRecord, buildRFTDataInfo, generateBatchRFTRecords } from "./rft-generator";
-import { simulateConversation } from "./sft-generator";
+import { buildTraceDataInfo, generateBatchRFTRecords } from "./rft-generator";
 
 // Import chunk resolution utilities
 import { resolveChunkRefs, buildChunkContextSection } from "@/lib/distri-finetune-tools/steps/shared/chunk-lookup";
@@ -50,187 +43,7 @@ import { resolveTopicSystemPrompt, buildGenericSystemPrompt } from "@/lib/distri
 // Re-export types for external use
 export type { GenerateTracesParams, GenerateTracesResult } from "./types";
 
-/**
- * Generate a single record for a topic
- * Returns the record data or null if generation failed
- */
-async function generateSingleRecord(
-  task: TopicGenerationTask,
-  recordIndex: number,
-  turns: number,
-  personaCache: Map<string, string[]>,
-  callbacks: GenerationCallbacks,
-): Promise<
-  | { record: TopicGenerationResult["records"][0]; error?: string }
-  | { record: null; error: string }
-> {
-  console.log(
-    `[generateSingleRecord] Starting record ${recordIndex + 1} for topic "${task.topicName}" (mode: ${task.generationMode})`,
-  );
-  try {
-    const seedRecord = task.seedRecords[recordIndex % task.seedRecords.length];
 
-    let simulated: SyntheticTraceRecord | null;
-    let data: DataInfo;
-
-    if (task.generationMode === "rft") {
-      // RFT mode: Generate varied prompts with empty output for rollout
-      console.log(`[generateSingleRecord] RFT mode - generating varied prompt`);
-      simulated = await generateRFTRecord(
-        task.topicPath,
-        seedRecord,
-        task.tools,
-        personaCache,
-        task.knowledgeContext,
-        task.topicSystemPrompt,
-      );
-
-      if (!simulated) {
-        console.log(
-          `[generateSingleRecord] RFT generation returned empty for ${task.topicName}[${recordIndex + 1}]`,
-        );
-        return {
-          record: null,
-          error: `${task.topicName}[${recordIndex + 1}]: RFT generation returned empty`,
-        };
-      }
-
-      console.log(
-        `[generateSingleRecord] Building RFT data info for ${task.topicName}[${recordIndex + 1}]...`,
-      );
-      console.log(
-        `[generateSingleRecord] Simulated record has ${simulated.messages.length} messages, persona: "${simulated.persona?.substring(0, 50)}..."`,
-      );
-      data = buildRFTDataInfo(simulated, task.tools);
-      console.log(
-        `[generateSingleRecord] RFT DataInfo built - input messages: ${data.input?.messages?.length}, tools: ${data.input?.tools?.length}`,
-      );
-    } else {
-      // SFT mode: Generate full conversation with assistant responses
-      const seedMessages = extractSeedMessages(seedRecord);
-      const seedSystemPrompt = extractSeedSystemPrompt(seedMessages);
-      console.log(
-        `[generateSingleRecord] SFT mode - Seed: ${seedRecord?.id || "none"}, messages: ${seedMessages.length}, hasSystemPrompt: ${!!seedSystemPrompt}`,
-      );
-
-      simulated = await simulateConversation(
-        task.topicPath,
-        seedSystemPrompt,
-        seedMessages,
-        task.tools,
-        turns,
-        personaCache,
-        task.knowledgeContext,
-        task.topicSystemPrompt,
-      );
-
-      if (!simulated) {
-        console.log(
-          `[generateSingleRecord] Simulation returned empty for ${task.topicName}[${recordIndex + 1}]`,
-        );
-        return {
-          record: null,
-          error: `${task.topicName}[${recordIndex + 1}]: simulation returned empty`,
-        };
-      }
-
-      console.log(
-        `[generateSingleRecord] Building SFT data info for ${task.topicName}[${recordIndex + 1}]...`,
-      );
-      data = buildSyntheticTraceDataInfo(simulated, task.tools);
-    }
-
-    const recordData = {
-      data,
-      metadata: {
-        persona: simulated.persona,
-        seed_record_id: seedRecord?.id,
-        seed_topic_path: task.topicPath,
-        generated_at_ms: Date.now(),
-        sourceChunkRefs: task.sourceChunkRefs || [],
-      },
-      topic: task.topicId, // Use topic ID (not name) for consistent lookup in UI
-      is_generated: true,
-      evaluation: undefined,
-    };
-
-    // Add record to DB immediately for real-time UI update
-    try {
-      console.log(
-        `[generateSingleRecord] Preparing to save record ${recordIndex + 1} to DB for topic "${task.topicName}"`,
-      );
-      console.log(
-        `[generateSingleRecord] Record structure: { topic: "${recordData.topic}", is_generated: ${recordData.is_generated}, has_data: ${!!recordData.data} }`,
-      );
-      console.log(
-        `[generateSingleRecord] Data structure: { has_input: ${!!recordData.data?.input}, has_output: ${!!recordData.data?.output} }`,
-      );
-      console.log(
-        `[generateSingleRecord] Input: { messages: ${recordData.data?.input?.messages?.length || 0}, tools: ${recordData.data?.input?.tools?.length || 0} }`,
-      );
-      console.log(
-        `[generateSingleRecord] Calling datasetsDB.addRecordsToDataset(${callbacks.datasetId}, [...])...`,
-      );
-
-      const addedRecords = await datasetsDB.addRecordsToDataset(
-        callbacks.datasetId,
-        [recordData],
-      );
-      console.log(
-        `[generateSingleRecord] DB call returned: ${addedRecords.length} records added`,
-      );
-
-      // Update shared progress counter atomically
-      callbacks.progressCounter.count += addedRecords.length;
-      console.log(
-        `[generateSingleRecord] Record ${recordIndex + 1} saved! Progress: ${callbacks.progressCounter.count}/${callbacks.totalExpectedRecords}`,
-      );
-
-      if (addedRecords.length === 0) {
-        console.warn(
-          `[generateSingleRecord] WARNING: DB returned empty array - record may not have been saved!`,
-        );
-      }
-
-      // Notify UI with newly created record
-      if (callbacks.on_records_added && addedRecords.length > 0) {
-        await callbacks.on_records_added(addedRecords);
-      }
-
-      // Report progress after each record
-      if (callbacks.on_progress) {
-        await callbacks.on_progress({
-          completed: callbacks.progressCounter.count,
-          total: callbacks.totalExpectedRecords,
-        });
-      }
-
-      return { record: recordData };
-    } catch (dbErr) {
-      console.error(
-        `[generateSingleRecord] DB add failed for ${task.topicName}[${recordIndex + 1}]:`,
-        dbErr,
-      );
-      return {
-        record: null,
-        error: `${task.topicName}[${recordIndex + 1}]: DB add failed - ${dbErr instanceof Error ? dbErr.message : String(dbErr)}`,
-      };
-    }
-  } catch (err) {
-    console.error(
-      `[generateSingleRecord] Error for ${task.topicName}[${recordIndex + 1}]:`,
-      err,
-    );
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    return {
-      record: null,
-      error: `${task.topicName}[${recordIndex + 1}]: ${errorMsg}`,
-    };
-  }
-}
-
-/** Number of records to generate in parallel within each topic (SFT mode) */
-const RECORDS_BATCH_SIZE = 10;
 
 /**
  * Generate multiple RFT records for a single topic using batch LLM call.
@@ -280,13 +93,15 @@ async function generateRFTRecordsForTopic(
 
     // Build record data for all generated records
     const allRecordData = syntheticRecords.map((simulated) => ({
-      data: buildRFTDataInfo(simulated, task.tools),
+      data: buildTraceDataInfo(simulated, task.tools),
       metadata: {
         persona: simulated.persona,
         seed_record_id: seedRecord?.id,
         seed_topic_path: task.topicPath,
         generated_at_ms: Date.now(),
         sourceChunkRefs: task.sourceChunkRefs || [],
+        skillResponse: simulated.skillResponse,
+        baseScore: simulated.baseScore,
       },
       topic: task.topicId,
       is_generated: true,
@@ -343,75 +158,14 @@ async function generateRFTRecordsForTopic(
 
 /**
  * Generate multiple records for a single topic.
- *
- * Routes to the appropriate strategy:
- * - RFT mode: Batch generation (1 LLM call per topic via generateRFTRecordsForTopic)
- * - SFT mode: Per-record generation (multi-turn conversation simulation)
+ * Uses batch generation (1 LLM call per topic).
  */
 async function generateRecordsForTopic(
   task: TopicGenerationTask,
-  turns: number,
   personaCache: Map<string, string[]>,
   callbacks: GenerationCallbacks,
 ): Promise<TopicGenerationResult> {
-  // RFT mode: use batch path (1 LLM call per topic)
-  if (task.generationMode === "rft") {
-    return generateRFTRecordsForTopic(task, personaCache, callbacks);
-  }
-
-  // SFT mode: per-record generation (multi-turn requires sequential LLM calls)
-  console.log(
-    `[generateRecordsForTopic] Starting SFT topic "${task.topicName}" - generating ${task.recordsToGenerate} records in batches of ${RECORDS_BATCH_SIZE}`,
-  );
-
-  const records: TopicGenerationResult["records"] = [];
-  const errors: string[] = [];
-
-  // Generate records in batches to avoid overwhelming the queue
-  for (
-    let batchStart = 0;
-    batchStart < task.recordsToGenerate;
-    batchStart += RECORDS_BATCH_SIZE
-  ) {
-    const batchEnd = Math.min(
-      batchStart + RECORDS_BATCH_SIZE,
-      task.recordsToGenerate,
-    );
-    const batchIndices = Array.from(
-      { length: batchEnd - batchStart },
-      (_, i) => batchStart + i,
-    );
-
-    console.log(
-      `[generateRecordsForTopic] Topic "${task.topicName}" - processing records ${batchStart + 1}-${batchEnd}`,
-    );
-
-    const batchPromises = batchIndices.map((i) =>
-      generateSingleRecord(task, i, turns, personaCache, callbacks),
-    );
-
-    const batchResults = await Promise.allSettled(batchPromises);
-
-    for (const result of batchResults) {
-      if (result.status === "fulfilled") {
-        if (result.value.record) {
-          records.push(result.value.record);
-        }
-        if (result.value.error) {
-          errors.push(result.value.error);
-        }
-      } else {
-        errors.push(
-          `${task.topicName}: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
-        );
-      }
-    }
-  }
-
-  console.log(
-    `[generateRecordsForTopic] Completed topic "${task.topicName}" - ${records.length} records, ${errors.length} errors`,
-  );
-  return { topicName: task.topicName, records, errors };
+  return generateRFTRecordsForTopic(task, personaCache, callbacks);
 }
 
 /**
@@ -425,13 +179,11 @@ export async function generateTraces(
       dataset_id,
       record_ids,
       count,
-      max_turns,
       concurrency,
       target_topics,
       selected_topics,
       on_progress,
       on_records_added,
-      generation_mode = "rft",
     } = params;
 
     const resolvedDatasetId = dataset_id;
@@ -527,7 +279,6 @@ export async function generateTraces(
         : DEFAULT_RECORDS_PER_TOPIC;
     const totalExpectedRecords = targetLeafTopics.length * recordsPerTopic;
 
-    const turns = typeof max_turns === "number" ? max_turns : DEFAULT_MAX_TURNS;
     const effectiveConcurrency =
       typeof concurrency === "number" && concurrency > 0
         ? Math.min(concurrency, 10)
@@ -597,7 +348,6 @@ export async function generateTraces(
         recordsToGenerate: recordsPerTopic,
         seedRecords: taskSeedRecords,
         tools: effectiveTools,
-        generationMode: generation_mode,
         knowledgeContext: topicKnowledgeContexts.get(topic.id),
         sourceChunkRefs: topic.sourceChunkRefs,
         topicSystemPrompt: topicSystemPromptMap.get(topic.id),
@@ -641,7 +391,7 @@ export async function generateTraces(
       // Run this batch of topic tasks in parallel
       const batchResults = await Promise.allSettled(
         batchTasks.map((task) =>
-          generateRecordsForTopic(task, turns, personaCache, callbacks),
+          generateRecordsForTopic(task, personaCache, callbacks),
         ),
       );
 
@@ -721,15 +471,15 @@ export const generateTracesHandler: ToolHandler = async (input) => {
 
 export const generateTracesTool: DistriFnTool = {
   name: "generate_traces",
-  description: `Generate synthetic trace records and add them to a dataset.
+  description: `Generate synthetic training examples and add them to a dataset.
+
+Each example includes user_message + assistant_response + expected_score.
+Output DataInfo has empty output (rollout handled during training).
+The assistant response and quality score are stored in record metadata (skillResponse, baseScore).
 
 Supports two workflows:
-1. **Data-First**: Provide record_ids to generate variations from existing records (no topic hierarchy needed). Generated records inherit seed's topic or remain uncategorized for later classification.
-2. **Topics-First**: Configure topic hierarchy first, then generate data for specific topics to fill coverage gaps.
-
-Generation modes:
-- **RFT** (default): Varied prompts with empty output for reinforcement learning rollouts
-- **SFT**: Complete multi-turn conversations with assistant responses for supervised fine-tuning`,
+1. **Data-First**: Provide record_ids to generate variations from existing records (no topic hierarchy needed).
+2. **Topics-First**: Configure topic hierarchy first, then generate data for specific topics to fill coverage gaps.`,
   type: "function",
   parameters: {
     type: "object",
@@ -745,17 +495,6 @@ Generation modes:
         type: "number",
         description:
           "Number of records to generate per topic/seed group (default 5).",
-      },
-      max_turns: {
-        type: "number",
-        description:
-          "Max user turns per trace (default 3, only used in SFT mode)",
-      },
-      generation_mode: {
-        type: "string",
-        enum: ["rft", "sft"],
-        description:
-          'Generation mode: "rft" (default) generates varied prompts with empty output for reinforcement learning rollouts; "sft" generates complete multi-turn conversations with assistant responses for supervised fine-tuning',
       },
     },
     required: ["dataset_id"],

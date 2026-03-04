@@ -57,6 +57,10 @@ export { syncEvaluatorHandler, syncEvaluatorTool } from './sync-evaluator';
 // Dry Run (Step 5)
 export { runDryRunHandler, runDryRunTool } from './run-dry-run';
 
+// Skill Packaging (between Dry Run and Training)
+export { generateSkillPackageHandler, generateSkillPackageTool } from './generate-skill-package';
+export { downloadSkillPackageHandler, downloadSkillPackageTool } from './download-skill-package';
+
 // Training (Step 6)
 export { startTrainingHandler, startTrainingTool } from './start-training';
 export { checkTrainingStatusHandler, checkTrainingStatusTool } from './check-training-status';
@@ -74,6 +78,9 @@ export { updateDatasetReadmeHandler, updateDatasetReadmeTool } from './update-da
 
 // Objective
 export { updateObjectiveHandler, updateObjectiveTool } from './update-objective';
+
+// Dataset Creation
+export { createDatasetHandler, createDatasetTool } from './create-dataset';
 
 // Semantic PDF Extraction (local, in-browser) — internal function, not an agent tool
 export { extractPdfContentLocal } from './semantic-pdf-extractor';
@@ -144,6 +151,8 @@ import { validateRecordsHandler, validateRecordsTool } from './validate-records'
 import { uploadDatasetHandler, uploadDatasetTool } from './upload-dataset';
 import { syncEvaluatorHandler, syncEvaluatorTool } from './sync-evaluator';
 import { runDryRunHandler, runDryRunTool } from './run-dry-run';
+import { generateSkillPackageHandler, generateSkillPackageTool } from './generate-skill-package';
+import { downloadSkillPackageHandler, downloadSkillPackageTool } from './download-skill-package';
 import { startTrainingHandler, startTrainingTool } from './start-training';
 import { checkTrainingStatusHandler, checkTrainingStatusTool } from './check-training-status';
 import { deployModelHandler, deployModelTool } from './deploy-model';
@@ -158,6 +167,7 @@ import { proposePlanHandler, proposePlanTool, adjustPlanHandler, adjustPlanTool 
 import { savePlanHandler, savePlanTool } from './save-plan';
 import { executePlanHandler, executePlanTool } from './execute-plan';
 import { updatePlanMarkdownHandler, updatePlanMarkdownTool } from './update-plan-markdown';
+import { createDatasetHandler, createDatasetTool } from './create-dataset';
 // Note: Stockfish tools (analyzeChessPositionTool, classifyChessMoveTool) are NOT imported here
 // They are conditionally added via stockfishTools in useFineTuneAgentChat for chess datasets only
 
@@ -186,6 +196,8 @@ export const STEP_TOOL_NAMES = [
   'upload_dataset',
   'sync_evaluator',
   'run_evaluation',
+  'generate_skill_package',
+  'download_skill_package',
   'start_training',
   'check_training_status',
   'deploy_model',
@@ -201,6 +213,7 @@ export const STEP_TOOL_NAMES = [
   'save_plan',
   'execute_plan',
   'update_plan_markdown',
+  'create_dataset',
   // Note: Stockfish tools ('analyze_chess_position', 'classify_chess_move') are NOT in this list
   // They are conditionally available for chess datasets only via stockfishTools export
 ] as const;
@@ -235,6 +248,8 @@ export const stepTools: DistriFnTool[] = [
   uploadDatasetTool,
   syncEvaluatorTool,
   runDryRunTool,
+  generateSkillPackageTool,
+  downloadSkillPackageTool,
   startTrainingTool,
   checkTrainingStatusTool,
   deployModelTool,
@@ -250,6 +265,7 @@ export const stepTools: DistriFnTool[] = [
   savePlanTool,
   executePlanTool,
   updatePlanMarkdownTool,
+  createDatasetTool,
   // Note: Stockfish tools are NOT included here - they are conditionally added
   // via stockfishTools in useFineTuneAgentChat for chess datasets only
 ].map(tool => ({ ...tool, autoExecute: true }));
@@ -275,6 +291,8 @@ export const stepToolHandlers: Record<string, ToolHandler> = {
   upload_dataset: uploadDatasetHandler,
   sync_evaluator: syncEvaluatorHandler,
   run_evaluation: runDryRunHandler,
+  generate_skill_package: generateSkillPackageHandler,
+  download_skill_package: downloadSkillPackageHandler,
   start_training: startTrainingHandler,
   check_training_status: checkTrainingStatusHandler,
   deploy_model: deployModelHandler,
@@ -290,5 +308,6 @@ export const stepToolHandlers: Record<string, ToolHandler> = {
   save_plan: savePlanHandler,
   execute_plan: executePlanHandler,
   update_plan_markdown: updatePlanMarkdownHandler,
+  create_dataset: createDatasetHandler,
   // Note: Stockfish handlers are in stockfishToolHandlers export, not here
 };

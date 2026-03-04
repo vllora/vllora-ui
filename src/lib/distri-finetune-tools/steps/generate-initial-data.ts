@@ -110,7 +110,6 @@ interface OutputFormatParam {
 interface GenerateInitialDataParams {
   dataset_id: string;
   count?: number;
-  generation_mode?: "rft" | "sft";
   /** Optional user guidance for how to generate the data (e.g., "focus on beginner concepts", "include edge cases") */
   user_guidance?: string;
   /** If true, distribute generation across topics in the hierarchy */
@@ -124,10 +123,11 @@ interface GenerateInitialDataParams {
 }
 
 interface GeneratedExample {
-  /** Optional — only present in legacy/structured output mode */
+  /** Optional — only present in structured output mode */
   system_prompt?: string;
   user_message: string;
-  assistant_response?: string;
+  assistant_response: string;
+  expected_score: number;
 }
 
 interface KnowledgeContext {
@@ -274,8 +274,8 @@ Rules:
 - Generate examples that directly align with the training objective
 - Each example should have a clear, specific scenario
 - User messages should be natural and varied in style
-- For SFT mode, include helpful assistant responses
-- For RFT mode, only generate the user prompt (assistant learns through reinforcement)
+- Include helpful, high-quality assistant responses for each example
+- Provide an expected quality score (0.0-1.0) for each example
 - Vary the complexity, length, and style across examples
 - Include edge cases and challenging scenarios
 - When knowledge sources are provided, GROUND your examples in that material
@@ -289,7 +289,7 @@ const DIVERSITY_GUIDELINES = `Make the user messages diverse across:
 - Length: brief one-liners to detailed multi-sentence requests
 - Specificity: broad questions to very specific sub-aspects`;
 
-const INITIAL_DATA_GENERATION_USER_RFT = `Generate {{count}} diverse training examples for the following objective:
+const INITIAL_DATA_GENERATION_USER = `Generate {{count}} diverse training examples for the following objective:
 
 Training Objective:
 {{objective}}
@@ -297,38 +297,13 @@ Training Objective:
 {{system_prompt_section}}
 {{topic_context}}
 {{knowledge_context}}
-Generate a JSON array of user messages. Each should be a realistic query/prompt that a real user would send to the assistant described above.
-
-For each example, provide:
-- user_message: A realistic user message/query
-
-${DIVERSITY_GUIDELINES}
-
-Output Format:
-{
-  "examples": [
-    {
-      "user_message": "User's question or request..."
-    },
-    ...
-  ]
-}
-
-Generate exactly {{count}} examples.`;
-
-const INITIAL_DATA_GENERATION_USER_SFT = `Generate {{count}} diverse training examples for the following objective:
-
-Training Objective:
-{{objective}}
-{{user_guidance}}
-{{system_prompt_section}}
-{{topic_context}}
-{{knowledge_context}}
+{{structured_output_section}}
 Generate a JSON array of complete conversation examples. Each example should demonstrate the ideal assistant behavior for this objective.
 
 For each example, provide:
 - user_message: A realistic user message/query
 - assistant_response: An ideal, helpful response from the assistant
+- expected_score: A quality score from 0.0 to 1.0 rating how well this response aligns with the training objective (1.0 = perfect alignment)
 
 ${DIVERSITY_GUIDELINES}
 
@@ -337,7 +312,8 @@ Output Format:
   "examples": [
     {
       "user_message": "User's question or request...",
-      "assistant_response": "Helpful and accurate response..."
+      "assistant_response": "Helpful and accurate response...",
+      "expected_score": 0.85
     },
     ...
   ]
@@ -345,83 +321,10 @@ Output Format:
 
 Generate exactly {{count}} examples.`;
 
-const INITIAL_DATA_GENERATION_USER_STRUCTURED_RFT = `Generate {{count}} diverse training examples for a structured output task.
-
-Training Objective:
-{{objective}}
-{{user_guidance}}
-{{topic_context}}
-{{knowledge_context}}
-
-## STRUCTURED OUTPUT DETAILS
-
-The model must produce structured JSON output. Use the EXACT fixed system prompt below for ALL examples.
-
-**Fixed System Prompt (use this EXACTLY for all examples):**
-{{system_prompt_template}}
-
-**Expected Output Schema:**
-{{output_schema}}
-
-## YOUR TASK
-
-Generate realistic input texts as user_message. The system_prompt must be the EXACT fixed system prompt above for ALL examples.
-
-Rules for generating inputs:
-- Vary names, amounts, dates, details across examples
-- Include different formats: formal, informal, messy, well-structured
-- Include edge cases: missing fields, unusual formatting, multiple items
-- Make inputs realistic - they should look like real-world data
-- Each input should contain enough information to produce the fields in the schema
-- Some inputs should have partial information (missing optional fields)
-
-For each example, provide:
-- system_prompt: The EXACT fixed system prompt above (copy it verbatim)
-- user_message: A realistic input text
-
-Output Format:
-{
-  "examples": [
-    {
-      "system_prompt": "<the exact fixed system prompt>",
-      "user_message": "Input text..."
-    },
-    ...
-  ]
-}
-
-Generate exactly {{count}} examples.`;
-
-const INITIAL_DATA_RESPONSE_SCHEMA_RFT = {
+const INITIAL_DATA_RESPONSE_SCHEMA = {
   type: "json_schema",
   json_schema: {
-    name: "initial_training_data_rft",
-    strict: true,
-    schema: {
-      type: "object",
-      properties: {
-        examples: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              user_message: { type: "string" },
-            },
-            required: ["user_message"],
-            additionalProperties: false,
-          },
-        },
-      },
-      required: ["examples"],
-      additionalProperties: false,
-    },
-  },
-};
-
-const INITIAL_DATA_RESPONSE_SCHEMA_SFT = {
-  type: "json_schema",
-  json_schema: {
-    name: "initial_training_data_sft",
+    name: "initial_training_data",
     strict: true,
     schema: {
       type: "object",
@@ -433,8 +336,9 @@ const INITIAL_DATA_RESPONSE_SCHEMA_SFT = {
             properties: {
               user_message: { type: "string" },
               assistant_response: { type: "string" },
+              expected_score: { type: "number" },
             },
-            required: ["user_message", "assistant_response"],
+            required: ["user_message", "assistant_response", "expected_score"],
             additionalProperties: false,
           },
         },
@@ -487,7 +391,6 @@ function buildKnowledgeContextSection(knowledge: KnowledgeContext): string {
 async function callLLMForInitialData(
   objective: string,
   count: number,
-  mode: "rft" | "sft",
   userGuidance?: string,
   knowledgeContext?: KnowledgeContext,
   topicContext?: LeafTopic,
@@ -498,16 +401,6 @@ async function callLLMForInitialData(
   /** Pre-built topic system prompt (shared across all records in this topic) */
   topicSystemPrompt?: string,
 ): Promise<GeneratedExample[]> {
-  // Select prompt template: structured output RFT when response schema is present
-  let userPromptTemplate: string;
-  if (outputFormatConfig && mode === "rft") {
-    userPromptTemplate = INITIAL_DATA_GENERATION_USER_STRUCTURED_RFT;
-  } else if (mode === "rft") {
-    userPromptTemplate = INITIAL_DATA_GENERATION_USER_RFT;
-  } else {
-    userPromptTemplate = INITIAL_DATA_GENERATION_USER_SFT;
-  }
-
   // Build user guidance section if provided
   const guidanceSection = userGuidance
     ? `\nUser's specific guidance:\n${userGuidance}\n`
@@ -522,10 +415,9 @@ async function callLLMForInitialData(
   const knowledgeSection = topicChunkContext
     || (knowledgeContext ? buildKnowledgeContextSection(knowledgeContext) : "");
 
-  // Build structured output placeholders
-  const systemPromptTemplatePlaceholder = outputFormatConfig?.system_prompt_template || "";
-  const outputSchemaPlaceholder = outputFormatConfig?.schema
-    ? JSON.stringify(outputFormatConfig.schema, null, 2)
+  // Build structured output section if output format is configured
+  const structuredOutputSection = outputFormatConfig
+    ? `\n## STRUCTURED OUTPUT DETAILS\n\nThe model must produce structured JSON output.\n\n**Fixed System Prompt (use this for context):**\n${outputFormatConfig.system_prompt_template}\n\n**Expected Output Schema:**\n${JSON.stringify(outputFormatConfig.schema, null, 2)}\n\nThe assistant_response should be valid JSON matching the output schema above.\n`
     : "";
 
   // Build system prompt section: tells the LLM about the assistant role (for context)
@@ -535,20 +427,14 @@ async function callLLMForInitialData(
     ? `\n--- ASSISTANT ROLE ---\nThe assistant uses this system prompt:\n"${effectiveSystemPrompt}"\nGenerate user messages a real user would ask this assistant.\n--- END ASSISTANT ROLE ---\n`
     : "";
 
-  const userPrompt = userPromptTemplate
+  const userPrompt = INITIAL_DATA_GENERATION_USER
     .replace(/\{\{count\}\}/g, String(count))
     .replace("{{objective}}", objective)
     .replace("{{user_guidance}}", guidanceSection)
     .replace("{{system_prompt_section}}", systemPromptSection)
     .replace("{{topic_context}}", topicSection)
     .replace("{{knowledge_context}}", knowledgeSection)
-    .replace("{{system_prompt_template}}", systemPromptTemplatePlaceholder)
-    .replace("{{output_schema}}", outputSchemaPlaceholder);
-
-  const responseSchema =
-    mode === "rft"
-      ? INITIAL_DATA_RESPONSE_SCHEMA_RFT
-      : INITIAL_DATA_RESPONSE_SCHEMA_SFT;
+    .replace("{{structured_output_section}}", structuredOutputSection);
 
   // Build user message content: file blocks (if any) + text instruction
   let userContent: string | ContentBlock[];
@@ -573,7 +459,7 @@ async function callLLMForInitialData(
   const responseText = await callLucy(messages, {
     temperature: 0.7,
     max_tokens: outputFormatConfig ? 16000 : undefined,
-    response_format: responseSchema,
+    response_format: INITIAL_DATA_RESPONSE_SCHEMA,
     label: "generate_initial_data",
   });
 
@@ -591,35 +477,17 @@ async function callLLMForInitialData(
 
 function exampleToDataInfo(
   example: GeneratedExample,
-  mode: "rft" | "sft",
   tools: any[],
   /** The shared system prompt for this topic (always provided, never from example) */
   systemPrompt: string,
 ): DataInfo {
-  const inputMessages = [
-    { role: "system" as const, content: systemPrompt },
-    { role: "user" as const, content: example.user_message },
-  ];
-
-  if (mode === "sft" && example.assistant_response) {
-    return {
-      input: {
-        messages: inputMessages,
-        tools,
-      },
-      output: {
-        messages: [
-          { role: "assistant" as const, content: example.assistant_response },
-        ],
-        finish_reason: "stop",
-      },
-    };
-  }
-
-  // RFT mode: empty output for rollout
+  // Output always empty — fine-tuning format (model learns through rollouts)
   return {
     input: {
-      messages: inputMessages,
+      messages: [
+        { role: "system" as const, content: systemPrompt },
+        { role: "user" as const, content: example.user_message },
+      ],
       tools,
     },
     output: {
@@ -645,7 +513,6 @@ export const generateInitialDataHandler: ToolHandler = async (
     const {
       dataset_id,
       count = 10,
-      generation_mode = "rft",
       user_guidance,
       distribute_by_topic = false,
       output_format,
@@ -845,7 +712,6 @@ export const generateInitialDataHandler: ToolHandler = async (
           callLLMForInitialData(
             objective,
             job.batchSize,
-            generation_mode,
             user_guidance,
             knowledgeContext,
             job.topic,
@@ -880,14 +746,15 @@ export const generateInitialDataHandler: ToolHandler = async (
           // Convert to records with topic already assigned
           const topicPrompt = topicSystemPrompts.get(job.topic.name)!;
           const topicRecords = examples.map((example) => ({
-            data: exampleToDataInfo(example, generation_mode, seedTools, topicPrompt),
+            data: exampleToDataInfo(example, seedTools, topicPrompt),
             is_generated: true,
             topic: job.topic.name,
             metadata: {
               generation_source: "initial_data",
-              generation_mode,
               generated_at_ms: Date.now(),
               topic_path: job.topic.path.join(" > "),
+              skillResponse: example.assistant_response,
+              baseScore: example.expected_score,
               sourceChunkRefs: job.topic.sourceChunkRefs?.length
                 ? job.topic.sourceChunkRefs
                 : fallbackChunkRefs,
@@ -958,7 +825,6 @@ export const generateInitialDataHandler: ToolHandler = async (
             callLLMForInitialData(
               objective,
               batchSize,
-              generation_mode,
               user_guidance,
               knowledgeContext,
               undefined,
@@ -985,13 +851,14 @@ export const generateInitialDataHandler: ToolHandler = async (
           totalGenerated += examples.length;
 
           const batchRecords = examples.map((example) => ({
-            data: exampleToDataInfo(example, generation_mode, seedTools, genericSystemPrompt),
+            data: exampleToDataInfo(example, seedTools, genericSystemPrompt),
             is_generated: true,
             metadata: {
               generation_source: "initial_data",
-              generation_mode,
               generated_at_ms: Date.now(),
               batch_index: batchIndex,
+              skillResponse: example.assistant_response,
+              baseScore: example.expected_score,
               sourceChunkRefs: fallbackChunkRefs,
             },
           }));
@@ -1094,9 +961,8 @@ If the dataset has uploaded knowledge sources (PDFs, documents), this tool autom
 
 This produces higher quality, more accurate training data that aligns with reference material.
 
-**Generation Modes:**
-- RFT (default): Generates prompts only (empty output for reinforcement learning rollouts)
-- SFT: Generates complete conversations with assistant responses
+Each generated example includes a user message, an ideal assistant response, and an expected
+quality score — all stored as record metadata for downstream use in skill packaging.
 
 **User Guidance:**
 Pass the user's specific instructions if they mentioned what kind of data they want.
@@ -1113,13 +979,6 @@ Examples: "focus on beginner concepts", "include edge cases", "emphasize error h
         type: "number",
         default: 10,
         description: "Number of initial records to generate (default: 10)",
-      },
-      generation_mode: {
-        type: "string",
-        enum: ["rft", "sft"],
-        default: "rft",
-        description:
-          'Generation mode: "rft" for prompts only, "sft" for complete conversations',
       },
       user_guidance: {
         type: "string",

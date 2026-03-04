@@ -554,6 +554,8 @@ export async function updateRecordEvaluationScores(
     finetuneModel?: string;
     incrementDryRunCount?: boolean;
     incrementFinetuneCount?: boolean;
+    /** Evaluation job ID — enables per-job score tracking in `record.evaluations` */
+    jobId?: string;
   }
 ): Promise<void> {
   const db = await getDB();
@@ -605,6 +607,20 @@ export async function updateRecordEvaluationScores(
       existing.evaluatedAt = now;
 
       record.evaluation = existing;
+
+      // Also write to per-job evaluations map (for skill package JSONL output)
+      if (update.jobId) {
+        const evaluations = record.evaluations ? { ...record.evaluations } : {};
+        if (update.dryRunScore !== undefined) {
+          evaluations[update.jobId] = {
+            score: update.dryRunScore,
+            model: update.dryRunModel,
+            evaluatedAt: now,
+          };
+        }
+        record.evaluations = evaluations;
+      }
+
       record.updatedAt = now;
       recordsStore.put(record);
     };

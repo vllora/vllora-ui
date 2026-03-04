@@ -14,7 +14,7 @@ The Lucy Dataset Agent follows a **3-tier architecture** with tools executing lo
 │  ┌────────────────────────┐   ┌─────────────────────────────────────┐  │
 │  │ LucyDatasetAssistant   │   │    distri-finetune-tools/           │  │
 │  │ - Sidebar UI           │   │    - Workflow tools (4)             │  │
-│  │ - Auto-analysis        │   │    - Step tools (35)                │  │
+│  │ - Auto-analysis        │   │    - Step tools (37)                │  │
 │  │ - Quick actions        │   │    - Execute locally in browser     │  │
 │  └────────────────────────┘   └─────────────────────────────────────┘  │
 │           │                              │                              │
@@ -44,7 +44,7 @@ The Lucy Dataset Agent follows a **3-tier architecture** with tools executing lo
 │  ┌───────────────────────┐   ┌────────────────────────────────────────┐│
 │  │   AgentOrchestrator   │   │     vllora-finetune-agent.md           ││
 │  │   - Loads agent defs  │◄──│     - Model: gpt-4.1                   ││
-│  │   - Tool execution    │   │     - 14 external + 3 builtin tools    ││
+│  │   - Tool execution    │   │     - 16 external + 3 builtin tools    ││
 │  │   - Message routing   │   │     - max_iterations: 30               ││
 │  │   - Sub-agent mgmt    │   │     - 3 sub-agents (topics, workflow,  ││
 │  │                       │   │       data_generation)                  ││
@@ -72,7 +72,7 @@ The Lucy Dataset Agent follows a **3-tier architecture** with tools executing lo
 | External Tool Timeout | `600s` (10 min for user responses) |
 | Sub-Agents | `finetune_topics`, `finetune_workflow`, `data_generation` |
 | Builtin Tools | 3 (`final`, `write_todos`, `transfer_to_agent`) |
-| External Tools | 14 (`ask_follow_up`, `get_workflow_status`, `get_dataset_state`, `get_dataset_records`, `update_objective`, `analyze_knowledge_sources`, `search_knowledge`, `generate_topics`, `generate_grader`, `propose_plan`, `adjust_plan`, `save_plan`, `execute_plan`, `update_plan_markdown`) |
+| External Tools | 16 (`ask_follow_up`, `get_workflow_status`, `get_dataset_state`, `get_dataset_records`, `update_objective`, `analyze_knowledge_sources`, `search_knowledge`, `generate_topics`, `generate_grader`, `propose_plan`, `adjust_plan`, `save_plan`, `execute_plan`, `update_plan_markdown`, `generate_skill_package`, `download_skill_package`) |
 
 The orchestrator is the main agent users interact with. It handles plan-first routing (detecting when to create plans from knowledge sources), delegates specialized work to sub-agents via `transfer_to_agent`, and calls some tools directly (plan system, knowledge analysis, dataset access).
 
@@ -80,7 +80,7 @@ Key prompt sections:
 - **ROLE**: Proactive finetune orchestrator
 - **CRITICAL RULES**: Plan-first triggers, ask_follow_up usage, delegation rules
 - **SUB-AGENTS**: When/how to delegate to each sub-agent
-- **RFT DATA FORMAT**: Record structure rules (prompts only, no golden responses needed)
+- **DATA FORMAT**: Unified record structure (user + assistant + score, output empty for RFT rollout)
 
 ---
 
@@ -91,7 +91,7 @@ The orchestrator delegates specialized tasks to 3 sub-agents via `transfer_to_ag
 | Sub-Agent | File | Purpose | External Tools |
 |-----------|------|---------|---------------|
 | `finetune_topics` | `finetune-topics-agent.md` | Topic hierarchy generation, display, manipulation | 5: `generate_topics`, `apply_topic_hierarchy`, `adjust_topic_hierarchy`, `get_topic_hierarchy`, `get_dataset_records` |
-| `finetune_workflow` | `finetune-workflow-agent.md` | Workflow operations — data generation, grading, training, deployment | 22: all workflow control + data ops + grader + training tools |
+| `finetune_workflow` | `finetune-workflow-agent.md` | Workflow operations — data generation, grading, training, deployment, skill packaging | 24: all workflow control + data ops + grader + training + packaging tools |
 | `data_generation` | `data-generation-agent.md` | Interactive data gen with knowledge sources, previews, iterative refinement | 12: knowledge source tools + generation tools + dataset access |
 
 **Delegation Flow:**
@@ -117,7 +117,7 @@ vllora_finetune_agent (Orchestrator)
 - **Tool overlap**: Some tools appear on multiple agents (e.g., `get_dataset_records` on orchestrator + topics + data_generation) to allow each agent to access what it needs
 
 **Agent Definition Files** (`gateway/agents/finetune/`):
-- `vllora-finetune-agent.md` — Orchestrator (14 external + 3 builtin tools)
+- `vllora-finetune-agent.md` — Orchestrator (16 external + 3 builtin tools)
 - `finetune-topics-agent.md` — Topics specialist (5 external tools)
 - `finetune-workflow-agent.md` — Workflow executor (22 external tools)
 - `data-generation-agent.md` — Data generation specialist (12 external tools)
@@ -265,7 +265,7 @@ const tools = useMemo<DistriAnyTool[]>(
 );
 ```
 
-- `finetuneTools`: All 39 function tools (4 workflow + 35 step tools)
+- `finetuneTools`: All 41 function tools (4 workflow + 37 step tools)
 - `createAskFollowUpTool()`: UI tool for presenting options to users
 
 **Context Injection Pattern:**
@@ -289,7 +289,7 @@ distri-finetune-tools/
 ├── workflow/
 │   └── index.ts          # 4 workflow control tools
 ├── steps/
-│   ├── index.ts                  # Aggregates all 35 step tools
+│   ├── index.ts                  # Aggregates all 37 step tools
 │   ├── generate-topics/          # Topic generation (frontend + backend)
 │   │   ├── frontend.ts           # LLM-based generation
 │   │   ├── backend.ts            # Template-based generation
@@ -338,6 +338,8 @@ distri-finetune-tools/
 │   ├── plan-step-normalization.ts  # Step ID normalization utilities
 │   ├── execution-state-store.ts  # In-memory execution cache (write-through to IndexedDB)
 │   ├── proposed-plan-store.ts    # IndexedDB plan persistence with lifecycle status tracking
+│   ├── generate-skill-package.ts  # Assemble skill package ZIP (zero LLM calls)
+│   ├── download-skill-package.ts  # Browser download of generated ZIP
 │   ├── stockfish-tools.ts        # Chess-specific tools (conditional)
 │   ├── stockfish-service.ts      # Stockfish engine integration
 │   └── helpers.ts
@@ -357,7 +359,7 @@ distri-finetune-tools/
 | `advance_to_step` | Move to next step (with skip support) |
 | `rollback_to_step` | Return to previous step via snapshots |
 
-#### Step Tools (35)
+#### Step Tools (37)
 
 | Category | Tools |
 |----------|-------|
@@ -368,6 +370,7 @@ distri-finetune-tools/
 | **Grader (Step 4)** | `configure_grader`, `generate_grader`, `test_grader_sample` |
 | **Upload/Sync** | `upload_dataset`, `sync_evaluator` |
 | **Dry Run (Step 5)** | `run_evaluation` |
+| **Skill Packaging (Step 5b)** | `generate_skill_package`, `download_skill_package` |
 | **Training (Step 6)** | `start_training`, `check_training_status` |
 | **Deploy (Step 7)** | `deploy_model` |
 | **Plan** | `propose_plan`, `adjust_plan`, `save_plan`, `execute_plan` (deprecated), `update_plan_markdown` |
@@ -397,6 +400,7 @@ interface FinetuneWorkflowState {
   coverageGeneration: {...} | null;
   graderConfig: {...} | null;
   dryRun: {...} | null;
+  skillPackaging: {...} | null;
   training: {...} | null;
   deployment: {...} | null;
 
@@ -447,7 +451,7 @@ interface FinetuneWorkflowState {
 ## Key Design Decisions
 
 ### 1. Frontend Tool Execution
-All 39 tools execute in the browser via JavaScript handlers. This allows:
+All 41 tools execute in the browser via JavaScript handlers. This allows:
 - Direct access to IndexedDB
 - No backend API needed for data operations
 - Real-time UI updates via emitter events
@@ -517,7 +521,7 @@ Workflow snapshots stored in IndexedDB enable:
 
    These must stay in sync manually across 4 agent definition files.
 
-2. **Browser-Only Execution** - All 39 tools execute in browser. For operations like `start_training` or `deploy_model`, consider:
+2. **Browser-Only Execution** - All 41 tools execute in browser. For operations like `start_training` or `deploy_model`, consider:
    - Access to GPU resources
    - Long-running jobs
    - Secure API key handling

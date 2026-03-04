@@ -55,6 +55,7 @@ const STEP_ORDER: FinetuneStep[] = [
   'coverage_generation',
   'grader_config',
   'dry_run',
+  'skill_packaging',
   'training',
   'deployment',
   'completed',
@@ -102,6 +103,19 @@ function isValidStepTransition(from: FinetuneStep, to: FinetuneStep): boolean {
   // Allow skipping dry_run and going directly to training
   // Users can skip validation if they're confident in their data and grader
   if (to === 'training' && from === 'grader_config') {
+    return true;
+  }
+
+  // Allow skipping skill_packaging — it's optional
+  if (to === 'training' && from === 'dry_run') {
+    return true;
+  }
+  if (to === 'training' && from === 'skill_packaging') {
+    return true;
+  }
+
+  // Allow skipping from coverage_generation directly to skill_packaging
+  if (to === 'skill_packaging' && from === 'coverage_generation') {
     return true;
   }
 

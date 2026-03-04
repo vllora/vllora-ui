@@ -21,6 +21,7 @@ export type FinetuneStep =
   | 'coverage_generation'
   | 'grader_config'
   | 'dry_run'
+  | 'skill_packaging'
   | 'training'
   | 'deployment'
   | 'completed';
@@ -118,6 +119,12 @@ export interface FinetuneWorkflowState {
     verdict: DryRunVerdict;
     sampleResults: DryRunSample[];
     recommendations: string[];
+  } | null;
+
+  skillPackaging: {
+    recordCount: number;
+    packagedAt: number;
+    skillName: string;
   } | null;
 
   training: {
@@ -254,6 +261,7 @@ function createInitialStepStatus(): Record<FinetuneStep, StepStatus> {
     coverage_generation: 'pending',
     grader_config: 'pending',
     dry_run: 'pending',
+    skill_packaging: 'pending',
     training: 'pending',
     deployment: 'pending',
     completed: 'pending',
@@ -286,6 +294,7 @@ export async function createWorkflow(
     coverageGeneration: null,
     graderConfig: null,
     dryRun: null,
+    skillPackaging: null,
     training: null,
     deployment: null,
     createdAt: now,

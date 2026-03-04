@@ -23,6 +23,7 @@ export type ContentSection =
   | "tasks"
   | "logs"
   | "insights"
+  | "skill"
   | null;
 
 /**
@@ -58,6 +59,8 @@ export function mapTabPathToSection(path: string | null): ContentSection {
   if (path.startsWith("finetune/")) return "jobs";
   if (path === "documents") return "documents";
   if (path.startsWith("documents/")) return "documents";
+  if (path === "skill") return "skill";
+  if (path.startsWith("skill/")) return "skill";
 
   return null;
 }
@@ -100,4 +103,20 @@ export function getFinetuneJobIdFromPath(path: string | null): string | null {
   const jobId = path.slice(prefix.length).trim();
   if (!jobId || jobId.includes("/")) return null;
   return jobId;
+}
+
+/**
+ * Extract skill file path from an explorer path like `skill/SKILL.md`
+ * or `skill/examples/using-joins.jsonl`.
+ * Returns the relative path within the skill package (e.g., "SKILL.md",
+ * "examples/using-joins.jsonl"), or null for the folder root.
+ */
+export function getSkillFileFromPath(path: string | null): string | null {
+  if (!path) return null;
+  const prefix = "skill/";
+  if (!path.startsWith(prefix)) return null;
+
+  const filePath = path.slice(prefix.length).trim();
+  if (!filePath) return null;
+  return filePath;
 }

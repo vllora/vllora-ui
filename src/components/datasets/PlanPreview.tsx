@@ -9,9 +9,10 @@
  * Empty state: prompt to generate a plan.
  */
 
-import { Sparkles, Loader2, FolderOpen, AlertCircle, CheckCircle2, XCircle, Pencil, FileText } from "lucide-react";
+import { Sparkles, Loader2, FolderOpen, AlertCircle, CheckCircle2, XCircle, Pencil, FileText, Download } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { useChatStateStore } from "@distri/react";
 import { PlanEditor } from "./plan-section/PlanEditor";
 import LazyMarkdownRenderer from "@/components/chat/LazyMarkdownRenderer";
@@ -20,6 +21,9 @@ import type { Plan } from "@/lib/distri-finetune-tools/steps/propose-plan";
 import type { PlanStatus } from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
 import { WorkspaceTabsConsumer } from "@/contexts/WorkspaceTabsContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
+import { getWorkflowByDataset } from "@/services/finetune-workflow-db";
+import { generateSkillPackageHandler } from "@/lib/distri-finetune-tools/steps/generate-skill-package";
+import { downloadSkillPackageHandler } from "@/lib/distri-finetune-tools/steps/download-skill-package";
 
 interface PlanPreviewProps {
   plan: Plan | null;
@@ -37,6 +41,8 @@ interface PlanPreviewProps {
   planErrorMessage?: string | null;
   /** Documents are being processed and plan will auto-generate when ready */
   docsProcessing?: boolean;
+  /** Dataset ID — needed for skill package download */
+  datasetId?: string;
 }
 
 export function PlanPreview({
@@ -54,6 +60,7 @@ export function PlanPreview({
   hasKnowledgeSources,
   planErrorMessage,
   docsProcessing,
+  datasetId,
 }: PlanPreviewProps) {
   // Show loading spinner while IndexedDB is being read on mount
   if (isLoadingPlan) {
@@ -89,6 +96,7 @@ export function PlanPreview({
             isExecuting={isExecuting}
             isActionable={isActionable}
             planErrorMessage={planErrorMessage}
+            datasetId={datasetId}
           />
         )
       ) : (
@@ -148,6 +156,7 @@ function PlanDisplayView({
   isExecuting,
   isActionable,
   planErrorMessage,
+  datasetId,
 }: {
   plan: Plan;
   planStatus: PlanStatus | null;
@@ -156,7 +165,40 @@ function PlanDisplayView({
   isExecuting: boolean;
   isActionable: boolean;
   planErrorMessage?: string | null;
+  datasetId?: string;
 }) {
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownloadSkillPackage = useCallback(async () => {
+    if (!datasetId) {
+      toast.error('No dataset selected');
+      return;
+    }
+    setIsDownloading(true);
+    try {
+      const workflow = await getWorkflowByDataset(datasetId);
+      if (!workflow) {
+        toast.error('No workflow found for this dataset');
+        return;
+      }
+      const genResult = await generateSkillPackageHandler({ workflow_id: workflow.id }) as { success: boolean; error?: string };
+      if (!genResult.success) {
+        toast.error(genResult.error ?? 'Failed to generate skill package');
+        return;
+      }
+      const dlResult = await downloadSkillPackageHandler({ workflow_id: workflow.id }) as { success: boolean; error?: string };
+      if (!dlResult.success) {
+        toast.error(dlResult.error ?? 'Failed to download skill package');
+        return;
+      }
+      toast.success('Skill package downloaded');
+    } catch {
+      toast.error('Download failed');
+    } finally {
+      setIsDownloading(false);
+    }
+  }, [datasetId]);
+
   return (
     <>
       {/* Plan content — agent updates plan_markdown via update_plan_markdown tool */}
@@ -182,6 +224,20 @@ function PlanDisplayView({
               <XCircle className="w-3 h-3 shrink-0" />
               <span className="truncate">{planErrorMessage ? 'Failed: ' + planErrorMessage : 'Failed'}</span>
             </span>
+          )}
+          {planStatus === 'completed' && datasetId && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              disabled={isDownloading}
+              onClick={handleDownloadSkillPackage}
+            >
+              {isDownloading
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Download className="w-3.5 h-3.5" />}
+              Skill Package
+            </Button>
           )}
           {isActionable && !isExecuting && (
             <>

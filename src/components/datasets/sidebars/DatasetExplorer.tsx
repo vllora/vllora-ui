@@ -30,6 +30,7 @@ import {
   Clock,
   AlertTriangle,
   Circle,
+  Package,
 } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
@@ -119,7 +120,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
   // Expanded/selected state
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(
-    () => new Set(["documents", "data", "evaluations", "finetune", "insights"])
+    () => new Set(["documents", "data", "evaluations", "finetune", "skill", "insights"])
   );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
@@ -504,6 +505,104 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
             },
           },
         ],
+      });
+    }
+
+    // --- skill/ (always shown — empty state when no records) ---
+    {
+      const skillChildren: FileTreeNode[] = [];
+
+      if (records.length > 0) {
+        // SKILL.md
+        skillChildren.push({
+          id: "skill/SKILL.md",
+          name: "SKILL.md",
+          type: "file",
+          icon: <FileText className={`${ICON_CLS} text-purple-400`} />,
+        });
+
+        // rules/
+        skillChildren.push({
+          id: "skill/rules",
+          name: "rules",
+          type: "folder",
+          icon: folderIcon(expandedNodes, "skill/rules"),
+          isExpandable: true,
+          children: [
+            {
+              id: "skill/rules/response-guidelines.md",
+              name: "response-guidelines.md",
+              type: "file",
+              icon: <FileText className={`${ICON_CLS} text-purple-400`} />,
+            },
+          ],
+        });
+
+        // examples/ — build from topicCounts
+        const exampleChildren: FileTreeNode[] = [
+          {
+            id: "skill/examples/index.md",
+            name: "index.md",
+            type: "file",
+            icon: <FileText className={`${ICON_CLS} text-purple-400`} />,
+          },
+        ];
+
+        // Add per-topic .jsonl files from topicCounts
+        const sortedTopics = [...topicCounts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+        for (const [topicName, count] of sortedTopics) {
+          const slug = topicName
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-|-$/g, "");
+          exampleChildren.push({
+            id: `skill/examples/${slug}.jsonl`,
+            name: `${slug}.jsonl`,
+            type: "file",
+            icon: <FileCode className={`${ICON_CLS} text-purple-400`} />,
+            badge: { label: String(count), variant: "count" },
+          });
+        }
+
+        skillChildren.push({
+          id: "skill/examples",
+          name: "examples",
+          type: "folder",
+          icon: folderIcon(expandedNodes, "skill/examples"),
+          isExpandable: true,
+          children: exampleChildren,
+        });
+
+        // knowledge/ — only if knowledge sources exist
+        const hasReadySources = sources.some((s) => s.status === "ready");
+        if (hasReadySources) {
+          skillChildren.push({
+            id: "skill/knowledge",
+            name: "knowledge",
+            type: "folder",
+            icon: folderIcon(expandedNodes, "skill/knowledge"),
+            isExpandable: true,
+            children: [
+              {
+                id: "skill/knowledge/domain-knowledge.md",
+                name: "domain-knowledge.md",
+                type: "file",
+                icon: <FileText className={`${ICON_CLS} text-purple-400`} />,
+              },
+            ],
+          });
+        }
+      }
+
+      nodes.push({
+        id: "skill",
+        name: "skill",
+        type: "folder",
+        icon: <Package className={`${ICON_CLS} text-purple-500`} />,
+        children: skillChildren,
+        isExpandable: skillChildren.length > 0,
+        isSection: true,
+        emptyText: "Generate training data to preview skill package",
       });
     }
 

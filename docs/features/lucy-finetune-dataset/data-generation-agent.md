@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Data Generation Agent is an interactive sub-agent for creating high-quality RFT training data. Unlike 1-shot generation tools, this agent engages in dialogue with users to understand requirements, show previews, and iterate until satisfied.
+The Data Generation Agent is an interactive sub-agent for creating high-quality training data. Unlike 1-shot generation tools, this agent engages in dialogue with users to understand requirements, show previews, and iterate until satisfied.
 
 ## Problem Statement
 
@@ -48,9 +48,9 @@ Users need:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## RFT Data Format
+## Unified Data Format
 
-Generated data must follow the RFT format:
+Generation always produces three fields per example: `user_message`, `assistant_response`, and `expected_score`. The assistant response and score are stored in record metadata (`skillResponse`, `baseScore`) while the DataInfo output remains empty for RFT rollout during training:
 
 ```json
 {
@@ -60,9 +60,19 @@ Generated data must follow the RFT format:
       {"role": "user", "content": "..."}
     ]
   },
-  "output": {}  // Empty - model generates response during training
+  "output": {}
 }
 ```
+
+Record metadata:
+```json
+{
+  "skillResponse": "The assistant's ideal response...",
+  "baseScore": 0.85
+}
+```
+
+These metadata fields are consumed by the skill package generation tool (`generate_skill_package`) to assemble JSONL training data with all 6 fields: `system`, `user`, `assistant`, `base_score`, `eval_scores`, `sources`.
 
 ## Shared System Prompt Per Topic
 

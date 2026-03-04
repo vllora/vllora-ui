@@ -43,6 +43,12 @@ This document describes the workflow state machine for the Lucy Finetune Agent s
     │           (Step 5)            │              │
     └───────────────┬───────────────┘              │
                     │                              │
+                    ▼                              │
+    ┌───────────────────────────────┐              │
+    │      skill_packaging          │              │
+    │      (Step 5b - OPTIONAL)     │              │
+    └───────────────┬───────────────┘              │
+                    │                              │
                     ▼              ◄───────────────┘
     ┌───────────────────────────────┐
     │           training            │
@@ -75,6 +81,7 @@ type FinetuneStep =
   | 'coverage_generation'
   | 'grader_config'
   | 'dry_run'
+  | 'skill_packaging'
   | 'training'
   | 'deployment'
   | 'completed';
@@ -102,6 +109,7 @@ const STEP_ORDER: FinetuneStep[] = [
   'coverage_generation', // 3
   'grader_config',    // 4
   'dry_run',          // 5
+  'skill_packaging',  // 5b (optional)
   'training',         // 6
   'deployment',       // 7
   'completed',        // 8
@@ -367,6 +375,40 @@ interface DryRunResult {
 **Per-Record Score Persistence:**
 
 During dry run polling, individual row scores from the backend are persisted to each record's `evaluation` field via `updateRecordEvaluation()` in `dry-run-polling-manager.ts`. This enables the `QualityIndicator` component to display per-record scores in the records table (green >= 0.8, amber >= 0.6, red < 0.6). Scores are stored as `DatasetEvaluation` on `DatasetRecord.evaluation`.
+
+---
+
+### Step 5b: Skill Packaging (`skill_packaging`)
+
+**Purpose:** Assemble a downloadable Claude Code skill package (ZIP) from the dataset.
+
+| Property | Value |
+|----------|-------|
+| Required | **NO** (optional, can skip to training) |
+| Prerequisites | None strictly required; best after `dry_run` |
+| Tools | `generate_skill_package`, `download_skill_package` |
+
+**What happens:**
+1. `generate_skill_package` reads all records from IndexedDB
+2. Each record is assembled into a JSONL row with 6 fields: `system`, `user`, `assistant`, `base_score`, `eval_scores`, `sources`
+3. A ZIP is created with `SKILL.md` + `examples/training-data.jsonl`
+4. The ZIP Blob is stored in memory for download
+5. `download_skill_package` triggers a browser file download
+
+**Zero LLM calls** — pure data assembly from IndexedDB.
+
+**Workflow State:**
+```typescript
+skillPackaging: {
+  recordCount: number;    // Records included in package
+  packagedAt: number;     // Timestamp
+  skillName: string;      // Package name
+} | null;
+```
+
+**Skip rules:**
+- Can skip from `dry_run` directly to `training`
+- Can skip from `coverage_generation` directly to `skill_packaging`
 
 ---
 

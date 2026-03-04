@@ -28,7 +28,6 @@ export const generateSyntheticDataHandler: ToolHandler = async (params): Promise
       target_topics,
       count_per_topic = 10,
       max_turns = 3,
-      generation_mode = 'rft',
       record_ids, // For Data-First workflow
     } = params;
 
@@ -143,7 +142,6 @@ export const generateSyntheticDataHandler: ToolHandler = async (params): Promise
           count: countPerTopic,
           max_turns: turns,
           concurrency: 5,
-          generation_mode: generation_mode as 'rft' | 'sft',
           // No target_topics or selected_topics - generateTraces will create virtual topics from seeds
         }
       : {
@@ -155,7 +153,6 @@ export const generateSyntheticDataHandler: ToolHandler = async (params): Promise
           concurrency: 5,
           target_topics: 'selected' as const,
           selected_topics: topicsToTarget,
-          generation_mode: generation_mode as 'rft' | 'sft',
         };
     console.log('[generateSyntheticData] Calling generateTraces with:', JSON.stringify(generateTracesParams, null, 2));
 
@@ -322,12 +319,6 @@ export const generateSyntheticDataTool: DistriFnTool = {
         type: 'number',
         default: 3,
         description: 'Maximum conversation turns per generated record (default: 3, only used in SFT mode)',
-      },
-      generation_mode: {
-        type: 'string',
-        enum: ['rft', 'sft'],
-        default: 'rft',
-        description: 'Generation mode: "rft" (default) generates varied prompts with empty output for reinforcement learning rollouts; "sft" generates complete conversations with assistant responses for supervised fine-tuning',
       },
     },
     required: ['workflow_id'],
