@@ -253,6 +253,7 @@ async function callLLMForHierarchy(
       ...modelSettingsFromConfig,
       model: modelSettingsFromConfig.model || 'openai/gpt-4.1',
       temperature: modelSettingsFromConfig.temperature ?? 0.3,
+      max_tokens: modelSettingsFromConfig.max_tokens ?? 4096,
       response_format: TOPIC_HIERARCHY_SCHEMA,
     },
   });
