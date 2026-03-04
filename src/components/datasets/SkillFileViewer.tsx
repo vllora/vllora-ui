@@ -29,6 +29,18 @@ interface SkillFileViewerProps {
   readonly filePath: string;
 }
 
+/**
+ * Convert YAML frontmatter (---...---) into a fenced code block
+ * so the markdown renderer shows it as a styled code block instead of raw text.
+ */
+function formatYamlFrontmatter(md: string): string {
+  const match = md.match(/^---\n([\s\S]*?)\n---\n*/);
+  if (!match) return md;
+  const yamlContent = match[1].trim();
+  const rest = md.slice(match[0].length);
+  return `\`\`\`yaml\n${yamlContent}\n\`\`\`\n\n${rest}`;
+}
+
 /** Resolve a file path to the corresponding content from assembled files */
 function resolveFileContent(
   files: SkillPackageFiles,
@@ -317,8 +329,8 @@ export function SkillFileViewer({ filePath }: SkillFileViewerProps) {
       ) : (
         <div className="flex-1 overflow-y-auto p-6">
           {isMarkdown ? (
-            <div className="max-w-3xl mx-auto prose prose-sm prose-invert">
-              <LazyMarkdownRenderer content={displayContent ?? ""} />
+            <div className="max-w-3xl mx-auto prose prose-sm prose-invert [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-xs [&_p]:text-xs [&_li]:text-xs [&_td]:text-xs [&_th]:text-xs [&_code]:text-[11px] [&_pre]:text-[11px]">
+              <LazyMarkdownRenderer content={formatYamlFrontmatter(displayContent ?? "")} />
             </div>
           ) : isJsonl ? (
             <JsonlContent content={originalContent} />

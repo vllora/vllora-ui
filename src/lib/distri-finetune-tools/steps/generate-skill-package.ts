@@ -102,6 +102,38 @@ function slugifySkillName(name: string): string {
     .slice(0, 64);
 }
 
+/** Common acronyms that should be fully uppercased */
+const ACRONYMS = new Set([
+  'sql', 'api', 'url', 'html', 'css', 'js', 'ts', 'cte', 'ctes',
+  'json', 'xml', 'http', 'https', 'jwt', 'oauth', 'sdk', 'cli',
+  'gui', 'ui', 'ux', 'ai', 'ml', 'llm', 'db', 'ip', 'dns', 'ssh',
+  'ftp', 'fen', 'aws', 'gcp', 'pdf', 'csv', 'yaml', 'toml', 'rag',
+]);
+
+/**
+ * Convert snake_case topic name to human-readable Title Case.
+ * Preserves common acronyms: "writing_sql_queries" → "Writing SQL Queries"
+ */
+function humanizeName(slug: string): string {
+  return slug
+    .replace(/_/g, ' ')
+    .split(' ')
+    .map((w) =>
+      ACRONYMS.has(w.toLowerCase())
+        ? w.toUpperCase()
+        : w.charAt(0).toUpperCase() + w.slice(1),
+    )
+    .join(' ');
+}
+
+/**
+ * Humanize a full topic path.
+ * "writing_sql_queries/using_joins" → "Writing SQL Queries / Using Joins"
+ */
+function humanizePath(path: string): string {
+  return path.split('/').map(humanizeName).join(' / ');
+}
+
 // ─── JSONL row assembly ───
 
 function assembleJsonlRow(record: DatasetRecord): SkillJsonlRow | null {
@@ -233,7 +265,7 @@ function buildExamplesIndex(
       group.diversityScore !== null ? group.diversityScore.toFixed(2) : 'N/A';
     const leafSlug = slugifySegment(group.topicPath.split('/').pop() ?? group.topicPath);
     lines.push(
-      `| ${group.topicPath} | [${leafSlug}.jsonl](${group.slug}.jsonl) | ${group.rows.length} | ${group.avgBaseScore.toFixed(2)} | ${diversity} |`,
+      `| ${humanizePath(group.topicPath)} | [${leafSlug}.jsonl](${group.slug}.jsonl) | ${group.rows.length} | ${group.avgBaseScore.toFixed(2)} | ${diversity} |`,
     );
   }
 
@@ -346,13 +378,21 @@ function buildTopicHierarchyList(nodes: readonly TopicHierarchyNode[]): string {
   const lines: string[] = [];
 
   function walk(node: TopicHierarchyNode, depth: number): void {
-    const indent = '  '.repeat(depth);
-    const desc = node.description ? ` (${node.description})` : '';
-    lines.push(`${indent}- ${node.name}${desc}`);
-    if (node.children) {
-      for (const child of node.children) {
+    const indent = '    '.repeat(depth);
+    const name = humanizeName(node.name);
+    const hasChildren = node.children && node.children.length > 0;
+
+    if (hasChildren) {
+      // Parent topics: bold name, description on next line if present
+      const desc = node.description ? ` — ${node.description}` : '';
+      lines.push(`${indent}- **${name}**${desc}`);
+      for (const child of node.children!) {
         walk(child, depth + 1);
       }
+    } else {
+      // Leaf topics: name with description in parentheses
+      const desc = node.description ? `: ${node.description}` : '';
+      lines.push(`${indent}- ${name}${desc}`);
     }
   }
 
@@ -361,25 +401,6 @@ function buildTopicHierarchyList(nodes: readonly TopicHierarchyNode[]): string {
   }
 
   return lines.join('\n');
-}
-
-// ─── Select top representative examples ───
-
-function selectTopExamples(
-  groups: readonly TopicGroup[],
-  maxCount: number,
-): readonly { topicPath: string; row: SkillJsonlRow }[] {
-  // Pick the highest-scored record from each major topic group
-  const candidates = groups
-    .filter((g) => g.rows.length > 0)
-    .map((g) => ({
-      topicPath: g.topicPath,
-      row: g.rows[0], // already sorted by baseScore desc
-      score: g.rows[0].base_score ?? 0,
-    }))
-    .sort((a, b) => b.score - a.score);
-
-  return candidates.slice(0, maxCount);
 }
 
 // ─── Build SKILL.md ───
@@ -433,7 +454,6 @@ function buildSkillMarkdown(params: {
   readonly examplesIndex: string;
   readonly hasKnowledge: boolean;
   readonly topicGroups: readonly TopicGroup[];
-  readonly representativeExamples: readonly { topicPath: string; row: SkillJsonlRow }[];
 }): string {
   const lines: string[] = [];
 
@@ -540,28 +560,6 @@ function buildSkillMarkdown(params: {
     );
   }
 
-  // Representative Examples
-  if (params.representativeExamples.length > 0) {
-    lines.push(
-      '## Representative Examples',
-      '',
-      'These are the highest-scored examples across major topic areas. Use them as',
-      'immediate reference — for more examples on any topic, load the relevant JSONL file.',
-      '',
-    );
-
-    for (const ex of params.representativeExamples) {
-      const leaf = ex.topicPath.split('/').pop() ?? ex.topicPath;
-      const score = ex.row.base_score !== null ? ex.row.base_score.toFixed(2) : 'N/A';
-      lines.push(
-        `### ${leaf} (Score: ${score})`,
-        `**User**: ${ex.row.user}`,
-        `**Assistant**: ${ex.row.assistant}`,
-        '',
-      );
-    }
-  }
-
   return lines.join('\n');
 }
 
@@ -615,7 +613,6 @@ export async function assembleSkillPackageFiles(
       : '';
 
   const readySources = knowledgeSources.filter((s) => s.status === 'ready');
-  const representativeExamples = selectTopExamples(topicGroups, 5);
 
   const skillMd = buildSkillMarkdown({
     skillName: resolvedName,
@@ -629,7 +626,6 @@ export async function assembleSkillPackageFiles(
     examplesIndex,
     hasKnowledge: knowledgeDoc !== null,
     topicGroups,
-    representativeExamples,
   });
 
   const topicFiles = new Map<string, string>();

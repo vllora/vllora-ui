@@ -651,7 +651,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         children: skillChildren,
         isExpandable: skillChildren.length > 0,
         isSection: true,
-        emptyText: "Generate training data to preview skill package",
+        emptyText: "Training data will be packaged as a skill folder you can deploy to your own agent",
       });
     }
 
