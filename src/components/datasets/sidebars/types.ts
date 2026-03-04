@@ -56,4 +56,6 @@ export interface FileTreeNode {
   isSection?: boolean;
   /** Custom empty state text when section is expanded with no children */
   emptyText?: string;
+  /** When true, clicking only toggles expand/collapse — does not open a tab */
+  expandOnly?: boolean;
 }

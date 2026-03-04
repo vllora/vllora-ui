@@ -67,7 +67,10 @@ export function FileTreeItem({
     if (canExpand) {
       onToggle(node.id);
     }
-    onSelect(node.id);
+    // expandOnly folders only toggle — they don't open a content tab
+    if (!node.expandOnly) {
+      onSelect(node.id);
+    }
   };
 
   // ── Section header (VS Code collapsible section) ────────────────────

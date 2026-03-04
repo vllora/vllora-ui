@@ -130,6 +130,7 @@ function buildSkillExamplesChildren(
         type: "folder" as const,
         icon: folderIcon(expandedNodes, folderId),
         isExpandable: true,
+        expandOnly: true,
         badge: count > 0 ? { label: String(count), variant: "count" as const } : undefined,
         children: buildSkillExamplesChildren(node.children!, slugPath, topicCounts, expandedNodes),
       };
