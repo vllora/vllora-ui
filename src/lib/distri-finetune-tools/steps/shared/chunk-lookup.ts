@@ -23,16 +23,31 @@ export interface ResolvedChunk {
 /**
  * Parse a composite "sourceId:chunkId" ref string.
  * Splits on the first `:` so that chunk IDs containing colons still work.
+ * Handles: "sourceId:chunkId", "ref:sourceId:chunkId", "[ref:sourceId:chunkId]"
  */
 export function parseChunkRef(ref: string): { sourceId: string; chunkId: string } | null {
-  // Strip "ref:" prefix if present (added by knowledge context formatting)
-  const cleaned = ref.startsWith('ref:') ? ref.substring(4) : ref;
+  let cleaned = ref.trim();
+  // Strip [ref:...] or ref: prefix
+  if (cleaned.startsWith('[ref:')) {
+    cleaned = cleaned.slice(5, cleaned.endsWith(']') ? -1 : undefined);
+  } else if (cleaned.startsWith('ref:')) {
+    cleaned = cleaned.substring(4);
+  }
   const colonIdx = cleaned.indexOf(':');
   if (colonIdx <= 0 || colonIdx === cleaned.length - 1) return null;
   return {
     sourceId: cleaned.substring(0, colonIdx),
     chunkId: cleaned.substring(colonIdx + 1),
   };
+}
+
+/**
+ * Normalize a ref to canonical "sourceId:chunkId" format.
+ * Returns null if the ref cannot be parsed.
+ */
+export function normalizeChunkRef(ref: string): string | null {
+  const parsed = parseChunkRef(ref);
+  return parsed ? `${parsed.sourceId}:${parsed.chunkId}` : null;
 }
 
 /**

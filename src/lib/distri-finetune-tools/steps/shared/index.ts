@@ -42,6 +42,7 @@ export {
   resolveChunkRefs,
   buildChunkContextSection,
   parseChunkRef,
+  normalizeChunkRef,
   type ResolvedChunk,
 } from './chunk-lookup';
 

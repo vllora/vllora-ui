@@ -17,6 +17,7 @@ import {
   buildKnowledgeContext,
   DOCUMENT_DERIVED_TOPICS_INSTRUCTION,
 } from '../shared/knowledge-context';
+import { normalizeChunkRef } from '../shared/chunk-lookup';
 
 // Cache for Lucy config
 let cachedLucyConfig: LucyConfig | null = null;
@@ -221,7 +222,7 @@ ${JSON.stringify(sampleRecords, null, 2)}`;
 4. Topic names: lowercase_with_underscores (e.g., "opening_theory", "tactical_patterns")
 5. Provide brief descriptions for each topic
 ${knowledgeContext ? `6. Topics MUST reflect the ACTUAL CONTENT of uploaded documents
-7. For each topic, include the source_chunks array with the [ref:...] IDs from the knowledge sources above that are most relevant to that topic. Return [] if no refs apply.` : ''}
+7. For each topic, include source_chunks as an array of "sourceId:chunkId" strings (e.g. ["abc-123:chunk-1"]) — copy the exact ref from each chunk line above. Return [] only if no chunks apply.` : ''}
 
 Generate the topic hierarchy JSON:`;
 
@@ -276,13 +277,60 @@ async function callLLMForHierarchy(
 }
 
 // =============================================================================
-// Convert Response to TopicHierarchyNode
+// Convert Response to TopicHierarchyNode (with ref normalization and fallback)
 // =============================================================================
 
 let nodeIdCounter = 0;
 
+interface RefRegistry {
+  validRefs: Set<string>;
+  headingToRefs: Map<string, string[]>;
+}
+
+/**
+ * Resolve refs for a topic: normalize LLM output, validate against known refs,
+ * and fallback to heading-based matching when empty.
+ */
+function resolveTopicRefs(
+  rawRefs: string[] | undefined,
+  topicName: string,
+  topicDescription: string,
+  registry: RefRegistry | null,
+): string[] | undefined {
+  const normalized = (rawRefs || [])
+    .map((r) => normalizeChunkRef(r))
+    .filter((r): r is string => r !== null);
+
+  const valid = registry
+    ? normalized.filter((r) => registry.validRefs.has(r))
+    : normalized;
+
+  if (valid.length > 0) return valid;
+
+  // Fallback: match topic name or description to chunk headings
+  if (!registry || registry.headingToRefs.size === 0) return undefined;
+
+  const topicTerms = [
+    ...topicName.toLowerCase().replace(/_/g, ' ').split(/\s+/),
+    ...(topicDescription || '').toLowerCase().split(/\s+/),
+  ].filter((t) => t.length > 2);
+
+  const matchedRefs = new Set<string>();
+  for (const [heading, refs] of registry.headingToRefs) {
+    const headingWords = heading.split(/\s+/);
+    for (const term of topicTerms) {
+      if (headingWords.some((w) => w.includes(term) || term.includes(w))) {
+        refs.forEach((r) => matchedRefs.add(r));
+        break;
+      }
+    }
+  }
+  return matchedRefs.size > 0 ? [...matchedRefs] : undefined;
+}
+
 function convertToHierarchyNodes(
   response: TopicHierarchyResponse,
+  refRegistry: RefRegistry | null,
 ): TopicHierarchyNode[] {
   nodeIdCounter = 0; // Reset for each conversion
 
@@ -292,11 +340,19 @@ function convertToHierarchyNodes(
     source_chunks?: string[];
     children?: Array<{ name: string; description: string; source_chunks?: string[]; children?: Array<{ name: string; description: string; source_chunks?: string[] }> }>;
   }): TopicHierarchyNode {
+    const topicName = node.name.toLowerCase().replace(/\s+/g, '_');
+    const sourceChunkRefs = resolveTopicRefs(
+      node.source_chunks,
+      topicName,
+      node.description || '',
+      refRegistry,
+    );
+
     const result: TopicHierarchyNode = {
       id: `topic_${++nodeIdCounter}`,
-      name: node.name.toLowerCase().replace(/\s+/g, '_'),
+      name: topicName,
       description: node.description || undefined,
-      sourceChunkRefs: node.source_chunks?.length ? node.source_chunks : undefined,
+      sourceChunkRefs,
     };
     if (node.children && node.children.length > 0) {
       result.children = node.children.map(convertNode);
@@ -360,8 +416,11 @@ export async function generateTopicsViaFrontend(
     // Call LLM
     const response = await callLLMForHierarchy(systemPrompt, userPrompt);
 
-    // Convert to hierarchy nodes
-    const hierarchy = convertToHierarchyNodes(response);
+    // Convert to hierarchy nodes (with ref validation and heading-based fallback)
+    const refRegistry: RefRegistry | null = hasKnowledgeSources
+      ? { validRefs: knowledgeCtx.validRefs, headingToRefs: knowledgeCtx.headingToRefs }
+      : null;
+    const hierarchy = convertToHierarchyNodes(response, refRegistry);
 
     console.log('[generateTopicsViaFrontend] Generated hierarchy:', {
       rootTopics: hierarchy.length,
