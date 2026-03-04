@@ -101,6 +101,50 @@ function getTopicRecordCount(node: TopicHierarchyNode, topicCounts: Map<string, 
   return total;
 }
 
+/** Slugify a single segment for skill example file paths */
+function slugifySegment(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+/**
+ * Build hierarchical skill examples tree from topic hierarchy.
+ * Non-leaf nodes → folders, leaf nodes → .jsonl files with record count badge.
+ */
+function buildSkillExamplesChildren(
+  nodes: readonly TopicHierarchyNode[],
+  parentSlug: string,
+  topicCounts: Map<string, number>,
+  expandedNodes: Set<string>,
+): FileTreeNode[] {
+  return nodes.map((node) => {
+    const slug = slugifySegment(node.name);
+    const slugPath = parentSlug ? `${parentSlug}/${slug}` : slug;
+    const hasChildren = node.children && node.children.length > 0;
+    const count = getTopicRecordCount(node, topicCounts);
+
+    if (hasChildren) {
+      const folderId = `skill/examples/${slugPath}`;
+      return {
+        id: folderId,
+        name: slug,
+        type: "folder" as const,
+        icon: folderIcon(expandedNodes, folderId),
+        isExpandable: true,
+        badge: count > 0 ? { label: String(count), variant: "count" as const } : undefined,
+        children: buildSkillExamplesChildren(node.children!, slugPath, topicCounts, expandedNodes),
+      };
+    }
+
+    return {
+      id: `skill/examples/${slugPath}.jsonl`,
+      name: `${slug}.jsonl`,
+      type: "file" as const,
+      icon: <FileCode className={`${ICON_CLS} text-purple-400`} />,
+      badge: count > 0 ? { label: String(count), variant: "count" as const } : undefined,
+    };
+  });
+}
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -120,7 +164,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
   // Expanded/selected state
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(
-    () => new Set(["documents", "data", "evaluations", "finetune", "skill", "insights"])
+    () => new Set(["documents", "data", "evaluations", "finetune", "skill", "skill/examples", "skill/rules", "insights"])
   );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
@@ -538,7 +582,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
           ],
         });
 
-        // examples/ — build from topicCounts
+        // examples/ — build hierarchical tree from topic hierarchy (or flat fallback)
         const exampleChildren: FileTreeNode[] = [
           {
             id: "skill/examples/index.md",
@@ -548,20 +592,25 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
           },
         ];
 
-        // Add per-topic .jsonl files from topicCounts
-        const sortedTopics = [...topicCounts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-        for (const [topicName, count] of sortedTopics) {
-          const slug = topicName
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, "-")
-            .replace(/^-|-$/g, "");
-          exampleChildren.push({
-            id: `skill/examples/${slug}.jsonl`,
-            name: `${slug}.jsonl`,
-            type: "file",
-            icon: <FileCode className={`${ICON_CLS} text-purple-400`} />,
-            badge: { label: String(count), variant: "count" },
-          });
+        const hierarchy = dataset?.topicHierarchy?.hierarchy;
+        if (hierarchy && hierarchy.length > 0) {
+          // Hierarchical: mirror topic tree as nested folders/files
+          exampleChildren.push(
+            ...buildSkillExamplesChildren(hierarchy, "", topicCounts, expandedNodes),
+          );
+        } else {
+          // Flat fallback: no hierarchy available
+          const sortedTopics = [...topicCounts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+          for (const [topicName, count] of sortedTopics) {
+            const slug = slugifySegment(topicName);
+            exampleChildren.push({
+              id: `skill/examples/${slug}.jsonl`,
+              name: `${slug}.jsonl`,
+              type: "file",
+              icon: <FileCode className={`${ICON_CLS} text-purple-400`} />,
+              badge: count > 0 ? { label: String(count), variant: "count" } : undefined,
+            });
+          }
         }
 
         skillChildren.push({

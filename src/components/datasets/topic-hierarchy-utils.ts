@@ -172,8 +172,8 @@ export function getTopicPathFromHierarchy(
  * Extract all leaf topics with their full paths from hierarchy
  */
 export function extractLeafTopicsFromHierarchy(
-  nodes: TopicHierarchyNode[],
-  parentPath: string[] = []
+  nodes: readonly TopicHierarchyNode[],
+  parentPath: readonly string[] = []
 ): Array<{ name: string; path: string[] }> {
   const leaves: Array<{ name: string; path: string[] }> = [];
   for (const node of nodes) {

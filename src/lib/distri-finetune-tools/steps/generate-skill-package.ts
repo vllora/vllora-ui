@@ -29,6 +29,7 @@ import type {
 import type { ToolHandler } from '../types';
 import { getProposedPlan } from './proposed-plan-store';
 import type { GraderCriterion } from './propose-plan/types';
+import { extractLeafTopicsFromHierarchy } from '@/components/datasets/topic-hierarchy-utils';
 
 // ─── Package store (module-level, keyed by workflow ID) ───
 
@@ -76,13 +77,20 @@ export interface SkillPackageFiles {
 
 // ─── Helpers ───
 
-/** Slugify a topic path for use as filename: "Chess/Openings/Sicilian Defense" → "sicilian-defense" */
-function slugify(topicPath: string): string {
-  const leaf = topicPath.split('/').pop() ?? topicPath;
-  return leaf
+/** Slugify a single text segment for use as a path component */
+function slugifySegment(text: string): string {
+  return text
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
+}
+
+/**
+ * Slugify a full topic path for hierarchical file paths.
+ * "Chess/Openings/Sicilian Defense" → "chess/openings/sicilian-defense"
+ */
+function slugifyPath(topicPath: string): string {
+  return topicPath.split('/').map(slugifySegment).join('/');
 }
 
 /** Slugify the full dataset objective for use as skill name */
@@ -131,7 +139,17 @@ function assembleJsonlRow(record: DatasetRecord): SkillJsonlRow | null {
 
 // ─── Group records by leaf topic ───
 
-function groupByTopic(records: readonly DatasetRecord[]): readonly TopicGroup[] {
+function groupByTopic(
+  records: readonly DatasetRecord[],
+  hierarchy?: readonly TopicHierarchyNode[],
+): readonly TopicGroup[] {
+  // Build leaf-name → full-path mapping from existing topic-hierarchy-utils
+  const leafPathMap = new Map<string, string>(
+    hierarchy
+      ? extractLeafTopicsFromHierarchy(hierarchy).map(l => [l.name, l.path.join('/')])
+      : [],
+  );
+
   const grouped = new Map<string, DatasetRecord[]>();
 
   for (const record of records) {
@@ -168,9 +186,13 @@ function groupByTopic(records: readonly DatasetRecord[]): readonly TopicGroup[] 
     const diversityScore =
       typeof firstMeta.diversityScore === 'number' ? firstMeta.diversityScore : null;
 
+    // Resolve full hierarchical path: leaf lookup from hierarchy, fallback to record.topic
+    const leaf = topicPath.split('/').pop() ?? topicPath;
+    const resolvedPath = leafPathMap.get(leaf) ?? topicPath;
+
     groups.push({
-      topicPath,
-      slug: slugify(topicPath),
+      topicPath: resolvedPath,
+      slug: slugifyPath(resolvedPath),
       records: topicRecords,
       rows: sortedRows,
       avgBaseScore,
@@ -209,8 +231,9 @@ function buildExamplesIndex(
   for (const group of topicGroups) {
     const diversity =
       group.diversityScore !== null ? group.diversityScore.toFixed(2) : 'N/A';
+    const leafSlug = slugifySegment(group.topicPath.split('/').pop() ?? group.topicPath);
     lines.push(
-      `| ${group.topicPath} | [${group.slug}.jsonl](${group.slug}.jsonl) | ${group.rows.length} | ${group.avgBaseScore.toFixed(2)} | ${diversity} |`,
+      `| ${group.topicPath} | [${leafSlug}.jsonl](${group.slug}.jsonl) | ${group.rows.length} | ${group.avgBaseScore.toFixed(2)} | ${diversity} |`,
     );
   }
 
@@ -573,7 +596,7 @@ export async function assembleSkillPackageFiles(
       : plan?.dataset_name || dataset.name || 'skill-package';
   const skillSlug = slugifySkillName(resolvedName);
 
-  const topicGroups = groupByTopic(records);
+  const topicGroups = groupByTopic(records, dataset?.topicHierarchy?.hierarchy);
   const totalRows = topicGroups.reduce((sum, g) => sum + g.rows.length, 0);
   if (totalRows === 0) return null;
 

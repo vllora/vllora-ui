@@ -10,9 +10,9 @@ import { MessageSquareText, Copy, Check, Pencil, X, RotateCcw } from "lucide-rea
 import { MustacheEditor } from "@/components/ui/mustache-editor";
 import { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import { cn } from "@/lib/utils";
-import { RecordRow } from "./RecordRow";
 import { TopicNodeHeader } from "./TopicNodeHeader";
 import type { AvailableTopic } from "../record-utils";
+import { ConversationDataTable, datasetRecordToRow } from "../conversation-data-table";
 import { resolveTopicSystemPrompt, buildAccumulatedPromptSegments, buildTemplateContext, buildTemplateVariables, buildDefaultTemplate, type TemplateVariable, type PromptTextSegment } from "@/lib/distri-finetune-tools/steps/shared/topic-system-prompt";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 
@@ -644,36 +644,24 @@ export function TopicTreeNodeRow({
               />
             ))}
 
-          {/* Records at this node */}
+          {/* Records at this node — unified conversation table */}
           {hasRecords && (
-            <div className="p-2 space-y-1">
-              {/* Column header — mirrors RecordRow compact column layout */}
-              <div className="flex gap-3 items-center px-2 pb-1 border-b border-border/20 text-[10px] text-muted-foreground/50 uppercase tracking-wider font-medium">
-                <span className="flex-1 min-w-0">user</span>
-                <span className="flex-1 min-w-0">assistant</span>
-                <span className="w-[52px] shrink-0 text-right">score</span>
-                <span className="shrink-0">tokens</span>
-                {/* Spacer for actions column */}
-                <span className="w-6 shrink-0" />
-              </div>
-              {directRecords.map((record) => (
-                <RecordRow
-                  key={record.id}
-                  ref={setRecordRef?.(record.id)}
-                  record={record}
-                  onUpdateTopic={onUpdateTopic}
-                  onDelete={onDelete}
-                  onSave={onSave}
-                  selectable={selectable}
-                  selected={selectedIds.has(record.id)}
-                  onSelect={(checked) => onSelectRecord(record.id, checked)}
-                  onExpand={onExpand}
-                  isViewing={viewingRecordId === record.id}
-                  availableTopics={availableTopics}
-                  hideTopic
-                  isHighlighted={highlightedRecordId === record.id}
-                />
-              ))}
+            <div className="p-2">
+              <ConversationDataTable
+                rows={directRecords.map((r, i) => datasetRecordToRow(r, i + 1))}
+                mode="synthetic-data-manage"
+                selectable={selectable}
+                selectedIds={selectedIds}
+                onSelectRecord={onSelectRecord}
+                onDelete={onDelete}
+                onSave={onSave}
+                onUpdateTopic={onUpdateTopic}
+                onUpdateEvaluation={undefined}
+                availableTopics={availableTopics}
+                highlightedRowId={highlightedRecordId}
+                setRowRef={setRecordRef}
+                datasetId={directRecords[0]?.datasetId}
+              />
             </div>
           )}
         </div>

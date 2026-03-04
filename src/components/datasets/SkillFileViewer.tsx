@@ -22,7 +22,7 @@ import {
   assembleSkillPackageFiles,
   type SkillPackageFiles,
 } from "@/lib/distri-finetune-tools/steps/generate-skill-package";
-import { JsonlConversationViewer } from "./skill-viewer/JsonlConversationViewer";
+import { ConversationDataTable, parseJsonlContent } from "./conversation-data-table";
 
 interface SkillFileViewerProps {
   /** Relative path within the skill package, e.g. "SKILL.md", "examples/using-joins.jsonl" */
@@ -80,6 +80,18 @@ async function buildZipWithEdits(
   }
 
   return zip.generateAsync({ type: "blob" });
+}
+
+/** Thin wrapper that memoizes JSONL parsing before rendering the unified table */
+function JsonlContent({ content }: { readonly content: string }) {
+  const parsed = useMemo(() => parseJsonlContent(content), [content]);
+  return (
+    <ConversationDataTable
+      rows={parsed.rows}
+      mode="jsonl-read-only"
+      systemPrompt={parsed.commonSystem}
+    />
+  );
 }
 
 export function SkillFileViewer({ filePath }: SkillFileViewerProps) {
@@ -309,7 +321,7 @@ export function SkillFileViewer({ filePath }: SkillFileViewerProps) {
               <LazyMarkdownRenderer content={displayContent ?? ""} />
             </div>
           ) : isJsonl ? (
-            <JsonlConversationViewer content={originalContent} />
+            <JsonlContent content={originalContent} />
           ) : (
             <pre className="text-xs font-mono text-zinc-300 whitespace-pre-wrap break-words leading-relaxed">
               {originalContent}
