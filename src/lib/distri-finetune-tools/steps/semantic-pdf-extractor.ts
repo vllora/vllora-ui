@@ -95,19 +95,51 @@ export async function extractPdfContentLocal(
   const pdf = await pdfjsLib.getDocument({ data: binaryData }).promise;
   const totalPages = pdf.numPages;
 
-  // Step 2: Extract text per page
+  // Step 2: Extract text per page with font-based diagram filtering
   onProgress?.({ step: 'Extracting text...', current: 0, total: totalPages, percent: 10 });
 
+  // ── Pass 1: Identify diagram/symbol fonts ────────────────────────────
+  // Diagram fonts (chess pieces, music notation, math symbols) produce
+  // control characters (\x00-\x08) or non-printable sequences when
+  // extracted as text. We scan all items, tally control-char vs
+  // printable ratios per fontName, and build a blocklist.
+  const fontStats = new Map<string, { controlCount: number; totalCount: number }>();
+
+  for (let i = 1; i <= totalPages; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    for (const item of textContent.items) {
+      if (!('str' in item) || !item.str) continue;
+      const fn = ('fontName' in item ? (item as Record<string, unknown>).fontName : null) as string | null;
+      if (!fn) continue;
+
+      const stats = fontStats.get(fn) ?? { controlCount: 0, totalCount: 0 };
+      stats.totalCount++;
+      if (/[\x00-\x08]/.test(item.str)) stats.controlCount++;
+      fontStats.set(fn, stats);
+    }
+  }
+
+  // A font is a "diagram font" if >20% of its items contain control chars.
+  const diagramFonts = new Set<string>();
+  for (const [fontName, stats] of fontStats) {
+    if (stats.totalCount >= 3 && stats.controlCount / stats.totalCount > 0.2) {
+      diagramFonts.add(fontName);
+    }
+  }
+  if (diagramFonts.size > 0) {
+    console.log(`[semantic-pdf-extractor] Identified ${diagramFonts.size} diagram font(s):`, [...diagramFonts]);
+  }
+
+  // ── Pass 2: Extract text, skipping diagram fonts + deduplicating ─────
   const pages: Array<{ text: string; pageNumber: number }> = [];
 
   for (let i = 1; i <= totalPages; i++) {
     const page = await pdf.getPage(i);
     const textContent = await page.getTextContent();
 
-    // Build page text, deduplicating overlapping text items.
-    // Some PDFs render each glyph twice at the same position (fake bold
-    // via double-strike). We skip items whose position matches the
-    // previous item within a 0.5 pt tolerance.
+    // Build page text, deduplicating overlapping text items and
+    // skipping items from diagram/symbol fonts identified in Pass 1.
     const parts: string[] = [];
     let prevItemX = -Infinity;
     let prevItemY = -Infinity;
@@ -115,6 +147,10 @@ export async function extractPdfContentLocal(
 
     for (const item of textContent.items) {
       if (!('str' in item)) continue;
+
+      // Skip diagram/symbol font items entirely
+      const fn = ('fontName' in item ? (item as Record<string, unknown>).fontName : null) as string | null;
+      if (fn && diagramFonts.has(fn)) continue;
 
       // Position-based dedup for overlapping text
       const transform = 'transform' in item ? (item.transform as number[]) : null;
@@ -396,6 +432,12 @@ const HEADING_PATTERNS: RegExp[] = [
 function isLikelyHeading(text: string): boolean {
   const trimmed = text.trim();
   if (trimmed.length < 3 || trimmed.length > 150) return false;
+
+  // Reject lines without enough real words — catches diagram garbage like
+  // "# $HBE*';%" or "# (% )% ,% -% ." that match heading patterns.
+  const nonSpace = trimmed.replace(/\s/g, '');
+  const alphaCount = nonSpace.replace(/[^a-zA-Z]/g, '').length;
+  if (nonSpace.length > 0 && alphaCount / nonSpace.length < 0.3) return false;
 
   // Check explicit heading patterns
   for (const pattern of HEADING_PATTERNS) {

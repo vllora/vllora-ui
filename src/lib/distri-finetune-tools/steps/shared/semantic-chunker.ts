@@ -46,10 +46,10 @@ const DOUBLED_RATIO_THRESHOLD = 0.7;
 
 /**
  * Ratio threshold for garbage-line detection.
- * If <40% of a line's characters are recognisable text (letters, digits,
- * common punctuation, whitespace), the line is stripped.
+ * If <30% of a line's non-space characters are alphabetic (a-zA-Z),
+ * the line is likely diagram/symbol garbage and is stripped.
  */
-const GARBAGE_LINE_THRESHOLD = 0.4;
+const GARBAGE_ALPHA_THRESHOLD = 0.3;
 
 /**
  * Detect and fix doubled characters from pdfjs overlapping text extraction.
@@ -84,10 +84,10 @@ function fixDoubledCharacters(text: string): string {
  * Strip inline garbage that appears mixed with valid text:
  *   - Control characters (\x00–\x08, \x0B, \x0C, \x0E–\x1F)
  *   - Runs of 3+ identical non-alphanumeric characters (diagram borders: `"""""""`)
- *   - Sequences of 4+ consecutive special characters (diagram fonts: `$H*E@'*;%`)
+ *   - Sequences of consecutive special characters (residual symbol noise)
  *
- * This runs before line-level filtering so garbage fragments inside otherwise
- * valid lines are cleaned first.
+ * Font-level filtering in the PDF extractor handles the bulk of diagram/symbol
+ * removal. This is a general-purpose safety net for any residual fragments.
  */
 function stripInlineGarbage(text: string): string {
   let result = text;
@@ -98,8 +98,8 @@ function stripInlineGarbage(text: string): string {
   // Remove runs of 3+ identical non-alphanumeric characters ("""""", ###, etc.)
   result = result.replace(/([^a-zA-Z0-9\s])\1{2,}/g, '');
 
-  // Remove sequences of 4+ special characters in a row (chess diagram font bytes).
-  // Allows letters/digits between specials: "$H*E@'*;%" is 60% special → caught.
+  // Remove sequences of 3+ consecutive special characters (residual diagram/symbol
+  // noise that wasn't caught by font-level filtering in the PDF extractor).
   result = result.replace(
     /(?:[^a-zA-Z0-9\s.,;:!?()\-–—]{2,}[a-zA-Z0-9]?){2,}/g,
     ' ',
@@ -109,11 +109,12 @@ function stripInlineGarbage(text: string): string {
 }
 
 /**
- * Remove lines that are mostly non-alphanumeric characters.
+ * Remove lines that are mostly non-alphabetic.
  *
  * Chess PDFs (and others using symbol fonts for diagrams) extract as ASCII
- * garbage like "$H*E@'*;% & < <*< <%". Lines where <40 % of characters are
- * recognisable text are stripped.
+ * garbage like "$H*E@'*;% & < <*< <%". We check the ratio of alphabetic
+ * characters among non-space characters — if below 30 %, the line is garbage.
+ * This avoids the false-positive from punctuation/spaces inflating the ratio.
  */
 function removeGarbageLines(text: string): string {
   return text
@@ -122,12 +123,12 @@ function removeGarbageLines(text: string): string {
       const trimmed = line.trim();
       if (!trimmed) return true; // keep blank lines for paragraph structure
 
-      // Count recognisable characters (letters, digits, common punctuation)
-      const recognisable = trimmed.replace(
-        /[^a-zA-Z0-9\s.,;:!?'"()\-–—]/g,
-        '',
-      );
-      return recognisable.length / trimmed.length >= GARBAGE_LINE_THRESHOLD;
+      const nonSpace = trimmed.replace(/\s/g, '');
+      if (!nonSpace) return false;
+
+      // Ratio of alphabetic chars among non-space chars
+      const alphaCount = nonSpace.replace(/[^a-zA-Z]/g, '').length;
+      return alphaCount / nonSpace.length >= GARBAGE_ALPHA_THRESHOLD;
     })
     .join('\n');
 }

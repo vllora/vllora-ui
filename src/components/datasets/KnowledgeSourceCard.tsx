@@ -2,16 +2,22 @@
  * KnowledgeSourceCard
  *
  * Card component for displaying a single knowledge source (uploaded doc).
- * Shows file info, status, extracted topics/sections, and allows expansion.
+ * Shows file info, status, extracted sections, and allows expansion.
+ *
+ * Expanded view shows a unified numbered section list with headings,
+ * content previews, and a "Show all / Show less" toggle.
  */
 
+import { useState } from "react";
 import { FileText, Trash2, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { KnowledgeSource } from "@/types/dataset-types";
 
-const MAX_TOPICS_SHOWN = 10;
-const MAX_SECTIONS_SHOWN = 5;
+/** Number of sections shown before "Show all" toggle */
+const COLLAPSED_SECTION_COUNT = 5;
+/** Max characters for inline content preview per section */
+const CONTENT_PREVIEW_LENGTH = 200;
 
 interface KnowledgeSourceCardProps {
   source: KnowledgeSource;
@@ -52,6 +58,108 @@ function getTypeColor(_type: KnowledgeSource["type"]) {
   return "text-muted-foreground";
 }
 
+// ---------------------------------------------------------------------------
+// Expanded sections panel — unified numbered list with content previews
+// ---------------------------------------------------------------------------
+
+interface ExpandedSectionsProps {
+  source: KnowledgeSource;
+  showAll: boolean;
+  onToggleShowAll: () => void;
+}
+
+/**
+ * Build a unified section list from extracted content.
+ * Prefers `sections` (title + content) over bare `sectionHeadings`.
+ */
+function buildSectionItems(source: KnowledgeSource): Array<{ title: string; preview: string }> {
+  const extracted = source.extractedContent;
+  if (!extracted) return [];
+
+  // Rich sections with content
+  if (extracted.sections && extracted.sections.length > 0) {
+    return extracted.sections.map((s) => ({
+      title: s.title,
+      preview: s.content
+        ? s.content.length > CONTENT_PREVIEW_LENGTH
+          ? s.content.slice(0, CONTENT_PREVIEW_LENGTH) + '…'
+          : s.content
+        : '',
+    }));
+  }
+
+  // Bare headings (no content body available)
+  if (extracted.sectionHeadings && extracted.sectionHeadings.length > 0) {
+    return extracted.sectionHeadings.map((h) => ({ title: h, preview: '' }));
+  }
+
+  return [];
+}
+
+function ExpandedSections({ source, showAll, onToggleShowAll }: ExpandedSectionsProps) {
+  const items = buildSectionItems(source);
+  const hasTextOnly = items.length === 0 && !!source.extractedContent?.text;
+
+  // Text-only fallback (no structured sections)
+  if (hasTextOnly) {
+    return (
+      <div className="border-t border-border bg-muted/30 p-3">
+        <p className="text-xs font-medium text-muted-foreground mb-1.5">Content Preview</p>
+        <p className="text-xs text-muted-foreground leading-relaxed line-clamp-6">
+          {source.extractedContent!.text!.substring(0, 600)}
+        </p>
+      </div>
+    );
+  }
+
+  if (items.length === 0) return null;
+
+  const visibleItems = showAll ? items : items.slice(0, COLLAPSED_SECTION_COUNT);
+  const hiddenCount = items.length - COLLAPSED_SECTION_COUNT;
+
+  return (
+    <div className="border-t border-border bg-muted/30 px-3 py-2.5">
+      {/* Header row */}
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs font-medium text-muted-foreground">
+          {items.length} section{items.length !== 1 ? 's' : ''}
+        </p>
+        {hiddenCount > 0 && (
+          <button
+            type="button"
+            className="text-[11px] text-blue-400 hover:text-blue-300 transition-colors"
+            onClick={(e) => { e.stopPropagation(); onToggleShowAll(); }}
+          >
+            {showAll ? 'Show less' : `Show all ${items.length}`}
+          </button>
+        )}
+      </div>
+
+      {/* Section list */}
+      <div className="space-y-1">
+        {visibleItems.map((item, i) => (
+          <div
+            key={i}
+            className="flex gap-2 py-1 px-1.5 rounded text-xs hover:bg-muted/50 transition-colors"
+          >
+            <span className="text-[10px] text-muted-foreground tabular-nums shrink-0 w-5 text-right pt-px">
+              {i + 1}.
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="font-medium truncate leading-snug">{item.title}</p>
+              {item.preview && (
+                <p className="text-muted-foreground leading-snug mt-0.5 line-clamp-2">
+                  {item.preview}
+                </p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function KnowledgeSourceCard({
   source,
   isExpanded,
@@ -62,6 +170,8 @@ export function KnowledgeSourceCard({
   coveragePercent,
   onFilterBySource,
 }: KnowledgeSourceCardProps) {
+  const [showAllSections, setShowAllSections] = useState(false);
+
   const hasContent =
     source.extractedContent &&
     (source.extractedContent.text ||
@@ -187,61 +297,11 @@ export function KnowledgeSourceCard({
 
       {/* Expanded content */}
       {isExpanded && hasContent && (
-        <div className="border-t border-border bg-muted/30 p-3 space-y-3">
-          {/* Document Sections */}
-          {source.extractedContent?.sectionHeadings && source.extractedContent.sectionHeadings.length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-muted-foreground mb-1.5">Document Sections</p>
-              <div className="flex flex-wrap gap-1.5">
-                {source.extractedContent.sectionHeadings.slice(0, MAX_TOPICS_SHOWN).map((heading, i) => (
-                  <span
-                    key={i}
-                    className="px-2 py-0.5 text-xs bg-blue-500/10 text-blue-500 rounded-full"
-                  >
-                    {heading}
-                  </span>
-                ))}
-                {source.extractedContent.sectionHeadings.length > MAX_TOPICS_SHOWN && (
-                  <span className="px-2 py-0.5 text-xs text-muted-foreground">
-                    +{source.extractedContent.sectionHeadings.length - MAX_TOPICS_SHOWN} more
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Sections */}
-          {source.extractedContent?.sections && source.extractedContent.sections.length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-muted-foreground mb-1.5">Document Sections</p>
-              <div className="space-y-1">
-                {source.extractedContent.sections.slice(0, MAX_SECTIONS_SHOWN).map((section, i) => (
-                  <div key={i} className="text-xs">
-                    <span className="font-medium">{section.title}</span>
-                    {section.content && (
-                      <span className="text-muted-foreground ml-1">- {section.content}</span>
-                    )}
-                  </div>
-                ))}
-                {source.extractedContent.sections.length > MAX_SECTIONS_SHOWN && (
-                  <p className="text-xs text-muted-foreground">
-                    +{source.extractedContent.sections.length - MAX_SECTIONS_SHOWN} more sections
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Text preview */}
-          {source.extractedContent?.text && !source.extractedContent.sections?.length && (
-            <div>
-              <p className="text-xs font-medium text-muted-foreground mb-1.5">Content Preview</p>
-              <p className="text-xs text-muted-foreground line-clamp-4">
-                {source.extractedContent.text.substring(0, 500)}...
-              </p>
-            </div>
-          )}
-        </div>
+        <ExpandedSections
+          source={source}
+          showAll={showAllSections}
+          onToggleShowAll={() => setShowAllSections((prev) => !prev)}
+        />
       )}
     </div>
   );
