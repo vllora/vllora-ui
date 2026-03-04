@@ -153,6 +153,7 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
           sourceRecordId={record.sourceRecordId}
           hideSystemMessage={hideTopic}
           compact={compact}
+          assistantFallback={typeof record.metadata?.skillResponse === "string" ? record.metadata.skillResponse : undefined}
         />
 
         {/* AI-generated indicator (hidden in compact mode — shown at topic level) */}
@@ -179,6 +180,7 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
           data={record.data}
           className={compact ? "shrink-0 mt-0.5" : COLUMN_WIDTHS.stats}
           compact={compact}
+          assistantFallback={typeof record.metadata?.skillResponse === "string" ? record.metadata.skillResponse : undefined}
         />
 
         {/* Strategy (Topic) - hidden in grouped/compact mode */}

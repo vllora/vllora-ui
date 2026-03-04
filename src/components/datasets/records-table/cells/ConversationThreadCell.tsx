@@ -26,9 +26,11 @@ interface ConversationThreadCellProps {
   hideSystemMessage?: boolean;
   /** Compact mode: content-first, no role badges, 2-line message preview */
   compact?: boolean;
+  /** Fallback assistant text when output.messages is empty (e.g. metadata.skillResponse) */
+  assistantFallback?: string;
 }
 
-export function ConversationThreadCell({ data, className, sourceRecordId, hideSystemMessage, compact }: ConversationThreadCellProps) {
+export function ConversationThreadCell({ data, className, sourceRecordId, hideSystemMessage, compact, assistantFallback }: ConversationThreadCellProps) {
   let messages = extractMessages(data);
   if (hideSystemMessage || compact) {
     messages = messages.filter(m => m.role.toLowerCase() !== 'system');
@@ -55,19 +57,31 @@ export function ConversationThreadCell({ data, className, sourceRecordId, hideSy
     });
 
     const userContent = userMsg ? cleanText(userMsg.content) : cleanText(messages[0].content);
-    const assistantContent = assistantMsg ? cleanText(assistantMsg.content) : null;
+    const assistantContent = assistantMsg
+      ? cleanText(assistantMsg.content)
+      : (assistantFallback ? cleanText(assistantFallback) : null);
 
     return (
-      <div className={cn("flex-1 min-w-0 flex flex-col gap-0.5", className)}>
-        {/* User message: 2-line clamp for more visible content */}
-        <span className="text-[11px] text-foreground line-clamp-2 leading-relaxed">
-          {userContent}
-        </span>
-        {/* Assistant response preview (SFT records) */}
-        {assistantContent && (
-          <span className="text-[10px] text-muted-foreground/60 truncate min-w-0 leading-relaxed">
-            → {assistantContent}
+      <div className={cn("flex-1 min-w-0 flex flex-col gap-1", className)}>
+        {/* User message with role badge */}
+        <div className="flex items-start gap-1.5 min-w-0">
+          <span className="shrink-0 mt-0.5 px-1 rounded text-[8px] font-semibold uppercase bg-blue-500/15 text-blue-400">
+            usr
           </span>
+          <span className="text-[11px] text-foreground line-clamp-2 leading-relaxed min-w-0">
+            {userContent}
+          </span>
+        </div>
+        {/* Assistant response preview */}
+        {assistantContent && (
+          <div className="flex items-start gap-1.5 min-w-0">
+            <span className="shrink-0 mt-0.5 px-1 rounded text-[8px] font-semibold uppercase bg-emerald-500/15 text-emerald-400">
+              ast
+            </span>
+            <span className="text-[10px] text-muted-foreground/70 truncate min-w-0 leading-relaxed">
+              {assistantContent}
+            </span>
+          </div>
         )}
         {/* Variant indicator */}
         {sourceRecordId && (
@@ -89,8 +103,17 @@ export function ConversationThreadCell({ data, className, sourceRecordId, hideSy
   }
 
   // ─── Default mode: role badges with single-line truncation ─────────────────
-  const displayMessagesCount = Math.min(messages.length, 2);
-  const displayMessages = messages.slice(0, displayMessagesCount);
+  // Inject fallback assistant if no assistant exists in extracted messages
+  const hasAssistant = messages.some(m => {
+    const r = m.role.toLowerCase();
+    return r === "assistant" || r === "ai" || r === "model";
+  });
+  const allMessages = (!hasAssistant && assistantFallback)
+    ? [...messages, { role: "assistant", content: assistantFallback }]
+    : messages;
+
+  const displayMessagesCount = Math.min(allMessages.length, 2);
+  const displayMessages = allMessages.slice(0, displayMessagesCount);
 
   return (
     <div className={cn("flex-1 min-w-0 flex flex-col gap-1", className)}>
@@ -128,9 +151,9 @@ export function ConversationThreadCell({ data, className, sourceRecordId, hideSy
         >
           ↳ variant of {sourceRecordId.slice(0, 8)}...
         </button>
-      ) : messages.length > displayMessagesCount ? (
+      ) : allMessages.length > displayMessagesCount ? (
         <span className="text-[10px] text-zinc-500 pl-10">
-          +{messages.length - displayMessagesCount} more...
+          +{allMessages.length - displayMessagesCount} more...
         </span>
       ) : null}
     </div>

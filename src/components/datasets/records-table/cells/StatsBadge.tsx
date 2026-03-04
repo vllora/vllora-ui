@@ -22,14 +22,29 @@ interface StatsBadgeProps {
   className?: string;
   /** Compact mode: smaller text, no icons */
   compact?: boolean;
+  /** Fallback assistant text to include in token estimate (e.g. metadata.skillResponse) */
+  assistantFallback?: string;
 }
 
 /**
- * Estimate token count from messages (~4 chars per token)
+ * Estimate token count from messages (~4 chars per token).
+ * Includes assistantFallback when output.messages is empty (e.g. metadata.skillResponse).
  */
-export function estimateTokens(data: unknown): number {
+export function estimateTokens(data: unknown, assistantFallback?: string): number {
   const messages = extractMessages(data);
-  const totalChars = messages.reduce((sum, msg) => sum + (msg.content?.length || 0), 0);
+  let totalChars = messages.reduce((sum, msg) => sum + (msg.content?.length || 0), 0);
+
+  // Include fallback assistant text if no assistant message exists in extracted messages
+  if (assistantFallback) {
+    const hasAssistant = messages.some(m => {
+      const r = m.role.toLowerCase();
+      return r === "assistant" || r === "ai" || r === "model";
+    });
+    if (!hasAssistant) {
+      totalChars += assistantFallback.length;
+    }
+  }
+
   return Math.ceil(totalChars / 4);
 }
 
@@ -48,8 +63,8 @@ function formatNumber(num: number): string {
   return num.toLocaleString();
 }
 
-export function StatsBadge({ data, className, compact }: StatsBadgeProps) {
-  const tokens = estimateTokens(data);
+export function StatsBadge({ data, className, compact, assistantFallback }: StatsBadgeProps) {
+  const tokens = estimateTokens(data, assistantFallback);
   const toolInfo = useMemo(() => extractToolInfo(data), [data]);
   const hasTools = toolInfo.totalCount > 0;
 
