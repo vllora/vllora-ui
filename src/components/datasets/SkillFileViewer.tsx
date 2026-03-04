@@ -6,14 +6,13 @@
  * - JSONL files: conversation card viewer with collapsible examples
  *
  * Files are regenerated on demand from IndexedDB data — zero LLM calls, ~100ms.
- * User edits to markdown files are stored in component state and included
- * when downloading the ZIP.
+ * User edits to markdown files are stored in component state for preview.
+ * Download is handled by the SKILL section hover action in the explorer sidebar.
  */
 
-import { useMemo, useCallback, useState, useRef } from "react";
+import { useMemo, useCallback, useState } from "react";
 import { useRequest } from "ahooks";
-import { Download, Loader2, FileWarning, Pencil, Eye, RotateCcw } from "lucide-react";
-import { toast } from "sonner";
+import { Loader2, FileWarning, Pencil, Eye, RotateCcw } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import { Button } from "@/components/ui/button";
 import LazyMarkdownRenderer from "@/components/chat/LazyMarkdownRenderer";
@@ -59,36 +58,6 @@ function resolveFileContent(
   return null;
 }
 
-/** Build a ZIP blob from assembled files, overlaying any user edits */
-async function buildZipWithEdits(
-  files: SkillPackageFiles,
-  editedFiles: ReadonlyMap<string, string>,
-): Promise<Blob> {
-  const JSZip = (await import("jszip")).default;
-  const zip = new JSZip();
-  const root = zip.folder(files.skillSlug)!;
-
-  // Use edited content where available, otherwise original
-  root.file("SKILL.md", editedFiles.get("SKILL.md") ?? files.skillMd);
-  root.file(
-    "examples/index.md",
-    editedFiles.get("examples/index.md") ?? files.examplesIndex,
-  );
-
-  for (const [slug, jsonl] of files.topicFiles) {
-    root.file(`examples/${slug}.jsonl`, jsonl);
-  }
-
-  if (files.knowledgeDoc) {
-    root.file(
-      "knowledge/domain-knowledge.md",
-      editedFiles.get("knowledge/domain-knowledge.md") ?? files.knowledgeDoc,
-    );
-  }
-
-  return zip.generateAsync({ type: "blob" });
-}
-
 /** Thin wrapper that memoizes JSONL parsing before rendering the unified table */
 function JsonlContent({ content }: { readonly content: string }) {
   const parsed = useMemo(() => parseJsonlContent(content), [content]);
@@ -116,7 +85,6 @@ export function SkillFileViewer({ filePath }: SkillFileViewerProps) {
 
   // ─── Edit state ───
   // Persists across file switches since the component stays mounted
-  const editedFilesRef = useRef<Map<string, string>>(new Map());
   const [editedFiles, setEditedFiles] = useState<Map<string, string>>(new Map());
   const [isEditing, setIsEditing] = useState(false);
 
@@ -124,7 +92,6 @@ export function SkillFileViewer({ filePath }: SkillFileViewerProps) {
     setEditedFiles((prev) => {
       const next = new Map(prev);
       next.set(filePath, value);
-      editedFilesRef.current = next;
       return next;
     });
   }, []);
@@ -133,50 +100,11 @@ export function SkillFileViewer({ filePath }: SkillFileViewerProps) {
     setEditedFiles((prev) => {
       const next = new Map(prev);
       next.delete(filePath);
-      editedFilesRef.current = next;
       return next;
     });
   }, []);
 
-  const hasEdits = editedFiles.size > 0;
   const isCurrentFileModified = editedFiles.has(filePath);
-
-  // ─── Download ZIP handler ───
-  const [isDownloading, setIsDownloading] = useState(false);
-  const handleDownloadZip = useCallback(async () => {
-    if (!files) {
-      toast.error("No data available to download");
-      return;
-    }
-    setIsDownloading(true);
-    try {
-      const blob = await buildZipWithEdits(files, editedFilesRef.current);
-      const filename = `${files.skillSlug}.zip`;
-
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = filename;
-      anchor.style.display = "none";
-      document.body.appendChild(anchor);
-      anchor.click();
-
-      setTimeout(() => {
-        document.body.removeChild(anchor);
-        URL.revokeObjectURL(url);
-      }, 100);
-
-      const editCount = editedFilesRef.current.size;
-      const suffix = editCount > 0
-        ? ` (${editCount} file${editCount !== 1 ? "s" : ""} modified)`
-        : "";
-      toast.success(`Skill package downloaded${suffix}`);
-    } catch {
-      toast.error("Download failed");
-    } finally {
-      setIsDownloading(false);
-    }
-  }, [files]);
 
   // ─── Resolve content ───
   const originalContent = useMemo(() => {
@@ -233,65 +161,42 @@ export function SkillFileViewer({ filePath }: SkillFileViewerProps) {
           )}
         </span>
 
-        <div className="flex items-center gap-1 shrink-0">
-          {/* Edit/Preview toggle — only for markdown files */}
-          {isMarkdown && (
-            <>
+        {/* Edit/Preview toggle — only for markdown files */}
+        {isMarkdown && (
+          <div className="flex items-center gap-1 shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={() => setIsEditing(!isEditing)}
+            >
+              {isEditing ? (
+                <>
+                  <Eye className="w-3.5 h-3.5" />
+                  Preview
+                </>
+              ) : (
+                <>
+                  <Pencil className="w-3.5 h-3.5" />
+                  Edit
+                </>
+              )}
+            </Button>
+
+            {/* Reset button — visible when current file is modified */}
+            {isCurrentFileModified && (
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 text-xs gap-1"
-                onClick={() => setIsEditing(!isEditing)}
+                className="h-7 text-xs gap-1 text-muted-foreground"
+                onClick={() => handleResetFile(filePath)}
               >
-                {isEditing ? (
-                  <>
-                    <Eye className="w-3.5 h-3.5" />
-                    Preview
-                  </>
-                ) : (
-                  <>
-                    <Pencil className="w-3.5 h-3.5" />
-                    Edit
-                  </>
-                )}
+                <RotateCcw className="w-3.5 h-3.5" />
+                Reset
               </Button>
-
-              {/* Reset button — visible when current file is modified */}
-              {isCurrentFileModified && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs gap-1 text-muted-foreground"
-                  onClick={() => handleResetFile(filePath)}
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  Reset
-                </Button>
-              )}
-            </>
-          )}
-
-          {/* Download ZIP */}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs gap-1"
-            disabled={isDownloading}
-            onClick={handleDownloadZip}
-          >
-            {isDownloading ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Download className="w-3.5 h-3.5" />
             )}
-            Download ZIP
-            {hasEdits && (
-              <span className="ml-0.5 text-[10px] text-[rgb(var(--theme-400))]">
-                ({editedFiles.size})
-              </span>
-            )}
-          </Button>
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Content */}

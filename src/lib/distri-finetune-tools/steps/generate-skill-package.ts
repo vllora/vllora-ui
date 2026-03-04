@@ -49,7 +49,6 @@ interface SkillJsonlRow {
   readonly system: string;
   readonly user: string;
   readonly assistant: string;
-  readonly base_score: number | null;
   readonly eval_scores: Readonly<Record<string, number>>;
   readonly sources: readonly string[];
 }
@@ -59,7 +58,6 @@ interface TopicGroup {
   readonly slug: string;
   readonly records: readonly DatasetRecord[];
   readonly rows: readonly SkillJsonlRow[];
-  readonly avgBaseScore: number;
   readonly diversityScore: number | null;
 }
 
@@ -158,7 +156,6 @@ function assembleJsonlRow(record: DatasetRecord): SkillJsonlRow | null {
     system: systemMsg?.content ?? '',
     user: userMsg.content ?? '',
     assistant: (metadata.skillResponse as string) ?? '',
-    base_score: typeof metadata.baseScore === 'number' ? metadata.baseScore : null,
     eval_scores: evalScores,
     sources: Array.isArray(metadata.sourceChunkRefs)
       ? (metadata.sourceChunkRefs as string[])
@@ -201,15 +198,6 @@ function groupByTopic(
     }
     if (rows.length === 0) continue;
 
-    // Sort by baseScore descending (best first)
-    const sortedRows = [...rows].sort((a, b) => (b.base_score ?? 0) - (a.base_score ?? 0));
-
-    const scores = sortedRows
-      .map((r) => r.base_score)
-      .filter((s): s is number => s !== null);
-    const avgBaseScore =
-      scores.length > 0 ? scores.reduce((sum, s) => sum + s, 0) / scores.length : 0;
-
     // Read diversity score from first record's metadata (same for all records in topic)
     const firstMeta = (topicRecords[0].metadata ?? {}) as Record<string, unknown>;
     const diversityScore =
@@ -223,8 +211,7 @@ function groupByTopic(
       topicPath: resolvedPath,
       slug: slugifyPath(resolvedPath),
       records: topicRecords,
-      rows: sortedRows,
-      avgBaseScore,
+      rows,
       diversityScore,
     });
   }
@@ -249,12 +236,12 @@ function buildExamplesIndex(
     '# Examples Index',
     '',
     `${totalCount} examples across ${topicGroups.length} topics.`,
-    'Each example includes base_score (LLM self-assessment) and eval_scores (external grader, per-job).',
+    'Each example includes eval_scores (external grader scores, per evaluation job).',
     '',
     '## Topic Map',
     '',
-    '| Topic | File | Examples | Avg Score | Diversity |',
-    '|-------|------|----------|-----------|-----------|',
+    '| Topic | File | Examples | Diversity |',
+    '|-------|------|----------|-----------|',
   ];
 
   for (const group of topicGroups) {
@@ -262,7 +249,7 @@ function buildExamplesIndex(
       group.diversityScore !== null ? group.diversityScore.toFixed(2) : 'N/A';
     const leafSlug = slugifySegment(group.topicPath.split('/').pop() ?? group.topicPath);
     lines.push(
-      `| ${humanizePath(group.topicPath)} | [${leafSlug}.jsonl](${group.slug}.jsonl) | ${group.rows.length} | ${group.avgBaseScore.toFixed(2)} | ${diversity} |`,
+      `| ${humanizePath(group.topicPath)} | [${leafSlug}.jsonl](${group.slug}.jsonl) | ${group.rows.length} | ${diversity} |`,
     );
   }
 

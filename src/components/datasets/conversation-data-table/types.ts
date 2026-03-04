@@ -22,7 +22,7 @@ export interface ConversationRow {
   readonly system: string;
   readonly user: string;
   readonly assistant: string;
-  /** Primary numeric score for display (base_score for JSONL, evaluation for records) */
+  /** Primary numeric score for display (evaluation score for records, null for JSONL) */
   readonly score: number | null;
   /** Per-job eval scores (JSONL mode only) */
   readonly evalScores?: Readonly<Record<string, number>>;
@@ -102,7 +102,6 @@ export function parseJsonlContent(content: string): ParsedJsonlResult {
       const system = typeof obj.system === "string" ? obj.system : "";
       const user = typeof obj.user === "string" ? obj.user : "";
       const assistant = typeof obj.assistant === "string" ? obj.assistant : "";
-      const baseScore = typeof obj.base_score === "number" ? obj.base_score : null;
       const evalScores =
         obj.eval_scores && typeof obj.eval_scores === "object" && !Array.isArray(obj.eval_scores)
           ? (obj.eval_scores as Record<string, number>)
@@ -116,7 +115,7 @@ export function parseJsonlContent(content: string): ParsedJsonlResult {
         system,
         user,
         assistant,
-        score: baseScore,
+        score: null,
         evalScores,
         tokenEstimate: Math.ceil(totalChars / 4),
       });

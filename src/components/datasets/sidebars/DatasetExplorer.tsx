@@ -31,6 +31,7 @@ import {
   AlertTriangle,
   Circle,
   Package,
+  Download,
 } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
@@ -46,6 +47,9 @@ import { NewEvaluationDialog } from "@/components/datasets/evaluation-dialog/New
 import type { FileTreeNode, FileTreeBadge } from "./types";
 import type { TopicHierarchyNode } from "@/types/dataset-types";
 import { computeSourceRecordStats } from "@/lib/distri-finetune-tools/steps/shared/source-record-counts";
+import {
+  assembleSkillPackageFiles,
+} from "@/lib/distri-finetune-tools/steps/generate-skill-package";
 
 // ============================================================================
 // Icon helpers (consistent sizing for tree items)
@@ -179,6 +183,44 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
   const [showNewJobDialog, setShowNewJobDialog] = useState(false);
   // New evaluation dialog
   const [showNewEvalDialog, setShowNewEvalDialog] = useState(false);
+
+  // Download skill package ZIP
+  const handleDownloadSkillZip = useCallback(async () => {
+    if (!dataset?.id) return;
+    try {
+      const files = await assembleSkillPackageFiles(dataset.id);
+      if (!files) {
+        toast.error("No data available to download");
+        return;
+      }
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
+      const root = zip.folder(files.skillSlug)!;
+      root.file("SKILL.md", files.skillMd);
+      root.file("examples/index.md", files.examplesIndex);
+      for (const [slug, jsonl] of files.topicFiles) {
+        root.file(`examples/${slug}.jsonl`, jsonl);
+      }
+      if (files.knowledgeDoc) {
+        root.file("knowledge/domain-knowledge.md", files.knowledgeDoc);
+      }
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${files.skillSlug}.zip`;
+      anchor.style.display = "none";
+      document.body.appendChild(anchor);
+      anchor.click();
+      setTimeout(() => {
+        document.body.removeChild(anchor);
+        URL.revokeObjectURL(url);
+      }, 100);
+      toast.success("Skill package downloaded");
+    } catch {
+      toast.error("Failed to download skill package");
+    }
+  }, [dataset?.id]);
 
   const toggleExpand = useCallback((nodeId: string) => {
     setExpandedNodes((prev) => {
@@ -636,6 +678,14 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         isExpandable: skillChildren.length > 0,
         isSection: true,
         emptyText: "Training data will be packaged as a skill folder you can deploy to your own agent",
+        actions: skillChildren.length > 0
+          ? [{
+              key: "download-zip",
+              icon: <Download className="w-3.5 h-3.5" />,
+              title: "Download skill package ZIP",
+              onClick: handleDownloadSkillZip,
+            }]
+          : undefined,
       });
     }
 
@@ -693,7 +743,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
   }, [
     dataset, records, sources, dryRunJobs, finetuneJobs,
     proposedPlan, planStatus, hasPlanProposed, todos,
-    topicCounts, expandedNodes, isGeneratingTraces,
+    topicCounts, expandedNodes, isGeneratingTraces, handleDownloadSkillZip,
   ]);
 
   // ============================================================================

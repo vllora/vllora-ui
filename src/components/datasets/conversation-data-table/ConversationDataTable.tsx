@@ -28,14 +28,6 @@ import { emitter } from "@/utils/eventEmitter";
 import { ConversationExpandedDetail } from "./ConversationExpandedDetail";
 import type { ConversationRow, ConversationTableMode } from "./types";
 
-// ─── Score badge (read-only mode) ───
-
-function scoreBadgeClass(score: number): string {
-  if (score >= 0.8) return "bg-emerald-500/15 text-emerald-400";
-  if (score >= 0.5) return "bg-yellow-500/15 text-yellow-400";
-  return "bg-red-500/15 text-red-400";
-}
-
 // ─── System prompt banner (read-only mode) ───
 
 function SystemBanner({ systemPrompt }: { readonly systemPrompt: string }) {
@@ -170,10 +162,12 @@ export function ConversationDataTable({
             <TableHead className="text-[11px] font-medium">
               <span className="text-emerald-400">assistant</span>
             </TableHead>
-            {/* Score */}
-            <TableHead className="w-24 text-[11px] font-medium text-right">
-              {mode === "jsonl-read-only" ? "base_score" : "score"}
-            </TableHead>
+            {/* Score (manage mode only — JSONL read-only has no meaningful score) */}
+            {isManage && (
+              <TableHead className="w-24 text-[11px] font-medium text-right">
+                score
+              </TableHead>
+            )}
             {/* Tokens */}
             <TableHead className="w-20 text-[11px] font-medium text-right">
               tokens
@@ -243,9 +237,9 @@ export function ConversationDataTable({
                     </p>
                   </TableCell>
 
-                  {/* Score */}
-                  <TableCell className="w-24 text-right align-top py-2.5">
-                    {isManage && record ? (
+                  {/* Score (manage mode only) */}
+                  {isManage && record && (
+                    <TableCell className="w-24 text-right align-top py-2.5">
                       <QualityIndicator
                         evaluation={row.evaluation}
                         compact
@@ -258,19 +252,8 @@ export function ConversationDataTable({
                           }, 300);
                         } : undefined}
                       />
-                    ) : (
-                      row.score !== null && (
-                        <span
-                          className={cn(
-                            "inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono font-medium",
-                            scoreBadgeClass(row.score),
-                          )}
-                        >
-                          {row.score.toFixed(2)}
-                        </span>
-                      )
-                    )}
-                  </TableCell>
+                    </TableCell>
+                  )}
 
                   {/* Tokens */}
                   <TableCell className="w-20 text-right align-top py-2.5">
