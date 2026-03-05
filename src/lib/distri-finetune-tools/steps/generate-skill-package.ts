@@ -285,78 +285,10 @@ function buildResourcesIndex(
 
 // ─── Build knowledge/domain-knowledge.md ───
 
-/** Shape of a semantic chunk from local-semantic PDF extraction */
-interface ExtractedChunk {
-  readonly id: string;
-  readonly heading: string;
-  readonly summary: string;
-  readonly sentences: readonly string[];
-  readonly pageStart: number;
-  readonly pageEnd: number;
-}
-
-/** Max sentences per chunk to include (prevents runaway file sizes) */
-const MAX_SENTENCES_PER_CHUNK = 30;
-
 /**
- * Build knowledge doc from semantic chunks (local-semantic extraction).
- * Each chunk becomes a section with heading, page range, and full sentences.
+ * Build domain-knowledge.md as a sections reference table only.
+ * Full content lives in knowledge/sections/*.md — use Read tool to load.
  */
-function buildKnowledgeFromChunks(
-  sourceName: string,
-  chunks: readonly ExtractedChunk[],
-  totalPages: number,
-): string[] {
-  const lines: string[] = [
-    `## ${sourceName}`,
-    '',
-    `*${totalPages} pages, ${chunks.length} sections*`,
-    '',
-  ];
-
-  for (const chunk of chunks) {
-    const pageRange = chunk.pageStart === chunk.pageEnd
-      ? `p.${chunk.pageStart}`
-      : `pp.${chunk.pageStart}–${chunk.pageEnd}`;
-
-    lines.push(`### ${chunk.heading}`, '');
-    lines.push(`*${pageRange}*`, '');
-
-    // Use full sentences — the actual content
-    const sentences = chunk.sentences.slice(0, MAX_SENTENCES_PER_CHUNK);
-    if (sentences.length > 0) {
-      lines.push(sentences.join(' '), '');
-    }
-  }
-
-  return lines;
-}
-
-/**
- * Build knowledge doc from legacy sections (LLM extraction fallback).
- */
-function buildKnowledgeFromSections(
-  sourceName: string,
-  sections: readonly { title: string; content: string }[],
-  summary: string | undefined,
-): string[] {
-  const lines: string[] = [`## ${sourceName}`, ''];
-
-  if (summary) {
-    lines.push(summary, '');
-  }
-
-  for (const section of sections.slice(0, 20)) {
-    lines.push(`### ${section.title}`, '');
-    const truncated = section.content.length > 800
-      ? `${section.content.slice(0, 800)}...`
-      : section.content;
-    lines.push(truncated, '');
-  }
-
-  return lines;
-}
-
 function buildKnowledgeDoc(
   sources: readonly KnowledgeSource[],
   sectionEntries?: ReadonlyArray<{ path: string; title: string; sourceName: string; pageRange?: string }>,
@@ -364,37 +296,35 @@ function buildKnowledgeDoc(
   const readySources = sources.filter((s) => s.status === 'ready' && s.extractedContent);
   if (readySources.length === 0) return null;
 
-  const lines: string[] = ['# Domain Knowledge', ''];
+  // Only sections with a reference document (page range from PDF extraction)
+  const entriesWithRef =
+    sectionEntries?.filter((e) => e.pageRange && String(e.title || '').trim()) ?? [];
+  if (entriesWithRef.length === 0) return null;
 
-  for (const source of readySources) {
-    const content = source.extractedContent!;
-    const metadata = content.metadata as Record<string, unknown> | undefined;
-    const extractionMethod = metadata?.extractionMethod as string | undefined;
+  const lines: string[] = [
+    '# Domain Knowledge',
+    '',
+    'Reference sections from uploaded documents. Use your Read tool to load full content.',
+    '',
+    '## Section Reference',
+    '',
+  ];
 
-    if (extractionMethod === 'local-semantic') {
-      // Modern path: use semantic chunks with full sentence content
-      const chunks = (metadata?.chunks as ExtractedChunk[] | undefined) ?? [];
-      const totalPages = (metadata?.totalPages as number) || 0;
+  const escapeTableCell = (s: string) => s.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  lines.push('| Section | File | Source | Pages |');
+  lines.push('|---------|------|--------|-------|');
 
-      if (chunks.length > 0) {
-        lines.push(...buildKnowledgeFromChunks(source.name, chunks, totalPages));
-      }
-    } else {
-      // Legacy fallback: use sections array
-      const sections = (content.sections ?? []) as Array<{ title: string; content: string }>;
-      const summary = metadata?.document_summary as string | undefined;
-
-      if (sections.length > 0) {
-        lines.push(...buildKnowledgeFromSections(source.name, sections, summary));
-      }
-    }
-
-    lines.push('---', '');
+  for (const e of entriesWithRef) {
+    const title = escapeTableCell(String(e.title || '').trim() || 'Untitled');
+    const sourceName = escapeTableCell(String(e.sourceName || '').trim() || '—');
+    const filename = e.path.split('/').pop() ?? e.path;
+    const fileLink = `[${filename}](${e.path})`;
+    const pages = escapeTableCell(e.pageRange ?? '—');
+    lines.push(`| ${title} | ${fileLink} | ${sourceName} | ${pages} |`);
   }
 
-  // Return null if we ended up with only the header and separators
-  const hasContent = lines.some((l) => l.startsWith('## '));
-  return hasContent ? lines.join('\n') : null;
+  lines.push('');
+  return lines.join('\n');
 }
 
 // ─── Build knowledge/sections/ (one file per section with full content) ───
