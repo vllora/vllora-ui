@@ -110,17 +110,24 @@ export function TopicRecordTree({
     const handleProgress = (event: {
       datasetId: string;
       status: string;
+      completed?: number;
+      total?: number;
       currentTopic?: string;
       topicCompleted?: number;
       topicTotal?: number;
     }) => {
       if (event.datasetId !== datasetId) return;
 
-      if ((event.status === 'started' || event.status === 'progress') && event.currentTopic) {
-        setGeneratingTopic(event.currentTopic);
-        // Use topic-specific progress (topicCompleted/topicTotal) for per-topic indicator
+      if (event.status === 'started' || event.status === 'progress') {
+        // Set current topic if available
+        if (event.currentTopic) {
+          setGeneratingTopic(event.currentTopic);
+        }
+        // Prefer topic-specific progress, fall back to overall progress
         if (event.topicCompleted !== undefined && event.topicTotal !== undefined) {
           setGeneratingProgress({ completed: event.topicCompleted, total: event.topicTotal });
+        } else if (event.completed !== undefined && event.total !== undefined) {
+          setGeneratingProgress({ completed: event.completed, total: event.total });
         }
       } else if (event.status === 'completed' || event.status === 'failed') {
         setGeneratingTopic(null);

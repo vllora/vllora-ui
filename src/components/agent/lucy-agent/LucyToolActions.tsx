@@ -15,6 +15,11 @@ import { ToolCallState } from '@distri/react';
 import { cn } from '@/lib/utils';
 import { getFriendlyToolMessage } from './lucy-message-utils';
 
+/** Convert snake_case tool name to Title Case display name */
+function formatToolName(name: string): string {
+  return name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export interface LucyToolActionsProps {
   toolCall: ToolCall;
   toolCallState?: ToolCallState;
@@ -123,7 +128,7 @@ export const LucyToolActions: React.FC<LucyToolActionsProps> = ({
         <div className="flex items-center gap-2">
           <Loader2 className="h-3.5 w-3.5 text-[rgb(var(--theme-500))] animate-spin shrink-0" />
           <span className="text-xs text-foreground/80">Executing</span>
-          <code className="text-[11px] text-[rgb(var(--theme-400))] font-mono">{toolName}</code>
+          <code className="text-[11px] text-[rgb(var(--theme-400))] font-mono">{formatToolName(toolName)}</code>
         </div>
       </div>
     );
@@ -148,7 +153,7 @@ export const LucyToolActions: React.FC<LucyToolActionsProps> = ({
           <span className="text-xs text-foreground/70">
             {wasSuccessful ? 'Done' : 'Failed'}
           </span>
-          <code className="text-[11px] text-muted-foreground font-mono">{toolName}</code>
+          <code className="text-[11px] text-muted-foreground font-mono">{formatToolName(toolName)}</code>
         </div>
       </div>
     );
@@ -164,7 +169,7 @@ export const LucyToolActions: React.FC<LucyToolActionsProps> = ({
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <code className="text-[11px] font-mono font-medium text-[rgb(var(--theme-400))]">{toolName}</code>
+            <code className="text-[11px] font-mono font-medium text-[rgb(var(--theme-400))]">{formatToolName(toolName)}</code>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5 truncate">{friendlyMessage}</p>
         </div>

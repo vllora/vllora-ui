@@ -91,11 +91,14 @@ function distributeCountAcrossTopics(totalCount: number, topics: LeafTopic[]): M
   return distribution;
 }
 
-// Batch size for generation - smaller batches are faster and more reliable
-const BATCH_SIZE = 10;
+// Batch size for generation — smaller batches complete faster and are less likely to timeout
+const BATCH_SIZE = 5;
 
 // Number of parallel requests to make — OpenAI gpt-4.1 supports 10K+ RPM
-const PARALLEL_REQUESTS = 6;
+const PARALLEL_REQUESTS = 5;
+
+// Max retries per batch before giving up
+const MAX_BATCH_RETRIES = 2;
 
 
 // =============================================================================
@@ -341,6 +344,36 @@ const INITIAL_DATA_RESPONSE_SCHEMA = {
     },
   },
 };
+
+// =============================================================================
+// Retry Helper
+// =============================================================================
+
+/**
+ * Retry an async function with exponential backoff.
+ * Returns the result on success, or the fallback value after all retries fail.
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  label: string,
+  fallback: T,
+): Promise<T> {
+  for (let attempt = 0; attempt <= MAX_BATCH_RETRIES; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const isLastAttempt = attempt === MAX_BATCH_RETRIES;
+      console.error(
+        `[generateInitialData] ${label} attempt ${attempt + 1}/${MAX_BATCH_RETRIES + 1} failed:`,
+        err instanceof Error ? err.message : err,
+      );
+      if (isLastAttempt) return fallback;
+      const backoffMs = 1000 * Math.pow(2, attempt);
+      await new Promise((resolve) => setTimeout(resolve, backoffMs));
+    }
+  }
+  return fallback;
+}
 
 // =============================================================================
 // LLM Call
@@ -696,22 +729,22 @@ export const generateInitialDataHandler: ToolHandler = async (
 
         // Create parallel requests for this chunk
         const batchPromises = chunkJobs.map(job =>
-          callLLMForInitialData(
-            objective,
-            job.batchSize,
-            user_guidance,
-            knowledgeContext,
-            job.topic,
-            output_format,
-            chunkFileBlocks,
-            seedSystemPrompt,
-            topicChunkContexts.get(job.topic.name),
-            topicSystemPrompts.get(job.topic.name),
+          withRetry(
+            () => callLLMForInitialData(
+              objective,
+              job.batchSize,
+              user_guidance,
+              knowledgeContext,
+              job.topic,
+              output_format,
+              chunkFileBlocks,
+              seedSystemPrompt,
+              topicChunkContexts.get(job.topic.name),
+              topicSystemPrompts.get(job.topic.name),
+            ),
+            `Topic "${job.topic.name}" batch ${job.batchIndex + 1}`,
+            [] as GeneratedExample[],
           ).then(examples => ({ job, examples }))
-            .catch(err => {
-              console.error(`[generateInitialData] Topic "${job.topic.name}" batch ${job.batchIndex + 1} failed:`, err);
-              return { job, examples: [] as GeneratedExample[] };
-            })
         );
 
         // Wait for all parallel batches to complete
@@ -773,7 +806,13 @@ export const generateInitialDataHandler: ToolHandler = async (
         await Promise.all(savePromises);
         emitter.emit("vllora_dataset_refresh" as any);
 
-        // Emit progress event after each parallel chunk
+        // Emit progress event after each parallel chunk (include per-topic fields for UI)
+        // Find the last topic processed in this round for the currentTopic indicator
+        const lastProcessedTopic = chunkJobs[chunkJobs.length - 1]?.topic;
+        const lastTopicName = lastProcessedTopic?.name;
+        const lastTopicTotal = lastTopicName ? (topicDistribution.get(lastProcessedTopic) ?? 0) : undefined;
+        const lastTopicCompleted = lastTopicName ? (topicProgress.get(lastTopicName) ?? 0) : undefined;
+
         emitter.emit("vllora_data_generation_progress", {
           datasetId: dataset_id,
           status: "progress",
@@ -781,6 +820,9 @@ export const generateInitialDataHandler: ToolHandler = async (
           completed: totalGenerated,
           currentBatch: completedBatches,
           totalBatches,
+          currentTopic: lastTopicName,
+          topicCompleted: lastTopicCompleted,
+          topicTotal: lastTopicTotal,
         });
       }
     } else {
@@ -822,22 +864,22 @@ export const generateInitialDataHandler: ToolHandler = async (
           console.log(`[generateInitialData] Queuing batch ${batchIndex + 1}/${totalBatches} (${batchSize} examples)`);
 
           batchPromises.push(
-            callLLMForInitialData(
-              objective,
-              batchSize,
-              user_guidance,
-              knowledgeContext,
-              undefined,
-              output_format,
-              chunkFileBlocks,
-              seedSystemPrompt,
-              undefined,
-              genericSystemPrompt,
+            withRetry(
+              () => callLLMForInitialData(
+                objective,
+                batchSize,
+                user_guidance,
+                knowledgeContext,
+                undefined,
+                output_format,
+                chunkFileBlocks,
+                seedSystemPrompt,
+                undefined,
+                genericSystemPrompt,
+              ),
+              `Batch ${batchIndex + 1}`,
+              [] as GeneratedExample[],
             ).then(examples => ({ batchIndex, examples }))
-              .catch(err => {
-                console.error(`[generateInitialData] Batch ${batchIndex + 1} failed:`, err);
-                return { batchIndex, examples: [] as GeneratedExample[] };
-              })
           );
         }
 

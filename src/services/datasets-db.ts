@@ -1093,10 +1093,23 @@ export async function addRecordsToDataset(
     };
   });
 
+  // Transaction timeout prevents DB lock when tool execution is killed mid-flight
+  const TX_TIMEOUT_MS = 30_000;
+
   return new Promise((resolve, reject) => {
     const tx = db.transaction(['datasets', 'records'], 'readwrite');
     const datasetsStore = tx.objectStore('datasets');
     const recordsStore = tx.objectStore('records');
+
+    // Safety net: abort transaction if it hangs beyond TX_TIMEOUT_MS
+    const txTimeoutId = setTimeout(() => {
+      try {
+        tx.abort();
+        console.warn(`[datasetsDB] Transaction aborted after ${TX_TIMEOUT_MS / 1000}s timeout`);
+      } catch {
+        // Transaction may have already completed
+      }
+    }, TX_TIMEOUT_MS);
 
     // Update dataset's updatedAt
     const getRequest = datasetsStore.get(datasetId);
@@ -1110,7 +1123,7 @@ export async function addRecordsToDataset(
 
     // Add records with error tracking
     let addedCount = 0;
-    let addErrors: string[] = [];
+    const addErrors: string[] = [];
     createdRecords.forEach((record, index) => {
       const addRequest = recordsStore.add(record);
       addRequest.onsuccess = () => {
@@ -1125,6 +1138,7 @@ export async function addRecordsToDataset(
     });
 
     tx.oncomplete = () => {
+      clearTimeout(txTimeoutId);
       console.log(`[datasetsDB] Transaction complete: ${addedCount}/${createdRecords.length} records added`);
       if (addErrors.length > 0) {
         console.warn(`[datasetsDB] Add errors:`, addErrors);
@@ -1134,8 +1148,14 @@ export async function addRecordsToDataset(
       resolve(createdRecords);
     };
     tx.onerror = () => {
+      clearTimeout(txTimeoutId);
       console.error(`[datasetsDB] Transaction error:`, tx.error);
       reject(tx.error);
+    };
+    tx.onabort = () => {
+      clearTimeout(txTimeoutId);
+      console.warn(`[datasetsDB] Transaction aborted:`, tx.error);
+      reject(tx.error || new Error('Transaction aborted'));
     };
   });
 }

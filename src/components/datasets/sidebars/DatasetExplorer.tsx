@@ -121,15 +121,18 @@ function buildSkillExamplesChildren(
   topicCounts: Map<string, number>,
   expandedNodes: Set<string>,
 ): FileTreeNode[] {
-  return nodes.map((node) => {
+  return nodes.flatMap((node): FileTreeNode[] => {
     const slug = slugifySegment(node.name);
     const slugPath = parentSlug ? `${parentSlug}/${slug}` : slug;
     const hasChildren = node.children && node.children.length > 0;
     const count = getTopicRecordCount(node, topicCounts);
 
     if (hasChildren) {
+      const children = buildSkillExamplesChildren(node.children!, slugPath, topicCounts, expandedNodes);
+      // Hide empty folders (all children filtered out)
+      if (children.length === 0) return [];
       const folderId = `skill/resources/${slugPath}`;
-      return {
+      return [{
         id: folderId,
         name: slug,
         type: "folder" as const,
@@ -137,17 +140,20 @@ function buildSkillExamplesChildren(
         isExpandable: true,
         expandOnly: true,
         badge: count > 0 ? { label: String(count), variant: "count" as const } : undefined,
-        children: buildSkillExamplesChildren(node.children!, slugPath, topicCounts, expandedNodes),
-      };
+        children,
+      }];
     }
 
-    return {
+    // Hide leaf topics with 0 records (Fix #008)
+    if (count === 0) return [];
+
+    return [{
       id: `skill/resources/${slugPath}.jsonl`,
       name: `${slug}.jsonl`,
       type: "file" as const,
       icon: <FileCode className={`${ICON_CLS} text-purple-400`} />,
-      badge: count > 0 ? { label: String(count), variant: "count" as const } : undefined,
-    };
+      badge: { label: String(count), variant: "count" as const },
+    }];
   });
 }
 
@@ -677,8 +683,10 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
             ...buildSkillExamplesChildren(hierarchy, "", topicCounts, expandedNodes),
           );
         } else {
-          // Flat fallback: no hierarchy available
-          const sortedTopics = [...topicCounts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+          // Flat fallback: no hierarchy available — skip topics with 0 records
+          const sortedTopics = [...topicCounts.entries()]
+            .filter(([, count]) => count > 0)
+            .sort((a, b) => a[0].localeCompare(b[0]));
           for (const [topicName, count] of sortedTopics) {
             const slug = slugifySegment(topicName);
             exampleChildren.push({
@@ -686,7 +694,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
               name: `${slug}.jsonl`,
               type: "file",
               icon: <FileCode className={`${ICON_CLS} text-purple-400`} />,
-              badge: count > 0 ? { label: String(count), variant: "count" } : undefined,
+              badge: { label: String(count), variant: "count" },
             });
           }
         }

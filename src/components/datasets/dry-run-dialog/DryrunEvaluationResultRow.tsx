@@ -89,9 +89,30 @@ function HighlightedText({ text }: { text: string }) {
   );
 }
 
-function RecordIdCell({ recordId, onNavigate }: { recordId: string; onNavigate: (e: React.MouseEvent) => void }) {
+/** Extract a short human-readable label from the evaluation row data */
+function getRecordLabel(row?: { messages?: unknown[]; [key: string]: unknown }): string | null {
+  if (!row?.messages || !Array.isArray(row.messages)) return null;
+  // Find the first user message to use as label
+  const userMsg = row.messages.find(
+    (m: any) => m?.role === 'user' && typeof m?.content === 'string',
+  ) as { content: string } | undefined;
+  if (!userMsg) return null;
+  const text = userMsg.content.trim();
+  return text.length > 40 ? `${text.slice(0, 37)}...` : text;
+}
+
+function RecordIdCell({
+  recordId,
+  row,
+  onNavigate,
+}: {
+  recordId: string;
+  row?: { messages?: unknown[]; [key: string]: unknown };
+  onNavigate: (e: React.MouseEvent) => void;
+}) {
   const [copied, setCopied] = useState(false);
   const shortId = recordId.length > 8 ? recordId.slice(0, 8) : recordId;
+  const label = getRecordLabel(row) || shortId;
 
   const handleCopy = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -104,11 +125,11 @@ function RecordIdCell({ recordId, onNavigate }: { recordId: string; onNavigate: 
     <div className="flex-1 min-w-[96px] py-1 pr-2 group/id">
       <div className="flex items-center gap-0.5">
         <button
-          className="font-mono text-[11px] text-[rgb(var(--theme-400))] hover:text-[rgb(var(--theme-300))] hover:underline transition-colors truncate"
+          className="text-[11px] text-[rgb(var(--theme-400))] hover:text-[rgb(var(--theme-300))] hover:underline transition-colors truncate max-w-[180px]"
           onClick={onNavigate}
           title={`Go to record ${recordId}`}
         >
-          {shortId}
+          {label}
         </button>
         <button
           onClick={handleCopy}
@@ -177,6 +198,7 @@ export function DryrunEvaluationResultRow({
       {onRecordIdClick && (
         <RecordIdCell
           recordId={result.dataset_row_id}
+          row={result.row}
           onNavigate={(e) => {
             e.stopPropagation();
             onRecordIdClick(result.dataset_row_id);

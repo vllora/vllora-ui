@@ -64,6 +64,9 @@ export async function fetchLucyConfigCached(): Promise<LucyConfig> {
  *
  * Returns the assistant's response content as a string.
  */
+/** Per-request timeout in ms — prevents hanging when LLM is unresponsive */
+const LLM_REQUEST_TIMEOUT_MS = 90_000;
+
 export async function callLucy(
   messages: LucyMessage[],
   options: LucyChatOptions = {},
@@ -95,6 +98,8 @@ export async function callLucy(
 
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), LLM_REQUEST_TIMEOUT_MS);
     try {
       const response = await fetch(getInferObjectiveUrl(), {
         method: 'POST',
@@ -103,6 +108,7 @@ export async function callLucy(
           'x-label': options.label || 'lucy_chat',
         },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -119,12 +125,18 @@ export async function callLucy(
 
       return content;
     } catch (err) {
-      lastError = err;
-      console.error(`[lucy-client] Attempt ${attempt + 1}/3 failed:`, err);
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        lastError = new Error(`Lucy LLM call timed out after ${LLM_REQUEST_TIMEOUT_MS / 1000}s`);
+      } else {
+        lastError = err;
+      }
+      console.error(`[lucy-client] Attempt ${attempt + 1}/3 failed:`, lastError);
       if (attempt < 2) {
         const backoffMs = 800 * Math.pow(2, attempt);
         await new Promise((resolve) => setTimeout(resolve, backoffMs));
       }
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
