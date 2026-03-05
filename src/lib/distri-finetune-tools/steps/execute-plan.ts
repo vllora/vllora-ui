@@ -28,8 +28,8 @@ import { generateInitialDataHandler } from './generate-initial-data';
 import { uploadDatasetHandler } from './upload-dataset';
 import { runDryRunHandler } from './run-dry-run';
 
-// Import for finetune job creation
-import { quickFinetune } from '@/services/quick-finetune';
+// Import for finetune job creation (disabled)
+// import { quickFinetune } from '@/services/quick-finetune';
 
 // Import grader template generator
 import { generateGraderTemplate } from './propose-plan/grader-template';
@@ -524,44 +524,46 @@ async function executeFinetune(ctx: StepContext): Promise<StepResult> {
     throw new Error('Dataset not uploaded to backend');
   }
 
-  const result = await quickFinetune({
-    datasetId: dataset_id,
-    baseModel: 'unsloth/Qwen3-4B',
-    trainingConfig: {
-      learning_rate: 0.00001,
-      epochs: 2,
-      batch_size_samples: 10,
-      lora_rank: 8,
-    },
-  });
-  if (!result.success) {
-    throw new Error(result.error || 'Failed to create finetune job');
-  }
+  // quickFinetune disabled during plan execution
+  // const result = await quickFinetune({
+  //   datasetId: dataset_id,
+  //   baseModel: 'unsloth/Qwen3-4B',
+  //   trainingConfig: {
+  //     learning_rate: 0.00001,
+  //     epochs: 2,
+  //     batch_size_samples: 10,
+  //     lora_rank: 8,
+  //   },
+  // });
+  // if (!result.success) {
+  //   throw new Error(result.error || 'Failed to create finetune job');
+  // }
 
-  summary.finetune_job_id = result.jobId;
-  summary.finetune_job_status = result.status;
+  // summary.finetune_job_id = result.jobId;
+  // summary.finetune_job_status = result.status;
 
-  emitter.emit('vllora_finetune_job_created', {
-    backendDatasetId: datasetForJob.backendDatasetId,
-    jobId: result.jobId,
-  });
+  // emitter.emit('vllora_finetune_job_created', {
+  //   backendDatasetId: datasetForJob.backendDatasetId,
+  //   jobId: result.jobId,
+  // });
 
-  toast.success('Fine-tune job started', {
-    action: {
-      label: 'Check Job',
-      onClick: () => emitter.emit('vllora_switch_tab', { datasetId: dataset_id, tab: 'jobs' }),
-    },
-  });
+  // toast.success('Fine-tune job started', {
+  //   action: {
+  //     label: 'Check Job',
+  //     onClick: () => emitter.emit('vllora_switch_tab', { datasetId: dataset_id, tab: 'jobs' }),
+  //   },
+  // });
 
-  // Mark workflow step as in_progress (not completed — training is async)
-  const wf = await workflowDB.getWorkflow(workflow_id);
-  if (wf) {
-    wf.stepStatus.training = 'in_progress';
-    wf.updatedAt = Date.now();
-    await workflowDB.updateWorkflow(wf);
-  }
+  // // Mark workflow step as in_progress (not completed — training is async)
+  // const wf = await workflowDB.getWorkflow(workflow_id);
+  // if (wf) {
+  //   wf.stepStatus.training = 'in_progress';
+  //   wf.updatedAt = Date.now();
+  //   await workflowDB.updateWorkflow(wf);
+  // }
 
-  return { message: `Finetune job started: ${result.jobId}`, result };
+  toast.info('Fine-tuning is currently disabled');
+  return { message: 'Fine-tuning is currently disabled', result: null };
 }
 
 // =============================================================================
