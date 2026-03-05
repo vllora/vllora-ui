@@ -46,7 +46,6 @@ export function clearPackageBlob(workflowId: string): void {
 // ─── Types ───
 
 interface SkillJsonlRow {
-  readonly system: string;
   readonly user: string;
   readonly assistant: string;
   readonly eval_scores: Readonly<Record<string, number>>;
@@ -139,7 +138,6 @@ function assembleJsonlRow(record: DatasetRecord): SkillJsonlRow | null {
     role?: string;
     content?: string;
   }>;
-  const systemMsg = messages.find((m) => m?.role === 'system');
   const userMsg = messages.find((m) => m?.role === 'user');
   if (!userMsg) return null;
 
@@ -153,7 +151,6 @@ function assembleJsonlRow(record: DatasetRecord): SkillJsonlRow | null {
   }
 
   return {
-    system: systemMsg?.content ?? '',
     user: userMsg.content ?? '',
     assistant: (metadata.skillResponse as string) ?? '',
     eval_scores: evalScores,
@@ -226,7 +223,6 @@ function buildTopicJsonl(rows: readonly SkillJsonlRow[]): string {
   return rows
     .map((row) => {
       const clean: Record<string, unknown> = {
-        system: row.system,
         user: row.user,
       };
       if (row.assistant) clean.assistant = row.assistant;
@@ -587,7 +583,6 @@ function buildSkillMarkdown(params: {
     '|-------|---------|',
     '| `user` | Example question — use to match incoming queries |',
     '| `assistant` | **Primary**: reference answer showing expected style and knowledge |',
-    '| `system` | Role context (same as this SKILL.md — skip if redundant) |',
     '',
     'Focus on the `assistant` field — it contains the domain knowledge and',
     'demonstrates the expected response patterns.',
