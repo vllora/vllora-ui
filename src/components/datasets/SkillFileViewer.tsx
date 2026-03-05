@@ -49,6 +49,13 @@ function resolveFileContent(
   if (filePath === "resources/index.md") return files.resourcesIndex;
   if (filePath === "knowledge/domain-knowledge.md") return files.knowledgeDoc;
 
+  // knowledge/sections/{filename}.md
+  const sectionMatch = filePath.match(/^knowledge\/sections\/(.+\.md)$/);
+  if (sectionMatch) {
+    const sectionPath = `sections/${sectionMatch[1]}`;
+    return files.sectionFiles.get(sectionPath) ?? null;
+  }
+  
   // resources/{slug}.jsonl
   const jsonlMatch = filePath.match(/^resources\/(.+)\.jsonl$/);
   if (jsonlMatch) {
