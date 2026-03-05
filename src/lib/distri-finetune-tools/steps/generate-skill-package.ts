@@ -67,6 +67,8 @@ export interface SkillPackageFiles {
   readonly resourcesIndex: string;
   readonly topicFiles: ReadonlyMap<string, string>;
   readonly knowledgeDoc: string | null;
+  /** Per-section markdown files: path → content */
+  readonly sectionFiles: ReadonlyMap<string, string>;
 }
 
 // ─── Helpers ───
@@ -357,6 +359,7 @@ function buildKnowledgeFromSections(
 
 function buildKnowledgeDoc(
   sources: readonly KnowledgeSource[],
+  sectionEntries?: ReadonlyArray<{ path: string; title: string; sourceName: string; pageRange?: string }>,
 ): string | null {
   const readySources = sources.filter((s) => s.status === 'ready' && s.extractedContent);
   if (readySources.length === 0) return null;
@@ -392,6 +395,148 @@ function buildKnowledgeDoc(
   // Return null if we ended up with only the header and separators
   const hasContent = lines.some((l) => l.startsWith('## '));
   return hasContent ? lines.join('\n') : null;
+}
+
+// ─── Build knowledge/sections/ (one file per section with full content) ───
+
+interface SectionEntry {
+  readonly sourceName: string;
+  readonly sourceSlug: string;
+  readonly title: string;
+  readonly slug: string;
+  readonly content: string;
+  readonly pageRange?: string;
+}
+
+function collectSectionsFromSources(
+  sources: readonly KnowledgeSource[],
+): SectionEntry[] {
+  const entries: SectionEntry[] = [];
+  const readySources = sources.filter((s) => s.status === 'ready' && s.extractedContent);
+
+  for (const source of readySources) {
+    const content = source.extractedContent!;
+    const metadata = content.metadata as Record<string, unknown> | undefined;
+    const extractionMethod = (metadata?.extractionMethod as string) || 'unknown';
+    const sourceSlug = slugifySegment(source.name);
+
+    if (extractionMethod === 'local-semantic') {
+      const chunks = (metadata?.chunks as Array<{
+        id: string;
+        heading: string;
+        summary: string;
+        text: string;
+        pageStart: number;
+        pageEnd: number;
+      }>) || [];
+      for (let i = 0; i < chunks.length; i++) {
+        const c = chunks[i];
+        const pageRange =
+          c.pageStart === c.pageEnd
+            ? `p.${c.pageStart}`
+            : `pp.${c.pageStart}–${c.pageEnd}`;
+        entries.push({
+          sourceName: source.name,
+          sourceSlug,
+          title: c.heading,
+          slug: slugifySegment(c.heading) || `chunk-${i + 1}`,
+          content: [
+            `# ${c.heading}`,
+            '',
+            `**Source:** ${source.name} | **Pages:** ${pageRange}`,
+            '',
+            `**Summary:** ${c.summary}`,
+            '',
+            c.text,
+          ].join('\n'),
+          pageRange,
+        });
+      }
+    } else {
+      const sections = (content.sections || []) as Array<{ title: string; content: string; level?: number }>;
+      for (let i = 0; i < sections.length; i++) {
+        const s = sections[i];
+        const slug = slugifySegment(s.title) || `section-${i + 1}`;
+        entries.push({
+          sourceName: source.name,
+          sourceSlug,
+          title: s.title || 'Untitled',
+          slug,
+          content: [
+            `# ${s.title || 'Untitled'}`,
+            '',
+            `**Source:** ${source.name}`,
+            '',
+            s.content,
+          ].join('\n'),
+        });
+      }
+    }
+  }
+
+  return entries;
+}
+
+/** Section path and title for sidebar display (no content) */
+export interface KnowledgeSectionEntry {
+  readonly path: string;
+  readonly title: string;
+}
+
+/** Get section paths from knowledge sources for sidebar tree. */
+export function getKnowledgeSectionEntries(
+  sources: readonly KnowledgeSource[],
+): KnowledgeSectionEntry[] {
+  const entries = collectSectionsFromSources(sources);
+  if (entries.length === 0) return [];
+
+  const result: KnowledgeSectionEntry[] = [];
+  const slugCounts = new Map<string, number>();
+
+  for (const e of entries) {
+    const baseSlug = `${e.sourceSlug}-${e.slug}`;
+    const count = (slugCounts.get(baseSlug) ?? 0) + 1;
+    slugCounts.set(baseSlug, count);
+    const path =
+      count === 1
+        ? `sections/${baseSlug}.md`
+        : `sections/${baseSlug}-${count}.md`;
+    result.push({ path, title: e.title });
+  }
+  return result;
+}
+
+function buildSectionFiles(
+  sources: readonly KnowledgeSource[],
+): {
+  files: Map<string, string>;
+  entries: Array<{ path: string; title: string; sourceName: string; pageRange?: string }>;
+} {
+  const entries = collectSectionsFromSources(sources);
+  if (entries.length === 0) return { files: new Map(), entries: [] };
+
+  const files = new Map<string, string>();
+  const sectionEntries: Array<{ path: string; title: string; sourceName: string; pageRange?: string }> = [];
+  const slugCounts = new Map<string, number>();
+
+  for (const e of entries) {
+    const baseSlug = `${e.sourceSlug}-${e.slug}`;
+    const count = (slugCounts.get(baseSlug) ?? 0) + 1;
+    slugCounts.set(baseSlug, count);
+    const path =
+      count === 1
+        ? `sections/${baseSlug}.md`
+        : `sections/${baseSlug}-${count}.md`;
+    files.set(path, e.content);
+    sectionEntries.push({
+      path,
+      title: e.title,
+      sourceName: e.sourceName,
+      pageRange: e.pageRange,
+    });
+  }
+
+  return { files, entries: sectionEntries };
 }
 
 // ─── Build topic hierarchy as nested markdown list ───
@@ -432,6 +577,7 @@ function buildPackageTree(
   skillSlug: string,
   topicGroups: readonly TopicGroup[],
   hasKnowledge: boolean,
+  sectionCount: number,
 ): string {
   const lines: string[] = [
     `${skillSlug}/`,
@@ -443,20 +589,27 @@ function buildPackageTree(
   const sortedGroups = [...topicGroups].sort((a, b) =>
     a.slug.localeCompare(b.slug),
   );
+  const hasSections = sectionCount > 0;
   for (let i = 0; i < sortedGroups.length; i++) {
     const g = sortedGroups[i];
     const prefix =
-      i === sortedGroups.length - 1 && !hasKnowledge
+      i === sortedGroups.length - 1 && !hasKnowledge && !hasSections
         ? '│   └──'
         : '│   ├──';
     lines.push(`${prefix} ${g.slug}.jsonl  (${g.rows.length} examples)`);
   }
 
-  if (hasKnowledge) {
-    lines.push(
-      '└── knowledge/',
-      '    └── domain-knowledge.md              ← Reference documents',
-    );
+  if (hasKnowledge || hasSections) {
+    lines.push('└── knowledge/');
+    const items: string[] = [];
+    if (hasKnowledge) items.push('domain-knowledge.md              ← Overview + section index');
+    if (hasSections) {
+      items.push(`sections/  (${sectionCount} files)              ← Full content per section`);
+    }
+    items.forEach((item, i) => {
+      const prefix = i === items.length - 1 ? '    └──' : '    ├──';
+      lines.push(`${prefix} ${item}`);
+    });
   }
 
   return lines.join('\n');
@@ -488,6 +641,7 @@ function buildSkillMarkdown(params: {
   readonly topicNames: readonly string[];
   readonly criteria: readonly GraderCriterion[];
   readonly hasKnowledge: boolean;
+  readonly sectionCount: number;
   readonly topicGroups: readonly TopicGroup[];
 }): string {
   const lines: string[] = [];
@@ -538,6 +692,7 @@ function buildSkillMarkdown(params: {
     params.skillSlug,
     params.topicGroups,
     params.hasKnowledge,
+    params.sectionCount,
   );
   lines.push(
     '## Package Structure',
@@ -592,15 +747,23 @@ function buildSkillMarkdown(params: {
     '',
   );
 
+  console.log(params.hasKnowledge, params.sectionCount);
   // Domain Knowledge (Read instruction)
-  if (params.hasKnowledge) {
+  if (params.hasKnowledge || params.sectionCount > 0) {
     lines.push(
       '## Domain Knowledge',
       '',
       'For deep reference material, use your Read tool to load:',
-      '  `knowledge/domain-knowledge.md`',
+    );
+    if (params.hasKnowledge) {
+      lines.push('  - `knowledge/domain-knowledge.md` — overview, key sections, and section index');
+    }
+    if (params.sectionCount > 0) {
+      lines.push(`  - \`knowledge/sections/*.md\` — ${params.sectionCount} section files with full content`);
+    }
+    lines.push(
       '',
-      'Only load this when you need additional context beyond what the examples provide.',
+      'Only load these when you need additional context beyond what the examples provide.',
       '',
     );
   }
@@ -623,9 +786,11 @@ export async function assembleSkillPackageFiles(
   overrideName?: string,
 ): Promise<SkillPackageFiles | null> {
   const dataset = await datasetsDB.getDatasetById(datasetId);
+  console.log(dataset);
   if (!dataset) return null;
 
   const records = await datasetsDB.getRecordsByDatasetId(datasetId);
+  console.log(records);
   if (records.length === 0) return null;
 
   const knowledgeSources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
@@ -645,7 +810,9 @@ export async function assembleSkillPackageFiles(
 
   const resourcesIndex = buildResourcesIndex(topicGroups, totalRows);
 
-  const knowledgeDoc = buildKnowledgeDoc(knowledgeSources);
+  const { files: sectionFiles, entries: sectionEntries } = buildSectionFiles(knowledgeSources);
+  const knowledgeDoc = buildKnowledgeDoc(knowledgeSources, sectionEntries);
+  const sectionCount = sectionFiles.size;
 
   const topicHierarchyMd =
     dataset.topicHierarchy?.hierarchy
@@ -670,6 +837,7 @@ export async function assembleSkillPackageFiles(
     topicNames,
     criteria: graderCriteria,
     hasKnowledge: knowledgeDoc !== null,
+    sectionCount,
     topicGroups,
   });
 
@@ -685,6 +853,7 @@ export async function assembleSkillPackageFiles(
     resourcesIndex,
     topicFiles,
     knowledgeDoc,
+    sectionFiles,
   };
 }
 
@@ -694,11 +863,13 @@ export const generateSkillPackageHandler: ToolHandler = async (params) => {
   try {
     const { workflow_id, skill_name } = params;
 
+    console.log(workflow_id);
     if (!workflow_id || typeof workflow_id !== 'string') {
       return { success: false, error: 'workflow_id is required' };
     }
 
     const workflow = await workflowDB.getWorkflow(workflow_id);
+    console.log(workflow);
     if (!workflow) {
       return { success: false, error: 'Workflow not found' };
     }
@@ -725,6 +896,9 @@ export const generateSkillPackageHandler: ToolHandler = async (params) => {
 
     if (packageFiles.knowledgeDoc) {
       root.file('knowledge/domain-knowledge.md', packageFiles.knowledgeDoc);
+    }
+    for (const [path, content] of packageFiles.sectionFiles) {
+      root.file(`knowledge/${path}`, content);
     }
 
     const blob = await zip.generateAsync({ type: 'blob' });
@@ -791,8 +965,10 @@ After generating, use download_skill_package to save the ZIP file.`,
     required: ['workflow_id'],
   },
   autoExecute: true,
-  handler: async (input: object) =>
-    JSON.stringify(
+  handler: async (input: object) => {
+    console.log('input', input);
+    return JSON.stringify(
       await generateSkillPackageHandler(input as Record<string, unknown>),
-    ),
+    )
+  },
 } as DistriFnTool;

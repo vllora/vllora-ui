@@ -49,6 +49,7 @@ import type { TopicHierarchyNode } from "@/types/dataset-types";
 import { computeSourceRecordStats } from "@/lib/distri-finetune-tools/steps/shared/source-record-counts";
 import {
   assembleSkillPackageFiles,
+  getKnowledgeSectionEntries,
 } from "@/lib/distri-finetune-tools/steps/generate-skill-package";
 
 // ============================================================================
@@ -195,7 +196,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
   // Expanded/selected state
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(
-    () => new Set(["documents", "data", "evaluations", "finetune", "skill", "skill/resources", "insights"])
+    () => new Set(["documents", "data", "evaluations", "finetune", "skill", "skill/resources", "skill/knowledge", "skill/knowledge/sections", "insights"])
   );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
@@ -229,6 +230,9 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       }
       if (files.knowledgeDoc) {
         root.file("knowledge/domain-knowledge.md", files.knowledgeDoc);
+      }
+      for (const [path, content] of files.sectionFiles) {
+        root.file(`knowledge/${path}`, content);
       }
       const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob);
@@ -272,6 +276,12 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
     }
     return counts;
   }, [records]);
+
+  // Knowledge section entries for skill/knowledge tree (from extracted content)
+  const knowledgeSectionEntries = useMemo(
+    () => getKnowledgeSectionEntries(sources),
+    [sources],
+  );
 
   // Map skill .jsonl leaf node IDs → corresponding data/ paths
   // so clicking a .jsonl in the Explorer opens the records view instead
@@ -693,20 +703,38 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         // knowledge/ — only if knowledge sources exist
         const hasReadySources = sources.some((s) => s.status === "ready");
         if (hasReadySources) {
+          const knowledgeChildren: FileTreeNode[] = [
+            {
+              id: "skill/knowledge/domain-knowledge.md",
+              name: "domain-knowledge.md",
+              type: "file",
+              icon: <FileText className={`${ICON_CLS} text-purple-400`} />,
+            },
+          ];
+          if (knowledgeSectionEntries.length > 0) {
+            knowledgeChildren.push({
+              id: "skill/knowledge/sections",
+              name: "sections",
+              type: "folder",
+              icon: folderIcon(expandedNodes, "skill/knowledge/sections"),
+              isExpandable: true,
+              badge: { label: String(knowledgeSectionEntries.length), variant: "count" },
+              children: knowledgeSectionEntries.map((e) => ({
+                id: `skill/knowledge/${e.path}`,
+                name: e.path.split("/").pop() ?? e.path,
+                type: "file" as const,
+                icon: <FileText className={`${ICON_CLS} text-purple-400`} />,
+                title: e.title,
+              })),
+            });
+          }
           skillChildren.push({
             id: "skill/knowledge",
             name: "knowledge",
             type: "folder",
             icon: folderIcon(expandedNodes, "skill/knowledge"),
             isExpandable: true,
-            children: [
-              {
-                id: "skill/knowledge/domain-knowledge.md",
-                name: "domain-knowledge.md",
-                type: "file",
-                icon: <FileText className={`${ICON_CLS} text-purple-400`} />,
-              },
-            ],
+            children: knowledgeChildren,
           });
         }
       }
@@ -786,6 +814,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
     dataset, records, sources, dryRunJobs, finetuneJobs,
     proposedPlan, planStatus, hasPlanProposed, todos,
     topicCounts, expandedNodes, isGeneratingTraces, handleDownloadSkillZip,
+    knowledgeSectionEntries,
   ]);
 
   // ============================================================================
