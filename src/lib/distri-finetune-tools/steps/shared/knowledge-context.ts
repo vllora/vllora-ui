@@ -28,6 +28,8 @@ export interface KnowledgeSourceContext {
   validRefs: Set<string>;
   /** Map heading (lowercase) → refs for heading-based topic→chunk fallback */
   headingToRefs: Map<string, string[]>;
+  /** Map ref → summary text for summary-based topic→chunk fallback */
+  summaryMap: Map<string, string>;
 }
 
 export interface ExtractedSection {
@@ -37,21 +39,21 @@ export interface ExtractedSection {
 }
 
 /**
- * Build rich knowledge context from all knowledge sources for a dataset.
- * This context emphasizes document-derived topics and sections.
+ * Build rich knowledge context from pre-fetched knowledge sources.
+ * Core implementation — avoids IndexedDB fetch so callers can reuse a single fetch.
  */
-export async function buildKnowledgeContext(
-  datasetId: string
-): Promise<KnowledgeSourceContext> {
-  const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
-  const readySources = sources.filter((s) => s.status === 'ready');
-  const processingSources = sources.filter((s) => s.status === 'processing');
+export function buildKnowledgeContextFromSources(
+  allSources: readonly KnowledgeSource[],
+): KnowledgeSourceContext {
+  const readySources = allSources.filter((s) => s.status === 'ready');
+  const processingSources = allSources.filter((s) => s.status === 'processing');
 
   const sourcesSummary: Array<{ name: string; section_headings: string[] }> = [];
   const allSectionHeadings: string[] = [];
   const contextParts: string[] = [];
   const validRefs = new Set<string>();
   const headingToRefs = new Map<string, string[]>();
+  const summaryMap = new Map<string, string>();
 
   for (const source of readySources) {
     const extracted = source.extractedContent;
@@ -108,6 +110,7 @@ export async function buildKnowledgeContext(
           const headingKey = chunk.heading.toLowerCase().trim();
           if (!headingToRefs.has(headingKey)) headingToRefs.set(headingKey, []);
           headingToRefs.get(headingKey)!.push(ref);
+          if (chunk.summary) summaryMap.set(ref, chunk.summary.toLowerCase());
           const pageRange = chunk.pageStart === chunk.pageEnd
             ? `p.${chunk.pageStart}`
             : `pp.${chunk.pageStart}–${chunk.pageEnd}`;
@@ -173,7 +176,19 @@ export async function buildKnowledgeContext(
     processingCount: processingSources.length,
     validRefs,
     headingToRefs,
+    summaryMap,
   };
+}
+
+/**
+ * Build rich knowledge context from all knowledge sources for a dataset.
+ * Convenience wrapper that fetches sources from IndexedDB then delegates.
+ */
+export async function buildKnowledgeContext(
+  datasetId: string
+): Promise<KnowledgeSourceContext> {
+  const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
+  return buildKnowledgeContextFromSources(sources);
 }
 
 /**
@@ -237,20 +252,14 @@ function inferMimeType(source: KnowledgeSource): string {
 }
 
 /**
- * Build native file content blocks from all knowledge sources for a dataset.
- *
- * For every source that has raw base64 content (stored in `source.content`),
- * a file content block is produced so the LLM can see the actual document.
- *
- * Also returns the text excerpt context (from `buildKnowledgeContext`) so
- * callers can fall back to excerpts for subsequent batches.
+ * Build native file content blocks from pre-fetched knowledge sources.
+ * Core implementation — avoids IndexedDB fetch so callers can reuse a single fetch.
  */
-export async function buildKnowledgeContentBlocks(
-  datasetId: string,
-): Promise<KnowledgeContentBlocks> {
-  const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
-  const readySources = sources.filter((s) => s.status === 'ready');
-  const processingSources = sources.filter((s) => s.status === 'processing');
+export function buildContentBlocksFromSources(
+  allSources: readonly KnowledgeSource[],
+): KnowledgeContentBlocks {
+  const readySources = allSources.filter((s) => s.status === 'ready');
+  const processingSources = allSources.filter((s) => s.status === 'processing');
 
   const fileBlocks: FileContentBlock[] = [];
   const sourcesSummary: Array<{ name: string; section_headings: string[] }> = [];
@@ -262,9 +271,6 @@ export async function buildKnowledgeContentBlocks(
     // Skip raw file blocks for locally-extracted sources — text is already extracted
     const extractionMethod = (source.extractedContent?.metadata as Record<string, unknown> | undefined)?.extractionMethod as string | undefined;
     if (extractionMethod === 'local-semantic') {
-      console.log(
-        `[knowledge-context] Skipping file block for "${source.name}": locally extracted, using text context instead`,
-      );
       continue;
     }
 
@@ -278,9 +284,6 @@ export async function buildKnowledgeContentBlocks(
           file_data: `data:${mimeType};base64,${source.content}`,
         },
       });
-      console.log(
-        `[knowledge-context] File block for "${source.name}" (${mimeType}, ${(source.content.length / 1024).toFixed(0)} KB base64)`,
-      );
     } else if (source.content && source.content.length > MAX_FILE_BASE64_SIZE) {
       console.warn(
         `[knowledge-context] Skipping file block for "${source.name}": base64 size ${(source.content.length / (1024 * 1024)).toFixed(1)} MB exceeds 20 MB limit`,
@@ -288,8 +291,8 @@ export async function buildKnowledgeContentBlocks(
     }
   }
 
-  // Also build the text excerpt context for fallback / subsequent batches
-  const textCtx = await buildKnowledgeContext(datasetId);
+  // Build text context from the same sources (no extra fetch)
+  const textCtx = buildKnowledgeContextFromSources(allSources);
 
   return {
     fileBlocks,
@@ -299,6 +302,17 @@ export async function buildKnowledgeContentBlocks(
     readyCount: readySources.length,
     processingCount: processingSources.length,
   };
+}
+
+/**
+ * Build native file content blocks from all knowledge sources for a dataset.
+ * Convenience wrapper that fetches sources from IndexedDB then delegates.
+ */
+export async function buildKnowledgeContentBlocks(
+  datasetId: string,
+): Promise<KnowledgeContentBlocks> {
+  const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
+  return buildContentBlocksFromSources(sources);
 }
 
 export function wrapKnowledgeContextForPrompt(

@@ -18,8 +18,8 @@ import {
   type ContentBlock,
   type FileContentBlock,
 } from "./shared/lucy-client";
-import { buildKnowledgeContentBlocks } from "./shared/knowledge-context";
-import { resolveChunkRefs, buildChunkContextSection } from "./shared/chunk-lookup";
+import { buildContentBlocksFromSources } from "./shared/knowledge-context";
+import { resolveChunkRefs, buildChunkContextSection, normalizeChunkRef, buildReadySourceMap } from "./shared/chunk-lookup";
 import { resolveTopicSystemPrompt, buildGenericSystemPrompt } from "./shared/topic-system-prompt";
 import { extractSeedTools, extractSeedMessages, extractSeedSystemPrompt } from "@/lib/distri-dataset-tools/analysis/generate-traces/utils";
 
@@ -128,6 +128,8 @@ interface GeneratedExample {
   user_message: string;
   assistant_response: string;
   expected_score: number;
+  /** Chunk ref IDs the LLM drew on for this example (e.g. "sourceId:chunkId") */
+  used_sources?: string[];
 }
 
 interface KnowledgeContext {
@@ -152,69 +154,17 @@ interface GenerateInitialDataResult {
 // Knowledge Source Fetching
 // =============================================================================
 
-async function getKnowledgeContext(datasetId: string): Promise<KnowledgeContext> {
-  try {
-    const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
-    const readySources = sources.filter(
-      (s) => s.status === "ready" && s.extractedContent
-    );
+/**
+ * Build knowledge context from pre-fetched sources (no IndexedDB call).
+ */
+function buildKnowledgeContextFromArray(
+  allSources: readonly import("@/types/dataset-types").KnowledgeSource[],
+): KnowledgeContext {
+  const readySources = allSources.filter(
+    (s) => s.status === "ready" && s.extractedContent
+  );
 
-    if (readySources.length === 0) {
-      return {
-        hasKnowledge: false,
-        sourceCount: 0,
-        sourceNames: [],
-        combinedText: "",
-        topics: [],
-        sections: [],
-      };
-    }
-
-    const sourceNames: string[] = [];
-    const allTopics: string[] = [];
-    const allSections: Array<{ title: string; content: string }> = [];
-    const textParts: string[] = [];
-
-    for (const source of readySources) {
-      sourceNames.push(source.name);
-      const extracted = source.extractedContent!;
-
-      // Collect section headings
-      if (extracted.sectionHeadings) {
-        allTopics.push(...extracted.sectionHeadings);
-      }
-
-      // Collect sections (limit content length per section)
-      if (extracted.sections) {
-        for (const section of extracted.sections) {
-          allSections.push({
-            title: section.title,
-            content: section.content.substring(0, 1000),
-          });
-        }
-      }
-
-      // Collect text (limit per source to avoid token overflow)
-      if (extracted.text) {
-        textParts.push(
-          `--- From: ${source.name} ---\n${extracted.text.substring(0, 3000)}`
-        );
-      }
-    }
-
-    // Deduplicate topics
-    const uniqueTopics = [...new Set(allTopics)];
-
-    return {
-      hasKnowledge: true,
-      sourceCount: readySources.length,
-      sourceNames,
-      combinedText: textParts.join("\n\n"),
-      topics: uniqueTopics,
-      sections: allSections.slice(0, 20), // Limit sections
-    };
-  } catch (error) {
-    console.warn("[generateInitialData] Failed to fetch knowledge sources:", error);
+  if (readySources.length === 0) {
     return {
       hasKnowledge: false,
       sourceCount: 0,
@@ -224,43 +174,81 @@ async function getKnowledgeContext(datasetId: string): Promise<KnowledgeContext>
       sections: [],
     };
   }
-}
 
-/**
- * Get all chunk refs for a dataset's knowledge sources.
- * Used as fallback when topic-level sourceChunkRefs are empty but documents exist.
- * Returns refs in "sourceId:chunkId" format.
- */
-async function getAllSourceChunkRefs(datasetId: string): Promise<string[]> {
-  try {
-    const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
-    const readySources = sources.filter(s => s.status === "ready" && s.extractedContent);
-    const refs: string[] = [];
+  const sourceNames: string[] = [];
+  const allTopics: string[] = [];
+  const allSections: Array<{ title: string; content: string }> = [];
+  const textParts: string[] = [];
 
-    for (const source of readySources) {
-      const metadata = source.extractedContent?.metadata as Record<string, unknown> | undefined;
-      const extractionMethod = metadata?.extractionMethod as string | undefined;
+  for (const source of readySources) {
+    sourceNames.push(source.name);
+    const extracted = source.extractedContent!;
 
-      if (extractionMethod === "local-semantic") {
-        // Semantic chunks have explicit IDs
-        const chunks = (metadata?.chunks as Array<{ id: string }>) || [];
-        for (const chunk of chunks) {
-          refs.push(`${source.id}:${chunk.id}`);
-        }
-      } else {
-        // Legacy sections: use section-N format
-        const sections = source.extractedContent?.sections || [];
-        for (let i = 0; i < sections.length; i++) {
-          refs.push(`${source.id}:section-${i}`);
-        }
+    // Collect section headings
+    if (extracted.sectionHeadings) {
+      allTopics.push(...extracted.sectionHeadings);
+    }
+
+    // Collect sections (limit content length per section)
+    if (extracted.sections) {
+      for (const section of extracted.sections) {
+        allSections.push({
+          title: section.title,
+          content: section.content.substring(0, 1000),
+        });
       }
     }
 
-    return refs;
-  } catch (err) {
-    console.warn("[generateInitialData] Failed to get all source chunk refs:", err);
-    return [];
+    // Collect text (limit per source to avoid token overflow)
+    if (extracted.text) {
+      textParts.push(
+        `--- From: ${source.name} ---\n${extracted.text.substring(0, 3000)}`
+      );
+    }
   }
+
+  // Deduplicate topics
+  const uniqueTopics = [...new Set(allTopics)];
+
+  return {
+    hasKnowledge: true,
+    sourceCount: readySources.length,
+    sourceNames,
+    combinedText: textParts.join("\n\n"),
+    topics: uniqueTopics,
+    sections: allSections.slice(0, 20), // Limit sections
+  };
+}
+
+/**
+ * Build all chunk refs from pre-fetched knowledge sources (no IndexedDB call).
+ * Used as fallback when topic-level sourceChunkRefs are empty but documents exist.
+ * Returns refs in "sourceId:chunkId" format.
+ */
+function buildAllChunkRefsFromSources(
+  allSources: readonly import("@/types/dataset-types").KnowledgeSource[],
+): string[] {
+  const readySources = allSources.filter(s => s.status === "ready" && s.extractedContent);
+  const refs: string[] = [];
+
+  for (const source of readySources) {
+    const metadata = source.extractedContent?.metadata as Record<string, unknown> | undefined;
+    const extractionMethod = metadata?.extractionMethod as string | undefined;
+
+    if (extractionMethod === "local-semantic") {
+      const chunks = (metadata?.chunks as Array<{ id: string }>) || [];
+      for (const chunk of chunks) {
+        refs.push(`${source.id}:${chunk.id}`);
+      }
+    } else {
+      const sections = source.extractedContent?.sections || [];
+      for (let i = 0; i < sections.length; i++) {
+        refs.push(`${source.id}:section-${i}`);
+      }
+    }
+  }
+
+  return refs;
 }
 
 // =============================================================================
@@ -280,6 +268,7 @@ Rules:
 - Include edge cases and challenging scenarios
 - When knowledge sources are provided, GROUND your examples in that material
 - Reference specific concepts, terminology, and scenarios from the knowledge sources
+- When knowledge chunks have [ref:...] IDs, include the ref IDs you used in the used_sources array for each example
 - Output MUST be valid JSON matching the schema`;
 
 const DIVERSITY_GUIDELINES = `Make the user messages diverse across:
@@ -337,8 +326,12 @@ const INITIAL_DATA_RESPONSE_SCHEMA = {
               user_message: { type: "string" },
               assistant_response: { type: "string" },
               expected_score: { type: "number" },
+              used_sources: {
+                type: "array",
+                items: { type: "string" },
+              },
             },
-            required: ["user_message", "assistant_response", "expected_score"],
+            required: ["user_message", "assistant_response", "expected_score", "used_sources"],
             additionalProperties: false,
           },
         },
@@ -525,34 +518,30 @@ export const generateInitialDataHandler: ToolHandler = async (
       return { success: false, error: "dataset_id is required" };
     }
 
-    // Get dataset
-    const dataset = await datasetsDB.getDatasetById(dataset_id);
+    // ── Parallel setup: fetch all data in one round-trip ──
+    const setupStart = Date.now();
+    const [dataset, workflow, existingRecords, allKnowledgeSources] = await Promise.all([
+      datasetsDB.getDatasetById(dataset_id),
+      workflowDB.getWorkflowByDataset(dataset_id),
+      datasetsDB.getRecordsByDatasetId(dataset_id),
+      knowledgeDB.getKnowledgeSourcesByDataset(dataset_id),
+    ]);
+
     if (!dataset) {
       return { success: false, error: `Dataset ${dataset_id} not found` };
     }
-    // get workflow
-    const workflow = await workflowDB.getWorkflowByDataset(dataset_id);
-    console.log("======== [generateInitialData] Workflow:", workflow);
+
     if (workflow) {
-      // check if workflow is in topics_config or grader_config
       if (!workflow.currentStep || workflow.currentStep === "not_started") {
         await workflowDB.advanceToStep(workflow.id, "topics_config");
       }
     }
 
     // Extract tools from the first non-generated seed record (if any)
-    const existingRecords = await datasetsDB.getRecordsByDatasetId(dataset_id);
     const seedRecord = existingRecords.find(r => !r.is_generated);
     const seedTools = extractSeedTools(seedRecord);
-    if (seedTools.length > 0) {
-      console.log(`[generateInitialData] Found ${seedTools.length} seed tool(s) from existing records`);
-    }
-
     const seedMessages = extractSeedMessages(seedRecord);
     const seedSystemPrompt = extractSeedSystemPrompt(seedMessages) ?? undefined;
-    if (seedSystemPrompt) {
-      console.log(`[generateInitialData] Found seed system prompt (${seedSystemPrompt.length} chars)`);
-    }
 
     // Get training objective and optional LLM-normalized role
     const objective = dataset.datasetObjective;
@@ -572,32 +561,25 @@ export const generateInitialDataHandler: ToolHandler = async (
       );
     }
 
-    // Fetch knowledge sources for grounded generation
-    const knowledgeContext = await getKnowledgeContext(dataset_id);
-    // Pre-compute fallback chunk refs for when topic-level refs are empty
+    // ── Derive knowledge context from the single fetch (no more redundant IDB calls) ──
+    const knowledgeContext = buildKnowledgeContextFromArray(allKnowledgeSources);
+    const sourceMap = buildReadySourceMap(allKnowledgeSources);
     const fallbackChunkRefs = knowledgeContext.hasKnowledge
-      ? await getAllSourceChunkRefs(dataset_id)
+      ? buildAllChunkRefsFromSources(allKnowledgeSources)
       : [];
+    const knowledgeBlocks = buildContentBlocksFromSources(allKnowledgeSources);
+    const firstBatchFileBlocks = knowledgeBlocks.hasFileBlocks ? knowledgeBlocks.fileBlocks : undefined;
+
+    console.log(`[generateInitialData] Setup completed in ${Date.now() - setupStart}ms`);
     if (knowledgeContext.hasKnowledge) {
       console.log(
         "[generateInitialData] Using knowledge sources:",
         knowledgeContext.sourceNames.join(", "),
       );
       console.log(
-        "[generateInitialData] Knowledge topics:",
-        knowledgeContext.topics.slice(0, 5).join(", "),
-      );
-      console.log(
         "[generateInitialData] Fallback chunk refs:",
         fallbackChunkRefs.length,
       );
-    }
-
-    // Fetch native file content blocks (sent only with first batch)
-    const knowledgeBlocks = await buildKnowledgeContentBlocks(dataset_id);
-    const firstBatchFileBlocks = knowledgeBlocks.hasFileBlocks ? knowledgeBlocks.fileBlocks : undefined;
-    if (firstBatchFileBlocks) {
-      console.log(`[generateInitialData] ${firstBatchFileBlocks.length} file content block(s) available — will send with first batch only`);
     }
 
     // Check if we should use topic-based generation
@@ -685,7 +667,7 @@ export const generateInitialDataHandler: ToolHandler = async (
       for (const topic of leafTopics) {
         if (!topic.sourceChunkRefs?.length) continue;
         try {
-          const resolvedChunks = await resolveChunkRefs(dataset_id, topic.sourceChunkRefs);
+          const resolvedChunks = await resolveChunkRefs(dataset_id, topic.sourceChunkRefs, sourceMap);
           if (resolvedChunks.length > 0) {
             topicChunkContexts.set(topic.name, buildChunkContextSection(resolvedChunks));
           }
@@ -736,7 +718,8 @@ export const generateInitialDataHandler: ToolHandler = async (
         const results = await Promise.all(batchPromises);
         console.log(`[generateInitialData] Round ${roundIndex}/${totalRounds} completed in ${((Date.now() - roundStart) / 1000).toFixed(1)}s`);
 
-        // Process results and save to DB
+        // Process results: build records, count progress, then save in parallel
+        const savePromises: Promise<void>[] = [];
         for (const { job, examples } of results) {
           if (examples.length === 0) {
             completedBatches++;
@@ -751,33 +734,44 @@ export const generateInitialDataHandler: ToolHandler = async (
 
           // Convert to records with topic already assigned
           const topicPrompt = topicSystemPrompts.get(job.topic.name)!;
-          const topicRecords = examples.map((example) => ({
-            data: exampleToDataInfo(example, seedTools, topicPrompt),
-            is_generated: true,
-            topic: job.topic.name,
-            metadata: {
-              generation_source: "initial_data",
-              generated_at_ms: Date.now(),
-              topic_path: job.topic.path.join(" > "),
-              skillResponse: example.assistant_response,
-              baseScore: example.expected_score,
-              sourceChunkRefs: job.topic.sourceChunkRefs?.length
-                ? job.topic.sourceChunkRefs
-                : fallbackChunkRefs,
-            },
-          }));
+          const topicRecords = examples.map((example) => {
+            // 3-tier ref priority: per-record LLM refs > per-topic refs > fallback all
+            const perRecordRefs = (example.used_sources ?? [])
+              .map(normalizeChunkRef)
+              .filter((r): r is string => r !== null);
+            const resolvedRefs = perRecordRefs.length > 0
+              ? perRecordRefs
+              : (job.topic.sourceChunkRefs?.length
+                  ? job.topic.sourceChunkRefs
+                  : fallbackChunkRefs);
+            return {
+              data: exampleToDataInfo(example, seedTools, topicPrompt),
+              is_generated: true,
+              topic: job.topic.name,
+              metadata: {
+                generation_source: "initial_data",
+                generated_at_ms: Date.now(),
+                topic_path: job.topic.path.join(" > "),
+                skillResponse: example.assistant_response,
+                baseScore: example.expected_score,
+                sourceChunkRefs: resolvedRefs,
+              },
+            };
+          });
 
-          const addedRecords = await datasetsDB.addRecordsToDataset(
-            dataset_id,
-            topicRecords,
+          const batchJob = job;
+          const batchTopicProgress = currentTopicProgress;
+          savePromises.push(
+            datasetsDB.addRecordsToDataset(dataset_id, topicRecords).then(addedRecords => {
+              console.log(`[generateInitialData] Topic "${batchJob.topic.name}" batch ${batchJob.batchIndex + 1}: added ${addedRecords.length} records (topic: ${batchTopicProgress}, total: ${totalGenerated})`);
+            }),
           );
-
-          console.log(`[generateInitialData] Topic "${job.topic.name}" batch ${job.batchIndex + 1}: added ${addedRecords.length} records (topic: ${currentTopicProgress}, total: ${totalGenerated})`);
           completedBatches++;
-
-          // Refresh UI so new records appear in the Data tab
-          emitter.emit("vllora_dataset_refresh" as any);
         }
+
+        // Save all batch results in parallel, then refresh UI once
+        await Promise.all(savePromises);
+        emitter.emit("vllora_dataset_refresh" as any);
 
         // Emit progress event after each parallel chunk
         emitter.emit("vllora_data_generation_progress", {
@@ -850,35 +844,44 @@ export const generateInitialDataHandler: ToolHandler = async (
         // Wait for all parallel batches to complete
         const results = await Promise.all(batchPromises);
 
-        // Process results and save to DB
+        // Process results: build records, then save in parallel
+        const standardSavePromises: Promise<void>[] = [];
         for (const { batchIndex, examples } of results) {
           if (examples.length === 0) continue;
 
           totalGenerated += examples.length;
 
-          const batchRecords = examples.map((example) => ({
-            data: exampleToDataInfo(example, seedTools, genericSystemPrompt),
-            is_generated: true,
-            metadata: {
-              generation_source: "initial_data",
-              generated_at_ms: Date.now(),
-              batch_index: batchIndex,
-              skillResponse: example.assistant_response,
-              baseScore: example.expected_score,
-              sourceChunkRefs: fallbackChunkRefs,
-            },
-          }));
+          const batchRecords = examples.map((example) => {
+            const perRecordRefs = (example.used_sources ?? [])
+              .map(normalizeChunkRef)
+              .filter((r): r is string => r !== null);
+            return {
+              data: exampleToDataInfo(example, seedTools, genericSystemPrompt),
+              is_generated: true,
+              metadata: {
+                generation_source: "initial_data",
+                generated_at_ms: Date.now(),
+                batch_index: batchIndex,
+                skillResponse: example.assistant_response,
+                baseScore: example.expected_score,
+                sourceChunkRefs: perRecordRefs.length > 0
+                  ? perRecordRefs
+                  : fallbackChunkRefs,
+              },
+            };
+          });
 
-          const addedBatchRecords = await datasetsDB.addRecordsToDataset(
-            dataset_id,
-            batchRecords,
+          const idx = batchIndex;
+          standardSavePromises.push(
+            datasetsDB.addRecordsToDataset(dataset_id, batchRecords).then(addedBatchRecords => {
+              console.log(`[generateInitialData] Batch ${idx + 1} complete: added ${addedBatchRecords.length} records (total: ${totalGenerated})`);
+            }),
           );
-
-          console.log(`[generateInitialData] Batch ${batchIndex + 1} complete: added ${addedBatchRecords.length} records (total: ${totalGenerated})`);
-
-          // Refresh UI so new records appear in the Data tab
-          emitter.emit("vllora_dataset_refresh" as any);
         }
+
+        // Save all batch results in parallel, then refresh UI once
+        await Promise.all(standardSavePromises);
+        emitter.emit("vllora_dataset_refresh" as any);
 
         completedBatches = chunkEnd;
 

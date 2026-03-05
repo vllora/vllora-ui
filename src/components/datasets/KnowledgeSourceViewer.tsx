@@ -4,12 +4,20 @@
  * Full-content viewer for a single knowledge source. Shows all extracted
  * chunks with headings, page ranges, and searchable full text.
  * Opens when clicking a document in the Explorer documents/ folder.
+ *
+ * Features:
+ * - Search with debounce + yellow highlighting
+ * - Expand/collapse chunk sentences
+ * - Record count badge per chunk (how many records reference it)
+ * - Highlight + scroll-to when navigating from a record's source badge
  */
 
-import { useState, useMemo, useCallback, type ReactNode } from "react";
-import { FileText, Search, ChevronRight, ChevronDown, X, Loader2 } from "lucide-react";
+import { useState, useMemo, useCallback, useEffect, useRef, type ReactNode } from "react";
+import { FileText, Search, ChevronRight, ChevronDown, X, Loader2, Database } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useDebounceFn } from "ahooks";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
+import { parseChunkRef } from "@/lib/distri-finetune-tools/steps/shared/chunk-lookup";
 
 // ─── Chunk types (matches metadata.chunks structure from semantic extractor) ───
 
@@ -47,32 +55,100 @@ function highlightTerms(text: string, terms: readonly string[]): ReactNode {
   );
 }
 
+// ─── Record-context term extraction ───
+
+/** Common English stop words to filter out when extracting significant terms */
+const STOP_WORDS = new Set([
+  "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of",
+  "with", "by", "from", "is", "are", "was", "were", "be", "been", "being",
+  "have", "has", "had", "do", "does", "did", "will", "would", "could",
+  "should", "may", "might", "shall", "can", "this", "that", "these", "those",
+  "it", "its", "i", "you", "he", "she", "we", "they", "me", "him", "her",
+  "us", "them", "my", "your", "his", "our", "their", "what", "which", "who",
+  "when", "where", "how", "not", "no", "if", "then", "than", "so", "as",
+  "up", "out", "about", "into", "over", "after", "before", "between",
+  "each", "all", "both", "few", "more", "most", "other", "some", "such",
+  "only", "same", "also", "just", "because", "too", "very", "here", "there",
+  "again", "once", "why", "any", "every", "well", "still", "even",
+  "user", "assistant", "please", "help", "question", "answer", "response",
+]);
+
+/**
+ * Extract significant terms from record text for sentence matching.
+ * Returns unique lowercase terms (3+ chars, not stop words), capped at 20.
+ */
+function extractSignificantTerms(text: string): readonly string[] {
+  const words = text.toLowerCase().match(/[a-z]{3,}/g);
+  if (!words) return [];
+  // Count frequency to prioritize meaningful terms
+  const freq = new Map<string, number>();
+  for (const w of words) {
+    if (STOP_WORDS.has(w)) continue;
+    freq.set(w, (freq.get(w) ?? 0) + 1);
+  }
+  // Sort by frequency descending, take top 20
+  return [...freq.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20)
+    .map(([term]) => term);
+}
+
+/**
+ * Check if a sentence matches enough context terms to be considered relevant.
+ * Returns true if ≥2 terms match (or ≥1 if only 1-2 terms total).
+ */
+function sentenceMatchesContext(
+  sentence: string,
+  terms: readonly string[],
+): boolean {
+  if (terms.length === 0) return false;
+  const lower = sentence.toLowerCase();
+  const matchCount = terms.filter(t => lower.includes(t)).length;
+  const threshold = terms.length <= 2 ? 1 : 2;
+  return matchCount >= threshold;
+}
+
 // ─── Page range formatter ───
 
 function formatPages(pageStart: number, pageEnd: number): string {
   if (pageStart === pageEnd) return `p.${pageStart}`;
-  return `pp.${pageStart}–${pageEnd}`;
+  return `pp.${pageStart}\u2013${pageEnd}`;
 }
 
-// ─── Chunk card ───
+// ─── Chunk card (clean, borderless) ───
 
 function ChunkCard({
   chunk,
   searchTerms,
+  contextTerms,
   isExpanded,
+  isHighlighted,
+  recordCount,
   onToggle,
+  refSetter,
 }: {
   readonly chunk: SemanticChunk;
   readonly searchTerms: readonly string[];
+  /** Terms extracted from the navigated record — used for sentence-level highlighting */
+  readonly contextTerms: readonly string[];
   readonly isExpanded: boolean;
+  readonly isHighlighted: boolean;
+  readonly recordCount: number;
   readonly onToggle: () => void;
+  readonly refSetter?: (el: HTMLDivElement | null) => void;
 }) {
   return (
-    <div className="border border-border rounded-lg overflow-hidden">
+    <div
+      ref={refSetter}
+      className={cn(
+        "rounded-md transition-shadow",
+        isHighlighted && "animate-record-highlight",
+      )}
+    >
       {/* Header — always visible, click to expand */}
       <button
         type="button"
-        className="w-full text-left px-3 py-2.5 flex items-start gap-2 hover:bg-muted/30 transition-colors"
+        className="w-full text-left px-3 py-2 flex items-start gap-2 hover:bg-muted/20 rounded-md transition-colors"
         onClick={onToggle}
       >
         {isExpanded
@@ -86,9 +162,21 @@ function ChunkCard({
             <span className="text-[10px] text-muted-foreground/60 tabular-nums shrink-0">
               {formatPages(chunk.pageStart, chunk.pageEnd)}
             </span>
-            <span className="text-[10px] text-muted-foreground/40 shrink-0">
+            <span
+              className="text-[10px] text-muted-foreground/40 shrink-0"
+              title={`${chunk.sentences.length} sentences in this section`}
+            >
               {chunk.sentences.length} sentences
             </span>
+            {recordCount > 0 && (
+              <span
+                className="inline-flex items-center gap-0.5 text-[10px] text-emerald-400/70 shrink-0"
+                title={`${recordCount} training record${recordCount === 1 ? '' : 's'} linked to this section`}
+              >
+                <Database className="w-2.5 h-2.5" />
+                {recordCount} {recordCount === 1 ? 'record' : 'records'}
+              </span>
+            )}
           </div>
           {!isExpanded && (
             <p className="text-[11px] text-muted-foreground/60 line-clamp-1 mt-0.5 leading-relaxed">
@@ -98,15 +186,28 @@ function ChunkCard({
         </div>
       </button>
 
-      {/* Expanded content */}
+      {/* Expanded content — sentences with optional context highlighting */}
       {isExpanded && (
-        <div className="px-3 pb-3 pt-0 ml-5.5 border-t border-border/50">
-          <div className="space-y-1 mt-2">
-            {chunk.sentences.map((sentence, i) => (
-              <p key={i} className="text-[11px] text-foreground/80 leading-relaxed">
-                {highlightTerms(sentence, searchTerms)}
-              </p>
-            ))}
+        <div className="px-3 pb-3 pt-0 ml-5.5">
+          <div className="space-y-1 mt-1">
+            {chunk.sentences.map((sentence, i) => {
+              const isContextMatch = contextTerms.length > 0
+                && sentenceMatchesContext(sentence, contextTerms);
+              return (
+                <p
+                  key={i}
+                  {...(isContextMatch ? { "data-context-match": "" } : {})}
+                  className={cn(
+                    "text-[11px] leading-relaxed transition-colors",
+                    isContextMatch
+                      ? "text-foreground bg-violet-500/15 rounded px-1.5 py-0.5 border-l-2 border-violet-400/50"
+                      : "text-foreground/80",
+                  )}
+                >
+                  {highlightTerms(sentence, searchTerms)}
+                </p>
+              );
+            })}
           </div>
         </div>
       )}
@@ -114,28 +215,38 @@ function ChunkCard({
   );
 }
 
-// ─── Legacy section card ───
+// ─── Legacy section card (clean, borderless) ───
 
 function LegacySectionCard({
   section,
   searchTerms,
   isExpanded,
+  isHighlighted,
   onToggle,
+  refSetter,
 }: {
   readonly section: LegacySection;
   readonly searchTerms: readonly string[];
   readonly isExpanded: boolean;
+  readonly isHighlighted: boolean;
   readonly onToggle: () => void;
+  readonly refSetter?: (el: HTMLDivElement | null) => void;
 }) {
   const preview = section.content.length > 200
     ? `${section.content.slice(0, 200)}...`
     : section.content;
 
   return (
-    <div className="border border-border rounded-lg overflow-hidden">
+    <div
+      ref={refSetter}
+      className={cn(
+        "rounded-md transition-shadow",
+        isHighlighted && "animate-record-highlight",
+      )}
+    >
       <button
         type="button"
-        className="w-full text-left px-3 py-2.5 flex items-start gap-2 hover:bg-muted/30 transition-colors"
+        className="w-full text-left px-3 py-2 flex items-start gap-2 hover:bg-muted/20 rounded-md transition-colors"
         onClick={onToggle}
       >
         {isExpanded
@@ -153,8 +264,8 @@ function LegacySectionCard({
         </div>
       </button>
       {isExpanded && (
-        <div className="px-3 pb-3 pt-0 ml-5.5 border-t border-border/50">
-          <p className="text-[11px] text-foreground/80 leading-relaxed whitespace-pre-wrap mt-2">
+        <div className="px-3 pb-3 pt-0 ml-5.5">
+          <p className="text-[11px] text-foreground/80 leading-relaxed whitespace-pre-wrap mt-1">
             {highlightTerms(section.content, searchTerms)}
           </p>
         </div>
@@ -167,13 +278,18 @@ function LegacySectionCard({
 
 interface KnowledgeSourceViewerProps {
   readonly sourceId: string;
+  /** Map of raw chunk ref ("sourceId:chunkId") → record count */
+  readonly chunkRecordCounts?: ReadonlyMap<string, number>;
 }
 
-export function KnowledgeSourceViewer({ sourceId }: KnowledgeSourceViewerProps) {
+export function KnowledgeSourceViewer({ sourceId, chunkRecordCounts }: KnowledgeSourceViewerProps) {
   const { sources } = KnowledgeSourcesConsumer();
   const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(new Set());
   const [searchInput, setSearchInput] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [highlightedChunkIds, setHighlightedChunkIds] = useState<ReadonlySet<string>>(new Set());
+  const [contextTerms, setContextTerms] = useState<readonly string[]>([]);
+  const chunkElRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const { run: updateDebouncedQuery } = useDebounceFn(
     (value: string) => setDebouncedQuery(value),
@@ -244,6 +360,95 @@ export function KnowledgeSourceViewer({ sourceId }: KnowledgeSourceViewerProps) 
     });
   }, []);
 
+  // Ref setter for scroll-into-view
+  const setChunkRef = useCallback((chunkId: string) => (el: HTMLDivElement | null) => {
+    if (el) {
+      chunkElRefs.current.set(chunkId, el);
+    } else {
+      chunkElRefs.current.delete(chunkId);
+    }
+  }, []);
+
+  // Record count lookup for a chunk
+  const getRecordCount = useCallback((chunkId: string): number => {
+    if (!chunkRecordCounts) return 0;
+    const ref = `${sourceId}:${chunkId}`;
+    return chunkRecordCounts.get(ref) ?? 0;
+  }, [chunkRecordCounts, sourceId]);
+
+  // ─── Listen for chunk highlight events (from records table navigation) ───
+
+  // Stable set of chunk IDs in this viewer (for fallback matching)
+  const localChunkIds = useMemo(
+    () => new Set(chunks.map(c => c.id)),
+    [chunks],
+  );
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{
+        sourceId: string;
+        chunkRefs: string[];
+        recordText?: string;
+      }>).detail;
+
+      // Parse refs to get chunk IDs — match by exact sourceId first
+      const chunkIds = new Set<string>();
+      for (const ref of detail.chunkRefs) {
+        const parsed = parseChunkRef(ref);
+        if (parsed && parsed.sourceId === sourceId) {
+          chunkIds.add(parsed.chunkId);
+        }
+      }
+
+      // Fallback: if source IDs don't match (stale refs from re-upload),
+      // match by chunk ID alone if they exist in this viewer's chunks
+      if (chunkIds.size === 0 && localChunkIds.size > 0) {
+        for (const ref of detail.chunkRefs) {
+          const parsed = parseChunkRef(ref);
+          if (parsed && localChunkIds.has(parsed.chunkId)) {
+            chunkIds.add(parsed.chunkId);
+          }
+        }
+      }
+
+      if (chunkIds.size === 0) return;
+
+      // Extract context terms for sentence-level highlighting
+      const terms = detail.recordText
+        ? extractSignificantTerms(detail.recordText)
+        : [];
+      setContextTerms(terms);
+
+      // Auto-expand + highlight
+      setExpandedIds(prev => new Set([...prev, ...chunkIds]));
+      setHighlightedChunkIds(chunkIds);
+
+      // Scroll to first highlighted chunk, then to first matching sentence
+      const firstId = [...chunkIds][0];
+      requestAnimationFrame(() => {
+        const el = chunkElRefs.current.get(firstId);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+        // After expansion renders, scroll to first violet-highlighted sentence
+        if (terms.length > 0) {
+          setTimeout(() => {
+            const sentenceEl = el?.querySelector("[data-context-match]");
+            if (sentenceEl) sentenceEl.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 300);
+        }
+      });
+
+      // Clear highlight after 6s (enough time to read)
+      setTimeout(() => {
+        setHighlightedChunkIds(new Set());
+        setContextTerms([]);
+      }, 6000);
+    };
+
+    window.addEventListener("vllora_highlight_chunks", handler);
+    return () => window.removeEventListener("vllora_highlight_chunks", handler);
+  }, [sourceId, localChunkIds]);
+
   // ─── Empty / error states ───
 
   if (!source) {
@@ -273,8 +478,8 @@ export function KnowledgeSourceViewer({ sourceId }: KnowledgeSourceViewerProps) 
 
   const totalItems = chunks.length || legacySections.length;
   const filteredCount = chunks.length > 0 ? filteredChunks.length : filteredSections.length;
-  const metadata = source.extractedContent?.metadata as Record<string, unknown> | undefined;
-  const totalPages = (metadata?.totalPages as number) || 0;
+  const extractedMetadata = source.extractedContent?.metadata as Record<string, unknown> | undefined;
+  const totalPages = (extractedMetadata?.totalPages as number) || 0;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -329,8 +534,8 @@ export function KnowledgeSourceViewer({ sourceId }: KnowledgeSourceViewerProps) 
         </div>
       )}
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+      {/* Content — clean list with subtle dividers */}
+      <div className="flex-1 overflow-y-auto px-2 py-1">
         {totalItems === 0 && (
           <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">
             No extracted content available.
@@ -338,26 +543,39 @@ export function KnowledgeSourceViewer({ sourceId }: KnowledgeSourceViewerProps) 
         )}
 
         {/* Semantic chunks */}
-        {filteredChunks.map((chunk) => (
-          <ChunkCard
-            key={chunk.id}
-            chunk={chunk}
-            searchTerms={searchTerms}
-            isExpanded={expandedIds.has(chunk.id)}
-            onToggle={() => toggleExpanded(chunk.id)}
-          />
+        {filteredChunks.map((chunk, i) => (
+          <div key={chunk.id}>
+            {i > 0 && <div className="mx-3 border-b border-border/20" />}
+            <ChunkCard
+              chunk={chunk}
+              searchTerms={searchTerms}
+              contextTerms={highlightedChunkIds.has(chunk.id) ? contextTerms : []}
+              isExpanded={expandedIds.has(chunk.id)}
+              isHighlighted={highlightedChunkIds.has(chunk.id)}
+              recordCount={getRecordCount(chunk.id)}
+              onToggle={() => toggleExpanded(chunk.id)}
+              refSetter={setChunkRef(chunk.id)}
+            />
+          </div>
         ))}
 
         {/* Legacy sections */}
-        {filteredSections.map((section, i) => (
-          <LegacySectionCard
-            key={`section-${i}`}
-            section={section}
-            searchTerms={searchTerms}
-            isExpanded={expandedIds.has(`section-${i}`)}
-            onToggle={() => toggleExpanded(`section-${i}`)}
-          />
-        ))}
+        {filteredSections.map((section, i) => {
+          const sectionId = `section-${i}`;
+          return (
+            <div key={sectionId}>
+              {i > 0 && <div className="mx-3 border-b border-border/20" />}
+              <LegacySectionCard
+                section={section}
+                searchTerms={searchTerms}
+                isExpanded={expandedIds.has(sectionId)}
+                isHighlighted={highlightedChunkIds.has(sectionId)}
+                onToggle={() => toggleExpanded(sectionId)}
+                refSetter={setChunkRef(sectionId)}
+              />
+            </div>
+          );
+        })}
 
         {/* No results */}
         {searchTerms.length > 0 && filteredCount === 0 && (

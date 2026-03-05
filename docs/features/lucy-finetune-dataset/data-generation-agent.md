@@ -68,11 +68,23 @@ Record metadata:
 ```json
 {
   "skillResponse": "The assistant's ideal response...",
-  "baseScore": 0.85
+  "baseScore": 0.85,
+  "sourceChunkRefs": ["sourceId:chunk-3", "sourceId:chunk-7"]
 }
 ```
 
 These metadata fields are consumed by the skill package generation tool (`generate_skill_package`) to assemble JSONL training data with all 6 fields: `system`, `user`, `assistant`, `base_score`, `eval_scores`, `sources`.
+
+### Per-Record Source Attribution (3-Tier Priority)
+
+Each generated record tracks which knowledge source chunks informed it via `metadata.sourceChunkRefs`. The LLM schema includes a `used_sources` field where the generation LLM reports which `[ref:sourceId:chunkId]` tags from the chunk context it actually used per example.
+
+Attribution priority (most precise first):
+1. **Per-record refs** — from `used_sources` in the LLM response (most precise)
+2. **Per-topic refs** — from `topic.sourceChunkRefs` assigned during topic generation
+3. **Fallback refs** — all chunk refs from all knowledge sources (coarsest)
+
+The chunk context passed to the generation LLM includes inline ref tags (e.g., `[ref:sourceId:chunkId | sourceName / heading]`) so the LLM can report which chunks it referenced. See `buildChunkContextSection()` in `chunk-lookup.ts`.
 
 ## Shared System Prompt Per Topic
 

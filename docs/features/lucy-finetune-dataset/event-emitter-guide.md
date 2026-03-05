@@ -1,6 +1,6 @@
 # Lucy Finetune Dataset — Event Emitter Guide
 
-> Last updated: 2026-03-02
+> Last updated: 2026-03-05
 
 ## Why Events?
 
@@ -262,7 +262,7 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 
 | | Details |
 |---|---|
-| **Data** | `{ datasetId: string; tab: 'records' \| 'evaluator' \| 'jobs' \| 'readme' \| 'docs' \| 'plan' }` |
+| **Data** | `{ datasetId: string; tab: 'records' \| 'evaluator' \| 'jobs' \| 'readme' \| 'docs' \| 'plan' \| \`documents/\${sourceId}\` }` |
 | **Direction** | Tool handler → React + React → React |
 
 **Emitters:**
@@ -438,6 +438,51 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 | File | What it does |
 |------|-------------|
 | `DatasetDetailContext.tsx` | Sets `sourceDocumentFilter` state and switches to records tab. The filter is passed to `filterAndSortRecords()` which uses `parseChunkRef()` to match records by their `metadata.sourceChunkRefs`. |
+
+---
+
+## Window CustomEvents (Navigation Highlighting)
+
+These events use `window.dispatchEvent(new CustomEvent(...))` instead of the emitter pattern. They enable cross-component highlighting when navigating from one view to another (e.g., clicking a source badge on a record scrolls to and highlights the relevant chunk in the document viewer).
+
+### `vllora_highlight_chunks`
+
+**Purpose:** Highlight and scroll to specific chunks (+ sentences) in the `KnowledgeSourceViewer` when navigating from a record's source badge.
+
+| | Details |
+|---|---|
+| **Data** | `{ sourceId: string; chunkRefs: string[]; recordText?: string }` |
+| **Direction** | React → React (via window CustomEvent) |
+
+**Emitters:**
+| File | When |
+|------|------|
+| `ConversationDataTable.tsx` | User clicks source badge → switches tab → 400ms delay → dispatches event |
+
+**Listeners:**
+| File | What it does |
+|------|-------------|
+| `KnowledgeSourceViewer.tsx` | Auto-expands matching chunks, applies glow animation, extracts significant terms from `recordText` for sentence-level violet highlighting. Falls back to chunk-ID-only matching when source IDs are stale (document re-uploaded). Clears after 6s. |
+
+> **Note:** `recordText` enables sentence-level highlighting within expanded chunks. The viewer extracts significant terms and highlights sentences matching ≥2 terms with a violet background.
+
+### `vllora_highlight_record`
+
+**Purpose:** Scroll to and highlight a specific record in the records table.
+
+| | Details |
+|---|---|
+| **Data** | `{ recordId: string }` |
+| **Direction** | React → React (via window CustomEvent) |
+
+### `vllora_highlight_eval_result`
+
+**Purpose:** Scroll to and highlight a specific evaluation result row.
+
+| | Details |
+|---|---|
+| **Data** | `{ recordId: string }` |
+| **Direction** | React → React (via window CustomEvent) |
 
 ---
 

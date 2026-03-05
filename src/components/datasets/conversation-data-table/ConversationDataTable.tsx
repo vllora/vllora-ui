@@ -89,7 +89,6 @@ function SourceRefBadge({
 
   const primary = attributions[0];
   const displayName = primary.sourceName.replace(/\.[^.]+$/, "");
-  const totalChunks = sourceChunkRefs?.length ?? 0;
 
   const handleClick = onNavigateToSource
     ? (e: React.MouseEvent) => {
@@ -112,9 +111,6 @@ function SourceRefBadge({
       <span className="truncate">{displayName}</span>
       {attributions.length > 1 && (
         <span className="text-blue-400/60 shrink-0">+{attributions.length - 1}</span>
-      )}
-      {totalChunks > 0 && (
-        <span className="text-blue-400/50 shrink-0">({totalChunks})</span>
       )}
     </button>
   );
@@ -326,7 +322,17 @@ export function ConversationDataTable({
                         sourceChunkRefs={record.metadata?.sourceChunkRefs as string[] | undefined}
                         sources={sources}
                         onNavigateToSource={datasetId ? (sourceId) => {
+                          const chunkRefs = (record.metadata?.sourceChunkRefs as string[] | undefined) ?? [];
                           emitter.emit("vllora_switch_tab", { datasetId, tab: `documents/${sourceId}` });
+                          // Phase 2: highlight specific chunks + sentences after viewer renders
+                          if (chunkRefs.length > 0) {
+                            const recordText = `${row.user} ${row.assistant}`;
+                            setTimeout(() => {
+                              window.dispatchEvent(new CustomEvent("vllora_highlight_chunks", {
+                                detail: { sourceId, chunkRefs, recordText },
+                              }));
+                            }, 400);
+                          }
                         } : undefined}
                       />
                     ) : (

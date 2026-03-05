@@ -285,11 +285,13 @@ let nodeIdCounter = 0;
 interface RefRegistry {
   validRefs: Set<string>;
   headingToRefs: Map<string, string[]>;
+  /** Map ref → lowercase summary text for summary-based fallback */
+  summaryMap: Map<string, string>;
 }
 
 /**
  * Resolve refs for a topic: normalize LLM output, validate against known refs,
- * and fallback to heading-based matching when empty.
+ * and fallback to heading + summary matching when empty.
  */
 function resolveTopicRefs(
   rawRefs: string[] | undefined,
@@ -307,7 +309,7 @@ function resolveTopicRefs(
 
   if (valid.length > 0) return valid;
 
-  // Fallback: match topic name or description to chunk headings
+  // Fallback: match topic name/description keywords against headings + summaries
   if (!registry || registry.headingToRefs.size === 0) return undefined;
 
   const topicTerms = [
@@ -315,16 +317,34 @@ function resolveTopicRefs(
     ...(topicDescription || '').toLowerCase().split(/\s+/),
   ].filter((t) => t.length > 2);
 
+  if (topicTerms.length === 0) return undefined;
+
+  // Require ≥2 keyword matches per heading (or ≥1 if topic has ≤2 keywords)
+  const threshold = topicTerms.length <= 2 ? 1 : 2;
+
   const matchedRefs = new Set<string>();
+
+  // Pass 1: heading-based matching (tighter than before)
   for (const [heading, refs] of registry.headingToRefs) {
     const headingWords = heading.split(/\s+/);
-    for (const term of topicTerms) {
-      if (headingWords.some((w) => w.includes(term) || term.includes(w))) {
-        refs.forEach((r) => matchedRefs.add(r));
-        break;
+    const matchCount = topicTerms.filter((term) =>
+      headingWords.some((w) => w.includes(term) || term.includes(w)),
+    ).length;
+    if (matchCount >= threshold) {
+      refs.forEach((r) => matchedRefs.add(r));
+    }
+  }
+
+  // Pass 2: summary-based matching (catches headings that are too generic)
+  if (matchedRefs.size === 0 && registry.summaryMap.size > 0) {
+    for (const [ref, summary] of registry.summaryMap) {
+      const matchCount = topicTerms.filter((term) => summary.includes(term)).length;
+      if (matchCount >= threshold) {
+        matchedRefs.add(ref);
       }
     }
   }
+
   return matchedRefs.size > 0 ? [...matchedRefs] : undefined;
 }
 
@@ -418,7 +438,7 @@ export async function generateTopicsViaFrontend(
 
     // Convert to hierarchy nodes (with ref validation and heading-based fallback)
     const refRegistry: RefRegistry | null = hasKnowledgeSources
-      ? { validRefs: knowledgeCtx.validRefs, headingToRefs: knowledgeCtx.headingToRefs }
+      ? { validRefs: knowledgeCtx.validRefs, headingToRefs: knowledgeCtx.headingToRefs, summaryMap: knowledgeCtx.summaryMap }
       : null;
     const hierarchy = convertToHierarchyNodes(response, refRegistry);
 

@@ -456,6 +456,20 @@ export function DatasetDetailContentV2() {
     [sortedRecords]
   );
 
+  // Build chunk → record count map for the knowledge source viewer
+  // Keys are raw refs "sourceId:chunkId", values are the number of records referencing that chunk
+  const chunkRecordCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const record of sortedRecords) {
+      const refs = record.metadata?.sourceChunkRefs as string[] | undefined;
+      if (!refs) continue;
+      for (const ref of refs) {
+        counts.set(ref, (counts.get(ref) || 0) + 1);
+      }
+    }
+    return counts;
+  }, [sortedRecords]);
+
   // Get selected records for synthetic data generation samples
   const selectedRecords = useMemo(
     () => sortedRecords.filter((record) => selectedRecordIds.has(record.id)),
@@ -871,7 +885,7 @@ export function DatasetDetailContentV2() {
           {contentSection === "documents" && (
             <div className="flex-1 flex flex-col overflow-hidden">
               {selectedDocumentSourceId ? (
-                <KnowledgeSourceViewer sourceId={selectedDocumentSourceId} />
+                <KnowledgeSourceViewer sourceId={selectedDocumentSourceId} chunkRecordCounts={chunkRecordCounts} />
               ) : (
                 <KnowledgeSourcesPanel
                   datasetId={datasetId}

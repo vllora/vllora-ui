@@ -2,10 +2,13 @@
  * ConversationExpandedDetail
  *
  * Expanded inline detail view for a conversation row.
- * Shows system prompt (if unique), user message, assistant response (with markdown),
+ * Shows user message, assistant response (with markdown),
  * and eval score breakdown.
  *
- * Role badges: System = amber, User = blue, Assistant = emerald.
+ * System prompt is NOT shown here — it's already displayed in the
+ * topic-level banner above the records table.
+ *
+ * Role badges: User = blue, Assistant = emerald.
  */
 
 import { cn } from "@/lib/utils";
@@ -19,7 +22,7 @@ import type { ConversationRow, ConversationTableMode } from "./types";
 interface ConversationExpandedDetailProps {
   readonly row: ConversationRow;
   readonly mode: ConversationTableMode;
-  /** Common system prompt from the table-level banner — skip display if row matches */
+  /** @deprecated No longer used — system prompt shown in topic banner instead */
   readonly commonSystem?: string;
   /** Number of visible columns for colSpan */
   readonly colSpan: number;
@@ -31,28 +34,12 @@ const ROLE_BADGE =
 export function ConversationExpandedDetail({
   row,
   mode,
-  commonSystem,
   colSpan,
 }: ConversationExpandedDetailProps) {
-  const hasUniqueSystem =
-    row.system.trim() !== "" && row.system !== commonSystem;
-
   return (
     <TableRow className="bg-muted/10 hover:bg-muted/10">
       <TableCell colSpan={colSpan} className="px-6 py-4">
         <div className="space-y-3 max-w-3xl">
-          {/* System prompt — only if different from the shared banner */}
-          {hasUniqueSystem && (
-            <div>
-              <span className={cn(ROLE_BADGE, "bg-amber-500/10 text-amber-500 border-amber-500/20")}>
-                System
-              </span>
-              <p className="text-xs text-foreground/70 whitespace-pre-wrap leading-relaxed mt-1">
-                {row.system}
-              </p>
-            </div>
-          )}
-
           {/* User message */}
           <div>
             <span className={cn(ROLE_BADGE, "bg-blue-500/10 text-blue-500 border-blue-500/20")}>

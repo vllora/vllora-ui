@@ -9,6 +9,20 @@
 import * as knowledgeDB from '@/services/knowledge-sources-db';
 import type { KnowledgeSource } from '@/types/dataset-types';
 
+/**
+ * Build a ready-source map from an array of knowledge sources.
+ * Only includes sources with status "ready".
+ */
+export function buildReadySourceMap(
+  sources: readonly KnowledgeSource[],
+): ReadonlyMap<string, KnowledgeSource> {
+  const map = new Map<string, KnowledgeSource>();
+  for (const s of sources) {
+    if (s.status === 'ready') map.set(s.id, s);
+  }
+  return map;
+}
+
 export interface ResolvedChunk {
   sourceId: string;
   sourceName: string;
@@ -56,17 +70,26 @@ export function normalizeChunkRef(ref: string): string | null {
  * - For `local-semantic` sources: looks up chunks from `metadata.chunks` by chunk ID
  * - For legacy sources: parses `section-{index}` and indexes into `extractedContent.sections`
  * - Unknown refs are silently skipped (graceful degradation)
+ *
+ * @param preloadedSources Optional pre-fetched source map (sourceId → KnowledgeSource).
+ *   Pass this to avoid redundant IndexedDB fetches when calling resolveChunkRefs in a loop.
  */
 export async function resolveChunkRefs(
   datasetId: string,
   refs: string[],
+  preloadedSources?: ReadonlyMap<string, KnowledgeSource>,
 ): Promise<ResolvedChunk[]> {
   if (refs.length === 0) return [];
 
-  const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
-  const sourceMap = new Map<string, KnowledgeSource>();
-  for (const s of sources) {
-    if (s.status === 'ready') sourceMap.set(s.id, s);
+  let sourceMap: Map<string, KnowledgeSource>;
+  if (preloadedSources) {
+    sourceMap = new Map(preloadedSources);
+  } else {
+    const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
+    sourceMap = new Map<string, KnowledgeSource>();
+    for (const s of sources) {
+      if (s.status === 'ready') sourceMap.set(s.id, s);
+    }
   }
 
   const resolved: ResolvedChunk[] = [];
@@ -131,6 +154,8 @@ export async function resolveChunkRefs(
 
 /**
  * Format resolved chunks into a context string for LLM prompts.
+ * Each chunk is labelled with its ref ID so the generation LLM can
+ * report which chunks it actually used per example (`used_sources`).
  */
 export function buildChunkContextSection(chunks: ResolvedChunk[]): string {
   if (chunks.length === 0) return '';
@@ -140,11 +165,13 @@ export function buildChunkContextSection(chunks: ResolvedChunk[]): string {
   ];
 
   for (const chunk of chunks) {
-    parts.push(`\n[${chunk.sourceName} / ${chunk.heading}]\n${chunk.text}`);
+    const ref = `${chunk.sourceId}:${chunk.chunkId}`;
+    parts.push(`\n[ref:${ref} | ${chunk.sourceName} / ${chunk.heading}]\n${chunk.text}`);
   }
 
   parts.push('\n--- END RELEVANT KNOWLEDGE ---');
   parts.push('IMPORTANT: Generate examples grounded in the specific knowledge sections above.');
+  parts.push('For each example, include the ref IDs (e.g. "sourceId:chunkId") of the chunks you referenced in the `used_sources` array.');
 
   return parts.join('\n');
 }
