@@ -54,8 +54,10 @@ A `.zip` file containing a ready-to-use Claude Code skill. Follows the [official
 ├── resources/
 │   ├── index.md                          ← Topic map table
 │   └── {category}/{topic-slug}.jsonl     ← Per-topic examples (one file per leaf topic)
-└── knowledge/
-    └── domain-knowledge.md               ← Extracted content from uploaded docs (optional)
+└── knowledge/                            ← Optional (only when knowledge sources exist)
+    ├── domain-knowledge.md               ← Section reference table
+    └── sections/                         ← One .md per extracted section
+        └── {source-slug}-{section-slug}.md
 ```
 
 ### SKILL.md
@@ -98,7 +100,7 @@ The `description` field uses the TRIGGER/DO NOT TRIGGER pattern from official An
 | **Package Structure** | Dynamic tree diagram of all bundled files | Orientation for Claude |
 | **Response Guidelines** | Grader criteria → behavioral rules (or generic fallback) | Inlined, not separate file |
 | **Using Resources** | 3-step instructions + JSONL format table | Tells Claude how to find and use data |
-| **Domain Knowledge** | Read instruction for `knowledge/domain-knowledge.md` | Only present when knowledge sources exist |
+| **Domain Knowledge** | Read instructions for `knowledge/` files | Only present when knowledge sources exist |
 
 **Design decisions:**
 - Under 100 lines (well below 500 official recommendation)
@@ -114,12 +116,12 @@ Each line is a JSON object. **No `system` field** — SKILL.md already provides 
 {"user": "What is a pin in chess?", "assistant": "A pin is a tactic where...", "eval_scores": {"job-abc": 0.93}, "sources": ["src1:chunk-3"]}
 ```
 
-| Field | Type | Purpose |
-|-------|------|---------|
-| `user` | `string` | Example question — used to match incoming queries |
-| `assistant` | `string` | **Primary** — reference answer with expected tone, format, knowledge |
-| `eval_scores` | `Record<string, number>` | Grader scores (0–1) keyed by evaluation job ID. Empty `{}` if no eval run. |
-| `sources` | `string[]` | Knowledge chunk references for traceability. Empty `[]` if no sources. |
+| Field | Type | Required | Purpose |
+|-------|------|----------|---------|
+| `user` | `string` | Always | Example question — used to match incoming queries |
+| `assistant` | `string` | Always | **Primary** — reference answer with expected tone, format, knowledge |
+| `eval_scores` | `Record<string, number>` | Optional | Grader scores (0-1) keyed by evaluation job ID. Omitted if no eval run. |
+| `sources` | `string[]` | Optional | Knowledge chunk references for traceability. Omitted if empty. |
 
 **Why no `system` field:** The system prompt was identical across all examples in a topic (repeated 25x per file). SKILL.md already contains the role context. Removing it reduced ZIP size by ~40%.
 
@@ -145,15 +147,47 @@ Each example includes eval_scores (external grader scores, per evaluation job).
 
 The Diversity column appears when topics have diversity scores from the LLM diversity audit.
 
-### Knowledge Doc (knowledge/domain-knowledge.md)
+### Knowledge Directory (knowledge/)
 
-Extracted content from uploaded knowledge sources (PDFs, docs). Optional — omitted when no knowledge sources exist.
+Optional — only present when the dataset has knowledge sources (uploaded PDFs/docs).
 
-**Two extraction paths:**
-- **Modern (local-semantic):** Uses `metadata.chunks` — semantic sections with full sentences, page ranges, headings
-- **Legacy (LLM extraction):** Uses `extractedContent.sections` — older format with truncated content
+#### domain-knowledge.md
 
-The modern path produces significantly better output (tested: 8/10 readability vs 2/10 for legacy).
+A **reference table** pointing to individual section files. Claude reads this to discover which sections exist, then uses Read to load specific section files.
+
+```markdown
+# Domain Knowledge
+
+Reference sections from uploaded documents. Use your Read tool to load full content.
+
+## Section Reference
+
+| Section | File | Source | Pages |
+|---------|------|--------|-------|
+| 3.2 Pins | [chess-guide-pins.md](sections/chess-guide-pins.md) | Chess Guide.pdf | pp.16-21 |
+| 4.1 Forks | [chess-guide-forks.md](sections/chess-guide-forks.md) | Chess Guide.pdf | pp.22-28 |
+```
+
+Only sections with a page range (from PDF extraction) appear in this table.
+
+#### sections/*.md
+
+Individual markdown files with **full content** for each extracted section. Named `{source-slug}-{section-slug}.md`.
+
+Each file contains:
+```markdown
+# Section Heading
+
+**Source:** Document Name | **Pages:** pp.16-21
+
+**Summary:** Brief summary of the section content.
+
+Full text content from the extracted section...
+```
+
+**Two extraction paths** (both produce section files):
+- **Modern (local-semantic):** Uses `metadata.chunks` — semantic sections with full text, page ranges, headings, summaries
+- **Legacy (LLM extraction):** Uses `extractedContent.sections` — older format with potentially truncated content, no page ranges
 
 ---
 
@@ -163,27 +197,28 @@ The modern path produces significantly better output (tested: 8/10 readability v
 1. User types: "What should I play against a pin?"
 
 2. Claude sees skill description (always in context — just the YAML description field):
-   → "TRIGGER: When users ask about Chess Tactics Tutor topics..."
-   → Matches! Auto-invokes via the Skill tool.
+   -> "TRIGGER: When users ask about Chess Tactics Tutor topics..."
+   -> Matches! Auto-invokes via the Skill tool.
 
 3. Full SKILL.md loads into context (~80 lines):
-   → Role, expertise areas, response guidelines, resource instructions
-   → Claude immediately knows how to behave — zero Read calls yet
+   -> Role, expertise areas, response guidelines, resource instructions
+   -> Claude immediately knows how to behave — zero Read calls yet
 
 4. Claude reads resources/index.md (1 Read call):
-   → Finds: "Tactical Patterns / Pins → tactical-patterns/pins.jsonl"
+   -> Finds: "Tactical Patterns / Pins -> tactical-patterns/pins.jsonl"
 
 5. Claude reads resources/tactical-patterns/pins.jsonl (1 Read call):
-   → Gets 25 pin-specific examples
-   → Studies assistant field for tone, format, domain knowledge
+   -> Gets 25 pin-specific examples
+   -> Studies assistant field for tone, format, domain knowledge
 
 6. (Optional) Claude reads knowledge/domain-knowledge.md (1 Read call):
-   → Only if deeper reference material needed beyond examples
+   -> Sees section reference table
+   -> Decides to load knowledge/sections/chess-guide-pins.md for deeper content
 
 7. Claude responds using example patterns + domain knowledge
 ```
 
-**Total Read calls:** 2–3 (index + JSONL + optional knowledge doc). Efficient context usage.
+**Total Read calls:** 2-4 (index + JSONL + optional knowledge reference + optional section file). Efficient context usage.
 
 ---
 
@@ -192,8 +227,8 @@ The modern path produces significantly better output (tested: 8/10 readability v
 Skill packaging happens **after data generation** and runs in parallel with evaluation/training.
 
 ```
-coverage_generation → skill_packaging → download (instant)
-                    → grader_config → dry_run → training (hours)
+coverage_generation -> skill_packaging -> download (instant)
+                    -> grader_config -> dry_run -> training (hours)
 ```
 
 **Key principle: what you see is what you get.** Whatever records exist in IndexedDB go into the skill package. No automatic filtering by scores, diversity flags, or evaluation results.

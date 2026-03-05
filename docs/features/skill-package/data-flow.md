@@ -13,34 +13,35 @@ This document traces how data flows from IndexedDB through skill package assembl
 │  IndexedDB                                                    │
 │                                                               │
 │  datasetsDB.getDatasetById(datasetId)                         │
-│  ├── dataset.datasetObjective     → SKILL.md Role & Objective │
-│  ├── dataset.topicHierarchy       → SKILL.md Expertise Areas  │
-│  └── dataset.name                 → Skill name fallback       │
+│  ├── dataset.datasetObjective     -> SKILL.md Role & Objective│
+│  ├── dataset.topicHierarchy       -> SKILL.md Expertise Areas │
+│  └── dataset.name                 -> Skill name fallback      │
 │                                                               │
 │  datasetsDB.getRecordsByDatasetId(datasetId)                  │
-│  └── records[]                    → JSONL files (grouped by   │
+│  └── records[]                    -> JSONL files (grouped by  │
 │      ├── .topic                      topic)                   │
 │      ├── .data.input.messages[]                               │
-│      │   └── [role=user].content  → JSONL `user` field        │
-│      ├── .metadata.skillResponse  → JSONL `assistant` field   │
-│      ├── .metadata.sourceChunkRefs → JSONL `sources` field    │
-│      ├── .metadata.diversityScore → index.md Diversity column │
-│      └── .evaluations[jobId].score → JSONL `eval_scores` field│
+│      │   └── [role=user].content  -> JSONL `user` field       │
+│      ├── .metadata.skillResponse  -> JSONL `assistant` field  │
+│      ├── .metadata.sourceChunkRefs -> JSONL `sources` field   │
+│      ├── .metadata.diversityScore -> index.md Diversity column│
+│      └── .evaluations[jobId].score -> JSONL `eval_scores`     │
 │                                                               │
 │  knowledgeDB.getKnowledgeSourcesByDataset(datasetId)          │
-│  └── sources[]                    → knowledge/domain-knowledge│
+│  └── sources[]                    -> knowledge/ directory     │
 │      ├── .extractedContent.metadata.extractionMethod          │
 │      ├── .extractedContent.metadata.chunks[]  (modern path)   │
-│      │   ├── .heading             → ### section heading       │
-│      │   ├── .sentences[]         → section body text         │
-│      │   ├── .pageStart/.pageEnd  → page range annotation     │
-│      │   └── .summary             → (not currently used)      │
+│      │   ├── .heading             -> section file heading     │
+│      │   ├── .text                -> section file body        │
+│      │   ├── .summary            -> section file summary line │
+│      │   ├── .pageStart/.pageEnd  -> page range annotation    │
+│      │   └── .id                  -> (not used in output)     │
 │      └── .extractedContent.sections[]         (legacy path)   │
-│          ├── .title               → ### section heading       │
-│          └── .content             → truncated section text    │
+│          ├── .title               -> section file heading     │
+│          └── .content             -> section file body        │
 │                                                               │
 │  getProposedPlan(datasetId)                                   │
-│  └── plan.grader_config.criteria  → SKILL.md Response         │
+│  └── plan.grader_config.criteria  -> SKILL.md Response        │
 │                                      Guidelines               │
 └───────────────────────────────┬──────────────────────────────┘
                                 │
@@ -53,33 +54,40 @@ This document traces how data flows from IndexedDB through skill package assembl
 │  ├── Resolve full path via hierarchy leaf lookup               │
 │  ├── Build SkillJsonlRow[] per group                          │
 │  │   └── assembleJsonlRow(record) for each record             │
-│  │       ├── user ← messages.find(role=user).content          │
-│  │       ├── assistant ← metadata.skillResponse               │
-│  │       ├── eval_scores ← evaluations → {jobId: score}      │
-│  │       └── sources ← metadata.sourceChunkRefs               │
+│  │       ├── user <- messages.find(role=user).content         │
+│  │       ├── assistant <- metadata.skillResponse              │
+│  │       ├── eval_scores <- evaluations -> {jobId: score}     │
+│  │       └── sources <- metadata.sourceChunkRefs              │
 │  └── Sort groups alphabetically by topic path                  │
 │                                                               │
 │  Step 2: buildResourcesIndex(topicGroups, totalRows)          │
 │  └── Markdown table: Topic | File | Examples | Diversity      │
 │                                                               │
-│  Step 3: buildKnowledgeDoc(knowledgeSources)                  │
-│  ├── if extractionMethod === 'local-semantic':                 │
-│  │   └── buildKnowledgeFromChunks(name, chunks, pages)        │
-│  │       └── Full sentences from metadata.chunks[].sentences   │
-│  └── else (legacy):                                           │
-│      └── buildKnowledgeFromSections(name, sections, summary)  │
-│          └── Truncated content from extractedContent.sections  │
+│  Step 3: buildSectionFiles(knowledgeSources)                  │
+│  ├── collectSectionsFromSources(sources)                      │
+│  │   ├── if extractionMethod === 'local-semantic':            │
+│  │   │   └── Extract from metadata.chunks[].text/.heading     │
+│  │   │       + .summary, .pageStart/.pageEnd                  │
+│  │   └── else (legacy):                                       │
+│  │       └── Extract from extractedContent.sections[]         │
+│  │           .title/.content                                  │
+│  ├── Deduplicate slug paths (add -2, -3 suffix)               │
+│  └── Returns { files: Map<path,content>, entries: metadata[] }│
 │                                                               │
-│  Step 4: buildSkillMarkdown(params)                           │
+│  Step 4: buildKnowledgeDoc(knowledgeSources, sectionEntries)  │
+│  └── Reference TABLE: Section | File | Source | Pages         │
+│      (only entries with pageRange appear in table)            │
+│                                                               │
+│  Step 5: buildSkillMarkdown(params)                           │
 │  ├── YAML: name, description (TRIGGER/DO NOT TRIGGER)         │
 │  ├── Role & Objective from dataset.datasetObjective           │
 │  ├── Expertise Areas from topicHierarchy                      │
 │  ├── Package Structure (dynamic tree)                         │
 │  ├── Response Guidelines from grader criteria                  │
 │  ├── Using Resources (JSONL format table)                     │
-│  └── Domain Knowledge (Read instruction, if sources exist)    │
+│  └── Domain Knowledge (Read instructions, if sources exist)   │
 │                                                               │
-│  Step 5: buildTopicJsonl(rows) for each topic group           │
+│  Step 6: buildTopicJsonl(rows) for each topic group           │
 │  └── JSON.stringify per row, join with \n                     │
 │      Only includes non-empty optional fields                  │
 │                                                               │
@@ -87,7 +95,8 @@ This document traces how data flows from IndexedDB through skill package assembl
 │  ├── skillMd: string                                          │
 │  ├── resourcesIndex: string                                   │
 │  ├── topicFiles: Map<slug, jsonl>                             │
-│  └── knowledgeDoc: string | null                              │
+│  ├── knowledgeDoc: string | null                              │
+│  └── sectionFiles: Map<path, markdown>                        │
 └───────────────────────────────┬──────────────────────────────┘
                                 │
                 ┌───────────────┼───────────────┐
@@ -98,23 +107,25 @@ This document traces how data flows from IndexedDB through skill package assembl
 │                          │    │  Same assembleSkill-     │
 │  JSZip assembly:         │    │  PackageFiles() call     │
 │  root.file('SKILL.md')   │    │                          │
-│  root.file('resources/   │    │  Resolves file path →    │
+│  root.file('resources/   │    │  Resolves file path ->   │
 │    index.md')            │    │  renders content:        │
-│  root.file('resources/   │    │  - .md → markdown view   │
-│    {slug}.jsonl')        │    │  - .jsonl → conversation │
+│  root.file('resources/   │    │  - .md -> markdown view  │
+│    {slug}.jsonl')        │    │  - .jsonl -> conversation │
 │  root.file('knowledge/   │    │    card viewer           │
 │    domain-knowledge.md') │    │                          │
-│                          │    │  Supports edit mode for  │
-│  Stores blob in          │    │  markdown files          │
-│  packageStore            │    │                          │
-│        │                 │    └──────────────────────────┘
-│        ▼                 │
+│  root.file('knowledge/   │    │  Also resolves:          │
+│    sections/*.md')       │    │  knowledge/sections/*.md │
+│                          │    │  via sectionFiles map    │
+│  Stores blob in          │    │                          │
+│  packageStore            │    │  Supports edit mode for  │
+│        │                 │    │  markdown files          │
+│        ▼                 │    └──────────────────────────┘
 │  Tool: download_skill_   │
 │  package                 │
 │                          │
-│  Retrieves blob →        │
+│  Retrieves blob ->       │
 │  browser download via    │
-│  <a> element →           │
+│  <a> element ->          │
 │  clears blob from store  │
 └──────────────────────────┘
 ```
@@ -128,20 +139,20 @@ Shows every field consumed by skill packaging:
 ```
 DatasetRecord
 ├── data.input.messages[]
-│   └── [role=user].content        → JSONL `user` field
+│   └── [role=user].content        -> JSONL `user` field
 │       (system message is IGNORED — SKILL.md provides role context)
 ├── metadata
-│   ├── skillResponse              → JSONL `assistant` field (THE primary value)
-│   ├── sourceChunkRefs            → JSONL `sources` field
-│   ├── diversityScore             → resources/index.md Diversity column
-│   ├── topic_path                 → (not used directly — record.topic is used instead)
-│   ├── baseScore                  → NOT included in JSONL (removed — less reliable than eval)
-│   ├── isDuplicate                → NOT used by packaging (UI visibility only)
-│   ├── duplicateClusterId         → NOT used by packaging (UI visibility only)
-│   └── duplicateClusterTheme      → NOT used by packaging (UI visibility only)
-├── topic                          → Grouping key for per-topic JSONL files
+│   ├── skillResponse              -> JSONL `assistant` field (THE primary value)
+│   ├── sourceChunkRefs            -> JSONL `sources` field
+│   ├── diversityScore             -> resources/index.md Diversity column
+│   ├── topic_path                 -> (not used directly — record.topic is used instead)
+│   ├── baseScore                  -> NOT included in JSONL (removed — less reliable than eval)
+│   ├── isDuplicate                -> NOT used by packaging (UI visibility only)
+│   ├── duplicateClusterId         -> NOT used by packaging (UI visibility only)
+│   └── duplicateClusterTheme      -> NOT used by packaging (UI visibility only)
+├── topic                          -> Grouping key for per-topic JSONL files
 └── evaluations
-    └── [jobId].score              → JSONL `eval_scores` map
+    └── [jobId].score              -> JSONL `eval_scores` map
 ```
 
 ### Fields NOT in JSONL (and why)
@@ -174,11 +185,13 @@ eval_scores (record.evaluations[jobId].score)
 
 **Why `base_score` was removed from JSONL:** The LLM self-assessed score (set during generation) was less informative than external grader scores. Including both created confusion about which to trust. `eval_scores` from actual graders are more reliable.
 
-**Why no auto-filtering by score:** Whatever records exist in IndexedDB go into the package. The user has full control — they see scores in the UI and can tell Lucy to remove records. Automatic filtering is dangerous (broken grader → empty package) and premature.
+**Why no auto-filtering by score:** Whatever records exist in IndexedDB go into the package. The user has full control — they see scores in the UI and can tell Lucy to remove records. Automatic filtering is dangerous (broken grader -> empty package) and premature.
 
 ---
 
-## Knowledge Doc Extraction Paths
+## Knowledge Section Extraction
+
+Knowledge sources are extracted into individual section files stored in `knowledge/sections/`.
 
 ### Modern: Local-Semantic (recommended)
 
@@ -192,21 +205,26 @@ KnowledgeSource
               id: "chunk-3",
               heading: "3.2 Pins",
               summary: "Pins are tactical motifs where...",
-              sentences: ["A pin is a tactic...", "The pinned piece...", ...],
+              text: "A pin is a tactic... The pinned piece...",
               pageStart: 16,
               pageEnd: 21
             },
             ...
           ]
 
-  → buildKnowledgeFromChunks():
-    ### 3.2 Pins
-    *pp.16–21*
-    A pin is a tactic... The pinned piece... [full sentences joined]
-```
+  -> collectSectionsFromSources() produces SectionEntry:
+     {
+       sourceName: "Chess Guide.pdf",
+       sourceSlug: "chess-guide-pdf",
+       title: "3.2 Pins",
+       slug: "3-2-pins",
+       content: "# 3.2 Pins\n\n**Source:** Chess Guide.pdf | **Pages:** pp.16-21\n\n**Summary:** Pins are...\n\nA pin is a tactic...",
+       pageRange: "pp.16-21"
+     }
 
-**Quality:** 8/10 — full sentences, meaningful headings, page ranges.
-**Limit:** Max 30 sentences per chunk (`MAX_SENTENCES_PER_CHUNK`).
+  -> Written to: knowledge/sections/chess-guide-pdf-3-2-pins.md
+  -> Referenced in: knowledge/domain-knowledge.md (table row with page range)
+```
 
 ### Legacy: LLM Extraction (fallback)
 
@@ -214,20 +232,44 @@ KnowledgeSource
 KnowledgeSource
   └── extractedContent
       ├── sections: [
-      │     { title: "Pins", content: "A pin is a t..." },  ← often truncated
+      │     { title: "Pins", content: "A pin is a tactic that..." },
       │     ...
       │   ]
       └── metadata
           ├── extractionMethod: undefined (or not "local-semantic")
           └── document_summary: "This document covers..."
 
-  → buildKnowledgeFromSections():
-    ### Pins
-    A pin is a t...  ← truncated at 800 chars
+  -> collectSectionsFromSources() produces SectionEntry:
+     {
+       sourceName: "Chess Guide.pdf",
+       sourceSlug: "chess-guide-pdf",
+       title: "Pins",
+       slug: "pins",
+       content: "# Pins\n\n**Source:** Chess Guide.pdf\n\nA pin is a tactic that...",
+       // No pageRange — won't appear in domain-knowledge.md table
+     }
+
+  -> Written to: knowledge/sections/chess-guide-pdf-pins.md
+  -> NOT in domain-knowledge.md table (no pageRange)
 ```
 
-**Quality:** 2/10 — fragmented text, truncated content, broken formatting.
-**Limit:** Max 20 sections, 800 chars per section.
+### domain-knowledge.md as Reference Table
+
+The `buildKnowledgeDoc()` function builds a **reference table** (not full content). Only entries with a `pageRange` appear:
+
+```markdown
+# Domain Knowledge
+
+Reference sections from uploaded documents. Use your Read tool to load full content.
+
+## Section Reference
+
+| Section | File | Source | Pages |
+|---------|------|--------|-------|
+| 3.2 Pins | [chess-guide-pdf-3-2-pins.md](sections/chess-guide-pdf-3-2-pins.md) | Chess Guide.pdf | pp.16-21 |
+```
+
+This means legacy-extracted content (no page ranges) still gets section files but won't appear in the reference table.
 
 ---
 
@@ -248,8 +290,11 @@ KnowledgeSource
 │   {"user": "...", "assistant": "...", "eval_scores": {...}, "sources": [...]}
 │   No system field. No base_score. Only non-empty optional fields.
 │
-└── knowledge/domain-knowledge.md (optional)
-    Full sentences from semantic chunks (modern) or truncated sections (legacy)
+├── knowledge/domain-knowledge.md (optional)
+│   Section reference table: Section | File | Source | Pages
+│
+└── knowledge/sections/*.md (optional)
+    Individual section files with full content from extracted documents
 ```
 
 ### Fine-Tuning Upload (separate consumer — NOT part of skill packaging)

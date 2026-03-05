@@ -10,8 +10,10 @@
  *   ├── resources/
  *   │   ├── index.md                 (topic map table)
  *   │   └── {topic-slug}.jsonl       (one per leaf topic)
- *   └── knowledge/
- *       └── domain-knowledge.md      (from knowledge sources, optional)
+ *   └── knowledge/                   (optional — only when knowledge sources exist)
+ *       ├── domain-knowledge.md      (section reference table)
+ *       └── sections/                (one .md per extracted section)
+ *           └── {source-slug}-{section-slug}.md
  */
 
 import JSZip from 'jszip';
@@ -677,7 +679,6 @@ function buildSkillMarkdown(params: {
     '',
   );
 
-  console.log(params.hasKnowledge, params.sectionCount);
   // Domain Knowledge (Read instruction)
   if (params.hasKnowledge || params.sectionCount > 0) {
     lines.push(
@@ -716,11 +717,9 @@ export async function assembleSkillPackageFiles(
   overrideName?: string,
 ): Promise<SkillPackageFiles | null> {
   const dataset = await datasetsDB.getDatasetById(datasetId);
-  console.log(dataset);
   if (!dataset) return null;
 
   const records = await datasetsDB.getRecordsByDatasetId(datasetId);
-  console.log(records);
   if (records.length === 0) return null;
 
   const knowledgeSources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
@@ -793,13 +792,11 @@ export const generateSkillPackageHandler: ToolHandler = async (params) => {
   try {
     const { workflow_id, skill_name } = params;
 
-    console.log(workflow_id);
     if (!workflow_id || typeof workflow_id !== 'string') {
       return { success: false, error: 'workflow_id is required' };
     }
 
     const workflow = await workflowDB.getWorkflow(workflow_id);
-    console.log(workflow);
     if (!workflow) {
       return { success: false, error: 'Workflow not found' };
     }
@@ -878,8 +875,9 @@ Zero LLM calls — pure data assembly from IndexedDB records.
 The package follows the Agent Skills standard and includes:
 - SKILL.md — Directive orchestrator with YAML frontmatter, inlined criteria and topic map
 - resources/index.md — Topic map table
-- resources/{topic}.jsonl — Per-topic examples sorted by score (one file per leaf topic)
-- knowledge/domain-knowledge.md — Extracted content from uploaded documents (if any)
+- resources/{topic}.jsonl — Per-topic examples (one file per leaf topic)
+- knowledge/domain-knowledge.md — Section reference table (if knowledge sources exist)
+- knowledge/sections/*.md — Full content per extracted section (if knowledge sources exist)
 
 After generating, use download_skill_package to save the ZIP file.`,
   type: 'function',
@@ -896,7 +894,6 @@ After generating, use download_skill_package to save the ZIP file.`,
   },
   autoExecute: true,
   handler: async (input: object) => {
-    console.log('input', input);
     return JSON.stringify(
       await generateSkillPackageHandler(input as Record<string, unknown>),
     )
