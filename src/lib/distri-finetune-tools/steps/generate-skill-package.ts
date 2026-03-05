@@ -668,9 +668,12 @@ function buildSkillMarkdown(params: {
     '|-------|---------|',
     '| `user` | Example question — use to match incoming queries |',
     '| `assistant` | **Primary**: reference answer showing expected style and knowledge |',
+    '| `eval_scores` | Grader scores (0–1) keyed by evaluation job ID — higher is better |',
+    '| `sources` | Chunk references to knowledge sources (for traceability) |',
     '',
     'Focus on the `assistant` field — it contains the domain knowledge and',
-    'demonstrates the expected response patterns.',
+    'demonstrates the expected response patterns. Use `eval_scores` to prefer',
+    'higher-rated examples when multiple matches exist.',
     '',
   );
 
