@@ -48,10 +48,12 @@ import {
   getInsightTypeFromPath,
   getFinetuneJobIdFromPath,
   getSkillFileFromPath,
+  getDocumentSourceIdFromPath,
   type ContentSection,
 } from "./TabContentRouter";
 import { InsightsPane } from "./InsightsPane";
 import { SkillFileViewer } from "./SkillFileViewer";
+import { KnowledgeSourceViewer } from "./KnowledgeSourceViewer";
 import { WorkspaceWelcome } from "./WorkspaceWelcome";
 import type { CoverageStats, TopicHierarchyNode } from "@/types/dataset-types";
 
@@ -188,6 +190,10 @@ export function DatasetDetailContentV2() {
   );
   const selectedFinetuneJobId = useMemo(
     () => getFinetuneJobIdFromPath(activeTabPath),
+    [activeTabPath]
+  );
+  const selectedDocumentSourceId = useMemo(
+    () => getDocumentSourceIdFromPath(activeTabPath),
     [activeTabPath]
   );
 
@@ -864,10 +870,14 @@ export function DatasetDetailContentV2() {
           )}
           {contentSection === "documents" && (
             <div className="flex-1 flex flex-col overflow-hidden">
-              <KnowledgeSourcesPanel
-                datasetId={datasetId}
-                className="h-full"
-              />
+              {selectedDocumentSourceId ? (
+                <KnowledgeSourceViewer sourceId={selectedDocumentSourceId} />
+              ) : (
+                <KnowledgeSourcesPanel
+                  datasetId={datasetId}
+                  className="h-full"
+                />
+              )}
             </div>
           )}
           {contentSection === "tasks" && (

@@ -120,3 +120,16 @@ export function getSkillFileFromPath(path: string | null): string | null {
   if (!filePath) return null;
   return filePath;
 }
+
+/**
+ * Extract knowledge source ID from `documents/{sourceId}`.
+ * Returns null for the folder path itself or invalid paths.
+ */
+export function getDocumentSourceIdFromPath(path: string | null): string | null {
+  if (!path) return null;
+  const prefix = "documents/";
+  if (!path.startsWith(prefix)) return null;
+  const sourceId = path.slice(prefix.length).trim();
+  if (!sourceId || sourceId.includes("/")) return null;
+  return sourceId;
+}

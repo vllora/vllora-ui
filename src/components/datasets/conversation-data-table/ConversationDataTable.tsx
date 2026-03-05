@@ -72,9 +72,11 @@ function SystemBanner({ systemPrompt }: { readonly systemPrompt: string }) {
 function SourceRefBadge({
   sourceChunkRefs,
   sources,
+  onNavigateToSource,
 }: {
   readonly sourceChunkRefs: string[] | undefined;
   readonly sources: KnowledgeSource[];
+  readonly onNavigateToSource?: (sourceId: string) => void;
 }) {
   const attributions = useMemo(
     () => getRecordSourceAttributions(sourceChunkRefs, sources),
@@ -89,8 +91,23 @@ function SourceRefBadge({
   const displayName = primary.sourceName.replace(/\.[^.]+$/, "");
   const totalChunks = sourceChunkRefs?.length ?? 0;
 
+  const handleClick = onNavigateToSource
+    ? (e: React.MouseEvent) => {
+        e.stopPropagation();
+        onNavigateToSource(primary.sourceId);
+      }
+    : undefined;
+
   return (
-    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-400 max-w-[140px]">
+    <button
+      type="button"
+      disabled={!onNavigateToSource}
+      onClick={handleClick}
+      className={cn(
+        "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-400 max-w-[140px]",
+        onNavigateToSource && "hover:bg-blue-500/20 cursor-pointer transition-colors",
+      )}
+    >
       <FileText className="w-2.5 h-2.5 shrink-0" />
       <span className="truncate">{displayName}</span>
       {attributions.length > 1 && (
@@ -99,7 +116,7 @@ function SourceRefBadge({
       {totalChunks > 0 && (
         <span className="text-blue-400/50 shrink-0">({totalChunks})</span>
       )}
-    </span>
+    </button>
   );
 }
 
@@ -308,6 +325,9 @@ export function ConversationDataTable({
                       <SourceRefBadge
                         sourceChunkRefs={record.metadata?.sourceChunkRefs as string[] | undefined}
                         sources={sources}
+                        onNavigateToSource={datasetId ? (sourceId) => {
+                          emitter.emit("vllora_switch_tab", { datasetId, tab: `documents/${sourceId}` });
+                        } : undefined}
                       />
                     ) : (
                       <span className="text-[10px] text-muted-foreground/60 tabular-nums whitespace-nowrap">

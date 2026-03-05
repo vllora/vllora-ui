@@ -137,9 +137,10 @@ type VlloraEvents = {
     error?: string;
   };
   // Switch to a specific tab during execution
+  // Known sections + arbitrary workspace paths (e.g. "documents/{sourceId}")
   vllora_switch_tab: {
     datasetId: string;
-    tab: 'overview' | 'records' | 'evaluator' | 'jobs' | 'deploy';
+    tab: 'overview' | 'records' | 'evaluator' | 'jobs' | 'deploy' | (string & {});
   };
   // Open a drawer (docs or readme) from non-React code
   vllora_open_drawer: {
