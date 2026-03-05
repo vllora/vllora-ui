@@ -7,7 +7,7 @@
  * ZIP structure:
  *   {skill-name}/
  *   ├── SKILL.md                     (YAML frontmatter + directive orchestrator)
- *   ├── examples/
+ *   ├── resources/
  *   │   ├── index.md                 (topic map table)
  *   │   └── {topic-slug}.jsonl       (one per leaf topic)
  *   └── knowledge/
@@ -65,7 +65,7 @@ export interface SkillPackageFiles {
   readonly skillName: string;
   readonly skillSlug: string;
   readonly skillMd: string;
-  readonly examplesIndex: string;
+  readonly resourcesIndex: string;
   readonly topicFiles: ReadonlyMap<string, string>;
   readonly knowledgeDoc: string | null;
 }
@@ -237,9 +237,9 @@ function buildTopicJsonl(rows: readonly SkillJsonlRow[]): string {
     .join('\n');
 }
 
-// ─── Build examples/index.md ───
+// ─── Build resources/index.md ───
 
-function buildExamplesIndex(
+function buildResourcesIndex(
   topicGroups: readonly TopicGroup[],
   totalCount: number,
 ): string {
@@ -249,7 +249,7 @@ function buildExamplesIndex(
   );
 
   const lines: string[] = [
-    '# Examples Index',
+    '# Resources Index',
     '',
     `${totalCount} examples across ${topicGroups.length} topics.`,
   ];
@@ -372,7 +372,7 @@ function buildPackageTree(
   const lines: string[] = [
     `${skillSlug}/`,
     '├── SKILL.md                              ← You are here',
-    '├── examples/',
+    '├── resources/',
     '│   ├── index.md                          ← Topic map with scores',
   ];
 
@@ -421,6 +421,7 @@ function buildSkillMarkdown(params: {
   readonly exampleCount: number;
   readonly sourceCount: number;
   readonly topicHierarchyMd: string;
+  readonly topicNames: readonly string[];
   readonly criteria: readonly GraderCriterion[];
   readonly hasKnowledge: boolean;
   readonly topicGroups: readonly TopicGroup[];
@@ -429,12 +430,25 @@ function buildSkillMarkdown(params: {
 
   const capability = objectiveToCapability(params.objective, params.skillName);
 
-  // YAML frontmatter
+  // Build topic list for description (first 5, with "..." if more)
+  const MAX_TOPICS_IN_DESC = 5;
+  const topicListItems = params.topicNames.slice(0, MAX_TOPICS_IN_DESC);
+  const topicSuffix = params.topicNames.length > MAX_TOPICS_IN_DESC ? ', and more' : '';
+  const topicList = topicListItems.map(humanizeName).join(', ') + topicSuffix;
+
+  // Build multi-line description with TRIGGER / DO NOT TRIGGER
+  const descLines = [
+    `  TRIGGER: When users ask about ${params.skillName} topics including ${topicList}.`,
+    `  DO NOT TRIGGER: For general questions unrelated to ${params.skillName}.`,
+    `  ${capability}`,
+  ];
+
+  // YAML frontmatter — official fields only (name, description)
   lines.push(
     '---',
     `name: ${params.skillSlug}`,
-    `description: ${capability}`,
-    `argument-hint: "Ask about ${params.skillName.toLowerCase()}"`,
+    'description: >',
+    ...descLines,
     '---',
     '',
   );
@@ -446,7 +460,7 @@ function buildSkillMarkdown(params: {
     '## Role & Objective',
     '',
     `You are a ${params.skillName}. ${capability}`,
-    `You have deep knowledge across ${params.topicCount} topics, backed by ${params.exampleCount} curated examples${params.sourceCount > 0 ? ` and ${params.sourceCount} reference documents` : ''}.`,
+    `You have deep knowledge across ${params.topicCount} topics, backed by ${params.exampleCount} curated examples${params.sourceCount > 0 ? ` and ${params.sourceCount} reference ${params.sourceCount === 1 ? 'document' : 'documents'}` : ''}.`,
     '',
   );
 
@@ -485,28 +499,17 @@ function buildSkillMarkdown(params: {
     );
   }
 
-  // Available Examples — brief summary, link to full index
+  // Using Resources — concise, domain-focused (replaces old "How to Use Examples" section)
   lines.push(
-    '## Available Examples',
+    '## Using Resources',
     '',
-    `${params.exampleCount} curated examples across ${params.topicCount} topics.`,
-    'See [examples/index.md](examples/index.md) for the full topic map.',
+    `This skill includes ${params.exampleCount} curated examples across ${params.topicCount} topics`,
+    'in the `resources/` directory. Each topic has a JSONL file with system/user/assistant',
+    'examples demonstrating the expected tone, format, and domain accuracy.',
     '',
-  );
-
-  // How to Use Examples
-  lines.push(
-    '## How to Use Examples (IMPORTANT)',
-    '',
-    'Before answering any question:',
-    '1. Read the topic map above to identify which topic file(s) match the user\'s question',
-    '2. Use your Read tool to load `examples/{topic}.jsonl` for the matching topic(s)',
-    '3. Study the examples for tone, format, and domain accuracy',
-    '4. Answer the user\'s question following those patterns',
-    '',
-    `You have access to ${params.exampleCount} examples across ${params.topicCount} topics.`,
-    'ALWAYS load relevant examples before responding.',
-    'DO NOT guess — check the examples first.',
+    'When responding:',
+    '1. Check [resources/index.md](resources/index.md) to find the matching topic file path',
+    '2. Load the relevant JSONL file(s) and follow the demonstrated patterns',
     '',
   );
 
@@ -561,7 +564,7 @@ export async function assembleSkillPackageFiles(
   const totalRows = topicGroups.reduce((sum, g) => sum + g.rows.length, 0);
   if (totalRows === 0) return null;
 
-  const examplesIndex = buildExamplesIndex(topicGroups, totalRows);
+  const resourcesIndex = buildResourcesIndex(topicGroups, totalRows);
 
   const knowledgeDoc = buildKnowledgeDoc(knowledgeSources);
 
@@ -572,6 +575,11 @@ export async function assembleSkillPackageFiles(
 
   const readySources = knowledgeSources.filter((s) => s.status === 'ready');
 
+  // Extract top-level topic names for the YAML description trigger list
+  const topicNames: readonly string[] = dataset.topicHierarchy?.hierarchy
+    ? dataset.topicHierarchy.hierarchy.map((n) => n.name)
+    : topicGroups.map((g) => g.topicPath.split('/')[0]);
+
   const skillMd = buildSkillMarkdown({
     skillName: resolvedName,
     skillSlug,
@@ -580,6 +588,7 @@ export async function assembleSkillPackageFiles(
     exampleCount: totalRows,
     sourceCount: readySources.length,
     topicHierarchyMd,
+    topicNames,
     criteria: graderCriteria,
     hasKnowledge: knowledgeDoc !== null,
     topicGroups,
@@ -594,7 +603,7 @@ export async function assembleSkillPackageFiles(
     skillName: resolvedName,
     skillSlug,
     skillMd,
-    examplesIndex,
+    resourcesIndex,
     topicFiles,
     knowledgeDoc,
   };
@@ -629,10 +638,10 @@ export const generateSkillPackageHandler: ToolHandler = async (params) => {
     const root = zip.folder(skillSlug)!;
 
     root.file('SKILL.md', packageFiles.skillMd);
-    root.file('examples/index.md', packageFiles.examplesIndex);
+    root.file('resources/index.md', packageFiles.resourcesIndex);
 
     for (const [topicSlug, jsonlContent] of packageFiles.topicFiles) {
-      root.file(`examples/${topicSlug}.jsonl`, jsonlContent);
+      root.file(`resources/${topicSlug}.jsonl`, jsonlContent);
     }
 
     if (packageFiles.knowledgeDoc) {
@@ -685,8 +694,8 @@ Zero LLM calls — pure data assembly from IndexedDB records.
 
 The package follows the Agent Skills standard and includes:
 - SKILL.md — Directive orchestrator with YAML frontmatter, inlined criteria and topic map
-- examples/index.md — Topic map table
-- examples/{topic}.jsonl — Per-topic examples sorted by score (one file per leaf topic)
+- resources/index.md — Topic map table
+- resources/{topic}.jsonl — Per-topic examples sorted by score (one file per leaf topic)
 - knowledge/domain-knowledge.md — Extracted content from uploaded documents (if any)
 
 After generating, use download_skill_package to save the ZIP file.`,

@@ -107,9 +107,9 @@ export function getFinetuneJobIdFromPath(path: string | null): string | null {
 
 /**
  * Extract skill file path from an explorer path like `skill/SKILL.md`
- * or `skill/examples/using-joins.jsonl`.
+ * or `skill/resources/using-joins.jsonl`.
  * Returns the relative path within the skill package (e.g., "SKILL.md",
- * "examples/using-joins.jsonl"), or null for the folder root.
+ * "resources/using-joins.jsonl"), or null for the folder root.
  */
 export function getSkillFileFromPath(path: string | null): string | null {
   if (!path) return null;

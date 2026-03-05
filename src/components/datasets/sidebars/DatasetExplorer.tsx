@@ -111,7 +111,7 @@ function slugifySegment(text: string): string {
 }
 
 /**
- * Build hierarchical skill examples tree from topic hierarchy.
+ * Build hierarchical skill resources tree from topic hierarchy.
  * Non-leaf nodes → folders, leaf nodes → .jsonl files with record count badge.
  */
 function buildSkillExamplesChildren(
@@ -127,7 +127,7 @@ function buildSkillExamplesChildren(
     const count = getTopicRecordCount(node, topicCounts);
 
     if (hasChildren) {
-      const folderId = `skill/examples/${slugPath}`;
+      const folderId = `skill/resources/${slugPath}`;
       return {
         id: folderId,
         name: slug,
@@ -141,7 +141,7 @@ function buildSkillExamplesChildren(
     }
 
     return {
-      id: `skill/examples/${slugPath}.jsonl`,
+      id: `skill/resources/${slugPath}.jsonl`,
       name: `${slug}.jsonl`,
       type: "file" as const,
       icon: <FileCode className={`${ICON_CLS} text-purple-400`} />,
@@ -170,7 +170,7 @@ function buildSkillToDataMap(
         map.set(k, v);
       }
     } else {
-      map.set(`skill/examples/${slugPath}.jsonl`, `data/${dataPath}`);
+      map.set(`skill/resources/${slugPath}.jsonl`, `data/${dataPath}`);
     }
   }
   return map;
@@ -195,7 +195,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
   // Expanded/selected state
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(
-    () => new Set(["documents", "data", "evaluations", "finetune", "skill", "skill/examples", "insights"])
+    () => new Set(["documents", "data", "evaluations", "finetune", "skill", "skill/resources", "insights"])
   );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
@@ -223,9 +223,9 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       const zip = new JSZip();
       const root = zip.folder(files.skillSlug)!;
       root.file("SKILL.md", files.skillMd);
-      root.file("examples/index.md", files.examplesIndex);
+      root.file("resources/index.md", files.resourcesIndex);
       for (const [slug, jsonl] of files.topicFiles) {
-        root.file(`examples/${slug}.jsonl`, jsonl);
+        root.file(`resources/${slug}.jsonl`, jsonl);
       }
       if (files.knowledgeDoc) {
         root.file("knowledge/domain-knowledge.md", files.knowledgeDoc);
@@ -282,7 +282,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       const map = new Map<string, string>();
       for (const [topicName] of topicCounts) {
         const slug = slugifySegment(topicName);
-        map.set(`skill/examples/${slug}.jsonl`, `data/${topicName}`);
+        map.set(`skill/resources/${slug}.jsonl`, `data/${topicName}`);
       }
       return map;
     }
@@ -650,10 +650,10 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
           icon: <FileText className={`${ICON_CLS} text-purple-400`} />,
         });
 
-        // examples/ — build hierarchical tree from topic hierarchy (or flat fallback)
+        // resources/ — build hierarchical tree from topic hierarchy (or flat fallback)
         const exampleChildren: FileTreeNode[] = [
           {
-            id: "skill/examples/index.md",
+            id: "skill/resources/index.md",
             name: "index.md",
             type: "file",
             icon: <FileText className={`${ICON_CLS} text-purple-400`} />,
@@ -672,7 +672,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
           for (const [topicName, count] of sortedTopics) {
             const slug = slugifySegment(topicName);
             exampleChildren.push({
-              id: `skill/examples/${slug}.jsonl`,
+              id: `skill/resources/${slug}.jsonl`,
               name: `${slug}.jsonl`,
               type: "file",
               icon: <FileCode className={`${ICON_CLS} text-purple-400`} />,
@@ -682,10 +682,10 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         }
 
         skillChildren.push({
-          id: "skill/examples",
-          name: "examples",
+          id: "skill/resources",
+          name: "resources",
           type: "folder",
-          icon: folderIcon(expandedNodes, "skill/examples"),
+          icon: folderIcon(expandedNodes, "skill/resources"),
           isExpandable: true,
           children: exampleChildren,
         });

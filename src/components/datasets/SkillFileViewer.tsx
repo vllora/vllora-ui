@@ -24,7 +24,7 @@ import {
 import { ConversationDataTable, parseJsonlContent } from "./conversation-data-table";
 
 interface SkillFileViewerProps {
-  /** Relative path within the skill package, e.g. "SKILL.md", "examples/using-joins.jsonl" */
+  /** Relative path within the skill package, e.g. "SKILL.md", "resources/using-joins.jsonl" */
   readonly filePath: string;
 }
 
@@ -46,11 +46,11 @@ function resolveFileContent(
   filePath: string,
 ): string | null {
   if (filePath === "SKILL.md") return files.skillMd;
-  if (filePath === "examples/index.md") return files.examplesIndex;
+  if (filePath === "resources/index.md") return files.resourcesIndex;
   if (filePath === "knowledge/domain-knowledge.md") return files.knowledgeDoc;
 
-  // examples/{slug}.jsonl
-  const jsonlMatch = filePath.match(/^examples\/(.+)\.jsonl$/);
+  // resources/{slug}.jsonl
+  const jsonlMatch = filePath.match(/^resources\/(.+)\.jsonl$/);
   if (jsonlMatch) {
     return files.topicFiles.get(jsonlMatch[1]) ?? null;
   }
