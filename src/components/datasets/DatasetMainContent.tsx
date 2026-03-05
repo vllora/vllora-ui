@@ -135,16 +135,30 @@ export function DatasetMainContent({
 
     if (!matchedNode) return records;
 
-    // Collect all topic IDs under this node (including itself)
-    const ids = new Set<string>();
+    // Collect all topic names and IDs under this node (including itself)
+    const names = new Set<string>();
     const collect = (node: TopicHierarchyNode) => {
-      ids.add(node.id || node.name);
-      ids.add(node.name);
+      if (node.id) names.add(node.id);
+      names.add(node.name);
       node.children?.forEach(collect);
     };
     collect(matchedNode);
 
-    return records.filter((r) => r.topic && ids.has(r.topic));
+    return records.filter((r) => {
+      if (!r.topic) return false;
+      // Direct match (covers most cases — record.topic is the leaf name)
+      if (names.has(r.topic)) return true;
+      // Leaf extraction fallback (handles path-format topics like "parent/child/leaf")
+      const leaf = r.topic.includes("/") ? r.topic.split("/").pop() : undefined;
+      if (leaf && names.has(leaf)) return true;
+      // topic_path metadata fallback (handles " > " separated paths)
+      const metaPath = r.metadata?.topic_path;
+      if (typeof metaPath === "string") {
+        const metaLeaf = metaPath.split(" > ").pop()?.trim();
+        if (metaLeaf && names.has(metaLeaf)) return true;
+      }
+      return false;
+    });
   }, [records, topicFilter, topicHierarchy]);
 
   // Apply stat filter, role filter, and search to records

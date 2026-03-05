@@ -5,14 +5,15 @@
  * Used in the expanded detail view of records.
  */
 
-import { useMemo } from "react";
-import { GitBranch, Coins, MessageSquare, FileText } from "lucide-react";
+import { useMemo, useState, useEffect } from "react";
+import { GitBranch, Coins, MessageSquare, FileText, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DatasetRecord, DataInfo } from "@/types/dataset-types";
 import { ToolDefinitionsViewer } from "@/components/chat/traces/TraceRow/span-info/DetailView/tool-definitions-viewer";
 import type { ToolInfoCall } from "@/components/chat/traces/TraceRow/span-info/DetailView/spans-display/tool-display";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { getRecordSourceAttributions } from "@/lib/distri-finetune-tools/steps/shared/source-attribution";
+import { resolveChunkRefs, type ResolvedChunk } from "@/lib/distri-finetune-tools/steps/shared/chunk-lookup";
 import { estimateTokens, countTurns } from "./StatsBadge";
 import { countTools } from "./ToolsBadge";
 
@@ -100,24 +101,12 @@ export function MetadataPanel({ record, topicPath }: MetadataPanelProps) {
         </div>
       )}
 
-      {/* Source Documents */}
+      {/* Source Documents with expandable chunk details */}
       {sourceAttributions.length > 0 && (
-        <div>
-          <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-            Source Documents
-          </h4>
-          <div className="space-y-1.5">
-            {sourceAttributions.map((attr) => (
-              <div key={attr.sourceId} className="flex items-center gap-2 text-xs">
-                <FileText className="w-3 h-3 text-blue-400 shrink-0" />
-                <span className="text-foreground font-medium truncate">{attr.sourceName}</span>
-                <span className="text-muted-foreground shrink-0">
-                  {attr.chunkCount} chunk{attr.chunkCount !== 1 ? 's' : ''}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
+        <SourceDocumentsSection
+          record={record}
+          sourceAttributions={sourceAttributions}
+        />
       )}
 
       {/* Conversation Stats */}
@@ -168,6 +157,79 @@ function MetadataRow({ label, value, valueColor = "text-foreground" }: MetadataR
     <div className="flex items-center justify-between py-2">
       <span className="text-xs text-zinc-500">{label}</span>
       <span className={cn("text-xs font-medium", valueColor)}>{value}</span>
+    </div>
+  );
+}
+
+interface SourceDocumentsSectionProps {
+  record: DatasetRecord;
+  sourceAttributions: Array<{ sourceId: string; sourceName: string; chunkCount: number }>;
+}
+
+function SourceDocumentsSection({ record, sourceAttributions }: SourceDocumentsSectionProps) {
+  const [showChunks, setShowChunks] = useState(false);
+  const [resolvedChunks, setResolvedChunks] = useState<ResolvedChunk[]>([]);
+
+  const chunkRefs = record.metadata?.sourceChunkRefs as string[] | undefined;
+
+  useEffect(() => {
+    if (!showChunks || !chunkRefs?.length) return;
+
+    let cancelled = false;
+    resolveChunkRefs(record.datasetId, chunkRefs)
+      .then((chunks) => { if (!cancelled) setResolvedChunks(chunks); })
+      .catch(() => { if (!cancelled) setResolvedChunks([]); });
+
+    return () => { cancelled = true; };
+  }, [showChunks, record.datasetId, chunkRefs]);
+
+  return (
+    <div>
+      <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+        Source Documents
+      </h4>
+      <div className="space-y-1.5">
+        {sourceAttributions.map((attr) => (
+          <div key={attr.sourceId} className="flex items-center gap-2 text-xs">
+            <FileText className="w-3 h-3 text-blue-400 shrink-0" />
+            <span className="text-foreground font-medium truncate">{attr.sourceName}</span>
+            <span className="text-muted-foreground shrink-0">
+              {attr.chunkCount} chunk{attr.chunkCount !== 1 ? "s" : ""}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Toggle to show chunk details */}
+      {chunkRefs && chunkRefs.length > 0 && (
+        <>
+          <button
+            type="button"
+            onClick={() => setShowChunks((prev) => !prev)}
+            className="mt-1.5 flex items-center gap-0.5 text-[10px] text-blue-400 hover:text-blue-300 transition-colors"
+          >
+            {showChunks
+              ? <ChevronDown className="w-3 h-3" />
+              : <ChevronRight className="w-3 h-3" />}
+            {showChunks ? "Hide chunk details" : `Show ${chunkRefs.length} chunk ref${chunkRefs.length !== 1 ? "s" : ""}`}
+          </button>
+          {showChunks && resolvedChunks.length > 0 && (
+            <div className="mt-2 space-y-1 pl-2 border-l border-border/50">
+              {resolvedChunks.map((chunk, i) => (
+                <div key={i} className="text-[10px] text-muted-foreground">
+                  <span className="text-foreground/80">{chunk.heading || chunk.chunkId}</span>
+                  {chunk.pageStart != null && (
+                    <span className="ml-1 text-muted-foreground/60">
+                      p.{chunk.pageStart}
+                      {chunk.pageEnd != null && chunk.pageEnd !== chunk.pageStart ? `–${chunk.pageEnd}` : ""}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

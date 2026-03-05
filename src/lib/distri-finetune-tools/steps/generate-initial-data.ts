@@ -94,8 +94,8 @@ function distributeCountAcrossTopics(totalCount: number, topics: LeafTopic[]): M
 // Batch size for generation - smaller batches are faster and more reliable
 const BATCH_SIZE = 10;
 
-// Number of parallel requests to make - balance between speed and API rate limits
-const PARALLEL_REQUESTS = 3;
+// Number of parallel requests to make — OpenAI gpt-4.1 supports 10K+ RPM
+const PARALLEL_REQUESTS = 6;
 
 
 // =============================================================================
@@ -505,6 +505,7 @@ export const generateInitialDataHandler: ToolHandler = async (
   params,
 ): Promise<GenerateInitialDataResult> => {
   try {
+    const handlerStart = Date.now();
     console.log(
       "=== [generateInitialData] Starting with params:",
       JSON.stringify(params, null, 2),
@@ -678,6 +679,22 @@ export const generateInitialDataHandler: ToolHandler = async (
         totalBatches,
       });
 
+      // Pre-resolve ALL topic-specific chunk contexts (single pass before batch loop)
+      const preResolveStart = Date.now();
+      const topicChunkContexts = new Map<string, string>();
+      for (const topic of leafTopics) {
+        if (!topic.sourceChunkRefs?.length) continue;
+        try {
+          const resolvedChunks = await resolveChunkRefs(dataset_id, topic.sourceChunkRefs);
+          if (resolvedChunks.length > 0) {
+            topicChunkContexts.set(topic.name, buildChunkContextSection(resolvedChunks));
+          }
+        } catch (err) {
+          console.warn(`[generateInitialData] Failed to resolve chunks for "${topic.name}":`, err);
+        }
+      }
+      console.log(`[generateInitialData] Pre-resolved chunk contexts for ${topicChunkContexts.size} topics in ${Date.now() - preResolveStart}ms`);
+
       // Track per-topic progress
       const topicProgress = new Map<string, number>();
       let completedBatches = 0;
@@ -686,26 +703,14 @@ export const generateInitialDataHandler: ToolHandler = async (
       for (let chunkStart = 0; chunkStart < allBatchJobs.length; chunkStart += PARALLEL_REQUESTS) {
         const chunkEnd = Math.min(chunkStart + PARALLEL_REQUESTS, allBatchJobs.length);
         const chunkJobs = allBatchJobs.slice(chunkStart, chunkEnd);
+        const roundIndex = Math.floor(chunkStart / PARALLEL_REQUESTS) + 1;
+        const totalRounds = Math.ceil(allBatchJobs.length / PARALLEL_REQUESTS);
+        const roundStart = Date.now();
 
-        console.log(`[generateInitialData] Processing batches ${chunkStart + 1}-${chunkEnd} of ${totalBatches}`);
+        console.log(`[generateInitialData] Round ${roundIndex}/${totalRounds}: batches ${chunkStart + 1}-${chunkEnd} of ${totalBatches}`);
 
         // Send file content blocks only with the first chunk
         const chunkFileBlocks = chunkStart === 0 ? firstBatchFileBlocks : undefined;
-
-        // Resolve topic-specific chunks for this batch
-        const topicChunkContexts = new Map<string, string>();
-        for (const job of chunkJobs) {
-          if (job.topic.sourceChunkRefs?.length && !topicChunkContexts.has(job.topic.name)) {
-            try {
-              const resolvedChunks = await resolveChunkRefs(dataset_id, job.topic.sourceChunkRefs);
-              if (resolvedChunks.length > 0) {
-                topicChunkContexts.set(job.topic.name, buildChunkContextSection(resolvedChunks));
-              }
-            } catch (err) {
-              console.warn(`[generateInitialData] Failed to resolve chunks for topic "${job.topic.name}":`, err);
-            }
-          }
-        }
 
         // Create parallel requests for this chunk
         const batchPromises = chunkJobs.map(job =>
@@ -729,6 +734,7 @@ export const generateInitialDataHandler: ToolHandler = async (
 
         // Wait for all parallel batches to complete
         const results = await Promise.all(batchPromises);
+        console.log(`[generateInitialData] Round ${roundIndex}/${totalRounds} completed in ${((Date.now() - roundStart) / 1000).toFixed(1)}s`);
 
         // Process results and save to DB
         for (const { job, examples } of results) {
@@ -893,7 +899,8 @@ export const generateInitialDataHandler: ToolHandler = async (
       }
     }
 
-    console.log("[generateInitialData] Generation complete:", totalGenerated, "examples total");
+    const totalElapsed = ((Date.now() - handlerStart) / 1000).toFixed(1);
+    console.log(`[generateInitialData] Generation complete: ${totalGenerated} examples in ${totalElapsed}s`);
 
     // Emit completed event
     emitter.emit("vllora_data_generation_progress", {

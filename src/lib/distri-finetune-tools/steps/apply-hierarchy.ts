@@ -11,6 +11,7 @@ import type { TopicHierarchyNode } from '@/types/dataset-types';
 import type { ToolHandler } from '../types';
 import { countLeafTopics, calculateMaxDepth } from './helpers';
 import { normalizeTopicSegments, normalizeObjectiveToRole } from './shared';
+import { getProposedPlan } from './proposed-plan-store';
 
 /**
  * Normalize and validate hierarchy nodes.
@@ -59,8 +60,10 @@ function normalizeHierarchy(
 
     // Preserve optional fields from the incoming node
     const description = typeof node.description === 'string' ? node.description : undefined;
-    const sourceChunkRefs = Array.isArray(node.sourceChunkRefs) && node.sourceChunkRefs.length > 0
-      ? (node.sourceChunkRefs as string[])
+    // Accept camelCase and snake_case variants — LLM or plan may use either
+    const rawRefs = node.sourceChunkRefs || node.source_chunk_refs || node.source_chunks;
+    const sourceChunkRefs = Array.isArray(rawRefs) && rawRefs.length > 0
+      ? (rawRefs as string[])
       : undefined;
     const promptTemplate = typeof node.promptTemplate === 'string' && node.promptTemplate.trim()
       ? node.promptTemplate
@@ -81,6 +84,81 @@ function normalizeHierarchy(
   }
 
   return result;
+}
+
+// =============================================================================
+// Plan-based ref merging — ensures sourceChunkRefs survive LLM tool calls
+// =============================================================================
+
+function allLeavesHaveRefs(nodes: readonly TopicHierarchyNode[]): boolean {
+  for (const node of nodes) {
+    if (node.children?.length) {
+      if (!allLeavesHaveRefs(node.children)) return false;
+    } else if (!node.sourceChunkRefs?.length) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function countNodesWithRefs(nodes: readonly TopicHierarchyNode[]): number {
+  let count = 0;
+  for (const node of nodes) {
+    if (node.sourceChunkRefs?.length) count++;
+    if (node.children) count += countNodesWithRefs(node.children);
+  }
+  return count;
+}
+
+/**
+ * When topics lack sourceChunkRefs (e.g., LLM omitted them in tool call),
+ * look up the proposed plan and merge in the matching source_chunk_refs.
+ * This is the key fix: the plan always has refs, but the LLM often drops
+ * them when calling apply_topic_hierarchy directly.
+ */
+async function mergeRefsFromPlan(
+  datasetId: string,
+  hierarchy: TopicHierarchyNode[],
+): Promise<TopicHierarchyNode[]> {
+  if (allLeavesHaveRefs(hierarchy)) return hierarchy;
+
+  let plan;
+  try {
+    plan = await getProposedPlan(datasetId);
+  } catch (err) {
+    console.warn('[apply-hierarchy] Failed to load proposed plan for ref merge:', err);
+    return hierarchy;
+  }
+  if (!plan?.proposed_topics?.length) return hierarchy;
+
+  // Build name → refs map from plan (flatten proposed_topics + subtopics)
+  const planRefMap = new Map<string, string[]>();
+  for (const topic of plan.proposed_topics) {
+    if (topic.source_chunk_refs?.length) {
+      planRefMap.set(topic.name.toLowerCase(), topic.source_chunk_refs);
+    }
+    for (const sub of topic.subtopics || []) {
+      if (sub.source_chunk_refs?.length) {
+        planRefMap.set(sub.name.toLowerCase(), sub.source_chunk_refs);
+      }
+    }
+  }
+
+  if (planRefMap.size === 0) return hierarchy;
+
+  // Walk hierarchy and fill in missing refs (immutable — creates new nodes)
+  function fillRefs(nodes: TopicHierarchyNode[]): TopicHierarchyNode[] {
+    return nodes.map(node => {
+      const refs = node.sourceChunkRefs || planRefMap.get(node.name.toLowerCase());
+      const children = node.children ? fillRefs(node.children) : node.children;
+      return { ...node, sourceChunkRefs: refs, children };
+    });
+  }
+
+  const merged = fillRefs(hierarchy);
+  const mergedCount = countNodesWithRefs(merged);
+  console.log(`[apply-hierarchy] Merged sourceChunkRefs from plan for ${mergedCount} topics`);
+  return merged;
 }
 
 export const applyTopicHierarchyHandler: ToolHandler = async (params) => {
@@ -115,6 +193,10 @@ export const applyTopicHierarchyHandler: ToolHandler = async (params) => {
 
     // Normalize and validate hierarchy structure (ensures IDs exist)
     let validHierarchy = normalizeHierarchy(hierarchy);
+
+    // Auto-merge sourceChunkRefs from proposed plan when LLM omits them
+    validHierarchy = await mergeRefsFromPlan(workflow.datasetId, validHierarchy);
+
     const topicCount = countLeafTopics(validHierarchy);
 
     if (topicCount === 0) {

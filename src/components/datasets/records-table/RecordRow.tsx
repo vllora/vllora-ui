@@ -235,14 +235,19 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
             </span>
           )}
 
-          {/* Source document badge */}
+          {/* Source document badge with chunk ref count */}
           {sourceAttributions.length > 0 && (
-            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-400 shrink-0 max-w-[120px]">
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-400 shrink-0 max-w-[140px]">
               <FileText className="w-2.5 h-2.5 shrink-0" />
               <span className="truncate">{sourceAttributions[0].sourceName.replace(/\.[^.]+$/, '')}</span>
               {sourceAttributions.length > 1 && (
                 <span className="text-blue-400/60 ml-0.5 shrink-0">+{sourceAttributions.length - 1}</span>
               )}
+              {(record.metadata?.sourceChunkRefs as string[] | undefined)?.length ? (
+                <span className="text-blue-400/50 ml-0.5 shrink-0">
+                  ({(record.metadata?.sourceChunkRefs as string[]).length})
+                </span>
+              ) : null}
             </span>
           )}
 
