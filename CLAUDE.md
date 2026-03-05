@@ -50,7 +50,9 @@ src/
 └── ...
 docs/
 ├── state-management-pattern.md     # MANDATORY: read before writing state code
-└── features/lucy-finetune-dataset/ # 8 feature docs (see below)
+└── features/
+    ├── lucy-finetune-dataset/      # 8 feature docs (see below)
+    └── skill-package/              # 3 docs: README, architecture, data-flow
 ```
 
 ---
@@ -97,40 +99,43 @@ User ↔ React UI (this repo)
 | `docs/features/lucy-finetune-dataset/dataset-readme-generation.md` | Auto-generated dataset README |
 | `docs/features/lucy-finetune-dataset/event-emitter-guide.md` | 14 events, emitters/listeners map, context architecture |
 | `docs/features/lucy-finetune-dataset/vendored-distri-packages.md` | Vendored package details |
+| `docs/features/skill-package/README.md` | Skill package overview, output format, how Claude uses it |
+| `docs/features/skill-package/architecture.md` | Skill package source map, types, functions, debugging |
+| `docs/features/skill-package/data-flow.md` | End-to-end data flow from IndexedDB through packaging |
 | `docs/state-management-pattern.md` | **MANDATORY** — Context + ahooks pattern |
 
 ---
 
 ## Cross-Repo Source Map
 
-When investigating issues, check the relevant layer(s). File paths are absolute so you can `Read` them directly.
+When investigating issues, check the relevant layer(s). Paths are relative to the project root (`vllora/ui/`).
 
 ### Layer 1: Agent Definition (what the AI does)
 
 | File | Purpose |
 |------|---------|
-| `/Users/anhthuduong/Documents/GitHub/vllora/gateway/agents/finetune/vllora-finetune-agent.md` | Orchestrator agent (plan-first routing) |
-| `/Users/anhthuduong/Documents/GitHub/vllora/gateway/agents/finetune/finetune-topics-agent.md` | Topic hierarchy sub-agent |
-| `/Users/anhthuduong/Documents/GitHub/vllora/gateway/agents/finetune/finetune-workflow-agent.md` | Workflow execution sub-agent |
-| `/Users/anhthuduong/Documents/GitHub/vllora/gateway/agents/finetune/data-generation-agent.md` | Data generation sub-agent |
+| `../gateway/agents/finetune/vllora-finetune-agent.md` | Orchestrator agent (plan-first routing) |
+| `../gateway/agents/finetune/finetune-topics-agent.md` | Topic hierarchy sub-agent |
+| `../gateway/agents/finetune/finetune-workflow-agent.md` | Workflow execution sub-agent |
+| `../gateway/agents/finetune/data-generation-agent.md` | Data generation sub-agent |
 
 ### Layer 2: Rust Gateway
 
 | File | Purpose |
 |------|---------|
-| `/Users/anhthuduong/Documents/GitHub/vllora/gateway/src/distri.rs` | Downloads distri binary, starts server, health checks |
+| `../gateway/src/distri.rs` | Downloads distri binary, starts server, health checks |
 
 ### Layer 3: Distri Server (Rust)
 
 | File | Purpose |
 |------|---------|
-| `/Users/anhthuduong/Documents/GitHub/distri/server/distri-core/src/agent/orchestrator.rs` | Loads agent defs, manages sessions |
-| `/Users/anhthuduong/Documents/GitHub/distri/server/distri-core/src/agent/agent_loop.rs` | Main LLM ↔ tool execution loop |
-| `/Users/anhthuduong/Documents/GitHub/distri/server/distri-core/src/tools/mod.rs` | Tool execution framework |
-| `/Users/anhthuduong/Documents/GitHub/distri/server/distri-core/src/a2a/handler.rs` | A2A protocol handler |
-| `/Users/anhthuduong/Documents/GitHub/distri/server/distri-core/src/a2a/stream.rs` | A2A streaming |
-| `/Users/anhthuduong/Documents/GitHub/distri/server/distri-server/src/routes.rs` | HTTP API routes |
-| `/Users/anhthuduong/Documents/GitHub/distri/distri-a2a/src/a2a_types.rs` | A2A type definitions |
+| `../../distri/server/distri-core/src/agent/orchestrator.rs` | Loads agent defs, manages sessions |
+| `../../distri/server/distri-core/src/agent/agent_loop.rs` | Main LLM ↔ tool execution loop |
+| `../../distri/server/distri-core/src/tools/mod.rs` | Tool execution framework |
+| `../../distri/server/distri-core/src/a2a/handler.rs` | A2A protocol handler |
+| `../../distri/server/distri-core/src/a2a/stream.rs` | A2A streaming |
+| `../../distri/server/distri-server/src/routes.rs` | HTTP API routes |
+| `../../distri/distri-a2a/src/a2a_types.rs` | A2A type definitions |
 
 ### Layer 4: Frontend (this repo)
 
@@ -149,13 +154,13 @@ When investigating issues, check the relevant layer(s). File paths are absolute 
 
 | File | Purpose |
 |------|---------|
-| `/Users/anhthuduong/Documents/GitHub/distri/distrijs/packages/react/src/useChat.ts` | Chat hook (message streaming, tool execution) |
-| `/Users/anhthuduong/Documents/GitHub/distri/distrijs/packages/react/src/stores/chatStateStore.ts` | Zustand state store |
-| `/Users/anhthuduong/Documents/GitHub/distri/distrijs/packages/react/src/components/Chat.tsx` | Main chat component |
-| `/Users/anhthuduong/Documents/GitHub/distri/distrijs/packages/react/src/components/ChatInput.tsx` | Input component |
-| `/Users/anhthuduong/Documents/GitHub/distri/distrijs/packages/core/src/distri-client.ts` | A2A protocol client |
-| `/Users/anhthuduong/Documents/GitHub/distri/distrijs/packages/core/src/types.ts` | Core type definitions |
-| `/Users/anhthuduong/Documents/GitHub/distri/distrijs/packages/core/src/events.ts` | Event system |
+| `../../distri/distrijs/packages/react/src/useChat.ts` | Chat hook (message streaming, tool execution) |
+| `../../distri/distrijs/packages/react/src/stores/chatStateStore.ts` | Zustand state store |
+| `../../distri/distrijs/packages/react/src/components/Chat.tsx` | Main chat component |
+| `../../distri/distrijs/packages/react/src/components/ChatInput.tsx` | Input component |
+| `../../distri/distrijs/packages/core/src/distri-client.ts` | A2A protocol client |
+| `../../distri/distrijs/packages/core/src/types.ts` | Core type definitions |
+| `../../distri/distrijs/packages/core/src/events.ts` | Event system |
 
 ### Layer 6: Sync Mechanism
 
@@ -216,18 +221,19 @@ Hook scripts live in `.claude/hooks/`. Configuration is in `.claude/settings.jso
 
 ## Documentation Sync Rule
 
-After ANY code change, check whether it affects behavior documented in `docs/features/lucy-finetune-dataset/`. If it does, **update the relevant doc file(s) in the same change**:
+After ANY code change, check whether it affects behavior documented in `docs/features/`. If it does, **update the relevant doc file(s) in the same change**:
 
 | What changed | Update |
 |-------------|--------|
-| State machine transitions | `state-machine.md` |
-| Tools added/removed/modified | `architecture.md` |
-| Onboarding flow or planning | `guided-onboarding.md` |
-| Data generation logic | `data-generation-agent.md` |
-| README generation | `dataset-readme-generation.md` |
-| Vendored packages updated | `vendored-distri-packages.md` |
-| Event emitters added/changed | `event-emitter-guide.md` |
+| State machine transitions | `lucy-finetune-dataset/state-machine.md` |
+| Tools added/removed/modified | `lucy-finetune-dataset/architecture.md` |
+| Onboarding flow or planning | `lucy-finetune-dataset/guided-onboarding.md` |
+| Data generation logic | `lucy-finetune-dataset/data-generation-agent.md` |
+| README generation | `lucy-finetune-dataset/dataset-readme-generation.md` |
+| Vendored packages updated | `lucy-finetune-dataset/vendored-distri-packages.md` |
+| Event emitters added/changed | `lucy-finetune-dataset/event-emitter-guide.md` |
 | Agent prompt/tools changed | The relevant agent md in `gateway/agents/finetune/` |
+| Skill packaging logic (generate, download, viewer) | `skill-package/README.md`, `architecture.md`, or `data-flow.md` |
 
 ---
 
@@ -243,6 +249,7 @@ Skills extend Claude's capabilities. Auto-invoked when relevant, or invoke manua
 | `/finetune-arch` | Yes | Load full-stack architecture from all 6 layers across 3 repos |
 | `/finetune-ui <task>` | Manual | Design or enhance UI (loads UI components, @distri/react renderers, UX docs) |
 | `/finetune-e2e <test>` | Manual | E2E test with Playwright MCP (browser automation, screenshots, verification) |
+| `/skill-package-context` | Yes | Load skill package docs — use when asked about skill packaging, SKILL.md, JSONL format |
 
 ## Sub-Agents
 
