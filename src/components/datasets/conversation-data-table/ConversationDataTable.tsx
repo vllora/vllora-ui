@@ -10,7 +10,7 @@
  */
 
 import { useState, useCallback, useMemo, Fragment } from "react";
-import { ChevronRight, ChevronDown } from "lucide-react";
+import { ChevronRight, ChevronDown, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Table,
@@ -20,11 +20,13 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
-import type { DatasetRecord } from "@/types/dataset-types";
+import type { DatasetRecord, KnowledgeSource } from "@/types/dataset-types";
 import type { AvailableTopic } from "../record-utils";
-import { SelectionCheckbox, QualityIndicator, RecordActions, StatsBadge } from "../records-table/cells";
+import { SelectionCheckbox, QualityIndicator, RecordActions } from "../records-table/cells";
 import { RecordDataDialog } from "../records-table/RecordDataDialog";
 import { emitter } from "@/utils/eventEmitter";
+import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
+import { getRecordSourceAttributions } from "@/lib/distri-finetune-tools/steps/shared/source-attribution";
 import { ConversationExpandedDetail } from "./ConversationExpandedDetail";
 import type { ConversationRow, ConversationTableMode } from "./types";
 
@@ -62,6 +64,42 @@ function SystemBanner({ systemPrompt }: { readonly systemPrompt: string }) {
         </p>
       )}
     </button>
+  );
+}
+
+// ─── Source ref badge (compact cell display) ───
+
+function SourceRefBadge({
+  sourceChunkRefs,
+  sources,
+}: {
+  readonly sourceChunkRefs: string[] | undefined;
+  readonly sources: KnowledgeSource[];
+}) {
+  const attributions = useMemo(
+    () => getRecordSourceAttributions(sourceChunkRefs, sources),
+    [sourceChunkRefs, sources],
+  );
+
+  if (attributions.length === 0) {
+    return <span className="text-[10px] text-muted-foreground/30">—</span>;
+  }
+
+  const primary = attributions[0];
+  const displayName = primary.sourceName.replace(/\.[^.]+$/, "");
+  const totalChunks = sourceChunkRefs?.length ?? 0;
+
+  return (
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-400 max-w-[140px]">
+      <FileText className="w-2.5 h-2.5 shrink-0" />
+      <span className="truncate">{displayName}</span>
+      {attributions.length > 1 && (
+        <span className="text-blue-400/60 shrink-0">+{attributions.length - 1}</span>
+      )}
+      {totalChunks > 0 && (
+        <span className="text-blue-400/50 shrink-0">({totalChunks})</span>
+      )}
+    </span>
   );
 }
 
@@ -109,6 +147,7 @@ export function ConversationDataTable({
 }: ConversationDataTableProps) {
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [editRecord, setEditRecord] = useState<DatasetRecord | null>(null);
+  const { sources } = KnowledgeSourcesConsumer();
 
   const isManage = mode === "synthetic-data-manage";
 
@@ -118,7 +157,7 @@ export function ConversationDataTable({
 
   // Column count for colSpan on expanded detail
   const colCount = useMemo(() => {
-    let count = 5; // #, user, assistant, score, tokens
+    let count = 5; // #, user, assistant, score, refs/tokens
     if (isManage && selectable) count += 1; // checkbox
     if (isManage) count += 1; // actions
     return count;
@@ -164,13 +203,16 @@ export function ConversationDataTable({
             </TableHead>
             {/* Score (manage mode only — JSONL read-only has no meaningful score) */}
             {isManage && (
-              <TableHead className="w-24 text-[11px] font-medium text-right">
+              <TableHead className="w-20 text-[11px] font-medium text-center">
                 score
               </TableHead>
             )}
-            {/* Tokens */}
-            <TableHead className="w-20 text-[11px] font-medium text-right">
-              tokens
+            {/* Source refs (manage) / tokens (read-only) */}
+            <TableHead className={cn(
+              "text-[11px] font-medium",
+              isManage ? "w-36" : "w-20 text-right",
+            )}>
+              {isManage ? "source" : "tokens"}
             </TableHead>
             {/* Actions header (manage mode) */}
             {isManage && (
@@ -239,33 +281,33 @@ export function ConversationDataTable({
 
                   {/* Score (manage mode only) */}
                   {isManage && record && (
-                    <TableCell className="w-24 text-right align-top py-2.5">
-                      <QualityIndicator
-                        evaluation={row.evaluation}
-                        compact
-                        onNavigate={datasetId ? (target) => {
-                          emitter.emit("vllora_switch_tab", { datasetId, tab: target });
-                          setTimeout(() => {
-                            window.dispatchEvent(new CustomEvent("vllora_highlight_eval_result", {
-                              detail: { recordId: row.id },
-                            }));
-                          }, 300);
-                        } : undefined}
-                      />
+                    <TableCell className="w-20 align-top py-2.5">
+                      <div className="flex justify-center">
+                        <QualityIndicator
+                          evaluation={row.evaluation}
+                          compact
+                          onNavigate={datasetId ? (target) => {
+                            emitter.emit("vllora_switch_tab", { datasetId, tab: target });
+                            setTimeout(() => {
+                              window.dispatchEvent(new CustomEvent("vllora_highlight_eval_result", {
+                                detail: { recordId: row.id },
+                              }));
+                            }, 300);
+                          } : undefined}
+                        />
+                      </div>
                     </TableCell>
                   )}
 
-                  {/* Tokens */}
-                  <TableCell className="w-20 text-right align-top py-2.5">
+                  {/* Source refs (manage) / tokens (read-only) */}
+                  <TableCell className={cn(
+                    "align-top py-2.5",
+                    isManage ? "w-36" : "w-20 text-right",
+                  )}>
                     {isManage && record ? (
-                      <StatsBadge
-                        data={record.data}
-                        compact
-                        assistantFallback={
-                          typeof record.metadata?.skillResponse === "string"
-                            ? record.metadata.skillResponse
-                            : undefined
-                        }
+                      <SourceRefBadge
+                        sourceChunkRefs={record.metadata?.sourceChunkRefs as string[] | undefined}
+                        sources={sources}
                       />
                     ) : (
                       <span className="text-[10px] text-muted-foreground/60 tabular-nums whitespace-nowrap">

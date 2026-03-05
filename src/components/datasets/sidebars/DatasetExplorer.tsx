@@ -150,6 +150,32 @@ function buildSkillExamplesChildren(
   });
 }
 
+/**
+ * Build a mapping from skill leaf node IDs to their corresponding data/ paths.
+ * Both trees share the same TopicHierarchyNode hierarchy — this builds
+ * the lookup by walking nodes in parallel with both naming conventions.
+ */
+function buildSkillToDataMap(
+  nodes: readonly TopicHierarchyNode[],
+  parentSlug: string,
+  parentDataPath: string,
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const node of nodes) {
+    const slug = slugifySegment(node.name);
+    const slugPath = parentSlug ? `${parentSlug}/${slug}` : slug;
+    const dataPath = parentDataPath ? `${parentDataPath}/${node.name}` : node.name;
+    if (node.children?.length) {
+      for (const [k, v] of buildSkillToDataMap(node.children, slugPath, dataPath)) {
+        map.set(k, v);
+      }
+    } else {
+      map.set(`skill/examples/${slugPath}.jsonl`, `data/${dataPath}`);
+    }
+  }
+  return map;
+}
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -246,6 +272,22 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
     }
     return counts;
   }, [records]);
+
+  // Map skill .jsonl leaf node IDs → corresponding data/ paths
+  // so clicking a .jsonl in the Explorer opens the records view instead
+  const skillToDataMap = useMemo(() => {
+    const hierarchy = dataset?.topicHierarchy?.hierarchy;
+    if (!hierarchy?.length) {
+      // Flat fallback: no hierarchy, map from slug to topic name
+      const map = new Map<string, string>();
+      for (const [topicName] of topicCounts) {
+        const slug = slugifySegment(topicName);
+        map.set(`skill/examples/${slug}.jsonl`, `data/${topicName}`);
+      }
+      return map;
+    }
+    return buildSkillToDataMap(hierarchy, "", "");
+  }, [dataset?.topicHierarchy?.hierarchy, topicCounts]);
 
   // ============================================================================
   // Build the virtual file tree
@@ -753,14 +795,17 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
   const handleSelect = useCallback((nodeId: string) => {
     setSelectedNodeId(nodeId);
 
-    // Open a workspace tab for this node.
-    // Single-click = preview tab (italic, replaced by next preview).
-    // The WorkspaceTabBridge in DatasetDetailContentV2 syncs
-    // activeTabPath → contentSection for rendering.
-    openTab(nodeId);
+    // Redirect skill example .jsonl files to the data records view
+    // so both Explorer paths show the same full-featured records table.
+    const dataPath = skillToDataMap.get(nodeId);
+    if (dataPath) {
+      openTab(dataPath);
+    } else {
+      openTab(nodeId);
+    }
 
     onNavigate?.(nodeId);
-  }, [openTab, onNavigate]);
+  }, [openTab, onNavigate, skillToDataMap]);
 
   // ============================================================================
   // Render
