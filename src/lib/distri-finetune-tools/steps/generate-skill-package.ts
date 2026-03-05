@@ -287,6 +287,78 @@ function buildResourcesIndex(
 
 // ─── Build knowledge/domain-knowledge.md ───
 
+/** Shape of a semantic chunk from local-semantic PDF extraction */
+interface ExtractedChunk {
+  readonly id: string;
+  readonly heading: string;
+  readonly summary: string;
+  readonly sentences: readonly string[];
+  readonly pageStart: number;
+  readonly pageEnd: number;
+}
+
+/** Max sentences per chunk to include (prevents runaway file sizes) */
+const MAX_SENTENCES_PER_CHUNK = 30;
+
+/**
+ * Build knowledge doc from semantic chunks (local-semantic extraction).
+ * Each chunk becomes a section with heading, page range, and full sentences.
+ */
+function buildKnowledgeFromChunks(
+  sourceName: string,
+  chunks: readonly ExtractedChunk[],
+  totalPages: number,
+): string[] {
+  const lines: string[] = [
+    `## ${sourceName}`,
+    '',
+    `*${totalPages} pages, ${chunks.length} sections*`,
+    '',
+  ];
+
+  for (const chunk of chunks) {
+    const pageRange = chunk.pageStart === chunk.pageEnd
+      ? `p.${chunk.pageStart}`
+      : `pp.${chunk.pageStart}–${chunk.pageEnd}`;
+
+    lines.push(`### ${chunk.heading}`, '');
+    lines.push(`*${pageRange}*`, '');
+
+    // Use full sentences — the actual content
+    const sentences = chunk.sentences.slice(0, MAX_SENTENCES_PER_CHUNK);
+    if (sentences.length > 0) {
+      lines.push(sentences.join(' '), '');
+    }
+  }
+
+  return lines;
+}
+
+/**
+ * Build knowledge doc from legacy sections (LLM extraction fallback).
+ */
+function buildKnowledgeFromSections(
+  sourceName: string,
+  sections: readonly { title: string; content: string }[],
+  summary: string | undefined,
+): string[] {
+  const lines: string[] = [`## ${sourceName}`, ''];
+
+  if (summary) {
+    lines.push(summary, '');
+  }
+
+  for (const section of sections.slice(0, 20)) {
+    lines.push(`### ${section.title}`, '');
+    const truncated = section.content.length > 800
+      ? `${section.content.slice(0, 800)}...`
+      : section.content;
+    lines.push(truncated, '');
+  }
+
+  return lines;
+}
+
 function buildKnowledgeDoc(
   sources: readonly KnowledgeSource[],
 ): string | null {
@@ -297,37 +369,33 @@ function buildKnowledgeDoc(
 
   for (const source of readySources) {
     const content = source.extractedContent!;
-    lines.push(`## ${source.name}`, '');
+    const metadata = content.metadata as Record<string, unknown> | undefined;
+    const extractionMethod = metadata?.extractionMethod as string | undefined;
 
-    if (content.metadata?.summary) {
-      lines.push(String(content.metadata.summary), '');
-    }
+    if (extractionMethod === 'local-semantic') {
+      // Modern path: use semantic chunks with full sentence content
+      const chunks = (metadata?.chunks as ExtractedChunk[] | undefined) ?? [];
+      const totalPages = (metadata?.totalPages as number) || 0;
 
-    if (content.sectionHeadings && content.sectionHeadings.length > 0) {
-      lines.push('### Key Sections', '');
-      for (const heading of content.sectionHeadings) {
-        lines.push(`- ${heading}`);
+      if (chunks.length > 0) {
+        lines.push(...buildKnowledgeFromChunks(source.name, chunks, totalPages));
       }
-      lines.push('');
-    }
+    } else {
+      // Legacy fallback: use sections array
+      const sections = (content.sections ?? []) as Array<{ title: string; content: string }>;
+      const summary = metadata?.document_summary as string | undefined;
 
-    if (content.sections && content.sections.length > 0) {
-      lines.push('### Reference Sections', '');
-      for (const section of content.sections.slice(0, 20)) {
-        lines.push(`#### ${section.title}`, '');
-        // Truncate long content to keep file manageable
-        const truncated =
-          section.content.length > 500
-            ? `${section.content.slice(0, 500)}...`
-            : section.content;
-        lines.push(truncated, '');
+      if (sections.length > 0) {
+        lines.push(...buildKnowledgeFromSections(source.name, sections, summary));
       }
     }
 
     lines.push('---', '');
   }
 
-  return lines.join('\n');
+  // Return null if we ended up with only the header and separators
+  const hasContent = lines.some((l) => l.startsWith('## '));
+  return hasContent ? lines.join('\n') : null;
 }
 
 // ─── Build topic hierarchy as nested markdown list ───
@@ -499,17 +567,30 @@ function buildSkillMarkdown(params: {
     );
   }
 
-  // Using Resources — concise, domain-focused (replaces old "How to Use Examples" section)
+  // Using Resources — concise, domain-focused with JSONL format description
   lines.push(
     '## Using Resources',
     '',
     `This skill includes ${params.exampleCount} curated examples across ${params.topicCount} topics`,
-    'in the `resources/` directory. Each topic has a JSONL file with system/user/assistant',
-    'examples demonstrating the expected tone, format, and domain accuracy.',
+    'in the `resources/` directory.',
     '',
     'When responding:',
     '1. Check [resources/index.md](resources/index.md) to find the matching topic file path',
-    '2. Load the relevant JSONL file(s) and follow the demonstrated patterns',
+    '2. Load the relevant JSONL file(s)',
+    '3. Study the `assistant` field for tone, format, and domain knowledge',
+    '',
+    '### JSONL Format',
+    '',
+    'Each line is a JSON object with these fields:',
+    '',
+    '| Field | Purpose |',
+    '|-------|---------|',
+    '| `user` | Example question — use to match incoming queries |',
+    '| `assistant` | **Primary**: reference answer showing expected style and knowledge |',
+    '| `system` | Role context (same as this SKILL.md — skip if redundant) |',
+    '',
+    'Focus on the `assistant` field — it contains the domain knowledge and',
+    'demonstrates the expected response patterns.',
     '',
   );
 
