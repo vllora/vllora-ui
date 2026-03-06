@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lucy Enhanced UX — Complete Mockups</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', sans-serif; background: #0e0e10; color: #d4d4d8; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+
+    /* Navigation */
+    .nav-tabs { display: flex; gap: 0; border-bottom: 1px solid #27272a; background: #111113; overflow-x: auto; }
+    .nav-tab { padding: 10px 16px; font-size: 12px; font-weight: 500; color: #71717a; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; transition: all 0.15s; }
+    .nav-tab:hover { color: #a1a1aa; background: #1a1a1f; }
+    .nav-tab.active { color: #e4e4e7; border-bottom-color: #7c3aed; }
+    .nav-group { display: flex; align-items: center; gap: 0; }
+    .nav-group-label { padding: 10px 8px 10px 16px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #52525b; }
+
+    /* Sidebar */
+    .sidebar { width: 380px; background: #131316; border: 1px solid #1e1e22; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
+    .sidebar-header { padding: 8px 12px; border-bottom: 1px solid #1e1e22; display: flex; align-items: center; justify-content: space-between; }
+    .sidebar-chat { padding: 12px; overflow-y: auto; flex: 1; }
+    .sidebar-input { padding: 8px 12px; border-top: 1px solid #1e1e22; }
+
+    /* Messages */
+    .msg-lucy { background: #1a1a1f; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; border: 1px solid #222228; }
+    .msg-user { background: #2d1f69; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+    .msg-system { background: #1a1a0f; border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; border: 1px solid #33331a; font-size: 10px; }
+
+    /* Steps */
+    .step-done { display: flex; align-items: center; gap: 6px; padding: 2px 0; font-size: 10px; color: #71717a; }
+    .step-active { display: flex; align-items: center; gap: 6px; padding: 2px 0; font-size: 10px; color: #e4e4e7; }
+    .step-pending { display: flex; align-items: center; gap: 6px; padding: 2px 0; font-size: 10px; color: #3f3f46; }
+
+    /* Buttons */
+    .btn { padding: 4px 10px; border-radius: 5px; font-size: 10px; font-weight: 500; cursor: pointer; transition: all 0.15s; border: none; }
+    .btn-primary { background: #7c3aed; color: white; }
+    .btn-primary:hover { background: #6d28d9; }
+    .btn-secondary { background: #27272a; color: #d4d4d8; border: 1px solid #3f3f46; }
+    .btn-secondary:hover { background: #3f3f46; }
+    .btn-success { background: #166534; color: #86efac; }
+    .btn-warning { background: #713f12; color: #fde047; }
+    .btn-danger { background: #7f1d1d; color: #fca5a5; }
+
+    /* Cards */
+    .card { background: #1a1a1f; border: 1px solid #222228; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+    .card-warning { border-color: #854d0e; background: #1a1a0f; }
+    .card-success { border-color: #166534; background: #0f1a14; }
+    .card-error { border-color: #7f1d1d; background: #1a0f0f; }
+
+    /* Score colors */
+    .score-good { color: #4ade80; }
+    .score-ok { color: #fbbf24; }
+    .score-bad { color: #f87171; }
+
+    /* Animations */
+    .pulse { animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    @keyframes countdown { from { width: 100%; } to { width: 0%; } }
+    .countdown-bar { animation: countdown 8s linear forwards; }
+
+    /* Progress bar */
+    .progress-bar { height: 3px; background: #27272a; border-radius: 2px; overflow: hidden; }
+    .progress-fill { height: 100%; background: #7c3aed; border-radius: 2px; transition: width 0.3s; }
+
+    /* Badge */
+    .badge { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; border-radius: 9999px; font-size: 9px; font-weight: 600; }
+    .badge-purple { background: #7c3aed20; color: #a78bfa; }
+    .badge-green { background: #16653420; color: #4ade80; }
+    .badge-yellow { background: #713f1220; color: #fbbf24; }
+    .badge-red { background: #7f1d1d20; color: #f87171; }
+    .badge-blue { background: #1e3a5f20; color: #60a5fa; }
+
+    /* Notification dot */
+    .notif-dot { width: 8px; height: 8px; background: #7c3aed; border-radius: 50%; position: absolute; top: -2px; right: -2px; }
+
+    /* Score matrix table */
+    .score-matrix { width: 100%; font-size: 10px; }
+    .score-matrix th { text-align: center; padding: 3px 4px; font-weight: 500; color: #71717a; border-bottom: 1px solid #27272a; }
+    .score-matrix td { text-align: center; padding: 3px 4px; }
+    .score-matrix td:first-child { text-align: left; color: #a1a1aa; }
+
+    /* Section container */
+    .scenario { display: none; padding: 24px; }
+    .scenario.active { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; }
+    .scenario-description { width: 100%; max-width: 900px; margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+
+<!-- Navigation -->
+<div class="nav-tabs" style="position: sticky; top: 0; z-index: 100;">
+  <div class="nav-group">
+    <span class="nav-group-label">Iteration Loop</span>
+    <div class="nav-tab active" data-tab="checkpoint">Checkpoint (Eval Done)</div>
+    <div class="nav-tab" data-tab="intervention">User Intervenes</div>
+    <div class="nav-tab" data-tab="auto-continue">Auto-Continue</div>
+    <div class="nav-tab" data-tab="stall">Stall Detected</div>
+    <div class="nav-tab" data-tab="post-training">Post-Training</div>
+  </div>
+  <div class="nav-group">
+    <span class="nav-group-label">Session Lifecycle</span>
+    <div class="nav-tab" data-tab="active-watching">Active Watching</div>
+    <div class="nav-tab" data-tab="came-back">Came Back (Job Done)</div>
+    <div class="nav-tab" data-tab="came-back-failed">Came Back (Job Failed)</div>
+    <div class="nav-tab" data-tab="mid-iteration">Mid-Iteration Resume</div>
+    <div class="nav-tab" data-tab="background">Background Transition</div>
+  </div>
+  <div class="nav-group">
+    <span class="nav-group-label">Reference</span>
+    <div class="nav-tab" data-tab="decision-tree">Decision Tree Flow</div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SCENARIO: Checkpoint (Eval Done)             -->
+<!-- ============================================ -->
+<div class="scenario active" id="checkpoint">
+  <div class="scenario-description">
+    <h2 style="font-size: 16px; font-weight: 600; color: #e4e4e7; margin-bottom: 4px;">Checkpoint: Evaluation Complete</h2>
+    <p style="font-size: 12px; color: #71717a;">Lucy has finished analyzing dry run results and presents a structured checkpoint with score matrix (multi-model x multi-grader), per-topic breakdown, and recommended actions.</p>
+  </div>
+
+  <div class="sidebar" style="min-height: 700px;">
+    <div class="sidebar-header">
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <div style="width: 20px; height: 20px; background: #7c3aed; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; color: white;">L</div>
+        <span style="font-size: 12px; font-weight: 600;">Lucy</span>
+        <span class="badge badge-purple">Iteration 2</span>
+      </div>
+      <div style="display: flex; gap: 4px;">
+        <span style="font-size: 10px; color: #52525b;">Chess Tutor Dataset</span>
+      </div>
+    </div>
+
+    <div class="sidebar-chat" style="font-size: 11px; line-height: 1.5;">
+      <!-- Completed steps -->
+      <div class="msg-lucy" style="padding: 6px 10px;">
+        <div class="step-done"><span style="color: #4ade80;">&#10003;</span> Topics configured (6 topics)</div>
+        <div class="step-done"><span style="color: #4ade80;">&#10003;</span> 132 records generated</div>
+        <div class="step-done"><span style="color: #4ade80;">&#10003;</span> Grader configured (Notation + Pedagogy)</div>
+        <div class="step-done"><span style="color: #4ade80;">&#10003;</span> Dataset uploaded</div>
+        <div class="step-done"><span style="color: #4ade80;">&#10003;</span> Evaluation completed (2 evals)</div>
+      </div>
+
+      <!-- CHECKPOINT CARD -->
+      <div class="card" style="border-color: #7c3aed40;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+          <span style="font-size: 10px; font-weight: 600; color: #a78bfa;">&#9632; ITERATION 2 CHECKPOINT</span>
+          <span class="badge badge-yellow">Needs Attention</span>
+        </div>
+
+        <!-- Score Matrix -->
+        <div style="background: #111116; border-radius: 6px; padding: 8px; margin-bottom: 8px;">
+          <div style="font-size: 9px; font-weight: 600; color: #52525b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Dry Run Score Matrix (2 evals)</div>
+          <table class="score-matrix">
+            <thead>
+              <tr>
+                <th style="text-align: left;"></th>
+                <th style="color: #60a5fa;">Notation Grader</th>
+                <th style="color: #c084fc;">Pedagogy Grader</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid #1e1e22;">
+                <td>gpt-4o-mini <span style="font-size: 8px; color: #52525b;">(base)</span></td>
+                <td class="mono score-bad">0.45</td>
+                <td class="mono score-ok">0.62</td>
+              </tr>
+              <tr>
+                <td>gpt-4o <span style="font-size: 8px; color: #52525b;">(compare)</span></td>
+                <td class="mono score-good">0.71</td>
+                <td class="mono score-good">0.78</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Cross-model insight -->
+        <div style="background: #1e3a5f15; border-radius: 4px; padding: 6px 8px; margin-bottom: 8px; border-left: 2px solid #3b82f6;">
+          <div style="font-size: 9px; color: #60a5fa; font-weight: 600; margin-bottom: 2px;">Cross-Model Insight</div>
+          <div style="font-size: 10px; color: #93c5fd;">gpt-4o scores 0.26 higher on Notation — dataset is valid, 4o-mini needs more specific prompts for notation tasks.</div>
+        </div>
+
+        <!-- Per-topic breakdown -->
+        <div style="font-size: 9px; font-weight: 600; color: #52525b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Per-Topic (gpt-4o-mini, Notation Grader)</div>
+        <div style="margin-bottom: 8px;">
+          <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+            <span style="font-size: 10px;">Pins</span>
+            <span class="mono score-bad" style="font-size: 10px;">0.22</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" style="width: 22%; background: #ef4444;"></div></div>
+
+          <div style="display: flex; justify-content: space-between; padding: 2px 0; margin-top: 4px;">
+            <span style="font-size: 10px;">Combinations</span>
+            <span class="mono score-bad" style="font-size: 10px;">0.31</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" style="width: 31%; background: #ef4444;"></div></div>
+
+          <div style="display: flex; justify-content: space-between; padding: 2px 0; margin-top: 4px;">
+            <span style="font-size: 10px;">Endgames</span>
+            <span class="mono score-ok" style="font-size: 10px;">0.54</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" style="width: 54%; background: #eab308;"></div></div>
+
+          <div style="display: flex; justify-content: space-between; padding: 2px 0; margin-top: 4px;">
+            <span style="font-size: 10px;">Forks</span>
+            <span class="mono score-good" style="font-size: 10px;">0.68</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" style="width: 68%; background: #22c55e;"></div></div>
+        </div>
+
+        <!-- Delta from previous -->
+        <div style="font-size: 9px; font-weight: 600; color: #52525b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">vs Iteration 1</div>
+        <div style="display: flex; gap: 8px; margin-bottom: 8px; font-size: 10px;">
+          <span>Mean: 0.38 &rarr; 0.45 <span style="color: #4ade80;">+0.07</span></span>
+          <span>Pins: 0.15 &rarr; 0.22 <span style="color: #4ade80;">+0.07</span></span>
+          <span>Forks: 0.70 &rarr; 0.68 <span style="color: #f87171;">-0.02</span></span>
+        </div>
+
+        <!-- Reasoning chain -->
+        <div style="background: #111116; border-radius: 6px; padding: 8px; margin-bottom: 8px;">
+          <div style="font-size: 9px; font-weight: 600; color: #52525b; margin-bottom: 4px;">REASONING</div>
+          <div style="font-size: 10px; color: #a1a1aa; line-height: 1.5;">
+            <div style="margin-bottom: 4px;"><span style="color: #ef4444;">&#9679;</span> Pins (0.22): Grader says "confuses pins with forks" on 6/10 records &rarr; <b style="color: #d4d4d8;">prompts too vague</b></div>
+            <div style="margin-bottom: 4px;"><span style="color: #ef4444;">&#9679;</span> Combos (0.31): Only 8 records, grader says "generic" &rarr; <b style="color: #d4d4d8;">need more + grounded in PDF</b></div>
+            <div><span style="color: #4ade80;">&#9679;</span> Forks (0.68): Stable, good performance &rarr; <b style="color: #d4d4d8;">no changes needed</b></div>
+          </div>
+        </div>
+
+        <!-- Proposed changes -->
+        <div style="font-size: 9px; font-weight: 600; color: #52525b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">PROPOSED CHANGES</div>
+        <div style="font-size: 10px; color: #d4d4d8; line-height: 1.5; margin-bottom: 8px;">
+          <div style="padding: 2px 0;">1. Rewrite 6 pin prompts to specify pinned piece + attacker</div>
+          <div style="padding: 2px 0;">2. Generate 15 combo records from Chapter 5 examples</div>
+          <div style="padding: 2px 0;">3. Add pin-vs-fork disambiguation to Notation Grader</div>
+        </div>
+
+        <!-- Action buttons -->
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <button class="btn btn-primary">Accept & Apply</button>
+          <button class="btn btn-secondary">Modify Changes</button>
+          <button class="btn btn-secondary">Skip to Training</button>
+          <button class="btn btn-secondary" style="color: #71717a;">Dismiss</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-input">
+      <div style="background: #1a1a1f; border: 1px solid #27272a; border-radius: 6px; padding: 8px; font-size: 11px; color: #52525b;">Type a message or modify the plan...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SCENARIO: User Intervenes                    -->
+<!-- ============================================ -->
+<div class="scenario" id="intervention">
+  <div class="scenario-description">
+    <h2 style="font-size: 16px; font-weight: 600; color: #e4e4e7; margin-bottom: 4px;">User Intervenes</h2>
+    <p style="font-size: 12px; color: #71717a;">User modifies Lucy's proposed changes before accepting. Lucy adjusts the plan accordingly.</p>
+  </div>
+
+  <div class="sidebar" style="min-height: 700px;">
+    <div class="sidebar-header">
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <div style="width: 20px; height: 20px; background: #7c3aed; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; color: white;">L</div>
+        <span style="font-size: 12px; font-weight: 600;">Lucy</span>
+        <span class="badge badge-purple">Iteration 2</span>
+      </div>
+    </div>
+
+    <div class="sidebar-chat" style="font-size: 11px; line-height: 1.5;">
+      <!-- Lucy's checkpoint (collapsed) -->
+      <div class="msg-lucy" style="padding: 6px 10px;">
+        <div style="font-size: 9px; color: #a78bfa; font-weight: 600;">CHECKPOINT — Dry run mean: 0.45</div>
+        <div style="font-size: 10px; color: #71717a; margin-top: 2px;">Proposed: fix pins, add combos, adjust grader</div>
+      </div>
+
+      <!-- User modifies -->
+      <div class="msg-user">
+        <div style="font-size: 11px;">Don't change the grader yet. Just fix the pin prompts and add 20 combo records instead of 15. Also add 10 endgame records.</div>
+      </div>
+
+      <!-- Lucy acknowledges -->
+      <div class="msg-lucy">
+        <div style="font-size: 11px; margin-bottom: 6px;">Got it. Updated plan for iteration 3:</div>
+
+        <div style="background: #111116; border-radius: 6px; padding: 8px; margin-bottom: 6px;">
+          <div style="font-size: 9px; font-weight: 600; color: #52525b; margin-bottom: 4px;">REVISED PLAN</div>
+          <div style="font-size: 10px; color: #d4d4d8;">
+            <div style="padding: 2px 0;"><span style="color: #4ade80;">&#10003;</span> Rewrite 6 pin prompts (specify pinned piece + attacker)</div>
+            <div style="padding: 2px 0;"><span style="color: #eab308;">&#8634;</span> Generate 20 combo records from Chapter 5 <span style="color: #71717a; font-size: 9px;">(was 15)</span></div>
+            <div style="padding: 2px 0;"><span style="color: #60a5fa;">+</span> Generate 10 endgame records <span style="color: #71717a; font-size: 9px;">(new)</span></div>
+            <div style="padding: 2px 0;"><span style="color: #ef4444;">&#10005;</span> <span style="text-decoration: line-through; color: #52525b;">Adjust Notation Grader</span> <span style="color: #71717a; font-size: 9px;">(skipped per your request)</span></div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 6px;">
+          <button class="btn btn-primary">Execute This Plan</button>
+          <button class="btn btn-secondary">Modify More</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-input">
+      <div style="background: #1a1a1f; border: 1px solid #27272a; border-radius: 6px; padding: 8px; font-size: 11px; color: #52525b;">Type a message...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SCENARIO: Auto-Continue                      -->
+<!-- ============================================ -->
+<div class="scenario" id="auto-continue">
+  <div class="scenario-description">
+    <h2 style="font-size: 16px; font-weight: 600; color: #e4e4e7; margin-bottom: 4px;">Auto-Continue (Healthy Scores)</h2>
+    <p style="font-size: 12px; color: #71717a;">Dry run scores are in healthy range and improving. Lucy auto-continues with a countdown, giving user a chance to intervene.</p>
+  </div>
+
+  <div class="sidebar" style="min-height: 600px;">
+    <div class="sidebar-header">
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <div style="width: 20px; height: 20px; background: #7c3aed; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; color: white;">L</div>
+        <span style="font-size: 12px; font-weight: 600;">Lucy</span>
+        <span class="badge badge-green">Iteration 3</span>
+      </div>
+    </div>
+
+    <div class="sidebar-chat" style="font-size: 11px; line-height: 1.5;">
+      <div class="card card-success">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+          <span style="font-size: 10px; font-weight: 600; color: #4ade80;">&#9632; ITERATION 3 — HEALTHY</span>
+          <span class="badge badge-green">Auto-continuing</span>
+        </div>
+
+        <div style="font-size: 10px; margin-bottom: 6px;">
+          <div>Dry run mean: <span class="mono score-good">0.62</span> <span style="color: #4ade80;">+0.04</span> from iter 2</div>
+          <div>All topics improving. Signal is healthy (0.25-0.65 range).</div>
+        </div>
+
+        <div style="font-size: 10px; color: #a1a1aa; margin-bottom: 6px;">
+          Scores are in the healthy range and trending up. Proceeding to training.
+        </div>
+
+        <!-- Countdown -->
+        <div style="margin-bottom: 6px;">
+          <div style="font-size: 9px; color: #52525b; margin-bottom: 2px;">Starting training in 8s...</div>
+          <div class="progress-bar">
+            <div class="progress-fill countdown-bar" style="width: 100%; background: #4ade80;"></div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 6px;">
+          <button class="btn btn-secondary">Wait, I want to review</button>
+          <button class="btn btn-primary">Start Training Now</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SCENARIO: Stall Detected                     -->
+<!-- ============================================ -->
+<div class="scenario" id="stall">
+  <div class="scenario-description">
+    <h2 style="font-size: 16px; font-weight: 600; color: #e4e4e7; margin-bottom: 4px;">Stall Detected</h2>
+    <p style="font-size: 12px; color: #71717a;">Dry run scores haven't improved for 3 iterations. Lucy escalates with diagnosis and recommends a different approach.</p>
+  </div>
+
+  <div class="sidebar" style="min-height: 700px;">
+    <div class="sidebar-header">
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <div style="width: 20px; height: 20px; background: #7c3aed; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; color: white;">L</div>
+        <span style="font-size: 12px; font-weight: 600;">Lucy</span>
+        <span class="badge badge-red">Stall</span>
+      </div>
+    </div>
+
+    <div class="sidebar-chat" style="font-size: 11px; line-height: 1.5;">
+      <div class="card card-warning">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+          <span style="font-size: 10px; font-weight: 600; color: #fbbf24;">&#9888; STALL DETECTED</span>
+          <span class="badge badge-yellow">3 iterations flat</span>
+        </div>
+
+        <!-- Score history -->
+        <div style="background: #111116; border-radius: 6px; padding: 8px; margin-bottom: 8px;">
+          <div style="font-size: 9px; font-weight: 600; color: #52525b; margin-bottom: 4px;">DRY RUN SCORE HISTORY</div>
+          <div style="font-size: 10px; color: #a1a1aa;">
+            <div style="display: flex; justify-content: space-between;">
+              <span>Iter 2:</span> <span class="mono">0.45</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span>Iter 3:</span> <span class="mono">0.47</span> <span style="color: #71717a;">+0.02</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span>Iter 4:</span> <span class="mono">0.46</span> <span style="color: #71717a;">-0.01</span>
+            </div>
+          </div>
+          <div style="font-size: 9px; color: #fbbf24; margin-top: 4px;">Delta &lt; 0.03 for 3 iterations</div>
+        </div>
+
+        <!-- Diagnosis -->
+        <div style="background: #111116; border-radius: 6px; padding: 8px; margin-bottom: 8px;">
+          <div style="font-size: 9px; font-weight: 600; color: #52525b; margin-bottom: 4px;">DIAGNOSIS</div>
+          <div style="font-size: 10px; color: #a1a1aa; line-height: 1.5;">
+            <div>Pattern: <b style="color: #fbbf24;">Plateau</b> — same failure modes repeat</div>
+            <div>Previous changes targeted records (Lever 2), but Pins topic stuck at 0.22</div>
+            <div>Grader reasons unchanged: "confuses pins with forks"</div>
+          </div>
+        </div>
+
+        <!-- Escalation -->
+        <div style="font-size: 9px; font-weight: 600; color: #52525b; text-transform: uppercase; margin-bottom: 4px;">ESCALATION: Try a different lever</div>
+        <div style="font-size: 10px; color: #d4d4d8; margin-bottom: 8px;">
+          Previous attempts adjusted records (Lever 2). I recommend switching to <b>Grader refinement (Lever 1)</b>:
+          <div style="margin-top: 4px; padding-left: 8px; border-left: 2px solid #fbbf24;">
+            Split Notation Grader into two separate checks:<br>
+            1. "Correct notation format" (programmatic regex)<br>
+            2. "Discusses the right tactic type" (LLM judge)
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <button class="btn btn-warning">Accept Escalation</button>
+          <button class="btn btn-secondary">Try Something Else</button>
+          <button class="btn btn-secondary">Skip to Training Anyway</button>
+          <button class="btn btn-danger" style="font-size: 9px;">Stop & Accept Current</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SCENARIO: Post-Training                      -->
+<!-- ============================================ -->
+<div class="scenario" id="post-training">
+  <div class="scenario-description">
+    <h2 style="font-size: 16px; font-weight: 600; color: #e4e4e7; margin-bottom: 4px;">Post-Training Analysis</h2>
+    <p style="font-size: 12px; color: #71717a;">Training complete. Lucy shows epoch-by-epoch training scores + post-training dry run eval comparing fine-tuned model vs base model.</p>
+  </div>
+
+  <div class="sidebar" style="min-height: 700px;">
+    <div class="sidebar-header">
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <div style="width: 20px; height: 20px; background: #7c3aed; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; color: white;">L</div>
+        <span style="font-size: 12px; font-weight: 600;">Lucy</span>
+        <span class="badge badge-green">Training Done</span>
+      </div>
+    </div>
+
+    <div class="sidebar-chat" style="font-size: 11px; line-height: 1.5;">
+      <!-- Two loops diagram -->
+      <div class="msg-lucy" style="padding: 6px 10px; font-size: 9px; color: #52525b;">
+        <span style="color: #60a5fa;">Inner Loop</span> (3 dataset iterations) &rarr;
+        <span style="color: #f59e0b;">Outer Loop</span> (training) &rarr;
+        <span style="color: #4ade80;">Post-Training Eval</span>
+      </div>
+
+      <div class="card card-success">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+          <span style="font-size: 10px; font-weight: 600; color: #4ade80;">&#9632; TRAINING COMPLETE</span>
+          <span class="badge badge-green">2 epochs</span>
+        </div>
+
+        <!-- Epoch-by-epoch training scores -->
+        <div style="background: #111116; border-radius: 6px; padding: 8px; margin-bottom: 8px;">
+          <div style="font-size: 9px; font-weight: 600; color: #52525b; margin-bottom: 4px;">TRAINING (FINETUNE) SCORES BY EPOCH</div>
+          <table class="score-matrix">
+            <thead>
+              <tr>
+                <th style="text-align: left;">Topic</th>
+                <th>Epoch 1</th>
+                <th>Epoch 2</th>
+                <th>Delta</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>Pins</td><td class="mono">0.35</td><td class="mono score-ok">0.52</td><td class="score-good">+0.17</td></tr>
+              <tr><td>Combos</td><td class="mono">0.42</td><td class="mono score-ok">0.58</td><td class="score-good">+0.16</td></tr>
+              <tr><td>Endgames</td><td class="mono">0.60</td><td class="mono score-good">0.68</td><td class="score-good">+0.08</td></tr>
+              <tr><td>Forks</td><td class="mono">0.70</td><td class="mono score-good">0.73</td><td class="score-good">+0.03</td></tr>
+            </tbody>
+          </table>
+          <div style="font-size: 9px; color: #4ade80; margin-top: 4px;">All topics improving across epochs, no overfitting detected</div>
+        </div>
+
+        <!-- Post-training dry run eval -->
+        <div style="background: #111116; border-radius: 6px; padding: 8px; margin-bottom: 8px;">
+          <div style="font-size: 9px; font-weight: 600; color: #52525b; margin-bottom: 4px;">POST-TRAINING DRY RUN EVAL (base vs fine-tuned)</div>
+          <table class="score-matrix">
+            <thead>
+              <tr>
+                <th style="text-align: left;"></th>
+                <th style="color: #71717a;">Base (4o-mini)</th>
+                <th style="color: #4ade80;">Fine-tuned</th>
+                <th>Improvement</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>Notation Grader</td><td class="mono score-bad">0.45</td><td class="mono score-good">0.67</td><td class="score-good">+0.22</td></tr>
+              <tr><td>Pedagogy Grader</td><td class="mono score-ok">0.62</td><td class="mono score-good">0.74</td><td class="score-good">+0.12</td></tr>
+            </tbody>
+          </table>
+          <div style="font-size: 9px; color: #4ade80; margin-top: 4px;">Fine-tuned model outperforms base on both graders</div>
+        </div>
+
+        <div style="font-size: 10px; color: #d4d4d8; margin-bottom: 8px;">
+          Training was successful. The fine-tuned model shows significant improvement on both grading dimensions. Ready to deploy.
+        </div>
+
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <button class="btn btn-success">Deploy Model</button>
+          <button class="btn btn-secondary">Run More Evals</button>
+          <button class="btn btn-secondary">Download Weights</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SCENARIO: Active Watching                    -->
+<!-- ============================================ -->
+<div class="scenario" id="active-watching">
+  <div class="scenario-description">
+    <h2 style="font-size: 16px; font-weight: 600; color: #e4e4e7; margin-bottom: 4px;">Active Watching (Job in Progress)</h2>
+    <p style="font-size: 12px; color: #71717a;">User stays on the page while a long-running evaluation runs. Lucy narrates progress inline with stage labels.</p>
+  </div>
+
+  <div class="sidebar" style="min-height: 600px;">
+    <div class="sidebar-header">
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <div style="width: 20px; height: 20px; background: #7c3aed; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; color: white;">L</div>
+        <span style="font-size: 12px; font-weight: 600;">Lucy</span>
+        <span class="badge badge-blue pulse">Evaluating</span>
+      </div>
+    </div>
+
+    <div class="sidebar-chat" style="font-size: 11px; line-height: 1.5;">
+      <div class="msg-lucy">
+        <div style="font-size: 10px; color: #d4d4d8; margin-bottom: 6px;">Running evaluation with Notation Grader on gpt-4o-mini...</div>
+
+        <!-- Progress with stage label -->
+        <div style="background: #111116; border-radius: 6px; padding: 8px; margin-bottom: 6px;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <span style="font-size: 10px; color: #60a5fa;">Evaluating records...</span>
+            <span class="mono" style="font-size: 10px; color: #a1a1aa;">67 / 132</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width: 51%;"></div>
+          </div>
+          <div style="font-size: 9px; color: #52525b; margin-top: 3px;">~2 min remaining</div>
+        </div>
+
+        <!-- Live partial results -->
+        <div style="font-size: 9px; color: #71717a;">
+          <div>Scored so far: mean 0.43 | Pins: 0.21 | Forks: 0.67</div>
+        </div>
+      </div>
+
+      <!-- Progressive background offer -->
+      <div class="msg-system">
+        <div style="color: #a1a1aa;">This is taking a moment. You can keep watching or work on other datasets &mdash; I'll message you when it's done.</div>
+        <div style="display: flex; gap: 6px; margin-top: 4px;">
+          <button class="btn btn-secondary" style="font-size: 9px;">Continue in Background</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SCENARIO: Came Back (Job Done)               -->
+<!-- ============================================ -->
+<div class="scenario" id="came-back">
+  <div class="scenario-description">
+    <h2 style="font-size: 16px; font-weight: 600; color: #e4e4e7; margin-bottom: 4px;">Came Back: Job Completed While Away</h2>
+    <p style="font-size: 12px; color: #71717a;">User navigated away or closed browser. Training completed while they were gone. Lucy catches up with a summary.</p>
+  </div>
+
+  <div class="sidebar" style="min-height: 600px;">
+    <div class="sidebar-header">
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <div style="width: 20px; height: 20px; background: #7c3aed; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; color: white; position: relative;">
+          L
+          <div class="notif-dot" style="background: #4ade80;"></div>
+        </div>
+        <span style="font-size: 12px; font-weight: 600;">Lucy</span>
+      </div>
+      <span style="font-size: 9px; color: #52525b;">Chess Tutor Dataset</span>
+    </div>
+
+    <div class="sidebar-chat" style="font-size: 11px; line-height: 1.5;">
+      <!-- Previous messages (collapsed) -->
+      <div style="text-align: center; margin-bottom: 8px;">
+        <span style="font-size: 9px; color: #52525b;">&#8593; 12 earlier messages</span>
+      </div>
+
+      <!-- Catch-up message -->
+      <div class="card card-success">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+          <span style="font-size: 10px; font-weight: 600; color: #4ade80;">&#9632; WELCOME BACK</span>
+          <span style="font-size: 9px; color: #52525b;">completed 2h ago</span>
+        </div>
+
+        <div style="font-size: 10px; color: #d4d4d8; margin-bottom: 8px;">
+          While you were away, your training job completed successfully:
+        </div>
+
+        <div style="background: #111116; border-radius: 6px; padding: 8px; margin-bottom: 8px;">
+          <div style="font-size: 10px;">
+            <div><b>Model:</b> ft:gpt-4o-mini-2024-07-18:org::abc123</div>
+            <div><b>Training:</b> 2 epochs, 132 records, 47 minutes</div>
+            <div><b>Result:</b> Training scores improved across all topics</div>
+          </div>
+        </div>
+
+        <div style="font-size: 10px; color: #a1a1aa; margin-bottom: 8px;">
+          I recommend running a post-training dry run eval to compare the fine-tuned model against the base model before deploying.
+        </div>
+
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <button class="btn btn-primary">Run Post-Training Eval</button>
+          <button class="btn btn-secondary">View Full Results</button>
+          <button class="btn btn-secondary">Deploy Now</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-input">
+      <div style="background: #1a1a1f; border: 1px solid #27272a; border-radius: 6px; padding: 8px; font-size: 11px; color: #52525b;">Ask Lucy anything about the results...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SCENARIO: Came Back (Job Failed)             -->
+<!-- ============================================ -->
+<div class="scenario" id="came-back-failed">
+  <div class="scenario-description">
+    <h2 style="font-size: 16px; font-weight: 600; color: #e4e4e7; margin-bottom: 4px;">Came Back: Job Failed While Away</h2>
+    <p style="font-size: 12px; color: #71717a;">User comes back to find the evaluation job failed. Lucy explains the error and suggests fixes.</p>
+  </div>
+
+  <div class="sidebar" style="min-height: 600px;">
+    <div class="sidebar-header">
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <div style="width: 20px; height: 20px; background: #7c3aed; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; color: white; position: relative;">
+          L
+          <div class="notif-dot" style="background: #ef4444;"></div>
+        </div>
+        <span style="font-size: 12px; font-weight: 600;">Lucy</span>
+      </div>
+    </div>
+
+    <div class="sidebar-chat" style="font-size: 11px; line-height: 1.5;">
+      <div style="text-align: center; margin-bottom: 8px;">
+        <span style="font-size: 9px; color: #52525b;">&#8593; 8 earlier messages</span>
+      </div>
+
+      <div class="card card-error">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+          <span style="font-size: 10px; font-weight: 600; color: #f87171;">&#9888; EVALUATION FAILED</span>
+          <span style="font-size: 9px; color: #52525b;">failed 45 min ago</span>
+        </div>
+
+        <div style="background: #111116; border-radius: 6px; padding: 8px; margin-bottom: 8px;">
+          <div style="font-size: 9px; font-weight: 600; color: #52525b; margin-bottom: 4px;">ERROR</div>
+          <div class="mono" style="font-size: 10px; color: #fca5a5; line-height: 1.4;">
+            Grader threw error on record pins-003:<br>
+            TypeError: Cannot read property 'notation' of undefined
+          </div>
+        </div>
+
+        <div style="font-size: 10px; color: #a1a1aa; margin-bottom: 8px;">
+          The grader function expects a <code style="background: #27272a; padding: 1px 4px; border-radius: 3px; font-size: 10px;">'notation'</code> field, but 3 records in the Pins topic don't have it. This is likely because those records were generated before the schema was updated.
+        </div>
+
+        <div style="font-size: 10px; color: #d4d4d8; margin-bottom: 8px;">
+          <b>Recommended fix:</b> Add null-check to grader, or regenerate the 3 affected records.
+        </div>
+
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <button class="btn btn-primary">Fix Grader (add null-check)</button>
+          <button class="btn btn-secondary">Regenerate 3 Records</button>
+          <button class="btn btn-secondary">View Error Details</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SCENARIO: Mid-Iteration Resume               -->
+<!-- ============================================ -->
+<div class="scenario" id="mid-iteration">
+  <div class="scenario-description">
+    <h2 style="font-size: 16px; font-weight: 600; color: #e4e4e7; margin-bottom: 4px;">Mid-Iteration Resume</h2>
+    <p style="font-size: 12px; color: #71717a;">User left while Lucy had proposed changes (awaiting user decision). On return, Lucy re-presents the pending proposal.</p>
+  </div>
+
+  <div class="sidebar" style="min-height: 600px;">
+    <div class="sidebar-header">
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <div style="width: 20px; height: 20px; background: #7c3aed; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; color: white; position: relative;">
+          L
+          <div class="notif-dot" style="background: #f59e0b;"></div>
+        </div>
+        <span style="font-size: 12px; font-weight: 600;">Lucy</span>
+        <span class="badge badge-yellow">Awaiting Decision</span>
+      </div>
+    </div>
+
+    <div class="sidebar-chat" style="font-size: 11px; line-height: 1.5;">
+      <div style="text-align: center; margin-bottom: 8px;">
+        <span style="font-size: 9px; color: #52525b;">&#8593; 15 earlier messages</span>
+      </div>
+
+      <div class="card" style="border-color: #f59e0b40;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+          <span style="font-size: 10px; font-weight: 600; color: #f59e0b;">&#9632; PENDING DECISION</span>
+          <span style="font-size: 9px; color: #52525b;">proposed 3h ago</span>
+        </div>
+
+        <div style="font-size: 10px; color: #d4d4d8; margin-bottom: 6px;">
+          Welcome back! We're in the middle of <b>Iteration 2</b>. I had proposed these changes based on the dry run results:
+        </div>
+
+        <div style="background: #111116; border-radius: 6px; padding: 8px; margin-bottom: 8px;">
+          <div style="font-size: 10px; color: #a1a1aa; line-height: 1.5;">
+            <div>1. Rewrite 6 pin prompts to specify pinned piece + attacker</div>
+            <div>2. Generate 15 combo records from Chapter 5 examples</div>
+            <div>3. Add pin-vs-fork disambiguation to Notation Grader</div>
+          </div>
+        </div>
+
+        <div style="font-size: 10px; color: #71717a; margin-bottom: 8px;">
+          Context: Dry run mean was 0.45, Pins scored 0.22 (grader said "confuses pins with forks").
+        </div>
+
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <button class="btn btn-primary">Accept & Apply</button>
+          <button class="btn btn-secondary">Modify Changes</button>
+          <button class="btn btn-secondary">Re-analyze (fresh eval)</button>
+          <button class="btn btn-secondary" style="color: #71717a;">Start Fresh</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SCENARIO: Background Transition              -->
+<!-- ============================================ -->
+<div class="scenario" id="background">
+  <div class="scenario-description">
+    <h2 style="font-size: 16px; font-weight: 600; color: #e4e4e7; margin-bottom: 4px;">Progressive Background Transition</h2>
+    <p style="font-size: 12px; color: #71717a;">A training job is taking longer than expected. Lucy progressively offers background mode as time passes.</p>
+  </div>
+
+  <div class="sidebar" style="min-height: 600px;">
+    <div class="sidebar-header">
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <div style="width: 20px; height: 20px; background: #7c3aed; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; color: white;">L</div>
+        <span style="font-size: 12px; font-weight: 600;">Lucy</span>
+        <span class="badge badge-blue pulse">Training</span>
+      </div>
+    </div>
+
+    <div class="sidebar-chat" style="font-size: 11px; line-height: 1.5;">
+      <!-- Phase 1: 0-30s -->
+      <div class="msg-lucy" style="opacity: 0.5;">
+        <div style="font-size: 10px;">Submitting training job with 132 records, 2 epochs...</div>
+        <div style="font-size: 9px; color: #52525b; margin-top: 2px;">0:15 elapsed</div>
+      </div>
+
+      <!-- Phase 2: 30-60s -->
+      <div class="msg-lucy" style="opacity: 0.7;">
+        <div style="font-size: 10px;">Training started. Epoch 1 of 2 in progress...</div>
+        <div style="font-size: 9px; color: #52525b; margin-top: 2px;">0:45 elapsed</div>
+      </div>
+
+      <!-- Phase 3: 60s+ -->
+      <div class="msg-lucy">
+        <div style="font-size: 10px; margin-bottom: 6px;">Training is progressing normally. This typically takes 15-45 minutes depending on dataset size.</div>
+
+        <div style="background: #111116; border-radius: 6px; padding: 8px; margin-bottom: 6px;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+            <span style="font-size: 10px; color: #60a5fa;">Epoch 1 of 2</span>
+            <span class="mono" style="font-size: 10px; color: #a1a1aa;">~12 min remaining</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width: 35%;"></div>
+          </div>
+        </div>
+
+        <div style="font-size: 10px; color: #a1a1aa; margin-bottom: 6px;">
+          Feel free to navigate away or work on other datasets. I'll have results ready when you come back.
+        </div>
+
+        <div style="display: flex; gap: 6px;">
+          <button class="btn btn-secondary">Work on Other Datasets</button>
+          <button class="btn btn-secondary" style="font-size: 9px; color: #71717a;">Keep Watching</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SCENARIO: Decision Tree Flow                 -->
+<!-- ============================================ -->
+<div class="scenario" id="decision-tree">
+  <div class="scenario-description" style="max-width: 1100px;">
+    <h2 style="font-size: 16px; font-weight: 600; color: #e4e4e7; margin-bottom: 4px;">Decision Tree Reference</h2>
+    <p style="font-size: 12px; color: #71717a; margin-bottom: 16px;">Two loops, two score types. Inner loop uses <span style="color: #60a5fa;">Dry Run (Eval) Scores</span>. Outer loop uses <span style="color: #f59e0b;">Training (Finetune) Scores</span>.</p>
+
+    <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+      <!-- Inner Loop -->
+      <div style="flex: 1; min-width: 400px;">
+        <div class="card" style="border-color: #3b82f640;">
+          <div style="font-size: 11px; font-weight: 600; color: #60a5fa; margin-bottom: 8px;">INNER LOOP — Dataset Iteration (Dry Run Scores)</div>
+          <pre class="mono" style="font-size: 9px; line-height: 1.6; color: #a1a1aa; white-space: pre-wrap;">
+<span style="color:#60a5fa">Step A:</span> Check dry run mean score
+  &lt; 0.25 → Too hard (loosen grader / simplify prompts)
+  0.25-0.65 → Healthy → continue
+  &gt; 0.65 → Too easy (tighten grader / add harder records)
+
+<span style="color:#60a5fa">Step B:</span> Check dry run std deviation
+  &lt; 0.10 → No differentiation (add partial credit)
+  0.10-0.25 → Healthy → continue
+  &gt; 0.25 → Bimodal (add intermediate scoring)
+
+<span style="color:#60a5fa">Step C:</span> Per-topic dry run analysis
+  Low score + few records → Add records + simplify
+  Low score + enough records → Read grader reasons → fix
+  Mid score → Check cross-iteration trend
+
+<span style="color:#60a5fa">Step D:</span> Grader health check (from dry run)
+  Reasons make sense? → Trust scores
+  Inconsistent? → Add contrastive examples
+  High scores but low quality? → Reward hacking risk
+
+<span style="color:#60a5fa">Step E:</span> Cross-iteration comparison (dry run)
+  Improved &gt; 0.03? → Changes worked, iterate or train
+  Plateau? → ESCALATE to different lever
+
+<span style="color:#60a5fa">Step F:</span> Cross-model comparison (dry run)
+  Strong model passes, target fails? → Prompts need work
+  Both fail? → Dataset/grader issue</pre>
+
+          <div style="text-align: center; margin-top: 8px;">
+            <span style="font-size: 10px; color: #60a5fa;">Healthy dry run scores &darr;</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Outer Loop -->
+      <div style="flex: 1; min-width: 400px;">
+        <div class="card" style="border-color: #f59e0b40;">
+          <div style="font-size: 11px; font-weight: 600; color: #f59e0b; margin-bottom: 8px;">OUTER LOOP — Training (Finetune Scores)</div>
+          <pre class="mono" style="font-size: 9px; line-height: 1.6; color: #a1a1aa; white-space: pre-wrap;">
+<span style="color:#f59e0b">Check 1:</span> Epoch-by-epoch training scores
+  Epoch N &gt; Epoch N-1 → Learning, no overfitting ✓
+  Epoch N &lt; Epoch N-1 → Overfitting → use earlier epoch
+  Epoch N ≈ Epoch 1 → No improvement → back to inner loop
+
+<span style="color:#f59e0b">Check 2:</span> Reward hacking detection
+  Training scores up but quality down?
+  → Run dry run on fine-tuned model
+  → Inspect high-scoring outputs manually
+  → Fix grader with discriminative criteria
+
+<span style="color:#f59e0b">Check 3:</span> Post-training dry run eval
+  Fine-tuned dry run &gt;&gt; Base dry run → Training worked ✓
+  Fine-tuned dry run ≈ Base dry run → Didn't help
+  Fine-tuned dry run &lt; Base dry run → Made it worse
+
+<span style="color:#f59e0b">Outcome:</span>
+  All good → DEPLOY ✓
+  Some topics failed → Back to inner loop for those
+  Overfitting → Reduce epochs or add data
+  Reward hacking → Fix grader, re-train</pre>
+        </div>
+
+        <!-- Five Levers -->
+        <div class="card" style="border-color: #a78bfa40; margin-top: 8px;">
+          <div style="font-size: 11px; font-weight: 600; color: #a78bfa; margin-bottom: 6px;">FIVE ADJUSTABLE LEVERS</div>
+          <div style="font-size: 10px; color: #a1a1aa; line-height: 1.6;">
+            <div><span style="color: #ef4444; font-weight: 600;">L1</span> Grader content <span style="color: #52525b;">— criteria, strictness, rubric (dry run scores)</span></div>
+            <div><span style="color: #f59e0b; font-weight: 600;">L2</span> Record content <span style="color: #52525b;">— prompt clarity, specificity (dry run scores)</span></div>
+            <div><span style="color: #22c55e; font-weight: 600;">L3</span> Record distribution <span style="color: #52525b;">— count, balance, variety (dry run scores)</span></div>
+            <div><span style="color: #60a5fa; font-weight: 600;">L4</span> Training config <span style="color: #52525b;">— epochs, LR, batch size (training scores)</span></div>
+            <div><span style="color: #c084fc; font-weight: 600;">L5</span> Topic hierarchy <span style="color: #52525b;">— split, merge, restructure (dry run scores)</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tab switching script -->
+<script>
+  document.querySelectorAll('.nav-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.scenario').forEach(s => s.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(tab.dataset.tab).classList.add('active');
+    });
+  });
+</script>
+
+</body>
+</html>
