@@ -88,7 +88,7 @@ export function PlanEditor({ plan, onApprove, onSubmitEdited, onDismiss }: PlanE
             <Textarea
               value={markdown}
               onChange={(e) => setMarkdown(e.target.value)}
-              className="w-full flex-1 min-h-[400px] border-0 rounded-none resize-none font-mono text-sm focus-visible:ring-0 focus-visible:ring-offset-0 p-4"
+              className="w-full flex-1 min-h-[400px] border-0 rounded-none resize-none text-sm focus-visible:ring-0 focus-visible:ring-offset-0 p-4"
               placeholder="Edit the plan..."
             />
           </div>

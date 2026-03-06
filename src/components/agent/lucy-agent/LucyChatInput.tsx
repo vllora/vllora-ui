@@ -130,13 +130,8 @@ export function LucyChatInput({
     }
   }, [value]);
 
-  // Handle send with files
+  // Handle send — always sends/queues the message (never stops streaming)
   const handleSend = useCallback(() => {
-    if (isStreaming && onStop) {
-      onStop();
-      return;
-    }
-
     if (attachedImages.length > 0) {
       // Send with files as DistriPart[]
       const parts: DistriPart[] = [];
@@ -155,7 +150,7 @@ export function LucyChatInput({
             data: {
               type: 'bytes' as const,
               mime_type: file.mimeType,
-              data: file.base64,
+              bytes: file.base64,
               name: file.name,
             },
           });
@@ -183,14 +178,19 @@ export function LucyChatInput({
     } else if (value.trim()) {
       onSend(value);
     }
-  }, [value, attachedImages, onSend, onStop, isStreaming]);
+  }, [value, attachedImages, onSend]);
+
+  // Handle stop streaming — separate from send
+  const handleStop = useCallback(() => {
+    if (onStop) onStop();
+  }, [onStop]);
 
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        if ((value.trim() || attachedImages.length > 0) && !isStreaming && !disabled) {
+        if ((value.trim() || attachedImages.length > 0) && !disabled) {
           handleSend();
         }
       }
@@ -275,7 +275,7 @@ export function LucyChatInput({
   return (
     <div
       ref={dropZoneRef}
-      className={cn('border-t border-border p-4 bg-card relative', className)}
+      className={cn('border-t border-border/50 px-3 py-3 bg-background/80 backdrop-blur relative', className)}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
@@ -364,7 +364,7 @@ export function LucyChatInput({
       />
 
       {/* Input container with focus ring */}
-      <div className="bg-secondary rounded-lg border border-input focus-within:border-[rgb(var(--theme-500))] transition-all">
+      <div className="bg-muted/30 rounded-xl border border-border/40 hover:border-border/60 focus-within:border-[rgba(var(--theme-500),0.3)] focus-within:shadow-[0_0_0_1px_rgba(var(--theme-500),0.1)] transition-all">
         {/* Textarea */}
         <textarea
           ref={textareaRef}
@@ -372,22 +372,22 @@ export function LucyChatInput({
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          disabled={disabled || isStreaming}
+          disabled={disabled}
           rows={1}
-          className="w-full bg-transparent text-secondary-foreground placeholder-text-[9px] placeholder-muted-foreground resize-none
+          className="w-full bg-transparent text-foreground text-[13px] placeholder:text-muted-foreground/50 placeholder:text-[13px] resize-none
             focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed
             max-h-[200px] overflow-y-auto px-4 pt-3 pb-2"
         />
 
         {/* Bottom toolbar inside input */}
-        <div className="flex items-center justify-between gap-2 px-3 pb-2">
+        <div className="flex items-center justify-between gap-2 px-3 pb-2 pt-1 border-t border-border/10">
           <div className="flex items-center gap-1">
             {/* Attachment button */}
             <button
               type="button"
               onClick={handleAttachClick}
               disabled={disabled || isStreaming || !onAddImages}
-              className="flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent transition-colors disabled:opacity-50"
+              className="flex items-center justify-center h-8 w-8 rounded-lg hover:bg-accent/50 transition-colors disabled:opacity-50"
               title="Attach files — documents become reference sources, images are sent to Lucy"
             >
               <Paperclip className="h-4 w-4 text-muted-foreground" />
@@ -399,7 +399,7 @@ export function LucyChatInput({
                 type="button"
                 disabled={disabled || isStreaming || !onStartStreamingVoice}
                 onClick={handleVoiceClick}
-                className="flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent transition-colors disabled:opacity-50"
+                className="flex items-center justify-center h-8 w-8 rounded-lg hover:bg-accent/50 transition-colors disabled:opacity-50"
                 title={isStreamingVoice ? 'Listening...' : 'Voice input'}
               >
                 <Mic className={cn(
@@ -410,25 +410,27 @@ export function LucyChatInput({
             )}
           </div>
 
-          {/* Send/Stop button */}
-          <Button
-            onClick={handleSend}
-            disabled={!canSend && !isStreaming}
-            size="icon"
-            className={cn(
-              'h-8 w-8 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg',
-              isStreaming
-                ? 'bg-destructive hover:bg-destructive/90 text-white'
-                : 'bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-700))] text-white dark:bg-[rgb(var(--theme-600))] dark:hover:bg-[rgb(var(--theme-700))]'
-            )}
-            title={isStreaming ? 'Stop' : 'Send message'}
-          >
-            {isStreaming ? (
-              <Square className="w-4 h-4 fill-current" />
-            ) : (
+          {/* Single action button — morphs between Send and Stop (Claude Code pattern) */}
+          {isStreaming && !canSend ? (
+            <Button
+              onClick={handleStop}
+              size="icon"
+              className="h-8 w-8 shrink-0 rounded-xl bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-700))] text-white"
+              title="Stop"
+            >
+              <Square className="w-3.5 h-3.5 fill-current" />
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSend}
+              disabled={!canSend}
+              size="icon"
+              className="h-8 w-8 shrink-0 rounded-xl bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-700))] text-white disabled:opacity-30"
+              title={isStreaming ? 'Queue message' : 'Send message'}
+            >
               <Send className="w-4 h-4" />
-            )}
-          </Button>
+            </Button>
+          )}
         </div>
       </div>
     </div>

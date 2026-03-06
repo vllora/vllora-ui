@@ -94,17 +94,29 @@ export function LucyMessageRenderer({
           </div>
         );
 
-      case 'run_error':
+      case 'run_error': {
+        const errorMessage = event.data?.message || 'Unknown error occurred';
+
+        // Suppress known internal/transient errors that Lucy handles automatically
+        const SUPPRESSED_ERRORS = [
+          'No draft plan found',
+          'Call propose_plan or adjust_plan first',
+        ];
+        if (SUPPRESSED_ERRORS.some(p => errorMessage.includes(p))) {
+          return null;
+        }
+
         return (
           <div
             key={`run-error-${index}`}
             className="border-l-2 border-destructive pl-3 py-1.5"
           >
             <div className="text-xs text-destructive">
-              <strong>Error:</strong> {event.data?.message || 'Unknown error occurred'}
+              <strong>Error:</strong> {errorMessage}
             </div>
           </div>
         );
+      }
 
       // Events that don't need rendering
       case 'run_started':

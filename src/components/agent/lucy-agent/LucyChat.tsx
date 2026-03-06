@@ -417,7 +417,7 @@ export function LucyChat({
     <div className={cn('flex flex-col h-full bg-background', className)}>
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto px-3 py-2 space-y-2">
+        <div className="max-w-3xl mx-auto px-3 py-2 space-y-1.5">
           {showWelcome ? (
             <LucyWelcome
               quickActions={quickActions}
@@ -504,6 +504,15 @@ export function LucyChat({
         </div>
       )}
 
+      {/* Pending message indicator */}
+      {pendingMessage && pendingMessage.length > 0 && (
+        <div className="px-4 py-1.5 bg-amber-500/10 border-t border-amber-500/20">
+          <p className="text-xs text-amber-600 dark:text-amber-400 text-center">
+            Message queued — will send when Lucy finishes
+          </p>
+        </div>
+      )}
+
       {/* Input Area */}
       <div className="bg-background/80 backdrop-blur">
         <LucyChatInput
@@ -514,7 +523,7 @@ export function LucyChat({
           isStreaming={isStreaming}
           disabled={isLoading || hasPendingToolCalls()}
           placeholder={
-            isStreaming ? 'Lucy is working… your message will be queued' : getPlaceholderForSection(activeSection)
+            isStreaming ? 'Type a message — it will be queued until Lucy finishes' : getPlaceholderForSection(activeSection)
           }
           // File attachments (images, PDFs, documents)
           attachedImages={attachedImages}

@@ -92,7 +92,6 @@ export function PlanPreview({
             plan={plan}
             planStatus={planStatus}
             onModeChange={onModeChange}
-            onApprove={onApprove}
             isExecuting={isExecuting}
             isActionable={isActionable}
             planErrorMessage={planErrorMessage}
@@ -152,7 +151,6 @@ function PlanDisplayView({
   plan,
   planStatus,
   onModeChange,
-  onApprove,
   isExecuting,
   isActionable,
   planErrorMessage,
@@ -161,7 +159,6 @@ function PlanDisplayView({
   plan: Plan;
   planStatus: PlanStatus | null;
   onModeChange: (mode: "display" | "edit") => void;
-  onApprove: (plan: Plan) => void;
   isExecuting: boolean;
   isActionable: boolean;
   planErrorMessage?: string | null;
@@ -240,24 +237,15 @@ function PlanDisplayView({
             </Button>
           )}
           {isActionable && !isExecuting && (
-            <>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs gap-1"
-                onClick={() => onModeChange("edit")}
-              >
-                <Pencil className="w-3.5 h-3.5" />
-                Edit
-              </Button>
-              <Button
-                size="sm"
-                className="h-7 text-xs bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
-                onClick={() => onApprove(plan)}
-              >
-                Approve & Execute
-              </Button>
-            </>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={() => onModeChange("edit")}
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              Edit
+            </Button>
           )}
         </div>
       )}

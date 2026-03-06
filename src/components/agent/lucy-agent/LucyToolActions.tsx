@@ -9,7 +9,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { CheckCircle2, XCircle, Loader2, ChevronDown, ChevronRight, Play, Ban } from 'lucide-react';
+import { CheckCircle2, XCircle, ChevronDown, ChevronRight, Play, Ban } from 'lucide-react';
 import { createSuccessfulToolResult, createFailedToolResult, DistriFnTool, ToolCall, ToolResult } from '@distri/core';
 import { ToolCallState } from '@distri/react';
 import { cn } from '@/lib/utils';
@@ -121,17 +121,9 @@ export const LucyToolActions: React.FC<LucyToolActionsProps> = ({
     handleExecute();
   }, [autoExecute, getApprovalPreferences, handleExecute, hasExecuted, isLiveStream, isProcessing, toolName]);
 
-  // --- Processing state ---
+  // --- Processing state (hidden — LucyToolCallCard already shows running indicator) ---
   if (isProcessing) {
-    return (
-      <div className="my-2 rounded-lg border border-[rgba(var(--theme-500),0.3)] bg-[rgba(var(--theme-500),0.05)] px-3 py-2.5">
-        <div className="flex items-center gap-2">
-          <Loader2 className="h-3.5 w-3.5 text-[rgb(var(--theme-500))] animate-spin shrink-0" />
-          <span className="text-xs text-foreground/80">Executing</span>
-          <code className="text-[11px] text-[rgb(var(--theme-400))] font-mono">{formatToolName(toolName)}</code>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   // --- Completed state ---

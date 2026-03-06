@@ -36,8 +36,23 @@ const FINETUNE_AGENT_NAME = 'vllora_finetune_agent';
 // Thread ID Management
 // ============================================================================
 
+const THREAD_STORAGE_KEY = 'lucy_thread_';
+
 function createNewThreadId(): string {
   return uuidv4();
+}
+
+/**
+ * Get or create a persistent thread ID for a dataset.
+ * Stores in localStorage so chat history survives page refreshes.
+ */
+function getOrCreateThreadId(datasetId: string): string {
+  const key = `${THREAD_STORAGE_KEY}${datasetId}`;
+  const stored = localStorage.getItem(key);
+  if (stored) return stored;
+  const newId = createNewThreadId();
+  localStorage.setItem(key, newId);
+  return newId;
 }
 
 // ============================================================================
@@ -115,8 +130,8 @@ export function useFineTuneAgentChat(
     agentIdOrDef: FINETUNE_AGENT_NAME,
   });
 
-  // Thread state - always start fresh per dataset visit
-  const [threadId, setThreadId] = useState<string>(() => createNewThreadId());
+  // Thread state - persisted per dataset so chat history survives refresh
+  const [threadId, setThreadId] = useState<string>(() => getOrCreateThreadId(datasetId));
 
   // Workflow state
   const [workflow, setWorkflow] = useState<FinetuneWorkflowState | null>(null);
@@ -194,15 +209,17 @@ export function useFineTuneAgentChat(
     };
   }, [datasetId, refreshWorkflow]);
 
-  // Create new thread when dataset changes
+  // Load persisted thread when dataset changes
   useEffect(() => {
-    setThreadId(createNewThreadId());
+    setThreadId(getOrCreateThreadId(datasetId));
   }, [datasetId]);
 
-  // Create new chat thread
+  // Create new chat thread (persists to localStorage)
   const handleNewChat = useCallback(() => {
-    setThreadId(createNewThreadId());
-  }, []);
+    const newId = createNewThreadId();
+    localStorage.setItem(`${THREAD_STORAGE_KEY}${datasetId}`, newId);
+    setThreadId(newId);
+  }, [datasetId]);
 
   // Prepare message with context injection (supports file parts)
   const prepareMessage = useCallback(

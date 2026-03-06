@@ -125,11 +125,26 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
   datasetIdRef.current = datasetId;
   const planStatusRef = useRef(planStatus);
   planStatusRef.current = planStatus;
+  const executionCompleteRef = useRef(false);
+  useEffect(() => {
+    executionCompleteRef.current = executionProgress?.is_complete ?? false;
+  }, [executionProgress?.is_complete]);
 
   // Check for persisted state on mount (IndexedDB + in-memory stores)
   // Uses a cancelled flag for proper cleanup — safe with React strict mode
   useEffect(() => {
     if (!datasetId) return;
+
+    // Reset state immediately so workspace doesn't show stale content from previous dataset
+    setIsLoadingPlan(true);
+    setProposedPlan(null);
+    setPlanStatus(null);
+    setIsGeneratingPlan(false);
+    setHasPlanProposed(false);
+    setIsExecuting(false);
+    setExecutionProgress(null);
+    setExecutedPlan(null);
+    setPlanErrorMessage(null);
 
     let cancelled = false;
 
@@ -272,8 +287,8 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
 
     const handleWorkflowUpdated = ({ datasetId: id }: { datasetId: string }) => {
       if (id === datasetId) {
-        // Only transition if execution is complete
-        if (executionProgress?.is_complete) {
+        // Only transition if execution is complete (read from ref to avoid stale closure)
+        if (executionCompleteRef.current) {
           setIsExecuting(false);
           // Keep executionProgress so plan checkboxes remain checked.
           // (It's persisted to IndexedDB by handleExecutionProgress and
@@ -395,7 +410,7 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
       emitter.off("vllora_plan_progress", handleExecutionProgress);
       emitter.off("vllora_plan_markdown_updated", handleMarkdownUpdated);
     };
-  }, [datasetId, executionProgress?.is_complete]);
+  }, [datasetId]); // executionProgress?.is_complete tracked via executionCompleteRef to keep listener stable
 
   // Actions
   const approvePlan = useCallback((plan: Plan) => {

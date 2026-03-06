@@ -698,6 +698,7 @@ interface DistriAuthContextValue {
         theme: 'dark' | 'light';
         baseUrl: string;
         debug: boolean;
+        workspaceId?: string;
     };
 }
 interface DistriAuthProviderProps {
@@ -706,8 +707,9 @@ interface DistriAuthProviderProps {
     children: ReactNode;
     debug?: boolean;
     baseUrl?: string;
+    workspaceId?: string;
 }
-declare function DistriAuthProvider({ clientId, theme, children, debug, baseUrl }: DistriAuthProviderProps): react_jsx_runtime.JSX.Element;
+declare function DistriAuthProvider({ clientId, theme, children, debug, baseUrl, workspaceId, }: DistriAuthProviderProps): react_jsx_runtime.JSX.Element;
 declare function useDistriAuth(): DistriAuthContextValue;
 
 interface UseChatMessagesOptions {

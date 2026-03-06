@@ -32,13 +32,18 @@ export function LucyUserMessage({ message }: LucyUserMessageProps) {
   const isPlanEditReview = content.text?.startsWith('[PLAN_EDIT_REVIEW]');
 
   return (
-    <div className="flex flex-col items-start gap-1">
-      {/* Header — left-aligned, no avatar */}
-      <span className="text-xs font-medium text-muted-foreground">
-        You {timestamp && <span>• {timestamp}</span>}
-      </span>
+    <div className="group pl-3 border-l-2 border-transparent hover:border-border/40 transition-colors">
+      {/* Header — compact, timestamp on hover */}
+      <div className="flex items-baseline gap-1.5">
+        <span className="text-xs font-semibold text-foreground/80">You</span>
+        {timestamp && (
+          <span className="text-[10px] text-muted-foreground/0 group-hover:text-muted-foreground/50 transition-colors">
+            {timestamp}
+          </span>
+        )}
+      </div>
 
-      {/* Message content — no bubble */}
+      {/* Message content */}
       <div className="overflow-hidden">
         {isPlanEditReview ? (
           <LucyTextRenderer text="I've edited the plan. Please review my changes and re-propose." />

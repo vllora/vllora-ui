@@ -398,6 +398,8 @@ export function DatasetDetailContentV2() {
     if (!shouldAutoGenerate || !datasetId || hasTriggeredAutoGenerate.current) return;
     if (!knowledgeSourcesLoaded) return; // Haven't loaded from IndexedDB yet — wait
     if (docsProcessing) return; // Still processing — wait
+    // Skip if a plan is already proposed/approved — another trigger already handled it
+    if (planStatus === 'proposed' || planStatus === 'approved' || planStatus === 'executing') return;
 
     hasTriggeredAutoGenerate.current = true;
 
@@ -409,13 +411,14 @@ export function DatasetDetailContentV2() {
     emitter.emit("vllora_lucy_prompt", {
       prompt: `Please analyze the uploaded documents and create a plan for this dataset using the propose_plan tool.`,
     });
-  }, [docsProcessing, shouldAutoGenerate, datasetId, knowledgeSourcesLoaded]);
+  }, [docsProcessing, shouldAutoGenerate, datasetId, knowledgeSourcesLoaded, planStatus]);
 
   // Timeout fallback: if docs are still processing after 60s, generate plan anyway.
   // Also requires knowledgeSourcesLoaded to avoid firing before sources are fetched.
   useEffect(() => {
     if (!shouldAutoGenerate || !datasetId || hasTriggeredAutoGenerate.current) return;
     if (!knowledgeSourcesLoaded || !docsProcessing) return;
+    if (planStatus === 'proposed' || planStatus === 'approved' || planStatus === 'executing') return;
 
     const timeoutId = setTimeout(() => {
       if (hasTriggeredAutoGenerate.current) return;
@@ -430,7 +433,7 @@ export function DatasetDetailContentV2() {
     }, 60000);
 
     return () => clearTimeout(timeoutId);
-  }, [docsProcessing, shouldAutoGenerate, datasetId, knowledgeSourcesLoaded]);
+  }, [docsProcessing, shouldAutoGenerate, datasetId, knowledgeSourcesLoaded, planStatus]);
 
   // README hook — agent-authored only, no auto-generation
   const { readme, readmeUpdatedAt, exportReadme } = useDatasetReadme({

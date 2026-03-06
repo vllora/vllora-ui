@@ -7,17 +7,6 @@
 
 import { Sparkles, Eye, Pencil, X, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { PlanConsumer } from "@/contexts/PlanContext";
 import { WorkspaceTabsConsumer } from "@/contexts/WorkspaceTabsContext";
 import { mapTabPathToSection } from "@/components/datasets/TabContentRouter";
@@ -87,34 +76,14 @@ export function PlanCard() {
       {/* Action buttons — only shown when plan is proposed (not yet approved/executing) */}
       {planStatus === 'proposed' && (
         <div className="flex items-center gap-1.5">
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                size="sm"
-                className="h-7 text-[11px] gap-1 flex-1 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
-              >
-                <Check className="w-3 h-3" />
-                Approve
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Approve and execute plan?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will start executing the plan. Lucy will configure topics, generate training data, and set up evaluation. This may take several minutes.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  className="bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
-                  onClick={handleApprove}
-                >
-                  Approve & Execute
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          <Button
+            size="sm"
+            className="h-7 text-[11px] gap-1 flex-1 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
+            onClick={handleApprove}
+          >
+            <Check className="w-3 h-3" />
+            Approve
+          </Button>
           <Button
             variant="outline"
             size="sm"

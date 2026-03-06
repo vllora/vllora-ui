@@ -55,8 +55,14 @@ module.exports = __toCommonJS(index_exports);
 function isArrayParts(result) {
   return Array.isArray(result) && result[0].part_type;
 }
-function createSuccessfulToolResult(toolCallId, toolName, result) {
-  const parts = isArrayParts(result) ? result : [{
+function createSuccessfulToolResult(toolCallId, toolName, result, explicitPartsMetadata) {
+  console.log("[createSuccessfulToolResult] toolName:", toolName);
+  console.log("[createSuccessfulToolResult] isArrayParts:", isArrayParts(result));
+  console.log("[createSuccessfulToolResult] result type:", typeof result, Array.isArray(result) ? `array[${result.length}]` : "");
+  if (isArrayParts(result)) {
+    console.log("[createSuccessfulToolResult] parts:", result.map((p) => ({ part_type: p.part_type, hasMetadata: !!p.__metadata })));
+  }
+  const rawParts = isArrayParts(result) ? result : [{
     part_type: "data",
     data: {
       result,
@@ -64,10 +70,22 @@ function createSuccessfulToolResult(toolCallId, toolName, result) {
       error: void 0
     }
   }];
+  const parts_metadata = { ...explicitPartsMetadata };
+  const parts = rawParts.map((part, index) => {
+    if ("__metadata" in part && part.__metadata) {
+      parts_metadata[index] = { ...parts_metadata[index], ...part.__metadata };
+    }
+    if (part.part_type === "image" && !parts_metadata[index]) {
+      parts_metadata[index] = { save: false };
+    }
+    const { __metadata, ...cleanPart } = part;
+    return cleanPart;
+  });
   return {
     tool_call_id: toolCallId,
     tool_name: toolName,
-    parts
+    parts,
+    parts_metadata: Object.keys(parts_metadata).length > 0 ? parts_metadata : void 0
   };
 }
 function createFailedToolResult(toolCallId, toolName, error, result) {
@@ -816,7 +834,7 @@ function convertA2APartToDistri(a2aPart) {
         const fileUrl = { type: "url", mime_type: a2aPart.file.mimeType || "application/octet-stream", url: a2aPart.file.uri || "" };
         return { part_type: "image", data: fileUrl };
       } else {
-        const fileBytes = { type: "bytes", mime_type: a2aPart.file.mimeType || "application/octet-stream", data: a2aPart.file.bytes || "" };
+        const fileBytes = { type: "bytes", mime_type: a2aPart.file.mimeType || "application/octet-stream", bytes: a2aPart.file.bytes || "" };
         return { part_type: "image", data: fileBytes };
       }
     case "data":
@@ -855,7 +873,8 @@ function convertDistriMessageToA2A(distriMessage, context) {
     parts: distriMessage.parts.map(convertDistriPartToA2A),
     kind: "message",
     contextId: context.thread_id,
-    taskId: context.task_id || context.run_id || void 0
+    taskId: context.task_id || context.run_id || void 0,
+    metadata: distriMessage.metadata
   };
 }
 function convertDistriPartToA2A(distriPart) {
@@ -869,7 +888,7 @@ function convertDistriPartToA2A(distriPart) {
         const fileUri = { mimeType: distriPart.data.mime_type, uri: distriPart.data.url };
         result = { kind: "file", file: fileUri };
       } else {
-        const fileBytes = { mimeType: distriPart.data.mime_type, bytes: distriPart.data.data };
+        const fileBytes = { mimeType: distriPart.data.mime_type, bytes: distriPart.data.bytes };
         result = { kind: "file", file: fileBytes };
       }
       break;
@@ -1809,7 +1828,12 @@ var _DistriClient = class _DistriClient {
         },
         body: JSON.stringify({
           tool_call_id: result.tool_call_id,
-          tool_response: result
+          tool_response: {
+            tool_call_id: result.tool_call_id,
+            tool_name: result.tool_name,
+            parts: result.parts,
+            parts_metadata: result.parts_metadata
+          }
         })
       });
       if (!response.ok) {
@@ -2217,7 +2241,7 @@ var Agent = class _Agent {
     const enhancedParams = this.enhanceParamsWithTools(params, tools);
     const a2aStream = this.client.sendMessageStream(this.agentDefinition.id, enhancedParams);
     const self = this;
-    return (async function* () {
+    return async function* () {
       try {
         for await (const event of a2aStream) {
           const converted = decodeA2AStreamEvent(event);
@@ -2250,7 +2274,7 @@ var Agent = class _Agent {
         };
         yield runError;
       }
-    })();
+    }();
   }
   /**
    * Validate that required external tools are registered before invoking.

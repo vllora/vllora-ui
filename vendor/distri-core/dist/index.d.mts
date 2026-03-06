@@ -639,6 +639,26 @@ declare class Agent {
  */
 type MessageRole = 'system' | 'assistant' | 'user' | 'tool' | 'developer';
 /**
+ * Message metadata structure that matches the backend.
+ * The 'parts' field maps part indices to PartMetadata for save filtering.
+ */
+interface DistriMessageMetadata {
+    /** Per-part metadata indexed by part position (0-based). Parts with save: false are filtered before DB save. */
+    parts?: Record<number, {
+        save?: boolean;
+    }>;
+    /** Session ID for browser sessions */
+    session_id?: string;
+    /** Browser session ID */
+    browser_session_id?: string;
+    /** Model/definition overrides */
+    definition_overrides?: {
+        model?: string;
+    };
+    /** Additional arbitrary metadata */
+    [key: string]: unknown;
+}
+/**
  * Distri-specific message structure with parts
  */
 interface DistriMessage {
@@ -652,6 +672,8 @@ interface DistriMessage {
     agent_id?: string;
     /** The name of the agent that generated this message (for assistant messages) */
     agent_name?: string;
+    /** Message metadata including parts metadata for save filtering */
+    metadata?: DistriMessageMetadata;
 }
 interface LlmExecuteOptions {
     thread_id?: string;
@@ -836,12 +858,12 @@ type DataPart = {
 };
 type DistriPart = TextPart | ToolCallPart | ToolResultRefPart | ImagePart | DataPart;
 /**
- * File type for images
+ * File type for images - matches Rust FileType::Bytes
  */
 interface FileBytes {
     type: 'bytes';
     mime_type: string;
-    data: string;
+    bytes: string;
     name?: string;
 }
 interface FileUrl {
@@ -893,6 +915,8 @@ interface ToolResult {
     readonly tool_call_id: string;
     readonly tool_name: string;
     readonly parts: readonly DistriPart[];
+    /** Per-part metadata indexed by part position (0-based). Parts with save: false will be filtered out when storing. */
+    readonly parts_metadata?: Record<number, PartMetadata>;
 }
 /**
  * Tool result data that goes inside the parts array
@@ -904,10 +928,19 @@ interface ToolResultData {
 }
 declare function isArrayParts(result: any): boolean;
 /**
+ * Part with optional inline metadata - used by tool handlers to mark parts as non-saveable
+ */
+type DistriPartWithMetadata = DistriPart & {
+    __metadata?: PartMetadata;
+};
+/**
  * Type-safe helper to create a successful ToolResult
  * Uses proper DistriPart structure - conversion to backend format happens in encoder
+ *
+ * Parts can include __metadata property to specify part-level metadata (e.g., save: false).
+ * Image parts are automatically marked as save: false.
  */
-declare function createSuccessfulToolResult(toolCallId: string, toolName: string, result: string | number | boolean | null | object | DistriPart[]): ToolResult;
+declare function createSuccessfulToolResult(toolCallId: string, toolName: string, result: string | number | boolean | null | object | DistriPartWithMetadata[], explicitPartsMetadata?: Record<number, PartMetadata>): ToolResult;
 /**
  * Type-safe helper to create a failed ToolResult
  * Uses proper DistriPart structure - conversion to backend format happens in encoder
@@ -1324,4 +1357,4 @@ declare function extractToolCallsFromDistriMessage(message: DistriMessage): any[
  */
 declare function extractToolResultsFromDistriMessage(message: DistriMessage): any[];
 
-export { A2AProtocolError, type A2AStreamEventData, type ActionPlanStep, Agent, type AgentConfigWithTools, type AgentDefinition, type AgentHandoverEvent, type AgentStats, type AgentUsageInfo, ApiError, type AssistantWithToolCalls, type BasePlanStep, type BatchToolCallsStep, type BrowserAgentConfig, type BrowserScreenshotEvent, type BrowserSession, type BrowserSessionStartedEvent, type ChatCompletionChoice, type ChatCompletionMessage, type ChatCompletionRequest, type ChatCompletionResponse, type ChatCompletionResponseFormat, type ChatCompletionRole, type ChatProps, type CodePlanStep, type ConfigurationMeta, type ConfigurationResponse, ConnectionError, type ConnectionStatus, DEFAULT_BASE_URL, type DataPart, type DistriBaseTool, type DistriBrowserRuntimeConfig, type DistriChatMessage, DistriClient, type DistriClientConfig, type DistriConfiguration, DistriError, type DistriEvent, type DistriFnTool, type DistriMessage, type DistriPart, type DistriPlan, type DistriStreamEvent, type DistriThread, type DynamicMetadata, type ExternalMcpServer, ExternalToolValidationError, type ExternalToolValidationResult, type FeedbackReceivedEvent, type FileBytes, type FileType, type FileUrl, type FinalResultPlanStep, type HookContext, type HookHandler, type HookMutation, type ImagePart, type InlineHookEventData, type InlineHookRequest, type InlineHookRequestedEvent, type InvokeConfig, type InvokeContext, type InvokeResult, type LLMResponse, type LlmExecuteOptions, type LlmPlanStep, type McpDefinition, type McpServerType, type MessageReadStatus, type MessageRole, type MessageVote, type MessageVoteSummary, type ModelProviderConfig, type ModelProviderName, type ModelSettings, type PartMetadata, type PlanAction, type PlanFinishedEvent, type PlanPrunedEvent, type PlanStartedEvent, type PlanStep, type PromptSection, type ReactStep, type Role, type RunErrorEvent, type RunFinishedEvent, type RunStartedEvent, type ServerConfig, type SpeechToTextConfig, type StepCompletedEvent, type StepStartedEvent, type StreamingTranscriptionOptions, type TextMessageContentEvent, type TextMessageEndEvent, type TextMessageStartEvent, type TextPart, type ThoughtPlanStep, type ThoughtStep, type Thread, type ThreadListParams, type ThreadListResponse, type TodoItem, type TodoStatus, type TodosUpdatedEvent, type ToolCall, type ToolCallPart, type ToolCallsEvent, type ToolDefinition, type ToolExecutionEndEvent, type ToolExecutionOptions, type ToolExecutionStartEvent, type ToolHandler, type ToolRejectedEvent, type ToolResult, type ToolResultData, type ToolResultRefPart, type ToolResults, type ToolResultsEvent, type UseToolsOptions, type VoteMessageRequest, type VoteType, convertA2AMessageToDistri, convertA2APartToDistri, convertA2AStatusUpdateToDistri, convertDistriMessageToA2A, convertDistriPartToA2A, createFailedToolResult, createSuccessfulToolResult, decodeA2AStreamEvent, extractTextFromDistriMessage, extractToolCallsFromDistriMessage, extractToolResultData, extractToolResultsFromDistriMessage, isArrayParts, isDistriEvent, isDistriMessage, processA2AMessagesData, processA2AStreamData, uuidv4 };
+export { A2AProtocolError, type A2AStreamEventData, type ActionPlanStep, Agent, type AgentConfigWithTools, type AgentDefinition, type AgentHandoverEvent, type AgentStats, type AgentUsageInfo, ApiError, type AssistantWithToolCalls, type BasePlanStep, type BatchToolCallsStep, type BrowserAgentConfig, type BrowserScreenshotEvent, type BrowserSession, type BrowserSessionStartedEvent, type ChatCompletionChoice, type ChatCompletionMessage, type ChatCompletionRequest, type ChatCompletionResponse, type ChatCompletionResponseFormat, type ChatCompletionRole, type ChatProps, type CodePlanStep, type ConfigurationMeta, type ConfigurationResponse, ConnectionError, type ConnectionStatus, DEFAULT_BASE_URL, type DataPart, type DistriBaseTool, type DistriBrowserRuntimeConfig, type DistriChatMessage, DistriClient, type DistriClientConfig, type DistriConfiguration, DistriError, type DistriEvent, type DistriFnTool, type DistriMessage, type DistriMessageMetadata, type DistriPart, type DistriPartWithMetadata, type DistriPlan, type DistriStreamEvent, type DistriThread, type DynamicMetadata, type ExternalMcpServer, ExternalToolValidationError, type ExternalToolValidationResult, type FeedbackReceivedEvent, type FileBytes, type FileType, type FileUrl, type FinalResultPlanStep, type HookContext, type HookHandler, type HookMutation, type ImagePart, type InlineHookEventData, type InlineHookRequest, type InlineHookRequestedEvent, type InvokeConfig, type InvokeContext, type InvokeResult, type LLMResponse, type LlmExecuteOptions, type LlmPlanStep, type McpDefinition, type McpServerType, type MessageReadStatus, type MessageRole, type MessageVote, type MessageVoteSummary, type ModelProviderConfig, type ModelProviderName, type ModelSettings, type PartMetadata, type PlanAction, type PlanFinishedEvent, type PlanPrunedEvent, type PlanStartedEvent, type PlanStep, type PromptSection, type ReactStep, type Role, type RunErrorEvent, type RunFinishedEvent, type RunStartedEvent, type ServerConfig, type SpeechToTextConfig, type StepCompletedEvent, type StepStartedEvent, type StreamingTranscriptionOptions, type TextMessageContentEvent, type TextMessageEndEvent, type TextMessageStartEvent, type TextPart, type ThoughtPlanStep, type ThoughtStep, type Thread, type ThreadListParams, type ThreadListResponse, type TodoItem, type TodoStatus, type TodosUpdatedEvent, type ToolCall, type ToolCallPart, type ToolCallsEvent, type ToolDefinition, type ToolExecutionEndEvent, type ToolExecutionOptions, type ToolExecutionStartEvent, type ToolHandler, type ToolRejectedEvent, type ToolResult, type ToolResultData, type ToolResultRefPart, type ToolResults, type ToolResultsEvent, type UseToolsOptions, type VoteMessageRequest, type VoteType, convertA2AMessageToDistri, convertA2APartToDistri, convertA2AStatusUpdateToDistri, convertDistriMessageToA2A, convertDistriPartToA2A, createFailedToolResult, createSuccessfulToolResult, decodeA2AStreamEvent, extractTextFromDistriMessage, extractToolCallsFromDistriMessage, extractToolResultData, extractToolResultsFromDistriMessage, isArrayParts, isDistriEvent, isDistriMessage, processA2AMessagesData, processA2AStreamData, uuidv4 };

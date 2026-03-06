@@ -98,6 +98,12 @@ export const proposePlanHandler: ToolHandler = async (
       objective: agentPlan.objective || dataset.datasetObjective || '',
     };
 
+    // Auto-rename dataset to the plan's clean display name
+    if (plan.dataset_name && plan.dataset_name !== dataset.name) {
+      await datasetsDB.renameDataset(dataset_id, plan.dataset_name);
+      emitter.emit('vllora_dataset_refresh' as any);
+    }
+
     // plan_markdown is required — the agent must provide the full markdown
     if (!plan.plan_markdown?.trim()) {
       return {

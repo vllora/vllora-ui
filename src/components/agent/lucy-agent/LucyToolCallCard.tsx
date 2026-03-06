@@ -149,10 +149,10 @@ export function LucyToolCallCard({ toolCall, state }: LucyToolCallCardProps) {
   // ── Pending / Running state ──
   if (isRunning) {
     return (
-      <div className="my-1 border-l-2 border-[rgb(var(--theme-500))] pl-3 py-1.5">
+      <div className="my-1 py-1">
         <div className="flex items-center gap-2">
-          <div className="animate-spin rounded-full h-4 w-4 border-2 border-[rgb(var(--theme-500))] border-t-transparent shrink-0" />
-          <span className="text-xs font-medium text-[rgb(var(--theme-400))]">
+          <div className="animate-spin rounded-full h-3 w-3 border-[1.5px] border-[rgb(var(--theme-500))] border-t-transparent shrink-0" />
+          <span className="text-xs font-medium text-muted-foreground">
             {formatToolName(toolCall.tool_name)}
           </span>
           {state?.startTime && liveElapsed >= 1000 && (
@@ -162,17 +162,17 @@ export function LucyToolCallCard({ toolCall, state }: LucyToolCallCardProps) {
             </span>
           )}
         </div>
-        <p className="text-xs text-muted-foreground mt-0.5 animate-pulse">{friendlyMessage}</p>
+        <p className="text-[11px] text-muted-foreground/50 mt-0.5">{friendlyMessage}</p>
         {/* Progress counter for data generation (Fix #003) */}
         {progress && progress.total > 0 && (
-          <div className="mt-1.5 flex items-center gap-2">
-            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+          <div className="mt-1 flex items-center gap-2">
+            <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
               <div
                 className="h-full bg-[rgb(var(--theme-500))] rounded-full transition-all duration-500"
                 style={{ width: `${Math.min(100, (progress.completed / progress.total) * 100)}%` }}
               />
             </div>
-            <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+            <span className="text-[11px] text-muted-foreground/60 tabular-nums shrink-0">
               {progress.completed}/{progress.total}
             </span>
           </div>
@@ -184,11 +184,11 @@ export function LucyToolCallCard({ toolCall, state }: LucyToolCallCardProps) {
   // ── Completed state ──
   if (state?.status === 'completed') {
     return (
-      <div className="my-1 border-l border-border/40 pl-3 overflow-hidden">
+      <div className="my-1 overflow-hidden">
         {/* Header */}
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="w-full py-1 flex items-center gap-2 hover:bg-muted/30 transition-colors -ml-3 pl-3 pr-1"
+          className="group/tool w-full py-1 flex items-center gap-2 hover:bg-muted/30 transition-colors -ml-3 pl-3 pr-1 rounded"
         >
           <CheckCircle className="w-3 h-3 text-[rgb(var(--theme-500))] shrink-0" />
           <span className="text-xs font-medium text-muted-foreground">
@@ -200,7 +200,10 @@ export function LucyToolCallCard({ toolCall, state }: LucyToolCallCardProps) {
               {formatElapsed(completedElapsed)}
             </span>
           )}
-          <div className="ml-auto flex items-center text-xs text-muted-foreground">
+          <div className={cn(
+            'ml-auto flex items-center text-xs transition-colors',
+            isExpanded ? 'text-muted-foreground' : 'text-muted-foreground/0 group-hover/tool:text-muted-foreground/50'
+          )}>
             {isExpanded ? (
               <ChevronDown className="h-3.5 w-3.5" />
             ) : (
@@ -211,24 +214,24 @@ export function LucyToolCallCard({ toolCall, state }: LucyToolCallCardProps) {
 
         {/* Expandable Content */}
         {isExpanded && (
-          <div className="border-t border-border/30 pt-2 pb-1 mt-1">
-            <div className="mb-2 flex items-center gap-1.5">
+          <div className="pt-1.5 pb-1">
+            <div className="mb-1.5 flex items-center gap-3 border-b border-border/30 px-1">
               {(['output', 'input'] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   className={cn(
-                    'text-xs px-2.5 py-1 rounded-md font-medium transition-colors',
+                    'text-[11px] pb-1.5 transition-colors border-b-2 -mb-px',
                     activeTab === tab
-                      ? 'bg-[rgb(var(--theme-600))] text-white'
-                      : 'bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80'
+                      ? 'border-foreground/60 text-foreground/80 font-medium'
+                      : 'border-transparent text-muted-foreground/60 hover:text-muted-foreground'
                   )}
                 >
                   {tab === 'output' ? 'Output' : 'Input'}
                 </button>
               ))}
             </div>
-            <div className="rounded-md border border-border/50 bg-muted/50 p-2 max-h-64 overflow-auto">
+            <div className="rounded border border-border/30 bg-muted/20 p-2 max-h-64 overflow-auto text-[12px]">
               <JsonViewer
                 data={activeTab === 'input' ? toolCall.input : getResultData()}
                 collapsed={5}

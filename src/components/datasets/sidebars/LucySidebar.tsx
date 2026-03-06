@@ -566,7 +566,7 @@ export function LucySidebar() {
                       <Plus className="h-3.5 w-3.5" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom">New Chat</TooltipContent>
+                  <TooltipContent side="bottom">Start fresh conversation (dataset is preserved)</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
               <TooltipProvider delayDuration={300}>

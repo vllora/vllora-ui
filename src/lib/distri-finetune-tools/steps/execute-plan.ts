@@ -517,7 +517,7 @@ async function executeDryRun(ctx: StepContext): Promise<StepResult> {
 }
 
 async function executeFinetune(ctx: StepContext): Promise<StepResult> {
-  const { dataset_id, summary, workflow_id } = ctx;
+  const { dataset_id } = ctx;
 
   const datasetForJob = await datasetsDB.getDatasetById(dataset_id);
   if (!datasetForJob?.backendDatasetId) {
