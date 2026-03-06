@@ -265,6 +265,82 @@ export interface DatasetStatsResult {
 }
 
 // =============================================================================
+// Evaluation Analysis Results (Phase 1: Give Lucy Eyes)
+// =============================================================================
+
+export interface EvaluationDetailsResult {
+  success: boolean;
+  error?: string;
+  evaluation_id?: string;
+  evaluation_run_id?: string;
+  summary?: {
+    total_records: number;
+    scored_records: number;
+    mean_score: number;
+    std_score: number;
+    min_score: number | null;
+    max_score: number | null;
+    pass_rate: number;
+  };
+  per_topic?: Array<{
+    topic: string;
+    record_count: number;
+    avg_score: number;
+    min_score: number;
+    max_score: number;
+    pass_count: number;
+    fail_count: number;
+  }>;
+  worst_records?: Array<{
+    record_id: string;
+    topic: string;
+    score: number;
+    reason: string;
+  }>;
+}
+
+export interface LogIterationResult {
+  success: boolean;
+  error?: string;
+  iteration_number?: number;
+  total_iterations?: number;
+}
+
+export interface IterationHistoryResult {
+  success: boolean;
+  error?: string;
+  current_iteration?: number;
+  phase?: string;
+  inner_loop?: {
+    last_eval_id: string | null;
+    last_dry_run_score: number | null;
+    proposed_changes: unknown[];
+    user_decision: string | null;
+  };
+  outer_loop?: {
+    last_training_job_id: string | null;
+    last_epoch_scores: Record<string, number[]> | null;
+    post_training_eval_id: string | null;
+  };
+  history?: Array<{
+    iteration: number;
+    timestamp: number;
+    eval_id: string;
+    mean_score: number;
+    per_topic_scores: Record<string, number>;
+    changes_made: string;
+    decision: string;
+  }>;
+}
+
+export interface MarkJobReviewedResult {
+  success: boolean;
+  error?: string;
+  job_id?: string;
+  reviewed_at?: number;
+}
+
+// =============================================================================
 // Context for Finetune Agent
 // =============================================================================
 

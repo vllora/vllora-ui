@@ -14,7 +14,7 @@ The Lucy Dataset Agent follows a **3-tier architecture** with tools executing lo
 │  ┌────────────────────────┐   ┌─────────────────────────────────────┐  │
 │  │ LucyDatasetAssistant   │   │    distri-finetune-tools/           │  │
 │  │ - Sidebar UI           │   │    - Workflow tools (4)             │  │
-│  │ - Auto-analysis        │   │    - Step tools (37)                │  │
+│  │ - Auto-analysis        │   │    - Step tools (41)                │  │
 │  │ - Quick actions        │   │    - Execute locally in browser     │  │
 │  └────────────────────────┘   └─────────────────────────────────────┘  │
 │           │                              │                              │
@@ -22,6 +22,7 @@ The Lucy Dataset Agent follows a **3-tier architecture** with tools executing lo
 │  ┌────────────────────────────────────────────────────────────────────┐│
 │  │              useFineTuneAgentChat Hook                             ││
 │  │  - Injects workflow context into messages                         ││
+│  │  - Session catch-up: detects unreviewed eval jobs on mount        ││
 │  │  - Manages thread/session state (localStorage)                    ││
 │  │  - Workflow state in IndexedDB                                    ││
 │  └────────────────────────────────────────────────────────────────────┘│
@@ -91,7 +92,7 @@ The orchestrator delegates specialized tasks to 3 sub-agents via `transfer_to_ag
 | Sub-Agent | File | Purpose | External Tools |
 |-----------|------|---------|---------------|
 | `finetune_topics` | `finetune-topics-agent.md` | Topic hierarchy generation, display, manipulation | 5: `generate_topics`, `apply_topic_hierarchy`, `adjust_topic_hierarchy`, `get_topic_hierarchy`, `get_dataset_records` |
-| `finetune_workflow` | `finetune-workflow-agent.md` | Workflow operations — data generation, grading, training, deployment, skill packaging | 24: all workflow control + data ops + grader + training + packaging tools |
+| `finetune_workflow` | `finetune-workflow-agent.md` | Workflow operations — data generation, grading, training, deployment, skill packaging, evaluation analysis | 26: all workflow control + data ops + grader + training + packaging + evaluation analysis tools |
 | `data_generation` | `data-generation-agent.md` | Interactive data gen with knowledge sources, previews, iterative refinement | 12: knowledge source tools + generation tools + dataset access |
 
 **Delegation Flow:**
@@ -104,7 +105,8 @@ vllora_finetune_agent (Orchestrator)
     │       └── generate_topics, apply_topic_hierarchy, adjust_topic_hierarchy
     │
     ├── transfer_to_agent("finetune_workflow", "Start training...")
-    │       └── start_finetune_workflow, advance_to_step, start_training, etc.
+    │       └── start_finetune_workflow, advance_to_step, start_training,
+    │           get_evaluation_details, log_iteration, mark_job_reviewed, etc.
     │
     └── transfer_to_agent("data_generation", "Generate training data...")
             └── generate_preview, generate_synthetic_data, upload_knowledge_source, etc.
@@ -119,7 +121,7 @@ vllora_finetune_agent (Orchestrator)
 **Agent Definition Files** (`gateway/agents/finetune/`):
 - `vllora-finetune-agent.md` — Orchestrator (16 external + 3 builtin tools)
 - `finetune-topics-agent.md` — Topics specialist (5 external tools)
-- `finetune-workflow-agent.md` — Workflow executor (22 external tools)
+- `finetune-workflow-agent.md` — Workflow executor (26 external tools)
 - `data-generation-agent.md` — Data generation specialist (12 external tools)
 
 ---

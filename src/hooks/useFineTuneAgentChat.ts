@@ -20,6 +20,10 @@ import type { ExecutionProgress } from '@/lib/distri-finetune-tools/steps/execut
 import { stockfishTools, isChessDataset } from '@/lib/distri-finetune-tools/steps';
 import { finetuneWorkflowService, FinetuneWorkflowState } from '@/services/finetune-workflow-db';
 import { getDatasetById } from '@/services/datasets-db';
+import { getDryRunJobsByDataset } from '@/services/dry-run-jobs-db';
+import { getIterationState } from '@/services/finetune-iteration-db';
+import type { DryRunJob } from '@/types/dry-run-job';
+import type { IterationState } from '@/services/finetune-iteration-db';
 import { emitter } from '@/utils/eventEmitter';
 
 // Type for chat messages returned by useChatMessages
@@ -65,11 +69,77 @@ function buildContextMessage(
   datasetHasEvaluator?: boolean,
   planStatus?: PlanStatus | null,
   executionProgress?: ExecutionProgress | null,
+  catchUpContext?: string | null,
 ): string {
   const context = workflowToContext(datasetId, workflow, datasetHasEvaluator, planStatus, executionProgress);
   // Put dataset_id prominently at the top to help LLM copy it exactly
   // UUIDs are hard for LLMs to transcribe from JSON - make it explicit
-  return `DATASET_ID: ${datasetId}\n\nContext:\n\`\`\`json\n${JSON.stringify(context, null, 2)}\n\`\`\``;
+  let msg = `DATASET_ID: ${datasetId}\n\nContext:\n\`\`\`json\n${JSON.stringify(context, null, 2)}\n\`\`\``;
+  if (catchUpContext) {
+    msg += `\n\n${catchUpContext}`;
+  }
+  return msg;
+}
+
+// ============================================================================
+// Catch-Up Context Builder
+// ============================================================================
+
+/**
+ * Build catch-up context for Lucy when a dataset is reopened.
+ * Checks for unreviewed completed/failed jobs and pending iteration proposals.
+ */
+async function buildCatchUpContext(datasetId: string): Promise<string | null> {
+  const sections: string[] = [];
+
+  try {
+    // Check for unreviewed dry run jobs
+    const jobs = await getDryRunJobsByDataset(datasetId);
+    const unreviewedCompleted = jobs.filter(
+      (j: DryRunJob) => j.status === 'completed' && !j.reviewedByAgent
+    );
+    const unreviewedFailed = jobs.filter(
+      (j: DryRunJob) => j.status === 'failed' && !j.reviewedByAgent
+    );
+
+    if (unreviewedCompleted.length > 0) {
+      const jobSummaries = unreviewedCompleted.map((j: DryRunJob) => {
+        const avgScore = j.pollingSnapshot?.summary?.average_score;
+        const scoreStr = avgScore != null ? ` (avg score: ${avgScore.toFixed(3)})` : '';
+        return `- Job ${j.id}${scoreStr}, completed at ${new Date(j.completedAt ?? 0).toLocaleString()}`;
+      });
+      sections.push(
+        `CATCH_UP: ${unreviewedCompleted.length} completed evaluation(s) not yet reviewed:\n${jobSummaries.join('\n')}\nUse get_evaluation_details to analyze results, then mark_job_reviewed after presenting to user.`
+      );
+    }
+
+    if (unreviewedFailed.length > 0) {
+      const failSummaries = unreviewedFailed.map((j: DryRunJob) => {
+        const errMsg = j.error ? `: ${j.error.slice(0, 200)}` : '';
+        return `- Job ${j.id} failed${errMsg}`;
+      });
+      sections.push(
+        `CATCH_UP: ${unreviewedFailed.length} failed evaluation(s):\n${failSummaries.join('\n')}\nPresent the error and suggest fixes, then mark_job_reviewed.`
+      );
+    }
+
+    // Check for pending iteration proposals
+    const iterState: IterationState | null = await getIterationState(datasetId);
+    if (iterState?.phase === 'awaiting_user') {
+      const changes = iterState.innerLoop.proposedChanges ?? [];
+      const changesSummary = changes.length > 0
+        ? changes.map((c) => `- [${c.lever}] ${c.description}`).join('\n')
+        : 'No specific changes recorded';
+      sections.push(
+        `CATCH_UP: Iteration ${iterState.iterationNumber} has pending proposed changes (user hasn't responded yet):\n${changesSummary}\nRe-present these proposals to the user.`
+      );
+    }
+  } catch (error) {
+    // Non-critical — don't block chat initialization
+    console.error('[buildCatchUpContext] Error:', error);
+  }
+
+  return sections.length > 0 ? sections.join('\n\n') : null;
 }
 
 // ============================================================================
@@ -138,6 +208,8 @@ export function useFineTuneAgentChat(
   const [workflowLoading, setWorkflowLoading] = useState(true);
   // Track if dataset has eval script configured (via UI, separate from workflow)
   const [datasetHasEvalScript, setDatasetHasEvalScript] = useState(false);
+  // Catch-up context for session resumption (unreviewed jobs, pending proposals)
+  const [catchUpContext, setCatchUpContext] = useState<string | null>(null);
 
   // Check if this is a chess-related dataset (enables Stockfish tools)
   const isChess = useMemo(() => isChessDataset(trainingGoals), [trainingGoals]);
@@ -174,16 +246,19 @@ export function useFineTuneAgentChat(
 
     setWorkflowLoading(true);
     try {
-      const [workflowState, dataset] = await Promise.all([
+      const [workflowState, dataset, catchUp] = await Promise.all([
         finetuneWorkflowService.getWorkflowByDataset(datasetId),
         getDatasetById(datasetId),
+        buildCatchUpContext(datasetId),
       ]);
       setWorkflow(workflowState);
       setDatasetHasEvalScript(!!dataset?.evalScript);
+      setCatchUpContext(catchUp);
     } catch (error) {
       console.error('[useFineTuneAgentChat] Error loading workflow:', error);
       setWorkflow(null);
       setDatasetHasEvalScript(false);
+      setCatchUpContext(null);
     } finally {
       setWorkflowLoading(false);
     }
@@ -225,7 +300,7 @@ export function useFineTuneAgentChat(
   const prepareMessage = useCallback(
     (userMessage: string, additionalParts?: any[]): DistriMessage => {
       // Build context from current workflow state
-      const contextText = buildContextMessage(datasetId, workflow, datasetHasEvalScript, planStatus, executionProgressFromContext);
+      const contextText = buildContextMessage(datasetId, workflow, datasetHasEvalScript, planStatus, executionProgressFromContext, catchUpContext);
 
       // Create message with context prepended
       const fullMessage = `${contextText}\n\nUser message: ${userMessage}`;
@@ -238,9 +313,14 @@ export function useFineTuneAgentChat(
         parts.push(...additionalParts);
       }
 
+      // Clear catch-up context after first use (only inject once)
+      if (catchUpContext) {
+        setCatchUpContext(null);
+      }
+
       return DistriClient.initDistriMessage('user', parts);
     },
-    [datasetId, workflow, datasetHasEvalScript, planStatus, executionProgressFromContext]
+    [datasetId, workflow, datasetHasEvalScript, planStatus, executionProgressFromContext, catchUpContext]
   );
 
   return {

@@ -82,6 +82,11 @@ export { updateObjectiveHandler, updateObjectiveTool } from './update-objective'
 // Dataset Creation
 export { createDatasetHandler, createDatasetTool } from './create-dataset';
 
+// Evaluation Analysis (Phase 1: Give Lucy Eyes)
+export { getEvaluationDetailsHandler, getEvaluationDetailsTool } from './get-evaluation-details';
+export { logIterationHandler, logIterationTool, getIterationHistoryHandler, getIterationHistoryTool } from './iteration-history';
+export { markJobReviewedHandler, markJobReviewedTool } from './mark-job-reviewed';
+
 // Semantic PDF Extraction (local, in-browser) — internal function, not an agent tool
 export { extractPdfContentLocal } from './semantic-pdf-extractor';
 
@@ -168,6 +173,9 @@ import { savePlanHandler, savePlanTool } from './save-plan';
 import { executePlanHandler, executePlanTool } from './execute-plan';
 import { updatePlanMarkdownHandler, updatePlanMarkdownTool } from './update-plan-markdown';
 import { createDatasetHandler, createDatasetTool } from './create-dataset';
+import { getEvaluationDetailsHandler, getEvaluationDetailsTool } from './get-evaluation-details';
+import { logIterationHandler, logIterationTool, getIterationHistoryHandler, getIterationHistoryTool } from './iteration-history';
+import { markJobReviewedHandler, markJobReviewedTool } from './mark-job-reviewed';
 // Note: Stockfish tools (analyzeChessPositionTool, classifyChessMoveTool) are NOT imported here
 // They are conditionally added via stockfishTools in useFineTuneAgentChat for chess datasets only
 
@@ -214,6 +222,11 @@ export const STEP_TOOL_NAMES = [
   'execute_plan',
   'update_plan_markdown',
   'create_dataset',
+  // Evaluation Analysis (Phase 1: Give Lucy Eyes)
+  'get_evaluation_details',
+  'log_iteration',
+  'get_iteration_history',
+  'mark_job_reviewed',
   // Note: Stockfish tools ('analyze_chess_position', 'classify_chess_move') are NOT in this list
   // They are conditionally available for chess datasets only via stockfishTools export
 ] as const;
@@ -266,6 +279,11 @@ export const stepTools: DistriFnTool[] = [
   executePlanTool,
   updatePlanMarkdownTool,
   createDatasetTool,
+  // Evaluation Analysis (Phase 1: Give Lucy Eyes)
+  getEvaluationDetailsTool,
+  logIterationTool,
+  getIterationHistoryTool,
+  markJobReviewedTool,
   // Note: Stockfish tools are NOT included here - they are conditionally added
   // via stockfishTools in useFineTuneAgentChat for chess datasets only
 ].map(tool => ({ ...tool, autoExecute: true }));
@@ -309,5 +327,10 @@ export const stepToolHandlers: Record<string, ToolHandler> = {
   execute_plan: executePlanHandler,
   update_plan_markdown: updatePlanMarkdownHandler,
   create_dataset: createDatasetHandler,
+  // Evaluation Analysis (Phase 1: Give Lucy Eyes)
+  get_evaluation_details: getEvaluationDetailsHandler,
+  log_iteration: logIterationHandler,
+  get_iteration_history: getIterationHistoryHandler,
+  mark_job_reviewed: markJobReviewedHandler,
   // Note: Stockfish handlers are in stockfishToolHandlers export, not here
 };

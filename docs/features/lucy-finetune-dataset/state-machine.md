@@ -546,16 +546,18 @@ The finetune workflow system uses **three separate IndexedDB databases** to pers
 
 **Purpose:** Stores workflow progress, step metadata, snapshots, dry run jobs, and proposed plans. Does NOT store actual configuration data.
 
-**Version:** 4
+**Version:** 7
 
 | Object Store | Key | Indexes | Added In | Description |
 |--------------|-----|---------|----------|-------------|
 | `workflows` | `id` | `datasetId`, `currentStep`, `createdAt`, `updatedAt` | v1 | Workflow state per dataset |
 | `snapshots` | `id` | `workflowId`, `step`, `createdAt` | v1 | State snapshots for rollback |
 | `generationHistory` | `id` | `workflowId`, `createdAt` | v1 | Synthetic data generation runs |
-| `dryRunJobs` | `id` | `datasetId`, `status`, `createdAt` | v2 | Dry run job tracking |
+| `dryRunJobs` | `id` | `datasetId`, `status`, `createdAt` | v2 | Dry run job tracking (includes `reviewedByAgent` flag for catch-up protocol) |
 | `jobEvaluations` | `id` | `updatedAt` | v3 | Finetune job evaluation results (includes `scoresPersisted` flag) |
 | `proposedPlans` | `datasetId` | (none) | v4 | Persisted plans with lifecycle status tracking |
+| `evaluationJobs` | `id` | `updatedAt` | v5 | Evaluation job metadata |
+| `iterationState` | `id` (datasetId) | `updatedAt` | v7 | Cross-iteration memory — tracks iteration number, phase, inner/outer loop state, history entries |
 
 #### Proposed Plans Store Schema
 

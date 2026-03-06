@@ -173,7 +173,7 @@ export interface GenerationHistoryStore {
 // =============================================================================
 
 const DB_NAME = 'vllora-finetune';
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -244,6 +244,12 @@ export async function getDB(): Promise<IDBDatabase> {
       // Create proposed plans store for persistence across page refresh (added in v4)
       if (!db.objectStoreNames.contains('proposedPlans')) {
         db.createObjectStore('proposedPlans', { keyPath: 'datasetId' });
+      }
+
+      // Create iteration state store for cross-iteration memory (added in v7)
+      if (!db.objectStoreNames.contains('iterationState')) {
+        const iterationStore = db.createObjectStore('iterationState', { keyPath: 'id' });
+        iterationStore.createIndex('updatedAt', 'updatedAt', { unique: false });
       }
     };
   });
