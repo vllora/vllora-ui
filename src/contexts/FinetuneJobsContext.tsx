@@ -278,15 +278,26 @@ function useFinetuneJobsLogic() {
   const handleJobUpdateEvent = useCallback(
     (event: CustomFinetuneJobUpdateEventType) => {
       const { job_id, status } = event;
+      const newStatus = status as FinetuneJobStatus;
+      const isTerminal = newStatus === 'succeeded' || newStatus === 'failed' || newStatus === 'cancelled';
 
       setJobs((prevJobs) => {
         const jobsList = prevJobs || [];
         const existingJob = jobsList.find((j) => j.id === job_id);
         if (existingJob) {
+          // Detect completion transition: was running/pending → now terminal
+          const wasActive = existingJob.status === 'running' || existingJob.status === 'pending';
+          if (wasActive && isTerminal && existingJob.dataset_id) {
+            emitter.emit('vllora_finetune_job_completed', {
+              jobId: job_id,
+              datasetId: existingJob.dataset_id,
+            });
+          }
+
           // Update existing job status
           return jobsList.map((job) =>
             job.id === job_id
-              ? { ...job, status: status as FinetuneJobStatus }
+              ? { ...job, status: newStatus }
               : job
           );
         } else {

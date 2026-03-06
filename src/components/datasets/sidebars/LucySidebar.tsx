@@ -282,6 +282,36 @@ export function LucySidebar() {
     return () => { emitter.off('vllora_docs_awaiting_plan', handleDocsAwaiting); };
   }, [selectedDatasetId]);
 
+  // Auto-prompt Lucy when evaluation completes in background
+  useEffect(() => {
+    const handleEvalCompleted = ({ datasetId, verdict }: { jobId: string; datasetId: string; verdict: string }) => {
+      if (datasetId !== selectedDatasetId) return;
+
+      const msg = verdict === 'FAILED'
+        ? 'The evaluation has failed. Please check what went wrong and advise on next steps.'
+        : `The evaluation has completed (verdict: ${verdict}). Please analyze the results and tell me what you recommend.`;
+
+      emitter.emit('vllora_lucy_prompt', { prompt: msg });
+    };
+
+    emitter.on('vllora_dry_run_job_completed', handleEvalCompleted);
+    return () => { emitter.off('vllora_dry_run_job_completed', handleEvalCompleted); };
+  }, [selectedDatasetId]);
+
+  // Auto-prompt Lucy when training completes in background
+  useEffect(() => {
+    const handleTrainingCompleted = ({ datasetId }: { jobId: string; datasetId: string }) => {
+      if (datasetId !== selectedDatasetId) return;
+
+      emitter.emit('vllora_lucy_prompt', {
+        prompt: 'The fine-tune training job has completed. Please analyze the training results and tell me how it went.',
+      });
+    };
+
+    emitter.on('vllora_finetune_job_completed', handleTrainingCompleted);
+    return () => { emitter.off('vllora_finetune_job_completed', handleTrainingCompleted); };
+  }, [selectedDatasetId]);
+
   // Listen for external prompt triggers (e.g., "Generate for topic" button)
   // In dual-sidebar layout: just expand Lucy sidebar, no tab switching needed
   useEffect(() => {

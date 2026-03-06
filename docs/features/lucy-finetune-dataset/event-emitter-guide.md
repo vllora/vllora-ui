@@ -370,7 +370,43 @@ The Lucy Finetune feature uses an event emitter (`src/utils/eventEmitter.ts`) fo
 
 ---
 
-### 13. `vllora_dataset_refresh`
+### 13. `vllora_dry_run_job_completed`
+
+**Purpose:** Dry run evaluation job completed or failed. Triggers Lucy auto-analysis.
+
+| | Details |
+|---|---|
+| **Data** | `{ jobId: string; datasetId: string; verdict: string }` |
+| **Direction** | Service → React → Lucy Agent |
+
+**Emitter:** `dry-run-polling-manager.ts` — after `handleJobComplete()` finishes processing results
+
+**Listeners:**
+| File | What it does |
+|------|-------------|
+| `LucySidebar.tsx` | Emits `vllora_lucy_prompt` to auto-trigger Lucy analysis message |
+
+---
+
+### 14. `vllora_finetune_job_completed`
+
+**Purpose:** Finetune training job completed, failed, or was cancelled. Triggers Lucy auto-analysis.
+
+| | Details |
+|---|---|
+| **Data** | `{ jobId: string; datasetId: string }` |
+| **Direction** | Context → React → Lucy Agent |
+
+**Emitter:** `FinetuneJobsContext.tsx` — when SSE handler detects status transition from running/pending to terminal
+
+**Listeners:**
+| File | What it does |
+|------|-------------|
+| `LucySidebar.tsx` | Emits `vllora_lucy_prompt` to auto-trigger Lucy analysis message |
+
+---
+
+### 15. `vllora_dataset_refresh`
 
 **Purpose:** Signal that a dataset's data changed in IndexedDB (records added/updated/deleted, metadata changed). This is the **primary refresh mechanism** that keeps React contexts in sync with IndexedDB.
 
@@ -546,6 +582,7 @@ These should remain events:
 - `vllora_data_generation_progress` — tool handler → multiple React listeners
 - `vllora_workflow_updated` — tool handler notification
 - `vllora_finetune_job_created` / `vllora_dry_run_job_update` — external sources
+- `vllora_dry_run_job_completed` / `vllora_finetune_job_completed` — auto-trigger Lucy analysis on job completion
 - `vllora_plan_approved` — React → tool handler (reverse direction)
 - `vllora_dataset_refresh` — service layer → contexts (bridges IndexedDB writes to React state)
 
