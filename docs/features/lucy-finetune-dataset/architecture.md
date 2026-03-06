@@ -14,7 +14,7 @@ The Lucy Dataset Agent follows a **3-tier architecture** with tools executing lo
 │  ┌────────────────────────┐   ┌─────────────────────────────────────┐  │
 │  │ LucyDatasetAssistant   │   │    distri-finetune-tools/           │  │
 │  │ - Sidebar UI           │   │    - Workflow tools (4)             │  │
-│  │ - Auto-analysis        │   │    - Step tools (41)                │  │
+│  │ - Auto-analysis        │   │    - Step tools (43)                │  │
 │  │ - Quick actions        │   │    - Execute locally in browser     │  │
 │  └────────────────────────┘   └─────────────────────────────────────┘  │
 │           │                              │                              │
@@ -92,7 +92,7 @@ The orchestrator delegates specialized tasks to 3 sub-agents via `transfer_to_ag
 | Sub-Agent | File | Purpose | External Tools |
 |-----------|------|---------|---------------|
 | `finetune_topics` | `finetune-topics-agent.md` | Topic hierarchy generation, display, manipulation | 5: `generate_topics`, `apply_topic_hierarchy`, `adjust_topic_hierarchy`, `get_topic_hierarchy`, `get_dataset_records` |
-| `finetune_workflow` | `finetune-workflow-agent.md` | Workflow operations — data generation, grading, training, deployment, skill packaging, evaluation analysis | 26: all workflow control + data ops + grader + training + packaging + evaluation analysis tools |
+| `finetune_workflow` | `finetune-workflow-agent.md` | Workflow operations — data generation, grading, training, deployment, skill packaging, evaluation analysis, inner loop iteration | 27: all workflow control + data ops + grader + training + packaging + evaluation analysis + analyze_evaluation tools |
 | `data_generation` | `data-generation-agent.md` | Interactive data gen with knowledge sources, previews, iterative refinement | 12: knowledge source tools + generation tools + dataset access |
 
 **Delegation Flow:**
@@ -121,7 +121,7 @@ vllora_finetune_agent (Orchestrator)
 **Agent Definition Files** (`gateway/agents/finetune/`):
 - `vllora-finetune-agent.md` — Orchestrator (16 external + 3 builtin tools)
 - `finetune-topics-agent.md` — Topics specialist (5 external tools)
-- `finetune-workflow-agent.md` — Workflow executor (26 external tools)
+- `finetune-workflow-agent.md` — Workflow executor (28 external tools, inner loop + outer loop analysis)
 - `data-generation-agent.md` — Data generation specialist (12 external tools)
 
 ---
@@ -267,7 +267,7 @@ const tools = useMemo<DistriAnyTool[]>(
 );
 ```
 
-- `finetuneTools`: All 41 function tools (4 workflow + 37 step tools)
+- `finetuneTools`: All 47 function tools (4 workflow + 43 step tools)
 - `createAskFollowUpTool()`: UI tool for presenting options to users
 
 **Context Injection Pattern:**
@@ -291,7 +291,7 @@ distri-finetune-tools/
 ├── workflow/
 │   └── index.ts          # 4 workflow control tools
 ├── steps/
-│   ├── index.ts                  # Aggregates all 37 step tools
+│   ├── index.ts                  # Aggregates all 43 step tools
 │   ├── generate-topics/          # Topic generation (frontend + backend)
 │   │   ├── frontend.ts           # LLM-based generation
 │   │   ├── backend.ts            # Template-based generation
@@ -361,7 +361,7 @@ distri-finetune-tools/
 | `advance_to_step` | Move to next step (with skip support) |
 | `rollback_to_step` | Return to previous step via snapshots |
 
-#### Step Tools (37)
+#### Step Tools (43)
 
 | Category | Tools |
 |----------|-------|
@@ -377,6 +377,7 @@ distri-finetune-tools/
 | **Deploy (Step 7)** | `deploy_model` |
 | **Plan** | `propose_plan`, `adjust_plan`, `save_plan`, `execute_plan` (deprecated), `update_plan_markdown` |
 | **Data Access** | `get_dataset_records`, `get_dataset_state`, `update_record`, `update_objective`, `validate_records` |
+| **Eval Analysis** | `get_evaluation_details`, `log_iteration`, `get_iteration_history`, `mark_job_reviewed`, `analyze_evaluation`, `analyze_training` |
 | **Documentation** | `update_dataset_readme` (agent-authored) |
 
 ---
@@ -412,7 +413,7 @@ interface FinetuneWorkflowState {
 ```
 
 **Storage Separation (3 IndexedDB databases):**
-- **`vllora-finetune`** (v4): Step progress, metadata, snapshots, dry run jobs, job evaluation cache (with `scoresPersisted` tracking), plans (with lifecycle status: proposed → approved → executing → completed/failed)
+- **`vllora-finetune`** (v7): Step progress, metadata, snapshots, dry run jobs (with `reviewedByAgent` flag), job evaluation cache (with `scoresPersisted` tracking), plans (with lifecycle status: proposed → approved → executing → completed/failed), evaluation jobs index, iteration state
 - **`vllora-datasets`**: Actual data (records, topicHierarchy, evaluationConfig)
 - **`vllora-knowledge-sources`**: Uploaded documents with extracted content
 

@@ -15,6 +15,7 @@ import { getProposedPlan } from "./proposed-plan-store";
 import { generateGraderTemplate } from "./propose-plan/grader-template";
 import { proposePlanHandler } from "./propose-plan";
 import { callLucy } from "./shared/lucy-client";
+import { runGraderTest } from "./test-grader";
 import type { ToolHandler } from "../types";
 
 /**
@@ -72,6 +73,7 @@ export const configureGraderHandler: ToolHandler = async (params) => {
       workflow_id,
       script: explicitScript,
       feedback,
+      auto_test,
     } = params;
 
     if (!workflow_id || typeof workflow_id !== "string") {
@@ -170,12 +172,22 @@ export const configureGraderHandler: ToolHandler = async (params) => {
       configuredAt: Date.now(),
     });
 
+    // Optionally run a quick grader test on 5 sample records
+    let testResults: Record<string, unknown> | undefined;
+    if (auto_test) {
+      const testResult = await runGraderTest(workflow.datasetId, 5);
+      if (testResult.test_results) {
+        testResults = testResult.test_results as unknown as Record<string, unknown>;
+      }
+    }
+
     return {
       success: true,
       grader_type: "js",
       regenerated,
       feedback_applied: feedbackApplied,
       configured_at: Date.now(),
+      ...(testResults ? { test_results: testResults } : {}),
     };
   } catch (error) {
     return {
@@ -204,6 +216,12 @@ export const configureGraderTool: DistriFnTool = {
         type: "string",
         description:
           "Optional: User feedback describing how to modify the grader (e.g. 'make accuracy scoring stricter', 'add a check for hallucinations'). Applied via LLM on top of the base script.",
+      },
+      auto_test: {
+        type: "boolean",
+        default: false,
+        description:
+          "If true, automatically tests the grader on 5 sample records after saving. Returns test_results in the response (takes 1-2 minutes).",
       },
     },
     required: ["workflow_id"],

@@ -82,6 +82,10 @@ type VlloraEvents = {
   vllora_finetune_job_created: { jobId?: string; backendDatasetId: string };
   // Dry run job events
   vllora_dry_run_job_update: { jobId: string; job: DryRunJob };
+  // Dry run job completed/failed (triggers Lucy auto-analysis)
+  vllora_dry_run_job_completed: { jobId: string; datasetId: string; verdict: string };
+  // Finetune job completed/failed (triggers Lucy auto-analysis)
+  vllora_finetune_job_completed: { jobId: string; datasetId: string };
   // Lucy assistant prompt trigger (from UI actions like "Generate for topic")
   vllora_lucy_prompt: { prompt: string };
   // Knowledge source events

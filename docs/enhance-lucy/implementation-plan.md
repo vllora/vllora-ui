@@ -11,11 +11,34 @@ Prioritized by impact and effort. Organized around the two-loop architecture and
 
 ---
 
+## Implementation Status Summary (2026-03-06)
+
+| Phase | Status | What's Done |
+|-------|--------|-------------|
+| **Phase 1: Give Lucy Eyes** | Partially done | 1A done (`get_evaluation_details`), 1B not started (iteration state), 1C partially done (reactive catch-up in agent instructions) |
+| **Phase 2: Give Lucy Autonomy** | Partially done | 2A done (`analyze_evaluation` — 697-line tool with full RFT decision tree), 2B not started (re-plan after analysis) |
+| **Phase 3: Give Lucy Wisdom** | Partially done | 3A done (`analyze_training` tool), 3B partially embedded in analyze_evaluation stall detection |
+| **Phase 4: Give Lucy Hands** | Partially done | `test_grader_sample` rewritten with real eval pipeline, `auto_test` on `configure_grader`. 4B not started |
+
+### Key Design Decision: Reactive Analysis (not blocking)
+
+During E2E testing, we discovered that `analyze_evaluation` and `analyze_training` should **NOT** be plan execution steps. They are **reactive catch-up tools**:
+
+- Evaluation runs 3-10+ minutes for 150 records
+- Making analysis a blocking step means Lucy sits waiting, user sees no progress
+- Skill Package and Training don't need eval results — they can proceed independently
+- **Correct approach**: Fire-and-forget `run_evaluation`, continue pipeline, analyze reactively when user returns
+
+See [issue/e2e-fresh-run-issues.md](./issue/e2e-fresh-run-issues.md) for all E2E testing issues found.
+
+---
+
 ## Phase 1: Give Lucy Eyes (P0 — Enable Diagnosis)
 
-### 1A. Evaluation Details Tool
+### 1A. Evaluation Details Tool — DONE
 
 **What**: New tool `get_evaluation_details` that returns per-record dry run scores, grader reasons, and per-topic breakdowns.
+**Implemented in**: `src/lib/distri-finetune-tools/steps/get-evaluation-details.ts`
 
 **Files to change**:
 | File | Change |
@@ -104,9 +127,11 @@ After every dry run evaluation completes:
 
 ---
 
-### 1C. Session Catch-Up Protocol
+### 1C. Session Catch-Up Protocol — PARTIALLY DONE (agent instructions only)
 
 **What**: When user reopens a dataset, Lucy checks for unreviewed job results and catches up.
+
+**What's done**: Reactive catch-up section added to `vllora-finetune-agent.md` — when user returns, `get_dataset_state` checks for completed jobs, then calls `analyze_evaluation`/`analyze_training`. The IndexedDB `reviewedByAgent` field and frontend notification badge are NOT yet implemented.
 
 **Files to change**:
 | File | Change |
@@ -133,9 +158,12 @@ On dataset open:
 
 ## Phase 2: Give Lucy Autonomy (P1 — Enable Inner Loop)
 
-### 2A. Post-Eval Analysis Step
+### 2A. Post-Eval Analysis Step — DONE (reactive, not blocking)
 
 **What**: After dry run eval, Lucy analyzes dry run scores using the decision tree (Steps A-F from [rft-decision-tree.md](./rft-decision-tree.md)).
+**Implemented in**: `src/lib/distri-finetune-tools/steps/analyze-evaluation.ts` (~697 lines)
+
+**Important**: This is a REACTIVE tool, not a plan execution step. It runs when the user returns after evaluation completes (catch-up flow), not as a blocking step during plan execution. See [issue/e2e-fresh-run-issues.md](./issue/e2e-fresh-run-issues.md) Issue 7 for why.
 
 **Files to change**:
 | File | Change |
@@ -206,9 +234,12 @@ type ExecutionStepId =
 
 ## Phase 3: Give Lucy Wisdom (P1 — Enable Outer Loop + Stall Detection)
 
-### 3A. Post-Training Analysis (Outer Loop)
+### 3A. Post-Training Analysis (Outer Loop) — DONE (reactive)
 
 **What**: After training completes, analyze training (finetune) scores per epoch and run post-training dry run eval.
+**Implemented in**: `src/lib/distri-finetune-tools/steps/analyze-training.ts`
+
+**Important**: Like `analyze_evaluation`, this is a REACTIVE tool — runs when user returns after training completes.
 
 **Files to change**:
 | File | Change |
@@ -265,14 +296,16 @@ async function handleAnalyzeTraining(params) {
 
 ## Phase 4: Give Lucy Hands (P2 — Enable Direct Control)
 
-### 4A. Custom Grader Editing
+### 4A. Custom Grader Testing — DONE (via test_grader_sample + auto_test)
 
-**What**: Let the agent write or edit raw grader JavaScript, not just template criteria.
+**What**: Let the agent test grader quality with real evaluation pipeline, not mock data.
+**Implemented in**:
+- `src/lib/distri-finetune-tools/steps/test-grader.ts` — `test_grader_sample` rewritten with real eval pipeline (generates sample, runs eval, returns scores)
+- `src/lib/distri-finetune-tools/steps/configure-grader.ts` — `auto_test` parameter added to `configure_grader` (automatically tests after configuring)
 
-**Effort**: ~4-6 hours
-**Impact**: Medium — enables domain-specific grading
+**Note**: Full raw JS grader editing (letting agent write custom grader code) is NOT yet implemented — current implementation tests graders via criteria templates.
 
-### 4B. Task Viability Pre-Check
+### 4B. Task Viability Pre-Check — NOT STARTED
 
 **What**: Test the base model on sample prompts before committing to the full pipeline.
 
@@ -284,28 +317,35 @@ async function handleAnalyzeTraining(params) {
 ## Implementation Order
 
 ```
-Week 1: Phase 1 (Give Lucy Eyes)
-  ├── 1A: get_evaluation_details tool (2-3h)
-  ├── 1B: Iteration state + history in IndexedDB (4-5h)
-  └── 1C: Session catch-up protocol (3-4h)
+Phase 1 (Give Lucy Eyes)
+  ├── 1A: get_evaluation_details tool          ✅ DONE
+  ├── 1B: Iteration state + history in IndexedDB   ⬜ NOT STARTED
+  └── 1C: Session catch-up protocol            🟡 PARTIAL (agent instructions only)
 
-Week 2: Phase 2 (Give Lucy Autonomy — Inner Loop)
-  ├── 2A: analyze_evaluation step using dry run scores (4-6h)
-  └── 2B: Re-plan after analysis (6-8h)
+Phase 2 (Give Lucy Autonomy — Inner Loop)
+  ├── 2A: analyze_evaluation (reactive)        ✅ DONE (697 lines, full RFT decision tree)
+  └── 2B: Re-plan after analysis               ⬜ NOT STARTED
 
-Week 3: Phase 3 (Give Lucy Wisdom — Outer Loop + Stall)
-  ├── 3A: Post-training analysis using finetune scores (4-5h)
-  └── 3B: Stall detection using dry run score trends (3-4h)
+Phase 3 (Give Lucy Wisdom — Outer Loop + Stall)
+  ├── 3A: Post-training analysis (reactive)    ✅ DONE
+  └── 3B: Stall detection                      🟡 PARTIAL (embedded in analyze_evaluation)
 
-Week 4: Phase 4 (Give Lucy Hands)
-  ├── 4A: Custom grader editing (4-6h)
-  └── 4B: Task viability pre-check (3-4h)
+Phase 4 (Give Lucy Hands)
+  ├── 4A: Grader testing (test_grader_sample)  ✅ DONE (real eval pipeline, auto_test)
+  └── 4B: Task viability pre-check             ⬜ NOT STARTED
 ```
 
-Total estimated effort: ~35-45 hours across 4 weeks.
+### Remaining Work (Priority Order)
 
-Each phase delivers independent value:
-- **Phase 1 alone** makes Lucy see what's happening and catch up on reopen
-- **Phase 2 alone** enables the inner dataset iteration loop
-- **Phase 3 alone** enables the outer training loop and stall prevention
-- **Phase 4 alone** gives Lucy direct control over graders and model testing
+1. **1B: Iteration state + history in IndexedDB** — Required for cross-iteration memory, trend analysis, and session resumption. Without this, Lucy can't compare current eval results to previous iterations.
+2. **2B: Re-plan after analysis** — Required for the inner loop. Lucy can analyze eval results but can't yet propose targeted changes (regenerate weak topics, adjust grader).
+3. **1C: Full session catch-up** — Agent instructions handle catch-up, but frontend needs `reviewedByAgent` tracking in IndexedDB + notification badge in LucySidebar.
+4. **4B: Task viability pre-check** — Nice-to-have, prevents wasted effort on impossible tasks.
+
+### Lessons from E2E Testing
+
+See [issue/e2e-fresh-run-issues.md](./issue/e2e-fresh-run-issues.md) for the full list. Key learnings:
+
+- **Analysis must be reactive, not blocking**: Eval/training are long-running background processes (3-10+ min). Making analysis a plan execution step creates terrible UX (Lucy sits waiting, user sees no progress). Fire-and-forget is the right pattern.
+- **Planning-only tools must be FORBIDDEN during execution**: The LLM ignored text instructions saying "don't call this" — it needed to be in a FORBIDDEN list. `generate_topics` and `generate_grader` are planning-only tools.
+- **Backend restart kills running evaluations**: No recovery mechanism exists. Frontend shows stale "running" status. Future work: detect stale jobs or persist eval state across restarts.

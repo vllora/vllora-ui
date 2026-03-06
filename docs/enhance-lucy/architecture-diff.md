@@ -33,7 +33,7 @@ Side-by-side comparison of how each system handles the finetune pipeline, with f
                                                             DEPLOY
 ```
 
-**Lucy today**: Only has the straight-through pipeline (no loops).
+**Lucy today**: Has the straight-through pipeline with reactive analysis tools. `analyze_evaluation` and `analyze_training` exist but run reactively (catch-up when user returns), not as blocking plan steps. The inner/outer loops are NOT yet automated.
 **Enhanced Lucy**: Has both loops with the full decision tree from [rft-decision-tree.md](./rft-decision-tree.md).
 
 ---
@@ -41,14 +41,14 @@ Side-by-side comparison of how each system handles the finetune pipeline, with f
 ## Decision Making
 
 ```
-Lucy Agent (Current):
+Lucy Agent (Current — as of 2026-03-06):
   User request
-    → Orchestrator routes to sub-agent (fixed rules)
-    → Sub-agent calls tools (fixed tool set)
-    → Tool returns JSON result
-    → Steps run sequentially from fixed registry
-    → No analysis after eval, no branching, no re-plan
-    → One-shot pipeline: start to finish, then done
+    → Orchestrator generates plan (topics + grader during planning)
+    → Orchestrator executes plan steps sequentially
+    → Eval fires-and-forgets (no blocking)
+    → Skill Package + Training proceed immediately
+    → analyze_evaluation / analyze_training run REACTIVELY on user return
+    → No automated inner/outer loop yet (no re-plan after analysis)
 
 Enhanced Lucy (Proposed):
   User request

@@ -19,6 +19,22 @@ The finetune pipeline has two long-running processes: **Evaluation (Dry Run)** a
 
 ---
 
+## Implementation Status (2026-03-06)
+
+**Reactive catch-up** is partially implemented in the agent instructions (`vllora-finetune-agent.md`):
+- Added "Post-execution analysis (REACTIVE)" section to orchestrator agent
+- When user returns, `get_dataset_state` checks for completed eval/training jobs
+- If completed: calls `analyze_evaluation` or `analyze_training` as catch-up
+- Tools registered in orchestrator's `[tools].external` list
+
+**NOT yet implemented:**
+- IndexedDB `reviewedByAgent` tracking (1C from implementation plan)
+- Frontend notification badge in LucySidebar for unreviewed results
+- Iteration state/history store (1B — required for cross-iteration memory)
+- Pending proposal persistence (part of 1B)
+
+---
+
 ## The Problem
 
 Lucy currently has no awareness of where she was in the iteration loop. When a user reopens a dataset:

@@ -160,15 +160,21 @@ export interface ConfigureGraderResult {
 }
 
 export interface TestGraderResult {
-  success: boolean;
-  error?: string;
-  samples?: Array<{
-    record_id: string;
-    prompt: string;
-    response: string;
-    score: number;
-    reasoning: string;
-  }>;
+  readonly success: boolean;
+  readonly error?: string;
+  readonly test_results?: {
+    readonly sample_size: number;
+    readonly average_score: number;
+    readonly results: ReadonlyArray<{
+      readonly record_id: string;
+      readonly row_index: number;
+      readonly score: number;
+      readonly reason: string;
+      readonly status: string;
+    }>;
+    readonly evaluation_run_id: string;
+    readonly grader_type: 'js';
+  };
 }
 
 export interface DryRunResult {
@@ -338,6 +344,113 @@ export interface MarkJobReviewedResult {
   error?: string;
   job_id?: string;
   reviewed_at?: number;
+}
+
+// =============================================================================
+// Evaluation Analysis Results (Phase 2: Give Lucy Autonomy)
+// =============================================================================
+
+export interface AnalyzeEvaluationResult {
+  success: boolean;
+  error?: string;
+  health?: {
+    overall: 'healthy' | 'warning' | 'critical';
+    mean_score: number;
+    std_score: number;
+    mean_verdict: 'hard_stop' | 'too_hard' | 'healthy_range' | 'getting_easy' | 'too_easy';
+    std_verdict: 'no_differentiation' | 'good_variance' | 'bimodal';
+    percent_above_zero: number;
+    percent_perfect: number;
+  };
+  per_topic?: Array<{
+    topic: string;
+    record_count: number;
+    avg_score: number;
+    classification: 'failing' | 'weak' | 'moderate' | 'strong' | 'over_performing';
+    recommendation?: string;
+  }>;
+  grader_health?: {
+    binary_scoring: boolean;
+    low_variance: boolean;
+    verdict: 'healthy' | 'needs_attention' | 'problematic';
+  };
+  iteration_comparison?: {
+    iteration_number: number;
+    previous_mean: number;
+    current_mean: number;
+    delta: number;
+    trend: 'improving' | 'stalled' | 'regressing';
+    per_topic_deltas: Array<{
+      topic: string;
+      previous: number;
+      current: number;
+      delta: number;
+      trend: 'improving' | 'stalled' | 'regressing';
+    }>;
+    stall_count: number;
+  };
+  escalation?: {
+    level: 1 | 2 | 3 | 4 | 5 | 6;
+    description: string;
+    reason: string;
+  };
+  recommendations?: Array<{
+    priority: 'high' | 'medium' | 'low';
+    lever: 'grader' | 'records' | 'distribution' | 'training_config' | 'topics';
+    action: string;
+    target_topics?: string[];
+    rationale: string;
+  }>;
+  next_action?: 'iterate' | 'train' | 'escalate' | 'hard_stop';
+}
+
+// =============================================================================
+// Training Analysis Results (Phase 3: Give Lucy Wisdom)
+// =============================================================================
+
+export type TrainingNextAction = 'deploy_eval' | 'investigate' | 'retrain' | 'inner_loop';
+
+export type TrainingPattern =
+  | 'all_improving'
+  | 'overfitting'
+  | 'no_learning'
+  | 'reward_hacking'
+  | 'training_failure';
+
+export interface TopicEpochProgression {
+  readonly topic: string;
+  readonly record_count: number;
+  readonly epoch_scores: Record<number, number>;
+  readonly first_epoch_score: number;
+  readonly last_epoch_score: number;
+  readonly peak_epoch: number;
+  readonly peak_score: number;
+  readonly pattern: TrainingPattern | 'mixed';
+}
+
+export interface AnalyzeTrainingResult {
+  success: boolean;
+  error?: string;
+  job_id?: string;
+  job_status?: string;
+  total_epochs?: number;
+  total_rows?: number;
+  overall_progression?: {
+    first_epoch_mean: number;
+    last_epoch_mean: number;
+    delta: number;
+    peak_epoch: number;
+    peak_mean: number;
+  };
+  per_topic?: TopicEpochProgression[];
+  patterns_detected?: TrainingPattern[];
+  recommendations?: Array<{
+    priority: 'high' | 'medium' | 'low';
+    action: string;
+    rationale: string;
+    target_topics?: string[];
+  }>;
+  next_action?: TrainingNextAction;
 }
 
 // =============================================================================

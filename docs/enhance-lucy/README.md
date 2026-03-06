@@ -2,6 +2,17 @@
 
 Lucy's finetune agent follows a fixed 7-step pipeline. Claude Code with the finetune skill operates like an autonomous researcher — it reads results, diagnoses problems, changes strategy, and iterates until the model is good. This document set identifies the gaps and proposes concrete solutions.
 
+## Implementation Status (2026-03-06)
+
+| Phase | Status | Key Deliverables |
+|-------|--------|-----------------|
+| **Phase 1: Eyes** | 🟡 Partial | `get_evaluation_details` done, iteration state not started, catch-up partial |
+| **Phase 2: Autonomy** | 🟡 Partial | `analyze_evaluation` done (reactive), re-plan not started |
+| **Phase 3: Wisdom** | 🟡 Partial | `analyze_training` done (reactive), stall detection partial |
+| **Phase 4: Hands** | 🟡 Partial | `test_grader_sample` + `auto_test` done, viability pre-check not started |
+
+See [implementation-plan.md](./implementation-plan.md) for detailed status and [issue/](./issue/) for E2E testing issues.
+
 ## Key Concepts
 
 - **Two iteration loops**: Inner loop (dataset iteration via dry run eval) and outer loop (training iteration via finetune scores)
@@ -23,19 +34,20 @@ Lucy's finetune agent follows a fixed 7-step pipeline. Claude Code with the fine
 | [architecture-adoption.md](./architecture-adoption.md) | Source code analysis: what needs to change per layer, what already works, implementation sequence |
 | [testing-strategy.md](./testing-strategy.md) | E2E + integration + unit test specs, API mock strategy, test fixtures, per-phase checklists |
 | [mockups-final.html](./mockups-final.html) | Interactive UX mockups: iteration checkpoints, intervention, stall, post-training, session lifecycle scenarios |
+| [issue/](./issue/) | E2E testing issues found during implementation |
 
 ## Summary of Gaps
 
-| # | Gap | Impact | Effort | Priority |
-|---|-----|--------|--------|----------|
-| 1 | Evaluation results are opaque (no per-record details) | High | Low | P0 |
-| 2 | No cross-iteration memory | High | Medium | P0 |
-| 3 | Fixed pipeline, no branching after eval | High | Medium | P1 |
-| 4 | No stall detection or escalation strategy | Medium | Medium | P1 |
-| 5 | Grader editing is template-constrained | Medium | High | P2 |
-| 6 | No task viability pre-check | Medium | Low | P2 |
-| 7 | Knowledge sources are opaque to the agent | Low | Medium | P3 |
-| 8 | No session resumption / catch-up (NEW) | High | Medium | P0 |
+| # | Gap | Impact | Effort | Priority | Status |
+|---|-----|--------|--------|----------|--------|
+| 1 | Evaluation results are opaque (no per-record details) | High | Low | P0 | Closed |
+| 2 | No cross-iteration memory | High | Medium | P0 | Open |
+| 3 | Fixed pipeline, no branching after eval | High | Medium | P1 | Partial |
+| 4 | No stall detection or escalation strategy | Medium | Medium | P1 | Partial |
+| 5 | Grader editing is template-constrained | Medium | High | P2 | Partial |
+| 6 | No task viability pre-check | Medium | Low | P2 | Open |
+| 7 | Knowledge sources are opaque to the agent | Low | Medium | P3 | Closed |
+| 8 | No session resumption / catch-up | High | Medium | P0 | Partial |
 
 ## Read Order
 

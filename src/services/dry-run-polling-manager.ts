@@ -23,6 +23,7 @@ import { analyzeDryRunResults } from '@/lib/distri-dataset-tools/analysis/analyz
 import * as datasetsDB from './datasets-db';
 import { getWorkflowByDataset, updateStepData, markStepFailed } from './finetune-workflow-db';
 import { toast } from 'sonner';
+import { emitter } from '@/utils/eventEmitter';
 
 // =============================================================================
 // Error helpers
@@ -404,6 +405,11 @@ class DryRunPollingManager {
         });
         await this.markWorkflowStepFailed(job.datasetId);
         toast.error('Evaluation failed');
+        emitter.emit('vllora_dry_run_job_completed', {
+          jobId,
+          datasetId: job.datasetId,
+          verdict: 'FAILED',
+        });
         return;
       }
 
@@ -494,6 +500,12 @@ class DryRunPollingManager {
       } else {
         toast.error('Evaluation complete: NO-GO - Issues detected', { duration: 5000 });
       }
+
+      emitter.emit('vllora_dry_run_job_completed', {
+        jobId,
+        datasetId: job.datasetId,
+        verdict,
+      });
     } catch (error) {
       console.error('[DryRunPollingManager] Failed to process results:', error);
       const friendly = friendlyEvalError(error);

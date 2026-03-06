@@ -1,5 +1,18 @@
 # Gap Analysis: Lucy Agent vs Claude Code Skill
 
+## Gap Status (2026-03-06)
+
+| # | Gap | Status |
+|---|-----|--------|
+| 1 | Evaluation results are opaque | **Closed** — `get_evaluation_details` + `analyze_evaluation` implemented |
+| 2 | No cross-iteration memory | **Open** — Iteration state DB (1B) not started |
+| 3 | Fixed pipeline, no branching after eval | **Partially closed** — Analysis tools exist but re-plan (2B) not started |
+| 4 | No stall detection or escalation | **Partially closed** — Stall patterns embedded in `analyze_evaluation` |
+| 5 | Grader editing is template-constrained | **Partially closed** — `test_grader_sample` with real eval, `auto_test` on configure |
+| 6 | No task viability pre-check | **Open** |
+| 7 | Knowledge sources opaque to agent | **Closed** — `analyze_knowledge_sources` tool exists |
+| 8 | No session resumption / catch-up | **Partially closed** — Reactive catch-up in agent instructions, frontend tracking not done |
+
 ## Key Context
 
 - **RFT (Reinforcement Fine-Tuning)**: Output field can be empty — model generates responses during training, grader scores them. The grader IS the training signal.
