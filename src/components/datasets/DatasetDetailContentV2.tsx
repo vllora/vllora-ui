@@ -371,11 +371,21 @@ export function DatasetDetailContentV2() {
   const hasTriggeredAutoGenerate = useRef(false);
   const shouldAutoGenerate = searchParams.get("autoGeneratePlan") === "true";
 
-  // Clear autoGeneratePlan param only after plan is actually saved (not before).
+  // Clear autoGeneratePlan param after plan is proposed (or if one already exists).
   // This ensures that if the user refreshes during generation, the param is still
   // present and will re-trigger plan generation.
   useEffect(() => {
     if (!shouldAutoGenerate) return;
+
+    // If a plan already exists when the component mounts, clear the param immediately
+    // to prevent duplicate triggers from other systems.
+    if (planStatus === 'proposed' || planStatus === 'approved' || planStatus === 'executing') {
+      hasTriggeredAutoGenerate.current = true;
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete("autoGeneratePlan");
+      setSearchParams(newParams, { replace: true });
+      return;
+    }
 
     const handlePlanProposed = ({ datasetId: id }: { datasetId: string }) => {
       if (id === datasetId) {
@@ -389,7 +399,7 @@ export function DatasetDetailContentV2() {
     return () => {
       emitter.off("vllora_plan_proposed", handlePlanProposed);
     };
-  }, [shouldAutoGenerate, datasetId, searchParams, setSearchParams]);
+  }, [shouldAutoGenerate, datasetId, searchParams, setSearchParams, planStatus]);
 
   // When docs finish processing (or were never processing), trigger plan generation.
   // Guard: wait for KnowledgeSourcesContext to load from IndexedDB first —
