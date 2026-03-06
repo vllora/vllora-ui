@@ -456,6 +456,8 @@ I've edited the plan before approving. Please review ALL my changes — I may ha
 
 Compare and interpret my changes, then call propose_plan with updated structured data that reflects my edits, followed by save_plan to commit. If any changes aren't feasible, explain what can't be done and propose the closest alternative.
 
+IMPORTANT — Record count consistency: If I changed the total record count, you MUST redistribute per-topic target_count values so they sum to the new total. Update BOTH the structured proposed_topics (target_count per leaf) AND the markdown Topics table (Records column) to be consistent. Set estimated_records to the new total.
+
 ORIGINAL PLAN:
 """
 ${originalMarkdown}
