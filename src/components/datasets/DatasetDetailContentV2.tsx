@@ -371,14 +371,11 @@ export function DatasetDetailContentV2() {
   const hasTriggeredAutoGenerate = useRef(false);
   const shouldAutoGenerate = searchParams.get("autoGeneratePlan") === "true";
 
-  // Clear autoGeneratePlan param after plan is proposed (or if one already exists).
-  // This ensures that if the user refreshes during generation, the param is still
-  // present and will re-trigger plan generation.
+  // Clean up autoGeneratePlan URL param when a plan exists or gets proposed.
   useEffect(() => {
     if (!shouldAutoGenerate) return;
 
-    // If a plan already exists when the component mounts, clear the param immediately
-    // to prevent duplicate triggers from other systems.
+    // If a plan already exists, clear the URL param immediately
     if (planStatus === 'proposed' || planStatus === 'approved' || planStatus === 'executing') {
       hasTriggeredAutoGenerate.current = true;
       const newParams = new URLSearchParams(searchParams);
@@ -389,6 +386,7 @@ export function DatasetDetailContentV2() {
 
     const handlePlanProposed = ({ datasetId: id }: { datasetId: string }) => {
       if (id === datasetId) {
+        hasTriggeredAutoGenerate.current = true;
         const newParams = new URLSearchParams(searchParams);
         newParams.delete("autoGeneratePlan");
         setSearchParams(newParams, { replace: true });
@@ -401,9 +399,9 @@ export function DatasetDetailContentV2() {
     };
   }, [shouldAutoGenerate, datasetId, searchParams, setSearchParams, planStatus]);
 
-  // When docs finish processing (or were never processing), trigger plan generation.
-  // Guard: wait for KnowledgeSourcesContext to load from IndexedDB first —
-  // otherwise docsProcessing is falsely `false` before sources are fetched.
+  // When docs finish processing (or were never processing), show "Generating plan..." UI.
+  // The actual prompt to Lucy is handled by LucySidebar's auto-analysis (which triggers
+  // on new datasets) — this effect only controls the plan.md loading indicator.
   useEffect(() => {
     if (!shouldAutoGenerate || !datasetId || hasTriggeredAutoGenerate.current) return;
     if (!knowledgeSourcesLoaded) return; // Haven't loaded from IndexedDB yet — wait
@@ -413,18 +411,13 @@ export function DatasetDetailContentV2() {
 
     hasTriggeredAutoGenerate.current = true;
 
-    // Emit generating event early so plan.md shows "Generating plan..." immediately,
-    // rather than waiting for the agent to eventually call the propose_plan tool.
+    // Emit generating event so plan.md shows "Generating plan..." immediately.
+    // LucySidebar's auto-analysis will prompt Lucy to create the actual plan.
     emitter.emit("vllora_plan_generating", { datasetId });
-
     toast.info("Lucy is creating a plan from your documents...", { duration: 4000 });
-    emitter.emit("vllora_lucy_prompt", {
-      prompt: `Please analyze the uploaded documents and create a plan for this dataset using the propose_plan tool.`,
-    });
   }, [docsProcessing, shouldAutoGenerate, datasetId, knowledgeSourcesLoaded, planStatus]);
 
-  // Timeout fallback: if docs are still processing after 60s, generate plan anyway.
-  // Also requires knowledgeSourcesLoaded to avoid firing before sources are fetched.
+  // Timeout fallback: if docs are still processing after 60s, show generating UI anyway.
   useEffect(() => {
     if (!shouldAutoGenerate || !datasetId || hasTriggeredAutoGenerate.current) return;
     if (!knowledgeSourcesLoaded || !docsProcessing) return;
@@ -435,11 +428,7 @@ export function DatasetDetailContentV2() {
       hasTriggeredAutoGenerate.current = true;
 
       emitter.emit("vllora_plan_generating", { datasetId });
-
       toast.warning("Document processing is taking longer than expected. Generating plan with available content...", { duration: 5000 });
-      emitter.emit("vllora_lucy_prompt", {
-        prompt: `Please analyze the uploaded documents and create a plan for this dataset using the propose_plan tool.`,
-      });
     }, 60000);
 
     return () => clearTimeout(timeoutId);

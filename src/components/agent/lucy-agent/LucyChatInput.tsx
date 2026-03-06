@@ -363,8 +363,8 @@ export function LucyChatInput({
         className="hidden"
       />
 
-      {/* Input container with focus ring */}
-      <div className="bg-muted/30 rounded-xl border border-border/40 hover:border-border/60 focus-within:border-[rgba(var(--theme-500),0.3)] focus-within:shadow-[0_0_0_1px_rgba(var(--theme-500),0.1)] transition-all">
+      {/* Input container */}
+      <div className="rounded-xl border border-border/30 hover:border-border/50 focus-within:border-[rgba(var(--theme-500),0.25)] transition-all">
         {/* Textarea */}
         <textarea
           ref={textareaRef}
@@ -374,61 +374,59 @@ export function LucyChatInput({
           placeholder={placeholder}
           disabled={disabled}
           rows={1}
-          className="w-full bg-transparent text-foreground text-[13px] placeholder:text-muted-foreground/50 placeholder:text-[13px] resize-none
-            focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed
-            max-h-[200px] overflow-y-auto px-4 pt-3 pb-2"
+          className="w-full bg-transparent text-foreground text-[13px] placeholder:text-muted-foreground/40 placeholder:text-[13px] resize-none
+            focus:outline-none disabled:opacity-50
+            max-h-[200px] overflow-y-auto px-3 pt-2.5 pb-1"
         />
 
-        {/* Bottom toolbar inside input */}
-        <div className="flex items-center justify-between gap-2 px-3 pb-2 pt-1 border-t border-border/10">
-          <div className="flex items-center gap-1">
-            {/* Attachment button */}
+        {/* Inline toolbar */}
+        <div className="flex items-center justify-between px-2 pb-1.5">
+          <div className="flex items-center">
             <button
               type="button"
               onClick={handleAttachClick}
               disabled={disabled || isStreaming || !onAddImages}
-              className="flex items-center justify-center h-8 w-8 rounded-lg hover:bg-accent/50 transition-colors disabled:opacity-50"
-              title="Attach files — documents become reference sources, images are sent to Lucy"
+              className="flex items-center justify-center h-7 w-7 rounded-md hover:bg-accent/40 transition-colors disabled:opacity-40"
+              title="Attach files"
             >
-              <Paperclip className="h-4 w-4 text-muted-foreground" />
+              <Paperclip className="h-3.5 w-3.5 text-muted-foreground/60" />
             </button>
 
-            {/* Voice button */}
             {voiceEnabled && (
               <button
                 type="button"
                 disabled={disabled || isStreaming || !onStartStreamingVoice}
                 onClick={handleVoiceClick}
-                className="flex items-center justify-center h-8 w-8 rounded-lg hover:bg-accent/50 transition-colors disabled:opacity-50"
+                className="flex items-center justify-center h-7 w-7 rounded-md hover:bg-accent/40 transition-colors disabled:opacity-40"
                 title={isStreamingVoice ? 'Listening...' : 'Voice input'}
               >
                 <Mic className={cn(
-                  'h-4 w-4',
-                  isStreamingVoice ? 'text-[rgb(var(--theme-500))] animate-pulse' : 'text-muted-foreground'
+                  'h-3.5 w-3.5',
+                  isStreamingVoice ? 'text-[rgb(var(--theme-500))] animate-pulse' : 'text-muted-foreground/60'
                 )} />
               </button>
             )}
           </div>
 
-          {/* Single action button — morphs between Send and Stop (Claude Code pattern) */}
+          {/* Single action button — morphs between Send and Stop */}
           {isStreaming && !canSend ? (
             <Button
               onClick={handleStop}
               size="icon"
-              className="h-8 w-8 shrink-0 rounded-xl bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-700))] text-white"
+              className="h-7 w-7 shrink-0 rounded-lg bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-700))] text-white"
               title="Stop"
             >
-              <Square className="w-3.5 h-3.5 fill-current" />
+              <Square className="w-3 h-3 fill-current" />
             </Button>
           ) : (
             <Button
               onClick={handleSend}
               disabled={!canSend}
               size="icon"
-              className="h-8 w-8 shrink-0 rounded-xl bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-700))] text-white disabled:opacity-30"
+              className="h-7 w-7 shrink-0 rounded-lg bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-700))] text-white disabled:opacity-20"
               title={isStreaming ? 'Queue message' : 'Send message'}
             >
-              <Send className="w-4 h-4" />
+              <Send className="w-3.5 h-3.5" />
             </Button>
           )}
         </div>

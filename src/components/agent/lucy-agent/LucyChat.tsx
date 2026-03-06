@@ -310,6 +310,7 @@ export function LucyChat({
         stopStreaming();
         useChatStateStore.getState().resetStreamingStates();
       }
+
       sendMessage([{ part_type: 'text', data: autoTriggerPrompt }]);
       // Mark as triggered AFTER send — only now is it safe to deduplicate
       lastAutoTriggeredPromptRef.current = autoTriggerPrompt;
@@ -523,7 +524,7 @@ export function LucyChat({
           isStreaming={isStreaming}
           disabled={isLoading || hasPendingToolCalls()}
           placeholder={
-            isStreaming ? 'Type a message — it will be queued until Lucy finishes' : getPlaceholderForSection(activeSection)
+            isStreaming ? 'Message Lucy (queued)...' : getPlaceholderForSection(activeSection)
           }
           // File attachments (images, PDFs, documents)
           attachedImages={attachedImages}

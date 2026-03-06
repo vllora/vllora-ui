@@ -44,6 +44,41 @@ function normalizeTargetCounts(topics: ProposedTopic[]): ProposedTopic[] {
   });
 }
 
+/** Sum all leaf target_counts in a topic tree */
+function sumTargetCounts(topics: ProposedTopic[]): number {
+  return topics.reduce((sum, t) => {
+    if (t.subtopics && t.subtopics.length > 0) {
+      return sum + sumTargetCounts(t.subtopics);
+    }
+    return sum + t.target_count;
+  }, 0);
+}
+
+/**
+ * Redistribute leaf target_counts so they sum to `desiredTotal`.
+ * Divides evenly across leaves; distributes remainder one-per-leaf.
+ * Returns a new tree (immutable).
+ */
+function redistributeTargetCounts(topics: ProposedTopic[], desiredTotal: number): ProposedTopic[] {
+  const leafCount = countLeafs(topics);
+  if (leafCount === 0 || desiredTotal <= 0) return topics;
+
+  const perTopic = Math.floor(desiredTotal / leafCount);
+  const extraCount = desiredTotal - perTopic * leafCount;
+  let leafIndex = 0;
+
+  const rebuild = (ts: ProposedTopic[]): ProposedTopic[] =>
+    ts.map((t) => {
+      if (t.subtopics && t.subtopics.length > 0) {
+        return { ...t, target_count: 0, subtopics: rebuild(t.subtopics) };
+      }
+      const idx = leafIndex++;
+      return { ...t, target_count: perTopic + (idx < extraCount ? 1 : 0) };
+    });
+
+  return rebuild(topics);
+}
+
 /** Validate output_format — if output_schema is invalid JSON, clear it */
 function validateOutputFormat(plan: Plan): void {
   if (!plan.output_format) return;
@@ -120,13 +155,22 @@ export const proposePlanHandler: ToolHandler = async (
       const leafCount = countLeafs(plan.proposed_topics);
       plan.total_topic_count = leafCount;
 
-      // Recalculate estimated_records from actual target_counts
-      const calcRecords = (topics: ProposedTopic[]): number =>
-        topics.reduce((sum, t) => {
-          const childSum = t.subtopics?.length ? calcRecords(t.subtopics) : 0;
-          return sum + t.target_count + childSum;
-        }, 0);
-      plan.estimated_records = calcRecords(plan.proposed_topics);
+      // If agent specified a desired total (estimated_records) that differs from
+      // the sum of per-topic target_counts, redistribute evenly across leaves.
+      // This handles cases where the user edits the total record count in the plan
+      // but the agent doesn't update individual topic counts to match.
+      const desiredTotal = agentPlan.estimated_records;
+      const actualSum = sumTargetCounts(plan.proposed_topics);
+
+      if (desiredTotal && desiredTotal > 0 && desiredTotal !== actualSum) {
+        console.log(
+          `[proposePlan] Redistributing target_counts: desired=${desiredTotal}, actual sum=${actualSum}, leaves=${leafCount}`
+        );
+        plan.proposed_topics = redistributeTargetCounts(plan.proposed_topics, desiredTotal);
+      }
+
+      // Recalculate estimated_records from actual target_counts (single source of truth)
+      plan.estimated_records = sumTargetCounts(plan.proposed_topics);
     }
 
     // Validate output_format
