@@ -25,6 +25,14 @@ import { adjustTopicHierarchyHandler } from './adjust-hierarchy';
 import { rollbackToStepHandler } from '../workflow/index';
 import { categorizeRecordsHandler } from './categorize-records';
 import { generateInitialDataHandler } from './generate-initial-data';
+
+/** Mock-aware wrapper: uses mock handler when localStorage flag is set. */
+async function callGenerateInitialData(params: Record<string, unknown>) {
+  const { maybeUseMockHandler } = await import(
+    '@/test/mock-data/mock-generate-initial-data'
+  );
+  return maybeUseMockHandler(generateInitialDataHandler, params);
+}
 import { uploadDatasetHandler } from './upload-dataset';
 import { runDryRunHandler } from './run-dry-run';
 
@@ -438,7 +446,7 @@ async function executeGenerate(ctx: StepContext): Promise<StepResult> {
 
   const recordCount = overrides?.generate?.count ?? plan.estimated_records ?? 0;
 
-  const result = await generateInitialDataHandler({
+  const result = await callGenerateInitialData({
     dataset_id,
     count: recordCount,
     use_knowledge: plan.data_generation?.grounded_in_knowledge ?? false,
@@ -555,7 +563,7 @@ async function executeRegenerateTopic(ctx: StepContext): Promise<StepResult> {
 
   const perTopicCount = overrides?.generate?.per_topic_count ?? 15;
 
-  const result = await generateInitialDataHandler({
+  const result = await callGenerateInitialData({
     dataset_id,
     count: perTopicCount * targetTopics.length,
     use_knowledge: plan.data_generation?.grounded_in_knowledge ?? false,

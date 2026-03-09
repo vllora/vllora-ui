@@ -201,6 +201,11 @@
   if (finetuneDb) finetuneDb.close();
   if (knowledgeDb) knowledgeDb.close();
 
+  // ─── Clean up E2E localStorage flags ──────────────────────────────────
+
+  localStorage.removeItem('vllora_mock_data_generation');
+  console.log('  Removed localStorage: vllora_mock_data_generation');
+
   // ─── Summary ──────────────────────────────────────────────────────────
 
   console.log('\n┌─────────────────────────────────────────────────┐');

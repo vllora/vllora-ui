@@ -83,36 +83,45 @@ export function makeCompletedEvalResponse(
   scenario: EvalScenarioKey,
   runId = 'eval-run-001',
   totalRows = 10,
+  /** Real record IDs from the uploaded JSONL. Falls back to `row-N` if empty. */
+  rowIds: string[] = [],
 ): EvaluationResultResponse {
   const { mean, scores } = SCENARIO_SCORES[scenario];
 
-  const results: RowEpochResult[] = scores.slice(0, totalRows).map((score, i) => ({
-    row_index: i,
-    row: { id: `row-${i}`, messages: [] },
-    epochs: {
-      '0': [{
-        dataset_row_id: `row-${i}`,
-        status: 'completed',
-        score,
-        reason: score >= 0.5 ? 'Meets criteria' : 'Does not meet criteria',
-      }],
-    },
-  }));
+  // Cycle through scenario scores to fill all rows
+  const effectiveRows = Math.max(totalRows, 1);
+  const results: RowEpochResult[] = Array.from({ length: effectiveRows }, (_, i) => {
+    const rowId = rowIds[i] ?? `row-${i}`;
+    const score = scores[i % scores.length] ?? mean;
+    return {
+      row_index: i,
+      row: { id: rowId, messages: [] },
+      epochs: {
+        '0': [{
+          dataset_row_id: rowId,
+          status: 'completed' as const,
+          score,
+          reason: score >= 0.5 ? 'Meets criteria' : 'Does not meet criteria',
+        }],
+      },
+    };
+  });
 
-  // Use 0.5 threshold to match the reason logic (>= 0.5 = "Meets criteria")
-  const passedCount = scores.filter((s) => s >= 0.5).length;
+  // Compute pass count across all rows (not just the base scores array)
+  const allScores = results.map((r) => r.epochs['0'][0].score);
+  const passedCount = allScores.filter((s) => s != null && s >= 0.5).length;
 
   return {
     evaluation_run_id: runId,
     status: 'completed',
-    total_rows: totalRows,
-    completed_rows: totalRows,
+    total_rows: effectiveRows,
+    completed_rows: effectiveRows,
     failed_rows: 0,
     results,
     summary: {
       average_score: mean,
       passed_count: passedCount,
-      failed_count: totalRows - passedCount,
+      failed_count: effectiveRows - passedCount,
     },
   };
 }
@@ -143,6 +152,8 @@ export function resolveEvalPollResponse(
   pollCount: number,
   pollsBeforeComplete: number,
   totalRows = 10,
+  /** Real record IDs from uploaded JSONL — forwarded to completed response. */
+  rowIds: string[] = [],
 ): EvaluationResultResponse {
   // Stalled: always return running with same progress (never completes)
   if (evalScenario === 'stalled') {
@@ -163,6 +174,6 @@ export function resolveEvalPollResponse(
     return makeFailedEvalResponse(runId);
   }
 
-  // Completed with scenario-appropriate results
-  return makeCompletedEvalResponse(evalScenario, runId, totalRows);
+  // Completed with scenario-appropriate results (using real row IDs)
+  return makeCompletedEvalResponse(evalScenario, runId, totalRows, rowIds);
 }

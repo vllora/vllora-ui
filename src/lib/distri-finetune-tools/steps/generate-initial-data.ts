@@ -1041,8 +1041,11 @@ Examples: "focus on beginner concepts", "include edge cases", "emphasize error h
     required: ["dataset_id"],
   },
   autoExecute: true,
-  handler: async (input) =>
-    JSON.stringify(
-      await generateInitialDataHandler(input as Record<string, unknown>),
-    ),
+  handler: async (input) => {
+    const params = input as Record<string, unknown>;
+    const { maybeUseMockHandler } = await import(
+      '@/test/mock-data/mock-generate-initial-data'
+    );
+    return JSON.stringify(await maybeUseMockHandler(generateInitialDataHandler, params));
+  },
 } as DistriFnTool;

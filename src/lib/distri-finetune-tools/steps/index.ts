@@ -320,7 +320,12 @@ export const stepToolHandlers: Record<string, ToolHandler> = {
   categorize_records: categorizeRecordsHandler,
   analyze_coverage: analyzeCoverageHandler,
   generate_synthetic_data: generateSyntheticDataHandler,
-  generate_initial_data: generateInitialDataHandler,
+  generate_initial_data: async (params) => {
+    const { maybeUseMockHandler } = await import(
+      '@/test/mock-data/mock-generate-initial-data'
+    );
+    return maybeUseMockHandler(generateInitialDataHandler, params);
+  },
   generate_record_variants: generateRecordVariantsHandler,
   generate_preview: generatePreviewHandler,
   upload_knowledge_source: uploadKnowledgeSourceHandler,

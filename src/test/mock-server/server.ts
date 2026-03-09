@@ -87,6 +87,8 @@ interface MockDatasetEntry {
   readonly createdAt: string;
   readonly evalRunIds: string[];
   readonly trainingJobIds: string[];
+  /** Row IDs parsed from uploaded JSONL — used for realistic eval responses. */
+  rowIds: string[];
 }
 
 /** All datasets created through the mock server, keyed by backend dataset ID. */
@@ -113,15 +115,33 @@ function nextTrainingJobId(): string {
   return `mock-ft-${String(trainingJobCounter).padStart(3, '0')}`;
 }
 
-function registerDataset(datasetId: string): MockDatasetEntry {
+function registerDataset(datasetId: string, rowIds: string[] = []): MockDatasetEntry {
   const entry: MockDatasetEntry = {
     datasetId,
     createdAt: new Date().toISOString(),
     evalRunIds: [],
     trainingJobIds: [],
+    rowIds,
   };
   mockDatasets.set(datasetId, entry);
   return entry;
+}
+
+/** Parse row IDs from uploaded JSONL content. */
+function parseRowIdsFromJsonl(buffer: Buffer | undefined): string[] {
+  if (!buffer) return [];
+  try {
+    const text = buffer.toString('utf-8');
+    return text.split('\n')
+      .filter((line) => line.trim())
+      .map((line) => {
+        const parsed = JSON.parse(line);
+        return typeof parsed.id === 'string' ? parsed.id : '';
+      })
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
 }
 
 function resetMockData(): void {
@@ -190,7 +210,7 @@ app.get('/api/env', (_req, res) => {
 // POST /finetune/datasets — Upload dataset
 // =============================================================================
 
-app.post('/finetune/datasets', upload.single('file'), async (_req, res) => {
+app.post('/finetune/datasets', upload.single('file'), async (req, res) => {
   const scenario = getScenario();
   await delayMs(scenario.createDelayMs);
 
@@ -205,8 +225,12 @@ app.post('/finetune/datasets', upload.single('file'), async (_req, res) => {
     return;
   }
 
+  // Parse row IDs from uploaded JSONL so eval responses use real IDs
+  const rowIds = parseRowIdsFromJsonl(req.file?.buffer);
+
   const datasetId = nextDatasetId();
-  registerDataset(datasetId);
+  registerDataset(datasetId, rowIds);
+  console.log(`[mock] Dataset ${datasetId} uploaded with ${rowIds.length} rows`);
   res.json({ dataset_id: datasetId });
 });
 
@@ -253,8 +277,12 @@ app.get('/finetune/evaluations/:id', async (req, res) => {
   const scenario = getScenario();
   await delayMs(scenario.pollDelayMs);
 
+  // Find the dataset that owns this eval run to get real row IDs
+  const ownerDataset = [...mockDatasets.values()].find((d) => d.evalRunIds.includes(runId));
+  const rowIds = ownerDataset?.rowIds ?? [];
+
   const pollCount = incrementEvalPoll(runId);
-  res.json(resolveEvalPollResponse(runId, scenario.evalScenario, pollCount, scenario.evalPollsBeforeComplete));
+  res.json(resolveEvalPollResponse(runId, scenario.evalScenario, pollCount, scenario.evalPollsBeforeComplete, rowIds.length || 10, rowIds));
 });
 
 // =============================================================================
