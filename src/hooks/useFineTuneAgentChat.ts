@@ -47,13 +47,12 @@ function createNewThreadId(): string {
 }
 
 /**
- * Get or create a persistent thread ID for a dataset.
- * Stores in localStorage so chat history survives page refreshes.
+ * Create a fresh thread ID for each dataset session.
+ * Always generates a new UUID — old thread messages are not restored.
+ * Catch-up cards and buildCatchUpContext() provide all needed context.
  */
-function getOrCreateThreadId(datasetId: string): string {
+function createFreshThreadId(datasetId: string): string {
   const key = `${THREAD_STORAGE_KEY}${datasetId}`;
-  const stored = localStorage.getItem(key);
-  if (stored) return stored;
   const newId = createNewThreadId();
   localStorage.setItem(key, newId);
   return newId;
@@ -267,7 +266,7 @@ export function useFineTuneAgentChat(
   });
 
   // Thread state - persisted per dataset so chat history survives refresh
-  const [threadId, setThreadId] = useState<string>(() => getOrCreateThreadId(datasetId));
+  const [threadId, setThreadId] = useState<string>(() => createFreshThreadId(datasetId));
 
   // Workflow state
   const [workflow, setWorkflow] = useState<FinetuneWorkflowState | null>(null);
@@ -356,7 +355,7 @@ export function useFineTuneAgentChat(
 
   // Load persisted thread when dataset changes
   useEffect(() => {
-    setThreadId(getOrCreateThreadId(datasetId));
+    setThreadId(createFreshThreadId(datasetId));
   }, [datasetId]);
 
   // Create new chat thread (persists to localStorage)

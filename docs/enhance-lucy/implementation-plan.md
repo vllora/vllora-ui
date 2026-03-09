@@ -34,7 +34,7 @@ All mockup scenarios now have corresponding UI card renderers:
 | `LucyFailedJobCard` | Failed job catch-up card | — |
 | `LucyPendingDecisionCard` | Pending iteration decision catch-up card | Raw decimal (0.45) |
 
-Catch-up cards use insertion-point positioning in `LucyChat.tsx` — rendered between historical and new messages.
+Catch-up cards are shown as a landing view on fresh threads — each dataset session creates a new thread instead of restoring old messages.
 
 ### Auto-Trigger Analysis (2026-03-09)
 

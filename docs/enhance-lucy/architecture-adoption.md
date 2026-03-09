@@ -320,7 +320,7 @@ Custom tool renderers registered in `LucyToolRenderer.tsx` render structured car
 | `LucyFailedJobCard` | (catch-up card) | Failed job card with error + retry/diagnose buttons |
 | `LucyPendingDecisionCard` | (catch-up card) | Resumption card for pending iteration proposals |
 
-**Catch-up card positioning:** Cards are inserted between historical (restored) messages and new messages using an insertion point ref in `LucyChat.tsx`, ensuring they remain visible after auto-scroll loads history.
+**Catch-up card positioning:** Cards are shown as a landing view on fresh threads — when a user reopens a dataset with unreviewed jobs or pending proposals, catch-up cards render before any messages (no insertion-point logic needed since threads are always fresh).
 
 **Score format:** All Lucy card components use raw decimal format (`0.45`, `+0.07`) matching the mockup designs. No percentage formatting.
 
@@ -348,8 +348,8 @@ Custom tool renderers registered in `LucyToolRenderer.tsx` render structured car
 | `DryRunPollingManager` | Already polls, persists, auto-recovers. **Updated**: now emits `vllora_dry_run_job_completed` event on job completion |
 | `FinetuneJobsContext` | SSE + polling for training jobs. **Updated**: now emits `vllora_finetune_job_completed` event on status transition |
 | IndexedDB per-record scores | Already persisted by dry run completion handler |
-| Thread persistence | `lucy_thread_{datasetId}` in localStorage survives everything |
-| Chat message history | Reloaded from Distri server via threadId |
+| Thread persistence | `lucy_thread_{datasetId}` in localStorage — now overwritten each session (fresh thread). Catch-up cards replace message history |
+| Chat message history | No longer restored — each session starts fresh. `buildCatchUpContext()` + catch-up cards provide all needed context |
 | `@distri/react` useChat | Multiple plans per task already supported |
 | `@distri/core` client | A2A protocol handles all needed states |
 | Distri server `agent_loop.rs` | `replan()`, `InputRequired`, `max_iterations` all work |

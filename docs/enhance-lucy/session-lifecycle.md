@@ -10,8 +10,8 @@ The finetune pipeline has two long-running processes: **Evaluation (Dry Run)** a
 |-----------|-------------|-----------------|
 | **Dry run polling** | Singleton `DryRunPollingManager` polls every 6s, auto-recovers on page refresh | IndexedDB (`dryRunJobs` store) |
 | **Finetune SSE + polling** | SSE for real-time status, evaluation polling every 20s, falls back to API | Backend (jobs live server-side) |
-| **Thread persistence** | Thread ID stored as `lucy_thread_{datasetId}` in localStorage | localStorage |
-| **Chat messages** | Reloaded from Distri server via threadId on reopen | Distri server |
+| **Thread persistence** | Fresh thread created on each dataset open (`createFreshThreadId`). Old messages are NOT restored — catch-up cards provide context instead | localStorage (overwritten each session) |
+| **Chat messages** | NOT reloaded. Fresh thread starts empty. Catch-up cards + `buildCatchUpContext()` replace message history | N/A (fresh each session) |
 | **Workflow state** | Step progress, metadata, dry run verdict | IndexedDB (`workflows` store) |
 | **Per-record scores** | Dry run & finetune scores persisted to dataset records on job completion | IndexedDB (dataset records) |
 
@@ -35,7 +35,7 @@ The finetune pipeline has two long-running processes: **Evaluation (Dry Run)** a
 - `LucyCompletedJobCard` — "Welcome Back" card for completed jobs (green border, score summary, action buttons)
 - `LucyFailedJobCard` — Failed job card with error details + retry/diagnose buttons
 - `LucyPendingDecisionCard` — Resumption card for pending iteration proposals with proposed changes list
-- Cards are positioned between historical (restored) messages and new messages using an insertion point ref in `LucyChat.tsx` (not at the top of the chat, which would be hidden by auto-scroll)
+- Cards are shown as a landing view when opening a dataset with catch-up data (fresh thread, no historical messages)
 - `buildCatchUpContext()` returns both text context (for agent) and structured card data (for UI)
 
 **Active watching & background transition (2026-03-09):**
@@ -54,16 +54,16 @@ The finetune pipeline has two long-running processes: **Evaluation (Dry Run)** a
 
 Lucy currently has no awareness of where she was in the iteration loop. When a user reopens a dataset:
 
-1. Lucy loads the thread (previous messages visible)
+1. Lucy starts a fresh thread (no historical messages)
 2. Lucy loads workflow state (which step we're on)
-3. But Lucy **doesn't know**:
+3. But Lucy **doesn't know** (without catch-up):
    - Was she in the middle of analyzing eval results?
    - Did she propose changes that haven't been applied yet?
    - Was a training job running? Did it complete while the user was away?
    - What iteration number are we on? What was the last decision?
    - Is there a completed job the user hasn't seen results for yet?
 
-The user sees old chat messages but Lucy has **no context** to pick up where she left off.
+Without the catch-up mechanism, Lucy would have **no context** to pick up where she left off. The catch-up cards and `buildCatchUpContext()` solve this.
 
 ---
 
@@ -239,7 +239,7 @@ Lucy: "Welcome back! We were in the middle of Iteration 2.
    }
    ```
 2. On reopen, Lucy reads iteration state and presents context-appropriate catch-up message
-3. The chat thread already has the history, but iteration state gives Lucy the structured context to reason about what to do next
+3. Each session starts with a fresh thread — iteration state and catch-up cards give Lucy the structured context to reason about what to do next
 
 ---
 
@@ -249,7 +249,7 @@ When a user opens a dataset, Lucy runs this logic before sending any message:
 
 ```
 1. Load workflow state from IndexedDB
-2. Load thread messages from Distri server (via threadId)
+2. Create fresh thread (no historical messages loaded)
 3. Check for pending job results:
    a. Query DryRunJobsContext for completed-but-unreviewed eval jobs
    b. Query FinetuneJobsContext for completed/failed training jobs
@@ -321,8 +321,8 @@ For jobs that take longer than expected:
 | Per-record scores | IndexedDB (dataset records) | Yes | Yes |
 | Workflow step progress | IndexedDB | Yes | Yes |
 | Iteration state (NEW) | IndexedDB | Yes | Yes |
-| Thread ID | localStorage | Yes | Yes |
-| Chat messages | Distri server | Yes (re-fetched) | Yes |
+| Thread ID | localStorage | Overwritten (fresh each session) | Overwritten (fresh each session) |
+| Chat messages | N/A (fresh thread) | No (fresh thread each session) | No (fresh thread each session) |
 | Proposed changes (NEW) | IndexedDB (iteration state) | Yes | Yes |
 | Reviewed-by-agent flag (NEW) | IndexedDB (job record) | Yes | Yes |
 | Streaming/loading indicators | React state | No | No |

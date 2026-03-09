@@ -92,7 +92,8 @@ describe('LucyAnalyzeEvalRenderer', () => {
 
     expect(screen.getByText('Evaluation Analysis')).toBeInTheDocument();
     expect(screen.getByText('Healthy')).toBeInTheDocument();
-    expect(screen.getByText('Ready to Train')).toBeInTheDocument();
+    // Auto-countdown card shown for healthy + train scenario
+    expect(screen.getByText('Auto-continue')).toBeInTheDocument();
   });
 
   it('shows per-topic breakdown for healthy scenario', () => {
@@ -121,7 +122,8 @@ describe('LucyAnalyzeEvalRenderer', () => {
     );
 
     expect(screen.getByText('Warning')).toBeInTheDocument();
-    expect(screen.getByText('Iterate')).toBeInTheDocument();
+    // Action button for iterate scenario
+    expect(screen.getByText('Accept & Apply')).toBeInTheDocument();
   });
 
   it('shows proposed changes for warning scenario', () => {
@@ -149,7 +151,8 @@ describe('LucyAnalyzeEvalRenderer', () => {
     );
 
     expect(screen.getByText('Critical')).toBeInTheDocument();
-    expect(screen.getByText('Escalate')).toBeInTheDocument();
+    // Action button for escalation scenario
+    expect(screen.getByText('Accept Escalation')).toBeInTheDocument();
     expect(screen.getByText('Grader issues detected')).toBeInTheDocument();
   });
 

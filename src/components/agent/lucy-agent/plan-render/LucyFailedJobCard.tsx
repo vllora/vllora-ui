@@ -48,7 +48,6 @@ function sendPrompt(prompt: string) {
 // =============================================================================
 
 export function LucyFailedJobCard({
-  jobId,
   errorMessage,
   failedAt,
 }: FailedJobCardProps) {
@@ -69,45 +68,30 @@ export function LucyFailedJobCard({
     : errorMessage;
 
   return (
-    <div className="rounded-lg border border-red-300 dark:border-red-700 bg-red-50/50 dark:bg-red-900/10 p-3 space-y-2.5">
+    <div className="border-l-2 border-red-500 pl-3 py-2 space-y-2">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <XCircle className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
-          <span className="text-xs font-semibold text-foreground">Evaluation Failed</span>
-        </div>
-        <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
-          Failed
-        </span>
+      <div className="flex items-center gap-1.5">
+        <XCircle className="w-3.5 h-3.5 text-red-500" />
+        <span className="text-xs font-semibold text-foreground">Evaluation Failed</span>
       </div>
 
       {/* Error details */}
-      <div className="space-y-1">
-        {timeStr && (
-          <div className="text-[10px] text-muted-foreground">
-            Failed at {timeStr}
-          </div>
-        )}
-        {displayError && (
-          <div className="text-[11px] bg-red-100/50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded p-2 font-mono text-red-700 dark:text-red-300 break-words">
+      <div className="text-[11px] text-muted-foreground space-y-0.5">
+        {timeStr && <div>Failed at {timeStr}</div>}
+        {displayError ? (
+          <div className="font-mono text-red-600 dark:text-red-400 break-words">
             {displayError}
           </div>
-        )}
-        {!displayError && (
-          <div className="text-[11px] text-muted-foreground italic">
+        ) : (
+          <div className="italic">
             No error details available. Ask Lucy to diagnose the issue.
           </div>
         )}
       </div>
 
-      {/* Job ID reference */}
-      <div className="text-[10px] text-muted-foreground">
-        Job: <code className="bg-muted px-1 py-0.5 rounded text-[9px]">{jobId.slice(0, 8)}...</code>
-      </div>
-
       {/* Recovery action buttons */}
       {!clicked ? (
-        <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+        <div className="flex flex-wrap gap-1.5">
           <Button
             size="sm"
             className="h-6 text-[10px] gap-1 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
@@ -145,7 +129,7 @@ export function LucyFailedJobCard({
           </Button>
         </div>
       ) : (
-        <div className="flex items-center gap-1 text-[10px] text-muted-foreground pt-0.5">
+        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
           <Check className="w-3 h-3 text-emerald-500" />
           <span>Response sent</span>
         </div>
