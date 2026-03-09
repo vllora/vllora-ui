@@ -86,7 +86,14 @@ export async function consumePendingPlan(datasetId: string): Promise<Plan | null
 // Types
 // =============================================================================
 
-export type ExecutionStepId = 'topics' | 'adjust_topics' | 'categorize' | 'generate' | 'grader' | 'upload' | 'dryrun' | 'finetune';
+export type ExecutionStepId =
+  | 'topics' | 'adjust_topics' | 'categorize' | 'generate' | 'grader' | 'upload' | 'dryrun' | 'finetune'
+  // Iteration loop steps (inner loop — dataset improvement)
+  | 'regenerate_topic'    // regenerate data for specific weak topics
+  | 'adjust_grader'       // modify grader based on analysis
+  | 'analyze'             // run post-eval analysis on dry run results
+  // Outer loop steps (post-training)
+  | 'post_training_eval'; // run eval on fine-tuned model vs base
 
 export type ExecutionStepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
 
@@ -257,6 +264,25 @@ function buildCompletedStepDetails(
     case 'finetune': {
       const ftId = summary.finetune_job_id;
       if (ftId) details.push(`[ft-${ftId.slice(0, 6)}](finetune/${ftId})`);
+      break;
+    }
+    case 'regenerate_topic': {
+      const regenerated = (res as any)?.records_created || 0;
+      const topics = (res as any)?.target_topics as string[] | undefined;
+      if (topics?.length) details.push(`Topics: ${topics.join(', ')}`);
+      if (regenerated > 0) details.push(`${regenerated} records generated`);
+      break;
+    }
+    case 'adjust_grader': {
+      details.push('Evaluator reconfigured');
+      break;
+    }
+    case 'analyze': {
+      details.push('Evaluation results analyzed');
+      break;
+    }
+    case 'post_training_eval': {
+      details.push('Post-training evaluation started');
       break;
     }
   }
@@ -516,6 +542,79 @@ async function executeDryRun(ctx: StepContext): Promise<StepResult> {
   return { message: 'Evaluation started in background', result };
 }
 
+async function executeRegenerateTopic(ctx: StepContext): Promise<StepResult> {
+  const { dataset_id, plan, overrides, summary } = ctx;
+  const targetTopics = overrides?.generate?.target_topics;
+
+  if (!targetTopics?.length) {
+    throw new Error(
+      'regenerate_topic requires overrides.generate.target_topics to specify which topics to regenerate. ' +
+      'Recovery: call execute_plan with overrides.generate.target_topics set to the weak topic names.'
+    );
+  }
+
+  const perTopicCount = overrides?.generate?.per_topic_count ?? 15;
+
+  const result = await generateInitialDataHandler({
+    dataset_id,
+    count: perTopicCount * targetTopics.length,
+    use_knowledge: plan.data_generation?.grounded_in_knowledge ?? false,
+    distribute_by_topic: true,
+    target_topics: targetTopics,
+    per_topic_count: perTopicCount,
+  });
+
+  if (!(result as any).success) {
+    throw new Error((result as any).error || 'Failed to regenerate topic data');
+  }
+
+  const regenerated = (result as any).records_created || 0;
+  summary.records_generated += regenerated;
+
+  toast.success(`Regenerated data for ${targetTopics.length} topic(s)`, {
+    description: `${regenerated} new records`,
+  });
+
+  return { message: `Regenerated ${regenerated} records for topics: ${targetTopics.join(', ')}`, result };
+}
+
+async function executeAdjustGrader(ctx: StepContext): Promise<StepResult> {
+  // Re-run grader configuration with updated criteria from the plan
+  return executeGrader(ctx);
+}
+
+async function executeAnalyze(ctx: StepContext): Promise<StepResult> {
+  const { dataset_id } = ctx;
+
+  // Find the most recent completed dry run job for this dataset
+  const { getDryRunJobsByDataset } = await import('@/services/dry-run-jobs-db');
+  const jobs = await getDryRunJobsByDataset(dataset_id);
+  const latestCompleted = [...jobs]
+    .filter((j) => j.status === 'completed' && j.evaluationRunId)
+    .sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))[0];
+
+  if (!latestCompleted?.evaluationRunId) {
+    throw new Error(
+      'No completed evaluation found for analysis. ' +
+      'Recovery: run a dry run evaluation first, then re-run the analyze step.'
+    );
+  }
+
+  const { analyzeEvaluationHandler } = await import('./analyze-evaluation');
+  const result = await analyzeEvaluationHandler({
+    dataset_id,
+    evaluation_id: latestCompleted.evaluationRunId,
+  });
+
+  return { message: 'Evaluation analysis complete', result };
+}
+
+async function executePostTrainingEval(ctx: StepContext): Promise<StepResult> {
+  // Same as dry run eval — runs the evaluation on the current dataset
+  // (agent should set the model to the fine-tuned model in the plan)
+  return executeDryRun(ctx);
+}
+
 async function executeFinetune(ctx: StepContext): Promise<StepResult> {
   const { dataset_id } = ctx;
 
@@ -579,6 +678,8 @@ export interface PlanValidationResult {
 export const STEP_ORDER: ExecutionStepId[] = [
   'topics', 'adjust_topics', 'categorize', 'generate',
   'grader', 'upload', 'dryrun', 'finetune',
+  // Iteration loop steps (can appear in iteration plans)
+  'regenerate_topic', 'adjust_grader', 'analyze', 'post_training_eval',
 ];
 const STEP_ORDER_SET = new Set<string>(STEP_ORDER);
 const LEGACY_STEP_IDS = new Set<string>(['readme']);
@@ -678,8 +779,14 @@ const STEP_REGISTRY: Record<ExecutionStepId, StepExecutor> = {
   generate:      { name: 'Generate Data',          workflowStep: 'coverage_generation', execute: executeGenerate },
   grader:        { name: 'Configure Evaluator',    workflowStep: 'grader_config',       execute: executeGrader },
   upload:        { name: 'Upload Dataset',                                               execute: executeUpload },
-  dryrun:        { name: 'Run Evaluation',          workflowStep: 'dry_run',             execute: executeDryRun,   nonFatal: true },
-  finetune:      { name: 'Start Finetune Job',                                           execute: executeFinetune, nonFatal: true },
+  dryrun:             { name: 'Run Evaluation',          workflowStep: 'dry_run',             execute: executeDryRun,            nonFatal: true },
+  finetune:           { name: 'Start Finetune Job',                                           execute: executeFinetune,           nonFatal: true },
+  // Iteration loop steps (inner loop)
+  regenerate_topic:   { name: 'Regenerate Topic Data',   workflowStep: 'coverage_generation', execute: executeRegenerateTopic },
+  adjust_grader:      { name: 'Adjust Evaluator',        workflowStep: 'grader_config',       execute: executeAdjustGrader },
+  analyze:            { name: 'Analyze Evaluation',                                           execute: executeAnalyze,            nonFatal: true },
+  // Outer loop steps
+  post_training_eval: { name: 'Post-Training Evaluation', workflowStep: 'dry_run',            execute: executePostTrainingEval,   nonFatal: true },
 };
 
 // =============================================================================

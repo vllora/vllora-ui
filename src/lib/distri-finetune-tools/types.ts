@@ -454,6 +454,28 @@ export interface AnalyzeTrainingResult {
 }
 
 // =============================================================================
+// Task Viability Pre-Check Results (Phase 4B)
+// =============================================================================
+
+export interface CheckViabilityResult {
+  readonly success: boolean;
+  readonly error?: string;
+  readonly viability?: {
+    readonly verdict: 'viable' | 'marginal' | 'not_viable';
+    readonly mean_score: number;
+    readonly sample_size: number;
+    readonly scored_count: number;
+    readonly per_record: ReadonlyArray<{
+      readonly record_id: string;
+      readonly score: number;
+      readonly reason: string;
+    }>;
+    readonly evaluation_run_id: string;
+    readonly recommendation: string;
+  };
+}
+
+// =============================================================================
 // Context for Finetune Agent
 // =============================================================================
 

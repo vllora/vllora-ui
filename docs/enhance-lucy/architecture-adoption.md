@@ -281,16 +281,24 @@ interface IterationState {
 
 **Implementation approach:** Inject catch-up context as the first system message when initializing the chat, so the agent knows what happened and can generate an appropriate greeting.
 
-### 5D. New Event Emitter Events
+### 5D. New Event Emitter Events — PARTIALLY DONE (different events than proposed)
 
+**Proposed** (not implemented):
 ```typescript
-// Add to existing event emitter
 'vllora_iteration_started':    { iteration: number, datasetId: string }
 'vllora_iteration_completed':  { iteration: number, scores: {...} }
 'vllora_iteration_stall':      { pattern: string, suggestion: string }
 ```
 
-Follow the existing pattern in `src/utils/eventEmitter.ts`. See `event-emitter-guide.md` for the full event map.
+**Actually implemented** (serve a similar but different purpose — auto-trigger Lucy analysis):
+```typescript
+'vllora_dry_run_job_completed':    { jobId: string, datasetId: string, verdict: string }
+'vllora_finetune_job_completed':   { jobId: string, datasetId: string }
+```
+
+These events are emitted by `DryRunPollingManager` and `FinetuneJobsContext` respectively, and caught by `LucySidebar` to auto-send Lucy a message. See `event-emitter-guide.md` events 13 & 14.
+
+The proposed iteration-level events (`vllora_iteration_started/completed/stall`) would be higher-level abstractions for when the full iteration loop is automated via `ExecutionStepId` extensions. They are NOT needed until Phase 2B step executors are implemented.
 
 ---
 
@@ -329,8 +337,8 @@ Lucy's chat messages already show structured content (plan cards, progress bars,
 
 | Component | Why No Change |
 |-----------|-------------|
-| `DryRunPollingManager` | Already polls, persists, auto-recovers — perfect for iteration loop |
-| `FinetuneJobsContext` | SSE + polling for training jobs already works |
+| `DryRunPollingManager` | Already polls, persists, auto-recovers. **Updated**: now emits `vllora_dry_run_job_completed` event on job completion |
+| `FinetuneJobsContext` | SSE + polling for training jobs. **Updated**: now emits `vllora_finetune_job_completed` event on status transition |
 | IndexedDB per-record scores | Already persisted by dry run completion handler |
 | Thread persistence | `lucy_thread_{datasetId}` in localStorage survives everything |
 | Chat message history | Reloaded from Distri server via threadId |
@@ -345,32 +353,24 @@ Lucy's chat messages already show structured content (plan cards, progress bars,
 Ordered by dependency (each phase builds on the previous):
 
 ```
-Phase 1: Give Lucy Eyes (Tools Only — No Architecture Change)
-  ├── 1A: get_evaluation_details tool handler
-  │     → reads existing DryRunStats + EvaluationResultResponse
-  │     → exposes per-record scores + grader reasons to agent
-  ├── 1B: IterationState IndexedDB store + tools (log_iteration, get_iteration_history)
-  │     → new store, follows finetune-workflow-db pattern
-  └── 1C: reviewedByAgent flag + catch-up protocol
-        → modify DryRunJob schema, add catch-up logic to useFineTuneAgentChat
+Phase 1: Give Lucy Eyes (Tools Only — No Architecture Change) — ✅ DONE
+  ├── 1A: get_evaluation_details tool handler ✅
+  ├── 1B: IterationState IndexedDB store + tools ✅ (finetune-iteration-db.ts, iteration-history.ts)
+  └── 1C: reviewedByAgent flag + catch-up protocol ✅ (mark_job_reviewed, buildCatchUpContext, auto-trigger events)
 
-Phase 2: Give Lucy Autonomy (Agent Instructions + New Steps)
-  ├── 2A: Update finetune-workflow-agent.md with iteration loop instructions
-  │     → post-eval analysis, decision tree, re-plan trigger
-  │     → REQUIRES backend restart after changes
-  ├── 2B: Add new step types to execute_plan (regenerate_topic, adjust_grader, analyze)
-  │     → extend STEP_REGISTRY, add step handlers
-  └── 2C: Update vllora-finetune-agent.md orchestrator routing
-        → add re-plan routing logic
+Phase 2: Give Lucy Autonomy (Agent Instructions + New Steps) — ✅ DONE
+  ├── 2A: Update finetune-workflow-agent.md with iteration loop instructions ✅
+  ├── 2B: Add new step types to execute_plan (regenerate_topic, adjust_grader, analyze, post_training_eval) ✅
+  └── 2C: Update vllora-finetune-agent.md orchestrator routing ✅
 
-Phase 3: Enable Outer Loop (Training Analysis)
-  ├── 3A: Post-training analysis instructions in agent md
-  └── 3B: post_training_eval step type
+Phase 3: Enable Outer Loop (Training Analysis) — ✅ DONE
+  ├── 3A: Post-training analysis instructions in agent md ✅
+  └── 3B: Stall detection (comprehensive, in analyze_evaluation) ✅
 
-Phase 4: Polish (UI + Stall Detection)
-  ├── 4A: Iteration checkpoint message renderer
-  ├── 4B: Notification badge on sidebar
-  └── 4C: Tool-based stall detection (if agent-driven isn't sufficient)
+Phase 4: Polish (UI + Stall Detection) — 🟡 PARTIAL
+  ├── 4A: Iteration checkpoint message renderer ⬜ NOT DONE
+  ├── 4B: Notification badge on sidebar ✅ DONE (amber dot, event-driven)
+  └── 4C: Tool-based stall detection ✅ (done in analyze_evaluation)
 ```
 
 ---

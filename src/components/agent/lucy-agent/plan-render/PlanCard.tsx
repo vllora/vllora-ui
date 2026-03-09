@@ -5,11 +5,30 @@
  * Shows key stats and action buttons for the proposed plan.
  */
 
-import { Sparkles, Eye, Pencil, X, Check } from "lucide-react";
+import { Sparkles, Eye, Pencil, X, Check, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useRequest } from "ahooks";
 import { PlanConsumer } from "@/contexts/PlanContext";
+import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { WorkspaceTabsConsumer } from "@/contexts/WorkspaceTabsContext";
 import { mapTabPathToSection } from "@/components/datasets/TabContentRouter";
+import { getIterationState, type IterationHistoryEntry } from "@/services/finetune-iteration-db";
+
+const STALL_THRESHOLD = 0.03;
+
+function computeStallCount(history: readonly IterationHistoryEntry[]): number {
+  if (history.length < 2) return 0;
+  let count = 0;
+  for (let i = history.length - 1; i > 0; i--) {
+    const delta = Math.abs(history[i].dryRunScores.mean - history[i - 1].dryRunScores.mean);
+    if (delta < STALL_THRESHOLD) {
+      count++;
+    } else {
+      break;
+    }
+  }
+  return count;
+}
 
 export function PlanCard() {
   const {
@@ -20,7 +39,19 @@ export function PlanCard() {
     setPlanEditMode,
   } = PlanConsumer();
 
+  const { datasetId } = DatasetDetailConsumer();
   const { activeTabPath, openTab } = WorkspaceTabsConsumer();
+
+  const { data: iterationState } = useRequest(
+    async () => {
+      if (!datasetId) return null;
+      return getIterationState(datasetId);
+    },
+    { refreshDeps: [datasetId] },
+  );
+
+  const stallCount = computeStallCount(iterationState?.history ?? []);
+  const hasStallWarning = stallCount >= 2;
 
   if (!proposedPlan) return null;
 
@@ -72,6 +103,18 @@ export function PlanCard() {
           <div>~{estimatedDuration}</div>
         )}
       </div>
+
+      {/* Stall warning */}
+      {hasStallWarning && (
+        <div className={`flex items-center gap-1 text-[11px] font-medium ${stallCount >= 4 ? 'text-destructive' : 'text-amber-500'}`}>
+          <AlertTriangle className="w-3 h-3 shrink-0" />
+          <span>
+            {stallCount >= 4
+              ? `Stalled ${stallCount} iterations \u2014 consider changing approach`
+              : `${stallCount} stalled iterations`}
+          </span>
+        </div>
+      )}
 
       {/* Action buttons — only shown when plan is proposed (not yet approved/executing) */}
       {planStatus === 'proposed' && (

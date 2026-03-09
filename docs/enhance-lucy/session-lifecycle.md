@@ -19,19 +19,20 @@ The finetune pipeline has two long-running processes: **Evaluation (Dry Run)** a
 
 ---
 
-## Implementation Status (2026-03-06)
+## Implementation Status (2026-03-09)
 
-**Reactive catch-up** is partially implemented in the agent instructions (`vllora-finetune-agent.md`):
-- Added "Post-execution analysis (REACTIVE)" section to orchestrator agent
-- When user returns, `get_dataset_state` checks for completed eval/training jobs
-- If completed: calls `analyze_evaluation` or `analyze_training` as catch-up
-- Tools registered in orchestrator's `[tools].external` list
+**Fully implemented:**
+- Reactive catch-up instructions in agent markdown (`vllora-finetune-agent.md`, `finetune-workflow-agent.md`)
+- `reviewedByAgent` + `reviewedByAgentAt` fields on `DryRunJob` type (`src/types/dry-run-job.ts`)
+- `mark_job_reviewed` tool (`src/lib/distri-finetune-tools/steps/mark-job-reviewed.ts`)
+- `buildCatchUpContext()` in `src/hooks/useFineTuneAgentChat.ts` — checks for unreviewed completed/failed jobs and pending iteration proposals on dataset open
+- Iteration state/history store (`src/services/finetune-iteration-db.ts`, IndexedDB v7 `iterationState` store)
+- `log_iteration` + `get_iteration_history` tools (`src/lib/distri-finetune-tools/steps/iteration-history.ts`)
+- Pending proposal persistence via `IterationState.phase === 'awaiting_user'` + `innerLoop.proposedChanges`
+- Auto-trigger events: `vllora_dry_run_job_completed` (from `DryRunPollingManager`) and `vllora_finetune_job_completed` (from `FinetuneJobsContext`) → LucySidebar auto-sends Lucy a message when jobs complete in background
 
 **NOT yet implemented:**
-- IndexedDB `reviewedByAgent` tracking (1C from implementation plan)
-- Frontend notification badge in LucySidebar for unreviewed results
-- Iteration state/history store (1B — required for cross-iteration memory)
-- Pending proposal persistence (part of 1B)
+- Frontend notification badge in LucySidebar for unreviewed results (visual indicator only — all backend wiring is done)
 
 ---
 

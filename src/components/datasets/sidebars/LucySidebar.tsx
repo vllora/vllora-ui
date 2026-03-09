@@ -32,6 +32,7 @@ import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { PlanConsumer } from "@/contexts/PlanContext";
+import { getDryRunJobsByDataset } from "@/services/dry-run-jobs-db";
 import { useFineTuneAgentChat } from "@/hooks/useFineTuneAgentChat";
 import {
   LucyChat,
@@ -95,6 +96,9 @@ export function LucySidebar() {
   const collapsedMessageCountRef = useRef(0);
   const isCollapsedRef = useRef(isCollapsed);
   isCollapsedRef.current = isCollapsed;
+
+  // Unreviewed job results badge
+  const [hasUnreviewedResults, setHasUnreviewedResults] = useState(false);
 
   // Persist pin state to localStorage
   const togglePin = useCallback(() => {
@@ -280,6 +284,41 @@ export function LucySidebar() {
 
     emitter.on('vllora_docs_awaiting_plan', handleDocsAwaiting);
     return () => { emitter.off('vllora_docs_awaiting_plan', handleDocsAwaiting); };
+  }, [selectedDatasetId]);
+
+  // Check for unreviewed dry run job results (notification badge)
+  useEffect(() => {
+    if (!selectedDatasetId) {
+      setHasUnreviewedResults(false);
+      return;
+    }
+
+    const checkUnreviewed = async () => {
+      try {
+        const jobs = await getDryRunJobsByDataset(selectedDatasetId);
+        const hasUnreviewed = jobs.some(
+          (j) => (j.status === 'completed' || j.status === 'failed') && !j.reviewedByAgent
+        );
+        setHasUnreviewedResults(hasUnreviewed);
+      } catch {
+        // Non-critical — don't break the sidebar
+      }
+    };
+
+    checkUnreviewed();
+
+    // Re-check when dry run jobs complete or get reviewed
+    const handleJobCompleted = ({ datasetId }: { jobId: string; datasetId: string; verdict: string }) => {
+      if (datasetId === selectedDatasetId) setHasUnreviewedResults(true);
+    };
+    const handleJobReviewed = () => { checkUnreviewed(); };
+
+    emitter.on('vllora_dry_run_job_completed', handleJobCompleted);
+    emitter.on('vllora_workflow_updated', handleJobReviewed);
+    return () => {
+      emitter.off('vllora_dry_run_job_completed', handleJobCompleted);
+      emitter.off('vllora_workflow_updated', handleJobReviewed);
+    };
   }, [selectedDatasetId]);
 
   // Auto-prompt Lucy when evaluation completes in background
@@ -539,6 +578,9 @@ export function LucySidebar() {
                     {!providersLoading && !isOpenAIConfigured && (
                       <span className="absolute top-0.5 right-0.5 w-2.5 h-2.5 bg-destructive rounded-full border-2 border-background" />
                     )}
+                    {hasUnreviewedResults && isOpenAIConfigured && (
+                      <span className="absolute top-0.5 right-0.5 w-2.5 h-2.5 bg-amber-500 rounded-full border-2 border-background" />
+                    )}
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="left">Expand Lucy</TooltipContent>
@@ -585,7 +627,12 @@ export function LucySidebar() {
           // Expanded header: Lucy label + action buttons
           <>
             <div className="flex items-center gap-2 min-w-0">
-              <LucyAvatar size="sm" />
+              <div className="relative">
+                <LucyAvatar size="sm" />
+                {hasUnreviewedResults && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-amber-500 rounded-full border-2 border-background" />
+                )}
+              </div>
               <span className="text-[13px] font-semibold text-foreground">Lucy</span>
             </div>
             <div className="flex items-center gap-0.5 shrink-0">

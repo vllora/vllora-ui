@@ -8,13 +8,221 @@ How to test every piece of the enhanced Lucy feature — from unit tests to full
 
 | Component | Framework | Status |
 |-----------|-----------|--------|
-| **Frontend unit tests** | Vitest 3.2 + @testing-library/react | Setup exists, few tests written |
-| **Frontend E2E** | Chrome MCP (manual) | 17 issues tracked, no automation |
+| **Frontend unit tests** | Vitest 3.2 + @testing-library/react | Active — tool handlers, renderers, helpers |
+| **Frontend E2E** | Chrome MCP (manual via `/finetune-e2e`) | 17 issues tracked, no automation |
+| **Mock gateway server** | Express + scenario bridges (`src/test/mock-server/`) | Standalone server for Playwright/Chrome E2E |
+| **IndexedDB mocking** | fake-indexeddb | Installed, auto-imported in test setup |
+| **API mocking (unit)** | Custom mock factory (`finetune-api.mock.ts`) | Configurable delays + scenarios |
+| **API mocking (integration)** | MSW 2.x (`src/test/msw/`) | Scenario-based HTTP interception |
+| **Integration tests** | Vitest + MSW + fake-indexeddb | Tool handler chain tests (15 tests) |
+| **Test fixtures** | Scenario-based factories | Eval, training, iteration history scenarios |
 | **Gateway (Rust)** | `#[test]` inline | Minimal, mostly type tests |
 | **Distri server (Rust)** | `#[test]` inline + mock LLM | Orchestrator + parser tests |
 | **CI/CD** | GitHub Actions | Build-only — **no tests run in CI** |
 
-**Key gaps**: No automated E2E, no integration tests, no API contract tests, no CI test execution.
+**Key gaps**: No automated E2E scripts (mock server ready), no API contract tests, no CI test execution.
+
+### Implemented Test Files
+
+```
+src/test/
+├── setup.ts                          # Vitest setup — fake-indexeddb, @testing-library cleanup
+├── fixtures/
+│   ├── eval-scenarios.ts             # EVAL_SCENARIOS (healthy/warning/critical/stalled/error)
+│   │                                 # ITERATION_HISTORIES (empty/single/improving/stalledThree/stalledFive/mixed)
+│   │                                 # makeEvalRecords() factory
+│   └── training-scenarios.ts         # TRAINING_SCENARIOS (improving/overfitting/noLearning/error)
+├── mocks/
+│   └── finetune-api.mock.ts          # mockFinetuneApi() factory with configurable delays
+├── msw/                              # MSW infrastructure for integration tests
+│   ├── server.ts                     # setupServer() for Vitest (Node.js)
+│   ├── browser.ts                    # setupWorker() for dev E2E (browser)
+│   ├── setup.ts                      # Vitest lifecycle hooks (beforeAll/afterEach/afterAll)
+│   ├── scenarios/
+│   │   ├── scenario-registry.ts      # Mutable singleton — tests set scenario, handlers read it
+│   │   ├── eval-scenario-bridge.ts   # Eval fixtures → HTTP response shapes
+│   │   └── training-scenario-bridge.ts  # Training fixtures → HTTP response shapes
+│   └── handlers/
+│       ├── index.ts                  # Combines all handler arrays
+│       ├── env.ts                    # GET /api/env
+│       ├── datasets.ts              # POST /finetune/datasets, PATCH .../evaluator
+│       ├── evaluations.ts           # POST/GET /finetune/evaluations (stateful polling)
+│       ├── training-jobs.ts         # POST/GET /finetune/reinforcement-jobs
+│       ├── finetune-evaluations.ts  # GET .../finetune-evaluations (per-epoch data)
+│       └── analytics.ts             # POST .../analytics/dry-run
+├── integration/                      # Tool handler chain tests (MSW + IndexedDB)
+│   ├── seed-helpers.ts               # IndexedDB seeding utilities
+│   ├── eval-analysis.test.ts         # 7 tests — analyze_evaluation scenarios
+│   └── training-analysis.test.ts     # 8 tests — analyze_training scenarios (MSW-dependent)
+└── mock-server/                      # Standalone Express mock for Playwright/Chrome E2E
+    └── server.ts                     # Express server reusing scenario bridges
+
+src/lib/distri-finetune-tools/steps/
+└── check-viability.test.ts           # 17 tests — input validation, classification, sample size, errors
+
+src/components/agent/lucy-agent/plan-render/
+├── computeStallCount.test.ts         # 10 tests — stall detection helper (edge cases, boundaries)
+├── LucyAnalyzeEvalRenderer.test.tsx  # 11 tests — eval card renderer (all scenarios)
+└── LucyAnalyzeTrainingRenderer.test.tsx  # 11 tests — training card renderer (all scenarios)
+```
+
+### Mock Architecture
+
+**API Mock Factory** (`src/test/mocks/finetune-api.mock.ts`):
+
+```typescript
+// Basic usage — 50ms default delay per call
+vi.mock('@/services/finetune-api', () => mockFinetuneApi());
+
+// Custom delays and scenarios
+vi.mock('@/services/finetune-api', () => mockFinetuneApi({
+  delayMs: 100,            // Simulate slower network
+  evalShouldFail: true,    // Force eval failure
+  uploadShouldFail: true,  // Force upload failure
+}));
+
+// Convenience helpers
+vi.mock('@/services/finetune-api', () => mockApiWithEvalRecords(records, 50));
+vi.mock('@/services/finetune-api', () => mockApiWithFailure(50));
+```
+
+**Fixture Scenarios** — Pre-built typed objects matching `AnalyzeEvaluationResult` / `AnalyzeTrainingResult`:
+
+| Fixture | Scenarios | Used By |
+|---------|-----------|---------|
+| `EVAL_SCENARIOS` | healthy, warning, critical, stalled, error | Renderer tests, tool handler tests |
+| `TRAINING_SCENARIOS` | improving, overfitting, noLearning, error | Renderer tests |
+| `ITERATION_HISTORIES` | empty, single, improving, stalledThree, stalledFive, mixedThenStalled | computeStallCount tests |
+| `makeEvalRecords()` | Generates N records with configurable mean/variance | API mock, tool handler tests |
+
+### MSW Integration Test Architecture
+
+MSW (Mock Service Worker) v2 intercepts HTTP requests at the network level, enabling integration tests that exercise full tool handler chains with real IndexedDB and mocked backend API responses.
+
+```
+   Test calls tool handlers directly
+                 ↓
+   Tool Handlers (analyze_evaluation, analyze_training, etc.)
+         ↓                              ↓
+    IndexedDB                    fetch() to localhost:8080
+  (fake-indexeddb)                      ↓
+                              MSW intercepts HTTP
+                                        ↓
+                              Scenario Registry decides response
+                                        ↓
+                              Bridges convert fixtures → HTTP shapes
+```
+
+**Scenario Registry** (`src/test/msw/scenarios/scenario-registry.ts`):
+
+```typescript
+import { setScenario, resetScenario } from '../msw/scenarios/scenario-registry';
+
+// Set scenario before calling tool handlers
+setScenario({
+  trainingScenario: 'overfitting',    // or 'improving' | 'noLearning' | 'error'
+  evalScenario: 'healthy',            // or 'warning' | 'critical' | 'stalled' | 'error'
+  trainingPollsBeforeComplete: 0,     // 0 = instant completion
+  evalPollsBeforeComplete: 2,         // 2 polls before completing
+});
+
+// Reset in afterEach (automatic via MSW setup.ts)
+resetScenario();
+```
+
+**Seed Helpers** (`src/test/integration/seed-helpers.ts`):
+
+```typescript
+const datasetId = await seedDataset({ backendDatasetId: 'ds-001' });
+await seedRecords(datasetId, [
+  { id: 'row-0', topic: 'Pins' },
+  { id: 'row-1', topic: 'Forks' },
+]);
+await seedWorkflow(datasetId, { jobId: 'ft-job-001' });
+await seedCompletedDryRunJob(datasetId, { scores: [...] });
+await seedIterationHistory(datasetId, history);
+```
+
+**Integration Test Catalog**:
+
+| Test File | Tests | What it exercises |
+|-----------|-------|-------------------|
+| `eval-analysis.test.ts` | 7 | analyze_evaluation: healthy/train, warning/iterate, critical/binary, stalled/escalate, error, per-topic, recommendations |
+| `training-analysis.test.ts` | 8 | analyze_training (MSW): improving/deploy, overfitting/investigate, noLearning/inner_loop, failed/retrain, per-topic progressions, overall progression, error cases |
+
+**Dev Server with MSW** (`pnpm dev:msw`): Starts Vite with `VITE_MSW_ENABLED=true`, enabling the browser service worker for interactive scenario testing without a real backend.
+
+### Mock Express Server (Playwright/Chrome E2E)
+
+A standalone Express server that replaces the real vLLora gateway for Playwright or Chrome MCP-based E2E tests. Reuses the same scenario registry and response bridges as MSW, but works over real HTTP (not in-process interception).
+
+```
+   Playwright / Chrome MCP
+              ↓
+   React UI (localhost:5173)
+         ↓  fetch()
+   Mock Express Server (localhost:9090)
+         ↓  reads
+   Scenario Registry (same as MSW)
+         ↓  builds response
+   Scenario Bridges (eval + training)
+```
+
+**Start the mock server**:
+
+```bash
+pnpm mock-server           # Runs on port 9090 (default)
+pnpm mock-server:9090      # Explicit port
+npx tsx src/test/mock-server/server.ts --port 8080  # Custom port
+```
+
+**Control API** (switch scenarios at runtime via HTTP):
+
+```bash
+# Set scenario (any ScenarioState fields + optional mockDatasetId)
+curl -X POST http://localhost:9090/mock/scenario \
+  -H "Content-Type: application/json" \
+  -d '{"evalScenario":"warning","trainingScenario":"overfitting","mockDatasetId":"my-test-ds"}'
+
+# Get current scenario
+curl http://localhost:9090/mock/scenario
+
+# Reset to defaults (clears all tracked data)
+curl -X POST http://localhost:9090/mock/reset
+
+# List tracked mock datasets
+curl http://localhost:9090/mock/datasets
+```
+
+**Dataset ID Tracking**:
+
+The mock server generates deterministic IDs (`mock-ds-001`, `mock-ds-002`, ...) that are distinguishable from real backend IDs. This prevents polling conflicts when switching between mock and real API:
+
+| Source | ID Pattern | Example |
+|--------|-----------|---------|
+| Mock server | `mock-ds-NNN` | `mock-ds-001` |
+| Custom override | Any string | `my-test-dataset` |
+| Real backend | UUID or `ds-*` | `ds-abc123` |
+
+Set a custom ID: `POST /mock/scenario {"mockDatasetId": "custom-id"}`
+
+**Supported endpoints** (mirrors real gateway):
+
+| Method | Endpoint | Scenario-dependent? |
+|--------|----------|-------------------|
+| GET | `/api/env` | No — returns mock port config |
+| POST | `/finetune/datasets` | `uploadBehavior` |
+| PATCH | `/finetune/datasets/:id/evaluator` | No |
+| POST | `/finetune/evaluations` | `evalCreateBehavior` |
+| GET | `/finetune/evaluations/:id` | `evalScenario` + poll counter |
+| POST | `/finetune/reinforcement-jobs` | `trainingCreateBehavior` |
+| GET | `/finetune/reinforcement-jobs/:id/status` | `trainingScenario` + poll counter |
+| GET | `/finetune/reinforcement-jobs` | `trainingScenario` |
+| GET | `/finetune/datasets/:id/finetune-evaluations` | `trainingScenario` |
+| POST | `/finetune/datasets/analytics/dry-run` | No — static response |
+| POST | `/finetune/reinforcement-jobs/:id/cancel` | No |
+| POST | `/finetune/reinforcement-jobs/:id/resume` | No |
+| GET | `/finetune/reinforcement-jobs/:id/weights/url` | No |
 
 ---
 
@@ -106,41 +314,44 @@ How to test every piece of the enhanced Lucy feature — from unit tests to full
 
 ### Test File Locations
 
-Follow the project convention — tests next to source files:
+Tests live next to source files (co-located pattern):
 
 ```
+src/test/                              # Shared test infrastructure
+  setup.ts                             # Vitest global setup (fake-indexeddb, cleanup)
+  fixtures/                            # Typed test data factories
+    eval-scenarios.ts                  # Eval + iteration history fixtures
+    training-scenarios.ts              # Training scenario fixtures
+  mocks/
+    finetune-api.mock.ts               # API mock factory with delays
+
 src/lib/distri-finetune-tools/steps/
-  get-evaluation-details/
-    handler.ts
-    handler.test.ts          ← Unit tests for the tool handler
-  iteration-history/
-    handler.ts
-    handler.test.ts          ← Unit tests for log/get iteration
-  analyze-evaluation/
-    handler.ts
-    handler.test.ts          ← Analysis logic tests
-    stall-detection.ts
-    stall-detection.test.ts  ← Stall pattern tests
+  check-viability.test.ts              # ✅ Viability tool handler unit tests (14 tests)
 
-src/services/
-  finetune-iteration-db.ts
-  finetune-iteration-db.test.ts  ← IndexedDB store tests
+src/components/agent/lucy-agent/plan-render/
+  computeStallCount.test.ts            # ✅ Stall detection unit tests (10 tests)
+  LucyAnalyzeEvalRenderer.test.tsx     # ✅ Eval renderer component tests (11 tests)
+  LucyAnalyzeTrainingRenderer.test.tsx # ✅ Training renderer component tests (11 tests)
 
-src/hooks/
-  useFineTuneAgentChat.test.ts   ← Catch-up protocol tests
+# Planned (not yet implemented):
+src/lib/distri-finetune-tools/__tests__/
+  iteration-loop.integration.test.ts   # Inner loop integration
+  training-loop.integration.test.ts    # Outer loop integration
 ```
 
 ### Test Framework Setup
 
 ```typescript
-// Already configured in vitest.config.ts:
-// - globals: true (describe, it, expect available globally)
+// vitest.config.ts — already configured:
+// - globals: true (describe, it, expect available)
 // - environment: jsdom
 // - setupFiles: ['./src/test/setup.ts']
 
-// For IndexedDB tests, use fake-indexeddb:
-// npm install -D fake-indexeddb
-// In test setup: import 'fake-indexeddb/auto';
+// src/test/setup.ts includes:
+import 'fake-indexeddb/auto';          // IndexedDB polyfill for tests
+import '@testing-library/jest-dom/vitest';  // DOM matchers
+import { cleanup } from '@testing-library/react';
+afterEach(() => cleanup());
 ```
 
 ### Example: `get_evaluation_details` Unit Tests
@@ -1060,6 +1271,57 @@ Before marking a phase as complete, run through this checklist:
 - [ ] E2E Scenario 8 (outer loop) verified in browser
 
 ### Phase 4 Checklist
+- [x] `check_viability` handler: 14 unit tests (input validation, classification, boundaries, errors)
+- [x] `computeStallCount` helper: 10 unit tests (edge cases, boundary conditions, fixture scenarios)
+- [x] `LucyAnalyzeEvalRenderer`: 11 component tests (all eval scenarios + loading/error/fallback)
+- [x] `LucyAnalyzeTrainingRenderer`: 11 component tests (all training scenarios + loading/error/fallback)
 - [ ] Notification badge appears/disappears correctly (E2E)
 - [ ] Progressive background transition timing correct (E2E)
 - [ ] Session resumption scenarios 4-6 verified (E2E)
+- [ ] Viability pre-check renders verdict in chat (E2E)
+- [ ] Stall warning badge appears on PlanCard after 2+ stalls (E2E)
+- [ ] Eval analysis card renders structured data (not raw JSON) (E2E)
+- [ ] Training analysis card renders epoch progression (E2E)
+
+### E2E Test Scenarios for Phase 4 Features
+
+Use `/finetune-e2e` to run these manually with Chrome MCP:
+
+#### E2E: Viability Pre-Check
+```
+1. Navigate to dataset with configured grader (step >= grader_config)
+2. In Lucy chat: "Check if this task is viable"
+3. VERIFY: Lucy runs check_viability tool
+4. VERIFY: Result shows verdict (viable/marginal/not_viable)
+5. VERIFY: Result includes recommendation text
+6. VERIFY: Result includes per-record scores
+```
+
+#### E2E: Eval Analysis Card
+```
+1. Navigate to dataset with completed evaluation
+2. In Lucy chat: "Analyze the evaluation results"
+3. VERIFY: Structured EvalCheckpointCard renders (not raw JSON)
+4. VERIFY: Health badge shows correct status (Healthy/Warning/Critical)
+5. VERIFY: Per-topic breakdown visible with colored dots
+6. VERIFY: Next action badge visible (Iterate/Ready to Train/Escalate)
+```
+
+#### E2E: Training Analysis Card
+```
+1. Navigate to dataset with completed training job
+2. In Lucy chat: "Analyze the training results"
+3. VERIFY: Structured TrainingCheckpointCard renders
+4. VERIFY: Epoch progression shown (first → last)
+5. VERIFY: Pattern badges visible (Improving/Overfitting/No Learning)
+6. VERIFY: Next action badge visible
+```
+
+#### E2E: Stall Warning on PlanCard
+```
+1. Create dataset with 3+ iteration history entries (all with |delta| < 0.03)
+2. Navigate to dataset, trigger plan proposal
+3. VERIFY: Amber stall warning appears on PlanCard ("2 stalled iterations")
+4. Add 2 more stalled iterations
+5. VERIFY: Red warning appears ("Stalled 5 iterations — consider changing approach")
+```

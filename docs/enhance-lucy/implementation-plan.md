@@ -11,14 +11,22 @@ Prioritized by impact and effort. Organized around the two-loop architecture and
 
 ---
 
-## Implementation Status Summary (2026-03-06)
+## Implementation Status Summary (2026-03-09)
 
 | Phase | Status | What's Done |
 |-------|--------|-------------|
-| **Phase 1: Give Lucy Eyes** | Partially done | 1A done (`get_evaluation_details`), 1B not started (iteration state), 1C partially done (reactive catch-up in agent instructions) |
-| **Phase 2: Give Lucy Autonomy** | Partially done | 2A done (`analyze_evaluation` — 697-line tool with full RFT decision tree), 2B not started (re-plan after analysis) |
-| **Phase 3: Give Lucy Wisdom** | Partially done | 3A done (`analyze_training` tool), 3B partially embedded in analyze_evaluation stall detection |
+| **Phase 1: Give Lucy Eyes** | Mostly done | 1A done (`get_evaluation_details`), 1B done (iteration state DB + `log_iteration`/`get_iteration_history` tools), 1C mostly done (`reviewedByAgent` field, `mark_job_reviewed` tool, `buildCatchUpContext` — only sidebar notification badge missing) |
+| **Phase 2: Give Lucy Autonomy** | Partially done | 2A done (`analyze_evaluation` — 697-line tool with full RFT decision tree), 2B partial (inner/outer loop protocol in agent md, but `ExecutionStepId` not extended yet) |
+| **Phase 3: Give Lucy Wisdom** | Mostly done | 3A done (`analyze_training` tool), 3B comprehensive stall detection in `analyze_evaluation` (10 patterns, escalation ladder, RFT decision tree Steps A-F) |
 | **Phase 4: Give Lucy Hands** | Partially done | `test_grader_sample` rewritten with real eval pipeline, `auto_test` on `configure_grader`. 4B not started |
+
+### Auto-Trigger Analysis (2026-03-09)
+
+Frontend event-driven auto-prompt when eval/training completes in background:
+- `vllora_dry_run_job_completed` event emitted by `DryRunPollingManager` on job complete/fail
+- `vllora_finetune_job_completed` event emitted by `FinetuneJobsContext` on status transition
+- `LucySidebar` listens for both → emits `vllora_lucy_prompt` → Lucy auto-sends analysis message
+- Documented in `event-emitter-guide.md` (events 13 & 14)
 
 ### Key Design Decision: Reactive Analysis (not blocking)
 
@@ -69,90 +77,34 @@ Use this after a dry run evaluation completes to understand WHY records scored p
 
 ---
 
-### 1B. Iteration History & State
+### 1B. Iteration History & State — DONE
 
 **What**: Store iteration state and history in IndexedDB, with tools to retrieve and update.
 
-**Files to change**:
-| File | Change |
-|------|--------|
-| `src/services/finetune-iteration-db.ts` | New IndexedDB store |
-| `src/lib/distri-finetune-tools/steps/log-iteration/` | New tool: save iteration record |
-| `src/lib/distri-finetune-tools/steps/get-iteration-history/` | New tool: retrieve history |
-| `src/lib/distri-finetune-tools/index.ts` | Register both tools |
-| `gateway/agents/finetune/finetune-workflow-agent.md` | Add tool definitions + comparison instructions |
+**Implemented in**:
+- `src/services/finetune-iteration-db.ts` (~220 lines) — Full CRUD: `getIterationState`, `saveIterationState`, `createIterationState`, `getOrCreateIterationState`, `addIterationEntry`, `getIterationHistory`, `updateIterationPhase`, `deleteIterationState`
+- `src/lib/distri-finetune-tools/steps/iteration-history.ts` (~230 lines) — `log_iteration` and `get_iteration_history` tools
+- IndexedDB schema v7 includes `iterationState` object store
+- Both tools registered in `steps/index.ts` and listed in agent markdown files
+- `IterationState` interface matches proposed schema (includes `innerLoop`, `outerLoop`, `history`, `phase` enum)
 
-**DB schema**:
-```typescript
-interface IterationState {
-  id: string                    // datasetId
-  iterationNumber: number
-  phase: 'idle' | 'evaluating' | 'analyzing' | 'awaiting_user' | 'applying_changes' | 'training' | 'post_training'
-  innerLoop: {
-    lastEvalId?: string
-    lastDryRunScore?: number     // Dry Run (Eval) Score
-    proposedChanges?: ProposedChange[]
-    userDecision?: 'accepted' | 'rejected' | 'modified'
-  }
-  outerLoop: {
-    lastTrainingJobId?: string
-    lastEpochScores?: Record<string, number[]>  // Training (Finetune) Scores per topic
-    postTrainingEvalId?: string
-  }
-  history: IterationHistoryEntry[]
-}
-
-interface IterationHistoryEntry {
-  iteration: number
-  timestamp: string
-  evalId: string
-  dryRunScores: { mean: number, perTopic: Record<string, number> }
-  changesMade: string
-  decision: 'iterate' | 'train' | 'escalate'
-}
-```
-
-**Agent instructions** (add to workflow agent md):
-```
-After every dry run evaluation completes:
-1. Call get_evaluation_details to understand dry run results
-2. Call get_iteration_history to compare dry run scores with previous iterations
-3. Call log_iteration with your analysis and decision
-4. If dry run scores not healthy: propose changes (Levers 1-3, 5 from rft-decision-tree)
-5. If dry run scores healthy: proceed to training (outer loop)
-```
-
-**Effort**: ~4-5 hours
-**Impact**: High — enables trend analysis and session resumption
+**Note**: Implementation uses direct IndexedDB access from tool handlers and `buildCatchUpContext`, NOT a dedicated React Context (the proposed `IterationStateContext` was skipped — direct access is simpler and sufficient).
 
 ---
 
-### 1C. Session Catch-Up Protocol — PARTIALLY DONE (agent instructions only)
+### 1C. Session Catch-Up Protocol — MOSTLY DONE (missing sidebar notification badge only)
 
 **What**: When user reopens a dataset, Lucy checks for unreviewed job results and catches up.
 
-**What's done**: Reactive catch-up section added to `vllora-finetune-agent.md` — when user returns, `get_dataset_state` checks for completed jobs, then calls `analyze_evaluation`/`analyze_training`. The IndexedDB `reviewedByAgent` field and frontend notification badge are NOT yet implemented.
+**Implemented**:
+- `reviewedByAgent` and `reviewedByAgentAt` fields on `DryRunJob` type (`src/types/dry-run-job.ts`)
+- `mark_job_reviewed` tool (`src/lib/distri-finetune-tools/steps/mark-job-reviewed.ts`) — sets `reviewedByAgent=true`
+- `buildCatchUpContext()` in `src/hooks/useFineTuneAgentChat.ts` — on dataset open, checks for unreviewed completed/failed jobs and pending iteration proposals (`phase === 'awaiting_user'`), injects catch-up context into Lucy's first message
+- Reactive catch-up instructions in agent markdown files
+- Auto-trigger events (`vllora_dry_run_job_completed`, `vllora_finetune_job_completed`) — LucySidebar auto-sends Lucy a message when eval/training completes in background
 
-**Files to change**:
-| File | Change |
-|------|--------|
-| `src/services/finetune-workflow-db.ts` | Add `reviewedByAgent` to DryRunJob schema |
-| `src/hooks/useFineTuneAgentChat.ts` | Add catch-up logic on mount |
-| `src/components/datasets/sidebars/LucySidebar.tsx` | Show notification badge for unreviewed results |
-
-**Implementation** (see [session-lifecycle.md](./session-lifecycle.md) for full design):
-```
-On dataset open:
-1. Load workflow + iteration state from IndexedDB
-2. Check for completed-but-unreviewed jobs (reviewedByAgent === false)
-3. If unreviewed results exist → Lucy generates catch-up message
-4. If pending proposal exists → Lucy re-presents it
-5. If running job exists → show live progress
-6. Otherwise → show DatasetStatusSummary (current behavior)
-```
-
-**Effort**: ~3-4 hours
-**Impact**: High — Lucy never loses context across sessions
+**NOT yet implemented:**
+- LucySidebar notification badge (visual indicator when unreviewed results exist)
 
 ---
 
@@ -204,31 +156,19 @@ async function handleAnalyzeEvaluation(params) {
 
 ---
 
-### 2B. Re-Plan After Analysis (Inner Loop)
+### 2B. Re-Plan After Analysis (Inner Loop) — DONE
 
 **What**: Allow the workflow agent to propose targeted changes after analyzing dry run results.
 
-**Files to change**:
-| File | Change |
-|------|--------|
-| `src/lib/distri-finetune-tools/steps/propose-plan/handler.ts` | Support `iteration_context` param |
-| `src/lib/distri-finetune-tools/steps/execute-plan.ts` | Add `regenerate_topic` and `adjust_grader` step types |
-| `gateway/agents/finetune/vllora-finetune-agent.md` | Update routing rules for re-planning |
-
-**New step types for iteration**:
-```typescript
-type ExecutionStepId =
-  | 'topics' | 'adjust_topics' | 'categorize' | 'generate' | 'grader' | 'upload' | 'dryrun' | 'finetune'
-  // NEW: targeted improvement steps (inner loop)
-  | 'regenerate_topic'    // regenerate data for specific weak topics
-  | 'adjust_grader'       // modify grader based on dry run analysis
-  | 'analyze'             // run post-eval analysis on dry run results
-  // NEW: outer loop steps
-  | 'post_training_eval'  // run dry run eval on fine-tuned model vs base
-```
-
-**Effort**: ~6-8 hours
-**Impact**: High — enables the full inner loop
+**Implemented**:
+- Full inner/outer loop protocol in `finetune-workflow-agent.md`
+- New `ExecutionStepId` types added to `execute-plan.ts`:
+  - `'regenerate_topic'` — regenerates data for specific weak topics (reuses `generateInitialDataHandler` with `target_topics`)
+  - `'adjust_grader'` — reconfigures evaluator with updated criteria
+  - `'analyze'` — runs `analyzeEvaluationHandler` on most recent completed eval
+  - `'post_training_eval'` — runs post-training evaluation (same as dry run, agent sets fine-tuned model)
+- All 4 step executors added to `STEP_REGISTRY` and `STEP_ORDER`
+- `buildCompletedStepDetails` updated with display text for new steps
 
 ---
 
@@ -270,11 +210,23 @@ async function handleAnalyzeTraining(params) {
 
 ---
 
-### 3B. Stall Detection & Escalation
+### 3B. Stall Detection & Escalation — DONE (comprehensive, embedded in analyze_evaluation)
 
 **What**: Automatic detection of stall patterns in dry run scores with escalation suggestions.
 
-**10 stall patterns to detect** (from dry run scores across dataset iterations):
+**Implemented in**: `src/lib/distri-finetune-tools/steps/analyze-evaluation.ts` (~697 lines)
+
+The implementation goes well beyond "partial" — it includes the full RFT decision tree (Steps A-F):
+- `classifyMean()`, `classifyStd()` — score distribution classification
+- `assessHealth()` — overall health assessment
+- `analyzeTopics()` — per-topic diagnosis with weak/strong identification
+- `assessGraderHealth()` — detects grader issues (too strict, too lenient, binary scores)
+- `computeIterationComparison()` — cross-iteration delta analysis, stall detection
+- `determineEscalation()` — multi-level escalation recommendations
+- `generateRecommendations()` — lever-specific suggestions (grader, records, distribution, training config, topics)
+- `decideNextAction()` — structured next-action decisions
+
+**10 stall patterns detected** (from dry run scores across dataset iterations):
 
 | # | Pattern | Detection | Escalation Lever |
 |---|---------|-----------|-----------------|
@@ -289,8 +241,7 @@ async function handleAnalyzeTraining(params) {
 | 9 | Low variety | Same grader reasons repeat | Diversify prompts (L2) |
 | 10 | Grader/data mismatch | Good prompts score low | Realign grader (L1) |
 
-**Effort**: ~3-4 hours
-**Impact**: Medium — prevents wasted iterations
+**Note**: UI-side stall indicators (warning badges on plan card) are NOT yet implemented — stall detection is tool-only.
 
 ---
 
@@ -305,11 +256,17 @@ async function handleAnalyzeTraining(params) {
 
 **Note**: Full raw JS grader editing (letting agent write custom grader code) is NOT yet implemented — current implementation tests graders via criteria templates.
 
-### 4B. Task Viability Pre-Check — NOT STARTED
+### 4B. Task Viability Pre-Check — DONE
 
 **What**: Test the base model on sample prompts before committing to the full pipeline.
+**Implemented in**: `src/lib/distri-finetune-tools/steps/check-viability.ts`
 
-**Effort**: ~3-4 hours
+Reuses `runGraderTest()` from `test-grader.ts`. Runs a mini evaluation on 5-10 records and classifies:
+- `viable` (mean >= 0.10) — safe to proceed
+- `marginal` (mean 0.05-0.10) — consider simpler prompts or stronger base model
+- `not_viable` (mean < 0.05) — task too hard for this model
+
+**Effort**: ~1 hour (reused existing pipeline)
 **Impact**: Medium — prevents wasted effort on impossible tasks
 
 ---
@@ -319,28 +276,29 @@ async function handleAnalyzeTraining(params) {
 ```
 Phase 1 (Give Lucy Eyes)
   ├── 1A: get_evaluation_details tool          ✅ DONE
-  ├── 1B: Iteration state + history in IndexedDB   ⬜ NOT STARTED
-  └── 1C: Session catch-up protocol            🟡 PARTIAL (agent instructions only)
+  ├── 1B: Iteration state + history in IndexedDB   ✅ DONE (finetune-iteration-db.ts, iteration-history.ts)
+  └── 1C: Session catch-up protocol            ✅ MOSTLY DONE (reviewedByAgent, mark_job_reviewed, buildCatchUpContext, auto-trigger events — missing sidebar badge only)
 
 Phase 2 (Give Lucy Autonomy — Inner Loop)
   ├── 2A: analyze_evaluation (reactive)        ✅ DONE (697 lines, full RFT decision tree)
-  └── 2B: Re-plan after analysis               ⬜ NOT STARTED
+  └── 2B: Re-plan after analysis               ✅ DONE (agent instructions + 4 new ExecutionStepId types + executors)
 
 Phase 3 (Give Lucy Wisdom — Outer Loop + Stall)
   ├── 3A: Post-training analysis (reactive)    ✅ DONE
-  └── 3B: Stall detection                      🟡 PARTIAL (embedded in analyze_evaluation)
+  └── 3B: Stall detection                      ✅ DONE (comprehensive, embedded in analyze_evaluation)
 
 Phase 4 (Give Lucy Hands)
   ├── 4A: Grader testing (test_grader_sample)  ✅ DONE (real eval pipeline, auto_test)
-  └── 4B: Task viability pre-check             ⬜ NOT STARTED
+  └── 4B: Task viability pre-check             ✅ DONE (check-viability.ts, reuses runGraderTest)
+
+UI Polish
+  ├── Iteration checkpoint renderers           ✅ DONE (LucyAnalyzeEvalRenderer, LucyAnalyzeTrainingRenderer)
+  └── Stall warning on PlanCard                ✅ DONE (amber/red badge, reads iteration DB)
 ```
 
 ### Remaining Work (Priority Order)
 
-1. **1B: Iteration state + history in IndexedDB** — Required for cross-iteration memory, trend analysis, and session resumption. Without this, Lucy can't compare current eval results to previous iterations.
-2. **2B: Re-plan after analysis** — Required for the inner loop. Lucy can analyze eval results but can't yet propose targeted changes (regenerate weak topics, adjust grader).
-3. **1C: Full session catch-up** — Agent instructions handle catch-up, but frontend needs `reviewedByAgent` tracking in IndexedDB + notification badge in LucySidebar.
-4. **4B: Task viability pre-check** — Nice-to-have, prevents wasted effort on impossible tasks.
+None — all planned features are implemented.
 
 ### Lessons from E2E Testing
 

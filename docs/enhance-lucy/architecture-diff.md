@@ -33,22 +33,25 @@ Side-by-side comparison of how each system handles the finetune pipeline, with f
                                                             DEPLOY
 ```
 
-**Lucy today**: Has the straight-through pipeline with reactive analysis tools. `analyze_evaluation` and `analyze_training` exist but run reactively (catch-up when user returns), not as blocking plan steps. The inner/outer loops are NOT yet automated.
-**Enhanced Lucy**: Has both loops with the full decision tree from [rft-decision-tree.md](./rft-decision-tree.md).
+**Lucy today (2026-03-09)**: Has the pipeline with reactive analysis tools and auto-trigger on job completion. `analyze_evaluation` and `analyze_training` run reactively — either via catch-up on session reopen (`buildCatchUpContext`) or via auto-trigger when jobs complete in background (`vllora_dry_run_job_completed` / `vllora_finetune_job_completed` events → LucySidebar → `vllora_lucy_prompt`). Full RFT decision tree implemented in `analyze_evaluation` (697 lines). Iteration state persisted in IndexedDB. Agent md has inner/outer loop protocol. The loops work via agent instruction compliance but `ExecutionStepId` hasn't been extended for iteration-specific steps.
+**Enhanced Lucy**: Has both loops with hard-coded step executors for `regenerate_topic`, `adjust_grader`, etc.
 
 ---
 
 ## Decision Making
 
 ```
-Lucy Agent (Current — as of 2026-03-06):
+Lucy Agent (Current — as of 2026-03-09):
   User request
     → Orchestrator generates plan (topics + grader during planning)
     → Orchestrator executes plan steps sequentially
     → Eval fires-and-forgets (no blocking)
     → Skill Package + Training proceed immediately
-    → analyze_evaluation / analyze_training run REACTIVELY on user return
-    → No automated inner/outer loop yet (no re-plan after analysis)
+    → When eval/training completes → auto-trigger event → Lucy auto-sends analysis message
+    → analyze_evaluation / analyze_training run REACTIVELY (auto-trigger or catch-up on reopen)
+    → Agent md has inner/outer loop protocol (works via instruction compliance)
+    → Iteration state persisted in IndexedDB (cross-iteration memory works)
+    → Missing: ExecutionStepId extension for regenerate_topic, adjust_grader, etc.
 
 Enhanced Lucy (Proposed):
   User request
@@ -150,11 +153,13 @@ Claude Code Skill:
 ## Async Job Lifecycle
 
 ```
-Lucy (Current):
+Lucy (Current — as of 2026-03-09):
   Start job → poll → show summary when done
+  Job completes → auto-trigger event → Lucy auto-sends analysis message
   User navigates away → polling continues → results saved to IndexedDB
-  User returns → sees old chat messages, no catch-up from Lucy
-  Completed job results just sit there until user manually inspects
+  User returns → buildCatchUpContext checks unreviewed jobs → Lucy catches up
+  Iteration state persisted → Lucy knows iteration number, pending proposals
+  Missing: sidebar notification badge for visual indicator
 
 Enhanced Lucy (Proposed):
   Start job → poll → Lucy narrates progress inline

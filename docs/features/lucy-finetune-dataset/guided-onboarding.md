@@ -91,7 +91,12 @@ interface Plan {
 ### Execution Types
 
 ```typescript
-type ExecutionStepId = 'topics' | 'adjust_topics' | 'categorize' | 'generate' | 'grader' | 'upload' | 'dryrun' | 'package' | 'readme' | 'finetune';
+type ExecutionStepId =
+  | 'topics' | 'adjust_topics' | 'categorize' | 'generate' | 'grader' | 'upload' | 'dryrun' | 'package' | 'readme' | 'finetune'
+  // Iteration loop steps (inner loop — dataset improvement)
+  | 'regenerate_topic' | 'adjust_grader' | 'analyze'
+  // Outer loop steps (post-training)
+  | 'post_training_eval';
 
 interface StepExecutor {
   name: string;

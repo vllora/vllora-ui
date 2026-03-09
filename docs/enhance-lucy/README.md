@@ -2,14 +2,14 @@
 
 Lucy's finetune agent follows a fixed 7-step pipeline. Claude Code with the finetune skill operates like an autonomous researcher — it reads results, diagnoses problems, changes strategy, and iterates until the model is good. This document set identifies the gaps and proposes concrete solutions.
 
-## Implementation Status (2026-03-06)
+## Implementation Status (2026-03-09)
 
 | Phase | Status | Key Deliverables |
 |-------|--------|-----------------|
-| **Phase 1: Eyes** | 🟡 Partial | `get_evaluation_details` done, iteration state not started, catch-up partial |
-| **Phase 2: Autonomy** | 🟡 Partial | `analyze_evaluation` done (reactive), re-plan not started |
-| **Phase 3: Wisdom** | 🟡 Partial | `analyze_training` done (reactive), stall detection partial |
-| **Phase 4: Hands** | 🟡 Partial | `test_grader_sample` + `auto_test` done, viability pre-check not started |
+| **Phase 1: Eyes** | ✅ Done | `get_evaluation_details`, iteration state DB, catch-up (`buildCatchUpContext`, `reviewedByAgent`, `mark_job_reviewed`, auto-trigger events), sidebar notification badge |
+| **Phase 2: Autonomy** | ✅ Done | `analyze_evaluation` (reactive, 697 lines), inner/outer loop protocol in agent md, 4 new `ExecutionStepId` types (`regenerate_topic`, `adjust_grader`, `analyze`, `post_training_eval`) with executors |
+| **Phase 3: Wisdom** | ✅ Done | `analyze_training` done (reactive), stall detection comprehensive (RFT decision tree Steps A-F in `analyze_evaluation`) |
+| **Phase 4: Hands** | ✅ Done | `test_grader_sample` + `auto_test`, `check_viability` tool, iteration checkpoint renderers (`LucyAnalyzeEvalRenderer`, `LucyAnalyzeTrainingRenderer`), stall warning on PlanCard |
 
 See [implementation-plan.md](./implementation-plan.md) for detailed status and [issue/](./issue/) for E2E testing issues.
 
@@ -33,6 +33,9 @@ See [implementation-plan.md](./implementation-plan.md) for detailed status and [
 | [implementation-plan.md](./implementation-plan.md) | Prioritized 4-phase plan with specific file changes per gap |
 | [architecture-adoption.md](./architecture-adoption.md) | Source code analysis: what needs to change per layer, what already works, implementation sequence |
 | [testing-strategy.md](./testing-strategy.md) | E2E + integration + unit test specs, API mock strategy, test fixtures, per-phase checklists |
+| [mock-test-architecture.md](./mock-test-architecture.md) | Mock API architecture: MSW (Vitest) + Express server (Playwright), scenario registry, response bridges |
+| [e2e-test-framework.md](./e2e-test-framework.md) | E2E test framework: test case structure, evidence collection, UI consistency checks, result tracking |
+| [e2e-tests/](./e2e-tests/) | Test case definitions per workflow step + master registry |
 | [mockups-final.html](./mockups-final.html) | Interactive UX mockups: iteration checkpoints, intervention, stall, post-training, session lifecycle scenarios |
 | [issue/](./issue/) | E2E testing issues found during implementation |
 
@@ -41,13 +44,13 @@ See [implementation-plan.md](./implementation-plan.md) for detailed status and [
 | # | Gap | Impact | Effort | Priority | Status |
 |---|-----|--------|--------|----------|--------|
 | 1 | Evaluation results are opaque (no per-record details) | High | Low | P0 | Closed |
-| 2 | No cross-iteration memory | High | Medium | P0 | Open |
-| 3 | Fixed pipeline, no branching after eval | High | Medium | P1 | Partial |
-| 4 | No stall detection or escalation strategy | Medium | Medium | P1 | Partial |
+| 2 | No cross-iteration memory | High | Medium | P0 | Closed |
+| 3 | Fixed pipeline, no branching after eval | High | Medium | P1 | Closed |
+| 4 | No stall detection or escalation strategy | Medium | Medium | P1 | Closed |
 | 5 | Grader editing is template-constrained | Medium | High | P2 | Partial |
-| 6 | No task viability pre-check | Medium | Low | P2 | Open |
+| 6 | No task viability pre-check | Medium | Low | P2 | Closed |
 | 7 | Knowledge sources are opaque to the agent | Low | Medium | P3 | Closed |
-| 8 | No session resumption / catch-up | High | Medium | P0 | Partial |
+| 8 | No session resumption / catch-up | High | Medium | P0 | Mostly closed |
 
 ## Read Order
 

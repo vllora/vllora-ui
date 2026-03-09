@@ -22,11 +22,114 @@ npm run dev           # Dev server → localhost:5173
 npm run build         # Type-check + production build
 npx tsc --noEmit      # Type-check only (run after every change)
 npm test              # Run tests
+pnpm mock-server      # Mock gateway on :9090 (for E2E testing without real backend)
+pnpm dev:msw          # Dev server with MSW (in-browser API mocking)
 scripts/sync-distrijs.sh  # Sync vendored @distri packages from distri repo
 scripts/restart-backend.sh  # Restart Distri server + vLLora gateway (required after agent md changes)
 ```
 
-Backend (Rust gateway) runs at `localhost:9090`. Start via `npm run start:backend` or from the gateway repo.
+Backend (Rust gateway) runs at `localhost:9090`. Start via `npm run start:backend` or from the gateway repo. For E2E testing without the real backend, use `pnpm mock-server` instead.
+
+---
+
+## E2E Testing Architecture
+
+### Overview
+
+50 E2E test scenarios across 15 areas covering the full finetune pipeline, Lucy AI assistant behavior, polling/job lifecycle, dummy user edge cases, UI interactions, and cross-cutting concerns. Tests use a **mock finetune API** so long-running operations (eval, training) complete instantly.
+
+### Key Docs
+
+| Doc | What it covers |
+|-----|---------------|
+| `docs/enhance-lucy/e2e-test-framework.md` | Framework, conventions, assertion types, how to run tests |
+| `docs/enhance-lucy/e2e-tests/_registry.md` | Master list of all 50 tests with priorities and execution order |
+| `docs/enhance-lucy/mock-test-architecture.md` | Mock server architecture, MSW integration, scenario system |
+
+### Test Infrastructure
+
+```
+Frontend (5173)
+    ├── Finetune API calls → Mock Server (9091) → instant mock responses
+    ├── Non-finetune calls → Mock Server (9091) → proxy to Real Gateway (9090)
+    └── Lucy chat → Distri Server (8081) → real LLM + A2A
+```
+
+**3-server setup for full Lucy chat + mock finetune**:
+```bash
+# Terminal 1: Real backend (Distri at 8081 + vLLora gateway at 9090)
+./scripts/restart-backend.sh
+
+# Terminal 2: Mock server in proxy mode (mocks finetune, proxies rest)
+pnpm mock-server:lucy
+
+# Terminal 3: Frontend pointing to mock server
+VITE_BACKEND_PORT=9091 pnpm dev
+```
+
+**Mock scenarios** control eval/training outcomes:
+```bash
+# Set scenario via API
+curl -X POST http://localhost:9091/mock/scenario \
+  -H 'Content-Type: application/json' \
+  -d '{"evalScenario":"critical","evalPollsBeforeComplete":2}'
+
+# Available scenarios: healthy, warning, critical, stalled, error, overfitting, noLearning
+```
+
+### Test Case Structure
+
+```
+docs/enhance-lucy/e2e-tests/
+├── _registry.md              # Master test list (READ THIS FIRST)
+├── 01-topics/                # TC-TOP-001, TC-TOP-002
+├── 02-categorization/        # TC-CAT-001
+├── 03-coverage-generation/   # TC-COV-001
+├── 04-grader/                # TC-GRD-001, TC-GRD-002
+├── 05-evaluation/            # TC-EVAL-001 to TC-EVAL-004
+├── 06-training/              # TC-TRN-001 to TC-TRN-004
+├── 07-deployment/            # TC-DEP-001
+├── 08-knowledge-sources/     # TC-KS-001, TC-KS-002
+├── 09-records-management/    # TC-REC-001
+├── 10-dataset-crud/          # TC-DS-001
+├── 11-skill-package/         # TC-SKL-001
+├── 12-polling/               # TC-POLL-001 to TC-POLL-005
+├── lucy-behavior/            # TC-LUCY-001 to TC-LUCY-013 (10 tests)
+├── dummy-user/               # TC-DU-001 to TC-DU-005
+├── ui-interactions/          # TC-UI-001 to TC-UI-003
+├── cross-cutting/            # TC-CC-001 to TC-CC-007
+└── e2e-runs/                 # Test results (separate from scenarios)
+    └── {run-id}/             # Per-run results + evidence
+```
+
+Each test case file has YAML frontmatter (`id`, `title`, `area`, `priority`, `type`, `mock-scenario`, `preconditions`) and markdown body with steps, hard checks (deterministic), soft checks (LLM-dependent), and evidence requirements.
+
+### Scenarios vs Results Separation
+
+- **Scenarios** (`e2e-tests/*.md`): Define WHAT to test. Immutable. Never modified by test runs.
+- **Results** (`e2e-runs/{run-id}/`): WHERE outcomes go. Created per test run with pass/fail, evidence, notes.
+
+### For Agents: Working with E2E Tests
+
+**When fixing a bug found by a test**:
+1. Read the failing test scenario file to understand expected behavior
+2. Read the result file in `e2e-runs/` for failure details and evidence
+3. Fix the source code
+4. Re-run the specific test to verify the fix
+
+**When adding a new feature**:
+1. Check `_registry.md` for existing coverage
+2. Determine which area the feature falls into (pipeline step, Lucy behavior, UI, etc.)
+3. Create a new test file following the ID convention: `TC-{AREA}-{NNN}.md`
+4. Add the test to `_registry.md` (test list, coverage summary, execution priority)
+5. Use the frontmatter template from `e2e-test-framework.md`
+
+**When fixing a broken test**:
+1. Read the test scenario to understand what it checks
+2. Check if the test's hard checks still match current behavior
+3. Update the test if behavior intentionally changed; fix the code if it's a regression
+
+**ID conventions**: `TC-TOP`, `TC-CAT`, `TC-COV`, `TC-GRD`, `TC-EVAL`, `TC-TRN`, `TC-DEP`, `TC-KS`, `TC-REC`, `TC-DS`, `TC-SKL`, `TC-POLL`, `TC-LUCY`, `TC-DU`, `TC-UI`, `TC-CC`
 
 ---
 

@@ -93,6 +93,9 @@ export { analyzeEvaluationHandler, analyzeEvaluationTool } from './analyze-evalu
 // Training Analysis (Phase 3: Give Lucy Wisdom)
 export { analyzeTrainingHandler, analyzeTrainingTool } from './analyze-training';
 
+// Task Viability Pre-Check (Phase 4B)
+export { checkViabilityHandler, checkViabilityTool } from './check-viability';
+
 // Semantic PDF Extraction (local, in-browser) — internal function, not an agent tool
 export { extractPdfContentLocal } from './semantic-pdf-extractor';
 
@@ -184,6 +187,7 @@ import { logIterationHandler, logIterationTool, getIterationHistoryHandler, getI
 import { markJobReviewedHandler, markJobReviewedTool } from './mark-job-reviewed';
 import { analyzeEvaluationHandler, analyzeEvaluationTool } from './analyze-evaluation';
 import { analyzeTrainingHandler, analyzeTrainingTool } from './analyze-training';
+import { checkViabilityHandler, checkViabilityTool } from './check-viability';
 // Note: Stockfish tools (analyzeChessPositionTool, classifyChessMoveTool) are NOT imported here
 // They are conditionally added via stockfishTools in useFineTuneAgentChat for chess datasets only
 
@@ -239,6 +243,8 @@ export const STEP_TOOL_NAMES = [
   'analyze_evaluation',
   // Training Analysis (Phase 3: Give Lucy Wisdom)
   'analyze_training',
+  // Task Viability Pre-Check (Phase 4B)
+  'check_viability',
   // Note: Stockfish tools ('analyze_chess_position', 'classify_chess_move') are NOT in this list
   // They are conditionally available for chess datasets only via stockfishTools export
 ] as const;
@@ -300,6 +306,8 @@ export const stepTools: DistriFnTool[] = [
   analyzeEvaluationTool,
   // Training Analysis (Phase 3: Give Lucy Wisdom)
   analyzeTrainingTool,
+  // Task Viability Pre-Check (Phase 4B)
+  checkViabilityTool,
   // Note: Stockfish tools are NOT included here - they are conditionally added
   // via stockfishTools in useFineTuneAgentChat for chess datasets only
 ].map(tool => ({ ...tool, autoExecute: true }));
@@ -352,5 +360,7 @@ export const stepToolHandlers: Record<string, ToolHandler> = {
   analyze_evaluation: analyzeEvaluationHandler,
   // Training Analysis (Phase 3: Give Lucy Wisdom)
   analyze_training: analyzeTrainingHandler,
+  // Task Viability Pre-Check (Phase 4B)
+  check_viability: checkViabilityHandler,
   // Note: Stockfish handlers are in stockfishToolHandlers export, not here
 };

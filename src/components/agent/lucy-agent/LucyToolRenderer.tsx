@@ -19,6 +19,8 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { LucyPlanRenderer, LucyExecutePlanRenderer } from './plan-render/LucyPlanRenderer';
 import { LucySavePlanRenderer } from './plan-render/LucySavePlanRenderer';
+import { LucyAnalyzeEvalRenderer } from './plan-render/LucyAnalyzeEvalRenderer';
+import { LucyAnalyzeTrainingRenderer } from './plan-render/LucyAnalyzeTrainingRenderer';
 
 // ============================================================================
 // Types
@@ -230,9 +232,9 @@ export const lucyToolRenderers: ToolRendererMap = {
   adjust_plan: LucyPlanRenderer,
   save_plan: LucySavePlanRenderer,
   execute_plan: LucyExecutePlanRenderer,
-  // Add more specific tool renderers here
-  // 'search': LucySearchToolRenderer,
-  // 'execute_code': LucyCodeToolRenderer,
+  // Analysis renderers
+  analyze_evaluation: LucyAnalyzeEvalRenderer,
+  analyze_training: LucyAnalyzeTrainingRenderer,
 };
 
 /**
