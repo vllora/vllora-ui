@@ -428,6 +428,16 @@ export interface TopicEpochProgression {
   readonly pattern: TrainingPattern | 'mixed';
 }
 
+/** Pre-training eval baseline from the last eval iteration before training. */
+export interface EvalBaseline {
+  /** Number of eval iterations completed before training */
+  readonly iteration_count: number;
+  /** Mean eval score from the final iteration */
+  readonly final_eval_mean: number;
+  /** Per-topic eval scores from the final iteration */
+  readonly per_topic_scores: Readonly<Record<string, number>>;
+}
+
 export interface AnalyzeTrainingResult {
   success: boolean;
   error?: string;
@@ -451,6 +461,8 @@ export interface AnalyzeTrainingResult {
     target_topics?: string[];
   }>;
   next_action?: TrainingNextAction;
+  /** Pre-training eval baseline (from iteration history). Present when iteration history exists. */
+  eval_baseline?: EvalBaseline;
 }
 
 // =============================================================================

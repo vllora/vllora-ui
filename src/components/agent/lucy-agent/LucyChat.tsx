@@ -71,6 +71,10 @@ export interface LucyChatProps {
   activeSection?: string;
   /** Status summary for existing datasets (rendered in welcome slot) */
   statusSummary?: React.ReactNode;
+  /** Catch-up cards for session resume (completed jobs, failed jobs, pending decisions) */
+  catchUpCards?: React.ReactNode;
+  /** Live eval progress card (shown during active evaluation jobs) */
+  evalProgressCard?: React.ReactNode;
 }
 
 // ============================================================================
@@ -139,6 +143,8 @@ export function LucyChat({
   autoTriggerPrompt,
   activeSection,
   statusSummary,
+  catchUpCards,
+  evalProgressCard,
 }: LucyChatProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState('');
@@ -233,6 +239,39 @@ export function LucyChat({
   const { expandedTools, toggleExpansion: toggleToolExpansion } = useAutoExpandTools({
     toolCalls,
   });
+
+  // ---------------------------------------------------------------------------
+  // Catch-up card insertion point
+  // When session is restored, historical messages are loaded first. Catch-up
+  // cards (completed/failed jobs, pending decisions) should appear BETWEEN old
+  // messages and any new messages — not above all messages where auto-scroll
+  // would hide them.
+  // ---------------------------------------------------------------------------
+  const catchUpInsertIndexRef = useRef<number | null>(null);
+  const prevHadCatchUpRef = useRef(false);
+
+  const hasCatchUpCards = Boolean(catchUpCards);
+  if (hasCatchUpCards && !prevHadCatchUpRef.current) {
+    // Catch-up cards just appeared — capture current message count as the
+    // insertion point (= number of historical messages already loaded).
+    catchUpInsertIndexRef.current = messages.length;
+  }
+  if (!hasCatchUpCards) {
+    catchUpInsertIndexRef.current = null;
+  }
+  prevHadCatchUpRef.current = hasCatchUpCards;
+
+  // Reset insertion tracking when thread changes (new chat)
+  useEffect(() => {
+    catchUpInsertIndexRef.current = null;
+    prevHadCatchUpRef.current = false;
+  }, [threadId]);
+
+  // Split messages around the catch-up insertion point
+  const catchUpIdx = catchUpInsertIndexRef.current;
+  const hasCatchUpInsert = hasCatchUpCards && catchUpIdx !== null;
+  const preMessages = hasCatchUpInsert ? messages.slice(0, catchUpIdx) : messages;
+  const postMessages = hasCatchUpInsert ? messages.slice(catchUpIdx) : [];
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -440,8 +479,8 @@ export function LucyChat({
             </div>
           ) : (
             <>
-              {/* Render messages using LucyMessageRenderer */}
-              {messages.map((message, index) => (
+              {/* Historical messages (before catch-up insertion point) */}
+              {preMessages.map((message, index) => (
                 <LucyMessageRenderer
                   key={`msg-${index}`}
                   message={message}
@@ -451,6 +490,31 @@ export function LucyChat({
                   onToggle={() => toggleToolExpansion(`msg-${index}`)}
                 />
               ))}
+
+              {/* Catch-up cards inserted between old and new messages */}
+              {hasCatchUpInsert && (
+                <div className="space-y-2 py-1.5 border-t border-border/50">
+                  {catchUpCards}
+                </div>
+              )}
+
+              {/* Live eval progress card */}
+              {evalProgressCard}
+
+              {/* New messages (after catch-up point) */}
+              {postMessages.map((message, i) => {
+                const globalIdx = (catchUpIdx ?? 0) + i;
+                return (
+                  <LucyMessageRenderer
+                    key={`msg-${globalIdx}`}
+                    message={message}
+                    index={globalIdx}
+                    toolRenderers={toolRenderers}
+                    isExpanded={expandedTools.has(`msg-${globalIdx}`)}
+                    onToggle={() => toggleToolExpansion(`msg-${globalIdx}`)}
+                  />
+                );
+              })}
 
               {/* Render external tool calls that need user approval */}
               <LucyToolCalls tools={externalTools} />

@@ -13,6 +13,7 @@ import type { DistriFnTool } from '@distri/core';
 import type {
   ToolHandler,
   AnalyzeTrainingResult,
+  EvalBaseline,
   TrainingPattern,
   TrainingNextAction,
   TopicEpochProgression,
@@ -416,6 +417,26 @@ function decideTrainingNextAction(
 }
 
 // =============================================================================
+// Eval Baseline Lookup
+// =============================================================================
+
+/** Pull pre-training eval baseline from the last iteration history entry. */
+async function lookupEvalBaseline(datasetId: string): Promise<EvalBaseline | undefined> {
+  const state = await getOrCreateIterationState(datasetId);
+  if (state.history.length === 0) return undefined;
+
+  // Last iteration entry = the eval that preceded training
+  const lastEntry = state.history[state.history.length - 1];
+  if (!lastEntry.dryRunScores) return undefined;
+
+  return {
+    iteration_count: state.history.length,
+    final_eval_mean: lastEntry.dryRunScores.mean,
+    per_topic_scores: lastEntry.dryRunScores.perTopic,
+  };
+}
+
+// =============================================================================
 // Iteration State Update
 // =============================================================================
 
@@ -508,8 +529,9 @@ export const analyzeTrainingHandler: ToolHandler = async (params) => {
     const recommendations = generateTrainingRecommendations(patterns, progressions, job.status);
     const nextAction = decideTrainingNextAction(patterns, job.status);
 
-    // 6. Update iteration state
+    // 6. Update iteration state + look up eval baseline
     await updateOuterLoopState(datasetId, job.id, progressions);
+    const evalBaseline = await lookupEvalBaseline(datasetId);
 
     // 7. Note if insufficient epochs for full analysis
     if (epochs.length < MIN_EPOCHS_FOR_ANALYSIS) {
@@ -531,6 +553,7 @@ export const analyzeTrainingHandler: ToolHandler = async (params) => {
       patterns_detected: patterns,
       recommendations,
       next_action: nextAction,
+      eval_baseline: evalBaseline,
     } satisfies AnalyzeTrainingResult;
   } catch (error) {
     return {

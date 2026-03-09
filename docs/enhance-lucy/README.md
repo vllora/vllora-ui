@@ -9,7 +9,7 @@ Lucy's finetune agent follows a fixed 7-step pipeline. Claude Code with the fine
 | **Phase 1: Eyes** | ✅ Done | `get_evaluation_details`, iteration state DB, catch-up (`buildCatchUpContext`, `reviewedByAgent`, `mark_job_reviewed`, auto-trigger events), sidebar notification badge |
 | **Phase 2: Autonomy** | ✅ Done | `analyze_evaluation` (reactive, 697 lines), inner/outer loop protocol in agent md, 4 new `ExecutionStepId` types (`regenerate_topic`, `adjust_grader`, `analyze`, `post_training_eval`) with executors |
 | **Phase 3: Wisdom** | ✅ Done | `analyze_training` done (reactive), stall detection comprehensive (RFT decision tree Steps A-F in `analyze_evaluation`) |
-| **Phase 4: Hands** | ✅ Done | `test_grader_sample` + `auto_test`, `check_viability` tool, iteration checkpoint renderers (`LucyAnalyzeEvalRenderer`, `LucyAnalyzeTrainingRenderer`), stall warning on PlanCard |
+| **Phase 4: Hands** | ✅ Done | `test_grader_sample` + `auto_test`, `check_viability` tool, 7 UI card renderers (eval, training, auto-countdown, progress, catch-up ×3), catch-up card insertion-point positioning, all scores in raw decimal format |
 
 See [implementation-plan.md](./implementation-plan.md) for detailed status and [issue/](./issue/) for E2E testing issues.
 
@@ -50,7 +50,7 @@ See [implementation-plan.md](./implementation-plan.md) for detailed status and [
 | 5 | Grader editing is template-constrained | Medium | High | P2 | Partial |
 | 6 | No task viability pre-check | Medium | Low | P2 | Closed |
 | 7 | Knowledge sources are opaque to the agent | Low | Medium | P3 | Closed |
-| 8 | No session resumption / catch-up | High | Medium | P0 | Mostly closed |
+| 8 | No session resumption / catch-up | High | Medium | P0 | Closed |
 
 ## Read Order
 

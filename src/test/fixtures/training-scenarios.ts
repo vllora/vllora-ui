@@ -4,7 +4,14 @@
  * Pre-built test data for different training outcomes.
  */
 
-import type { AnalyzeTrainingResult, TrainingPattern } from '@/lib/distri-finetune-tools/types';
+import type { AnalyzeTrainingResult, EvalBaseline, TrainingPattern } from '@/lib/distri-finetune-tools/types';
+
+/** Pre-training eval baseline fixture for combined view tests */
+export const EVAL_BASELINE_FIXTURE: EvalBaseline = {
+  iteration_count: 3,
+  final_eval_mean: 0.52,
+  per_topic_scores: { Pins: 0.48, Forks: 0.55, Combos: 0.53 },
+};
 
 export const TRAINING_SCENARIOS = {
   /** All topics improving — ready for post-training eval */

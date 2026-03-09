@@ -31,6 +31,20 @@ The finetune pipeline has two long-running processes: **Evaluation (Dry Run)** a
 - Pending proposal persistence via `IterationState.phase === 'awaiting_user'` + `innerLoop.proposedChanges`
 - Auto-trigger events: `vllora_dry_run_job_completed` (from `DryRunPollingManager`) and `vllora_finetune_job_completed` (from `FinetuneJobsContext`) → LucySidebar auto-sends Lucy a message when jobs complete in background
 
+**Catch-up UI cards (2026-03-09):**
+- `LucyCompletedJobCard` — "Welcome Back" card for completed jobs (green border, score summary, action buttons)
+- `LucyFailedJobCard` — Failed job card with error details + retry/diagnose buttons
+- `LucyPendingDecisionCard` — Resumption card for pending iteration proposals with proposed changes list
+- Cards are positioned between historical (restored) messages and new messages using an insertion point ref in `LucyChat.tsx` (not at the top of the chat, which would be hidden by auto-scroll)
+- `buildCatchUpContext()` returns both text context (for agent) and structured card data (for UI)
+
+**Active watching & background transition (2026-03-09):**
+- `LucyEvalProgressCard` — live progress card (67/132 records, partial mean score, elapsed time) driven by `vllora_dry_run_job_update` events
+- `LucyAutoCountdownCard` — 8-second auto-continue countdown when eval is healthy + train recommended
+- Background transition timer in `LucySidebar` — after 60s of active job, offers "Continue in Background" message
+
+**Score format:** All Lucy card components display scores as raw decimals (0.45, +0.07) matching the mockup designs.
+
 **NOT yet implemented:**
 - Frontend notification badge in LucySidebar for unreviewed results (visual indicator only — all backend wiring is done)
 

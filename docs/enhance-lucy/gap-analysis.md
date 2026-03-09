@@ -11,7 +11,7 @@
 | 5 | Grader editing is template-constrained | **Partially closed** — `test_grader_sample` with real eval, `auto_test` on configure |
 | 6 | No task viability pre-check | **Open** |
 | 7 | Knowledge sources opaque to agent | **Closed** — `analyze_knowledge_sources` tool exists |
-| 8 | No session resumption / catch-up | **Mostly closed** — `reviewedByAgent` field, `mark_job_reviewed` tool, `buildCatchUpContext()`, auto-trigger events (`vllora_dry_run_job_completed`, `vllora_finetune_job_completed`). Missing: sidebar notification badge |
+| 8 | No session resumption / catch-up | **Closed** — `reviewedByAgent` field, `mark_job_reviewed` tool, `buildCatchUpContext()`, auto-trigger events, catch-up UI cards (`LucyCompletedJobCard`, `LucyFailedJobCard`, `LucyPendingDecisionCard`) with insertion-point positioning in `LucyChat.tsx`. Only sidebar notification badge missing (visual only) |
 
 ## Key Context
 

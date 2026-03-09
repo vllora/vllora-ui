@@ -33,6 +33,8 @@ import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { PlanConsumer } from "@/contexts/PlanContext";
 import { getDryRunJobsByDataset } from "@/services/dry-run-jobs-db";
+import type { DryRunJob } from "@/types/dry-run-job";
+import { getIterationState } from "@/services/finetune-iteration-db";
 import { useFineTuneAgentChat } from "@/hooks/useFineTuneAgentChat";
 import {
   LucyChat,
@@ -41,6 +43,10 @@ import {
   LucyAvatar,
   lucyToolRenderers,
 } from "@/components/agent/lucy-agent";
+import { LucyCompletedJobCard } from "@/components/agent/lucy-agent/plan-render/LucyCompletedJobCard";
+import { LucyFailedJobCard } from "@/components/agent/lucy-agent/plan-render/LucyFailedJobCard";
+import { LucyPendingDecisionCard } from "@/components/agent/lucy-agent/plan-render/LucyPendingDecisionCard";
+import { LucyEvalProgressCard } from "@/components/agent/lucy-agent/plan-render/LucyEvalProgressCard";
 
 import type { QuickAction } from "@/components/agent/lucy-agent/LucyWelcome";
 import { DatasetStatusSummary } from "@/components/agent/lucy-agent/DatasetStatusSummary";
@@ -100,6 +106,12 @@ export function LucySidebar() {
   // Unreviewed job results badge
   const [hasUnreviewedResults, setHasUnreviewedResults] = useState(false);
 
+  // Iteration number badge
+  const [iterationNumber, setIterationNumber] = useState(0);
+
+  // Active eval job tracking (for live progress card)
+  const [activeEvalJobId, setActiveEvalJobId] = useState<string | null>(null);
+
   // Persist pin state to localStorage
   const togglePin = useCallback(() => {
     setIsPinned((prev) => {
@@ -155,6 +167,7 @@ export function LucySidebar() {
     workflowLoading,
     handleNewChat,
     prepareMessage,
+    catchUpCards,
   } = useFineTuneAgentChat({
     datasetId: selectedDatasetId || '',
     datasetName: currentDataset?.name,
@@ -321,6 +334,30 @@ export function LucySidebar() {
     };
   }, [selectedDatasetId]);
 
+  // Track iteration number for sidebar badge
+  useEffect(() => {
+    if (!selectedDatasetId) {
+      setIterationNumber(0);
+      return;
+    }
+
+    const fetchIteration = async () => {
+      try {
+        const state = await getIterationState(selectedDatasetId);
+        setIterationNumber(state?.iterationNumber ?? 0);
+      } catch {
+        // Non-critical
+      }
+    };
+
+    fetchIteration();
+
+    // Re-check when workflow updates (iteration may have advanced)
+    const handleWorkflowUpdated = () => { fetchIteration(); };
+    emitter.on('vllora_workflow_updated', handleWorkflowUpdated);
+    return () => { emitter.off('vllora_workflow_updated', handleWorkflowUpdated); };
+  }, [selectedDatasetId]);
+
   // Auto-prompt Lucy when evaluation completes in background
   useEffect(() => {
     const handleEvalCompleted = ({ datasetId, verdict }: { jobId: string; datasetId: string; verdict: string }) => {
@@ -350,6 +387,70 @@ export function LucySidebar() {
     emitter.on('vllora_finetune_job_completed', handleTrainingCompleted);
     return () => { emitter.off('vllora_finetune_job_completed', handleTrainingCompleted); };
   }, [selectedDatasetId]);
+
+  // Track active eval jobs for live progress card (Scenario #6)
+  useEffect(() => {
+    if (!selectedDatasetId) {
+      setActiveEvalJobId(null);
+      return;
+    }
+
+    // Check for running jobs on mount
+    const checkActiveJobs = async () => {
+      try {
+        const jobs = await getDryRunJobsByDataset(selectedDatasetId);
+        const running = jobs.find((j) => j.status === 'running' || j.status === 'pending');
+        setActiveEvalJobId(running?.id ?? null);
+      } catch {
+        // Non-critical
+      }
+    };
+    checkActiveJobs();
+
+    // Listen for job updates to detect start/completion
+    const handleJobUpdate = ({ job }: { jobId: string; job: DryRunJob }) => {
+      if (job.datasetId !== selectedDatasetId) return;
+      if (job.status === 'running' || job.status === 'pending') {
+        setActiveEvalJobId(job.id);
+      } else {
+        setActiveEvalJobId((prev) => (prev === job.id ? null : prev));
+      }
+    };
+
+    const handleJobCompleted = () => { setActiveEvalJobId(null); };
+
+    emitter.on('vllora_dry_run_job_update', handleJobUpdate);
+    emitter.on('vllora_dry_run_job_completed', handleJobCompleted);
+    return () => {
+      emitter.off('vllora_dry_run_job_update', handleJobUpdate);
+      emitter.off('vllora_dry_run_job_completed', handleJobCompleted);
+    };
+  }, [selectedDatasetId]);
+
+  // Background transition reminder (Scenario #10)
+  // After 60s of an active eval job, gently suggest working on other datasets
+  const bgReminderSentRef = useRef(false);
+  useEffect(() => {
+    if (!activeEvalJobId) {
+      bgReminderSentRef.current = false;
+      return;
+    }
+
+    // Don't send reminder twice for the same job
+    if (bgReminderSentRef.current) return;
+
+    const timer = setTimeout(() => {
+      // Only send if job is still active
+      if (activeEvalJobId && !bgReminderSentRef.current) {
+        bgReminderSentRef.current = true;
+        emitter.emit('vllora_lucy_prompt', {
+          prompt: "This evaluation is taking a while — feel free to work on other datasets while you wait. I'll notify you when results are ready.",
+        });
+      }
+    }, 60_000);
+
+    return () => clearTimeout(timer);
+  }, [activeEvalJobId]);
 
   // Listen for external prompt triggers (e.g., "Generate for topic" button)
   // In dual-sidebar layout: just expand Lucy sidebar, no tab switching needed
@@ -397,6 +498,61 @@ export function LucySidebar() {
       />
     );
   }, [records.length, workflow, currentDataset?.evalScript, filteredJobs.length, planStatus, docsProcessing]);
+
+  // Build catch-up card ReactNodes from structured data (session resume)
+  const catchUpCardsNode = useMemo(() => {
+    if (!catchUpCards) return undefined;
+
+    const cards: React.ReactNode[] = [];
+
+    for (const job of catchUpCards.completedJobs) {
+      cards.push(
+        <LucyCompletedJobCard
+          key={`completed-${job.jobId}`}
+          jobId={job.jobId}
+          averageScore={job.averageScore}
+          completedAt={job.completedAt}
+          verdict={job.verdict}
+          totalRows={job.totalRows}
+        />
+      );
+    }
+
+    for (const job of catchUpCards.failedJobs) {
+      cards.push(
+        <LucyFailedJobCard
+          key={`failed-${job.jobId}`}
+          jobId={job.jobId}
+          errorMessage={job.errorMessage}
+          failedAt={job.failedAt}
+        />
+      );
+    }
+
+    if (catchUpCards.pendingDecision) {
+      const { iterationNumber: iterNum, proposedChanges, lastScore } = catchUpCards.pendingDecision;
+      cards.push(
+        <LucyPendingDecisionCard
+          key="pending-decision"
+          iterationNumber={iterNum}
+          proposedChanges={proposedChanges.map((c) => ({
+            lever: c.lever as 'grader' | 'records' | 'distribution' | 'training_config' | 'topics',
+            description: c.description,
+            applied: c.applied,
+          }))}
+          lastScore={lastScore}
+        />
+      );
+    }
+
+    return cards.length > 0 ? <div className="space-y-2">{cards}</div> : undefined;
+  }, [catchUpCards]);
+
+  // Live eval progress card (rendered above messages during active evaluation)
+  const evalProgressCard = useMemo(() => {
+    if (!activeEvalJobId || !selectedDatasetId) return undefined;
+    return <LucyEvalProgressCard datasetId={selectedDatasetId} />;
+  }, [activeEvalJobId, selectedDatasetId]);
 
   const getKnowledgeSourceType = useCallback((mimeType: string, fileName: string): KnowledgeSourceType => {
     if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) return 'pdf';
@@ -531,6 +687,8 @@ export function LucySidebar() {
             autoTriggerPrompt={autoTriggerPrompt}
             activeSection={activeSection}
             statusSummary={statusSummary}
+            catchUpCards={catchUpCardsNode}
+            evalProgressCard={evalProgressCard}
           />
         </div>
       ) : (
@@ -634,6 +792,11 @@ export function LucySidebar() {
                 )}
               </div>
               <span className="text-[13px] font-semibold text-foreground">Lucy</span>
+              {iterationNumber > 0 && (
+                <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground">
+                  Iter {iterationNumber}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-0.5 shrink-0">
               <TooltipProvider delayDuration={300}>

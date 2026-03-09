@@ -304,17 +304,25 @@ The proposed iteration-level events (`vllora_iteration_started/completed/stall`)
 
 ## Layer 6: Frontend UI — Low-Medium Changes
 
-### 6A. Iteration Progress in Chat
+### 6A. Iteration Progress in Chat — ✅ DONE
 
-Lucy's chat messages already show structured content (plan cards, progress bars, action buttons). The iteration checkpoint UI from `mockups-final.html` would be rendered as chat message components.
+Custom tool renderers registered in `LucyToolRenderer.tsx` render structured cards for tool results.
 
-**Location:** `src/components/agent/lucy-agent/` — add new message renderer for iteration checkpoints.
+**Implemented renderers** (`src/components/agent/lucy-agent/plan-render/`):
 
-**Renders:**
-- Score summary (per-topic bars with color coding)
-- Cross-iteration delta ("+0.19 from last iteration")
-- Lucy's reasoning chain
-- Action buttons (Accept & Apply, Modify, Skip to Training)
+| Component | Tool | What it renders |
+|-----------|------|----------------|
+| `LucyAnalyzeEvalRenderer` | `analyze_evaluation` | Health badge, per-topic bars with raw decimal scores (0.45), vs Iteration deltas (+0.07), reasoning with colored bullets, proposed changes, action buttons |
+| `LucyAnalyzeTrainingRenderer` | `analyze_training` | Pattern badge, epoch table with per-topic scores, pipeline journey (eval→training), action buttons |
+| `LucyAutoCountdownCard` | (child of eval renderer) | 8s countdown when eval healthy + train recommended, auto-sends proceed prompt |
+| `LucyEvalProgressCard` | (standalone) | Live record progress (67/132), partial mean score, elapsed time |
+| `LucyCompletedJobCard` | (catch-up card) | Welcome Back success card with job summary + action buttons |
+| `LucyFailedJobCard` | (catch-up card) | Failed job card with error + retry/diagnose buttons |
+| `LucyPendingDecisionCard` | (catch-up card) | Resumption card for pending iteration proposals |
+
+**Catch-up card positioning:** Cards are inserted between historical (restored) messages and new messages using an insertion point ref in `LucyChat.tsx`, ensuring they remain visible after auto-scroll loads history.
+
+**Score format:** All Lucy card components use raw decimal format (`0.45`, `+0.07`) matching the mockup designs. No percentage formatting.
 
 ### 6B. Notification Badge
 
@@ -367,8 +375,14 @@ Phase 3: Enable Outer Loop (Training Analysis) — ✅ DONE
   ├── 3A: Post-training analysis instructions in agent md ✅
   └── 3B: Stall detection (comprehensive, in analyze_evaluation) ✅
 
-Phase 4: Polish (UI + Stall Detection) — 🟡 PARTIAL
-  ├── 4A: Iteration checkpoint message renderer ⬜ NOT DONE
+Phase 4: Polish (UI + Stall Detection) — ✅ DONE
+  ├── 4A: Iteration checkpoint message renderer ✅ DONE (LucyAnalyzeEvalRenderer, LucyAnalyzeTrainingRenderer)
+  │   ├── Eval card: per-topic bars, vs Iteration deltas, reasoning, proposed changes, action buttons
+  │   ├── Training card: epoch table, pipeline journey, pattern badges, action buttons
+  │   ├── Auto-continue countdown (LucyAutoCountdownCard) for healthy evals
+  │   ├── Catch-up cards (LucyCompletedJobCard, LucyFailedJobCard, LucyPendingDecisionCard)
+  │   ├── Live eval progress (LucyEvalProgressCard) with record counts + partial results
+  │   └── All scores use raw decimal format (0.45, +0.07) matching mockups
   ├── 4B: Notification badge on sidebar ✅ DONE (amber dot, event-driven)
   └── 4C: Tool-based stall detection ✅ (done in analyze_evaluation)
 ```

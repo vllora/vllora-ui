@@ -85,12 +85,46 @@ function buildContextMessage(
 // Catch-Up Context Builder
 // ============================================================================
 
+/** Structured catch-up card data for rendering rich cards in the sidebar. */
+export interface CatchUpCardData {
+  readonly completedJobs: ReadonlyArray<{
+    readonly jobId: string;
+    readonly averageScore?: number;
+    readonly completedAt?: number;
+    readonly verdict?: string;
+    readonly totalRows?: number;
+  }>;
+  readonly failedJobs: ReadonlyArray<{
+    readonly jobId: string;
+    readonly errorMessage?: string;
+    readonly failedAt?: number;
+  }>;
+  readonly pendingDecision?: {
+    readonly iterationNumber: number;
+    readonly proposedChanges: ReadonlyArray<{
+      readonly lever: string;
+      readonly description: string;
+      readonly applied: boolean;
+    }>;
+    readonly lastScore?: number;
+  };
+}
+
+/** Combined catch-up result: text for agent context + structured data for UI cards. */
+interface CatchUpResult {
+  readonly text: string | null;
+  readonly cards: CatchUpCardData | null;
+}
+
 /**
  * Build catch-up context for Lucy when a dataset is reopened.
- * Checks for unreviewed completed/failed jobs and pending iteration proposals.
+ * Returns both text (for agent context injection) and structured card data (for rich UI).
  */
-async function buildCatchUpContext(datasetId: string): Promise<string | null> {
+async function buildCatchUpContext(datasetId: string): Promise<CatchUpResult> {
   const sections: string[] = [];
+  const completedJobs: CatchUpCardData['completedJobs'][number][] = [];
+  const failedJobs: CatchUpCardData['failedJobs'][number][] = [];
+  let pendingDecision: CatchUpCardData['pendingDecision'];
 
   try {
     // Check for unreviewed dry run jobs
@@ -103,6 +137,16 @@ async function buildCatchUpContext(datasetId: string): Promise<string | null> {
     );
 
     if (unreviewedCompleted.length > 0) {
+      for (const j of unreviewedCompleted) {
+        const avgScore = j.pollingSnapshot?.summary?.average_score;
+        completedJobs.push({
+          jobId: j.id,
+          averageScore: avgScore ?? undefined,
+          completedAt: j.completedAt ?? undefined,
+          verdict: undefined,
+          totalRows: j.pollingSnapshot?.total_rows ?? undefined,
+        });
+      }
       const jobSummaries = unreviewedCompleted.map((j: DryRunJob) => {
         const avgScore = j.pollingSnapshot?.summary?.average_score;
         const scoreStr = avgScore != null ? ` (avg score: ${avgScore.toFixed(3)})` : '';
@@ -114,6 +158,13 @@ async function buildCatchUpContext(datasetId: string): Promise<string | null> {
     }
 
     if (unreviewedFailed.length > 0) {
+      for (const j of unreviewedFailed) {
+        failedJobs.push({
+          jobId: j.id,
+          errorMessage: j.error ?? undefined,
+          failedAt: j.completedAt ?? undefined,
+        });
+      }
       const failSummaries = unreviewedFailed.map((j: DryRunJob) => {
         const errMsg = j.error ? `: ${j.error.slice(0, 200)}` : '';
         return `- Job ${j.id} failed${errMsg}`;
@@ -127,6 +178,15 @@ async function buildCatchUpContext(datasetId: string): Promise<string | null> {
     const iterState: IterationState | null = await getIterationState(datasetId);
     if (iterState?.phase === 'awaiting_user') {
       const changes = iterState.innerLoop.proposedChanges ?? [];
+      pendingDecision = {
+        iterationNumber: iterState.iterationNumber,
+        proposedChanges: changes.map((c) => ({
+          lever: c.lever,
+          description: c.description,
+          applied: c.applied,
+        })),
+        lastScore: iterState.innerLoop.lastDryRunScore ?? undefined,
+      };
       const changesSummary = changes.length > 0
         ? changes.map((c) => `- [${c.lever}] ${c.description}`).join('\n')
         : 'No specific changes recorded';
@@ -139,7 +199,11 @@ async function buildCatchUpContext(datasetId: string): Promise<string | null> {
     console.error('[buildCatchUpContext] Error:', error);
   }
 
-  return sections.length > 0 ? sections.join('\n\n') : null;
+  const hasCards = completedJobs.length > 0 || failedJobs.length > 0 || pendingDecision != null;
+  return {
+    text: sections.length > 0 ? sections.join('\n\n') : null,
+    cards: hasCards ? { completedJobs, failedJobs, pendingDecision } : null,
+  };
 }
 
 // ============================================================================
@@ -184,6 +248,8 @@ interface UseFineTuneAgentChatReturn {
   refreshWorkflow: () => Promise<void>;
   /** Prepare message with context injection (supports additional parts like files) */
   prepareMessage: (userMessage: string, additionalParts?: any[]) => DistriMessage;
+  /** Structured catch-up card data for rendering rich cards on session resume */
+  catchUpCards: CatchUpCardData | null;
 }
 
 // ============================================================================
@@ -210,6 +276,8 @@ export function useFineTuneAgentChat(
   const [datasetHasEvalScript, setDatasetHasEvalScript] = useState(false);
   // Catch-up context for session resumption (unreviewed jobs, pending proposals)
   const [catchUpContext, setCatchUpContext] = useState<string | null>(null);
+  // Structured catch-up card data for rendering rich cards in the sidebar
+  const [catchUpCards, setCatchUpCards] = useState<CatchUpCardData | null>(null);
 
   // Check if this is a chess-related dataset (enables Stockfish tools)
   const isChess = useMemo(() => isChessDataset(trainingGoals), [trainingGoals]);
@@ -253,12 +321,14 @@ export function useFineTuneAgentChat(
       ]);
       setWorkflow(workflowState);
       setDatasetHasEvalScript(!!dataset?.evalScript);
-      setCatchUpContext(catchUp);
+      setCatchUpContext(catchUp.text);
+      setCatchUpCards(catchUp.cards);
     } catch (error) {
       console.error('[useFineTuneAgentChat] Error loading workflow:', error);
       setWorkflow(null);
       setDatasetHasEvalScript(false);
       setCatchUpContext(null);
+      setCatchUpCards(null);
     } finally {
       setWorkflowLoading(false);
     }
@@ -334,6 +404,7 @@ export function useFineTuneAgentChat(
     handleNewChat,
     refreshWorkflow,
     prepareMessage,
+    catchUpCards,
   };
 }
 

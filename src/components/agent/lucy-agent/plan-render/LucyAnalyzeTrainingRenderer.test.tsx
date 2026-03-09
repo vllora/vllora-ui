@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { LucyAnalyzeTrainingRenderer } from './LucyAnalyzeTrainingRenderer';
-import { TRAINING_SCENARIOS } from '@/test/fixtures/training-scenarios';
+import { TRAINING_SCENARIOS, EVAL_BASELINE_FIXTURE } from '@/test/fixtures/training-scenarios';
 import type { ToolCall } from '@distri/core';
 import type { ToolCallState } from '@distri/react';
 
@@ -93,7 +93,8 @@ describe('LucyAnalyzeTrainingRenderer', () => {
     expect(screen.getByText('Training Analysis')).toBeInTheDocument();
     // Multiple "Improving" badges (header + per-topic rows)
     expect(screen.getAllByText('Improving').length).toBeGreaterThan(0);
-    expect(screen.getByText('Run Post-Training Eval')).toBeInTheDocument();
+    // "Run Post-Training Eval" appears in both NextAction badge and action button
+    expect(screen.getAllByText('Run Post-Training Eval').length).toBeGreaterThan(0);
   });
 
   it('shows per-topic rows for improving scenario', () => {
@@ -133,7 +134,8 @@ describe('LucyAnalyzeTrainingRenderer', () => {
     );
 
     expect(screen.getAllByText('Overfitting').length).toBeGreaterThan(0);
-    expect(screen.getByText('Retrain')).toBeInTheDocument();
+    // "Retrain" appears in both NextAction badge and action button
+    expect(screen.getAllByText('Retrain').length).toBeGreaterThan(0);
   });
 
   it('shows recommendations for overfitting scenario', () => {
@@ -173,7 +175,44 @@ describe('LucyAnalyzeTrainingRenderer', () => {
     );
 
     expect(screen.getAllByText('No Learning').length).toBeGreaterThan(0);
-    expect(screen.getByText('Improve Dataset')).toBeInTheDocument();
+    // "Improve Dataset" appears in both NextAction badge and action button
+    expect(screen.getAllByText('Improve Dataset').length).toBeGreaterThan(0);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Pipeline Journey (eval baseline → training)
+  // ---------------------------------------------------------------------------
+
+  it('renders Pipeline Journey when eval_baseline is present', () => {
+    const resultWithBaseline = {
+      ...TRAINING_SCENARIOS.improving,
+      eval_baseline: EVAL_BASELINE_FIXTURE,
+    };
+    render(
+      <LucyAnalyzeTrainingRenderer
+        toolCall={makeToolCall()}
+        state={makeState(resultWithBaseline)}
+      />,
+    );
+
+    expect(screen.getByText('Pipeline Journey')).toBeInTheDocument();
+    // Shows eval baseline score (raw decimal)
+    expect(screen.getByText('0.52')).toBeInTheDocument();
+    // Shows iteration count
+    expect(screen.getByText('3 eval iterations before training')).toBeInTheDocument();
+    // Per-topic comparison header
+    expect(screen.getByText('Eval → Training (per topic)')).toBeInTheDocument();
+  });
+
+  it('does not render Pipeline Journey when eval_baseline is absent', () => {
+    render(
+      <LucyAnalyzeTrainingRenderer
+        toolCall={makeToolCall()}
+        state={makeState(TRAINING_SCENARIOS.improving)}
+      />,
+    );
+
+    expect(screen.queryByText('Pipeline Journey')).not.toBeInTheDocument();
   });
 
   // ---------------------------------------------------------------------------

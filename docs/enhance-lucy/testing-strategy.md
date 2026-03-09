@@ -326,12 +326,16 @@ src/test/                              # Shared test infrastructure
     finetune-api.mock.ts               # API mock factory with delays
 
 src/lib/distri-finetune-tools/steps/
-  check-viability.test.ts              # ✅ Viability tool handler unit tests (14 tests)
+  check-viability.test.ts              # ✅ Viability tool handler unit tests (17 tests)
 
 src/components/agent/lucy-agent/plan-render/
   computeStallCount.test.ts            # ✅ Stall detection unit tests (10 tests)
   LucyAnalyzeEvalRenderer.test.tsx     # ✅ Eval renderer component tests (11 tests)
-  LucyAnalyzeTrainingRenderer.test.tsx # ✅ Training renderer component tests (11 tests)
+  LucyAnalyzeTrainingRenderer.test.tsx # ✅ Training renderer component tests (13 tests)
+
+src/test/integration/
+  eval-analysis.test.ts                # ✅ Eval analysis integration tests (7 tests)
+  training-analysis.test.ts            # ✅ Training analysis integration tests (8 tests)
 
 # Planned (not yet implemented):
 src/lib/distri-finetune-tools/__tests__/
@@ -1271,10 +1275,13 @@ Before marking a phase as complete, run through this checklist:
 - [ ] E2E Scenario 8 (outer loop) verified in browser
 
 ### Phase 4 Checklist
-- [x] `check_viability` handler: 14 unit tests (input validation, classification, boundaries, errors)
+- [x] `check_viability` handler: 17 unit tests (input validation, classification, boundaries, errors)
 - [x] `computeStallCount` helper: 10 unit tests (edge cases, boundary conditions, fixture scenarios)
 - [x] `LucyAnalyzeEvalRenderer`: 11 component tests (all eval scenarios + loading/error/fallback)
-- [x] `LucyAnalyzeTrainingRenderer`: 11 component tests (all training scenarios + loading/error/fallback)
+- [x] `LucyAnalyzeTrainingRenderer`: 13 component tests (all training scenarios + pipeline journey + loading/error/fallback)
+- [x] `eval-analysis.test.ts`: 7 integration tests (full analyze_evaluation pipeline scenarios)
+- [x] `training-analysis.test.ts`: 8 integration tests (full analyze_training pipeline scenarios)
+- [x] All scores in raw decimal format (0.45, +0.07) matching mockup designs
 - [ ] Notification badge appears/disappears correctly (E2E)
 - [ ] Progressive background transition timing correct (E2E)
 - [ ] Session resumption scenarios 4-6 verified (E2E)

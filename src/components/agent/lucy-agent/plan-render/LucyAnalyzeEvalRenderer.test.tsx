@@ -124,7 +124,7 @@ describe('LucyAnalyzeEvalRenderer', () => {
     expect(screen.getByText('Iterate')).toBeInTheDocument();
   });
 
-  it('shows recommendations for warning scenario', () => {
+  it('shows proposed changes for warning scenario', () => {
     render(
       <LucyAnalyzeEvalRenderer
         toolCall={makeToolCall()}
@@ -132,7 +132,7 @@ describe('LucyAnalyzeEvalRenderer', () => {
       />,
     );
 
-    expect(screen.getByText('Recommendations')).toBeInTheDocument();
+    expect(screen.getByText('Proposed Changes')).toBeInTheDocument();
     expect(screen.getByText('Regenerate Combos data with simpler prompts')).toBeInTheDocument();
   });
 
@@ -177,10 +177,12 @@ describe('LucyAnalyzeEvalRenderer', () => {
       />,
     );
 
-    // Iteration #3 with delta
-    expect(screen.getByText(/Iter #3/)).toBeInTheDocument();
+    // VS Iteration — shows inline deltas (mockup #1 format)
+    expect(screen.getByText(/vs Iteration 2/)).toBeInTheDocument();
+    // Per-topic deltas shown inline
+    expect(screen.getByText(/Pins:/)).toBeInTheDocument();
     // Stall count warning (>= 2)
-    expect(screen.getByText(/3 stalled/)).toBeInTheDocument();
+    expect(screen.getByText(/3 iterations stalled/)).toBeInTheDocument();
   });
 
   // ---------------------------------------------------------------------------
