@@ -9,9 +9,7 @@ import { http, HttpResponse, delay } from 'msw';
 import { getScenario, incrementEvalPoll } from '../scenarios/scenario-registry';
 import {
   makeCreateEvalResponse,
-  makeRunningEvalResponse,
-  makeCompletedEvalResponse,
-  makeFailedEvalResponse,
+  resolveEvalPollResponse,
 } from '../scenarios/eval-scenario-bridge';
 
 const BASE = 'http://localhost:8080';
@@ -39,26 +37,8 @@ export const evaluationHandlers = [
     await delay(scenario.pollDelayMs);
 
     const pollCount = incrementEvalPoll(runId);
-    const totalRows = 10;
-
-    // Still running — not enough polls yet
-    if (pollCount <= scenario.evalPollsBeforeComplete) {
-      const completedRows = Math.floor(
-        (pollCount / (scenario.evalPollsBeforeComplete + 1)) * totalRows,
-      );
-      return HttpResponse.json(
-        makeRunningEvalResponse(runId, completedRows, totalRows),
-      );
-    }
-
-    // Error scenario
-    if (scenario.evalScenario === 'error') {
-      return HttpResponse.json(makeFailedEvalResponse(runId));
-    }
-
-    // Completed with scenario-appropriate results
     return HttpResponse.json(
-      makeCompletedEvalResponse(scenario.evalScenario, runId, totalRows),
+      resolveEvalPollResponse(runId, scenario.evalScenario, pollCount, scenario.evalPollsBeforeComplete),
     );
   }),
 ];

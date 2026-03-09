@@ -42,16 +42,14 @@ import {
 } from '../msw/scenarios/scenario-registry';
 import {
   makeCreateEvalResponse,
-  makeRunningEvalResponse,
-  makeCompletedEvalResponse,
-  makeFailedEvalResponse,
+  resolveEvalPollResponse,
 } from '../msw/scenarios/eval-scenario-bridge';
 import {
   makeCreateTrainingResponse,
-  makeRunningTrainingResponse,
   makeCompletedTrainingResponse,
   makeFailedTrainingResponse,
   makeFinetuneEvalResponse,
+  resolveTrainingPollResponse,
 } from '../msw/scenarios/training-scenario-bridge';
 
 // =============================================================================
@@ -256,22 +254,7 @@ app.get('/finetune/evaluations/:id', async (req, res) => {
   await delayMs(scenario.pollDelayMs);
 
   const pollCount = incrementEvalPoll(runId);
-  const totalRows = 10;
-
-  if (pollCount <= scenario.evalPollsBeforeComplete) {
-    const completedRows = Math.floor(
-      (pollCount / (scenario.evalPollsBeforeComplete + 1)) * totalRows,
-    );
-    res.json(makeRunningEvalResponse(runId, completedRows, totalRows));
-    return;
-  }
-
-  if (scenario.evalScenario === 'error') {
-    res.json(makeFailedEvalResponse(runId));
-    return;
-  }
-
-  res.json(makeCompletedEvalResponse(scenario.evalScenario, runId, totalRows));
+  res.json(resolveEvalPollResponse(runId, scenario.evalScenario, pollCount, scenario.evalPollsBeforeComplete));
 });
 
 // =============================================================================
@@ -309,18 +292,7 @@ app.get('/finetune/reinforcement-jobs/:jobId/status', async (req, res) => {
   await delayMs(scenario.pollDelayMs);
 
   const pollCount = incrementTrainingPoll(jobId);
-
-  if (pollCount <= scenario.trainingPollsBeforeComplete) {
-    res.json(makeRunningTrainingResponse(jobId));
-    return;
-  }
-
-  if (scenario.trainingScenario === 'error') {
-    res.json(makeFailedTrainingResponse(jobId));
-    return;
-  }
-
-  res.json(makeCompletedTrainingResponse(jobId));
+  res.json(resolveTrainingPollResponse(jobId, scenario.trainingScenario, pollCount, scenario.trainingPollsBeforeComplete));
 });
 
 // =============================================================================
@@ -404,7 +376,8 @@ app.post('/finetune/datasets/analytics/dry-run', async (_req, res) => {
 // =============================================================================
 
 if (proxyTarget) {
-  app.all('*', async (req, res) => {
+  // Express 5 requires named wildcard params (path-to-regexp v8)
+  app.all('{*path}', async (req, res) => {
     const targetUrl = `http://localhost:${proxyTarget}${req.originalUrl}`;
     try {
       const headers: Record<string, string> = {};

@@ -99,7 +99,8 @@ export function makeCompletedEvalResponse(
     },
   }));
 
-  const passedCount = scores.filter((s) => s > 0).length;
+  // Use 0.5 threshold to match the reason logic (>= 0.5 = "Meets criteria")
+  const passedCount = scores.filter((s) => s >= 0.5).length;
 
   return {
     evaluation_run_id: runId,
@@ -126,4 +127,42 @@ export function makeFailedEvalResponse(runId = 'eval-run-001'): EvaluationResult
     results: [],
     summary: null,
   };
+}
+
+// =============================================================================
+// Poll Resolver (single source of truth for eval polling logic)
+// =============================================================================
+
+/**
+ * Resolves what response to return for an eval poll request.
+ * Used by both MSW handlers and Express mock server — keeps routing logic in one place.
+ */
+export function resolveEvalPollResponse(
+  runId: string,
+  evalScenario: EvalScenarioKey,
+  pollCount: number,
+  pollsBeforeComplete: number,
+  totalRows = 10,
+): EvaluationResultResponse {
+  // Stalled: always return running with same progress (never completes)
+  if (evalScenario === 'stalled') {
+    const stalledRows = Math.floor(totalRows * 0.4);
+    return makeRunningEvalResponse(runId, stalledRows, totalRows);
+  }
+
+  // Still running — not enough polls yet
+  if (pollCount <= pollsBeforeComplete) {
+    const completedRows = Math.floor(
+      (pollCount / (pollsBeforeComplete + 1)) * totalRows,
+    );
+    return makeRunningEvalResponse(runId, completedRows, totalRows);
+  }
+
+  // Error scenario → failed
+  if (evalScenario === 'error') {
+    return makeFailedEvalResponse(runId);
+  }
+
+  // Completed with scenario-appropriate results
+  return makeCompletedEvalResponse(evalScenario, runId, totalRows);
 }

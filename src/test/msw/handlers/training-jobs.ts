@@ -9,9 +9,9 @@ import { http, HttpResponse, delay } from 'msw';
 import { getScenario, incrementTrainingPoll } from '../scenarios/scenario-registry';
 import {
   makeCreateTrainingResponse,
-  makeRunningTrainingResponse,
   makeCompletedTrainingResponse,
   makeFailedTrainingResponse,
+  resolveTrainingPollResponse,
 } from '../scenarios/training-scenario-bridge';
 
 const BASE = 'http://localhost:8080';
@@ -39,19 +39,9 @@ export const trainingJobHandlers = [
     await delay(scenario.pollDelayMs);
 
     const pollCount = incrementTrainingPoll(jobId);
-
-    // Still running — not enough polls yet
-    if (pollCount <= scenario.trainingPollsBeforeComplete) {
-      return HttpResponse.json(makeRunningTrainingResponse(jobId));
-    }
-
-    // Error scenario
-    if (scenario.trainingScenario === 'error') {
-      return HttpResponse.json(makeFailedTrainingResponse(jobId));
-    }
-
-    // Completed
-    return HttpResponse.json(makeCompletedTrainingResponse(jobId));
+    return HttpResponse.json(
+      resolveTrainingPollResponse(jobId, scenario.trainingScenario, pollCount, scenario.trainingPollsBeforeComplete),
+    );
   }),
 
   // GET /finetune/reinforcement-jobs — List training jobs
