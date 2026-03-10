@@ -73,8 +73,6 @@ export interface LucyChatProps {
   statusSummary?: React.ReactNode;
   /** Catch-up cards for session resume (completed jobs, failed jobs, pending decisions) */
   catchUpCards?: React.ReactNode;
-  /** Live eval progress card (shown during active evaluation jobs) */
-  evalProgressCard?: React.ReactNode;
 }
 
 // ============================================================================
@@ -144,7 +142,6 @@ export function LucyChat({
   activeSection,
   statusSummary,
   catchUpCards,
-  evalProgressCard,
 }: LucyChatProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState('');
@@ -465,9 +462,6 @@ export function LucyChat({
                   onToggle={() => toggleToolExpansion(`msg-${index}`)}
                 />
               ))}
-
-              {/* Live eval progress card */}
-              {evalProgressCard}
 
               {/* Render external tool calls that need user approval */}
               <LucyToolCalls tools={externalTools} />

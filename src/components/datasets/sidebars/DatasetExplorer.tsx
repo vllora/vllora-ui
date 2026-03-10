@@ -30,8 +30,6 @@ import {
   Clock,
   AlertTriangle,
   Circle,
-  Package,
-  Download,
 } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
@@ -47,10 +45,6 @@ import { NewEvaluationDialog } from "@/components/datasets/evaluation-dialog/New
 import type { FileTreeNode, FileTreeBadge } from "./types";
 import type { TopicHierarchyNode } from "@/types/dataset-types";
 import { computeSourceRecordStats } from "@/lib/distri-finetune-tools/steps/shared/source-record-counts";
-import {
-  assembleSkillPackageFiles,
-  getKnowledgeSectionEntries,
-} from "@/lib/distri-finetune-tools/steps/generate-skill-package";
 
 // ============================================================================
 // Icon helpers (consistent sizing for tree items)
@@ -106,83 +100,6 @@ function getTopicRecordCount(node: TopicHierarchyNode, topicCounts: Map<string, 
   return total;
 }
 
-/** Slugify a single segment for skill example file paths */
-function slugifySegment(text: string): string {
-  return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-}
-
-/**
- * Build hierarchical skill resources tree from topic hierarchy.
- * Non-leaf nodes → folders, leaf nodes → .jsonl files with record count badge.
- */
-function buildSkillExamplesChildren(
-  nodes: readonly TopicHierarchyNode[],
-  parentSlug: string,
-  topicCounts: Map<string, number>,
-  expandedNodes: Set<string>,
-): FileTreeNode[] {
-  return nodes.flatMap((node): FileTreeNode[] => {
-    const slug = slugifySegment(node.name);
-    const slugPath = parentSlug ? `${parentSlug}/${slug}` : slug;
-    const hasChildren = node.children && node.children.length > 0;
-    const count = getTopicRecordCount(node, topicCounts);
-
-    if (hasChildren) {
-      const children = buildSkillExamplesChildren(node.children!, slugPath, topicCounts, expandedNodes);
-      // Hide empty folders (all children filtered out)
-      if (children.length === 0) return [];
-      const folderId = `skill/resources/${slugPath}`;
-      return [{
-        id: folderId,
-        name: slug,
-        type: "folder" as const,
-        icon: folderIcon(expandedNodes, folderId),
-        isExpandable: true,
-        expandOnly: true,
-        badge: count > 0 ? { label: String(count), variant: "count" as const } : undefined,
-        children,
-      }];
-    }
-
-    // Hide leaf topics with 0 records (Fix #008)
-    if (count === 0) return [];
-
-    return [{
-      id: `skill/resources/${slugPath}.jsonl`,
-      name: `${slug}.jsonl`,
-      type: "file" as const,
-      icon: <FileCode className={`${ICON_CLS} text-purple-400`} />,
-      badge: { label: String(count), variant: "count" as const },
-    }];
-  });
-}
-
-/**
- * Build a mapping from skill leaf node IDs to their corresponding data/ paths.
- * Both trees share the same TopicHierarchyNode hierarchy — this builds
- * the lookup by walking nodes in parallel with both naming conventions.
- */
-function buildSkillToDataMap(
-  nodes: readonly TopicHierarchyNode[],
-  parentSlug: string,
-  parentDataPath: string,
-): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const node of nodes) {
-    const slug = slugifySegment(node.name);
-    const slugPath = parentSlug ? `${parentSlug}/${slug}` : slug;
-    const dataPath = parentDataPath ? `${parentDataPath}/${node.name}` : node.name;
-    if (node.children?.length) {
-      for (const [k, v] of buildSkillToDataMap(node.children, slugPath, dataPath)) {
-        map.set(k, v);
-      }
-    } else {
-      map.set(`skill/resources/${slugPath}.jsonl`, `data/${dataPath}`);
-    }
-  }
-  return map;
-}
-
 // ============================================================================
 // Component
 // ============================================================================
@@ -202,7 +119,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
   // Expanded/selected state
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(
-    () => new Set(["documents", "data", "evaluations", "finetune", "skill", "skill/resources", "skill/knowledge", "skill/knowledge/sections", "insights"])
+    () => new Set(["documents", "data", "evaluations", "finetune", "insights"])
   );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
@@ -216,47 +133,6 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
   const [showNewJobDialog, setShowNewJobDialog] = useState(false);
   // New evaluation dialog
   const [showNewEvalDialog, setShowNewEvalDialog] = useState(false);
-
-  // Download skill package ZIP
-  const handleDownloadSkillZip = useCallback(async () => {
-    if (!dataset?.id) return;
-    try {
-      const files = await assembleSkillPackageFiles(dataset.id);
-      if (!files) {
-        toast.error("No data available to download");
-        return;
-      }
-      const JSZip = (await import("jszip")).default;
-      const zip = new JSZip();
-      const root = zip.folder(files.skillSlug)!;
-      root.file("SKILL.md", files.skillMd);
-      root.file("resources/index.md", files.resourcesIndex);
-      for (const [slug, jsonl] of files.topicFiles) {
-        root.file(`resources/${slug}.jsonl`, jsonl);
-      }
-      if (files.knowledgeDoc) {
-        root.file("knowledge/domain-knowledge.md", files.knowledgeDoc);
-      }
-      for (const [path, content] of files.sectionFiles) {
-        root.file(`knowledge/${path}`, content);
-      }
-      const blob = await zip.generateAsync({ type: "blob" });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${files.skillSlug}.zip`;
-      anchor.style.display = "none";
-      document.body.appendChild(anchor);
-      anchor.click();
-      setTimeout(() => {
-        document.body.removeChild(anchor);
-        URL.revokeObjectURL(url);
-      }, 100);
-      toast.success("Skill package downloaded");
-    } catch {
-      toast.error("Failed to download skill package");
-    }
-  }, [dataset?.id]);
 
   const toggleExpand = useCallback((nodeId: string) => {
     setExpandedNodes((prev) => {
@@ -282,28 +158,6 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
     }
     return counts;
   }, [records]);
-
-  // Knowledge section entries for skill/knowledge tree (from extracted content)
-  const knowledgeSectionEntries = useMemo(
-    () => getKnowledgeSectionEntries(sources),
-    [sources],
-  );
-
-  // Map skill .jsonl leaf node IDs → corresponding data/ paths
-  // so clicking a .jsonl in the Explorer opens the records view instead
-  const skillToDataMap = useMemo(() => {
-    const hierarchy = dataset?.topicHierarchy?.hierarchy;
-    if (!hierarchy?.length) {
-      // Flat fallback: no hierarchy, map from slug to topic name
-      const map = new Map<string, string>();
-      for (const [topicName] of topicCounts) {
-        const slug = slugifySegment(topicName);
-        map.set(`skill/resources/${slug}.jsonl`, `data/${topicName}`);
-      }
-      return map;
-    }
-    return buildSkillToDataMap(hierarchy, "", "");
-  }, [dataset?.topicHierarchy?.hierarchy, topicCounts]);
 
   // ============================================================================
   // Build the virtual file tree
@@ -653,120 +507,6 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       });
     }
 
-    // --- skill/ (always shown — empty state when no records) ---
-    {
-      const skillChildren: FileTreeNode[] = [];
-
-      if (records.length > 0) {
-        // SKILL.md
-        skillChildren.push({
-          id: "skill/SKILL.md",
-          name: "SKILL.md",
-          type: "file",
-          icon: <FileText className={`${ICON_CLS} text-purple-400`} />,
-        });
-
-        // resources/ — build hierarchical tree from topic hierarchy (or flat fallback)
-        const exampleChildren: FileTreeNode[] = [
-          {
-            id: "skill/resources/index.md",
-            name: "index.md",
-            type: "file",
-            icon: <FileText className={`${ICON_CLS} text-purple-400`} />,
-          },
-        ];
-
-        const hierarchy = dataset?.topicHierarchy?.hierarchy;
-        if (hierarchy && hierarchy.length > 0) {
-          // Hierarchical: mirror topic tree as nested folders/files
-          exampleChildren.push(
-            ...buildSkillExamplesChildren(hierarchy, "", topicCounts, expandedNodes),
-          );
-        } else {
-          // Flat fallback: no hierarchy available — skip topics with 0 records
-          const sortedTopics = [...topicCounts.entries()]
-            .filter(([, count]) => count > 0)
-            .sort((a, b) => a[0].localeCompare(b[0]));
-          for (const [topicName, count] of sortedTopics) {
-            const slug = slugifySegment(topicName);
-            exampleChildren.push({
-              id: `skill/resources/${slug}.jsonl`,
-              name: `${slug}.jsonl`,
-              type: "file",
-              icon: <FileCode className={`${ICON_CLS} text-purple-400`} />,
-              badge: { label: String(count), variant: "count" },
-            });
-          }
-        }
-
-        skillChildren.push({
-          id: "skill/resources",
-          name: "resources",
-          type: "folder",
-          icon: folderIcon(expandedNodes, "skill/resources"),
-          isExpandable: true,
-          children: exampleChildren,
-        });
-
-        // knowledge/ — only if knowledge sources exist
-        const hasReadySources = sources.some((s) => s.status === "ready");
-        if (hasReadySources) {
-          const knowledgeChildren: FileTreeNode[] = [
-            {
-              id: "skill/knowledge/domain-knowledge.md",
-              name: "domain-knowledge.md",
-              type: "file",
-              icon: <FileText className={`${ICON_CLS} text-purple-400`} />,
-            },
-          ];
-          if (knowledgeSectionEntries.length > 0) {
-            knowledgeChildren.push({
-              id: "skill/knowledge/sections",
-              name: "sections",
-              type: "folder",
-              icon: folderIcon(expandedNodes, "skill/knowledge/sections"),
-              isExpandable: true,
-              badge: { label: String(knowledgeSectionEntries.length), variant: "count" },
-              children: knowledgeSectionEntries.map((e) => ({
-                id: `skill/knowledge/${e.path}`,
-                name: e.path.split("/").pop() ?? e.path,
-                type: "file" as const,
-                icon: <FileText className={`${ICON_CLS} text-purple-400`} />,
-                title: e.title,
-              })),
-            });
-          }
-          skillChildren.push({
-            id: "skill/knowledge",
-            name: "knowledge",
-            type: "folder",
-            icon: folderIcon(expandedNodes, "skill/knowledge"),
-            isExpandable: true,
-            children: knowledgeChildren,
-          });
-        }
-      }
-
-      nodes.push({
-        id: "skill",
-        name: "skill",
-        type: "folder",
-        icon: <Package className={`${ICON_CLS} text-purple-500`} />,
-        children: skillChildren,
-        isExpandable: skillChildren.length > 0,
-        isSection: true,
-        emptyText: "Training data will be packaged as a skill folder you can deploy to your own agent",
-        actions: skillChildren.length > 0
-          ? [{
-              key: "download-zip",
-              icon: <Download className="w-3.5 h-3.5" />,
-              title: "Download skill package ZIP",
-              onClick: handleDownloadSkillZip,
-            }]
-          : undefined,
-      });
-    }
-
     // --- insights/ (always shown, children are data-driven) ---
     {
       const statsChildren: FileTreeNode[] = [];
@@ -821,8 +561,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
   }, [
     dataset, records, sources, dryRunJobs, finetuneJobs,
     proposedPlan, planStatus, hasPlanProposed, todos,
-    topicCounts, expandedNodes, isGeneratingTraces, handleDownloadSkillZip,
-    knowledgeSectionEntries,
+    topicCounts, expandedNodes, isGeneratingTraces,
   ]);
 
   // ============================================================================
@@ -831,18 +570,9 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
   const handleSelect = useCallback((nodeId: string) => {
     setSelectedNodeId(nodeId);
-
-    // Redirect skill example .jsonl files to the data records view
-    // so both Explorer paths show the same full-featured records table.
-    const dataPath = skillToDataMap.get(nodeId);
-    if (dataPath) {
-      openTab(dataPath);
-    } else {
-      openTab(nodeId);
-    }
-
+    openTab(nodeId);
     onNavigate?.(nodeId);
-  }, [openTab, onNavigate, skillToDataMap]);
+  }, [openTab, onNavigate]);
 
   // ============================================================================
   // Render

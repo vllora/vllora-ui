@@ -44,8 +44,6 @@ import {
   lucyToolRenderers,
 } from "@/components/agent/lucy-agent";
 import { LucyCatchUpCard } from "@/components/agent/lucy-agent/plan-render/LucyCatchUpCard";
-import { LucyEvalProgressCard } from "@/components/agent/lucy-agent/plan-render/LucyEvalProgressCard";
-
 import type { QuickAction } from "@/components/agent/lucy-agent/LucyWelcome";
 import { DatasetStatusSummary } from "@/components/agent/lucy-agent/DatasetStatusSummary";
 import { cn } from "@/lib/utils";
@@ -503,12 +501,6 @@ export function LucySidebar() {
     return <LucyCatchUpCard data={catchUpCards} />;
   }, [catchUpCards]);
 
-  // Live eval progress card (rendered above messages during active evaluation)
-  const evalProgressCard = useMemo(() => {
-    if (!activeEvalJobId || !selectedDatasetId) return undefined;
-    return <LucyEvalProgressCard datasetId={selectedDatasetId} />;
-  }, [activeEvalJobId, selectedDatasetId]);
-
   const getKnowledgeSourceType = useCallback((mimeType: string, fileName: string): KnowledgeSourceType => {
     if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) return 'pdf';
     if (mimeType.startsWith('image/')) return 'image';
@@ -643,7 +635,6 @@ export function LucySidebar() {
             activeSection={activeSection}
             statusSummary={statusSummary}
             catchUpCards={catchUpCardsNode}
-            evalProgressCard={evalProgressCard}
           />
         </div>
       ) : (
