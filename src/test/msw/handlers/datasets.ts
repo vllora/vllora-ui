@@ -6,7 +6,7 @@
 
 import { http, HttpResponse, delay } from 'msw';
 import { getScenario } from '../scenarios/scenario-registry';
-import { makeUploadResponse } from '../scenarios/eval-scenario-bridge';
+import { makeUploadResponse, makeEvaluatorVersionsResponse } from '../scenarios/eval-scenario-bridge';
 
 const BASE = 'http://localhost:8080';
 
@@ -29,6 +29,15 @@ export const datasetHandlers = [
     }
 
     return HttpResponse.json(makeUploadResponse());
+  }),
+
+  // GET /finetune/datasets/:datasetId/evaluator/versions — Evaluator version history
+  http.get(`${BASE}/finetune/datasets/:datasetId/evaluator/versions`, async ({ params }) => {
+    const datasetId = params.datasetId as string;
+    const scenario = getScenario();
+    await delay(scenario.pollDelayMs);
+
+    return HttpResponse.json(makeEvaluatorVersionsResponse(datasetId));
   }),
 
   // PATCH /finetune/datasets/:datasetId/evaluator — Update eval script

@@ -20,6 +20,7 @@ import { EpochProgressBar } from "./EpochProgressSection";
 import { FinetuneJobDetailsSection } from "./FinetuneJobDetailsSection";
 import { UsageGuideDialog } from "./UsageGuideSection";
 import { TrainingMetricsSection } from "../TrainingMetricsSection";
+import { ReinforcementMetricsSection } from "../ReinforcementMetricsSection";
 import { PerRowDetailsSection } from "../PerRowDetailsSection";
 import { ErrorLogSection } from "../ErrorLogSection";
 import {
@@ -253,7 +254,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
             <ErrorLogSection errorMessage={job.error_message} />
           )}
 
-          {/* ── Metrics Chart ── */}
+          {/* ── Eval Score Chart (per-epoch grader scores) ── */}
           {job.dataset_id ? (
             <TrainingMetricsSection
               evalResults={evalResults}
@@ -270,6 +271,12 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
               </div>
             )
           )}
+
+          {/* ── Reinforcement Training Metrics (reward, KL, loss, completions) ── */}
+          <ReinforcementMetricsSection
+            jobId={job.id}
+            isLive={job.status === "running"}
+          />
 
           {/* ── Per-Row Details (themed to match panel) ── */}
           {job.dataset_id && evalResults && evalResults.results.length > 0 && (

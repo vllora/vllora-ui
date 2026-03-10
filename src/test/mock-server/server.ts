@@ -44,6 +44,7 @@ import {
 import {
   makeCreateEvalResponse,
   resolveEvalPollResponse,
+  makeEvaluatorVersionsResponse,
 } from '../msw/scenarios/eval-scenario-bridge';
 import {
   makeCreateTrainingResponse,
@@ -51,6 +52,7 @@ import {
   makeFailedTrainingResponse,
   makeFinetuneEvalResponse,
   resolveTrainingPollResponse,
+  makeReinforcementMetricsResponse,
 } from '../msw/scenarios/training-scenario-bridge';
 
 // =============================================================================
@@ -249,6 +251,15 @@ app.post('/finetune/datasets', upload.single('file'), async (req, res) => {
 });
 
 // =============================================================================
+// GET /finetune/datasets/:datasetId/evaluator/versions
+// =============================================================================
+
+app.get('/finetune/datasets/:datasetId/evaluator/versions', async (req, res) => {
+  await delayMs(getScenario().pollDelayMs);
+  res.json(makeEvaluatorVersionsResponse(req.params.datasetId));
+});
+
+// =============================================================================
 // PATCH /finetune/datasets/:datasetId/evaluator
 // =============================================================================
 
@@ -398,6 +409,17 @@ app.post('/finetune/reinforcement-jobs/:jobId/cancel', async (_req, res) => {
 app.post('/finetune/reinforcement-jobs/:jobId/resume', async (_req, res) => {
   await delayMs(getScenario().createDelayMs);
   res.json({ ok: true });
+});
+
+// =============================================================================
+// GET /finetune/reinforcement-jobs/:jobId/metrics — Training metrics
+// =============================================================================
+
+app.get('/finetune/reinforcement-jobs/:jobId/metrics', async (req, res) => {
+  const jobId = resolveJobId(req.params.jobId);
+  const scenario = getScenario();
+  await delayMs(scenario.pollDelayMs);
+  res.json(makeReinforcementMetricsResponse(jobId, scenario.trainingScenario));
 });
 
 // =============================================================================

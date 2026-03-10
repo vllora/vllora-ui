@@ -93,6 +93,9 @@ export { analyzeEvaluationHandler, analyzeEvaluationTool } from './analyze-evalu
 // Training Analysis (Phase 3: Give Lucy Wisdom)
 export { analyzeTrainingHandler, analyzeTrainingTool } from './analyze-training';
 
+// Training Metrics (Phase 3B: Raw training telemetry)
+export { getTrainingMetricsHandler, getTrainingMetricsTool, type GetTrainingMetricsResult } from './get-training-metrics';
+
 // Task Viability Pre-Check (Phase 4B)
 export { checkViabilityHandler, checkViabilityTool } from './check-viability';
 
@@ -187,6 +190,7 @@ import { logIterationHandler, logIterationTool, getIterationHistoryHandler, getI
 import { markJobReviewedHandler, markJobReviewedTool } from './mark-job-reviewed';
 import { analyzeEvaluationHandler, analyzeEvaluationTool } from './analyze-evaluation';
 import { analyzeTrainingHandler, analyzeTrainingTool } from './analyze-training';
+import { getTrainingMetricsHandler, getTrainingMetricsTool } from './get-training-metrics';
 import { checkViabilityHandler, checkViabilityTool } from './check-viability';
 // Note: Stockfish tools (analyzeChessPositionTool, classifyChessMoveTool) are NOT imported here
 // They are conditionally added via stockfishTools in useFineTuneAgentChat for chess datasets only
@@ -243,6 +247,8 @@ export const STEP_TOOL_NAMES = [
   'analyze_evaluation',
   // Training Analysis (Phase 3: Give Lucy Wisdom)
   'analyze_training',
+  // Training Metrics (Phase 3B: Raw training telemetry)
+  'get_training_metrics',
   // Task Viability Pre-Check (Phase 4B)
   'check_viability',
   // Note: Stockfish tools ('analyze_chess_position', 'classify_chess_move') are NOT in this list
@@ -306,6 +312,8 @@ export const stepTools: DistriFnTool[] = [
   analyzeEvaluationTool,
   // Training Analysis (Phase 3: Give Lucy Wisdom)
   analyzeTrainingTool,
+  // Training Metrics (Phase 3B: Raw training telemetry)
+  getTrainingMetricsTool,
   // Task Viability Pre-Check (Phase 4B)
   checkViabilityTool,
   // Note: Stockfish tools are NOT included here - they are conditionally added
@@ -365,6 +373,8 @@ export const stepToolHandlers: Record<string, ToolHandler> = {
   analyze_evaluation: analyzeEvaluationHandler,
   // Training Analysis (Phase 3: Give Lucy Wisdom)
   analyze_training: analyzeTrainingHandler,
+  // Training Metrics (Phase 3B: Raw training telemetry)
+  get_training_metrics: getTrainingMetricsHandler,
   // Task Viability Pre-Check (Phase 4B)
   check_viability: checkViabilityHandler,
   // Note: Stockfish handlers are in stockfishToolHandlers export, not here

@@ -142,6 +142,19 @@ export function mockFinetuneApi(opts: MockFinetuneApiOptions = {}) {
     getFinetuneEvaluations: vi.fn().mockImplementation(() =>
       delayed({ results: [] }, ms),
     ),
+
+    // Evaluator versions
+    getEvaluatorVersions: vi.fn().mockImplementation(() =>
+      delayed([
+        { id: 'ev-002', dataset_id: backendId, version: 2, config: { type: 'js', config: {} }, diff: '+ new line', created_at: '2026-03-10T12:00:00Z' },
+        { id: 'ev-001', dataset_id: backendId, version: 1, config: { type: 'js', config: {} }, diff: null, created_at: '2026-03-09T10:00:00Z' },
+      ], ms),
+    ),
+
+    // Reinforcement training metrics
+    getReinforcementJobMetrics: vi.fn().mockImplementation(() =>
+      delayed({ provider_job_id: 'ft-job-001', metrics: [] }, ms),
+    ),
   };
 }
 

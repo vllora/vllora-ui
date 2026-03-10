@@ -12,6 +12,7 @@ import {
   makeCompletedTrainingResponse,
   makeFailedTrainingResponse,
   resolveTrainingPollResponse,
+  makeReinforcementMetricsResponse,
 } from '../scenarios/training-scenario-bridge';
 
 const BASE = 'http://localhost:8080';
@@ -42,6 +43,15 @@ export const trainingJobHandlers = [
     return HttpResponse.json(
       resolveTrainingPollResponse(jobId, scenario.trainingScenario, pollCount, scenario.trainingPollsBeforeComplete),
     );
+  }),
+
+  // GET /finetune/reinforcement-jobs/:jobId/metrics — Training metrics
+  http.get(`${BASE}/finetune/reinforcement-jobs/:jobId/metrics`, async ({ params }) => {
+    const jobId = params.jobId as string;
+    const scenario = getScenario();
+    await delay(scenario.pollDelayMs);
+
+    return HttpResponse.json(makeReinforcementMetricsResponse(jobId, scenario.trainingScenario));
   }),
 
   // GET /finetune/reinforcement-jobs — List training jobs

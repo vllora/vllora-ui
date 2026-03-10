@@ -46,10 +46,19 @@ if [ -d "$DISTRI_DIR/.distri" ]; then
   rm -rf "$DISTRI_DIR/.distri"
 fi
 
-# --- Step 3: Start Distri server ---
-log "Starting Distri server on port $DISTRI_PORT..."
+# --- Step 3: Build Distri UI and start server ---
+log "Building Distri frontend..."
 cd "$DISTRI_DIR"
-cargo run --package distri-server-cli --features ui -- serve --port=$DISTRI_PORT > /tmp/distri-server.log 2>&1 &
+VITE_PREFIX=ui pnpm run build > /tmp/distri-ui-build.log 2>&1
+if [ $? -ne 0 ]; then
+  err "Frontend build failed. Check /tmp/distri-ui-build.log"
+  tail -20 /tmp/distri-ui-build.log
+  exit 1
+fi
+log "  Frontend build complete"
+
+log "Starting Distri server on port $DISTRI_PORT..."
+cargo run --package distri-server-cli --features "ui sqlite" -- serve --port=$DISTRI_PORT > /tmp/distri-server.log 2>&1 &
 DISTRI_PID=$!
 log "  Distri PID: $DISTRI_PID (logs: /tmp/distri-server.log)"
 

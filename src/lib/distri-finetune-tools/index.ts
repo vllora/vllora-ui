@@ -57,6 +57,8 @@ export type {
   DatasetStatsResult,
 } from './types';
 
+export type { GetTrainingMetricsResult } from './steps/get-training-metrics';
+
 export { workflowToContext, workflowToStatusResult } from './types';
 
 // Re-export workflow DB types for convenience

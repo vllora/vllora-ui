@@ -14,6 +14,7 @@ import type {
   EvaluationResultResponse,
   RowEpochResult,
   DatasetUploadResponse,
+  EvaluatorVersionResponse,
 } from '@/services/finetune-api';
 import type { EvalScenarioKey } from './scenario-registry';
 
@@ -176,4 +177,59 @@ export function resolveEvalPollResponse(
 
   // Completed with scenario-appropriate results (using real row IDs)
   return makeCompletedEvalResponse(evalScenario, runId, totalRows, rowIds);
+}
+
+// =============================================================================
+// Evaluator Version History
+// =============================================================================
+
+const MOCK_EVALUATOR_VERSIONS: ReadonlyArray<Omit<EvaluatorVersionResponse, 'dataset_id'>> = [
+  {
+    id: 'ev-003',
+    version: 3,
+    config: { type: 'js', config: { script: 'return score >= 0.7 ? 1 : 0;' } },
+    diff: [
+      '--- v2',
+      '+++ v3',
+      '@@ -1,3 +1,3 @@',
+      ' function evaluate(output, expected) {',
+      '-  return score >= 0.5 ? 1 : 0;',
+      '+  return score >= 0.7 ? 1 : 0;',
+      ' }',
+    ].join('\n'),
+    created_at: '2026-03-10T12:00:00Z',
+  },
+  {
+    id: 'ev-002',
+    version: 2,
+    config: { type: 'js', config: { script: 'return score >= 0.5 ? 1 : 0;' } },
+    diff: [
+      '--- v1',
+      '+++ v2',
+      '@@ -1,3 +1,5 @@',
+      ' function evaluate(output, expected) {',
+      '-  return output === expected ? 1 : 0;',
+      '+  const score = similarity(output, expected);',
+      '+  return score >= 0.5 ? 1 : 0;',
+      ' }',
+    ].join('\n'),
+    created_at: '2026-03-09T15:30:00Z',
+  },
+  {
+    id: 'ev-001',
+    version: 1,
+    config: { type: 'js', config: { script: 'return output === expected ? 1 : 0;' } },
+    diff: null,
+    created_at: '2026-03-08T10:00:00Z',
+  },
+];
+
+/**
+ * Build mock evaluator version history for a dataset.
+ * Returns versions sorted newest-first (matching real API behavior).
+ */
+export function makeEvaluatorVersionsResponse(
+  datasetId: string,
+): EvaluatorVersionResponse[] {
+  return MOCK_EVALUATOR_VERSIONS.map((v) => ({ ...v, dataset_id: datasetId }));
 }

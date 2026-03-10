@@ -71,6 +71,84 @@ export interface CreateReinforcementJobRequest {
   inference_parameters?: ReinforcementInferenceParameters;
   chunk_size?: number;
   node_count?: number;
+  /** Evaluator version to use during training. If omitted, uses the latest version. */
+  evaluator_version?: number;
+}
+
+// ============================================================================
+// Evaluator Version Types
+// ============================================================================
+
+export interface EvaluatorVersionResponse {
+  id: string;
+  dataset_id: string;
+  version: number;
+  config: {
+    type: 'js' | 'llm_as_judge';
+    config: Record<string, unknown>;
+  };
+  /** Git-style diff between this version and the previous one */
+  diff: string | null;
+  created_at: string;
+}
+
+// ============================================================================
+// Reinforcement Training Metrics Types
+// ============================================================================
+
+/** A single point in the training metrics time series */
+export interface ReinforcementJobMetricPoint {
+  /** Raw metrics JSON blob from the training provider */
+  metrics: TrainingMetricsSnapshot;
+  created_at: string;
+}
+
+/** Response from GET /finetune/reinforcement-jobs/{id}/metrics */
+export interface ReinforcementJobMetricsResponse {
+  provider_job_id: string;
+  metrics: ReinforcementJobMetricPoint[];
+}
+
+/** Typed training metrics snapshot from GRPO/GSPO reinforcement fine-tuning */
+export interface TrainingMetricsSnapshot {
+  // Progress / Schedule
+  global_step?: number;
+  max_steps?: number;
+  epoch?: number;
+  learning_rate?: number;
+
+  // Reward Quality
+  reward?: number;
+  reward_std?: number;
+  frac_reward_zero_std?: number;
+  'rewards/vllora_reward_fn/mean'?: number;
+  'rewards/vllora_reward_fn/std'?: number;
+
+  // Optimization / Stability
+  loss?: number;
+  grad_norm?: number;
+  kl?: number;
+
+  // Clipping / PPO-style
+  'clip_ratio/low_mean'?: number;
+  'clip_ratio/low_min'?: number;
+  'clip_ratio/high_mean'?: number;
+  'clip_ratio/high_max'?: number;
+  'clip_ratio/region_mean'?: number;
+
+  // Sequence / Generation Behavior
+  num_tokens?: number;
+  completion_length?: number;
+  'completions/mean_length'?: number;
+  'completions/min_length'?: number;
+  'completions/max_length'?: number;
+  'completions/clipped_ratio'?: number;
+  'completions/mean_terminated_length'?: number;
+  'completions/min_terminated_length'?: number;
+  'completions/max_terminated_length'?: number;
+
+  // Allow additional unknown metrics
+  [key: string]: number | string | undefined;
 }
 
 // Finetune job status enum
@@ -567,6 +645,8 @@ export interface CreateFinetuneJobOptions {
   chunkSize?: number;
   /** Number of nodes for distributed training */
   nodeCount?: number;
+  /** Evaluator version to use during training. If omitted, uses the latest version. */
+  evaluatorVersion?: number;
 }
 
 /**
@@ -607,12 +687,15 @@ export async function createFinetuneJobFromUpload(
     inference_parameters: inferenceParameters,
   };
 
-  // Add optional distributed training parameters
+  // Add optional parameters
   if (options?.chunkSize !== undefined) {
     request.chunk_size = options.chunkSize;
   }
   if (options?.nodeCount !== undefined) {
     request.node_count = options.nodeCount;
+  }
+  if (options?.evaluatorVersion !== undefined) {
+    request.evaluator_version = options.evaluatorVersion;
   }
 
   const job = await createReinforcementJob(request);
@@ -839,4 +922,42 @@ export async function getDryRunAnalytics(
     body: JSON.stringify({ rows }),
   });
   return handleApiResponse<DryRunAnalyticsResponse>(response);
+}
+
+// ============================================================================
+// Evaluator Version API Functions
+// ============================================================================
+
+/**
+ * Get version history of the evaluator/grader for a dataset
+ * Returns all versions with configs and diffs between consecutive versions
+ * @param datasetId - The backend dataset ID
+ */
+export async function getEvaluatorVersions(
+  datasetId: string,
+): Promise<EvaluatorVersionResponse[]> {
+  const response = await apiClient(
+    `/finetune/datasets/${datasetId}/evaluator/versions`,
+    { method: "GET" },
+  );
+  return handleApiResponse<EvaluatorVersionResponse[]>(response);
+}
+
+// ============================================================================
+// Reinforcement Training Metrics API Functions
+// ============================================================================
+
+/**
+ * Get training metrics time series for a reinforcement fine-tuning job
+ * Returns raw GRPO/GSPO metrics (reward, KL, loss, grad_norm, completion stats)
+ * @param jobId - The finetune job ID
+ */
+export async function getReinforcementJobMetrics(
+  jobId: string,
+): Promise<ReinforcementJobMetricsResponse> {
+  const response = await apiClient(
+    `/finetune/reinforcement-jobs/${jobId}/metrics`,
+    { method: "GET" },
+  );
+  return handleApiResponse<ReinforcementJobMetricsResponse>(response);
 }
