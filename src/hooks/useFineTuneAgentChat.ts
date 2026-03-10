@@ -22,7 +22,7 @@ import { finetuneWorkflowService, FinetuneWorkflowState, getWorkflowByDataset, u
 import { getDatasetById, getRecordsByDatasetId } from '@/services/datasets-db';
 import { getDryRunJobsByDataset } from '@/services/dry-run-jobs-db';
 import { getIterationState } from '@/services/finetune-iteration-db';
-import { getReinforcementJobStatus, getFinetuneEvaluations } from '@/services/finetune-api';
+import { getReinforcementJobStatus, getFinetuneEvaluations, getEvaluatorVersions } from '@/services/finetune-api';
 import type { DryRunJob } from '@/types/dry-run-job';
 import type { IterationState } from '@/services/finetune-iteration-db';
 import type { TopicDryRunStats } from '@/types/dataset-types';
@@ -181,6 +181,12 @@ export interface CatchUpCardData {
     readonly description: string;
     readonly applied: boolean;
   }>;
+  /** Current evaluator version info (latest version from backend). */
+  readonly evaluatorVersion?: {
+    readonly version: number;
+    readonly totalVersions: number;
+    readonly createdAt: string;
+  };
 }
 
 /** Combined catch-up result: text for agent context + structured data for UI cards. */
@@ -202,14 +208,36 @@ async function buildCatchUpContext(datasetId: string): Promise<CatchUpResult> {
   const reasoning: CatchUpTopicReasoning[] = [];
   const proposedChanges: CatchUpCardData['proposedChanges'][number][] = [];
   let pendingDecision: CatchUpCardData['pendingDecision'];
+  let evaluatorVersion: CatchUpCardData['evaluatorVersion'];
 
   try {
     // Fetch all data sources in parallel
-    const [jobs, iterState, workflow] = await Promise.all([
+    const [jobs, iterState, workflow, dataset] = await Promise.all([
       getDryRunJobsByDataset(datasetId),
       getIterationState(datasetId),
       getWorkflowByDataset(datasetId),
+      getDatasetById(datasetId),
     ]);
+
+    // --- Fetch evaluator versions if backend dataset ID is available ---
+    if (dataset?.backendDatasetId) {
+      try {
+        const versions = await getEvaluatorVersions(dataset.backendDatasetId);
+        if (versions.length > 0) {
+          const latest = versions[0];
+          evaluatorVersion = {
+            version: latest.version,
+            totalVersions: versions.length,
+            createdAt: latest.created_at,
+          };
+          sections.push(
+            `CATCH_UP: Evaluator is at version ${latest.version} (${versions.length} total versions). Last updated ${latest.created_at}.`
+          );
+        }
+      } catch {
+        // Non-critical — evaluator versions may not exist yet
+      }
+    }
 
     // --- Build completed steps from workflow ---
     if (workflow) {
@@ -349,11 +377,12 @@ async function buildCatchUpContext(datasetId: string): Promise<CatchUpResult> {
   }
 
   const hasCards = completedJobs.length > 0 || failedJobs.length > 0
-    || pendingDecision != null || trainingJobs.length > 0 || completedSteps.length > 0;
+    || pendingDecision != null || trainingJobs.length > 0 || completedSteps.length > 0
+    || evaluatorVersion != null;
   return {
     text: sections.length > 0 ? sections.join('\n\n') : null,
     cards: hasCards
-      ? { completedJobs, failedJobs, pendingDecision, trainingJobs, completedSteps, reasoning, proposedChanges }
+      ? { completedJobs, failedJobs, pendingDecision, trainingJobs, completedSteps, reasoning, proposedChanges, evaluatorVersion }
       : null,
   };
 }

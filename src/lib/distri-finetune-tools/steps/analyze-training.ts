@@ -21,6 +21,8 @@ import type {
 import {
   getFinetuneEvaluations,
   getReinforcementJobStatus,
+  getReinforcementJobMetrics,
+  getEvaluatorVersions,
   listReinforcementJobs,
 } from '@/services/finetune-api';
 import type { FinetuneJob, RowEpochResults, EpochEvalResult } from '@/services/finetune-api';
@@ -533,6 +535,33 @@ export const analyzeTrainingHandler: ToolHandler = async (params) => {
     await updateOuterLoopState(datasetId, job.id, progressions);
     const evalBaseline = await lookupEvalBaseline(datasetId);
 
+    // 6b. Fetch evaluator version + reinforcement metrics (non-critical, parallel)
+    let evaluator_version: { version: number; created_at: string; has_diff: boolean } | undefined;
+    let reinforcementMetrics: { reward: number | null; kl: number | null; loss: number | null; clipped_ratio: number | null } | undefined;
+    try {
+      const dataset = await getDatasetById(datasetId);
+      const [evalVersions, metricsResp] = await Promise.all([
+        dataset?.backendDatasetId ? getEvaluatorVersions(dataset.backendDatasetId).catch(() => []) : Promise.resolve([]),
+        getReinforcementJobMetrics(job.provider_job_id).catch(() => ({ metrics: [] })),
+      ]);
+      if (evalVersions.length > 0) {
+        const latest = evalVersions[0];
+        evaluator_version = { version: latest.version, created_at: latest.created_at, has_diff: latest.diff != null };
+      }
+      const snapshots = metricsResp.metrics.map((m) => m.metrics);
+      if (snapshots.length > 0) {
+        const last = snapshots[snapshots.length - 1];
+        reinforcementMetrics = {
+          reward: typeof last.reward === 'number' ? last.reward : null,
+          kl: typeof last.kl === 'number' ? last.kl : null,
+          loss: typeof last.loss === 'number' ? last.loss : null,
+          clipped_ratio: typeof last['completions/clipped_ratio'] === 'number' ? last['completions/clipped_ratio'] : null,
+        };
+      }
+    } catch {
+      // Non-critical — proceed without enrichment
+    }
+
     // 7. Note if insufficient epochs for full analysis
     if (epochs.length < MIN_EPOCHS_FOR_ANALYSIS) {
       recommendations.unshift({
@@ -554,6 +583,8 @@ export const analyzeTrainingHandler: ToolHandler = async (params) => {
       recommendations,
       next_action: nextAction,
       eval_baseline: evalBaseline,
+      evaluator_version,
+      reinforcement_metrics: reinforcementMetrics,
     } satisfies AnalyzeTrainingResult;
   } catch (error) {
     return {

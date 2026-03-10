@@ -96,6 +96,9 @@ export function ReinforcementMetricsSection({
   }
 
   if (error && metrics.length === 0) {
+    // Hide empty state while job is still running — metrics aren't available yet
+    if (isLive) return null;
+
     return (
       <div className="flex flex-col items-center justify-center gap-2 py-8 text-zinc-500">
         <Activity className="h-5 w-5 opacity-40" />
@@ -124,6 +127,9 @@ export function ReinforcementMetricsSection({
       />
     );
   }
+
+  // Hide empty state while job is still running
+  if (isLive) return null;
 
   return (
     <div className="flex flex-col items-center justify-center gap-2 py-8 text-zinc-500">

@@ -381,7 +381,7 @@ function TrainingActionButtons({ nextAction }: { nextAction: string }) {
 // =============================================================================
 
 function TrainingCheckpointCard({ result }: { result: AnalyzeTrainingResult }) {
-  const { overall_progression, per_topic, total_epochs, recommendations, next_action, eval_baseline } = result;
+  const { overall_progression, per_topic, total_epochs, recommendations, next_action, eval_baseline, evaluator_version, reinforcement_metrics } = result;
 
   // Determine dominant pattern from per_topic
   const dominantPattern = per_topic && per_topic.length > 0
@@ -398,6 +398,36 @@ function TrainingCheckpointCard({ result }: { result: AnalyzeTrainingResult }) {
         </div>
         {dominantPattern && <PatternBadge pattern={dominantPattern} />}
       </div>
+
+      {/* Evaluator version context — only show for v2+ */}
+      {evaluator_version && evaluator_version.version > 1 && (
+        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+          <span className="px-1.5 py-0.5 rounded bg-muted font-mono font-medium">
+            Evaluator v{evaluator_version.version}
+          </span>
+          {evaluator_version.has_diff && (
+            <span className="text-amber-500/70">modified since baseline</span>
+          )}
+        </div>
+      )}
+
+      {/* Reinforcement metrics snapshot */}
+      {reinforcement_metrics && (
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+          {reinforcement_metrics.reward != null && (
+            <span>Reward: <span className="font-mono text-foreground">{reinforcement_metrics.reward.toFixed(3)}</span></span>
+          )}
+          {reinforcement_metrics.kl != null && (
+            <span>KL: <span className="font-mono text-foreground">{reinforcement_metrics.kl.toFixed(4)}</span></span>
+          )}
+          {reinforcement_metrics.loss != null && (
+            <span>Loss: <span className="font-mono text-foreground">{reinforcement_metrics.loss.toFixed(4)}</span></span>
+          )}
+          {reinforcement_metrics.clipped_ratio != null && (
+            <span>Clipped: <span className={`font-mono ${reinforcement_metrics.clipped_ratio > 0.3 ? 'text-amber-500' : 'text-foreground'}`}>{(reinforcement_metrics.clipped_ratio * 100).toFixed(1)}%</span></span>
+          )}
+        </div>
+      )}
 
       {/* Pipeline Journey — eval baseline → training (when available) */}
       {eval_baseline && overall_progression && (

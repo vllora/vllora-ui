@@ -33,7 +33,6 @@ import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { PlanConsumer } from "@/contexts/PlanContext";
 import { getDryRunJobsByDataset } from "@/services/dry-run-jobs-db";
-import type { DryRunJob } from "@/types/dry-run-job";
 import { getIterationState } from "@/services/finetune-iteration-db";
 import { useFineTuneAgentChat } from "@/hooks/useFineTuneAgentChat";
 import {
@@ -106,7 +105,6 @@ export function LucySidebar() {
   const [iterationNumber, setIterationNumber] = useState(0);
 
   // Active eval job tracking (for live progress card)
-  const [activeEvalJobId, setActiveEvalJobId] = useState<string | null>(null);
 
   // Persist pin state to localStorage
   const togglePin = useCallback(() => {
@@ -384,69 +382,7 @@ export function LucySidebar() {
     return () => { emitter.off('vllora_finetune_job_completed', handleTrainingCompleted); };
   }, [selectedDatasetId]);
 
-  // Track active eval jobs for live progress card (Scenario #6)
-  useEffect(() => {
-    if (!selectedDatasetId) {
-      setActiveEvalJobId(null);
-      return;
-    }
 
-    // Check for running jobs on mount
-    const checkActiveJobs = async () => {
-      try {
-        const jobs = await getDryRunJobsByDataset(selectedDatasetId);
-        const running = jobs.find((j) => j.status === 'running' || j.status === 'pending');
-        setActiveEvalJobId(running?.id ?? null);
-      } catch {
-        // Non-critical
-      }
-    };
-    checkActiveJobs();
-
-    // Listen for job updates to detect start/completion
-    const handleJobUpdate = ({ job }: { jobId: string; job: DryRunJob }) => {
-      if (job.datasetId !== selectedDatasetId) return;
-      if (job.status === 'running' || job.status === 'pending') {
-        setActiveEvalJobId(job.id);
-      } else {
-        setActiveEvalJobId((prev) => (prev === job.id ? null : prev));
-      }
-    };
-
-    const handleJobCompleted = () => { setActiveEvalJobId(null); };
-
-    emitter.on('vllora_dry_run_job_update', handleJobUpdate);
-    emitter.on('vllora_dry_run_job_completed', handleJobCompleted);
-    return () => {
-      emitter.off('vllora_dry_run_job_update', handleJobUpdate);
-      emitter.off('vllora_dry_run_job_completed', handleJobCompleted);
-    };
-  }, [selectedDatasetId]);
-
-  // Background transition reminder (Scenario #10)
-  // After 60s of an active eval job, gently suggest working on other datasets
-  const bgReminderSentRef = useRef(false);
-  useEffect(() => {
-    if (!activeEvalJobId) {
-      bgReminderSentRef.current = false;
-      return;
-    }
-
-    // Don't send reminder twice for the same job
-    if (bgReminderSentRef.current) return;
-
-    const timer = setTimeout(() => {
-      // Only send if job is still active
-      if (activeEvalJobId && !bgReminderSentRef.current) {
-        bgReminderSentRef.current = true;
-        emitter.emit('vllora_lucy_prompt', {
-          prompt: "This evaluation is taking a while — feel free to work on other datasets while you wait. I'll notify you when results are ready.",
-        });
-      }
-    }, 60_000);
-
-    return () => clearTimeout(timer);
-  }, [activeEvalJobId]);
 
   // Listen for external prompt triggers (e.g., "Generate for topic" button)
   // In dual-sidebar layout: just expand Lucy sidebar, no tab switching needed

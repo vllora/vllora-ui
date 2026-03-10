@@ -756,6 +756,17 @@ export function LucyCatchUpCard({ data }: LucyCatchUpCardProps) {
       </div>
       {/* ── Completed steps (green checkmarks) ── */}
       <CompletedStepsSection steps={data.completedSteps} />
+      {/* ── Evaluator version badge — only show for v2+ ── */}
+      {data.evaluatorVersion && data.evaluatorVersion.totalVersions > 1 && (
+        <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+          <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono font-medium">
+            Evaluator v{data.evaluatorVersion.version}
+          </span>
+          <span className="text-slate-500">
+            ({data.evaluatorVersion.totalVersions} version{data.evaluatorVersion.totalVersions !== 1 ? 's' : ''})
+          </span>
+        </div>
+      )}
       {/* ── Score matrix (eval + training jobs in one table) ── */}
       <ScoreMatrixSection evalJobs={data.completedJobs} trainingJobs={data.trainingJobs} />
 

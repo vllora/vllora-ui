@@ -19,11 +19,12 @@ import { ScoreStrip } from "./ScoreStrip";
 import { ResultsTable } from "./ResultsTable";
 import { RunningView } from "./RunningView";
 import { RunsSidebar } from "./RunsSidebar";
-import { flattenEvaluationResults } from "@/services/finetune-api";
+import { flattenEvaluationResults, getEvaluatorVersions } from "@/services/finetune-api";
 import { cn } from "@/lib/utils";
 import { emitter } from "@/utils/eventEmitter";
 import type { DryRunJob } from "@/types/dry-run-job";
 import { getJobTotalRows, getJobCompletedRows } from "@/types/dry-run-job";
+import { Code2 } from "lucide-react";
 
 interface DryRunActivityViewProps {
   /** Dataset ID for navigation (click record ID → switch to Records tab) */
@@ -79,6 +80,35 @@ function getScoreInsight(stats: { mean: number; std: number; min: number; max: n
     return `Scores range from ${min.toFixed(2)} to ${max.toFixed(2)} with moderate spread — good differentiation across sample quality.`;
   }
   return `Average score is ${mean.toFixed(2)} with ${std < 0.15 ? "low" : "moderate"} variance across samples.`;
+}
+
+/** Compact evaluator version badge for eval job header */
+function EvaluatorVersionBadge({ backendDatasetId }: { backendDatasetId: string }) {
+  const [version, setVersion] = useState<{ version: number; total: number } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getEvaluatorVersions(backendDatasetId)
+      .then((versions) => {
+        if (!cancelled && versions.length > 0) {
+          setVersion({ version: versions[0].version, total: versions.length });
+        }
+      })
+      .catch(() => { /* non-critical */ });
+    return () => { cancelled = true; };
+  }, [backendDatasetId]);
+
+  if (!version || version.total <= 1) return null;
+
+  return (
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-800 text-[10px] font-mono text-zinc-400 border border-zinc-700/50">
+      <Code2 className="h-2.5 w-2.5" />
+      v{version.version}
+      {version.total > 1 && (
+        <span className="text-zinc-600">({version.total})</span>
+      )}
+    </span>
+  );
 }
 
 /** Inline detail panel for a selected job (left side of split) */
@@ -164,6 +194,9 @@ function JobDetail({ job, datasetId, onCancel, onRunAgain, onRefresh }: { job: D
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-medium animate-pulse">
                       Running
                     </span>
+                  )}
+                  {job.backendDatasetId && (
+                    <EvaluatorVersionBadge backendDatasetId={job.backendDatasetId} />
                   )}
                   {result && <VerdictBadge verdict={result.diagnosis.verdict} />}
                   {job.status === "failed" && !result && (

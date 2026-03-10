@@ -404,6 +404,12 @@ export interface AnalyzeEvaluationResult {
     rationale: string;
   }>;
   next_action?: 'iterate' | 'train' | 'escalate' | 'hard_stop';
+  /** Evaluator version used for this evaluation run. */
+  evaluator_version?: {
+    version: number;
+    created_at: string;
+    has_diff: boolean;
+  };
 }
 
 // =============================================================================
@@ -465,6 +471,19 @@ export interface AnalyzeTrainingResult {
   next_action?: TrainingNextAction;
   /** Pre-training eval baseline (from iteration history). Present when iteration history exists. */
   eval_baseline?: EvalBaseline;
+  /** Evaluator version used during the pre-training eval. */
+  evaluator_version?: {
+    version: number;
+    created_at: string;
+    has_diff: boolean;
+  };
+  /** Latest reinforcement training metrics snapshot. */
+  reinforcement_metrics?: {
+    reward: number | null;
+    kl: number | null;
+    loss: number | null;
+    clipped_ratio: number | null;
+  };
 }
 
 // =============================================================================

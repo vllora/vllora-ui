@@ -22,6 +22,7 @@ import { UsageGuideDialog } from "./UsageGuideSection";
 import { TrainingMetricsSection } from "../TrainingMetricsSection";
 import { ReinforcementMetricsSection } from "../ReinforcementMetricsSection";
 import { PerRowDetailsSection } from "../PerRowDetailsSection";
+import { EvaluatorVersionHistory } from "../EvaluatorVersionHistory";
 import { ErrorLogSection } from "../ErrorLogSection";
 import {
   formatFinetuneJobDate,
@@ -277,6 +278,11 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
             jobId={job.id}
             isLive={job.status === "running"}
           />
+
+          {/* ── Evaluator Version History ── */}
+          {job.dataset_id && (
+            <EvaluatorVersionHistory backendDatasetId={job.dataset_id} />
+          )}
 
           {/* ── Per-Row Details (themed to match panel) ── */}
           {job.dataset_id && evalResults && evalResults.results.length > 0 && (

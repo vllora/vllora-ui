@@ -188,7 +188,7 @@ function EvalActionButtons({ nextAction }: { nextAction: string }) {
 // =============================================================================
 
 function EvalCheckpointCard({ result }: { result: AnalyzeEvaluationResult }) {
-  const { health, per_topic, grader_health, iteration_comparison, escalation, recommendations, next_action, iteration_number } = result;
+  const { health, per_topic, grader_health, iteration_comparison, escalation, recommendations, next_action, iteration_number, evaluator_version } = result;
 
   return (
     <div className="rounded-lg border border-border bg-card p-3 space-y-2.5">
@@ -241,6 +241,18 @@ function EvalCheckpointCard({ result }: { result: AnalyzeEvaluationResult }) {
           <AlertTriangle className="w-3 h-3 shrink-0" />
           <span>Grader {grader_health.verdict === 'problematic' ? 'issues detected' : 'needs attention'}</span>
           {grader_health.binary_scoring && <span className="text-[10px]">(binary scores)</span>}
+        </div>
+      )}
+
+      {/* Evaluator version context — only show for v2+ (v1 is the initial version, not useful) */}
+      {evaluator_version && evaluator_version.version > 1 && (
+        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+          <span className="px-1.5 py-0.5 rounded bg-muted font-mono font-medium">
+            Evaluator v{evaluator_version.version}
+          </span>
+          {evaluator_version.has_diff && (
+            <span className="text-amber-500/70">modified</span>
+          )}
         </div>
       )}
 

@@ -12,7 +12,6 @@ import {
   ChevronRight,
   Clock,
   Code2,
-  FileCode,
   Loader2,
   RefreshCw,
 } from "lucide-react";
@@ -79,6 +78,7 @@ export function EvaluatorVersionHistory({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedVersion, setExpandedVersion] = useState<number | null>(null);
+  const [isSectionExpanded, setIsSectionExpanded] = useState(false);
 
   const fetchVersions = useCallback(async () => {
     setIsLoading(true);
@@ -121,51 +121,61 @@ export function EvaluatorVersionHistory({
     );
   }
 
-  if (versions.length === 0) {
-    return (
-      <div className="flex items-center gap-2 py-4 text-zinc-500 text-xs">
-        <FileCode className="h-4 w-4 opacity-40" />
-        No evaluator versions yet
-      </div>
-    );
+  if (versions.length <= 1) {
+    return null;
   }
 
   return (
     <div className={cn("rounded-lg bg-[#111] overflow-hidden", className)}>
-      <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setIsSectionExpanded((prev) => !prev)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setIsSectionExpanded((prev) => !prev); }}
+        className="w-full px-4 py-3 border-b border-white/5 flex items-center justify-between hover:bg-white/5 transition-colors cursor-pointer"
+      >
         <div className="flex items-center gap-2">
+          {isSectionExpanded ? (
+            <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5 text-slate-500" />
+          )}
           <Code2 className="h-4 w-4 text-slate-400" />
           <span className="text-xs font-medium text-slate-300">
             Evaluator Versions ({versions.length})
           </span>
         </div>
         <button
-          onClick={fetchVersions}
+          onClick={(e) => { e.stopPropagation(); fetchVersions(); }}
           className="p-1 text-slate-500 hover:text-slate-300 transition-colors rounded hover:bg-white/5"
         >
           <RefreshCw className="h-3 w-3" />
         </button>
       </div>
 
-      <div className="divide-y divide-white/5 max-h-[400px] overflow-y-auto">
+      {isSectionExpanded && <div className="divide-y divide-white/5 max-h-[300px] overflow-y-auto">
         {versions.map((version) => {
           const isExpanded = expandedVersion === version.version;
           const isSelected = selectedVersion === version.version;
           const isLatest = version.version === versions[0]?.version;
+          // Don't show diff for v1 (initial version) — it's just the full file as additions
+          const hasMeaningfulDiff = version.diff != null && version.version > 1;
 
           return (
             <div key={version.id} className="group">
               <button
                 onClick={() => {
-                  setExpandedVersion(isExpanded ? null : version.version);
+                  if (hasMeaningfulDiff) {
+                    setExpandedVersion(isExpanded ? null : version.version);
+                  }
                   onVersionSelect?.(version.version);
                 }}
                 className={cn(
-                  "w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/5 transition-colors",
+                  "w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-white/5 transition-colors",
                   isSelected && "bg-emerald-500/5 border-l-2 border-emerald-500"
                 )}
               >
-                {version.diff ? (
+                {hasMeaningfulDiff ? (
                   isExpanded ? (
                     <ChevronDown className="h-3.5 w-3.5 text-slate-500 shrink-0" />
                   ) : (
@@ -197,15 +207,15 @@ export function EvaluatorVersionHistory({
                 </div>
               </button>
 
-              {isExpanded && version.diff && (
+              {isExpanded && hasMeaningfulDiff && (
                 <div className="px-4 pb-3">
-                  <DiffView diff={version.diff} />
+                  <DiffView diff={version.diff!} />
                 </div>
               )}
             </div>
           );
         })}
-      </div>
+      </div>}
     </div>
   );
 }

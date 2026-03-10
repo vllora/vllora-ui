@@ -13,6 +13,8 @@ import type { ToolHandler } from '../types';
 import { getEvaluationDetailsHandler } from './get-evaluation-details';
 import { getIterationHistoryHandler, logIterationHandler } from './iteration-history';
 import { getWorkflowByDataset } from '@/services/finetune-workflow-db';
+import { getEvaluatorVersions } from '@/services/finetune-api';
+import { getDatasetById } from '@/services/datasets-db';
 
 // =============================================================================
 // Constants (from rft-decision-tree.md Section 2)
@@ -655,6 +657,25 @@ export const analyzeEvaluationHandler: ToolHandler = async (params) => {
       }
     }
 
+    // 9b. Fetch evaluator version context (non-critical)
+    let evaluator_version: { version: number; created_at: string; has_diff: boolean } | undefined;
+    try {
+      const dataset = await getDatasetById(dataset_id);
+      if (dataset?.backendDatasetId) {
+        const versions = await getEvaluatorVersions(dataset.backendDatasetId);
+        if (versions.length > 0) {
+          const latest = versions[0];
+          evaluator_version = {
+            version: latest.version,
+            created_at: latest.created_at,
+            has_diff: latest.diff != null,
+          };
+        }
+      }
+    } catch {
+      // Non-critical — evaluator versions may not exist yet
+    }
+
     // 10. Auto-log this iteration so future calls have history for comparison.
     //     Fire-and-forget — logging failure should not break analysis results.
     const iterationNumber = history.length + 1;
@@ -685,6 +706,7 @@ export const analyzeEvaluationHandler: ToolHandler = async (params) => {
       ...(escalation ? { escalation } : {}),
       recommendations,
       next_action: nextAction,
+      evaluator_version,
     };
   } catch (error) {
     return {
