@@ -9,6 +9,7 @@
 import type { DistriFnTool } from '@distri/core';
 import * as datasetsDB from '@/services/datasets-db';
 import * as workflowDB from '@/services/finetune-workflow-db';
+import * as knowledgeDB from '@/services/knowledge-sources-db';
 import { countLeafTopics } from './helpers';
 import type { ToolHandler } from '../types';
 import type { DatasetStats, SanitizationStats, DatasetRecord } from '@/types/dataset-types';
@@ -80,6 +81,13 @@ export interface DatasetState {
     has_job: boolean;
     job_id: string | null;
     status: string | null;
+  };
+
+  // Knowledge sources
+  knowledge_sources: {
+    total_count: number;
+    ready_count: number;
+    processing_count: number;
   };
 
   // Plan execution state (tells the agent whether an existing plan exists)
@@ -192,11 +200,12 @@ export const getDatasetStateHandler: ToolHandler = async (params) => {
       return { success: false, error: `Dataset ${dataset_id} not found. It may still be initializing — try again in a moment.` };
     }
 
-    // Fetch records, workflow, and plan state in parallel
-    const [records, workflow, storedPlan] = await Promise.all([
+    // Fetch records, workflow, plan state, and knowledge sources in parallel
+    const [records, workflow, storedPlan, knowledgeSources] = await Promise.all([
       datasetsDB.getRecordsByDatasetId(dataset_id),
       workflowDB.getWorkflowByDataset(dataset_id),
       getStoredPlan(dataset_id).catch(() => null),
+      knowledgeDB.getKnowledgeSourcesByDataset(dataset_id).catch(() => [] as Awaited<ReturnType<typeof knowledgeDB.getKnowledgeSourcesByDataset>>),
     ]);
 
     // Compute stats (includes sanitization)
@@ -237,6 +246,13 @@ export const getDatasetStateHandler: ToolHandler = async (params) => {
         validation_rate: stats.sanitization?.validationRate ?? 0,
         errors_by_type: stats.sanitization?.errorsByType ?? {},
         recommendations: stats.sanitization?.recommendations ?? [],
+      },
+
+      // Knowledge sources
+      knowledge_sources: {
+        total_count: knowledgeSources.length,
+        ready_count: knowledgeSources.filter(s => s.status === 'ready').length,
+        processing_count: knowledgeSources.filter(s => s.status === 'processing').length,
       },
 
       // Pipeline status
@@ -309,6 +325,7 @@ Returns:
 - records: total/generated/original counts, messages, uncategorized
 - topics: configured? leaf count, top-level names, distribution
 - sanitization: valid/invalid/duplicate counts, validation rate, errors, recommendations
+- knowledge_sources: total_count, ready_count, processing_count
 - grader: evaluator configured?
 - upload: uploaded to backend?
 - dry_run: completed? verdict?
