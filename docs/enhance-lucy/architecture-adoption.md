@@ -316,11 +316,9 @@ Custom tool renderers registered in `LucyToolRenderer.tsx` render structured car
 | `LucyAnalyzeTrainingRenderer` | `analyze_training` | Pattern badge, epoch table with per-topic scores, pipeline journey (eval→training), action buttons |
 | `LucyAutoCountdownCard` | (child of eval renderer) | 8s countdown when eval healthy + train recommended, auto-sends proceed prompt |
 | `LucyEvalProgressCard` | (standalone) | Live record progress (67/132), partial mean score, elapsed time |
-| `LucyCompletedJobCard` | (catch-up card) | Welcome Back success card with job summary + action buttons |
-| `LucyFailedJobCard` | (catch-up card) | Failed job card with error + retry/diagnose buttons |
-| `LucyPendingDecisionCard` | (catch-up card) | Resumption card for pending iteration proposals |
+| `LucyCatchUpCard` | (catch-up card) | Unified catch-up card matching mockup — completed steps (green checkmarks via `isStepDone()` with `currentStep` fallback), Score Matrix table (unified eval + training rows), Cross-Model Insight (blue callout when 2+ scored entries), Per-Topic grouped list (each topic is a header with model rows underneath, eval blue / ft purple, color-coded scores with reasoning tooltips), proposed changes, training error box (only for failed training), contextual action buttons. Replaces separate `LucyCompletedJobCard`, `LucyFailedJobCard`, `LucyPendingDecisionCard`, `LucyTrainingJobCard` |
 
-**Catch-up card positioning:** Cards are shown as a landing view on fresh threads — when a user reopens a dataset with unreviewed jobs or pending proposals, catch-up cards render before any messages (no insertion-point logic needed since threads are always fresh).
+**Catch-up card positioning:** A single unified `LucyCatchUpCard` is shown as a landing view on fresh threads — when a user reopens a dataset with unreviewed jobs or pending proposals, the card renders before any messages (no insertion-point logic needed since threads are always fresh). The card renders sections in mockup order: Header + Health Badge → Completed Steps (green checkmarks — `isStepDone()` checks `stepStatus` then falls back to `currentStep` pipeline position) → Score Matrix table (unified eval + training rows in dark DataBox) → Cross-Model Insight (blue callout, only when 2+ scored entries across eval + training) → Per-Topic grouped list (each topic is a header, model rows underneath — eval in blue, fine-tuned in purple, scores color-coded with reasoning tooltips on hover) → Iteration delta text → Proposed Changes (numbered list) → Training error box (only for failed training — completed/running training is in Score Matrix) → Contextual action buttons. The `buildCatchUpContext()` function cross-references stale `workflow.training.status` in IndexedDB against the finetune API (`getReinforcementJobStatus()`) and fixes stale records automatically. For completed training, `fetchTrainingEpochScores()` uses dual topic lookup: primary by `row.row.id` (matches real backend data), fallback by `row_index` position (handles mock/test data with synthetic IDs).
 
 **Score format:** All Lucy card components use raw decimal format (`0.45`, `+0.07`) matching the mockup designs. No percentage formatting.
 
@@ -380,7 +378,7 @@ Phase 4: Polish (UI + Stall Detection) — ✅ DONE
   │   ├── Eval card: per-topic bars, vs Iteration deltas, reasoning, proposed changes, action buttons
   │   ├── Training card: epoch table, pipeline journey, pattern badges, action buttons
   │   ├── Auto-continue countdown (LucyAutoCountdownCard) for healthy evals
-  │   ├── Catch-up cards (LucyCompletedJobCard, LucyFailedJobCard, LucyPendingDecisionCard)
+  │   ├── Unified catch-up card (LucyCatchUpCard — replaces 4 separate cards)
   │   ├── Live eval progress (LucyEvalProgressCard) with record counts + partial results
   │   └── All scores use raw decimal format (0.45, +0.07) matching mockups
   ├── 4B: Notification badge on sidebar ✅ DONE (amber dot, event-driven)

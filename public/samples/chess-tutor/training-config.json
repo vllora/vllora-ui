@@ -1,5 +1,5 @@
 {
-  "base_model": "unsloth/Qwen3-4B",
+  "base_model": "unsloth/Qwen3.5-4B",
   "training_config": {
     "learning_rate": 0.00001,
     "lora_rank": 8,

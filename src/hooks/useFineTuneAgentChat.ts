@@ -18,12 +18,14 @@ import { finetuneTools, workflowToContext } from '@/lib/distri-finetune-tools';
 import type { PlanStatus } from '@/lib/distri-finetune-tools/steps/proposed-plan-store';
 import type { ExecutionProgress } from '@/lib/distri-finetune-tools/steps/execute-plan';
 import { stockfishTools, isChessDataset } from '@/lib/distri-finetune-tools/steps';
-import { finetuneWorkflowService, FinetuneWorkflowState } from '@/services/finetune-workflow-db';
-import { getDatasetById } from '@/services/datasets-db';
+import { finetuneWorkflowService, FinetuneWorkflowState, getWorkflowByDataset, updateStepData, type FinetuneStep } from '@/services/finetune-workflow-db';
+import { getDatasetById, getRecordsByDatasetId } from '@/services/datasets-db';
 import { getDryRunJobsByDataset } from '@/services/dry-run-jobs-db';
 import { getIterationState } from '@/services/finetune-iteration-db';
+import { getReinforcementJobStatus, getFinetuneEvaluations } from '@/services/finetune-api';
 import type { DryRunJob } from '@/types/dry-run-job';
 import type { IterationState } from '@/services/finetune-iteration-db';
+import type { TopicDryRunStats } from '@/types/dataset-types';
 import { emitter } from '@/utils/eventEmitter';
 
 // Type for chat messages returned by useChatMessages
@@ -84,6 +86,63 @@ function buildContextMessage(
 // Catch-Up Context Builder
 // ============================================================================
 
+/** Per-topic score entry for catch-up cards. */
+export interface CatchUpTopicScore {
+  readonly topic: string;
+  readonly mean: number;
+  readonly count: number;
+  readonly status: string;
+}
+
+/** Iteration delta for catch-up cards (current vs previous). */
+export interface CatchUpIterationDelta {
+  readonly prevMean: number;
+  readonly currentMean: number;
+  readonly delta: number;
+  readonly perTopic: ReadonlyArray<{
+    readonly topic: string;
+    readonly prev: number;
+    readonly current: number;
+    readonly delta: number;
+  }>;
+}
+
+/** Completed training job info for catch-up cards. */
+export interface CatchUpTrainingJob {
+  readonly jobId: string;
+  readonly baseModel: string;
+  readonly fineTunedModel?: string;
+  readonly status: 'completed' | 'failed' | 'running' | 'pending' | 'queued';
+  readonly startedAt?: number;
+  readonly completedAt?: number;
+  readonly epochs?: number;
+  readonly totalRows?: number;
+  readonly metrics?: {
+    readonly trainReward: number;
+    readonly validReward: number;
+    readonly loss: number;
+    readonly currentEpoch: number;
+    readonly totalEpochs: number;
+  };
+  /** Per-topic scores from the last training epoch (for catch-up card per-topic view) */
+  readonly perTopic?: ReadonlyArray<CatchUpTopicScore>;
+  readonly errorMessage?: string;
+}
+
+/** Step completion info for catch-up cards. */
+export interface CatchUpCompletedStep {
+  readonly step: string;
+  readonly label: string;
+}
+
+/** Per-topic reasoning for catch-up cards (derived from scores). */
+export interface CatchUpTopicReasoning {
+  readonly topic: string;
+  readonly score: number;
+  readonly classification: 'failing' | 'weak' | 'moderate' | 'strong';
+  readonly insight: string;
+}
+
 /** Structured catch-up card data for rendering rich cards in the sidebar. */
 export interface CatchUpCardData {
   readonly completedJobs: ReadonlyArray<{
@@ -92,6 +151,10 @@ export interface CatchUpCardData {
     readonly completedAt?: number;
     readonly verdict?: string;
     readonly totalRows?: number;
+    readonly perTopic?: ReadonlyArray<CatchUpTopicScore>;
+    readonly iterationDelta?: CatchUpIterationDelta;
+    readonly iterationNumber?: number;
+    readonly rolloutModel?: string;
   }>;
   readonly failedJobs: ReadonlyArray<{
     readonly jobId: string;
@@ -107,6 +170,17 @@ export interface CatchUpCardData {
     }>;
     readonly lastScore?: number;
   };
+  readonly trainingJobs: ReadonlyArray<CatchUpTrainingJob>;
+  /** Completed pipeline steps for progress display. */
+  readonly completedSteps: ReadonlyArray<CatchUpCompletedStep>;
+  /** Per-topic reasoning chain (derived from score analysis). */
+  readonly reasoning: ReadonlyArray<CatchUpTopicReasoning>;
+  /** Proposed changes from iteration state (even when not in awaiting_user phase). */
+  readonly proposedChanges: ReadonlyArray<{
+    readonly lever: string;
+    readonly description: string;
+    readonly applied: boolean;
+  }>;
 }
 
 /** Combined catch-up result: text for agent context + structured data for UI cards. */
@@ -123,11 +197,26 @@ async function buildCatchUpContext(datasetId: string): Promise<CatchUpResult> {
   const sections: string[] = [];
   const completedJobs: CatchUpCardData['completedJobs'][number][] = [];
   const failedJobs: CatchUpCardData['failedJobs'][number][] = [];
+  const trainingJobs: CatchUpTrainingJob[] = [];
+  const completedSteps: CatchUpCompletedStep[] = [];
+  const reasoning: CatchUpTopicReasoning[] = [];
+  const proposedChanges: CatchUpCardData['proposedChanges'][number][] = [];
   let pendingDecision: CatchUpCardData['pendingDecision'];
 
   try {
-    // Check for unreviewed dry run jobs
-    const jobs = await getDryRunJobsByDataset(datasetId);
+    // Fetch all data sources in parallel
+    const [jobs, iterState, workflow] = await Promise.all([
+      getDryRunJobsByDataset(datasetId),
+      getIterationState(datasetId),
+      getWorkflowByDataset(datasetId),
+    ]);
+
+    // --- Build completed steps from workflow ---
+    if (workflow) {
+      buildCompletedSteps(workflow, completedSteps);
+    }
+
+    // --- Completed eval jobs (with per-topic breakdown + iteration delta) ---
     const unreviewedCompleted = jobs.filter(
       (j: DryRunJob) => j.status === 'completed' && !j.reviewedByAgent
     );
@@ -138,12 +227,36 @@ async function buildCatchUpContext(datasetId: string): Promise<CatchUpResult> {
     if (unreviewedCompleted.length > 0) {
       for (const j of unreviewedCompleted) {
         const avgScore = j.pollingSnapshot?.summary?.average_score;
+        const byTopic = j.result?.byTopic;
+
+        // Build per-topic scores from DryRunStats
+        const perTopic: CatchUpTopicScore[] | undefined = byTopic
+          ? Object.entries(byTopic).map(([topic, stats]: [string, TopicDryRunStats]) => ({
+              topic,
+              mean: stats.mean,
+              count: stats.count,
+              status: stats.status,
+            }))
+          : undefined;
+
+        // Build per-topic reasoning from scores
+        if (perTopic) {
+          buildTopicReasoning(perTopic, reasoning);
+        }
+
+        // Build iteration delta from history
+        const iterationDelta = buildIterationDelta(iterState, j);
+
         completedJobs.push({
           jobId: j.id,
           averageScore: avgScore ?? undefined,
           completedAt: j.completedAt ?? undefined,
           verdict: undefined,
           totalRows: j.pollingSnapshot?.total_rows ?? undefined,
+          perTopic,
+          iterationDelta,
+          iterationNumber: iterState?.iterationNumber ?? undefined,
+          rolloutModel: j.rolloutModel ?? undefined,
         });
       }
       const jobSummaries = unreviewedCompleted.map((j: DryRunJob) => {
@@ -156,6 +269,7 @@ async function buildCatchUpContext(datasetId: string): Promise<CatchUpResult> {
       );
     }
 
+    // --- Failed eval jobs ---
     if (unreviewedFailed.length > 0) {
       for (const j of unreviewedFailed) {
         failedJobs.push({
@@ -173,8 +287,26 @@ async function buildCatchUpContext(datasetId: string): Promise<CatchUpResult> {
       );
     }
 
-    // Check for pending iteration proposals
-    const iterState: IterationState | null = await getIterationState(datasetId);
+    // --- Training job status from workflow state (with API freshness check) ---
+    if (workflow?.training) {
+      const resolved = await resolveTrainingStatus(workflow);
+      trainingJobs.push(resolved);
+      if (resolved.status === 'completed') {
+        sections.push(
+          `CATCH_UP: Training job completed. Model: ${resolved.fineTunedModel ?? resolved.baseModel}. Check if user wants post-training eval or deployment.`
+        );
+      } else if (resolved.status === 'failed') {
+        sections.push(
+          `CATCH_UP: Training job failed (job ${resolved.jobId}). Present the error and suggest recovery options.`
+        );
+      } else if (resolved.status === 'running') {
+        sections.push(
+          `CATCH_UP: Training job is still running (job ${resolved.jobId}).`
+        );
+      }
+    }
+
+    // --- Pending iteration proposals ---
     if (iterState?.phase === 'awaiting_user') {
       const changes = iterState.innerLoop.proposedChanges ?? [];
       pendingDecision = {
@@ -193,15 +325,324 @@ async function buildCatchUpContext(datasetId: string): Promise<CatchUpResult> {
         `CATCH_UP: Iteration ${iterState.iterationNumber} has pending proposed changes (user hasn't responded yet):\n${changesSummary}\nRe-present these proposals to the user.`
       );
     }
+
+    // --- Proposed changes from iteration state (even if not awaiting_user) ---
+    const allChanges = iterState?.innerLoop.proposedChanges ?? [];
+    for (const c of allChanges) {
+      proposedChanges.push({ lever: c.lever, description: c.description, applied: c.applied });
+    }
   } catch (error) {
     // Non-critical — don't block chat initialization
     console.error('[buildCatchUpContext] Error:', error);
   }
 
-  const hasCards = completedJobs.length > 0 || failedJobs.length > 0 || pendingDecision != null;
+  const hasCards = completedJobs.length > 0 || failedJobs.length > 0
+    || pendingDecision != null || trainingJobs.length > 0 || completedSteps.length > 0;
   return {
     text: sections.length > 0 ? sections.join('\n\n') : null,
-    cards: hasCards ? { completedJobs, failedJobs, pendingDecision } : null,
+    cards: hasCards
+      ? { completedJobs, failedJobs, pendingDecision, trainingJobs, completedSteps, reasoning, proposedChanges }
+      : null,
+  };
+}
+
+// ============================================================================
+// Catch-Up Helpers
+// ============================================================================
+
+/**
+ * Pipeline step ordering used to infer which steps are completed.
+ * If currentStep is at position N, all steps before N are done.
+ */
+const STEP_ORDER: readonly FinetuneStep[] = [
+  'not_started',
+  'topics_config',
+  'categorize',
+  'coverage_generation',
+  'grader_config',
+  'dry_run',
+  'skill_packaging',
+  'training',
+  'deployment',
+  'completed',
+] as const;
+
+/** Check if a step is completed via stepStatus OR is before currentStep in the pipeline. */
+function isStepDone(
+  step: FinetuneStep,
+  workflow: FinetuneWorkflowState,
+): boolean {
+  if (workflow.stepStatus[step] === 'completed') return true;
+  // Fallback: if currentStep is past this step, treat it as done
+  const stepIdx = STEP_ORDER.indexOf(step);
+  const currentIdx = STEP_ORDER.indexOf(workflow.currentStep);
+  return stepIdx >= 0 && currentIdx > stepIdx;
+}
+
+/** Build completed pipeline steps from workflow state + currentStep inference. */
+function buildCompletedSteps(
+  workflow: FinetuneWorkflowState,
+  out: CatchUpCompletedStep[],
+): void {
+  if (isStepDone('topics_config', workflow)) {
+    const topicInfo = workflow.topicsConfig
+      ? ` (${workflow.topicsConfig.topicCount} topics)`
+      : '';
+    out.push({ step: 'topics', label: `Topics configured${topicInfo}` });
+  }
+  if (isStepDone('categorize', workflow)) {
+    const catInfo = workflow.categorization
+      ? `${workflow.categorization.assignedCount} records categorized`
+      : 'Records categorized';
+    out.push({ step: 'categorize', label: catInfo });
+  }
+  if (isStepDone('coverage_generation', workflow)) {
+    const genInfo = workflow.coverageGeneration
+      ? `${workflow.coverageGeneration.syntheticCount} records generated`
+      : 'Records generated';
+    out.push({ step: 'generate', label: genInfo });
+  }
+  if (isStepDone('grader_config', workflow)) {
+    out.push({ step: 'grader', label: 'Grader configured' });
+  }
+  if (isStepDone('dry_run', workflow)) {
+    const evalInfo = workflow.dryRun
+      ? `Evaluation completed (mean: ${workflow.dryRun.mean.toFixed(2)})`
+      : 'Evaluation completed';
+    out.push({ step: 'evaluation', label: evalInfo });
+  }
+  if (isStepDone('training', workflow)) {
+    out.push({ step: 'training', label: 'Training completed' });
+  }
+}
+
+/**
+ * Derive per-topic reasoning from score classifications.
+ * Thresholds aligned with mockup color coding:
+ *   failing  < 0.3  (red)    — critically low
+ *   weak     < 0.5  (red)    — needs work
+ *   moderate < 0.65 (amber)  — room for improvement
+ *   strong   ≥ 0.65 (green)  — good performance
+ */
+function buildTopicReasoning(
+  topics: ReadonlyArray<CatchUpTopicScore>,
+  out: CatchUpTopicReasoning[],
+): void {
+  for (const t of topics) {
+    let classification: CatchUpTopicReasoning['classification'];
+    let insight: string;
+
+    if (t.mean < 0.3) {
+      classification = 'failing';
+      insight = `Score ${t.mean.toFixed(2)} is critically low — check grader reasons, prompts may be off-topic or too vague`;
+    } else if (t.mean < 0.5) {
+      classification = 'weak';
+      insight = `Score ${t.mean.toFixed(2)} is below target — needs more examples or targeted prompt fixes`;
+    } else if (t.mean < 0.65) {
+      classification = 'moderate';
+      insight = `Score ${t.mean.toFixed(2)} is moderate — room for improvement with refined examples`;
+    } else {
+      classification = 'strong';
+      insight = `Score ${t.mean.toFixed(2)} — good performance, no changes needed`;
+    }
+
+    out.push({ topic: t.topic, score: t.mean, classification, insight });
+  }
+}
+
+/**
+ * Resolve training job status, fixing stale workflow data by checking the API.
+ * If the workflow says 'running' but the API says 'succeeded', updates IndexedDB.
+ */
+async function resolveTrainingStatus(
+  workflow: FinetuneWorkflowState,
+): Promise<CatchUpTrainingJob> {
+  const t = workflow.training!;
+  let status = t.status;
+  let fineTunedModel = t.modelId ?? undefined;
+  let completedAt: number | undefined = status === 'completed' ? workflow.updatedAt : undefined;
+  let errorMessage: string | undefined = status === 'failed' ? 'Training job failed' : undefined;
+
+  // If workflow says running, verify against the API (handles stale IndexedDB)
+  if (status === 'running' || status === 'pending' || status === 'queued') {
+    try {
+      const freshJob = await getReinforcementJobStatus(t.jobId);
+      if (freshJob.status === 'succeeded') {
+        status = 'completed';
+        fineTunedModel = freshJob.fine_tuned_model ?? fineTunedModel;
+        completedAt = freshJob.completed_at ? new Date(freshJob.completed_at).getTime() : Date.now();
+        // Fix stale workflow in IndexedDB so future loads are correct
+        await updateStepData(workflow.id, 'training', {
+          ...t,
+          status: 'completed',
+          modelId: freshJob.fine_tuned_model ?? t.modelId,
+        });
+        emitter.emit('vllora_workflow_updated', { datasetId: workflow.datasetId });
+      } else if (freshJob.status === 'failed') {
+        status = 'failed';
+        errorMessage = freshJob.error_message ?? 'Training job failed';
+        await updateStepData(workflow.id, 'training', { ...t, status: 'failed' });
+        emitter.emit('vllora_workflow_updated', { datasetId: workflow.datasetId });
+      }
+    } catch {
+      // API unavailable — keep stale status (non-critical)
+    }
+  }
+
+  // For completed training, fetch last-epoch scores (overall + per-topic)
+  let metrics = t.metrics ?? undefined;
+  let perTopic: CatchUpTopicScore[] | undefined;
+  if (status === 'completed' && !metrics) {
+    const trainingScores = await fetchTrainingEpochScores(workflow.datasetId, t.jobId);
+    metrics = trainingScores?.metrics;
+    perTopic = trainingScores?.perTopic;
+  }
+
+  return {
+    jobId: t.jobId,
+    baseModel: t.baseModel,
+    fineTunedModel,
+    status,
+    startedAt: t.startedAt,
+    completedAt,
+    epochs: metrics?.totalEpochs ?? t.metrics?.totalEpochs ?? undefined,
+    totalRows: workflow.coverageGeneration?.syntheticCount ?? undefined,
+    metrics,
+    perTopic,
+    errorMessage,
+  };
+}
+
+/** Result from fetching training evaluation data. */
+interface TrainingEpochScores {
+  readonly metrics: CatchUpTrainingJob['metrics'];
+  readonly perTopic: CatchUpTopicScore[];
+}
+
+/**
+ * Fetch last-epoch scores for a completed training job — overall mean + per-topic.
+ * Lightweight version of what analyze_training computes.
+ */
+async function fetchTrainingEpochScores(
+  datasetId: string,
+  providerJobId: string,
+): Promise<TrainingEpochScores | undefined> {
+  try {
+    const [dataset, records] = await Promise.all([
+      getDatasetById(datasetId),
+      getRecordsByDatasetId(datasetId),
+    ]);
+    if (!dataset?.backendDatasetId) return undefined;
+
+    const evalResponse = await getFinetuneEvaluations(dataset.backendDatasetId, providerJobId);
+    const results = evalResponse.results;
+    if (results.length === 0) return undefined;
+
+    // Find the last epoch number
+    const allEpochs = new Set<number>();
+    for (const row of results) {
+      for (const ep of Object.keys(row.epochs)) {
+        allEpochs.add(Number(ep));
+      }
+    }
+    if (allEpochs.size === 0) return undefined;
+
+    const lastEpoch = Math.max(...allEpochs);
+    const totalEpochs = allEpochs.size;
+
+    // Build record ID → topic lookup
+    const topicMap = new Map<string, string>();
+    for (const rec of records) {
+      topicMap.set(rec.id, rec.topic ?? 'uncategorized');
+    }
+
+    // Accumulate per-topic scores at last epoch
+    const topicAccum = new Map<string, { sum: number; count: number }>();
+    let overallSum = 0;
+    let overallCount = 0;
+
+    for (const row of results) {
+      const epochResults = row.epochs[lastEpoch];
+      if (!epochResults) continue;
+
+      // Primary: match by record ID (real backend puts record.id in uploaded JSONL).
+      // Fallback: match by row_index position (handles mock data with synthetic IDs).
+      let topic = topicMap.get(row.row?.id ?? '');
+      if (!topic && row.row_index != null && row.row_index < records.length) {
+        topic = records[row.row_index].topic ?? 'uncategorized';
+      }
+      topic = topic ?? 'uncategorized';
+
+      for (const r of epochResults) {
+        if (r.score == null) continue;
+        overallSum += r.score;
+        overallCount++;
+
+        const acc = topicAccum.get(topic) ?? { sum: 0, count: 0 };
+        topicAccum.set(topic, { sum: acc.sum + r.score, count: acc.count + 1 });
+      }
+    }
+
+    if (overallCount === 0) return undefined;
+
+    const meanScore = overallSum / overallCount;
+
+    // Build per-topic CatchUpTopicScore array
+    const perTopic: CatchUpTopicScore[] = [];
+    for (const [topic, acc] of topicAccum) {
+      const mean = acc.sum / acc.count;
+      perTopic.push({
+        topic,
+        mean,
+        count: acc.count,
+        status: mean >= 0.65 ? 'good' : mean >= 0.5 ? 'ok' : 'bad',
+      });
+    }
+
+    return {
+      metrics: {
+        trainReward: meanScore,
+        validReward: meanScore,
+        loss: 1 - meanScore,
+        currentEpoch: totalEpochs,
+        totalEpochs,
+      },
+      perTopic,
+    };
+  } catch {
+    // Non-critical — card still renders without scores
+    return undefined;
+  }
+}
+
+/**
+ * Build iteration delta by comparing current eval scores against the previous iteration.
+ * Returns undefined if there's no prior iteration to compare against.
+ */
+function buildIterationDelta(
+  iterState: IterationState | null,
+  job: DryRunJob,
+): CatchUpIterationDelta | undefined {
+  if (!iterState || iterState.history.length === 0) return undefined;
+
+  const currentByTopic = job.result?.byTopic;
+  const currentMean = job.pollingSnapshot?.summary?.average_score;
+  if (currentMean == null || !currentByTopic) return undefined;
+
+  // Get the most recent history entry (previous iteration)
+  const prevEntry = iterState.history[iterState.history.length - 1];
+  if (!prevEntry?.dryRunScores) return undefined;
+
+  const perTopic = Object.entries(currentByTopic).map(([topic, stats]: [string, TopicDryRunStats]) => {
+    const prev = prevEntry.dryRunScores.perTopic[topic] ?? 0;
+    return { topic, prev, current: stats.mean, delta: stats.mean - prev };
+  });
+
+  return {
+    prevMean: prevEntry.dryRunScores.mean,
+    currentMean,
+    delta: currentMean - prevEntry.dryRunScores.mean,
+    perTopic,
   };
 }
 

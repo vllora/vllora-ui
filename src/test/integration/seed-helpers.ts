@@ -120,7 +120,7 @@ export async function seedWorkflow(
       const getReq = store.get(workflow.id);
       getReq.onsuccess = () => {
         const wf = getReq.result;
-        wf.training = { jobId: opts.jobId, baseModel: 'unsloth/Qwen3-4B', status: 'succeeded' };
+        wf.training = { jobId: opts.jobId, baseModel: 'unsloth/Qwen3.5-4B', status: 'succeeded' };
         store.put(wf);
       };
       tx.oncomplete = () => resolve();

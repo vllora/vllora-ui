@@ -25,18 +25,19 @@ The finetune pipeline has two long-running processes: **Evaluation (Dry Run)** a
 - Reactive catch-up instructions in agent markdown (`vllora-finetune-agent.md`, `finetune-workflow-agent.md`)
 - `reviewedByAgent` + `reviewedByAgentAt` fields on `DryRunJob` type (`src/types/dry-run-job.ts`)
 - `mark_job_reviewed` tool (`src/lib/distri-finetune-tools/steps/mark-job-reviewed.ts`)
-- `buildCatchUpContext()` in `src/hooks/useFineTuneAgentChat.ts` — checks for unreviewed completed/failed jobs and pending iteration proposals on dataset open
+- `buildCatchUpContext()` in `src/hooks/useFineTuneAgentChat.ts` — checks for unreviewed completed/failed eval jobs, training job status (from workflow state), and pending iteration proposals on dataset open
 - Iteration state/history store (`src/services/finetune-iteration-db.ts`, IndexedDB v7 `iterationState` store)
 - `log_iteration` + `get_iteration_history` tools (`src/lib/distri-finetune-tools/steps/iteration-history.ts`)
 - Pending proposal persistence via `IterationState.phase === 'awaiting_user'` + `innerLoop.proposedChanges`
 - Auto-trigger events: `vllora_dry_run_job_completed` (from `DryRunPollingManager`) and `vllora_finetune_job_completed` (from `FinetuneJobsContext`) → LucySidebar auto-sends Lucy a message when jobs complete in background
 
-**Catch-up UI cards (2026-03-09):**
-- `LucyCompletedJobCard` — "Welcome Back" card for completed jobs (green border, score summary, action buttons)
-- `LucyFailedJobCard` — Failed job card with error details + retry/diagnose buttons
-- `LucyPendingDecisionCard` — Resumption card for pending iteration proposals with proposed changes list
-- Cards are shown as a landing view when opening a dataset with catch-up data (fresh thread, no historical messages)
-- `buildCatchUpContext()` returns both text context (for agent) and structured card data (for UI)
+**Catch-up UI card (2026-03-10):**
+- `LucyCatchUpCard` — Unified catch-up card matching the "Checkpoint: Evaluation Complete" mockup. Replaces the 4 separate cards (`LucyCompletedJobCard`, `LucyFailedJobCard`, `LucyPendingDecisionCard`, `LucyTrainingJobCard`) with a single card that shows completed steps, eval results, reasoning, proposed changes, training status, and action buttons — all in one card with dark-bg data boxes
+- Card style: `rounded-lg border` with tinted border color (emerald/amber/red/blue), dark `DataBox` panels (`dark:bg-[#111116]`), health badge (Healthy/Needs Attention/Critical), uppercase section labels with letter-spacing
+- Sections (mockup order): Completed Steps (green checkmarks, inferred via `isStepDone()` using both `stepStatus` and `currentStep` pipeline position) → Score Matrix table (unified eval + training rows in dark DataBox — completed/running training shown here, failed training gets its own error box) → Cross-Model Insight (blue callout, shown when 2+ scored entries across eval + training) → Per-Topic grouped list (each topic is a header with model rows underneath — eval models in blue, fine-tuned in purple, scores are color-coded with reasoning tooltips on hover) → Iteration delta → Proposed changes (numbered list) → Training error box (only for failed training — completed/running training is in Score Matrix) → Action buttons
+- `CatchUpCardData` includes: `completedJobs` (with `perTopic`, `iterationDelta`, `rolloutModel`), `failedJobs`, `pendingDecision`, `trainingJobs`, `completedSteps` (pipeline step labels — uses `currentStep` fallback so steps are shown even when `stepStatus` wasn't explicitly set to `'completed'`), `reasoning` (per-topic classification + insight), `proposedChanges` (lever + description)
+- Card is shown as a landing view when opening a dataset with catch-up data (fresh thread, no historical messages)
+- `buildCatchUpContext()` fetches dry-run jobs, iteration state, and workflow state in parallel — returns both text context (for agent) and structured card data (for UI). Includes `resolveTrainingStatus()` that cross-references stale `workflow.training.status` against the finetune API and fixes IndexedDB if stale. For completed training, `fetchTrainingEpochScores()` calls `getFinetuneEvaluations()` + `getRecordsByDatasetId()` to compute both the last-epoch mean score AND per-topic scores (lightweight version of what `analyze_training` does) so the Score Matrix shows a real score and Per-Topic shows fine-tuned columns alongside eval columns. Topic resolution uses dual lookup: primary by `row.row.id` (real backend puts `record.id` into uploaded JSONL), fallback by `row_index` position in the records array (handles mock/test data with synthetic IDs)
 
 **Active watching & background transition (2026-03-09):**
 - `LucyEvalProgressCard` — live progress card (67/132 records, partial mean score, elapsed time) driven by `vllora_dry_run_job_update` events

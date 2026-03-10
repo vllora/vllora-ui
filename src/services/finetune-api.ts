@@ -600,7 +600,7 @@ export async function createFinetuneJobFromUpload(
   // Create reinforcement job request
   const request: CreateReinforcementJobRequest = {
     dataset: backendDatasetId,
-    base_model: options?.baseModel || "unsloth/Qwen3-4B",
+    base_model: options?.baseModel || "unsloth/Qwen3.5-4B",
     output_model: options?.outputModel || defaultOutputModel,
     display_name: options?.displayName || `${datasetName} Fine-tune`,
     training_config: trainingConfig,

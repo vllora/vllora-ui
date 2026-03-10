@@ -70,7 +70,7 @@ export function NewJobDialog({
   initialConfig,
 }: NewJobDialogProps) {
   // Use initial config from sample dataset if available, otherwise use defaults
-  const defaultBaseModel = initialConfig?.base_model || "unsloth/Qwen3-4B";
+  const defaultBaseModel = initialConfig?.base_model || "unsloth/Qwen3.5-4B";
   const defaultLearningRate =
     initialConfig?.training_config?.learning_rate ??
     DEFAULT_TRAINING_CONFIG.learning_rate;

@@ -43,9 +43,7 @@ import {
   LucyAvatar,
   lucyToolRenderers,
 } from "@/components/agent/lucy-agent";
-import { LucyCompletedJobCard } from "@/components/agent/lucy-agent/plan-render/LucyCompletedJobCard";
-import { LucyFailedJobCard } from "@/components/agent/lucy-agent/plan-render/LucyFailedJobCard";
-import { LucyPendingDecisionCard } from "@/components/agent/lucy-agent/plan-render/LucyPendingDecisionCard";
+import { LucyCatchUpCard } from "@/components/agent/lucy-agent/plan-render/LucyCatchUpCard";
 import { LucyEvalProgressCard } from "@/components/agent/lucy-agent/plan-render/LucyEvalProgressCard";
 
 import type { QuickAction } from "@/components/agent/lucy-agent/LucyWelcome";
@@ -499,53 +497,10 @@ export function LucySidebar() {
     );
   }, [records.length, workflow, currentDataset?.evalScript, filteredJobs.length, planStatus, docsProcessing]);
 
-  // Build catch-up card ReactNodes from structured data (session resume)
+  // Build unified catch-up card from structured data (session resume)
   const catchUpCardsNode = useMemo(() => {
     if (!catchUpCards) return undefined;
-
-    const cards: React.ReactNode[] = [];
-
-    for (const job of catchUpCards.completedJobs) {
-      cards.push(
-        <LucyCompletedJobCard
-          key={`completed-${job.jobId}`}
-          jobId={job.jobId}
-          averageScore={job.averageScore}
-          completedAt={job.completedAt}
-          verdict={job.verdict}
-          totalRows={job.totalRows}
-        />
-      );
-    }
-
-    for (const job of catchUpCards.failedJobs) {
-      cards.push(
-        <LucyFailedJobCard
-          key={`failed-${job.jobId}`}
-          jobId={job.jobId}
-          errorMessage={job.errorMessage}
-          failedAt={job.failedAt}
-        />
-      );
-    }
-
-    if (catchUpCards.pendingDecision) {
-      const { iterationNumber: iterNum, proposedChanges, lastScore } = catchUpCards.pendingDecision;
-      cards.push(
-        <LucyPendingDecisionCard
-          key="pending-decision"
-          iterationNumber={iterNum}
-          proposedChanges={proposedChanges.map((c) => ({
-            lever: c.lever as 'grader' | 'records' | 'distribution' | 'training_config' | 'topics',
-            description: c.description,
-            applied: c.applied,
-          }))}
-          lastScore={lastScore}
-        />
-      );
-    }
-
-    return cards.length > 0 ? <div className="space-y-2">{cards}</div> : undefined;
+    return <LucyCatchUpCard data={catchUpCards} />;
   }, [catchUpCards]);
 
   // Live eval progress card (rendered above messages during active evaluation)
