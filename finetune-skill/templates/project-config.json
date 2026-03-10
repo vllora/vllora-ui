@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "vLLora Finetune Project Configuration Template",
+  "dataset": {
+    "id": "my-dataset-v1",
+    "name": "My Fine-tune Dataset",
+    "objective": "Train a model that [describe desired behaviors]",
+    "system_prompt": "You are [role]. You [key behaviors]. You [constraints]."
+  },
+  "topic_hierarchy": {
+    "goals": "What the model should learn",
+    "depth": 3,
+    "topics": [
+      {
+        "id": "topic-1",
+        "name": "Topic 1",
+        "description": "What this topic covers",
+        "children": [
+          {
+            "id": "topic-1/subtopic-a",
+            "name": "Subtopic A",
+            "description": "Specific area within Topic 1",
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  "data_generation": {
+    "target_records_per_topic": 15,
+    "conversation_lengths": {
+      "short": "2 turns (40%)",
+      "medium": "4 turns (40%)",
+      "long": "6 turns (20%)"
+    },
+    "scenario_mix": {
+      "happy_path": "50%",
+      "edge_cases": "25%",
+      "error_handling": "15%",
+      "ambiguous_queries": "10%"
+    }
+  },
+  "grader": {
+    "type": "js",
+    "script_file": "grader.js",
+    "completion_params": {
+      "model": "gpt-4o-mini",
+      "temperature": 0.0,
+      "max_tokens": 300
+    }
+  },
+  "evaluation": {
+    "rollout_model": "gpt-4o-mini",
+    "sample_size": 50,
+    "target_metrics": {
+      "average_score": "> 0.7",
+      "percent_above_zero": "> 80%",
+      "std_deviation": "0.15-0.30"
+    }
+  },
+  "training": {
+    "base_model": "unsloth/Qwen3.5-4B",
+    "config": {
+      "learning_rate": 0.00001,
+      "lora_rank": 8,
+      "gradient_accumulation_steps": 40,
+      "epochs": 2.0,
+      "batch_size": 100
+    },
+    "inference_parameters": {
+      "max_output_tokens": 1000,
+      "temperature": 0.7,
+      "top_p": 0.9,
+      "response_candidates_count": 2
+    }
+  },
+  "backend": {
+    "base_url": "http://localhost:9090",
+    "auth_token": null
+  }
+}

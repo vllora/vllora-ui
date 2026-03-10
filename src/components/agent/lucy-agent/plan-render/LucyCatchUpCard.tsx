@@ -12,7 +12,6 @@ import {
   AlertTriangle,
   Check,
   Eye,
-  FlaskConical,
   Loader2,
   Pencil,
   RefreshCw,
@@ -41,19 +40,15 @@ import type {
 
 const PROMPTS = {
   analyze: 'Please analyze the evaluation results in detail and tell me what you recommend.',
-  viewResults: 'Show me the detailed evaluation results — per-topic breakdown and recommendations.',
-  deploy: 'The evaluation looks good. Let\'s proceed to deployment.',
-  postTrainEval: 'Please run a post-training evaluation to compare the fine-tuned model against the base model.',
   retryEval: 'Please retry the failed evaluation. Run it again with the same configuration.',
-  fixGrader: 'The evaluation failed — it might be a grader issue. Please check the grader configuration and suggest fixes.',
   diagnoseEval: 'Please diagnose what went wrong with the failed evaluation and give me a detailed analysis.',
-  viewTrainingResults: 'Show me the detailed training results — per-epoch progression, per-topic breakdown.',
   retryTraining: 'Please retry the training job with the same configuration.',
   diagnoseTraining: 'Please diagnose what went wrong with the training job and suggest fixes.',
   checkProgress: 'What\'s the current status of the training job? Show me progress details.',
-  accept: 'I accept the proposed changes from the previous iteration. Please apply them now.',
-  modify: 'I want to modify the proposed changes before applying. Let me tell you what adjustments I need.',
+  accept: 'I see the weak topics from the scores above. Please apply the proposed improvements — regenerate examples and refine prompts for the low-scoring topics.',
+  modify: 'I see the proposed changes for the weak topics, but I want to adjust them before applying. Let me tell you what I want to change.',
   skipToTraining: 'Skip further iteration — let\'s proceed directly to training with the current dataset.',
+  continueNextStep: 'I just opened this dataset. What should we do next?',
 } as const;
 
 function sendPrompt(prompt: string) {
@@ -337,6 +332,10 @@ function CrossModelInsight({ evalJobs, trainingJobs }: {
   if (base === compare) return null;
 
   const diff = compare.score - base.score;
+
+  // Suppress when comparing the same model with negligible delta
+  if (base.model === compare.model && Math.abs(diff) < 0.01) return null;
+
   const direction = diff >= 0 ? 'higher' : 'lower';
   const absDiff = Math.abs(diff).toFixed(2);
 
@@ -646,6 +645,7 @@ type ActionDef = {
 function buildActions(data: CatchUpCardData): ActionDef[] {
   const a: ActionDef[] = [];
   const hasPending = data.pendingDecision != null;
+  const hasProposedChanges = data.proposedChanges.length > 0;
   const completedTrain = data.trainingJobs.find((t) => t.status === 'completed');
   const failedTrain = data.trainingJobs.find((t) => t.status === 'failed');
   const runningTrain = data.trainingJobs.find(
@@ -657,39 +657,41 @@ function buildActions(data: CatchUpCardData): ActionDef[] {
     (j) => j.verdict === 'GO' || (j.averageScore != null && j.averageScore >= 0.7),
   );
 
-  if (hasPending) {
+  // Pending iteration decision or score-based proposed changes → accept / modify
+  if (hasPending || hasProposedChanges) {
     a.push({ key: 'accept', label: 'Accept & Apply', icon: Check, prompt: PROMPTS.accept, primary: true });
     a.push({ key: 'modify', label: 'Modify Changes', icon: Pencil, prompt: PROMPTS.modify });
-    a.push({ key: 'skip', label: 'Skip to Training', icon: Rocket, prompt: PROMPTS.skipToTraining });
-    return a;
   }
+
   if (completedTrain) {
-    a.push({ key: 'postTrainEval', label: 'Run Post-Training Eval', icon: FlaskConical, prompt: PROMPTS.postTrainEval, primary: true });
-    a.push({ key: 'trainResults', label: 'View Full Results', icon: Eye, prompt: PROMPTS.viewTrainingResults });
-    a.push({ key: 'deploy', label: 'Deploy Now', icon: Rocket, prompt: PROMPTS.deploy });
     return a;
   }
   if (failedTrain) {
-    a.push({ key: 'retryTrain', label: 'Retry Training', icon: RefreshCw, prompt: PROMPTS.retryTraining, primary: true });
+    a.push({ key: 'retryTrain', label: 'Retry Training', icon: RefreshCw, prompt: PROMPTS.retryTraining, primary: !hasProposedChanges });
     a.push({ key: 'diagnoseTrain', label: 'Diagnose', icon: AlertTriangle, prompt: PROMPTS.diagnoseTraining });
     return a;
   }
   if (runningTrain) {
-    a.push({ key: 'progress', label: 'Check Progress', icon: Eye, prompt: PROMPTS.checkProgress, primary: true });
+    a.push({ key: 'progress', label: 'Check Progress', icon: Eye, prompt: PROMPTS.checkProgress, primary: !hasProposedChanges });
     return a;
   }
   if (hasFailedEval) {
-    a.push({ key: 'retryEval', label: 'Retry Eval', icon: RefreshCw, prompt: PROMPTS.retryEval, primary: true });
+    a.push({ key: 'retryEval', label: 'Retry Eval', icon: RefreshCw, prompt: PROMPTS.retryEval, primary: !hasProposedChanges });
     a.push({ key: 'diagnoseEval', label: 'Diagnose', icon: AlertTriangle, prompt: PROMPTS.diagnoseEval });
-    a.push({ key: 'fixGrader', label: 'Fix Grader', icon: Pencil, prompt: PROMPTS.fixGrader });
     return a;
   }
   if (hasCompletedEval) {
-    a.push({ key: 'analyze', label: 'View Analysis', icon: Eye, prompt: PROMPTS.analyze, primary: true });
-    a.push({ key: 'details', label: 'Details', icon: FlaskConical, prompt: PROMPTS.viewResults });
+    if (!hasProposedChanges) {
+      a.push({ key: 'analyze', label: 'View Analysis', icon: Eye, prompt: PROMPTS.analyze, primary: true });
+    }
     if (isHealthy) {
       a.push({ key: 'skip', label: 'Skip to Training', icon: Rocket, prompt: PROMPTS.skipToTraining });
     }
+  }
+
+  // Fallback: mid-pipeline with completed steps but no eval/training yet
+  if (a.length === 0 && data.completedSteps.length > 0) {
+    a.push({ key: 'continue', label: 'Continue', icon: Rocket, prompt: PROMPTS.continueNextStep, primary: true });
   }
   return a;
 }

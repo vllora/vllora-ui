@@ -32,9 +32,9 @@ const ROLLOUT_MODEL_OPTIONS = [
 
 function getDefaultSampleSize(recordCount: number): number {
   if (recordCount <= 10) return recordCount;
-  if (recordCount <= 50) return Math.min(25, recordCount);
-  if (recordCount <= 200) return 50;
-  return 100;
+  if (recordCount <= 50) return recordCount;
+  if (recordCount <= 200) return recordCount;
+  return recordCount;
 }
 
 function getSampleSizeOptions(recordCount: number): Array<{ value: number; label: string }> {
@@ -105,7 +105,7 @@ export function NewEvaluationDialog({
             Run Evaluation
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Test your grader script on a sample of records.
+            Test your grader script
           </DialogDescription>
         </DialogHeader>
 

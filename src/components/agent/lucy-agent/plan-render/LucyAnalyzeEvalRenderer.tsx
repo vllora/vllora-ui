@@ -46,19 +46,23 @@ function HealthBadge({ overall }: { overall: keyof typeof HEALTH_CONFIG }) {
   return <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${cls}`}>{label}</span>;
 }
 
-/** Progress bar color based on score (matches mockup gradient: red → yellow → green). */
+/**
+ * Unified score color thresholds (used by both progress bar and text):
+ *   bad (red)    < 0.5
+ *   ok (amber)   0.5–0.64
+ *   good (green) ≥ 0.65
+ * Aligned with LucyCatchUpCard.scoreColor() for visual consistency.
+ */
 function scoreBarColor(score: number): string {
-  if (score < 0.35) return 'bg-red-500';
-  if (score < 0.55) return 'bg-amber-500';
-  if (score < 0.7) return 'bg-yellow-500';
-  return 'bg-emerald-500';
+  if (score >= 0.65) return 'bg-emerald-500';
+  if (score >= 0.5) return 'bg-amber-500';
+  return 'bg-red-500';
 }
 
-/** Text color for inline score values (matches mockup: score-bad, score-ok, score-good). */
 function scoreTextColor(score: number): string {
-  if (score < 0.4) return 'text-red-400';
-  if (score < 0.6) return 'text-amber-400';
-  return 'text-emerald-400';
+  if (score >= 0.65) return 'text-emerald-400';
+  if (score >= 0.5) return 'text-amber-400';
+  return 'text-red-400';
 }
 
 /** Format score as raw decimal (mockup style: 0.45, not 45.0%). */
@@ -283,7 +287,7 @@ function EvalCheckpointCard({ result }: { result: AnalyzeEvaluationResult }) {
           <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Reasoning</div>
           {per_topic.filter((t) => t.recommendation).slice(0, 5).map((t) => (
             <div key={t.topic} className="text-[11px] text-muted-foreground leading-relaxed">
-              <span className={t.avg_score < 0.5 ? 'text-red-400' : 'text-emerald-400'}>&#9679;</span>{' '}
+              <span className={t.avg_score >= 0.65 ? 'text-emerald-400' : t.avg_score >= 0.5 ? 'text-amber-400' : 'text-red-400'}>&#9679;</span>{' '}
               <span className="text-foreground font-medium">{t.topic}</span>{' '}
               ({formatScore(t.avg_score)}): {t.recommendation}
             </div>

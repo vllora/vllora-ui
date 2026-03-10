@@ -39,6 +39,7 @@ import {
   resetScenario,
   incrementEvalPoll,
   incrementTrainingPoll,
+  getTrainingPollCount,
 } from '../msw/scenarios/scenario-registry';
 import {
   makeCreateEvalResponse,
@@ -94,6 +95,12 @@ interface MockDatasetEntry {
 /** All datasets created through the mock server, keyed by backend dataset ID. */
 const mockDatasets = new Map<string, MockDatasetEntry>();
 
+/** Tracked training jobs — keyed by job ID, value is owning dataset ID (or null). */
+const mockTrainingJobs = new Map<string, string | null>();
+
+/** Maps provider_job_id → id so status polls with either ID resolve correctly. */
+const providerJobIdMap = new Map<string, string>();
+
 let datasetCounter = 0;
 let evalRunCounter = 0;
 let trainingJobCounter = 0;
@@ -146,10 +153,17 @@ function parseRowIdsFromJsonl(buffer: Buffer | undefined): string[] {
 
 function resetMockData(): void {
   mockDatasets.clear();
+  mockTrainingJobs.clear();
+  providerJobIdMap.clear();
   datasetCounter = 0;
   evalRunCounter = 0;
   trainingJobCounter = 0;
   mockDatasetIdOverride = null;
+}
+
+/** Resolve a jobId from the URL — may be either `id` or `provider_job_id`. */
+function resolveJobId(rawJobId: string): string {
+  return providerJobIdMap.get(rawJobId) ?? rawJobId;
 }
 
 // =============================================================================
@@ -307,7 +321,19 @@ app.post('/finetune/reinforcement-jobs', async (req, res) => {
     if (entry) entry.trainingJobIds.push(jobId);
   }
 
-  res.json(makeCreateTrainingResponse(jobId));
+  // Track job so the list endpoint can return it
+  mockTrainingJobs.set(jobId, datasetId ?? null);
+
+  const response = makeCreateTrainingResponse(jobId);
+
+  // Map provider_job_id → id so status polls with either ID resolve correctly
+  if (response.provider_job_id && response.provider_job_id !== jobId) {
+    providerJobIdMap.set(response.provider_job_id, jobId);
+  }
+
+  console.log(`[mock] Training job ${jobId} created (provider: ${response.provider_job_id}) for dataset ${datasetId ?? 'unknown'}`);
+
+  res.json(response);
 });
 
 // =============================================================================
@@ -315,7 +341,7 @@ app.post('/finetune/reinforcement-jobs', async (req, res) => {
 // =============================================================================
 
 app.get('/finetune/reinforcement-jobs/:jobId/status', async (req, res) => {
-  const jobId = req.params.jobId;
+  const jobId = resolveJobId(req.params.jobId);
   const scenario = getScenario();
   await delayMs(scenario.pollDelayMs);
 
@@ -327,10 +353,27 @@ app.get('/finetune/reinforcement-jobs/:jobId/status', async (req, res) => {
 // GET /finetune/reinforcement-jobs — List training jobs
 // =============================================================================
 
-app.get('/finetune/reinforcement-jobs', async (_req, res) => {
+app.get('/finetune/reinforcement-jobs', async (req, res) => {
   const scenario = getScenario();
   await delayMs(scenario.pollDelayMs);
 
+  const datasetIdFilter = req.query.dataset_id as string | undefined;
+
+  // If jobs were created via POST, return them (optionally filtered by dataset)
+  if (mockTrainingJobs.size > 0) {
+    const jobs = [...mockTrainingJobs.entries()]
+      .filter(([, dsId]) => !datasetIdFilter || dsId === datasetIdFilter)
+      .map(([jobId]) => resolveTrainingPollResponse(
+        jobId,
+        scenario.trainingScenario,
+        getTrainingPollCount(jobId),
+        scenario.trainingPollsBeforeComplete,
+      ));
+    res.json(jobs);
+    return;
+  }
+
+  // Fallback: no jobs created yet — return scenario-based default
   if (scenario.trainingScenario === 'error') {
     res.json([makeFailedTrainingResponse()]);
     return;
@@ -376,7 +419,7 @@ app.get('/finetune/reinforcement-jobs/:jobId/weights/url', async (_req, res) => 
 app.get('/finetune/datasets/:datasetId/finetune-evaluations', async (_req, res) => {
   const scenario = getScenario();
   await delayMs(scenario.pollDelayMs);
-  res.json(makeFinetuneEvalResponse(scenario.trainingScenario));
+  res.json(makeFinetuneEvalResponse(scenario.trainingScenario, scenario.trainingRowCount));
 });
 
 // =============================================================================

@@ -326,10 +326,22 @@ async function buildCatchUpContext(datasetId: string): Promise<CatchUpResult> {
       );
     }
 
-    // --- Proposed changes from iteration state (even if not awaiting_user) ---
-    const allChanges = iterState?.innerLoop.proposedChanges ?? [];
-    for (const c of allChanges) {
-      proposedChanges.push({ lever: c.lever, description: c.description, applied: c.applied });
+    // --- Proposed changes: prefer latest finetune job, then latest eval job, then iteration state ---
+    const completedTraining = trainingJobs.find((t) => t.status === 'completed' && t.perTopic && t.perTopic.length > 0);
+    const completedEval = completedJobs.find((j) => j.perTopic && j.perTopic.length > 0);
+
+    if (completedTraining?.perTopic) {
+      const fromFt = buildProposedChangesFromScores(completedTraining.perTopic, 'fine-tuned model');
+      for (const c of fromFt) proposedChanges.push(c);
+    } else if (completedEval?.perTopic) {
+      const fromEval = buildProposedChangesFromScores(completedEval.perTopic, 'evaluation');
+      for (const c of fromEval) proposedChanges.push(c);
+    } else {
+      // Fallback: iteration state proposals
+      const allChanges = iterState?.innerLoop.proposedChanges ?? [];
+      for (const c of allChanges) {
+        proposedChanges.push({ lever: c.lever, description: c.description, applied: c.applied });
+      }
     }
   } catch (error) {
     // Non-critical — don't block chat initialization
@@ -450,6 +462,44 @@ function buildTopicReasoning(
   }
 }
 
+type ProposedChange = CatchUpCardData['proposedChanges'][number];
+
+/**
+ * Build proposed changes from per-topic scores.
+ * Only generates proposals for topics scoring below the "strong" threshold (< 0.65).
+ * Sorted by score ascending (worst topics get top priority).
+ */
+function buildProposedChangesFromScores(
+  topics: ReadonlyArray<CatchUpTopicScore>,
+  source: 'fine-tuned model' | 'evaluation',
+): ProposedChange[] {
+  const weak = [...topics]
+    .filter((t) => t.mean < 0.65)
+    .sort((a, b) => a.mean - b.mean);
+
+  return weak.map((t) => {
+    if (t.mean < 0.3) {
+      return {
+        lever: t.topic,
+        description: `Critical (${t.mean.toFixed(2)} from ${source}) — review grader rubric and regenerate examples for this topic`,
+        applied: false,
+      };
+    }
+    if (t.mean < 0.5) {
+      return {
+        lever: t.topic,
+        description: `Low score (${t.mean.toFixed(2)} from ${source}) — add more high-quality examples or refine prompts`,
+        applied: false,
+      };
+    }
+    return {
+      lever: t.topic,
+      description: `Below target (${t.mean.toFixed(2)} from ${source}) — minor prompt adjustments may help`,
+      applied: false,
+    };
+  });
+}
+
 /**
  * Resolve training job status, fixing stale workflow data by checking the API.
  * If the workflow says 'running' but the API says 'succeeded', updates IndexedDB.
@@ -567,11 +617,12 @@ async function fetchTrainingEpochScores(
 
       // Primary: match by record ID (real backend puts record.id in uploaded JSONL).
       // Fallback: match by row_index position (handles mock data with synthetic IDs).
+      // Skip rows that can't be mapped to any record (mock excess rows).
       let topic = topicMap.get(row.row?.id ?? '');
       if (!topic && row.row_index != null && row.row_index < records.length) {
         topic = records[row.row_index].topic ?? 'uncategorized';
       }
-      topic = topic ?? 'uncategorized';
+      if (!topic) continue;
 
       for (const r of epochResults) {
         if (r.score == null) continue;

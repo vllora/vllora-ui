@@ -24,6 +24,8 @@ export interface ScenarioState {
   readonly uploadBehavior: BehaviorOption;
   readonly evalCreateBehavior: BehaviorOption;
   readonly trainingCreateBehavior: BehaviorOption;
+  /** Number of rows the mock finetune-evaluations endpoint returns. Set to match dataset record count. */
+  readonly trainingRowCount: number;
 }
 
 // =============================================================================
@@ -40,6 +42,7 @@ const DEFAULT_STATE: ScenarioState = {
   uploadBehavior: 'success',
   evalCreateBehavior: 'success',
   trainingCreateBehavior: 'success',
+  trainingRowCount: 5,
 };
 
 // =============================================================================
