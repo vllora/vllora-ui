@@ -370,27 +370,47 @@ function PerTopicSection({ evalJobs, trainingJobs, reasoning }: {
   readonly trainingJobs: ReadonlyArray<CatchUpTrainingJob>;
   readonly reasoning?: ReadonlyArray<CatchUpTopicReasoning>;
 }) {
-  // Build model entries: each eval/training job with per-topic scores
+  // Build model entries: each eval/training job with per-topic scores.
+  // When multiple jobs share the same model name, use "Eval N" / "FT N" labels
+  // instead so rows are distinguishable.
   type ModelEntry = {
     readonly key: string;
     readonly label: string;
     readonly tag: 'eval' | 'ft';
     readonly scores: ReadonlyMap<string, number>;
   };
-  const models: ModelEntry[] = [];
 
+  // First pass: build with raw model names
+  const rawEvalLabels: string[] = [];
+  const rawFtLabels: string[] = [];
+  for (const j of evalJobs) {
+    if (j.perTopic && j.perTopic.length > 0) rawEvalLabels.push(j.rolloutModel ?? '');
+  }
+  for (const t of trainingJobs) {
+    if (t.perTopic && t.perTopic.length > 0) rawFtLabels.push(t.fineTunedModel ?? '');
+  }
+
+  // Detect duplicates: if any label appears more than once within its group, use index labels
+  const hasDupEval = rawEvalLabels.length > 1 && new Set(rawEvalLabels).size < rawEvalLabels.length;
+  const hasDupFt = rawFtLabels.length > 1 && new Set(rawFtLabels).size < rawFtLabels.length;
+
+  const models: ModelEntry[] = [];
+  let evalIdx = 0;
   for (let i = 0; i < evalJobs.length; i++) {
     const j = evalJobs[i];
     if (!j.perTopic || j.perTopic.length === 0) continue;
-    const label = j.rolloutModel ?? `Eval ${i + 1}`;
+    evalIdx++;
+    const label = hasDupEval ? `Eval ${evalIdx}` : (j.rolloutModel ?? `Eval ${evalIdx}`);
     const scores = new Map(j.perTopic.map((t) => [t.topic, t.mean]));
     models.push({ key: `eval-${j.jobId}`, label, tag: 'eval', scores });
   }
 
+  let ftIdx = 0;
   for (let i = 0; i < trainingJobs.length; i++) {
     const t = trainingJobs[i];
     if (!t.perTopic || t.perTopic.length === 0) continue;
-    const label = t.fineTunedModel ?? `FT ${i + 1}`;
+    ftIdx++;
+    const label = hasDupFt ? `FT ${ftIdx}` : (t.fineTunedModel ?? `FT ${ftIdx}`);
     const scores = new Map(t.perTopic.map((tp) => [tp.topic, tp.mean]));
     models.push({ key: `ft-${t.jobId}`, label, tag: 'ft', scores });
   }

@@ -353,6 +353,8 @@ export interface MarkJobReviewedResult {
 export interface AnalyzeEvaluationResult {
   success: boolean;
   error?: string;
+  /** Current iteration number (1-based). Added by auto-log in analyze_evaluation. */
+  iteration_number?: number;
   health?: {
     overall: 'healthy' | 'warning' | 'critical';
     mean_score: number;

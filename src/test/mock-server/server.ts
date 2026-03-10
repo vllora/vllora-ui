@@ -416,10 +416,13 @@ app.get('/finetune/reinforcement-jobs/:jobId/weights/url', async (_req, res) => 
 // GET /finetune/datasets/:datasetId/finetune-evaluations
 // =============================================================================
 
-app.get('/finetune/datasets/:datasetId/finetune-evaluations', async (_req, res) => {
+app.get('/finetune/datasets/:datasetId/finetune-evaluations', async (req, res) => {
   const scenario = getScenario();
   await delayMs(scenario.pollDelayMs);
-  res.json(makeFinetuneEvalResponse(scenario.trainingScenario, scenario.trainingRowCount));
+  const entry = mockDatasets.get(req.params.datasetId);
+  const rowIds = entry?.rowIds ?? [];
+  const rowCount = rowIds.length > 0 ? rowIds.length : scenario.trainingRowCount;
+  res.json(makeFinetuneEvalResponse(scenario.trainingScenario, rowCount, rowIds));
 });
 
 // =============================================================================

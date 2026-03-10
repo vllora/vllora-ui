@@ -11,7 +11,8 @@
 import type { DistriFnTool } from '@distri/core';
 import type { ToolHandler } from '../types';
 import { getEvaluationDetailsHandler } from './get-evaluation-details';
-import { getIterationHistoryHandler } from './iteration-history';
+import { getIterationHistoryHandler, logIterationHandler } from './iteration-history';
+import { getWorkflowByDataset } from '@/services/finetune-workflow-db';
 
 // =============================================================================
 // Constants (from rft-decision-tree.md Section 2)
@@ -639,11 +640,44 @@ export const analyzeEvaluationHandler: ToolHandler = async (params) => {
       escalation,
     );
 
-    // 9. Next action
-    const nextAction = decideNextAction(health, iterComparison, escalation, topicAnalysis);
+    // 9. Next action (adjusted if training already completed)
+    let nextAction = decideNextAction(health, iterComparison, escalation, topicAnalysis);
+
+    // If next_action is 'train' but training already succeeded, skip re-training
+    if (nextAction === 'train') {
+      try {
+        const workflow = await getWorkflowByDataset(dataset_id);
+        if (workflow?.training?.status === 'completed') {
+          nextAction = 'iterate';
+        }
+      } catch {
+        // Non-critical — proceed with original decision
+      }
+    }
+
+    // 10. Auto-log this iteration so future calls have history for comparison.
+    //     Fire-and-forget — logging failure should not break analysis results.
+    const iterationNumber = history.length + 1;
+    const evalId = typeof evaluation_id === 'string' ? evaluation_id : 'unknown';
+    try {
+      await logIterationHandler({
+        dataset_id,
+        eval_id: evalId,
+        scores: {
+          mean: summary.mean_score,
+          per_topic: Object.fromEntries(perTopic.map((t) => [t.topic, t.avg_score])),
+        },
+        decision: nextAction === 'hard_stop' ? 'escalate' : nextAction,
+        changes_made: recommendations.map((r) => r.action).join('; '),
+        phase: nextAction === 'train' ? 'training' : 'awaiting_user',
+      });
+    } catch {
+      // Non-critical — iteration history is best-effort
+    }
 
     return {
       success: true,
+      iteration_number: iterationNumber,
       health,
       per_topic: topicAnalysis,
       grader_health: graderHealth,

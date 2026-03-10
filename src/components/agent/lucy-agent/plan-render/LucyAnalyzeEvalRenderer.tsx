@@ -188,7 +188,7 @@ function EvalActionButtons({ nextAction }: { nextAction: string }) {
 // =============================================================================
 
 function EvalCheckpointCard({ result }: { result: AnalyzeEvaluationResult }) {
-  const { health, per_topic, grader_health, iteration_comparison, escalation, recommendations, next_action } = result;
+  const { health, per_topic, grader_health, iteration_comparison, escalation, recommendations, next_action, iteration_number } = result;
 
   return (
     <div className="rounded-lg border border-border bg-card p-3 space-y-2.5">
@@ -196,7 +196,9 @@ function EvalCheckpointCard({ result }: { result: AnalyzeEvaluationResult }) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <Activity className="w-3.5 h-3.5 text-[rgb(var(--theme-500))]" />
-          <span className="text-xs font-semibold text-foreground">Evaluation Analysis</span>
+          <span className="text-xs font-semibold text-foreground">
+            Evaluation Analysis{iteration_number != null && iteration_number > 1 ? ` — Iteration ${iteration_number}` : ''}
+          </span>
         </div>
         {health && <HealthBadge overall={health.overall} />}
       </div>

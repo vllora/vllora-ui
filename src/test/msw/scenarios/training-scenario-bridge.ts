@@ -134,6 +134,8 @@ export function resolveTrainingPollResponse(
 export function makeFinetuneEvalResponse(
   scenario: TrainingScenarioKey,
   rowCount = 5,
+  /** Real record IDs from the uploaded JSONL. Falls back to `row-N` if empty. */
+  rowIds: string[] = [],
 ): FinetuneEvalResultsResponse {
   if (scenario === 'error') {
     return { results: [] };
@@ -141,6 +143,7 @@ export function makeFinetuneEvalResponse(
 
   const config = TRAINING_EPOCH_SCORES[scenario];
   const results: RowEpochResults[] = Array.from({ length: rowCount }, (_, i) => {
+    const rowId = rowIds[i] ?? `row-${i}`;
     const epochs: Record<number, Array<{ score: number; status: string }>> = {};
     for (let epoch = 0; epoch < config.epochs; epoch++) {
       const scores = config.rowScores[epoch] ?? [];
@@ -151,7 +154,7 @@ export function makeFinetuneEvalResponse(
     }
     return {
       row_index: i,
-      row: { id: `row-${i}`, messages: [] },
+      row: { id: rowId, messages: [] },
       epochs,
     };
   });

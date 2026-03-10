@@ -7,6 +7,7 @@
 import type { DistriFnTool } from '@distri/core';
 import * as workflowDB from '@/services/finetune-workflow-db';
 import { getReinforcementJobStatus } from '@/services/finetune-api';
+import { emitter } from '@/utils/eventEmitter';
 import type { ToolHandler } from '../types';
 
 export const checkTrainingStatusHandler: ToolHandler = async (params) => {
@@ -59,6 +60,17 @@ export const checkTrainingStatusHandler: ToolHandler = async (params) => {
         status: workflowStatus,
         modelId: job.fine_tuned_model || workflow.training.modelId,
       });
+
+      // Emit completion event so LucySidebar auto-triggers training analysis.
+      // FinetuneJobsContext only emits this via SSE, which the mock server lacks.
+      const wasActive = workflow.training.status === 'running' || workflow.training.status === 'pending' || workflow.training.status === 'queued';
+      const isTerminal = workflowStatus === 'completed' || workflowStatus === 'failed';
+      if (wasActive && isTerminal && workflow.datasetId) {
+        emitter.emit('vllora_finetune_job_completed', {
+          jobId: workflow.training.jobId,
+          datasetId: workflow.datasetId,
+        });
+      }
     }
 
     return {
