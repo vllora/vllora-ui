@@ -544,16 +544,16 @@ export async function ensureDatasetUploaded(
 export const DEFAULT_TRAINING_CONFIG: ReinforcementTrainingConfig = {
   learning_rate: 0.00001,
   lora_rank: 8,
-  gradient_accumulation_steps: 40,
+  gradient_accumulation_steps: 5,
   epochs: 2.0,
-  batch_size: 100,
+  batch_size: 5,
 };
 
 /** Default inference parameters */
 export const DEFAULT_INFERENCE_PARAMETERS: ReinforcementInferenceParameters = {
   max_output_tokens: 1000,
-  temperature: 0.7,
-  top_p: 0.9,
+  temperature: 1.0,
+  top_p: 1.0,
   response_candidates_count: 2,
 };
 
