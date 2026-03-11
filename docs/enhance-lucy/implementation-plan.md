@@ -16,9 +16,9 @@ Prioritized by impact and effort. Organized around the two-loop architecture and
 | Phase | Status | What's Done |
 |-------|--------|-------------|
 | **Phase 1: Give Lucy Eyes** | ✅ Done | 1A done (`get_evaluation_details`), 1B done (iteration state DB + `log_iteration`/`get_iteration_history` tools), 1C done (`reviewedByAgent` field, `mark_job_reviewed` tool, `buildCatchUpContext`, catch-up UI cards — only sidebar notification badge missing) |
-| **Phase 2: Give Lucy Autonomy** | Partially done | 2A done (`analyze_evaluation` — 697-line tool with full RFT decision tree), 2B partial (inner/outer loop protocol in agent md, but `ExecutionStepId` not extended yet) |
-| **Phase 3: Give Lucy Wisdom** | ✅ Done | 3A done (`analyze_training` tool), 3B comprehensive stall detection in `analyze_evaluation` (10 patterns, escalation ladder, RFT decision tree Steps A-F) |
-| **Phase 4: Give Lucy Hands** | Partially done | `test_grader_sample` rewritten with real eval pipeline, `auto_test` on `configure_grader`. 4B not started |
+| **Phase 2: Give Lucy Autonomy** | ✅ Done | 2A done (`analyze_evaluation` — full RFT decision tree), 2B done (inner/outer loop protocol in agent md, `ExecutionStepId` extended with `regenerate_topic`, `adjust_grader`, `analyze`, `post_training_eval` — all registered in `STEP_REGISTRY` and `STEP_ORDER`) |
+| **Phase 3: Give Lucy Wisdom** | ✅ Done | 3A done (`analyze_training` tool + `get_training_metrics` for raw GRPO/GSPO reinforcement metrics), 3B comprehensive stall detection in `analyze_evaluation` (10 patterns, escalation ladder, RFT decision tree Steps A-F) |
+| **Phase 4: Give Lucy Hands** | ✅ Done | `test_grader_sample` rewritten with real eval pipeline, `auto_test` on `configure_grader`. 4B done (`check_viability` tool — classifies viable/marginal/not_viable) |
 
 ### UI Renderers (2026-03-09)
 
@@ -30,9 +30,11 @@ All mockup scenarios now have corresponding UI card renderers:
 | `LucyAnalyzeTrainingRenderer` | Training analysis card (epoch table, pipeline journey, pattern badges) | Raw decimal (0.45) |
 | `LucyAutoCountdownCard` | Auto-continue countdown when eval healthy + train recommended | — |
 | `LucyEvalProgressCard` | Live eval progress (67/132 records, partial score) | Raw decimal (0.45) |
-| `LucyCompletedJobCard` | Welcome Back success card for catch-up | Raw decimal (0.45) |
-| `LucyFailedJobCard` | Failed job catch-up card | — |
-| `LucyPendingDecisionCard` | Pending iteration decision catch-up card | Raw decimal (0.45) |
+| `LucyCatchUpCard` | Unified catch-up card (replaces 4 separate cards below) | Raw decimal (0.45) |
+| `LucyCompletedJobCard` | Completed evaluation results (legacy, used by CatchUpCard internally) | Raw decimal (0.45) |
+| `LucyTrainingJobCard` | Training job status and metrics | Raw decimal (0.45) |
+| `LucyFailedJobCard` | Failed job errors | — |
+| `LucyPendingDecisionCard` | Pending iteration decision | Raw decimal (0.45) |
 
 Catch-up cards are shown as a landing view on fresh threads — each dataset session creates a new thread instead of restoring old messages.
 

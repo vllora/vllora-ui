@@ -8,11 +8,9 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { DatasetsConsumer } from "@/contexts/DatasetsContext";
 import { LoadingIndicator } from "@/components/ui/LoadingIndicator";
 import { toast } from "sonner";
-import { getKnowledgeSourceCount } from "@/services/knowledge-sources-db";
-import { getWorkflowByDataset } from "@/services/finetune-workflow-db";
-import type { FinetuneWorkflowState } from "@/services/finetune-workflow-db";
-import { getDryRunJobsByDataset } from "@/services/dry-run-jobs-db";
-import { getJobCompletedRows, getJobTotalRows, getJobAverageScore } from "@/types/dry-run-job";
+import { knowledgeSourceService, workflowService, evalJobService } from "@/services/service-registry";
+import type { FinetuneWorkflowState } from "@/types/workflow-types";
+import { getJobCompletedRows, getJobTotalRows, getJobAverageScore } from "@/types/eval-job";
 import { emitter } from "@/utils/eventEmitter";
 import { computeFilterGroup } from "@/types/dataset-types";
 import type { DatasetFilterGroup } from "@/types/dataset-types";
@@ -158,15 +156,15 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
     await Promise.all(
       datasets.map(async (ds) => {
         counts[ds.id] = await getRecordCount(ds.id);
-        docs[ds.id] = await getKnowledgeSourceCount(ds.id);
+        docs[ds.id] = await knowledgeSourceService.getCount(ds.id);
         const coverage = await getTopicCoverageStats(ds.id);
         const topicCount = ds.topicHierarchy?.hierarchy
           ? countTopics(ds.topicHierarchy.hierarchy)
           : 0;
         stats[ds.id] = { ...coverage, topicCount };
-        const wf = await getWorkflowByDataset(ds.id);
+        const wf = await workflowService.getByDataset(ds.id);
         if (wf) wfs[ds.id] = wf;
-        const jobs = await getDryRunJobsByDataset(ds.id);
+        const jobs = await evalJobService.getByDataset(ds.id);
         dryRuns[ds.id] = jobs.filter(j => j.status === 'running' || j.status === 'pending').length;
         completedRuns[ds.id] = jobs.filter(j => j.status === 'completed').length;
 

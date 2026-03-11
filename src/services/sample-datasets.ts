@@ -5,7 +5,7 @@
  * Sample data is served from /public/samples/ folder.
  */
 
-import * as datasetsDB from './datasets-db';
+import { datasetService, recordService } from './service-registry';
 import type { TopicHierarchyConfig, SampleTrainingConfig } from '@/types/dataset-types';
 
 export interface SampleDatasetConfig {
@@ -114,14 +114,14 @@ export async function createSampleDataset(
   const { records, topics, evaluationScript, trainingConfig } = await loadSampleFiles(config.folder);
 
   // Create the dataset
-  const dataset = await datasetsDB.createDataset(
+  const dataset = await datasetService.create(
     `${config.name} (Sample)`,
     config.objective
   );
 
   // Add records to the dataset
   if (records.length > 0) {
-    await datasetsDB.addRecordsToDataset(
+    await recordService.add(
       dataset.id,
       records.map((record) => ({
         data: record,
@@ -137,17 +137,17 @@ export async function createSampleDataset(
       depth: topics.depth || 3,
       hierarchy: topics.hierarchy,
     };
-    await datasetsDB.updateDatasetTopicHierarchy(dataset.id, topicConfig);
+    await datasetService.updateTopicHierarchy(dataset.id, topicConfig);
   }
 
   // Set up evaluation script if available
   if (evaluationScript) {
-    await datasetsDB.updateDatasetEvalScript(dataset.id, evaluationScript);
+    await datasetService.updateEvalScript(dataset.id, evaluationScript);
   }
 
   // Set up training configuration if available (for sample datasets)
   if (trainingConfig) {
-    await datasetsDB.updateDatasetTrainingConfig(dataset.id, trainingConfig);
+    await datasetService.updateTrainingConfig(dataset.id, trainingConfig);
   }
 
   return {

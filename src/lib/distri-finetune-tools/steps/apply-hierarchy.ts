@@ -5,8 +5,7 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import * as workflowDB from '@/services/finetune-workflow-db';
-import * as datasetsDB from '@/services/datasets-db';
+import { workflowService, datasetService } from '@/services/service-registry';
 import type { TopicHierarchyNode } from '@/types/dataset-types';
 import type { ToolHandler } from '../types';
 import { countLeafTopics, calculateMaxDepth } from './helpers';
@@ -173,7 +172,7 @@ export const applyTopicHierarchyHandler: ToolHandler = async (params) => {
       return { success: false, error: 'hierarchy array is required' };
     }
 
-    const workflow = await workflowDB.getWorkflow(workflow_id);
+    const workflow = await workflowService.get(workflow_id);
     if (!workflow) {
       return { success: false, error: 'Workflow not found' };
     }
@@ -188,7 +187,7 @@ export const applyTopicHierarchyHandler: ToolHandler = async (params) => {
 
     // Auto-advance from not_started to topics_config when topic operations begin
     if (workflow.currentStep === 'not_started') {
-      await workflowDB.advanceToStep(workflow_id, 'topics_config');
+      await workflowService.advanceToStep(workflow_id, 'topics_config');
     }
 
     // Normalize and validate hierarchy structure (ensures IDs exist)
@@ -206,12 +205,12 @@ export const applyTopicHierarchyHandler: ToolHandler = async (params) => {
     const depth = calculateMaxDepth(validHierarchy);
 
     // Ensure the objective has a normalized "You are ..." role sentence
-    const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
+    const dataset = await datasetService.getById(workflow.datasetId);
     let normalizedObjective = dataset?.normalizedObjective;
     if (dataset?.datasetObjective && !normalizedObjective) {
       try {
         normalizedObjective = await normalizeObjectiveToRole(dataset.datasetObjective);
-        await datasetsDB.updateDatasetObjective(workflow.datasetId, dataset.datasetObjective, normalizedObjective);
+        await datasetService.updateObjective(workflow.datasetId, dataset.datasetObjective, normalizedObjective);
       } catch {
         console.warn('[apply-hierarchy] Objective normalization failed, will use heuristic fallback');
       }
@@ -231,14 +230,14 @@ export const applyTopicHierarchyHandler: ToolHandler = async (params) => {
     }
 
     // Save hierarchy to dataset (single source of truth)
-    await datasetsDB.updateDatasetTopicHierarchy(workflow.datasetId, {
+    await datasetService.updateTopicHierarchy(workflow.datasetId, {
       hierarchy: validHierarchy,
       depth,
       generatedAt: Date.now(),
     });
 
     // Update workflow with metadata only (not the full hierarchy)
-    await workflowDB.updateStepData(workflow_id, 'topicsConfig', {
+    await workflowService.updateStepData(workflow_id, 'topicsConfig', {
       topicCount,
       depth,
       generatedAt: Date.now(),

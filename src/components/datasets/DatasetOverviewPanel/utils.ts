@@ -3,9 +3,9 @@
  */
 
 import { emitter } from "@/utils/eventEmitter";
-import type { DryRunJob } from "@/types/dry-run-job";
-import { getJobAverageScore } from "@/types/dry-run-job";
-import type { DryRunStats, ScoreDistribution } from "@/types/dataset-types";
+import type { EvalJob } from "@/types/eval-job";
+import { getJobAverageScore } from "@/types/eval-job";
+import type { EvalStats, ScoreDistribution } from "@/types/dataset-types";
 import type { FinetuneJob } from "@/services/finetune-api";
 import type { Plan } from "@/lib/distri-finetune-tools/steps/propose-plan/types";
 import type {
@@ -110,7 +110,7 @@ export function formatTrainingConfigValue(value: unknown): string | undefined {
 // Navigation
 // =============================================================================
 
-export function navigateToDryRunJob(datasetId: string, jobId: string): void {
+export function navigateToEvalJob(datasetId: string, jobId: string): void {
   emitter.emit("vllora_switch_tab", { datasetId, tab: "evaluator" });
   setTimeout(() => {
     window.dispatchEvent(
@@ -194,13 +194,13 @@ export function topTopicBins(
 }
 
 export function buildQualityDistributionBlock(
-  dryRunStats?: DryRunStats | null
+  evalStats?: EvalStats | null
 ): ActivityDetailBlock | undefined {
-  if (!dryRunStats?.distribution) return undefined;
-  const bins = scoreDistributionToBins(dryRunStats.distribution, { keepZeros: true });
+  if (!evalStats?.distribution) return undefined;
+  const bins = scoreDistributionToBins(evalStats.distribution, { keepZeros: true });
   if (bins.length === 0 || bins.every((bin) => bin.value === 0)) return undefined;
-  const mean = dryRunStats.statistics?.mean;
-  const samples = dryRunStats.samplesEvaluated;
+  const mean = evalStats.statistics?.mean;
+  const samples = evalStats.samplesEvaluated;
   const footerBits = [
     mean != null ? `Mean ${Math.round(mean * 100)}%` : undefined,
     samples != null ? `${samples} samples` : undefined,
@@ -256,22 +256,22 @@ export function buildFinetuneConfigRows(job: FinetuneJob): Array<{ key: string; 
 // Detail builders
 // =============================================================================
 
-export function getDryRunStatsForEvaluationJob(
-  job: DryRunJob,
-  datasetDryRunStats?: DryRunStats | null
-): DryRunStats | undefined {
+export function getEvalStatsForEvaluationJob(
+  job: EvalJob,
+  datasetEvalStats?: EvalStats | null
+): EvalStats | undefined {
   if (job.result) return job.result;
-  if (datasetDryRunStats?.evaluationRunId && datasetDryRunStats.evaluationRunId === job.evaluationRunId) {
-    return datasetDryRunStats;
+  if (datasetEvalStats?.evaluationRunId && datasetEvalStats.evaluationRunId === job.evaluationRunId) {
+    return datasetEvalStats;
   }
   return undefined;
 }
 
-export function getDryRunStatsForStep(
+export function getEvalStatsForStep(
   stepResult: Record<string, unknown> | null,
-  dryRunJobs: DryRunJob[],
-  datasetDryRunStats?: DryRunStats | null
-): { job?: DryRunJob; stats?: DryRunStats } {
+  dryRunJobs: EvalJob[],
+  datasetEvalStats?: EvalStats | null
+): { job?: EvalJob; stats?: EvalStats } {
   const dryRunJobId = asString(stepResult?.dry_run_job_id);
   const matchedJob = dryRunJobId
     ? dryRunJobs.find((job) => job.id === dryRunJobId)
@@ -279,8 +279,8 @@ export function getDryRunStatsForStep(
         .filter((job) => job.status !== "pending")
         .sort((a, b) => (b.completedAt ?? b.createdAt) - (a.completedAt ?? a.createdAt))[0];
   const stats = matchedJob
-    ? getDryRunStatsForEvaluationJob(matchedJob, datasetDryRunStats)
-    : datasetDryRunStats ?? undefined;
+    ? getEvalStatsForEvaluationJob(matchedJob, datasetEvalStats)
+    : datasetEvalStats ?? undefined;
   return { job: matchedJob, stats };
 }
 
@@ -393,7 +393,7 @@ export function getStepDetails({
     if (metrics.length) {
       details.push({ type: "metric_grid", title: "Generation Output", metrics });
     }
-    const qualityBlock = buildQualityDistributionBlock(dataset?.dryRunStats);
+    const qualityBlock = buildQualityDistributionBlock(dataset?.evalStats);
     if (qualityBlock) {
       details.push(qualityBlock);
     } else {
@@ -440,7 +440,7 @@ export function getStepDetails({
     rows.push({ key: "Status", value: alreadyUploaded ? "Already uploaded" : "Uploaded" });
     if (rows.length) details.push({ type: "kv_list", title: "Upload", rows });
   } else if (stepId === "dryrun") {
-    const { stats, job } = getDryRunStatsForStep(r, dryRunJobs, dataset?.dryRunStats);
+    const { stats, job } = getEvalStatsForStep(r, dryRunJobs, dataset?.evalStats);
     const verdict = asString(stats?.diagnosis?.verdict);
     const sampleSize = asNumber(r?.sample_size) ?? stats?.samplesEvaluated ?? job?.sampleSize;
     const samplePct =
@@ -472,11 +472,11 @@ export function getStepDetails({
 }
 
 export function getEvaluationDetails(
-  job: DryRunJob,
-  datasetDryRunStats?: DryRunStats | null
+  job: EvalJob,
+  datasetEvalStats?: EvalStats | null
 ): ActivityDetailBlock[] | undefined {
   const details: ActivityDetailBlock[] = [];
-  const stats = getDryRunStatsForEvaluationJob(job, datasetDryRunStats);
+  const stats = getEvalStatsForEvaluationJob(job, datasetEvalStats);
   const avg = stats?.statistics.mean ?? getJobAverageScore(job);
   const passed = asNumber(job.pollingSnapshot?.summary?.passed_count);
   const failed = asNumber(job.pollingSnapshot?.summary?.failed_count);

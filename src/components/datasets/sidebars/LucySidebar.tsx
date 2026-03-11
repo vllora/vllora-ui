@@ -32,8 +32,7 @@ import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { PlanConsumer } from "@/contexts/PlanContext";
-import { getDryRunJobsByDataset } from "@/services/dry-run-jobs-db";
-import { getIterationState } from "@/services/finetune-iteration-db";
+import { evalJobService, iterationStateService } from "@/services/service-registry";
 import { useFineTuneAgentChat } from "@/hooks/useFineTuneAgentChat";
 import {
   LucyChat,
@@ -302,7 +301,7 @@ export function LucySidebar() {
 
     const checkUnreviewed = async () => {
       try {
-        const jobs = await getDryRunJobsByDataset(selectedDatasetId);
+        const jobs = await evalJobService.getByDataset(selectedDatasetId);
         const hasUnreviewed = jobs.some(
           (j) => (j.status === 'completed' || j.status === 'failed') && !j.reviewedByAgent
         );
@@ -337,7 +336,7 @@ export function LucySidebar() {
 
     const fetchIteration = async () => {
       try {
-        const state = await getIterationState(selectedDatasetId);
+        const state = await iterationStateService.get(selectedDatasetId);
         setIterationNumber(state?.iterationNumber ?? 0);
       } catch {
         // Non-critical

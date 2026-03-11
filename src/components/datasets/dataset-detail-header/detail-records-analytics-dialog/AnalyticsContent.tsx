@@ -5,7 +5,7 @@
  * Shows overview chart, quality stats, message lengths, histograms, tool usage, and topic coverage.
  */
 
-import type { DryRunAnalyticsResponse } from "@/services/finetune-api";
+import type { EvalAnalyticsResponse } from "@/services/finetune-api";
 import { EmptyState } from "../DialogStates";
 import { OverviewChart } from "../overview-card";
 import { DistributionList } from "./DistributionList";
@@ -50,7 +50,7 @@ export interface RecordStats {
 }
 
 export interface AnalyticsContentProps {
-  analytics: DryRunAnalyticsResponse;
+  analytics: EvalAnalyticsResponse;
   recordStats?: RecordStats;
 }
 

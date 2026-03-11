@@ -6,8 +6,8 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import * as workflowDB from '@/services/finetune-workflow-db';
-import * as datasetsDB from '@/services/datasets-db';
+import { workflowService, datasetService, recordService } from '@/services/service-registry';
+import type { GenerationStrategy } from '@/types/workflow-types';
 import type { ToolHandler, GenerateDataResult } from '../types';
 
 // Import existing analysis and generation tools
@@ -40,7 +40,7 @@ export const generateSyntheticDataHandler: ToolHandler = async (params): Promise
       return { success: false, error: 'workflow_id is required' };
     }
 
-    const workflow = await workflowDB.getWorkflow(workflow_id);
+    const workflow = await workflowService.get(workflow_id);
     if (!workflow) {
       console.log('[generateSyntheticData] Workflow not found:', workflow_id);
       return { success: false, error: 'Workflow not found' };
@@ -50,9 +50,9 @@ export const generateSyntheticDataHandler: ToolHandler = async (params): Promise
 
 
     // Get current coverage
-    const records = await datasetsDB.getRecordsByDatasetId(workflow.datasetId);
+    const records = await recordService.getByDatasetId(workflow.datasetId);
 
-    const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
+    const dataset = await datasetService.getById(workflow.datasetId);
 
     if (!dataset) {
       return { success: false, error: 'Dataset not found' };
@@ -99,7 +99,7 @@ export const generateSyntheticDataHandler: ToolHandler = async (params): Promise
         return {
           success: true,
           generation: {
-            strategy: strategy as workflowDB.GenerationStrategy,
+            strategy: strategy as GenerationStrategy,
             topics_targeted: [],
             records_generated: 0,
             records_valid: 0,
@@ -207,8 +207,8 @@ export const generateSyntheticDataHandler: ToolHandler = async (params): Promise
     const topicsForHistory = isDataFirstWorkflow && topicsToTarget.length === 0
       ? ['__seed_based__']
       : topicsToTarget;
-    await workflowDB.recordGeneration(workflow_id, {
-      strategy: strategy as workflowDB.GenerationStrategy,
+    await workflowService.recordGeneration(workflow_id, {
+      strategy: strategy as GenerationStrategy,
       topicsTargeted: topicsForHistory,
       recordsGenerated: totalGenerated,
       recordsValid: totalGenerated,
@@ -221,14 +221,14 @@ export const generateSyntheticDataHandler: ToolHandler = async (params): Promise
     const newRecordCount = records.length + totalGenerated;
     const syntheticCount = (workflow.coverageGeneration?.syntheticCount || 0) + totalGenerated;
 
-    await workflowDB.updateStepData(workflow_id, 'coverageGeneration', {
+    await workflowService.updateStepData(workflow_id, 'coverageGeneration', {
       balanceScore: balanceScoreAfter,
       topicDistribution,
       recommendations: [],
       generationRounds: [
         ...existingRounds,
         {
-          strategy: strategy as workflowDB.GenerationStrategy,
+          strategy: strategy as GenerationStrategy,
           topicsTargeted: topicsForHistory,
           recordsGenerated: totalGenerated,
           timestamp: Date.now(),
@@ -242,7 +242,7 @@ export const generateSyntheticDataHandler: ToolHandler = async (params): Promise
     return {
       success: true,
       generation: {
-        strategy: strategy as workflowDB.GenerationStrategy,
+        strategy: strategy as GenerationStrategy,
         topics_targeted: topicsForHistory,
         records_generated: totalGenerated,
         records_valid: totalGenerated,

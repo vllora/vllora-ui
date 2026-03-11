@@ -14,15 +14,15 @@
  */
 
 import {
-  DryRunStats,
+  EvalStats,
   DryRunDiagnosis,
   DryRunVerdict,
   QualityRating,
   ScoreDistribution,
   Percentiles,
-  TopicDryRunStats,
+  TopicEvalStats,
 } from '@/types/dataset-types';
-import { updateDatasetDryRunStats } from '@/services/datasets-db';
+import { datasetService } from '@/services/service-registry';
 import type { EvaluationResultResponse, FlatEvaluationResult } from '@/services/finetune-api';
 import { flattenEvaluationResults } from '@/services/finetune-api';
 
@@ -145,7 +145,7 @@ function diagnoseResults(
   std: number,
   percentAboveZero: number,
   percentPerfect: number,
-  byTopic: Record<string, TopicDryRunStats>
+  byTopic: Record<string, TopicEvalStats>
 ): DryRunDiagnosis {
   const warnings: string[] = [];
   const recommendations: string[] = [];
@@ -295,11 +295,11 @@ function diagnoseResults(
 /**
  * Analyze evaluation results and produce comprehensive dry run stats
  */
-export function analyzeDryRunResults(
+export function analyzeEvalResults(
   evaluationResult: EvaluationResultResponse,
   samplePercentage: number,
   recordTopics?: Record<number, string> // row_index -> topic mapping
-): DryRunStats {
+): EvalStats {
   const results: FlatEvaluationResult[] = flattenEvaluationResults(evaluationResult.results);
 
   // Only include results that have actual scores (filter out failed/pending)
@@ -326,7 +326,7 @@ export function analyzeDryRunResults(
   const distribution = calculateDistribution(scores);
 
   // Calculate per-topic breakdown
-  const byTopic: Record<string, TopicDryRunStats> = {};
+  const byTopic: Record<string, TopicEvalStats> = {};
   if (recordTopics) {
     const topicScores: Record<string, number[]> = {};
 
@@ -410,19 +410,19 @@ export function analyzeDryRunResults(
  *
  * This is the shared function used by both Lucy agent and UI.
  */
-export async function calculateAndSaveDryRunStats(
+export async function calculateAndSaveEvalStats(
   datasetId: string,
   evaluationResult: EvaluationResultResponse,
   samplePercentage: number,
   recordTopics?: Record<number, string>
-): Promise<DryRunStats> {
+): Promise<EvalStats> {
   // Calculate stats
-  const dryRunStats = analyzeDryRunResults(evaluationResult, samplePercentage, recordTopics);
+  const evalStats = analyzeEvalResults(evaluationResult, samplePercentage, recordTopics);
 
   // Save to dataset
-  await updateDatasetDryRunStats(datasetId, dryRunStats);
+  await datasetService.updateEvalStats(datasetId, evalStats);
 
-  return dryRunStats;
+  return evalStats;
 }
 
 /**

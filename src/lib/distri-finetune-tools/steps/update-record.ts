@@ -5,8 +5,7 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import * as workflowDB from '@/services/finetune-workflow-db';
-import * as datasetsDB from '@/services/datasets-db';
+import { workflowService, recordService } from '@/services/service-registry';
 import type { ToolHandler } from '../types';
 
 export const updateRecordHandler: ToolHandler = async (params) => {
@@ -25,13 +24,13 @@ export const updateRecordHandler: ToolHandler = async (params) => {
       return { success: false, error: 'updates object is required' };
     }
 
-    const workflow = await workflowDB.getWorkflow(workflow_id);
+    const workflow = await workflowService.get(workflow_id);
     if (!workflow) {
       return { success: false, error: 'Workflow not found' };
     }
 
     // Get existing record
-    const records = await datasetsDB.getRecordsByDatasetId(workflow.datasetId);
+    const records = await recordService.getByDatasetId(workflow.datasetId);
     const record = records.find((r) => r.id === record_id);
 
     if (!record) {
@@ -43,7 +42,7 @@ export const updateRecordHandler: ToolHandler = async (params) => {
 
     // Update topic if provided
     if ('topic' in updatesObj && typeof updatesObj.topic === 'string') {
-      await datasetsDB.updateRecordTopic(workflow.datasetId, record_id, updatesObj.topic);
+      await recordService.updateTopic(workflow.datasetId, record_id, updatesObj.topic);
     }
 
     // Update data if messages provided
@@ -56,11 +55,11 @@ export const updateRecordHandler: ToolHandler = async (params) => {
           messages: updatesObj.messages,
         },
       };
-      await datasetsDB.updateRecordData(workflow.datasetId, record_id, newData);
+      await recordService.updateData(workflow.datasetId, record_id, newData);
     }
 
     // Get updated record
-    const updatedRecords = await datasetsDB.getRecordsByDatasetId(workflow.datasetId);
+    const updatedRecords = await recordService.getByDatasetId(workflow.datasetId);
     const updatedRecord = updatedRecords.find(r => r.id === record_id);
     const updatedData = updatedRecord?.data as { input?: { messages?: unknown[] } } | null;
 

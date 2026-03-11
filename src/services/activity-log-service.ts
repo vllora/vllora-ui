@@ -7,12 +7,12 @@
  * Sources:
  * - FinetuneWorkflowState (step timestamps)
  * - KnowledgeSource (created/processed)
- * - DryRunJob (created/started/completed)
+ * - EvalJob (created/started/completed)
  * - FinetuneJob (created/updated/completed)
  */
 
 import type { KnowledgeSource } from "@/types/dataset-types";
-import type { DryRunJob } from "@/types/dry-run-job";
+import type { EvalJob } from "@/types/eval-job";
 import type { FinetuneJob } from "@/services/finetune-api";
 
 export type LogEntryType =
@@ -37,7 +37,7 @@ export interface ActivityLogEntry {
  */
 export function buildActivityLog(params: {
   knowledgeSources: KnowledgeSource[];
-  dryRunJobs: DryRunJob[];
+  dryRunJobs: EvalJob[];
   finetuneJobs: FinetuneJob[];
   workflowCreatedAt?: number;
   topicsGeneratedAt?: number;

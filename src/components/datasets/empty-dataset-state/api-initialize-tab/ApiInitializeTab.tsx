@@ -15,7 +15,7 @@ import { ConfigureEndpointCard } from "./ConfigureEndpointCard";
 import { LiveTracesCard } from "./LiveTracesCard";
 import type { Trace } from "./LiveTraceFeed";
 import { inferObjectiveFromTraces } from "./infer-objective";
-import * as datasetsDB from "@/services/datasets-db";
+import { datasetService, recordService } from "@/services/service-registry";
 import { ObjectiveInputCard } from "../ObjectiveInputCard";
 import { StartFinetuneButton } from "../StartFinetuneButton";
 
@@ -116,7 +116,7 @@ export function ApiInitializeTab({ traces, onClear }: ApiInitializeTabProps) {
         ? datasetObjective.trim().slice(0, 50) + (datasetObjective.length > 50 ? "..." : "")
         : `Dataset ${new Date().toLocaleDateString()}`;
 
-      const dataset = await datasetsDB.createDataset(datasetName, datasetObjective.trim() || undefined);
+      const dataset = await datasetService.create(datasetName, datasetObjective.trim() || undefined);
 
       // If traces exist, add them as seed records
       if (traces.length > 0) {
@@ -137,7 +137,7 @@ export function ApiInitializeTab({ traces, onClear }: ApiInitializeTabProps) {
           };
         });
 
-        await datasetsDB.addRecordsToDataset(dataset.id, records);
+        await recordService.add(dataset.id, records);
         toast.success(`Created experiment with ${records.length} records`);
       } else {
         toast.success("Created experiment");

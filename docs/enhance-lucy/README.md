@@ -2,14 +2,28 @@
 
 Lucy's finetune agent follows a fixed 7-step pipeline. Claude Code with the finetune skill operates like an autonomous researcher — it reads results, diagnoses problems, changes strategy, and iterates until the model is good. This document set identifies the gaps and proposes concrete solutions.
 
-## Implementation Status (2026-03-09)
+## Implementation Status (2026-03-10)
 
 | Phase | Status | Key Deliverables |
 |-------|--------|-----------------|
-| **Phase 1: Eyes** | ✅ Done | `get_evaluation_details`, iteration state DB, catch-up (`buildCatchUpContext`, `reviewedByAgent`, `mark_job_reviewed`, auto-trigger events), sidebar notification badge |
-| **Phase 2: Autonomy** | ✅ Done | `analyze_evaluation` (reactive, 697 lines), inner/outer loop protocol in agent md, 4 new `ExecutionStepId` types (`regenerate_topic`, `adjust_grader`, `analyze`, `post_training_eval`) with executors |
-| **Phase 3: Wisdom** | ✅ Done | `analyze_training` done (reactive), stall detection comprehensive (RFT decision tree Steps A-F in `analyze_evaluation`) |
-| **Phase 4: Hands** | ✅ Done | `test_grader_sample` + `auto_test`, `check_viability` tool, 7 UI card renderers (eval, training, auto-countdown, progress, catch-up ×3), fresh thread per session (no history restoration), all scores in raw decimal format |
+| **Phase 1: Eyes** | ✅ Done | `get_evaluation_details`, iteration state DB, catch-up (`buildCatchUpContext`, `reviewedByAgent`, `mark_job_reviewed`, auto-trigger events). Sidebar notification badge wiring complete but visual indicator not yet rendered. |
+| **Phase 2: Autonomy** | ✅ Done | `analyze_evaluation` (reactive), inner/outer loop protocol in agent md, 4 new `ExecutionStepId` types (`regenerate_topic`, `adjust_grader`, `analyze`, `post_training_eval`) with executors |
+| **Phase 3: Wisdom** | ✅ Done | `analyze_training` done (reactive), `get_training_metrics` (GRPO/GSPO reinforcement metrics), stall detection comprehensive (RFT decision tree Steps A-F in `analyze_evaluation`) |
+| **Phase 4: Hands** | ✅ Done | `test_grader_sample` + `auto_test`, `check_viability` tool, 9 UI card renderers (see below), fresh thread per session (no history restoration), all scores in raw decimal format |
+
+### UI Card Renderers
+
+| Component | Purpose |
+|-----------|---------|
+| `LucyAnalyzeEvalRenderer` | Eval analysis results card |
+| `LucyAnalyzeTrainingRenderer` | Training analysis results card |
+| `LucyAutoCountdownCard` | Auto-continue countdown (8s) |
+| `LucyEvalProgressCard` | Live eval progress (records, partial score) |
+| `LucyCatchUpCard` | Unified catch-up card (replaces 4 separate cards below) |
+| `LucyCompletedJobCard` | Completed evaluation results |
+| `LucyTrainingJobCard` | Training job status and metrics |
+| `LucyFailedJobCard` | Failed job errors |
+| `LucyPendingDecisionCard` | Awaiting-user decisions |
 
 See [implementation-plan.md](./implementation-plan.md) for detailed status and [issue/](./issue/) for E2E testing issues.
 
@@ -37,6 +51,7 @@ See [implementation-plan.md](./implementation-plan.md) for detailed status and [
 | [e2e-test-framework.md](./e2e-test-framework.md) | E2E test framework: test case structure, evidence collection, UI consistency checks, result tracking |
 | [e2e-tests/](./e2e-tests/) | Test case definitions per workflow step + master registry |
 | [mockups-final.html](./mockups-final.html) | Interactive UX mockups: iteration checkpoints, intervention, stall, post-training, session lifecycle scenarios |
+| [end-to-end-flow.md](./end-to-end-flow.md) | Full request flow: FE → Gateway → Cloud API → Distri. Port map, endpoint tables, polling architecture, data residency |
 | [issue/](./issue/) | E2E testing issues found during implementation |
 
 ## Summary of Gaps

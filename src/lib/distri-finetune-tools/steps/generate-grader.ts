@@ -18,8 +18,7 @@ import type { DistriFnTool } from '@distri/core';
 import { DistriClient, type DistriMessage } from '@distri/core';
 import { getDistriUrl } from '@/config/api';
 import { fetchLucyConfig, type LucyConfig } from '@/lib/agent-sync';
-import * as datasetsDB from '@/services/datasets-db';
-import * as workflowDB from '@/services/finetune-workflow-db';
+import { datasetService, workflowService } from '@/services/service-registry';
 import { updateDatasetEvalScript as updateBackendEvalScript } from '@/services/finetune-api';
 import { buildKnowledgeContext } from './shared/knowledge-context';
 import { generateGraderTemplate } from './propose-plan/grader-template';
@@ -259,7 +258,7 @@ export const generateGraderHandler: ToolHandler = async (params) => {
     if (mode === 'append' && parsedCriteria && parsedCriteria.length > 0) {
       const dsId = typeof dataset_id === 'string' ? dataset_id : undefined;
       const wfDsId = workflow_id && typeof workflow_id === 'string'
-        ? (await workflowDB.getWorkflow(workflow_id))?.datasetId
+        ? (await workflowService.get(workflow_id))?.datasetId
         : undefined;
       const resolvedDatasetId = dsId || wfDsId;
 
@@ -283,7 +282,7 @@ export const generateGraderHandler: ToolHandler = async (params) => {
     // Used during plan creation to get grader suggestions
     // =========================================================================
     if (dataset_id && typeof dataset_id === 'string' && !workflow_id) {
-      const dataset = await datasetsDB.getDatasetById(dataset_id);
+      const dataset = await datasetService.getById(dataset_id);
       if (!dataset) {
         return { success: false, error: `Dataset ${dataset_id} not found` };
       }
@@ -318,12 +317,12 @@ export const generateGraderHandler: ToolHandler = async (params) => {
       return { success: false, error: 'workflow_id or dataset_id is required' };
     }
 
-    const workflow = await workflowDB.getWorkflow(workflow_id);
+    const workflow = await workflowService.get(workflow_id);
     if (!workflow) {
       return { success: false, error: 'Workflow not found' };
     }
 
-    const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
+    const dataset = await datasetService.getById(workflow.datasetId);
     const objective = dataset?.datasetObjective || workflow.trainingGoals || '';
     if (!objective.trim()) {
       return { success: false, error: 'No training objective found' };
@@ -344,7 +343,7 @@ export const generateGraderHandler: ToolHandler = async (params) => {
     }
 
     // Save eval script to dataset
-    await datasetsDB.updateDatasetEvalScript(workflow.datasetId, result.script);
+    await datasetService.updateEvalScript(workflow.datasetId, result.script);
 
     // Sync to backend if uploaded
     if (dataset?.backendDatasetId) {
@@ -356,7 +355,7 @@ export const generateGraderHandler: ToolHandler = async (params) => {
     }
 
     // Update workflow metadata
-    await workflowDB.updateStepData(workflow_id, 'graderConfig', {
+    await workflowService.updateStepData(workflow_id, 'graderConfig', {
       type: 'js',
       configuredAt: Date.now(),
     });

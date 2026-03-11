@@ -3,15 +3,15 @@ export interface DatasetEvaluation {
   feedback?: string;
   evaluatedAt?: number;
   /** Latest dry-run evaluation score */
-  dryRunScore?: number;
+  evalScore?: number;
   /** Running average across all dry runs */
   dryRunAvg?: number;
   /** Number of dry runs that included this record */
-  dryRunCount?: number;
+  evalCount?: number;
   /** Timestamp of the latest dry-run evaluation */
   dryRunEvaluatedAt?: number;
   /** Model used for the latest dry-run evaluation */
-  dryRunModel?: string;
+  evalModel?: string;
   /** Latest finetune average score across epochs */
   finetuneScore?: number;
   /** Running average across all finetune jobs */
@@ -168,7 +168,7 @@ export type DryRunVerdict = 'GO' | 'NO-GO' | 'WARNING';
 export type QualityRating = 'good' | 'warning' | 'problem' | 'unknown';
 
 // Per-topic dry run statistics
-export interface TopicDryRunStats {
+export interface TopicEvalStats {
   mean: number;
   std: number;
   count: number;
@@ -214,7 +214,7 @@ export interface DryRunDiagnosis {
 }
 
 // Dry run statistics stored on dataset for UI display
-export interface DryRunStats {
+export interface EvalStats {
   // When this was run
   evaluationRunId: string;
   lastRunAt: number;
@@ -240,7 +240,7 @@ export interface DryRunStats {
   distribution: ScoreDistribution;
 
   // Per-topic breakdown
-  byTopic: Record<string, TopicDryRunStats>;
+  byTopic: Record<string, TopicEvalStats>;
 
   // Diagnosis and recommendations
   diagnosis: DryRunDiagnosis;
@@ -303,7 +303,7 @@ export function getFilterGroupConfig(group: DatasetFilterGroup): DatasetFilterGr
  * Used for both badge display and tab filtering.
  */
 export function computeFilterGroup(
-  dataset: { state?: DatasetState; dryRunStats?: DryRunStats },
+  dataset: { state?: DatasetState; evalStats?: EvalStats },
   workflow: { currentStep: string; training?: { status: string } | null } | null,
   activeDryRunCount: number,
 ): DatasetFilterGroup {
@@ -354,7 +354,7 @@ export interface Dataset {
   // Knowledge source coverage stats (which chunks are covered by training data)
   knowledgeCoverageStats?: KnowledgeCoverageStats;
   // Dry run statistics for UI display (updated by run_evaluation)
-  dryRunStats?: DryRunStats;
+  evalStats?: EvalStats;
   // Dataset statistics for UI display (updated by get_dataset_state)
   stats?: DatasetStats;
   // Training configuration (from sample or user-configured)

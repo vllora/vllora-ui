@@ -30,7 +30,7 @@ import { ExplorerSidebar, LucySidebar, TasksViewer, LogsViewer } from "./sidebar
 import { EvaluationConfigPanel } from "./evaluation-dialog/EvaluationConfigPanel";
 import { FinetuneConfigPanel } from "@/components/finetune/content/FinetuneConfigPanel";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
-import { DryRunJobsProvider } from "@/contexts/DryRunJobsContext";
+import { EvalJobsProvider } from "@/contexts/EvalJobsContext";
 import { PlanPreview } from "./PlanPreview";
 import { DatasetTitleBar, DatasetBreadcrumbBar } from "./DatasetBreadcrumbBar";
 import { useDatasetReadme } from "@/hooks/useDatasetReadme";
@@ -714,7 +714,7 @@ export function DatasetDetailContentV2() {
   const contentSection: ContentSection = tabContentSection;
 
   return (
-    <DryRunJobsProvider dataset={dataset}>
+    <EvalJobsProvider dataset={dataset}>
      <WorkspaceTabsProvider datasetId={datasetId} initialTabs={emptyDatasetInitialTabs}>
       {/* Bridge: syncs workspace tab state ↔ parent content section */}
       <WorkspaceTabBridge openTabRef={openTabRef} onSectionChange={setTabContentSection} onActivePathChange={setActiveTabPath} />
@@ -1003,6 +1003,6 @@ export function DatasetDetailContentV2() {
         />
       </div>
      </WorkspaceTabsProvider>
-    </DryRunJobsProvider>
+    </EvalJobsProvider>
   );
 }

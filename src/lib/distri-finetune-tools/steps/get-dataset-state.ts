@@ -7,9 +7,7 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import * as datasetsDB from '@/services/datasets-db';
-import * as workflowDB from '@/services/finetune-workflow-db';
-import * as knowledgeDB from '@/services/knowledge-sources-db';
+import { datasetService, recordService, knowledgeSourceService, workflowService } from '@/services/service-registry';
 import { countLeafTopics } from './helpers';
 import type { ToolHandler } from '../types';
 import type { DatasetStats, SanitizationStats, DatasetRecord } from '@/types/dataset-types';
@@ -191,10 +189,10 @@ export const getDatasetStateHandler: ToolHandler = async (params) => {
     // This handles the race where the agent calls get_dataset_state
     // immediately after creating an experiment (IndexedDB write may
     // not have committed yet).
-    let dataset = await datasetsDB.getDatasetById(dataset_id);
+    let dataset = await datasetService.getById(dataset_id);
     if (!dataset) {
       await new Promise(resolve => setTimeout(resolve, 500));
-      dataset = await datasetsDB.getDatasetById(dataset_id);
+      dataset = await datasetService.getById(dataset_id);
     }
     if (!dataset) {
       return { success: false, error: `Dataset ${dataset_id} not found. It may still be initializing — try again in a moment.` };
@@ -202,10 +200,10 @@ export const getDatasetStateHandler: ToolHandler = async (params) => {
 
     // Fetch records, workflow, plan state, and knowledge sources in parallel
     const [records, workflow, storedPlan, knowledgeSources] = await Promise.all([
-      datasetsDB.getRecordsByDatasetId(dataset_id),
-      workflowDB.getWorkflowByDataset(dataset_id),
+      recordService.getByDatasetId(dataset_id),
+      workflowService.getByDataset(dataset_id),
       getStoredPlan(dataset_id).catch(() => null),
-      knowledgeDB.getKnowledgeSourcesByDataset(dataset_id).catch(() => [] as Awaited<ReturnType<typeof knowledgeDB.getKnowledgeSourcesByDataset>>),
+      knowledgeSourceService.getByDataset(dataset_id).catch(() => [] as Awaited<ReturnType<typeof knowledgeSourceService.getByDataset>>),
     ]);
 
     // Compute stats (includes sanitization)
@@ -213,7 +211,7 @@ export const getDatasetStateHandler: ToolHandler = async (params) => {
 
     // Persist stats to dataset if requested (default: true)
     if (persist && dataset) {
-      await datasetsDB.updateDatasetStats(dataset_id, stats);
+      await datasetService.updateDatasetStats(dataset_id, stats);
     }
 
     // Build topic info from hierarchy

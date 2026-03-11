@@ -17,8 +17,7 @@ import {
   listReinforcementJobs,
 } from '@/services/finetune-api';
 import type { TrainingMetricsSnapshot } from '@/services/finetune-api';
-import { getDatasetById } from '@/services/datasets-db';
-import { getWorkflowByDataset } from '@/services/finetune-workflow-db';
+import { datasetService, workflowService } from '@/services/service-registry';
 
 // =============================================================================
 // Alert Thresholds (from reinforcement_metrics_cheatsheet.md)
@@ -99,10 +98,10 @@ async function resolveJobId(
 ): Promise<string> {
   if (jobId) return jobId;
 
-  const workflow = await getWorkflowByDataset(datasetId);
+  const workflow = await workflowService.getByDataset(datasetId);
   if (workflow?.training?.jobId) return workflow.training.jobId;
 
-  const dataset = await getDatasetById(datasetId);
+  const dataset = await datasetService.getById(datasetId);
   if (!dataset?.backendDatasetId) {
     throw new Error('Dataset not uploaded to backend');
   }

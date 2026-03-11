@@ -8,8 +8,7 @@
  */
 
 import type { DistriFnTool } from "@distri/core";
-import * as workflowDB from "@/services/finetune-workflow-db";
-import * as datasetsDB from "@/services/datasets-db";
+import { workflowService, datasetService } from "@/services/service-registry";
 import { updateDatasetEvalScript as updateBackendEvalScript } from "@/services/finetune-api";
 import { getProposedPlan } from "./proposed-plan-store";
 import { generateGraderTemplate } from "./propose-plan/grader-template";
@@ -80,7 +79,7 @@ export const configureGraderHandler: ToolHandler = async (params) => {
       return { success: false, error: "workflow_id is required" };
     }
 
-    const workflow = await workflowDB.getWorkflow(workflow_id);
+    const workflow = await workflowService.get(workflow_id);
     if (!workflow) {
       return { success: false, error: "Workflow not found" };
     }
@@ -95,7 +94,7 @@ export const configureGraderHandler: ToolHandler = async (params) => {
       script = explicitScript;
     } else if (hasFeedback) {
       // 2. Feedback provided without script → modify the existing saved script
-      const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
+      const dataset = await datasetService.getById(workflow.datasetId);
       if (!dataset?.evalScript) {
         return {
           success: false,
@@ -137,7 +136,7 @@ export const configureGraderHandler: ToolHandler = async (params) => {
     // Apply user feedback via LLM if provided
     let feedbackApplied = false;
     if (hasFeedback) {
-      const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
+      const dataset = await datasetService.getById(workflow.datasetId);
       const objective =
         dataset?.datasetObjective || workflow.trainingGoals || "general evaluation";
       script = await applyFeedbackToScript(script, feedback as string, objective);
@@ -154,10 +153,10 @@ export const configureGraderHandler: ToolHandler = async (params) => {
     }
 
     // Save eval script to dataset (local IndexedDB)
-    await datasetsDB.updateDatasetEvalScript(workflow.datasetId, script);
+    await datasetService.updateEvalScript(workflow.datasetId, script);
 
     // Sync to backend if dataset has been uploaded
-    const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
+    const dataset = await datasetService.getById(workflow.datasetId);
     if (dataset?.backendDatasetId) {
       try {
         await updateBackendEvalScript(dataset.backendDatasetId, script);
@@ -167,7 +166,7 @@ export const configureGraderHandler: ToolHandler = async (params) => {
     }
 
     // Update workflow with metadata only
-    await workflowDB.updateStepData(workflow_id, "graderConfig", {
+    await workflowService.updateStepData(workflow_id, "graderConfig", {
       type: "js",
       configuredAt: Date.now(),
     });

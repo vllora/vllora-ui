@@ -22,14 +22,14 @@ import { RunsSidebar } from "./RunsSidebar";
 import { flattenEvaluationResults, getEvaluatorVersions } from "@/services/finetune-api";
 import { cn } from "@/lib/utils";
 import { emitter } from "@/utils/eventEmitter";
-import type { DryRunJob } from "@/types/dry-run-job";
-import { getJobTotalRows, getJobCompletedRows } from "@/types/dry-run-job";
+import type { EvalJob } from "@/types/eval-job";
+import { getJobTotalRows, getJobCompletedRows } from "@/types/eval-job";
 import { Code2 } from "lucide-react";
 
-interface DryRunActivityViewProps {
+interface EvalActivityViewProps {
   /** Dataset ID for navigation (click record ID → switch to Records tab) */
   datasetId: string;
-  jobs: DryRunJob[];
+  jobs: EvalJob[];
   /** Cancel handler for running jobs */
   onCancelJob?: () => void;
   /** Pre-select a specific job when opening */
@@ -112,7 +112,7 @@ function EvaluatorVersionBadge({ backendDatasetId }: { backendDatasetId: string 
 }
 
 /** Inline detail panel for a selected job (left side of split) */
-function JobDetail({ job, datasetId, onCancel, onRunAgain, onRefresh }: { job: DryRunJob; datasetId: string; onCancel?: () => void; onRunAgain?: () => void; onRefresh?: (jobId: string) => void }) {
+function JobDetail({ job, datasetId, onCancel, onRunAgain, onRefresh }: { job: EvalJob; datasetId: string; onCancel?: () => void; onRunAgain?: () => void; onRefresh?: (jobId: string) => void }) {
   const result = job.result;
 
   const scores = useMemo(() => {
@@ -369,7 +369,7 @@ function JobDetail({ job, datasetId, onCancel, onRunAgain, onRefresh }: { job: D
   );
 }
 
-export function DryRunActivityView({ datasetId, jobs, onCancelJob, initialSelectedId, onRunAgain, onRefresh, hideRunsSidebar = false }: DryRunActivityViewProps) {
+export function DryRunActivityView({ datasetId, jobs, onCancelJob, initialSelectedId, onRunAgain, onRefresh, hideRunsSidebar = false }: EvalActivityViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     if (initialSelectedId) return initialSelectedId;
     // Default to most recent completed job

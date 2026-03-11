@@ -5,7 +5,7 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import * as workflowDB from '@/services/finetune-workflow-db';
+import { workflowService } from '@/services/service-registry';
 import { getReinforcementJobStatus } from '@/services/finetune-api';
 import { emitter } from '@/utils/eventEmitter';
 import type { ToolHandler } from '../types';
@@ -18,7 +18,7 @@ export const checkTrainingStatusHandler: ToolHandler = async (params) => {
       return { success: false, error: 'workflow_id is required' };
     }
 
-    const workflow = await workflowDB.getWorkflow(workflow_id);
+    const workflow = await workflowService.get(workflow_id);
     if (!workflow) {
       return { success: false, error: 'Workflow not found' };
     }
@@ -55,7 +55,7 @@ export const checkTrainingStatusHandler: ToolHandler = async (params) => {
       (job.fine_tuned_model && workflow.training.modelId !== job.fine_tuned_model);
 
     if (needsUpdate) {
-      await workflowDB.updateStepData(workflow_id, 'training', {
+      await workflowService.updateStepData(workflow_id, 'training', {
         ...workflow.training,
         status: workflowStatus,
         modelId: job.fine_tuned_model || workflow.training.modelId,

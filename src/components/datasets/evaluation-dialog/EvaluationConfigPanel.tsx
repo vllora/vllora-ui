@@ -16,7 +16,7 @@ import {
   Settings,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
-import { DryRunJobsConsumer } from "@/contexts/DryRunJobsContext";
+import { EvalJobsConsumer } from "@/contexts/EvalJobsContext";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import {
   Tooltip,
@@ -213,7 +213,7 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
   const [rolloutModel, setRolloutModel] = useState("gpt-4o-mini");
 
   const bottomPanelRef = useRef<ImperativePanelHandle>(null);
-  const { runningJob, lastCompletedJob, startDryRun } = DryRunJobsConsumer();
+  const { runningJob, lastCompletedJob, startDryRun } = EvalJobsConsumer();
 
   useEffect(() => {
     setSampleSize(getDefaultSampleSize(recordCount));

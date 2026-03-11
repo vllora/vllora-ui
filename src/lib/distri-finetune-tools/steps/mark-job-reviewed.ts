@@ -7,7 +7,7 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import { updateDryRunJob } from '@/services/dry-run-jobs-db';
+import { evalJobService } from '@/services/service-registry';
 import type { ToolHandler } from '../types';
 
 // =============================================================================
@@ -22,7 +22,7 @@ export const markJobReviewedHandler: ToolHandler = async (params) => {
       return { success: false, error: 'job_id is required' };
     }
 
-    const updated = await updateDryRunJob(job_id, {
+    const updated = await evalJobService.update(job_id, {
       reviewedByAgent: true,
       reviewedByAgentAt: Date.now(),
     });

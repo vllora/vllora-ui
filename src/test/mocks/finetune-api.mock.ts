@@ -122,7 +122,7 @@ export function mockFinetuneApi(opts: MockFinetuneApiOptions = {}) {
       }));
     }),
 
-    getDryRunAnalytics: vi.fn().mockImplementation(() =>
+    getEvalAnalytics: vi.fn().mockImplementation(() =>
       delayed({ diagnosis: { verdict: 'HEALTHY', mean: 0.5 } }, ms),
     ),
 

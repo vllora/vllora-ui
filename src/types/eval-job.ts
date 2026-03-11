@@ -1,17 +1,17 @@
 /**
- * Dry Run Job Types
+ * Eval Job Types
  *
- * Types for background dry run job management.
+ * Types for background evaluation job management.
  * Jobs are stored in IndexedDB and polled in the background.
  */
 
-import type { DryRunStats } from './dataset-types';
+import type { EvalStats } from './dataset-types';
 import type { EvaluationResultResponse } from '@/services/finetune-api';
 
 /**
- * Status of a dry run job
+ * Status of an evaluation job
  */
-export type DryRunJobStatus =
+export type EvalJobStatus =
   | 'pending'     // Created but not started
   | 'running'     // Evaluation in progress
   | 'completed'   // Successfully finished
@@ -19,9 +19,9 @@ export type DryRunJobStatus =
   | 'cancelled';  // User cancelled
 
 /**
- * A dry run job record stored in IndexedDB
+ * An evaluation job record stored in IndexedDB
  */
-export interface DryRunJob {
+export interface EvalJob {
   /** Unique job ID (UUID) */
   id: string;
 
@@ -35,7 +35,7 @@ export interface DryRunJob {
   evaluationRunId: string;
 
   /** Current job status */
-  status: DryRunJobStatus;
+  status: EvalJobStatus;
 
   /** Number of samples to evaluate */
   sampleSize: number;
@@ -55,8 +55,8 @@ export interface DryRunJob {
   /** Latest polling snapshot from backend (real-time progress) */
   pollingSnapshot?: EvaluationResultResponse;
 
-  /** Full dry run results (populated on completion) */
-  result?: DryRunStats;
+  /** Full evaluation results (populated on completion) */
+  result?: EvalStats;
 
   /** Error message (populated on failure) */
   error?: string;
@@ -73,39 +73,39 @@ export interface DryRunJob {
 // =============================================================================
 
 /** Get total rows from job (from polling snapshot or default) */
-export function getJobTotalRows(job: DryRunJob): number {
+export function getJobTotalRows(job: EvalJob): number {
   return job.pollingSnapshot?.total_rows ?? 0;
 }
 
 /** Get completed rows from job */
-export function getJobCompletedRows(job: DryRunJob): number {
+export function getJobCompletedRows(job: EvalJob): number {
   return (job.pollingSnapshot?.completed_rows ?? 0) + (job.pollingSnapshot?.failed_rows ?? 0);
 }
 
 /** Get failed rows from job */
-export function getJobFailedRows(job: DryRunJob): number {
+export function getJobFailedRows(job: EvalJob): number {
   return job.pollingSnapshot?.failed_rows ?? 0;
 }
 
 /** Get average score from job */
-export function getJobAverageScore(job: DryRunJob): number | undefined {
+export function getJobAverageScore(job: EvalJob): number | undefined {
   return job.pollingSnapshot?.summary?.average_score ?? undefined;
 }
 
 /** Get passed count from job */
-export function getJobPassedCount(job: DryRunJob): number {
+export function getJobPassedCount(job: EvalJob): number {
   return job.pollingSnapshot?.summary?.passed_count ?? 0;
 }
 
 /** Get failed grading count from job */
-export function getJobFailedGradingCount(job: DryRunJob): number {
+export function getJobFailedGradingCount(job: EvalJob): number {
   return job.pollingSnapshot?.summary?.failed_count ?? 0;
 }
 
 /**
- * Parameters for starting a new dry run
+ * Parameters for starting a new evaluation
  */
-export interface StartDryRunParams {
+export interface StartEvalParams {
   datasetId: string;
   backendDatasetId: string;
   sampleSize: number;

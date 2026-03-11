@@ -18,9 +18,7 @@
 
 import JSZip from 'jszip';
 import type { DistriFnTool } from '@distri/core';
-import * as workflowDB from '@/services/finetune-workflow-db';
-import * as datasetsDB from '@/services/datasets-db';
-import * as knowledgeDB from '@/services/knowledge-sources-db';
+import { workflowService, datasetService, recordService, knowledgeSourceService } from '@/services/service-registry';
 import type {
   DatasetRecord,
   KnowledgeSource,
@@ -716,13 +714,13 @@ export async function assembleSkillPackageFiles(
   datasetId: string,
   overrideName?: string,
 ): Promise<SkillPackageFiles | null> {
-  const dataset = await datasetsDB.getDatasetById(datasetId);
+  const dataset = await datasetService.getById(datasetId);
   if (!dataset) return null;
 
-  const records = await datasetsDB.getRecordsByDatasetId(datasetId);
+  const records = await recordService.getByDatasetId(datasetId);
   if (records.length === 0) return null;
 
-  const knowledgeSources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
+  const knowledgeSources = await knowledgeSourceService.getByDataset(datasetId);
 
   const plan = await getProposedPlan(datasetId);
   const graderCriteria: readonly GraderCriterion[] = plan?.grader_config?.criteria ?? [];
@@ -796,7 +794,7 @@ export const generateSkillPackageHandler: ToolHandler = async (params) => {
       return { success: false, error: 'workflow_id is required' };
     }
 
-    const workflow = await workflowDB.getWorkflow(workflow_id);
+    const workflow = await workflowService.get(workflow_id);
     if (!workflow) {
       return { success: false, error: 'Workflow not found' };
     }
@@ -837,7 +835,7 @@ export const generateSkillPackageHandler: ToolHandler = async (params) => {
       .reduce((sum, content) => sum + content.split('\n').filter(Boolean).length, 0);
 
     // Update workflow state
-    await workflowDB.updateStepData(workflow_id, 'skillPackaging', {
+    await workflowService.updateStepData(workflow_id, 'skillPackaging', {
       recordCount: totalRows,
       packagedAt: Date.now(),
       skillName: resolvedName,
@@ -852,7 +850,7 @@ export const generateSkillPackageHandler: ToolHandler = async (params) => {
       package_size_bytes: blob.size,
       has_knowledge: packageFiles.knowledgeDoc !== null,
       has_eval_rules: Boolean(
-        (await datasetsDB.getDatasetById(workflow.datasetId))?.evalScript,
+        (await datasetService.getById(workflow.datasetId))?.evalScript,
       ),
       message: `Skill package "${resolvedName}" generated with ${totalRows} examples across ${packageFiles.topicFiles.size} topics. Use download_skill_package to save.`,
     };

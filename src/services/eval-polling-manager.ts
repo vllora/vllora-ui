@@ -5,23 +5,16 @@
  * Survives component unmounts and can recover from page refresh.
  */
 
-import type { StartDryRunParams } from '@/types/dry-run-job';
-import {
-  createDryRunJob,
-  getDryRunJob,
-  getRunningDryRunJobs,
-  getPendingDryRunJobs,
-  updateDryRunJob,
-} from './dry-run-jobs-db';
+import type { StartEvalParams } from '@/types/eval-job';
+import { evalJobService } from './service-registry';
 import {
   createEvaluation,
   getEvaluationResult,
   ensureDatasetUploaded,
   flattenEvaluationResults,
 } from './finetune-api';
-import { analyzeDryRunResults } from '@/lib/distri-dataset-tools/analysis/analyze-dry-run';
-import * as datasetsDB from './datasets-db';
-import { getWorkflowByDataset, updateStepData, markStepFailed } from './finetune-workflow-db';
+import { analyzeEvalResults } from '@/lib/distri-dataset-tools/analysis/analyze-evaluation';
+import { datasetService, recordService, workflowService } from './service-registry';
 import { toast } from 'sonner';
 import { emitter } from '@/utils/eventEmitter';
 
@@ -74,8 +67,8 @@ const MAX_CONSECUTIVE_ERRORS = 150;
 // Singleton Class
 // =============================================================================
 
-class DryRunPollingManager {
-  private static instance: DryRunPollingManager;
+class EvalPollingManager {
+  private static instance: EvalPollingManager;
   private pollingIntervals: Map<string, ReturnType<typeof setInterval>> = new Map();
   private pollAttempts: Map<string, number> = new Map();
   private consecutiveErrors: Map<string, number> = new Map();
@@ -83,11 +76,11 @@ class DryRunPollingManager {
 
   private constructor() {}
 
-  static getInstance(): DryRunPollingManager {
-    if (!DryRunPollingManager.instance) {
-      DryRunPollingManager.instance = new DryRunPollingManager();
+  static getInstance(): EvalPollingManager {
+    if (!EvalPollingManager.instance) {
+      EvalPollingManager.instance = new EvalPollingManager();
     }
-    return DryRunPollingManager.instance;
+    return EvalPollingManager.instance;
   }
 
   /**
@@ -101,8 +94,8 @@ class DryRunPollingManager {
     try {
       // Get all running and pending jobs
       const [runningJobs, pendingJobs] = await Promise.all([
-        getRunningDryRunJobs(),
-        getPendingDryRunJobs(),
+        evalJobService.getRunning(),
+        evalJobService.getPending(),
       ]);
 
       // Resume polling for running jobs
@@ -114,7 +107,7 @@ class DryRunPollingManager {
       for (const job of pendingJobs) {
         // Mark as failed if pending for too long (more than 1 minute)
         if (Date.now() - job.createdAt > 60000) {
-          await updateDryRunJob(job.id, {
+          await evalJobService.update(job.id, {
             status: 'failed',
             error: 'Job was interrupted before evaluation started',
             completedAt: Date.now(),
@@ -122,16 +115,16 @@ class DryRunPollingManager {
         }
       }
     } catch (error) {
-      console.error('[DryRunPollingManager] Failed to initialize:', error);
+      console.error('[EvalPollingManager] Failed to initialize:', error);
     }
   }
 
   /**
    * Start a dry run for a dataset (high-level API)
    * Handles fetching dataset, auto-upload, and starting the dry run.
-   * Used by both UI (DryRunJobsContext) and tool handlers.
+   * Used by both UI (EvalJobsContext) and tool handlers.
    */
-  async startDryRunForDataset(params: {
+  async startEvalForDataset(params: {
     datasetId: string;
     sampleSize: number;
     rolloutModel?: string;
@@ -139,7 +132,7 @@ class DryRunPollingManager {
     const { datasetId, sampleSize, rolloutModel = 'gpt-4o-mini' } = params;
 
     // Validate dataset has eval script
-    const dataset = await datasetsDB.getDatasetById(datasetId);
+    const dataset = await datasetService.getById(datasetId);
     if (!dataset) {
       throw new Error('Dataset not found');
     }
@@ -152,7 +145,7 @@ class DryRunPollingManager {
     const backendDatasetId = await ensureDatasetUploaded(datasetId);
 
     // Start the dry run
-    return this.startDryRun({
+    return this.startEval({
       datasetId,
       backendDatasetId,
       sampleSize,
@@ -164,7 +157,7 @@ class DryRunPollingManager {
    * Start a new dry run job (low-level API)
    * Requires backendDatasetId to already exist.
    */
-  async startDryRun(params: StartDryRunParams): Promise<string> {
+  async startEval(params: StartEvalParams): Promise<string> {
     const {
       datasetId,
       backendDatasetId,
@@ -173,7 +166,7 @@ class DryRunPollingManager {
     } = params;
 
     // Create job record in pending state
-    const job = await createDryRunJob({
+    const job = await evalJobService.create({
       datasetId,
       backendDatasetId,
       evaluationRunId: '',
@@ -195,7 +188,7 @@ class DryRunPollingManager {
       });
 
       // Update job with evaluation run ID and start polling
-      await updateDryRunJob(job.id, {
+      await evalJobService.update(job.id, {
         evaluationRunId: evaluationResponse.evaluation_run_id,
         status: 'running',
         startedAt: Date.now(),
@@ -210,7 +203,7 @@ class DryRunPollingManager {
     } catch (error) {
       const friendly = friendlyEvalError(error);
       // Mark job as failed
-      await updateDryRunJob(job.id, {
+      await evalJobService.update(job.id, {
         status: 'failed',
         error: friendly,
         completedAt: Date.now(),
@@ -225,7 +218,7 @@ class DryRunPollingManager {
    * Resume polling for a job (e.g., after page refresh)
    */
   async resumePolling(jobId: string): Promise<void> {
-    const job = await getDryRunJob(jobId);
+    const job = await evalJobService.get(jobId);
     if (!job) return;
 
     // Check current status from backend
@@ -240,8 +233,8 @@ class DryRunPollingManager {
         this.startPolling(jobId);
       }
     } catch (error) {
-      console.error(`[DryRunPollingManager] Failed to resume polling for ${jobId}:`, error);
-      await updateDryRunJob(jobId, {
+      console.error(`[EvalPollingManager] Failed to resume polling for ${jobId}:`, error);
+      await evalJobService.update(jobId, {
         status: 'failed',
         error: error instanceof Error ? error.message : 'Failed to recover job state',
         completedAt: Date.now(),
@@ -265,10 +258,10 @@ class DryRunPollingManager {
   /**
    * Cancel a running dry run
    */
-  async cancelDryRun(jobId: string): Promise<void> {
+  async cancelEval(jobId: string): Promise<void> {
     this.stopPolling(jobId);
 
-    await updateDryRunJob(jobId, {
+    await evalJobService.update(jobId, {
       status: 'cancelled',
       completedAt: Date.now(),
     });
@@ -281,13 +274,13 @@ class DryRunPollingManager {
    * Re-fetches evaluation results and updates IndexedDB + emits event.
    */
   async refreshJob(jobId: string): Promise<void> {
-    const job = await getDryRunJob(jobId);
+    const job = await evalJobService.get(jobId);
     if (!job || !job.evaluationRunId) return;
 
     const result = await getEvaluationResult(job.evaluationRunId);
 
     // Update the polling snapshot so the UI gets fresh per-row data
-    await updateDryRunJob(jobId, {
+    await evalJobService.update(jobId, {
       pollingSnapshot: result,
     });
 
@@ -329,7 +322,7 @@ class DryRunPollingManager {
   }
 
   private async pollJob(jobId: string): Promise<void> {
-    const job = await getDryRunJob(jobId);
+    const job = await evalJobService.get(jobId);
     if (!job || job.status !== 'running') {
       this.stopPolling(jobId);
       return;
@@ -342,7 +335,7 @@ class DryRunPollingManager {
     // Check for timeout
     if (attempts > MAX_POLL_ATTEMPTS) {
       this.stopPolling(jobId);
-      await updateDryRunJob(jobId, {
+      await evalJobService.update(jobId, {
         status: 'failed',
         error: 'Evaluation timed out',
         completedAt: Date.now(),
@@ -359,7 +352,7 @@ class DryRunPollingManager {
       this.consecutiveErrors.set(jobId, 0);
 
       // Update progress with polling snapshot (full result for investigation)
-      await updateDryRunJob(jobId, {
+      await evalJobService.update(jobId, {
         pollingSnapshot: result,
       });
 
@@ -368,7 +361,7 @@ class DryRunPollingManager {
         await this.handleJobComplete(jobId, result);
       }
     } catch (error) {
-      console.error(`[DryRunPollingManager] Poll failed for ${jobId}:`, error);
+      console.error(`[EvalPollingManager] Poll failed for ${jobId}:`, error);
 
       // Track consecutive errors
       const errorCount = (this.consecutiveErrors.get(jobId) || 0) + 1;
@@ -376,7 +369,7 @@ class DryRunPollingManager {
 
       if (errorCount >= MAX_CONSECUTIVE_ERRORS) {
         this.stopPolling(jobId);
-        await updateDryRunJob(jobId, {
+        await evalJobService.update(jobId, {
           status: 'failed',
           error: 'Evaluation failed: unable to reach evaluation server after multiple attempts',
           completedAt: Date.now(),
@@ -393,12 +386,12 @@ class DryRunPollingManager {
   ): Promise<void> {
     this.stopPolling(jobId);
 
-    const job = await getDryRunJob(jobId);
+    const job = await evalJobService.get(jobId);
     if (!job) return;
 
     try {
       if (result.status === 'failed') {
-        await updateDryRunJob(jobId, {
+        await evalJobService.update(jobId, {
           status: 'failed',
           error: 'Evaluation failed on backend',
           completedAt: Date.now(),
@@ -415,7 +408,7 @@ class DryRunPollingManager {
 
       // Build record topics mapping from database
       // This works even after page refresh since we fetch from DB
-      const records = await datasetsDB.getRecordsByDatasetId(job.datasetId);
+      const records = await recordService.getByDatasetId(job.datasetId);
       const recordTopics: Record<number, string> = {};
       for (let i = 0; i < records.length; i++) {
         const record = records[i];
@@ -426,7 +419,7 @@ class DryRunPollingManager {
 
       // Analyze results
       const samplePercentage = Math.round((job.sampleSize / result.total_rows) * 100);
-      const dryRunStats = analyzeDryRunResults(
+      const evalStats = analyzeEvalResults(
         result,
         samplePercentage,
         Object.keys(recordTopics).length > 0 ? recordTopics : undefined
@@ -437,14 +430,11 @@ class DryRunPollingManager {
         const flatResults = flattenEvaluationResults(result.results);
         for (const row of flatResults) {
           if (typeof row.score === 'number' && row.dataset_row_id) {
-            await datasetsDB.updateRecordEvaluationScores(
+            await recordService.updateEvalScores(
               job.datasetId,
               row.dataset_row_id,
               {
-                dryRunScore: row.score,
-                dryRunModel: job.rolloutModel,
-                incrementDryRunCount: true,
-                jobId: job.id,
+                evalScore: row.score,
               }
             );
           }
@@ -452,31 +442,31 @@ class DryRunPollingManager {
       }
 
       // Save results to dataset
-      await datasetsDB.updateDatasetDryRunStats(job.datasetId, dryRunStats);
+      await datasetService.updateEvalStats(job.datasetId, evalStats);
 
       // Update job with results (clear any previous error)
-      await updateDryRunJob(jobId, {
+      await evalJobService.update(jobId, {
         status: 'completed',
         completedAt: Date.now(),
-        result: dryRunStats,
+        result: evalStats,
         error: undefined,
       });
 
       // Update workflow step data on success
       try {
-        const workflow = await getWorkflowByDataset(job.datasetId);
+        const workflow = await workflowService.getByDataset(job.datasetId);
         if (workflow && workflow.currentStep === 'dry_run') {
           const allSamples = [
-            ...(dryRunStats.sampleResults.highest || []),
-            ...(dryRunStats.sampleResults.lowest || []),
-            ...(dryRunStats.sampleResults.aroundMean || []),
+            ...(evalStats.sampleResults.highest || []),
+            ...(evalStats.sampleResults.lowest || []),
+            ...(evalStats.sampleResults.aroundMean || []),
           ];
-          await updateStepData(workflow.id, 'dryRun', {
-            mean: dryRunStats.statistics.mean,
-            std: dryRunStats.statistics.std,
-            percentAboveZero: dryRunStats.statistics.percentAboveZero,
-            percentPerfect: dryRunStats.statistics.percentPerfect,
-            verdict: dryRunStats.diagnosis.verdict,
+          await workflowService.updateStepData(workflow.id, 'dryRun', {
+            mean: evalStats.statistics.mean,
+            std: evalStats.statistics.std,
+            percentAboveZero: evalStats.statistics.percentAboveZero,
+            percentPerfect: evalStats.statistics.percentPerfect,
+            verdict: evalStats.diagnosis.verdict,
             sampleResults: allSamples.map((s) => ({
               recordId: s.recordId,
               prompt: '',
@@ -484,15 +474,15 @@ class DryRunPollingManager {
               score: s.score,
               reasoning: s.reason || '',
             })),
-            recommendations: dryRunStats.diagnosis.recommendations || [],
+            recommendations: evalStats.diagnosis.recommendations || [],
           });
         }
       } catch (wfError) {
-        console.error('[DryRunPollingManager] Failed to update workflow:', wfError);
+        console.error('[EvalPollingManager] Failed to update workflow:', wfError);
       }
 
       // Show verdict toast
-      const verdict = dryRunStats.diagnosis.verdict;
+      const verdict = evalStats.diagnosis.verdict;
       if (verdict === 'GO') {
         toast.success('Evaluation complete: GO - Ready for training', { duration: 5000 });
       } else if (verdict === 'WARNING') {
@@ -507,9 +497,9 @@ class DryRunPollingManager {
         verdict,
       });
     } catch (error) {
-      console.error('[DryRunPollingManager] Failed to process results:', error);
+      console.error('[EvalPollingManager] Failed to process results:', error);
       const friendly = friendlyEvalError(error);
-      await updateDryRunJob(jobId, {
+      await evalJobService.update(jobId, {
         status: 'failed',
         error: friendly,
         completedAt: Date.now(),
@@ -521,12 +511,12 @@ class DryRunPollingManager {
 
   private async markWorkflowStepFailed(datasetId: string): Promise<void> {
     try {
-      const workflow = await getWorkflowByDataset(datasetId);
+      const workflow = await workflowService.getByDataset(datasetId);
       if (workflow && workflow.currentStep === 'dry_run') {
-        await markStepFailed(workflow.id);
+        await workflowService.markStepFailed(workflow.id);
       }
     } catch (error) {
-      console.error('[DryRunPollingManager] Failed to mark workflow step failed:', error);
+      console.error('[EvalPollingManager] Failed to mark workflow step failed:', error);
     }
   }
 }
@@ -535,4 +525,4 @@ class DryRunPollingManager {
 // Export Singleton Instance
 // =============================================================================
 
-export const dryRunPollingManager = DryRunPollingManager.getInstance();
+export const evalPollingManager = EvalPollingManager.getInstance();

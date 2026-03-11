@@ -5,7 +5,7 @@ import {
   DatasetRecord,
   DataInfo,
 } from "@/types/dataset-types";
-import * as datasetsDB from "./datasets-db";
+import { datasetService, recordService } from "@/services/service-registry";
 import { toast } from "sonner";
 
 // ============================================================================
@@ -584,7 +584,7 @@ export async function uploadDatasetForFinetune(
 export async function ensureDatasetUploaded(
   datasetId: string,
 ): Promise<string> {
-  const dataset = await datasetsDB.getDatasetById(datasetId);
+  const dataset = await datasetService.getById(datasetId);
   if (!dataset) {
     throw new Error("Dataset not found");
   }
@@ -595,7 +595,7 @@ export async function ensureDatasetUploaded(
   }
 
   // Need to upload
-  const records = await datasetsDB.getRecordsByDatasetId(datasetId);
+  const records = await recordService.getByDatasetId(datasetId);
   if (records.length === 0) {
     throw new Error("Dataset has no records");
   }
@@ -606,7 +606,7 @@ export async function ensureDatasetUploaded(
       ...dataset,
       records,
     });
-    await datasetsDB.updateDatasetBackendId(
+    await datasetService.updateBackendId(
       datasetId,
       uploadResult.backendDatasetId,
     );
@@ -868,11 +868,11 @@ export interface UpdateEvaluatorResponse {
 // Dataset Analytics Types
 // ============================================================================
 
-export interface DryRunAnalyticsRequest {
+export interface EvalAnalyticsRequest {
   rows: unknown[];
 }
 
-export interface DryRunAnalyticsResponse {
+export interface EvalAnalyticsResponse {
   analytics: Record<string, unknown>;
   quality: Record<string, unknown>;
 }
@@ -916,12 +916,12 @@ export async function updateDatasetEvalScript(
  */
 export async function getDryRunAnalytics(
   rows: unknown[],
-): Promise<DryRunAnalyticsResponse> {
+): Promise<EvalAnalyticsResponse> {
   const response = await apiClient("/finetune/datasets/analytics/dry-run", {
     method: "POST",
     body: JSON.stringify({ rows }),
   });
-  return handleApiResponse<DryRunAnalyticsResponse>(response);
+  return handleApiResponse<EvalAnalyticsResponse>(response);
 }
 
 // ============================================================================

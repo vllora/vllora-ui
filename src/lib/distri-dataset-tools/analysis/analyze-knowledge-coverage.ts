@@ -6,8 +6,7 @@
  * falls back to topic → hierarchy → sourceChunkRefs for older records.
  */
 
-import * as datasetsDB from '@/services/datasets-db';
-import * as knowledgeDB from '@/services/knowledge-sources-db';
+import { datasetService, recordService, knowledgeSourceService } from '@/services/service-registry';
 import type { KnowledgeCoverageStats, TopicHierarchyNode } from '@/types/dataset-types';
 
 /** Collect all leaf nodes from a hierarchy */
@@ -34,7 +33,7 @@ function collectLeafNodes(
 export async function analyzeKnowledgeCoverage(
   datasetId: string,
 ): Promise<KnowledgeCoverageStats | null> {
-  const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
+  const sources = await knowledgeSourceService.getByDataset(datasetId);
   const readySources = sources.filter((s) => s.status === 'ready');
 
   if (readySources.length === 0) return null;
@@ -66,7 +65,7 @@ export async function analyzeKnowledgeCoverage(
 
   // Count chunk usage across all records
   const chunkUsageCounts: Record<string, number> = {};
-  const records = await datasetsDB.getRecordsByDatasetId(datasetId);
+  const records = await recordService.getByDatasetId(datasetId);
 
   // Pass 1: Direct lineage from record metadata (Phase 1 records)
   for (const record of records) {
@@ -82,7 +81,7 @@ export async function analyzeKnowledgeCoverage(
 
   // Pass 2: Backward compatibility — infer from topic → hierarchy → sourceChunkRefs
   // for records that don't have sourceChunkRefs in metadata
-  const dataset = await datasetsDB.getDatasetById(datasetId);
+  const dataset = await datasetService.getById(datasetId);
   const hierarchy = dataset?.topicHierarchy?.hierarchy;
   if (hierarchy?.length) {
     const topicToChunkRefs = collectLeafNodes(hierarchy);

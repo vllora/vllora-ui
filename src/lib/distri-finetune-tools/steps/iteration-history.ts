@@ -9,13 +9,8 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import {
-  addIterationEntry,
-  getIterationHistory,
-  getOrCreateIterationState,
-  saveIterationState,
-} from '@/services/finetune-iteration-db';
-import type { IterationPhase, ProposedChange } from '@/services/finetune-iteration-db';
+import { iterationStateService } from '@/services/service-registry';
+import type { IterationPhase, ProposedChange } from '@/types/iteration-types';
 import type { ToolHandler } from '../types';
 
 // =============================================================================
@@ -49,7 +44,7 @@ export const logIterationHandler: ToolHandler = async (params) => {
       : 'iterate';
 
     // Add the iteration entry
-    const state = await addIterationEntry(dataset_id, {
+    const state = await iterationStateService.addEntry(dataset_id, {
       evalId: eval_id,
       dryRunScores: { mean: meanScore, perTopic },
       changesMade: typeof changes_made === 'string' ? changes_made : '',
@@ -70,7 +65,7 @@ export const logIterationHandler: ToolHandler = async (params) => {
         ? (proposed_changes as ProposedChange[])
         : undefined;
 
-      await saveIterationState({
+      await iterationStateService.save({
         ...state,
         phase: phaseValue,
         innerLoop: {
@@ -107,8 +102,8 @@ export const getIterationHistoryHandler: ToolHandler = async (params) => {
       return { success: false, error: 'dataset_id is required' };
     }
 
-    const state = await getOrCreateIterationState(dataset_id);
-    const history = await getIterationHistory(dataset_id);
+    const state = await iterationStateService.getOrCreate(dataset_id);
+    const history = await iterationStateService.getHistory(dataset_id);
 
     return {
       success: true,

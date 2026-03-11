@@ -7,8 +7,7 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import * as workflowDB from '@/services/finetune-workflow-db';
-import * as datasetsDB from '@/services/datasets-db';
+import { workflowService, datasetService, recordService } from '@/services/service-registry';
 import {
   ensureDatasetUploaded,
   createEvaluation,
@@ -43,7 +42,7 @@ export async function runGraderTest(
   rolloutModel: string = DEFAULT_MODEL,
 ): Promise<TestGraderResult> {
   try {
-    const dataset = await datasetsDB.getDatasetById(datasetId);
+    const dataset = await datasetService.getById(datasetId);
     if (!dataset?.evalScript) {
       return { success: false, error: 'Grader must be configured first' };
     }
@@ -113,7 +112,7 @@ export const testGraderSampleHandler: ToolHandler = async (params) => {
     return { success: false, error: 'workflow_id is required' };
   }
 
-  const workflow = await workflowDB.getWorkflow(workflow_id);
+  const workflow = await workflowService.get(workflow_id);
   if (!workflow) {
     return { success: false, error: 'Workflow not found' };
   }
@@ -123,7 +122,7 @@ export const testGraderSampleHandler: ToolHandler = async (params) => {
     return { success: false, error: `Cannot test grader in step ${workflow.currentStep}` };
   }
 
-  const records = await datasetsDB.getRecordsByDatasetId(workflow.datasetId);
+  const records = await recordService.getByDatasetId(workflow.datasetId);
   if (records.length === 0) {
     return { success: false, error: 'Dataset has no records' };
   }

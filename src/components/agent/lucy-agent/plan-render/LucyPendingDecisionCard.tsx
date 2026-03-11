@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { emitter } from '@/utils/eventEmitter';
-import type { ProposedChange } from '@/services/finetune-iteration-db';
+import type { ProposedChange } from '@/types/iteration-types';
 
 // =============================================================================
 // Types

@@ -8,8 +8,7 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import * as workflowDB from '@/services/finetune-workflow-db';
-import * as datasetsDB from '@/services/datasets-db';
+import { workflowService, datasetService } from '@/services/service-registry';
 import { ensureDatasetUploaded } from '@/services/finetune-api';
 import type { ToolHandler } from '../types';
 
@@ -21,13 +20,13 @@ export const syncEvaluatorHandler: ToolHandler = async (params) => {
       return { success: false, error: 'workflow_id is required' };
     }
 
-    const workflow = await workflowDB.getWorkflow(workflow_id);
+    const workflow = await workflowService.get(workflow_id);
     if (!workflow) {
       return { success: false, error: 'Workflow not found' };
     }
 
     // Get dataset
-    const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
+    const dataset = await datasetService.getById(workflow.datasetId);
     if (!dataset) {
       return { success: false, error: 'Dataset not found' };
     }

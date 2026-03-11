@@ -6,19 +6,19 @@
  */
 
 import { cn } from "@/lib/utils";
-import type { DryRunJob } from "@/types/dry-run-job";
+import type { EvalJob } from "@/types/eval-job";
 import {
   getJobTotalRows,
   getJobCompletedRows,
   getJobFailedRows,
   getJobAverageScore,
   getJobPassedCount,
-} from "@/types/dry-run-job";
+} from "@/types/eval-job";
 import { flattenEvaluationResults } from "@/services/finetune-api";
 import { ResultsTable } from "./ResultsTable";
 
 interface RunningViewProps {
-  job: DryRunJob;
+  job: EvalJob;
   progress: number;
   /** Callback when record ID is clicked — enables navigation to record */
   onRecordIdClick?: (recordId: string) => void;

@@ -22,7 +22,7 @@ import type { Dataset, DatasetRecord, TopicHierarchyConfig, TopicHierarchyNode }
 import { emitter } from "@/utils/eventEmitter";
 import { toast } from "sonner";
 import { quickFinetune } from "@/services/quick-finetune";
-import { updateDatasetTopicHierarchy, clearAllRecordTopics, updateRecordTopicsBatch, renameTopicInRecords, clearTopicFromRecords, updateDatasetEvalScript, updateDatasetObjective } from "@/services/datasets-db";
+import { datasetService, recordService } from "@/services/service-registry";
 import { updateDatasetEvalScript as updateBackendEvalScript } from "@/services/finetune-api";
 import { filterAndSortRecords } from "@/components/datasets/record-filters";
 import {
@@ -413,7 +413,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
         generatedAt: dataset.topicHierarchy?.generatedAt || Date.now(),
       };
       // Save to IndexedDB and update local state
-      await updateDatasetTopicHierarchy(dataset.id, updatedConfig);
+      await datasetService.updateTopicHierarchy(dataset.id, updatedConfig);
       setDataset((prev) =>
         prev ? { ...prev, topicHierarchy: updatedConfig } : null
       );
@@ -444,7 +444,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     async (newObjective: string) => {
       if (!dataset) return;
       try {
-        await updateDatasetObjective(dataset.id, newObjective);
+        await datasetService.updateObjective(dataset.id, newObjective);
         const trimmed = newObjective.trim();
         setDataset({ ...dataset, datasetObjective: trimmed || undefined });
         toast.success("Objective updated");
@@ -838,7 +838,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
       if (!dataset) return;
       try {
         // Save to IndexedDB and update local state
-        await updateDatasetTopicHierarchy(dataset.id, config);
+        await datasetService.updateTopicHierarchy(dataset.id, config);
         setDataset((prev) => (prev ? { ...prev, topicHierarchy: config } : null));
         // Dialog shows its own "Saved" indicator - no toast or auto-close needed
       } catch (err) {
@@ -881,7 +881,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
       }
 
       // Batch update all records' topics in a single transaction
-      const updatedCount = await updateRecordTopicsBatch(dataset.id, result.classifications);
+      const updatedCount = await recordService.updateTopicsBatch(dataset.id, result.classifications);
 
       // Refresh records silently (avoid unmounting dialogs)
       await refreshDataset();
@@ -927,7 +927,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
       }
 
       // Batch update all records' topics
-      const updatedCount = await updateRecordTopicsBatch(dataset.id, result.classifications);
+      const updatedCount = await recordService.updateTopicsBatch(dataset.id, result.classifications);
 
       // Refresh records
       await refreshDataset();
@@ -944,7 +944,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
   const handleClearRecordTopics = useCallback(async () => {
     if (!dataset) return;
     try {
-      const clearedCount = await clearAllRecordTopics(dataset.id);
+      const clearedCount = await recordService.clearAllTopics(dataset.id);
       // Update local state to reflect cleared topics
       setRecords((prev) =>
         prev.map((r) => (r.topic ? { ...r, topic: undefined, updatedAt: Date.now() } : r))
@@ -968,7 +968,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
       }
 
       // Use batch update to clear topics
-      const clearedCount = await updateRecordTopicsBatch(dataset.id, clearMap);
+      const clearedCount = await recordService.updateTopicsBatch(dataset.id, clearMap);
 
       // Update local state
       setRecords((prev) =>
@@ -991,7 +991,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
   const handleRenameTopicInRecords = useCallback(async (oldName: string, newName: string) => {
     if (!dataset || !oldName || !newName || oldName === newName) return;
     try {
-      const renamedCount = await renameTopicInRecords(dataset.id, oldName, newName);
+      const renamedCount = await recordService.renameTopic(dataset.id, oldName, newName);
       if (renamedCount > 0) {
         // Update local state to reflect renamed topics
         setRecords((prev) =>
@@ -1009,7 +1009,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     try {
       let totalCleared = 0;
       for (const topicName of topicNames) {
-        const clearedCount = await clearTopicFromRecords(dataset.id, topicName);
+        const clearedCount = await recordService.clearTopic(dataset.id, topicName);
         totalCleared += clearedCount;
       }
       if (totalCleared > 0) {
@@ -1094,14 +1094,14 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
 
     try {
       // Save updated hierarchy
-      await updateDatasetTopicHierarchy(dataset.id, updatedConfig);
+      await datasetService.updateTopicHierarchy(dataset.id, updatedConfig);
       setDataset((prev) => (prev ? { ...prev, topicHierarchy: updatedConfig } : null));
 
       // Clear topics from records for all removed topic IDs (the deleted topic and its children)
       if (removedTopicIds.length > 0) {
         let totalCleared = 0;
         for (const topicId of removedTopicIds) {
-          const clearedCount = await clearTopicFromRecords(dataset.id, topicId);
+          const clearedCount = await recordService.clearTopic(dataset.id, topicId);
           totalCleared += clearedCount;
         }
         if (totalCleared > 0) {
@@ -1254,7 +1254,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     if (!dataset) return;
     try {
       // Save to local IndexedDB
-      await updateDatasetEvalScript(dataset.id, script);
+      await datasetService.updateEvalScript(dataset.id, script);
       setDataset((prev) => (prev ? { ...prev, evalScript: script } : null));
 
       // Sync to backend if dataset has been uploaded
@@ -1312,7 +1312,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     };
 
     try {
-      await updateDatasetTopicHierarchy(dataset.id, updatedConfig);
+      await datasetService.updateTopicHierarchy(dataset.id, updatedConfig);
       setDataset((prev) => (prev ? { ...prev, topicHierarchy: updatedConfig } : null));
     } catch (err) {
       console.error("Failed to update prompt template:", err);

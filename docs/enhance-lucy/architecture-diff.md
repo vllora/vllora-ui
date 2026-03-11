@@ -33,8 +33,7 @@ Side-by-side comparison of how each system handles the finetune pipeline, with f
                                                             DEPLOY
 ```
 
-**Lucy today (2026-03-09)**: Has the pipeline with reactive analysis tools and auto-trigger on job completion. `analyze_evaluation` and `analyze_training` run reactively — either via catch-up on session reopen (`buildCatchUpContext`) or via auto-trigger when jobs complete in background (`vllora_dry_run_job_completed` / `vllora_finetune_job_completed` events → LucySidebar → `vllora_lucy_prompt`). Full RFT decision tree implemented in `analyze_evaluation` (697 lines). Iteration state persisted in IndexedDB. Agent md has inner/outer loop protocol. The loops work via agent instruction compliance but `ExecutionStepId` hasn't been extended for iteration-specific steps.
-**Enhanced Lucy**: Has both loops with hard-coded step executors for `regenerate_topic`, `adjust_grader`, etc.
+**Lucy today (2026-03-10)**: Has the pipeline with reactive analysis tools and auto-trigger on job completion. `analyze_evaluation`, `analyze_training`, and `get_training_metrics` run reactively — either via catch-up on session reopen (`buildCatchUpContext`) or via auto-trigger when jobs complete in background (`vllora_dry_run_job_completed` / `vllora_finetune_job_completed` events → LucySidebar → `vllora_lucy_prompt`). Full RFT decision tree implemented in `analyze_evaluation`. Iteration state persisted in IndexedDB. Agent md has inner/outer loop protocol. `ExecutionStepId` extended with `regenerate_topic`, `adjust_grader`, `analyze`, `post_training_eval` — all registered in `STEP_REGISTRY` and `STEP_ORDER` with executors. Both loops fully operational.
 
 ---
 
@@ -51,7 +50,8 @@ Lucy Agent (Current — as of 2026-03-09):
     → analyze_evaluation / analyze_training run REACTIVELY (auto-trigger or catch-up on reopen)
     → Agent md has inner/outer loop protocol (works via instruction compliance)
     → Iteration state persisted in IndexedDB (cross-iteration memory works)
-    → Missing: ExecutionStepId extension for regenerate_topic, adjust_grader, etc.
+    → ExecutionStepId extended: regenerate_topic, adjust_grader, analyze, post_training_eval
+    → get_training_metrics fetches raw GRPO/GSPO reinforcement metrics with alert thresholds
 
 Enhanced Lucy (Proposed):
   User request

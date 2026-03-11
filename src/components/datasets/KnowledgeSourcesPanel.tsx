@@ -11,7 +11,7 @@ import { RefreshCw, Upload, Loader2, Plus, X, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { emitter } from "@/utils/eventEmitter";
-import * as knowledgeDB from "@/services/knowledge-sources-db";
+import { knowledgeSourceService } from "@/services/service-registry";
 import type { KnowledgeSource, KnowledgeSourceType } from "@/types/dataset-types";
 import { toast } from "sonner";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
@@ -78,7 +78,7 @@ export function KnowledgeSourcesPanel({ datasetId, className }: KnowledgeSources
   const fetchSources = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
+      const data = await knowledgeSourceService.getByDataset(datasetId);
       setSources(data);
     } catch (error) {
       console.error("[KnowledgeSourcesPanel] Error fetching sources:", error);
@@ -185,7 +185,7 @@ export function KnowledgeSourcesPanel({ datasetId, className }: KnowledgeSources
   // Delete a source
   const handleDelete = async (sourceId: string) => {
     try {
-      await knowledgeDB.deleteKnowledgeSource(sourceId);
+      await knowledgeSourceService.delete(sourceId);
       setSources((prev) => prev.filter((s) => s.id !== sourceId));
       emitter.emit("vllora_knowledge_source_updated", { datasetId });
     } catch (error) {

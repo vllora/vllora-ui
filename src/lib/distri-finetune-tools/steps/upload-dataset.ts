@@ -7,8 +7,7 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import * as workflowDB from '@/services/finetune-workflow-db';
-import * as datasetsDB from '@/services/datasets-db';
+import { workflowService, datasetService, recordService } from '@/services/service-registry';
 import { uploadDatasetForFinetune } from '@/services/finetune-api';
 import type { ToolHandler } from '../types';
 
@@ -20,13 +19,13 @@ export const uploadDatasetHandler: ToolHandler = async (params) => {
       return { success: false, error: 'workflow_id is required' };
     }
 
-    const workflow = await workflowDB.getWorkflow(workflow_id);
+    const workflow = await workflowService.get(workflow_id);
     if (!workflow) {
       return { success: false, error: 'Workflow not found' };
     }
 
     // Get dataset with records
-    const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
+    const dataset = await datasetService.getById(workflow.datasetId);
     if (!dataset) {
       return { success: false, error: 'Dataset not found' };
     }
@@ -42,7 +41,7 @@ export const uploadDatasetHandler: ToolHandler = async (params) => {
     }
 
     // Get records
-    const records = await datasetsDB.getRecordsByDatasetId(workflow.datasetId);
+    const records = await recordService.getByDatasetId(workflow.datasetId);
     if (records.length === 0) {
       return { success: false, error: 'Dataset has no records to upload' };
     }
@@ -57,7 +56,7 @@ export const uploadDatasetHandler: ToolHandler = async (params) => {
     const { backendDatasetId, jsonlContent } = await uploadDatasetForFinetune(datasetWithRecords);
 
     // Save backend dataset ID to local dataset
-    await datasetsDB.updateDatasetBackendId(workflow.datasetId, backendDatasetId);
+    await datasetService.updateBackendId(workflow.datasetId, backendDatasetId);
 
     // Count what was included
     const hasTopicHierarchy = !!dataset.topicHierarchy?.hierarchy?.length;

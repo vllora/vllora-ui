@@ -9,8 +9,7 @@
 import type { DistriFnTool } from '@distri/core';
 import type { TopicHierarchyNode } from '@/types/dataset-types';
 import type { ToolHandler } from '../types';
-import * as workflowDB from '@/services/finetune-workflow-db';
-import * as datasetsDB from '@/services/datasets-db';
+import { workflowService, datasetService } from '@/services/service-registry';
 import { getBackendUrl } from '@/config/api';
 import { countLeafTopics, calculateMaxDepth } from './helpers';
 
@@ -76,7 +75,7 @@ export const adjustTopicHierarchyHandler: ToolHandler = async (params) => {
       return { success: false, error: 'instruction is required' };
     }
 
-    const workflow = await workflowDB.getWorkflow(workflow_id);
+    const workflow = await workflowService.get(workflow_id);
     if (!workflow) {
       return { success: false, error: 'Workflow not found' };
     }
@@ -93,11 +92,11 @@ export const adjustTopicHierarchyHandler: ToolHandler = async (params) => {
 
     // Auto-advance from not_started to topics_config when topic operations begin
     if (workflow.currentStep === 'not_started') {
-      await workflowDB.advanceToStep(workflow_id, 'topics_config');
+      await workflowService.advanceToStep(workflow_id, 'topics_config');
     }
 
     // Get current hierarchy from dataset
-    const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
+    const dataset = await datasetService.getById(workflow.datasetId);
     if (!dataset) {
       return { success: false, error: 'Dataset not found' };
     }
@@ -125,14 +124,14 @@ export const adjustTopicHierarchyHandler: ToolHandler = async (params) => {
     const depth = calculateMaxDepth(result.hierarchy);
 
     // Save updated hierarchy to dataset
-    await datasetsDB.updateDatasetTopicHierarchy(workflow.datasetId, {
+    await datasetService.updateTopicHierarchy(workflow.datasetId, {
       hierarchy: result.hierarchy,
       depth,
       generatedAt: Date.now(),
     });
 
     // Update workflow metadata
-    await workflowDB.updateStepData(workflow_id, 'topicsConfig', {
+    await workflowService.updateStepData(workflow_id, 'topicsConfig', {
       topicCount,
       depth,
       generatedAt: Date.now(),

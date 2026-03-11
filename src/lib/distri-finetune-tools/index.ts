@@ -49,7 +49,7 @@ export type {
   GenerateDataResult,
   ConfigureGraderResult,
   TestGraderResult,
-  DryRunResult,
+  EvalRunResult,
   StartTrainingResult,
   TrainingStatusResult,
   DeployModelResult,
@@ -68,9 +68,9 @@ export type {
   StepStatus,
   GenerationStrategy,
   DryRunVerdict,
-} from '@/services/finetune-workflow-db';
+} from '@/types/workflow-types';
 
-export { finetuneWorkflowService } from '@/services/finetune-workflow-db';
+export { workflowService } from '@/services/service-registry';
 
 // =============================================================================
 // Combined Tool Handlers

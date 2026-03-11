@@ -10,8 +10,8 @@
 import type { DistriFnTool } from '@distri/core';
 import { toast } from 'sonner';
 import { emitter } from '@/utils/eventEmitter';
-import * as datasetsDB from '@/services/datasets-db';
-import * as workflowDB from '@/services/finetune-workflow-db';
+import { workflowService, datasetService, recordService } from '@/services/service-registry';
+import type { FinetuneStep, StepStatus } from '@/types/workflow-types';
 import type { ToolHandler } from '../types';
 import type { Plan } from './propose-plan';
 import type { TopicHierarchyNode } from '@/types/dataset-types';
@@ -34,7 +34,7 @@ async function callGenerateInitialData(params: Record<string, unknown>) {
   return maybeUseMockHandler(generateInitialDataHandler, params);
 }
 import { uploadDatasetHandler } from './upload-dataset';
-import { runDryRunHandler } from './run-dry-run';
+import { runEvaluationHandler } from './run-evaluation';
 
 // Import for finetune job creation (disabled)
 // import { quickFinetune } from '@/services/quick-finetune';
@@ -163,9 +163,9 @@ interface StepResult {
 interface StepExecutor {
   name: string;
   /** Maps to workflow step for status tracking */
-  workflowStep?: workflowDB.FinetuneStep;
+  workflowStep?: FinetuneStep;
   /** Workflow step status to set on completion (defaults to 'completed') */
-  workflowStatus?: workflowDB.StepStatus;
+  workflowStatus?: StepStatus;
   /** If true, failure does not abort the pipeline */
   nonFatal?: boolean;
   execute: (ctx: StepContext) => Promise<StepResult>;
@@ -327,7 +327,7 @@ async function executeTopics(ctx: StepContext): Promise<StepResult> {
   // Auto-rollback if the workflow is in a state that doesn't allow topic changes (e.g. training).
   // The user approved a plan with the topics step, so rolling back is the right action.
   const allowedSteps = ['not_started', 'topics_config', 'grader_config'];
-  const workflow = await workflowDB.getWorkflow(workflow_id);
+  const workflow = await workflowService.get(workflow_id);
   if (workflow && !allowedSteps.includes(workflow.currentStep)) {
     const rollback = await rollbackToStepHandler({ workflow_id, step: 'topics_config' });
     if (!(rollback as any).success) {
@@ -348,7 +348,7 @@ async function executeTopics(ctx: StepContext): Promise<StepResult> {
   // Warn if categorize is missing but the dataset already has records — they'll be unassigned.
   const stepsToRun = new Set(ctx.selected_steps);
   if (!stepsToRun.has('categorize')) {
-    const existingRecordCount = await datasetsDB.getRecordCount(dataset_id);
+    const existingRecordCount = await recordService.getCount(dataset_id);
     if (existingRecordCount > 0) {
       console.warn(
         '[executeTopics] New hierarchy applied but "categorize" is not in steps_to_execute. ' +
@@ -376,7 +376,7 @@ async function executeAdjustTopics(ctx: StepContext): Promise<StepResult> {
   if (!instruction) throw new Error('adjust_topics requires an instruction (in plan.adjust_topics_instruction or overrides)');
 
   // Pre-flight: ensure a hierarchy exists to adjust
-  const dataset = await datasetsDB.getDatasetById(dataset_id);
+  const dataset = await datasetService.getById(dataset_id);
   if (!dataset?.topicHierarchy?.hierarchy?.length) {
     throw new Error(
       'No topic hierarchy exists to adjust. ' +
@@ -403,7 +403,7 @@ async function executeCategorize(ctx: StepContext): Promise<StepResult> {
   const { workflow_id, dataset_id } = ctx;
 
   // Pre-flight: hierarchy must exist
-  const dataset = await datasetsDB.getDatasetById(dataset_id);
+  const dataset = await datasetService.getById(dataset_id);
   if (!dataset?.topicHierarchy?.hierarchy?.length) {
     throw new Error(
       'Cannot categorize: no topic hierarchy configured. ' +
@@ -412,7 +412,7 @@ async function executeCategorize(ctx: StepContext): Promise<StepResult> {
   }
 
   // Pre-flight: records must exist
-  const recordCount = await datasetsDB.getRecordCount(dataset_id);
+  const recordCount = await recordService.getCount(dataset_id);
   if (recordCount === 0) {
     throw new Error(
       'Cannot categorize: dataset has no records. ' +
@@ -433,7 +433,7 @@ async function executeGenerate(ctx: StepContext): Promise<StepResult> {
   const { dataset_id, plan, overrides, summary } = ctx;
 
   // Pre-flight: dataset objective is required
-  const dataset = await datasetsDB.getDatasetById(dataset_id);
+  const dataset = await datasetService.getById(dataset_id);
   if (!dataset?.datasetObjective?.trim()) {
     emitter.emit('vllora_lucy_prompt', {
       prompt: 'The dataset has no training objective defined. What is the goal of this fine-tuning run? Please describe the task or behavior you want the model to learn.',
@@ -483,8 +483,8 @@ async function executeGrader(ctx: StepContext): Promise<StepResult> {
     plan.output_format,
   );
 
-  await datasetsDB.updateDatasetEvalScript(dataset_id, evalScript);
-  await workflowDB.updateStepData(workflow_id, 'graderConfig', {
+  await datasetService.updateEvalScript(dataset_id, evalScript);
+  await workflowService.updateStepData(workflow_id, 'graderConfig', {
     type: 'js',
     configuredAt: Date.now(),
   });
@@ -505,7 +505,7 @@ async function executeUpload(ctx: StepContext): Promise<StepResult> {
   const { workflow_id, overrides, dataset_id } = ctx;
 
   // Pre-flight: must have records to upload
-  const recordCount = await datasetsDB.getRecordCount(dataset_id);
+  const recordCount = await recordService.getCount(dataset_id);
   if (recordCount === 0) {
     throw new Error(
       'Cannot upload: dataset has no records. ' +
@@ -537,7 +537,7 @@ async function executeDryRun(ctx: StepContext): Promise<StepResult> {
     ? Math.ceil((targetSamples / totalRecords) * 100)
     : 100;
 
-  const result = await runDryRunHandler({ workflow_id, sample_percentage: samplePercentage });
+  const result = await runEvaluationHandler({ workflow_id, sample_percentage: samplePercentage });
 
   if (!(result as any).success) {
     throw new Error((result as any).error || 'Failed to run evaluation');
@@ -595,8 +595,8 @@ async function executeAnalyze(ctx: StepContext): Promise<StepResult> {
   const { dataset_id } = ctx;
 
   // Find the most recent completed dry run job for this dataset
-  const { getDryRunJobsByDataset } = await import('@/services/dry-run-jobs-db');
-  const jobs = await getDryRunJobsByDataset(dataset_id);
+  const { evalJobService: evalSvc } = await import('@/services/service-registry');
+  const jobs = await evalSvc.getByDataset(dataset_id);
   const latestCompleted = [...jobs]
     .filter((j) => j.status === 'completed' && j.evaluationRunId)
     .sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))[0];
@@ -626,7 +626,7 @@ async function executePostTrainingEval(ctx: StepContext): Promise<StepResult> {
 async function executeFinetune(ctx: StepContext): Promise<StepResult> {
   const { dataset_id } = ctx;
 
-  const datasetForJob = await datasetsDB.getDatasetById(dataset_id);
+  const datasetForJob = await datasetService.getById(dataset_id);
   if (!datasetForJob?.backendDatasetId) {
     throw new Error('Dataset not uploaded to backend');
   }
@@ -662,11 +662,11 @@ async function executeFinetune(ctx: StepContext): Promise<StepResult> {
   // });
 
   // // Mark workflow step as in_progress (not completed — training is async)
-  // const wf = await workflowDB.getWorkflow(workflow_id);
+  // const wf = await workflowService.get(workflow_id);
   // if (wf) {
   //   wf.stepStatus.training = 'in_progress';
   //   wf.updatedAt = Date.now();
-  //   await workflowDB.updateWorkflow(wf);
+  //   await workflowService.update(wf);
   // }
 
   toast.info('Fine-tuning is currently disabled');
@@ -952,7 +952,7 @@ export const executePlanHandler: ToolHandler = async (
     };
 
     // Verify dataset
-    const dataset = await datasetsDB.getDatasetById(dataset_id);
+    const dataset = await datasetService.getById(dataset_id);
     if (!dataset) {
       return { success: false, error: `Dataset ${dataset_id} not found` };
     }
@@ -1019,9 +1019,9 @@ export const executePlanHandler: ToolHandler = async (
     // =========================================================================
 
     // Get or create workflow
-    let workflow = await workflowDB.getWorkflowByDataset(dataset_id);
+    let workflow = await workflowService.getByDataset(dataset_id);
     if (!workflow) {
-      workflow = await workflowDB.createWorkflow(dataset_id, dataset.datasetObjective || 'Plan execution');
+      workflow = await workflowService.create(dataset_id, dataset.datasetObjective || 'Plan execution');
     }
 
     // Determine which steps to run (params > normalized plan > all)
@@ -1106,15 +1106,15 @@ export const executePlanHandler: ToolHandler = async (
     };
 
     const markWorkflowStep = async (
-      finetuneStep: workflowDB.FinetuneStep,
-      status: workflowDB.StepStatus,
+      finetuneStep: FinetuneStep,
+      status: StepStatus,
     ): Promise<void> => {
       try {
-        const wf = await workflowDB.getWorkflow(workflow.id);
+        const wf = await workflowService.get(workflow.id);
         if (wf) {
           wf.stepStatus[finetuneStep] = status;
           wf.updatedAt = Date.now();
-          await workflowDB.updateWorkflow(wf);
+          await workflowService.update(wf);
         }
       } catch (err) {
         console.warn('[executePlan] Failed to update workflow step:', finetuneStep, err);

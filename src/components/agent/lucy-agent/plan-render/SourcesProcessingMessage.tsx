@@ -7,7 +7,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Loader2, CheckCircle2, RefreshCw } from 'lucide-react';
 import { emitter } from '@/utils/eventEmitter';
-import * as knowledgeDB from '@/services/knowledge-sources-db';
+import { knowledgeSourceService } from '@/services/service-registry';
 
 interface SourcesProcessingMessageProps {
   datasetId: string;
@@ -37,7 +37,7 @@ export function SourcesProcessingMessage({
   const checkSources = useCallback(async () => {
     if (!datasetId) return;
     try {
-      const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
+      const sources = await knowledgeSourceService.getByDataset(datasetId);
       const processing = sources.filter((s) => s.status === 'processing');
       if (processing.length === 0 && sources.length > 0) {
         setSourcesReady(true);

@@ -6,10 +6,10 @@
 |---|-----|--------|
 | 1 | Evaluation results are opaque | **Closed** — `get_evaluation_details` + `analyze_evaluation` implemented |
 | 2 | No cross-iteration memory | **Closed** — `finetune-iteration-db.ts` (IndexedDB v7), `log_iteration` + `get_iteration_history` tools, `buildCatchUpContext` reads iteration state |
-| 3 | Fixed pipeline, no branching after eval | **Mostly closed** — Analysis tools exist, agent md has full inner/outer loop protocol. Remaining: `ExecutionStepId` extension for `regenerate_topic`, `adjust_grader`, etc. |
+| 3 | Fixed pipeline, no branching after eval | **Closed** — Analysis tools exist, agent md has full inner/outer loop protocol. `ExecutionStepId` extended with `regenerate_topic`, `adjust_grader`, `analyze`, `post_training_eval` — all registered in `STEP_REGISTRY` and `STEP_ORDER` |
 | 4 | No stall detection or escalation | **Closed** — Comprehensive RFT decision tree (Steps A-F) in `analyze_evaluation` (~697 lines): score classification, health assessment, per-topic diagnosis, grader health, cross-iteration comparison, escalation ladder |
 | 5 | Grader editing is template-constrained | **Partially closed** — `test_grader_sample` with real eval, `auto_test` on configure |
-| 6 | No task viability pre-check | **Open** |
+| 6 | No task viability pre-check | **Closed** — `check_viability` tool implemented (`src/lib/distri-finetune-tools/steps/check-viability.ts`), classifies tasks as viable/marginal/not_viable |
 | 7 | Knowledge sources opaque to agent | **Closed** — `analyze_knowledge_sources` tool exists |
 | 8 | No session resumption / catch-up | **Closed** — `reviewedByAgent` field, `mark_job_reviewed` tool, `buildCatchUpContext()`, auto-trigger events, catch-up UI cards (`LucyCompletedJobCard`, `LucyFailedJobCard`, `LucyPendingDecisionCard`), fresh thread per session (no history restoration). Only sidebar notification badge missing (visual only) |
 
@@ -198,46 +198,26 @@ Claude has **two decision loops**:
 - If overfitting → use earlier epoch, adjust training config
 - If reward hacking → fix grader, re-train
 
-### What Lucy does
-Lucy's `execute_plan` runs steps sequentially from a fixed registry:
+### What Lucy does now (2026-03-10)
+
+**Closed.** `execute_plan` now supports iteration-specific steps alongside the base pipeline:
+
 ```typescript
-const STEP_EXECUTORS: Record<ExecutionStepId, StepExecutor> = {
-  topics: executeTopicsStep,
-  adjust_topics: executeAdjustTopicsStep,
-  categorize: executeCategorizeStep,
-  generate: executeGenerateStep,
-  grader: executeGraderStep,
-  upload: executeUploadStep,
-  dryrun: executeDryRunStep,
-  finetune: executeFinetuneStep,
-};
+type ExecutionStepId =
+  // Base pipeline
+  | 'topics' | 'adjust_topics' | 'categorize' | 'generate'
+  | 'grader' | 'upload' | 'dryrun' | 'finetune'
+  // Iteration steps (added Phase 2)
+  | 'regenerate_topic' | 'adjust_grader' | 'analyze' | 'post_training_eval';
 ```
 
-There is no `analyze_results` step. There is no conditional logic. The plan runs top-to-bottom. **Neither inner loop nor outer loop exists.**
+All 4 iteration step types are registered in `STEP_REGISTRY` and `STEP_ORDER` with executors.
 
-### What's missing
-- Post-eval analysis step that inspects dry run results and proposes next actions
-- Ability for the agent to propose a new plan based on dry run scores
-- Post-training analysis step that inspects training scores and epoch data
-- Post-training dry run eval (compare fine-tuned model vs base model)
-- The entire iteration loop concept (neither inner nor outer loop)
+**Inner loop**: `analyze_evaluation` runs reactively (auto-trigger on eval completion or catch-up on reopen). Implements the full RFT decision tree (Steps A-F): score classification, health assessment, per-topic diagnosis, grader health, cross-iteration comparison, escalation ladder. Returns structured recommendations with specific levers to pull.
 
-### Proposed fix
-1. Add an `analyze_evaluation` step that runs after `dryrun`:
-   - Reads evaluation details (per-record scores, per-topic breakdown)
-   - Compares with iteration history
-   - Generates a diagnosis: what's working, what's not, what to do next
-   - Returns a structured recommendation
+**Outer loop**: `analyze_training` and `get_training_metrics` run reactively after training completes. Per-epoch analysis detects overfitting, no-learning, and reward hacking patterns. Agent md has full inner/outer loop protocol.
 
-2. Allow the agent to call `propose_plan` again after analysis:
-   - New plan should reference previous iteration
-   - Plan should target specific improvements (not full re-run)
-   - UI shows "Iteration 2 Plan" with what changed
-
-3. Add step types for targeted fixes:
-   - `regenerate_topic` — regenerate data for specific weak topics
-   - `adjust_grader` — modify grader based on analysis
-   - `rerun_evaluation` — re-evaluate without re-uploading (if only grader changed)
+Both loops work via agent instruction compliance + reactive analysis tools. Iteration state persisted in IndexedDB for cross-iteration memory.
 
 ---
 
@@ -351,26 +331,9 @@ Before starting the pipeline, the skill instructs Claude to verify prerequisites
 3. If the model produces garbage → base model is too small or task is too hard
 4. If the model is already good → fine-tuning may not be needed
 
-### What Lucy does
-Jumps straight into topic generation and data creation. No pre-check.
+### What Lucy does now (2026-03-10)
 
-### Proposed fix
-Add a `test_base_model` tool:
-```typescript
-// Input
-{ model: string, sample_prompts: string[], system_prompt: string }
-
-// Output
-{
-  results: [
-    { prompt: "...", response: "...", approximate_quality: "good" | "partial" | "poor" }
-  ],
-  viability: "ready" | "marginal" | "not_ready",
-  recommendation: "Proceed with fine-tuning" | "Consider a larger base model"
-}
-```
-
-Add this as an optional first step in the plan — run before generating data.
+**Closed.** `check_viability` tool implemented (`src/lib/distri-finetune-tools/steps/check-viability.ts`). Tests the base model on sample prompts using the real eval pipeline (reuses `runGraderTest()` from `test-grader.ts`). Returns a classification: `viable` / `marginal` / `not_viable` with a recommendation. The agent can run this as an optional pre-check before starting the pipeline.
 
 ---
 

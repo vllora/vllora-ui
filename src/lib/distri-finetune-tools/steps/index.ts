@@ -54,8 +54,8 @@ export { uploadDatasetHandler, uploadDatasetTool } from './upload-dataset';
 // Sync Evaluator (update grader without re-uploading)
 export { syncEvaluatorHandler, syncEvaluatorTool } from './sync-evaluator';
 
-// Dry Run (Step 5)
-export { runDryRunHandler, runDryRunTool } from './run-dry-run';
+// Evaluation (Step 5)
+export { runEvaluationHandler, runEvaluationTool } from './run-evaluation';
 
 // Skill Packaging (between Dry Run and Training)
 export { generateSkillPackageHandler, generateSkillPackageTool } from './generate-skill-package';
@@ -167,7 +167,7 @@ import { testGraderSampleHandler, testGraderSampleTool } from './test-grader';
 import { validateRecordsHandler, validateRecordsTool } from './validate-records';
 import { uploadDatasetHandler, uploadDatasetTool } from './upload-dataset';
 import { syncEvaluatorHandler, syncEvaluatorTool } from './sync-evaluator';
-import { runDryRunHandler, runDryRunTool } from './run-dry-run';
+import { runEvaluationHandler, runEvaluationTool } from './run-evaluation';
 import { generateSkillPackageHandler, generateSkillPackageTool } from './generate-skill-package';
 import { downloadSkillPackageHandler, downloadSkillPackageTool } from './download-skill-package';
 import { startTrainingHandler, startTrainingTool } from './start-training';
@@ -284,7 +284,7 @@ export const stepTools: DistriFnTool[] = [
   testGraderSampleTool,
   uploadDatasetTool,
   syncEvaluatorTool,
-  runDryRunTool,
+  runEvaluationTool,
   generateSkillPackageTool,
   downloadSkillPackageTool,
   startTrainingTool,
@@ -345,7 +345,7 @@ export const stepToolHandlers: Record<string, ToolHandler> = {
   test_grader_sample: testGraderSampleHandler,
   upload_dataset: uploadDatasetHandler,
   sync_evaluator: syncEvaluatorHandler,
-  run_evaluation: runDryRunHandler,
+  run_evaluation: runEvaluationHandler,
   generate_skill_package: generateSkillPackageHandler,
   download_skill_package: downloadSkillPackageHandler,
   start_training: startTrainingHandler,

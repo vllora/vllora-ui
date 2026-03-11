@@ -64,29 +64,29 @@ function ScoreLine({
 
 export function QualityIndicator({ evaluation, className, onNavigate, compact }: QualityIndicatorProps) {
   // Normalize: legacy records only have `score` (set by old dry-run code).
-  const dryRunLatest = evaluation?.dryRunScore ?? (
+  const dryRunLatest = evaluation?.evalScore ?? (
     evaluation?.score != null && !evaluation?.finetuneScore ? evaluation.score : undefined
   );
   const dryRunAvg = evaluation?.dryRunAvg;
   const finetuneLatest = evaluation?.finetuneScore;
   const finetuneAvg = evaluation?.finetuneAvg;
-  const dryRunCount = evaluation?.dryRunCount ?? (dryRunLatest != null ? 1 : 0);
+  const evalCount = evaluation?.evalCount ?? (dryRunLatest != null ? 1 : 0);
   const finetuneCount = evaluation?.finetuneCount ?? 0;
 
   const hasDryRun = dryRunLatest != null;
   const hasFinetune = finetuneLatest != null;
 
   // Determine display values and labels
-  const drScore = hasDryRun ? (dryRunCount > 1 && dryRunAvg != null ? dryRunAvg : dryRunLatest!) : undefined;
-  const drLabel = dryRunCount > 1 ? "Avg Evaluation" : "Evaluation";
+  const drScore = hasDryRun ? (evalCount > 1 && dryRunAvg != null ? dryRunAvg : dryRunLatest!) : undefined;
+  const drLabel = evalCount > 1 ? "Avg Evaluation" : "Evaluation";
   const ftScore = hasFinetune ? (finetuneCount > 1 && finetuneAvg != null ? finetuneAvg : finetuneLatest!) : undefined;
   const ftLabel = finetuneCount > 1 ? "Avg Finetune" : "Finetune";
 
   // Tooltip with full detail (shared between modes)
   const tooltipLines: string[] = [];
   if (hasDryRun) {
-    if (dryRunCount > 1 && dryRunAvg != null) {
-      tooltipLines.push(`Avg: ${dryRunAvg.toFixed(2)} across ${dryRunCount} evaluations`);
+    if (evalCount > 1 && dryRunAvg != null) {
+      tooltipLines.push(`Avg: ${dryRunAvg.toFixed(2)} across ${evalCount} evaluations`);
       tooltipLines.push(`Latest run: ${dryRunLatest!.toFixed(2)}`);
     } else {
       tooltipLines.push(`Evaluation score: ${dryRunLatest!.toFixed(2)}`);

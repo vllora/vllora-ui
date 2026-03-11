@@ -18,14 +18,12 @@ import { finetuneTools, workflowToContext } from '@/lib/distri-finetune-tools';
 import type { PlanStatus } from '@/lib/distri-finetune-tools/steps/proposed-plan-store';
 import type { ExecutionProgress } from '@/lib/distri-finetune-tools/steps/execute-plan';
 import { stockfishTools, isChessDataset } from '@/lib/distri-finetune-tools/steps';
-import { finetuneWorkflowService, FinetuneWorkflowState, getWorkflowByDataset, updateStepData, type FinetuneStep } from '@/services/finetune-workflow-db';
-import { getDatasetById, getRecordsByDatasetId } from '@/services/datasets-db';
-import { getDryRunJobsByDataset } from '@/services/dry-run-jobs-db';
-import { getIterationState } from '@/services/finetune-iteration-db';
+import { workflowService, datasetService, recordService, evalJobService, iterationStateService } from '@/services/service-registry';
+import type { FinetuneWorkflowState, FinetuneStep } from '@/types/workflow-types';
 import { getReinforcementJobStatus, getFinetuneEvaluations, getEvaluatorVersions } from '@/services/finetune-api';
-import type { DryRunJob } from '@/types/dry-run-job';
-import type { IterationState } from '@/services/finetune-iteration-db';
-import type { TopicDryRunStats } from '@/types/dataset-types';
+import type { EvalJob } from '@/types/eval-job';
+import type { IterationState } from '@/types/iteration-types';
+import type { TopicEvalStats } from '@/types/dataset-types';
 import { emitter } from '@/utils/eventEmitter';
 
 // Type for chat messages returned by useChatMessages
@@ -213,10 +211,10 @@ async function buildCatchUpContext(datasetId: string): Promise<CatchUpResult> {
   try {
     // Fetch all data sources in parallel
     const [jobs, iterState, workflow, dataset] = await Promise.all([
-      getDryRunJobsByDataset(datasetId),
-      getIterationState(datasetId),
-      getWorkflowByDataset(datasetId),
-      getDatasetById(datasetId),
+      evalJobService.getByDataset(datasetId),
+      iterationStateService.get(datasetId),
+      workflowService.getByDataset(datasetId),
+      datasetService.getById(datasetId),
     ]);
 
     // --- Fetch evaluator versions if backend dataset ID is available ---
@@ -246,10 +244,10 @@ async function buildCatchUpContext(datasetId: string): Promise<CatchUpResult> {
 
     // --- Completed eval jobs (with per-topic breakdown + iteration delta) ---
     const unreviewedCompleted = jobs.filter(
-      (j: DryRunJob) => j.status === 'completed' && !j.reviewedByAgent
+      (j: EvalJob) => j.status === 'completed' && !j.reviewedByAgent
     );
     const unreviewedFailed = jobs.filter(
-      (j: DryRunJob) => j.status === 'failed' && !j.reviewedByAgent
+      (j: EvalJob) => j.status === 'failed' && !j.reviewedByAgent
     );
 
     if (unreviewedCompleted.length > 0) {
@@ -259,7 +257,7 @@ async function buildCatchUpContext(datasetId: string): Promise<CatchUpResult> {
 
         // Build per-topic scores from DryRunStats
         const perTopic: CatchUpTopicScore[] | undefined = byTopic
-          ? Object.entries(byTopic).map(([topic, stats]: [string, TopicDryRunStats]) => ({
+          ? Object.entries(byTopic).map(([topic, stats]: [string, TopicEvalStats]) => ({
               topic,
               mean: stats.mean,
               count: stats.count,
@@ -287,7 +285,7 @@ async function buildCatchUpContext(datasetId: string): Promise<CatchUpResult> {
           rolloutModel: j.rolloutModel ?? undefined,
         });
       }
-      const jobSummaries = unreviewedCompleted.map((j: DryRunJob) => {
+      const jobSummaries = unreviewedCompleted.map((j: EvalJob) => {
         const avgScore = j.pollingSnapshot?.summary?.average_score;
         const scoreStr = avgScore != null ? ` (avg score: ${avgScore.toFixed(3)})` : '';
         return `- Job ${j.id}${scoreStr}, completed at ${new Date(j.completedAt ?? 0).toLocaleString()}`;
@@ -306,7 +304,7 @@ async function buildCatchUpContext(datasetId: string): Promise<CatchUpResult> {
           failedAt: j.completedAt ?? undefined,
         });
       }
-      const failSummaries = unreviewedFailed.map((j: DryRunJob) => {
+      const failSummaries = unreviewedFailed.map((j: EvalJob) => {
         const errMsg = j.error ? `: ${j.error.slice(0, 200)}` : '';
         return `- Job ${j.id} failed${errMsg}`;
       });
@@ -551,7 +549,7 @@ async function resolveTrainingStatus(
         fineTunedModel = freshJob.fine_tuned_model ?? fineTunedModel;
         completedAt = freshJob.completed_at ? new Date(freshJob.completed_at).getTime() : Date.now();
         // Fix stale workflow in IndexedDB so future loads are correct
-        await updateStepData(workflow.id, 'training', {
+        await workflowService.updateStepData(workflow.id, 'training', {
           ...t,
           status: 'completed',
           modelId: freshJob.fine_tuned_model ?? t.modelId,
@@ -560,7 +558,7 @@ async function resolveTrainingStatus(
       } else if (freshJob.status === 'failed') {
         status = 'failed';
         errorMessage = freshJob.error_message ?? 'Training job failed';
-        await updateStepData(workflow.id, 'training', { ...t, status: 'failed' });
+        await workflowService.updateStepData(workflow.id, 'training', { ...t, status: 'failed' });
         emitter.emit('vllora_workflow_updated', { datasetId: workflow.datasetId });
       }
     } catch {
@@ -608,8 +606,8 @@ async function fetchTrainingEpochScores(
 ): Promise<TrainingEpochScores | undefined> {
   try {
     const [dataset, records] = await Promise.all([
-      getDatasetById(datasetId),
-      getRecordsByDatasetId(datasetId),
+      datasetService.getById(datasetId),
+      recordService.getByDatasetId(datasetId),
     ]);
     if (!dataset?.backendDatasetId) return undefined;
 
@@ -701,7 +699,7 @@ async function fetchTrainingEpochScores(
  */
 function buildIterationDelta(
   iterState: IterationState | null,
-  job: DryRunJob,
+  job: EvalJob,
 ): CatchUpIterationDelta | undefined {
   if (!iterState || iterState.history.length === 0) return undefined;
 
@@ -713,7 +711,7 @@ function buildIterationDelta(
   const prevEntry = iterState.history[iterState.history.length - 1];
   if (!prevEntry?.dryRunScores) return undefined;
 
-  const perTopic = Object.entries(currentByTopic).map(([topic, stats]: [string, TopicDryRunStats]) => {
+  const perTopic = Object.entries(currentByTopic).map(([topic, stats]: [string, TopicEvalStats]) => {
     const prev = prevEntry.dryRunScores.perTopic[topic] ?? 0;
     return { topic, prev, current: stats.mean, delta: stats.mean - prev };
   });
@@ -835,8 +833,8 @@ export function useFineTuneAgentChat(
     setWorkflowLoading(true);
     try {
       const [workflowState, dataset, catchUp] = await Promise.all([
-        finetuneWorkflowService.getWorkflowByDataset(datasetId),
-        getDatasetById(datasetId),
+        workflowService.getByDataset(datasetId),
+        datasetService.getById(datasetId),
         buildCatchUpContext(datasetId),
       ]);
       setWorkflow(workflowState);
@@ -951,7 +949,7 @@ export function useWorkflowPolling(
 
     const poll = async () => {
       try {
-        const state = await finetuneWorkflowService.getWorkflowByDataset(datasetId);
+        const state = await workflowService.getByDataset(datasetId);
         if (mounted) {
           setWorkflow(state);
           setLoading(false);

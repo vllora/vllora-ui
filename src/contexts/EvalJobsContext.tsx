@@ -1,7 +1,7 @@
 /**
- * DryRunJobsContext
+ * EvalJobsContext
  *
- * Provides reactive state for dry run jobs to UI components.
+ * Provides reactive state for evaluation jobs to UI components.
  * Bridges between the singleton polling manager and React.
  */
 
@@ -12,80 +12,43 @@ import {
   useState,
   useCallback,
   useMemo,
-  useRef,
   type ReactNode,
 } from 'react';
-import type { DryRunJob } from '@/types/dry-run-job';
+import type { EvalJob } from '@/types/eval-job';
 import type { Dataset } from '@/types/dataset-types';
-import { getDryRunJobsByDataset } from '@/services/dry-run-jobs-db';
-import { dryRunPollingManager } from '@/services/dry-run-polling-manager';
-import { backfillDryRunScoresFromJobs, backfillDryRunModel } from '@/services/datasets-db';
+import { evalJobService } from '@/services/service-registry';
+import { evalPollingManager } from '@/services/eval-polling-manager';
 import { emitter } from '@/utils/eventEmitter';
 
 // =============================================================================
 // Types
 // =============================================================================
 
-export type DryRunJobsContextType = ReturnType<typeof useDryRunJobs>;
+export type EvalJobsContextType = ReturnType<typeof useEvalJobs>;
 
-export const DryRunJobsContext = createContext<DryRunJobsContextType | null>(null);
+export const EvalJobsContext = createContext<EvalJobsContextType | null>(null);
 
 // =============================================================================
 // Hook (contains all logic)
 // =============================================================================
 
-function useDryRunJobs(props: {
+function useEvalJobs(props: {
   dataset: Dataset;
 }) {
   const { dataset } = props;
 
-  const [jobs, setJobs] = useState<DryRunJob[]>([]);
+  const [jobs, setJobs] = useState<EvalJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const backfillRanRef = useRef(false);
-
   const datasetId = dataset.id;
 
   // Load jobs from IndexedDB
   const loadJobs = useCallback(async () => {
     try {
-      const fetchedJobs = await getDryRunJobsByDataset(datasetId);
+      const fetchedJobs = await evalJobService.getByDataset(datasetId);
       setJobs(fetchedJobs);
 
-      // One-time backfill: migrate records that were evaluated by old code
-      // (only set evaluation.score, missing dryRunCount/dryRunAvg)
-      if (!backfillRanRef.current) {
-        backfillRanRef.current = true;
-        const completedWithSnapshot = fetchedJobs.filter(
-          (j) => j.status === 'completed' && j.pollingSnapshot?.results?.length
-        );
-        if (completedWithSnapshot.length > 0) {
-          backfillDryRunScoresFromJobs(datasetId, completedWithSnapshot).then((n) => {
-            if (n > 0) {
-              console.log(`[DryRunJobsContext] Backfilled ${n} records with dry-run scores`);
-              emitter.emit('vllora_dataset_refresh' as any, { datasetId });
-            }
-          }).catch((err) => {
-            console.warn('[DryRunJobsContext] Backfill failed:', err);
-          });
-        }
-
-        // Backfill dryRunModel from the most recent completed job
-        const latestCompleted = fetchedJobs.find(
-          (j) => j.status === 'completed' && j.rolloutModel
-        );
-        if (latestCompleted?.rolloutModel) {
-          backfillDryRunModel(datasetId, latestCompleted.rolloutModel).then((n) => {
-            if (n > 0) {
-              console.log(`[DryRunJobsContext] Backfilled ${n} records with dryRunModel`);
-              emitter.emit('vllora_dataset_refresh' as any, { datasetId });
-            }
-          }).catch((err) => {
-            console.warn('[DryRunJobsContext] dryRunModel backfill failed:', err);
-          });
-        }
-      }
     } catch (error) {
-      console.error('[DryRunJobsContext] Failed to load jobs:', error);
+      console.error('[EvalJobsContext] Failed to load jobs:', error);
     } finally {
       setIsLoading(false);
     }
@@ -93,13 +56,13 @@ function useDryRunJobs(props: {
 
   // Initialize polling manager and load jobs on mount
   useEffect(() => {
-    dryRunPollingManager.initialize();
+    evalPollingManager.initialize();
     loadJobs();
   }, [loadJobs]);
 
   // Listen for job update events
   useEffect(() => {
-    const handleJobUpdate = (event: { jobId: string; job: DryRunJob }) => {
+    const handleJobUpdate = (event: { jobId: string; job: EvalJob }) => {
       // Only update if this job belongs to current dataset
       if (event.job.datasetId === datasetId) {
         setJobs((prevJobs) => {
@@ -124,10 +87,10 @@ function useDryRunJobs(props: {
     };
   }, [datasetId]);
 
-  // Start a new dry run (delegates to polling manager which handles auto-upload and validation)
+  // Start a new evaluation (delegates to polling manager which handles auto-upload and validation)
   const startDryRun = useCallback(
     async (sampleSize: number, rolloutModel?: string): Promise<string> => {
-      return dryRunPollingManager.startDryRunForDataset({
+      return evalPollingManager.startEvalForDataset({
         datasetId,
         sampleSize,
         rolloutModel,
@@ -136,14 +99,14 @@ function useDryRunJobs(props: {
     [datasetId]
   );
 
-  // Cancel a dry run
+  // Cancel an evaluation
   const cancelDryRun = useCallback(async (jobId: string): Promise<void> => {
-    await dryRunPollingManager.cancelDryRun(jobId);
+    await evalPollingManager.cancelEval(jobId);
   }, []);
 
   // Refresh a single job's data from the backend API
   const refreshJob = useCallback(async (jobId: string): Promise<void> => {
-    await dryRunPollingManager.refreshJob(jobId);
+    await evalPollingManager.refreshJob(jobId);
   }, []);
 
   // Compute derived state
@@ -175,25 +138,25 @@ function useDryRunJobs(props: {
 // Provider
 // =============================================================================
 
-export function DryRunJobsProvider({
+export function EvalJobsProvider({
   children,
   dataset,
 }: {
   children: ReactNode;
   dataset: Dataset;
 }) {
-  const value = useDryRunJobs({ dataset });
-  return <DryRunJobsContext.Provider value={value}>{children}</DryRunJobsContext.Provider>;
+  const value = useEvalJobs({ dataset });
+  return <EvalJobsContext.Provider value={value}>{children}</EvalJobsContext.Provider>;
 }
 
 // =============================================================================
 // Consumer
 // =============================================================================
 
-export function DryRunJobsConsumer() {
-  const value = useContext(DryRunJobsContext);
+export function EvalJobsConsumer() {
+  const value = useContext(EvalJobsContext);
   if (value === null) {
-    throw new Error('DryRunJobsContext must be used within a DryRunJobsProvider');
+    throw new Error('EvalJobsContext must be used within an EvalJobsProvider');
   }
   return value;
 }

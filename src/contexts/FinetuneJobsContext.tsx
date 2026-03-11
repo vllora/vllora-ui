@@ -24,13 +24,7 @@ import {
   getReinforcementJobStatus,
   getFinetuneEvaluations,
 } from "@/services/finetune-api";
-import {
-  getCachedJobEvaluations,
-  saveJobEvaluationsCache,
-  isJobScoresPersisted,
-  markJobScoresPersisted,
-} from "@/services/finetune-workflow-db";
-import { persistFinetuneScoresToRecords } from "@/services/datasets-db";
+import { workflowService, recordService } from "@/services/service-registry";
 import { ProjectEventsConsumer } from "@/contexts/project-events";
 import {
   CustomEvent,
@@ -50,6 +44,52 @@ interface JobEvaluationState {
 
 // Poll interval for evaluations (20 seconds)
 const EVAL_POLL_INTERVAL = 20000;
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/**
+ * Persist finetune evaluation scores to individual records.
+ * Computes average score across all epochs for each row, then updates via recordService.
+ */
+async function persistFinetuneScores(
+  datasetId: string,
+  results: Array<{
+    row_index: number;
+    row: { id: string; [key: string]: unknown };
+    epochs: Record<number, Array<{ score?: number; [key: string]: unknown }>>;
+  }>,
+  _previewOnly: boolean,
+  _finetuneModel?: string,
+): Promise<number> {
+  let persisted = 0;
+
+  for (const row of results) {
+    const recordId = row.row?.id;
+    if (!recordId) continue;
+
+    const allScores: number[] = [];
+    for (const epochEntries of Object.values(row.epochs)) {
+      for (const entry of epochEntries) {
+        if (typeof entry.score === 'number') {
+          allScores.push(entry.score);
+        }
+      }
+    }
+
+    if (allScores.length === 0) continue;
+
+    const avgScore = allScores.reduce((sum, s) => sum + s, 0) / allScores.length;
+
+    await recordService.updateEvalScores(datasetId, recordId, {
+      finetuneScore: avgScore,
+    });
+    persisted++;
+  }
+
+  return persisted;
+}
 
 // ============================================================================
 // Hook
@@ -123,7 +163,7 @@ function useFinetuneJobsLogic() {
     // On initial fetch, try to load from cache first (stale-while-revalidate)
     if (isInitial) {
       try {
-        const cached = await getCachedJobEvaluations(jobId);
+        const cached = await workflowService.getCachedJobEvaluations(jobId);
         if (cached) {
           // Show cached data immediately
           setJobEvaluations((prev) => ({
@@ -156,40 +196,37 @@ function useFinetuneJobsLogic() {
       }));
 
       // Save to cache in background
-      saveJobEvaluationsCache(jobId, results).catch((err) => {
-        console.warn('Failed to cache job evaluations:', err);
+      workflowService.saveJobEvaluationsCache(jobId, results).catch((cacheErr: unknown) => {
+        console.warn('Failed to cache job evaluations:', cacheErr);
       });
 
       // Persist finetune scores to records
       if (results.results.length > 0) {
         const isComplete = job.status !== 'pending' && job.status !== 'running';
         const modelName = job.base_model;
+        const datasetId = job.dataset_id!;
         try {
+          const previewOnly = !isComplete;
           if (isComplete) {
-            // Final persistence: increment count, mark as done (once per job)
-            const alreadyPersisted = await isJobScoresPersisted(jobId);
-            if (!alreadyPersisted) {
-              const { persisted, localDatasetId } = await persistFinetuneScoresToRecords(
-                job.dataset_id!, results.results, false, modelName
-              );
+            const alreadyPersisted = await workflowService.isJobScoresPersisted(jobId);
+            if (alreadyPersisted) {
+              // Already persisted — skip
+            } else {
+              const persisted = await persistFinetuneScores(datasetId, results.results, previewOnly, modelName);
               if (persisted > 0) {
-                await markJobScoresPersisted(jobId);
-                emitter.emit('vllora_dataset_refresh' as any,
-                  localDatasetId ? { datasetId: localDatasetId } : undefined);
+                await workflowService.markJobScoresPersisted(jobId);
+                emitter.emit('vllora_dataset_refresh' as any, { datasetId });
               }
             }
           } else {
             // Live preview: update scores without incrementing count (overwritten each poll)
-            const { persisted, localDatasetId } = await persistFinetuneScoresToRecords(
-              job.dataset_id!, results.results, true, modelName
-            );
+            const persisted = await persistFinetuneScores(datasetId, results.results, previewOnly, modelName);
             if (persisted > 0) {
-              emitter.emit('vllora_dataset_refresh' as any,
-                localDatasetId ? { datasetId: localDatasetId } : undefined);
+              emitter.emit('vllora_dataset_refresh' as any, { datasetId });
             }
           }
-        } catch (err) {
-          console.warn('[FinetuneJobs] Failed to persist finetune scores:', err);
+        } catch (scoreErr: unknown) {
+          console.warn('[FinetuneJobs] Failed to persist finetune scores:', scoreErr);
         }
       }
     } catch (err) {

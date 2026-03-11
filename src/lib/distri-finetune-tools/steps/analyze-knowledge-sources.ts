@@ -10,10 +10,9 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import * as datasetsDB from '@/services/datasets-db';
+import { datasetService, knowledgeSourceService } from '@/services/service-registry';
 import type { ToolHandler } from '../types';
 import { type ExtractedSection } from './shared/knowledge-context';
-import * as knowledgeDB from '@/services/knowledge-sources-db';
 import { emitter } from '@/utils/eventEmitter';
 
 // =============================================================================
@@ -81,7 +80,7 @@ export const analyzeKnowledgeSourcesHandler: ToolHandler = async (
     }
 
     // Get dataset
-    const dataset = await datasetsDB.getDatasetById(dataset_id);
+    const dataset = await datasetService.getById(dataset_id);
     if (!dataset) {
       return { success: false, error: `Dataset ${dataset_id} not found` };
     }
@@ -97,7 +96,7 @@ export const analyzeKnowledgeSourcesHandler: ToolHandler = async (
     }
 
     // Check knowledge source status
-    const sources = await knowledgeDB.getKnowledgeSourcesByDataset(dataset_id);
+    const sources = await knowledgeSourceService.getByDataset(dataset_id);
     const readySources = sources.filter((s) => s.status === 'ready');
     const processingSources = sources.filter((s) => s.status === 'processing');
 

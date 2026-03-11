@@ -26,7 +26,7 @@ Tests what happens when a user sends multiple messages rapidly, interrupts Lucy 
   - [ ] Lucy processes messages in order
   - [ ] No duplicate tool executions
   - [ ] Lucy's final response addresses the latest intent
-  - [ ] Chat history shows all 3 messages correctly
+  - [ ] Chat shows all 3 messages correctly within the current session
 - **Soft checks**:
   - [ ] Lucy acknowledges the changing instructions gracefully
 - **Evidence**: screenshot of chat with rapid messages

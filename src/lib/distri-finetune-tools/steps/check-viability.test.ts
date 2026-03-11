@@ -19,16 +19,16 @@ vi.mock('./test-grader', () => ({
   runGraderTest: (...args: unknown[]) => mockRunGraderTest(...args),
 }));
 
-// Mock workflow DB
+// Mock service registry
 const mockGetWorkflow = vi.fn();
-vi.mock('@/services/finetune-workflow-db', () => ({
-  getWorkflow: (...args: unknown[]) => mockGetWorkflow(...args),
-}));
-
-// Mock datasets DB
 const mockGetRecords = vi.fn();
-vi.mock('@/services/datasets-db', () => ({
-  getRecordsByDatasetId: (...args: unknown[]) => mockGetRecords(...args),
+vi.mock('@/services/service-registry', () => ({
+  workflowService: {
+    get: (...args: unknown[]) => mockGetWorkflow(...args),
+  },
+  recordService: {
+    getByDatasetId: (...args: unknown[]) => mockGetRecords(...args),
+  },
 }));
 
 // =============================================================================

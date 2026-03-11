@@ -6,7 +6,7 @@
  */
 
 import { Loader2, Check, X, StopCircle } from "lucide-react";
-import type { DryRunJob } from "@/types/dry-run-job";
+import type { EvalJob } from "@/types/eval-job";
 import {
   getJobTotalRows,
   getJobCompletedRows,
@@ -14,11 +14,11 @@ import {
   getJobAverageScore,
   getJobPassedCount,
   getJobFailedGradingCount,
-} from "@/types/dry-run-job";
+} from "@/types/eval-job";
 
 interface EvaluationRunningStateProps {
   /** The currently running dry run job */
-  runningJob: DryRunJob;
+  runningJob: EvalJob;
   /** Callback when clicking to open dry run dialog */
   onDryRunClick?: () => void;
   /** Callback when clicking to cancel the dry run */

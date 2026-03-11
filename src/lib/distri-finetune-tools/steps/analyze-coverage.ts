@@ -6,8 +6,7 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import * as workflowDB from '@/services/finetune-workflow-db';
-import * as datasetsDB from '@/services/datasets-db';
+import { workflowService, datasetService, recordService } from '@/services/service-registry';
 import type { ToolHandler, AnalyzeCoverageResult } from '../types';
 
 // Import shared analysis functions
@@ -25,11 +24,11 @@ export const analyzeCoverageHandler: ToolHandler = async (params): Promise<Analy
       return { success: false, error: 'workflow_id is required' };
     }
 
-    const workflow = await workflowDB.getWorkflow(workflow_id);
+    const workflow = await workflowService.get(workflow_id);
     if (!workflow) {
       return { success: false, error: 'Workflow not found' };
     }
-    await workflowDB.advanceToStep(workflow_id, 'coverage_generation');
+    await workflowService.advanceToStep(workflow_id, 'coverage_generation');
 
     
 
@@ -43,12 +42,12 @@ export const analyzeCoverageHandler: ToolHandler = async (params): Promise<Analy
     // Calculate and save knowledge coverage stats (which chunks are used)
     const knowledgeCoverage = await analyzeKnowledgeCoverage(workflow.datasetId);
     if (knowledgeCoverage) {
-      await datasetsDB.updateDatasetKnowledgeCoverageStats(workflow.datasetId, knowledgeCoverage);
+      await datasetService.updateKnowledgeCoverageStats(workflow.datasetId, knowledgeCoverage);
     }
 
     // Get full coverage report for response (includes distribution details)
-    const records = await datasetsDB.getRecordsByDatasetId(workflow.datasetId);
-    const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
+    const records = await recordService.getByDatasetId(workflow.datasetId);
+    const dataset = await datasetService.getById(workflow.datasetId);
     const coverageReport = existingAnalyzeCoverage({records, hierarchy: dataset?.topicHierarchy || undefined});
 
     // Convert distribution to expected format for response
@@ -71,7 +70,7 @@ export const analyzeCoverageHandler: ToolHandler = async (params): Promise<Analy
     }
 
     // Update workflow with process-related data (generation history, synthetic counts)
-    await workflowDB.updateStepData(workflow_id, 'coverageGeneration', {
+    await workflowService.updateStepData(workflow_id, 'coverageGeneration', {
       balanceScore: coverageStats.balanceScore,
       topicDistribution: coverageStats.topicDistribution,
       recommendations: coverageReport.recommendations,

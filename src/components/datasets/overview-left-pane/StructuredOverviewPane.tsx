@@ -14,9 +14,9 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { Dataset, DatasetRecord, TopicHierarchyNode, DryRunStats, ScoreDistribution } from "@/types/dataset-types";
-import type { DryRunJob } from "@/types/dry-run-job";
-import { getJobAverageScore, getJobCompletedRows, getJobTotalRows } from "@/types/dry-run-job";
+import type { Dataset, DatasetRecord, TopicHierarchyNode, EvalStats, ScoreDistribution } from "@/types/dataset-types";
+import type { EvalJob } from "@/types/eval-job";
+import { getJobAverageScore, getJobCompletedRows, getJobTotalRows } from "@/types/eval-job";
 import type { FinetuneJob } from "@/services/finetune-api";
 import type { Plan } from "@/lib/distri-finetune-tools/steps/propose-plan/types";
 import { getLeafTopicsFromHierarchy } from "@/components/datasets/record-utils";
@@ -24,7 +24,7 @@ import { getLeafTopicsFromHierarchy } from "@/components/datasets/record-utils";
 interface StructuredOverviewPaneProps {
   dataset: Dataset | null | undefined;
   records: DatasetRecord[];
-  dryRunJobs: DryRunJob[];
+  dryRunJobs: EvalJob[];
   latestFinetuneJob: FinetuneJob | null;
   finetuneJobsCount: number;
   proposedPlan: Plan | null;
@@ -32,7 +32,7 @@ interface StructuredOverviewPaneProps {
   onOpenEvaluator: () => void;
   onOpenJobs: () => void;
   onOpenRecord: (recordId: string) => void;
-  onOpenDryRunJob?: (jobId: string) => void;
+  onOpenEvalJob?: (jobId: string) => void;
   onOpenFinetuneJob?: (jobId: string) => void;
   className?: string;
 }
@@ -143,7 +143,7 @@ function pickSampleRecords(records: DatasetRecord[]): DatasetRecord[] {
     seen.add(r.id);
   };
 
-  const withScore = records.find((r) => r.evaluation?.dryRunScore != null || r.evaluation?.score != null);
+  const withScore = records.find((r) => r.evaluation?.evalScore != null || r.evaluation?.score != null);
   const generated = records.find((r) => r.is_generated);
   const original = records.find((r) => !r.is_generated);
   push(withScore);
@@ -158,7 +158,7 @@ function pickSampleRecords(records: DatasetRecord[]): DatasetRecord[] {
   return selected.slice(0, 5);
 }
 
-function getDryRunStatusPill(status: DryRunJob["status"]) {
+function getDryRunStatusPill(status: EvalJob["status"]) {
   switch (status) {
     case "completed":
       return "bg-emerald-500/15 text-emerald-400";
@@ -190,7 +190,7 @@ function getFinetuneStatusPill(status?: string | null) {
   }
 }
 
-function verdictUi(verdict?: DryRunStats["diagnosis"]["verdict"]) {
+function verdictUi(verdict?: EvalStats["diagnosis"]["verdict"]) {
   if (verdict === "GO") {
     return { label: "GO", Icon: CheckCircle2, className: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" };
   }
@@ -230,7 +230,7 @@ function topicCountsMapFromDataset(dataset: Dataset | null | undefined, records:
   return map;
 }
 
-function ScoreDistributionMini({ stats }: { stats: DryRunStats }) {
+function ScoreDistributionMini({ stats }: { stats: EvalStats }) {
   const bins = useMemo<ScoreBin[]>(
     () =>
       SCORE_BINS.map((b) => ({
@@ -359,7 +359,7 @@ export function StructuredOverviewPane({
   onOpenEvaluator,
   onOpenJobs,
   onOpenRecord,
-  onOpenDryRunJob,
+  onOpenEvalJob,
   onOpenFinetuneJob,
   className,
 }: StructuredOverviewPaneProps) {
@@ -384,26 +384,26 @@ export function StructuredOverviewPane({
   );
   const originalCount = records.length - generatedCount;
 
-  const runningDryRunJob = useMemo(
+  const runningEvalJob = useMemo(
     () => dryRunJobs.find((j) => j.status === "running" || j.status === "pending") ?? null,
     [dryRunJobs]
   );
-  const latestDryRunJob = useMemo(
+  const latestEvalJob = useMemo(
     () =>
       [...dryRunJobs]
         .sort((a, b) => (b.completedAt ?? b.createdAt) - (a.completedAt ?? a.createdAt))[0] ?? null,
     [dryRunJobs]
   );
-  const completedDryRunJob = useMemo(
+  const completedEvalJob = useMemo(
     () =>
       [...dryRunJobs]
         .filter((j) => j.status === "completed" && j.result)
         .sort((a, b) => (b.completedAt ?? b.createdAt) - (a.completedAt ?? a.createdAt))[0] ?? null,
     [dryRunJobs]
   );
-  const effectiveDryRunStats = completedDryRunJob?.result ?? dataset?.dryRunStats ?? null;
+  const effectiveEvalStats = completedEvalJob?.result ?? dataset?.evalStats ?? null;
 
-  const qualityVerdict = verdictUi(effectiveDryRunStats?.diagnosis?.verdict);
+  const qualityVerdict = verdictUi(effectiveEvalStats?.diagnosis?.verdict);
 
   const latestFinetuneTime = latestFinetuneJob
     ? new Date(latestFinetuneJob.completed_at ?? latestFinetuneJob.created_at).getTime()
@@ -475,8 +475,8 @@ export function StructuredOverviewPane({
             <MetricItem
               label="Evaluation Avg"
               value={
-                effectiveDryRunStats?.statistics?.mean != null
-                  ? effectiveDryRunStats.statistics.mean.toFixed(2)
+                effectiveEvalStats?.statistics?.mean != null
+                  ? effectiveEvalStats.statistics.mean.toFixed(2)
                   : "N/A"
               }
             />
@@ -548,10 +548,10 @@ export function StructuredOverviewPane({
                 Evaluator
                 <ArrowRight className="w-3 h-3" />
               </Button>
-              {latestDryRunJob && onOpenDryRunJob ? (
+              {latestEvalJob && onOpenEvalJob ? (
                 <button
                   type="button"
-                  onClick={() => onOpenDryRunJob(latestDryRunJob.id)}
+                  onClick={() => onOpenEvalJob(latestEvalJob.id)}
                   className="w-7 h-7 rounded-full border border-border/40 bg-background/50 text-muted-foreground hover:text-foreground hover:border-[rgb(var(--theme-500))]/40 transition-colors flex items-center justify-center"
                   title="Open latest evaluation job"
                 >
@@ -561,29 +561,29 @@ export function StructuredOverviewPane({
             </div>
           }
         >
-          {runningDryRunJob && (
+          {runningEvalJob && (
             <div className="mb-3 rounded-lg border border-blue-500/15 bg-blue-500/5 p-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-medium", getDryRunStatusPill(runningDryRunJob.status))}>
-                    {runningDryRunJob.status.toUpperCase()}
+                  <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-medium", getDryRunStatusPill(runningEvalJob.status))}>
+                    {runningEvalJob.status.toUpperCase()}
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    {getJobCompletedRows(runningDryRunJob)}/{getJobTotalRows(runningDryRunJob) || runningDryRunJob.sampleSize} rows
+                    {getJobCompletedRows(runningEvalJob)}/{getJobTotalRows(runningEvalJob) || runningEvalJob.sampleSize} rows
                   </span>
                 </div>
-                {getJobAverageScore(runningDryRunJob) != null && (
+                {getJobAverageScore(runningEvalJob) != null && (
                   <span className="text-xs font-medium text-blue-400">
-                    avg {getJobAverageScore(runningDryRunJob)?.toFixed(2)}
+                    avg {getJobAverageScore(runningEvalJob)?.toFixed(2)}
                   </span>
                 )}
               </div>
-              {getJobTotalRows(runningDryRunJob) > 0 && (
+              {getJobTotalRows(runningEvalJob) > 0 && (
                 <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
                   <div
                     className="h-full bg-blue-500 rounded-full"
                     style={{
-                      width: `${Math.round((getJobCompletedRows(runningDryRunJob) / Math.max(1, getJobTotalRows(runningDryRunJob))) * 100)}%`,
+                      width: `${Math.round((getJobCompletedRows(runningEvalJob) / Math.max(1, getJobTotalRows(runningEvalJob))) * 100)}%`,
                     }}
                   />
                 </div>
@@ -591,7 +591,7 @@ export function StructuredOverviewPane({
             </div>
           )}
 
-          {effectiveDryRunStats ? (
+          {effectiveEvalStats ? (
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
                 {qualityVerdict ? (
@@ -600,23 +600,23 @@ export function StructuredOverviewPane({
                     {qualityVerdict.label}
                   </span>
                 ) : null}
-                <MetricPill label="Avg" value={effectiveDryRunStats.statistics.mean.toFixed(2)} />
-                <MetricPill label="Std" value={effectiveDryRunStats.statistics.std.toFixed(2)} />
-                <MetricPill label="Samples" value={`${effectiveDryRunStats.samplesEvaluated}`} />
-                {effectiveDryRunStats.lastRunAt ? (
+                <MetricPill label="Avg" value={effectiveEvalStats.statistics.mean.toFixed(2)} />
+                <MetricPill label="Std" value={effectiveEvalStats.statistics.std.toFixed(2)} />
+                <MetricPill label="Samples" value={`${effectiveEvalStats.samplesEvaluated}`} />
+                {effectiveEvalStats.lastRunAt ? (
                   <span className="text-[10px] text-muted-foreground">
-                    Last run {formatRelativeTime(effectiveDryRunStats.lastRunAt)}
+                    Last run {formatRelativeTime(effectiveEvalStats.lastRunAt)}
                   </span>
                 ) : null}
               </div>
 
-              <ScoreDistributionMini stats={effectiveDryRunStats} />
+              <ScoreDistributionMini stats={effectiveEvalStats} />
 
-              {effectiveDryRunStats.diagnosis?.recommendations?.length ? (
+              {effectiveEvalStats.diagnosis?.recommendations?.length ? (
                 <div className="space-y-1.5">
                   <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Recommendations</div>
                   <div className="flex flex-wrap gap-1.5">
-                    {effectiveDryRunStats.diagnosis.recommendations.slice(0, 4).map((rec, i) => (
+                    {effectiveEvalStats.diagnosis.recommendations.slice(0, 4).map((rec, i) => (
                       <span key={`${rec}-${i}`} className="px-2 py-0.5 rounded-full bg-background/60 text-xs text-foreground/90 max-w-full truncate" title={rec}>
                         {rec}
                       </span>
@@ -652,7 +652,7 @@ export function StructuredOverviewPane({
           {sampleRecords.length > 0 ? (
             <div className="space-y-2.5">
               {sampleRecords.map((record, index) => {
-                const score = record.evaluation?.dryRunScore ?? record.evaluation?.score;
+                const score = record.evaluation?.evalScore ?? record.evaluation?.score;
                 const topicLabel = record.topic ? (topicPathMap.get(record.topic) ?? record.topic) : "Unassigned";
                 return (
                   <div key={record.id} className="rounded-lg border border-border/40 bg-background/20 p-3">

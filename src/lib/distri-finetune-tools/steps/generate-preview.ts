@@ -8,7 +8,7 @@
 
 import type { DistriFnTool } from '@distri/core';
 import { DistriClient, type DistriMessage } from '@distri/core';
-import * as datasetsDB from '@/services/datasets-db';
+import { datasetService } from '@/services/service-registry';
 import { getDistriUrl } from '@/config/api';
 import { fetchLucyConfig, type LucyConfig } from '@/lib/agent-sync';
 import { resolveChunkRefs, buildChunkContextSection } from './shared/chunk-lookup';
@@ -274,7 +274,7 @@ export const generatePreviewHandler: ToolHandler = async (
     }
 
     // Get dataset
-    const dataset = await datasetsDB.getDatasetById(dataset_id);
+    const dataset = await datasetService.getById(dataset_id);
     if (!dataset) {
       return { success: false, error: `Dataset ${dataset_id} not found` };
     }

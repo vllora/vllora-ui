@@ -7,15 +7,15 @@
 
 import { Loader2, CheckCircle2, XCircle, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { DryRunJob } from "@/types/dry-run-job";
+import type { EvalJob } from "@/types/eval-job";
 
 interface RunsSidebarProps {
-  jobs: DryRunJob[];
+  jobs: EvalJob[];
   selectedId: string | null;
   onSelectJob: (jobId: string) => void;
 }
 
-function StatusIcon({ status }: { status: DryRunJob["status"] }) {
+function StatusIcon({ status }: { status: EvalJob["status"] }) {
   if (status === "running") return <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-400" />;
   if (status === "completed") return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />;
   if (status === "failed") return <XCircle className="h-3.5 w-3.5 text-red-400" />;

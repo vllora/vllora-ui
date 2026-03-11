@@ -5,7 +5,7 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import * as datasetsDB from '@/services/datasets-db';
+import { recordService } from '@/services/service-registry';
 import type { ToolHandler } from '../types';
 
 export const getDatasetRecordsHandler: ToolHandler = async (params) => {
@@ -17,7 +17,7 @@ export const getDatasetRecordsHandler: ToolHandler = async (params) => {
     }
 
     // Get records
-    let records = await datasetsDB.getRecordsByDatasetId(dataset_id);
+    let records = await recordService.getByDatasetId(dataset_id);
 
     // Apply topic filter if provided
     if (topic_filter && typeof topic_filter === 'string') {

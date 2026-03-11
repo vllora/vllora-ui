@@ -2,7 +2,7 @@
  * Eval Analysis Integration Tests
  *
  * Tests the analyze_evaluation tool handler with real IndexedDB data.
- * Seeds DryRunJobs with evaluation results, then calls the handler
+ * Seeds EvalJobs with evaluation results, then calls the handler
  * and asserts the analysis output (health, per_topic, next_action).
  *
  * No MSW needed — analyze_evaluation reads from IndexedDB only.
@@ -10,14 +10,14 @@
 
 import { describe, it, expect } from 'vitest';
 import { analyzeEvaluationHandler } from '@/lib/distri-finetune-tools/steps/analyze-evaluation';
-import { seedDataset, seedRecords, seedCompletedDryRunJob, seedIterationHistory } from './seed-helpers';
-import type { IterationHistoryEntry } from '@/services/finetune-iteration-db';
+import { seedDataset, seedRecords, seedCompletedEvalJob, seedIterationHistory } from './seed-helpers';
+import type { IterationHistoryEntry } from '@/types/iteration-types';
 
 // =============================================================================
 // Helpers
 // =============================================================================
 
-/** Seed a full eval scenario: dataset + records + DryRunJob with scores. */
+/** Seed a full eval scenario: dataset + records + EvalJob with scores. */
 async function seedEvalScenario(opts: {
   scores: { rowId: string; score: number; topic: string }[];
 }) {
@@ -29,8 +29,8 @@ async function seedEvalScenario(opts: {
     opts.scores.map((s) => ({ id: s.rowId, topic: s.topic })),
   );
 
-  // Seed DryRunJob with completed results
-  await seedCompletedDryRunJob(datasetId, { scores: opts.scores });
+  // Seed EvalJob with completed results
+  await seedCompletedEvalJob(datasetId, { scores: opts.scores });
 
   return datasetId;
 }

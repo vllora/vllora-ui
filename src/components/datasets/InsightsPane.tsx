@@ -13,7 +13,7 @@ import { useMemo } from "react";
 import LazyMarkdownRenderer from "@/components/chat/LazyMarkdownRenderer";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import type { KnowledgeCoverageStats } from "@/types/dataset-types";
-import { DryRunJobsConsumer } from "@/contexts/DryRunJobsContext";
+import { EvalJobsConsumer } from "@/contexts/EvalJobsContext";
 import { BALANCE_RATING_DESCRIPTIONS } from "@/types/coverage-types";
 import type { BalanceRating } from "@/types/coverage-types";
 
@@ -269,7 +269,7 @@ function generateQualityScoresMarkdown(opts: {
 
 export function InsightsPane({ insightType }: InsightsPaneProps) {
   const { dataset, records } = DatasetDetailConsumer();
-  const { jobs: dryRunJobs } = DryRunJobsConsumer();
+  const { jobs: dryRunJobs } = EvalJobsConsumer();
 
   const markdown = useMemo(() => {
     // Compute basic stats from records

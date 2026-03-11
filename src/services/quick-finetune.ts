@@ -12,8 +12,7 @@
  * 4. Starts the training job
  */
 
-import * as workflowDB from './finetune-workflow-db';
-import * as datasetsDB from './datasets-db';
+import { datasetService, recordService, workflowService } from './service-registry';
 import {
   ensureDatasetUploaded,
   createFinetuneJobFromUpload,
@@ -132,7 +131,7 @@ export async function startFinetuneTraining(
     const jobId = job.provider_job_id || job.id;
 
     // Update workflow with training info
-    await workflowDB.updateStepData(workflowId, 'training', {
+    await workflowService.updateStepData(workflowId, 'training', {
       jobId,
       baseModel,
       status: job.status as 'pending' | 'queued' | 'running' | 'completed' | 'failed',
@@ -174,13 +173,13 @@ export async function quickFinetune(options: QuickFinetuneOptions): Promise<Quic
 
   try {
     // 1. Get dataset and validate
-    const dataset = await datasetsDB.getDatasetById(datasetId);
+    const dataset = await datasetService.getById(datasetId);
     if (!dataset) {
       return { success: false, error: 'Dataset not found' };
     }
 
     // Check records exist
-    const records = await datasetsDB.getRecordsByDatasetId(datasetId);
+    const records = await recordService.getByDatasetId(datasetId);
     if (records.length === 0) {
       return { success: false, error: 'Dataset has no records' };
     }
@@ -191,24 +190,24 @@ export async function quickFinetune(options: QuickFinetuneOptions): Promise<Quic
     }
 
     // 2. Get or create workflow
-    let workflow = await workflowDB.getWorkflowByDataset(datasetId);
+    let workflow = await workflowService.getByDataset(datasetId);
 
     if (!workflow) {
       // Create new workflow starting at grader_config (since we have evaluator)
       const trainingGoals = dataset.datasetObjective || 'Fine-tune model for this dataset';
-      workflow = await workflowDB.createWorkflow(datasetId, trainingGoals);
+      workflow = await workflowService.create(datasetId, trainingGoals);
     }
 
     // 3. Sync grader config from dataset to workflow
     if (!workflow.graderConfig) {
-      await workflowDB.updateStepData(workflow.id, 'graderConfig', {
+      await workflowService.updateStepData(workflow.id, 'graderConfig', {
         type: 'js',
         configuredAt: Date.now(),
       });
     }
 
     // 4. Advance workflow to training step (skipping dry run)
-    await workflowDB.advanceToStep(workflow.id, 'training');
+    await workflowService.advanceToStep(workflow.id, 'training');
 
     // 5. Ensure dataset is uploaded (auto-uploads if needed)
     const backendDatasetId = await ensureDatasetUploaded(datasetId);
