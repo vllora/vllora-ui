@@ -35,7 +35,7 @@ Before starting the pipeline, verify these conditions. If they aren't met, fine-
 ## The Pipeline
 
 ```
-Define Objective → Read Documents → Build Topics → Generate JSONL Data → Write Grader
+Define Objective → Extract Documents → Build Topics → Generate JSONL Data → Write Grader
 → Upload Dataset (API) → Run Evaluation (API) → Analyze Results → Iterate
 → Train Model (API) → Test (API) → Done
 ```
@@ -52,7 +52,9 @@ finetune-project/
 ├── grader.js                   # Evaluation/grader function
 ├── topics.json                 # Topic hierarchy
 ├── knowledge/                  # Extracted domain knowledge (required when documents provided)
-│   ├── document-extraction.md  # Structured extraction: sections, page numbers, key concepts
+│   ├── docling-result.json     # Raw Docling response (chunks + document)
+│   ├── knowledge_parts.json    # Typed parts: text, table, image (agent-created)
+│   ├── document-extraction.md  # Structured extraction summary
 │   └── ...                     # Additional extraction files per document
 ├── evaluations/                # Evaluation results (one file per run)
 │   ├── eval-v1.json            # Full API response from evaluation run
@@ -146,23 +148,55 @@ Ask the user what behaviors the model should learn. Produce two things:
 - An **objective statement** describing desired behaviors and constraints
 - A **system prompt** ("You are...") that will prefix every training conversation
 
-### Step 2: Gather Knowledge
+### Step 2: Extract Documents
 
-Read the user's documents (PDFs, markdown, text). Extract the domain knowledge that should inform training data. Identify natural topic areas from document structure.
+Read the user's documents (PDFs, markdown, text). Extract typed, linked knowledge parts — text passages, tables (with cell structure), and images (with base64 data) — into `knowledge_parts.json`.
 
-**Reading PDF files**: The Read tool may not support PDFs in all environments. If it fails, extract text using `pdftotext` via Bash:
+**Primary method — Docling Serve** (best quality, handles tables/images/complex layouts):
+
+1. Check if Docling Serve is running:
+```bash
+curl -sS http://127.0.0.1:5001/health
+```
+If not running, start it: `docker run -p 5001:5001 ghcr.io/docling-project/docling-serve-cpu:latest` — wait for startup to complete, then verify with the health check.
+
+2. Call the hybrid chunk API with images:
+```bash
+TASK_RESPONSE=$(curl -sS -X POST "http://127.0.0.1:5001/v1/chunk/hybrid/file/async" \
+  -F "files=@document.pdf;type=application/pdf" \
+  -F "include_converted_doc=true" \
+  -F "convert_do_ocr=true" -F "convert_do_table_structure=true" \
+  -F "convert_include_images=true" -F "convert_image_export_mode=embedded" \
+  -F "chunking_merge_peers=true" -F "chunking_tokenizer=BAAI/bge-small-en-v1.5")
+TASK_ID=$(echo "$TASK_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['task_id'])")
+```
+Poll `/v1/status/poll/$TASK_ID` until success, then fetch `/v1/result/$TASK_ID` and save as `knowledge/docling-result.json`.
+
+3. **Read the document before writing any code.** Read chunks 0-9 to understand the document — title, structure, content type, heading patterns. Then read a few chunks from the middle and end. This context is critical for writing a good extraction script — without it you'll produce noise (chess moves as headings, blank pages as parts, domain patterns lost).
+
+4. **Write a script** to create `knowledge/knowledge_parts.json` — this is the required deliverable, not optional. The script must produce typed parts (text, table, image) with headings, cross-references, and image data matching the schema in `extraction-guide.md` Section 3. Normalized chunks or cleaned chunk lists are NOT sufficient — the downstream pipeline (topics, training data, UI) requires the full `knowledge_parts.json` format.
+
+The Docling response contains both `chunks[]` (text segments with headings, pages, doc_item pointers) and `documents[0].content.json_content` (the full DoclingDocument with texts, tables, pictures). Your script resolves the pointers, classifies each item by type (text/table/image), extracts structured data, discovers images via caption `parent.$ref` (pictures are NOT in chunk doc_items), falls back to page-level renders when `pictures[].image` is null, and builds bidirectional cross-references.
+
+See `knowledge/extraction-guide.md` for the full response structure, schema, and step-by-step guidance.
+
+**Fallback — pdftotext** (when Docker is not available):
 ```bash
 pdftotext input.pdf output.txt
+python3 .claude/skills/vllora-finetune/templates/extract-sections.py \
+  knowledge/converted.md knowledge/sections.json
 ```
-If `pdftotext` is not found, try the full path `/opt/homebrew/bin/pdftotext` (macOS) or install poppler-utils (`brew install poppler` or `apt-get install poppler-utils`). Then read the extracted text file.
+Note: pdftotext loses tables, images, and complex layout — use Docling Serve when possible.
 
-**Save your extracted content** to the `knowledge/` directory in the working directory. For each document, create a structured extraction file (e.g., `knowledge/document-extraction.md`) that records:
-- Document name and page count
-- Section headings with page numbers
-- Key concepts, facts, and examples per section
-- A summary of what each section covers
+**Working directory after extraction:**
+```
+knowledge/
+├── docling-result.json       # Raw Docling response (chunks + document)
+├── knowledge_parts.json      # Typed parts — text, table, image (agent-created)
+└── document-extraction.md    # Agent's extraction notes
+```
 
-This extraction serves two purposes: (1) it grounds your training data in real content, and (2) it makes the `sourceChunkRefs` in your topic hierarchy verifiable — anyone can check that `"manual:page15-pins"` actually corresponds to real content you extracted from page 15.
+**Save your extraction notes** to `knowledge/document-extraction.md` — document name, page count, section headings, key concepts. This grounds your training data in real content and makes `sourceChunkRefs` in the topic hierarchy verifiable.
 
 ### Step 3: Build Topic Hierarchy
 
@@ -293,4 +327,5 @@ Read these when you need more detail on a specific step:
 | `knowledge/grader-writing.md` | When writing the grader — 3 patterns, design guidelines, common mistakes |
 | `knowledge/topic-hierarchy.md` | When designing topics — structure, coverage analysis, balance scoring |
 | `knowledge/iteration-strategy.md` | When analyzing results — eval scores, topic distribution, data variety, diagnosing data vs grader issues |
+| `knowledge/extraction-guide.md` | When extracting documents — Docling API, response structure, knowledge_parts.json schema, creating parts |
 | `knowledge/workflow-guide.md` | For the full detailed walkthrough of every step |
