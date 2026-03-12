@@ -23,7 +23,6 @@ import { emitter } from "@/utils/eventEmitter";
 import { toast } from "sonner";
 import { quickFinetune } from "@/services/quick-finetune";
 import { datasetService, recordService } from "@/services/service-registry";
-import { updateDatasetEvalScript as updateBackendEvalScript } from "@/services/finetune-api";
 import { filterAndSortRecords } from "@/components/datasets/record-filters";
 import {
   DEFAULT_COLUMN_VISIBILITY,
@@ -1253,19 +1252,9 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
   const handleSaveEvaluationConfig = useCallback(async (script: string) => {
     if (!dataset) return;
     try {
-      // Save to local IndexedDB
+      // Save eval script to gateway SQLite via PUT /workflows
       await datasetService.updateEvalScript(dataset.id, script);
       setDataset((prev) => (prev ? { ...prev, evalScript: script } : null));
-
-      // Sync to backend if dataset has been uploaded
-      if (dataset.id) {
-        try {
-          await updateBackendEvalScript(dataset.id, script);
-        } catch (backendErr) {
-          console.error("Failed to sync eval script to backend:", backendErr);
-          toast.warning("Saved locally, but failed to sync to backend");
-        }
-      }
     } catch (err) {
       console.error("Failed to save evaluation script:", err);
       toast.error("Failed to save evaluation script");

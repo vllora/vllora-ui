@@ -124,7 +124,7 @@ export const apiRecordAdapter: RecordService = {
     const response = await api.post(basePath(datasetId), { records: beRecords });
     await handleApiResponse<{ added: number }>(response);
 
-    // Return the records as DatasetRecord objects (BE doesn't return full objects)
+    // Server uses client-provided IDs for records (id is required in RecordInput)
     const now = Date.now();
     return beRecords.map((r, i) => ({
       id: r.id,

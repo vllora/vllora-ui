@@ -9,7 +9,6 @@
 
 import type { DistriFnTool } from "@distri/core";
 import { workflowService, datasetService } from "@/services/service-registry";
-import { updateDatasetEvalScript as updateBackendEvalScript } from "@/services/finetune-api";
 import { getProposedPlan } from "./proposed-plan-store";
 import { generateGraderTemplate } from "./propose-plan/grader-template";
 import { proposePlanHandler } from "./propose-plan";
@@ -152,18 +151,8 @@ export const configureGraderHandler: ToolHandler = async (params) => {
       );
     }
 
-    // Save eval script to dataset (local IndexedDB)
+    // Save eval script to dataset (gateway SQLite via PUT /workflows)
     await datasetService.updateEvalScript(workflow.datasetId, script);
-
-    // Sync to backend if dataset has been uploaded
-    const dataset = await datasetService.getById(workflow.datasetId);
-    if (dataset) {
-      try {
-        await updateBackendEvalScript(dataset.id, script);
-      } catch (backendErr) {
-        console.error("Failed to sync eval script to backend:", backendErr);
-      }
-    }
 
     // Update workflow with metadata only
     await workflowService.updateStepData(workflow_id, "graderConfig", {

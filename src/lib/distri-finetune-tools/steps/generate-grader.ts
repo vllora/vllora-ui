@@ -19,7 +19,6 @@ import { DistriClient, type DistriMessage } from '@distri/core';
 import { getDistriUrl } from '@/config/api';
 import { fetchLucyConfig, type LucyConfig } from '@/lib/agent-sync';
 import { datasetService, workflowService } from '@/services/service-registry';
-import { updateDatasetEvalScript as updateBackendEvalScript } from '@/services/finetune-api';
 import { buildKnowledgeContext } from './shared/knowledge-context';
 import { generateGraderTemplate } from './propose-plan/grader-template';
 import type { GraderCriterion } from './propose-plan/types';
@@ -342,17 +341,8 @@ export const generateGraderHandler: ToolHandler = async (params) => {
       return { success: false, error: result.error };
     }
 
-    // Save eval script to dataset
+    // Save eval script to dataset (gateway SQLite via PUT /workflows)
     await datasetService.updateEvalScript(workflow.datasetId, result.script);
-
-    // Sync to backend if uploaded
-    if (dataset) {
-      try {
-        await updateBackendEvalScript(dataset.id, result.script);
-      } catch (err) {
-        console.error('[generate_grader] Failed to sync to backend:', err);
-      }
-    }
 
     // Update workflow metadata
     await workflowService.updateStepData(workflow_id, 'graderConfig', {
