@@ -103,7 +103,7 @@ export interface ReinforcementJobMetricPoint {
   created_at: string;
 }
 
-/** Response from GET /finetune/reinforcement-jobs/{id}/metrics */
+/** Response from GET /finetune/workflows/{workflowId}/jobs/{jobId}/metrics */
 export interface ReinforcementJobMetricsResponse {
   provider_job_id: string;
   metrics: ReinforcementJobMetricPoint[];
@@ -188,12 +188,7 @@ export interface DatasetUploadResponse {
 
 export interface StartFinetuneResult {
   job: ReinforcementJob;
-  backendDatasetId: string;
-}
-
-export interface DatasetUploadResult {
-  backendDatasetId: string;
-  jsonlContent: string;
+  datasetId: string;
 }
 
 // ============================================================================
@@ -428,11 +423,14 @@ export async function uploadDataset(props: {
 
 /**
  * Create a reinforcement fine-tuning job
+ * @param workflowId - The workflow ID (same as dataset ID)
+ * @param request - Job creation request
  */
 export async function createReinforcementJob(
+  workflowId: string,
   request: CreateReinforcementJobRequest,
 ): Promise<ReinforcementJob> {
-  const response = await apiClient("/finetune/reinforcement-jobs", {
+  const response = await apiClient(`/finetune/workflows/${workflowId}/jobs`, {
     method: "POST",
     body: JSON.stringify(request),
   });
@@ -440,25 +438,23 @@ export async function createReinforcementJob(
 }
 
 /**
- * List reinforcement fine-tuning jobs
+ * List reinforcement fine-tuning jobs for a workflow
+ * @param workflowId - The workflow ID (same as dataset ID) — scopes the listing
  * @param limit - Maximum number of jobs to return
  * @param after - Cursor for pagination
- * @param datasetId - Optional backend dataset ID to filter jobs by
  */
 export async function listReinforcementJobs(
+  workflowId: string,
   limit?: number,
   after?: string,
-  datasetId?: string,
 ): Promise<ReinforcementJob[]> {
   const params = new URLSearchParams();
   if (limit) params.set("limit", String(limit));
   if (after) params.set("after", after);
-  if (datasetId) params.set("dataset_id", datasetId);
 
   const queryString = params.toString();
-  const endpoint = queryString
-    ? `/finetune/reinforcement-jobs?${queryString}`
-    : "/finetune/reinforcement-jobs";
+  const base = `/finetune/workflows/${workflowId}/jobs`;
+  const endpoint = queryString ? `${base}?${queryString}` : base;
 
   const response = await apiClient(endpoint, { method: "GET" });
   return handleApiResponse<ReinforcementJob[]>(response);
@@ -466,12 +462,15 @@ export async function listReinforcementJobs(
 
 /**
  * Get reinforcement job status
+ * @param workflowId - The workflow ID (same as dataset ID)
+ * @param jobId - The job ID
  */
 export async function getReinforcementJobStatus(
+  workflowId: string,
   jobId: string,
 ): Promise<ReinforcementJob> {
   const response = await apiClient(
-    `/finetune/reinforcement-jobs/${jobId}/status`,
+    `/finetune/workflows/${workflowId}/jobs/${jobId}/status`,
     {
       method: "GET",
     },
@@ -481,11 +480,12 @@ export async function getReinforcementJobStatus(
 
 /**
  * Cancel a reinforcement fine-tuning job
+ * @param workflowId - The workflow ID (same as dataset ID)
  * @param jobId - The provider job ID to cancel
  */
-export async function cancelReinforcementJob(jobId: string): Promise<void> {
+export async function cancelReinforcementJob(workflowId: string, jobId: string): Promise<void> {
   const response = await apiClient(
-    `/finetune/reinforcement-jobs/${jobId}/cancel`,
+    `/finetune/workflows/${workflowId}/jobs/${jobId}/cancel`,
     {
       method: "POST",
     },
@@ -500,11 +500,12 @@ export async function cancelReinforcementJob(jobId: string): Promise<void> {
 
 /**
  * Resume a cancelled reinforcement fine-tuning job
+ * @param workflowId - The workflow ID (same as dataset ID)
  * @param jobId - The provider job ID to resume
  */
-export async function resumeReinforcementJob(jobId: string): Promise<void> {
+export async function resumeReinforcementJob(workflowId: string, jobId: string): Promise<void> {
   const response = await apiClient(
-    `/finetune/reinforcement-jobs/${jobId}/resume`,
+    `/finetune/workflows/${workflowId}/jobs/${jobId}/resume`,
     {
       method: "POST",
     },
@@ -524,13 +525,15 @@ export interface WeightsDownloadUrlResponse {
 
 /**
  * Get a signed URL to download trained weights for a completed reinforcement fine-tuning job
+ * @param workflowId - The workflow ID (same as dataset ID)
  * @param jobId - The provider job ID
  */
 export async function getWeightsDownloadUrl(
+  workflowId: string,
   jobId: string,
 ): Promise<WeightsDownloadUrlResponse> {
   const response = await apiClient(
-    `/finetune/reinforcement-jobs/${jobId}/weights/url`,
+    `/finetune/workflows/${workflowId}/jobs/${jobId}/weights/url`,
     {
       method: "GET",
     },
@@ -541,11 +544,11 @@ export async function getWeightsDownloadUrl(
 /**
  * Upload a dataset to the backend for finetuning
  * This is step 1 of the finetune process - should be called first so the
- * backendDatasetId can be saved before attempting to create the job
+ * datasetId can be saved before attempting to create the job
  */
 export async function uploadDatasetForFinetune(
   dataset: DatasetWithRecords,
-): Promise<DatasetUploadResult> {
+): Promise<{ datasetId: string; jsonlContent: string }> {
   // Convert dataset to JSONL
   const jsonlContent = datasetToJsonl(dataset.records);
 
@@ -567,18 +570,18 @@ export async function uploadDatasetForFinetune(
   });
 
   return {
-    backendDatasetId: uploadResult.dataset_id,
+    datasetId: uploadResult.dataset_id,
     jsonlContent,
   };
 }
 
 /**
  * Ensure dataset is uploaded to backend.
- * If already uploaded, returns existing backendDatasetId.
- * If not, uploads the dataset and saves the backendDatasetId.
+ * Since datasetId always equals the workflow ID, this simply uploads
+ * the dataset content and returns the datasetId.
  *
- * @param datasetId - Local dataset ID
- * @returns backendDatasetId
+ * @param datasetId - Dataset ID (same as workflow ID)
+ * @returns datasetId
  * @throws Error if dataset not found, has no records, or upload fails
  */
 export async function ensureDatasetUploaded(
@@ -589,12 +592,6 @@ export async function ensureDatasetUploaded(
     throw new Error("Dataset not found");
   }
 
-  // Already uploaded
-  if (dataset.backendDatasetId) {
-    return dataset.backendDatasetId;
-  }
-
-  // Need to upload
   const records = await recordService.getByDatasetId(datasetId);
   if (records.length === 0) {
     throw new Error("Dataset has no records");
@@ -602,16 +599,12 @@ export async function ensureDatasetUploaded(
 
   toast.info("Uploading training data...");
   try {
-    const uploadResult = await uploadDatasetForFinetune({
+    await uploadDatasetForFinetune({
       ...dataset,
       records,
     });
-    await datasetService.updateBackendId(
-      datasetId,
-      uploadResult.backendDatasetId,
-    );
     toast.success("Training data uploaded");
-    return uploadResult.backendDatasetId;
+    return datasetId;
   } catch (uploadError) {
     toast.error("Failed to upload training data");
     throw uploadError;
@@ -654,7 +647,7 @@ export interface CreateFinetuneJobOptions {
  * This is step 2 of the finetune process - call after uploadDatasetForFinetune
  */
 export async function createFinetuneJobFromUpload(
-  backendDatasetId: string,
+  datasetId: string,
   datasetName: string,
   options?: CreateFinetuneJobOptions,
 ): Promise<ReinforcementJob> {
@@ -679,7 +672,7 @@ export async function createFinetuneJobFromUpload(
 
   // Create reinforcement job request
   const request: CreateReinforcementJobRequest = {
-    dataset: backendDatasetId,
+    dataset: datasetId,
     base_model: options?.baseModel || "unsloth/Qwen3.5-4B",
     output_model: options?.outputModel || defaultOutputModel,
     display_name: options?.displayName || `${datasetName} Fine-tune`,
@@ -698,7 +691,7 @@ export async function createFinetuneJobFromUpload(
     request.evaluator_version = options.evaluatorVersion;
   }
 
-  const job = await createReinforcementJob(request);
+  const job = await createReinforcementJob(datasetId, request);
 
   return job;
 }
@@ -707,7 +700,7 @@ export async function createFinetuneJobFromUpload(
  * Start a finetune job with default configuration (convenience function)
  * This uploads the dataset and creates a reinforcement job in one step
  * Note: For better error handling, use uploadDatasetForFinetune + createFinetuneJobFromUpload
- * to save the backendDatasetId before attempting job creation
+ * to save the dataset ID before attempting job creation
  */
 export async function startFinetuneJob(
   dataset: DatasetWithRecords,
@@ -717,13 +710,13 @@ export async function startFinetuneJob(
     displayName?: string;
   },
 ): Promise<StartFinetuneResult> {
-  const { backendDatasetId } = await uploadDatasetForFinetune(dataset);
+  const { datasetId } = await uploadDatasetForFinetune(dataset);
   const job = await createFinetuneJobFromUpload(
-    backendDatasetId,
+    datasetId,
     dataset.name,
     options,
   );
-  return { job, backendDatasetId };
+  return { job, datasetId };
 }
 
 // Legacy function - kept for backward compatibility
@@ -896,7 +889,7 @@ export async function updateDatasetEvalScript(
   //   },
   // };
   const response = await apiClient(
-    `/finetune/datasets/${datasetId}/evaluator`,
+    `/finetune/workflows/${datasetId}/evaluator`,
     {
       method: "PATCH",
       body: JSON.stringify({ evaluator: { type: "js", config: { script } } }),
@@ -937,7 +930,7 @@ export async function getEvaluatorVersions(
   datasetId: string,
 ): Promise<EvaluatorVersionResponse[]> {
   const response = await apiClient(
-    `/finetune/datasets/${datasetId}/evaluator/versions`,
+    `/finetune/workflows/${datasetId}/evaluator/versions`,
     { method: "GET" },
   );
   return handleApiResponse<EvaluatorVersionResponse[]>(response);
@@ -950,13 +943,15 @@ export async function getEvaluatorVersions(
 /**
  * Get training metrics time series for a reinforcement fine-tuning job
  * Returns raw GRPO/GSPO metrics (reward, KL, loss, grad_norm, completion stats)
+ * @param workflowId - The workflow ID (same as dataset ID)
  * @param jobId - The finetune job ID
  */
 export async function getReinforcementJobMetrics(
+  workflowId: string,
   jobId: string,
 ): Promise<ReinforcementJobMetricsResponse> {
   const response = await apiClient(
-    `/finetune/reinforcement-jobs/${jobId}/metrics`,
+    `/finetune/workflows/${workflowId}/jobs/${jobId}/metrics`,
     { method: "GET" },
   );
   return handleApiResponse<ReinforcementJobMetricsResponse>(response);

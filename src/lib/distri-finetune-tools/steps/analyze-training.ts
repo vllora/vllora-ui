@@ -52,7 +52,7 @@ interface Recommendation {
 
 interface ResolvedJob {
   readonly job: FinetuneJob;
-  readonly backendDatasetId: string;
+  readonly datasetId: string;
 }
 
 interface OverallProgression {
@@ -71,29 +71,28 @@ async function resolveTrainingJob(
   datasetId: string,
   jobId?: string,
 ): Promise<ResolvedJob> {
-  // Get dataset to find backendDatasetId
+  // Verify the dataset exists
   const dataset = await datasetService.getById(datasetId);
-  if (!dataset?.backendDatasetId) {
-    throw new Error('Dataset not uploaded to backend — cannot fetch training results');
+  if (!dataset) {
+    throw new Error('Dataset not found — cannot fetch training results');
   }
-
-  const backendDatasetId = dataset.backendDatasetId;
 
   // If explicit jobId provided, fetch it directly
   if (jobId) {
-    const job = await getReinforcementJobStatus(jobId);
-    return { job, backendDatasetId };
+    const job = await getReinforcementJobStatus(datasetId, jobId);
+    return { job, datasetId };
   }
 
   // Otherwise, find job from workflow
   const workflow = await workflowService.getByDataset(datasetId);
   if (workflow?.training?.jobId) {
-    const job = await getReinforcementJobStatus(workflow.training.jobId);
-    return { job, backendDatasetId };
+    const job = await getReinforcementJobStatus(datasetId, workflow.training.jobId);
+    return { job, datasetId };
   }
 
   // Fallback: list jobs for this dataset, pick most recent completed
-  const jobs = await listReinforcementJobs(undefined, undefined, backendDatasetId);
+  // The dataset ID is the backend dataset ID — they are always the same.
+  const jobs = await listReinforcementJobs(datasetId);
   const completed = jobs
     .filter((j) => j.status === 'succeeded' || j.status === 'failed')
     .sort((a, b) => (b.completed_at ?? b.updated_at).localeCompare(a.completed_at ?? a.updated_at));
@@ -102,7 +101,7 @@ async function resolveTrainingJob(
     throw new Error('No completed training job found for this dataset');
   }
 
-  return { job: completed[0], backendDatasetId };
+  return { job: completed[0], datasetId };
 }
 
 // =============================================================================
@@ -479,7 +478,7 @@ export const analyzeTrainingHandler: ToolHandler = async (params) => {
     }
 
     // 1. Resolve the training job
-    const { job, backendDatasetId } = await resolveTrainingJob(datasetId, jobId);
+    const { job } = await resolveTrainingJob(datasetId, jobId);
 
     // Handle failed jobs early
     if (job.status === 'failed') {
@@ -498,7 +497,7 @@ export const analyzeTrainingHandler: ToolHandler = async (params) => {
     }
 
     // 2. Fetch per-epoch evaluation results
-    const evalResponse = await getFinetuneEvaluations(backendDatasetId, job.provider_job_id);
+    const evalResponse = await getFinetuneEvaluations(datasetId, job.provider_job_id);
     const results = evalResponse.results;
 
     if (results.length === 0) {
@@ -539,8 +538,8 @@ export const analyzeTrainingHandler: ToolHandler = async (params) => {
     try {
       const dataset = await datasetService.getById(datasetId);
       const [evalVersions, metricsResp] = await Promise.all([
-        dataset?.backendDatasetId ? getEvaluatorVersions(dataset.backendDatasetId).catch(() => []) : Promise.resolve([]),
-        getReinforcementJobMetrics(job.provider_job_id).catch(() => ({ metrics: [] })),
+        dataset ? getEvaluatorVersions(dataset.id).catch(() => []) : Promise.resolve([]),
+        getReinforcementJobMetrics(datasetId, job.provider_job_id).catch(() => ({ metrics: [] })),
       ]);
       if (evalVersions.length > 0) {
         const latest = evalVersions[0];

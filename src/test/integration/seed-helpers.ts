@@ -21,7 +21,6 @@ import type { IterationHistoryEntry, IterationState } from '@/types/iteration-ty
 interface SeedDatasetOpts {
   readonly id?: string;
   readonly name?: string;
-  readonly backendDatasetId?: string;
   readonly evalScript?: string;
 }
 
@@ -114,7 +113,6 @@ export async function seedWorkflow(
 export async function seedCompletedEvalJob(
   datasetId: string,
   opts: {
-    backendDatasetId?: string;
     evaluationRunId?: string;
     scores: readonly { rowId: string; score: number; topic?: string }[];
   },
@@ -152,11 +150,18 @@ export async function seedCompletedEvalJob(
 
   const job = await evalJobService.create({
     datasetId,
-    backendDatasetId: opts.backendDatasetId ?? 'ds-backend-001',
     evaluationRunId: opts.evaluationRunId ?? 'eval-run-001',
     status: 'completed',
     sampleSize: totalRows,
     createdAt: Date.now(),
+    completedAt: Date.now(),
+    pollingSnapshot,
+  });
+
+  // The API adapter's create only sends cloud_run_id, sample_size, rollout_model.
+  // Update the job to set status, pollingSnapshot, and completedAt.
+  await evalJobService.update(job.id, {
+    status: 'completed',
     completedAt: Date.now(),
     pollingSnapshot,
   });

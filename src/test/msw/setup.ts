@@ -9,6 +9,7 @@
 import { afterAll, afterEach, beforeAll } from 'vitest';
 import { server } from './server';
 import { resetScenario } from './scenarios/scenario-registry';
+import { resetGatewayStores } from './handlers/gateway-crud';
 
 beforeAll(() => {
   server.listen({ onUnhandledRequest: 'bypass' });
@@ -17,6 +18,7 @@ beforeAll(() => {
 afterEach(() => {
   server.resetHandlers();
   resetScenario();
+  resetGatewayStores();
 });
 
 afterAll(() => {

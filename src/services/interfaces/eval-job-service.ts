@@ -2,8 +2,7 @@
  * Eval Job Service Interface
  *
  * Abstraction over evaluation job persistence.
- * Currently backed by IndexedDB.
- * Will be swapped to gateway API adapter when eval job endpoints are ready.
+ * Backed by Gateway API (api-eval-job-adapter.ts).
  */
 
 import type { EvalJob } from '@/types/eval-job';

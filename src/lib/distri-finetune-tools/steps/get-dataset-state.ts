@@ -258,8 +258,8 @@ export const getDatasetStateHandler: ToolHandler = async (params) => {
         configured: !!dataset.evalScript,
       },
       upload: {
-        uploaded: !!dataset.backendDatasetId,
-        backend_dataset_id: dataset.backendDatasetId || null,
+        uploaded: true,
+        backend_dataset_id: dataset.id,
       },
       dry_run: {
         completed: !!workflow?.dryRun?.verdict,

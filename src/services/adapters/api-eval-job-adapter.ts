@@ -35,7 +35,6 @@ function mapToFe(db: DbEvalJobResponse): EvalJob {
   return {
     id: db.id,
     datasetId: db.workflow_id,
-    backendDatasetId: db.workflow_id,
     evaluationRunId: db.cloud_run_id ?? '',
     status: db.status as EvalJobStatus,
     sampleSize: db.sample_size ?? 0,

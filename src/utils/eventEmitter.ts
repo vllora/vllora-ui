@@ -79,7 +79,7 @@ type VlloraEvents = {
   vllora_input_speechRecognitionStart: Record<string, never>;
   vllora_input_speechRecognitionEnd: Record<string, never>;
   // Finetune job events
-  vllora_finetune_job_created: { jobId?: string; backendDatasetId: string };
+  vllora_finetune_job_created: { jobId?: string; datasetId: string };
   // Dry run job events
   vllora_dry_run_job_update: { jobId: string; job: EvalJob };
   // Dry run job completed/failed (triggers Lucy auto-analysis)

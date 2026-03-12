@@ -232,7 +232,17 @@
       "Bash(git fetch:*)",
       "Bash(git rebase:*)",
       "Bash(git add:*)",
-      "Bash(cargo build:*)"
+      "Bash(cargo build:*)",
+      "Bash(npx vitest:*)",
+      "Bash(npm test:*)",
+      "Bash(git stash:*)",
+      "Bash(VITE_BACKEND_PORT=9091 npm run dev 2>&1 | head -20)",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Read(//private/tmp/claude-501/-Users-anhthuduong-Documents-GitHub-vllora-ui/tasks/**)",
+      "Bash(VITE_BACKEND_PORT=9090 npm run dev 2>&1 | head -5)",
+      "Bash(chmod +x /Users/anhthuduong/Documents/GitHub/vllora/ui/scripts/test-flows/*.sh)",
+      "Bash(while ! curl -sf http://localhost:9090/health > /dev/null 2>&1; do sleep 5; done && echo \"Gateway is UP\")"
     ],
     "deny": [],
     "ask": [],

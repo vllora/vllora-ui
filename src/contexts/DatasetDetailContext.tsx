@@ -1258,9 +1258,9 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
       setDataset((prev) => (prev ? { ...prev, evalScript: script } : null));
 
       // Sync to backend if dataset has been uploaded
-      if (dataset.backendDatasetId) {
+      if (dataset.id) {
         try {
-          await updateBackendEvalScript(dataset.backendDatasetId, script);
+          await updateBackendEvalScript(dataset.id, script);
         } catch (backendErr) {
           console.error("Failed to sync eval script to backend:", backendErr);
           toast.warning("Saved locally, but failed to sync to backend");

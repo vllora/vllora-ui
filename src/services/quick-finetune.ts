@@ -52,8 +52,8 @@ export interface QuickFinetuneOptions extends TrainingConfigOptions {
 // ============================================================================
 
 export interface StartFinetuneTrainingOptions extends TrainingConfigOptions {
-  /** Backend dataset ID (must already be uploaded) */
-  backendDatasetId: string;
+  /** Dataset ID (must already be uploaded) */
+  datasetId: string;
   /** Dataset name for display */
   datasetName: string;
   /** Workflow ID to update */
@@ -79,7 +79,7 @@ export interface StartFinetuneTrainingResult {
  *
  * This is the core function that creates the job and updates the workflow.
  * Prerequisites:
- * - Dataset must already be uploaded (backendDatasetId required)
+ * - Dataset must already be uploaded
  * - Workflow must exist
  *
  * Both quickFinetune and startTrainingHandler use this function.
@@ -88,7 +88,7 @@ export async function startFinetuneTraining(
   options: StartFinetuneTrainingOptions
 ): Promise<StartFinetuneTrainingResult> {
   const {
-    backendDatasetId,
+    datasetId,
     datasetName,
     workflowId,
     baseModel = 'unsloth/Qwen3.5-4B',
@@ -100,7 +100,7 @@ export async function startFinetuneTraining(
 
   try {
     // Check for existing running/pending jobs for this dataset
-    const existingJobs = await listReinforcementJobs(undefined, undefined, backendDatasetId);
+    const existingJobs = await listReinforcementJobs(datasetId);
     const activeJob = existingJobs.find(
       (job) => job.status === 'pending' || job.status === 'running'
     );
@@ -115,7 +115,7 @@ export async function startFinetuneTraining(
 
     // Create the finetune job via backend API
     const job = await createFinetuneJobFromUpload(
-      backendDatasetId,
+      datasetId,
       datasetName,
       {
         baseModel,
@@ -210,11 +210,11 @@ export async function quickFinetune(options: QuickFinetuneOptions): Promise<Quic
     await workflowService.advanceToStep(workflow.id, 'training');
 
     // 5. Ensure dataset is uploaded (auto-uploads if needed)
-    const backendDatasetId = await ensureDatasetUploaded(datasetId);
+    await ensureDatasetUploaded(datasetId);
 
     // 6. Start training job using common function
     const result = await startFinetuneTraining({
-      backendDatasetId,
+      datasetId,
       datasetName: dataset.name,
       workflowId: workflow.id,
       baseModel,
@@ -231,8 +231,8 @@ export async function quickFinetune(options: QuickFinetuneOptions): Promise<Quic
       };
     }
 
-    // Emit event so FinetuneJobsContext can refresh with the correct backendDatasetId
-    emitter.emit('vllora_finetune_job_created', { backendDatasetId });
+    // Emit event so FinetuneJobsContext can refresh
+    emitter.emit('vllora_finetune_job_created', { datasetId });
 
     return {
       success: true,

@@ -627,8 +627,8 @@ async function executeFinetune(ctx: StepContext): Promise<StepResult> {
   const { dataset_id } = ctx;
 
   const datasetForJob = await datasetService.getById(dataset_id);
-  if (!datasetForJob?.backendDatasetId) {
-    throw new Error('Dataset not uploaded to backend');
+  if (!datasetForJob) {
+    throw new Error('Dataset not found');
   }
 
   // quickFinetune disabled during plan execution
@@ -650,7 +650,7 @@ async function executeFinetune(ctx: StepContext): Promise<StepResult> {
   // summary.finetune_job_status = result.status;
 
   // emitter.emit('vllora_finetune_job_created', {
-  //   backendDatasetId: datasetForJob.backendDatasetId,
+  //   datasetId: dataset_id,
   //   jobId: result.jobId,
   // });
 

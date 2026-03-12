@@ -251,21 +251,21 @@ app.post('/finetune/datasets', upload.single('file'), async (req, res) => {
 });
 
 // =============================================================================
-// GET /finetune/datasets/:datasetId/evaluator/versions
+// GET /finetune/workflows/:workflowId/evaluator/versions
 // =============================================================================
 
-app.get('/finetune/datasets/:datasetId/evaluator/versions', async (req, res) => {
+app.get('/finetune/workflows/:workflowId/evaluator/versions', async (req, res) => {
   await delayMs(getScenario().pollDelayMs);
-  res.json(makeEvaluatorVersionsResponse(req.params.datasetId));
+  res.json(makeEvaluatorVersionsResponse(req.params.workflowId));
 });
 
 // =============================================================================
-// PATCH /finetune/datasets/:datasetId/evaluator
+// PATCH /finetune/workflows/:workflowId/evaluator
 // =============================================================================
 
-app.patch('/finetune/datasets/:datasetId/evaluator', async (req, res) => {
+app.patch('/finetune/workflows/:workflowId/evaluator', async (req, res) => {
   await delayMs(getScenario().createDelayMs);
-  res.json({ dataset_id: req.params.datasetId, updated: true });
+  res.json({ workflow_id: req.params.workflowId, updated: true });
 });
 
 // =============================================================================
@@ -311,10 +311,10 @@ app.get('/finetune/evaluations/:id', async (req, res) => {
 });
 
 // =============================================================================
-// POST /finetune/reinforcement-jobs — Create training job
+// POST /finetune/workflows/:workflowId/jobs — Create training job
 // =============================================================================
 
-app.post('/finetune/reinforcement-jobs', async (req, res) => {
+app.post('/finetune/workflows/:workflowId/jobs', async (req, res) => {
   const scenario = getScenario();
   await delayMs(scenario.createDelayMs);
 
@@ -324,6 +324,7 @@ app.post('/finetune/reinforcement-jobs', async (req, res) => {
   }
 
   const jobId = nextTrainingJobId();
+  const workflowId = req.params.workflowId;
   const datasetId = req.body?.dataset as string | undefined;
 
   // Track the training job under its dataset if known
@@ -342,16 +343,16 @@ app.post('/finetune/reinforcement-jobs', async (req, res) => {
     providerJobIdMap.set(response.provider_job_id, jobId);
   }
 
-  console.log(`[mock] Training job ${jobId} created (provider: ${response.provider_job_id}) for dataset ${datasetId ?? 'unknown'}`);
+  console.log(`[mock] Training job ${jobId} created (provider: ${response.provider_job_id}) for workflow ${workflowId}`);
 
   res.json(response);
 });
 
 // =============================================================================
-// GET /finetune/reinforcement-jobs/:jobId/status — Poll training status
+// GET /finetune/workflows/:workflowId/jobs/:jobId/status — Poll training status
 // =============================================================================
 
-app.get('/finetune/reinforcement-jobs/:jobId/status', async (req, res) => {
+app.get('/finetune/workflows/:workflowId/jobs/:jobId/status', async (req, res) => {
   const jobId = resolveJobId(req.params.jobId);
   const scenario = getScenario();
   await delayMs(scenario.pollDelayMs);
@@ -361,10 +362,10 @@ app.get('/finetune/reinforcement-jobs/:jobId/status', async (req, res) => {
 });
 
 // =============================================================================
-// GET /finetune/reinforcement-jobs — List training jobs
+// GET /finetune/workflows/:workflowId/jobs — List training jobs
 // =============================================================================
 
-app.get('/finetune/reinforcement-jobs', async (req, res) => {
+app.get('/finetune/workflows/:workflowId/jobs', async (req, res) => {
   const scenario = getScenario();
   await delayMs(scenario.pollDelayMs);
 
@@ -394,28 +395,28 @@ app.get('/finetune/reinforcement-jobs', async (req, res) => {
 });
 
 // =============================================================================
-// POST /finetune/reinforcement-jobs/:jobId/cancel
+// POST /finetune/workflows/:workflowId/jobs/:jobId/cancel
 // =============================================================================
 
-app.post('/finetune/reinforcement-jobs/:jobId/cancel', async (_req, res) => {
+app.post('/finetune/workflows/:workflowId/jobs/:jobId/cancel', async (_req, res) => {
   await delayMs(getScenario().createDelayMs);
   res.json({ ok: true });
 });
 
 // =============================================================================
-// POST /finetune/reinforcement-jobs/:jobId/resume
+// POST /finetune/workflows/:workflowId/jobs/:jobId/resume
 // =============================================================================
 
-app.post('/finetune/reinforcement-jobs/:jobId/resume', async (_req, res) => {
+app.post('/finetune/workflows/:workflowId/jobs/:jobId/resume', async (_req, res) => {
   await delayMs(getScenario().createDelayMs);
   res.json({ ok: true });
 });
 
 // =============================================================================
-// GET /finetune/reinforcement-jobs/:jobId/metrics — Training metrics
+// GET /finetune/workflows/:workflowId/jobs/:jobId/metrics — Training metrics
 // =============================================================================
 
-app.get('/finetune/reinforcement-jobs/:jobId/metrics', async (req, res) => {
+app.get('/finetune/workflows/:workflowId/jobs/:jobId/metrics', async (req, res) => {
   const jobId = resolveJobId(req.params.jobId);
   const scenario = getScenario();
   await delayMs(scenario.pollDelayMs);
@@ -423,10 +424,10 @@ app.get('/finetune/reinforcement-jobs/:jobId/metrics', async (req, res) => {
 });
 
 // =============================================================================
-// GET /finetune/reinforcement-jobs/:jobId/weights/url
+// GET /finetune/workflows/:workflowId/jobs/:jobId/weights/url
 // =============================================================================
 
-app.get('/finetune/reinforcement-jobs/:jobId/weights/url', async (_req, res) => {
+app.get('/finetune/workflows/:workflowId/jobs/:jobId/weights/url', async (_req, res) => {
   await delayMs(getScenario().pollDelayMs);
   res.json({
     download_url: 'https://mock-storage.example.com/weights/model.safetensors',

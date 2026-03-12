@@ -35,7 +35,7 @@ function JobItem({ job }: { job: FinetuneJob }) {
     e.stopPropagation();
     setIsDownloading(true);
     try {
-      const { download_url } = await getWeightsDownloadUrl(job.provider_job_id);
+      const { download_url } = await getWeightsDownloadUrl(job.dataset_id, job.provider_job_id);
       triggerFileDownload(download_url, `weights-${job.provider_job_id}.tar.gz`);
       showWeightsDownloadToast();
     } catch (error) {

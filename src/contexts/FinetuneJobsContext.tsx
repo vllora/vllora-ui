@@ -101,8 +101,8 @@ function useFinetuneJobsLogic() {
   // Sidebar visibility state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // Dataset filtering - server-side filter via backend dataset ID
-  const [currentBackendDatasetId, setCurrentBackendDatasetId] = useState<string | null>(null);
+  // Dataset filtering - server-side filter via dataset ID
+  const [currentDatasetId, setCurrentDatasetId] = useState<string | null>(null);
 
   // Job evaluations state - keyed by job ID
   const [jobEvaluations, setJobEvaluations] = useState<Record<string, JobEvaluationState>>({});
@@ -122,7 +122,7 @@ function useFinetuneJobsLogic() {
   } = useRequest(
     async (datasetId?: string | null) => {
       // Use provided datasetId or fall back to current state
-      const filterDatasetId = datasetId !== undefined ? datasetId : currentBackendDatasetId;
+      const filterDatasetId = datasetId !== undefined ? datasetId : currentDatasetId;
 
       // If no backend dataset ID, return empty (dataset not uploaded yet)
       if (!filterDatasetId) {
@@ -130,20 +130,19 @@ function useFinetuneJobsLogic() {
       }
 
       return listReinforcementJobs(
-        undefined, // limit
-        undefined, // after
-        filterDatasetId // datasetId (server-side filter)
+        filterDatasetId, // workflowId (scopes the listing)
       );
     },
     {
-      manual: true, // We'll trigger manually based on currentBackendDatasetId
+      manual: true, // We'll trigger manually based on currentDatasetId
     }
   );
 
   // Refresh a specific job by ID
   const refreshJob = useCallback(async (providerJobId: string) => {
+    if (!currentDatasetId) return;
     try {
-      const updatedJob = await getReinforcementJobStatus(providerJobId);
+      const updatedJob = await getReinforcementJobStatus(currentDatasetId, providerJobId);
       setJobs((prevJobs) =>
         (prevJobs || []).map((job) =>
           job.provider_job_id === providerJobId ? updatedJob : job
@@ -152,7 +151,7 @@ function useFinetuneJobsLogic() {
     } catch (err) {
       console.error(`Failed to refresh job ${providerJobId}:`, err);
     }
-  }, [setJobs]);
+  }, [setJobs, currentDatasetId]);
 
   // Fetch evaluations for a specific job (stale-while-revalidate pattern)
   const fetchJobEvaluations = useCallback(async (job: FinetuneJob, isInitial = false) => {
@@ -339,12 +338,12 @@ function useFinetuneJobsLogic() {
           );
         } else {
           // Job not in list, trigger a full reload
-          loadJobs(currentBackendDatasetId);
+          loadJobs(currentDatasetId);
           return jobsList;
         }
       });
     },
-    [loadJobs, setJobs, currentBackendDatasetId]
+    [loadJobs, setJobs, currentDatasetId]
   );
 
   // Subscribe to SSE events
@@ -370,21 +369,21 @@ function useFinetuneJobsLogic() {
     };
   }, [subscribe, handleJobUpdateEvent]);
 
-  // Load jobs on mount and when currentBackendDatasetId changes
+  // Load jobs on mount and when currentDatasetId changes
   useEffect(() => {
-    loadJobs(currentBackendDatasetId);
-  }, [currentBackendDatasetId]); // eslint-disable-line react-hooks/exhaustive-deps
+    loadJobs(currentDatasetId);
+  }, [currentDatasetId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Listen for job created events from quickFinetune
   useEffect(() => {
-    const handleJobCreated = (event: { backendDatasetId: string }) => {
-      // Update the current backend dataset ID if it changed
-      const targetId = event.backendDatasetId || currentBackendDatasetId;
-      if (event.backendDatasetId && event.backendDatasetId !== currentBackendDatasetId) {
-        setCurrentBackendDatasetId(event.backendDatasetId);
-        // useEffect watching currentBackendDatasetId will call loadJobs
+    const handleJobCreated = (event: { datasetId: string }) => {
+      // Update the current dataset ID if it changed
+      const targetId = event.datasetId || currentDatasetId;
+      if (event.datasetId && event.datasetId !== currentDatasetId) {
+        setCurrentDatasetId(event.datasetId);
+        // useEffect watching currentDatasetId will call loadJobs
       } else {
-        // Same dataset — refresh directly (setCurrentBackendDatasetId would be a no-op)
+        // Same dataset — refresh directly (setCurrentDatasetId would be a no-op)
         loadJobs(targetId);
       }
       setIsSidebarOpen(true);
@@ -394,7 +393,7 @@ function useFinetuneJobsLogic() {
     return () => {
       emitter.off("vllora_finetune_job_created", handleJobCreated);
     };
-  }, [loadJobs, currentBackendDatasetId]);
+  }, [loadJobs, currentDatasetId]);
 
   // Jobs are now filtered server-side, so filteredJobs just returns jobs
   const filteredJobs = jobs;
@@ -431,8 +430,8 @@ function useFinetuneJobsLogic() {
     refreshJob,
     isSidebarOpen,
     setIsSidebarOpen,
-    currentBackendDatasetId,
-    setCurrentBackendDatasetId,
+    currentDatasetId,
+    setCurrentDatasetId,
     filteredJobs,
     latestJob,
     getJobEvaluations,

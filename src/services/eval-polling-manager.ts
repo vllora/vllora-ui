@@ -142,12 +142,11 @@ class EvalPollingManager {
     }
 
     // Ensure dataset is uploaded (auto-uploads if needed)
-    const backendDatasetId = await ensureDatasetUploaded(datasetId);
+    await ensureDatasetUploaded(datasetId);
 
     // Start the dry run
     return this.startEval({
       datasetId,
-      backendDatasetId,
       sampleSize,
       rolloutModel,
     });
@@ -155,12 +154,11 @@ class EvalPollingManager {
 
   /**
    * Start a new dry run job (low-level API)
-   * Requires backendDatasetId to already exist.
+   * Dataset must already be uploaded.
    */
   async startEval(params: StartEvalParams): Promise<string> {
     const {
       datasetId,
-      backendDatasetId,
       sampleSize,
       rolloutModel = 'gpt-4o-mini',
     } = params;
@@ -168,7 +166,6 @@ class EvalPollingManager {
     // Create job record in pending state
     const job = await evalJobService.create({
       datasetId,
-      backendDatasetId,
       evaluationRunId: '',
       status: 'pending',
       sampleSize,
@@ -179,7 +176,7 @@ class EvalPollingManager {
     try {
       // Call backend to create evaluation
       const evaluationResponse = await createEvaluation({
-        dataset_id: backendDatasetId,
+        dataset_id: datasetId,
         rollout_model_params: {
           model: rolloutModel,
         },

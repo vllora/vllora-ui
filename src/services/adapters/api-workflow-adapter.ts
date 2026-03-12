@@ -5,7 +5,9 @@
  * on the BE workflows table. Snapshots, generation history, and eval cache
  * are embedded within a compound blob alongside the workflow state.
  *
- * All mutation methods use read-modify-write on the JSON blob.
+ * All mutation methods use read-modify-write on the JSON blob with
+ * optimistic concurrency control via the `version` field. If a concurrent
+ * write bumped the version, the mutate helper re-reads and retries.
  */
 
 import { api, handleApiResponse } from '@/lib/api-client';
@@ -42,11 +44,14 @@ interface WorkflowStateBlob {
   readonly snapshots: WorkflowSnapshotStore[];
   readonly generationHistory: GenerationHistoryStore[];
   readonly evalCache: CachedJobEvaluation[];
+  /** Monotonically increasing version for optimistic concurrency control */
+  readonly version: number;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const BASE = '/finetune/workflows';
+const MAX_RETRIES = 3;
 
 function createInitialStepStatus(): Record<FinetuneStep, StepStatus> {
   return {
@@ -66,7 +71,12 @@ function createInitialStepStatus(): Record<FinetuneStep, StepStatus> {
 function parseBlob(stateJson: string | null): WorkflowStateBlob | null {
   if (!stateJson) return null;
   try {
-    return JSON.parse(stateJson) as WorkflowStateBlob;
+    const parsed = JSON.parse(stateJson) as WorkflowStateBlob;
+    // Backfill version for blobs created before versioning was added
+    if (parsed.version == null) {
+      return { ...parsed, version: 0 };
+    }
+    return parsed;
   } catch {
     return null;
   }
@@ -96,15 +106,59 @@ async function readBlob(id: string): Promise<WorkflowStateBlob | null> {
   return parseBlob(row.state);
 }
 
-async function readOrCreateBlob(id: string): Promise<WorkflowStateBlob> {
-  const blob = await readBlob(id);
-  if (blob) return blob;
+function newEmptyBlob(id: string): WorkflowStateBlob {
   return {
     workflow: createDefaultWorkflow(id),
     snapshots: [],
     generationHistory: [],
     evalCache: [],
+    version: 1,
   };
+}
+
+async function readOrCreateBlob(id: string): Promise<WorkflowStateBlob> {
+  return (await readBlob(id)) ?? newEmptyBlob(id);
+}
+
+/**
+ * Atomically mutate a workflow blob with optimistic concurrency control.
+ *
+ * Reads the current blob, applies `mutate` to produce the next blob,
+ * then writes it back with an incremented version. If a concurrent write
+ * changed the version between read and write, retries up to MAX_RETRIES.
+ */
+async function mutateBlob(
+  id: string,
+  mutate: (blob: WorkflowStateBlob) => WorkflowStateBlob,
+): Promise<WorkflowStateBlob> {
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const blob = await readOrCreateBlob(id);
+    const next = { ...mutate(blob), version: blob.version + 1 };
+    await saveBlob(id, next);
+
+    // Re-read to verify our write landed (version matches)
+    const verification = await readBlob(id);
+    if (verification && verification.version === next.version) {
+      return next;
+    }
+
+    // Version mismatch — another writer intervened. Retry.
+    if (attempt < MAX_RETRIES - 1) {
+      // Small jitter to reduce collision likelihood
+      await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
+    }
+  }
+
+  // Last-resort: do the write without verification
+  const blob = await readOrCreateBlob(id);
+  const next = { ...mutate(blob), version: blob.version + 1 };
+  await saveBlob(id, next);
+  return next;
+}
+
+/** Generate a unique snapshot/record ID using crypto.randomUUID(). */
+function uniqueId(prefix: string): string {
+  return `${prefix}-${crypto.randomUUID()}`;
 }
 
 function createDefaultWorkflow(datasetId: string): FinetuneWorkflowState {
@@ -158,6 +212,7 @@ export const apiWorkflowAdapter: WorkflowService = {
       snapshots: [],
       generationHistory: [],
       evalCache: [],
+      version: 1,
     };
 
     await saveBlob(datasetId, blob);
@@ -188,12 +243,10 @@ export const apiWorkflowAdapter: WorkflowService = {
 
   async update(workflow: FinetuneWorkflowState): Promise<void> {
     const id = workflow.datasetId;
-    const blob = await readOrCreateBlob(id);
-    const updatedBlob: WorkflowStateBlob = {
+    await mutateBlob(id, (blob) => ({
       ...blob,
       workflow: { ...workflow, updatedAt: Date.now() },
-    };
-    await saveBlob(id, updatedBlob);
+    }));
   },
 
   async delete(id: string): Promise<void> {
@@ -205,64 +258,55 @@ export const apiWorkflowAdapter: WorkflowService = {
   // ─── Step management ─────────────────────────────────────────────────────
 
   async advanceToStep(id: string, step: FinetuneStep): Promise<FinetuneWorkflowState | null> {
-    const blob = await readBlob(id);
-    if (!blob) return null;
+    const result = await mutateBlob(id, (blob) => {
+      const { workflow } = blob;
+      const now = Date.now();
 
-    const { workflow } = blob;
+      const snapshot: WorkflowSnapshotStore = {
+        id: uniqueId(`${workflow.id}-${workflow.currentStep}`),
+        workflowId: workflow.id,
+        step: workflow.currentStep,
+        state: { ...workflow },
+        createdAt: now,
+      };
 
-    // Create snapshot before advancing
-    const now = Date.now();
-    const snapshot: WorkflowSnapshotStore = {
-      id: `${workflow.id}-${workflow.currentStep}-${now}`,
-      workflowId: workflow.id,
-      step: workflow.currentStep,
-      state: { ...workflow },
-      createdAt: now,
-    };
+      const updatedStatus = { ...workflow.stepStatus };
+      updatedStatus[workflow.currentStep] = 'completed';
+      updatedStatus[step] = 'in_progress';
 
-    const updatedStatus = { ...workflow.stepStatus };
-    updatedStatus[workflow.currentStep] = 'completed';
-    updatedStatus[step] = 'in_progress';
+      return {
+        ...blob,
+        workflow: {
+          ...workflow,
+          currentStep: step,
+          stepStatus: updatedStatus,
+          updatedAt: now,
+        },
+        snapshots: [...blob.snapshots, snapshot],
+      };
+    });
 
-    const updatedWorkflow: FinetuneWorkflowState = {
-      ...workflow,
-      currentStep: step,
-      stepStatus: updatedStatus,
-      updatedAt: now,
-    };
-
-    const updatedBlob: WorkflowStateBlob = {
-      ...blob,
-      workflow: updatedWorkflow,
-      snapshots: [...blob.snapshots, snapshot],
-    };
-
-    await saveBlob(id, updatedBlob);
-    emitWorkflowUpdate(workflow.datasetId, step);
-    return updatedWorkflow;
+    emitWorkflowUpdate(id, step);
+    return result.workflow;
   },
 
   async markStepFailed(id: string): Promise<FinetuneWorkflowState | null> {
-    const blob = await readBlob(id);
-    if (!blob) return null;
+    const result = await mutateBlob(id, (blob) => {
+      const { workflow } = blob;
+      const updatedStatus = { ...workflow.stepStatus };
+      updatedStatus[workflow.currentStep] = 'failed';
 
-    const { workflow } = blob;
-    const updatedStatus = { ...workflow.stepStatus };
-    updatedStatus[workflow.currentStep] = 'failed';
+      return {
+        ...blob,
+        workflow: {
+          ...workflow,
+          stepStatus: updatedStatus,
+          updatedAt: Date.now(),
+        },
+      };
+    });
 
-    const updatedWorkflow: FinetuneWorkflowState = {
-      ...workflow,
-      stepStatus: updatedStatus,
-      updatedAt: Date.now(),
-    };
-
-    const updatedBlob: WorkflowStateBlob = {
-      ...blob,
-      workflow: updatedWorkflow,
-    };
-
-    await saveBlob(id, updatedBlob);
-    return updatedWorkflow;
+    return result.workflow;
   },
 
   async updateStepData<K extends keyof FinetuneWorkflowState>(
@@ -270,46 +314,40 @@ export const apiWorkflowAdapter: WorkflowService = {
     key: K,
     data: FinetuneWorkflowState[K],
   ): Promise<FinetuneWorkflowState | null> {
-    const blob = await readBlob(id);
-    if (!blob) return null;
-
-    const updatedWorkflow: FinetuneWorkflowState = {
-      ...blob.workflow,
-      [key]: data,
-      updatedAt: Date.now(),
-    };
-
-    const updatedBlob: WorkflowStateBlob = {
+    const result = await mutateBlob(id, (blob) => ({
       ...blob,
-      workflow: updatedWorkflow,
-    };
+      workflow: {
+        ...blob.workflow,
+        [key]: data,
+        updatedAt: Date.now(),
+      },
+    }));
 
-    await saveBlob(id, updatedBlob);
-    return updatedWorkflow;
+    return result.workflow;
   },
 
   // ─── Snapshots ────────────────────────────────────────────────────────────
 
   async createSnapshot(workflow: FinetuneWorkflowState): Promise<string> {
     const id = workflow.datasetId;
-    const blob = await readOrCreateBlob(id);
-    const now = Date.now();
+    const snapshotId = uniqueId(`${workflow.id}-${workflow.currentStep}`);
 
-    const snapshot: WorkflowSnapshotStore = {
-      id: `${workflow.id}-${workflow.currentStep}-${now}`,
-      workflowId: workflow.id,
-      step: workflow.currentStep,
-      state: { ...workflow },
-      createdAt: now,
-    };
+    await mutateBlob(id, (blob) => {
+      const snapshot: WorkflowSnapshotStore = {
+        id: snapshotId,
+        workflowId: workflow.id,
+        step: workflow.currentStep,
+        state: { ...workflow },
+        createdAt: Date.now(),
+      };
 
-    const updatedBlob: WorkflowStateBlob = {
-      ...blob,
-      snapshots: [...blob.snapshots, snapshot],
-    };
+      return {
+        ...blob,
+        snapshots: [...blob.snapshots, snapshot],
+      };
+    });
 
-    await saveBlob(id, updatedBlob);
-    return snapshot.id;
+    return snapshotId;
   },
 
   async getSnapshots(workflowId: string): Promise<WorkflowSnapshotStore[]> {
@@ -319,10 +357,7 @@ export const apiWorkflowAdapter: WorkflowService = {
   },
 
   async rollbackToSnapshot(snapshotId: string): Promise<FinetuneWorkflowState | null> {
-    // We need to find which workflow contains this snapshot.
-    // Since snapshot IDs are prefixed with the workflow ID, extract it.
-    // Format: `{workflowId}-{step}-{timestamp}`
-    // We can't easily parse this, so scan all workflows.
+    // Scan all workflows to find the one containing this snapshot.
     const response = await api.get(BASE);
     const rows = await handleApiResponse<DbWorkflowResponse[]>(response);
 
@@ -341,6 +376,7 @@ export const apiWorkflowAdapter: WorkflowService = {
       const updatedBlob: WorkflowStateBlob = {
         ...blob,
         workflow: restoredWorkflow,
+        version: blob.version + 1,
       };
 
       await saveBlob(row.id, updatedBlob);
@@ -353,28 +389,28 @@ export const apiWorkflowAdapter: WorkflowService = {
   // ─── Generation history ───────────────────────────────────────────────────
 
   async recordGeneration(workflowId: string, data: GenerationData): Promise<string> {
-    const blob = await readOrCreateBlob(workflowId);
-    const now = Date.now();
+    const recordId = uniqueId(`${workflowId}-gen`);
 
-    const record: GenerationHistoryStore = {
-      id: `${workflowId}-gen-${now}`,
-      workflowId,
-      strategy: data.strategy,
-      topicsTargeted: data.topicsTargeted,
-      recordsGenerated: data.recordsGenerated,
-      recordsValid: data.recordsValid,
-      balanceScoreBefore: data.balanceScoreBefore,
-      balanceScoreAfter: data.balanceScoreAfter,
-      createdAt: now,
-    };
+    await mutateBlob(workflowId, (blob) => {
+      const record: GenerationHistoryStore = {
+        id: recordId,
+        workflowId,
+        strategy: data.strategy,
+        topicsTargeted: data.topicsTargeted,
+        recordsGenerated: data.recordsGenerated,
+        recordsValid: data.recordsValid,
+        balanceScoreBefore: data.balanceScoreBefore,
+        balanceScoreAfter: data.balanceScoreAfter,
+        createdAt: Date.now(),
+      };
 
-    const updatedBlob: WorkflowStateBlob = {
-      ...blob,
-      generationHistory: [...blob.generationHistory, record],
-    };
+      return {
+        ...blob,
+        generationHistory: [...blob.generationHistory, record],
+      };
+    });
 
-    await saveBlob(workflowId, updatedBlob);
-    return record.id;
+    return recordId;
   },
 
   async getGenerationHistory(workflowId: string): Promise<GenerationHistoryStore[]> {
@@ -402,43 +438,30 @@ export const apiWorkflowAdapter: WorkflowService = {
   },
 
   async saveJobEvaluationsCache(jobId: string, data: FinetuneEvalResultsResponse): Promise<void> {
-    // Find the workflow that owns this job by checking eval jobs
     const workflowId = await findWorkflowIdForJob(jobId);
     if (!workflowId) return;
 
-    const blob = await readOrCreateBlob(workflowId);
-    const existing = blob.evalCache.find((c) => c.jobId === jobId);
-
-    const cached: CachedJobEvaluation = {
-      jobId,
-      data,
-      updatedAt: Date.now(),
-      ...(existing?.scoresPersisted && { scoresPersisted: true }),
-    };
-
-    const updatedCache = blob.evalCache.filter((c) => c.jobId !== jobId);
-
-    const updatedBlob: WorkflowStateBlob = {
-      ...blob,
-      evalCache: [...updatedCache, cached],
-    };
-
-    await saveBlob(workflowId, updatedBlob);
+    await mutateBlob(workflowId, (blob) => {
+      const existing = blob.evalCache.find((c) => c.jobId === jobId);
+      const cached: CachedJobEvaluation = {
+        jobId,
+        data,
+        updatedAt: Date.now(),
+        ...(existing?.scoresPersisted && { scoresPersisted: true }),
+      };
+      const filteredCache = blob.evalCache.filter((c) => c.jobId !== jobId);
+      return { ...blob, evalCache: [...filteredCache, cached] };
+    });
   },
 
   async deleteCachedJobEvaluations(jobId: string): Promise<void> {
     const workflowId = await findWorkflowIdForJob(jobId);
     if (!workflowId) return;
 
-    const blob = await readBlob(workflowId);
-    if (!blob) return;
-
-    const updatedBlob: WorkflowStateBlob = {
+    await mutateBlob(workflowId, (blob) => ({
       ...blob,
       evalCache: blob.evalCache.filter((c) => c.jobId !== jobId),
-    };
-
-    await saveBlob(workflowId, updatedBlob);
+    }));
   },
 
   async clearOldEvaluationsCache(maxAgeMs: number = 7 * 24 * 60 * 60 * 1000): Promise<number> {
@@ -457,8 +480,7 @@ export const apiWorkflowAdapter: WorkflowService = {
       if (removed === 0) continue;
 
       deletedCount += removed;
-      const updatedBlob: WorkflowStateBlob = { ...blob, evalCache: kept };
-      await saveBlob(row.id, updatedBlob);
+      await saveBlob(row.id, { ...blob, evalCache: kept, version: blob.version + 1 });
     }
 
     return deletedCount;
@@ -473,28 +495,24 @@ export const apiWorkflowAdapter: WorkflowService = {
     const workflowId = await findWorkflowIdForJob(jobId);
     if (!workflowId) return;
 
-    const blob = await readBlob(workflowId);
-    if (!blob) return;
-
-    const updatedCache = blob.evalCache.map((c) =>
-      c.jobId === jobId ? { ...c, scoresPersisted: true } : c,
-    );
-
-    const updatedBlob: WorkflowStateBlob = { ...blob, evalCache: updatedCache };
-    await saveBlob(workflowId, updatedBlob);
+    await mutateBlob(workflowId, (blob) => ({
+      ...blob,
+      evalCache: blob.evalCache.map((c) =>
+        c.jobId === jobId ? { ...c, scoresPersisted: true } : c,
+      ),
+    }));
   },
 };
 
 // ─── Helper: find workflow ID that owns a given eval job ─────────────────────
 
 async function findWorkflowIdForJob(jobId: string): Promise<string | null> {
-  // Try to find the eval job to get its workflow_id
+  // Try to find the eval job directly (uses the wildcard route that ignores workflow_id)
   try {
-    const response = await api.get(`/finetune/eval-jobs?status=completed`);
+    const response = await api.get(`/finetune/workflows/_/eval-jobs/${jobId}`);
     if (response.ok) {
-      const jobs = await handleApiResponse<Array<{ id: string; workflow_id: string }>>(response);
-      const job = jobs.find((j) => j.id === jobId);
-      if (job) return job.workflow_id;
+      const job = await handleApiResponse<{ id: string; workflow_id: string }>(response);
+      return job.workflow_id;
     }
   } catch {
     // Fall through to scan approach

@@ -1,8 +1,7 @@
 /**
  * Dataset Service Interface
  *
- * Abstraction over dataset persistence. Currently backed by IndexedDB (datasets-db.ts).
- * Will be swapped to gateway API adapter when /finetune/workflows endpoints are ready.
+ * Abstraction over dataset persistence. Backed by Gateway API (api-dataset-adapter.ts).
  *
  * Consumers should import from the service registry, not directly from adapters.
  */
@@ -20,7 +19,6 @@ import type {
 export interface DatasetService {
   // CRUD
   getById(id: string): Promise<Dataset | null>;
-  getByBackendId(backendId: string): Promise<Dataset | null>;
   getAll(): Promise<Dataset[]>;
   create(name: string, objective?: string): Promise<Dataset>;
   rename(id: string, name: string): Promise<void>;
@@ -28,7 +26,6 @@ export interface DatasetService {
 
   // Metadata updates
   updateObjective(id: string, objective: string, normalizedObjective?: string): Promise<void>;
-  updateBackendId(id: string, backendId: string): Promise<void>;
   updateTopicHierarchy(id: string, topics: TopicHierarchyConfig): Promise<void>;
   updateEvalScript(id: string, script: string): Promise<void>;
   updateCoverageStats(id: string, stats: CoverageStats): Promise<void>;

@@ -23,14 +23,20 @@ async function seedEvalScenario(opts: {
 }) {
   const datasetId = await seedDataset();
 
-  // Seed records with topics (must match score rowIds for topic mapping)
-  await seedRecords(
+  // Seed records with topics — returns actual auto-generated IDs
+  const actualIds = await seedRecords(
     datasetId,
     opts.scores.map((s) => ({ id: s.rowId, topic: s.topic })),
   );
 
-  // Seed EvalJob with completed results
-  await seedCompletedEvalJob(datasetId, { scores: opts.scores });
+  // Remap scores to use actual record IDs (not the user-provided rowId)
+  const remappedScores = opts.scores.map((s, i) => ({
+    ...s,
+    rowId: actualIds[i],
+  }));
+
+  // Seed EvalJob with completed results using actual record IDs
+  await seedCompletedEvalJob(datasetId, { scores: remappedScores });
 
   return datasetId;
 }

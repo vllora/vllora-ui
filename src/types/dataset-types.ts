@@ -343,8 +343,6 @@ export interface Dataset {
   datasetObjective?: string;
   // LLM-normalized "You are ..." role sentence derived from datasetObjective
   normalizedObjective?: string;
-  // Backend dataset ID from the cloud provider (set after first finetune upload)
-  backendDatasetId?: string;
   // Topic hierarchy configuration
   topicHierarchy?: TopicHierarchyConfig;
   // JavaScript evaluation script for grading

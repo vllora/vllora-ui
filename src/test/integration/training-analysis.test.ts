@@ -6,7 +6,7 @@
  * per-epoch finetune evaluation data.
  *
  * MSW handlers serve:
- *   GET /finetune/reinforcement-jobs/:jobId/status
+ *   GET /finetune/workflows/:workflowId/jobs/:jobId/status
  *   GET /finetune/datasets/:id/finetune-evaluations
  */
 
@@ -27,22 +27,21 @@ async function seedTrainingScenario(opts: {
 } = {}) {
   const topics = opts.topics ?? ['Pins', 'Forks'];
   const rowCount = opts.rowCount ?? 5;
-  const backendDatasetId = 'ds-backend-001';
   const jobId = 'ft-job-001';
 
-  const datasetId = await seedDataset({ backendDatasetId });
+  const datasetId = await seedDataset();
 
-  // Seed records with row IDs matching MSW response (row-0, row-1, ...)
+  // Seed records — returns auto-generated IDs
   const records = Array.from({ length: rowCount }, (_, i) => ({
     id: `row-${i}`,
     topic: topics[i % topics.length],
   }));
-  await seedRecords(datasetId, records);
+  const recordIds = await seedRecords(datasetId, records);
 
   // Create workflow with training jobId
   await seedWorkflow(datasetId, { jobId });
 
-  return { datasetId, backendDatasetId, jobId };
+  return { datasetId, jobId, recordIds };
 }
 
 // =============================================================================
@@ -55,11 +54,12 @@ describe('analyze_training integration (MSW)', () => {
   // ---------------------------------------------------------------------------
 
   it('returns deploy_eval for improving training', async () => {
-    const { datasetId, jobId } = await seedTrainingScenario();
+    const { datasetId, jobId, recordIds } = await seedTrainingScenario();
 
     setScenario({
       trainingScenario: 'improving',
       trainingPollsBeforeComplete: 0,
+      trainingRowIds: recordIds,
     });
 
     const result = await analyzeTrainingHandler({
@@ -83,11 +83,12 @@ describe('analyze_training integration (MSW)', () => {
   // ---------------------------------------------------------------------------
 
   it('returns investigate for overfitting training', async () => {
-    const { datasetId, jobId } = await seedTrainingScenario();
+    const { datasetId, jobId, recordIds } = await seedTrainingScenario();
 
     setScenario({
       trainingScenario: 'overfitting',
       trainingPollsBeforeComplete: 0,
+      trainingRowIds: recordIds,
     });
 
     const result = await analyzeTrainingHandler({
@@ -116,11 +117,12 @@ describe('analyze_training integration (MSW)', () => {
   // ---------------------------------------------------------------------------
 
   it('returns inner_loop for no-learning training', async () => {
-    const { datasetId, jobId } = await seedTrainingScenario();
+    const { datasetId, jobId, recordIds } = await seedTrainingScenario();
 
     setScenario({
       trainingScenario: 'noLearning',
       trainingPollsBeforeComplete: 0,
+      trainingRowIds: recordIds,
     });
 
     const result = await analyzeTrainingHandler({
@@ -147,11 +149,12 @@ describe('analyze_training integration (MSW)', () => {
   // ---------------------------------------------------------------------------
 
   it('returns retrain for failed training job', async () => {
-    const { datasetId, jobId } = await seedTrainingScenario();
+    const { datasetId, jobId, recordIds } = await seedTrainingScenario();
 
     setScenario({
       trainingScenario: 'error',
       trainingPollsBeforeComplete: 0,
+      trainingRowIds: recordIds,
     });
 
     const result = await analyzeTrainingHandler({
@@ -172,7 +175,7 @@ describe('analyze_training integration (MSW)', () => {
   // ---------------------------------------------------------------------------
 
   it('includes per-topic epoch progressions', async () => {
-    const { datasetId, jobId } = await seedTrainingScenario({
+    const { datasetId, jobId, recordIds } = await seedTrainingScenario({
       topics: ['Pins', 'Forks'],
       rowCount: 5,
     });
@@ -180,6 +183,7 @@ describe('analyze_training integration (MSW)', () => {
     setScenario({
       trainingScenario: 'improving',
       trainingPollsBeforeComplete: 0,
+      trainingRowIds: recordIds,
     });
 
     const result = await analyzeTrainingHandler({
@@ -207,11 +211,12 @@ describe('analyze_training integration (MSW)', () => {
   // ---------------------------------------------------------------------------
 
   it('computes overall progression with positive delta', async () => {
-    const { datasetId, jobId } = await seedTrainingScenario();
+    const { datasetId, jobId, recordIds } = await seedTrainingScenario();
 
     setScenario({
       trainingScenario: 'improving',
       trainingPollsBeforeComplete: 0,
+      trainingRowIds: recordIds,
     });
 
     const result = await analyzeTrainingHandler({
@@ -229,23 +234,6 @@ describe('analyze_training integration (MSW)', () => {
     expect(overall).toBeDefined();
     expect(overall.delta).toBeGreaterThan(0);
     expect(overall.last_epoch_mean).toBeGreaterThan(overall.first_epoch_mean);
-  });
-
-  // ---------------------------------------------------------------------------
-  // Error — dataset without backendDatasetId
-  // ---------------------------------------------------------------------------
-
-  it('returns error when dataset has no backendDatasetId', async () => {
-    const datasetId = await seedDataset({ backendDatasetId: undefined });
-    await seedRecords(datasetId, [{ topic: 'Pins' }]);
-
-    const result = await analyzeTrainingHandler({
-      dataset_id: datasetId,
-      job_id: 'ft-job-001',
-    }) as Record<string, unknown>;
-
-    expect(result.success).toBe(false);
-    expect(result.error).toBeDefined();
   });
 
   // ---------------------------------------------------------------------------

@@ -83,12 +83,12 @@ function getScoreInsight(stats: { mean: number; std: number; min: number; max: n
 }
 
 /** Compact evaluator version badge for eval job header */
-function EvaluatorVersionBadge({ backendDatasetId }: { backendDatasetId: string }) {
+function EvaluatorVersionBadge({ datasetId }: { datasetId: string }) {
   const [version, setVersion] = useState<{ version: number; total: number } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    getEvaluatorVersions(backendDatasetId)
+    getEvaluatorVersions(datasetId)
       .then((versions) => {
         if (!cancelled && versions.length > 0) {
           setVersion({ version: versions[0].version, total: versions.length });
@@ -96,7 +96,7 @@ function EvaluatorVersionBadge({ backendDatasetId }: { backendDatasetId: string 
       })
       .catch(() => { /* non-critical */ });
     return () => { cancelled = true; };
-  }, [backendDatasetId]);
+  }, [datasetId]);
 
   if (!version || version.total <= 1) return null;
 
@@ -195,8 +195,8 @@ function JobDetail({ job, datasetId, onCancel, onRunAgain, onRefresh }: { job: E
                       Running
                     </span>
                   )}
-                  {job.backendDatasetId && (
-                    <EvaluatorVersionBadge backendDatasetId={job.backendDatasetId} />
+                  {job.datasetId && (
+                    <EvaluatorVersionBadge datasetId={job.datasetId} />
                   )}
                   {result && <VerdictBadge verdict={result.diagnosis.verdict} />}
                   {job.status === "failed" && !result && (

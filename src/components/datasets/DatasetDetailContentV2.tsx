@@ -198,19 +198,19 @@ export function DatasetDetailContentV2() {
   );
 
   // Finetune jobs sidebar
-  const { setCurrentBackendDatasetId } = FinetuneJobsConsumer();
+  const { setCurrentDatasetId } = FinetuneJobsConsumer();
 
-  // Set the backend dataset ID for filtering jobs when dataset changes
+  // Set the dataset ID for filtering jobs when dataset changes
   useEffect(() => {
-    if (dataset?.backendDatasetId) {
-      setCurrentBackendDatasetId(dataset.backendDatasetId);
+    if (dataset?.id) {
+      setCurrentDatasetId(dataset.id);
     } else {
-      setCurrentBackendDatasetId(null);
+      setCurrentDatasetId(null);
     }
     return () => {
-      setCurrentBackendDatasetId(null);
+      setCurrentDatasetId(null);
     };
-  }, [dataset?.backendDatasetId, setCurrentBackendDatasetId]);
+  }, [dataset?.id, setCurrentDatasetId]);
 
   // Dialog state for records analytics
   const [analyticsDialogOpen, setAnalyticsDialogOpen] = useState(false);

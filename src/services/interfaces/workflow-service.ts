@@ -2,10 +2,7 @@
  * Workflow Service Interface
  *
  * Abstraction over finetune workflow state persistence.
- * Currently backed by IndexedDB (finetune-workflow-db.ts).
- * Will be swapped to gateway API adapter when workflow state endpoints are ready.
- *
- * Re-exports types from the DB module to ensure interface compatibility.
+ * Backed by Gateway API (api-workflow-adapter.ts).
  */
 
 import type {

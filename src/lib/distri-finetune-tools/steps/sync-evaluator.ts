@@ -40,12 +40,13 @@ export const syncEvaluatorHandler: ToolHandler = async (params) => {
     }
 
     // Ensure dataset is uploaded (auto-uploads if needed)
-    const backendDatasetId = await ensureDatasetUploaded(workflow.datasetId);
+    await ensureDatasetUploaded(workflow.datasetId);
 
     // Dataset is uploaded and has eval script - ready for dry run
+    // The dataset ID is the backend dataset ID — they are always the same.
     return {
       success: true,
-      backend_dataset_id: backendDatasetId,
+      backend_dataset_id: workflow.datasetId,
       evaluator_type: 'js',
       message: 'Eval script configured and dataset uploaded. Ready for evaluation. Note: If eval script changed, use upload_dataset with force_reupload=true.',
     };

@@ -26,6 +26,8 @@ export interface ScenarioState {
   readonly trainingCreateBehavior: BehaviorOption;
   /** Number of rows the mock finetune-evaluations endpoint returns. Set to match dataset record count. */
   readonly trainingRowCount: number;
+  /** Actual record IDs for topic mapping in finetune-evaluations. Falls back to `row-N` if empty. */
+  readonly trainingRowIds: readonly string[];
 }
 
 // =============================================================================
@@ -43,6 +45,7 @@ const DEFAULT_STATE: ScenarioState = {
   evalCreateBehavior: 'success',
   trainingCreateBehavior: 'success',
   trainingRowCount: 5,
+  trainingRowIds: [],
 };
 
 // =============================================================================

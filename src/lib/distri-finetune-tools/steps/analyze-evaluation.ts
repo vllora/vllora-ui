@@ -660,8 +660,8 @@ export const analyzeEvaluationHandler: ToolHandler = async (params) => {
     let evaluator_version: { version: number; created_at: string; has_diff: boolean } | undefined;
     try {
       const dataset = await datasetService.getById(dataset_id);
-      if (dataset?.backendDatasetId) {
-        const versions = await getEvaluatorVersions(dataset.backendDatasetId);
+      if (dataset) {
+        const versions = await getEvaluatorVersions(dataset.id);
         if (versions.length > 0) {
           const latest = versions[0];
           evaluator_version = {

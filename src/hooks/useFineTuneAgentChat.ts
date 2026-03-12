@@ -217,10 +217,10 @@ async function buildCatchUpContext(datasetId: string): Promise<CatchUpResult> {
       datasetService.getById(datasetId),
     ]);
 
-    // --- Fetch evaluator versions if backend dataset ID is available ---
-    if (dataset?.backendDatasetId) {
+    // --- Fetch evaluator versions ---
+    if (dataset) {
       try {
-        const versions = await getEvaluatorVersions(dataset.backendDatasetId);
+        const versions = await getEvaluatorVersions(dataset.id);
         if (versions.length > 0) {
           const latest = versions[0];
           evaluatorVersion = {
@@ -543,7 +543,7 @@ async function resolveTrainingStatus(
   // If workflow says running, verify against the API (handles stale IndexedDB)
   if (status === 'running' || status === 'pending' || status === 'queued') {
     try {
-      const freshJob = await getReinforcementJobStatus(t.jobId);
+      const freshJob = await getReinforcementJobStatus(workflow.datasetId, t.jobId);
       if (freshJob.status === 'succeeded') {
         status = 'completed';
         fineTunedModel = freshJob.fine_tuned_model ?? fineTunedModel;
@@ -609,9 +609,9 @@ async function fetchTrainingEpochScores(
       datasetService.getById(datasetId),
       recordService.getByDatasetId(datasetId),
     ]);
-    if (!dataset?.backendDatasetId) return undefined;
+    if (!dataset) return undefined;
 
-    const evalResponse = await getFinetuneEvaluations(dataset.backendDatasetId, providerJobId);
+    const evalResponse = await getFinetuneEvaluations(dataset.id, providerJobId);
     const results = evalResponse.results;
     if (results.length === 0) return undefined;
 

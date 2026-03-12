@@ -37,7 +37,7 @@ export const checkTrainingStatusHandler: ToolHandler = async (params) => {
     }
 
     // Get actual job status from backend API (source of truth)
-    const job = await getReinforcementJobStatus(workflow.training.jobId);
+    const job = await getReinforcementJobStatus(workflow.datasetId, workflow.training.jobId);
 
     // Map backend status to workflow status
     const statusMap: Record<string, 'pending' | 'queued' | 'running' | 'completed' | 'failed'> = {

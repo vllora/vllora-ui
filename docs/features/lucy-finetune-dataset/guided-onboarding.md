@@ -690,7 +690,7 @@ The Lucy agent system uses 4 agent definitions in `gateway/agents/finetune/`:
 
 ### Orchestrator Agent (`vllora-finetune-agent.md`)
 
-The orchestrator handles plan creation directly (no delegation to sub-agents). Its plan-related external tools:
+The orchestrator handles plan creation and execution directly (no delegation to sub-agents). Its plan-related and step execution external tools:
 ```yaml
 external = [
   "analyze_knowledge_sources",
@@ -699,7 +699,20 @@ external = [
   "propose_plan",
   "adjust_plan",
   "save_plan",
-  "execute_plan"
+  "execute_plan",
+  "update_plan_markdown",
+  "apply_topic_hierarchy",
+  "generate_initial_data",
+  "configure_grader",
+  "upload_dataset",
+  "run_evaluation",
+  "start_training",
+  "start_finetune_workflow",
+  "advance_to_step",
+  "update_dataset_readme",
+  "analyze_evaluation",
+  "analyze_training",
+  "get_training_metrics"
 ]
 ```
 

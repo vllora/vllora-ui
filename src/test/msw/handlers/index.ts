@@ -10,9 +10,11 @@ import { evaluationHandlers } from './evaluations';
 import { trainingJobHandlers } from './training-jobs';
 import { finetuneEvaluationHandlers } from './finetune-evaluations';
 import { analyticsHandlers } from './analytics';
+import { gatewayCrudHandlers } from './gateway-crud';
 
 export const allHandlers = [
   ...envHandlers,
+  ...gatewayCrudHandlers,
   ...datasetHandlers,
   ...evaluationHandlers,
   ...trainingJobHandlers,

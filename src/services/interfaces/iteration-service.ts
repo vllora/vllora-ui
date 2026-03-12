@@ -2,10 +2,7 @@
  * Iteration State Service Interface
  *
  * Abstraction over cross-iteration memory persistence.
- * Currently backed by IndexedDB (finetune-iteration-db.ts).
- * Will be swapped to gateway API adapter when iteration state endpoints are ready.
- *
- * Re-exports types directly from the DB module to ensure compatibility.
+ * Backed by Gateway API (api-iteration-adapter.ts).
  */
 
 export type {

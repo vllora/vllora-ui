@@ -1,8 +1,7 @@
 /**
  * Record Service Interface
  *
- * Abstraction over dataset record persistence. Currently backed by IndexedDB (datasets-db.ts).
- * Will be swapped to gateway API adapter when /finetune/workflows/{id}/records endpoints are ready.
+ * Abstraction over dataset record persistence. Backed by Gateway API (api-record-adapter.ts).
  */
 
 import type { DatasetRecord, DatasetEvaluation, Dataset } from '@/types/dataset-types';

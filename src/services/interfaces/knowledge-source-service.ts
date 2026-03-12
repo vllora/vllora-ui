@@ -2,10 +2,7 @@
  * Knowledge Source Service Interface
  *
  * Abstraction over knowledge source persistence.
- * Currently backed by IndexedDB (knowledge-sources-db.ts).
- * Will be swapped to gateway API adapter when knowledge source endpoints are ready.
- *
- * Re-exports types directly from the DB module to ensure compatibility.
+ * Backed by Gateway API (api-knowledge-source-adapter.ts).
  */
 
 import type {

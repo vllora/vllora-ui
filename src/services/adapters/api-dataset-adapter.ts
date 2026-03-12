@@ -60,13 +60,6 @@ export const apiDatasetAdapter: DatasetService = {
     return mapToFe(db);
   },
 
-  async getByBackendId(_backendId: string): Promise<Dataset | null> {
-    // In the API world, dataset ID === workflow ID === backend ID.
-    // backendDatasetId is the cloud upload ID, not the local workflow ID.
-    // This method is used for cloud dataset lookups — not applicable here.
-    return null;
-  },
-
   async getAll(): Promise<Dataset[]> {
     const response = await api.get(BASE);
     const workflows = await handleApiResponse<DbWorkflowResponse[]>(response);
@@ -95,11 +88,6 @@ export const apiDatasetAdapter: DatasetService = {
   async updateObjective(id: string, objective: string, _normalizedObjective?: string): Promise<void> {
     const response = await api.put(`${BASE}/${id}`, { objective });
     await handleApiResponse<DbWorkflowResponse>(response);
-  },
-
-  async updateBackendId(_id: string, _backendId: string): Promise<void> {
-    // backendDatasetId is the cloud upload ID — not stored in workflow table.
-    // TODO: Add a metadata field to the workflow table for this.
   },
 
   async updateTopicHierarchy(_id: string, _topics: TopicHierarchyConfig): Promise<void> {

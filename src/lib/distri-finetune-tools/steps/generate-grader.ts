@@ -346,9 +346,9 @@ export const generateGraderHandler: ToolHandler = async (params) => {
     await datasetService.updateEvalScript(workflow.datasetId, result.script);
 
     // Sync to backend if uploaded
-    if (dataset?.backendDatasetId) {
+    if (dataset) {
       try {
-        await updateBackendEvalScript(dataset.backendDatasetId, result.script);
+        await updateBackendEvalScript(dataset.id, result.script);
       } catch (err) {
         console.error('[generate_grader] Failed to sync to backend:', err);
       }

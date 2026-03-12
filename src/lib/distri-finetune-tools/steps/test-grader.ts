@@ -47,11 +47,12 @@ export async function runGraderTest(
       return { success: false, error: 'Grader must be configured first' };
     }
 
-    const backendDatasetId = await ensureDatasetUploaded(datasetId);
-    await updateDatasetEvalScript(backendDatasetId, dataset.evalScript);
+    // Ensure dataset is uploaded; the dataset ID is the backend dataset ID.
+    await ensureDatasetUploaded(datasetId);
+    await updateDatasetEvalScript(datasetId, dataset.evalScript);
 
     const evalResponse = await createEvaluation({
-      dataset_id: backendDatasetId,
+      dataset_id: datasetId,
       rollout_model_params: { model: rolloutModel },
       offset: 0,
       limit: sampleSize,

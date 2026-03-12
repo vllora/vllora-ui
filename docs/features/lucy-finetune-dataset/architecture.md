@@ -14,7 +14,7 @@ The Lucy Dataset Agent follows a **3-tier architecture** with tools executing lo
 │  ┌────────────────────────┐   ┌─────────────────────────────────────┐  │
 │  │ LucyDatasetAssistant   │   │    distri-finetune-tools/           │  │
 │  │ - Sidebar UI           │   │    - Workflow tools (4)             │  │
-│  │ - Auto-analysis        │   │    - Step tools (43)                │  │
+│  │ - Auto-analysis        │   │    - Step tools (47)                │  │
 │  │ - Quick actions        │   │    - Execute locally in browser     │  │
 │  └────────────────────────┘   └─────────────────────────────────────┘  │
 │           │                              │                              │
@@ -45,7 +45,7 @@ The Lucy Dataset Agent follows a **3-tier architecture** with tools executing lo
 │  ┌───────────────────────┐   ┌────────────────────────────────────────┐│
 │  │   AgentOrchestrator   │   │     vllora-finetune-agent.md           ││
 │  │   - Loads agent defs  │◄──│     - Model: gpt-4.1                   ││
-│  │   - Tool execution    │   │     - 16 external + 3 builtin tools    ││
+│  │   - Tool execution    │   │     - 24 external + 3 builtin tools    ││
 │  │   - Message routing   │   │     - max_iterations: 30               ││
 │  │   - Sub-agent mgmt    │   │     - 3 sub-agents (topics, workflow,  ││
 │  │                       │   │       data_generation)                  ││
@@ -73,7 +73,7 @@ The Lucy Dataset Agent follows a **3-tier architecture** with tools executing lo
 | External Tool Timeout | `600s` (10 min for user responses) |
 | Sub-Agents | `finetune_topics`, `finetune_workflow`, `data_generation` |
 | Builtin Tools | 3 (`final`, `write_todos`, `transfer_to_agent`) |
-| External Tools | 16 (`ask_follow_up`, `get_workflow_status`, `get_dataset_state`, `get_dataset_records`, `update_objective`, `analyze_knowledge_sources`, `search_knowledge`, `generate_topics`, `generate_grader`, `propose_plan`, `adjust_plan`, `save_plan`, `execute_plan`, `update_plan_markdown`, `generate_skill_package`, `download_skill_package`) |
+| External Tools | 24 (`ask_follow_up`, `get_workflow_status`, `get_dataset_state`, `get_dataset_records`, `update_objective`, `analyze_knowledge_sources`, `search_knowledge`, `generate_topics`, `generate_grader`, `propose_plan`, `adjust_plan`, `save_plan`, `execute_plan`, `update_plan_markdown`, `apply_topic_hierarchy`, `generate_initial_data`, `configure_grader`, `upload_dataset`, `run_evaluation`, `start_training`, `start_finetune_workflow`, `advance_to_step`, `update_dataset_readme`, `analyze_evaluation`, `analyze_training`, `get_training_metrics`) |
 
 The orchestrator is the main agent users interact with. It handles plan-first routing (detecting when to create plans from knowledge sources), delegates specialized work to sub-agents via `transfer_to_agent`, and calls some tools directly (plan system, knowledge analysis, dataset access).
 
@@ -92,7 +92,7 @@ The orchestrator delegates specialized tasks to 3 sub-agents via `transfer_to_ag
 | Sub-Agent | File | Purpose | External Tools |
 |-----------|------|---------|---------------|
 | `finetune_topics` | `finetune-topics-agent.md` | Topic hierarchy generation, display, manipulation | 5: `generate_topics`, `apply_topic_hierarchy`, `adjust_topic_hierarchy`, `get_topic_hierarchy`, `get_dataset_records` |
-| `finetune_workflow` | `finetune-workflow-agent.md` | Workflow operations — data generation, grading, training, deployment, skill packaging, evaluation analysis, inner loop iteration | 27: all workflow control + data ops + grader + training + packaging + evaluation analysis + analyze_evaluation tools |
+| `finetune_workflow` | `finetune-workflow-agent.md` | Workflow operations — data generation, grading, training, deployment, skill packaging, evaluation analysis, inner loop iteration | 28: all workflow control + data ops + grader + training + packaging + evaluation analysis + analyze_evaluation tools |
 | `data_generation` | `data-generation-agent.md` | Interactive data gen with knowledge sources, previews, iterative refinement | 12: knowledge source tools + generation tools + dataset access |
 
 **Delegation Flow:**
@@ -119,9 +119,9 @@ vllora_finetune_agent (Orchestrator)
 - **Tool overlap**: Some tools appear on multiple agents (e.g., `get_dataset_records` on orchestrator + topics + data_generation) to allow each agent to access what it needs
 
 **Agent Definition Files** (`gateway/agents/finetune/`):
-- `vllora-finetune-agent.md` — Orchestrator (16 external + 3 builtin tools)
+- `vllora-finetune-agent.md` — Orchestrator (24 external + 3 builtin tools)
 - `finetune-topics-agent.md` — Topics specialist (5 external tools)
-- `finetune-workflow-agent.md` — Workflow executor (28 external tools, inner loop + outer loop analysis)
+- `finetune-workflow-agent.md` — Workflow executor (29 external tools, inner loop + outer loop analysis)
 - `data-generation-agent.md` — Data generation specialist (12 external tools)
 
 ---
@@ -267,7 +267,7 @@ const tools = useMemo<DistriAnyTool[]>(
 );
 ```
 
-- `finetuneTools`: All 47 function tools (4 workflow + 43 step tools)
+- `finetuneTools`: All 51 function tools (4 workflow + 47 step tools)
 - `createAskFollowUpTool()`: UI tool for presenting options to users
 
 **Context Injection Pattern:**
@@ -454,7 +454,7 @@ interface FinetuneWorkflowState {
 ## Key Design Decisions
 
 ### 1. Frontend Tool Execution
-All 41 tools execute in the browser via JavaScript handlers. This allows:
+All 51 tools execute in the browser via JavaScript handlers. This allows:
 - Direct access to IndexedDB
 - No backend API needed for data operations
 - Real-time UI updates via emitter events
@@ -524,7 +524,7 @@ Workflow snapshots stored in IndexedDB enable:
 
    These must stay in sync manually across 4 agent definition files.
 
-2. **Browser-Only Execution** - All 41 tools execute in browser. For operations like `start_training` or `deploy_model`, consider:
+2. **Browser-Only Execution** - All 51 tools execute in browser. For operations like `start_training` or `deploy_model`, consider:
    - Access to GPU resources
    - Long-running jobs
    - Secure API key handling

@@ -430,10 +430,10 @@ export function getStepDetails({
     if (metrics.length) details.push({ type: "metric_grid", metrics });
   } else if (stepId === "upload") {
     const rows: Array<{ key: string; value: string }> = [];
-    if (dataset?.backendDatasetId) {
+    if (dataset?.id) {
       rows.push({
         key: "Backend ID",
-        value: truncateMiddle(dataset.backendDatasetId),
+        value: truncateMiddle(dataset.id),
       });
     }
     const alreadyUploaded = Boolean((r as Record<string, unknown> | null)?.already_uploaded);

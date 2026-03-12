@@ -690,9 +690,6 @@ interface Dataset {
   topicHierarchy?: TopicHierarchyConfig;  // Full topic tree (Step 1 output)
   evalScript?: string;                     // JavaScript evaluation script (Step 4 output)
 
-  // Backend sync
-  backendDatasetId?: string;  // ID from backend after upload
-
   // Statistics for UI display
   coverageStats?: CoverageStats;
   dryRunStats?: DryRunStats;

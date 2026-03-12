@@ -16,6 +16,8 @@ import { ReinforcementMetricsChart } from "../ReinforcementMetricsChart";
 
 interface ReinforcementMetricsSectionProps {
   jobId: string;
+  /** The workflow ID (same as dataset ID) — required for the API path */
+  workflowId: string;
   isLive?: boolean;
 }
 
@@ -23,6 +25,7 @@ const POLL_INTERVAL = 15_000;
 
 export function ReinforcementMetricsSection({
   jobId,
+  workflowId,
   isLive,
 }: ReinforcementMetricsSectionProps) {
   const [metrics, setMetrics] = useState<ReinforcementJobMetricPoint[]>([]);
@@ -31,17 +34,20 @@ export function ReinforcementMetricsSection({
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const hasDataRef = useRef(false);
+
   const fetchMetrics = useCallback(
     async (showRefresh: boolean) => {
       if (showRefresh) setIsRefreshing(true);
       try {
-        const response = await getReinforcementJobMetrics(jobId);
+        const response = await getReinforcementJobMetrics(workflowId, jobId);
         setMetrics(response.metrics);
+        hasDataRef.current = response.metrics.length > 0;
         setError(null);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Failed to fetch metrics";
         // Don't overwrite existing data on poll failure
-        if (metrics.length === 0) {
+        if (!hasDataRef.current) {
           setError(message);
         }
       } finally {
@@ -49,7 +55,7 @@ export function ReinforcementMetricsSection({
         setIsRefreshing(false);
       }
     },
-    [jobId, metrics.length]
+    [jobId, workflowId]
   );
 
   // Initial fetch

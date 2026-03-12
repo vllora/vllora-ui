@@ -13,7 +13,7 @@ import type { ToolHandler } from '../types';
 
 export const uploadDatasetHandler: ToolHandler = async (params) => {
   try {
-    const { workflow_id, force_reupload = false } = params;
+    const { workflow_id } = params;
 
     if (!workflow_id || typeof workflow_id !== 'string') {
       return { success: false, error: 'workflow_id is required' };
@@ -30,15 +30,8 @@ export const uploadDatasetHandler: ToolHandler = async (params) => {
       return { success: false, error: 'Dataset not found' };
     }
 
-    // Check if already uploaded and not forcing reupload
-    if (dataset.backendDatasetId && !force_reupload) {
-      return {
-        success: true,
-        already_uploaded: true,
-        backend_dataset_id: dataset.backendDatasetId,
-        message: 'Dataset already uploaded to backend. Use force_reupload=true to re-upload.',
-      };
-    }
+    // The dataset ID is the backend dataset ID — they are always the same.
+    const datasetId = dataset.id;
 
     // Get records
     const records = await recordService.getByDatasetId(workflow.datasetId);
@@ -53,10 +46,7 @@ export const uploadDatasetHandler: ToolHandler = async (params) => {
     };
 
     // Upload to backend (includes topic hierarchy and evaluator if configured)
-    const { backendDatasetId, jsonlContent } = await uploadDatasetForFinetune(datasetWithRecords);
-
-    // Save backend dataset ID to local dataset
-    await datasetService.updateBackendId(workflow.datasetId, backendDatasetId);
+    const { jsonlContent } = await uploadDatasetForFinetune(datasetWithRecords);
 
     // Count what was included
     const hasTopicHierarchy = !!dataset.topicHierarchy?.hierarchy?.length;
@@ -64,7 +54,7 @@ export const uploadDatasetHandler: ToolHandler = async (params) => {
 
     return {
       success: true,
-      backend_dataset_id: backendDatasetId,
+      backend_dataset_id: datasetId,
       records_uploaded: records.length,
       jsonl_size_bytes: jsonlContent.length,
       included: {
