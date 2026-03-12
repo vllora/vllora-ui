@@ -67,12 +67,15 @@ interface TopicMetadata {
   normalizedPromptSegment?: string;
 }
 
-/** Flatten a FE hierarchy tree into flat rows with parent_id for the BE */
+type FlatTopic = { id: string; name: string; parent_id: string | null; selected: boolean; source_chunk_refs: TopicMetadata | null };
+
+/** Flatten a FE hierarchy tree into flat rows with parent_id for the BE.
+ *  Uses UUIDs for DB IDs to avoid cross-workflow collisions. */
 function flattenHierarchy(
   nodes: readonly TopicHierarchyNode[],
   parentId: string | null,
-): Array<{ id: string; name: string; parent_id: string | null; selected: boolean; source_chunk_refs: TopicMetadata | null }> {
-  const result: Array<{ id: string; name: string; parent_id: string | null; selected: boolean; source_chunk_refs: TopicMetadata | null }> = [];
+): FlatTopic[] {
+  const result: FlatTopic[] = [];
   for (const node of nodes) {
     const meta: TopicMetadata = {};
     if (node.sourceChunkRefs?.length) meta.sourceChunkRefs = node.sourceChunkRefs;
@@ -80,8 +83,9 @@ function flattenHierarchy(
     if (node.promptTemplate) meta.promptTemplate = node.promptTemplate;
     if (node.normalizedPromptSegment) meta.normalizedPromptSegment = node.normalizedPromptSegment;
 
+    const dbId = crypto.randomUUID();
     result.push({
-      id: node.id,
+      id: dbId,
       name: node.name,
       parent_id: parentId,
       selected: node.selected ?? true,
@@ -89,7 +93,7 @@ function flattenHierarchy(
     });
 
     if (node.children?.length) {
-      result.push(...flattenHierarchy(node.children, node.id));
+      result.push(...flattenHierarchy(node.children, dbId));
     }
   }
   return result;

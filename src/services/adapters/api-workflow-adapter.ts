@@ -222,7 +222,16 @@ export const apiWorkflowAdapter: WorkflowService = {
   async get(id: string): Promise<FinetuneWorkflowState | null> {
     const row = await fetchWorkflowRow(id);
     if (!row) return null;
-    return extractWorkflow(row);
+    const workflow = extractWorkflow(row);
+    if (workflow) return workflow;
+    // Row exists but has no state blob yet (e.g. just created via
+    // createDataset). Return a default workflow with the objective from
+    // the DB row so tools don't fail with "Workflow not found".
+    const defaultWf = createDefaultWorkflow(id);
+    if (row.objective) {
+      return { ...defaultWf, trainingGoals: row.objective };
+    }
+    return defaultWf;
   },
 
   async getByDataset(workflowId: string): Promise<FinetuneWorkflowState | null> {

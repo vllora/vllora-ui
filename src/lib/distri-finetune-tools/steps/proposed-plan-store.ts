@@ -1,53 +1,14 @@
 /**
  * Proposed Plan Store
  *
- * Persists plans to IndexedDB with lifecycle status tracking.
- * Plans survive page refresh and track their full lifecycle:
- * proposed → approved → executing → completed/failed/dismissed
+ * In-memory plan store with lifecycle status tracking.
+ * Plans are session-scoped — they don't survive page refresh,
+ * which is fine because the agent session doesn't either.
  */
 
 import type { Plan } from "./propose-plan";
 import type { ExecutionProgress } from "./execute-plan";
 import { normalizePlanSteps } from "./plan-step-normalization";
-
-// =============================================================================
-// Local IndexedDB access for proposedPlans store
-// =============================================================================
-
-const DB_NAME = 'vllora-finetune';
-const DB_VERSION = 7;
-let dbInstance: IDBDatabase | null = null;
-
-function getDB(): Promise<IDBDatabase> {
-  if (dbInstance) return Promise.resolve(dbInstance);
-
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-    request.onerror = () => reject(request.error);
-
-    request.onsuccess = () => {
-      dbInstance = request.result;
-
-      dbInstance.onversionchange = () => {
-        dbInstance?.close();
-        dbInstance = null;
-      };
-      dbInstance.onclose = () => {
-        dbInstance = null;
-      };
-
-      resolve(dbInstance);
-    };
-
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-      if (!db.objectStoreNames.contains('proposedPlans')) {
-        db.createObjectStore('proposedPlans', { keyPath: 'workflowId' });
-      }
-    };
-  });
-}
 
 // =============================================================================
 // Types
@@ -64,63 +25,41 @@ export interface StoredPlan {
   updatedAt: number;
 }
 
-// Backward compat alias
-interface StoredProposedPlan {
-  workflowId: string;
-  plan: Plan;
-  status?: PlanStatus;
-  executionProgress?: ExecutionProgress | null;
-  createdAt: number;
-  updatedAt?: number;
-}
+// =============================================================================
+// In-memory store
+// =============================================================================
+
+const planStore = new Map<string, StoredPlan>();
+const SNAPSHOT_KEY_PREFIX = 'previous:';
 
 // =============================================================================
 // Helpers
 // =============================================================================
 
-function hasStore(db: IDBDatabase): boolean {
-  if (!db.objectStoreNames.contains("proposedPlans")) {
-    console.error(
-      "[proposed-plan-store] proposedPlans store does not exist! DB version:",
-      db.version,
-    );
-    return false;
-  }
-  return true;
-}
-
-function normalizeStored(raw: StoredProposedPlan): StoredPlan {
-  const rawSteps = Array.isArray(raw.plan.steps_to_execute)
-    ? (raw.plan.steps_to_execute as unknown as string[])
+function normalizePlan(plan: Plan): Plan {
+  const rawSteps = Array.isArray(plan.steps_to_execute)
+    ? (plan.steps_to_execute as unknown as string[])
     : undefined;
   const stepNormalization = normalizePlanSteps(rawSteps, { fallbackToDefaultWhenEmpty: true });
 
-  const normalizedPlan: Plan = stepNormalization.hadInput
+  const normalized: Plan = stepNormalization.hadInput
     ? {
-        ...raw.plan,
+        ...plan,
         steps_to_execute: stepNormalization.steps as unknown as Plan["steps_to_execute"],
       }
-    : raw.plan;
+    : plan;
 
-  // Backward compat: old plans may not have plan_markdown.
-  // Generate a minimal fallback so the frontend can render something.
-  if (!normalizedPlan.plan_markdown) {
-    const title = normalizedPlan.title || normalizedPlan.dataset_name || 'Plan';
-    const objective = normalizedPlan.objective ? `> ${normalizedPlan.objective}\n\n` : '';
-    const steps = (normalizedPlan.execution_steps ?? [])
+  // Generate fallback plan_markdown if missing
+  if (!normalized.plan_markdown) {
+    const title = normalized.title || normalized.dataset_name || 'Plan';
+    const objective = normalized.objective ? `> ${normalized.objective}\n\n` : '';
+    const steps = (normalized.execution_steps ?? [])
       .map(s => `- [ ] ${s.step}`)
       .join('\n');
-    normalizedPlan.plan_markdown = `# ${title}\n\n${objective}${steps || '_No steps configured_'}`;
+    normalized.plan_markdown = `# ${title}\n\n${objective}${steps || '_No steps configured_'}`;
   }
 
-  return {
-    workflowId: raw.workflowId,
-    plan: normalizedPlan,
-    status: raw.status || 'proposed',
-    executionProgress: raw.executionProgress || null,
-    createdAt: raw.createdAt,
-    updatedAt: raw.updatedAt || raw.createdAt,
-  };
+  return normalized;
 }
 
 // =============================================================================
@@ -128,91 +67,40 @@ function normalizeStored(raw: StoredProposedPlan): StoredPlan {
 // =============================================================================
 
 /**
- * Save a proposed plan for a dataset (status: 'proposed')
+ * Save a proposed plan (status: 'proposed')
  */
 export async function saveProposedPlan(
   workflowId: string,
   plan: Plan,
 ): Promise<void> {
-  try {
-    const db = await getDB();
-    if (!hasStore(db)) return;
-
-    const rawSteps = Array.isArray(plan.steps_to_execute)
-      ? (plan.steps_to_execute as unknown as string[])
-      : undefined;
-    const stepNormalization = normalizePlanSteps(rawSteps, { fallbackToDefaultWhenEmpty: true });
-    const normalizedPlan: Plan = stepNormalization.hadInput
-      ? {
-          ...plan,
-          steps_to_execute: stepNormalization.steps as unknown as Plan["steps_to_execute"],
-        }
-      : plan;
-
-    const stored: StoredPlan = {
-      workflowId,
-      plan: normalizedPlan,
-      status: 'proposed',
-      executionProgress: null,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction("proposedPlans", "readwrite");
-      const store = tx.objectStore("proposedPlans");
-      const request = store.put(stored);
-
-      request.onsuccess = () => {
-        console.log("[proposed-plan-store] Plan saved for dataset:", workflowId, "status: proposed");
-        resolve();
-      };
-      request.onerror = () => reject(request.error);
-    });
-  } catch (error) {
-    console.error("[proposed-plan-store] Failed to save plan:", error);
-  }
+  const stored: StoredPlan = {
+    workflowId,
+    plan: normalizePlan(plan),
+    status: 'proposed',
+    executionProgress: null,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+  planStore.set(workflowId, stored);
 }
 
 /**
- * Get the full stored plan record for a dataset (includes status + execution progress)
+ * Get the full stored plan record (includes status + execution progress)
  */
 export async function getStoredPlan(
   workflowId: string,
 ): Promise<StoredPlan | null> {
-  try {
-    const db = await getDB();
-    if (!hasStore(db)) return null;
-
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction("proposedPlans", "readonly");
-      const store = tx.objectStore("proposedPlans");
-      const request = store.get(workflowId);
-
-      request.onsuccess = () => {
-        const raw = request.result as StoredProposedPlan | undefined;
-        if (!raw) {
-          resolve(null);
-          return;
-        }
-        resolve(normalizeStored(raw));
-      };
-      request.onerror = () => reject(request.error);
-    });
-  } catch (error) {
-    console.error("[proposed-plan-store] Failed to get stored plan:", error);
-    return null;
-  }
+  return planStore.get(workflowId) ?? null;
 }
 
 /**
- * Get the proposed plan for a dataset (backward compat — returns just the plan data)
+ * Get the proposed plan (returns just the plan data)
  */
 export async function getProposedPlan(
   workflowId: string,
 ): Promise<Plan | null> {
-  const stored = await getStoredPlan(workflowId);
-  return stored?.plan || null;
+  const stored = planStore.get(workflowId);
+  return stored?.plan ?? null;
 }
 
 /**
@@ -222,36 +110,14 @@ export async function updatePlanStatus(
   workflowId: string,
   status: PlanStatus,
 ): Promise<void> {
-  try {
-    const stored = await getStoredPlan(workflowId);
-    if (!stored) {
-      console.warn("[proposed-plan-store] No plan found to update status for:", workflowId);
-      return;
-    }
+  const stored = planStore.get(workflowId);
+  if (!stored) return;
 
-    const db = await getDB();
-    if (!hasStore(db)) return;
-
-    const updated: StoredPlan = {
-      ...stored,
-      status,
-      updatedAt: Date.now(),
-    };
-
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction("proposedPlans", "readwrite");
-      const store = tx.objectStore("proposedPlans");
-      const request = store.put(updated);
-
-      request.onsuccess = () => {
-        console.log("[proposed-plan-store] Status updated:", workflowId, "→", status);
-        resolve();
-      };
-      request.onerror = () => reject(request.error);
-    });
-  } catch (error) {
-    console.error("[proposed-plan-store] Failed to update plan status:", error);
-  }
+  planStore.set(workflowId, {
+    ...stored,
+    status,
+    updatedAt: Date.now(),
+  });
 }
 
 /**
@@ -261,31 +127,15 @@ export async function updatePlanExecution(
   workflowId: string,
   progress: ExecutionProgress,
 ): Promise<void> {
-  try {
-    const stored = await getStoredPlan(workflowId);
-    if (!stored) return;
+  const stored = planStore.get(workflowId);
+  if (!stored) return;
 
-    const db = await getDB();
-    if (!hasStore(db)) return;
-
-    const updated: StoredPlan = {
-      ...stored,
-      status: 'executing',
-      executionProgress: progress,
-      updatedAt: Date.now(),
-    };
-
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction("proposedPlans", "readwrite");
-      const store = tx.objectStore("proposedPlans");
-      const request = store.put(updated);
-
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
-  } catch (error) {
-    console.error("[proposed-plan-store] Failed to update execution:", error);
-  }
+  planStore.set(workflowId, {
+    ...stored,
+    status: 'executing',
+    executionProgress: progress,
+    updatedAt: Date.now(),
+  });
 }
 
 /**
@@ -295,34 +145,15 @@ export async function completePlan(
   workflowId: string,
   finalProgress: ExecutionProgress | null,
 ): Promise<void> {
-  try {
-    const stored = await getStoredPlan(workflowId);
-    if (!stored) return;
+  const stored = planStore.get(workflowId);
+  if (!stored) return;
 
-    const db = await getDB();
-    if (!hasStore(db)) return;
-
-    const updated: StoredPlan = {
-      ...stored,
-      status: 'completed',
-      executionProgress: finalProgress ?? stored.executionProgress,
-      updatedAt: Date.now(),
-    };
-
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction("proposedPlans", "readwrite");
-      const store = tx.objectStore("proposedPlans");
-      const request = store.put(updated);
-
-      request.onsuccess = () => {
-        console.log("[proposed-plan-store] Plan completed:", workflowId);
-        resolve();
-      };
-      request.onerror = () => reject(request.error);
-    });
-  } catch (error) {
-    console.error("[proposed-plan-store] Failed to complete plan:", error);
-  }
+  planStore.set(workflowId, {
+    ...stored,
+    status: 'completed',
+    executionProgress: finalProgress ?? stored.executionProgress,
+    updatedAt: Date.now(),
+  });
 }
 
 /**
@@ -332,178 +163,72 @@ export async function failPlan(
   workflowId: string,
   finalProgress: ExecutionProgress | null,
 ): Promise<void> {
-  try {
-    const stored = await getStoredPlan(workflowId);
-    if (!stored) return;
+  const stored = planStore.get(workflowId);
+  if (!stored) return;
 
-    const db = await getDB();
-    if (!hasStore(db)) return;
-
-    const updated: StoredPlan = {
-      ...stored,
-      status: 'failed',
-      executionProgress: finalProgress ?? stored.executionProgress,
-      updatedAt: Date.now(),
-    };
-
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction("proposedPlans", "readwrite");
-      const store = tx.objectStore("proposedPlans");
-      const request = store.put(updated);
-
-      request.onsuccess = () => {
-        console.log("[proposed-plan-store] Plan failed:", workflowId);
-        resolve();
-      };
-      request.onerror = () => reject(request.error);
-    });
-  } catch (error) {
-    console.error("[proposed-plan-store] Failed to mark plan as failed:", error);
-  }
+  planStore.set(workflowId, {
+    ...stored,
+    status: 'failed',
+    executionProgress: finalProgress ?? stored.executionProgress,
+    updatedAt: Date.now(),
+  });
 }
 
 /**
  * Update only the plan_markdown field (preserves status, executionProgress, etc.)
- * Used by the update_plan_markdown tool during agent-driven execution.
  */
 export async function updateStoredPlanMarkdown(
   workflowId: string,
   planMarkdown: string,
 ): Promise<void> {
-  try {
-    const stored = await getStoredPlan(workflowId);
-    if (!stored) {
-      console.warn("[proposed-plan-store] No plan found to update markdown for:", workflowId);
-      return;
-    }
+  const stored = planStore.get(workflowId);
+  if (!stored) return;
 
-    const db = await getDB();
-    if (!hasStore(db)) return;
-
-    const updated: StoredPlan = {
-      ...stored,
-      plan: { ...stored.plan, plan_markdown: planMarkdown },
-      updatedAt: Date.now(),
-    };
-
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction("proposedPlans", "readwrite");
-      const store = tx.objectStore("proposedPlans");
-      const request = store.put(updated);
-
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
-  } catch (error) {
-    console.error("[proposed-plan-store] Failed to update plan markdown:", error);
-  }
+  planStore.set(workflowId, {
+    ...stored,
+    plan: { ...stored.plan, plan_markdown: planMarkdown },
+    updatedAt: Date.now(),
+  });
 }
 
 /**
- * Clear the plan for a dataset (on dismiss — removes entirely)
+ * Clear the plan (on dismiss — removes entirely)
  */
 export async function clearProposedPlan(workflowId: string): Promise<void> {
-  try {
-    const db = await getDB();
-
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction("proposedPlans", "readwrite");
-      const store = tx.objectStore("proposedPlans");
-      const request = store.delete(workflowId);
-
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
-  } catch (error) {
-    console.error("[proposed-plan-store] Failed to clear plan:", error);
-  }
+  planStore.delete(workflowId);
 }
 
 /**
- * Check if a dataset has a proposed plan
+ * Check if a workflow has a proposed plan
  */
 export async function hasProposedPlan(workflowId: string): Promise<boolean> {
-  const stored = await getStoredPlan(workflowId);
-  return stored !== null && stored.status === 'proposed';
+  const stored = planStore.get(workflowId);
+  return stored !== null && stored !== undefined && stored.status === 'proposed';
 }
 
 // =============================================================================
 // Plan Snapshots (for diff computation in save_plan)
 // =============================================================================
 
-const SNAPSHOT_KEY_PREFIX = 'previous:';
-
 /**
  * Save snapshot of the last applied plan (for diff computation in save_plan).
- * Uses a separate key prefix so it doesn't interfere with the main plan lifecycle.
  */
 export async function savePreviousPlanSnapshot(workflowId: string, plan: Plan): Promise<void> {
-  try {
-    const db = await getDB();
-    if (!hasStore(db)) return;
-
-    const rawSteps = Array.isArray(plan.steps_to_execute)
-      ? (plan.steps_to_execute as unknown as string[])
-      : undefined;
-    const stepNormalization = normalizePlanSteps(rawSteps, { fallbackToDefaultWhenEmpty: true });
-    const normalizedPlan: Plan = stepNormalization.hadInput
-      ? {
-          ...plan,
-          steps_to_execute: stepNormalization.steps as unknown as Plan["steps_to_execute"],
-        }
-      : plan;
-
-    const snapshot: StoredPlan = {
-      workflowId: `${SNAPSHOT_KEY_PREFIX}${workflowId}`,
-      plan: normalizedPlan,
-      status: 'proposed',
-      executionProgress: null,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction("proposedPlans", "readwrite");
-      const store = tx.objectStore("proposedPlans");
-      const request = store.put(snapshot);
-
-      request.onsuccess = () => {
-        console.log("[proposed-plan-store] Previous plan snapshot saved for dataset:", workflowId);
-        resolve();
-      };
-      request.onerror = () => reject(request.error);
-    });
-  } catch (error) {
-    console.error("[proposed-plan-store] Failed to save previous plan snapshot:", error);
-  }
+  const snapshot: StoredPlan = {
+    workflowId: `${SNAPSHOT_KEY_PREFIX}${workflowId}`,
+    plan: normalizePlan(plan),
+    status: 'proposed',
+    executionProgress: null,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+  planStore.set(snapshot.workflowId, snapshot);
 }
 
 /**
  * Get the last applied plan snapshot (null if first proposal).
- * Used by save_plan to compute diff against previous plan.
  */
 export async function getPreviousPlanSnapshot(workflowId: string): Promise<Plan | null> {
-  try {
-    const db = await getDB();
-    if (!hasStore(db)) return null;
-
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction("proposedPlans", "readonly");
-      const store = tx.objectStore("proposedPlans");
-      const request = store.get(`${SNAPSHOT_KEY_PREFIX}${workflowId}`);
-
-      request.onsuccess = () => {
-        const raw = request.result as StoredProposedPlan | undefined;
-        if (!raw) {
-          resolve(null);
-          return;
-        }
-        resolve(normalizeStored(raw).plan);
-      };
-      request.onerror = () => reject(request.error);
-    });
-  } catch (error) {
-    console.error("[proposed-plan-store] Failed to get previous plan snapshot:", error);
-    return null;
-  }
+  const snapshot = planStore.get(`${SNAPSHOT_KEY_PREFIX}${workflowId}`);
+  return snapshot?.plan ?? null;
 }
