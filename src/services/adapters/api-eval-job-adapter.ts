@@ -66,8 +66,7 @@ export const apiEvalJobAdapter: EvalJobService = {
   },
 
   async get(id: string): Promise<EvalJob | null> {
-    // The route requires workflow_id, but handler ignores it. Use placeholder.
-    const response = await api.get(`/finetune/workflows/_/eval-jobs/${id}`);
+    const response = await api.get(`/finetune/eval-jobs/${id}`);
     if (!response.ok && response.status === 404) return null;
     const db = await handleApiResponse<DbEvalJobResponse>(response);
     return mapToFe(db);
@@ -119,14 +118,13 @@ export const apiEvalJobAdapter: EvalJobService = {
 
     if (Object.keys(payload).length === 0) return this.get(id);
 
-    // Route requires workflow_id but handler ignores it
-    const response = await api.patch(`/finetune/workflows/_/eval-jobs/${id}`, payload);
+    const response = await api.patch(`/finetune/eval-jobs/${id}`, payload);
     const db = await handleApiResponse<DbEvalJobResponse>(response);
     return mapToFe(db);
   },
 
   async delete(id: string): Promise<void> {
-    const response = await api.delete(`/finetune/workflows/_/eval-jobs/${id}`);
+    const response = await api.delete(`/finetune/eval-jobs/${id}`);
     await handleApiResponse<{ deleted: boolean }>(response);
   },
 
