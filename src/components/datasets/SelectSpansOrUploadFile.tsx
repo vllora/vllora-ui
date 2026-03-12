@@ -52,7 +52,7 @@ export function SelectSpansOrUploadFile() {
           <ArrowLeft className="h-4 w-4" />
           Back
         </Button>
-        <h1 className="text-2xl font-bold">Create New Experiment</h1>
+        <h1 className="text-2xl font-bold">Create New Workflow</h1>
       </div>
 
       {/* Two-column layout - 3:1 ratio using grid */}

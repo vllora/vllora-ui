@@ -745,7 +745,7 @@ export function DatasetDetailContentV2() {
               }
             >
               <WorkspaceWelcome
-                datasetName={dataset.name || "Untitled Experiment"}
+                datasetName={dataset.name || "Untitled Workflow"}
                 onOpenTab={handleOpenTab}
                 recordCount={sortedRecords.length}
                 generatedCount={insights.generatedRecords}

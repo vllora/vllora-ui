@@ -215,7 +215,7 @@ export function ExecutionProgressCard({
             </div>
             <div className="text-center">
               <p className="text-sm font-medium text-foreground">Setup Complete</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Your experiment is ready for training</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Your workflow is ready for training</p>
             </div>
             <div className="flex items-center gap-2 w-full">
               <Button

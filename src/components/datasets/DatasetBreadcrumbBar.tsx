@@ -27,7 +27,7 @@ export function DatasetTitleBar() {
   const [editValue, setEditValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const datasetName = dataset?.name || "Untitled Experiment";
+  const datasetName = dataset?.name || "Untitled Workflow";
 
   const handleStartEdit = () => {
     setEditValue(datasetName);

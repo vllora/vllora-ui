@@ -52,7 +52,7 @@ export function DatasetsListHeader({
         <Input
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search experiments..."
+          placeholder="Search workflows..."
           className="pl-9 bg-transparent border-border/50 focus-visible:ring-1 focus-visible:ring-[rgb(var(--theme-500))]"
         />
       </div>
@@ -78,11 +78,11 @@ export function DatasetsListHeader({
       {/* Sort dropdown */}
       <DatasetSortDropdown activeSort={activeSort} onSortChange={onSortChange} />
 
-      {/* Count + New Experiment button */}
+      {/* Count + New Workflow button */}
       <div className="flex items-center gap-3 ml-auto">
         {totalCount !== undefined && (
           <span className="text-xs text-muted-foreground/50 tabular-nums">
-            {totalCount} experiment{totalCount !== 1 ? "s" : ""}
+            {totalCount} workflow{totalCount !== 1 ? "s" : ""}
           </span>
         )}
         <Link
@@ -90,7 +90,7 @@ export function DatasetsListHeader({
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--theme-500))] text-white hover:bg-[rgb(var(--theme-600))] transition-colors shrink-0"
         >
           <Plus className="w-3.5 h-3.5" />
-          New Experiment
+          New Workflow
         </Link>
       </div>
     </div>

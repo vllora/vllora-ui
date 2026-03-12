@@ -85,8 +85,8 @@ export function EmptyRecordsState({
     const prompt = hasTopicHierarchy
       ? "Generate training data to fill my topics."
       : datasetObjective
-        ? "Help me generate training data for this experiment."
-        : "Help me get started with this experiment.";
+        ? "Help me generate training data for this workflow."
+        : "Help me get started with this workflow.";
     emitter.emit("vllora_lucy_prompt", { prompt });
   };
 
@@ -140,13 +140,13 @@ export function EmptyRecordsState({
         {/* Title */}
         <div className="space-y-2">
           <h3 className="text-lg font-semibold text-foreground">
-            {hasTopicHierarchy ? "Your topics are ready for data" : "Get started with your experiment"}
+            {hasTopicHierarchy ? "Your topics are ready for data" : "Get started with your workflow"}
           </h3>
           <p className="text-sm text-muted-foreground leading-relaxed">
             {hasTopicHierarchy
               ? "Generate training data to fill your topics, or import existing records."
               : datasetObjective
-                ? "Your experiment is ready. Follow these three stages to fine-tune your model."
+                ? "Your workflow is ready. Follow these three stages to fine-tune your model."
                 : "Define your training goal and follow three stages to fine-tune your model."}
           </p>
         </div>

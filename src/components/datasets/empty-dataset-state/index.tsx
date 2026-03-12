@@ -238,7 +238,7 @@ export function EmptyDatasetsState() {
       }
     } catch (error) {
       console.error("Failed to create dataset:", error);
-      toast.error("Failed to create experiment");
+      toast.error("Failed to create workflow");
       setIsCreating(false);
     }
   };
@@ -266,7 +266,7 @@ export function EmptyDatasetsState() {
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-[rgba(var(--theme-500),0.15)] bg-[rgba(var(--theme-500),0.05)] mb-6">
           <Sparkles className="w-3 h-3 text-[rgba(var(--theme-500),0.7)]" />
           <span className="text-[11px] font-medium text-[rgba(var(--theme-500),0.8)] tracking-wide uppercase">
-            New Experiment
+            New Workflow
           </span>
         </div>
 

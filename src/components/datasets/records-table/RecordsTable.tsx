@@ -88,7 +88,7 @@ export function RecordsTable({
   records,
   datasetId,
   isLoading = false,
-  emptyMessage: _emptyMessage = "No records in this experiment",
+  emptyMessage: _emptyMessage = "No records in this workflow",
   showHeader = false,
   showFooter = false,
   maxRecords = 0,

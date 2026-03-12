@@ -14,7 +14,7 @@ export function DatasetsNoResultsState({ searchQuery }: DatasetsNoResultsStatePr
   return (
     <div className="text-center py-12 text-muted-foreground">
       <Search className="w-12 h-12 mx-auto mb-4 opacity-50" />
-      <p className="text-lg">No experiments match "{searchQuery}"</p>
+      <p className="text-lg">No workflows match "{searchQuery}"</p>
       <p className="text-sm mt-1">Try a different search term</p>
     </div>
   );

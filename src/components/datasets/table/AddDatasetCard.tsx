@@ -18,7 +18,7 @@ export function AddDatasetCard() {
         <div className="w-10 h-10 rounded-xl bg-muted/50 group-hover:bg-[rgba(var(--theme-500),0.1)] flex items-center justify-center mb-3 transition-colors">
           <Plus className="w-5 h-5 text-muted-foreground group-hover:text-[rgb(var(--theme-500))] transition-colors" />
         </div>
-        <p className="font-semibold text-sm text-foreground mb-1">New Experiment</p>
+        <p className="font-semibold text-sm text-foreground mb-1">New Workflow</p>
         <p className="text-[11px] text-muted-foreground/60 flex items-center gap-1">
           <Sparkles className="w-3 h-3" />
           AI-assisted setup

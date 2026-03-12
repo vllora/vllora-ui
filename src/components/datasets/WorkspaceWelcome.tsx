@@ -2,7 +2,7 @@
  * WorkspaceWelcome
  *
  * Clean welcome state shown when all workspace tabs are closed.
- * Displays experiment statistics at a glance, plus quick-action cards
+ * Displays workflow statistics at a glance, plus quick-action cards
  * matching explorer sidebar sections to reopen any tab.
  *
  * Consumes DryRunJobsContext and FinetuneJobsContext directly (rendered
@@ -188,7 +188,7 @@ export function WorkspaceWelcome({
             {datasetName}
           </h2>
           <p className="text-xs text-zinc-500">
-            Experiment overview
+            Workflow overview
           </p>
         </div>
 

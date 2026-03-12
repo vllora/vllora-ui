@@ -13,13 +13,13 @@ export function DatasetsEmptyState() {
   return (
     <EmptyStateTemplate
       icon={Database}
-      heading="No experiments yet"
-      description="Create your first experiment to start preparing training data."
+      heading="No workflows yet"
+      description="Create your first workflow to start preparing training data."
       action={
         <Button asChild className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white">
           <Link to="/finetune/new">
             <Plus className="w-4 h-4" />
-            Create Experiment
+            Create Workflow
           </Link>
         </Button>
       }

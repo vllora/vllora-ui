@@ -35,7 +35,7 @@ export function DatasetBreadcrumb({
         className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all"
       >
         <Database className="w-3.5 h-3.5" />
-        <span>Experiments</span>
+        <span>Workflows</span>
       </button>
       <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />
       {datasets && datasets.length > 1 && onSelectDataset ? (

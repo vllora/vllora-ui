@@ -137,7 +137,7 @@ export function RecordsAnalyticsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[90vw] h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Experiment Analytics</DialogTitle>
+          <DialogTitle>Workflow Analytics</DialogTitle>
         </DialogHeader>
 
         {isLoading ? (
