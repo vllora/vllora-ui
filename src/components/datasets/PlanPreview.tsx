@@ -291,7 +291,7 @@ function PlanEmptyView({
 
   // Detect when Lucy is actively streaming (covers the gap between the user
   // asking for a plan and Lucy actually calling propose_plan — e.g. she may
-  // run get_dataset_state or analyze_knowledge_sources first).
+  // run get_workflow_state or analyze_knowledge_sources first).
   const isLucyStreaming = useChatStateStore((state) => state.isStreaming);
 
   // Get processing source details for progress display

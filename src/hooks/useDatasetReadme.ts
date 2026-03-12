@@ -1,7 +1,7 @@
 /**
  * useDatasetReadme Hook
  *
- * Exposes the README stored on the dataset (written by Lucy via update_dataset_readme tool).
+ * Exposes the README stored on the dataset (written by Lucy via update_workflow_readme tool).
  * No auto-generation or template fallback — README is agent-authored only.
  */
 

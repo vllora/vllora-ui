@@ -17,7 +17,7 @@ import type { Plan } from './propose-plan';
 import type { TopicHierarchyNode } from '@/types/dataset-types';
 // NOTE: executeFinetuneTool is imported lazily (dynamic import) inside
 // executeDynamicSteps() to avoid a circular dependency:
-//   execute-plan → ../index → ./steps/index → get-dataset-state → execute-plan
+//   execute-plan → ../index → ./steps/index → get-workflow-state → execute-plan
 
 // Import step handlers
 import { applyTopicHierarchyHandler } from './apply-hierarchy';

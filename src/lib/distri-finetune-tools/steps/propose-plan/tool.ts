@@ -18,7 +18,7 @@ each step you plan to execute. After approval, call tools directly and use
 update_plan_markdown to check off completed steps.
 
 Workflow:
-1. Assess dataset state (use get_dataset_state)
+1. Assess dataset state (use get_workflow_state)
 2. If needed, analyze knowledge sources (use analyze_knowledge_sources)
 3. Construct a plan with plan_markdown containing the full plan + checklist
 4. Call this tool to show the plan to the user

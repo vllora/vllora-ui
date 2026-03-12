@@ -100,7 +100,7 @@ export interface SanitizationStats {
   recommendations: string[];
 }
 
-// Dataset statistics computed by get_dataset_state tool
+// Dataset statistics computed by get_workflow_state tool
 // Stored on dataset for UI display and agent reference
 export interface DatasetStats {
   // Record counts
@@ -353,7 +353,7 @@ export interface Dataset {
   knowledgeCoverageStats?: KnowledgeCoverageStats;
   // Dry run statistics for UI display (updated by run_evaluation)
   evalStats?: EvalStats;
-  // Dataset statistics for UI display (updated by get_dataset_state)
+  // Dataset statistics for UI display (updated by get_workflow_state)
   stats?: DatasetStats;
   // Training configuration (from sample or user-configured)
   trainingConfig?: SampleTrainingConfig;

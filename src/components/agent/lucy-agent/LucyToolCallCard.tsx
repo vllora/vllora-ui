@@ -32,15 +32,8 @@ const PROGRESS_TOOLS = new Set([
 // Helpers
 // ============================================================================
 
-/** Display name overrides for tools where the internal name differs from user-facing text */
-const TOOL_DISPLAY_NAMES: Record<string, string> = {
-  get_dataset_state: 'Get Workflow State',
-  get_dataset_records: 'Get Workflow Records',
-};
-
 /** Convert snake_case tool name to Title Case display name */
 function formatToolName(name: string): string {
-  if (TOOL_DISPLAY_NAMES[name]) return TOOL_DISPLAY_NAMES[name];
   return name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 

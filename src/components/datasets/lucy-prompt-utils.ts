@@ -4,7 +4,7 @@
  * Minimal intent signals sent to Lucy on dataset open.
  * Lucy already receives full dataset context (name, objective, workflow state,
  * plan status) via context injection (workflowToContext) and can call
- * get_dataset_state for details. These prompts just signal user intent.
+ * get_workflow_state for details. These prompts just signal user intent.
  */
 
 /**

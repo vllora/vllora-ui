@@ -162,9 +162,9 @@ export function getFriendlyToolMessage(toolName: string, input: any): string {
       return 'Analyzing documents...';
 
     // Dataset state tools
-    case 'get_dataset_state':
+    case 'get_workflow_state':
       return 'Loading workflow state...';
-    case 'get_dataset_records':
+    case 'get_workflow_records':
       return 'Loading records...';
     case 'update_objective':
       return 'Updating objective...';

@@ -210,7 +210,7 @@ export function PlanProvider({ workflowId, children }: PlanProviderProps) {
                   setTimeout(() => {
                     if (cancelled) return;
                     emitter.emit("vllora_lucy_prompt", {
-                      prompt: `The plan execution was interrupted. Steps completed: [${completedStepIds.join(', ')}]. Please call get_dataset_state first to check what already exists, then call execute_plan with only the steps that still need to run (using steps_to_execute and overrides).`,
+                      prompt: `The plan execution was interrupted. Steps completed: [${completedStepIds.join(', ')}]. Please call get_workflow_state first to check what already exists, then call execute_plan with only the steps that still need to run (using steps_to_execute and overrides).`,
                     });
                   }, 2000);
                 }
