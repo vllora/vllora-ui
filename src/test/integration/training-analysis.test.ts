@@ -29,19 +29,19 @@ async function seedTrainingScenario(opts: {
   const rowCount = opts.rowCount ?? 5;
   const jobId = 'ft-job-001';
 
-  const datasetId = await seedDataset();
+  const workflowId = await seedDataset();
 
   // Seed records — returns auto-generated IDs
   const records = Array.from({ length: rowCount }, (_, i) => ({
     id: `row-${i}`,
     topic: topics[i % topics.length],
   }));
-  const recordIds = await seedRecords(datasetId, records);
+  const recordIds = await seedRecords(workflowId, records);
 
   // Create workflow with training jobId
-  await seedWorkflow(datasetId, { jobId });
+  await seedWorkflow(workflowId, { jobId });
 
-  return { datasetId, jobId, recordIds };
+  return { workflowId, jobId, recordIds };
 }
 
 // =============================================================================
@@ -54,7 +54,7 @@ describe('analyze_training integration (MSW)', () => {
   // ---------------------------------------------------------------------------
 
   it('returns deploy_eval for improving training', async () => {
-    const { datasetId, jobId, recordIds } = await seedTrainingScenario();
+    const { workflowId, jobId, recordIds } = await seedTrainingScenario();
 
     setScenario({
       trainingScenario: 'improving',
@@ -63,7 +63,7 @@ describe('analyze_training integration (MSW)', () => {
     });
 
     const result = await analyzeTrainingHandler({
-      dataset_id: datasetId,
+      workflow_id: workflowId,
       job_id: jobId,
     }) as Record<string, unknown>;
 
@@ -83,7 +83,7 @@ describe('analyze_training integration (MSW)', () => {
   // ---------------------------------------------------------------------------
 
   it('returns investigate for overfitting training', async () => {
-    const { datasetId, jobId, recordIds } = await seedTrainingScenario();
+    const { workflowId, jobId, recordIds } = await seedTrainingScenario();
 
     setScenario({
       trainingScenario: 'overfitting',
@@ -92,7 +92,7 @@ describe('analyze_training integration (MSW)', () => {
     });
 
     const result = await analyzeTrainingHandler({
-      dataset_id: datasetId,
+      workflow_id: workflowId,
       job_id: jobId,
     }) as Record<string, unknown>;
 
@@ -117,7 +117,7 @@ describe('analyze_training integration (MSW)', () => {
   // ---------------------------------------------------------------------------
 
   it('returns inner_loop for no-learning training', async () => {
-    const { datasetId, jobId, recordIds } = await seedTrainingScenario();
+    const { workflowId, jobId, recordIds } = await seedTrainingScenario();
 
     setScenario({
       trainingScenario: 'noLearning',
@@ -126,7 +126,7 @@ describe('analyze_training integration (MSW)', () => {
     });
 
     const result = await analyzeTrainingHandler({
-      dataset_id: datasetId,
+      workflow_id: workflowId,
       job_id: jobId,
     }) as Record<string, unknown>;
 
@@ -149,7 +149,7 @@ describe('analyze_training integration (MSW)', () => {
   // ---------------------------------------------------------------------------
 
   it('returns retrain for failed training job', async () => {
-    const { datasetId, jobId, recordIds } = await seedTrainingScenario();
+    const { workflowId, jobId, recordIds } = await seedTrainingScenario();
 
     setScenario({
       trainingScenario: 'error',
@@ -158,7 +158,7 @@ describe('analyze_training integration (MSW)', () => {
     });
 
     const result = await analyzeTrainingHandler({
-      dataset_id: datasetId,
+      workflow_id: workflowId,
       job_id: jobId,
     }) as Record<string, unknown>;
 
@@ -175,7 +175,7 @@ describe('analyze_training integration (MSW)', () => {
   // ---------------------------------------------------------------------------
 
   it('includes per-topic epoch progressions', async () => {
-    const { datasetId, jobId, recordIds } = await seedTrainingScenario({
+    const { workflowId, jobId, recordIds } = await seedTrainingScenario({
       topics: ['Pins', 'Forks'],
       rowCount: 5,
     });
@@ -187,7 +187,7 @@ describe('analyze_training integration (MSW)', () => {
     });
 
     const result = await analyzeTrainingHandler({
-      dataset_id: datasetId,
+      workflow_id: workflowId,
       job_id: jobId,
     }) as Record<string, unknown>;
 
@@ -211,7 +211,7 @@ describe('analyze_training integration (MSW)', () => {
   // ---------------------------------------------------------------------------
 
   it('computes overall progression with positive delta', async () => {
-    const { datasetId, jobId, recordIds } = await seedTrainingScenario();
+    const { workflowId, jobId, recordIds } = await seedTrainingScenario();
 
     setScenario({
       trainingScenario: 'improving',
@@ -220,7 +220,7 @@ describe('analyze_training integration (MSW)', () => {
     });
 
     const result = await analyzeTrainingHandler({
-      dataset_id: datasetId,
+      workflow_id: workflowId,
       job_id: jobId,
     }) as Record<string, unknown>;
 
@@ -237,13 +237,13 @@ describe('analyze_training integration (MSW)', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Error — missing dataset_id
+  // Error — missing workflow_id
   // ---------------------------------------------------------------------------
 
-  it('returns error when dataset_id is missing', async () => {
+  it('returns error when workflow_id is missing', async () => {
     const result = await analyzeTrainingHandler({}) as Record<string, unknown>;
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe('dataset_id is required');
+    expect(result.error).toBe('workflow_id is required');
   });
 });

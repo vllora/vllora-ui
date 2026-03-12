@@ -19,15 +19,15 @@ import {
 // =============================================================================
 
 export const updatePlanMarkdownHandler: ToolHandler = async (params) => {
-  const { dataset_id, plan_markdown, status, error_message } = params as {
-    dataset_id: string;
+  const { workflow_id, plan_markdown, status, error_message } = params as {
+    workflow_id: string;
     plan_markdown: string;
     status?: 'executing' | 'completed' | 'failed';
     error_message?: string;
   };
 
-  if (!dataset_id || typeof dataset_id !== 'string') {
-    return { success: false, error: 'dataset_id is required' };
+  if (!workflow_id || typeof workflow_id !== 'string') {
+    return { success: false, error: 'workflow_id is required' };
   }
 
   if (!plan_markdown || typeof plan_markdown !== 'string') {
@@ -35,29 +35,29 @@ export const updatePlanMarkdownHandler: ToolHandler = async (params) => {
   }
 
   try {
-    const stored = await getStoredPlan(dataset_id);
+    const stored = await getStoredPlan(workflow_id);
     if (!stored) {
       return { success: false, error: 'No plan found for this dataset' };
     }
 
     // Update the markdown in IndexedDB (preserves status, progress, etc.)
-    await updateStoredPlanMarkdown(dataset_id, plan_markdown);
+    await updateStoredPlanMarkdown(workflow_id, plan_markdown);
 
     // If a status transition was requested, persist it to IndexedDB too
     if (status) {
       const { updatePlanStatus, completePlan, failPlan } = await import('./proposed-plan-store');
       if (status === 'completed') {
-        completePlan(dataset_id, null);
+        completePlan(workflow_id, null);
       } else if (status === 'failed') {
-        failPlan(dataset_id, null);
+        failPlan(workflow_id, null);
       } else {
-        updatePlanStatus(dataset_id, status);
+        updatePlanStatus(workflow_id, status);
       }
     }
 
     // Emit content-only update — does NOT reset plan status (unlike vllora_plan_proposed)
     emitter.emit('vllora_plan_markdown_updated', {
-      datasetId: dataset_id,
+      workflowId: workflow_id,
       plan: { ...stored.plan, plan_markdown },
       status,
       error_message,
@@ -98,7 +98,7 @@ Status transitions:
   parameters: {
     type: 'object',
     properties: {
-      dataset_id: {
+      workflow_id: {
         type: 'string',
         description: 'The dataset ID',
       },
@@ -116,7 +116,7 @@ Status transitions:
         description: 'Short error description when status is "failed". Shown in the plan footer so the user knows what went wrong. Example: "Training failed: maximum finetune jobs reached"',
       },
     },
-    required: ['dataset_id', 'plan_markdown'],
+    required: ['workflow_id', 'plan_markdown'],
   },
   autoExecute: true,
   handler: async (input) =>

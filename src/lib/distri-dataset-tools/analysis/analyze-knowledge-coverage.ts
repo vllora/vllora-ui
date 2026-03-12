@@ -31,9 +31,9 @@ function collectLeafNodes(
  * @returns KnowledgeCoverageStats with per-source and overall coverage metrics
  */
 export async function analyzeKnowledgeCoverage(
-  datasetId: string,
+  workflowId: string,
 ): Promise<KnowledgeCoverageStats | null> {
-  const sources = await knowledgeSourceService.getByDataset(datasetId);
+  const sources = await knowledgeSourceService.getByDataset(workflowId);
   const readySources = sources.filter((s) => s.status === 'ready');
 
   if (readySources.length === 0) return null;
@@ -65,7 +65,7 @@ export async function analyzeKnowledgeCoverage(
 
   // Count chunk usage across all records
   const chunkUsageCounts: Record<string, number> = {};
-  const records = await recordService.getByDatasetId(datasetId);
+  const records = await recordService.getByDatasetId(workflowId);
 
   // Pass 1: Direct lineage from record metadata (Phase 1 records)
   for (const record of records) {
@@ -81,7 +81,7 @@ export async function analyzeKnowledgeCoverage(
 
   // Pass 2: Backward compatibility — infer from topic → hierarchy → sourceChunkRefs
   // for records that don't have sourceChunkRefs in metadata
-  const dataset = await datasetService.getById(datasetId);
+  const dataset = await datasetService.getById(workflowId);
   const hierarchy = dataset?.topicHierarchy?.hierarchy;
   if (hierarchy?.length) {
     const topicToChunkRefs = collectLeafNodes(hierarchy);

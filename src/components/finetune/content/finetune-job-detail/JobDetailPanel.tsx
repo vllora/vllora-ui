@@ -73,7 +73,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
     if (isActionLoading) return;
     setIsActionLoading(true);
     try {
-      await cancelReinforcementJob(job.dataset_id, job.provider_job_id);
+      await cancelReinforcementJob(job.workflow_id, job.provider_job_id);
       toast.success("Job cancelled");
     } catch (error) {
       toast.error(
@@ -82,13 +82,13 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
     } finally {
       setIsActionLoading(false);
     }
-  }, [job.dataset_id, job.provider_job_id, isActionLoading]);
+  }, [job.workflow_id, job.provider_job_id, isActionLoading]);
 
   const handleResume = useCallback(async () => {
     if (isActionLoading) return;
     setIsActionLoading(true);
     try {
-      await resumeReinforcementJob(job.dataset_id, job.provider_job_id);
+      await resumeReinforcementJob(job.workflow_id, job.provider_job_id);
       toast.success("Job resumed");
     } catch (error) {
       toast.error(
@@ -97,13 +97,13 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
     } finally {
       setIsActionLoading(false);
     }
-  }, [job.dataset_id, job.provider_job_id, isActionLoading]);
+  }, [job.workflow_id, job.provider_job_id, isActionLoading]);
 
   const handleDownloadWeights = useCallback(async () => {
     setIsDownloading(true);
     try {
       const { download_url } = await getWeightsDownloadUrl(
-        job.dataset_id,
+        job.workflow_id,
         job.provider_job_id
       );
       triggerFileDownload(
@@ -120,7 +120,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
     } finally {
       setIsDownloading(false);
     }
-  }, [job.dataset_id, job.provider_job_id]);
+  }, [job.workflow_id, job.provider_job_id]);
 
   const canCancel = job.status === "pending" || job.status === "running";
   const canResume = job.status === "cancelled";
@@ -257,7 +257,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
           )}
 
           {/* ── Eval Score Chart (per-epoch grader scores) ── */}
-          {job.dataset_id ? (
+          {job.workflow_id ? (
             <TrainingMetricsSection
               evalResults={evalResults}
               isLoading={isLoadingEvals}
@@ -277,21 +277,21 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
           {/* ── Reinforcement Training Metrics (reward, KL, loss, completions) ── */}
           <ReinforcementMetricsSection
             jobId={job.id}
-            workflowId={job.dataset_id}
+            workflowId={job.workflow_id}
             isLive={job.status === "running"}
           />
 
           {/* ── Evaluator Version History ── */}
-          {job.dataset_id && (
-            <EvaluatorVersionHistory datasetId={job.dataset_id} />
+          {job.workflow_id && (
+            <EvaluatorVersionHistory workflowId={job.workflow_id} />
           )}
 
           {/* ── Per-Row Details (themed to match panel) ── */}
-          {job.dataset_id && evalResults && evalResults.results.length > 0 && (
+          {job.workflow_id && evalResults && evalResults.results.length > 0 && (
             <div className="[&_input]:!bg-[#141414] [&_input]:!border-[#262626] [&_button]:!border-[#262626] [&_button]:!text-slate-400 [&_button:hover]:!bg-white/5">
               <PerRowDetailsSection
                 results={evalResults.results}
-                datasetId={job.dataset_id}
+                workflowId={job.workflow_id}
               />
             </div>
           )}

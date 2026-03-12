@@ -1,5 +1,5 @@
 /**
- * Get Dataset State Tool
+ * Get Workflow State Tool
  *
  * Merged tool that combines data content stats (from get_dataset_stats)
  * with pipeline execution state (from get_dataset_execution_state).
@@ -36,7 +36,7 @@ function normalizePlanStepIds(stepIds?: readonly string[] | null): string[] {
 // =============================================================================
 
 export interface DatasetState {
-  dataset_id: string;
+  workflow_id: string;
 
   // Data content (from get_dataset_stats)
   records: {
@@ -68,7 +68,7 @@ export interface DatasetState {
   };
   upload: {
     uploaded: boolean;
-    backend_dataset_id: string | null;
+    backend_workflow_id: string | null;
   };
   dry_run: {
     completed: boolean;
@@ -178,32 +178,32 @@ export async function computeDatasetStats(
 // =============================================================================
 
 export const getDatasetStateHandler: ToolHandler = async (params) => {
-  const { dataset_id, persist = true } = params;
+  const { workflow_id, persist = true } = params;
 
-  if (!dataset_id || typeof dataset_id !== 'string') {
-    return { success: false, error: 'dataset_id is required' };
+  if (!workflow_id || typeof workflow_id !== 'string') {
+    return { success: false, error: 'workflow_id is required' };
   }
 
   try {
     // Retry once after a short delay if the dataset is not found.
-    // This handles the race where the agent calls get_dataset_state
+    // This handles the race where the agent calls get_workflow_state
     // immediately after creating an experiment (IndexedDB write may
     // not have committed yet).
-    let dataset = await datasetService.getById(dataset_id);
+    let dataset = await datasetService.getById(workflow_id);
     if (!dataset) {
       await new Promise(resolve => setTimeout(resolve, 500));
-      dataset = await datasetService.getById(dataset_id);
+      dataset = await datasetService.getById(workflow_id);
     }
     if (!dataset) {
-      return { success: false, error: `Dataset ${dataset_id} not found. It may still be initializing — try again in a moment.` };
+      return { success: false, error: `Dataset ${workflow_id} not found. It may still be initializing — try again in a moment.` };
     }
 
     // Fetch records, workflow, plan state, and knowledge sources in parallel
     const [records, workflow, storedPlan, knowledgeSources] = await Promise.all([
-      recordService.getByDatasetId(dataset_id),
-      workflowService.getByDataset(dataset_id),
-      getStoredPlan(dataset_id).catch(() => null),
-      knowledgeSourceService.getByDataset(dataset_id).catch(() => [] as Awaited<ReturnType<typeof knowledgeSourceService.getByDataset>>),
+      recordService.getByDatasetId(workflow_id),
+      workflowService.getByDataset(workflow_id),
+      getStoredPlan(workflow_id).catch(() => null),
+      knowledgeSourceService.getByDataset(workflow_id).catch(() => [] as Awaited<ReturnType<typeof knowledgeSourceService.getByDataset>>),
     ]);
 
     // Compute stats (includes sanitization)
@@ -211,7 +211,7 @@ export const getDatasetStateHandler: ToolHandler = async (params) => {
 
     // Persist stats to dataset if requested (default: true)
     if (persist && dataset) {
-      await datasetService.updateDatasetStats(dataset_id, stats);
+      await datasetService.updateDatasetStats(workflow_id, stats);
     }
 
     // Build topic info from hierarchy
@@ -220,7 +220,7 @@ export const getDatasetStateHandler: ToolHandler = async (params) => {
     const topLevelNames = hierarchy?.map((n) => n.name) || [];
 
     const state: DatasetState = {
-      dataset_id,
+      workflow_id,
 
       // Data content
       records: {
@@ -259,7 +259,7 @@ export const getDatasetStateHandler: ToolHandler = async (params) => {
       },
       upload: {
         uploaded: true,
-        backend_dataset_id: dataset.id,
+        backend_workflow_id: dataset.id,
       },
       dry_run: {
         completed: !!workflow?.dryRun?.verdict,
@@ -316,7 +316,7 @@ export const getDatasetStateHandler: ToolHandler = async (params) => {
 // =============================================================================
 
 export const getDatasetStateTool: DistriFnTool = {
-  name: 'get_dataset_state',
+  name: 'get_workflow_state',
   description: `Get a comprehensive snapshot of the current dataset: content stats + pipeline status + plan state.
 
 Returns:
@@ -340,12 +340,12 @@ Compare the returned state against the plan to decide which steps still need to 
   parameters: {
     type: 'object',
     properties: {
-      dataset_id: {
+      workflow_id: {
         type: 'string',
         description: 'The dataset ID',
       },
     },
-    required: ['dataset_id'],
+    required: ['workflow_id'],
   },
   autoExecute: true,
   handler: async (input) =>

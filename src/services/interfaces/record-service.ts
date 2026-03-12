@@ -23,27 +23,27 @@ export interface ScoreUpdate {
 
 export interface RecordService {
   // Queries
-  getByDatasetId(datasetId: string, recordIds?: string[]): Promise<DatasetRecord[]>;
-  getCount(datasetId: string): Promise<number>;
-  getTopicCoverageStats(datasetId: string): Promise<{ total: number; withTopic: number }>;
-  spanExists(datasetId: string, spanId: string): Promise<boolean>;
+  getByDatasetId(workflowId: string, recordIds?: string[]): Promise<DatasetRecord[]>;
+  getCount(workflowId: string): Promise<number>;
+  getTopicCoverageStats(workflowId: string): Promise<{ total: number; withTopic: number }>;
+  spanExists(workflowId: string, spanId: string): Promise<boolean>;
   getDatasetsBySpanId(spanId: string): Promise<Dataset[]>;
 
   // Creation
-  add(datasetId: string, records: readonly NewRecord[], defaultTopic?: string): Promise<DatasetRecord[]>;
-  addFromSpans(datasetId: string, spans: readonly Span[], topic?: string): Promise<number>;
+  add(workflowId: string, records: readonly NewRecord[], defaultTopic?: string): Promise<DatasetRecord[]>;
+  addFromSpans(workflowId: string, spans: readonly Span[], topic?: string): Promise<number>;
 
   // Updates
-  updateTopic(datasetId: string, recordId: string, topic: string): Promise<void>;
-  updateTopicsBatch(datasetId: string, updates: Map<string, string>): Promise<number>;
-  updateData(datasetId: string, recordId: string, data: unknown): Promise<void>;
-  updateEvalScores(datasetId: string, recordId: string, update: ScoreUpdate): Promise<void>;
-  updateEvaluation(datasetId: string, recordId: string, score: number | undefined): Promise<void>;
+  updateTopic(workflowId: string, recordId: string, topic: string): Promise<void>;
+  updateTopicsBatch(workflowId: string, updates: Map<string, string>): Promise<number>;
+  updateData(workflowId: string, recordId: string, data: unknown): Promise<void>;
+  updateEvalScores(workflowId: string, recordId: string, update: ScoreUpdate): Promise<void>;
+  updateEvaluation(workflowId: string, recordId: string, score: number | undefined): Promise<void>;
 
   // Deletion & cleanup
-  delete(datasetId: string, recordId: string): Promise<void>;
-  clearAll(datasetId: string): Promise<number>;
-  clearAllTopics(datasetId: string): Promise<number>;
-  renameTopic(datasetId: string, oldName: string, newName: string): Promise<number>;
-  clearTopic(datasetId: string, topicName: string): Promise<number>;
+  delete(workflowId: string, recordId: string): Promise<void>;
+  clearAll(workflowId: string): Promise<number>;
+  clearAllTopics(workflowId: string): Promise<number>;
+  renameTopic(workflowId: string, oldName: string, newName: string): Promise<number>;
+  clearTopic(workflowId: string, topicName: string): Promise<number>;
 }

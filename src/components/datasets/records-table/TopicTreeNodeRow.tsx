@@ -660,7 +660,7 @@ export function TopicTreeNodeRow({
                 availableTopics={availableTopics}
                 highlightedRowId={highlightedRecordId}
                 setRowRef={setRecordRef}
-                datasetId={directRecords[0]?.datasetId}
+                workflowId={directRecords[0]?.workflowId}
               />
             </div>
           )}

@@ -19,7 +19,7 @@ import { emitter } from "@/utils/eventEmitter";
 interface PerRowDetailsSectionProps {
   results: FinetuneEvalResultsResponse["results"];
   /** Dataset ID for navigation (click record ID → switch to Records tab) */
-  datasetId?: string;
+  workflowId?: string;
 }
 
 interface RowEpochData {
@@ -27,7 +27,7 @@ interface RowEpochData {
   criteriaNames: string[];
 }
 
-export function PerRowDetailsSection({ results, datasetId }: PerRowDetailsSectionProps) {
+export function PerRowDetailsSection({ results, workflowId }: PerRowDetailsSectionProps) {
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
 
   // Auto-expand row when navigating from QualityIndicator finetune score click
@@ -101,14 +101,14 @@ export function PerRowDetailsSection({ results, datasetId }: PerRowDetailsSectio
   }, [epochDataMap]);
 
   const handleRecordIdClick = useCallback((recordId: string) => {
-    if (!datasetId) return;
-    emitter.emit('vllora_switch_tab', { datasetId, tab: 'records' });
+    if (!workflowId) return;
+    emitter.emit('vllora_switch_tab', { workflowId, tab: 'records' });
     setTimeout(() => {
       window.dispatchEvent(new CustomEvent('vllora_highlight_record', {
         detail: { recordId }
       }));
     }, 150);
-  }, [datasetId]);
+  }, [workflowId]);
 
   if (flatResults.length === 0) {
     return (
@@ -124,7 +124,7 @@ export function PerRowDetailsSection({ results, datasetId }: PerRowDetailsSectio
       expandedRowId={expandedRowId}
       onRowClick={handleRowClick}
       renderExpandedContent={renderExpandedContent}
-      onRecordIdClick={datasetId ? handleRecordIdClick : undefined}
+      onRecordIdClick={workflowId ? handleRecordIdClick : undefined}
     />
   );
 }

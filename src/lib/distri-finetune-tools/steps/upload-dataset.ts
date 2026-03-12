@@ -25,16 +25,16 @@ export const uploadDatasetHandler: ToolHandler = async (params) => {
     }
 
     // Get dataset with records
-    const dataset = await datasetService.getById(workflow.datasetId);
+    const dataset = await datasetService.getById(workflow.workflowId);
     if (!dataset) {
       return { success: false, error: 'Dataset not found' };
     }
 
     // The dataset ID is the backend dataset ID — they are always the same.
-    const datasetId = dataset.id;
+    const workflowId = dataset.id;
 
     // Get records
-    const records = await recordService.getByDatasetId(workflow.datasetId);
+    const records = await recordService.getByDatasetId(workflow.workflowId);
     if (records.length === 0) {
       return { success: false, error: 'Dataset has no records to upload' };
     }
@@ -54,7 +54,7 @@ export const uploadDatasetHandler: ToolHandler = async (params) => {
 
     return {
       success: true,
-      backend_dataset_id: datasetId,
+      backend_workflow_id: workflowId,
       records_uploaded: records.length,
       jsonl_size_bytes: jsonlContent.length,
       included: {

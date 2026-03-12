@@ -10,7 +10,7 @@
  * consistent whether called during plan creation or standalone.
  *
  * Two modes:
- * - Suggest mode (dataset_id only): returns criteria + script without saving
+ * - Suggest mode (workflow_id only): returns criteria + script without saving
  * - Normal mode (workflow_id): saves to DB
  */
 
@@ -181,7 +181,7 @@ async function generateCriteriaViaLLM(
 // =============================================================================
 
 async function generateGraderCore(
-  datasetId: string,
+  workflowId: string,
   objective: string,
   topicNames?: string[],
   providedCriteria?: GraderCriterion[],
@@ -195,7 +195,7 @@ async function generateGraderCore(
       criteria = providedCriteria;
     } else {
       // No criteria provided — generate via LLM using knowledge sources
-      const knowledgeCtx = await buildKnowledgeContext(datasetId);
+      const knowledgeCtx = await buildKnowledgeContext(workflowId);
 
       console.log('[generate_grader] Generating criteria via LLM:', {
         hasKnowledgeSources: knowledgeCtx.readyCount > 0,
@@ -237,7 +237,7 @@ async function generateGraderCore(
 
 export const generateGraderHandler: ToolHandler = async (params) => {
   try {
-    const { workflow_id, dataset_id, topics, criteria: rawCriteria, mode = 'replace' } = params;
+    const { workflow_id, topics, criteria: rawCriteria, mode = 'replace' } = params;
     const topicNames = Array.isArray(topics) ? topics.map(String) : undefined;
 
 
@@ -255,9 +255,9 @@ export const generateGraderHandler: ToolHandler = async (params) => {
 
     // Append mode: merge new criteria with existing from plan
     if (mode === 'append' && parsedCriteria && parsedCriteria.length > 0) {
-      const dsId = typeof dataset_id === 'string' ? dataset_id : undefined;
+      const dsId = typeof workflow_id === 'string' ? workflow_id : undefined;
       const wfDsId = workflow_id && typeof workflow_id === 'string'
-        ? (await workflowService.get(workflow_id))?.datasetId
+        ? (await workflowService.get(workflow_id))?.workflowId
         : undefined;
       const resolvedDatasetId = dsId || wfDsId;
 
@@ -277,13 +277,13 @@ export const generateGraderHandler: ToolHandler = async (params) => {
     const providedCriteria = parsedCriteria;
 
     // =========================================================================
-    // Suggest mode: dataset_id only, no side effects
+    // Suggest mode: workflow_id only, no side effects
     // Used during plan creation to get grader suggestions
     // =========================================================================
-    if (dataset_id && typeof dataset_id === 'string' && !workflow_id) {
-      const dataset = await datasetService.getById(dataset_id);
+    if (workflow_id && typeof workflow_id === 'string' && !workflow_id) {
+      const dataset = await datasetService.getById(workflow_id);
       if (!dataset) {
-        return { success: false, error: `Dataset ${dataset_id} not found` };
+        return { success: false, error: `Dataset ${workflow_id} not found` };
       }
 
       const objective = dataset.datasetObjective;
@@ -294,9 +294,9 @@ export const generateGraderHandler: ToolHandler = async (params) => {
         };
       }
 
-      console.log('[generate_grader] Suggest mode for dataset:', dataset_id);
+      console.log('[generate_grader] Suggest mode for dataset:', workflow_id);
 
-      const result = await generateGraderCore(dataset_id, objective, topicNames, providedCriteria);
+      const result = await generateGraderCore(workflow_id, objective, topicNames, providedCriteria);
       if (!result.success) {
         return { success: false, error: result.error };
       }
@@ -313,7 +313,7 @@ export const generateGraderHandler: ToolHandler = async (params) => {
     // Normal mode: workflow_id required, saves to DB
     // =========================================================================
     if (!workflow_id || typeof workflow_id !== 'string') {
-      return { success: false, error: 'workflow_id or dataset_id is required' };
+      return { success: false, error: 'workflow_id or workflow_id is required' };
     }
 
     const workflow = await workflowService.get(workflow_id);
@@ -321,7 +321,7 @@ export const generateGraderHandler: ToolHandler = async (params) => {
       return { success: false, error: 'Workflow not found' };
     }
 
-    const dataset = await datasetService.getById(workflow.datasetId);
+    const dataset = await datasetService.getById(workflow.workflowId);
     const objective = dataset?.datasetObjective || workflow.trainingGoals || '';
     if (!objective.trim()) {
       return { success: false, error: 'No training objective found' };
@@ -336,13 +336,13 @@ export const generateGraderHandler: ToolHandler = async (params) => {
       );
     }
 
-    const result = await generateGraderCore(workflow.datasetId, objective, topicNames, providedCriteria);
+    const result = await generateGraderCore(workflow.workflowId, objective, topicNames, providedCriteria);
     if (!result.success || !result.script) {
       return { success: false, error: result.error };
     }
 
     // Save eval script to dataset (gateway SQLite via PUT /workflows)
-    await datasetService.updateEvalScript(workflow.datasetId, result.script);
+    await datasetService.updateEvalScript(workflow.workflowId, result.script);
 
     // Update workflow metadata
     await workflowService.updateStepData(workflow_id, 'graderConfig', {
@@ -370,7 +370,7 @@ export const generateGraderHandler: ToolHandler = async (params) => {
 export const generateGraderTool: DistriFnTool = {
   name: 'generate_grader',
   description:
-    'Generate an evaluation function (JavaScript grader script) for RFT. Uses the training objective and uploaded knowledge sources to create domain-specific evaluation criteria and a complete LLM-as-judge script. Can be called in two modes: (1) with dataset_id only for suggest mode (returns criteria + script without saving — use during plan creation), or (2) with workflow_id for normal mode (saves to DB).',
+    'Generate an evaluation function (JavaScript grader script) for RFT. Uses the training objective and uploaded knowledge sources to create domain-specific evaluation criteria and a complete LLM-as-judge script. Can be called in two modes: (1) with workflow_id only for suggest mode (returns criteria + script without saving — use during plan creation), or (2) with workflow_id for normal mode (saves to DB).',
   type: 'function',
   parameters: {
     type: 'object',
@@ -378,12 +378,7 @@ export const generateGraderTool: DistriFnTool = {
       workflow_id: {
         type: 'string',
         description:
-          'The workflow ID. Use for normal mode (saves grader to DB). Either workflow_id or dataset_id is required.',
-      },
-      dataset_id: {
-        type: 'string',
-        description:
-          'The dataset ID. Use for suggest mode during plan creation — returns criteria + script without saving.',
+          'The workflow ID. Required. Use for normal mode (saves grader to DB) or suggest mode during plan creation.',
       },
       topics: {
         type: 'array',

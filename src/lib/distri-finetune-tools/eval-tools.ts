@@ -13,7 +13,7 @@ import { datasetService, recordService } from '@/services/service-registry';
 
 // Reuse types from topic-tools where possible or define new ones
 interface EvalPromptParams {
-    datasetId?: string;
+    workflowId?: string;
     datasetName?: string;
     recordIds?: string[];
 }
@@ -68,12 +68,12 @@ export async function generateEvaluationPrompt(
     params: Record<string, unknown>
 ): Promise<EvalPromptResult> {
     try {
-        const { datasetId: paramDatasetId, datasetName } = params as unknown as EvalPromptParams;
+        const { workflowId: paramDatasetId, datasetName } = params as unknown as EvalPromptParams;
 
         if (!paramDatasetId && !datasetName) {
             return {
                 success: false,
-                error: 'Either datasetId or datasetName is required',
+                error: 'Either workflowId or datasetName is required',
             };
         }
 
@@ -165,12 +165,12 @@ export async function runEvaluationOnDataset(
     params: Record<string, unknown>
 ): Promise<EvalRunResult> {
     try {
-        const { datasetId: paramDatasetId, datasetName, systemPrompt, maxRecords = 10 } = params as unknown as EvalRunParams;
+        const { workflowId: paramDatasetId, datasetName, systemPrompt, maxRecords = 10 } = params as unknown as EvalRunParams;
 
         if (!paramDatasetId && !datasetName) {
             return {
                 success: false,
-                error: 'Either datasetId or datasetName is required',
+                error: 'Either workflowId or datasetName is required',
             };
         }
 
@@ -289,7 +289,7 @@ export async function runEvaluationOnDataset(
 
 // Interfaces
 interface EvalRunParams {
-    datasetId?: string;
+    workflowId?: string;
     datasetName?: string;
     systemPrompt?: string;
     maxRecords?: number;

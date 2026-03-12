@@ -66,7 +66,7 @@ export function FinetuneStudioTab() {
           const content = await readFileAsBase64(file);
           const type: KnowledgeSourceType = file.type === "application/pdf" ? "pdf" : "text";
           await uploadKnowledgeSourceHandler({
-            dataset_id: dataset.id,
+            workflow_id: dataset.id,
             name: file.name,
             type,
             content,
@@ -75,7 +75,7 @@ export function FinetuneStudioTab() {
         }
 
         // Notify KnowledgeSourcesPanel to refresh
-        emitter.emit("vllora_knowledge_source_updated", { datasetId: dataset.id });
+        emitter.emit("vllora_knowledge_source_updated", { workflowId: dataset.id });
 
         setIsCreating(false);
         navigate(`/finetune/${dataset.id}?autoGeneratePlan=true`);

@@ -69,12 +69,12 @@ export { checkTrainingStatusHandler, checkTrainingStatusTool } from './check-tra
 export { deployModelHandler, deployModelTool } from './deploy-model';
 
 // Data Access
-export { getDatasetRecordsHandler, getDatasetRecordsTool } from './get-dataset-records';
-export { getDatasetStateHandler, getDatasetStateTool, computeDatasetStats, type DatasetState } from './get-dataset-state';
+export { getDatasetRecordsHandler, getDatasetRecordsTool } from './get-workflow-records';
+export { getDatasetStateHandler, getDatasetStateTool, computeDatasetStats, type DatasetState } from './get-workflow-state';
 export { updateRecordHandler, updateRecordTool } from './update-record';
 
 // README
-export { updateDatasetReadmeHandler, updateDatasetReadmeTool } from './update-dataset-readme';
+export { updateDatasetReadmeHandler, updateDatasetReadmeTool } from './update-workflow-readme';
 
 // Objective
 export { updateObjectiveHandler, updateObjectiveTool } from './update-objective';
@@ -173,10 +173,10 @@ import { downloadSkillPackageHandler, downloadSkillPackageTool } from './downloa
 import { startTrainingHandler, startTrainingTool } from './start-training';
 import { checkTrainingStatusHandler, checkTrainingStatusTool } from './check-training-status';
 import { deployModelHandler, deployModelTool } from './deploy-model';
-import { getDatasetRecordsHandler, getDatasetRecordsTool } from './get-dataset-records';
-import { getDatasetStateHandler, getDatasetStateTool } from './get-dataset-state';
+import { getDatasetRecordsHandler, getDatasetRecordsTool } from './get-workflow-records';
+import { getDatasetStateHandler, getDatasetStateTool } from './get-workflow-state';
 import { updateRecordHandler, updateRecordTool } from './update-record';
-import { updateDatasetReadmeHandler, updateDatasetReadmeTool } from './update-dataset-readme';
+import { updateDatasetReadmeHandler, updateDatasetReadmeTool } from './update-workflow-readme';
 import { updateObjectiveHandler, updateObjectiveTool } from './update-objective';
 import { analyzeKnowledgeSourcesHandler, analyzeKnowledgeSourcesTool } from './analyze-knowledge-sources';
 import { generateGraderHandler, generateGraderTool } from './generate-grader';
@@ -225,10 +225,10 @@ export const STEP_TOOL_NAMES = [
   'start_training',
   'check_training_status',
   'deploy_model',
-  'get_dataset_records',
-  'get_dataset_state',
+  'get_workflow_records',
+  'get_workflow_state',
   'update_record',
-  'update_dataset_readme',
+  'update_workflow_readme',
   'update_objective',
   'analyze_knowledge_sources',
   'generate_grader',
@@ -351,10 +351,10 @@ export const stepToolHandlers: Record<string, ToolHandler> = {
   start_training: startTrainingHandler,
   check_training_status: checkTrainingStatusHandler,
   deploy_model: deployModelHandler,
-  get_dataset_records: getDatasetRecordsHandler,
-  get_dataset_state: getDatasetStateHandler,
+  get_workflow_records: getDatasetRecordsHandler,
+  get_workflow_state: getDatasetStateHandler,
   update_record: updateRecordHandler,
-  update_dataset_readme: updateDatasetReadmeHandler,
+  update_workflow_readme: updateDatasetReadmeHandler,
   update_objective: updateObjectiveHandler,
   analyze_knowledge_sources: analyzeKnowledgeSourcesHandler,
   generate_grader: generateGraderHandler,

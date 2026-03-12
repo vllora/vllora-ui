@@ -37,17 +37,17 @@ export const analyzeCoverageHandler: ToolHandler = async (params): Promise<Analy
     // }
 
     // Use shared function to calculate and save coverage stats to dataset
-    const coverageStats = await calculateAndSaveCoverageStats(workflow.datasetId);
+    const coverageStats = await calculateAndSaveCoverageStats(workflow.workflowId);
 
     // Calculate and save knowledge coverage stats (which chunks are used)
-    const knowledgeCoverage = await analyzeKnowledgeCoverage(workflow.datasetId);
+    const knowledgeCoverage = await analyzeKnowledgeCoverage(workflow.workflowId);
     if (knowledgeCoverage) {
-      await datasetService.updateKnowledgeCoverageStats(workflow.datasetId, knowledgeCoverage);
+      await datasetService.updateKnowledgeCoverageStats(workflow.workflowId, knowledgeCoverage);
     }
 
     // Get full coverage report for response (includes distribution details)
-    const records = await recordService.getByDatasetId(workflow.datasetId);
-    const dataset = await datasetService.getById(workflow.datasetId);
+    const records = await recordService.getByDatasetId(workflow.workflowId);
+    const dataset = await datasetService.getById(workflow.workflowId);
     const coverageReport = existingAnalyzeCoverage({records, hierarchy: dataset?.topicHierarchy || undefined});
 
     // Convert distribution to expected format for response

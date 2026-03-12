@@ -93,15 +93,15 @@ export interface GetTrainingMetricsResult {
 // =============================================================================
 
 async function resolveJobId(
-  datasetId: string,
+  workflowId: string,
   jobId?: string,
 ): Promise<string> {
   if (jobId) return jobId;
 
-  const workflow = await workflowService.getByDataset(datasetId);
+  const workflow = await workflowService.getByDataset(workflowId);
   if (workflow?.training?.jobId) return workflow.training.jobId;
 
-  const dataset = await datasetService.getById(datasetId);
+  const dataset = await datasetService.getById(workflowId);
   if (!dataset) {
     throw new Error('Dataset not found');
   }
@@ -291,19 +291,18 @@ function generateAlerts(
 
 export const getTrainingMetricsHandler: ToolHandler = async (params) => {
   try {
-    const datasetId = params.dataset_id as string | undefined;
+    const workflowId = params.workflow_id as string | undefined;
     const jobId = params.job_id as string | undefined;
 
-    if (!datasetId && !jobId) {
-      return { success: false, error: 'Either dataset_id or job_id is required' } satisfies GetTrainingMetricsResult;
+    if (!workflowId && !jobId) {
+      return { success: false, error: 'Either workflow_id or job_id is required' } satisfies GetTrainingMetricsResult;
     }
 
-    if (!datasetId) {
-      return { success: false, error: 'dataset_id is required for API calls (workflow scoping)' } satisfies GetTrainingMetricsResult;
+    if (!workflowId) {
+      return { success: false, error: 'workflow_id is required for API calls (workflow scoping)' } satisfies GetTrainingMetricsResult;
     }
 
-    // Resolve job ID (datasetId === workflowId)
-    const workflowId = datasetId;
+    // Resolve job ID
     const resolvedJobId = await resolveJobId(workflowId, jobId);
 
     // Fetch job status and metrics in parallel
@@ -409,7 +408,7 @@ export const getTrainingMetricsTool: DistriFnTool = {
   parameters: {
     type: 'object',
     properties: {
-      dataset_id: {
+      workflow_id: {
         type: 'string',
         description: 'The dataset ID. Used to look up the latest training job if job_id is not provided.',
       },

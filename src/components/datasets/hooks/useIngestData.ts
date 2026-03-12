@@ -33,7 +33,7 @@ export interface ImportResult {
 interface UseIngestDataOptions {
   /** Pre-selected dataset ID for list mode */
   preselectedDatasetId?: string;
-  /** Whether this is list mode (no datasetId provided) */
+  /** Whether this is list mode (no workflowId provided) */
   isListMode: boolean;
   /** Current record count (for detail mode) */
   currentRecordCount?: number;

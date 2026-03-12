@@ -46,14 +46,14 @@ export function LucyExecutePlanRenderer({ toolCall, state }: ToolRendererProps) 
   const result = getResultData();
 
   // Get dataset ID from tool input
-  const datasetId = (toolCall.input as any)?.dataset_id as string || '';
+  const workflowId = (toolCall.input as any)?.workflow_id as string || '';
 
   // Completed with final status — show completion card
   if (isCompleted && result?.final_status?.is_complete) {
     return (
       <PlanCompletionCard
         progress={result.final_status}
-        datasetId={datasetId}
+        workflowId={workflowId}
       />
     );
   }

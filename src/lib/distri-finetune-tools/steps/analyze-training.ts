@@ -52,7 +52,7 @@ interface Recommendation {
 
 interface ResolvedJob {
   readonly job: FinetuneJob;
-  readonly datasetId: string;
+  readonly workflowId: string;
 }
 
 interface OverallProgression {
@@ -68,31 +68,31 @@ interface OverallProgression {
 // =============================================================================
 
 async function resolveTrainingJob(
-  datasetId: string,
+  workflowId: string,
   jobId?: string,
 ): Promise<ResolvedJob> {
   // Verify the dataset exists
-  const dataset = await datasetService.getById(datasetId);
+  const dataset = await datasetService.getById(workflowId);
   if (!dataset) {
     throw new Error('Dataset not found — cannot fetch training results');
   }
 
   // If explicit jobId provided, fetch it directly
   if (jobId) {
-    const job = await getReinforcementJobStatus(datasetId, jobId);
-    return { job, datasetId };
+    const job = await getReinforcementJobStatus(workflowId, jobId);
+    return { job, workflowId };
   }
 
   // Otherwise, find job from workflow
-  const workflow = await workflowService.getByDataset(datasetId);
+  const workflow = await workflowService.getByDataset(workflowId);
   if (workflow?.training?.jobId) {
-    const job = await getReinforcementJobStatus(datasetId, workflow.training.jobId);
-    return { job, datasetId };
+    const job = await getReinforcementJobStatus(workflowId, workflow.training.jobId);
+    return { job, workflowId };
   }
 
   // Fallback: list jobs for this dataset, pick most recent completed
   // The dataset ID is the backend dataset ID — they are always the same.
-  const jobs = await listReinforcementJobs(datasetId);
+  const jobs = await listReinforcementJobs(workflowId);
   const completed = jobs
     .filter((j) => j.status === 'succeeded' || j.status === 'failed')
     .sort((a, b) => (b.completed_at ?? b.updated_at).localeCompare(a.completed_at ?? a.updated_at));
@@ -101,15 +101,15 @@ async function resolveTrainingJob(
     throw new Error('No completed training job found for this dataset');
   }
 
-  return { job: completed[0], datasetId };
+  return { job: completed[0], workflowId };
 }
 
 // =============================================================================
 // Topic Mapping
 // =============================================================================
 
-async function buildTopicMap(datasetId: string): Promise<Map<string, string>> {
-  const records = await recordService.getByDatasetId(datasetId);
+async function buildTopicMap(workflowId: string): Promise<Map<string, string>> {
+  const records = await recordService.getByDatasetId(workflowId);
   const topicMap = new Map<string, string>();
   for (const record of records) {
     topicMap.set(record.id, record.topic ?? 'uncategorized');
@@ -420,8 +420,8 @@ function decideTrainingNextAction(
 // =============================================================================
 
 /** Pull pre-training eval baseline from the last iteration history entry. */
-async function lookupEvalBaseline(datasetId: string): Promise<EvalBaseline | undefined> {
-  const state = await iterationStateService.getOrCreate(datasetId);
+async function lookupEvalBaseline(workflowId: string): Promise<EvalBaseline | undefined> {
+  const state = await iterationStateService.getOrCreate(workflowId);
   if (state.history.length === 0) return undefined;
 
   // Last iteration entry = the eval that preceded training
@@ -440,11 +440,11 @@ async function lookupEvalBaseline(datasetId: string): Promise<EvalBaseline | und
 // =============================================================================
 
 async function updateOuterLoopState(
-  datasetId: string,
+  workflowId: string,
   jobId: string,
   progressions: TopicEpochProgression[],
 ): Promise<void> {
-  const state = await iterationStateService.getOrCreate(datasetId);
+  const state = await iterationStateService.getOrCreate(workflowId);
 
   // Build epoch scores map: topic → scores array
   const epochScores: Record<string, number[]> = {};
@@ -470,15 +470,15 @@ async function updateOuterLoopState(
 
 export const analyzeTrainingHandler: ToolHandler = async (params) => {
   try {
-    const datasetId = params.dataset_id as string | undefined;
+    const workflowId = params.workflow_id as string | undefined;
     const jobId = params.job_id as string | undefined;
 
-    if (!datasetId) {
-      return { success: false, error: 'dataset_id is required' } satisfies AnalyzeTrainingResult;
+    if (!workflowId) {
+      return { success: false, error: 'workflow_id is required' } satisfies AnalyzeTrainingResult;
     }
 
     // 1. Resolve the training job
-    const { job } = await resolveTrainingJob(datasetId, jobId);
+    const { job } = await resolveTrainingJob(workflowId, jobId);
 
     // Handle failed jobs early
     if (job.status === 'failed') {
@@ -497,7 +497,7 @@ export const analyzeTrainingHandler: ToolHandler = async (params) => {
     }
 
     // 2. Fetch per-epoch evaluation results
-    const evalResponse = await getFinetuneEvaluations(datasetId, job.provider_job_id);
+    const evalResponse = await getFinetuneEvaluations(workflowId, job.provider_job_id);
     const results = evalResponse.results;
 
     if (results.length === 0) {
@@ -519,7 +519,7 @@ export const analyzeTrainingHandler: ToolHandler = async (params) => {
     const epochs = getEpochNumbers(results);
 
     // 4. Build topic map and compute progressions
-    const topicMap = await buildTopicMap(datasetId);
+    const topicMap = await buildTopicMap(workflowId);
     const progressions = computeTopicProgressions(results, topicMap, epochs);
     const overall = computeOverallProgression(progressions, epochs);
 
@@ -529,17 +529,17 @@ export const analyzeTrainingHandler: ToolHandler = async (params) => {
     const nextAction = decideTrainingNextAction(patterns, job.status);
 
     // 6. Update iteration state + look up eval baseline
-    await updateOuterLoopState(datasetId, job.id, progressions);
-    const evalBaseline = await lookupEvalBaseline(datasetId);
+    await updateOuterLoopState(workflowId, job.id, progressions);
+    const evalBaseline = await lookupEvalBaseline(workflowId);
 
     // 6b. Fetch evaluator version + reinforcement metrics (non-critical, parallel)
     let evaluator_version: { version: number; created_at: string; has_diff: boolean } | undefined;
     let reinforcementMetrics: { reward: number | null; kl: number | null; loss: number | null; clipped_ratio: number | null } | undefined;
     try {
-      const dataset = await datasetService.getById(datasetId);
+      const dataset = await datasetService.getById(workflowId);
       const [evalVersions, metricsResp] = await Promise.all([
         dataset ? getEvaluatorVersions(dataset.id).catch(() => []) : Promise.resolve([]),
-        getReinforcementJobMetrics(datasetId, job.provider_job_id).catch(() => ({ metrics: [] })),
+        getReinforcementJobMetrics(workflowId, job.provider_job_id).catch(() => ({ metrics: [] })),
       ]);
       if (evalVersions.length > 0) {
         const latest = evalVersions[0];
@@ -603,7 +603,7 @@ export const analyzeTrainingTool: DistriFnTool = {
   parameters: {
     type: 'object',
     properties: {
-      dataset_id: {
+      workflow_id: {
         type: 'string',
         description: 'The dataset ID to analyze training results for',
       },
@@ -612,7 +612,7 @@ export const analyzeTrainingTool: DistriFnTool = {
         description: 'Specific training job ID. If omitted, uses the latest completed job from the workflow.',
       },
     },
-    required: ['dataset_id'],
+    required: ['workflow_id'],
   },
   handler: async (input) =>
     JSON.stringify(await analyzeTrainingHandler(input as Record<string, unknown>)),

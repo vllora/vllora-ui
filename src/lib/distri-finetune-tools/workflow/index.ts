@@ -24,11 +24,11 @@ import type { FinetuneStep, FinetuneWorkflowState, ValidationError } from '@/typ
  * Emit an event when the workflow state changes.
  * This allows UI components (like WorkflowStepIndicator) to update in real-time.
  */
-export function emitWorkflowUpdate(datasetId: string, step?: FinetuneStep): void {
+export function emitWorkflowUpdate(workflowId: string, step?: FinetuneStep): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(
       new CustomEvent('finetune-workflow-updated', {
-        detail: { datasetId, step },
+        detail: { workflowId, step },
       })
     );
 
@@ -135,10 +135,10 @@ function canRollbackTo(currentStep: FinetuneStep, targetStep: FinetuneStep): boo
 
 export const startFinetuneWorkflowHandler: ToolHandler = async (params): Promise<StartWorkflowResult> => {
   try {
-    const { dataset_id, training_goals, start_step } = params;
+    const { workflow_id, training_goals, start_step } = params;
 
-    if (!dataset_id || typeof dataset_id !== 'string') {
-      return { success: false, error: 'dataset_id is required' };
+    if (!workflow_id || typeof workflow_id !== 'string') {
+      return { success: false, error: 'workflow_id is required' };
     }
 
     // Validate start_step if provided
@@ -148,9 +148,9 @@ export const startFinetuneWorkflowHandler: ToolHandler = async (params): Promise
       : 'topics_config';
 
     // Verify dataset exists
-    const dataset = await datasetService.getById(dataset_id);
+    const dataset = await datasetService.getById(workflow_id);
     if (!dataset) {
-      return { success: false, error: `Dataset ${dataset_id} not found` };
+      return { success: false, error: `Dataset ${workflow_id} not found` };
     }
 
     // Use provided training_goals or fall back to dataset's objective
@@ -163,7 +163,7 @@ export const startFinetuneWorkflowHandler: ToolHandler = async (params): Promise
     }
 
     // Check if workflow already exists
-    const existingWorkflow = await workflowService.getByDataset(dataset_id);
+    const existingWorkflow = await workflowService.getByDataset(workflow_id);
     if (existingWorkflow && existingWorkflow.currentStep !== 'completed') {
       return {
         success: false,
@@ -172,7 +172,7 @@ export const startFinetuneWorkflowHandler: ToolHandler = async (params): Promise
     }
 
     // Get and validate records
-    const records = await recordService.getByDatasetId(dataset_id);
+    const records = await recordService.getByDatasetId(workflow_id);
     const validationErrors: ValidationError[] = [];
 
     // Basic validation: check records have input/output
@@ -190,7 +190,7 @@ export const startFinetuneWorkflowHandler: ToolHandler = async (params): Promise
     const invalidCount = validationErrors.length;
 
     // Create workflow
-    const workflow = await workflowService.create(dataset_id, effectiveGoals);
+    const workflow = await workflowService.create(workflow_id, effectiveGoals);
 
     // Update workflow with validation results
     await workflowService.updateStepData(workflow.id, 'inputValidation', {
@@ -204,7 +204,7 @@ export const startFinetuneWorkflowHandler: ToolHandler = async (params): Promise
     await workflowService.advanceToStep(workflow.id, targetStartStep);
 
     // Emit event for UI update
-    emitWorkflowUpdate(dataset_id, targetStartStep);
+    emitWorkflowUpdate(workflow_id, targetStartStep);
 
     return {
       success: true,
@@ -232,7 +232,7 @@ export const startFinetuneWorkflowTool: DistriFnTool = {
   parameters: {
     type: 'object',
     properties: {
-      dataset_id: {
+      workflow_id: {
         type: 'string',
         description: 'The dataset ID to create a workflow for',
       },
@@ -246,7 +246,7 @@ export const startFinetuneWorkflowTool: DistriFnTool = {
         description: 'Optional: The step to start at. Default is "topics_config". Use "grader_config" for quick path to skip all preparation steps.',
       },
     },
-    required: ['dataset_id'],
+    required: ['workflow_id'],
   },
   handler: async (input) => JSON.stringify(await startFinetuneWorkflowHandler(input as Record<string, unknown>)),
 } as DistriFnTool;
@@ -257,25 +257,25 @@ export const startFinetuneWorkflowTool: DistriFnTool = {
 
 export const getWorkflowStatusHandler: ToolHandler = async (params): Promise<WorkflowStatusResult> => {
   try {
-    const { workflow_id, dataset_id } = params;
+    const { workflow_id } = params;
 
     let workflow: FinetuneWorkflowState | null = null;
-    let datasetIdToCheck: string | null = null;
+    let workflowIdToCheck: string | null = null;
 
     if (workflow_id && typeof workflow_id === 'string') {
       workflow = await workflowService.get(workflow_id);
-      datasetIdToCheck = workflow?.datasetId ?? null;
-    } else if (dataset_id && typeof dataset_id === 'string') {
-      workflow = await workflowService.getByDataset(dataset_id);
-      datasetIdToCheck = dataset_id;
+      if (!workflow) {
+        workflow = await workflowService.getByDataset(workflow_id);
+      }
+      workflowIdToCheck = workflow?.workflowId ?? workflow_id;
     } else {
-      return { success: false, error: 'Either workflow_id or dataset_id is required' };
+      return { success: false, error: 'workflow_id is required' };
     }
 
     // Check if dataset has evalScript (configured via UI)
     let datasetHasEvalScript = false;
-    if (datasetIdToCheck) {
-      const dataset = await datasetService.getById(datasetIdToCheck);
+    if (workflowIdToCheck) {
+      const dataset = await datasetService.getById(workflowIdToCheck);
       datasetHasEvalScript = !!dataset?.evalScript;
 
       // Sync: If dataset has evalScript but workflow doesn't have graderConfig,
@@ -308,11 +308,7 @@ export const getWorkflowStatusTool: DistriFnTool = {
     properties: {
       workflow_id: {
         type: 'string',
-        description: 'The workflow ID (optional if dataset_id provided)',
-      },
-      dataset_id: {
-        type: 'string',
-        description: 'The dataset ID (optional if workflow_id provided)',
+        description: 'The workflow ID',
       },
     },
     required: [],
@@ -438,7 +434,7 @@ export const rollbackToStepHandler: ToolHandler = async (params): Promise<Rollba
         };
       }
       // Emit event for UI update
-      emitWorkflowUpdate(workflow.datasetId);
+      emitWorkflowUpdate(workflow.workflowId);
       return {
         success: true,
         rolled_back_to: restored.currentStep,
@@ -479,7 +475,7 @@ export const rollbackToStepHandler: ToolHandler = async (params): Promise<Rollba
       }
 
       // Emit event for UI update
-      emitWorkflowUpdate(workflow.datasetId);
+      emitWorkflowUpdate(workflow.workflowId);
 
       return {
         success: true,

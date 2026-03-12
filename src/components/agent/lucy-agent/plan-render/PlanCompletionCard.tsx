@@ -12,20 +12,20 @@ import type { ExecutionProgress } from "@/lib/distri-finetune-tools/steps/execut
 
 interface PlanCompletionCardProps {
   progress: ExecutionProgress;
-  datasetId: string;
+  workflowId: string;
 }
 
-export function PlanCompletionCard({ progress, datasetId }: PlanCompletionCardProps) {
+export function PlanCompletionCard({ progress, workflowId }: PlanCompletionCardProps) {
   // Extract summary from completed steps
   const completedSteps = progress.steps.filter(s => s.status === "completed");
   const failedSteps = progress.steps.filter(s => s.status === "failed");
 
   const handleViewData = () => {
-    emitter.emit("vllora_switch_tab", { datasetId, tab: "records" });
+    emitter.emit("vllora_switch_tab", { workflowId, tab: "records" });
   };
 
   const handleCheckJob = () => {
-    emitter.emit("vllora_switch_tab", { datasetId, tab: "jobs" });
+    emitter.emit("vllora_switch_tab", { workflowId, tab: "jobs" });
   };
 
   return (

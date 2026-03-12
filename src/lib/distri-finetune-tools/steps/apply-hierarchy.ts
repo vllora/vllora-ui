@@ -11,6 +11,7 @@ import type { ToolHandler } from '../types';
 import { countLeafTopics, calculateMaxDepth } from './helpers';
 import { normalizeTopicSegments, normalizeObjectiveToRole } from './shared';
 import { getProposedPlan } from './proposed-plan-store';
+import { emitter } from '@/utils/eventEmitter';
 
 /**
  * Normalize and validate hierarchy nodes.
@@ -116,14 +117,14 @@ function countNodesWithRefs(nodes: readonly TopicHierarchyNode[]): number {
  * them when calling apply_topic_hierarchy directly.
  */
 async function mergeRefsFromPlan(
-  datasetId: string,
+  workflowId: string,
   hierarchy: TopicHierarchyNode[],
 ): Promise<TopicHierarchyNode[]> {
   if (allLeavesHaveRefs(hierarchy)) return hierarchy;
 
   let plan;
   try {
-    plan = await getProposedPlan(datasetId);
+    plan = await getProposedPlan(workflowId);
   } catch (err) {
     console.warn('[apply-hierarchy] Failed to load proposed plan for ref merge:', err);
     return hierarchy;
@@ -194,7 +195,7 @@ export const applyTopicHierarchyHandler: ToolHandler = async (params) => {
     let validHierarchy = normalizeHierarchy(hierarchy);
 
     // Auto-merge sourceChunkRefs from proposed plan when LLM omits them
-    validHierarchy = await mergeRefsFromPlan(workflow.datasetId, validHierarchy);
+    validHierarchy = await mergeRefsFromPlan(workflow.workflowId, validHierarchy);
 
     const topicCount = countLeafTopics(validHierarchy);
 
@@ -205,12 +206,12 @@ export const applyTopicHierarchyHandler: ToolHandler = async (params) => {
     const depth = calculateMaxDepth(validHierarchy);
 
     // Ensure the objective has a normalized "You are ..." role sentence
-    const dataset = await datasetService.getById(workflow.datasetId);
+    const dataset = await datasetService.getById(workflow.workflowId);
     let normalizedObjective = dataset?.normalizedObjective;
     if (dataset?.datasetObjective && !normalizedObjective) {
       try {
         normalizedObjective = await normalizeObjectiveToRole(dataset.datasetObjective);
-        await datasetService.updateObjective(workflow.datasetId, dataset.datasetObjective, normalizedObjective);
+        await datasetService.updateObjective(workflow.workflowId, dataset.datasetObjective, normalizedObjective);
       } catch {
         console.warn('[apply-hierarchy] Objective normalization failed, will use heuristic fallback');
       }
@@ -230,7 +231,7 @@ export const applyTopicHierarchyHandler: ToolHandler = async (params) => {
     }
 
     // Save hierarchy to dataset (single source of truth)
-    await datasetService.updateTopicHierarchy(workflow.datasetId, {
+    await datasetService.updateTopicHierarchy(workflow.workflowId, {
       hierarchy: validHierarchy,
       depth,
       generatedAt: Date.now(),
@@ -243,6 +244,9 @@ export const applyTopicHierarchyHandler: ToolHandler = async (params) => {
       generatedAt: Date.now(),
       method: 'manual',
     });
+
+    // Notify detail view to refresh (scoped to current dataset, avoids reloading entire list)
+    emitter.emit('vllora_dataset_detail_refresh' as any, { workflowId: workflow.workflowId });
 
     return {
       success: true,

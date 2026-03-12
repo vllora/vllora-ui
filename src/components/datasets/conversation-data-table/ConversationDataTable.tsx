@@ -137,7 +137,7 @@ interface ConversationDataTableProps {
   /** Ref setter for scroll-into-view support */
   readonly setRowRef?: (id: string) => (el: HTMLDivElement | null) => void;
   /** Dataset ID for navigation events */
-  readonly datasetId?: string;
+  readonly workflowId?: string;
 }
 
 // ─── Main component ───
@@ -156,7 +156,7 @@ export function ConversationDataTable({
   availableTopics,
   highlightedRowId,
   setRowRef,
-  datasetId,
+  workflowId,
 }: ConversationDataTableProps) {
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [editRecord, setEditRecord] = useState<DatasetRecord | null>(null);
@@ -299,8 +299,8 @@ export function ConversationDataTable({
                         <QualityIndicator
                           evaluation={row.evaluation}
                           compact
-                          onNavigate={datasetId ? (target) => {
-                            emitter.emit("vllora_switch_tab", { datasetId, tab: target });
+                          onNavigate={workflowId ? (target) => {
+                            emitter.emit("vllora_switch_tab", { workflowId, tab: target });
                             setTimeout(() => {
                               window.dispatchEvent(new CustomEvent("vllora_highlight_eval_result", {
                                 detail: { recordId: row.id },
@@ -321,9 +321,9 @@ export function ConversationDataTable({
                       <SourceRefBadge
                         sourceChunkRefs={record.metadata?.sourceChunkRefs as string[] | undefined}
                         sources={sources}
-                        onNavigateToSource={datasetId ? (sourceId) => {
+                        onNavigateToSource={workflowId ? (sourceId) => {
                           const chunkRefs = (record.metadata?.sourceChunkRefs as string[] | undefined) ?? [];
-                          emitter.emit("vllora_switch_tab", { datasetId, tab: `documents/${sourceId}` });
+                          emitter.emit("vllora_switch_tab", { workflowId, tab: `documents/${sourceId}` });
                           // Phase 2: highlight specific chunks + sentences after viewer renders
                           if (chunkRefs.length > 0) {
                             const recordText = `${row.user} ${row.assistant}`;

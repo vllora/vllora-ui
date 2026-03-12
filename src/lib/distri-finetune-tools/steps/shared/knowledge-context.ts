@@ -185,9 +185,9 @@ export function buildKnowledgeContextFromSources(
  * Convenience wrapper that fetches sources from IndexedDB then delegates.
  */
 export async function buildKnowledgeContext(
-  datasetId: string
+  workflowId: string
 ): Promise<KnowledgeSourceContext> {
-  const sources = await knowledgeSourceService.getByDataset(datasetId);
+  const sources = await knowledgeSourceService.getByDataset(workflowId);
   return buildKnowledgeContextFromSources(sources);
 }
 
@@ -309,9 +309,9 @@ export function buildContentBlocksFromSources(
  * Convenience wrapper that fetches sources from IndexedDB then delegates.
  */
 export async function buildKnowledgeContentBlocks(
-  datasetId: string,
+  workflowId: string,
 ): Promise<KnowledgeContentBlocks> {
-  const sources = await knowledgeSourceService.getByDataset(datasetId);
+  const sources = await knowledgeSourceService.getByDataset(workflowId);
   return buildContentBlocksFromSources(sources);
 }
 

@@ -79,7 +79,7 @@ export function FinetuneJobTableRow({ job, onJobAction }: FinetuneJobTableRowPro
 
     setIsActionLoading(true);
     try {
-      await cancelReinforcementJob(job.dataset_id, job.provider_job_id);
+      await cancelReinforcementJob(job.workflow_id, job.provider_job_id);
       toast.success('Job cancelled successfully');
       onJobAction?.();
     } catch (error) {
@@ -87,7 +87,7 @@ export function FinetuneJobTableRow({ job, onJobAction }: FinetuneJobTableRowPro
     } finally {
       setIsActionLoading(false);
     }
-  }, [job.dataset_id, job.provider_job_id, isActionLoading, onJobAction]);
+  }, [job.workflow_id, job.provider_job_id, isActionLoading, onJobAction]);
 
   const handleResume = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -95,7 +95,7 @@ export function FinetuneJobTableRow({ job, onJobAction }: FinetuneJobTableRowPro
 
     setIsActionLoading(true);
     try {
-      await resumeReinforcementJob(job.dataset_id, job.provider_job_id);
+      await resumeReinforcementJob(job.workflow_id, job.provider_job_id);
       toast.success('Job resumed successfully');
       onJobAction?.();
     } catch (error) {
@@ -103,7 +103,7 @@ export function FinetuneJobTableRow({ job, onJobAction }: FinetuneJobTableRowPro
     } finally {
       setIsActionLoading(false);
     }
-  }, [job.dataset_id, job.provider_job_id, isActionLoading, onJobAction]);
+  }, [job.workflow_id, job.provider_job_id, isActionLoading, onJobAction]);
 
   const handleDownloadWeights = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -111,7 +111,7 @@ export function FinetuneJobTableRow({ job, onJobAction }: FinetuneJobTableRowPro
 
     setIsActionLoading(true);
     try {
-      const { download_url } = await getWeightsDownloadUrl(job.dataset_id, job.provider_job_id);
+      const { download_url } = await getWeightsDownloadUrl(job.workflow_id, job.provider_job_id);
       triggerFileDownload(download_url, `weights-${job.provider_job_id}.tar.gz`);
       showWeightsDownloadToast();
     } catch (error) {
@@ -119,7 +119,7 @@ export function FinetuneJobTableRow({ job, onJobAction }: FinetuneJobTableRowPro
     } finally {
       setIsActionLoading(false);
     }
-  }, [job.dataset_id, job.provider_job_id, isActionLoading]);
+  }, [job.workflow_id, job.provider_job_id, isActionLoading]);
 
   const toggleExpand = useCallback(() => {
     setIsExpanded(prev => !prev);

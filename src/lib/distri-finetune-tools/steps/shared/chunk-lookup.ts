@@ -75,7 +75,7 @@ export function normalizeChunkRef(ref: string): string | null {
  *   Pass this to avoid redundant IndexedDB fetches when calling resolveChunkRefs in a loop.
  */
 export async function resolveChunkRefs(
-  datasetId: string,
+  workflowId: string,
   refs: string[],
   preloadedSources?: ReadonlyMap<string, KnowledgeSource>,
 ): Promise<ResolvedChunk[]> {
@@ -85,7 +85,7 @@ export async function resolveChunkRefs(
   if (preloadedSources) {
     sourceMap = new Map(preloadedSources);
   } else {
-    const sources = await knowledgeSourceService.getByDataset(datasetId);
+    const sources = await knowledgeSourceService.getByDataset(workflowId);
     sourceMap = new Map<string, KnowledgeSource>();
     for (const s of sources) {
       if (s.status === 'ready') sourceMap.set(s.id, s);

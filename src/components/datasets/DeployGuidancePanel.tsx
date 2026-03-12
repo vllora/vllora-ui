@@ -73,20 +73,20 @@ export function DeployGuidancePanel() {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function ModelCard({ job }: { job: { dataset_id: string; provider_job_id: string; base_model: string; fine_tuned_model?: string; completed_at?: string; updated_at: string } }) {
+function ModelCard({ job }: { job: { workflow_id: string; provider_job_id: string; base_model: string; fine_tuned_model?: string; completed_at?: string; updated_at: string } }) {
   const [isDownloading, setIsDownloading] = useState(false);
 
   const handleDownload = useCallback(async () => {
     setIsDownloading(true);
     try {
-      const { download_url } = await getWeightsDownloadUrl(job.dataset_id, job.provider_job_id);
+      const { download_url } = await getWeightsDownloadUrl(job.workflow_id, job.provider_job_id);
       triggerFileDownload(download_url, `weights-${job.provider_job_id}.tar.gz`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to get download URL");
     } finally {
       setIsDownloading(false);
     }
-  }, [job.dataset_id, job.provider_job_id]);
+  }, [job.workflow_id, job.provider_job_id]);
 
   return (
     <section className="rounded-lg border border-border bg-card p-4 space-y-4">

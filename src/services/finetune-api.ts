@@ -81,7 +81,7 @@ export interface CreateReinforcementJobRequest {
 
 export interface EvaluatorVersionResponse {
   id: string;
-  dataset_id: string;
+  workflow_id: string;
   version: number;
   config: {
     type: 'js' | 'llm_as_judge';
@@ -163,7 +163,7 @@ export type FinetuneJobStatus =
 export interface FinetuneJob {
   id: string;
   provider_job_id: string;
-  dataset_id: string;
+  workflow_id: string;
   status: FinetuneJobStatus;
   base_model: string;
   fine_tuned_model?: string;
@@ -182,13 +182,13 @@ export interface FinetuneJob {
 export type ReinforcementJob = FinetuneJob;
 
 export interface DatasetUploadResponse {
-  dataset_id: string;
+  workflow_id: string;
   [key: string]: unknown;
 }
 
 export interface StartFinetuneResult {
   job: ReinforcementJob;
-  datasetId: string;
+  workflowId: string;
 }
 
 // ============================================================================
@@ -202,7 +202,7 @@ export interface EvaluationCompletionParams {
 }
 
 export interface CreateEvaluationRequest {
-  dataset_id: string;
+  workflow_id: string;
   rollout_model_params: EvaluationCompletionParams;
   offset?: number;
   limit?: number;
@@ -368,16 +368,16 @@ export async function uploadDataset(props: {
   jsonlContent: string;
   topicHierarchy?: string;
   evalScript?: string;
-  datasetId: string;
+  workflowId: string;
 }): Promise<DatasetUploadResponse> {
-  const { jsonlContent, topicHierarchy, evalScript, datasetId } = props;
+  const { jsonlContent, topicHierarchy, evalScript, workflowId } = props;
   const apiUrl = getBackendUrl();
   const formData = new FormData();
 
   // Create a Blob from the JSONL content
   const blob = new Blob([jsonlContent], { type: "application/x-ndjson" });
   formData.append("file", blob, "training.jsonl");
-  formData.append("dataset_id", datasetId);
+  formData.append("workflow_id", workflowId);
 
   // Add topic hierarchy if provided
   if (topicHierarchy) {
@@ -544,11 +544,11 @@ export async function getWeightsDownloadUrl(
 /**
  * Upload a dataset to the backend for finetuning
  * This is step 1 of the finetune process - should be called first so the
- * datasetId can be saved before attempting to create the job
+ * workflowId can be saved before attempting to create the job
  */
 export async function uploadDatasetForFinetune(
   dataset: DatasetWithRecords,
-): Promise<{ datasetId: string; jsonlContent: string }> {
+): Promise<{ workflowId: string; jsonlContent: string }> {
   // Convert dataset to JSONL
   const jsonlContent = datasetToJsonl(dataset.records);
 
@@ -566,33 +566,33 @@ export async function uploadDatasetForFinetune(
     jsonlContent,
     topicHierarchy,
     evalScript: dataset.evalScript,
-    datasetId: dataset.id,
+    workflowId: dataset.id,
   });
 
   return {
-    datasetId: uploadResult.dataset_id,
+    workflowId: uploadResult.workflow_id,
     jsonlContent,
   };
 }
 
 /**
  * Ensure dataset is uploaded to backend.
- * Since datasetId always equals the workflow ID, this simply uploads
- * the dataset content and returns the datasetId.
+ * Since workflowId always equals the workflow ID, this simply uploads
+ * the dataset content and returns the workflowId.
  *
- * @param datasetId - Dataset ID (same as workflow ID)
- * @returns datasetId
+ * @param workflowId - Dataset ID (same as workflow ID)
+ * @returns workflowId
  * @throws Error if dataset not found, has no records, or upload fails
  */
 export async function ensureDatasetUploaded(
-  datasetId: string,
+  workflowId: string,
 ): Promise<string> {
-  const dataset = await datasetService.getById(datasetId);
+  const dataset = await datasetService.getById(workflowId);
   if (!dataset) {
     throw new Error("Dataset not found");
   }
 
-  const records = await recordService.getByDatasetId(datasetId);
+  const records = await recordService.getByDatasetId(workflowId);
   if (records.length === 0) {
     throw new Error("Dataset has no records");
   }
@@ -604,7 +604,7 @@ export async function ensureDatasetUploaded(
       records,
     });
     toast.success("Training data uploaded");
-    return datasetId;
+    return workflowId;
   } catch (uploadError) {
     toast.error("Failed to upload training data");
     throw uploadError;
@@ -647,7 +647,7 @@ export interface CreateFinetuneJobOptions {
  * This is step 2 of the finetune process - call after uploadDatasetForFinetune
  */
 export async function createFinetuneJobFromUpload(
-  datasetId: string,
+  workflowId: string,
   datasetName: string,
   options?: CreateFinetuneJobOptions,
 ): Promise<ReinforcementJob> {
@@ -672,7 +672,7 @@ export async function createFinetuneJobFromUpload(
 
   // Create reinforcement job request
   const request: CreateReinforcementJobRequest = {
-    dataset: datasetId,
+    dataset: workflowId,
     base_model: options?.baseModel || "unsloth/Qwen3.5-4B",
     output_model: options?.outputModel || defaultOutputModel,
     display_name: options?.displayName || `${datasetName} Fine-tune`,
@@ -691,7 +691,7 @@ export async function createFinetuneJobFromUpload(
     request.evaluator_version = options.evaluatorVersion;
   }
 
-  const job = await createReinforcementJob(datasetId, request);
+  const job = await createReinforcementJob(workflowId, request);
 
   return job;
 }
@@ -710,13 +710,13 @@ export async function startFinetuneJob(
     displayName?: string;
   },
 ): Promise<StartFinetuneResult> {
-  const { datasetId } = await uploadDatasetForFinetune(dataset);
+  const { workflowId } = await uploadDatasetForFinetune(dataset);
   const job = await createFinetuneJobFromUpload(
-    datasetId,
+    workflowId,
     dataset.name,
     options,
   );
-  return { job, datasetId };
+  return { job, workflowId };
 }
 
 // Legacy function - kept for backward compatibility
@@ -741,7 +741,7 @@ export async function createFinetuningJob(
 /**
  * Create an evaluation run for a dataset
  * This runs the configured evaluator/grader on the dataset rows
- * @param request - Evaluation request with dataset_id and model params
+ * @param request - Evaluation request with workflow_id and model params
  */
 export async function createEvaluation(
   request: CreateEvaluationRequest,
@@ -823,13 +823,13 @@ export interface FinetuneEvalResultsResponse {
 /**
  * Get finetune evaluation results for a dataset/job
  * Shows how the model performs on each row across training epochs
- * @param datasetId - The backend dataset ID
+ * @param workflowId - The backend dataset ID
  * @param finetuneJobId - Optional job ID to filter results
  * @param rowIndex - Optional row index to filter
  * @param epoch - Optional epoch to filter
  */
 export async function getFinetuneEvaluations(
-  datasetId: string,
+  workflowId: string,
   finetuneJobId?: string,
   rowIndex?: number,
   epoch?: number,
@@ -841,8 +841,8 @@ export async function getFinetuneEvaluations(
 
   const queryString = params.toString();
   const endpoint = queryString
-    ? `/finetune/datasets/${datasetId}/finetune-evaluations?${queryString}`
-    : `/finetune/datasets/${datasetId}/finetune-evaluations`;
+    ? `/finetune/datasets/${workflowId}/finetune-evaluations?${queryString}`
+    : `/finetune/datasets/${workflowId}/finetune-evaluations`;
 
   const response = await apiClient(endpoint, { method: "GET" });
   return handleApiResponse<FinetuneEvalResultsResponse>(response);
@@ -853,7 +853,7 @@ export async function getFinetuneEvaluations(
 // ============================================================================
 
 export interface UpdateEvaluatorResponse {
-  dataset_id: string;
+  workflow_id: string;
   updated: boolean;
 }
 
@@ -872,11 +872,11 @@ export interface EvalAnalyticsResponse {
 
 /**
  * Update the eval script for an existing backend dataset
- * @param datasetId - The backend dataset ID
+ * @param workflowId - The backend dataset ID
  * @param script - The JavaScript evaluator script
  */
 export async function updateDatasetEvalScript(
-  datasetId: string,
+  workflowId: string,
   script: string,
 ): Promise<UpdateEvaluatorResponse> {
   // const evaluator = {
@@ -889,7 +889,7 @@ export async function updateDatasetEvalScript(
   //   },
   // };
   const response = await apiClient(
-    `/finetune/workflows/${datasetId}/evaluator`,
+    `/finetune/workflows/${workflowId}/evaluator`,
     {
       method: "PATCH",
       body: JSON.stringify({ evaluator: { type: "js", config: { script } } }),
@@ -924,13 +924,13 @@ export async function getDryRunAnalytics(
 /**
  * Get version history of the evaluator/grader for a dataset
  * Returns all versions with configs and diffs between consecutive versions
- * @param datasetId - The backend dataset ID
+ * @param workflowId - The backend dataset ID
  */
 export async function getEvaluatorVersions(
-  datasetId: string,
+  workflowId: string,
 ): Promise<EvaluatorVersionResponse[]> {
   const response = await apiClient(
-    `/finetune/workflows/${datasetId}/evaluator/versions`,
+    `/finetune/workflows/${workflowId}/evaluator/versions`,
     { method: "GET" },
   );
   return handleApiResponse<EvaluatorVersionResponse[]>(response);

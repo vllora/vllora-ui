@@ -11,17 +11,17 @@ import type { Dataset } from "@/types/dataset-types";
 
 export interface DatasetBreadcrumbProps {
   name: string;
-  datasetId: string;
+  workflowId: string;
   datasets?: Dataset[];
   datasetRecordCounts?: Record<string, number>;
   onBack: () => void;
-  onSelectDataset?: (datasetId: string) => void;
+  onSelectDataset?: (workflowId: string) => void;
   onCreateNew: () => void;
 }
 
 export function DatasetBreadcrumb({
   name,
-  datasetId,
+  workflowId,
   datasets,
   datasetRecordCounts,
   onBack,
@@ -41,7 +41,7 @@ export function DatasetBreadcrumb({
       {datasets && datasets.length > 1 && onSelectDataset ? (
         <DatasetSelector
           currentName={name}
-          currentId={datasetId}
+          currentId={workflowId}
           datasets={datasets}
           recordCounts={datasetRecordCounts}
           onSelect={onSelectDataset}

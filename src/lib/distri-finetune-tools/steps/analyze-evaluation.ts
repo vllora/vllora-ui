@@ -549,15 +549,15 @@ function decideNextAction(
 
 export const analyzeEvaluationHandler: ToolHandler = async (params) => {
   try {
-    const { dataset_id, evaluation_id } = params;
+    const { workflow_id, evaluation_id } = params;
 
-    if (!dataset_id || typeof dataset_id !== 'string') {
-      return { success: false, error: 'dataset_id is required' };
+    if (!workflow_id || typeof workflow_id !== 'string') {
+      return { success: false, error: 'workflow_id is required' };
     }
 
     // 1. Fetch eval details (reuse Phase 1 handler)
     const evalResult = await getEvaluationDetailsHandler({
-      dataset_id,
+      workflow_id,
       evaluation_id,
       sort_by: 'score_asc',
       limit: 100,
@@ -595,7 +595,7 @@ export const analyzeEvaluationHandler: ToolHandler = async (params) => {
     }>;
 
     // 2. Fetch iteration history (reuse Phase 1 handler)
-    const historyResult = await getIterationHistoryHandler({ dataset_id }) as Record<string, unknown>;
+    const historyResult = await getIterationHistoryHandler({ workflow_id }) as Record<string, unknown>;
 
     const history = (historyResult.success && historyResult.history)
       ? historyResult.history as Array<{
@@ -647,7 +647,7 @@ export const analyzeEvaluationHandler: ToolHandler = async (params) => {
     // If next_action is 'train' but training already succeeded, skip re-training
     if (nextAction === 'train') {
       try {
-        const workflow = await workflowService.getByDataset(dataset_id);
+        const workflow = await workflowService.getByDataset(workflow_id);
         if (workflow?.training?.status === 'completed') {
           nextAction = 'iterate';
         }
@@ -659,7 +659,7 @@ export const analyzeEvaluationHandler: ToolHandler = async (params) => {
     // 9b. Fetch evaluator version context (non-critical)
     let evaluator_version: { version: number; created_at: string; has_diff: boolean } | undefined;
     try {
-      const dataset = await datasetService.getById(dataset_id);
+      const dataset = await datasetService.getById(workflow_id);
       if (dataset) {
         const versions = await getEvaluatorVersions(dataset.id);
         if (versions.length > 0) {
@@ -681,7 +681,7 @@ export const analyzeEvaluationHandler: ToolHandler = async (params) => {
     const evalId = typeof evaluation_id === 'string' ? evaluation_id : 'unknown';
     try {
       await logIterationHandler({
-        dataset_id,
+        workflow_id,
         eval_id: evalId,
         scores: {
           mean: summary.mean_score,
@@ -736,7 +736,7 @@ export const analyzeEvaluationTool: DistriFnTool = {
   parameters: {
     type: 'object',
     properties: {
-      dataset_id: {
+      workflow_id: {
         type: 'string',
         description: 'The dataset ID to analyze',
       },
@@ -745,7 +745,7 @@ export const analyzeEvaluationTool: DistriFnTool = {
         description: 'Specific evaluation job ID. If omitted, uses the most recent completed evaluation.',
       },
     },
-    required: ['dataset_id'],
+    required: ['workflow_id'],
   },
   handler: async (input) => JSON.stringify(await analyzeEvaluationHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

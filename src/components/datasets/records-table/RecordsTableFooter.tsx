@@ -11,13 +11,13 @@ import { DatasetRecord } from "@/types/dataset-types";
 export interface RecordsTableFooterProps {
   records: DatasetRecord[];
   selectedCount?: number;
-  datasetId?: string;
+  workflowId?: string;
 }
 
 export function RecordsTableFooter({
   records,
   selectedCount = 0,
-  datasetId,
+  workflowId,
 }: RecordsTableFooterProps) {
   const [copied, setCopied] = useState(false);
 
@@ -37,9 +37,9 @@ export function RecordsTableFooter({
   const topicCount = topics.size;
 
   const handleCopyId = async () => {
-    if (!datasetId) return;
+    if (!workflowId) return;
     try {
-      await navigator.clipboard.writeText(datasetId);
+      await navigator.clipboard.writeText(workflowId);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
@@ -78,17 +78,17 @@ export function RecordsTableFooter({
           <span className="font-medium text-foreground">{withEvaluation}</span> evaluated
         </span>
       </div>
-      {datasetId && (
+      {workflowId && (
         <button
           onClick={handleCopyId}
           className="flex items-center gap-1.5 hover:text-foreground transition-colors"
-          title={`Copy dataset ID: ${datasetId}`}
+          title={`Copy dataset ID: ${workflowId}`}
         >
           <span>ID:</span>
           <span className="font-mono">
-            {datasetId.length > 12
-              ? `${datasetId.slice(0, 5)}...${datasetId.slice(-5)}`
-              : datasetId}
+            {workflowId.length > 12
+              ? `${workflowId.slice(0, 5)}...${workflowId.slice(-5)}`
+              : workflowId}
           </span>
           {copied ? (
             <CheckCheck className="w-3.5 h-3.5 text-green-500" />

@@ -35,9 +35,9 @@ function hierarchyToProposedTopics(nodes: TopicHierarchyNode[]): ProposedTopic[]
  * Extract topics from all knowledge sources for a dataset
  * Returns a flat list of unique topic strings
  */
-async function getKnowledgeSourceTopics(datasetId: string): Promise<string[]> {
+async function getKnowledgeSourceTopics(workflowId: string): Promise<string[]> {
   try {
-    const sources = await knowledgeSourceService.getByDataset(datasetId);
+    const sources = await knowledgeSourceService.getByDataset(workflowId);
     const allTopics: string[] = [];
 
     for (const source of sources) {
@@ -111,7 +111,7 @@ function mergeHierarchies(
  * Used by both the generate_topics tool and plan creation flow.
  */
 async function generateTopicsCore(
-  datasetId: string,
+  workflowId: string,
   trainingGoals: string | undefined,
   depthValue: number,
   degreeValue: number,
@@ -119,13 +119,13 @@ async function generateTopicsCore(
   focusValue?: string,
 ): Promise<{ success: boolean; hierarchy?: TopicHierarchyNode[]; error?: string }> {
   if (USE_BACKEND_TOPIC_GENERATION) {
-    const records = await recordService.getByDatasetId(datasetId);
+    const records = await recordService.getByDatasetId(workflowId);
     if (records.length === 0) {
       // For suggest mode (plan creation), empty records is fine
       // Fall through to frontend generation
     } else {
       const formattedRecords = records.slice(0, 20).map((r) => ({ data: r.data }));
-      const autoTopics = await getKnowledgeSourceTopics(datasetId);
+      const autoTopics = await getKnowledgeSourceTopics(workflowId);
 
       const result = await generateTopicsViaBackend(
         trainingGoals || "Generate diverse training data",
@@ -148,7 +148,7 @@ async function generateTopicsCore(
   console.log("[generate_topics] Using frontend generation with automatic knowledge context");
 
   const result = await generateTopicsViaFrontend(
-    datasetId,
+    workflowId,
     depthValue,
     degreeValue,
     maxTopicsValue,
@@ -171,7 +171,6 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
   try {
     const {
       workflow_id,
-      dataset_id,
       method = "auto",
       max_depth = 2,
       degree = 2,
@@ -193,13 +192,13 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
         : undefined;
 
     // =========================================================================
-    // Suggest mode: dataset_id only, no side effects
+    // Suggest mode: workflow_id only, no side effects
     // Used during plan creation to get topic suggestions
     // =========================================================================
-    if (dataset_id && typeof dataset_id === "string" && !workflow_id) {
-      const dataset = await datasetService.getById(dataset_id);
+    if (workflow_id && typeof workflow_id === "string" && !workflow_id) {
+      const dataset = await datasetService.getById(workflow_id);
       if (!dataset) {
-        return { success: false, error: `Dataset ${dataset_id} not found` };
+        return { success: false, error: `Dataset ${workflow_id} not found` };
       }
 
       let hierarchy: TopicHierarchyNode[];
@@ -210,9 +209,9 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
         hierarchy = topicNamesToHierarchy(explicitTopics);
       } else {
         // No explicit topics — generate via LLM
-        console.log("[generate_topics] Suggest mode (no DB writes) for dataset:", dataset_id);
+        console.log("[generate_topics] Suggest mode (no DB writes) for dataset:", workflow_id);
         const result = await generateTopicsCore(
-          dataset_id,
+          workflow_id,
           dataset.datasetObjective,
           depthValue,
           degreeValue,
@@ -269,7 +268,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
     // Normal mode: workflow_id required, full DB writes
     // =========================================================================
     if (!workflow_id || typeof workflow_id !== "string") {
-      return { success: false, error: "workflow_id or dataset_id is required" };
+      return { success: false, error: "workflow_id or workflow_id is required" };
     }
 
     const workflow = await workflowService.get(workflow_id);
@@ -299,7 +298,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
     } else {
       // No explicit topics — generate via LLM
       const result = await generateTopicsCore(
-        workflow.datasetId,
+        workflow.workflowId,
         workflow.trainingGoals,
         depthValue,
         degreeValue,
@@ -314,7 +313,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
 
     // Append mode: merge with existing hierarchy from dataset
     if (mode === "append") {
-      const dataset = await datasetService.getById(workflow.datasetId);
+      const dataset = await datasetService.getById(workflow.workflowId);
       const existingHierarchy = dataset?.topicHierarchy?.hierarchy;
       if (existingHierarchy && existingHierarchy.length > 0) {
         hierarchy = mergeHierarchies(existingHierarchy, hierarchy);
@@ -324,12 +323,12 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
 
     // Ensure the objective has a normalized "You are ..." role sentence
     if (workflow.trainingGoals) {
-      const workflowDataset = await datasetService.getById(workflow.datasetId);
+      const workflowDataset = await datasetService.getById(workflow.workflowId);
       let normalizedObj = workflowDataset?.normalizedObjective;
       if (!normalizedObj) {
         try {
           normalizedObj = await normalizeObjectiveToRole(workflow.trainingGoals);
-          await datasetService.updateObjective(workflow.datasetId, workflow.trainingGoals, normalizedObj);
+          await datasetService.updateObjective(workflow.workflowId, workflow.trainingGoals, normalizedObj);
         } catch {
           console.warn("[generate_topics] Objective normalization failed, will use heuristic fallback");
         }
@@ -346,7 +345,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
     const topicCount = countLeafTopics(hierarchy);
 
     // Save hierarchy to dataset (single source of truth)
-    await datasetService.updateTopicHierarchy(workflow.datasetId, {
+    await datasetService.updateTopicHierarchy(workflow.workflowId, {
       goals: workflow.trainingGoals,
       depth: depthValue,
       hierarchy,
@@ -362,7 +361,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
     });
 
     // Get record counts for categorization info
-    const allRecords = await recordService.getByDatasetId(workflow.datasetId);
+    const allRecords = await recordService.getByDatasetId(workflow.workflowId);
     const uncategorizedCount = allRecords.filter((r) => !r.topic).length;
 
     return {
@@ -387,7 +386,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
 export const generateTopicsTool: DistriFnTool = {
   name: "generate_topics",
   description:
-    "Auto-generate topic hierarchy from dataset content. If knowledge sources (PDFs, documents) have been uploaded, their extracted topics and document sections will be used to derive the topic hierarchy. Can be called in two modes: (1) with workflow_id for full workflow integration (saves to DB), or (2) with dataset_id only for suggest mode (returns hierarchy without side effects — use this during plan creation).",
+    "Auto-generate topic hierarchy from dataset content. If knowledge sources (PDFs, documents) have been uploaded, their extracted topics and document sections will be used to derive the topic hierarchy. Can be called in two modes: (1) with workflow_id for full workflow integration (saves to DB), or (2) with workflow_id only for suggest mode (returns hierarchy without side effects — use this during plan creation).",
   type: "function",
   parameters: {
     type: "object",
@@ -395,12 +394,7 @@ export const generateTopicsTool: DistriFnTool = {
       workflow_id: {
         type: "string",
         description:
-          "The workflow ID. Use this for normal workflow mode (saves topics to DB). Either workflow_id or dataset_id is required.",
-      },
-      dataset_id: {
-        type: "string",
-        description:
-          "The dataset ID. Use this for suggest mode during plan creation — returns topic hierarchy without any DB writes or workflow state changes.",
+          "The workflow ID. Required. Use for normal workflow mode (saves topics to DB) or suggest mode during plan creation.",
       },
       max_depth: {
         type: "number",

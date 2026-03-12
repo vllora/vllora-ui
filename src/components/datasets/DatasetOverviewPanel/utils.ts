@@ -110,23 +110,23 @@ export function formatTrainingConfigValue(value: unknown): string | undefined {
 // Navigation
 // =============================================================================
 
-export function navigateToEvalJob(datasetId: string, jobId: string): void {
-  emitter.emit("vllora_switch_tab", { datasetId, tab: "evaluator" });
+export function navigateToEvalJob(workflowId: string, jobId: string): void {
+  emitter.emit("vllora_switch_tab", { workflowId, tab: "evaluator" });
   setTimeout(() => {
     window.dispatchEvent(
       new CustomEvent(OPEN_DRY_RUN_JOB_EVENT, {
-        detail: { datasetId, jobId },
+        detail: { workflowId, jobId },
       })
     );
   }, 150);
 }
 
-export function navigateToFinetuneJob(datasetId: string, jobId: string): void {
-  emitter.emit("vllora_switch_tab", { datasetId, tab: "jobs" });
+export function navigateToFinetuneJob(workflowId: string, jobId: string): void {
+  emitter.emit("vllora_switch_tab", { workflowId, tab: "jobs" });
   setTimeout(() => {
     window.dispatchEvent(
       new CustomEvent(OPEN_FINETUNE_JOB_EVENT, {
-        detail: { datasetId, jobId },
+        detail: { workflowId, jobId },
       })
     );
   }, 150);

@@ -4,7 +4,7 @@
  * Stores the IterationState as JSON in the `iteration_state` column
  * on the BE workflows table. All mutations use read-modify-write.
  *
- * Key mapping: datasetId === BE workflow row ID.
+ * Key mapping: workflowId === BE workflow row ID.
  */
 
 import { api, handleApiResponse } from '@/lib/api-client';
@@ -35,23 +35,23 @@ function parseIterationState(json: string | null): IterationState | null {
   }
 }
 
-async function fetchRow(datasetId: string): Promise<DbWorkflowResponse | null> {
-  const response = await api.get(`${BASE}/${datasetId}`);
+async function fetchRow(workflowId: string): Promise<DbWorkflowResponse | null> {
+  const response = await api.get(`${BASE}/${workflowId}`);
   if (!response.ok && response.status === 404) return null;
   return handleApiResponse<DbWorkflowResponse>(response);
 }
 
-async function saveIterationJson(datasetId: string, state: IterationState): Promise<void> {
-  const response = await api.put(`${BASE}/${datasetId}`, {
+async function saveIterationJson(workflowId: string, state: IterationState): Promise<void> {
+  const response = await api.put(`${BASE}/${workflowId}`, {
     iteration_state: JSON.stringify(state),
   });
   await handleApiResponse<DbWorkflowResponse>(response);
 }
 
-function createDefault(datasetId: string): IterationState {
+function createDefault(workflowId: string): IterationState {
   const now = Date.now();
   return {
-    id: datasetId,
+    id: workflowId,
     iterationNumber: 0,
     phase: 'idle',
     innerLoop: {},
@@ -65,8 +65,8 @@ function createDefault(datasetId: string): IterationState {
 // ─── Adapter ─────────────────────────────────────────────────────────────────
 
 export const apiIterationAdapter: IterationStateService = {
-  async get(datasetId: string): Promise<IterationState | null> {
-    const row = await fetchRow(datasetId);
+  async get(workflowId: string): Promise<IterationState | null> {
+    const row = await fetchRow(workflowId);
     if (!row) return null;
     return parseIterationState(row.iteration_state);
   },
@@ -79,23 +79,23 @@ export const apiIterationAdapter: IterationStateService = {
     await saveIterationJson(state.id, updatedState);
   },
 
-  async create(datasetId: string): Promise<IterationState> {
-    const state = createDefault(datasetId);
-    await saveIterationJson(datasetId, state);
+  async create(workflowId: string): Promise<IterationState> {
+    const state = createDefault(workflowId);
+    await saveIterationJson(workflowId, state);
     return state;
   },
 
-  async getOrCreate(datasetId: string): Promise<IterationState> {
-    const existing = await apiIterationAdapter.get(datasetId);
+  async getOrCreate(workflowId: string): Promise<IterationState> {
+    const existing = await apiIterationAdapter.get(workflowId);
     if (existing) return existing;
-    return apiIterationAdapter.create(datasetId);
+    return apiIterationAdapter.create(workflowId);
   },
 
   async addEntry(
-    datasetId: string,
+    workflowId: string,
     entry: Omit<IterationHistoryEntry, 'iteration' | 'timestamp'>,
   ): Promise<IterationState> {
-    const state = await apiIterationAdapter.getOrCreate(datasetId);
+    const state = await apiIterationAdapter.getOrCreate(workflowId);
     const nextIteration = state.iterationNumber + 1;
 
     const fullEntry: IterationHistoryEntry = {
@@ -111,18 +111,18 @@ export const apiIterationAdapter: IterationStateService = {
       updatedAt: Date.now(),
     };
 
-    await saveIterationJson(datasetId, updatedState);
+    await saveIterationJson(workflowId, updatedState);
     return updatedState;
   },
 
-  async getHistory(datasetId: string): Promise<IterationHistoryEntry[]> {
-    const state = await apiIterationAdapter.get(datasetId);
+  async getHistory(workflowId: string): Promise<IterationHistoryEntry[]> {
+    const state = await apiIterationAdapter.get(workflowId);
     if (!state) return [];
     return [...state.history].sort((a, b) => a.iteration - b.iteration);
   },
 
-  async updatePhase(datasetId: string, phase: IterationPhase): Promise<IterationState> {
-    const state = await apiIterationAdapter.getOrCreate(datasetId);
+  async updatePhase(workflowId: string, phase: IterationPhase): Promise<IterationState> {
+    const state = await apiIterationAdapter.getOrCreate(workflowId);
 
     const updatedState: IterationState = {
       ...state,
@@ -130,12 +130,12 @@ export const apiIterationAdapter: IterationStateService = {
       updatedAt: Date.now(),
     };
 
-    await saveIterationJson(datasetId, updatedState);
+    await saveIterationJson(workflowId, updatedState);
     return updatedState;
   },
 
-  async delete(datasetId: string): Promise<void> {
-    const response = await api.put(`${BASE}/${datasetId}`, {
+  async delete(workflowId: string): Promise<void> {
+    const response = await api.put(`${BASE}/${workflowId}`, {
       iteration_state: null,
     });
     await handleApiResponse<DbWorkflowResponse>(response);

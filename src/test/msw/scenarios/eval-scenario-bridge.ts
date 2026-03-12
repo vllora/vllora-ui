@@ -49,8 +49,8 @@ const SCENARIO_SCORES: Record<EvalScenarioKey, { mean: number; scores: number[] 
 // Response Builders
 // =============================================================================
 
-export function makeUploadResponse(datasetId = 'ds-backend-001'): DatasetUploadResponse {
-  return { dataset_id: datasetId };
+export function makeUploadResponse(workflowId = 'ds-backend-001'): DatasetUploadResponse {
+  return { workflow_id: workflowId };
 }
 
 export function makeCreateEvalResponse(
@@ -183,7 +183,7 @@ export function resolveEvalPollResponse(
 // Evaluator Version History
 // =============================================================================
 
-const MOCK_EVALUATOR_VERSIONS: ReadonlyArray<Omit<EvaluatorVersionResponse, 'dataset_id'>> = [
+const MOCK_EVALUATOR_VERSIONS: ReadonlyArray<Omit<EvaluatorVersionResponse, 'workflow_id'>> = [
   {
     id: 'ev-003',
     version: 3,
@@ -229,7 +229,7 @@ const MOCK_EVALUATOR_VERSIONS: ReadonlyArray<Omit<EvaluatorVersionResponse, 'dat
  * Returns versions sorted newest-first (matching real API behavior).
  */
 export function makeEvaluatorVersionsResponse(
-  datasetId: string,
+  workflowId: string,
 ): EvaluatorVersionResponse[] {
-  return MOCK_EVALUATOR_VERSIONS.map((v) => ({ ...v, dataset_id: datasetId }));
+  return MOCK_EVALUATOR_VERSIONS.map((v) => ({ ...v, workflow_id: workflowId }));
 }

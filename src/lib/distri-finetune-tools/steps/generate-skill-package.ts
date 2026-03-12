@@ -707,22 +707,22 @@ function buildSkillMarkdown(params: {
  * Pure data assembly — zero LLM calls, ~100ms.
  * Returns null if the dataset has no usable records.
  *
- * @param datasetId - The dataset ID to assemble files for
+ * @param workflowId - The dataset ID to assemble files for
  * @param overrideName - Optional skill name override (defaults to plan name → dataset name)
  */
 export async function assembleSkillPackageFiles(
-  datasetId: string,
+  workflowId: string,
   overrideName?: string,
 ): Promise<SkillPackageFiles | null> {
-  const dataset = await datasetService.getById(datasetId);
+  const dataset = await datasetService.getById(workflowId);
   if (!dataset) return null;
 
-  const records = await recordService.getByDatasetId(datasetId);
+  const records = await recordService.getByDatasetId(workflowId);
   if (records.length === 0) return null;
 
-  const knowledgeSources = await knowledgeSourceService.getByDataset(datasetId);
+  const knowledgeSources = await knowledgeSourceService.getByDataset(workflowId);
 
-  const plan = await getProposedPlan(datasetId);
+  const plan = await getProposedPlan(workflowId);
   const graderCriteria: readonly GraderCriterion[] = plan?.grader_config?.criteria ?? [];
 
   const resolvedName =
@@ -800,7 +800,7 @@ export const generateSkillPackageHandler: ToolHandler = async (params) => {
     }
 
     const overrideName = typeof skill_name === 'string' ? skill_name : undefined;
-    const packageFiles = await assembleSkillPackageFiles(workflow.datasetId, overrideName);
+    const packageFiles = await assembleSkillPackageFiles(workflow.workflowId, overrideName);
 
     if (!packageFiles) {
       return { success: false, error: 'No valid records could be assembled' };
@@ -850,7 +850,7 @@ export const generateSkillPackageHandler: ToolHandler = async (params) => {
       package_size_bytes: blob.size,
       has_knowledge: packageFiles.knowledgeDoc !== null,
       has_eval_rules: Boolean(
-        (await datasetService.getById(workflow.datasetId))?.evalScript,
+        (await datasetService.getById(workflow.workflowId))?.evalScript,
       ),
       message: `Skill package "${resolvedName}" generated with ${totalRows} examples across ${packageFiles.topicFiles.size} topics. Use download_skill_package to save.`,
     };

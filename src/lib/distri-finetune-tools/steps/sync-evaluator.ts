@@ -26,7 +26,7 @@ export const syncEvaluatorHandler: ToolHandler = async (params) => {
     }
 
     // Get dataset
-    const dataset = await datasetService.getById(workflow.datasetId);
+    const dataset = await datasetService.getById(workflow.workflowId);
     if (!dataset) {
       return { success: false, error: 'Dataset not found' };
     }
@@ -40,13 +40,13 @@ export const syncEvaluatorHandler: ToolHandler = async (params) => {
     }
 
     // Ensure dataset is uploaded (auto-uploads if needed)
-    await ensureDatasetUploaded(workflow.datasetId);
+    await ensureDatasetUploaded(workflow.workflowId);
 
     // Dataset is uploaded and has eval script - ready for dry run
     // The dataset ID is the backend dataset ID — they are always the same.
     return {
       success: true,
-      backend_dataset_id: workflow.datasetId,
+      backend_workflow_id: workflow.workflowId,
       evaluator_type: 'js',
       message: 'Eval script configured and dataset uploaded. Ready for evaluation. Note: If eval script changed, use upload_dataset with force_reupload=true.',
     };

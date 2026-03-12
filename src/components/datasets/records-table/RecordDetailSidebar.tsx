@@ -179,7 +179,7 @@ export function RecordDetailSidebar({
                     <EvaluationScores
                       evaluation={record.evaluation}
                       onNavigate={(target) => {
-                        emitter.emit("vllora_switch_tab", { datasetId: record.datasetId, tab: target });
+                        emitter.emit("vllora_switch_tab", { workflowId: record.workflowId, tab: target });
                         setTimeout(() => {
                           window.dispatchEvent(new CustomEvent('vllora_highlight_eval_result', {
                             detail: { recordId: record.id }

@@ -27,7 +27,7 @@ const fetchLucyConfigCached = async (): Promise<LucyConfig> => {
 // =============================================================================
 
 interface GenerateRecordVariantsParams {
-  dataset_id: string;
+  workflow_id: string;
   record_id: string;
   count?: number;
   guidance?: string;
@@ -324,14 +324,14 @@ export const generateRecordVariantsHandler: ToolHandler = async (
     );
 
     const {
-      dataset_id,
+      workflow_id,
       record_id,
       count = 5,
       guidance,
     } = params as unknown as GenerateRecordVariantsParams;
 
-    if (!dataset_id) {
-      return { success: false, error: "dataset_id is required" };
+    if (!workflow_id) {
+      return { success: false, error: "workflow_id is required" };
     }
 
     if (!record_id) {
@@ -339,7 +339,7 @@ export const generateRecordVariantsHandler: ToolHandler = async (
     }
 
     // Get the source record
-    const records = await recordService.getByDatasetId(dataset_id);
+    const records = await recordService.getByDatasetId(workflow_id);
     const sourceRecord = records.find((r) => r.id === record_id);
 
     if (!sourceRecord) {
@@ -366,10 +366,10 @@ export const generateRecordVariantsHandler: ToolHandler = async (
     let resolvedChunkRefs: string[] = [];
     if (sourceRecord.topic) {
       try {
-        const dataset = await datasetService.getById(dataset_id);
+        const dataset = await datasetService.getById(workflow_id);
         const hierarchy = dataset?.topicHierarchy?.hierarchy;
         if (!hierarchy?.length) {
-          console.log(`[generateRecordVariants] No hierarchy found for dataset "${dataset_id}"`);
+          console.log(`[generateRecordVariants] No hierarchy found for dataset "${workflow_id}"`);
         } else {
           console.log(`[generateRecordVariants] Hierarchy loaded: ${hierarchy.length} top-level nodes`);
           let topicNode = findTopicNode(hierarchy, sourceRecord.topic);
@@ -385,7 +385,7 @@ export const generateRecordVariantsHandler: ToolHandler = async (
           console.log(`[generateRecordVariants] Topic node lookup: ${topicNode ? `found "${topicNode.name}" with ${topicNode.sourceChunkRefs?.length ?? 0} chunk refs` : 'not found'}`);
           if (topicNode?.sourceChunkRefs?.length) {
             resolvedChunkRefs = topicNode.sourceChunkRefs;
-            const resolvedChunks = await resolveChunkRefs(dataset_id, topicNode.sourceChunkRefs);
+            const resolvedChunks = await resolveChunkRefs(workflow_id, topicNode.sourceChunkRefs);
             console.log(`[generateRecordVariants] Resolved ${resolvedChunks.length} chunks from ${topicNode.sourceChunkRefs.length} refs for topic "${sourceRecord.topic}"`);
             if (resolvedChunks.length > 0) {
               knowledgeContext = buildChunkContextSection(resolvedChunks);
@@ -426,7 +426,7 @@ export const generateRecordVariantsHandler: ToolHandler = async (
     }));
 
     const addedRecords = await recordService.add(
-      dataset_id,
+      workflow_id,
       recordsToAdd,
     );
 
@@ -476,7 +476,7 @@ Generated variants keep the full conversation history unchanged and only vary th
   parameters: {
     type: "object",
     properties: {
-      dataset_id: {
+      workflow_id: {
         type: "string",
         description: "The dataset ID containing the source record",
       },
@@ -495,7 +495,7 @@ Generated variants keep the full conversation history unchanged and only vary th
           'Optional guidance for how to vary the records (e.g., "make some more challenging", "vary the tone from formal to casual")',
       },
     },
-    required: ["dataset_id", "record_id"],
+    required: ["workflow_id", "record_id"],
   },
   autoExecute: true,
   handler: async (input) =>

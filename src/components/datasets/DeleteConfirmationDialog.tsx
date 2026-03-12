@@ -18,7 +18,7 @@ import {
 export interface DeleteConfirmation {
   type: "dataset" | "record";
   id: string;
-  datasetId?: string;
+  workflowId?: string;
   name?: string; // Optional name for display
 }
 

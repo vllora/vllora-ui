@@ -93,11 +93,11 @@ const PlanContext = createContext<PlanContextType | undefined>(undefined);
 // ============================================================================
 
 interface PlanProviderProps {
-  datasetId: string;
+  workflowId: string;
   children: ReactNode;
 }
 
-export function PlanProvider({ datasetId, children }: PlanProviderProps) {
+export function PlanProvider({ workflowId, children }: PlanProviderProps) {
   // Plan status (persisted to IndexedDB — single source of truth)
   const [planStatus, setPlanStatus] = useState<PlanStatus | null>(null);
 
@@ -121,8 +121,8 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
   const [planEditMode, setPlanEditMode] = useState<"display" | "edit">("display");
 
   // Refs to track current values for use in event handlers (avoids stale closures)
-  const datasetIdRef = useRef(datasetId);
-  datasetIdRef.current = datasetId;
+  const workflowIdRef = useRef(workflowId);
+  workflowIdRef.current = workflowId;
   const planStatusRef = useRef(planStatus);
   planStatusRef.current = planStatus;
   const executionCompleteRef = useRef(false);
@@ -133,7 +133,7 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
   // Check for persisted state on mount (IndexedDB + in-memory stores)
   // Uses a cancelled flag for proper cleanup — safe with React strict mode
   useEffect(() => {
-    if (!datasetId) return;
+    if (!workflowId) return;
 
     // Reset state immediately so workspace doesn't show stale content from previous dataset
     setIsLoadingPlan(true);
@@ -150,8 +150,8 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
 
     const loadState = async () => {
       // Check for active execution first (in-memory, lost on refresh)
-      const currentExecution = getCurrentExecution(datasetId);
-      const executingPlanData = getExecutingPlan(datasetId);
+      const currentExecution = getCurrentExecution(workflowId);
+      const executingPlanData = getExecutingPlan(workflowId);
 
       if (currentExecution && !currentExecution.is_complete) {
         if (cancelled) return;
@@ -176,7 +176,7 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
 
       // Check IndexedDB for a persisted plan (survives page refresh)
       try {
-        const storedPlan = await getStoredPlan(datasetId);
+        const storedPlan = await getStoredPlan(workflowId);
         if (cancelled) return;
         if (storedPlan) {
           setPlanStatus(storedPlan.status);
@@ -247,18 +247,18 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
     return () => {
       cancelled = true;
     };
-  }, [datasetId]);
+  }, [workflowId]);
 
   // Listen for plan lifecycle events
   useEffect(() => {
-    const handleGenerating = ({ datasetId: id }: { datasetId: string }) => {
-      if (id === datasetId) {
+    const handleGenerating = ({ workflowId: id }: { workflowId: string }) => {
+      if (id === workflowId) {
         setIsGeneratingPlan(true);
       }
     };
 
-    const handleProposed = ({ datasetId: id, plan }: { datasetId: string; plan: unknown }) => {
-      if (id === datasetId) {
+    const handleProposed = ({ workflowId: id, plan }: { workflowId: string; plan: unknown }) => {
+      if (id === workflowId) {
         setPlanStatus('proposed');
         setIsGeneratingPlan(false);
         setHasPlanProposed(true);
@@ -273,8 +273,8 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
       }
     };
 
-    const handleDismissed = ({ datasetId: id }: { datasetId: string }) => {
-      if (id === datasetId) {
+    const handleDismissed = ({ workflowId: id }: { workflowId: string }) => {
+      if (id === workflowId) {
         setPlanStatus(null);
         setIsGeneratingPlan(false);
         setHasPlanProposed(false);
@@ -285,8 +285,8 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
       }
     };
 
-    const handleWorkflowUpdated = ({ datasetId: id }: { datasetId: string }) => {
-      if (id === datasetId) {
+    const handleWorkflowUpdated = ({ workflowId: id }: { workflowId: string }) => {
+      if (id === workflowId) {
         // Only transition if execution is complete (read from ref to avoid stale closure)
         if (executionCompleteRef.current) {
           setIsExecuting(false);
@@ -299,13 +299,13 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
 
     // Content-only plan markdown updates (during agent-driven execution).
     // Unlike vllora_plan_proposed, this does NOT reset status/isExecuting.
-    const handleMarkdownUpdated = ({ datasetId: id, plan, status: newStatus, error_message }: {
-      datasetId: string;
+    const handleMarkdownUpdated = ({ workflowId: id, plan, status: newStatus, error_message }: {
+      workflowId: string;
       plan: unknown;
       status?: 'executing' | 'completed' | 'failed';
       error_message?: string;
     }) => {
-      if (id !== datasetId) return;
+      if (id !== workflowId) return;
 
       // Update plan content so PlanPreview re-renders with new checkboxes
       setProposedPlan(plan as Plan);
@@ -316,7 +316,7 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
         setPlanStatus('executing');
         setIsExecuting(true);
         setPlanErrorMessage(null);
-        updatePlanStatus(datasetId, 'executing');
+        updatePlanStatus(workflowId, 'executing');
       }
 
       // Explicit status transition from the agent
@@ -329,7 +329,7 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
           }
           // Delay clearing isExecuting briefly so the user sees the final state
           setTimeout(() => {
-            if (datasetIdRef.current !== id) return;
+            if (workflowIdRef.current !== id) return;
             setIsExecuting(false);
             if (newStatus === 'completed') {
               toast.success('Plan executed successfully!', {
@@ -346,7 +346,7 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
     };
 
     const handleExecutionProgress = ({ progress }: { progress: ExecutionProgress }) => {
-      if (progress.dataset_id === datasetId) {
+      if (progress.workflow_id === workflowId) {
         // Shallow-clone to guarantee a new reference — execute-plan.ts mutates
         // the same progress object in place, so without this React's Object.is()
         // check would bail out and skip the re-render (checkboxes wouldn't update).
@@ -355,27 +355,27 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
           setIsExecuting(true);
           setPlanStatus('executing');
           // Persist progress to IndexedDB (write-through)
-          updatePlanExecution(datasetId, progress);
+          updatePlanExecution(workflowId, progress);
         }
         if (progress.is_complete) {
           // Persist final status to IndexedDB
           if (progress.has_error) {
-            failPlan(datasetId, progress);
+            failPlan(workflowId, progress);
             setPlanStatus('failed');
           } else {
-            completePlan(datasetId, progress);
+            completePlan(workflowId, progress);
             setPlanStatus('completed');
           }
           // Keep showing progress briefly, then transition
           setTimeout(() => {
             // Guard: if user navigated to a different dataset, skip stale update
-            if (datasetIdRef.current !== progress.dataset_id) return;
+            if (workflowIdRef.current !== progress.workflow_id) return;
             setIsExecuting(false);
             // Keep executionProgress so plan checkboxes remain checked when the
             // user navigates back to the plan tab. For both success and failure,
             // preserving progress shows which steps completed.
             // Get plan from execution store for executedPlan reference
-            const planFromStore = getExecutingPlan(datasetIdRef.current);
+            const planFromStore = getExecutingPlan(workflowIdRef.current);
             if (planFromStore) {
               setExecutedPlan(planFromStore);
             }
@@ -410,7 +410,7 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
       emitter.off("vllora_plan_progress", handleExecutionProgress);
       emitter.off("vllora_plan_markdown_updated", handleMarkdownUpdated);
     };
-  }, [datasetId]); // executionProgress?.is_complete tracked via executionCompleteRef to keep listener stable
+  }, [workflowId]); // executionProgress?.is_complete tracked via executionCompleteRef to keep listener stable
 
   // Actions
   const approvePlan = useCallback((plan: Plan) => {
@@ -430,10 +430,10 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
     }
 
     // Update plan status to 'approved' in IndexedDB (keep the plan data!)
-    updatePlanStatus(datasetId, 'approved');
+    updatePlanStatus(workflowId, 'approved');
     setPlanStatus('approved');
     // Emit the approved plan via event (Lucy will pick it up)
-    emitter.emit("vllora_plan_approved", { datasetId, plan });
+    emitter.emit("vllora_plan_approved", { workflowId, plan });
     // Send a simple prompt to Lucy
     emitter.emit("vllora_lucy_prompt", {
       prompt: `I approve the plan. Please execute it now.`,
@@ -442,7 +442,7 @@ export function PlanProvider({ datasetId, children }: PlanProviderProps) {
     setIsExecuting(true);
     // Hide plan preview during execution (workspace returns to tabs)
     setIsPlanPreviewActive(false);
-  }, [datasetId]);
+  }, [workflowId]);
 
   const submitEditedPlan = useCallback((editedMarkdown: string) => {
     if (!proposedPlan) return;
@@ -475,19 +475,19 @@ ${editedMarkdown}
   }, [proposedPlan]);
 
   const dismissPlan = useCallback(() => {
-    clearProposedPlan(datasetId);
-    emitter.emit("vllora_plan_dismissed", { datasetId });
+    clearProposedPlan(workflowId);
+    emitter.emit("vllora_plan_dismissed", { workflowId });
     setProposedPlan(null);
     setHasPlanProposed(false);
     setIsExecuting(false);
     setExecutionProgress(null);
     setIsPlanPreviewActive(false);
-  }, [datasetId]);
+  }, [workflowId]);
 
   const cancelExecution = useCallback(() => {
-    cancelExecutionInStore(datasetId);
+    cancelExecutionInStore(workflowId);
     toast.info("Cancelling execution after current step completes...");
-  }, [datasetId]);
+  }, [workflowId]);
 
   const value: PlanContextType = {
     planStatus,

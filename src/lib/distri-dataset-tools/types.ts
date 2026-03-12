@@ -13,7 +13,7 @@ export interface ServerAnalyticsInfo {
 
 // Dataset stats result
 export interface DatasetStats {
-  dataset_id: string;
+  workflow_id: string;
   dataset_name: string;
   record_count: number;
   from_spans_count: number;

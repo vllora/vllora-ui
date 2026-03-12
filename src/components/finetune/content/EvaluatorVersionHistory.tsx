@@ -21,7 +21,7 @@ import {
 } from "@/services/finetune-api";
 
 interface EvaluatorVersionHistoryProps {
-  datasetId: string;
+  workflowId: string;
   className?: string;
   /** Callback when a version is selected (e.g., for picking evaluator_version in training) */
   onVersionSelect?: (version: number) => void;
@@ -69,7 +69,7 @@ function DiffView({ diff }: { diff: string }) {
 }
 
 export function EvaluatorVersionHistory({
-  datasetId,
+  workflowId,
   className,
   onVersionSelect,
   selectedVersion,
@@ -83,7 +83,7 @@ export function EvaluatorVersionHistory({
   const fetchVersions = useCallback(async () => {
     setIsLoading(true);
     try {
-      const result = await getEvaluatorVersions(datasetId);
+      const result = await getEvaluatorVersions(workflowId);
       setVersions(result);
       setError(null);
     } catch (err) {
@@ -91,7 +91,7 @@ export function EvaluatorVersionHistory({
     } finally {
       setIsLoading(false);
     }
-  }, [datasetId]);
+  }, [workflowId]);
 
   useEffect(() => {
     fetchVersions();

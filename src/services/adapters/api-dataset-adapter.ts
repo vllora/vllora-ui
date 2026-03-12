@@ -6,11 +6,9 @@
  *
  * Mapping: FE "Dataset" → BE "Workflow"
  *
- * The BE workflow only stores: name, objective, eval_script.
- * Derived metadata (coverageStats, evalStats, topicHierarchy, etc.)
- * is computed on-demand from records, topics, and eval jobs.
- * These update methods are no-ops in the API adapter — the data is
- * derived, not persisted.
+ * The BE workflow stores: name, objective, eval_script.
+ * Topic hierarchy is stored in the workflow_topics table via separate endpoints.
+ * Derived metadata (coverageStats, evalStats, etc.) is computed on-demand.
  */
 
 import { api, handleApiResponse } from '@/lib/api-client';
@@ -18,6 +16,7 @@ import type { DatasetService } from '@/services/interfaces/dataset-service';
 import type {
   Dataset,
   TopicHierarchyConfig,
+  TopicHierarchyNode,
   CoverageStats,
   KnowledgeCoverageStats,
   EvalStats,
@@ -48,6 +47,122 @@ function mapToFe(db: DbWorkflowResponse): Dataset {
   };
 }
 
+// ─── Topic hierarchy helpers ─────────────────────────────────────────────────
+
+interface DbTopicResponse {
+  readonly id: string;
+  readonly workflow_id: string;
+  readonly name: string;
+  readonly parent_id: string | null;
+  readonly selected: number;
+  readonly source_chunk_refs: string | null;
+  readonly created_at: string;
+}
+
+/** Extra FE-only fields stored as JSON in the BE source_chunk_refs column */
+interface TopicMetadata {
+  sourceChunkRefs?: string[];
+  description?: string;
+  promptTemplate?: string;
+  normalizedPromptSegment?: string;
+}
+
+/** Flatten a FE hierarchy tree into flat rows with parent_id for the BE */
+function flattenHierarchy(
+  nodes: readonly TopicHierarchyNode[],
+  parentId: string | null,
+): Array<{ id: string; name: string; parent_id: string | null; selected: boolean; source_chunk_refs: TopicMetadata | null }> {
+  const result: Array<{ id: string; name: string; parent_id: string | null; selected: boolean; source_chunk_refs: TopicMetadata | null }> = [];
+  for (const node of nodes) {
+    const meta: TopicMetadata = {};
+    if (node.sourceChunkRefs?.length) meta.sourceChunkRefs = node.sourceChunkRefs;
+    if (node.description) meta.description = node.description;
+    if (node.promptTemplate) meta.promptTemplate = node.promptTemplate;
+    if (node.normalizedPromptSegment) meta.normalizedPromptSegment = node.normalizedPromptSegment;
+
+    result.push({
+      id: node.id,
+      name: node.name,
+      parent_id: parentId,
+      selected: node.selected ?? true,
+      source_chunk_refs: Object.keys(meta).length > 0 ? meta : null,
+    });
+
+    if (node.children?.length) {
+      result.push(...flattenHierarchy(node.children, node.id));
+    }
+  }
+  return result;
+}
+
+/** Reconstruct a FE hierarchy tree from flat BE topic rows */
+function buildHierarchyTree(rows: readonly DbTopicResponse[]): TopicHierarchyNode[] {
+  const nodeMap = new Map<string, TopicHierarchyNode>();
+  const roots: TopicHierarchyNode[] = [];
+
+  // First pass: create all nodes
+  for (const row of rows) {
+    let meta: TopicMetadata = {};
+    if (row.source_chunk_refs) {
+      try { meta = JSON.parse(row.source_chunk_refs); } catch { /* ignore */ }
+    }
+
+    nodeMap.set(row.id, {
+      id: row.id,
+      name: row.name,
+      selected: row.selected === 1,
+      description: meta.description,
+      sourceChunkRefs: meta.sourceChunkRefs,
+      promptTemplate: meta.promptTemplate,
+      normalizedPromptSegment: meta.normalizedPromptSegment,
+      children: undefined,
+    });
+  }
+
+  // Second pass: link children to parents
+  for (const row of rows) {
+    const node = nodeMap.get(row.id)!;
+    if (row.parent_id && nodeMap.has(row.parent_id)) {
+      const parent = nodeMap.get(row.parent_id)!;
+      if (!parent.children) parent.children = [];
+      parent.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+
+  return roots;
+}
+
+/** Calculate max depth of a hierarchy tree */
+function calcMaxDepth(nodes: readonly TopicHierarchyNode[], depth = 1): number {
+  let max = depth;
+  for (const node of nodes) {
+    if (node.children?.length) {
+      max = Math.max(max, calcMaxDepth(node.children, depth + 1));
+    }
+  }
+  return max;
+}
+
+/** Fetch topics from gateway and reconstruct as TopicHierarchyConfig */
+async function fetchTopicHierarchy(workflowId: string): Promise<TopicHierarchyConfig | undefined> {
+  try {
+    const response = await api.get(`${BASE}/${workflowId}/topics`);
+    const data = await handleApiResponse<{ topics: DbTopicResponse[] }>(response);
+    if (!data.topics || data.topics.length === 0) return undefined;
+
+    const hierarchy = buildHierarchyTree(data.topics);
+    return {
+      hierarchy,
+      depth: calcMaxDepth(hierarchy),
+      generatedAt: new Date(data.topics[0].created_at).getTime(),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 // ─── Adapter ──────────────────────────────────────────────────────────────────
 
 const BASE = '/finetune/workflows';
@@ -57,7 +172,11 @@ export const apiDatasetAdapter: DatasetService = {
     const response = await api.get(`${BASE}/${id}`);
     if (!response.ok && response.status === 404) return null;
     const db = await handleApiResponse<DbWorkflowResponse>(response);
-    return mapToFe(db);
+    const dataset = mapToFe(db);
+    const topicHierarchy = await fetchTopicHierarchy(id);
+    console.log('[api-dataset] getById', id, 'topicHierarchy:', topicHierarchy ? `${topicHierarchy.hierarchy?.length} roots` : 'none');
+    if (topicHierarchy) dataset.topicHierarchy = topicHierarchy;
+    return dataset;
   },
 
   async getAll(): Promise<Dataset[]> {
@@ -90,9 +209,19 @@ export const apiDatasetAdapter: DatasetService = {
     await handleApiResponse<DbWorkflowResponse>(response);
   },
 
-  async updateTopicHierarchy(_id: string, _topics: TopicHierarchyConfig): Promise<void> {
-    // Topic hierarchy is stored in the workflow_topics table, not on the workflow.
-    // Topics are managed via the separate topics CRUD endpoints.
+  async updateTopicHierarchy(id: string, topics: TopicHierarchyConfig): Promise<void> {
+    // Delete existing topics, then insert the new hierarchy
+    console.log('[api-dataset] updateTopicHierarchy called:', id, 'hierarchy nodes:', topics.hierarchy?.length ?? 0);
+    const delResponse = await api.delete(`${BASE}/${id}/topics`);
+    const delResult = await handleApiResponse<{ deleted: number }>(delResponse);
+    console.log('[api-dataset] deleted topics:', delResult);
+    if (topics.hierarchy?.length) {
+      const flat = flattenHierarchy(topics.hierarchy, null);
+      console.log('[api-dataset] posting flat topics:', flat.length);
+      const response = await api.post(`${BASE}/${id}/topics`, { topics: flat });
+      const createResult = await handleApiResponse<{ created: number }>(response);
+      console.log('[api-dataset] created topics:', createResult);
+    }
   },
 
   async updateEvalScript(id: string, script: string): Promise<void> {

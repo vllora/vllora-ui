@@ -19,10 +19,10 @@ import type { ToolHandler } from '../types';
 
 export const logIterationHandler: ToolHandler = async (params) => {
   try {
-    const { dataset_id, eval_id, scores, changes_made, decision, proposed_changes, phase } = params;
+    const { workflow_id, eval_id, scores, changes_made, decision, proposed_changes, phase } = params;
 
-    if (!dataset_id || typeof dataset_id !== 'string') {
-      return { success: false, error: 'dataset_id is required' };
+    if (!workflow_id || typeof workflow_id !== 'string') {
+      return { success: false, error: 'workflow_id is required' };
     }
     if (!eval_id || typeof eval_id !== 'string') {
       return { success: false, error: 'eval_id is required' };
@@ -44,7 +44,7 @@ export const logIterationHandler: ToolHandler = async (params) => {
       : 'iterate';
 
     // Add the iteration entry
-    const state = await iterationStateService.addEntry(dataset_id, {
+    const state = await iterationStateService.addEntry(workflow_id, {
       evalId: eval_id,
       dryRunScores: { mean: meanScore, perTopic },
       changesMade: typeof changes_made === 'string' ? changes_made : '',
@@ -96,14 +96,14 @@ export const logIterationHandler: ToolHandler = async (params) => {
 
 export const getIterationHistoryHandler: ToolHandler = async (params) => {
   try {
-    const { dataset_id } = params;
+    const { workflow_id } = params;
 
-    if (!dataset_id || typeof dataset_id !== 'string') {
-      return { success: false, error: 'dataset_id is required' };
+    if (!workflow_id || typeof workflow_id !== 'string') {
+      return { success: false, error: 'workflow_id is required' };
     }
 
-    const state = await iterationStateService.getOrCreate(dataset_id);
-    const history = await iterationStateService.getHistory(dataset_id);
+    const state = await iterationStateService.getOrCreate(workflow_id);
+    const history = await iterationStateService.getHistory(workflow_id);
 
     return {
       success: true,
@@ -150,7 +150,7 @@ export const logIterationTool: DistriFnTool = {
   parameters: {
     type: 'object',
     properties: {
-      dataset_id: {
+      workflow_id: {
         type: 'string',
         description: 'The dataset ID',
       },
@@ -201,7 +201,7 @@ export const logIterationTool: DistriFnTool = {
         description: 'Current iteration phase',
       },
     },
-    required: ['dataset_id', 'eval_id', 'scores', 'decision'],
+    required: ['workflow_id', 'eval_id', 'scores', 'decision'],
   },
   handler: async (input) => JSON.stringify(await logIterationHandler(input as Record<string, unknown>)),
 } as DistriFnTool;
@@ -214,12 +214,12 @@ export const getIterationHistoryTool: DistriFnTool = {
   parameters: {
     type: 'object',
     properties: {
-      dataset_id: {
+      workflow_id: {
         type: 'string',
         description: 'The dataset ID to get iteration history for',
       },
     },
-    required: ['dataset_id'],
+    required: ['workflow_id'],
   },
   handler: async (input) => JSON.stringify(await getIterationHistoryHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

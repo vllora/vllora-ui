@@ -79,18 +79,18 @@ type VlloraEvents = {
   vllora_input_speechRecognitionStart: Record<string, never>;
   vllora_input_speechRecognitionEnd: Record<string, never>;
   // Finetune job events
-  vllora_finetune_job_created: { jobId?: string; datasetId: string };
+  vllora_finetune_job_created: { jobId?: string; workflowId: string };
   // Dry run job events
   vllora_dry_run_job_update: { jobId: string; job: EvalJob };
   // Dry run job completed/failed (triggers Lucy auto-analysis)
-  vllora_dry_run_job_completed: { jobId: string; datasetId: string; verdict: string };
+  vllora_dry_run_job_completed: { jobId: string; workflowId: string; verdict: string };
   // Finetune job completed/failed (triggers Lucy auto-analysis)
-  vllora_finetune_job_completed: { jobId: string; datasetId: string };
+  vllora_finetune_job_completed: { jobId: string; workflowId: string };
   // Lucy assistant prompt trigger (from UI actions like "Generate for topic")
   vllora_lucy_prompt: { prompt: string };
   // Knowledge source events
   vllora_knowledge_source_updated: {
-    datasetId: string;
+    workflowId: string;
     sourceId?: string;
     progress?: {
       step: string;
@@ -102,16 +102,16 @@ type VlloraEvents = {
   // plan execution progress
   vllora_plan_progress: { progress: import('@/lib/distri-finetune-tools/steps/execute-plan').ExecutionProgress };
   // plan generation started (show loading in right panel and open plan preview state)
-  vllora_plan_generating: { datasetId: string; switchToReadme?: boolean };
+  vllora_plan_generating: { workflowId: string; switchToReadme?: boolean };
   // plan proposed (for displaying in right panel)
   vllora_plan_proposed: {
-    datasetId: string;
+    workflowId: string;
     plan: unknown;
     diff?: import('@/components/datasets/plan-section/plan-markdown-utils').PlanDiff;
   };
   // plan markdown updated (content-only update during execution — does NOT reset plan status)
   vllora_plan_markdown_updated: {
-    datasetId: string;
+    workflowId: string;
     plan: unknown;
     /** Optional status transition: 'executing' during steps, 'completed'/'failed' on final call */
     status?: 'executing' | 'completed' | 'failed';
@@ -119,14 +119,14 @@ type VlloraEvents = {
     error_message?: string;
   };
   // plan dismissed (user closed the card without approving)
-  vllora_plan_dismissed: { datasetId: string };
+  vllora_plan_dismissed: { workflowId: string };
   // plan approved (user approved, triggers execution)
-  vllora_plan_approved: { datasetId: string; plan: unknown };
+  vllora_plan_approved: { workflowId: string; plan: unknown };
   // Workflow updated (triggers refresh in UI)
-  vllora_workflow_updated: { datasetId: string };
+  vllora_workflow_updated: { workflowId: string };
   // Data generation progress (for showing loading state in Records tab)
   vllora_data_generation_progress: {
-    datasetId: string;
+    workflowId: string;
     status: 'started' | 'progress' | 'completed' | 'failed';
     total: number;
     completed: number;
@@ -143,7 +143,7 @@ type VlloraEvents = {
   // Switch to a specific tab during execution
   // Known sections + arbitrary workspace paths (e.g. "documents/{sourceId}")
   vllora_switch_tab: {
-    datasetId: string;
+    workflowId: string;
     tab: 'overview' | 'records' | 'evaluator' | 'jobs' | 'deploy' | (string & {});
   };
   // Open a drawer (docs or readme) from non-React code
@@ -151,9 +151,9 @@ type VlloraEvents = {
     type: 'docs' | 'readme';
   };
   // Docs are still processing — UI should auto-prompt Lucy when they're done
-  vllora_docs_awaiting_plan: { datasetId: string };
+  vllora_docs_awaiting_plan: { workflowId: string };
   // Filter records table by source document (from KnowledgeSourceCard clicks)
-  vllora_filter_by_source: { datasetId: string; sourceId: string | null };
+  vllora_filter_by_source: { workflowId: string; sourceId: string | null };
 };
 
 // ============================================================================

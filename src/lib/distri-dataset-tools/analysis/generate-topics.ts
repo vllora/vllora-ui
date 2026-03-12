@@ -35,7 +35,7 @@ interface TopicAnalysisResult {
 }
 
 export interface AnalyzeRecordsForTopicsParams {
-  datasetId?: string;
+  workflowId?: string;
   datasetName?: string;
   recordIds?: string[];
   maxTopics?: number;
@@ -55,8 +55,8 @@ export interface AnalyzeRecordsForTopicsResult {
 }
 
 export interface GenerateTopicsParams {
-  datasetId?: string;
-  dataset_id?: string;
+  workflowId?: string;
+  workflow_id?: string;
   datasetName?: string;
   dataset_name?: string;
   recordIds?: string[];
@@ -253,14 +253,14 @@ function parseTopicAnalysisResponse(content: string): TopicAnalysisResult {
 
 export async function analyzeRecordsForTopics(params: Record<string, unknown>): Promise<AnalyzeRecordsForTopicsResult> {
   try {
-    const { datasetId: paramDatasetId, datasetName, recordIds, maxTopics, maxDepth = DEFAULT_TOPIC_MAX_DEPTH, degree = DEFAULT_TOPIC_DEGREE } =
+    const { workflowId: paramDatasetId, datasetName, recordIds, maxTopics, maxDepth = DEFAULT_TOPIC_MAX_DEPTH, degree = DEFAULT_TOPIC_DEGREE } =
       params as unknown as AnalyzeRecordsForTopicsParams & { maxDepth?: number; degree?: number };
     const autoApply = true;
     const estimatedMaxTopics = degree > 1 ? Math.min(20, Math.max(1, Math.round((Math.pow(degree, maxDepth) - 1) / (degree - 1)))) : maxDepth;
     const effectiveMaxTopics = maxTopics ?? estimatedMaxTopics;
 
     if (!paramDatasetId && !datasetName) {
-      return { success: false, error: 'Either datasetId or datasetName is required' };
+      return { success: false, error: 'Either workflowId or datasetName is required' };
     }
 
     const allDatasets = await datasetService.getAll();
@@ -342,10 +342,10 @@ export async function analyzeRecordsForTopics(params: Record<string, unknown>): 
 }
 
 export async function generateTopics(params: Record<string, unknown>): Promise<AnalyzeRecordsForTopicsResult> {
-  const { datasetId, dataset_id, datasetName, dataset_name, recordIds, record_ids, maxTopics, max_topics, maxDepth, max_depth, degree, branching } =
+  const { workflowId, workflow_id, datasetName, dataset_name, recordIds, record_ids, maxTopics, max_topics, maxDepth, max_depth, degree, branching } =
     params as unknown as GenerateTopicsParams;
 
-  const resolvedDatasetId = datasetId || dataset_id;
+  const resolvedDatasetId = workflowId || workflow_id;
   const resolvedDatasetName = datasetName || dataset_name;
   const resolvedRecordIds = (recordIds || record_ids || []).filter(Boolean);
 
@@ -364,7 +364,7 @@ export async function generateTopics(params: Record<string, unknown>): Promise<A
     for (let i = 0; i < resolvedRecordIds.length; i += TOPIC_BATCH_SIZE) {
       const batchIds = resolvedRecordIds.slice(i, i + TOPIC_BATCH_SIZE);
       const result = await analyzeRecordsForTopics({
-        datasetId: resolvedDatasetId,
+        workflowId: resolvedDatasetId,
         datasetName: resolvedDatasetName,
         recordIds: batchIds,
         maxTopics: resolvedMaxTopics,
@@ -396,7 +396,7 @@ export async function generateTopics(params: Record<string, unknown>): Promise<A
   }
 
   return analyzeRecordsForTopics({
-    datasetId: resolvedDatasetId,
+    workflowId: resolvedDatasetId,
     datasetName: resolvedDatasetName,
     recordIds: resolvedRecordIds.length > 0 ? resolvedRecordIds : undefined,
     maxTopics: resolvedMaxTopics,

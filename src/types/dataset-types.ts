@@ -27,7 +27,7 @@ export interface DatasetEvaluation {
 // Stored in 'records' object store
 export interface DatasetRecord {
   id: string;
-  datasetId: string;           // Foreign key to dataset
+  workflowId: string;           // Foreign key to dataset/workflow
   data: unknown;               // Trace payload (DataInfo) or imported object
   metadata?: Record<string, unknown>; // Record-level metadata (provenance, flags)
   spanId?: string;             // For duplicate detection and keeping track of span (optional - undefined for generated data)
@@ -414,7 +414,7 @@ export interface ExtractedContent {
 /** Knowledge source stored in IndexedDB */
 export interface KnowledgeSource {
   id: string;
-  datasetId: string;
+  workflowId: string;
   /** Original filename or URL */
   name: string;
   /** Type of source */

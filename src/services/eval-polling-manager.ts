@@ -125,14 +125,14 @@ class EvalPollingManager {
    * Used by both UI (EvalJobsContext) and tool handlers.
    */
   async startEvalForDataset(params: {
-    datasetId: string;
+    workflowId: string;
     sampleSize: number;
     rolloutModel?: string;
   }): Promise<string> {
-    const { datasetId, sampleSize, rolloutModel = 'gpt-4o-mini' } = params;
+    const { workflowId, sampleSize, rolloutModel = 'gpt-4o-mini' } = params;
 
     // Validate dataset has eval script
-    const dataset = await datasetService.getById(datasetId);
+    const dataset = await datasetService.getById(workflowId);
     if (!dataset) {
       throw new Error('Dataset not found');
     }
@@ -142,11 +142,11 @@ class EvalPollingManager {
     }
 
     // Ensure dataset is uploaded (auto-uploads if needed)
-    await ensureDatasetUploaded(datasetId);
+    await ensureDatasetUploaded(workflowId);
 
     // Start the dry run
     return this.startEval({
-      datasetId,
+      workflowId,
       sampleSize,
       rolloutModel,
     });
@@ -158,14 +158,14 @@ class EvalPollingManager {
    */
   async startEval(params: StartEvalParams): Promise<string> {
     const {
-      datasetId,
+      workflowId,
       sampleSize,
       rolloutModel = 'gpt-4o-mini',
     } = params;
 
     // Create job record in pending state
     const job = await evalJobService.create({
-      datasetId,
+      workflowId,
       evaluationRunId: '',
       status: 'pending',
       sampleSize,
@@ -176,7 +176,7 @@ class EvalPollingManager {
     try {
       // Call backend to create evaluation
       const evaluationResponse = await createEvaluation({
-        dataset_id: datasetId,
+        workflow_id: workflowId,
         rollout_model_params: {
           model: rolloutModel,
         },
@@ -337,7 +337,7 @@ class EvalPollingManager {
         error: 'Evaluation timed out',
         completedAt: Date.now(),
       });
-      await this.markWorkflowStepFailed(job.datasetId);
+      await this.markWorkflowStepFailed(job.workflowId);
       toast.error('Evaluation timed out');
       return;
     }
@@ -371,7 +371,7 @@ class EvalPollingManager {
           error: 'Evaluation failed: unable to reach evaluation server after multiple attempts',
           completedAt: Date.now(),
         });
-        await this.markWorkflowStepFailed(job.datasetId);
+        await this.markWorkflowStepFailed(job.workflowId);
         toast.error('Evaluation failed: unable to reach evaluation server');
       }
     }
@@ -393,11 +393,11 @@ class EvalPollingManager {
           error: 'Evaluation failed on backend',
           completedAt: Date.now(),
         });
-        await this.markWorkflowStepFailed(job.datasetId);
+        await this.markWorkflowStepFailed(job.workflowId);
         toast.error('Evaluation failed');
         emitter.emit('vllora_dry_run_job_completed', {
           jobId,
-          datasetId: job.datasetId,
+          workflowId: job.workflowId,
           verdict: 'FAILED',
         });
         return;
@@ -405,7 +405,7 @@ class EvalPollingManager {
 
       // Build record topics mapping from database
       // This works even after page refresh since we fetch from DB
-      const records = await recordService.getByDatasetId(job.datasetId);
+      const records = await recordService.getByDatasetId(job.workflowId);
       const recordTopics: Record<number, string> = {};
       for (let i = 0; i < records.length; i++) {
         const record = records[i];
@@ -428,7 +428,7 @@ class EvalPollingManager {
         for (const row of flatResults) {
           if (typeof row.score === 'number' && row.dataset_row_id) {
             await recordService.updateEvalScores(
-              job.datasetId,
+              job.workflowId,
               row.dataset_row_id,
               {
                 evalScore: row.score,
@@ -439,7 +439,7 @@ class EvalPollingManager {
       }
 
       // Save results to dataset
-      await datasetService.updateEvalStats(job.datasetId, evalStats);
+      await datasetService.updateEvalStats(job.workflowId, evalStats);
 
       // Update job with results (clear any previous error)
       await evalJobService.update(jobId, {
@@ -451,7 +451,7 @@ class EvalPollingManager {
 
       // Update workflow step data on success
       try {
-        const workflow = await workflowService.getByDataset(job.datasetId);
+        const workflow = await workflowService.getByDataset(job.workflowId);
         if (workflow && workflow.currentStep === 'dry_run') {
           const allSamples = [
             ...(evalStats.sampleResults.highest || []),
@@ -490,7 +490,7 @@ class EvalPollingManager {
 
       emitter.emit('vllora_dry_run_job_completed', {
         jobId,
-        datasetId: job.datasetId,
+        workflowId: job.workflowId,
         verdict,
       });
     } catch (error) {
@@ -501,14 +501,14 @@ class EvalPollingManager {
         error: friendly,
         completedAt: Date.now(),
       });
-      await this.markWorkflowStepFailed(job.datasetId);
+      await this.markWorkflowStepFailed(job.workflowId);
       toast.error('Failed to process evaluation results', { description: friendly });
     }
   }
 
-  private async markWorkflowStepFailed(datasetId: string): Promise<void> {
+  private async markWorkflowStepFailed(workflowId: string): Promise<void> {
     try {
-      const workflow = await workflowService.getByDataset(datasetId);
+      const workflow = await workflowService.getByDataset(workflowId);
       if (workflow && workflow.currentStep === 'dry_run') {
         await workflowService.markStepFailed(workflow.id);
       }

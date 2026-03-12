@@ -31,18 +31,18 @@ export interface UpdateStatusOptions {
 
 export interface KnowledgeSourceService {
   create(
-    datasetId: string,
+    workflowId: string,
     name: string,
     type: KnowledgeSourceType,
     options?: CreateKnowledgeSourceOptions,
   ): Promise<KnowledgeSource>;
   get(id: string): Promise<KnowledgeSource | null>;
-  getByDataset(datasetId: string): Promise<KnowledgeSource[]>;
-  getCount(datasetId: string): Promise<number>;
+  getByDataset(workflowId: string): Promise<KnowledgeSource[]>;
+  getCount(workflowId: string): Promise<number>;
   updateStatus(id: string, status: KnowledgeSourceStatus, options?: UpdateStatusOptions): Promise<void>;
   updateProgress(id: string, progress: KnowledgeSourceProgress): Promise<void>;
   updateChunks(id: string, content: ExtractedContent, phase: 'basic' | 'enhanced'): Promise<void>;
   delete(id: string): Promise<void>;
-  deleteByDataset(datasetId: string): Promise<void>;
-  search(datasetId: string, query: string): Promise<SearchResult[]>;
+  deleteByDataset(workflowId: string): Promise<void>;
+  search(workflowId: string, query: string): Promise<SearchResult[]>;
 }

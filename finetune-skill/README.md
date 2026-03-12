@@ -1,6 +1,6 @@
 # vLLora Finetune Skill
 
-A Claude Code skill that teaches AI agents how to execute the complete vLLora fine-tuning pipeline — from reading documents, through data generation and grader writing, to API execution and iterative improvement.
+A Claude Code skill that teaches AI agents to prepare vLLora fine-tuning datasets — from reading documents, through data generation and grader writing, to pushing everything to the gateway for handoff to the vLLora UI.
 
 This README is the full context for anyone (human or AI) working on this skill: why it exists, how it works, what's planned, and how everything connects.
 
@@ -10,7 +10,7 @@ This README is the full context for anyone (human or AI) working on this skill: 
 
 - [Why This Skill Exists](#why-this-skill-exists)
 - [Architecture](#architecture)
-- [Two Operating Modes](#two-operating-modes)
+- [Operating Mode](#operating-mode-data-prep--handoff)
 - [What We've Built](#what-weve-built)
 - [Key Design Decisions](#key-design-decisions)
 - [Testing History](#testing-history)
@@ -18,21 +18,25 @@ This README is the full context for anyone (human or AI) working on this skill: 
 - [How to Test](#how-to-test)
 - [How to Debug](#how-to-debug)
 - [Relationship to Lucy UI](#relationship-to-lucy-ui)
-- [Migration Plan: Shared Data via Gateway API](#migration-plan-shared-data-via-gateway-api)
 - [TODO & Future Work](#todo--future-work)
 
 ---
 
 ## Why This Skill Exists
 
-The vLLora UI has Lucy — an AI assistant that orchestrates 50+ browser-side tools via a chat completion API to guide users through fine-tuning. It works, but any capable AI agent (Claude Code, Cowork, etc.) already has the intelligence to do this directly. It doesn't need another LLM in the loop.
+The intelligence-heavy part of fine-tuning — reading documents, designing topics, generating diverse training prompts, writing graders — is exactly what AI agents excel at. The interactive part — evaluation, iteration, training monitoring — is better in a visual UI.
 
 ```
-Before:  User → Lucy UI → Chat Completion API → Tool Calls → vLLora Backend APIs
-After:   User → Agent (with this skill) → vLLora Backend APIs
+Agent (with this skill)                    vLLora UI (Lucy)
+─────────────────────                      ─────────────────
+Read docs, extract knowledge               Evaluate with visual score breakdown
+Design topic hierarchy                     Iterate: tune grader, fix records
+Generate 100-200+ training prompts         Monitor training metrics in real-time
+Write hybrid grader function               Deploy and test the model
+Push to gateway via API ──────────────────→ Lucy picks up where agent left off
 ```
 
-The skill gives the agent **knowledge of the APIs and fine-tuning concepts**. The agent handles everything else: reading documents, generating training data, writing graders, analyzing results, iterating.
+The skill gives the agent **knowledge of the APIs and fine-tuning concepts**. The agent prepares everything, pushes to the gateway, and hands off to the UI for the interactive loop.
 
 ### Who uses this skill
 
@@ -43,11 +47,11 @@ The skill gives the agent **knowledge of the APIs and fine-tuning concepts**. Th
 ### What the skill teaches
 
 1. How vLLora fine-tuning works (grader = training objective, RFT, smooth scoring)
-2. The pipeline (objective → knowledge → topics → data → grader → evaluate → iterate → train)
-3. All vLLora API endpoints with curl examples
+2. The data prep pipeline (objective → knowledge → topics → data → grader → push to gateway)
+3. All vLLora gateway API endpoints with curl examples
 4. How to write effective graders (hybrid, partial credit, reward hacking prevention)
-5. How to analyze evaluation results and iterate
-6. When to escalate (10 stall patterns, 6-level escalation ladder)
+5. How to extract documents via Docling Serve into structured knowledge parts
+6. How to push everything to the gateway for UI handoff
 
 ---
 
@@ -57,7 +61,7 @@ The skill gives the agent **knowledge of the APIs and fine-tuning concepts**. Th
 
 ```
 finetune-skill/
-├── SKILL.md                    # Main entry point (~300 lines)
+├── SKILL.md                    # Main entry point (~280 lines)
 │   ├── YAML frontmatter        # name + description (auto-triggering)
 │   ├── Core concepts           # How RFT works, prerequisites
 │   ├── Working directory spec  # What files the agent creates
@@ -121,78 +125,56 @@ finetune-project/               # Agent creates this working directory
 
 ---
 
-## Two Operating Modes
+## Operating Mode: Data Prep + Handoff
 
-The skill supports two modes, controlled by whether the user wants to hand off to the vLLora UI or run the full pipeline in the CLI.
-
-### Mode A: Data Prep + Handoff to Lucy (UI)
-
-The agent prepares all data, then creates a workflow in the gateway so the vLLora UI can pick it up. Lucy takes over for evaluation, training, and iteration.
+The skill focuses on one mode: **prepare data in the CLI, hand off to the UI**.
 
 ```
-1. Define objective
-2. Read documents, extract knowledge
-3. Build topic hierarchy
-4. Generate JSONL training data
+Agent (CLI)                                      UI (Lucy)
+───────────                                      ─────────
+1. Define objective                              7. Evaluate (visual scores)
+2. Read documents, extract knowledge             8. Iterate (tune grader, fix records)
+3. Build topic hierarchy                         9. Train (monitor metrics)
+4. Generate JSONL training data                  10. Deploy & test
 5. Write grader
-6. Create workflow via API:  POST /finetune/workflows
-7. Upload records via API:   POST /finetune/workflows/{id}/records
-8. Upload topics + grader:   PUT  /finetune/workflows/{id}/topics
-                              PUT  /finetune/workflows/{id}/grader
-9. Print: "Open vLLora UI → select '{workflow_name}' → Lucy will take over"
+6. Push to gateway via API:
+   POST /finetune/workflows
+   POST /finetune/workflows/{id}/knowledge
+   POST /finetune/workflows/{id}/records
+   POST /finetune/workflows/{id}/topics
+   PATCH /finetune/workflows/{id}/evaluator
+   → "Open vLLora UI → Lucy takes over"
 ```
 
-**When to use**: User wants the visual UI experience for evaluation/training, or wants Lucy's guided workflow for the iteration loop.
+**Requires**: Gateway running at localhost:9090.
 
-**Requires**: Gateway running at localhost:9090 (all local CRUD endpoints are available).
-
-### Mode B: Full CLI Pipeline (current, working)
-
-The agent handles everything end-to-end via API calls, with no UI dependency.
-
-```
-1. Define objective
-2. Read documents, extract knowledge
-3. Build topic hierarchy
-4. Generate JSONL training data
-5. Write grader
-6. Upload dataset to cloud:  POST /finetune/datasets
-7. Create evaluation:        POST /finetune/evaluations
-8. Poll results, analyze, iterate
-9. Start training:           POST /finetune/workflows/{id}/jobs
-10. At any point: "Open vLLora UI to see progress"
-```
-
-**When to use**: User wants maximum autonomy and CLI-first workflow, or doesn't have the vLLora UI running.
-
-**This is the currently working mode** — tested through v9 with live backend.
+The `reference/api-reference.md` documents all 58 gateway endpoints for completeness (including evaluation, training, and deployment). These are available if an advanced user wants to do everything from CLI, but SKILL.md focuses on the data prep pipeline only.
 
 ---
 
 ## What We've Built
 
-### SKILL.md (~300 lines)
+### SKILL.md (~530 lines)
 
 - YAML frontmatter with pushy description for auto-triggering
 - Prerequisites check (base model capability, task clarity, smooth scoring)
-- Pipeline with inline examples and curl commands
-- Working directory structure with evaluation/training job tracking
+- 6-step data prep pipeline: objective → extraction → topics → data generation → grader → push to gateway → hand off to UI
+- Working directory structure
 - Execution log specification with full timestamps (`YYYY-MM-DD HH:MM:SS`)
 - Explicit directives: "execute curl directly, never create .sh files"
-- UUID requirement for dataset_id (backend rejects plain strings)
-- PDF reading fallback via pdftotext
+- Gateway API calls for workflow creation and data population
 
 ### Knowledge Files
 
 | File | Lines | What it covers |
 |------|-------|---------------|
-| `api-reference.md` | ~350 | All vLLora REST endpoints: cloud (datasets, eval, training) + local CRUD (workflows, records, topics) + Mode A/B pipeline examples |
+| `api-reference.md` | ~950 | All 58 vLLora REST endpoints: cloud (datasets, eval, training, deployments) + local CRUD (workflows, records, topics, knowledge, eval-jobs) + dataset/upload + record scores + topic management + training metrics + Mode A/B pipeline examples |
 | `data-format.md` | ~100 | JSONL format — prompts only (no assistant messages, since RFT) |
 | `extraction-guide.md` | ~670 | Docling Serve setup, hybrid chunk API, knowledge_parts.json schema, image extraction, troubleshooting |
 | `grader-writing.md` | ~290 | 3 grader patterns, smooth scoring, reward hacking prevention |
 | `topic-hierarchy.md` | ~290 | Topic structure, source tracing, coverage analysis, per-topic scores |
 | `iteration-strategy.md` | ~710 | 9 parts: eval analysis, training, topics, variety, diagnosis, fixes, tracking, stalls, escalation |
-| `workflow-guide.md` | ~305 | Deep dive on each pipeline step |
+| `workflow-guide.md` | ~416 | Deep dive on each pipeline step (including categorization, variants, grader testing, evaluator versioning, training metrics, dataset/upload, eval-job tracking) |
 
 ### Helper Scripts (PEP 723)
 
@@ -214,7 +196,7 @@ These scripts solve the #1 testing issue (agents creating shell scripts instead 
 - `extract-sections.py` — Generic markdown section extractor (splits on `##` headings, outputs `{document_title, sections}` JSON)
 - `project-config.json` — Configuration reference
 
-Total: ~2,500 lines across 15 files. SKILL.md is ~300 lines (under the 500-line guideline).
+Total: ~3,500 lines across 15 files. SKILL.md is ~280 lines (well under the 500-line guideline).
 
 ---
 
@@ -462,74 +444,45 @@ Start now." \
 
 ## Relationship to Lucy UI
 
-This skill and the Lucy finetune agent are **two interfaces to the same backend**. They share the same vLLora gateway API endpoints, the same evaluation engine, and the same training infrastructure.
+This skill and the vLLora UI (Lucy) are **complementary halves of the same workflow**, sharing the same gateway API and data.
 
-### Shared Backend
-
-```
-                    ┌─────────────────────────────┐
-                    │   vLLora Gateway (:9090)     │
-                    │                             │
-                    │  POST /finetune/datasets    │
-                    │  POST /finetune/evaluations  │
-                    │  POST /finetune/workflows/{id}/jobs │
-                    │  GET  /finetune/workflows (local)   │
-                    └──────────┬──────────────────┘
-                               │
-              ┌────────────────┼────────────────┐
-              │                │                │
-    ┌─────────▼──────┐  ┌─────▼──────┐  ┌──────▼─────┐
-    │  Lucy Agent     │  │  This Skill │  │  Direct    │
-    │  (Browser UI)   │  │  (Claude    │  │  curl      │
-    │                 │  │   Code CLI) │  │  (manual)  │
-    └─────────────────┘  └────────────┘  └────────────┘
-```
-
-### How They Differ
-
-| Aspect | Lucy Agent (Browser UI) | This Skill (Claude Code CLI) |
-|--------|------------------------|------------------------------|
-| **Where it runs** | Browser (React app) | Terminal (Claude Code) |
-| **AI orchestration** | Distri server → 3 sub-agents | Single agent reads skill + knowledge files |
-| **Tool execution** | 50+ browser-side tools via @distri/react | Direct API calls via curl in Bash |
-| **Data storage** | Gateway API (SQLite) | Local filesystem (JSONL, JSON, JS files) + Gateway API for Mode A handoff |
-| **State machine** | Formal workflow state machine with validation rules | execution-log.md + iteration-log.md (informal) |
-| **Workflow flexibility** | Fixed 7-step pipeline | Agent decides step order, can skip/repeat/branch |
-
-### Why Both Exist
-
-**Lucy** is for users who want a **guided, visual experience** — plan approval, progress tracking, visual feedback. Good for routine fine-tuning.
-
-**This skill** is for users who want **maximum autonomy and intelligence** — the agent reads documents deeply, writes custom graders, diagnoses failures per-record. Good for complex or novel fine-tuning tasks.
-
----
-
-## Shared Data via Gateway API
-
-Both the skill and the vLLora UI read/write through the same gateway local API. The gateway's local SQLite is the single source of truth.
+### How They Work Together
 
 ```
-  Skill (CLI) ──┐
-                 ├→ gateway API (localhost:9090) → local SQLite (workspace data)
-  UI (browser) ──┘                               → cloud API (eval, training)
+  Skill (CLI)                                    Lucy (UI)
+  ───────────                                    ─────────
+  Read docs, extract knowledge                   Evaluate with visual scores
+  Design topic hierarchy                         Iterate: tune grader, fix records
+  Generate training prompts                      Monitor training metrics
+  Write grader function                          Deploy and test model
+       │                                              ▲
+       └── Push to gateway (localhost:9090) ──────────┘
+                     │
+              Local SQLite (single source of truth)
 ```
 
-### What This Enables
+### Why This Split
 
-1. **CLI → UI handoff** (Mode A): Agent prepares data via skill → creates workflow in gateway → user opens vLLora UI → Lucy picks up where the agent left off
-2. **Shared visibility**: Datasets and workflows created by either tool are visible in both
-3. **Single source of truth**: Gateway SQLite stores all workflows, records, topics, knowledge sources, and eval jobs
+| What | Best done by | Why |
+|------|-------------|-----|
+| Reading 100-page PDFs and extracting structure | Agent (CLI) | Deep document comprehension, no UI needed |
+| Designing topic hierarchy from domain knowledge | Agent (CLI) | Requires reasoning about document structure |
+| Generating 100-200 diverse training prompts | Agent (CLI) | Bulk generation with quality control |
+| Writing hybrid grader functions | Agent (CLI) | Code generation is the agent's strength |
+| Viewing per-record score distributions | Lucy (UI) | Visual charts, clickable drilldown |
+| Tuning grader iteratively | Lucy (UI) | Immediate visual feedback on score changes |
+| Monitoring training loss curves | Lucy (UI) | Real-time charts, alert thresholds |
+| Deploying and testing the model | Lucy (UI) | Interactive chat testing |
 
-### Implementation Status
+### Shared Data via Gateway API
 
-| Component | Status | Details |
-|-----------|--------|---------|
-| UI abstraction layer (service interfaces) | ✅ Done | 6 interfaces in `src/services/interfaces/` |
-| Gateway local CRUD (workflows, records, topics, knowledge, eval jobs) | ✅ Done | 62 endpoints in gateway |
-| UI API adapters (swap IndexedDB → API) | ✅ Done | 6 adapters in `src/services/adapters/` |
-| Skill Mode A (handoff to UI) | ✅ Done | Create workflow + populate via API |
-| Skill Mode B (full CLI) | ✅ Done | Tested through v9 with live backend |
-| IndexedDB removal | ✅ Done | No longer used at runtime |
+Both write through the same gateway API → same SQLite database. Workflows, records, topics, knowledge sources, and eval jobs created by the skill are immediately visible in the UI.
+
+| Component | Status |
+|-----------|--------|
+| Gateway local CRUD (58 endpoints) | ✅ Done |
+| Skill → gateway push (create workflow + populate) | ✅ Done |
+| UI reads from gateway | ✅ Done |
 
 ---
 
@@ -540,21 +493,19 @@ Both the skill and the vLLora UI read/write through the same gateway local API. 
 - [x] Test PDF extraction via pdftotext
 - [x] Test dataset upload with UUID
 - [x] Test evaluation job creation and polling
-- [ ] Test evaluation results analysis (agent reads results and diagnoses)
-- [ ] Test iteration loop (agent fixes issues and re-evaluates)
-- [ ] Test training job submission (after good eval scores)
-- [ ] Test Mode A (handoff to UI via workflow API)
+- [ ] **Test full Mode A handoff** (create workflow → push data → open UI → verify Lucy sees it)
 - [ ] Test Docling Serve extraction (Docker required)
-- [ ] Test extract-sections.py on non-chess documents
-- [ ] Test fallback when Docling is not available
 - [ ] Test with different document types (not just chess PDF)
 - [ ] Test without any document (objective-only, no PDF)
+- [ ] Test extract-sections.py on non-chess documents
+- [ ] Test fallback when Docling is not available
 
 ### Skill improvements
 
 - [x] Add Mode A pipeline (handoff to Lucy) via gateway workflow API
-- [x] Update api-reference.md with local workflow endpoints
+- [x] Update api-reference.md with all 58 gateway endpoints
 - [x] Fix training job endpoints (now scoped under workflows)
+- [x] Simplify SKILL.md to focus on data prep + handoff (removed Mode B complexity)
 - [ ] Add guidance for multi-turn conversation training data
 - [ ] Add guidance for structured output fine-tuning (JSON schema enforcement)
 - [ ] Test on Cowork (no local filesystem — may need adaptations)
@@ -563,6 +514,4 @@ Both the skill and the vLLora UI read/write through the same gateway local API. 
 
 - Agent sometimes writes output to unexpected directories (ignores specified output path)
 - Agent may not update execution-log.md after every single step (sometimes batches)
-- Polling loop timeout — if eval takes > 5 minutes, agent's poll loop may expire
 - No guidance on what to do if backend is down or returns unexpected errors
-- Skill doesn't cover multi-dataset experiments (A/B testing different data strategies)

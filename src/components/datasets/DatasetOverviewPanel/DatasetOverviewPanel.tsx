@@ -43,7 +43,7 @@ export function DatasetOverviewPanel({
   readme,
   readmeUpdatedAt,
   onExport,
-  datasetId,
+  workflowId,
   onOverviewClick,
 }: DatasetOverviewPanelProps) {
   // Dataset data for stats cards
@@ -73,7 +73,7 @@ export function DatasetOverviewPanel({
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      const stored = await getStoredPlan(datasetId);
+      const stored = await getStoredPlan(workflowId);
       if (!cancelled && stored?.executionProgress) {
         setHistoricalProgress(stored.executionProgress);
         setHistoricalPlanTime(stored.updatedAt);
@@ -84,7 +84,7 @@ export function DatasetOverviewPanel({
     return () => {
       cancelled = true;
     };
-  }, [datasetId, planStatus]);
+  }, [workflowId, planStatus]);
 
   const activeProgress = executionProgress ?? historicalProgress;
   const planTimestamp = isExecuting ? Date.now() : historicalPlanTime;
@@ -142,12 +142,12 @@ export function DatasetOverviewPanel({
             action: dryRunJobId
               ? {
                   title: "Open evaluation job",
-                  onClick: () => navigateToEvalJob(datasetId, dryRunJobId),
+                  onClick: () => navigateToEvalJob(workflowId, dryRunJobId),
                 }
               : finetuneJobId
               ? {
                   title: "Open fine-tune job",
-                  onClick: () => navigateToFinetuneJob(datasetId, finetuneJobId),
+                  onClick: () => navigateToFinetuneJob(workflowId, finetuneJobId),
                 }
               : undefined,
           };
@@ -191,11 +191,11 @@ export function DatasetOverviewPanel({
             details: getEvaluationDetails(j, dataset?.evalStats),
             action: {
               title: "Open evaluation job",
-              onClick: () => navigateToEvalJob(datasetId, j.id),
+              onClick: () => navigateToEvalJob(workflowId, j.id),
             },
           };
         }),
-    [dryRunJobs, dataset?.evalStats, datasetId]
+    [dryRunJobs, dataset?.evalStats, workflowId]
   );
 
   // Finetune jobs
@@ -217,11 +217,11 @@ export function DatasetOverviewPanel({
           details: getFinetuneDetails(j),
           action: {
             title: "Open fine-tune job",
-            onClick: () => navigateToFinetuneJob(datasetId, j.id),
+            onClick: () => navigateToFinetuneJob(workflowId, j.id),
           },
         };
       }),
-    [filteredJobs, datasetId]
+    [filteredJobs, workflowId]
   );
 
   // Merge and sort chronologically: oldest first for easier timeline scanning.
@@ -270,7 +270,7 @@ export function DatasetOverviewPanel({
           currentScore={evalCurrentScore}
           prevScore={evalPrevScore}
           criteriaCount={criteriaCount}
-          onClick={() => emitter.emit("vllora_switch_tab", { datasetId, tab: "evaluator" })}
+          onClick={() => emitter.emit("vllora_switch_tab", { workflowId, tab: "evaluator" })}
         />
         <FinetuneStatusCard latestJob={latestJob} />
       </div>
@@ -304,17 +304,17 @@ export function DatasetOverviewPanel({
                 latestFinetuneJob={latestJob}
                 finetuneJobsCount={filteredJobs.length}
                 proposedPlan={proposedPlan}
-                onOpenRecords={() => emitter.emit("vllora_switch_tab", { datasetId, tab: "records" })}
-                onOpenEvaluator={() => emitter.emit("vllora_switch_tab", { datasetId, tab: "evaluator" })}
-                onOpenJobs={() => emitter.emit("vllora_switch_tab", { datasetId, tab: "jobs" })}
+                onOpenRecords={() => emitter.emit("vllora_switch_tab", { workflowId, tab: "records" })}
+                onOpenEvaluator={() => emitter.emit("vllora_switch_tab", { workflowId, tab: "evaluator" })}
+                onOpenJobs={() => emitter.emit("vllora_switch_tab", { workflowId, tab: "jobs" })}
                 onOpenRecord={(recordId) => {
-                  emitter.emit("vllora_switch_tab", { datasetId, tab: "records" });
+                  emitter.emit("vllora_switch_tab", { workflowId, tab: "records" });
                   setTimeout(() => {
                     window.dispatchEvent(new CustomEvent("vllora_highlight_record", { detail: { recordId } }));
                   }, 150);
                 }}
-                onOpenEvalJob={(jobId) => navigateToEvalJob(datasetId, jobId)}
-                onOpenFinetuneJob={(jobId) => navigateToFinetuneJob(datasetId, jobId)}
+                onOpenEvalJob={(jobId) => navigateToEvalJob(workflowId, jobId)}
+                onOpenFinetuneJob={(jobId) => navigateToFinetuneJob(workflowId, jobId)}
                 className="h-full"
               />
             </TabsContent>

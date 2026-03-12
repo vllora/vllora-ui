@@ -28,7 +28,7 @@ import { Code2 } from "lucide-react";
 
 interface EvalActivityViewProps {
   /** Dataset ID for navigation (click record ID → switch to Records tab) */
-  datasetId: string;
+  workflowId: string;
   jobs: EvalJob[];
   /** Cancel handler for running jobs */
   onCancelJob?: () => void;
@@ -83,12 +83,12 @@ function getScoreInsight(stats: { mean: number; std: number; min: number; max: n
 }
 
 /** Compact evaluator version badge for eval job header */
-function EvaluatorVersionBadge({ datasetId }: { datasetId: string }) {
+function EvaluatorVersionBadge({ workflowId }: { workflowId: string }) {
   const [version, setVersion] = useState<{ version: number; total: number } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    getEvaluatorVersions(datasetId)
+    getEvaluatorVersions(workflowId)
       .then((versions) => {
         if (!cancelled && versions.length > 0) {
           setVersion({ version: versions[0].version, total: versions.length });
@@ -96,7 +96,7 @@ function EvaluatorVersionBadge({ datasetId }: { datasetId: string }) {
       })
       .catch(() => { /* non-critical */ });
     return () => { cancelled = true; };
-  }, [datasetId]);
+  }, [workflowId]);
 
   if (!version || version.total <= 1) return null;
 
@@ -112,7 +112,7 @@ function EvaluatorVersionBadge({ datasetId }: { datasetId: string }) {
 }
 
 /** Inline detail panel for a selected job (left side of split) */
-function JobDetail({ job, datasetId, onCancel, onRunAgain, onRefresh }: { job: EvalJob; datasetId: string; onCancel?: () => void; onRunAgain?: () => void; onRefresh?: (jobId: string) => void }) {
+function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: EvalJob; workflowId: string; onCancel?: () => void; onRunAgain?: () => void; onRefresh?: (jobId: string) => void }) {
   const result = job.result;
 
   const scores = useMemo(() => {
@@ -195,8 +195,8 @@ function JobDetail({ job, datasetId, onCancel, onRunAgain, onRefresh }: { job: E
                       Running
                     </span>
                   )}
-                  {job.datasetId && (
-                    <EvaluatorVersionBadge datasetId={job.datasetId} />
+                  {job.workflowId && (
+                    <EvaluatorVersionBadge workflowId={job.workflowId} />
                   )}
                   {result && <VerdictBadge verdict={result.diagnosis.verdict} />}
                   {job.status === "failed" && !result && (
@@ -282,7 +282,7 @@ function JobDetail({ job, datasetId, onCancel, onRunAgain, onRefresh }: { job: E
                 job={job}
                 progress={pct}
                 onRecordIdClick={(recordId) => {
-                  emitter.emit('vllora_switch_tab', { datasetId, tab: 'records' });
+                  emitter.emit('vllora_switch_tab', { workflowId, tab: 'records' });
                   setTimeout(() => {
                     window.dispatchEvent(new CustomEvent('vllora_highlight_record', {
                       detail: { recordId }
@@ -353,7 +353,7 @@ function JobDetail({ job, datasetId, onCancel, onRunAgain, onRefresh }: { job: E
                 results={evaluationResults}
                 fillHeight
                 onRecordIdClick={(recordId) => {
-                  emitter.emit('vllora_switch_tab', { datasetId, tab: 'records' });
+                  emitter.emit('vllora_switch_tab', { workflowId, tab: 'records' });
                   setTimeout(() => {
                     window.dispatchEvent(new CustomEvent('vllora_highlight_record', {
                       detail: { recordId }
@@ -369,7 +369,7 @@ function JobDetail({ job, datasetId, onCancel, onRunAgain, onRefresh }: { job: E
   );
 }
 
-export function DryRunActivityView({ datasetId, jobs, onCancelJob, initialSelectedId, onRunAgain, onRefresh, hideRunsSidebar = false }: EvalActivityViewProps) {
+export function DryRunActivityView({ workflowId, jobs, onCancelJob, initialSelectedId, onRunAgain, onRefresh, hideRunsSidebar = false }: EvalActivityViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     if (initialSelectedId) return initialSelectedId;
     // Default to most recent completed job
@@ -393,7 +393,7 @@ export function DryRunActivityView({ datasetId, jobs, onCancelJob, initialSelect
       {/* Left: selected job detail */}
       <div className={cn("flex-1 min-w-0 min-h-0", !hideRunsSidebar && "border-r border-zinc-800/60")}>
         {selectedJob ? (
-          <JobDetail job={selectedJob} datasetId={datasetId} onCancel={onCancelJob} onRunAgain={onRunAgain} onRefresh={onRefresh} />
+          <JobDetail job={selectedJob} workflowId={workflowId} onCancel={onCancelJob} onRunAgain={onRunAgain} onRefresh={onRefresh} />
         ) : (
           <div className="flex items-center justify-center h-full text-xs text-zinc-600">
             Select a job from the list

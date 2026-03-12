@@ -24,14 +24,14 @@ export const runEvaluationHandler: ToolHandler = async (params) => {
       return { success: false, error: 'Workflow not found' };
     }
     // Get records to calculate sample size
-    const records = await recordService.getByDatasetId(workflow.datasetId);
+    const records = await recordService.getByDatasetId(workflow.workflowId);
     const pct = typeof sample_percentage === 'number' ? sample_percentage : 100;
     const sampleSize = Math.max(1, Math.floor(records.length * (pct / 100)));
 
     // Start evaluation using high-level API (handles auto-upload and validation)
     const model = typeof rollout_model === 'string' ? rollout_model : 'gpt-4o-mini';
     const jobId = await evalPollingManager.startEvalForDataset({
-      datasetId: workflow.datasetId,
+      workflowId: workflow.workflowId,
       sampleSize,
       rolloutModel: model,
     });

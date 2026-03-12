@@ -13,7 +13,7 @@ export interface OutputFormat {
 }
 
 export interface ProposePlanParams {
-  dataset_id: string;
+  workflow_id: string;
   /** The plan to propose. Lucy constructs this. */
   plan: Plan;
 }
@@ -59,7 +59,7 @@ export interface DynamicExecutionStep {
 export type PlanType = 'finetune' | 'generic';
 
 export interface Plan {
-  dataset_id: string;
+  workflow_id: string;
   dataset_name: string;
   objective: string;
 

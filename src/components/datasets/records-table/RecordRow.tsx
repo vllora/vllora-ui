@@ -117,14 +117,14 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
 
   // Handler for QualityIndicator click — navigate to evaluator or jobs tab and highlight record
   const handleScoreNavigate = useCallback((target: "evaluator" | "jobs") => {
-    emitter.emit("vllora_switch_tab", { datasetId: record.datasetId, tab: target });
+    emitter.emit("vllora_switch_tab", { workflowId: record.workflowId, tab: target });
     // After tab switch, highlight the record in the results table
     setTimeout(() => {
       window.dispatchEvent(new CustomEvent('vllora_highlight_eval_result', {
         detail: { recordId: record.id }
       }));
     }, 300);
-  }, [record.datasetId, record.id]);
+  }, [record.workflowId, record.id]);
 
   // Handler to trigger Lucy for variant generation
   const handleGenerateVariants = useCallback(() => {

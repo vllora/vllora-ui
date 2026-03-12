@@ -44,7 +44,7 @@ export interface GenerateTracesResult {
 }
 
 export interface GenerateTracesParams {
-  dataset_id?: string;
+  workflow_id?: string;
   dataset_name?: string;
   record_ids?: string[];
   count?: number;
@@ -110,7 +110,7 @@ export interface TopicGenerationResult {
  * Callbacks for tracking generation progress across parallel topics
  */
 export interface GenerationCallbacks {
-  datasetId: string;
+  workflowId: string;
   totalExpectedRecords: number;
   /** Shared counter for tracking total created records across parallel topics */
   progressCounter: { count: number };

@@ -50,7 +50,7 @@ interface TopicHierarchyCanvasProps {
   /** All records in the dataset */
   records: DatasetRecord[];
   /** Dataset ID */
-  datasetId?: string;
+  workflowId?: string;
   /** Coverage stats for showing distribution info on nodes */
   coverageStats?: CoverageStats;
   /** Called when a topic node is selected to view its data */
@@ -318,7 +318,7 @@ function CanvasWithPanel({ hierarchy }: { hierarchy?: TopicHierarchyNode[] }) {
 export function TopicHierarchyCanvas({
   hierarchy,
   records,
-  datasetId,
+  workflowId,
   coverageStats,
   onSelectTopic,
   selectedTopic,
@@ -340,7 +340,7 @@ export function TopicHierarchyCanvas({
   return (
     <TopicCanvasProvider
       records={records}
-      datasetId={datasetId}
+      workflowId={workflowId}
       hierarchy={hierarchy}
       coverageStats={coverageStats}
       selectedTopic={selectedTopic}

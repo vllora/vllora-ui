@@ -15,7 +15,7 @@ import { normalizeObjectiveToRole } from './shared/topic-system-prompt';
 // =============================================================================
 
 interface UpdateObjectiveParams {
-  dataset_id: string;
+  workflow_id: string;
   objective: string;
 }
 
@@ -35,10 +35,10 @@ export const updateObjectiveHandler: ToolHandler = async (
   params
 ): Promise<UpdateObjectiveResult> => {
   try {
-    const { dataset_id, objective } = params as unknown as UpdateObjectiveParams;
+    const { workflow_id, objective } = params as unknown as UpdateObjectiveParams;
 
-    if (!dataset_id) {
-      return { success: false, error: 'dataset_id is required', new_objective: '', workflow_synced: false };
+    if (!workflow_id) {
+      return { success: false, error: 'workflow_id is required', new_objective: '', workflow_synced: false };
     }
 
     if (!objective || !objective.trim()) {
@@ -47,9 +47,9 @@ export const updateObjectiveHandler: ToolHandler = async (
 
     const trimmedObjective = objective.trim();
 
-    const dataset = await datasetService.getById(dataset_id);
+    const dataset = await datasetService.getById(workflow_id);
     if (!dataset) {
-      return { success: false, error: `Dataset ${dataset_id} not found`, new_objective: '', workflow_synced: false };
+      return { success: false, error: `Dataset ${workflow_id} not found`, new_objective: '', workflow_synced: false };
     }
 
     const previousObjective = dataset.datasetObjective;
@@ -62,11 +62,11 @@ export const updateObjectiveHandler: ToolHandler = async (
       console.warn('[updateObjective] Failed to normalize objective via LLM, will use heuristic fallback:', err);
     }
 
-    await datasetService.updateObjective(dataset_id, trimmedObjective, normalizedRole);
+    await datasetService.updateObjective(workflow_id, trimmedObjective, normalizedRole);
 
     let workflowSynced = false;
     try {
-      const workflow = await workflowService.getByDataset(dataset_id);
+      const workflow = await workflowService.getByDataset(workflow_id);
       if (workflow) {
         workflow.trainingGoals = trimmedObjective;
         await workflowService.update(workflow);
@@ -117,7 +117,7 @@ Use this tool when:
   parameters: {
     type: 'object',
     properties: {
-      dataset_id: {
+      workflow_id: {
         type: 'string',
         description: 'The dataset ID to update the objective for',
       },
@@ -126,7 +126,7 @@ Use this tool when:
         description: 'The new training objective describing specific behaviors to reinforce or suppress',
       },
     },
-    required: ['dataset_id', 'objective'],
+    required: ['workflow_id', 'objective'],
   },
   autoExecute: true,
   handler: async (input) =>

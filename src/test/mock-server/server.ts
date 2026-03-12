@@ -86,7 +86,7 @@ function parseProxyPort(): number | null {
 // =============================================================================
 
 interface MockDatasetEntry {
-  readonly datasetId: string;
+  readonly workflowId: string;
   readonly createdAt: string;
   readonly evalRunIds: string[];
   readonly trainingJobIds: string[];
@@ -124,15 +124,15 @@ function nextTrainingJobId(): string {
   return `mock-ft-${String(trainingJobCounter).padStart(3, '0')}`;
 }
 
-function registerDataset(datasetId: string, rowIds: string[] = []): MockDatasetEntry {
+function registerDataset(workflowId: string, rowIds: string[] = []): MockDatasetEntry {
   const entry: MockDatasetEntry = {
-    datasetId,
+    workflowId,
     createdAt: new Date().toISOString(),
     evalRunIds: [],
     trainingJobIds: [],
     rowIds,
   };
-  mockDatasets.set(datasetId, entry);
+  mockDatasets.set(workflowId, entry);
   return entry;
 }
 
@@ -244,10 +244,10 @@ app.post('/finetune/datasets', upload.single('file'), async (req, res) => {
   // Parse row IDs from uploaded JSONL so eval responses use real IDs
   const rowIds = parseRowIdsFromJsonl(req.file?.buffer);
 
-  const datasetId = nextDatasetId();
-  registerDataset(datasetId, rowIds);
-  console.log(`[mock] Dataset ${datasetId} uploaded with ${rowIds.length} rows`);
-  res.json({ dataset_id: datasetId });
+  const workflowId = nextDatasetId();
+  registerDataset(workflowId, rowIds);
+  console.log(`[mock] Dataset ${workflowId} uploaded with ${rowIds.length} rows`);
+  res.json({ workflow_id: workflowId });
 });
 
 // =============================================================================
@@ -282,11 +282,11 @@ app.post('/finetune/evaluations', async (req, res) => {
   }
 
   const evalRunId = nextEvalRunId();
-  const datasetId = req.body?.dataset_id as string | undefined;
+  const workflowId = req.body?.workflow_id as string | undefined;
 
   // Track the eval run under its dataset if known
-  if (datasetId) {
-    const entry = mockDatasets.get(datasetId);
+  if (workflowId) {
+    const entry = mockDatasets.get(workflowId);
     if (entry) entry.evalRunIds.push(evalRunId);
   }
 
@@ -324,17 +324,16 @@ app.post('/finetune/workflows/:workflowId/jobs', async (req, res) => {
   }
 
   const jobId = nextTrainingJobId();
-  const workflowId = req.params.workflowId;
-  const datasetId = req.body?.dataset as string | undefined;
+  const workflowId = (req.params.workflowId as string) ?? (req.body?.dataset as string | undefined);
 
   // Track the training job under its dataset if known
-  if (datasetId) {
-    const entry = mockDatasets.get(datasetId);
+  if (workflowId) {
+    const entry = mockDatasets.get(workflowId);
     if (entry) entry.trainingJobIds.push(jobId);
   }
 
   // Track job so the list endpoint can return it
-  mockTrainingJobs.set(jobId, datasetId ?? null);
+  mockTrainingJobs.set(jobId, workflowId ?? null);
 
   const response = makeCreateTrainingResponse(jobId);
 
@@ -369,12 +368,12 @@ app.get('/finetune/workflows/:workflowId/jobs', async (req, res) => {
   const scenario = getScenario();
   await delayMs(scenario.pollDelayMs);
 
-  const datasetIdFilter = req.query.dataset_id as string | undefined;
+  const workflowIdFilter = req.query.workflow_id as string | undefined;
 
   // If jobs were created via POST, return them (optionally filtered by dataset)
   if (mockTrainingJobs.size > 0) {
     const jobs = [...mockTrainingJobs.entries()]
-      .filter(([, dsId]) => !datasetIdFilter || dsId === datasetIdFilter)
+      .filter(([, dsId]) => !workflowIdFilter || dsId === workflowIdFilter)
       .map(([jobId]) => resolveTrainingPollResponse(
         jobId,
         scenario.trainingScenario,
@@ -436,13 +435,13 @@ app.get('/finetune/workflows/:workflowId/jobs/:jobId/weights/url', async (_req, 
 });
 
 // =============================================================================
-// GET /finetune/datasets/:datasetId/finetune-evaluations
+// GET /finetune/datasets/:workflowId/finetune-evaluations
 // =============================================================================
 
-app.get('/finetune/datasets/:datasetId/finetune-evaluations', async (req, res) => {
+app.get('/finetune/datasets/:workflowId/finetune-evaluations', async (req, res) => {
   const scenario = getScenario();
   await delayMs(scenario.pollDelayMs);
-  const entry = mockDatasets.get(req.params.datasetId);
+  const entry = mockDatasets.get(req.params.workflowId);
   const rowIds = entry?.rowIds ?? [];
   const rowCount = rowIds.length > 0 ? rowIds.length : scenario.trainingRowCount;
   res.json(makeFinetuneEvalResponse(scenario.trainingScenario, rowCount, rowIds));

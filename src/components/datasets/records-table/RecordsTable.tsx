@@ -21,7 +21,7 @@ import type { RecordRole } from "../record-filters";
 interface RecordsTableProps {
   records: DatasetRecord[];
   /** Dataset ID for display in footer */
-  datasetId?: string;
+  workflowId?: string;
   isLoading?: boolean;
   emptyMessage?: string;
   /** Show table header with column titles */
@@ -86,7 +86,7 @@ const VIRTUALIZATION_THRESHOLD = 50; // Virtualize when more than this many reco
 
 export function RecordsTable({
   records,
-  datasetId,
+  workflowId,
   isLoading = false,
   emptyMessage: _emptyMessage = "No records in this workflow",
   showHeader = false,
@@ -312,7 +312,7 @@ export function RecordsTable({
             <TopicRecordTree
               hierarchy={topicHierarchy}
               records={displayRecords}
-              datasetId={datasetId || ''}
+              workflowId={workflowId || ''}
               onUpdateTopic={onUpdateTopic}
               onDelete={onDelete}
               onSave={onSave}
@@ -334,7 +334,7 @@ export function RecordsTable({
           </div>
         </div>
         {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
-        {showFooter && <RecordsTableFooter records={displayRecords} selectedCount={selectedIds.size} datasetId={datasetId} />}
+        {showFooter && <RecordsTableFooter records={displayRecords} selectedCount={selectedIds.size} workflowId={workflowId} />}
       </div>
     );
   }
@@ -448,7 +448,7 @@ export function RecordsTable({
             })}
         </div>
         {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
-        {showFooter && <RecordsTableFooter records={displayRecords} selectedCount={selectedIds.size} datasetId={datasetId} />}
+        {showFooter && <RecordsTableFooter records={displayRecords} selectedCount={selectedIds.size} workflowId={workflowId} />}
       </div>
     );
   }
@@ -490,7 +490,7 @@ export function RecordsTable({
           ))}
           {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
         </div>
-        {showFooter && <RecordsTableFooter records={displayRecords} selectedCount={selectedIds.size} datasetId={datasetId} />}
+        {showFooter && <RecordsTableFooter records={displayRecords} selectedCount={selectedIds.size} workflowId={workflowId} />}
       </div>
     );
   }
@@ -561,7 +561,7 @@ export function RecordsTable({
         </div>
       </div>
       {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
-      {showFooter && <RecordsTableFooter records={displayRecords} selectedCount={selectedIds.size} datasetId={datasetId} />}
+      {showFooter && <RecordsTableFooter records={displayRecords} selectedCount={selectedIds.size} workflowId={workflowId} />}
     </div>
   );
 }

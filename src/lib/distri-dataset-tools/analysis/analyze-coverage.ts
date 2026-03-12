@@ -332,16 +332,16 @@ export function getTopicsPrioritizedForGeneration(
  * It calculates coverage stats and persists them to the dataset.
  */
 export async function calculateAndSaveCoverageStats(
-  datasetId: string
+  workflowId: string
 ): Promise<CoverageStats> {
   // Fetch dataset and records
-  const dataset = await datasetService.getById(datasetId);
-  const records = await recordService.getByDatasetId(datasetId);
+  const dataset = await datasetService.getById(workflowId);
+  const records = await recordService.getByDatasetId(workflowId);
 
 
   const coverageStats = computeCoverageStats({records, topic_hierarchy: dataset?.topicHierarchy});
   // Save to dataset
-  await datasetService.updateCoverageStats(datasetId, coverageStats);
+  await datasetService.updateCoverageStats(workflowId, coverageStats);
 
   return coverageStats;
 }

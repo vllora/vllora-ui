@@ -44,7 +44,7 @@ export function JobExpandedContent({
           {(() => {
             const hasEvalData = evalResults && evalResults.results.length > 0;
             const isFailed = job.status === "failed";
-            const showMetricsTabs = job.dataset_id && !(isFailed && !hasEvalData && !isLoadingEvals);
+            const showMetricsTabs = job.workflow_id && !(isFailed && !hasEvalData && !isLoadingEvals);
 
             return (
               <Tabs defaultValue="details" className="w-full">

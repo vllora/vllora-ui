@@ -97,7 +97,7 @@ function App() {
                 <Route path="projects" element={<ProjectsPage />} />
                 <Route path="finetune/new" element={<NewDatasetPage />} />
                 <Route path="finetune/new-advanced" element={<NewDatasetAdvancedPage />} />
-                <Route path="finetune/:datasetId" element={<DatasetDetailPage />} />
+                <Route path="finetune/:workflowId" element={<DatasetDetailPage />} />
                 <Route path="finetune" element={<DatasetsPage />} />
                 <Route path="settings" element={<SettingsPage />} />
               </Route>

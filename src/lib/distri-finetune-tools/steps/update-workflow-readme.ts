@@ -1,5 +1,5 @@
 /**
- * Update Dataset README Tool
+ * Update Workflow README Tool
  *
  * Saves agent-written README content for a dataset.
  * Accepts markdown content authored by the LLM agent.
@@ -14,13 +14,13 @@ import type { ToolHandler } from '../types';
 // =============================================================================
 
 export const updateDatasetReadmeHandler: ToolHandler = async (params) => {
-  const { dataset_id, readme_content } = params as {
-    dataset_id: string;
+  const { workflow_id, readme_content } = params as {
+    workflow_id: string;
     readme_content: string;
   };
 
-  if (!dataset_id || typeof dataset_id !== 'string') {
-    return { success: false, error: 'dataset_id is required' };
+  if (!workflow_id || typeof workflow_id !== 'string') {
+    return { success: false, error: 'workflow_id is required' };
   }
 
   if (!readme_content || typeof readme_content !== 'string') {
@@ -29,22 +29,22 @@ export const updateDatasetReadmeHandler: ToolHandler = async (params) => {
 
   try {
     // Verify dataset exists
-    const dataset = await datasetService.getById(dataset_id);
+    const dataset = await datasetService.getById(workflow_id);
     if (!dataset) {
-      return { success: false, error: `Dataset ${dataset_id} not found` };
+      return { success: false, error: `Dataset ${workflow_id} not found` };
     }
 
     // Save agent-authored README to IndexedDB
-    await datasetService.updateReadme(dataset_id, readme_content, 'agent');
+    await datasetService.updateReadme(workflow_id, readme_content, 'agent');
 
-    console.log('[updateDatasetReadme] Agent-authored README saved for dataset:', dataset_id);
+    console.log('[updateWorkflowReadme] Agent-authored README saved for dataset:', workflow_id);
 
     return {
       success: true,
       readme_length: readme_content.length,
     };
   } catch (error) {
-    console.error('[updateDatasetReadme] Failed:', error);
+    console.error('[updateWorkflowReadme] Failed:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to save README',
@@ -57,7 +57,7 @@ export const updateDatasetReadmeHandler: ToolHandler = async (params) => {
 // =============================================================================
 
 export const updateDatasetReadmeTool: DistriFnTool = {
-  name: 'update_dataset_readme',
+  name: 'update_workflow_readme',
   description: `Save agent-written README content for a dataset.
 
 Write a comprehensive, narrative README in markdown. Do NOT just list tables of numbers —
@@ -72,12 +72,12 @@ Cover:
 6. Current status and recommendations
 
 You already have context from the tools you called during execution.
-If updating the README outside of plan execution, call get_dataset_state first.`,
+If updating the README outside of plan execution, call get_workflow_state first.`,
   type: 'function',
   parameters: {
     type: 'object',
     properties: {
-      dataset_id: {
+      workflow_id: {
         type: 'string',
         description: 'The dataset ID',
       },
@@ -86,7 +86,7 @@ If updating the README outside of plan execution, call get_dataset_state first.`
         description: 'The full README markdown content to save',
       },
     },
-    required: ['dataset_id', 'readme_content'],
+    required: ['workflow_id', 'readme_content'],
   },
   autoExecute: true,
   handler: async (input) =>

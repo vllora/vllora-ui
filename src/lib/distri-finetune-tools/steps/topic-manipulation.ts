@@ -53,23 +53,23 @@ interface GetTopicHierarchyResult {
 
 export const getTopicHierarchyHandler: ToolHandler = async (params): Promise<GetTopicHierarchyResult> => {
   try {
-    const { workflow_id, dataset_id } = params;
+    const { workflow_id } = params;
 
-    let datasetIdToUse: string | null = null;
+    let workflowIdToUse: string | null = null;
 
     if (workflow_id && typeof workflow_id === 'string') {
       const workflow = await workflowService.get(workflow_id);
       if (!workflow) {
         return { success: false, error: 'Workflow not found' };
       }
-      datasetIdToUse = workflow.datasetId;
-    } else if (dataset_id && typeof dataset_id === 'string') {
-      datasetIdToUse = dataset_id;
+      workflowIdToUse = workflow.workflowId;
+    } else if (workflow_id && typeof workflow_id === 'string') {
+      workflowIdToUse = workflow_id;
     } else {
-      return { success: false, error: 'Either workflow_id or dataset_id is required' };
+      return { success: false, error: 'Either workflow_id or workflow_id is required' };
     }
 
-    const dataset = await datasetService.getById(datasetIdToUse);
+    const dataset = await datasetService.getById(workflowIdToUse);
     if (!dataset) {
       return { success: false, error: 'Dataset not found' };
     }
@@ -110,11 +110,7 @@ export const getTopicHierarchyTool: DistriFnTool = {
     properties: {
       workflow_id: {
         type: 'string',
-        description: 'The workflow ID (optional if dataset_id provided)',
-      },
-      dataset_id: {
-        type: 'string',
-        description: 'The dataset ID (optional if workflow_id provided)',
+        description: 'The workflow ID',
       },
     },
     required: [],

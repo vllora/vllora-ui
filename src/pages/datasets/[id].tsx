@@ -2,7 +2,7 @@
  * DatasetDetailPage
  *
  * Page component for viewing a single dataset's details.
- * Accessed via /datasets/:datasetId route.
+ * Accessed via /datasets/:workflowId route.
  */
 
 import { useParams, useNavigate } from "react-router";
@@ -10,10 +10,10 @@ import { DatasetsUIProvider } from "@/contexts/DatasetsUIContext";
 import { DatasetDetailView } from "@/components/datasets/DatasetDetailView";
 
 function DatasetDetailPageContent() {
-  const { datasetId } = useParams<{ datasetId: string }>();
+  const { workflowId } = useParams<{ workflowId: string }>();
   const navigate = useNavigate();
 
-  if (!datasetId) {
+  if (!workflowId) {
     navigate("/finetune");
     return null;
   }
@@ -29,7 +29,7 @@ function DatasetDetailPageContent() {
 
   return (
     <DatasetDetailView
-      datasetId={datasetId}
+      workflowId={workflowId}
       onBack={handleBack}
       onSelectDataset={handleSelectDataset}
     />

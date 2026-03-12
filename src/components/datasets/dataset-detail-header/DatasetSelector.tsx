@@ -25,7 +25,7 @@ interface DatasetSelectorProps {
   /** Optional record counts for each dataset (keyed by dataset ID) */
   recordCounts?: Record<string, number>;
   /** Called when user selects a dataset */
-  onSelect: (datasetId: string) => void;
+  onSelect: (workflowId: string) => void;
   /** Called when user clicks "Create new dataset" */
   onCreateNew?: () => void;
   /** Optional className for the trigger button */

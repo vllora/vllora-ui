@@ -35,8 +35,8 @@ vi.mock('@/services/service-registry', () => ({
 // Helpers
 // =============================================================================
 
-function makeWorkflow(step: string, datasetId = 'ds-001') {
-  return { id: 'wf-001', datasetId, currentStep: step };
+function makeWorkflow(step: string, workflowId = 'ds-001') {
+  return { id: 'wf-001', workflowId, currentStep: step };
 }
 
 function makeGraderResult(avgScore: number, sampleSize = 5) {

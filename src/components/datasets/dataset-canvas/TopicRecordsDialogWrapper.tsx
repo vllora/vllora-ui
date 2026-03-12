@@ -20,7 +20,7 @@ export function TopicRecordsDialogWrapper() {
     isFullDialogMode,
     recordsByTopic,
     hierarchy,
-    datasetId,
+    workflowId,
     availableTopics,
     onUpdateRecordTopic,
     onDeleteRecord,
@@ -129,7 +129,7 @@ export function TopicRecordsDialogWrapper() {
       records={topicRecords}
       isParentTopic={isParentTopic}
       subtreeHierarchy={subtreeHierarchy}
-      datasetId={datasetId}
+      workflowId={workflowId}
       availableTopics={availableTopics}
       onUpdateRecordTopic={onUpdateRecordTopic}
       onDeleteRecord={onDeleteRecord}

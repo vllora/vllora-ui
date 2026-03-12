@@ -5,7 +5,7 @@
  * Replaces IndexedDB adapter.
  *
  * Naming: FE uses "EvalJob" internally, BE uses "eval_jobs".
- * Mapping: FE datasetId -> BE workflowId (same ID after migration)
+ * Mapping: FE workflowId -> BE workflowId (same ID after migration)
  *          FE evaluationRunId -> BE cloud_run_id
  */
 
@@ -34,7 +34,7 @@ interface DbEvalJobResponse {
 function mapToFe(db: DbEvalJobResponse): EvalJob {
   return {
     id: db.id,
-    datasetId: db.workflow_id,
+    workflowId: db.workflow_id,
     evaluationRunId: db.cloud_run_id ?? '',
     status: db.status as EvalJobStatus,
     sampleSize: db.sample_size ?? 0,
@@ -56,7 +56,7 @@ function basePath(workflowId: string): string {
 
 export const apiEvalJobAdapter: EvalJobService = {
   async create(job: Omit<EvalJob, 'id'>): Promise<EvalJob> {
-    const response = await api.post(basePath(job.datasetId), {
+    const response = await api.post(basePath(job.workflowId), {
       cloud_run_id: job.evaluationRunId || null,
       sample_size: job.sampleSize,
       rollout_model: job.rolloutModel,
@@ -73,8 +73,8 @@ export const apiEvalJobAdapter: EvalJobService = {
     return mapToFe(db);
   },
 
-  async getByDataset(datasetId: string): Promise<EvalJob[]> {
-    const response = await api.get(basePath(datasetId));
+  async getByDataset(workflowId: string): Promise<EvalJob[]> {
+    const response = await api.get(basePath(workflowId));
     const data = await handleApiResponse<{ jobs: DbEvalJobResponse[] }>(response);
     return data.jobs.map(mapToFe);
   },
@@ -130,8 +130,8 @@ export const apiEvalJobAdapter: EvalJobService = {
     await handleApiResponse<{ deleted: boolean }>(response);
   },
 
-  async deleteByDataset(datasetId: string): Promise<void> {
-    const response = await api.delete(basePath(datasetId));
+  async deleteByDataset(workflowId: string): Promise<void> {
+    const response = await api.delete(basePath(workflowId));
     await handleApiResponse<{ deleted: number }>(response);
   },
 };

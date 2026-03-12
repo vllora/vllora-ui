@@ -130,6 +130,32 @@ Generate more data for under-represented topics before proceeding.
 
 ---
 
+## Step 3.5: Categorize Existing Records — In Depth
+
+If you have existing records (from seed data or a prior iteration), assign them to topics before generating new data. This ensures coverage analysis is accurate.
+
+### Batch Topic Assignment via API
+
+```bash
+curl -X PATCH http://localhost:9090/finetune/workflows/WORKFLOW_ID/records/topics \
+  -H "Content-Type: application/json" \
+  -d '{"updates": [
+    {"record_id": "rec-001", "topic": "billing/refunds"},
+    {"record_id": "rec-002", "topic": "technical/api"}
+  ]}'
+```
+
+### Local JSONL Approach
+
+If working locally (Mode B), add the topic directly in the JSONL:
+```json
+{"id": "rec-001", "topic": "billing/refunds", "messages": [...]}
+```
+
+Categorize all uncategorized records before running coverage analysis — uncategorized records create blind spots in the balance check.
+
+---
+
 ## Step 4: Generate Training Data — In Depth
 
 ### The Generation Loop
@@ -169,6 +195,33 @@ The prior assistant messages are **conversation context**, not training targets.
 
 ---
 
+## Step 4.5: Generate Variants for Augmentation — In Depth
+
+When you have good seed records but need more volume, generate variants rather than writing from scratch. Variants preserve the conversation structure and topic but change the final user message.
+
+### Rules for Variants
+
+1. **Only vary the final user message** — keep system prompt and conversation history identical
+2. **Track lineage** — set `sourceRecordId` pointing to the original record
+3. **3-5 variants per source** — enough for diversity without flooding a single scenario
+4. **Vary along these axes**: phrasing, specificity, emotion, complexity, expected response depth
+
+### Example
+
+Source record (asking about refunds):
+```json
+{"id": "refund-001", "messages": [{"role": "system", "content": "..."}, {"role": "user", "content": "How do I get a refund?"}]}
+```
+
+Variants:
+```json
+{"id": "refund-001-v1", "sourceRecordId": "refund-001", "messages": [{"role": "system", "content": "..."}, {"role": "user", "content": "I want my money back for order #12345"}]}
+{"id": "refund-001-v2", "sourceRecordId": "refund-001", "messages": [{"role": "system", "content": "..."}, {"role": "user", "content": "Can you reverse a charge? I was double-billed."}]}
+{"id": "refund-001-v3", "sourceRecordId": "refund-001", "messages": [{"role": "system", "content": "..."}, {"role": "user", "content": "I'm frustrated — I requested a refund 3 days ago and heard nothing."}]}
+```
+
+---
+
 ## Step 5: Analyze Coverage — In Depth
 
 ### Computing Balance Score
@@ -205,22 +258,53 @@ Design the grader to reward exactly the behaviors from your objective, and penal
 
 ---
 
+## Step 6.5: Test the Grader Before Full Evaluation — In Depth
+
+Run a mini evaluation on 3-5 records before committing to a full run. This catches grader bugs cheaply.
+
+```bash
+# Upload dataset, then run eval with limit=5
+uv run scripts/run_evaluation.py --dataset-id BACKEND_DATASET_ID --limit 5 --output evaluations/grader-test.json
+```
+
+### Diagnostic Checklist
+
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| All scores 0 | Hard gate rejects everything | Loosen length/format checks |
+| All scores 1 | Grader is a rubber stamp | Add meaningful criteria |
+| Scores cluster at one value | No differentiation | Add more scoring dimensions |
+| Reasons are generic | LLM judge prompt too vague | Make the prompt more specific |
+| Reasons contradict score | Bug in scoring formula | Review the math |
+
+Fix issues here — it's 10x cheaper than discovering them in a full evaluation.
+
+---
+
 ## Step 7: Upload & Evaluate — In Depth
 
 See `api-reference.md` for full endpoint documentation. Key workflow details:
 
-### Upload Flow
+### Upload Flow — Two Paths
 
-1. Write your JSONL data to a file (e.g., `training.jsonl`)
-2. Write your grader to a file (e.g., `grader.js`)
-3. Upload both together via `POST /finetune/datasets`
-4. Save the returned `dataset_id` — you need it for everything else
+**Path A: Workflow-integrated (recommended)**
+1. Save records, topics, and evaluator via gateway local CRUD (Steps 3-5)
+2. Package and upload: `POST /finetune/workflows/{id}/dataset/upload`
+3. This reads from SQLite and pushes to cloud automatically
+
+**Path B: Standalone file upload**
+1. Write JSONL data to a file (e.g., `training.jsonl`)
+2. Write grader to a file (e.g., `grader.js`)
+3. Upload both via `POST /finetune/datasets` (multipart)
+4. Save the returned `dataset_id`
 
 ### Evaluation Flow
 
 1. Create an evaluation run: `POST /finetune/evaluations`
-2. Poll for results every 2-3 seconds: `GET /finetune/evaluations/{id}`
-3. When `status` is `"completed"`, analyze the results
+2. Track locally: `POST /finetune/workflows/{id}/eval-jobs` (for history)
+3. Poll for results every 2-3 seconds: `GET /finetune/evaluations/{id}`
+4. When `status` is `"completed"`, write scores back to records: `PATCH /workflows/{id}/records/{record_id}/scores`
+5. Analyze the results
 
 ### What Happens During Evaluation
 
@@ -228,7 +312,9 @@ The backend takes each training prompt, feeds it to a rollout model (typically `
 
 ### Re-uploading After Data Changes
 
-When you change the JSONL data, you must re-upload the entire dataset with a **new** `dataset_id`. The old backend dataset ID becomes stale. When you only change the grader, use `PATCH /finetune/workflows/{id}/evaluator` — no re-upload needed.
+After changing records, topics, or the evaluator, call `POST /workflows/{id}/dataset/upload` again before the next eval or training run. The cloud snapshot is immutable — it doesn't auto-sync with local changes.
+
+If using standalone upload (Path B), you must re-upload via `POST /finetune/datasets` with a new `dataset_id`.
 
 ---
 
@@ -250,6 +336,16 @@ See `iteration-strategy.md` for the full diagnostic framework.
 - First-time users: 3-5 iterations (learning the grader + data balance)
 - Experienced users: 1-2 iterations (minor adjustments)
 - Complex domains: 3-4 iterations (requires careful criteria tuning)
+
+### Tracking Evaluator Versions
+
+Every `PATCH /finetune/workflows/{id}/evaluator` creates a new version. View the history:
+
+```bash
+curl -s "http://localhost:9090/finetune/workflows/WORKFLOW_ID/evaluator/versions" | python3 -m json.tool
+```
+
+This shows git-style diffs between consecutive versions. Log version numbers in `iteration-log.md` alongside eval scores so you can trace which grader version produced which results. When starting a training job, you can pin a specific version via `evaluator_version` in the request body.
 
 ---
 
@@ -280,6 +376,22 @@ Poll `GET /finetune/workflows/{workflow_id}/jobs/{job_id}/status`. Watch for:
 - `status: "failed"` → Check `error_message` field
 
 You can also check per-epoch scores via `GET /finetune/datasets/{dataset_id}/finetune-evaluations` to see if the model is improving across training epochs.
+
+### Monitoring Training Metrics
+
+Poll `GET /finetune/workflows/{workflow_id}/jobs/{job_id}/metrics` while training runs. Key metrics:
+
+| Metric | Healthy Range | Alert If |
+|--------|--------------|----------|
+| `reward` | Trending upward | Flat/declining after 50+ steps |
+| `reward_std` | 0.05-0.30 | < 0.05 (collapsed) or > 0.30 (noisy) |
+| `loss` | Decreasing | Increasing (diverging) |
+| `kl` | Stable, < 0.5 | Rising > 1.5x over last steps |
+| `grad_norm` | Stable | Spikes > 3x median |
+| `completions/clipped_ratio` | < 0.20 | > 0.70 (critical — increase max_tokens) |
+| `frac_reward_zero_std` | < 0.30 | > 0.60 (weak training signal) |
+
+**Stop and investigate** if you see NaN/Inf in any metric, clipped ratio > 70%, or KL divergence rising sharply.
 
 ---
 

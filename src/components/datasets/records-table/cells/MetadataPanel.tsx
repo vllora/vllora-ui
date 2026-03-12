@@ -176,12 +176,12 @@ function SourceDocumentsSection({ record, sourceAttributions }: SourceDocumentsS
     if (!showChunks || !chunkRefs?.length) return;
 
     let cancelled = false;
-    resolveChunkRefs(record.datasetId, chunkRefs)
+    resolveChunkRefs(record.workflowId, chunkRefs)
       .then((chunks) => { if (!cancelled) setResolvedChunks(chunks); })
       .catch(() => { if (!cancelled) setResolvedChunks([]); });
 
     return () => { cancelled = true; };
-  }, [showChunks, record.datasetId, chunkRefs]);
+  }, [showChunks, record.workflowId, chunkRefs]);
 
   return (
     <div>

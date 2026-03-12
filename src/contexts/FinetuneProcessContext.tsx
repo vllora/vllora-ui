@@ -402,20 +402,20 @@ function FinetuneProcessInner({ children }: { children: ReactNode }) {
 
 interface FinetuneProcessProviderProps {
   children: ReactNode;
-  datasetId: string;
+  workflowId: string;
   onBack: () => void;
-  onSelectDataset?: (datasetId: string) => void;
+  onSelectDataset?: (workflowId: string) => void;
 }
 
 export function FinetuneProcessProvider({
   children,
-  datasetId,
+  workflowId,
   onBack,
   onSelectDataset,
 }: FinetuneProcessProviderProps) {
   return (
     <DatasetDetailProvider
-      datasetId={datasetId}
+      workflowId={workflowId}
       onBack={onBack}
       onSelectDataset={onSelectDataset}
     >

@@ -99,7 +99,7 @@ export interface DatasetOverviewPanelProps {
   readme: string | null;
   readmeUpdatedAt: number | null;
   onExport: () => void;
-  datasetId: string;
+  workflowId: string;
   onOverviewClick?: () => void;
 }
 

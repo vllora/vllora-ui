@@ -24,7 +24,7 @@ import type { EvalJob } from '@/types/eval-job';
 
 interface EvalProgressCardProps {
   /** The dataset ID to filter events for */
-  readonly datasetId: string;
+  readonly workflowId: string;
   /** Initial job data (if already running when card mounts) */
   readonly initialJob?: EvalJob;
 }
@@ -50,7 +50,7 @@ function formatScore(score: number): string {
 // Component
 // =============================================================================
 
-export function LucyEvalProgressCard({ datasetId, initialJob }: EvalProgressCardProps) {
+export function LucyEvalProgressCard({ workflowId, initialJob }: EvalProgressCardProps) {
   const [completedRows, setCompletedRows] = useState(
     initialJob?.pollingSnapshot?.completed_rows ?? 0,
   );
@@ -79,7 +79,7 @@ export function LucyEvalProgressCard({ datasetId, initialJob }: EvalProgressCard
   // Listen for job update events
   useEffect(() => {
     const handleUpdate = ({ job }: { jobId: string; job: EvalJob }) => {
-      if (job.datasetId !== datasetId) return;
+      if (job.workflowId !== workflowId) return;
 
       const snapshot = job.pollingSnapshot;
       if (snapshot) {
@@ -98,7 +98,7 @@ export function LucyEvalProgressCard({ datasetId, initialJob }: EvalProgressCard
 
     emitter.on('vllora_dry_run_job_update', handleUpdate);
     return () => { emitter.off('vllora_dry_run_job_update', handleUpdate); };
-  }, [datasetId]);
+  }, [workflowId]);
 
   const progress = totalRows > 0 ? (completedRows / totalRows) * 100 : 0;
 
@@ -156,7 +156,7 @@ export function LucyEvalProgressCard({ datasetId, initialJob }: EvalProgressCard
           size="sm"
           className="h-6 text-[10px] gap-1 text-muted-foreground hover:text-foreground w-full"
           onClick={() => {
-            emitter.emit('vllora_switch_tab', { datasetId, tab: 'overview' });
+            emitter.emit('vllora_switch_tab', { workflowId, tab: 'overview' });
           }}
         >
           <ExternalLink className="w-3 h-3" />

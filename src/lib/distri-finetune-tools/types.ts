@@ -35,7 +35,7 @@ export interface WorkflowStatusResult {
   error?: string;
   workflow?: {
     id: string;
-    dataset_id: string;
+    workflow_id: string;
     training_goals: string;
     current_step: FinetuneStep;
     step_status: Record<FinetuneStep, string>;
@@ -257,7 +257,7 @@ export interface DatasetStatsResult {
   success: boolean;
   error?: string;
   stats?: {
-    dataset_id: string;
+    workflow_id: string;
     dataset_name: string;
     record_count: number;
     synthetic_count: number;
@@ -514,7 +514,7 @@ export interface CheckViabilityResult {
 
 export interface FinetuneContext {
   page: 'datasets';
-  current_dataset_id: string;
+  current_workflow_id: string;
   plan?: {
     status: PlanStatus;
     has_active_plan: boolean;
@@ -543,7 +543,7 @@ export interface FinetuneContext {
 // =============================================================================
 
 export function workflowToContext(
-  datasetId: string,
+  workflowId: string,
   workflow: FinetuneWorkflowState | null,
   datasetHasEvalScript?: boolean,
   planStatus?: PlanStatus | null,
@@ -572,7 +572,7 @@ export function workflowToContext(
 
   return {
     page: 'datasets',
-    current_dataset_id: datasetId,
+    current_workflow_id: workflowId,
     ...(planStatus ? {
       plan: {
         status: planStatus,
@@ -611,7 +611,7 @@ export function workflowToStatusResult(
     success: true,
     workflow: {
       id: workflow.id,
-      dataset_id: workflow.datasetId,
+      workflow_id: workflow.workflowId,
       training_goals: workflow.trainingGoals,
       current_step: workflow.currentStep,
       step_status: workflow.stepStatus as Record<FinetuneStep, string>,

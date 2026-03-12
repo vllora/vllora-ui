@@ -93,7 +93,7 @@ export const configureGraderHandler: ToolHandler = async (params) => {
       script = explicitScript;
     } else if (hasFeedback) {
       // 2. Feedback provided without script → modify the existing saved script
-      const dataset = await datasetService.getById(workflow.datasetId);
+      const dataset = await datasetService.getById(workflow.workflowId);
       if (!dataset?.evalScript) {
         return {
           success: false,
@@ -104,12 +104,12 @@ export const configureGraderHandler: ToolHandler = async (params) => {
       script = dataset.evalScript;
     } else {
       // 3. Neither script nor feedback → regenerate from plan
-      let plan = await getProposedPlan(workflow.datasetId);
+      let plan = await getProposedPlan(workflow.workflowId);
 
       if (!plan?.grader_config?.criteria || !plan.objective) {
         // No plan exists → auto-run propose_plan to generate one
         const proposeResult = await proposePlanHandler({
-          dataset_id: workflow.datasetId,
+          workflow_id: workflow.workflowId,
         });
         const result = proposeResult as Record<string, unknown>;
         if (result.success && result.plan) {
@@ -135,7 +135,7 @@ export const configureGraderHandler: ToolHandler = async (params) => {
     // Apply user feedback via LLM if provided
     let feedbackApplied = false;
     if (hasFeedback) {
-      const dataset = await datasetService.getById(workflow.datasetId);
+      const dataset = await datasetService.getById(workflow.workflowId);
       const objective =
         dataset?.datasetObjective || workflow.trainingGoals || "general evaluation";
       script = await applyFeedbackToScript(script, feedback as string, objective);
@@ -152,7 +152,7 @@ export const configureGraderHandler: ToolHandler = async (params) => {
     }
 
     // Save eval script to dataset (gateway SQLite via PUT /workflows)
-    await datasetService.updateEvalScript(workflow.datasetId, script);
+    await datasetService.updateEvalScript(workflow.workflowId, script);
 
     // Update workflow with metadata only
     await workflowService.updateStepData(workflow_id, "graderConfig", {
@@ -163,7 +163,7 @@ export const configureGraderHandler: ToolHandler = async (params) => {
     // Optionally run a quick grader test on 5 sample records
     let testResults: Record<string, unknown> | undefined;
     if (auto_test) {
-      const testResult = await runGraderTest(workflow.datasetId, 5);
+      const testResult = await runGraderTest(workflow.workflowId, 5);
       if (testResult.test_results) {
         testResults = testResult.test_results as unknown as Record<string, unknown>;
       }

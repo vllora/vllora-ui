@@ -63,13 +63,13 @@ export const checkViabilityHandler: ToolHandler = async (params) => {
     } satisfies CheckViabilityResult;
   }
 
-  const records = await recordService.getByDatasetId(workflow.datasetId);
+  const records = await recordService.getByDatasetId(workflow.workflowId);
   if (records.length === 0) {
     return { success: false, error: 'Dataset has no records' } satisfies CheckViabilityResult;
   }
 
   const sampleCount = clampSampleSize(sample_size, records.length);
-  const testResult = await runGraderTest(workflow.datasetId, sampleCount);
+  const testResult = await runGraderTest(workflow.workflowId, sampleCount);
 
   if (!testResult.success || !testResult.test_results) {
     return { success: false, error: testResult.error ?? 'Viability check failed' } satisfies CheckViabilityResult;

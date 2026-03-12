@@ -47,19 +47,19 @@ interface RecordDetail {
 export const getEvaluationDetailsHandler: ToolHandler = async (params) => {
   try {
     const {
-      dataset_id,
+      workflow_id,
       evaluation_id,
       sort_by = 'score_asc',
       limit = 20,
       topic_filter,
     } = params;
 
-    if (!dataset_id || typeof dataset_id !== 'string') {
-      return { success: false, error: 'dataset_id is required' };
+    if (!workflow_id || typeof workflow_id !== 'string') {
+      return { success: false, error: 'workflow_id is required' };
     }
 
     // Find the target evaluation job
-    const jobs = await evalJobService.getByDataset(dataset_id);
+    const jobs = await evalJobService.getByDataset(workflow_id);
     const targetJob = evaluation_id
       ? jobs.find((j) => j.id === evaluation_id || j.evaluationRunId === evaluation_id)
       : jobs.find((j) => j.status === 'completed');
@@ -79,7 +79,7 @@ export const getEvaluationDetailsHandler: ToolHandler = async (params) => {
     const flatResults = flattenEvaluationResults(targetJob.pollingSnapshot.results);
 
     // Load dataset records for topic mapping
-    const records = await recordService.getByDatasetId(dataset_id);
+    const records = await recordService.getByDatasetId(workflow_id);
     const recordTopicMap = new Map<string, string>();
     for (const record of records) {
       recordTopicMap.set(record.id, record.topic ?? 'Uncategorized');
@@ -228,7 +228,7 @@ export const getEvaluationDetailsTool: DistriFnTool = {
   parameters: {
     type: 'object',
     properties: {
-      dataset_id: {
+      workflow_id: {
         type: 'string',
         description: 'The dataset ID to get evaluation details for',
       },
@@ -251,7 +251,7 @@ export const getEvaluationDetailsTool: DistriFnTool = {
         description: 'Filter results to a specific topic (case-insensitive substring match)',
       },
     },
-    required: ['dataset_id'],
+    required: ['workflow_id'],
   },
   handler: async (input) => JSON.stringify(await getEvaluationDetailsHandler(input as Record<string, unknown>)),
 } as DistriFnTool;

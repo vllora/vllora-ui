@@ -109,7 +109,7 @@ async function loadSampleFiles(folder: string) {
  */
 export async function createSampleDataset(
   config: SampleDatasetConfig
-): Promise<{ datasetId: string; recordCount: number }> {
+): Promise<{ workflowId: string; recordCount: number }> {
   // Load sample files
   const { records, topics, evaluationScript, trainingConfig } = await loadSampleFiles(config.folder);
 
@@ -151,7 +151,7 @@ export async function createSampleDataset(
   }
 
   return {
-    datasetId: dataset.id,
+    workflowId: dataset.id,
     recordCount: records.length,
   };
 }

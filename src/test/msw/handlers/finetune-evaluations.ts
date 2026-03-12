@@ -12,7 +12,7 @@ const BASE = 'http://localhost:8080';
 
 export const finetuneEvaluationHandlers = [
   http.get(
-    `${BASE}/finetune/datasets/:datasetId/finetune-evaluations`,
+    `${BASE}/finetune/datasets/:workflowId/finetune-evaluations`,
     async () => {
       const scenario = getScenario();
       await delay(scenario.pollDelayMs);

@@ -53,32 +53,32 @@ const KnowledgeSourcesContext = createContext<KnowledgeSourcesContextType | unde
 // ============================================================================
 
 interface KnowledgeSourcesProviderProps {
-  datasetId: string;
+  workflowId: string;
   children: ReactNode;
 }
 
-export function KnowledgeSourcesProvider({ datasetId, children }: KnowledgeSourcesProviderProps) {
+export function KnowledgeSourcesProvider({ workflowId, children }: KnowledgeSourcesProviderProps) {
   const [sources, setSources] = useState<KnowledgeSource[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
 
   const fetchSources = useCallback(async () => {
-    if (!datasetId) return;
+    if (!workflowId) return;
     try {
-      const result = await knowledgeSourceService.getByDataset(datasetId);
+      const result = await knowledgeSourceService.getByDataset(workflowId);
       setSources(result);
       setHasLoaded(true);
     } catch (error) {
       console.error("[KnowledgeSourcesContext] Error fetching sources:", error);
       setHasLoaded(true); // Mark loaded even on error to unblock consumers
     }
-  }, [datasetId]);
+  }, [workflowId]);
 
   // Initial fetch + listen for updates
   useEffect(() => {
     fetchSources();
 
-    const handleUpdate = ({ datasetId: updatedId }: { datasetId: string }) => {
-      if (updatedId === datasetId) {
+    const handleUpdate = ({ workflowId: updatedId }: { workflowId: string }) => {
+      if (updatedId === workflowId) {
         fetchSources();
       }
     };
@@ -87,7 +87,7 @@ export function KnowledgeSourcesProvider({ datasetId, children }: KnowledgeSourc
     return () => {
       emitter.off("vllora_knowledge_source_updated", handleUpdate);
     };
-  }, [datasetId, fetchSources]);
+  }, [workflowId, fetchSources]);
 
   // Derived state
   const count = sources.length;

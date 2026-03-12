@@ -34,7 +34,7 @@ export interface IterationHistoryEntry {
 }
 
 export interface IterationState {
-  /** datasetId — one iteration state per dataset */
+  /** workflowId — one iteration state per dataset */
   id: string;
   iterationNumber: number;
   phase: IterationPhase;

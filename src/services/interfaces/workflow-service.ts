@@ -26,9 +26,9 @@ export interface GenerationData {
 
 export interface WorkflowService {
   // CRUD
-  create(datasetId: string, trainingGoals: string): Promise<FinetuneWorkflowState>;
+  create(workflowId: string, trainingGoals: string): Promise<FinetuneWorkflowState>;
   get(id: string): Promise<FinetuneWorkflowState | null>;
-  getByDataset(datasetId: string): Promise<FinetuneWorkflowState | null>;
+  getByDataset(workflowId: string): Promise<FinetuneWorkflowState | null>;
   getAll(): Promise<FinetuneWorkflowState[]>;
   update(workflow: FinetuneWorkflowState): Promise<void>;
   delete(id: string): Promise<void>;

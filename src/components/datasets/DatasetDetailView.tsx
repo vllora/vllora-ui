@@ -12,22 +12,22 @@ import { PlanProvider } from "@/contexts/PlanContext";
 import { DatasetDetailContentV2 } from "./DatasetDetailContentV2";
 
 interface DatasetDetailViewProps {
-  datasetId: string;
+  workflowId: string;
   onBack: () => void;
   /** Called when user selects a different dataset from the dropdown */
-  onSelectDataset?: (datasetId: string) => void;
+  onSelectDataset?: (workflowId: string) => void;
 }
 
-export function DatasetDetailView({ datasetId, onBack, onSelectDataset }: DatasetDetailViewProps) {
+export function DatasetDetailView({ workflowId, onBack, onSelectDataset }: DatasetDetailViewProps) {
   return (
     <DatasetDetailProvider
-      datasetId={datasetId}
+      workflowId={workflowId}
       onBack={onBack}
       onSelectDataset={onSelectDataset}
     >
       <FinetuneJobsProvider>
-        <KnowledgeSourcesProvider datasetId={datasetId}>
-          <PlanProvider datasetId={datasetId}>
+        <KnowledgeSourcesProvider workflowId={workflowId}>
+          <PlanProvider workflowId={workflowId}>
             <DatasetDetailContentV2 />
           </PlanProvider>
         </KnowledgeSourcesProvider>

@@ -31,7 +31,7 @@ export const deployModelHandler: ToolHandler = async (params) => {
 
     // TODO: Actually deploy model
     const modelId = `ft:${workflow.training.baseModel}:${workflow.training.jobId}`;
-    const name = typeof deployment_name === 'string' ? deployment_name : `finetune-${workflow.datasetId}`;
+    const name = typeof deployment_name === 'string' ? deployment_name : `finetune-${workflow.workflowId}`;
 
     // Update workflow
     await workflowService.updateStepData(workflow_id, 'deployment', {

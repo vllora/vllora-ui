@@ -14,13 +14,13 @@ import { emitter } from "@/utils/eventEmitter";
 import type { KnowledgeSource } from "@/types/dataset-types";
 
 interface DocsProcessingStateProps {
-  datasetId: string;
+  workflowId: string;
   sources: KnowledgeSource[];
   className?: string;
 }
 
 export function DocsProcessingState({
-  datasetId: _datasetId,
+  workflowId: _workflowId,
   sources,
   className,
 }: DocsProcessingStateProps) {

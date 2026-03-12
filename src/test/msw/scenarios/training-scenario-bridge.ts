@@ -60,7 +60,7 @@ export function makeCreateTrainingResponse(
   return {
     id: jobId,
     provider_job_id: `prov-${jobId}`,
-    dataset_id: 'ds-backend-001',
+    workflow_id: 'ds-backend-001',
     status: 'pending',
     base_model: 'unsloth/Qwen3.5-4B',
     provider: 'test',

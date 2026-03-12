@@ -11,7 +11,7 @@ import { FinetuneJobsPanel } from "./finetune-job-detail";
 import type { SampleTrainingConfig } from "@/types/dataset-types";
 
 interface FinetuneConfigPanelProps {
-  datasetId: string;
+  workflowId: string;
   canStartJob: boolean;
   initialConfig?: SampleTrainingConfig;
   /** Optional external selection from explorer path (`finetune/<jobId>`). */

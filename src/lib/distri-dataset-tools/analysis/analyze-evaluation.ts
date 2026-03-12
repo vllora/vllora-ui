@@ -411,7 +411,7 @@ export function analyzeEvalResults(
  * This is the shared function used by both Lucy agent and UI.
  */
 export async function calculateAndSaveEvalStats(
-  datasetId: string,
+  workflowId: string,
   evaluationResult: EvaluationResultResponse,
   samplePercentage: number,
   recordTopics?: Record<number, string>
@@ -420,7 +420,7 @@ export async function calculateAndSaveEvalStats(
   const evalStats = analyzeEvalResults(evaluationResult, samplePercentage, recordTopics);
 
   // Save to dataset
-  await datasetService.updateEvalStats(datasetId, evalStats);
+  await datasetService.updateEvalStats(workflowId, evalStats);
 
   return evalStats;
 }

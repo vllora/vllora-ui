@@ -19,7 +19,7 @@ export interface RecordsSectionHeaderProps {
   onViewModeChange: (mode: ViewMode) => void;
   onExport: () => void;
   records: DatasetRecord[];
-  datasetId?: string;
+  workflowId?: string;
   /** Active stat filter (P0-19) */
   activeStatFilter?: StatFilter;
   /** Called when a stat chip is clicked to filter (P0-19) */
@@ -39,7 +39,7 @@ export function RecordsSectionHeader({
   onViewModeChange,
   onExport,
   records,
-  datasetId,
+  workflowId,
   activeStatFilter = "all",
   onStatFilterChange,
   searchQuery = "",
@@ -57,13 +57,13 @@ export function RecordsSectionHeader({
   // Listen for data generation progress events
   useEffect(() => {
     const handleProgress = (event: {
-      datasetId: string;
+      workflowId: string;
       status: string;
       completed?: number;
       total?: number;
       currentTopic?: string;
     }) => {
-      if (datasetId && event.datasetId !== datasetId) return;
+      if (workflowId && event.workflowId !== workflowId) return;
 
       if ((event.status === 'started' || event.status === 'progress') &&
           event.completed !== undefined && event.total !== undefined) {
@@ -77,7 +77,7 @@ export function RecordsSectionHeader({
     return () => {
       emitter.off('vllora_data_generation_progress', handleProgress);
     };
-  }, [datasetId]);
+  }, [workflowId]);
 
   // Calculate summary stats (same as footer)
   const totalRecords = records.length;

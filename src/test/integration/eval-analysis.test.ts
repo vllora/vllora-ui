@@ -21,11 +21,11 @@ import type { IterationHistoryEntry } from '@/types/iteration-types';
 async function seedEvalScenario(opts: {
   scores: { rowId: string; score: number; topic: string }[];
 }) {
-  const datasetId = await seedDataset();
+  const workflowId = await seedDataset();
 
   // Seed records with topics — returns actual auto-generated IDs
   const actualIds = await seedRecords(
-    datasetId,
+    workflowId,
     opts.scores.map((s) => ({ id: s.rowId, topic: s.topic })),
   );
 
@@ -36,9 +36,9 @@ async function seedEvalScenario(opts: {
   }));
 
   // Seed EvalJob with completed results using actual record IDs
-  await seedCompletedEvalJob(datasetId, { scores: remappedScores });
+  await seedCompletedEvalJob(workflowId, { scores: remappedScores });
 
-  return datasetId;
+  return workflowId;
 }
 
 // =============================================================================
@@ -53,7 +53,7 @@ describe('analyze_evaluation integration', () => {
   it('returns healthy + train for good scores', async () => {
     // Scores designed to hit: mean ~0.50 (healthy_range: 0.25–0.65)
     // and std ~0.18 (good_variance: 0.10–0.25) → overall = 'healthy'
-    const datasetId = await seedEvalScenario({
+    const workflowId = await seedEvalScenario({
       scores: [
         { rowId: 'r0', score: 0.65, topic: 'Pins' },
         { rowId: 'r1', score: 0.55, topic: 'Forks' },
@@ -64,7 +64,7 @@ describe('analyze_evaluation integration', () => {
       ],
     });
 
-    const result = await analyzeEvaluationHandler({ dataset_id: datasetId }) as Record<string, unknown>;
+    const result = await analyzeEvaluationHandler({ workflow_id: workflowId }) as Record<string, unknown>;
 
     expect(result.success).toBe(true);
     const health = result.health as { overall: string; mean_score: number };
@@ -80,7 +80,7 @@ describe('analyze_evaluation integration', () => {
   it('returns warning + iterate for too-hard scores', async () => {
     // Scores designed to hit: mean ~0.20 (too_hard: < 0.25) → overall = 'warning'
     // hasFailingTopics = true → next_action = 'iterate'
-    const datasetId = await seedEvalScenario({
+    const workflowId = await seedEvalScenario({
       scores: [
         { rowId: 'r0', score: 0.35, topic: 'Pins' },
         { rowId: 'r1', score: 0.30, topic: 'Pins' },
@@ -91,7 +91,7 @@ describe('analyze_evaluation integration', () => {
       ],
     });
 
-    const result = await analyzeEvaluationHandler({ dataset_id: datasetId }) as Record<string, unknown>;
+    const result = await analyzeEvaluationHandler({ workflow_id: workflowId }) as Record<string, unknown>;
 
     expect(result.success).toBe(true);
     const health = result.health as { overall: string; mean_verdict: string };
@@ -105,7 +105,7 @@ describe('analyze_evaluation integration', () => {
   // ---------------------------------------------------------------------------
 
   it('returns critical for binary grader scores', async () => {
-    const datasetId = await seedEvalScenario({
+    const workflowId = await seedEvalScenario({
       scores: [
         { rowId: 'r0', score: 0.0, topic: 'Pins' },
         { rowId: 'r1', score: 1.0, topic: 'Pins' },
@@ -120,7 +120,7 @@ describe('analyze_evaluation integration', () => {
       ],
     });
 
-    const result = await analyzeEvaluationHandler({ dataset_id: datasetId }) as Record<string, unknown>;
+    const result = await analyzeEvaluationHandler({ workflow_id: workflowId }) as Record<string, unknown>;
 
     expect(result.success).toBe(true);
     const grader = result.grader_health as { binary_scoring: boolean; verdict: string };
@@ -136,7 +136,7 @@ describe('analyze_evaluation integration', () => {
     // Scores designed to hit: mean ~0.45 (healthy_range), std ~0.15 (good_variance)
     // No failing topics → overall = 'healthy' → allows stall escalation check
     // Current mean matches history (all ~0.45) → trend = 'stalled'
-    const datasetId = await seedEvalScenario({
+    const workflowId = await seedEvalScenario({
       scores: [
         { rowId: 'r0', score: 0.60, topic: 'Pins' },
         { rowId: 'r1', score: 0.30, topic: 'Forks' },
@@ -151,9 +151,9 @@ describe('analyze_evaluation integration', () => {
       { iteration: 2, timestamp: Date.now() - 5000, evalId: 'e2', dryRunScores: { mean: 0.45, perTopic: { Pins: 0.57, Forks: 0.33 } }, changesMade: 'Tweak', decision: 'iterate' },
       { iteration: 3, timestamp: Date.now() - 1000, evalId: 'e3', dryRunScores: { mean: 0.44, perTopic: { Pins: 0.56, Forks: 0.32 } }, changesMade: 'More', decision: 'iterate' },
     ];
-    await seedIterationHistory(datasetId, history);
+    await seedIterationHistory(workflowId, history);
 
-    const result = await analyzeEvaluationHandler({ dataset_id: datasetId }) as Record<string, unknown>;
+    const result = await analyzeEvaluationHandler({ workflow_id: workflowId }) as Record<string, unknown>;
 
     expect(result.success).toBe(true);
     const comparison = result.iteration_comparison as { stall_count: number; trend: string } | undefined;
@@ -168,10 +168,10 @@ describe('analyze_evaluation integration', () => {
   // ---------------------------------------------------------------------------
 
   it('returns error when no evaluation exists', async () => {
-    const datasetId = await seedDataset();
-    await seedRecords(datasetId, [{ topic: 'Pins' }]);
+    const workflowId = await seedDataset();
+    await seedRecords(workflowId, [{ topic: 'Pins' }]);
 
-    const result = await analyzeEvaluationHandler({ dataset_id: datasetId }) as Record<string, unknown>;
+    const result = await analyzeEvaluationHandler({ workflow_id: workflowId }) as Record<string, unknown>;
 
     expect(result.success).toBe(false);
     expect(result.error).toBeDefined();
@@ -182,7 +182,7 @@ describe('analyze_evaluation integration', () => {
   // ---------------------------------------------------------------------------
 
   it('includes per-topic breakdown with classifications', async () => {
-    const datasetId = await seedEvalScenario({
+    const workflowId = await seedEvalScenario({
       scores: [
         { rowId: 'r0', score: 0.75, topic: 'Pins' },
         { rowId: 'r1', score: 0.70, topic: 'Pins' },
@@ -191,7 +191,7 @@ describe('analyze_evaluation integration', () => {
       ],
     });
 
-    const result = await analyzeEvaluationHandler({ dataset_id: datasetId }) as Record<string, unknown>;
+    const result = await analyzeEvaluationHandler({ workflow_id: workflowId }) as Record<string, unknown>;
 
     expect(result.success).toBe(true);
     const topics = result.per_topic as Array<{ topic: string; classification: string }>;
@@ -210,7 +210,7 @@ describe('analyze_evaluation integration', () => {
   // ---------------------------------------------------------------------------
 
   it('generates recommendations for failing topics', async () => {
-    const datasetId = await seedEvalScenario({
+    const workflowId = await seedEvalScenario({
       scores: [
         { rowId: 'r0', score: 0.10, topic: 'Combos' },
         { rowId: 'r1', score: 0.12, topic: 'Combos' },
@@ -220,7 +220,7 @@ describe('analyze_evaluation integration', () => {
       ],
     });
 
-    const result = await analyzeEvaluationHandler({ dataset_id: datasetId }) as Record<string, unknown>;
+    const result = await analyzeEvaluationHandler({ workflow_id: workflowId }) as Record<string, unknown>;
 
     expect(result.success).toBe(true);
     const recs = result.recommendations as Array<{ action: string; priority: string }>;

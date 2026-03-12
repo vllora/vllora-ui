@@ -93,7 +93,7 @@ export const startTrainingHandler: ToolHandler = async (params) => {
     // - Duplicate job prevention
     // - Training job creation
     const result = await quickFinetune({
-      datasetId: workflow.datasetId,
+      workflowId: workflow.workflowId,
       baseModel: model,
       trainingConfig: Object.keys(trainingConfig).length > 0 ? trainingConfig : undefined,
       inferenceParameters: Object.keys(inferenceParameters).length > 0 ? inferenceParameters : undefined,

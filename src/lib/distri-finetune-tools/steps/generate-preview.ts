@@ -29,7 +29,7 @@ const fetchLucyConfigCached = async (): Promise<LucyConfig> => {
 // =============================================================================
 
 interface GeneratePreviewParams {
-  dataset_id: string;
+  workflow_id: string;
   count?: number;
   topic?: string;
   difficulty?: 'beginner' | 'intermediate' | 'advanced';
@@ -260,7 +260,7 @@ export const generatePreviewHandler: ToolHandler = async (
     );
 
     const {
-      dataset_id,
+      workflow_id,
       count = 3,
       topic,
       difficulty,
@@ -269,14 +269,14 @@ export const generatePreviewHandler: ToolHandler = async (
       use_knowledge = true,
     } = params as unknown as GeneratePreviewParams;
 
-    if (!dataset_id) {
-      return { success: false, error: 'dataset_id is required' };
+    if (!workflow_id) {
+      return { success: false, error: 'workflow_id is required' };
     }
 
     // Get dataset
-    const dataset = await datasetService.getById(dataset_id);
+    const dataset = await datasetService.getById(workflow_id);
     if (!dataset) {
-      return { success: false, error: `Dataset ${dataset_id} not found` };
+      return { success: false, error: `Dataset ${workflow_id} not found` };
     }
 
     // Get training objective
@@ -298,7 +298,7 @@ export const generatePreviewHandler: ToolHandler = async (
         const topicNode = findTopicNodeByName(dataset.topicHierarchy.hierarchy, topic);
         if (topicNode?.sourceChunkRefs?.length) {
           try {
-            const resolvedChunks = await resolveChunkRefs(dataset_id, topicNode.sourceChunkRefs);
+            const resolvedChunks = await resolveChunkRefs(workflow_id, topicNode.sourceChunkRefs);
             if (resolvedChunks.length > 0) {
               knowledgeContext = buildChunkContextSection(resolvedChunks);
               // Collect unique source names
@@ -314,7 +314,7 @@ export const generatePreviewHandler: ToolHandler = async (
       // Strategy 2: Fallback to structured knowledge context (full sources)
       if (!knowledgeContext) {
         try {
-          const knowledgeCtx = await buildKnowledgeContext(dataset_id);
+          const knowledgeCtx = await buildKnowledgeContext(workflow_id);
           if (knowledgeCtx.readyCount > 0 && knowledgeCtx.contextString) {
             knowledgeContext = knowledgeCtx.contextString;
             knowledgeSourcesUsed.push(...knowledgeCtx.sourcesSummary.map(s => s.name));
@@ -393,7 +393,7 @@ Preview generation is fast and allows interactive refinement.`,
   parameters: {
     type: 'object',
     properties: {
-      dataset_id: {
+      workflow_id: {
         type: 'string',
         description: 'The dataset ID to generate previews for',
       },
@@ -426,7 +426,7 @@ Preview generation is fast and allows interactive refinement.`,
         description: 'Whether to use uploaded knowledge sources for grounding (default: true)',
       },
     },
-    required: ['dataset_id'],
+    required: ['workflow_id'],
   },
   autoExecute: true,
   handler: async (input) =>

@@ -37,22 +37,22 @@ function clampSampleSize(raw: unknown, recordCount: number): number {
  * Flow: ensure upload → sync eval script → create mini evaluation → poll → flatten results.
  */
 export async function runGraderTest(
-  datasetId: string,
+  workflowId: string,
   sampleSize: number,
   rolloutModel: string = DEFAULT_MODEL,
 ): Promise<TestGraderResult> {
   try {
-    const dataset = await datasetService.getById(datasetId);
+    const dataset = await datasetService.getById(workflowId);
     if (!dataset?.evalScript) {
       return { success: false, error: 'Grader must be configured first' };
     }
 
     // Ensure dataset is uploaded; the dataset ID is the backend dataset ID.
-    await ensureDatasetUploaded(datasetId);
-    await updateDatasetEvalScript(datasetId, dataset.evalScript);
+    await ensureDatasetUploaded(workflowId);
+    await updateDatasetEvalScript(workflowId, dataset.evalScript);
 
     const evalResponse = await createEvaluation({
-      dataset_id: datasetId,
+      workflow_id: workflowId,
       rollout_model_params: { model: rolloutModel },
       offset: 0,
       limit: sampleSize,
@@ -123,7 +123,7 @@ export const testGraderSampleHandler: ToolHandler = async (params) => {
     return { success: false, error: `Cannot test grader in step ${workflow.currentStep}` };
   }
 
-  const records = await recordService.getByDatasetId(workflow.datasetId);
+  const records = await recordService.getByDatasetId(workflow.workflowId);
   if (records.length === 0) {
     return { success: false, error: 'Dataset has no records' };
   }
@@ -131,7 +131,7 @@ export const testGraderSampleHandler: ToolHandler = async (params) => {
   const sampleCount = clampSampleSize(sample_size, records.length);
   const model = typeof rollout_model === 'string' ? rollout_model : DEFAULT_MODEL;
 
-  return runGraderTest(workflow.datasetId, sampleCount, model);
+  return runGraderTest(workflow.workflowId, sampleCount, model);
 };
 
 export const testGraderSampleTool: DistriFnTool = {

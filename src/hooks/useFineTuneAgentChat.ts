@@ -51,8 +51,8 @@ function createNewThreadId(): string {
  * Always generates a new UUID — old thread messages are not restored.
  * Catch-up cards and buildCatchUpContext() provide all needed context.
  */
-function createFreshThreadId(datasetId: string): string {
-  const key = `${THREAD_STORAGE_KEY}${datasetId}`;
+function createFreshThreadId(workflowId: string): string {
+  const key = `${THREAD_STORAGE_KEY}${workflowId}`;
   const newId = createNewThreadId();
   localStorage.setItem(key, newId);
   return newId;
@@ -63,17 +63,17 @@ function createFreshThreadId(datasetId: string): string {
 // ============================================================================
 
 function buildContextMessage(
-  datasetId: string,
+  workflowId: string,
   workflow: FinetuneWorkflowState | null,
   datasetHasEvaluator?: boolean,
   planStatus?: PlanStatus | null,
   executionProgress?: ExecutionProgress | null,
   catchUpContext?: string | null,
 ): string {
-  const context = workflowToContext(datasetId, workflow, datasetHasEvaluator, planStatus, executionProgress);
-  // Put dataset_id prominently at the top to help LLM copy it exactly
+  const context = workflowToContext(workflowId, workflow, datasetHasEvaluator, planStatus, executionProgress);
+  // Put WORKFLOW_ID prominently at the top to help LLM copy it exactly
   // UUIDs are hard for LLMs to transcribe from JSON - make it explicit
-  let msg = `DATASET_ID: ${datasetId}\n\nContext:\n\`\`\`json\n${JSON.stringify(context, null, 2)}\n\`\`\``;
+  let msg = `WORKFLOW_ID: ${workflowId}\n\nContext:\n\`\`\`json\n${JSON.stringify(context, null, 2)}\n\`\`\``;
   if (catchUpContext) {
     msg += `\n\n${catchUpContext}`;
   }
@@ -197,7 +197,7 @@ interface CatchUpResult {
  * Build catch-up context for Lucy when a dataset is reopened.
  * Returns both text (for agent context injection) and structured card data (for rich UI).
  */
-async function buildCatchUpContext(datasetId: string): Promise<CatchUpResult> {
+async function buildCatchUpContext(workflowId: string): Promise<CatchUpResult> {
   const sections: string[] = [];
   const completedJobs: CatchUpCardData['completedJobs'][number][] = [];
   const failedJobs: CatchUpCardData['failedJobs'][number][] = [];
@@ -211,10 +211,10 @@ async function buildCatchUpContext(datasetId: string): Promise<CatchUpResult> {
   try {
     // Fetch all data sources in parallel
     const [jobs, iterState, workflow, dataset] = await Promise.all([
-      evalJobService.getByDataset(datasetId),
-      iterationStateService.get(datasetId),
-      workflowService.getByDataset(datasetId),
-      datasetService.getById(datasetId),
+      evalJobService.getByDataset(workflowId),
+      iterationStateService.get(workflowId),
+      workflowService.getByDataset(workflowId),
+      datasetService.getById(workflowId),
     ]);
 
     // --- Fetch evaluator versions ---
@@ -543,7 +543,7 @@ async function resolveTrainingStatus(
   // If workflow says running, verify against the API (handles stale IndexedDB)
   if (status === 'running' || status === 'pending' || status === 'queued') {
     try {
-      const freshJob = await getReinforcementJobStatus(workflow.datasetId, t.jobId);
+      const freshJob = await getReinforcementJobStatus(workflow.workflowId, t.jobId);
       if (freshJob.status === 'succeeded') {
         status = 'completed';
         fineTunedModel = freshJob.fine_tuned_model ?? fineTunedModel;
@@ -554,12 +554,12 @@ async function resolveTrainingStatus(
           status: 'completed',
           modelId: freshJob.fine_tuned_model ?? t.modelId,
         });
-        emitter.emit('vllora_workflow_updated', { datasetId: workflow.datasetId });
+        emitter.emit('vllora_workflow_updated', { workflowId: workflow.workflowId });
       } else if (freshJob.status === 'failed') {
         status = 'failed';
         errorMessage = freshJob.error_message ?? 'Training job failed';
         await workflowService.updateStepData(workflow.id, 'training', { ...t, status: 'failed' });
-        emitter.emit('vllora_workflow_updated', { datasetId: workflow.datasetId });
+        emitter.emit('vllora_workflow_updated', { workflowId: workflow.workflowId });
       }
     } catch {
       // API unavailable — keep stale status (non-critical)
@@ -570,7 +570,7 @@ async function resolveTrainingStatus(
   let metrics = t.metrics ?? undefined;
   let perTopic: CatchUpTopicScore[] | undefined;
   if (status === 'completed' && !metrics) {
-    const trainingScores = await fetchTrainingEpochScores(workflow.datasetId, t.jobId);
+    const trainingScores = await fetchTrainingEpochScores(workflow.workflowId, t.jobId);
     metrics = trainingScores?.metrics;
     perTopic = trainingScores?.perTopic;
   }
@@ -601,13 +601,13 @@ interface TrainingEpochScores {
  * Lightweight version of what analyze_training computes.
  */
 async function fetchTrainingEpochScores(
-  datasetId: string,
+  workflowId: string,
   providerJobId: string,
 ): Promise<TrainingEpochScores | undefined> {
   try {
     const [dataset, records] = await Promise.all([
-      datasetService.getById(datasetId),
-      recordService.getByDatasetId(datasetId),
+      datasetService.getById(workflowId),
+      recordService.getByDatasetId(workflowId),
     ]);
     if (!dataset) return undefined;
 
@@ -730,7 +730,7 @@ function buildIterationDelta(
 
 interface UseFineTuneAgentChatOptions {
   /** The dataset ID being processed */
-  datasetId: string;
+  workflowId: string;
   /** The dataset name for display */
   datasetName?: string;
   /** Training goals (used for workflow initialization) */
@@ -777,7 +777,7 @@ interface UseFineTuneAgentChatReturn {
 export function useFineTuneAgentChat(
   options: UseFineTuneAgentChatOptions
 ): UseFineTuneAgentChatReturn {
-  const { datasetId, trainingGoals, planStatus, executionProgress: executionProgressFromContext } = options;
+  const { workflowId, trainingGoals, planStatus, executionProgress: executionProgressFromContext } = options;
 
   // Agent state
   const { agent, loading: agentLoading } = useAgent({
@@ -785,7 +785,7 @@ export function useFineTuneAgentChat(
   });
 
   // Thread state - persisted per dataset so chat history survives refresh
-  const [threadId, setThreadId] = useState<string>(() => createFreshThreadId(datasetId));
+  const [threadId, setThreadId] = useState<string>(() => createFreshThreadId(workflowId));
 
   // Workflow state
   const [workflow, setWorkflow] = useState<FinetuneWorkflowState | null>(null);
@@ -820,10 +820,10 @@ export function useFineTuneAgentChat(
     },
   });
 
-  // Load workflow state on mount and when datasetId changes
+  // Load workflow state on mount and when workflowId changes
   const refreshWorkflow = useCallback(async () => {
-    // Skip loading if no datasetId
-    if (!datasetId) {
+    // Skip loading if no workflowId
+    if (!workflowId) {
       setWorkflowLoading(false);
       setWorkflow(null);
       setDatasetHasEvalScript(false);
@@ -833,9 +833,9 @@ export function useFineTuneAgentChat(
     setWorkflowLoading(true);
     try {
       const [workflowState, dataset, catchUp] = await Promise.all([
-        workflowService.getByDataset(datasetId),
-        datasetService.getById(datasetId),
-        buildCatchUpContext(datasetId),
+        workflowService.getByDataset(workflowId),
+        datasetService.getById(workflowId),
+        buildCatchUpContext(workflowId),
       ]);
       setWorkflow(workflowState);
       setDatasetHasEvalScript(!!dataset?.evalScript);
@@ -850,7 +850,7 @@ export function useFineTuneAgentChat(
     } finally {
       setWorkflowLoading(false);
     }
-  }, [datasetId]);
+  }, [workflowId]);
 
   // Initial load
   useEffect(() => {
@@ -859,8 +859,8 @@ export function useFineTuneAgentChat(
 
   // Listen for workflow updated events (e.g., after execute_plan completes)
   useEffect(() => {
-    const handleWorkflowUpdated = ({ datasetId: updatedDatasetId }: { datasetId: string }) => {
-      if (updatedDatasetId === datasetId) {
+    const handleWorkflowUpdated = ({ workflowId: updatedDatasetId }: { workflowId: string }) => {
+      if (updatedDatasetId === workflowId) {
         console.log('[useFineTuneAgentChat] Workflow updated event received, refreshing...');
         refreshWorkflow();
       }
@@ -870,25 +870,25 @@ export function useFineTuneAgentChat(
     return () => {
       emitter.off('vllora_workflow_updated', handleWorkflowUpdated);
     };
-  }, [datasetId, refreshWorkflow]);
+  }, [workflowId, refreshWorkflow]);
 
   // Load persisted thread when dataset changes
   useEffect(() => {
-    setThreadId(createFreshThreadId(datasetId));
-  }, [datasetId]);
+    setThreadId(createFreshThreadId(workflowId));
+  }, [workflowId]);
 
   // Create new chat thread (persists to localStorage)
   const handleNewChat = useCallback(() => {
     const newId = createNewThreadId();
-    localStorage.setItem(`${THREAD_STORAGE_KEY}${datasetId}`, newId);
+    localStorage.setItem(`${THREAD_STORAGE_KEY}${workflowId}`, newId);
     setThreadId(newId);
-  }, [datasetId]);
+  }, [workflowId]);
 
   // Prepare message with context injection (supports file parts)
   const prepareMessage = useCallback(
     (userMessage: string, additionalParts?: any[]): DistriMessage => {
       // Build context from current workflow state
-      const contextText = buildContextMessage(datasetId, workflow, datasetHasEvalScript, planStatus, executionProgressFromContext, catchUpContext);
+      const contextText = buildContextMessage(workflowId, workflow, datasetHasEvalScript, planStatus, executionProgressFromContext, catchUpContext);
 
       // Create message with context prepended
       const fullMessage = `${contextText}\n\nUser message: ${userMessage}`;
@@ -908,7 +908,7 @@ export function useFineTuneAgentChat(
 
       return DistriClient.initDistriMessage('user', parts);
     },
-    [datasetId, workflow, datasetHasEvalScript, planStatus, executionProgressFromContext, catchUpContext]
+    [workflowId, workflow, datasetHasEvalScript, planStatus, executionProgressFromContext, catchUpContext]
   );
 
   return {
@@ -935,7 +935,7 @@ export function useFineTuneAgentChat(
  * (IndexedDB doesn't have built-in change notifications)
  */
 export function useWorkflowPolling(
-  datasetId: string,
+  workflowId: string,
   enabled: boolean = true,
   intervalMs: number = 2000
 ) {
@@ -949,7 +949,7 @@ export function useWorkflowPolling(
 
     const poll = async () => {
       try {
-        const state = await workflowService.getByDataset(datasetId);
+        const state = await workflowService.getByDataset(workflowId);
         if (mounted) {
           setWorkflow(state);
           setLoading(false);
@@ -969,7 +969,7 @@ export function useWorkflowPolling(
       mounted = false;
       clearInterval(interval);
     };
-  }, [datasetId, enabled, intervalMs]);
+  }, [workflowId, enabled, intervalMs]);
 
   return { workflow, loading };
 }

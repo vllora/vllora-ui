@@ -212,14 +212,14 @@ export function EmptyDatasetsState() {
       // If files were uploaded, add them as knowledge sources
       if (files && files.length > 0) {
         // Emit generating event immediately so UI shows loading state
-        emitter.emit("vllora_plan_generating", { datasetId: dataset.id });
+        emitter.emit("vllora_plan_generating", { workflowId: dataset.id });
 
         // Upload files as knowledge sources (processing happens async)
         for (const file of files) {
           const content = await readFileAsBase64(file);
           const type: KnowledgeSourceType = file.type === "application/pdf" ? "pdf" : "text";
           await uploadKnowledgeSourceHandler({
-            dataset_id: dataset.id,
+            workflow_id: dataset.id,
             name: file.name,
             type,
             content,
@@ -228,7 +228,7 @@ export function EmptyDatasetsState() {
         }
 
         // Emit update so KnowledgeSourcesPanel refreshes
-        emitter.emit("vllora_knowledge_source_updated", { datasetId: dataset.id });
+        emitter.emit("vllora_knowledge_source_updated", { workflowId: dataset.id });
 
         setIsCreating(false);
         navigate(`/finetune/${dataset.id}?autoGeneratePlan=true`);

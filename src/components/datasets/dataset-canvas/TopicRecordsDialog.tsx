@@ -37,7 +37,7 @@ interface TopicRecordsDialogProps {
   /** Subtree hierarchy for parent topics (children of the current topic) */
   subtreeHierarchy?: TopicHierarchyNode[];
   /** Dataset ID */
-  datasetId?: string;
+  workflowId?: string;
   /** Available topics for reassignment */
   availableTopics?: AvailableTopic[];
   /** Handler for updating a record's topic */
@@ -55,7 +55,7 @@ export function TopicRecordsDialog({
   records,
   isParentTopic = false,
   subtreeHierarchy,
-  datasetId,
+  workflowId,
   availableTopics = [],
   onUpdateRecordTopic,
   onDeleteRecord,
@@ -161,7 +161,7 @@ export function TopicRecordsDialog({
         <div className="flex-1 overflow-hidden min-h-0">
           <RecordsTable
             records={filteredRecords}
-            datasetId={datasetId}
+            workflowId={workflowId}
             showHeader={true}
             showFooter={true}
             height="auto"

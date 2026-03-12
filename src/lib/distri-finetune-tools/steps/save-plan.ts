@@ -28,7 +28,7 @@ import { datasetService } from '@/services/service-registry';
 // =============================================================================
 
 interface SavePlanParams {
-  dataset_id: string;
+  workflow_id: string;
 }
 
 interface SavePlanResult {
@@ -133,14 +133,14 @@ export const savePlanHandler: ToolHandler = async (
   params
 ): Promise<SavePlanResult> => {
   try {
-    const { dataset_id } = params as unknown as SavePlanParams;
+    const { workflow_id } = params as unknown as SavePlanParams;
 
-    if (!dataset_id) {
-      return { success: false, errors: ['dataset_id is required'] };
+    if (!workflow_id) {
+      return { success: false, errors: ['workflow_id is required'] };
     }
 
     // 1. Read draft from store
-    const stored = await getStoredPlan(dataset_id);
+    const stored = await getStoredPlan(workflow_id);
     if (!stored) {
       return {
         success: false,
@@ -153,7 +153,7 @@ export const savePlanHandler: ToolHandler = async (
     // Agents often set the objective via update_objective (on the dataset) but
     // forget to mirror it into the plan object — this prevents a validation loop.
     if (!draft.objective?.trim() || !draft.dataset_name?.trim()) {
-      const dataset = await datasetService.getById(dataset_id);
+      const dataset = await datasetService.getById(workflow_id);
       if (dataset) {
         let patched = false;
         if (!draft.objective?.trim() && dataset.datasetObjective?.trim()) {
@@ -165,7 +165,7 @@ export const savePlanHandler: ToolHandler = async (
           patched = true;
         }
         if (patched) {
-          await saveProposedPlan(dataset_id, draft);
+          await saveProposedPlan(workflow_id, draft);
         }
       }
     }
@@ -181,7 +181,7 @@ export const savePlanHandler: ToolHandler = async (
             ...draft,
             steps_to_execute: stepNormalization.steps as unknown as Plan['steps_to_execute'],
           };
-          await saveProposedPlan(dataset_id, draft);
+          await saveProposedPlan(workflow_id, draft);
         }
       }
     }
@@ -194,15 +194,15 @@ export const savePlanHandler: ToolHandler = async (
     }
 
     // 3. Compute diff vs previous snapshot
-    const previous = await getPreviousPlanSnapshot(dataset_id);
+    const previous = await getPreviousPlanSnapshot(workflow_id);
     const diff = diffPlans(previous, draft);
 
     // 4. Save current draft as new snapshot (for future diffs)
-    await savePreviousPlanSnapshot(dataset_id, draft);
+    await savePreviousPlanSnapshot(workflow_id, draft);
 
     // 5. Emit event with diff payload so UI can show the diff banner
     emitter.emit('vllora_plan_proposed', {
-      datasetId: dataset_id,
+      workflowId: workflow_id,
       plan: draft,
       diff,
     });
@@ -242,11 +242,11 @@ Always call this AFTER propose_plan or adjust_plan.
 
 Workflow:
 1. propose_plan / adjust_plan  (saves draft)
-2. save_plan(dataset_id)
+2. save_plan(workflow_id)
    - If errors: fix the plan and go back to step 1
    - If success: plan is committed and shown to user with diff summary
 3. Wait for user to click "Approve & Execute" in the UI
-4. execute_plan(dataset_id)
+4. execute_plan(workflow_id)
 
 Returns:
 - { success: false, errors: [...] }  → Lucy fixes proposal and retries step 1
@@ -255,12 +255,12 @@ Returns:
   parameters: {
     type: 'object',
     properties: {
-      dataset_id: {
+      workflow_id: {
         type: 'string',
         description: 'The dataset ID whose draft plan should be validated and committed',
       },
     },
-    required: ['dataset_id'],
+    required: ['workflow_id'],
   },
   autoExecute: true,
   handler: async (input) =>

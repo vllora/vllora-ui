@@ -23,7 +23,7 @@ interface GenerationProgress {
 }
 
 interface EmptyRecordsStateProps {
-  datasetId: string;
+  workflowId: string;
   datasetObjective?: string;
   hasTopicHierarchy?: boolean;
   onImportClick?: () => void;
@@ -34,7 +34,7 @@ interface EmptyRecordsStateProps {
 }
 
 export function EmptyRecordsState({
-  datasetId,
+  workflowId,
   datasetObjective,
   hasTopicHierarchy = false,
   onImportClick,
@@ -48,7 +48,7 @@ export function EmptyRecordsState({
   // Listen for generation progress events
   useEffect(() => {
     const handleProgress = (event: {
-      datasetId: string;
+      workflowId: string;
       status: "started" | "progress" | "completed" | "failed";
       total: number;
       completed: number;
@@ -56,7 +56,7 @@ export function EmptyRecordsState({
       totalBatches?: number;
       error?: string;
     }) => {
-      if (event.datasetId === datasetId) {
+      if (event.workflowId === workflowId) {
         setGenerationProgress({
           status: event.status,
           total: event.total,
@@ -79,7 +79,7 @@ export function EmptyRecordsState({
     return () => {
       emitter.off("vllora_data_generation_progress", handleProgress);
     };
-  }, [datasetId]);
+  }, [workflowId]);
 
   const handleAskLucy = () => {
     const prompt = hasTopicHierarchy

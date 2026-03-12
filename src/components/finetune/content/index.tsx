@@ -28,13 +28,13 @@ import { NewJobDialog } from "./NewJobDialog";
 import type { SampleTrainingConfig } from "@/types/dataset-types";
 
 interface FinetuneJobsContentProps {
-  datasetId?: string;
+  workflowId?: string;
   canCreateJob?: boolean;
   /** Initial training config from dataset (e.g., from sample) */
   trainingConfig?: SampleTrainingConfig;
 }
 
-export function FinetuneJobsContent({ datasetId, canCreateJob = true, trainingConfig }: FinetuneJobsContentProps) {
+export function FinetuneJobsContent({ workflowId, canCreateJob = true, trainingConfig }: FinetuneJobsContentProps) {
   const { filteredJobs, isLoading, error, loadJobs } = FinetuneJobsConsumer();
   const [showNewJobDialog, setShowNewJobDialog] = useState(false);
 
@@ -43,7 +43,7 @@ export function FinetuneJobsContent({ datasetId, canCreateJob = true, trainingCo
     (job) => job.status === 'pending' || job.status === 'running'
   ).length;
   const hasActiveJob = activeJobsCount > 0;
-  const canStartNewJob = canCreateJob && datasetId && !hasActiveJob;
+  const canStartNewJob = canCreateJob && workflowId && !hasActiveJob;
 
   const handleJobCreated = useCallback(() => {
     loadJobs();
@@ -63,7 +63,7 @@ export function FinetuneJobsContent({ datasetId, canCreateJob = true, trainingCo
           )}
         </div>
         <div className="flex items-center gap-2">
-          {datasetId && (
+          {workflowId && (
             <Button
               size="sm"
               className="h-7 gap-1.5 text-xs bg-[rgb(var(--theme-600))] hover:bg-[rgb(var(--theme-500))] text-white"
@@ -104,7 +104,7 @@ export function FinetuneJobsContent({ datasetId, canCreateJob = true, trainingCo
             <Sparkles className="h-12 w-12 mx-auto mb-3 opacity-30" />
             <p className="font-medium">No finetune jobs yet</p>
             <p className="text-xs mt-1 max-w-xs mx-auto">
-              {datasetId
+              {workflowId
                 ? "Click 'New Job' to start a finetune job"
                 : "Start a finetune job using the Finetune button to see your jobs here"}
             </p>
@@ -130,9 +130,9 @@ export function FinetuneJobsContent({ datasetId, canCreateJob = true, trainingCo
       </div>
 
       {/* New Job Dialog */}
-      {datasetId && (
+      {workflowId && (
         <NewJobDialog
-          datasetId={datasetId}
+          workflowId={workflowId}
           onSuccess={handleJobCreated}
           disabled={hasActiveJob}
           open={showNewJobDialog}

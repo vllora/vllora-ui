@@ -20,7 +20,7 @@ import { emitter } from '@/utils/eventEmitter';
 // =============================================================================
 
 interface AnalyzeKnowledgeSourcesParams {
-  dataset_id: string;
+  workflow_id: string;
 }
 
 interface ChunkInfo {
@@ -73,16 +73,16 @@ export const analyzeKnowledgeSourcesHandler: ToolHandler = async (
   params
 ): Promise<AnalyzeKnowledgeSourcesResult> => {
   try {
-    const { dataset_id } = params as unknown as AnalyzeKnowledgeSourcesParams;
+    const { workflow_id } = params as unknown as AnalyzeKnowledgeSourcesParams;
 
-    if (!dataset_id) {
-      return { success: false, error: 'dataset_id is required' };
+    if (!workflow_id) {
+      return { success: false, error: 'workflow_id is required' };
     }
 
     // Get dataset
-    const dataset = await datasetService.getById(dataset_id);
+    const dataset = await datasetService.getById(workflow_id);
     if (!dataset) {
-      return { success: false, error: `Dataset ${dataset_id} not found` };
+      return { success: false, error: `Dataset ${workflow_id} not found` };
     }
 
     // Get training objective
@@ -96,7 +96,7 @@ export const analyzeKnowledgeSourcesHandler: ToolHandler = async (
     }
 
     // Check knowledge source status
-    const sources = await knowledgeSourceService.getByDataset(dataset_id);
+    const sources = await knowledgeSourceService.getByDataset(workflow_id);
     const readySources = sources.filter((s) => s.status === 'ready');
     const processingSources = sources.filter((s) => s.status === 'processing');
 
@@ -108,7 +108,7 @@ export const analyzeKnowledgeSourcesHandler: ToolHandler = async (
         : `${readySources.length} of ${total} document(s) are ready, ${processingSources.length} still processing.`;
 
       // Signal the UI to auto-prompt Lucy when processing completes
-      emitter.emit('vllora_docs_awaiting_plan', { datasetId: dataset_id });
+      emitter.emit('vllora_docs_awaiting_plan', { workflowId: workflow_id });
 
       return {
         success: false,
@@ -244,12 +244,12 @@ Pure data-access (no LLM calls). Call once to understand what's available, then 
   parameters: {
     type: 'object',
     properties: {
-      dataset_id: {
+      workflow_id: {
         type: 'string',
         description: 'The dataset ID to analyze',
       },
     },
-    required: ['dataset_id'],
+    required: ['workflow_id'],
   },
   autoExecute: true,
   handler: async (input) =>

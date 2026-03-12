@@ -26,7 +26,7 @@ import { DatasetsNoResultsState } from "./DatasetsNoResultsState";
 import { IngestDataDialog, type ImportResult } from "../IngestDataDialog";
 
 interface DatasetsGridProps {
-  onSelectDataset: (datasetId: string) => void;
+  onSelectDataset: (workflowId: string) => void;
 }
 
 export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
@@ -216,13 +216,13 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
   }, [loadStats]);
 
   // Handlers
-  const handleRenameDataset = async (datasetId: string) => {
+  const handleRenameDataset = async (workflowId: string) => {
     if (!editingDatasetName.trim()) {
       toast.error("Workflow name cannot be empty");
       return;
     }
     try {
-      await renameDataset(datasetId, editingDatasetName);
+      await renameDataset(workflowId, editingDatasetName);
       toast.success("Workflow renamed");
       setEditingDatasetId(null);
     } catch {
@@ -230,9 +230,9 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
     }
   };
 
-  const handleDeleteDataset = async (datasetId: string) => {
+  const handleDeleteDataset = async (workflowId: string) => {
     try {
-      await deleteDataset(datasetId);
+      await deleteDataset(workflowId);
       toast.success("Workflow deleted");
     } catch (err) {
       console.error("Failed to delete dataset:", err);
@@ -284,9 +284,9 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
     }
   };
 
-  const handleDownloadDataset = async (datasetId: string) => {
+  const handleDownloadDataset = async (workflowId: string) => {
     try {
-      const datasetWithRecords = await getDatasetWithRecords(datasetId);
+      const datasetWithRecords = await getDatasetWithRecords(workflowId);
       if (!datasetWithRecords) {
         toast.error("Workflow not found");
         return;

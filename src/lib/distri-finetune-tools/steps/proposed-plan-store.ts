@@ -43,7 +43,7 @@ function getDB(): Promise<IDBDatabase> {
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
       if (!db.objectStoreNames.contains('proposedPlans')) {
-        db.createObjectStore('proposedPlans', { keyPath: 'datasetId' });
+        db.createObjectStore('proposedPlans', { keyPath: 'workflowId' });
       }
     };
   });
@@ -56,7 +56,7 @@ function getDB(): Promise<IDBDatabase> {
 export type PlanStatus = 'proposed' | 'approved' | 'executing' | 'completed' | 'failed' | 'dismissed';
 
 export interface StoredPlan {
-  datasetId: string;
+  workflowId: string;
   plan: Plan;
   status: PlanStatus;
   executionProgress: ExecutionProgress | null;
@@ -66,7 +66,7 @@ export interface StoredPlan {
 
 // Backward compat alias
 interface StoredProposedPlan {
-  datasetId: string;
+  workflowId: string;
   plan: Plan;
   status?: PlanStatus;
   executionProgress?: ExecutionProgress | null;
@@ -114,7 +114,7 @@ function normalizeStored(raw: StoredProposedPlan): StoredPlan {
   }
 
   return {
-    datasetId: raw.datasetId,
+    workflowId: raw.workflowId,
     plan: normalizedPlan,
     status: raw.status || 'proposed',
     executionProgress: raw.executionProgress || null,
@@ -131,7 +131,7 @@ function normalizeStored(raw: StoredProposedPlan): StoredPlan {
  * Save a proposed plan for a dataset (status: 'proposed')
  */
 export async function saveProposedPlan(
-  datasetId: string,
+  workflowId: string,
   plan: Plan,
 ): Promise<void> {
   try {
@@ -150,7 +150,7 @@ export async function saveProposedPlan(
       : plan;
 
     const stored: StoredPlan = {
-      datasetId,
+      workflowId,
       plan: normalizedPlan,
       status: 'proposed',
       executionProgress: null,
@@ -164,7 +164,7 @@ export async function saveProposedPlan(
       const request = store.put(stored);
 
       request.onsuccess = () => {
-        console.log("[proposed-plan-store] Plan saved for dataset:", datasetId, "status: proposed");
+        console.log("[proposed-plan-store] Plan saved for dataset:", workflowId, "status: proposed");
         resolve();
       };
       request.onerror = () => reject(request.error);
@@ -178,7 +178,7 @@ export async function saveProposedPlan(
  * Get the full stored plan record for a dataset (includes status + execution progress)
  */
 export async function getStoredPlan(
-  datasetId: string,
+  workflowId: string,
 ): Promise<StoredPlan | null> {
   try {
     const db = await getDB();
@@ -187,7 +187,7 @@ export async function getStoredPlan(
     return new Promise((resolve, reject) => {
       const tx = db.transaction("proposedPlans", "readonly");
       const store = tx.objectStore("proposedPlans");
-      const request = store.get(datasetId);
+      const request = store.get(workflowId);
 
       request.onsuccess = () => {
         const raw = request.result as StoredProposedPlan | undefined;
@@ -209,9 +209,9 @@ export async function getStoredPlan(
  * Get the proposed plan for a dataset (backward compat — returns just the plan data)
  */
 export async function getProposedPlan(
-  datasetId: string,
+  workflowId: string,
 ): Promise<Plan | null> {
-  const stored = await getStoredPlan(datasetId);
+  const stored = await getStoredPlan(workflowId);
   return stored?.plan || null;
 }
 
@@ -219,13 +219,13 @@ export async function getProposedPlan(
  * Update the status of a stored plan
  */
 export async function updatePlanStatus(
-  datasetId: string,
+  workflowId: string,
   status: PlanStatus,
 ): Promise<void> {
   try {
-    const stored = await getStoredPlan(datasetId);
+    const stored = await getStoredPlan(workflowId);
     if (!stored) {
-      console.warn("[proposed-plan-store] No plan found to update status for:", datasetId);
+      console.warn("[proposed-plan-store] No plan found to update status for:", workflowId);
       return;
     }
 
@@ -244,7 +244,7 @@ export async function updatePlanStatus(
       const request = store.put(updated);
 
       request.onsuccess = () => {
-        console.log("[proposed-plan-store] Status updated:", datasetId, "→", status);
+        console.log("[proposed-plan-store] Status updated:", workflowId, "→", status);
         resolve();
       };
       request.onerror = () => reject(request.error);
@@ -258,11 +258,11 @@ export async function updatePlanStatus(
  * Update execution progress and set status to 'executing'
  */
 export async function updatePlanExecution(
-  datasetId: string,
+  workflowId: string,
   progress: ExecutionProgress,
 ): Promise<void> {
   try {
-    const stored = await getStoredPlan(datasetId);
+    const stored = await getStoredPlan(workflowId);
     if (!stored) return;
 
     const db = await getDB();
@@ -292,11 +292,11 @@ export async function updatePlanExecution(
  * Mark plan as completed with final progress
  */
 export async function completePlan(
-  datasetId: string,
+  workflowId: string,
   finalProgress: ExecutionProgress | null,
 ): Promise<void> {
   try {
-    const stored = await getStoredPlan(datasetId);
+    const stored = await getStoredPlan(workflowId);
     if (!stored) return;
 
     const db = await getDB();
@@ -315,7 +315,7 @@ export async function completePlan(
       const request = store.put(updated);
 
       request.onsuccess = () => {
-        console.log("[proposed-plan-store] Plan completed:", datasetId);
+        console.log("[proposed-plan-store] Plan completed:", workflowId);
         resolve();
       };
       request.onerror = () => reject(request.error);
@@ -329,11 +329,11 @@ export async function completePlan(
  * Mark plan as failed with final progress
  */
 export async function failPlan(
-  datasetId: string,
+  workflowId: string,
   finalProgress: ExecutionProgress | null,
 ): Promise<void> {
   try {
-    const stored = await getStoredPlan(datasetId);
+    const stored = await getStoredPlan(workflowId);
     if (!stored) return;
 
     const db = await getDB();
@@ -352,7 +352,7 @@ export async function failPlan(
       const request = store.put(updated);
 
       request.onsuccess = () => {
-        console.log("[proposed-plan-store] Plan failed:", datasetId);
+        console.log("[proposed-plan-store] Plan failed:", workflowId);
         resolve();
       };
       request.onerror = () => reject(request.error);
@@ -367,13 +367,13 @@ export async function failPlan(
  * Used by the update_plan_markdown tool during agent-driven execution.
  */
 export async function updateStoredPlanMarkdown(
-  datasetId: string,
+  workflowId: string,
   planMarkdown: string,
 ): Promise<void> {
   try {
-    const stored = await getStoredPlan(datasetId);
+    const stored = await getStoredPlan(workflowId);
     if (!stored) {
-      console.warn("[proposed-plan-store] No plan found to update markdown for:", datasetId);
+      console.warn("[proposed-plan-store] No plan found to update markdown for:", workflowId);
       return;
     }
 
@@ -402,14 +402,14 @@ export async function updateStoredPlanMarkdown(
 /**
  * Clear the plan for a dataset (on dismiss — removes entirely)
  */
-export async function clearProposedPlan(datasetId: string): Promise<void> {
+export async function clearProposedPlan(workflowId: string): Promise<void> {
   try {
     const db = await getDB();
 
     return new Promise((resolve, reject) => {
       const tx = db.transaction("proposedPlans", "readwrite");
       const store = tx.objectStore("proposedPlans");
-      const request = store.delete(datasetId);
+      const request = store.delete(workflowId);
 
       request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
@@ -422,8 +422,8 @@ export async function clearProposedPlan(datasetId: string): Promise<void> {
 /**
  * Check if a dataset has a proposed plan
  */
-export async function hasProposedPlan(datasetId: string): Promise<boolean> {
-  const stored = await getStoredPlan(datasetId);
+export async function hasProposedPlan(workflowId: string): Promise<boolean> {
+  const stored = await getStoredPlan(workflowId);
   return stored !== null && stored.status === 'proposed';
 }
 
@@ -437,7 +437,7 @@ const SNAPSHOT_KEY_PREFIX = 'previous:';
  * Save snapshot of the last applied plan (for diff computation in save_plan).
  * Uses a separate key prefix so it doesn't interfere with the main plan lifecycle.
  */
-export async function savePreviousPlanSnapshot(datasetId: string, plan: Plan): Promise<void> {
+export async function savePreviousPlanSnapshot(workflowId: string, plan: Plan): Promise<void> {
   try {
     const db = await getDB();
     if (!hasStore(db)) return;
@@ -454,7 +454,7 @@ export async function savePreviousPlanSnapshot(datasetId: string, plan: Plan): P
       : plan;
 
     const snapshot: StoredPlan = {
-      datasetId: `${SNAPSHOT_KEY_PREFIX}${datasetId}`,
+      workflowId: `${SNAPSHOT_KEY_PREFIX}${workflowId}`,
       plan: normalizedPlan,
       status: 'proposed',
       executionProgress: null,
@@ -468,7 +468,7 @@ export async function savePreviousPlanSnapshot(datasetId: string, plan: Plan): P
       const request = store.put(snapshot);
 
       request.onsuccess = () => {
-        console.log("[proposed-plan-store] Previous plan snapshot saved for dataset:", datasetId);
+        console.log("[proposed-plan-store] Previous plan snapshot saved for dataset:", workflowId);
         resolve();
       };
       request.onerror = () => reject(request.error);
@@ -482,7 +482,7 @@ export async function savePreviousPlanSnapshot(datasetId: string, plan: Plan): P
  * Get the last applied plan snapshot (null if first proposal).
  * Used by save_plan to compute diff against previous plan.
  */
-export async function getPreviousPlanSnapshot(datasetId: string): Promise<Plan | null> {
+export async function getPreviousPlanSnapshot(workflowId: string): Promise<Plan | null> {
   try {
     const db = await getDB();
     if (!hasStore(db)) return null;
@@ -490,7 +490,7 @@ export async function getPreviousPlanSnapshot(datasetId: string): Promise<Plan |
     return new Promise((resolve, reject) => {
       const tx = db.transaction("proposedPlans", "readonly");
       const store = tx.objectStore("proposedPlans");
-      const request = store.get(`${SNAPSHOT_KEY_PREFIX}${datasetId}`);
+      const request = store.get(`${SNAPSHOT_KEY_PREFIX}${workflowId}`);
 
       request.onsuccess = () => {
         const raw = request.result as StoredProposedPlan | undefined;

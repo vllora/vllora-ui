@@ -52,7 +52,7 @@ const INPUT_CLS =
   "h-8 text-xs border-border/50 bg-muted/30 focus-visible:ring-0 focus-visible:ring-offset-0";
 
 interface NewJobDialogProps {
-  datasetId: string;
+  workflowId: string;
   onSuccess: () => void;
   disabled?: boolean;
   open: boolean;
@@ -62,7 +62,7 @@ interface NewJobDialogProps {
 }
 
 export function NewJobDialog({
-  datasetId,
+  workflowId,
   onSuccess,
   disabled,
   open,
@@ -110,7 +110,7 @@ export function NewJobDialog({
   const [responseCandidatesCount, setResponseCandidatesCount] = useState(String(defaultResponseCandidatesCount));
 
   const handleSubmit = useCallback(async () => {
-    if (!datasetId || isSubmitting) return;
+    if (!workflowId || isSubmitting) return;
 
     setIsSubmitting(true);
 
@@ -153,7 +153,7 @@ export function NewJobDialog({
       }
 
       const result = await quickFinetune({
-        datasetId,
+        workflowId,
         baseModel,
         trainingConfig:
           Object.keys(trainingConfig).length > 0 ? trainingConfig : undefined,
@@ -178,7 +178,7 @@ export function NewJobDialog({
       setIsSubmitting(false);
     }
   }, [
-    datasetId,
+    workflowId,
     baseModel,
     learningRate,
     epochs,

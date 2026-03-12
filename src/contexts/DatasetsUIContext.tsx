@@ -37,7 +37,7 @@ interface DatasetsUIContextType {
   sortConfig: SortConfig | undefined;
 
   // Navigation actions
-  navigateToDataset: (datasetId: string) => void;
+  navigateToDataset: (workflowId: string) => void;
   navigateToList: () => void;
 
   // Selection actions
@@ -46,8 +46,8 @@ interface DatasetsUIContextType {
   clearSelection: () => void;
 
   // Expand/collapse actions
-  expandDataset: (datasetId: string) => void;
-  collapseDataset: (datasetId: string) => void;
+  expandDataset: (workflowId: string) => void;
+  collapseDataset: (workflowId: string) => void;
 
   // Search and sort actions
   setSearchQuery: (query: string) => void;
@@ -137,8 +137,8 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
   }, [projectId, subscribe]);
 
   // Navigation actions - use path-based routing
-  const navigateToDataset = useCallback((datasetId: string) => {
-    navigate(`/finetune/${datasetId}`);
+  const navigateToDataset = useCallback((workflowId: string) => {
+    navigate(`/finetune/${workflowId}`);
     // Clear selection when navigating
     setSelectedRecordIds(new Set());
     setSearchQuery('');
@@ -162,14 +162,14 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Expand/collapse actions
-  const expandDataset = useCallback((datasetId: string) => {
-    setExpandedDatasetIds(prev => new Set([...prev, datasetId]));
+  const expandDataset = useCallback((workflowId: string) => {
+    setExpandedDatasetIds(prev => new Set([...prev, workflowId]));
   }, []);
 
-  const collapseDataset = useCallback((datasetId: string) => {
+  const collapseDataset = useCallback((workflowId: string) => {
     setExpandedDatasetIds(prev => {
       const next = new Set(prev);
-      next.delete(datasetId);
+      next.delete(workflowId);
       return next;
     });
   }, []);
@@ -177,27 +177,27 @@ export function DatasetsUIProvider({ children }: { children: ReactNode }) {
   // Listen for Lucy tool events
   useEffect(() => {
     // Navigation handlers
-    const handleNavigate = (data: { datasetId: string }) => {
-      navigateToDataset(data.datasetId);
+    const handleNavigate = (data: { workflowId: string }) => {
+      navigateToDataset(data.workflowId);
     };
 
     const handleNavigateToList = () => {
       navigateToList();
     };
 
-    const handleExpand = (data: { datasetId: string }) => {
-      expandDataset(data.datasetId);
+    const handleExpand = (data: { workflowId: string }) => {
+      expandDataset(data.workflowId);
     };
 
-    const handleCollapse = (data: { datasetId: string }) => {
-      collapseDataset(data.datasetId);
+    const handleCollapse = (data: { workflowId: string }) => {
+      collapseDataset(data.workflowId);
     };
 
     // Selection handlers
-    const handleSelectRecords = (data: { datasetId: string; recordIds: string[] }) => {
+    const handleSelectRecords = (data: { workflowId: string; recordIds: string[] }) => {
       // Navigate to the dataset first, then select records
-      if (data.datasetId) {
-        navigate(`/finetune/${data.datasetId}`);
+      if (data.workflowId) {
+        navigate(`/finetune/${data.workflowId}`);
       }
       selectRecords(data.recordIds);
     };

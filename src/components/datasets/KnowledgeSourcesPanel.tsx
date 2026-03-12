@@ -21,7 +21,7 @@ import { KnowledgeSourceCard } from "./KnowledgeSourceCard";
 import { uploadKnowledgeSourceHandler } from "@/lib/distri-finetune-tools/steps/knowledge-sources";
 
 interface KnowledgeSourcesPanelProps {
-  datasetId: string;
+  workflowId: string;
   className?: string;
 }
 
@@ -55,7 +55,7 @@ function formatFileSize(bytes: number): string {
 
 const ACCEPTED_TYPES = ".pdf,.md,.txt,.text";
 
-export function KnowledgeSourcesPanel({ datasetId, className }: KnowledgeSourcesPanelProps) {
+export function KnowledgeSourcesPanel({ workflowId, className }: KnowledgeSourcesPanelProps) {
   const [sources, setSources] = useState<KnowledgeSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -78,28 +78,28 @@ export function KnowledgeSourcesPanel({ datasetId, className }: KnowledgeSources
   const fetchSources = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await knowledgeSourceService.getByDataset(datasetId);
+      const data = await knowledgeSourceService.getByDataset(workflowId);
       setSources(data);
     } catch (error) {
       console.error("[KnowledgeSourcesPanel] Error fetching sources:", error);
     } finally {
       setLoading(false);
     }
-  }, [datasetId]);
+  }, [workflowId]);
 
   useEffect(() => {
     fetchSources();
 
     const handleUpdate = ({
-      datasetId: updatedDatasetId,
+      workflowId: updatedDatasetId,
       sourceId,
       progress,
     }: {
-      datasetId: string;
+      workflowId: string;
       sourceId?: string;
       progress?: { step: string; current?: number; total?: number; percent?: number };
     }) => {
-      if (updatedDatasetId !== datasetId) return;
+      if (updatedDatasetId !== workflowId) return;
 
       if (sourceId && progress) {
         setSources((prev) =>
@@ -114,7 +114,7 @@ export function KnowledgeSourcesPanel({ datasetId, className }: KnowledgeSources
     return () => {
       emitter.off("vllora_knowledge_source_updated", handleUpdate);
     };
-  }, [fetchSources, datasetId]);
+  }, [fetchSources, workflowId]);
 
   // Stage files when selected via file input
   const handleFileSelect = useCallback((files: FileList | null) => {
@@ -141,7 +141,7 @@ export function KnowledgeSourcesPanel({ datasetId, className }: KnowledgeSources
         const sourceType = getSourceType(file);
 
         await uploadKnowledgeSourceHandler({
-          dataset_id: datasetId,
+          workflow_id: workflowId,
           name: file.name,
           type: sourceType,
           content: base64,
@@ -167,7 +167,7 @@ export function KnowledgeSourcesPanel({ datasetId, className }: KnowledgeSources
       setStagedFiles([]);
       setComment("");
     }
-  }, [stagedFiles, comment, datasetId, fetchSources, planStatus]);
+  }, [stagedFiles, comment, workflowId, fetchSources, planStatus]);
 
   // Toggle source expansion
   const toggleExpand = (sourceId: string) => {
@@ -187,7 +187,7 @@ export function KnowledgeSourcesPanel({ datasetId, className }: KnowledgeSources
     try {
       await knowledgeSourceService.delete(sourceId);
       setSources((prev) => prev.filter((s) => s.id !== sourceId));
-      emitter.emit("vllora_knowledge_source_updated", { datasetId });
+      emitter.emit("vllora_knowledge_source_updated", { workflowId });
     } catch (error) {
       console.error("[KnowledgeSourcesPanel] Error deleting source:", error);
     }
@@ -336,7 +336,7 @@ export function KnowledgeSourcesPanel({ datasetId, className }: KnowledgeSources
                   recordCount={stats?.recordCount}
                   coveragePercent={stats?.coveragePercent}
                   onFilterBySource={() => {
-                    emitter.emit("vllora_filter_by_source", { datasetId, sourceId: source.id });
+                    emitter.emit("vllora_filter_by_source", { workflowId, sourceId: source.id });
                   }}
                 />
               );

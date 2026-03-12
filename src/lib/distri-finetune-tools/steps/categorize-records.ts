@@ -31,14 +31,14 @@ export const categorizeRecordsHandler: ToolHandler = async (params): Promise<Cat
     await workflowService.advanceToStep(workflow_id, 'categorize');
 
     // Check dataset for topic hierarchy (single source of truth)
-    const dataset = await datasetService.getById(workflow.datasetId);
+    const dataset = await datasetService.getById(workflow.workflowId);
     if (!dataset?.topicHierarchy?.hierarchy) {
       return { success: false, error: 'Topic hierarchy must be configured first. Use generate_topics or apply_hierarchy.' };
     }
 
     console.log('===== dataset?.topicHierarchy?.hierarchy', JSON.stringify(dataset?.topicHierarchy?.hierarchy))
     // Get all records to classify
-    const records = await recordService.getByDatasetId(workflow.datasetId);
+    const records = await recordService.getByDatasetId(workflow.workflowId);
     if (records.length === 0) {
       return { success: false, error: 'No records found in dataset' };
     }
@@ -61,7 +61,7 @@ export const categorizeRecordsHandler: ToolHandler = async (params): Promise<Cat
     // Apply classifications to records
     let assignedCount = 0;
     for (const [recordId, topic] of result.classifications) {
-      await recordService.updateTopic(workflow.datasetId, recordId, topic);
+      await recordService.updateTopic(workflow.workflowId, recordId, topic);
       assignedCount++;
     }
 
@@ -78,7 +78,7 @@ export const categorizeRecordsHandler: ToolHandler = async (params): Promise<Cat
     });
 
     // Get topic distribution after classification
-    const updatedRecords = await recordService.getByDatasetId(workflow.datasetId);
+    const updatedRecords = await recordService.getByDatasetId(workflow.workflowId);
     const byTopic: Record<string, { count: number; avg_confidence: number }> = {};
 
     for (const record of updatedRecords) {

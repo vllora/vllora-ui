@@ -58,7 +58,7 @@ export interface MockFinetuneApiOptions {
   /** Override eval results for specific scenarios. */
   readonly evalResults?: ReturnType<typeof defaultEvalResults>;
   /** Override dataset ID used in mock responses. */
-  readonly datasetId?: string;
+  readonly workflowId?: string;
   /** Simulate evaluation failure. */
   readonly evalShouldFail?: boolean;
   /** Simulate upload failure. */
@@ -67,7 +67,7 @@ export interface MockFinetuneApiOptions {
 
 export function mockFinetuneApi(opts: MockFinetuneApiOptions = {}) {
   const ms = opts.delayMs ?? DEFAULT_DELAY_MS;
-  const dsId = opts.datasetId ?? DEFAULT_DATASET_ID;
+  const dsId = opts.workflowId ?? DEFAULT_DATASET_ID;
   const evalResults = opts.evalResults ?? defaultEvalResults();
 
   return {
@@ -80,11 +80,11 @@ export function mockFinetuneApi(opts: MockFinetuneApiOptions = {}) {
     }),
 
     uploadDataset: vi.fn().mockImplementation(() =>
-      delayed({ dataset_id: dsId }, ms),
+      delayed({ workflow_id: dsId }, ms),
     ),
 
     uploadDatasetForFinetune: vi.fn().mockImplementation(() =>
-      delayed({ datasetId: dsId, jsonlContent: '{}' }, ms),
+      delayed({ workflowId: dsId, jsonlContent: '{}' }, ms),
     ),
 
     // Evaluator
@@ -146,8 +146,8 @@ export function mockFinetuneApi(opts: MockFinetuneApiOptions = {}) {
     // Evaluator versions
     getEvaluatorVersions: vi.fn().mockImplementation(() =>
       delayed([
-        { id: 'ev-002', dataset_id: dsId, version: 2, config: { type: 'js', config: {} }, diff: '+ new line', created_at: '2026-03-10T12:00:00Z' },
-        { id: 'ev-001', dataset_id: dsId, version: 1, config: { type: 'js', config: {} }, diff: null, created_at: '2026-03-09T10:00:00Z' },
+        { id: 'ev-002', workflow_id: dsId, version: 2, config: { type: 'js', config: {} }, diff: '+ new line', created_at: '2026-03-10T12:00:00Z' },
+        { id: 'ev-001', workflow_id: dsId, version: 1, config: { type: 'js', config: {} }, diff: null, created_at: '2026-03-09T10:00:00Z' },
       ], ms),
     ),
 

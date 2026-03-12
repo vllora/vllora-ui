@@ -50,11 +50,11 @@ export async function seedDataset(opts: SeedDatasetOpts = {}): Promise<string> {
 
 /** Create records for a dataset via the service adapter. */
 export async function seedRecords(
-  datasetId: string,
+  workflowId: string,
   records: readonly SeedRecordOpts[],
 ): Promise<string[]> {
   const created = await recordService.add(
-    datasetId,
+    workflowId,
     records.map((rec) => ({
       data: {
         messages: [
@@ -73,7 +73,7 @@ export async function seedRecords(
   for (let i = 0; i < records.length; i++) {
     const rec = records[i];
     if (rec.score != null && ids[i]) {
-      await recordService.updateEvaluation(datasetId, ids[i], rec.score);
+      await recordService.updateEvaluation(workflowId, ids[i], rec.score);
     }
   }
 
@@ -86,10 +86,10 @@ export async function seedRecords(
 
 /** Create a workflow for a dataset. */
 export async function seedWorkflow(
-  datasetId: string,
+  workflowId: string,
   opts: { trainingGoals?: string; jobId?: string } = {},
 ): Promise<string> {
-  const workflow = await workflowService.create(datasetId, opts.trainingGoals ?? 'Test training');
+  const workflow = await workflowService.create(workflowId, opts.trainingGoals ?? 'Test training');
 
   if (opts.jobId) {
     await workflowService.updateStepData(workflow.id, 'training', {
@@ -111,7 +111,7 @@ export async function seedWorkflow(
 
 /** Create a completed EvalJob with evaluation results. */
 export async function seedCompletedEvalJob(
-  datasetId: string,
+  workflowId: string,
   opts: {
     evaluationRunId?: string;
     scores: readonly { rowId: string; score: number; topic?: string }[];
@@ -149,7 +149,7 @@ export async function seedCompletedEvalJob(
   };
 
   const job = await evalJobService.create({
-    datasetId,
+    workflowId,
     evaluationRunId: opts.evaluationRunId ?? 'eval-run-001',
     status: 'completed',
     sampleSize: totalRows,
@@ -175,11 +175,11 @@ export async function seedCompletedEvalJob(
 
 /** Seed iteration history for stall detection tests. */
 export async function seedIterationHistory(
-  datasetId: string,
+  workflowId: string,
   history: readonly IterationHistoryEntry[],
 ): Promise<void> {
   const state: IterationState = {
-    id: datasetId,
+    id: workflowId,
     iterationNumber: history.length,
     phase: 'idle',
     innerLoop: {},

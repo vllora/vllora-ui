@@ -10,12 +10,12 @@ import { emitter } from '@/utils/eventEmitter';
 import { knowledgeSourceService } from '@/services/service-registry';
 
 interface SourcesProcessingMessageProps {
-  datasetId: string;
+  workflowId: string;
   originalMessage?: string;
 }
 
 export function SourcesProcessingMessage({
-  datasetId,
+  workflowId,
   originalMessage,
 }: SourcesProcessingMessageProps) {
   const [sourcesReady, setSourcesReady] = useState(false);
@@ -26,18 +26,18 @@ export function SourcesProcessingMessage({
   // Auto-switch to Docs tab on first render (only once)
   // This helps user see the document processing progress
   useEffect(() => {
-    if (!hasAutoSwitchedToDocsTab && datasetId && !sourcesReady) {
+    if (!hasAutoSwitchedToDocsTab && workflowId && !sourcesReady) {
       setHasAutoSwitchedToDocsTab(true);
       console.log('[SourcesProcessingMessage] Auto-switching to Docs tab');
       emitter.emit('vllora_open_drawer', { type: 'docs' });
     }
-  }, [hasAutoSwitchedToDocsTab, datasetId, sourcesReady]);
+  }, [hasAutoSwitchedToDocsTab, workflowId, sourcesReady]);
 
   // Check if all sources are ready and auto-trigger plan generation
   const checkSources = useCallback(async () => {
-    if (!datasetId) return;
+    if (!workflowId) return;
     try {
-      const sources = await knowledgeSourceService.getByDataset(datasetId);
+      const sources = await knowledgeSourceService.getByDataset(workflowId);
       const processing = sources.filter((s) => s.status === 'processing');
       if (processing.length === 0 && sources.length > 0) {
         setSourcesReady(true);
@@ -45,11 +45,11 @@ export function SourcesProcessingMessage({
     } catch (error) {
       console.error('[SourcesProcessingMessage] Error checking sources:', error);
     }
-  }, [datasetId]);
+  }, [workflowId]);
 
   // Auto-trigger plan generation when sources become ready
   useEffect(() => {
-    if (sourcesReady && !autoTriggered && datasetId) {
+    if (sourcesReady && !autoTriggered && workflowId) {
       setAutoTriggered(true);
       console.log('[SourcesProcessingMessage] Documents ready, auto-triggering plan');
       // Emit event to trigger Lucy to generate the plan
@@ -57,13 +57,13 @@ export function SourcesProcessingMessage({
         prompt: 'My documents have finished processing. Please use the propose_plan tool to create a comprehensive plan based on the uploaded documents.',
       });
     }
-  }, [sourcesReady, autoTriggered, datasetId]);
+  }, [sourcesReady, autoTriggered, workflowId]);
 
   // Listen for knowledge source updates
   useEffect(() => {
-    const handleUpdate = ({ datasetId: updatedId }: { datasetId: string }) => {
+    const handleUpdate = ({ workflowId: updatedId }: { workflowId: string }) => {
       console.log('[SourcesProcessingMessage] Received update for dataset:', updatedId);
-      if (updatedId === datasetId) {
+      if (updatedId === workflowId) {
         checkSources();
       }
     };
@@ -76,7 +76,7 @@ export function SourcesProcessingMessage({
     return () => {
       emitter.off('vllora_knowledge_source_updated', handleUpdate);
     };
-  }, [datasetId, checkSources]);
+  }, [workflowId, checkSources]);
 
   // Manual refresh handler
   const handleManualCheck = async () => {

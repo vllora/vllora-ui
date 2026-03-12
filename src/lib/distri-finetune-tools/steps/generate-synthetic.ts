@@ -50,9 +50,9 @@ export const generateSyntheticDataHandler: ToolHandler = async (params): Promise
 
 
     // Get current coverage
-    const records = await recordService.getByDatasetId(workflow.datasetId);
+    const records = await recordService.getByDatasetId(workflow.workflowId);
 
-    const dataset = await datasetService.getById(workflow.datasetId);
+    const dataset = await datasetService.getById(workflow.workflowId);
 
     if (!dataset) {
       return { success: false, error: 'Dataset not found' };
@@ -137,7 +137,7 @@ export const generateSyntheticDataHandler: ToolHandler = async (params): Promise
     const generateTracesParams = isDataFirstWorkflow && topicsToTarget.length === 0
       ? {
           // Data-First workflow: seed-based mode
-          dataset_id: workflow.datasetId,
+          workflow_id: workflow.workflowId,
           record_ids: seedRecordIds,
           count: countPerTopic,
           max_turns: turns,
@@ -146,7 +146,7 @@ export const generateSyntheticDataHandler: ToolHandler = async (params): Promise
         }
       : {
           // Topics-First workflow or Data-First with explicit topics
-          dataset_id: workflow.datasetId,
+          workflow_id: workflow.workflowId,
           record_ids: seedRecordIds,
           count: countPerTopic,
           max_turns: turns,
@@ -190,8 +190,8 @@ export const generateSyntheticDataHandler: ToolHandler = async (params): Promise
     let topicDistribution: Record<string, number> = {};
 
     if (dataset?.topicHierarchy) {
-      console.log('[generateSyntheticData] Recalculating coverage stats for dataset:', workflow.datasetId);
-      const afterCoverageStats = await calculateAndSaveCoverageStats(workflow.datasetId);
+      console.log('[generateSyntheticData] Recalculating coverage stats for dataset:', workflow.workflowId);
+      const afterCoverageStats = await calculateAndSaveCoverageStats(workflow.workflowId);
       balanceScoreAfter = afterCoverageStats.balanceScore ?? 0;
       topicDistribution = afterCoverageStats.topicDistribution;
       console.log('[generateSyntheticData] Coverage after:', {

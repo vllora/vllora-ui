@@ -21,7 +21,7 @@ export interface DatasetMainContentProps {
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
   onExport: () => void;
-  datasetId: string;
+  workflowId: string;
   records: DatasetRecord[];
   topicHierarchy?: TopicHierarchyNode[];
   coverageStats?: CoverageStats;
@@ -78,7 +78,7 @@ export function DatasetMainContent({
   viewMode,
   onViewModeChange,
   onExport,
-  datasetId,
+  workflowId,
   records,
   topicHierarchy,
   coverageStats,
@@ -211,7 +211,7 @@ export function DatasetMainContent({
     return (
       <div className="flex-1 flex flex-col overflow-hidden">
         <EmptyRecordsState
-          datasetId={datasetId}
+          workflowId={workflowId}
           datasetObjective={datasetObjective}
           hasTopicHierarchy={false}
           onImportClick={onImportClick}
@@ -233,7 +233,7 @@ export function DatasetMainContent({
           onViewModeChange={onViewModeChange}
           onExport={onExport}
           records={topicFilteredRecords}
-          datasetId={datasetId}
+          workflowId={workflowId}
           activeStatFilter={activeStatFilter}
           onStatFilterChange={setActiveStatFilter}
           searchQuery={searchQuery}
@@ -249,7 +249,7 @@ export function DatasetMainContent({
         <TopicHierarchyCanvas
           hierarchy={displayHierarchy}
           records={filteredRecords}
-          datasetId={datasetId}
+          workflowId={workflowId}
           coverageStats={coverageStats}
           onSelectTopic={onSelectTopic}
           selectedTopic={selectedTopic}
@@ -271,7 +271,7 @@ export function DatasetMainContent({
       ) : (
         <RecordsTable
           records={filteredRecords}
-          datasetId={datasetId}
+          workflowId={workflowId}
           showHeader={true}
           showFooter={false}
           height="auto"

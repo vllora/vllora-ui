@@ -72,7 +72,7 @@ export interface GenerationRound {
 
 export interface FinetuneWorkflowState {
   id: string;
-  datasetId: string;
+  workflowId: string;
   trainingGoals: string;
   currentStep: FinetuneStep;
   stepStatus: Record<FinetuneStep, StepStatus>;

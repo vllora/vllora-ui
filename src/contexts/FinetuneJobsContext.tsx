@@ -54,7 +54,7 @@ const EVAL_POLL_INTERVAL = 20000;
  * Computes average score across all epochs for each row, then updates via recordService.
  */
 async function persistFinetuneScores(
-  datasetId: string,
+  workflowId: string,
   results: Array<{
     row_index: number;
     row: { id: string; [key: string]: unknown };
@@ -82,7 +82,7 @@ async function persistFinetuneScores(
 
     const avgScore = allScores.reduce((sum, s) => sum + s, 0) / allScores.length;
 
-    await recordService.updateEvalScores(datasetId, recordId, {
+    await recordService.updateEvalScores(workflowId, recordId, {
       finetuneScore: avgScore,
     });
     persisted++;
@@ -120,9 +120,9 @@ function useFinetuneJobsLogic() {
     run: loadJobs,
     mutate: setJobs,
   } = useRequest(
-    async (datasetId?: string | null) => {
-      // Use provided datasetId or fall back to current state
-      const filterDatasetId = datasetId !== undefined ? datasetId : currentDatasetId;
+    async (workflowId?: string | null) => {
+      // Use provided workflowId or fall back to current state
+      const filterDatasetId = workflowId !== undefined ? workflowId : currentDatasetId;
 
       // If no backend dataset ID, return empty (dataset not uploaded yet)
       if (!filterDatasetId) {
@@ -155,7 +155,7 @@ function useFinetuneJobsLogic() {
 
   // Fetch evaluations for a specific job (stale-while-revalidate pattern)
   const fetchJobEvaluations = useCallback(async (job: FinetuneJob, isInitial = false) => {
-    if (!job.dataset_id) return;
+    if (!job.workflow_id) return;
 
     const jobId = job.id;
 
@@ -186,7 +186,7 @@ function useFinetuneJobsLogic() {
 
     // Fetch fresh data from API (revalidate)
     try {
-      const results = await getFinetuneEvaluations(job.dataset_id, job.provider_job_id);
+      const results = await getFinetuneEvaluations(job.workflow_id, job.provider_job_id);
 
       // Update state with fresh data
       setJobEvaluations((prev) => ({
@@ -203,7 +203,7 @@ function useFinetuneJobsLogic() {
       if (results.results.length > 0) {
         const isComplete = job.status !== 'pending' && job.status !== 'running';
         const modelName = job.base_model;
-        const datasetId = job.dataset_id!;
+        const workflowId = job.workflow_id!;
         try {
           const previewOnly = !isComplete;
           if (isComplete) {
@@ -211,17 +211,17 @@ function useFinetuneJobsLogic() {
             if (alreadyPersisted) {
               // Already persisted — skip
             } else {
-              const persisted = await persistFinetuneScores(datasetId, results.results, previewOnly, modelName);
+              const persisted = await persistFinetuneScores(workflowId, results.results, previewOnly, modelName);
               if (persisted > 0) {
                 await workflowService.markJobScoresPersisted(jobId);
-                emitter.emit('vllora_dataset_refresh' as any, { datasetId });
+                emitter.emit('vllora_dataset_refresh' as any, { workflowId });
               }
             }
           } else {
             // Live preview: update scores without incrementing count (overwritten each poll)
-            const persisted = await persistFinetuneScores(datasetId, results.results, previewOnly, modelName);
+            const persisted = await persistFinetuneScores(workflowId, results.results, previewOnly, modelName);
             if (persisted > 0) {
-              emitter.emit('vllora_dataset_refresh' as any, { datasetId });
+              emitter.emit('vllora_dataset_refresh' as any, { workflowId });
             }
           }
         } catch (scoreErr: unknown) {
@@ -270,7 +270,7 @@ function useFinetuneJobsLogic() {
     const isActive = job && (job.status === 'pending' || job.status === 'running');
 
     // Start polling for active jobs that aren't being polled yet
-    if (job && isActive && job.dataset_id && !evalPollIntervalsRef.current[jobId]) {
+    if (job && isActive && job.workflow_id && !evalPollIntervalsRef.current[jobId]) {
       startEvalPolling(job);
     }
 
@@ -291,7 +291,7 @@ function useFinetuneJobsLogic() {
       const isActive = job.status === 'pending' || job.status === 'running';
       const isPolling = !!evalPollIntervalsRef.current[job.id];
 
-      if (isActive && job.dataset_id && !isPolling) {
+      if (isActive && job.workflow_id && !isPolling) {
         // Job became active, start polling
         startEvalPolling(job);
       } else if (!isActive && isPolling) {
@@ -323,10 +323,10 @@ function useFinetuneJobsLogic() {
         if (existingJob) {
           // Detect completion transition: was running/pending → now terminal
           const wasActive = existingJob.status === 'running' || existingJob.status === 'pending';
-          if (wasActive && isTerminal && existingJob.dataset_id) {
+          if (wasActive && isTerminal && existingJob.workflow_id) {
             emitter.emit('vllora_finetune_job_completed', {
               jobId: job_id,
-              datasetId: existingJob.dataset_id,
+              workflowId: existingJob.workflow_id,
             });
           }
 
@@ -376,11 +376,11 @@ function useFinetuneJobsLogic() {
 
   // Listen for job created events from quickFinetune
   useEffect(() => {
-    const handleJobCreated = (event: { datasetId: string }) => {
+    const handleJobCreated = (event: { workflowId: string }) => {
       // Update the current dataset ID if it changed
-      const targetId = event.datasetId || currentDatasetId;
-      if (event.datasetId && event.datasetId !== currentDatasetId) {
-        setCurrentDatasetId(event.datasetId);
+      const targetId = event.workflowId || currentDatasetId;
+      if (event.workflowId && event.workflowId !== currentDatasetId) {
+        setCurrentDatasetId(event.workflowId);
         // useEffect watching currentDatasetId will call loadJobs
       } else {
         // Same dataset — refresh directly (setCurrentDatasetId would be a no-op)
@@ -415,7 +415,7 @@ function useFinetuneJobsLogic() {
       const isCompleted = job.status !== 'pending' && job.status !== 'running';
       const alreadyFetched = completedJobsFetchedRef.current.has(job.id);
 
-      if (isCompleted && job.dataset_id && !alreadyFetched) {
+      if (isCompleted && job.workflow_id && !alreadyFetched) {
         completedJobsFetchedRef.current.add(job.id);
         fetchJobEvaluations(job, true);
       }

@@ -130,7 +130,7 @@ export function LucySidebar() {
   }, [isPinned]);
 
   // Get dataset from context
-  const { dataset: currentDataset, datasetId: selectedDatasetId, isLoading: datasetLoading, records, activeSection } = DatasetDetailConsumer();
+  const { dataset: currentDataset, workflowId: selectedDatasetId, isLoading: datasetLoading, records, activeSection } = DatasetDetailConsumer();
   const { filteredJobs } = FinetuneJobsConsumer();
 
   // Lucy agent state
@@ -162,7 +162,7 @@ export function LucySidebar() {
     prepareMessage,
     catchUpCards,
   } = useFineTuneAgentChat({
-    datasetId: selectedDatasetId || '',
+    workflowId: selectedDatasetId || '',
     datasetName: currentDataset?.name,
     trainingGoals: currentDataset?.datasetObjective,
     planStatus,
@@ -281,8 +281,8 @@ export function LucySidebar() {
 
   // Listen for docs awaiting plan
   useEffect(() => {
-    const handleDocsAwaiting = ({ datasetId }: { datasetId: string }) => {
-      if (datasetId === selectedDatasetId) {
+    const handleDocsAwaiting = ({ workflowId }: { workflowId: string }) => {
+      if (workflowId === selectedDatasetId) {
         console.log('[LucySidebar] Docs awaiting plan — setting pending trigger');
         pendingDocsPlanTriggerRef.current = true;
       }
@@ -314,8 +314,8 @@ export function LucySidebar() {
     checkUnreviewed();
 
     // Re-check when dry run jobs complete or get reviewed
-    const handleJobCompleted = ({ datasetId }: { jobId: string; datasetId: string; verdict: string }) => {
-      if (datasetId === selectedDatasetId) setHasUnreviewedResults(true);
+    const handleJobCompleted = ({ workflowId }: { jobId: string; workflowId: string; verdict: string }) => {
+      if (workflowId === selectedDatasetId) setHasUnreviewedResults(true);
     };
     const handleJobReviewed = () => { checkUnreviewed(); };
 
@@ -353,8 +353,8 @@ export function LucySidebar() {
 
   // Auto-prompt Lucy when evaluation completes in background
   useEffect(() => {
-    const handleEvalCompleted = ({ datasetId, verdict }: { jobId: string; datasetId: string; verdict: string }) => {
-      if (datasetId !== selectedDatasetId) return;
+    const handleEvalCompleted = ({ workflowId, verdict }: { jobId: string; workflowId: string; verdict: string }) => {
+      if (workflowId !== selectedDatasetId) return;
 
       const msg = verdict === 'FAILED'
         ? 'The evaluation has failed. Please check what went wrong and advise on next steps.'
@@ -369,8 +369,8 @@ export function LucySidebar() {
 
   // Auto-prompt Lucy when training completes in background
   useEffect(() => {
-    const handleTrainingCompleted = ({ datasetId }: { jobId: string; datasetId: string }) => {
-      if (datasetId !== selectedDatasetId) return;
+    const handleTrainingCompleted = ({ workflowId }: { jobId: string; workflowId: string }) => {
+      if (workflowId !== selectedDatasetId) return;
 
       emitter.emit('vllora_lucy_prompt', {
         prompt: 'The fine-tune training job has completed. Please analyze the training results and tell me how it went.',
@@ -468,7 +468,7 @@ export function LucySidebar() {
               toast.loading(`Processing: ${fileData.name}`, { id: toastId, description: 'Extracting text and topics...' });
 
               const result = await uploadKnowledgeSourceHandler({
-                dataset_id: selectedDatasetId,
+                workflow_id: selectedDatasetId,
                 name: fileData.name,
                 type: sourceType,
                 content: fileData.data,
@@ -498,7 +498,7 @@ export function LucySidebar() {
         }
 
         if (uploadedFiles.length > 0) {
-          emitter.emit("vllora_knowledge_source_updated", { datasetId: selectedDatasetId });
+          emitter.emit("vllora_knowledge_source_updated", { workflowId: selectedDatasetId });
 
           const currentPlanStatus = planStatusRef.current;
           if (currentPlanStatus === "executing") {

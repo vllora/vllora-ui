@@ -14,7 +14,7 @@ import { getStoredPlan, saveProposedPlan } from '../proposed-plan-store';
 import { normalizePlanSteps } from '../plan-step-normalization';
 
 interface AdjustPlanParams {
-  dataset_id: string;
+  workflow_id: string;
   current_plan?: Plan;
   user_feedback: string;
 }
@@ -445,10 +445,10 @@ export const adjustPlanHandler: ToolHandler = async (
   try {
     console.log('[adjustPlan] Starting with feedback:', params);
 
-    const { dataset_id, current_plan, user_feedback } = params as unknown as AdjustPlanParams;
+    const { workflow_id, current_plan, user_feedback } = params as unknown as AdjustPlanParams;
 
-    if (!dataset_id) {
-      return { success: false, error: 'dataset_id is required' };
+    if (!workflow_id) {
+      return { success: false, error: 'workflow_id is required' };
     }
 
     if (!user_feedback || !user_feedback.trim()) {
@@ -456,7 +456,7 @@ export const adjustPlanHandler: ToolHandler = async (
     }
 
     // Robust fallback: if the agent omits current_plan, load the latest persisted one.
-    const resolvedPlan = current_plan ?? (await getStoredPlan(dataset_id))?.plan;
+    const resolvedPlan = current_plan ?? (await getStoredPlan(workflow_id))?.plan;
     if (!resolvedPlan) {
       return {
         success: false,
@@ -465,7 +465,7 @@ export const adjustPlanHandler: ToolHandler = async (
     }
 
     // Emit event to show loading state
-    emitter.emit('vllora_plan_generating', { datasetId: dataset_id });
+    emitter.emit('vllora_plan_generating', { workflowId: workflow_id });
 
     console.log('[adjustPlan] Calling LLM to adjust plan...');
 
@@ -551,10 +551,10 @@ export const adjustPlanHandler: ToolHandler = async (
     console.log('[adjustPlan] Plan adjusted successfully:', llmResult.changes_made);
 
     // Persist adjusted plan to IndexedDB so it survives page refresh
-    await saveProposedPlan(dataset_id, adjustedPlan);
+    await saveProposedPlan(workflow_id, adjustedPlan);
 
     // Emit event so the right panel can display the updated plan
-    emitter.emit('vllora_plan_proposed', { datasetId: dataset_id, plan: adjustedPlan });
+    emitter.emit('vllora_plan_proposed', { workflowId: workflow_id, plan: adjustedPlan });
 
     return {
       success: true,
@@ -585,7 +585,7 @@ The adjusted plan is shown to the user for approval.`,
   parameters: {
     type: 'object',
     properties: {
-      dataset_id: {
+      workflow_id: {
         type: 'string',
         description: 'The dataset ID',
       },
@@ -598,7 +598,7 @@ The adjusted plan is shown to the user for approval.`,
         description: 'The user\'s feedback/request for changes (e.g., "reduce to 5 topics with 50 records each")',
       },
     },
-    required: ['dataset_id', 'user_feedback'],
+    required: ['workflow_id', 'user_feedback'],
   },
   autoExecute: true,
   handler: async (input) =>

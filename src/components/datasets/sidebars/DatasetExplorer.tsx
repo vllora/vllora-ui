@@ -602,7 +602,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       {/* New finetune job dialog (triggered from finetune folder "+" action) */}
       {dataset?.id && (
         <NewJobDialog
-          datasetId={dataset.id}
+          workflowId={dataset.id}
           onSuccess={loadFinetuneJobs}
           disabled={hasActiveJob}
           open={showNewJobDialog}

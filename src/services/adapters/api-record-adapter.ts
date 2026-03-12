@@ -4,7 +4,7 @@
  * Calls gateway /finetune/workflows/{workflowId}/records endpoints.
  * Replaces IndexedDB adapter (indexeddb-record-adapter.ts).
  *
- * Mapping: FE datasetId → BE workflowId (same ID after migration)
+ * Mapping: FE workflowId → BE workflowId (same ID after migration)
  */
 
 import { api, handleApiResponse } from '@/lib/api-client';
@@ -33,7 +33,7 @@ function mapToFe(db: DbWorkflowRecordResponse): DatasetRecord {
   const createdAt = new Date(db.created_at).getTime();
   return {
     id: db.id,
-    datasetId: db.workflow_id,
+    workflowId: db.workflow_id,
     data: JSON.parse(db.data),
     topic: db.topic ?? undefined,
     spanId: db.span_id ?? undefined,
@@ -64,8 +64,8 @@ function basePath(workflowId: string): string {
 }
 
 export const apiRecordAdapter: RecordService = {
-  async getByDatasetId(datasetId: string, recordIds?: string[]): Promise<DatasetRecord[]> {
-    const response = await api.get(basePath(datasetId));
+  async getByDatasetId(workflowId: string, recordIds?: string[]): Promise<DatasetRecord[]> {
+    const response = await api.get(basePath(workflowId));
     const data = await handleApiResponse<{ records: DbWorkflowRecordResponse[] }>(response);
     let records = data.records.map(mapToFe);
 
@@ -77,22 +77,22 @@ export const apiRecordAdapter: RecordService = {
     return records.sort((a, b) => b.createdAt - a.createdAt);
   },
 
-  async getCount(datasetId: string): Promise<number> {
-    const response = await api.get(basePath(datasetId));
+  async getCount(workflowId: string): Promise<number> {
+    const response = await api.get(basePath(workflowId));
     const data = await handleApiResponse<{ records: DbWorkflowRecordResponse[] }>(response);
     return data.records.length;
   },
 
-  async getTopicCoverageStats(datasetId: string): Promise<{ total: number; withTopic: number }> {
-    const response = await api.get(basePath(datasetId));
+  async getTopicCoverageStats(workflowId: string): Promise<{ total: number; withTopic: number }> {
+    const response = await api.get(basePath(workflowId));
     const data = await handleApiResponse<{ records: DbWorkflowRecordResponse[] }>(response);
     const total = data.records.length;
     const withTopic = data.records.filter(r => r.topic != null && r.topic !== '').length;
     return { total, withTopic };
   },
 
-  async spanExists(datasetId: string, spanId: string): Promise<boolean> {
-    const response = await api.get(basePath(datasetId));
+  async spanExists(workflowId: string, spanId: string): Promise<boolean> {
+    const response = await api.get(basePath(workflowId));
     const data = await handleApiResponse<{ records: DbWorkflowRecordResponse[] }>(response);
     return data.records.some(r => r.span_id === spanId);
   },
@@ -105,7 +105,7 @@ export const apiRecordAdapter: RecordService = {
   },
 
   async add(
-    datasetId: string,
+    workflowId: string,
     records: readonly NewRecord[],
     defaultTopic?: string,
   ): Promise<DatasetRecord[]> {
@@ -121,14 +121,14 @@ export const apiRecordAdapter: RecordService = {
       };
     });
 
-    const response = await api.post(basePath(datasetId), { records: beRecords });
+    const response = await api.post(basePath(workflowId), { records: beRecords });
     await handleApiResponse<{ added: number }>(response);
 
     // Server uses client-provided IDs for records (id is required in RecordInput)
     const now = Date.now();
     return beRecords.map((r, i) => ({
       id: r.id,
-      datasetId,
+      workflowId,
       data: records[i].data,
       metadata: records[i].metadata,
       topic: r.topic,
@@ -141,7 +141,7 @@ export const apiRecordAdapter: RecordService = {
   },
 
   async addFromSpans(
-    datasetId: string,
+    workflowId: string,
     spans: readonly Span[],
     topic?: string,
   ): Promise<number> {
@@ -151,42 +151,42 @@ export const apiRecordAdapter: RecordService = {
       is_generated: false,
     }));
 
-    const result = await this.add(datasetId, records);
+    const result = await this.add(workflowId, records);
     return result.length;
   },
 
-  async updateTopic(datasetId: string, recordId: string, topic: string): Promise<void> {
+  async updateTopic(workflowId: string, recordId: string, topic: string): Promise<void> {
     const response = await api.patch(
-      `${basePath(datasetId)}/${recordId}`,
+      `${basePath(workflowId)}/${recordId}`,
       { topic: topic || null },
     );
     await handleApiResponse<{ updated: boolean }>(response);
   },
 
-  async updateTopicsBatch(datasetId: string, updates: Map<string, string>): Promise<number> {
+  async updateTopicsBatch(workflowId: string, updates: Map<string, string>): Promise<number> {
     const updatesList = Array.from(updates.entries()).map(([recordId, topic]) => ({
       record_id: recordId,
       topic,
     }));
 
-    const response = await api.patch(`${basePath(datasetId)}/topics`, {
+    const response = await api.patch(`${basePath(workflowId)}/topics`, {
       updates: updatesList,
     });
     await handleApiResponse<{ updated: boolean }>(response);
     return updatesList.length;
   },
 
-  async updateData(datasetId: string, recordId: string, data: unknown): Promise<void> {
+  async updateData(workflowId: string, recordId: string, data: unknown): Promise<void> {
     const response = await api.patch(
-      `${basePath(datasetId)}/${recordId}/data`,
+      `${basePath(workflowId)}/${recordId}/data`,
       { data: JSON.stringify(data) },
     );
     await handleApiResponse<{ updated: boolean }>(response);
   },
 
-  async updateEvaluation(datasetId: string, recordId: string, score: number | undefined): Promise<void> {
+  async updateEvaluation(workflowId: string, recordId: string, score: number | undefined): Promise<void> {
     const response = await api.patch(
-      `${basePath(datasetId)}/${recordId}/scores`,
+      `${basePath(workflowId)}/${recordId}/scores`,
       {
         dry_run_score: score ?? null,
       },
@@ -194,9 +194,9 @@ export const apiRecordAdapter: RecordService = {
     await handleApiResponse<{ updated: boolean }>(response);
   },
 
-  async updateEvalScores(datasetId: string, recordId: string, update: ScoreUpdate): Promise<void> {
+  async updateEvalScores(workflowId: string, recordId: string, update: ScoreUpdate): Promise<void> {
     const response = await api.patch(
-      `${basePath(datasetId)}/${recordId}/scores`,
+      `${basePath(workflowId)}/${recordId}/scores`,
       {
         dry_run_score: update.evalScore,
         finetune_score: update.finetuneScore,
@@ -205,25 +205,25 @@ export const apiRecordAdapter: RecordService = {
     await handleApiResponse<{ updated: boolean }>(response);
   },
 
-  async delete(datasetId: string, recordId: string): Promise<void> {
-    const response = await api.delete(`${basePath(datasetId)}/${recordId}`);
+  async delete(workflowId: string, recordId: string): Promise<void> {
+    const response = await api.delete(`${basePath(workflowId)}/${recordId}`);
     await handleApiResponse<{ deleted: boolean }>(response);
   },
 
-  async clearAll(datasetId: string): Promise<number> {
-    const response = await api.delete(basePath(datasetId));
+  async clearAll(workflowId: string): Promise<number> {
+    const response = await api.delete(basePath(workflowId));
     const data = await handleApiResponse<{ deleted: number }>(response);
     return data.deleted;
   },
 
-  async clearAllTopics(datasetId: string): Promise<number> {
-    const response = await api.delete(`${basePath(datasetId)}/topics`);
+  async clearAllTopics(workflowId: string): Promise<number> {
+    const response = await api.delete(`${basePath(workflowId)}/topics`);
     const data = await handleApiResponse<{ cleared: number }>(response);
     return data.cleared;
   },
 
-  async renameTopic(datasetId: string, oldName: string, newName: string): Promise<number> {
-    const response = await api.patch(`${basePath(datasetId)}/rename-topic`, {
+  async renameTopic(workflowId: string, oldName: string, newName: string): Promise<number> {
+    const response = await api.patch(`${basePath(workflowId)}/rename-topic`, {
       old_name: oldName,
       new_name: newName,
     });
@@ -231,9 +231,9 @@ export const apiRecordAdapter: RecordService = {
     return data.renamed;
   },
 
-  async clearTopic(datasetId: string, topicName: string): Promise<number> {
+  async clearTopic(workflowId: string, topicName: string): Promise<number> {
     const response = await api.delete(
-      `${basePath(datasetId)}/topics/${encodeURIComponent(topicName)}`,
+      `${basePath(workflowId)}/topics/${encodeURIComponent(topicName)}`,
     );
     const data = await handleApiResponse<{ cleared: number }>(response);
     return data.cleared;

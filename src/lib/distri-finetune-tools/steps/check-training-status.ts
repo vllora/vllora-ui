@@ -37,7 +37,7 @@ export const checkTrainingStatusHandler: ToolHandler = async (params) => {
     }
 
     // Get actual job status from backend API (source of truth)
-    const job = await getReinforcementJobStatus(workflow.datasetId, workflow.training.jobId);
+    const job = await getReinforcementJobStatus(workflow.workflowId, workflow.training.jobId);
 
     // Map backend status to workflow status
     const statusMap: Record<string, 'pending' | 'queued' | 'running' | 'completed' | 'failed'> = {
@@ -65,10 +65,10 @@ export const checkTrainingStatusHandler: ToolHandler = async (params) => {
       // FinetuneJobsContext only emits this via SSE, which the mock server lacks.
       const wasActive = workflow.training.status === 'running' || workflow.training.status === 'pending' || workflow.training.status === 'queued';
       const isTerminal = workflowStatus === 'completed' || workflowStatus === 'failed';
-      if (wasActive && isTerminal && workflow.datasetId) {
+      if (wasActive && isTerminal && workflow.workflowId) {
         emitter.emit('vllora_finetune_job_completed', {
           jobId: workflow.training.jobId,
-          datasetId: workflow.datasetId,
+          workflowId: workflow.workflowId,
         });
       }
     }

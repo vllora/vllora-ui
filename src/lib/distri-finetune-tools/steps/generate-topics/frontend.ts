@@ -34,7 +34,7 @@ export interface GenerateTopicsResult {
 }
 
 export interface GenerateTopicsOptions {
-  datasetId: string;
+  workflowId: string;
   depth: number;
   degree: number;
   maxTopics?: number;
@@ -393,7 +393,7 @@ function convertToHierarchyNodes(
  * @param options - Generation options including seed topics, focus, etc.
  */
 export async function generateTopicsViaFrontend(
-  datasetId: string,
+  workflowId: string,
   depth: number,
   degree: number,
   maxTopics?: number,
@@ -403,10 +403,10 @@ export async function generateTopicsViaFrontend(
 ): Promise<GenerateTopicsResult> {
   try {
     // Get records for context
-    const records = await recordService.getByDatasetId(datasetId);
+    const records = await recordService.getByDatasetId(workflowId);
 
     // Build rich knowledge context using shared module
-    const knowledgeCtx = await buildKnowledgeContext(datasetId);
+    const knowledgeCtx = await buildKnowledgeContext(workflowId);
     const hasKnowledgeSources = knowledgeCtx.readyCount > 0;
 
     const effectiveMaxTopics = maxTopics || 3;

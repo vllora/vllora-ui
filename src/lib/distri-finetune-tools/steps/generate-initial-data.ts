@@ -109,7 +109,7 @@ interface OutputFormatParam {
 }
 
 interface GenerateInitialDataParams {
-  dataset_id: string;
+  workflow_id: string;
   count?: number;
   /** Optional user guidance for how to generate the data (e.g., "focus on beginner concepts", "include edge cases") */
   user_guidance?: string;
@@ -536,7 +536,7 @@ export const generateInitialDataHandler: ToolHandler = async (
     );
 
     const {
-      dataset_id,
+      workflow_id,
       count = 10,
       user_guidance,
       distribute_by_topic = false,
@@ -545,21 +545,21 @@ export const generateInitialDataHandler: ToolHandler = async (
       per_topic_count,
     } = params as unknown as GenerateInitialDataParams;
 
-    if (!dataset_id) {
-      return { success: false, error: "dataset_id is required" };
+    if (!workflow_id) {
+      return { success: false, error: "workflow_id is required" };
     }
 
     // ── Parallel setup: fetch all data in one round-trip ──
     const setupStart = Date.now();
     const [dataset, workflow, existingRecords, allKnowledgeSources] = await Promise.all([
-      datasetService.getById(dataset_id),
-      workflowService.getByDataset(dataset_id),
-      recordService.getByDatasetId(dataset_id),
-      knowledgeSourceService.getByDataset(dataset_id),
+      datasetService.getById(workflow_id),
+      workflowService.getByDataset(workflow_id),
+      recordService.getByDatasetId(workflow_id),
+      knowledgeSourceService.getByDataset(workflow_id),
     ]);
 
     if (!dataset) {
-      return { success: false, error: `Dataset ${dataset_id} not found` };
+      return { success: false, error: `Dataset ${workflow_id} not found` };
     }
 
     if (workflow) {
@@ -684,7 +684,7 @@ export const generateInitialDataHandler: ToolHandler = async (
 
       // Emit started event
       emitter.emit("vllora_data_generation_progress", {
-        datasetId: dataset_id,
+        workflowId: workflow_id,
         status: "started",
         total: count,
         completed: 0,
@@ -698,7 +698,7 @@ export const generateInitialDataHandler: ToolHandler = async (
       for (const topic of leafTopics) {
         if (!topic.sourceChunkRefs?.length) continue;
         try {
-          const resolvedChunks = await resolveChunkRefs(dataset_id, topic.sourceChunkRefs, sourceMap);
+          const resolvedChunks = await resolveChunkRefs(workflow_id, topic.sourceChunkRefs, sourceMap);
           if (resolvedChunks.length > 0) {
             topicChunkContexts.set(topic.name, buildChunkContextSection(resolvedChunks));
           }
@@ -793,7 +793,7 @@ export const generateInitialDataHandler: ToolHandler = async (
           const batchJob = job;
           const batchTopicProgress = currentTopicProgress;
           savePromises.push(
-            recordService.add(dataset_id, topicRecords).then(addedRecords => {
+            recordService.add(workflow_id, topicRecords).then(addedRecords => {
               console.log(`[generateInitialData] Topic "${batchJob.topic.name}" batch ${batchJob.batchIndex + 1}: added ${addedRecords.length} records (topic: ${batchTopicProgress}, total: ${totalGenerated})`);
             }),
           );
@@ -812,7 +812,7 @@ export const generateInitialDataHandler: ToolHandler = async (
         const lastTopicCompleted = lastTopicName ? (topicProgress.get(lastTopicName) ?? 0) : undefined;
 
         emitter.emit("vllora_data_generation_progress", {
-          datasetId: dataset_id,
+          workflowId: workflow_id,
           status: "progress",
           total: count,
           completed: totalGenerated,
@@ -834,7 +834,7 @@ export const generateInitialDataHandler: ToolHandler = async (
 
       // Emit started event
       emitter.emit("vllora_data_generation_progress", {
-        datasetId: dataset_id,
+        workflowId: workflow_id,
         status: "started",
         total: count,
         completed: 0,
@@ -913,7 +913,7 @@ export const generateInitialDataHandler: ToolHandler = async (
 
           const idx = batchIndex;
           standardSavePromises.push(
-            recordService.add(dataset_id, batchRecords).then(addedBatchRecords => {
+            recordService.add(workflow_id, batchRecords).then(addedBatchRecords => {
               console.log(`[generateInitialData] Batch ${idx + 1} complete: added ${addedBatchRecords.length} records (total: ${totalGenerated})`);
             }),
           );
@@ -927,7 +927,7 @@ export const generateInitialDataHandler: ToolHandler = async (
 
         // Emit progress event after each parallel chunk
         emitter.emit("vllora_data_generation_progress", {
-          datasetId: dataset_id,
+          workflowId: workflow_id,
           status: "progress",
           total: count,
           completed: totalGenerated,
@@ -947,7 +947,7 @@ export const generateInitialDataHandler: ToolHandler = async (
 
     // Emit completed event
     emitter.emit("vllora_data_generation_progress", {
-      datasetId: dataset_id,
+      workflowId: workflow_id,
       status: "completed",
       total: count,
       completed: totalGenerated,
@@ -966,12 +966,12 @@ export const generateInitialDataHandler: ToolHandler = async (
     };
   } catch (error) {
     console.error("[generateInitialData] Failed:", error);
-    const { dataset_id } = params as unknown as GenerateInitialDataParams;
+    const { workflow_id } = params as unknown as GenerateInitialDataParams;
 
     // Emit failed event
-    if (dataset_id) {
+    if (workflow_id) {
       emitter.emit("vllora_data_generation_progress", {
-        datasetId: dataset_id,
+        workflowId: workflow_id,
         status: "failed",
         total: 0,
         completed: 0,
@@ -1021,7 +1021,7 @@ Examples: "focus on beginner concepts", "include edge cases", "emphasize error h
   parameters: {
     type: "object",
     properties: {
-      dataset_id: {
+      workflow_id: {
         type: "string",
         description: "The dataset ID to generate initial data for",
       },
@@ -1036,7 +1036,7 @@ Examples: "focus on beginner concepts", "include edge cases", "emphasize error h
           'Optional user guidance for data generation (e.g., "focus on beginner concepts", "include edge cases")',
       },
     },
-    required: ["dataset_id"],
+    required: ["workflow_id"],
   },
   autoExecute: true,
   handler: async (input) => {

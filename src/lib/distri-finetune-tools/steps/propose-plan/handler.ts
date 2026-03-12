@@ -103,10 +103,10 @@ export const proposePlanHandler: ToolHandler = async (
   try {
     console.log('[proposePlan] Starting with params:', JSON.stringify(params, null, 2));
 
-    const { dataset_id, plan: agentPlan } = params as unknown as ProposePlanParams;
+    const { workflow_id, plan: agentPlan } = params as unknown as ProposePlanParams;
 
-    if (!dataset_id) {
-      return { success: false, error: 'dataset_id is required' };
+    if (!workflow_id) {
+      return { success: false, error: 'workflow_id is required' };
     }
 
     if (!agentPlan) {
@@ -117,25 +117,25 @@ export const proposePlanHandler: ToolHandler = async (
     }
 
     // Show loading state in UI
-    emitter.emit('vllora_plan_generating', { datasetId: dataset_id });
+    emitter.emit('vllora_plan_generating', { workflowId: workflow_id });
 
     // Validate dataset exists
-    const dataset = await datasetService.getById(dataset_id);
+    const dataset = await datasetService.getById(workflow_id);
     if (!dataset) {
-      return { success: false, error: `Dataset ${dataset_id} not found` };
+      return { success: false, error: `Dataset ${workflow_id} not found` };
     }
 
     // Fill in defaults from dataset
     const plan: Plan = {
       ...agentPlan,
-      dataset_id,
+      workflow_id,
       dataset_name: agentPlan.dataset_name || dataset.name,
       objective: agentPlan.objective || dataset.datasetObjective || '',
     };
 
     // Auto-rename dataset to the plan's clean display name
     if (plan.dataset_name && plan.dataset_name !== dataset.name) {
-      await datasetService.rename(dataset_id, plan.dataset_name);
+      await datasetService.rename(workflow_id, plan.dataset_name);
       emitter.emit('vllora_dataset_refresh' as any);
     }
 
@@ -196,10 +196,10 @@ export const proposePlanHandler: ToolHandler = async (
     }
 
     // Persist to IndexedDB so it survives page refresh
-    await saveProposedPlan(dataset_id, plan);
+    await saveProposedPlan(workflow_id, plan);
 
     // Emit event so the UI can display the plan card
-    emitter.emit('vllora_plan_proposed', { datasetId: dataset_id, plan });
+    emitter.emit('vllora_plan_proposed', { workflowId: workflow_id, plan });
 
     console.log('[proposePlan] Plan persisted and emitted');
     return { success: true, plan };

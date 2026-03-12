@@ -25,8 +25,8 @@ export interface EvalJob {
   /** Unique job ID (UUID) */
   id: string;
 
-  /** Local dataset ID (also used for API calls — same as workflow ID) */
-  datasetId: string;
+  /** Local dataset/workflow ID (also used for API calls) */
+  workflowId: string;
 
   /** Backend evaluation run ID */
   evaluationRunId: string;
@@ -103,7 +103,7 @@ export function getJobFailedGradingCount(job: EvalJob): number {
  * Parameters for starting a new evaluation
  */
 export interface StartEvalParams {
-  datasetId: string;
+  workflowId: string;
   sampleSize: number;
   /** Model to use for generating responses (rollout model) */
   rolloutModel?: string;

@@ -56,13 +56,13 @@ function useDatasets() {
   }, []);
 
   // Get a dataset with its records (fetches fresh from IndexedDB)
-  const getDatasetWithRecords = useCallback(async (datasetId: string): Promise<DatasetWithRecords | null> => {
+  const getDatasetWithRecords = useCallback(async (workflowId: string): Promise<DatasetWithRecords | null> => {
     try {
       // Fetch fresh dataset from IndexedDB to get latest data (including topicHierarchy)
-      const dataset = await datasetService.getById(datasetId);
+      const dataset = await datasetService.getById(workflowId);
       if (!dataset) return null;
 
-      const records = await recordService.getByDatasetId(datasetId);
+      const records = await recordService.getByDatasetId(workflowId);
       return { ...dataset, records };
     } catch (err) {
       console.error('Failed to get dataset with records:', err);
@@ -71,9 +71,9 @@ function useDatasets() {
   }, []);
 
   // Get record count for a dataset
-  const getRecordCount = useCallback(async (datasetId: string): Promise<number> => {
+  const getRecordCount = useCallback(async (workflowId: string): Promise<number> => {
     try {
-      return await recordService.getCount(datasetId);
+      return await recordService.getCount(workflowId);
     } catch (err) {
       console.error('Failed to get record count:', err);
       return 0;
@@ -81,9 +81,9 @@ function useDatasets() {
   }, []);
 
   // Get topic coverage stats for a dataset
-  const getTopicCoverageStats = useCallback(async (datasetId: string): Promise<{ total: number; withTopic: number }> => {
+  const getTopicCoverageStats = useCallback(async (workflowId: string): Promise<{ total: number; withTopic: number }> => {
     try {
-      return await recordService.getTopicCoverageStats(datasetId);
+      return await recordService.getTopicCoverageStats(workflowId);
     } catch (err) {
       console.error('Failed to get topic coverage stats:', err);
       return { total: 0, withTopic: 0 };
@@ -99,11 +99,11 @@ function useDatasets() {
 
   // Add spans to an existing dataset
   const addSpansToDataset = useCallback(async (
-    datasetId: string,
+    workflowId: string,
     spans: Span[],
     topic?: string
   ): Promise<number> => {
-    const addedCount = await recordService.addFromSpans(datasetId, spans, topic);
+    const addedCount = await recordService.addFromSpans(workflowId, spans, topic);
     // Refresh datasets to get updated timestamps
     await loadDatasets();
     return addedCount;
@@ -111,27 +111,27 @@ function useDatasets() {
 
   // Import raw records to an existing dataset (for file import)
   const importRecords = useCallback(async (
-    datasetId: string,
+    workflowId: string,
     records: Array<{ data: unknown; topic?: string; evaluation?: DatasetEvaluation }>,
     defaultTopic?: string
   ): Promise<number> => {
-    const addedRecords = await recordService.add(datasetId, records, defaultTopic);
+    const addedRecords = await recordService.add(workflowId, records, defaultTopic);
     // Refresh datasets to get updated timestamps
     await loadDatasets();
     return addedRecords.length;
   }, [loadDatasets]);
 
   // Clear all records from a dataset (for replace import)
-  const clearDatasetRecords = useCallback(async (datasetId: string): Promise<number> => {
-    const deletedCount = await recordService.clearAll(datasetId);
+  const clearDatasetRecords = useCallback(async (workflowId: string): Promise<number> => {
+    const deletedCount = await recordService.clearAll(workflowId);
     await loadDatasets();
     return deletedCount;
   }, [loadDatasets]);
 
   // Delete a dataset and all related data across all IndexedDB stores
-  const deleteDataset = useCallback(async (datasetId: string): Promise<void> => {
+  const deleteDataset = useCallback(async (workflowId: string): Promise<void> => {
     // Delete associated finetune workflow (includes snapshots and generation history)
-    const workflow = await workflowService.getByDataset(datasetId);
+    const workflow = await workflowService.getByDataset(workflowId);
     if (workflow) {
       await workflowService.delete(workflow.id);
     }
@@ -139,69 +139,69 @@ function useDatasets() {
     // Clean up all related data in parallel
     await Promise.all([
       // Dataset + records + finetune job associations (vllora-datasets DB)
-      datasetService.delete(datasetId),
+      datasetService.delete(workflowId),
       // Knowledge sources (vllora-knowledge-sources DB)
-      knowledgeSourceService.deleteByDataset(datasetId),
+      knowledgeSourceService.deleteByDataset(workflowId),
       // Dry run / eval jobs
-      evalJobService.deleteByDataset(datasetId),
+      evalJobService.deleteByDataset(workflowId),
       // Proposed plans (vllora-finetune DB)
-      clearProposedPlan(datasetId),
+      clearProposedPlan(workflowId),
     ]);
 
     // Clear in-memory execution state
-    clearExecution(datasetId);
+    clearExecution(workflowId);
 
-    setDatasets(prev => prev.filter(ds => ds.id !== datasetId));
+    setDatasets(prev => prev.filter(ds => ds.id !== workflowId));
   }, []);
 
   // Delete a single record from a dataset
-  const deleteRecord = useCallback(async (datasetId: string, recordId: string): Promise<void> => {
-    await recordService.delete(datasetId, recordId);
+  const deleteRecord = useCallback(async (workflowId: string, recordId: string): Promise<void> => {
+    await recordService.delete(workflowId, recordId);
     // Refresh datasets to get updated timestamps
     await loadDatasets();
   }, [loadDatasets]);
 
   // Update a record's topic
   const updateRecordTopic = useCallback(async (
-    datasetId: string,
+    workflowId: string,
     recordId: string,
     topic: string
   ): Promise<void> => {
-    await recordService.updateTopic(datasetId, recordId, topic);
+    await recordService.updateTopic(workflowId, recordId, topic);
   }, []);
 
   // Update a record's data
   const updateRecordData = useCallback(async (
-    datasetId: string,
+    workflowId: string,
     recordId: string,
     data: unknown
   ): Promise<void> => {
-    await recordService.updateData(datasetId, recordId, data);
+    await recordService.updateData(workflowId, recordId, data);
   }, []);
 
   // Update a record's evaluation
   const updateRecordEvaluation = useCallback(async (
-    datasetId: string,
+    workflowId: string,
     recordId: string,
     score: number | undefined
   ): Promise<void> => {
-    await recordService.updateEvaluation(datasetId, recordId, score);
+    await recordService.updateEvaluation(workflowId, recordId, score);
   }, []);
 
   // Rename a dataset
-  const renameDataset = useCallback(async (datasetId: string, newName: string): Promise<void> => {
-    await datasetService.rename(datasetId, newName);
+  const renameDataset = useCallback(async (workflowId: string, newName: string): Promise<void> => {
+    await datasetService.rename(workflowId, newName);
     setDatasets(prev => prev.map(ds =>
-      ds.id === datasetId ? { ...ds, name: newName.trim(), updatedAt: Date.now() } : ds
+      ds.id === workflowId ? { ...ds, name: newName.trim(), updatedAt: Date.now() } : ds
     ));
   }, []);
 
   // Check if span already exists in dataset
   const spanExistsInDataset = useCallback(async (
-    datasetId: string,
+    workflowId: string,
     spanId: string
   ): Promise<boolean> => {
-    return await recordService.spanExists(datasetId, spanId);
+    return await recordService.spanExists(workflowId, spanId);
   }, []);
 
   // Get all datasets that contain a specific span
@@ -231,16 +231,16 @@ function useDatasets() {
       }
     };
 
-    const handleDatasetDeleted = (data: { datasetId: string }) => {
-      if (data.datasetId) {
-        setDatasets(prev => prev.filter(d => d.id !== data.datasetId));
+    const handleDatasetDeleted = (data: { workflowId: string }) => {
+      if (data.workflowId) {
+        setDatasets(prev => prev.filter(d => d.id !== data.workflowId));
       }
     };
 
-    const handleDatasetRenamed = (data: { datasetId: string; name: string }) => {
-      if (data.datasetId && data.name) {
+    const handleDatasetRenamed = (data: { workflowId: string; name: string }) => {
+      if (data.workflowId && data.name) {
         setDatasets(prev => prev.map(d =>
-          d.id === data.datasetId ? { ...d, name: data.name, updatedAt: Date.now() } : d
+          d.id === data.workflowId ? { ...d, name: data.name, updatedAt: Date.now() } : d
         ));
       }
     };

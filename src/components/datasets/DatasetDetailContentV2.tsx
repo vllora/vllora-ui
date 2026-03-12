@@ -104,7 +104,7 @@ export function DatasetDetailContentV2() {
     dataset,
     sortedRecords,
     isLoading,
-    datasetId,
+    workflowId,
 
     // Navigation
     onBack,
@@ -312,8 +312,8 @@ export function DatasetDetailContentV2() {
   // Maps old section names to workspace tab paths that match the Explorer tree
   useEffect(() => {
 
-    const handleSwitchTab = ({ datasetId: switchDatasetId, tab }: { datasetId: string; tab: string }) => {
-      if (switchDatasetId === datasetId) {
+    const handleSwitchTab = ({ workflowId: switchDatasetId, tab }: { workflowId: string; tab: string }) => {
+      if (switchDatasetId === workflowId) {
         const mapped = TAB_PATH_MAP[tab];
         if (mapped) {
           openTabRef.current(mapped.path, mapped.label, false);
@@ -338,17 +338,17 @@ export function DatasetDetailContentV2() {
       emitter.off("vllora_switch_tab", handleSwitchTab);
       emitter.off("vllora_open_drawer", handleOpenDrawer);
     };
-  }, [datasetId]);
+  }, [workflowId]);
 
   // 8.1: Show toast when data generation completes (Lucy action attribution)
   useEffect(() => {
     const handleGenProgress = (event: {
-      datasetId: string;
+      workflowId: string;
       status: string;
       completed?: number;
       topicName?: string;
     }) => {
-      if (event.datasetId !== datasetId) return;
+      if (event.workflowId !== workflowId) return;
       if (event.status === "completed") {
         const count = event.completed ?? 0;
         const topicStr = event.topicName ? ` for "${event.topicName}"` : "";
@@ -364,7 +364,7 @@ export function DatasetDetailContentV2() {
     return () => {
       emitter.off("vllora_data_generation_progress", handleGenProgress);
     };
-  }, [datasetId]);
+  }, [workflowId]);
 
   // Handle autoGeneratePlan query param (from new dataset with uploaded files)
   // Uses docsProcessing from KnowledgeSourcesContext — triggers when all docs finish
@@ -384,8 +384,8 @@ export function DatasetDetailContentV2() {
       return;
     }
 
-    const handlePlanProposed = ({ datasetId: id }: { datasetId: string }) => {
-      if (id === datasetId) {
+    const handlePlanProposed = ({ workflowId: id }: { workflowId: string }) => {
+      if (id === workflowId) {
         hasTriggeredAutoGenerate.current = true;
         const newParams = new URLSearchParams(searchParams);
         newParams.delete("autoGeneratePlan");
@@ -397,13 +397,13 @@ export function DatasetDetailContentV2() {
     return () => {
       emitter.off("vllora_plan_proposed", handlePlanProposed);
     };
-  }, [shouldAutoGenerate, datasetId, searchParams, setSearchParams, planStatus]);
+  }, [shouldAutoGenerate, workflowId, searchParams, setSearchParams, planStatus]);
 
   // When docs finish processing (or were never processing), show "Generating plan..." UI.
   // The actual prompt to Lucy is handled by LucySidebar's auto-analysis (which triggers
   // on new datasets) — this effect only controls the plan.md loading indicator.
   useEffect(() => {
-    if (!shouldAutoGenerate || !datasetId || hasTriggeredAutoGenerate.current) return;
+    if (!shouldAutoGenerate || !workflowId || hasTriggeredAutoGenerate.current) return;
     if (!knowledgeSourcesLoaded) return; // Haven't loaded from IndexedDB yet — wait
     if (docsProcessing) return; // Still processing — wait
     // Skip if a plan is already proposed/approved — another trigger already handled it
@@ -413,13 +413,13 @@ export function DatasetDetailContentV2() {
 
     // Emit generating event so plan.md shows "Generating plan..." immediately.
     // LucySidebar's auto-analysis will prompt Lucy to create the actual plan.
-    emitter.emit("vllora_plan_generating", { datasetId });
+    emitter.emit("vllora_plan_generating", { workflowId });
     toast.info("Lucy is creating a plan from your documents...", { duration: 4000 });
-  }, [docsProcessing, shouldAutoGenerate, datasetId, knowledgeSourcesLoaded, planStatus]);
+  }, [docsProcessing, shouldAutoGenerate, workflowId, knowledgeSourcesLoaded, planStatus]);
 
   // Timeout fallback: if docs are still processing after 60s, show generating UI anyway.
   useEffect(() => {
-    if (!shouldAutoGenerate || !datasetId || hasTriggeredAutoGenerate.current) return;
+    if (!shouldAutoGenerate || !workflowId || hasTriggeredAutoGenerate.current) return;
     if (!knowledgeSourcesLoaded || !docsProcessing) return;
     if (planStatus === 'proposed' || planStatus === 'approved' || planStatus === 'executing') return;
 
@@ -427,12 +427,12 @@ export function DatasetDetailContentV2() {
       if (hasTriggeredAutoGenerate.current) return;
       hasTriggeredAutoGenerate.current = true;
 
-      emitter.emit("vllora_plan_generating", { datasetId });
+      emitter.emit("vllora_plan_generating", { workflowId });
       toast.warning("Document processing is taking longer than expected. Generating plan with available content...", { duration: 5000 });
     }, 60000);
 
     return () => clearTimeout(timeoutId);
-  }, [docsProcessing, shouldAutoGenerate, datasetId, knowledgeSourcesLoaded, planStatus]);
+  }, [docsProcessing, shouldAutoGenerate, workflowId, knowledgeSourcesLoaded, planStatus]);
 
   // README hook — agent-authored only, no auto-generation
   const { readme, readmeUpdatedAt, exportReadme } = useDatasetReadme({
@@ -715,7 +715,7 @@ export function DatasetDetailContentV2() {
 
   return (
     <EvalJobsProvider dataset={dataset}>
-     <WorkspaceTabsProvider datasetId={datasetId} initialTabs={emptyDatasetInitialTabs}>
+     <WorkspaceTabsProvider workflowId={workflowId} initialTabs={emptyDatasetInitialTabs}>
       {/* Bridge: syncs workspace tab state ↔ parent content section */}
       <WorkspaceTabBridge openTabRef={openTabRef} onSectionChange={setTabContentSection} onActivePathChange={setActiveTabPath} />
 
@@ -763,7 +763,7 @@ export function DatasetDetailContentV2() {
               readme={readme}
               readmeUpdatedAt={readmeUpdatedAt}
               onExport={exportReadme}
-              datasetId={datasetId}
+              workflowId={workflowId}
               onOverviewClick={() => setAnalyticsDialogOpen(true)}
             />
           )}
@@ -775,7 +775,7 @@ export function DatasetDetailContentV2() {
               viewMode={viewMode}
               onViewModeChange={handleViewModeChange}
               onExport={handleExport}
-              datasetId={datasetId}
+              workflowId={workflowId}
               records={sortedRecords}
               topicHierarchy={dataset.topicHierarchy?.hierarchy}
               coverageStats={canvasCoverageStats}
@@ -793,7 +793,7 @@ export function DatasetDetailContentV2() {
               onDeleteTopic={handleDeleteTopic}
               onUpdateRecordTopic={handleUpdateRecordTopic}
               onDeleteRecord={(recordId) =>
-                setDeleteConfirm({ type: "record", id: recordId, datasetId: dataset.id })
+                setDeleteConfirm({ type: "record", id: recordId, workflowId: dataset.id })
               }
               onSaveRecord={handleSaveRecordData}
               onCreateChildTopic={handleCreateChildTopic}
@@ -843,7 +843,7 @@ export function DatasetDetailContentV2() {
           {contentSection === "jobs" && (
             <div className="flex-1 flex flex-col overflow-hidden">
               <FinetuneConfigPanel
-                datasetId={datasetId}
+                workflowId={workflowId}
                 canStartJob={hasRecords && hasEvaluator}
                 initialConfig={dataset.trainingConfig}
                 selectedFinetuneJobId={selectedFinetuneJobId}
@@ -871,7 +871,7 @@ export function DatasetDetailContentV2() {
               hasKnowledgeSources={knowledgeSourcesCount > 0}
               planErrorMessage={planErrorMessage}
               docsProcessing={docsProcessing && shouldAutoGenerate}
-              datasetId={datasetId}
+              workflowId={workflowId}
             />
           )}
           {contentSection === "readme" && (
@@ -890,7 +890,7 @@ export function DatasetDetailContentV2() {
                 <KnowledgeSourceViewer sourceId={selectedDocumentSourceId} chunkRecordCounts={chunkRecordCounts} />
               ) : (
                 <KnowledgeSourcesPanel
-                  datasetId={datasetId}
+                  workflowId={workflowId}
                   className="h-full"
                 />
               )}
@@ -941,7 +941,7 @@ export function DatasetDetailContentV2() {
         <IngestDataDialog
           open={importDialog}
           onOpenChange={setImportDialog}
-          datasetId={dataset.id}
+          workflowId={dataset.id}
           onImport={handleImportRecords}
           currentRecordCount={sortedRecords.length}
         />

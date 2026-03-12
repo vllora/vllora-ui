@@ -51,7 +51,7 @@ export async function maybeUseMockHandler(
 // =============================================================================
 
 interface GenerateInitialDataParams {
-  dataset_id: string;
+  workflow_id: string;
   count?: number;
   user_guidance?: string;
   distribute_by_topic?: boolean;
@@ -193,22 +193,22 @@ export const mockGenerateInitialDataHandler: ToolHandler = async (
 ): Promise<GenerateInitialDataResult> => {
   const startTime = Date.now();
   const {
-    dataset_id,
+    workflow_id,
     count = 10,
     distribute_by_topic = true,
     target_topics,
     per_topic_count,
   } = params as unknown as GenerateInitialDataParams;
 
-  if (!dataset_id) {
-    return { success: false, error: 'dataset_id is required' };
+  if (!workflow_id) {
+    return { success: false, error: 'workflow_id is required' };
   }
 
   // Fetch dataset (hierarchy lives on the Dataset object)
-  const dataset = await datasetService.getById(dataset_id);
+  const dataset = await datasetService.getById(workflow_id);
 
   if (!dataset) {
-    return { success: false, error: `Dataset ${dataset_id} not found` };
+    return { success: false, error: `Dataset ${workflow_id} not found` };
   }
 
   const objective = dataset.datasetObjective ?? dataset.name;
@@ -216,7 +216,7 @@ export const mockGenerateInitialDataHandler: ToolHandler = async (
 
   // Emit started
   emitter.emit('vllora_data_generation_progress', {
-    datasetId: dataset_id,
+    workflowId: workflow_id,
     status: 'started',
     total: count,
     completed: 0,
@@ -258,13 +258,13 @@ export const mockGenerateInitialDataHandler: ToolHandler = async (
           buildTopicRecord(topic.name, topicPath, systemPrompt, offset + i),
         );
 
-        await recordService.add(dataset_id, records);
+        await recordService.add(workflow_id, records);
         totalGenerated += batchSize;
         batchIndex++;
 
         // Emit progress
         emitter.emit('vllora_data_generation_progress', {
-          datasetId: dataset_id,
+          workflowId: workflow_id,
           status: 'progress',
           total: count,
           completed: totalGenerated,
@@ -288,11 +288,11 @@ export const mockGenerateInitialDataHandler: ToolHandler = async (
         buildFlatRecord(systemPrompt, offset + i),
       );
 
-      await recordService.add(dataset_id, records);
+      await recordService.add(workflow_id, records);
       totalGenerated += batchSize;
 
       emitter.emit('vllora_data_generation_progress', {
-        datasetId: dataset_id,
+        workflowId: workflow_id,
         status: 'progress',
         total: count,
         completed: totalGenerated,
@@ -309,7 +309,7 @@ export const mockGenerateInitialDataHandler: ToolHandler = async (
 
   // Emit completed
   emitter.emit('vllora_data_generation_progress', {
-    datasetId: dataset_id,
+    workflowId: workflow_id,
     status: 'completed',
     total: count,
     completed: totalGenerated,

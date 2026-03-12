@@ -28,7 +28,7 @@ Workflow:
   parameters: {
     type: 'object',
     properties: {
-      dataset_id: {
+      workflow_id: {
         type: 'string',
         description: 'The dataset ID',
       },
@@ -113,7 +113,7 @@ Workflow:
         required: ['dataset_name', 'objective', 'plan_markdown'],
       },
     },
-    required: ['dataset_id', 'plan'],
+    required: ['workflow_id', 'plan'],
   },
   autoExecute: true,
   handler: async (input) =>

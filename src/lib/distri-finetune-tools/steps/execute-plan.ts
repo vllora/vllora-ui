@@ -51,23 +51,23 @@ import { updatePlanStatus, completePlan as completePlanInDB, failPlan as failPla
 // Pending Plan Store (populated by UI event, consumed by handler)
 // =============================================================================
 
-let pendingApprovedPlan: { datasetId: string; plan: Plan } | null = null;
+let pendingApprovedPlan: { workflowId: string; plan: Plan } | null = null;
 
 // Listen for plan approval events from UI
-emitter.on('vllora_plan_approved', ({ datasetId, plan }) => {
-  console.log('[executePlan] Received plan approval event for dataset:', datasetId);
-  pendingApprovedPlan = { datasetId, plan: plan as Plan };
+emitter.on('vllora_plan_approved', ({ workflowId, plan }) => {
+  console.log('[executePlan] Received plan approval event for dataset:', workflowId);
+  pendingApprovedPlan = { workflowId, plan: plan as Plan };
 });
 
 /**
  * Get and consume the pending approved plan for a dataset.
  * First checks in-memory store, then falls back to IndexedDB persistence.
  */
-export async function consumePendingPlan(datasetId: string): Promise<Plan | null> {
-  console.log('[executePlan] Attempting to consume pending plan for:', datasetId);
+export async function consumePendingPlan(workflowId: string): Promise<Plan | null> {
+  console.log('[executePlan] Attempting to consume pending plan for:', workflowId);
 
   // Try in-memory store first
-  if (pendingApprovedPlan?.datasetId === datasetId) {
+  if (pendingApprovedPlan?.workflowId === workflowId) {
     const plan = pendingApprovedPlan.plan;
     pendingApprovedPlan = null;
     console.log('[executePlan] Consumed pending plan from memory');
@@ -77,7 +77,7 @@ export async function consumePendingPlan(datasetId: string): Promise<Plan | null
   // Fall back to IndexedDB-persisted plan
   try {
     const { getStoredPlan } = await import('./proposed-plan-store');
-    const storedPlan = await getStoredPlan(datasetId);
+    const storedPlan = await getStoredPlan(workflowId);
     if (storedPlan && (storedPlan.status === 'approved' || storedPlan.status === 'proposed' || storedPlan.status === 'executing' || storedPlan.status === 'failed')) {
       console.log('[executePlan] Consumed pending plan from IndexedDB (status:', storedPlan.status, ')');
       return storedPlan.plan;
@@ -118,7 +118,7 @@ export interface ExecutionStep {
 }
 
 export interface ExecutionProgress {
-  dataset_id: string;
+  workflow_id: string;
   current_step: number;
   total_steps: number;
   steps: ExecutionStep[];
@@ -128,9 +128,8 @@ export interface ExecutionProgress {
 
 /** Shared context passed to every step executor */
 export interface StepContext {
-  dataset_id: string;
-  plan: Plan;
   workflow_id: string;
+  plan: Plan;
   /** Ordered subset of steps being executed for this run */
   selected_steps: ExecutionStepId[];
   overrides?: {
@@ -172,7 +171,7 @@ interface StepExecutor {
 }
 
 interface ExecutePlanParams {
-  dataset_id: string;
+  workflow_id: string;
   plan: Plan;
   steps_to_execute?: ExecutionStepId[];
   overrides?: {
@@ -321,7 +320,7 @@ function convertToHierarchyNodes(
 // =============================================================================
 
 async function executeTopics(ctx: StepContext): Promise<StepResult> {
-  const { plan, workflow_id, summary, dataset_id } = ctx;
+  const { plan, workflow_id, summary } = ctx;
   const hierarchyNodes = convertToHierarchyNodes(plan.proposed_topics || []);
 
   // Auto-rollback if the workflow is in a state that doesn't allow topic changes (e.g. training).
@@ -348,7 +347,7 @@ async function executeTopics(ctx: StepContext): Promise<StepResult> {
   // Warn if categorize is missing but the dataset already has records — they'll be unassigned.
   const stepsToRun = new Set(ctx.selected_steps);
   if (!stepsToRun.has('categorize')) {
-    const existingRecordCount = await recordService.getCount(dataset_id);
+    const existingRecordCount = await recordService.getCount(workflow_id);
     if (existingRecordCount > 0) {
       console.warn(
         '[executeTopics] New hierarchy applied but "categorize" is not in steps_to_execute. ' +
@@ -363,7 +362,7 @@ async function executeTopics(ctx: StepContext): Promise<StepResult> {
   toast.success('Topics configured', {
     action: {
       label: 'View Records',
-      onClick: () => emitter.emit('vllora_switch_tab', { datasetId: dataset_id, tab: 'records' }),
+      onClick: () => emitter.emit('vllora_switch_tab', { workflowId: workflow_id, tab: 'records' }),
     },
   });
 
@@ -371,12 +370,12 @@ async function executeTopics(ctx: StepContext): Promise<StepResult> {
 }
 
 async function executeAdjustTopics(ctx: StepContext): Promise<StepResult> {
-  const { workflow_id, plan, overrides, summary, dataset_id } = ctx;
+  const { workflow_id, plan, overrides, summary } = ctx;
   const instruction = overrides?.adjust_topics?.instruction ?? plan.adjust_topics_instruction;
   if (!instruction) throw new Error('adjust_topics requires an instruction (in plan.adjust_topics_instruction or overrides)');
 
   // Pre-flight: ensure a hierarchy exists to adjust
-  const dataset = await datasetService.getById(dataset_id);
+  const dataset = await datasetService.getById(workflow_id);
   if (!dataset?.topicHierarchy?.hierarchy?.length) {
     throw new Error(
       'No topic hierarchy exists to adjust. ' +
@@ -392,7 +391,7 @@ async function executeAdjustTopics(ctx: StepContext): Promise<StepResult> {
   toast.success('Topics adjusted', {
     action: {
       label: 'View Records',
-      onClick: () => emitter.emit('vllora_switch_tab', { datasetId: dataset_id, tab: 'records' }),
+      onClick: () => emitter.emit('vllora_switch_tab', { workflowId: workflow_id, tab: 'records' }),
     },
   });
 
@@ -400,10 +399,10 @@ async function executeAdjustTopics(ctx: StepContext): Promise<StepResult> {
 }
 
 async function executeCategorize(ctx: StepContext): Promise<StepResult> {
-  const { workflow_id, dataset_id } = ctx;
+  const { workflow_id } = ctx;
 
   // Pre-flight: hierarchy must exist
-  const dataset = await datasetService.getById(dataset_id);
+  const dataset = await datasetService.getById(workflow_id);
   if (!dataset?.topicHierarchy?.hierarchy?.length) {
     throw new Error(
       'Cannot categorize: no topic hierarchy configured. ' +
@@ -412,7 +411,7 @@ async function executeCategorize(ctx: StepContext): Promise<StepResult> {
   }
 
   // Pre-flight: records must exist
-  const recordCount = await recordService.getCount(dataset_id);
+  const recordCount = await recordService.getCount(workflow_id);
   if (recordCount === 0) {
     throw new Error(
       'Cannot categorize: dataset has no records. ' +
@@ -430,10 +429,10 @@ async function executeCategorize(ctx: StepContext): Promise<StepResult> {
 }
 
 async function executeGenerate(ctx: StepContext): Promise<StepResult> {
-  const { dataset_id, plan, overrides, summary } = ctx;
+  const { workflow_id, plan, overrides, summary } = ctx;
 
   // Pre-flight: dataset objective is required
-  const dataset = await datasetService.getById(dataset_id);
+  const dataset = await datasetService.getById(workflow_id);
   if (!dataset?.datasetObjective?.trim()) {
     emitter.emit('vllora_lucy_prompt', {
       prompt: 'The dataset has no training objective defined. What is the goal of this fine-tuning run? Please describe the task or behavior you want the model to learn.',
@@ -447,7 +446,7 @@ async function executeGenerate(ctx: StepContext): Promise<StepResult> {
   const recordCount = overrides?.generate?.count ?? plan.estimated_records ?? 0;
 
   const result = await callGenerateInitialData({
-    dataset_id,
+    workflow_id,
     count: recordCount,
     use_knowledge: plan.data_generation?.grounded_in_knowledge ?? false,
     distribute_by_topic: true,
@@ -465,12 +464,12 @@ async function executeGenerate(ctx: StepContext): Promise<StepResult> {
 }
 
 async function executeGrader(ctx: StepContext): Promise<StepResult> {
-  const { dataset_id, plan, workflow_id, summary } = ctx;
+  const { workflow_id, plan, summary } = ctx;
 
   if (!plan.grader_config?.criteria?.length) {
     throw new Error(
       'grader_config.criteria is required for grader step. ' +
-      'Recovery: call generate_grader({ dataset_id }) to get criteria, add them to the plan via adjust_plan, then re-run execute_plan.'
+      'Recovery: call generate_grader({ workflow_id }) to get criteria, add them to the plan via adjust_plan, then re-run execute_plan.'
     );
   }
 
@@ -483,7 +482,7 @@ async function executeGrader(ctx: StepContext): Promise<StepResult> {
     plan.output_format,
   );
 
-  await datasetService.updateEvalScript(dataset_id, evalScript);
+  await datasetService.updateEvalScript(workflow_id, evalScript);
   await workflowService.updateStepData(workflow_id, 'graderConfig', {
     type: 'js',
     configuredAt: Date.now(),
@@ -494,7 +493,7 @@ async function executeGrader(ctx: StepContext): Promise<StepResult> {
   toast.success('Evaluation configured', {
     action: {
       label: 'Review',
-      onClick: () => emitter.emit('vllora_switch_tab', { datasetId: dataset_id, tab: 'evaluator' }),
+      onClick: () => emitter.emit('vllora_switch_tab', { workflowId: workflow_id, tab: 'evaluator' }),
     },
   });
 
@@ -502,10 +501,10 @@ async function executeGrader(ctx: StepContext): Promise<StepResult> {
 }
 
 async function executeUpload(ctx: StepContext): Promise<StepResult> {
-  const { workflow_id, overrides, dataset_id } = ctx;
+  const { workflow_id, overrides } = ctx;
 
   // Pre-flight: must have records to upload
-  const recordCount = await recordService.getCount(dataset_id);
+  const recordCount = await recordService.getCount(workflow_id);
   if (recordCount === 0) {
     throw new Error(
       'Cannot upload: dataset has no records. ' +
@@ -551,7 +550,7 @@ async function executeDryRun(ctx: StepContext): Promise<StepResult> {
 }
 
 async function executeRegenerateTopic(ctx: StepContext): Promise<StepResult> {
-  const { dataset_id, plan, overrides, summary } = ctx;
+  const { workflow_id, plan, overrides, summary } = ctx;
   const targetTopics = overrides?.generate?.target_topics;
 
   if (!targetTopics?.length) {
@@ -564,7 +563,7 @@ async function executeRegenerateTopic(ctx: StepContext): Promise<StepResult> {
   const perTopicCount = overrides?.generate?.per_topic_count ?? 15;
 
   const result = await callGenerateInitialData({
-    dataset_id,
+    workflow_id,
     count: perTopicCount * targetTopics.length,
     use_knowledge: plan.data_generation?.grounded_in_knowledge ?? false,
     distribute_by_topic: true,
@@ -592,11 +591,11 @@ async function executeAdjustGrader(ctx: StepContext): Promise<StepResult> {
 }
 
 async function executeAnalyze(ctx: StepContext): Promise<StepResult> {
-  const { dataset_id } = ctx;
+  const { workflow_id } = ctx;
 
   // Find the most recent completed dry run job for this dataset
   const { evalJobService: evalSvc } = await import('@/services/service-registry');
-  const jobs = await evalSvc.getByDataset(dataset_id);
+  const jobs = await evalSvc.getByDataset(workflow_id);
   const latestCompleted = [...jobs]
     .filter((j) => j.status === 'completed' && j.evaluationRunId)
     .sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))[0];
@@ -610,7 +609,7 @@ async function executeAnalyze(ctx: StepContext): Promise<StepResult> {
 
   const { analyzeEvaluationHandler } = await import('./analyze-evaluation');
   const result = await analyzeEvaluationHandler({
-    dataset_id,
+    workflow_id,
     evaluation_id: latestCompleted.evaluationRunId,
   });
 
@@ -624,16 +623,16 @@ async function executePostTrainingEval(ctx: StepContext): Promise<StepResult> {
 }
 
 async function executeFinetune(ctx: StepContext): Promise<StepResult> {
-  const { dataset_id } = ctx;
+  const { workflow_id } = ctx;
 
-  const datasetForJob = await datasetService.getById(dataset_id);
+  const datasetForJob = await datasetService.getById(workflow_id);
   if (!datasetForJob) {
     throw new Error('Dataset not found');
   }
 
   // quickFinetune disabled during plan execution
   // const result = await quickFinetune({
-  //   datasetId: dataset_id,
+  //   workflowId: workflow_id,
   //   baseModel: 'unsloth/Qwen3.5-4B',
   //   trainingConfig: {
   //     learning_rate: 0.00001,
@@ -650,14 +649,14 @@ async function executeFinetune(ctx: StepContext): Promise<StepResult> {
   // summary.finetune_job_status = result.status;
 
   // emitter.emit('vllora_finetune_job_created', {
-  //   datasetId: dataset_id,
+  //   workflowId: workflow_id,
   //   jobId: result.jobId,
   // });
 
   // toast.success('Fine-tune job started', {
   //   action: {
   //     label: 'Check Job',
-  //     onClick: () => emitter.emit('vllora_switch_tab', { datasetId: dataset_id, tab: 'jobs' }),
+  //     onClick: () => emitter.emit('vllora_switch_tab', { workflowId: workflow_id, tab: 'jobs' }),
   //   },
   // });
 
@@ -806,7 +805,7 @@ const STEP_REGISTRY: Record<ExecutionStepId, StepExecutor> = {
  * Emits the same vllora_plan_progress events as finetune execution.
  */
 async function executeDynamicSteps(
-  datasetId: string,
+  workflowId: string,
   plan: Plan,
   progress: ExecutionProgress,
 ): Promise<{ success: boolean; error?: string }> {
@@ -827,8 +826,8 @@ async function executeDynamicSteps(
     const ds = dynamicSteps[i];
 
     // Check cancellation
-    if (isExecutionCancelled(datasetId)) {
-      clearCancellation(datasetId);
+    if (isExecutionCancelled(workflowId)) {
+      clearCancellation(workflowId);
       for (const s of progress.steps) {
         if (s.status === 'pending') s.status = 'skipped';
       }
@@ -861,7 +860,7 @@ async function executeDynamicSteps(
       // Dispatch the tool by name with its params
       const result = await executeFinetuneTool(ds.tool_name, {
         ...ds.tool_params,
-        dataset_id: datasetId,
+        workflow_id: workflowId,
       });
 
       const resultObj = result as Record<string, unknown>;
@@ -913,18 +912,18 @@ export const executePlanHandler: ToolHandler = async (
     console.log('[executePlan] Starting execution:', executionId);
 
     const {
-      dataset_id,
+      workflow_id,
       plan: planFromParams,
       steps_to_execute,
       overrides,
     } = params as unknown as ExecutePlanParams;
 
-    if (!dataset_id) {
-      return { success: false, error: 'dataset_id is required' };
+    if (!workflow_id) {
+      return { success: false, error: 'workflow_id is required' };
     }
 
     // Resolve plan: params → in-memory → IndexedDB
-    const resolvedPlan = planFromParams || await consumePendingPlan(dataset_id);
+    const resolvedPlan = planFromParams || await consumePendingPlan(workflow_id);
     if (!resolvedPlan) {
       return { success: false, error: 'No plan provided. Please approve a plan first.' };
     }
@@ -952,9 +951,9 @@ export const executePlanHandler: ToolHandler = async (
     };
 
     // Verify dataset
-    const dataset = await datasetService.getById(dataset_id);
+    const dataset = await datasetService.getById(workflow_id);
     if (!dataset) {
-      return { success: false, error: `Dataset ${dataset_id} not found` };
+      return { success: false, error: `Dataset ${workflow_id} not found` };
     }
 
     // =========================================================================
@@ -966,11 +965,11 @@ export const executePlanHandler: ToolHandler = async (
         return { success: false, error: 'Generic plan has no dynamic_steps to execute.' };
       }
 
-      updatePlanStatus(dataset_id, 'executing');
+      updatePlanStatus(workflow_id, 'executing');
 
       // Build progress from dynamic_steps
       progress = {
-        dataset_id,
+        workflow_id,
         current_step: 0,
         total_steps: dynamicSteps.length,
         steps: dynamicSteps.map((ds) => ({
@@ -992,17 +991,17 @@ export const executePlanHandler: ToolHandler = async (
 
       emitProgress(progress);
 
-      const dynamicResult = await executeDynamicSteps(dataset_id, plan, progress);
+      const dynamicResult = await executeDynamicSteps(workflow_id, plan, progress);
 
       progress.is_complete = true;
       progress.has_error = !dynamicResult.success;
       emitProgress(progress);
 
       if (dynamicResult.success) {
-        await completePlanInDB(dataset_id, progress);
-        emitter.emit('vllora_workflow_updated', { datasetId: dataset_id });
+        await completePlanInDB(workflow_id, progress);
+        emitter.emit('vllora_workflow_updated', { workflowId: workflow_id });
       } else {
-        await failPlanInDB(dataset_id, progress);
+        await failPlanInDB(workflow_id, progress);
       }
 
       return {
@@ -1019,9 +1018,9 @@ export const executePlanHandler: ToolHandler = async (
     // =========================================================================
 
     // Get or create workflow
-    let workflow = await workflowService.getByDataset(dataset_id);
+    let workflow = await workflowService.getByDataset(workflow_id);
     if (!workflow) {
-      workflow = await workflowService.create(dataset_id, dataset.datasetObjective || 'Plan execution');
+      workflow = await workflowService.create(workflow_id, dataset.datasetObjective || 'Plan execution');
     }
 
     // Determine which steps to run (params > normalized plan > all)
@@ -1057,7 +1056,7 @@ export const executePlanHandler: ToolHandler = async (
     }
 
     // Mark plan as executing (only after validation passes)
-    updatePlanStatus(dataset_id, 'executing');
+    updatePlanStatus(workflow_id, 'executing');
 
     console.log('[executePlan] Steps:', [...stepsToRun]);
 
@@ -1071,9 +1070,8 @@ export const executePlanHandler: ToolHandler = async (
     };
 
     const ctx: StepContext = {
-      dataset_id,
-      plan,
       workflow_id: workflow.id,
+      plan,
       selected_steps: stepSelection.steps,
       overrides: effectiveOverrides,
       summary,
@@ -1088,7 +1086,7 @@ export const executePlanHandler: ToolHandler = async (
     }));
 
     progress = {
-      dataset_id,
+      workflow_id,
       current_step: 0,
       total_steps: steps.length,
       steps,
@@ -1131,8 +1129,8 @@ export const executePlanHandler: ToolHandler = async (
       if (!stepsToRun.has(stepId)) continue;
 
       // Check cancellation before starting each step
-      if (isExecutionCancelled(dataset_id)) {
-        clearCancellation(dataset_id);
+      if (isExecutionCancelled(workflow_id)) {
+        clearCancellation(workflow_id);
         // Mark remaining steps as skipped
         for (const s of progress.steps) {
           if (s.status === 'pending') s.status = 'skipped';
@@ -1140,7 +1138,7 @@ export const executePlanHandler: ToolHandler = async (
         progress.is_complete = true;
         progress.has_error = true;
         emitProgress(progress);
-        await failPlanInDB(dataset_id, progress);
+        await failPlanInDB(workflow_id, progress);
         throw new Error('Execution cancelled by user');
       }
 
@@ -1190,9 +1188,9 @@ export const executePlanHandler: ToolHandler = async (
     emitProgress(progress);
 
     // Directly persist completion to IndexedDB (belt-and-suspenders with event listeners)
-    await completePlanInDB(dataset_id, progress);
+    await completePlanInDB(workflow_id, progress);
 
-    emitter.emit('vllora_workflow_updated', { datasetId: dataset_id });
+    emitter.emit('vllora_workflow_updated', { workflowId: workflow_id });
 
     console.log('[executePlan] Execution complete:', executionId);
 
@@ -1204,7 +1202,7 @@ export const executePlanHandler: ToolHandler = async (
     };
   } catch (error) {
     console.error('[executePlan] Failed:', error);
-    const { dataset_id } = params as unknown as ExecutePlanParams;
+    const { workflow_id } = params as unknown as ExecutePlanParams;
 
     // Mark progress as complete+error (use real progress if available)
     if (progress) {
@@ -1213,9 +1211,9 @@ export const executePlanHandler: ToolHandler = async (
       emitProgress(progress);
     }
 
-    if (dataset_id) {
-      failPlanInDB(dataset_id, progress ?? {
-        dataset_id,
+    if (workflow_id) {
+      failPlanInDB(workflow_id, progress ?? {
+        workflow_id,
         current_step: 0,
         total_steps: 0,
         steps: [],
@@ -1265,7 +1263,7 @@ Available steps: ${STEP_ORDER.join(', ')}`,
   parameters: {
     type: 'object',
     properties: {
-      dataset_id: {
+      workflow_id: {
         type: 'string',
         description: 'The dataset ID to execute the plan for',
       },
@@ -1305,7 +1303,7 @@ Available steps: ${STEP_ORDER.join(', ')}`,
         },
       },
     },
-    required: ['dataset_id'],
+    required: ['workflow_id'],
   },
   autoExecute: true,
   handler: async (input) =>

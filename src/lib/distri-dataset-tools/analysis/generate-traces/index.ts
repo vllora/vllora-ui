@@ -111,7 +111,7 @@ async function generateRFTRecordsForTopic(
     // Save all records to DB in one batch write
     try {
       const addedRecords = await recordService.add(
-        callbacks.datasetId,
+        callbacks.workflowId,
         allRecordData,
       );
 
@@ -176,7 +176,7 @@ export async function generateTraces(
 ): Promise<GenerateTracesResult> {
   try {
     const {
-      dataset_id,
+      workflow_id,
       record_ids,
       count,
       concurrency,
@@ -186,9 +186,9 @@ export async function generateTraces(
       on_records_added,
     } = params;
 
-    const resolvedDatasetId = dataset_id;
+    const resolvedDatasetId = workflow_id;
     if (!resolvedDatasetId) {
-      return { success: false, error: "dataset_id is required" };
+      return { success: false, error: "workflow_id is required" };
     }
 
     const dataset = await datasetService.getById(resolvedDatasetId);
@@ -361,7 +361,7 @@ export async function generateTraces(
 
     // Callbacks object shared by all parallel tasks
     const callbacks: GenerationCallbacks = {
-      datasetId: resolvedDatasetId,
+      workflowId: resolvedDatasetId,
       totalExpectedRecords,
       progressCounter,
       on_progress,
@@ -484,7 +484,7 @@ Supports two workflows:
   parameters: {
     type: "object",
     properties: {
-      dataset_id: { type: "string", description: "The dataset ID" },
+      workflow_id: { type: "string", description: "The dataset ID" },
       record_ids: {
         type: "array",
         items: { type: "string" },
@@ -497,7 +497,7 @@ Supports two workflows:
           "Number of records to generate per topic/seed group (default 5).",
       },
     },
-    required: ["dataset_id"],
+    required: ["workflow_id"],
   },
   autoExecute: true,
   handler: async (input: object) =>

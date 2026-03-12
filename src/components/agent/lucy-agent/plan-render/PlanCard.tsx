@@ -40,15 +40,15 @@ export function PlanCard() {
     setPlanEditMode,
   } = PlanConsumer();
 
-  const { datasetId } = DatasetDetailConsumer();
+  const { workflowId } = DatasetDetailConsumer();
   const { activeTabPath, openTab } = WorkspaceTabsConsumer();
 
   const { data: iterationState } = useRequest(
     async () => {
-      if (!datasetId) return null;
-      return iterationStateService.get(datasetId);
+      if (!workflowId) return null;
+      return iterationStateService.get(workflowId);
     },
-    { refreshDeps: [datasetId] },
+    { refreshDeps: [workflowId] },
   );
 
   const stallCount = computeStallCount(iterationState?.history ?? []);

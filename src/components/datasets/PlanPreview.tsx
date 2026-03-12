@@ -42,7 +42,7 @@ interface PlanPreviewProps {
   /** Documents are being processed and plan will auto-generate when ready */
   docsProcessing?: boolean;
   /** Dataset ID — needed for skill package download */
-  datasetId?: string;
+  workflowId?: string;
 }
 
 export function PlanPreview({
@@ -60,7 +60,7 @@ export function PlanPreview({
   hasKnowledgeSources,
   planErrorMessage,
   docsProcessing,
-  datasetId,
+  workflowId,
 }: PlanPreviewProps) {
   // Show loading spinner while IndexedDB is being read on mount
   if (isLoadingPlan) {
@@ -95,7 +95,7 @@ export function PlanPreview({
             isExecuting={isExecuting}
             isActionable={isActionable}
             planErrorMessage={planErrorMessage}
-            datasetId={datasetId}
+            workflowId={workflowId}
           />
         )
       ) : (
@@ -154,7 +154,7 @@ function PlanDisplayView({
   isExecuting,
   isActionable,
   planErrorMessage,
-  datasetId,
+  workflowId,
 }: {
   plan: Plan;
   planStatus: PlanStatus | null;
@@ -162,18 +162,18 @@ function PlanDisplayView({
   isExecuting: boolean;
   isActionable: boolean;
   planErrorMessage?: string | null;
-  datasetId?: string;
+  workflowId?: string;
 }) {
   const [isDownloading, setIsDownloading] = useState(false);
 
   const handleDownloadSkillPackage = useCallback(async () => {
-    if (!datasetId) {
+    if (!workflowId) {
       toast.error('No dataset selected');
       return;
     }
     setIsDownloading(true);
     try {
-      const workflow = await workflowService.getByDataset(datasetId);
+      const workflow = await workflowService.getByDataset(workflowId);
       if (!workflow) {
         toast.error('No workflow found for this dataset');
         return;
@@ -194,7 +194,7 @@ function PlanDisplayView({
     } finally {
       setIsDownloading(false);
     }
-  }, [datasetId]);
+  }, [workflowId]);
 
   return (
     <>
@@ -222,7 +222,7 @@ function PlanDisplayView({
               <span className="truncate">{planErrorMessage ? 'Failed: ' + planErrorMessage : 'Failed'}</span>
             </span>
           )}
-          {planStatus === 'completed' && datasetId && (
+          {planStatus === 'completed' && workflowId && (
             <Button
               variant="ghost"
               size="sm"

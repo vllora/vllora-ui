@@ -38,7 +38,7 @@ export function EvaluationBottomPanel({
   selectedJobIdOverride,
 }: EvaluationBottomPanelProps) {
   const {
-    datasetId,
+    workflowId,
     jobs,
     runningJob,
     lastCompletedJob,
@@ -82,8 +82,8 @@ export function EvaluationBottomPanel({
   // Allow other screens (e.g., Overview activity timeline) to open a specific dry-run job.
   useEffect(() => {
     const handleSelectDryRunJob = (event: Event) => {
-      const detail = (event as CustomEvent<{ datasetId?: string; jobId?: string }>).detail;
-      if (!detail?.jobId || detail.datasetId !== datasetId) return;
+      const detail = (event as CustomEvent<{ workflowId?: string; jobId?: string }>).detail;
+      if (!detail?.jobId || detail.workflowId !== workflowId) return;
       setSelectedJobId(detail.jobId);
       if (isCollapsed) onToggleCollapse();
     };
@@ -92,7 +92,7 @@ export function EvaluationBottomPanel({
     return () => {
       window.removeEventListener(OPEN_DRY_RUN_JOB_EVENT, handleSelectDryRunJob as EventListener);
     };
-  }, [datasetId, isCollapsed, onToggleCollapse]);
+  }, [workflowId, isCollapsed, onToggleCollapse]);
 
   const handleCancel = useCallback(async () => {
     if (runningJob) {
@@ -106,7 +106,7 @@ export function EvaluationBottomPanel({
       <div className="flex flex-col h-full overflow-hidden bg-background">
         <div className="flex-1 min-h-0 flex flex-col">
           <EvalActivityView
-            datasetId={datasetId}
+            workflowId={workflowId}
             jobs={jobs}
             onCancelJob={handleCancel}
             initialSelectedId={selectedJobId}
@@ -164,7 +164,7 @@ export function EvaluationBottomPanel({
       {!isCollapsed && (
         <div className="flex-1 min-h-0 flex flex-col">
           <EvalActivityView
-            datasetId={datasetId}
+            workflowId={workflowId}
             jobs={jobs}
             onCancelJob={handleCancel}
             initialSelectedId={selectedJobId}

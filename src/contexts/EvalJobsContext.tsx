@@ -39,12 +39,12 @@ function useEvalJobs(props: {
 
   const [jobs, setJobs] = useState<EvalJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const datasetId = dataset.id;
+  const workflowId = dataset.id;
 
   // Load jobs from IndexedDB
   const loadJobs = useCallback(async () => {
     try {
-      const fetchedJobs = await evalJobService.getByDataset(datasetId);
+      const fetchedJobs = await evalJobService.getByDataset(workflowId);
       setJobs(fetchedJobs);
 
     } catch (error) {
@@ -52,7 +52,7 @@ function useEvalJobs(props: {
     } finally {
       setIsLoading(false);
     }
-  }, [datasetId]);
+  }, [workflowId]);
 
   // Initialize polling manager and load jobs on mount
   useEffect(() => {
@@ -64,7 +64,7 @@ function useEvalJobs(props: {
   useEffect(() => {
     const handleJobUpdate = (event: { jobId: string; job: EvalJob }) => {
       // Only update if this job belongs to current dataset
-      if (event.job.datasetId === datasetId) {
+      if (event.job.workflowId === workflowId) {
         setJobs((prevJobs) => {
           const existingIndex = prevJobs.findIndex((j) => j.id === event.jobId);
           if (existingIndex >= 0) {
@@ -85,18 +85,18 @@ function useEvalJobs(props: {
     return () => {
       emitter.off('vllora_dry_run_job_update', handleJobUpdate);
     };
-  }, [datasetId]);
+  }, [workflowId]);
 
   // Start a new evaluation (delegates to polling manager which handles auto-upload and validation)
   const startDryRun = useCallback(
     async (sampleSize: number, rolloutModel?: string): Promise<string> => {
       return evalPollingManager.startEvalForDataset({
-        datasetId,
+        workflowId,
         sampleSize,
         rolloutModel,
       });
     },
-    [datasetId]
+    [workflowId]
   );
 
   // Cancel an evaluation
@@ -122,7 +122,7 @@ function useEvalJobs(props: {
   );
 
   return {
-    datasetId,
+    workflowId,
     jobs,
     isLoading,
     runningJob,

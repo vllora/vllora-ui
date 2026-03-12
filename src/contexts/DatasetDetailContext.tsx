@@ -50,16 +50,16 @@ export type ViewMode = "canvas" | "table";
 export type DatasetSection = "overview" | "records" | "evaluator" | "jobs" | "deploy";
 
 interface DatasetDetailHookProps {
-  datasetId: string;
+  workflowId: string;
   onBack: () => void;
-  onSelectDataset?: (datasetId: string) => void;
+  onSelectDataset?: (workflowId: string) => void;
 }
 
 // ============================================================================
 // Hook - Core logic
 // ============================================================================
 
-function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailHookProps) {
+function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetailHookProps) {
   // Get datasets context
   const {
     datasets,
@@ -226,7 +226,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
   const loadDataset = useCallback(async () => {
     setIsLoading(true);
     try {
-      const result = await getDatasetWithRecords(datasetId);
+      const result = await getDatasetWithRecords(workflowId);
       if (result) {
         setDataset(result);
         setRecords(result.records);
@@ -237,12 +237,12 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     } finally {
       setIsLoading(false);
     }
-  }, [datasetId, getDatasetWithRecords]);
+  }, [workflowId, getDatasetWithRecords]);
 
   // Refresh dataset silently (no loading indicator - for background syncs)
   const refreshDataset = useCallback(async () => {
     try {
-      const result = await getDatasetWithRecords(datasetId);
+      const result = await getDatasetWithRecords(workflowId);
       if (result) {
         setDataset(result);
         setRecords(result.records);
@@ -250,7 +250,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     } catch (err) {
       console.error("Failed to refresh dataset:", err);
     }
-  }, [datasetId, getDatasetWithRecords]);
+  }, [workflowId, getDatasetWithRecords]);
 
   // Initial load
   useEffect(() => {
@@ -265,6 +265,17 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
       emitter.off("vllora_dataset_refresh" as any, handleRefresh);
     };
   }, [refreshDataset]);
+
+  // Listen for scoped detail-only refresh (avoids reloading the entire dataset list)
+  useEffect(() => {
+    const handleDetailRefresh = (data: { workflowId: string }) => {
+      if (data.workflowId === workflowId) refreshDataset();
+    };
+    emitter.on("vllora_dataset_detail_refresh" as any, handleDetailRefresh);
+    return () => {
+      emitter.off("vllora_dataset_detail_refresh" as any, handleDetailRefresh);
+    };
+  }, [workflowId, refreshDataset]);
 
   // Refresh records when dry run completes (scores are persisted to individual records)
   useEffect(() => {
@@ -283,12 +294,12 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
   // This keeps isGeneratingTraces/generationProgress in sync so tab spinners work
   useEffect(() => {
     const handleGenerationProgress = (event: {
-      datasetId: string;
+      workflowId: string;
       status: "started" | "progress" | "completed" | "failed";
       completed: number;
       total: number;
     }) => {
-      if (event.datasetId !== datasetId) return;
+      if (event.workflowId !== workflowId) return;
 
       if (event.status === "started" || event.status === "progress") {
         setIsGeneratingTraces(true);
@@ -303,12 +314,12 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     return () => {
       emitter.off("vllora_data_generation_progress", handleGenerationProgress);
     };
-  }, [datasetId]);
+  }, [workflowId]);
 
   // Listen for records deleted events
   useEffect(() => {
-    const handleRecordsDeleted = (data: { datasetId: string; recordIds: string[] }) => {
-      if (data.datasetId !== datasetId) return;
+    const handleRecordsDeleted = (data: { workflowId: string; recordIds: string[] }) => {
+      if (data.workflowId !== workflowId) return;
       const deletedSet = new Set(data.recordIds);
       setRecords((prev) => prev.filter((r) => !deletedSet.has(r.id)));
       const newSelection = new Set(selectedRecordIds);
@@ -320,39 +331,39 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     return () => {
       emitter.off("vllora_dataset_records_deleted" as any, handleRecordsDeleted);
     };
-  }, [datasetId, selectedRecordIds, setSelectedRecordIds]);
+  }, [workflowId, selectedRecordIds, setSelectedRecordIds]);
 
   // Listen for source document filter events (from KnowledgeSourceCard clicks)
   useEffect(() => {
-    const handleFilterBySource = (event: { datasetId: string; sourceId: string | null }) => {
-      if (event.datasetId !== datasetId) return;
+    const handleFilterBySource = (event: { workflowId: string; sourceId: string | null }) => {
+      if (event.workflowId !== workflowId) return;
       setSourceDocumentFilter(event.sourceId);
       if (event.sourceId) {
         // Switch to records tab (uses existing vllora_switch_tab → workspace tab system)
-        emitter.emit("vllora_switch_tab", { datasetId, tab: "records" });
+        emitter.emit("vllora_switch_tab", { workflowId, tab: "records" });
       }
     };
     emitter.on("vllora_filter_by_source", handleFilterBySource);
     return () => {
       emitter.off("vllora_filter_by_source", handleFilterBySource);
     };
-  }, [datasetId]);
+  }, [workflowId]);
 
   // Update dataset from context when it changes
   useEffect(() => {
-    const updated = datasets.find((d) => d.id === datasetId);
+    const updated = datasets.find((d) => d.id === workflowId);
     if (updated && dataset) {
       setDataset(updated);
     }
-  }, [datasets, datasetId, dataset]);
+  }, [datasets, workflowId, dataset]);
 
   // Load record counts for dropdown
   useEffect(() => {
     const loadCounts = async () => {
       const counts: Record<string, number> = {};
-      counts[datasetId] = records.length;
+      counts[workflowId] = records.length;
       for (const ds of datasets) {
-        if (ds.id !== datasetId) {
+        if (ds.id !== workflowId) {
           counts[ds.id] = await getRecordCount(ds.id);
         }
       }
@@ -361,7 +372,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     if (datasets.length > 1) {
       loadCounts();
     }
-  }, [datasets, datasetId, records.length, getRecordCount]);
+  }, [datasets, workflowId, records.length, getRecordCount]);
 
   // Listen for workflow-triggered section/view mode changes (e.g., grader_config -> evaluator)
   useEffect(() => {
@@ -589,7 +600,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     setIsGeneratingTopics(true);
     try {
       const result = await generateTopics({
-        datasetId: dataset.id,
+        workflowId: dataset.id,
         recordIds,
         maxTopics: 3,
         maxDepth: 3,
@@ -628,7 +639,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
 
     try {
       const result = await generateTraces({
-        dataset_id: dataset.id,
+        workflow_id: dataset.id,
         record_ids: recordIds.length > 0 ? recordIds : undefined,
         count,
         max_turns: 3,
@@ -734,7 +745,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
       // - Dataset upload if needed
       // - Duplicate job prevention
       // - Training job creation
-      const result = await quickFinetune({ datasetId: dataset.id });
+      const result = await quickFinetune({ workflowId: dataset.id });
 
       if (result.success && result.jobId) {
         toast.success("Fine-tuning job started", {
@@ -1315,7 +1326,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     records,
     sortedRecords,
     isLoading,
-    datasetId,
+    workflowId,
 
     // Navigation
     datasets,
@@ -1434,18 +1445,18 @@ const DatasetDetailContext = createContext<DatasetDetailContextType | undefined>
 
 interface DatasetDetailProviderProps {
   children: ReactNode;
-  datasetId: string;
+  workflowId: string;
   onBack: () => void;
-  onSelectDataset?: (datasetId: string) => void;
+  onSelectDataset?: (workflowId: string) => void;
 }
 
 export function DatasetDetailProvider({
   children,
-  datasetId,
+  workflowId,
   onBack,
   onSelectDataset,
 }: DatasetDetailProviderProps) {
-  const value = useDatasetDetail({ datasetId, onBack, onSelectDataset });
+  const value = useDatasetDetail({ workflowId, onBack, onSelectDataset });
   return (
     <DatasetDetailContext.Provider value={value}>
       {children}

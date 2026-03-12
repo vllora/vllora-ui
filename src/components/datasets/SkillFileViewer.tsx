@@ -79,15 +79,15 @@ function JsonlContent({ content }: { readonly content: string }) {
 
 export function SkillFileViewer({ filePath }: SkillFileViewerProps) {
   const { dataset } = DatasetDetailConsumer();
-  const datasetId = dataset?.id;
+  const workflowId = dataset?.id;
 
   // Assemble files on demand — cached by ahooks useRequest
   const { data: files, loading, error } = useRequest(
     async (): Promise<SkillPackageFiles | null> => {
-      if (!datasetId) return null;
-      return assembleSkillPackageFiles(datasetId);
+      if (!workflowId) return null;
+      return assembleSkillPackageFiles(workflowId);
     },
-    { refreshDeps: [datasetId] },
+    { refreshDeps: [workflowId] },
   );
 
   // ─── Edit state ───

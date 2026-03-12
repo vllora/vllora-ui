@@ -29,12 +29,12 @@ export const createDatasetHandler: ToolHandler = async (params) => {
 
     // Navigate the browser to the new dataset
     emitter.emit('vllora_dataset_navigate' as never, {
-      datasetId: dataset.id,
+      workflowId: dataset.id,
     } as never);
 
     return {
       success: true,
-      dataset_id: dataset.id,
+      workflow_id: dataset.id,
       name: dataset.name,
       objective: dataset.datasetObjective ?? null,
       has_workflow: Boolean(resolvedObjective),

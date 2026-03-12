@@ -19,7 +19,7 @@ interface TopicRecordTreeProps {
   /** All records to display */
   records: DatasetRecord[];
   /** Dataset ID for listening to generation events */
-  datasetId: string;
+  workflowId: string;
   /** Handler for updating record topic */
   onUpdateTopic: (recordId: string, topic: string, isNew?: boolean) => Promise<void>;
   /** Handler for deleting a record */
@@ -82,7 +82,7 @@ function calculateDescendantCounts(
 export function TopicRecordTree({
   hierarchy,
   records,
-  datasetId,
+  workflowId,
   onUpdateTopic,
   onDelete,
   onSave,
@@ -108,7 +108,7 @@ export function TopicRecordTree({
   // Listen for data generation progress events
   useEffect(() => {
     const handleProgress = (event: {
-      datasetId: string;
+      workflowId: string;
       status: string;
       completed?: number;
       total?: number;
@@ -116,7 +116,7 @@ export function TopicRecordTree({
       topicCompleted?: number;
       topicTotal?: number;
     }) => {
-      if (event.datasetId !== datasetId) return;
+      if (event.workflowId !== workflowId) return;
 
       if (event.status === 'started' || event.status === 'progress') {
         // Set current topic if available
@@ -139,7 +139,7 @@ export function TopicRecordTree({
     return () => {
       emitter.off('vllora_data_generation_progress', handleProgress);
     };
-  }, [datasetId]);
+  }, [workflowId]);
 
   // Group records by topic
   const recordsByTopic = useMemo(() => {

@@ -67,34 +67,34 @@ const WorkspaceTabsContext = createContext<WorkspaceTabsContextType | undefined>
 
 const STORAGE_KEY_PREFIX = "workspace-tabs-";
 
-function loadTabs(datasetId: string): WorkspaceTab[] {
+function loadTabs(workflowId: string): WorkspaceTab[] {
   try {
-    const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${datasetId}`);
+    const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${workflowId}`);
     if (raw) return JSON.parse(raw);
   } catch { /* ignore corrupt data */ }
   return [];
 }
 
-function loadActiveTab(datasetId: string): string | null {
+function loadActiveTab(workflowId: string): string | null {
   try {
-    return localStorage.getItem(`${STORAGE_KEY_PREFIX}${datasetId}-active`);
+    return localStorage.getItem(`${STORAGE_KEY_PREFIX}${workflowId}-active`);
   } catch { return null; }
 }
 
-function saveTabs(datasetId: string, tabs: WorkspaceTab[]) {
+function saveTabs(workflowId: string, tabs: WorkspaceTab[]) {
   try {
     // Only persist pinned tabs (previews are ephemeral)
     const pinned = tabs.filter((t) => t.isPinned);
-    localStorage.setItem(`${STORAGE_KEY_PREFIX}${datasetId}`, JSON.stringify(pinned));
+    localStorage.setItem(`${STORAGE_KEY_PREFIX}${workflowId}`, JSON.stringify(pinned));
   } catch { /* storage full, ignore */ }
 }
 
-function saveActiveTab(datasetId: string, path: string | null) {
+function saveActiveTab(workflowId: string, path: string | null) {
   try {
     if (path) {
-      localStorage.setItem(`${STORAGE_KEY_PREFIX}${datasetId}-active`, path);
+      localStorage.setItem(`${STORAGE_KEY_PREFIX}${workflowId}-active`, path);
     } else {
-      localStorage.removeItem(`${STORAGE_KEY_PREFIX}${datasetId}-active`);
+      localStorage.removeItem(`${STORAGE_KEY_PREFIX}${workflowId}-active`);
     }
   } catch { /* ignore */ }
 }
@@ -113,15 +113,15 @@ function labelFromPath(path: string): string {
 // ============================================================================
 
 interface WorkspaceTabsProviderProps {
-  datasetId: string;
+  workflowId: string;
   /** Seed tabs used when localStorage has none (e.g., empty dataset → plan.md). */
   initialTabs?: { path: string; label: string }[];
   children: ReactNode;
 }
 
-export function WorkspaceTabsProvider({ datasetId, initialTabs, children }: WorkspaceTabsProviderProps) {
+export function WorkspaceTabsProvider({ workflowId, initialTabs, children }: WorkspaceTabsProviderProps) {
   const [tabs, setTabs] = useState<WorkspaceTab[]>(() => {
-    const saved = loadTabs(datasetId);
+    const saved = loadTabs(workflowId);
     if (saved.length > 0) return saved;
     // No saved tabs — use initialTabs if provided
     if (initialTabs && initialTabs.length > 0) {
@@ -130,7 +130,7 @@ export function WorkspaceTabsProvider({ datasetId, initialTabs, children }: Work
     return [];
   });
   const [activeTabPath, setActiveTabPath] = useState<string | null>(() => {
-    const saved = loadActiveTab(datasetId);
+    const saved = loadActiveTab(workflowId);
     if (saved) return saved;
     // Default to last initialTab if provided
     if (initialTabs && initialTabs.length > 0) {
@@ -145,10 +145,10 @@ export function WorkspaceTabsProvider({ datasetId, initialTabs, children }: Work
 
   // Reset tabs when dataset changes
   useEffect(() => {
-    const loaded = loadTabs(datasetId);
+    const loaded = loadTabs(workflowId);
     if (loaded.length > 0) {
       setTabs(loaded);
-      setActiveTabPath(loadActiveTab(datasetId));
+      setActiveTabPath(loadActiveTab(workflowId));
     } else if (initialTabs && initialTabs.length > 0) {
       setTabs(initialTabs.map((t) => ({ path: t.path, label: t.label, isPinned: true })));
       setActiveTabPath(initialTabs[initialTabs.length - 1].path);
@@ -156,7 +156,7 @@ export function WorkspaceTabsProvider({ datasetId, initialTabs, children }: Work
       setTabs([]);
       setActiveTabPath(null);
     }
-  }, [datasetId, initialTabs]);
+  }, [workflowId, initialTabs]);
 
   // Apply initialTabs when they become available after mount
   // (handles the case where parent's reactive data settles after provider mounts)
@@ -174,12 +174,12 @@ export function WorkspaceTabsProvider({ datasetId, initialTabs, children }: Work
 
   // Persist on change
   useEffect(() => {
-    saveTabs(datasetId, tabs);
-  }, [datasetId, tabs]);
+    saveTabs(workflowId, tabs);
+  }, [workflowId, tabs]);
 
   useEffect(() => {
-    saveActiveTab(datasetId, activeTabPath);
-  }, [datasetId, activeTabPath]);
+    saveActiveTab(workflowId, activeTabPath);
+  }, [workflowId, activeTabPath]);
 
   const openTab = useCallback((path: string, label?: string, preview = true) => {
     const displayLabel = label || labelFromPath(path);

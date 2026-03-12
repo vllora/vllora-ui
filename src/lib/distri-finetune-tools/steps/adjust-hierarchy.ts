@@ -96,7 +96,7 @@ export const adjustTopicHierarchyHandler: ToolHandler = async (params) => {
     }
 
     // Get current hierarchy from dataset
-    const dataset = await datasetService.getById(workflow.datasetId);
+    const dataset = await datasetService.getById(workflow.workflowId);
     if (!dataset) {
       return { success: false, error: 'Dataset not found' };
     }
@@ -124,7 +124,7 @@ export const adjustTopicHierarchyHandler: ToolHandler = async (params) => {
     const depth = calculateMaxDepth(result.hierarchy);
 
     // Save updated hierarchy to dataset
-    await datasetService.updateTopicHierarchy(workflow.datasetId, {
+    await datasetService.updateTopicHierarchy(workflow.workflowId, {
       hierarchy: result.hierarchy,
       depth,
       generatedAt: Date.now(),

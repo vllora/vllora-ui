@@ -4,7 +4,7 @@
  * Calls gateway /finetune/workflows/{workflowId}/knowledge endpoints.
  * Replaces IndexedDB adapter (indexeddb-knowledge-source-adapter.ts).
  *
- * Mapping: FE datasetId → BE workflowId (same ID after migration)
+ * Mapping: FE workflowId → BE workflowId (same ID after migration)
  */
 
 import { api, handleApiResponse } from '@/lib/api-client';
@@ -36,7 +36,7 @@ interface DbKnowledgeSourceResponse {
 function mapToFe(db: DbKnowledgeSourceResponse): KnowledgeSource {
   return {
     id: db.id,
-    datasetId: db.workflow_id,
+    workflowId: db.workflow_id,
     name: db.name,
     type: db.type,
     status: db.status as KnowledgeSourceStatus,
@@ -55,12 +55,12 @@ function basePath(workflowId: string): string {
 
 export const apiKnowledgeSourceAdapter: KnowledgeSourceService = {
   async create(
-    datasetId: string,
+    workflowId: string,
     name: string,
     type: KnowledgeSourceType,
     options?: CreateKnowledgeSourceOptions,
   ): Promise<KnowledgeSource> {
-    const response = await api.post(basePath(datasetId), {
+    const response = await api.post(basePath(workflowId), {
       name,
       type,
       content: options?.content,
@@ -77,14 +77,14 @@ export const apiKnowledgeSourceAdapter: KnowledgeSourceService = {
     return mapToFe(db);
   },
 
-  async getByDataset(datasetId: string): Promise<KnowledgeSource[]> {
-    const response = await api.get(basePath(datasetId));
+  async getByDataset(workflowId: string): Promise<KnowledgeSource[]> {
+    const response = await api.get(basePath(workflowId));
     const data = await handleApiResponse<{ knowledge_sources: DbKnowledgeSourceResponse[] }>(response);
     return data.knowledge_sources.map(mapToFe);
   },
 
-  async getCount(datasetId: string): Promise<number> {
-    const response = await api.get(`${basePath(datasetId)}/count`);
+  async getCount(workflowId: string): Promise<number> {
+    const response = await api.get(`${basePath(workflowId)}/count`);
     const data = await handleApiResponse<{ count: number }>(response);
     return data.count;
   },
@@ -122,12 +122,12 @@ export const apiKnowledgeSourceAdapter: KnowledgeSourceService = {
     await handleApiResponse<{ deleted: boolean }>(response);
   },
 
-  async deleteByDataset(datasetId: string): Promise<void> {
-    const response = await api.delete(basePath(datasetId));
+  async deleteByDataset(workflowId: string): Promise<void> {
+    const response = await api.delete(basePath(workflowId));
     await handleApiResponse<{ deleted: number }>(response);
   },
 
-  async search(_datasetId: string, _query: string): Promise<SearchResult[]> {
+  async search(_workflowId: string, _query: string): Promise<SearchResult[]> {
     // Search is done client-side with extracted content. No BE endpoint yet.
     // TODO: Implement POST /finetune/workflows/{id}/knowledge/search on BE
     return [];

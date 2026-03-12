@@ -35,7 +35,7 @@ export interface CanvasOperationProgress {
 export interface TopicCanvasProviderProps {
   children: ReactNode;
   records: DatasetRecord[];
-  datasetId?: string;
+  workflowId?: string;
   /** Topic hierarchy for computing available topics */
   hierarchy?: TopicHierarchyNode[];
   /** Coverage stats for showing distribution info on nodes */
@@ -72,7 +72,7 @@ export interface TopicCanvasProviderProps {
 function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
   const {
     records,
-    datasetId,
+    workflowId,
     hierarchy,
     coverageStats,
     selectedTopic: externalSelectedTopic,
@@ -332,13 +332,13 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
   // Listen for data generation progress events
   useEffect(() => {
     const handleProgress = (event: {
-      datasetId: string;
+      workflowId: string;
       status: 'started' | 'progress' | 'completed' | 'failed';
       completed?: number;
       total?: number;
       topicName?: string;
     }) => {
-      if (datasetId && event.datasetId !== datasetId) return;
+      if (workflowId && event.workflowId !== workflowId) return;
 
       if (event.status === 'started' || event.status === 'progress') {
         setOperationProgress({
@@ -361,14 +361,14 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
     return () => {
       emitter.off('vllora_data_generation_progress', handleProgress);
     };
-  }, [datasetId]);
+  }, [workflowId]);
 
   return {
     hierarchy,
     records,
     recordsByTopic,
     totalRecordCount,
-    datasetId,
+    workflowId,
     availableTopics,
     coverageStats,
     selectedTopic,

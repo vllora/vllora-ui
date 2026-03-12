@@ -161,11 +161,11 @@ function uniqueId(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`;
 }
 
-function createDefaultWorkflow(datasetId: string): FinetuneWorkflowState {
+function createDefaultWorkflow(workflowId: string): FinetuneWorkflowState {
   const now = Date.now();
   return {
-    id: datasetId,
-    datasetId,
+    id: workflowId,
+    workflowId,
     trainingGoals: '',
     currentStep: 'not_started',
     stepStatus: createInitialStepStatus(),
@@ -186,11 +186,11 @@ function createDefaultWorkflow(datasetId: string): FinetuneWorkflowState {
 // ─── Adapter ─────────────────────────────────────────────────────────────────
 
 export const apiWorkflowAdapter: WorkflowService = {
-  async create(datasetId: string, trainingGoals: string): Promise<FinetuneWorkflowState> {
+  async create(workflowId: string, trainingGoals: string): Promise<FinetuneWorkflowState> {
     const now = Date.now();
     const workflow: FinetuneWorkflowState = {
-      id: datasetId,
-      datasetId,
+      id: workflowId,
+      workflowId,
       trainingGoals,
       currentStep: 'not_started',
       stepStatus: createInitialStepStatus(),
@@ -215,7 +215,7 @@ export const apiWorkflowAdapter: WorkflowService = {
       version: 1,
     };
 
-    await saveBlob(datasetId, blob);
+    await saveBlob(workflowId, blob);
     return workflow;
   },
 
@@ -225,9 +225,9 @@ export const apiWorkflowAdapter: WorkflowService = {
     return extractWorkflow(row);
   },
 
-  async getByDataset(datasetId: string): Promise<FinetuneWorkflowState | null> {
-    // In the API world, datasetId === workflowId (BE row ID)
-    return apiWorkflowAdapter.get(datasetId);
+  async getByDataset(workflowId: string): Promise<FinetuneWorkflowState | null> {
+    // In the API world, workflowId === workflowId (BE row ID)
+    return apiWorkflowAdapter.get(workflowId);
   },
 
   async getAll(): Promise<FinetuneWorkflowState[]> {
@@ -242,7 +242,7 @@ export const apiWorkflowAdapter: WorkflowService = {
   },
 
   async update(workflow: FinetuneWorkflowState): Promise<void> {
-    const id = workflow.datasetId;
+    const id = workflow.workflowId;
     await mutateBlob(id, (blob) => ({
       ...blob,
       workflow: { ...workflow, updatedAt: Date.now() },
@@ -329,7 +329,7 @@ export const apiWorkflowAdapter: WorkflowService = {
   // ─── Snapshots ────────────────────────────────────────────────────────────
 
   async createSnapshot(workflow: FinetuneWorkflowState): Promise<string> {
-    const id = workflow.datasetId;
+    const id = workflow.workflowId;
     const snapshotId = uniqueId(`${workflow.id}-${workflow.currentStep}`);
 
     await mutateBlob(id, (blob) => {

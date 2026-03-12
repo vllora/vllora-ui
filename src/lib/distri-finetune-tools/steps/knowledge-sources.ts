@@ -350,7 +350,7 @@ async function extractContent(
 // =============================================================================
 
 interface UploadKnowledgeSourceParams {
-  dataset_id: string;
+  workflow_id: string;
   name: string;
   type: KnowledgeSourceType;
   content: string;
@@ -368,10 +368,10 @@ interface UploadKnowledgeSourceParams {
 
 export const uploadKnowledgeSourceHandler: ToolHandler = async (params) => {
   try {
-    const { dataset_id, name, type, content, mime_type, comment, extraction_mode = 'llm' } = params as unknown as UploadKnowledgeSourceParams;
+    const { workflow_id, name, type, content, mime_type, comment, extraction_mode = 'llm' } = params as unknown as UploadKnowledgeSourceParams;
 
-    if (!dataset_id) {
-      return { success: false, error: 'dataset_id is required' };
+    if (!workflow_id) {
+      return { success: false, error: 'workflow_id is required' };
     }
 
     if (!name || !type || !content) {
@@ -379,7 +379,7 @@ export const uploadKnowledgeSourceHandler: ToolHandler = async (params) => {
     }
 
     // Create the knowledge source
-    const source = await knowledgeSourceService.create(dataset_id, name, type, {
+    const source = await knowledgeSourceService.create(workflow_id, name, type, {
       content,
       mimeType: mime_type,
       size: content.length,
@@ -391,7 +391,7 @@ export const uploadKnowledgeSourceHandler: ToolHandler = async (params) => {
 
     // Extract content in background (non-blocking)
     // This allows the UI to proceed immediately while extraction happens async
-    processExtractionInBackground(source.id, dataset_id, type, content, name, extraction_mode, comment);
+    processExtractionInBackground(source.id, workflow_id, type, content, name, extraction_mode, comment);
 
     // Return immediately with 'processing' status
     return {
@@ -416,7 +416,7 @@ export const uploadKnowledgeSourceHandler: ToolHandler = async (params) => {
  */
 async function processExtractionInBackground(
   sourceId: string,
-  datasetId: string,
+  workflowId: string,
   type: KnowledgeSourceType,
   content: string,
   name: string,
@@ -439,13 +439,13 @@ async function processExtractionInBackground(
       await knowledgeSourceService.updateProgress(sourceId, progressInfo);
 
       // Emit event to notify UI of progress change
-      emitter.emit('vllora_knowledge_source_updated', { datasetId, sourceId, progress: progressInfo });
+      emitter.emit('vllora_knowledge_source_updated', { workflowId, sourceId, progress: progressInfo });
     };
 
     // Fetch objective from dataset (for PDF LLM extraction context)
     let objective: string | undefined;
     if (type === 'pdf') {
-      const dataset = await datasetService.getById(datasetId);
+      const dataset = await datasetService.getById(workflowId);
       objective = dataset?.datasetObjective;
     }
 
@@ -454,30 +454,30 @@ async function processExtractionInBackground(
     await knowledgeSourceService.updateStatus(sourceId, 'ready', { extractedContent });
     console.log(`[processExtractionInBackground] Extraction complete for ${sourceId}`);
     // Emit event to notify UI of status change
-    emitter.emit('vllora_knowledge_source_updated', { datasetId });
+    emitter.emit('vllora_knowledge_source_updated', { workflowId });
   } catch (error) {
     console.error(`[processExtractionInBackground] Extraction failed for ${sourceId}:`, error);
     await knowledgeSourceService.updateStatus(sourceId, 'failed', {
       error: error instanceof Error ? error.message : 'Extraction failed',
     });
     // Also emit event on failure so UI can show the failed state
-    emitter.emit('vllora_knowledge_source_updated', { datasetId });
+    emitter.emit('vllora_knowledge_source_updated', { workflowId });
   }
 }
 
 interface ListKnowledgeSourcesParams {
-  dataset_id: string;
+  workflow_id: string;
 }
 
 export const listKnowledgeSourcesHandler: ToolHandler = async (params) => {
   try {
-    const { dataset_id } = params as unknown as ListKnowledgeSourcesParams;
+    const { workflow_id } = params as unknown as ListKnowledgeSourcesParams;
 
-    if (!dataset_id) {
-      return { success: false, error: 'dataset_id is required' };
+    if (!workflow_id) {
+      return { success: false, error: 'workflow_id is required' };
     }
 
-    const sources = await knowledgeSourceService.getByDataset(dataset_id);
+    const sources = await knowledgeSourceService.getByDataset(workflow_id);
 
     return {
       success: true,
@@ -511,16 +511,16 @@ export const listKnowledgeSourcesHandler: ToolHandler = async (params) => {
 };
 
 interface ExtractTopicsParams {
-  dataset_id: string;
+  workflow_id: string;
   source_id?: string;
 }
 
 export const extractTopicsFromSourceHandler: ToolHandler = async (params) => {
   try {
-    const { dataset_id, source_id } = params as unknown as ExtractTopicsParams;
+    const { workflow_id, source_id } = params as unknown as ExtractTopicsParams;
 
-    if (!dataset_id) {
-      return { success: false, error: 'dataset_id is required' };
+    if (!workflow_id) {
+      return { success: false, error: 'workflow_id is required' };
     }
 
     let sources;
@@ -528,7 +528,7 @@ export const extractTopicsFromSourceHandler: ToolHandler = async (params) => {
       const source = await knowledgeSourceService.get(source_id);
       sources = source ? [source] : [];
     } else {
-      sources = await knowledgeSourceService.getByDataset(dataset_id);
+      sources = await knowledgeSourceService.getByDataset(workflow_id);
     }
 
     const allTopics: string[] = [];
@@ -560,7 +560,7 @@ export const extractTopicsFromSourceHandler: ToolHandler = async (params) => {
 };
 
 interface SearchKnowledgeParams {
-  dataset_id: string;
+  workflow_id: string;
   query?: string;
   chunk_id?: string;
   max_results?: number;
@@ -568,15 +568,15 @@ interface SearchKnowledgeParams {
 
 export const searchKnowledgeHandler: ToolHandler = async (params) => {
   try {
-    const { dataset_id, query, chunk_id, max_results = 5 } = params as unknown as SearchKnowledgeParams;
+    const { workflow_id, query, chunk_id, max_results = 5 } = params as unknown as SearchKnowledgeParams;
 
-    if (!dataset_id) {
-      return { success: false, error: 'dataset_id is required' };
+    if (!workflow_id) {
+      return { success: false, error: 'workflow_id is required' };
     }
 
     // Fetch mode: return full text for a specific chunk
     if (chunk_id) {
-      const sources = await knowledgeSourceService.getByDataset(dataset_id);
+      const sources = await knowledgeSourceService.getByDataset(workflow_id);
       for (const source of sources) {
         if (source.status !== 'ready' || !source.extractedContent) continue;
         const metadata = source.extractedContent.metadata as Record<string, unknown> | undefined;
@@ -603,7 +603,7 @@ export const searchKnowledgeHandler: ToolHandler = async (params) => {
       return { success: false, error: 'Either query or chunk_id is required' };
     }
 
-    const results = await knowledgeSourceService.search(dataset_id, query);
+    const results = await knowledgeSourceService.search(workflow_id, query);
 
     return {
       success: true,
@@ -675,7 +675,7 @@ For markdown files, the system automatically detects whether it's a knowledge so
   parameters: {
     type: 'object',
     properties: {
-      dataset_id: {
+      workflow_id: {
         type: 'string',
         description: 'The dataset ID to associate this knowledge source with',
       },
@@ -707,7 +707,7 @@ For markdown files, the system automatically detects whether it's a knowledge so
         description: 'Extraction mode for PDFs: "llm" for LLM section extraction with start/end anchors (default, no fallback), "local" for LLM section extraction with embeddings fallback, "basic" for fast regex-based extraction',
       },
     },
-    required: ['dataset_id', 'name', 'type', 'content'],
+    required: ['workflow_id', 'name', 'type', 'content'],
   },
   autoExecute: true,
   handler: async (input) =>
@@ -724,12 +724,12 @@ extracted topics, and section counts.`,
   parameters: {
     type: 'object',
     properties: {
-      dataset_id: {
+      workflow_id: {
         type: 'string',
         description: 'The dataset ID to list knowledge sources for',
       },
     },
-    required: ['dataset_id'],
+    required: ['workflow_id'],
   },
   autoExecute: true,
   handler: async (input) =>
@@ -750,7 +750,7 @@ If source_id is not provided, extracts from all sources for the dataset.`,
   parameters: {
     type: 'object',
     properties: {
-      dataset_id: {
+      workflow_id: {
         type: 'string',
         description: 'The dataset ID',
       },
@@ -759,7 +759,7 @@ If source_id is not provided, extracts from all sources for the dataset.`,
         description: 'Optional: specific source ID to extract from',
       },
     },
-    required: ['dataset_id'],
+    required: ['workflow_id'],
   },
   autoExecute: true,
   handler: async (input) =>
@@ -779,7 +779,7 @@ Call once per query. Do NOT retry if results seem incomplete.`,
   parameters: {
     type: 'object',
     properties: {
-      dataset_id: {
+      workflow_id: {
         type: 'string',
         description: 'The dataset ID to search within',
       },
@@ -797,7 +797,7 @@ Call once per query. Do NOT retry if results seem incomplete.`,
         description: 'Maximum number of chunk results to return (default: 5)',
       },
     },
-    required: ['dataset_id'],
+    required: ['workflow_id'],
   },
   autoExecute: true,
   handler: async (input) =>

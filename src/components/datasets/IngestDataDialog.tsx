@@ -7,8 +7,8 @@
  * - Upload File: Import from JSON/JSONL files
  *
  * Supports two modes:
- * - Detail mode: Import into a specific dataset (datasetId provided)
- * - List mode: Create new dataset or select existing (no datasetId)
+ * - Detail mode: Import into a specific dataset (workflowId provided)
+ * - List mode: Create new dataset or select existing (no workflowId)
  */
 
 import { Button } from "@/components/ui/button";
@@ -50,7 +50,7 @@ export type { ParsedRecord, ImportMode, ImportResult, DataSourceTab, DatasetTarg
 
 // Props for detail mode (importing into a specific dataset)
 interface DetailModeProps {
-  datasetId: string;
+  workflowId: string;
   onImport: (records: ParsedRecord[], mode: ImportMode, defaultTopic?: string) => Promise<void>;
   currentRecordCount?: number;
   datasets?: never;
@@ -59,7 +59,7 @@ interface DetailModeProps {
 
 // Props for list mode (create new or select existing dataset)
 interface ListModeProps {
-  datasetId?: never;
+  workflowId?: never;
   onImport?: never;
   currentRecordCount?: never;
   datasets: Dataset[];
@@ -78,7 +78,7 @@ export function IngestDataDialog(props: IngestDataDialogProps) {
   const { currentProjectId } = ProjectsConsumer();
 
   // Determine mode based on props
-  const isListMode = !('datasetId' in props) || !props.datasetId;
+  const isListMode = !('workflowId' in props) || !props.workflowId;
   const datasets = isListMode ? (props as ListModeProps).datasets : [];
   const onImportToDataset = isListMode ? (props as ListModeProps).onImportToDataset : undefined;
   const onImport = !isListMode ? (props as DetailModeProps).onImport : undefined;

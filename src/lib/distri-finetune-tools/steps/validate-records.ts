@@ -22,7 +22,7 @@ export const validateRecordsHandler: ToolHandler = async (params) => {
     }
 
     // Get records
-    const records = await recordService.getByDatasetId(workflow.datasetId);
+    const records = await recordService.getByDatasetId(workflow.workflowId);
 
     // Validation checks
     const issues: Array<{ record_id: string; field: string; issue: string }> = [];
