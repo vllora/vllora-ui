@@ -7,6 +7,7 @@
  */
 
 import { cn } from "@/lib/utils";
+import { emitter } from "@/utils/eventEmitter";
 import {
   extractMessages,
   getRoleLabel,
@@ -89,9 +90,7 @@ export function ConversationThreadCell({ data, className, sourceRecordId, hideSy
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              window.dispatchEvent(new CustomEvent('vllora_highlight_record', {
-                detail: { recordId: sourceRecordId }
-              }));
+              emitter.emit('vllora_highlight_record', { recordId: sourceRecordId });
             }}
             className="text-[10px] text-violet-400/80 hover:text-violet-300 hover:underline cursor-pointer text-left"
           >

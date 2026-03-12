@@ -14,7 +14,7 @@ import {
 } from "@/utils/parse-score-breakdown";
 import { ResultsTable } from "@/components/datasets/eval-dialog/ResultsTable";
 import { EpochScoresTable, type EpochScore } from "./EpochScoresTable";
-import { emitter } from "@/utils/eventEmitter";
+import { emitter, setPendingHighlight } from "@/utils/eventEmitter";
 
 interface PerRowDetailsSectionProps {
   results: FinetuneEvalResultsResponse["results"];
@@ -102,12 +102,10 @@ export function PerRowDetailsSection({ results, workflowId }: PerRowDetailsSecti
 
   const handleRecordIdClick = useCallback((recordId: string) => {
     if (!workflowId) return;
-    (window as any).__pendingHighlightRecordId = recordId;
+    setPendingHighlight(recordId);
     emitter.emit('vllora_switch_tab', { workflowId, tab: 'records' });
     setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('vllora_highlight_record', {
-        detail: { recordId }
-      }));
+      emitter.emit('vllora_highlight_record', { recordId });
     }, 150);
   }, [workflowId]);
 

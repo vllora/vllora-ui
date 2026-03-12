@@ -285,12 +285,10 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
                   // Store pending highlight so RecordsTable can pick it up on mount
                   // (the tab switch causes conditional re-mount, so the event listener
                   //  may not be registered yet when the event fires)
-                  (window as any).__pendingHighlightRecordId = recordId;
+                  setPendingHighlight(recordId);
                   emitter.emit('vllora_switch_tab', { workflowId, tab: 'records' });
                   setTimeout(() => {
-                    window.dispatchEvent(new CustomEvent('vllora_highlight_record', {
-                      detail: { recordId }
-                    }));
+                    emitter.emit('vllora_highlight_record', { recordId });
                   }, 500);
                 }}
               />
@@ -357,12 +355,10 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
                 results={evaluationResults}
                 fillHeight
                 onRecordIdClick={(recordId) => {
-                  (window as any).__pendingHighlightRecordId = recordId;
+                  setPendingHighlight(recordId);
                   emitter.emit('vllora_switch_tab', { workflowId, tab: 'records' });
                   setTimeout(() => {
-                    window.dispatchEvent(new CustomEvent('vllora_highlight_record', {
-                      detail: { recordId }
-                    }));
+                    emitter.emit('vllora_highlight_record', { recordId });
                   }, 500);
                 }}
               />

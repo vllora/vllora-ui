@@ -17,6 +17,7 @@ import { RecordsTableFooter } from "./RecordsTableFooter";
 import { SeeAllLink } from "./SeeAllLink";
 import { getTopicColor, type AvailableTopic } from "../record-utils";
 import type { RecordRole } from "../record-filters";
+import { emitter, consumePendingHighlight } from "@/utils/eventEmitter";
 
 interface RecordsTableProps {
   records: DatasetRecord[];
@@ -168,22 +169,21 @@ export function RecordsTable({
 
   // Listen for highlight record events (from variant source clicks / eval job detail)
   useEffect(() => {
-    const handleHighlightRecord = (event: CustomEvent<{ recordId: string }>) => {
-      highlightRecord(event.detail.recordId);
+    const handleHighlightRecord = ({ recordId }: { recordId: string }) => {
+      highlightRecord(recordId);
     };
 
-    window.addEventListener('vllora_highlight_record', handleHighlightRecord as EventListener);
+    emitter.on('vllora_highlight_record', handleHighlightRecord);
 
-    // Check for pending highlight (set before tab switch, before this component mounted)
-    const pendingId = (window as any).__pendingHighlightRecordId as string | undefined;
+    // Check for pending highlight (set before tab switch, before this component mounted).
+    // Use setTimeout to ensure record refs are populated after the first paint.
+    const pendingId = consumePendingHighlight();
     if (pendingId) {
-      delete (window as any).__pendingHighlightRecordId;
-      // Delay slightly to let DOM render after mount
-      requestAnimationFrame(() => { highlightRecord(pendingId); });
+      setTimeout(() => { highlightRecord(pendingId); }, 100);
     }
 
     return () => {
-      window.removeEventListener('vllora_highlight_record', handleHighlightRecord as EventListener);
+      emitter.off('vllora_highlight_record', handleHighlightRecord);
     };
   }, [highlightRecord]);
 

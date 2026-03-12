@@ -18,7 +18,7 @@ import { getStoredPlan } from "@/lib/distri-finetune-tools/steps/proposed-plan-s
 import { computeDatasetInsights, getLeafTopicsFromHierarchy } from "@/components/datasets/record-utils";
 import { DatasetOverviewCard } from "@/components/datasets/dataset-detail-header/overview-card/DatasetOverviewCard";
 import { getJobAverageScore, getJobCompletedRows, getJobTotalRows } from "@/types/eval-job";
-import { emitter } from "@/utils/eventEmitter";
+import { emitter, setPendingHighlight } from "@/utils/eventEmitter";
 import type { ExecutionProgress } from "@/lib/distri-finetune-tools/steps/execute-plan";
 import type { Dataset } from "@/types/dataset-types";
 
@@ -308,9 +308,10 @@ export function DatasetOverviewPanel({
                 onOpenEvaluator={() => emitter.emit("vllora_switch_tab", { workflowId, tab: "evaluator" })}
                 onOpenJobs={() => emitter.emit("vllora_switch_tab", { workflowId, tab: "jobs" })}
                 onOpenRecord={(recordId) => {
+                  setPendingHighlight(recordId);
                   emitter.emit("vllora_switch_tab", { workflowId, tab: "records" });
                   setTimeout(() => {
-                    window.dispatchEvent(new CustomEvent("vllora_highlight_record", { detail: { recordId } }));
+                    emitter.emit("vllora_highlight_record", { recordId });
                   }, 150);
                 }}
                 onOpenEvalJob={(jobId) => navigateToEvalJob(workflowId, jobId)}
