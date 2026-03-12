@@ -272,9 +272,9 @@ export const gatewayCrudHandlers = [
     },
   ),
 
-  // GET /finetune/workflows/_/eval-jobs/:id — Get single eval job (wildcard workflow)
+  // GET /finetune/eval-jobs/:id — Get single eval job (non-scoped)
   http.get(
-    `${BASE}/finetune/workflows/_/eval-jobs/:id`,
+    `${BASE}/finetune/eval-jobs/:id`,
     ({ params }) => {
       const id = params.id as string;
       const row = evalJobs.get(id);
@@ -285,9 +285,9 @@ export const gatewayCrudHandlers = [
     },
   ),
 
-  // PATCH /finetune/workflows/_/eval-jobs/:id — Update eval job
+  // PATCH /finetune/eval-jobs/:id — Update eval job
   http.patch(
-    `${BASE}/finetune/workflows/_/eval-jobs/:id`,
+    `${BASE}/finetune/eval-jobs/:id`,
     async ({ params, request }) => {
       const id = params.id as string;
       const row = evalJobs.get(id);
@@ -321,9 +321,9 @@ export const gatewayCrudHandlers = [
     return HttpResponse.json({ jobs });
   }),
 
-  // DELETE /finetune/workflows/_/eval-jobs/:id — Delete eval job
+  // DELETE /finetune/eval-jobs/:id — Delete eval job
   http.delete(
-    `${BASE}/finetune/workflows/_/eval-jobs/:id`,
+    `${BASE}/finetune/eval-jobs/:id`,
     ({ params }) => {
       const id = params.id as string;
       if (!evalJobs.has(id)) {

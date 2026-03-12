@@ -516,9 +516,9 @@ export const apiWorkflowAdapter: WorkflowService = {
 // ─── Helper: find workflow ID that owns a given eval job ─────────────────────
 
 async function findWorkflowIdForJob(jobId: string): Promise<string | null> {
-  // Try to find the eval job directly (uses the wildcard route that ignores workflow_id)
+  // Try to find the eval job directly (uses the non-scoped route)
   try {
-    const response = await api.get(`/finetune/workflows/_/eval-jobs/${jobId}`);
+    const response = await api.get(`/finetune/eval-jobs/${jobId}`);
     if (response.ok) {
       const job = await handleApiResponse<{ id: string; workflow_id: string }>(response);
       return job.workflow_id;

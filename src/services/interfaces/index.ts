@@ -10,7 +10,7 @@
  */
 
 export type { DatasetService } from './dataset-service';
-export type { RecordService, NewRecord, ScoreUpdate } from './record-service';
+export type { RecordService, NewRecord } from './record-service';
 export type { WorkflowService, GenerationData } from './workflow-service';
 export type { EvalJobService } from './eval-job-service';
 export type {

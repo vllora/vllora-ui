@@ -10,7 +10,6 @@ import { evalJobService } from './service-registry';
 import {
   createEvaluation,
   getEvaluationResult,
-  flattenEvaluationResults,
 } from './finetune-api';
 import { analyzeEvalResults } from '@/lib/distri-dataset-tools/analysis/analyze-evaluation';
 import { datasetService, recordService, workflowService } from './service-registry';
@@ -418,21 +417,7 @@ class EvalPollingManager {
         Object.keys(recordTopics).length > 0 ? recordTopics : undefined
       );
 
-      // Persist per-row scores to individual records
-      if (result.results && result.results.length > 0) {
-        const flatResults = flattenEvaluationResults(result.results);
-        for (const row of flatResults) {
-          if (typeof row.score === 'number' && row.dataset_row_id) {
-            await recordService.updateEvalScores(
-              job.workflowId,
-              row.dataset_row_id,
-              {
-                evalScore: row.score,
-              }
-            );
-          }
-        }
-      }
+      // Per-record score persistence is handled by the gateway, not the FE.
 
       // Save results to dataset
       await datasetService.updateEvalStats(job.workflowId, evalStats);

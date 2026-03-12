@@ -93,6 +93,7 @@ export const apiEvalJobAdapter: EvalJobService = {
   async update(id: string, updates: Partial<EvalJob>): Promise<EvalJob | null> {
     // Map FE fields to BE update payload
     const payload: Record<string, unknown> = {};
+    if (updates.evaluationRunId !== undefined) payload.cloud_run_id = updates.evaluationRunId || null;
     if (updates.status !== undefined) payload.status = updates.status;
     if (updates.error !== undefined) payload.error = updates.error ?? null;
     if (updates.completedAt !== undefined) {

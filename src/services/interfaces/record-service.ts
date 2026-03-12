@@ -16,11 +16,6 @@ export interface NewRecord {
   readonly evaluation?: DatasetEvaluation;
 }
 
-export interface ScoreUpdate {
-  readonly evalScore?: number;
-  readonly finetuneScore?: number;
-}
-
 export interface RecordService {
   // Queries
   getByDatasetId(workflowId: string, recordIds?: string[]): Promise<DatasetRecord[]>;
@@ -37,7 +32,6 @@ export interface RecordService {
   updateTopic(workflowId: string, recordId: string, topic: string): Promise<void>;
   updateTopicsBatch(workflowId: string, updates: Map<string, string>): Promise<number>;
   updateData(workflowId: string, recordId: string, data: unknown): Promise<void>;
-  updateEvalScores(workflowId: string, recordId: string, update: ScoreUpdate): Promise<void>;
   updateEvaluation(workflowId: string, recordId: string, score: number | undefined): Promise<void>;
 
   // Deletion & cleanup

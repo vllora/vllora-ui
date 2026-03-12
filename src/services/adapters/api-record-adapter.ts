@@ -9,7 +9,7 @@
 
 import { api, handleApiResponse } from '@/lib/api-client';
 import { extractDataInfoFromSpan } from '@/utils/modelUtils';
-import type { RecordService, NewRecord, ScoreUpdate } from '@/services/interfaces/record-service';
+import type { RecordService, NewRecord } from '@/services/interfaces/record-service';
 import type { DatasetRecord, Dataset } from '@/types/dataset-types';
 import type { Span } from '@/types/common-type';
 
@@ -189,17 +189,6 @@ export const apiRecordAdapter: RecordService = {
       `${basePath(workflowId)}/${recordId}/scores`,
       {
         dry_run_score: score ?? null,
-      },
-    );
-    await handleApiResponse<{ updated: boolean }>(response);
-  },
-
-  async updateEvalScores(workflowId: string, recordId: string, update: ScoreUpdate): Promise<void> {
-    const response = await api.patch(
-      `${basePath(workflowId)}/${recordId}/scores`,
-      {
-        dry_run_score: update.evalScore,
-        finetune_score: update.finetuneScore,
       },
     );
     await handleApiResponse<{ updated: boolean }>(response);

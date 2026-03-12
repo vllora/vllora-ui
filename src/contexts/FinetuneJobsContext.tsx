@@ -24,7 +24,7 @@ import {
   getFinetuneJobStatus,
   getFinetuneEvaluations,
 } from "@/services/finetune-api";
-import { workflowService, recordService } from "@/services/service-registry";
+import { workflowService } from "@/services/service-registry";
 import { ProjectEventsConsumer } from "@/contexts/project-events";
 import {
   CustomEvent,
@@ -48,48 +48,6 @@ const EVAL_POLL_INTERVAL = 20000;
 // ============================================================================
 // Helpers
 // ============================================================================
-
-/**
- * Persist finetune evaluation scores to individual records.
- * Computes average score across all epochs for each row, then updates via recordService.
- */
-async function persistFinetuneScores(
-  workflowId: string,
-  results: Array<{
-    row_index: number;
-    row: { id: string; [key: string]: unknown };
-    epochs: Record<number, Array<{ score?: number; [key: string]: unknown }>>;
-  }>,
-  _previewOnly: boolean,
-  _finetuneModel?: string,
-): Promise<number> {
-  let persisted = 0;
-
-  for (const row of results) {
-    const recordId = row.row?.id;
-    if (!recordId) continue;
-
-    const allScores: number[] = [];
-    for (const epochEntries of Object.values(row.epochs)) {
-      for (const entry of epochEntries) {
-        if (typeof entry.score === 'number') {
-          allScores.push(entry.score);
-        }
-      }
-    }
-
-    if (allScores.length === 0) continue;
-
-    const avgScore = allScores.reduce((sum, s) => sum + s, 0) / allScores.length;
-
-    await recordService.updateEvalScores(workflowId, recordId, {
-      finetuneScore: avgScore,
-    });
-    persisted++;
-  }
-
-  return persisted;
-}
 
 // ============================================================================
 // Hook
@@ -199,35 +157,7 @@ function useFinetuneJobsLogic() {
         console.warn('Failed to cache job evaluations:', cacheErr);
       });
 
-      // Persist finetune scores to records
-      if (results.results.length > 0) {
-        const isComplete = job.status !== 'pending' && job.status !== 'running';
-        const modelName = job.base_model;
-        const workflowId = job.workflow_id!;
-        try {
-          const previewOnly = !isComplete;
-          if (isComplete) {
-            const alreadyPersisted = await workflowService.isJobScoresPersisted(jobId);
-            if (alreadyPersisted) {
-              // Already persisted — skip
-            } else {
-              const persisted = await persistFinetuneScores(workflowId, results.results, previewOnly, modelName);
-              if (persisted > 0) {
-                await workflowService.markJobScoresPersisted(jobId);
-                emitter.emit('vllora_dataset_refresh' as any, { workflowId });
-              }
-            }
-          } else {
-            // Live preview: update scores without incrementing count (overwritten each poll)
-            const persisted = await persistFinetuneScores(workflowId, results.results, previewOnly, modelName);
-            if (persisted > 0) {
-              emitter.emit('vllora_dataset_refresh' as any, { workflowId });
-            }
-          }
-        } catch (scoreErr: unknown) {
-          console.warn('[FinetuneJobs] Failed to persist finetune scores:', scoreErr);
-        }
-      }
+      // Per-record score persistence is handled by the gateway, not the FE.
     } catch (err) {
       setJobEvaluations((prev) => ({
         ...prev,
