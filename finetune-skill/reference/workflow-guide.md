@@ -60,19 +60,18 @@ When the user provides documents:
 
 The `knowledge_parts.json` output maps to your topic hierarchy:
 
-- **Text parts** grouped by `heading_path` → natural topic clusters
+- **Text parts** grouped by `extraction_path` → natural topic clusters
 - **Table parts** may become their own topics (e.g., a comparison table → a "comparison" subtopic)
 - **Image parts** provide context — figures illustrate concepts that become training scenarios
-- Use `heading_path` values as `sourceChunkRefs` in topics.json (e.g., `"document-name:3.2 Attention"`)
+- Use `extraction_path` values as `sourceChunkRefs` in topics.json (e.g., `"document-name:3.2 Attention"`)
 - Group related parts under parent topics for 2-3 levels of hierarchy
 
-Example mapping:
+Example mapping (after JSON-decoding `extraction_path` strings):
 ```
-knowledge_parts.json                    →  topics.json
-  heading_path: ["3 Model Architecture"]  →  topic: architecture (root)
-  heading_path: ["3 Model Architecture",
-    "3.2 Attention"]                      →  topic: architecture/attention (leaf)
-  type: "table", heading: "3.4..."        →  topic: architecture/comparison (leaf)
+knowledge_parts.json                                                    →  topics.json
+  extraction_path: '["3 Model Architecture"]'                             →  topic: architecture (root)
+  extraction_path: '["3 Model Architecture", "3.2 Attention"]'            →  topic: architecture/attention (leaf)
+  type: "table", title: "3.4..."                                          →  topic: architecture/comparison (leaf)
 ```
 
 ### Organizing Extracted Knowledge

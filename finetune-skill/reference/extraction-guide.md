@@ -2,7 +2,7 @@
 
 Extract structured knowledge parts from PDFs using Docling Serve — a local Docker container that handles OCR, tables, images, and complex layouts.
 
-**Your deliverable is `knowledge/knowledge_parts.json`** — a typed, linked parts file matching the schema in Section 3. Every text passage, table, and image becomes a part with headings, cross-references, and provenance. Normalized chunks or raw Docling output are intermediate steps, NOT the final output.
+**Your deliverable is `knowledge/knowledge_parts.json`** — a typed, linked parts file matching the schema in Section 3. Every text passage, table, and image becomes a `source_part` with a title, extraction path, and provenance metadata. Normalized chunks or raw Docling output are intermediate steps, NOT the final output.
 
 ---
 
@@ -307,100 +307,110 @@ def resolve(pointer, doc):
 
 ### What is `knowledge_parts.json` and why does it matter?
 
-`knowledge_parts.json` is the structured representation of a document that the rest of the pipeline depends on. It transforms a raw Docling response (chunks + document tree) into a flat list of **typed, linked parts** — each text passage, table, and image becomes a discrete part with a heading, page location, and cross-references to related parts.
+`knowledge_parts.json` is the structured representation of a document that the rest of the pipeline depends on. It transforms a raw Docling response (chunks + document tree) into a flat list of **typed, linked source_parts** — each text passage, table, and image becomes a discrete part with a title, extraction path, and provenance metadata.
 
 **Why not just use chunks?** Chunks are text-only segments — they don't carry table cell structure, image data, or caption links. They also have unreliable headings (Docling promotes noise like chess moves to section_header). `knowledge_parts.json` fixes all of this:
 
-- **Typed parts** — text, table, and image parts each carry type-specific data (table headers/rows, image data_uri)
-- **Clean headings** — domain-specific heading filters produce a reliable `heading_path` hierarchy
-- **Cross-references** — captions link to their tables/pictures, co-occurring parts link via `related`
-- **Image data** — every image part has a `data_uri` (from pictures[] or page-level fallback)
+- **Typed parts** — text, table, and image parts each carry type-specific data in `content_metadata` (table headers/rows, image dimensions)
+- **Clean titles** — domain-specific heading filters produce a reliable `extraction_path` hierarchy
+- **Cross-references** — captions link to their tables/pictures via `content_metadata`, co-occurring parts link via `extraction_metadata.related`
+- **Unified content** — every part's primary data lives in `content` (text, markdown table, or base64 data URI)
 
-**Who consumes it?** Topic generation reads `heading_path` to build the topic hierarchy. Training data generation reads part text and headings to create prompts. The UI displays parts grouped by heading. If this file is missing or malformed, all downstream steps fail.
+**Who consumes it?** Topic generation reads `extraction_path` to build the topic hierarchy. Training data generation reads part content and titles to create prompts. The UI displays parts grouped by `extraction_path`. If this file is missing or malformed, all downstream steps fail.
 
 This is the output you produce. Every document extraction must result in a `knowledge_parts.json` file matching this schema.
 
 ```json
 {
-  "document": {
-    "title": "Attention Is All You Need",
-    "source_file": "1706.03762v7.pdf",
-    "total_pages": 15
-  },
-  "extraction": {
-    "method": "docling_hybrid",
-    "total_chunks": 61,
-    "extracted_at": "2026-03-10T15:30:00Z"
+  "source": {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "reference_id": "doc-001",
+    "workflow_id": "wf_abc123",
+    "name": "1706.03762v7.pdf",
+    "description": "Attention Is All You Need — foundational transformer paper",
+    "metadata": {
+      "total_pages": 15,
+      "extraction_method": "docling_hybrid",
+      "total_chunks": 61,
+      "extracted_at": "2026-03-10T15:30:00Z"
+    }
   },
   "parts": [
     {
       "id": "p-001",
+      "source_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       "type": "text",
-      "text": "The dominant sequence transduction models are based on...",
-      "heading": "Abstract",
-      "heading_path": ["Abstract"],
-      "pages": [1],
-      "source_chunks": [2],
-      "refs": {
+      "content": "The dominant sequence transduction models are based on...",
+      "title": "Abstract",
+      "extraction_path": "[\"Abstract\"]",
+      "extraction_metadata": {
+        "pages": [1],
+        "source_chunks": [2],
+        "doc_item": "#/texts/13",
         "related": ["p-002", "p-003"]
-      },
-      "doc_item": "#/texts/13"
+      }
     },
     {
       "id": "p-010",
+      "source_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       "type": "table",
-      "text": "| Layer Type | Complexity per Layer | Sequential Ops | Max Path |\n|---|---|---|---|\n| Self-Attention | O(n²·d) | O(1) | O(1) |\n...",
-      "heading": "3.4 Embeddings and Softmax",
-      "heading_path": ["3 Model Architecture", "3.4 Embeddings and Softmax"],
-      "pages": [6],
-      "source_chunks": [20, 21],
-      "table": {
+      "content": "| Layer Type | Complexity per Layer | Sequential Ops | Max Path |\n|---|---|---|---|\n| Self-Attention | O(n²·d) | O(1) | O(1) |\n...",
+      "title": "3.4 Embeddings and Softmax",
+      "extraction_path": "[\"3 Model Architecture\", \"3.4 Embeddings and Softmax\"]",
+      "content_metadata": {
         "num_rows": 5,
         "num_cols": 4,
         "headers": ["Layer Type", "Complexity per Layer", "Sequential Operations", "Maximum Path Length"],
         "rows": [
           ["Self-Attention", "O(n²·d)", "O(1)", "O(1)"],
           ["Recurrent", "O(n·d²)", "O(n)", "O(n)"]
-        ]
+        ],
+        "caption": "Table 1: Maximum path lengths, per-layer complexity and minimum number of...",
+        "caption_part_id": "p-011"
       },
-      "refs": {
-        "caption": "p-011",
+      "extraction_metadata": {
+        "pages": [6],
+        "source_chunks": [20, 21],
+        "doc_item": "#/tables/0",
         "related": ["p-009"]
-      },
-      "doc_item": "#/tables/0"
+      }
     },
     {
       "id": "p-011",
+      "source_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       "type": "text",
-      "text": "Table 1: Maximum path lengths, per-layer complexity and minimum number of...",
-      "heading": "3.4 Embeddings and Softmax",
-      "heading_path": ["3 Model Architecture", "3.4 Embeddings and Softmax"],
-      "pages": [6],
-      "source_chunks": [20],
-      "refs": {
-        "caption_for": "p-010"
+      "content": "Table 1: Maximum path lengths, per-layer complexity and minimum number of...",
+      "title": "3.4 Embeddings and Softmax",
+      "extraction_path": "[\"3 Model Architecture\", \"3.4 Embeddings and Softmax\"]",
+      "content_metadata": {
+        "caption_for_part_id": "p-010"
       },
-      "doc_item": "#/texts/115"
+      "extraction_metadata": {
+        "pages": [6],
+        "source_chunks": [20],
+        "doc_item": "#/texts/115"
+      }
     },
     {
       "id": "p-020",
+      "source_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       "type": "image",
-      "text": "",
-      "heading": "3.2 Attention",
-      "heading_path": ["3 Model Architecture", "3.2 Attention"],
-      "pages": [3],
-      "source_chunks": [8],
-      "image": {
+      "content": "data:image/png;base64,iVBORw0KGgo...",
+      "title": "3.2 Attention",
+      "extraction_path": "[\"3 Model Architecture\", \"3.2 Attention\"]",
+      "content_metadata": {
         "mimetype": "image/png",
         "width": 400,
         "height": 300,
-        "data_uri": "data:image/png;base64,iVBORw0KGgo..."
+        "caption": "Figure 2: Scaled Dot-Product Attention and Multi-Head Attention",
+        "caption_part_id": "p-021"
       },
-      "refs": {
-        "caption": "p-021",
+      "extraction_metadata": {
+        "pages": [3],
+        "source_chunks": [8],
+        "doc_item": "#/pictures/0",
         "related": ["p-007", "p-008"]
-      },
-      "doc_item": "#/pictures/0"
+      }
     }
   ]
 }
@@ -408,27 +418,28 @@ This is the output you produce. Every document extraction must result in a `know
 
 ### Schema rules
 
-1. **Every part has**: `id`, `type` (text|table|image), `text`, `heading`, `heading_path`, `pages`, `source_chunks`, `refs`, `doc_item`
-2. **`text` is always a string** — for tables it's the markdown rendering, for images it's empty string `""`. This keeps backward compatibility with text-only consumers.
-3. **`table`** field only present on type=table: `headers` (string array), `rows` (2D string array), `num_rows`, `num_cols`
-4. **`image`** field only present on type=image: `mimetype`, `width`, `height`, `data_uri` (base64 data URI). Always populated — Docling is called with `include_images=true` + `image_export_mode=embedded`.
-5. **`refs`** links parts together:
-   - `caption` → part ID of the caption text (on table/image parts)
-   - `caption_for` → part ID of what this text captions (on caption text parts)
-   - `related` → part IDs of co-occurring items (from the same Docling chunk)
-6. **`heading_path`** is the full heading hierarchy from root to leaf. `heading` is the leaf (last element).
-7. **Flat list** — no sections grouping. Parts are ordered by document position. Consumers group by `heading_path` if needed.
-8. **`doc_item`** — JSON pointer back to the DoclingDocument item for traceability (e.g., `#/texts/13`, `#/tables/0`, `#/pictures/0`)
+1. **Top-level**: `source` (document metadata) and `parts[]` (flat list of source_parts). Note: API response uses `part` (singular) as the field name on `KnowledgeSource`.
+2. **Every part has** (required): `id`, `source_id`, `type` (text|table|image), `content`
+3. **Every part may have** (optional): `reference_id`, `title`, `extraction_path`, `content_metadata`, `extraction_metadata`
+4. **`content` is always a string** — for text parts it's the text content, for tables it's the markdown rendering, for images it's the base64 data URI. This keeps a single unified field for the primary data.
+5. **`content_metadata`** carries type-specific structure (stored as JSON string in DB, parsed as object in API):
+   - **table**: `num_rows`, `num_cols`, `headers` (string array), `rows` (2D string array), `caption`, `caption_part_id`
+   - **image**: `mimetype`, `width`, `height`, `caption`, `caption_part_id`
+   - **caption text**: `caption_for_part_id` (points back to the table/image this text captions)
+6. **`extraction_metadata`** carries provenance from the extraction process (stored as JSON string in DB, parsed as object in API): `pages` (page numbers), `source_chunks` (Docling chunk indices), `doc_item` (JSON pointer like `#/texts/13`), `related` (part IDs of co-occurring items from the same Docling chunk)
+7. **`extraction_path`** is a **string** (TEXT column in DB) containing a JSON-encoded array of the heading hierarchy from root to leaf — e.g., `'["3 Model Architecture", "3.2 Attention"]'`. `title` is the leaf (last element of the decoded array).
+8. **Flat list** — no sections grouping. Parts are ordered by document position. Consumers parse `extraction_path` and group if needed.
+9. **`source`** maps to the `knowledge_sources` table. Supports optional `reference_id` for external system mapping (unique per workflow). The `metadata` field holds extraction-level details (total_pages, extraction_method, total_chunks, extracted_at).
 
 The formal JSON Schema is at `reference/knowledge-parts-schema.json` — use it to validate your output.
 
-**This schema is mandatory.** Do not invent alternative formats (e.g., normalized chunk lists, cleaned chunk JSON). Downstream consumers — topic generation, training data creation, and the UI — all expect `knowledge_parts.json` with typed parts, cross-references, and image data. If you skip this step, the entire pipeline breaks.
+**This schema is mandatory.** Do not invent alternative formats (e.g., normalized chunk lists, cleaned chunk JSON). Downstream consumers — topic generation, training data creation, and the UI — all expect `knowledge_parts.json` with typed source_parts. If you skip this step, the entire pipeline breaks.
 
 ---
 
 ## Section 4: How to Create Parts
 
-**You must produce `knowledge/knowledge_parts.json` matching the Section 3 schema.** This is not optional. Normalized chunks, cleaned chunk lists, or any other intermediate format are NOT the deliverable — they are steps along the way. The final output must be a flat `parts[]` array where every part has `id`, `type` (text|table|image), `heading_path`, `refs`, and `doc_item`. Image parts must have `data_uri` (use page fallback if needed). Caption links must be bidirectional.
+**You must produce `knowledge/knowledge_parts.json` matching the Section 3 schema.** This is not optional. Normalized chunks, cleaned chunk lists, or any other intermediate format are NOT the deliverable — they are steps along the way. The final output must have a `source` object and a flat `parts[]` array where every part has `id`, `source_id`, `type` (text|table|image), `content`, `title`, and `extraction_path`. Image parts must have the base64 data URI as `content` (use page fallback if needed). Caption links must be bidirectional via `content_metadata`.
 
 Write your own extraction script tailored to the document. There is no template — each document is different and may require domain-specific filtering or restructuring. Here's the general approach:
 
@@ -461,7 +472,7 @@ def pointer_type(pointer):
 
 Process chunks by `chunk_index` to maintain reading order. For each chunk:
 
-1. **Track heading context** from `chunk.headings` — these give you `heading` and `heading_path`
+1. **Track heading context** from `chunk.headings` — these give you `title` (leaf heading) and `extraction_path` (JSON-encode the headings array as a string)
 2. **Iterate `doc_items`** — each pointer references a text or table in the document
 3. **Determine part type** by the pointer prefix:
    - `#/tables/N` → type `table`
@@ -476,54 +487,56 @@ Process chunks by `chunk_index` to maintain reading order. For each chunk:
 ### Step 4: Create parts by type
 
 **For text items** (`#/texts/N`):
-- Use `item.text` as the part's `text`
+- Use `item.text` as the part's `content`
 - Skip items with `label` = `page_header` or `page_footer` (noise)
-- Items with `label` = `caption` should still become parts — they'll be linked via `refs`
-- Items with `label` = `section_header` can be skipped OR included depending on whether the heading adds value beyond what `heading_path` provides
+- Items with `label` = `caption` should still become parts — they'll be linked via `content_metadata.caption_for_part_id`
+- Items with `label` = `section_header` can be skipped OR included depending on whether the heading adds value beyond what `extraction_path` provides
 
 **For table items** (`#/tables/N`):
-- Extract `data.table_cells` into `headers` and `rows`:
+- Extract `data.table_cells` into `headers` and `rows` in `content_metadata`:
   - Cells with `column_header: true` → headers array (use `start_col_offset_idx` for ordering)
   - Remaining cells → rows (use `start_row_offset_idx` and `start_col_offset_idx`)
   - Handle `row_span`/`col_span` for merged cells
-- Render a markdown table for the `text` field
-- Resolve `captions` pointers to find the caption text
+- Render a markdown table for the `content` field
+- Resolve `captions` pointers to find the caption text → store in `content_metadata.caption` and `content_metadata.caption_part_id`
 
 **For picture items** (`#/pictures/N`) — discovered via caption `parent.$ref`, not from chunk `doc_items`:
 - When processing a caption text item whose `parent.$ref` points to `#/pictures/N`, create both the caption text part AND the image part
-- **Primary**: use `item.image` if present — this is the individual figure cropped by layout analysis (typically ~300-500px). Extract `mimetype`, `size.width`, `size.height`, `uri` → `data_uri`.
-- **Fallback**: if `item.image` is `null` (common on CPU — all pictures may be null), use the page-level render from `doc["pages"][str(page_no)]["image"]` instead. **Warning**: page images are full-page renders (~964x1332px), not cropped figures. Add `"source": "page"` to the image field so consumers know the difference.
+- **Primary**: use `item.image` if present — this is the individual figure cropped by layout analysis (typically ~300-500px). Extract `mimetype`, `size.width`, `size.height` into `content_metadata`. Use `uri` as the part's `content`.
+- **Fallback**: if `item.image` is `null` (common on CPU — all pictures may be null), use the page-level render from `doc["pages"][str(page_no)]["image"]` instead. **Warning**: page images are full-page renders (~964x1332px), not cropped figures.
 - Page images from `pages{}` are **always available** when `convert_include_images=true`
-- Set `text` to `""` (empty string)
-- Link the image part to its caption part immediately (bidirectional `caption`/`caption_for` refs)
+- Set `content` to the base64 data URI (e.g., `"data:image/png;base64,..."`)
+- Link the image part to its caption part immediately (bidirectional `content_metadata.caption_part_id` / `content_metadata.caption_for_part_id`)
 
 ### Step 5: Build cross-references
 
 After creating all parts, link them:
 
 **Caption links**: For each table/picture part that has captions:
-1. Find the caption text part (by matching `doc_item` to the resolved caption pointer)
-2. Set `table_or_picture_part.refs.caption = caption_part.id`
-3. Set `caption_part.refs.caption_for = table_or_picture_part.id`
+1. Find the caption text part (by matching `extraction_metadata.doc_item` to the resolved caption pointer)
+2. Set `table_or_picture_part.content_metadata.caption_part_id = caption_part.id`
+3. Set `caption_part.content_metadata.caption_for_part_id = table_or_picture_part.id`
 
 **Related links**: Parts whose doc_items appeared in the same chunk are related:
 1. Group parts by the chunks they appeared in
-2. For each group, add all other part IDs to each part's `refs.related`
+2. For each group, add all other part IDs to each part's `extraction_metadata.related`
 
 ### Step 6: Assign IDs and output
 
 - Assign sequential IDs: `p-001`, `p-002`, etc.
-- Sort parts by first appearance (first `source_chunks` value)
-- Wrap in the `knowledge_parts.json` envelope with `document` and `extraction` metadata
+- Set `source_id` on every part to the `source.id` value
+- JSON-encode each part's `extraction_path` as a string (e.g., `json.dumps(["Ch 1", "1.2 Intro"])`)
+- Sort parts by first appearance (first `extraction_metadata.source_chunks` value)
+- Wrap in the `knowledge_parts.json` envelope with the `source` object (id, workflow_id, name, description, metadata)
 - Write to `knowledge/knowledge_parts.json`
 
 ### Step 7: Validate Output
 
 Before finalizing `knowledge_parts.json`, run these checks:
 
-1. **Sample 10 parts and verify headings make sense** — headings should be real section titles, not chess moves, page numbers, or noise. If headings look wrong, fix the extraction logic (add domain-specific filters, rebuild heading hierarchy from the document structure).
-2. **Check image parts have non-null `data_uri`** — every type=image part must have image data. If any are null, use the page-level fallback from `pages{}`.
-3. **Verify caption links are bidirectional** — if part A has `refs.caption = "p-011"`, then p-011 must have `refs.caption_for = A's id`. Missing links break downstream consumers.
+1. **Sample 10 parts and verify titles make sense** — titles should be real section titles, not chess moves, page numbers, or noise. If titles look wrong, fix the extraction logic (add domain-specific filters, rebuild heading hierarchy from the document structure).
+2. **Check image parts have non-empty `content`** — every type=image part must have a base64 data URI in `content`. If any are empty, use the page-level fallback from `pages{}`.
+3. **Verify caption links are bidirectional** — if part A has `content_metadata.caption_part_id = "p-011"`, then p-011 must have `content_metadata.caption_for_part_id = A's id`. Missing links break downstream consumers.
 4. **Count parts by type** — does the distribution make sense for this document? A 200-page textbook with 0 image parts is suspicious. A chess book with 50 text parts and 0 images missed all the board diagrams.
 5. **Spot-check text content** — read a few text parts. Are they meaningful content or garbled OCR noise?
 

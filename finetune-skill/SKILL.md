@@ -95,7 +95,7 @@ Ask the user what behaviors the model should learn. Produce two things:
 
 ### Step 2: Extract Documents
 
-Read the user's documents (PDFs, markdown, text). Extract typed, linked knowledge parts — text passages, tables (with cell structure), and images (with base64 data) — into `knowledge_parts.json`.
+Read the user's documents (PDFs, markdown, text). Extract typed, linked source_parts — text passages, tables (with cell structure), and images (with base64 data) — into `knowledge_parts.json`.
 
 **Primary method — Docling Serve** (best quality, handles tables/images/complex layouts):
 
@@ -119,7 +119,7 @@ Poll `/v1/status/poll/$TASK_ID` until success, then fetch `/v1/result/$TASK_ID` 
 
 3. **Read the document before writing any code.** Read chunks 0-9 to understand the document — title, structure, content type, heading patterns. Then read a few chunks from the middle and end. This context is critical for writing a good extraction script.
 
-4. **Write a script** to create `knowledge/knowledge_parts.json` — this is the required deliverable. The script must produce typed parts (text, table, image) with headings, cross-references, and image data matching the schema in `reference/extraction-guide.md` Section 3.
+4. **Write a script** to create `knowledge/knowledge_parts.json` — this is the required deliverable. The script must produce typed source_parts (text, table, image) with titles, extraction paths, and provenance metadata matching the schema in `reference/extraction-guide.md` Section 3.
 
 See `reference/extraction-guide.md` for the full response structure, schema, and step-by-step guidance.
 

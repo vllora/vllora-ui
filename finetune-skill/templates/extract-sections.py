@@ -1,6 +1,7 @@
 import argparse
 import json
 import re
+import uuid
 from pathlib import Path
 from typing import Callable
 
@@ -39,10 +40,39 @@ def split_markdown_sections(text: str, heading_pattern: str = r"(?m)^##\s+(.+?)\
     return sections
 
 
-def build_document(document_title: str | None, sections: list[dict[str, str]]) -> dict:
+def build_document(
+    document_title: str | None,
+    sections: list[dict[str, str]],
+    source_file: str | None = None,
+    workflow_id: str | None = None,
+) -> dict:
+    source_id = str(uuid.uuid4())
+    parts = []
+
+    for idx, section in enumerate(sections, start=1):
+        part_id = f"p-{idx:03d}"
+        title = section["title"]
+        extraction_path = json.dumps([title] if title else ["Untitled"])
+        parts.append({
+            "id": part_id,
+            "source_id": source_id,
+            "type": "text",
+            "content": section["content"],
+            "title": title or "Untitled",
+            "extraction_path": extraction_path,
+        })
+
     return {
-        "document_title": document_title or "Untitled Document",
-        "sections": sections,
+        "source": {
+            "id": source_id,
+            "workflow_id": workflow_id or "",
+            "name": source_file or "unknown",
+            "description": document_title or "Untitled Document",
+            "metadata": {
+                "extraction_method": "pdftotext",
+            },
+        },
+        "parts": parts,
     }
 
 
@@ -54,7 +84,7 @@ def extract_heading_sections(
     text = clean_text(raw_text)
     parts = split_markdown_sections(text, heading_pattern=heading_pattern)
 
-    title = None
+    doc_title = None
     sections: list[dict[str, str]] = []
     skipped = skip_headings or set()
 
@@ -65,11 +95,11 @@ def extract_heading_sections(
         if heading is None:
             continue
 
-        if title is None:
-            title = heading
+        if doc_title is None:
+            doc_title = heading
             continue
 
-        if heading == title or heading in skipped:
+        if heading == doc_title or heading in skipped:
             continue
 
         if not content:
@@ -77,12 +107,12 @@ def extract_heading_sections(
 
         sections.append(
             {
-                "section_heading": heading,
-                "section_text": f"## {heading}\n\n{content}".strip(),
+                "title": heading,
+                "content": f"## {heading}\n\n{content}".strip(),
             }
         )
 
-    return build_document(title, sections)
+    return build_document(doc_title, sections)
 
 
 def extract_with_strategy(raw_text: str, extractor: SectionExtractor) -> dict:
@@ -95,15 +125,24 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Extract generic heading-based sections from markdown.")
     parser.add_argument("input", help="Input markdown file")
     parser.add_argument("output", nargs="?", default="sections.json", help="Output JSON file")
+    parser.add_argument("--source-file", help="Original source filename (e.g., 'document.pdf')")
+    parser.add_argument("--workflow-id", help="Workflow ID to set on the source")
     args = parser.parse_args()
 
     input_path = Path(args.input)
     output_path = Path(args.output)
 
     data = extract_heading_sections(input_path.read_text(encoding="utf-8"))
+
+    # Override source metadata if provided via CLI
+    if args.source_file:
+        data["source"]["name"] = args.source_file
+    if args.workflow_id:
+        data["source"]["workflow_id"] = args.workflow_id
+
     output_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
-    print(f"Wrote {len(data['sections'])} sections to {output_path}")
+    print(f"Wrote {len(data['parts'])} parts to {output_path}")
 
 
 if __name__ == "__main__":
