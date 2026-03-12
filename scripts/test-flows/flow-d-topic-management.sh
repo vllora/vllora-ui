@@ -5,17 +5,18 @@ source "$(dirname "$0")/helpers.sh"
 
 echo "═══ Flow D: Topic Management ═══"
 
-WF_ID=$(create_workflow "flow-d-topics" "topic test" | jq -r '.id')
+WF_ID=$(create_workflow "flow-d-topics-$(uuid)" "topic test" | jq -r '.id')
 
 # Setup: add records with topics
-post "$BASE/workflows/$WF_ID/records" '{
-  "records":[
-    {"id":"r1","data":{"input":{"messages":[]},"output":{"messages":[]}},"topic":"Animals/Dogs"},
-    {"id":"r2","data":{"input":{"messages":[]},"output":{"messages":[]}},"topic":"Animals/Dogs"},
-    {"id":"r3","data":{"input":{"messages":[]},"output":{"messages":[]}},"topic":"Animals/Cats"},
-    {"id":"r4","data":{"input":{"messages":[]},"output":{"messages":[]}},"topic":"Plants"}
+R1=$(uuid) R2=$(uuid) R3=$(uuid) R4=$(uuid)
+post "$BASE/workflows/$WF_ID/records" "{
+  \"records\":[
+    {\"id\":\"$R1\",\"data\":{\"input\":{\"messages\":[]},\"output\":{\"messages\":[]}},\"topic\":\"Animals/Dogs\"},
+    {\"id\":\"$R2\",\"data\":{\"input\":{\"messages\":[]},\"output\":{\"messages\":[]}},\"topic\":\"Animals/Dogs\"},
+    {\"id\":\"$R3\",\"data\":{\"input\":{\"messages\":[]},\"output\":{\"messages\":[]}},\"topic\":\"Animals/Cats\"},
+    {\"id\":\"$R4\",\"data\":{\"input\":{\"messages\":[]},\"output\":{\"messages\":[]}},\"topic\":\"Plants\"}
   ]
-}' > /dev/null
+}" > /dev/null
 
 # Rename topic
 echo ""
@@ -48,12 +49,13 @@ assert_eq "records still exist" "$(get "$BASE/workflows/$WF_ID/records" | jq '.r
 # Create + delete topic tree
 echo ""
 echo "Topic tree CRUD"
-post "$BASE/workflows/$WF_ID/topics" '{
-  "topics":[
-    {"id":"t1","name":"Root","parent_id":null,"selected":true,"source_chunk_refs":[]},
-    {"id":"t2","name":"Child","parent_id":"t1","selected":true,"source_chunk_refs":["ks1:c1"]}
+T1=$(uuid) T2=$(uuid)
+post "$BASE/workflows/$WF_ID/topics" "{
+  \"topics\":[
+    {\"id\":\"$T1\",\"name\":\"Root\",\"parent_id\":null,\"selected\":true,\"source_chunk_refs\":[]},
+    {\"id\":\"$T2\",\"name\":\"Child\",\"parent_id\":\"$T1\",\"selected\":true,\"source_chunk_refs\":[\"ks1:c1\"]}
   ]
-}' > /dev/null
+}" > /dev/null
 del "$BASE/workflows/$WF_ID/topics" > /dev/null
 echo "  ✓ topic tree created and deleted"
 

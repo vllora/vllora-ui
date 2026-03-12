@@ -5,6 +5,9 @@ BASE="${GATEWAY_URL:-http://localhost:9090}/finetune"
 PASS=0
 FAIL=0
 
+# Generate a UUID (macOS uuidgen or fallback)
+uuid() { uuidgen 2>/dev/null | tr '[:upper:]' '[:lower:]' || cat /proc/sys/kernel/random/uuid 2>/dev/null || echo "$(date +%s)-$RANDOM"; }
+
 post()  { curl -sf -X POST   "$1" -H 'Content-Type: application/json' -d "$2"; }
 put()   { curl -sf -X PUT    "$1" -H 'Content-Type: application/json' -d "$2"; }
 patch() { curl -sf -X PATCH  "$1" -H 'Content-Type: application/json' -d "$2"; }
