@@ -67,6 +67,7 @@ finetune-skill/
 ├── reference/                  # Deep-dive reference files (read on demand)
 │   ├── api-reference.md        # ~380 lines — all REST endpoints with curl examples
 │   ├── data-format.md          # ~100 lines — JSONL format spec
+│   ├── extraction-guide.md     # ~200 lines — Docling Serve setup, API calls, section extraction
 │   ├── grader-writing.md       # ~290 lines — grader patterns + anti-patterns
 │   ├── topic-hierarchy.md      # ~270 lines — topic design + coverage analysis
 │   ├── iteration-strategy.md   # ~710 lines — analysis, diagnosis, escalation
@@ -81,6 +82,7 @@ finetune-skill/
 ├── templates/                  # Starter files
 │   ├── sample-conversation.jsonl  # 4 example prompts (system + user only)
 │   ├── grader-template.js         # Hybrid grader template
+│   ├── extract-sections.py        # Generic markdown → sections.json extractor
 │   └── project-config.json        # Configuration reference
 │
 └── README.md                   # This file
@@ -185,6 +187,7 @@ The agent handles everything end-to-end via API calls, with no UI dependency.
 |------|-------|---------------|
 | `api-reference.md` | ~450 | All vLLora REST endpoints: cloud (datasets, eval, training) + local workflow API |
 | `data-format.md` | ~100 | JSONL format — prompts only (no assistant messages, since RFT) |
+| `extraction-guide.md` | ~200 | Docling Serve setup, convert/chunk API calls, section extraction, troubleshooting |
 | `grader-writing.md` | ~290 | 3 grader patterns, smooth scoring, reward hacking prevention |
 | `topic-hierarchy.md` | ~270 | Topic structure, source tracing, coverage analysis, per-topic scores |
 | `iteration-strategy.md` | ~710 | 9 parts: eval analysis, training, topics, variety, diagnosis, fixes, tracking, stalls, escalation |
@@ -207,6 +210,7 @@ These scripts solve the #1 testing issue (agents creating shell scripts instead 
 
 - `sample-conversation.jsonl` — 4 example prompts (system + user only, no assistant)
 - `grader-template.js` — Hybrid grader with programmatic checks + LLM-as-judge
+- `extract-sections.py` — Generic markdown section extractor (splits on `##` headings, outputs `{document_title, sections}` JSON)
 - `project-config.json` — Configuration reference
 
 Total: ~2,500 lines across 15 files. SKILL.md is ~300 lines (under the 500-line guideline).
@@ -361,7 +365,8 @@ those values in the next API call.
 1. vLLora backend running at `localhost:9090`
 2. A test PDF or document
 3. Claude Code CLI installed
-4. `poppler` installed for pdftotext (`brew install poppler` on macOS)
+4. `poppler` installed for pdftotext fallback (`brew install poppler` on macOS, `apt-get install poppler-utils` on Linux)
+5. Docker installed for Docling Serve extraction (optional but recommended — `docker run -p 5001:5001 ghcr.io/docling-project/docling-serve-cpu:latest`)
 
 ### Setup test repo
 
@@ -559,6 +564,9 @@ Covers: gateway API design (SQL schemas, endpoint specs), UI abstraction layer, 
 - [ ] Test iteration loop (agent fixes issues and re-evaluates)
 - [ ] Test training job submission (after good eval scores)
 - [ ] Test Mode A (handoff to UI via workflow API)
+- [ ] Test Docling Serve extraction (Docker required)
+- [ ] Test extract-sections.py on non-chess documents
+- [ ] Test fallback when Docling is not available
 - [ ] Test with different document types (not just chess PDF)
 - [ ] Test without any document (objective-only, no PDF)
 

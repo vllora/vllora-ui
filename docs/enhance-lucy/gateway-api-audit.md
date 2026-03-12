@@ -87,7 +87,7 @@ The UI uses service interfaces (`src/services/`). The migration plan swaps Index
 
 ---
 
-## 1. Existing Endpoints (61 total: 53 working, 8 placeholders)
+## 1. Existing Endpoints (59 total: 51 working, 8 placeholders)
 
 **Status:**
 - **Working** — fully implemented, returns real data
@@ -138,37 +138,34 @@ The UI uses service interfaces (`src/services/`). The migration plan swaps Index
 | 36 | `DELETE` | `/finetune/workflows/{id}/eval-jobs/{jobId}` | Working | Local SQLite |
 | 37 | `DELETE` | `/finetune/workflows/{id}/eval-jobs` | Working | Local SQLite |
 | 38 | `GET` | `/finetune/eval-jobs?status=X` | Working | Local SQLite |
-| | | **Record Generation (stateless)** | | |
-| 39 | `POST` | `/finetune/records/generate` | Placeholder | — |
-| 40 | `POST` | `/finetune/records/generate/status` | Placeholder | — |
 | | | **Evaluator Run** | | |
-| 41 | `POST` | `/finetune/workflows/{id}/evaluator/run` | Placeholder | — |
-| 42 | `GET` | `/finetune/workflows/{id}/evaluator/run/status` | Placeholder | — |
+| 39 | `POST` | `/finetune/workflows/{id}/evaluator/run` | Placeholder | — |
+| 40 | `GET` | `/finetune/workflows/{id}/evaluator/run/status` | Placeholder | — |
 | | | **Evaluator Config** | | |
-| 43 | `PATCH` | `/finetune/workflows/{id}/evaluator` | Working | Local SQLite (cloud sync at upload) |
-| 44 | `GET` | `/finetune/workflows/{id}/evaluator/versions` | Working | Cloud proxy |
+| 41 | `PATCH` | `/finetune/workflows/{id}/evaluator` | Working | Local SQLite (cloud sync at upload) |
+| 42 | `GET` | `/finetune/workflows/{id}/evaluator/versions` | Working | Cloud proxy |
 | | | **Training Jobs** | | |
-| 45 | `POST` | `/finetune/workflows/{id}/jobs` | Working | Cloud + Local SQLite |
-| 46 | `GET` | `/finetune/workflows/{id}/jobs` | Working | Local SQLite |
-| 47 | `GET` | `/finetune/workflows/{id}/jobs/{job_id}/status` | Working | Local SQLite (cloud fallback) |
-| 48 | `GET` | `/finetune/workflows/{id}/jobs/{job_id}/metrics` | Working | Cloud proxy |
-| 49 | `POST` | `/finetune/workflows/{id}/jobs/{job_id}/cancel` | Working | Cloud + Local SQLite |
-| 50 | `POST` | `/finetune/workflows/{id}/jobs/{job_id}/resume` | Working | Cloud + Local SQLite |
-| 51 | `GET` | `/finetune/workflows/{id}/jobs/{job_id}/weights/url` | Working | Cloud proxy |
+| 43 | `POST` | `/finetune/workflows/{id}/jobs` | Working | Cloud + Local SQLite |
+| 44 | `GET` | `/finetune/workflows/{id}/jobs` | Working | Local SQLite |
+| 45 | `GET` | `/finetune/workflows/{id}/jobs/{job_id}/status` | Working | Local SQLite (cloud fallback) |
+| 46 | `GET` | `/finetune/workflows/{id}/jobs/{job_id}/metrics` | Working | Cloud proxy |
+| 47 | `POST` | `/finetune/workflows/{id}/jobs/{job_id}/cancel` | Working | Cloud + Local SQLite |
+| 48 | `POST` | `/finetune/workflows/{id}/jobs/{job_id}/resume` | Working | Cloud + Local SQLite |
+| 49 | `GET` | `/finetune/workflows/{id}/jobs/{job_id}/weights/url` | Working | Cloud proxy |
 | | | **Dataset (cloud JSONL snapshot)** | | |
-| 52 | `POST` | `/finetune/workflows/{id}/dataset/upload` | Working | Cloud proxy |
-| 53 | `POST` | `/finetune/workflows/{id}/dataset/analytics/dry-run` | Working | Cloud proxy |
-| 54 | `GET` | `/finetune/workflows/{id}/dataset/analytics` | Working | Cloud proxy |
-| 55 | `GET` | `/finetune/workflows/{id}/dataset/finetune-evaluations` | Working | Cloud proxy |
+| 50 | `POST` | `/finetune/workflows/{id}/dataset/upload` | Working | Cloud proxy |
+| 51 | `POST` | `/finetune/workflows/{id}/dataset/analytics/dry-run` | Working | Cloud proxy |
+| 52 | `GET` | `/finetune/workflows/{id}/dataset/analytics` | Working | Cloud proxy |
+| 53 | `GET` | `/finetune/workflows/{id}/dataset/finetune-evaluations` | Working | Cloud proxy |
 | | | **Evaluations** | | |
-| 56 | `POST` | `/finetune/evaluations` | Working | Cloud proxy |
-| 57 | `GET` | `/finetune/evaluations/{run_id}` | Working | Cloud proxy |
+| 54 | `POST` | `/finetune/evaluations` | Working | Cloud proxy |
+| 55 | `GET` | `/finetune/evaluations/{run_id}` | Working | Cloud proxy |
 | | | **Deployments** | | |
-| 58 | `POST` | `/finetune/deployments` | Working | Cloud proxy |
-| 59 | `DELETE` | `/finetune/deployments/{id}` | Working | Cloud proxy |
+| 56 | `POST` | `/finetune/deployments` | Working | Cloud proxy |
+| 57 | `DELETE` | `/finetune/deployments/{id}` | Working | Cloud proxy |
 | | | **Topic Hierarchy (LLM)** | | |
-| 60 | `POST` | `/finetune/topic-hierarchy/generate` | Working | Local LLM |
-| 61 | `POST` | `/finetune/topic-hierarchy/adjust` | Working | Local LLM |
+| 58 | `POST` | `/finetune/topic-hierarchy/generate` | Working | Local LLM |
+| 59 | `POST` | `/finetune/topic-hierarchy/adjust` | Working | Local LLM |
 
 ---
 
@@ -190,7 +187,7 @@ The UI uses service interfaces (`src/services/`). The migration plan swaps Index
 
 - `/workflows/{id}/records/*` — local record CRUD
 - `/workflows/{id}/dataset/*` — cloud JSONL upload + analytics
-- `/finetune/records/generate` — stateless LLM generation (returns records, does not store)
+- Record generation endpoints are planned but not yet registered in gateway routes (see [Missing Endpoints](#5-missing-endpoints))
 
 ---
 

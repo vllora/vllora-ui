@@ -28,38 +28,70 @@ Transform the objective into a concrete system prompt. The system prompt appears
 
 ---
 
-## Step 2: Gather Knowledge — In Depth
+## Step 2: Extract Documents — In Depth
+
+### Choosing an Extraction Method
+
+Pick the right tool for the job:
+
+| Situation | Method | Why |
+|-----------|--------|-----|
+| Docker available, PDF has tables/images/complex layout | **Docling Serve** (hybrid chunk API) | Best quality — typed parts with tables, images, cross-references |
+| No Docker, simple text-based PDF | **pdftotext** | Fast, no dependencies beyond poppler |
+| Document is already markdown/text | **Skip extraction** | Read the file directly, proceed to topic building |
+
+**Decision flow**: Check `curl -s http://127.0.0.1:5001/health` first. If Docling is running, use it. If not, and you have Docker, start it. If no Docker at all, fall back to pdftotext.
+
+See `knowledge/extraction-guide.md` for the complete Docling workflow — curl commands, response structure, knowledge_parts.json schema, and troubleshooting.
 
 ### Document Processing Strategy
 
 When the user provides documents:
 
-1. **Read the full document** to understand its structure and scope
-2. **Extract section headings** — these become seed topics for your hierarchy
-3. **Identify key concepts** — terms, procedures, and facts the model must know
-4. **Note examples and edge cases** — real-world scenarios from the docs become training conversations
-5. **Find gaps** — what does the document NOT cover that the objective requires?
+1. **Call Docling hybrid chunk API** — with `include_images=true` and `image_export_mode=embedded` to get complete extraction
+2. **Read the document** — before writing any code, read the first 5-10 chunks to understand the document title, content type (textbook? reference? game collection?), heading patterns, and key entities. Then sample chunks from the middle and end. Note what the real section headings are vs noise (e.g., chess moves like "31... Rxd5" are NOT headings). Note domain-specific patterns that need special handling (game notation, formulas, multi-column layouts). This understanding is critical for writing a good extraction script.
+3. **Write an extraction script** — dynamically create `knowledge_parts.json` from the response, tailored to the document. Use insights from step 2 to add domain-specific heading filters, noise removal, and the right image sourcing strategy (pictures[] vs pages{} fallback).
+4. **Review the parts** — check that tables have headers/rows, images have base64 data, captions are linked
+5. **Extract key concepts** — terms, procedures, and facts the model must know
+6. **Note examples and edge cases** — real-world scenarios from the docs become training conversations
+7. **Find gaps** — what does the document NOT cover that the objective requires?
+
+### From Parts to Topics
+
+The `knowledge_parts.json` output maps to your topic hierarchy:
+
+- **Text parts** grouped by `heading_path` → natural topic clusters
+- **Table parts** may become their own topics (e.g., a comparison table → a "comparison" subtopic)
+- **Image parts** provide context — figures illustrate concepts that become training scenarios
+- Use `heading_path` values as `sourceChunkRefs` in topics.json (e.g., `"document-name:3.2 Attention"`)
+- Group related parts under parent topics for 2-3 levels of hierarchy
+
+Example mapping:
+```
+knowledge_parts.json                    →  topics.json
+  heading_path: ["3 Model Architecture"]  →  topic: architecture (root)
+  heading_path: ["3 Model Architecture",
+    "3.2 Attention"]                      →  topic: architecture/attention (leaf)
+  type: "table", heading: "3.4..."        →  topic: architecture/comparison (leaf)
+```
 
 ### Organizing Extracted Knowledge
 
 Keep extracted knowledge organized so you can reference it while generating data:
 
 ```
-extracted-knowledge/
-├── concepts.md          # Key terms and definitions
-├── procedures.md        # Step-by-step processes
-├── faqs.md              # Common questions and answers
-├── edge-cases.md        # Unusual scenarios, exceptions
-└── section-summaries/   # Per-section summaries
-    ├── chapter-1.md
-    └── chapter-2.md
+knowledge/
+├── docling-result.json     # Raw Docling response (chunks + document)
+├── knowledge_parts.json    # Typed parts: text, table, image (agent-created)
+├── document-extraction.md  # Human-readable summary with key concepts
+└── ...                     # Additional files per document
 ```
 
-This isn't required — organize however works for your workflow. The goal is having domain knowledge accessible when you write training prompts.
+The goal is having domain knowledge accessible when you write training prompts.
 
 ### Linking Knowledge to Topics and Records
 
-As you extract knowledge, keep a mental (or written) map of which document sections relate to which topics. When you build the topic hierarchy later, add `sourceChunkRefs` to each topic node pointing back to the relevant sections (e.g., `"product-manual:ch3-refund-policy"`).
+As you extract knowledge, keep a mental (or written) map of which parts relate to which topics. When you build the topic hierarchy later, add `sourceChunkRefs` to each topic node pointing back to the relevant parts (e.g., `"document-name:3.2 Attention"`).
 
 This traceability helps during iteration — when a topic scores poorly in evaluation, you can quickly find the source material to check whether the issue is missing knowledge, incorrect facts, or insufficient detail. See `topic-hierarchy.md` for the full approach.
 

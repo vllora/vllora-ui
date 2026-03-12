@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "knowledge_parts.json",
+  "description": "Typed, linked parts extracted from a document via Docling. Every text passage, table, and image becomes a discrete part with headings, cross-references, and provenance.",
+  "type": "object",
+  "required": ["document", "extraction", "parts"],
+  "properties": {
+    "document": {
+      "type": "object",
+      "required": ["title", "source_file", "total_pages"],
+      "properties": {
+        "title": { "type": "string", "description": "Document title" },
+        "source_file": { "type": "string", "description": "Original filename (e.g., 'chess.pdf')" },
+        "total_pages": { "type": "integer", "description": "Total page count" }
+      }
+    },
+    "extraction": {
+      "type": "object",
+      "required": ["method", "total_chunks", "extracted_at"],
+      "properties": {
+        "method": { "type": "string", "enum": ["docling_hybrid", "pdftotext"] },
+        "total_chunks": { "type": "integer", "description": "Number of Docling chunks processed" },
+        "extracted_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "parts": {
+      "type": "array",
+      "description": "Flat list of parts ordered by document position",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "text", "heading", "heading_path", "pages", "source_chunks", "refs", "doc_item"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^p-\\d{3,}$",
+            "description": "Sequential ID: p-001, p-002, etc."
+          },
+          "type": {
+            "type": "string",
+            "enum": ["text", "table", "image"]
+          },
+          "text": {
+            "type": "string",
+            "description": "Text content. For tables: markdown rendering. For images: empty string."
+          },
+          "heading": {
+            "type": "string",
+            "description": "Leaf heading (last element of heading_path)"
+          },
+          "heading_path": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "description": "Full heading hierarchy from root to leaf"
+          },
+          "pages": {
+            "type": "array",
+            "items": { "type": "integer" },
+            "description": "Page numbers this part spans"
+          },
+          "source_chunks": {
+            "type": "array",
+            "items": { "type": "integer" },
+            "description": "Docling chunk indices where this part's doc_item appeared"
+          },
+          "doc_item": {
+            "type": "string",
+            "pattern": "^#/(texts|tables|pictures)/\\d+$",
+            "description": "JSON pointer back to the DoclingDocument item"
+          },
+          "refs": {
+            "type": "object",
+            "description": "Cross-references to other parts",
+            "properties": {
+              "caption": {
+                "type": "string",
+                "description": "Part ID of caption text (on table/image parts)"
+              },
+              "caption_for": {
+                "type": "string",
+                "description": "Part ID of what this text captions (on caption text parts)"
+              },
+              "related": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Part IDs of co-occurring items (from same Docling chunk)"
+              }
+            }
+          },
+          "table": {
+            "type": "object",
+            "description": "Only present when type=table",
+            "required": ["num_rows", "num_cols", "headers", "rows"],
+            "properties": {
+              "num_rows": { "type": "integer" },
+              "num_cols": { "type": "integer" },
+              "headers": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Column header texts"
+              },
+              "rows": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "description": "2D array of cell texts (excluding header row)"
+              }
+            }
+          },
+          "image": {
+            "type": "object",
+            "description": "Only present when type=image",
+            "required": ["mimetype", "width", "height", "data_uri"],
+            "properties": {
+              "mimetype": { "type": "string", "description": "e.g., image/png" },
+              "width": { "type": "number" },
+              "height": { "type": "number" },
+              "data_uri": {
+                "type": "string",
+                "pattern": "^data:image/",
+                "description": "Base64 data URI"
+              },
+              "source": {
+                "type": "string",
+                "enum": ["picture", "page"],
+                "description": "picture = cropped figure from pictures[]. page = full-page render fallback from pages{}."
+              }
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "type": { "const": "table" } } },
+            "then": { "required": ["table"] }
+          },
+          {
+            "if": { "properties": { "type": { "const": "image" } } },
+            "then": { "required": ["image"] }
+          }
+        ]
+      }
+    }
+  }
+}

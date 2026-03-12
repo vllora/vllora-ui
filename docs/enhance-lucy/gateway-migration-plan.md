@@ -1481,16 +1481,20 @@ Background task that polls cloud API for eval job status updates. Mirrors the ex
 
 ## Phase 3: Frontend API Adapters (FE)
 
+> **Status: DONE** ✅ All 6 API adapters implemented and fully swapped in `service-registry.ts`. IndexedDB adapters are no longer used at runtime.
+
 Create adapters that call the gateway API instead of IndexedDB. Each implements the existing service interface — same contract, different backend.
 
 ### File structure
 
 ```
 src/services/adapters/
+  ├── api-dataset-adapter.ts
   ├── api-record-adapter.ts
   ├── api-workflow-adapter.ts
   ├── api-eval-job-adapter.ts
-  └── api-knowledge-adapter.ts
+  ├── api-knowledge-source-adapter.ts
+  └── api-iteration-adapter.ts
 ```
 
 ### Example: api-record-adapter.ts
@@ -1531,23 +1535,16 @@ export const apiRecordAdapter: RecordService = {
 
 ### Swap strategy
 
-In `service-registry.ts`, swap one adapter at a time:
+In `service-registry.ts`, all services are now registered with API adapters directly (no feature flags needed — migration is complete):
 
 ```typescript
 import { apiRecordAdapter } from './adapters/api-record-adapter';
-import { indexedDbRecordAdapter } from './adapters/indexeddb-record-adapter';
+import { apiWorkflowAdapter } from './adapters/api-workflow-adapter';
+// ... all adapters use gateway API
 
-// Flip this flag per service as each becomes ready
-const USE_API = {
-  records: true,      // ← flip when BE endpoints ready
-  workflows: false,
-  evalJobs: false,
-  knowledge: false,
-};
-
-export const recordService = USE_API.records
-  ? apiRecordAdapter
-  : indexedDbRecordAdapter;
+export const recordService = apiRecordAdapter;
+export const workflowService = apiWorkflowAdapter;
+// etc.
 ```
 
 ### Test each adapter
@@ -1607,17 +1604,19 @@ Priority tests from `docs/enhance-lucy/e2e-tests/_registry.md`:
 
 ## Phase 5: Update Mock Server (FE)
 
+> **Status: NOT STARTED** — The mock server (`src/test/mock-server/server.ts`) currently only mocks cloud endpoints (evaluations, training jobs, analytics). It does NOT mock local CRUD endpoints (records, topics, knowledge sources, eval jobs) — those go through the real gateway in proxy mode.
+
 Add new endpoints to `pnpm mock-server` so E2E tests work without real backend.
 
 ```
-src/mock-server/
-  ├── handlers/
-  │   ├── workflow-records.ts    ← in-memory record CRUD
-  │   ├── workflow-topics.ts     ← in-memory topic CRUD
-  │   ├── eval-jobs.ts           ← in-memory eval job tracking
-  │   └── knowledge-sources.ts   ← in-memory KS CRUD
-  └── stores/
-      └── mock-db.ts             ← shared in-memory state (replaces SQLite for mocks)
+src/test/mock-server/
+  handlers/                      ← TO ADD
+  ├── workflow-records.ts        ← in-memory record CRUD
+  ├── workflow-topics.ts         ← in-memory topic CRUD
+  ├── eval-jobs.ts               ← in-memory eval job tracking
+  └── knowledge-sources.ts       ← in-memory KS CRUD
+  stores/                        ← TO ADD
+  └── mock-db.ts                 ← shared in-memory state (replaces SQLite for mocks)
 ```
 
 ### Test
@@ -1636,8 +1635,8 @@ curl http://localhost:9091/finetune/workflows/test-id/records
 |-------|-----|-----------|--------|
 | 1. Migrations | BE | — | ✅ Done |
 | 2. Rust handlers | BE | Phase 1 | ✅ Done |
-| 3. FE adapters | FE | API contract (this doc) | Not started |
-| 4. Integration | Both | Phase 2 + 3 | Not started |
+| 3. FE adapters | FE | API contract (this doc) | ✅ Done |
+| 4. Integration | Both | Phase 2 + 3 | ✅ Done |
 | 5. Mock server | FE | Phase 4 | Not started |
 
 > FE Phase 3 can start in parallel with BE Phase 2 — the [API audit](./gateway-api-audit.md) is the contract. FE builds adapters against the spec, BE builds handlers against the same spec, integration test connects them.

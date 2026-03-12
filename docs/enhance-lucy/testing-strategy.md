@@ -49,11 +49,12 @@ src/test/
 │       ├── evaluations.ts           # POST/GET /finetune/evaluations (stateful polling)
 │       ├── training-jobs.ts         # POST/GET /finetune/reinforcement-jobs
 │       ├── finetune-evaluations.ts  # GET .../finetune-evaluations (per-epoch data)
-│       └── analytics.ts             # POST .../analytics/dry-run
+│       ├── analytics.ts             # POST .../analytics/dry-run
+│       └── gateway-crud.ts          # Workflow, record, topic, eval-job, KS CRUD handlers
 ├── integration/                      # Tool handler chain tests (MSW + IndexedDB)
 │   ├── seed-helpers.ts               # IndexedDB seeding utilities
 │   ├── eval-analysis.test.ts         # 7 tests — analyze_evaluation scenarios
-│   └── training-analysis.test.ts     # 8 tests — analyze_training scenarios (MSW-dependent)
+│   └── training-analysis.test.ts     # 7 tests — analyze_training scenarios (MSW-dependent)
 └── mock-server/                      # Standalone Express mock for Playwright/Chrome E2E
     └── server.ts                     # Express server reusing scenario bridges
 
@@ -148,7 +149,7 @@ await seedIterationHistory(datasetId, history);
 | Test File | Tests | What it exercises |
 |-----------|-------|-------------------|
 | `eval-analysis.test.ts` | 7 | analyze_evaluation: healthy/train, warning/iterate, critical/binary, stalled/escalate, error, per-topic, recommendations |
-| `training-analysis.test.ts` | 8 | analyze_training (MSW): improving/deploy, overfitting/investigate, noLearning/inner_loop, failed/retrain, per-topic progressions, overall progression, error cases |
+| `training-analysis.test.ts` | 7 | analyze_training (MSW): improving/deploy, overfitting/investigate, noLearning/inner_loop, failed/retrain, per-topic progressions, overall progression, error cases |
 
 **Dev Server with MSW** (`pnpm dev:msw`): Starts Vite with `VITE_MSW_ENABLED=true`, enabling the browser service worker for interactive scenario testing without a real backend.
 
@@ -335,7 +336,7 @@ src/components/agent/lucy-agent/plan-render/
 
 src/test/integration/
   eval-analysis.test.ts                # ✅ Eval analysis integration tests (7 tests)
-  training-analysis.test.ts            # ✅ Training analysis integration tests (8 tests)
+  training-analysis.test.ts            # ✅ Training analysis integration tests (7 tests)
 
 # Planned (not yet implemented):
 src/lib/distri-finetune-tools/__tests__/
@@ -1280,7 +1281,7 @@ Before marking a phase as complete, run through this checklist:
 - [x] `LucyAnalyzeEvalRenderer`: 11 component tests (all eval scenarios + loading/error/fallback)
 - [x] `LucyAnalyzeTrainingRenderer`: 13 component tests (all training scenarios + pipeline journey + loading/error/fallback)
 - [x] `eval-analysis.test.ts`: 7 integration tests (full analyze_evaluation pipeline scenarios)
-- [x] `training-analysis.test.ts`: 8 integration tests (full analyze_training pipeline scenarios)
+- [x] `training-analysis.test.ts`: 7 integration tests (full analyze_training pipeline scenarios)
 - [x] All scores in raw decimal format (0.45, +0.07) matching mockup designs
 - [ ] Notification badge appears/disappears correctly (E2E)
 - [ ] Progressive background transition timing correct (E2E)
