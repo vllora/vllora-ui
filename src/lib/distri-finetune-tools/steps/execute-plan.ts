@@ -469,7 +469,7 @@ async function executeGrader(ctx: StepContext): Promise<StepResult> {
   if (!plan.grader_config?.criteria?.length) {
     throw new Error(
       'grader_config.criteria is required for grader step. ' +
-      'Recovery: call generate_grader({ workflow_id }) to get criteria, add them to the plan via adjust_plan, then re-run execute_plan.'
+      'Recovery: call suggest_grader({ workflow_id }) to get criteria, add them to the plan via adjust_plan, then re-run execute_plan.'
     );
   }
 

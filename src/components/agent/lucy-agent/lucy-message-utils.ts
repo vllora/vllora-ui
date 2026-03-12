@@ -98,8 +98,8 @@ export function getFriendlyToolMessage(toolName: string, input: any): string {
       return 'Executing plan...';
 
     // Topic tools
-    case 'generate_topics':
-      return 'Generating topics...';
+    case 'suggest_topics':
+      return 'Suggesting topics...';
     case 'get_topic_hierarchy':
       return 'Loading topic hierarchy...';
     case 'adjust_topic_hierarchy':
@@ -130,7 +130,7 @@ export function getFriendlyToolMessage(toolName: string, input: any): string {
     // Evaluation tools
     case 'configure_grader':
       return 'Configuring evaluation grader...';
-    case 'generate_grader':
+    case 'suggest_grader':
       return 'Generating evaluation grader...';
     case 'test_grader_sample':
       return 'Testing grader on sample...';

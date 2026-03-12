@@ -200,7 +200,7 @@ import { checkViabilityHandler, checkViabilityTool } from './check-viability';
 // =============================================================================
 
 export const STEP_TOOL_NAMES = [
-  'generate_topics',
+  'suggest_topics',
   'apply_topic_hierarchy',
   'adjust_topic_hierarchy',
   'get_topic_hierarchy',
@@ -231,7 +231,7 @@ export const STEP_TOOL_NAMES = [
   'update_workflow_readme',
   'update_objective',
   'analyze_knowledge_sources',
-  'generate_grader',
+  'suggest_grader',
   'propose_plan',
   'adjust_plan',
   'save_plan',
@@ -321,7 +321,7 @@ export const stepTools: DistriFnTool[] = [
 ].map(tool => ({ ...tool, autoExecute: true }));
 
 export const stepToolHandlers: Record<string, ToolHandler> = {
-  generate_topics: generateTopicsHandler,
+  suggest_topics: generateTopicsHandler,
   apply_topic_hierarchy: applyTopicHierarchyHandler,
   adjust_topic_hierarchy: adjustTopicHierarchyHandler,
   get_topic_hierarchy: getTopicHierarchyHandler,
@@ -357,7 +357,7 @@ export const stepToolHandlers: Record<string, ToolHandler> = {
   update_workflow_readme: updateDatasetReadmeHandler,
   update_objective: updateObjectiveHandler,
   analyze_knowledge_sources: analyzeKnowledgeSourcesHandler,
-  generate_grader: generateGraderHandler,
+  suggest_grader: generateGraderHandler,
   propose_plan: proposePlanHandler,
   adjust_plan: adjustPlanHandler,
   save_plan: savePlanHandler,

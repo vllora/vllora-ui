@@ -49,7 +49,7 @@ async function getKnowledgeSourceTopics(workflowId: string): Promise<string[]> {
     // Deduplicate and return
     return [...new Set(allTopics)];
   } catch (error) {
-    console.warn("[generate_topics] Failed to get knowledge source topics:", error);
+    console.warn("[suggest_topics] Failed to get knowledge source topics:", error);
     return [];
   }
 }
@@ -108,7 +108,7 @@ function mergeHierarchies(
 /**
  * Generate topics using the frontend LLM pipeline.
  * Pure function — no DB writes, no workflow state changes.
- * Used by both the generate_topics tool and plan creation flow.
+ * Used by both the suggest_topics tool and plan creation flow.
  */
 async function generateTopicsCore(
   workflowId: string,
@@ -145,7 +145,7 @@ async function generateTopicsCore(
   }
 
   // Frontend LLM-based topic generation (handles knowledge sources automatically)
-  console.log("[generate_topics] Using frontend generation with automatic knowledge context");
+  console.log("[suggest_topics] Using frontend generation with automatic knowledge context");
 
   const result = await generateTopicsViaFrontend(
     workflowId,
@@ -205,11 +205,11 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
 
       if (explicitTopics) {
         // Explicit topics provided — skip LLM
-        console.log("[generate_topics] Suggest mode with explicit topics:", explicitTopics.length);
+        console.log("[suggest_topics] Suggest mode with explicit topics:", explicitTopics.length);
         hierarchy = topicNamesToHierarchy(explicitTopics);
       } else {
         // No explicit topics — generate via LLM
-        console.log("[generate_topics] Suggest mode (no DB writes) for dataset:", workflow_id);
+        console.log("[suggest_topics] Suggest mode (no DB writes) for dataset:", workflow_id);
         const result = await generateTopicsCore(
           workflow_id,
           dataset.datasetObjective,
@@ -230,7 +230,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
         if (existingHierarchy && existingHierarchy.length > 0) {
           const before = hierarchy.length;
           hierarchy = mergeHierarchies(existingHierarchy, hierarchy);
-          console.log("[generate_topics] Append mode: merged", existingHierarchy.length, "existing +", hierarchy.length - existingHierarchy.length, "new (from", before, "provided)");
+          console.log("[suggest_topics] Append mode: merged", existingHierarchy.length, "existing +", hierarchy.length - existingHierarchy.length, "new (from", before, "provided)");
         }
       }
 
@@ -241,7 +241,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
           suggestNormalized = await normalizeObjectiveToRole(dataset.datasetObjective);
           await datasetService.updateObjective(dataset.id, dataset.datasetObjective, suggestNormalized);
         } catch {
-          console.warn("[generate_topics] Objective normalization failed, will use heuristic fallback");
+          console.warn("[suggest_topics] Objective normalization failed, will use heuristic fallback");
         }
       }
 
@@ -250,7 +250,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
         try {
           hierarchy = await normalizeTopicSegments(hierarchy, dataset.datasetObjective, suggestNormalized);
         } catch {
-          console.warn("[generate_topics] Segment normalization failed, falling back to heuristic");
+          console.warn("[suggest_topics] Segment normalization failed, falling back to heuristic");
         }
       }
 
@@ -275,25 +275,15 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
     if (!workflow) {
       return { success: false, error: "Workflow not found" };
     }
-    // Switch to Records tab so user can see the generated topic hierarchy
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(
-        new CustomEvent("finetune-set-view-mode", {
-          detail: { section: "records" },
-        }),
-      );
-    }
-
-    // Auto-advance from not_started to topics_config when topic operations begin
-    if (workflow.currentStep === "not_started") {
-      await workflowService.advanceToStep(workflow_id, "topics_config");
-    }
+    // NOTE: suggest_topics is a PLANNING-ONLY tool — it does NOT advance the
+    // workflow step or switch the UI view. Those happen in apply_topic_hierarchy
+    // during plan execution.
 
     let hierarchy: TopicHierarchyNode[];
 
     if (explicitTopics) {
       // Explicit topics provided — skip LLM
-      console.log("[generate_topics] Using explicit topics:", explicitTopics.length);
+      console.log("[suggest_topics] Using explicit topics:", explicitTopics.length);
       hierarchy = topicNamesToHierarchy(explicitTopics);
     } else {
       // No explicit topics — generate via LLM
@@ -317,7 +307,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
       const existingHierarchy = dataset?.topicHierarchy?.hierarchy;
       if (existingHierarchy && existingHierarchy.length > 0) {
         hierarchy = mergeHierarchies(existingHierarchy, hierarchy);
-        console.log("[generate_topics] Append mode: merged with existing hierarchy");
+        console.log("[suggest_topics] Append mode: merged with existing hierarchy");
       }
     }
 
@@ -330,7 +320,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
           normalizedObj = await normalizeObjectiveToRole(workflow.trainingGoals);
           await datasetService.updateObjective(workflow.workflowId, workflow.trainingGoals, normalizedObj);
         } catch {
-          console.warn("[generate_topics] Objective normalization failed, will use heuristic fallback");
+          console.warn("[suggest_topics] Objective normalization failed, will use heuristic fallback");
         }
       }
 
@@ -338,27 +328,15 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
       try {
         hierarchy = await normalizeTopicSegments(hierarchy, workflow.trainingGoals, normalizedObj);
       } catch {
-        console.warn("[generate_topics] Segment normalization failed, falling back to heuristic");
+        console.warn("[suggest_topics] Segment normalization failed, falling back to heuristic");
       }
     }
 
     const topicCount = countLeafTopics(hierarchy);
 
-    // Save hierarchy to dataset (single source of truth)
-    await datasetService.updateTopicHierarchy(workflow.workflowId, {
-      goals: workflow.trainingGoals,
-      depth: depthValue,
-      hierarchy,
-      generatedAt: Date.now(),
-    });
-
-    // Update workflow with metadata only (not the full hierarchy)
-    await workflowService.updateStepData(workflow_id, "topicsConfig", {
-      topicCount,
-      depth: depthValue,
-      generatedAt: Date.now(),
-      method: method as "auto" | "template" | "manual",
-    });
+    // NOTE: suggest_topics is a PLANNING-ONLY tool — it does NOT write to the DB.
+    // Topics are persisted later by apply_topic_hierarchy during plan execution.
+    // The hierarchy is returned in the result so the agent can include it in the plan.
 
     // Get record counts for categorization info
     const allRecords = await recordService.getByDatasetId(workflow.workflowId);
@@ -384,7 +362,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
 };
 
 export const generateTopicsTool: DistriFnTool = {
-  name: "generate_topics",
+  name: "suggest_topics",
   description:
     "Auto-generate topic hierarchy from dataset content. If knowledge sources (PDFs, documents) have been uploaded, their extracted topics and document sections will be used to derive the topic hierarchy. Can be called in two modes: (1) with workflow_id for full workflow integration (saves to DB), or (2) with workflow_id only for suggest mode (returns hierarchy without side effects — use this during plan creation).",
   type: "function",

@@ -214,18 +214,11 @@ export const apiDatasetAdapter: DatasetService = {
   },
 
   async updateTopicHierarchy(id: string, topics: TopicHierarchyConfig): Promise<void> {
-    // Delete existing topics, then insert the new hierarchy
-    console.log('[api-dataset] updateTopicHierarchy called:', id, 'hierarchy nodes:', topics.hierarchy?.length ?? 0);
-    const delResponse = await api.delete(`${BASE}/${id}/topics`);
-    const delResult = await handleApiResponse<{ deleted: number }>(delResponse);
-    console.log('[api-dataset] deleted topics:', delResult);
-    if (topics.hierarchy?.length) {
-      const flat = flattenHierarchy(topics.hierarchy, null);
-      console.log('[api-dataset] posting flat topics:', flat.length);
-      const response = await api.post(`${BASE}/${id}/topics`, { topics: flat });
-      const createResult = await handleApiResponse<{ created: number }>(response);
-      console.log('[api-dataset] created topics:', createResult);
-    }
+    const flat = topics.hierarchy?.length
+      ? flattenHierarchy(topics.hierarchy, null)
+      : [];
+    const response = await api.put(`${BASE}/${id}/topics`, { topics: flat });
+    await handleApiResponse<{ replaced: number }>(response);
   },
 
   async updateEvalScript(id: string, script: string): Promise<void> {

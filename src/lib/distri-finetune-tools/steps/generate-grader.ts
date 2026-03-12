@@ -6,7 +6,7 @@
  * - Knowledge sources (if uploaded) — extracted topics, sections, summaries
  * - Topic hierarchy (optional context)
  *
- * Mirrors generate_topics: dedicated LLM pipeline ensures the grader is
+ * Mirrors suggest_topics: dedicated LLM pipeline ensures the grader is
  * consistent whether called during plan creation or standalone.
  *
  * Two modes:
@@ -191,13 +191,13 @@ async function generateGraderCore(
 
     if (providedCriteria && providedCriteria.length > 0) {
       // User provided explicit criteria — skip LLM, use directly
-      console.log('[generate_grader] Using provided criteria:', providedCriteria.length);
+      console.log('[suggest_grader] Using provided criteria:', providedCriteria.length);
       criteria = providedCriteria;
     } else {
       // No criteria provided — generate via LLM using knowledge sources
       const knowledgeCtx = await buildKnowledgeContext(workflowId);
 
-      console.log('[generate_grader] Generating criteria via LLM:', {
+      console.log('[suggest_grader] Generating criteria via LLM:', {
         hasKnowledgeSources: knowledgeCtx.readyCount > 0,
         topicCount: topicNames?.length ?? 0,
       });
@@ -223,7 +223,7 @@ async function generateGraderCore(
       script,
     };
   } catch (error) {
-    console.error('[generate_grader] Error:', error);
+    console.error('[suggest_grader] Error:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to generate grader',
@@ -269,7 +269,7 @@ export const generateGraderHandler: ToolHandler = async (params) => {
           const existingNames = new Set(existingCriteria.map((c) => c.name.toLowerCase()));
           const newOnly = parsedCriteria.filter((c) => !existingNames.has(c.name.toLowerCase()));
           parsedCriteria = [...existingCriteria, ...newOnly];
-          console.log('[generate_grader] Append mode: merged', existingCriteria.length, 'existing +', newOnly.length, 'new criteria');
+          console.log('[suggest_grader] Append mode: merged', existingCriteria.length, 'existing +', newOnly.length, 'new criteria');
         }
       }
     }
@@ -294,7 +294,7 @@ export const generateGraderHandler: ToolHandler = async (params) => {
         };
       }
 
-      console.log('[generate_grader] Suggest mode for dataset:', workflow_id);
+      console.log('[suggest_grader] Suggest mode for dataset:', workflow_id);
 
       const result = await generateGraderCore(workflow_id, objective, topicNames, providedCriteria);
       if (!result.success) {
@@ -368,7 +368,7 @@ export const generateGraderHandler: ToolHandler = async (params) => {
 // =============================================================================
 
 export const generateGraderTool: DistriFnTool = {
-  name: 'generate_grader',
+  name: 'suggest_grader',
   description:
     'Generate an evaluation function (JavaScript grader script) for RFT. Uses the training objective and uploaded knowledge sources to create domain-specific evaluation criteria and a complete LLM-as-judge script. Can be called in two modes: (1) with workflow_id only for suggest mode (returns criteria + script without saving — use during plan creation), or (2) with workflow_id for normal mode (saves to DB).',
   type: 'function',

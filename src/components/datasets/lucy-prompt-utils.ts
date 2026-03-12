@@ -15,7 +15,7 @@
  */
 export function buildDatasetAnalysisPrompt(isEmpty: boolean): string {
   if (isEmpty) {
-    return `I just opened this new dataset. Please create a plan so we can get started.`;
+    return `I just opened this new workflow. Please create a plan so we can get started.`;
   }
-  return `I just opened this dataset. What should we do next?`;
+  return `I just opened this workflow. What should we do next?`;
 }

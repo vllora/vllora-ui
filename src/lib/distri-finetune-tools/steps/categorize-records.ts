@@ -33,7 +33,7 @@ export const categorizeRecordsHandler: ToolHandler = async (params): Promise<Cat
     // Check dataset for topic hierarchy (single source of truth)
     const dataset = await datasetService.getById(workflow.workflowId);
     if (!dataset?.topicHierarchy?.hierarchy) {
-      return { success: false, error: 'Topic hierarchy must be configured first. Use generate_topics or apply_hierarchy.' };
+      return { success: false, error: 'Topic hierarchy must be configured first. Use suggest_topics or apply_hierarchy.' };
     }
 
     console.log('===== dataset?.topicHierarchy?.hierarchy', JSON.stringify(dataset?.topicHierarchy?.hierarchy))

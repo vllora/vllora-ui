@@ -5,7 +5,7 @@
  * from IndexedDB. No LLM calls.
  *
  * Lucy uses this to check what knowledge sources exist, then calls
- * generate_topics to get a topic hierarchy (which handles document-grounding
+ * suggest_topics to get a topic hierarchy (which handles document-grounding
  * internally), then constructs a plan with propose_plan.
  */
 

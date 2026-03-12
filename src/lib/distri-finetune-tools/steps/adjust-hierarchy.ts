@@ -105,7 +105,7 @@ export const adjustTopicHierarchyHandler: ToolHandler = async (params) => {
     if (!currentHierarchy || currentHierarchy.length === 0) {
       return {
         success: false,
-        error: 'No existing topic hierarchy found. Please generate topics first using generate_topics.',
+        error: 'No existing topic hierarchy found. Please generate topics first using suggest_topics.',
       };
     }
 
