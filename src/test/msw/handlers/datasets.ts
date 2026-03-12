@@ -6,30 +6,12 @@
 
 import { http, HttpResponse, delay } from 'msw';
 import { getScenario } from '../scenarios/scenario-registry';
-import { makeUploadResponse, makeEvaluatorVersionsResponse } from '../scenarios/eval-scenario-bridge';
+import { makeEvaluatorVersionsResponse } from '../scenarios/eval-scenario-bridge';
 
 const BASE = 'http://localhost:8080';
 
 export const datasetHandlers = [
-  // POST /finetune/datasets — Upload dataset
-  http.post(`${BASE}/finetune/datasets`, async () => {
-    const scenario = getScenario();
-    await delay(scenario.createDelayMs);
-
-    if (scenario.uploadBehavior === 'error') {
-      return HttpResponse.json(
-        { error: 'Upload failed: invalid format' },
-        { status: 400 },
-      );
-    }
-
-    if (scenario.uploadBehavior === 'timeout') {
-      await delay(30_000);
-      return HttpResponse.error();
-    }
-
-    return HttpResponse.json(makeUploadResponse());
-  }),
+  // NOTE: POST /finetune/datasets (upload) was removed — gateway auto-uploads.
 
   // GET /finetune/workflows/:workflowId/evaluator/versions — Evaluator version history
   http.get(`${BASE}/finetune/workflows/:workflowId/evaluator/versions`, async ({ params }) => {

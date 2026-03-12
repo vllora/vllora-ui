@@ -101,6 +101,17 @@ export interface DatasetState {
     output_format?: string;
     /** Data generation config from the plan */
     data_generation?: { grounded_in_knowledge?: boolean };
+    /** Execution summary with metrics from the last run */
+    execution_summary?: {
+      topics_created: number;
+      records_generated: number;
+      grader_configured: boolean;
+      dry_run_completed: boolean;
+      dry_run_pass_rate?: number;
+      ready_to_finetune: boolean;
+      finetune_job_id?: string;
+      finetune_job_status?: string;
+    } | null;
   };
 }
 
@@ -306,6 +317,7 @@ export const getDatasetStateHandler: ToolHandler = async (params) => {
           estimated_records: storedPlan.plan?.estimated_records,
           output_format: storedPlan.plan?.output_format as string | undefined,
           data_generation: storedPlan.plan?.data_generation,
+          execution_summary: storedPlan.executionSummary,
         };
       })(),
     };
@@ -335,7 +347,7 @@ Returns:
 - grader: evaluator configured?
 - dry_run: completed? verdict?
 - training: job exists? status?
-- plan: exists? status? completed_steps, failed_step, remaining_steps, proposed_topics, grader_config, estimated_records, output_format, data_generation
+- plan: exists? status? completed_steps, failed_step, remaining_steps, proposed_topics, grader_config, estimated_records, output_format, data_generation, execution_summary
 
 IMPORTANT: If plan.exists is true and plan.status is 'failed' or 'executing',
 do NOT create a new plan. Resume the existing plan by calling execute_plan

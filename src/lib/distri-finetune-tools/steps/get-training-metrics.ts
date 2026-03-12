@@ -12,9 +12,9 @@
 import type { DistriFnTool } from '@distri/core';
 import type { ToolHandler } from '../types';
 import {
-  getReinforcementJobMetrics,
-  getReinforcementJobStatus,
-  listReinforcementJobs,
+  getFinetuneJobMetrics,
+  getFinetuneJobStatus,
+  listFinetuneJobs,
 } from '@/services/finetune-api';
 import type { TrainingMetricsSnapshot } from '@/services/finetune-api';
 import { datasetService, workflowService } from '@/services/service-registry';
@@ -107,7 +107,7 @@ async function resolveJobId(
   }
 
   // The dataset ID is the backend dataset ID — they are always the same.
-  const jobs = await listReinforcementJobs(dataset.id);
+  const jobs = await listFinetuneJobs(dataset.id);
   const active = jobs
     .filter((j) => j.status === 'running' || j.status === 'succeeded' || j.status === 'pending')
     .sort((a, b) => (b.updated_at).localeCompare(a.updated_at));
@@ -307,8 +307,8 @@ export const getTrainingMetricsHandler: ToolHandler = async (params) => {
 
     // Fetch job status and metrics in parallel
     const [jobStatus, metricsResponse] = await Promise.all([
-      getReinforcementJobStatus(workflowId, resolvedJobId),
-      getReinforcementJobMetrics(workflowId, resolvedJobId),
+      getFinetuneJobStatus(workflowId, resolvedJobId),
+      getFinetuneJobMetrics(workflowId, resolvedJobId),
     ]);
 
     const snapshots = metricsResponse.metrics.map((m) => m.metrics);

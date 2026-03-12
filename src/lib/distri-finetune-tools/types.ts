@@ -478,7 +478,7 @@ export interface AnalyzeTrainingResult {
     has_diff: boolean;
   };
   /** Latest reinforcement training metrics snapshot. */
-  reinforcement_metrics?: {
+  training_metrics?: {
     reward: number | null;
     kl: number | null;
     loss: number | null;

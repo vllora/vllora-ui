@@ -87,7 +87,7 @@ The UI uses service interfaces (`src/services/`). The migration plan swaps Index
 
 ---
 
-## 1. Existing Endpoints (59 total: 51 working, 8 placeholders)
+## 1. Existing Endpoints (61 total: 51 working, 5 placeholders, 5 GET-only)
 
 **Status:**
 - **Working** — fully implemented, returns real data
@@ -98,74 +98,78 @@ The UI uses service interfaces (`src/services/`). The migration plan swaps Index
 | | | **Workflow CRUD** | | |
 | 1 | `GET` | `/finetune/workflows` | Working | Local SQLite |
 | 2 | `POST` | `/finetune/workflows` | Working | Local SQLite |
-| 3 | `PUT` | `/finetune/workflows/{id}` | Working | Local SQLite |
-| 4 | `DELETE` | `/finetune/workflows/{id}` | Working | Local SQLite (soft delete) |
+| 3 | `GET` | `/finetune/workflows/{id}` | Working | Local SQLite |
+| 4 | `PUT` | `/finetune/workflows/{id}` | Working | Local SQLite |
+| 5 | `DELETE` | `/finetune/workflows/{id}` | Working | Local SQLite (soft delete) |
 | | | **Knowledge Sources** | | |
-| 5 | `POST` | `/finetune/workflows/{id}/knowledge` | Working | Local SQLite, knowledge_sources table |
-| 6 | `GET` | `/finetune/workflows/{id}/knowledge` | Working | Local SQLite |
-| 7 | `GET` | `/finetune/workflows/{id}/knowledge/{ksId}` | Working | Local SQLite |
-| 8 | `GET` | `/finetune/workflows/{id}/knowledge/count` | Working | Local SQLite |
-| 9 | `PATCH` | `/finetune/workflows/{id}/knowledge/{ksId}/status` | Working | Local SQLite |
-| 10 | `PATCH` | `/finetune/workflows/{id}/knowledge/{ksId}/chunks` | Working | Local SQLite |
-| 11 | `DELETE` | `/finetune/workflows/{id}/knowledge/{ksId}` | Working | Local SQLite (soft delete) |
-| 12 | `DELETE` | `/finetune/workflows/{id}/knowledge` | Working | Local SQLite (soft delete all) |
-| 13 | `POST` | `/finetune/workflows/{id}/knowledge/chunk` | Placeholder | — |
-| 14 | `POST` | `/finetune/workflows/{id}/knowledge/trace` | Placeholder | — |
-| 15 | `DELETE` | `/finetune/workflows/{id}/knowledge/trace/{trace_id}` | Placeholder | — |
+| 6 | `POST` | `/finetune/workflows/{id}/knowledge` | Working | Local SQLite, knowledge_sources table |
+| 7 | `GET` | `/finetune/workflows/{id}/knowledge` | Working | Local SQLite |
+| 8 | `GET` | `/finetune/workflows/{id}/knowledge/{ksId}` | Working | Local SQLite |
+| 9 | `GET` | `/finetune/workflows/{id}/knowledge/count` | Working | Local SQLite |
+| 10 | `PATCH` | `/finetune/workflows/{id}/knowledge/{ksId}/status` | Working | Local SQLite |
+| 11 | `PATCH` | `/finetune/workflows/{id}/knowledge/{ksId}/chunks` | Working | Local SQLite |
+| 12 | `DELETE` | `/finetune/workflows/{id}/knowledge/{ksId}` | Working | Local SQLite (soft delete) |
+| 13 | `DELETE` | `/finetune/workflows/{id}/knowledge` | Working | Local SQLite (soft delete all) |
+| 14 | `POST` | `/finetune/workflows/{id}/knowledge/chunk` | Placeholder | — |
+| 15 | `POST` | `/finetune/workflows/{id}/knowledge/trace` | Placeholder | — |
+| 16 | `DELETE` | `/finetune/workflows/{id}/knowledge/trace/{trace_id}` | Placeholder | — |
 | | | **Topics** | | |
-| 16 | `GET` | `/finetune/workflows/{id}/topics` | Working | Local SQLite |
-| 17 | `POST` | `/finetune/workflows/{id}/topics` | Working | Local SQLite |
-| 18 | `DELETE` | `/finetune/workflows/{id}/topics` | Working | Local SQLite |
-| 19 | `POST` | `/finetune/workflows/{id}/topics/generate` | Placeholder | — |
+| 17 | `GET` | `/finetune/workflows/{id}/topics` | Working | Local SQLite |
+| 18 | `POST` | `/finetune/workflows/{id}/topics` | Working | Local SQLite |
+| 19 | `PUT` | `/finetune/workflows/{id}/topics` | Working | Local SQLite (replace all) |
+| 20 | `DELETE` | `/finetune/workflows/{id}/topics` | Working | Local SQLite |
+| 21 | `POST` | `/finetune/workflows/{id}/topics/generate` | Working | Local LLM |
 | | | **Records** | | |
-| 20 | `GET` | `/finetune/workflows/{id}/records` | Working | Local SQLite |
-| 21 | `POST` | `/finetune/workflows/{id}/records` | Working | Local SQLite |
-| 22 | `PUT` | `/finetune/workflows/{id}/records` | Working | Local SQLite |
-| 23 | `DELETE` | `/finetune/workflows/{id}/records` | Working | Local SQLite |
-| 24 | `PATCH` | `/finetune/workflows/{id}/records/{recordId}` | Working | Local SQLite |
-| 25 | `PATCH` | `/finetune/workflows/{id}/records/topics` | Working | Local SQLite |
-| 26 | `PATCH` | `/finetune/workflows/{id}/records/{recordId}/data` | Working | Local SQLite |
-| 27 | `PATCH` | `/finetune/workflows/{id}/records/{recordId}/scores` | Working | Local SQLite |
-| 28 | `DELETE` | `/finetune/workflows/{id}/records/{recordId}` | Working | Local SQLite |
-| 29 | `DELETE` | `/finetune/workflows/{id}/records/topics` | Working | Local SQLite |
-| 30 | `PATCH` | `/finetune/workflows/{id}/records/rename-topic` | Working | Local SQLite |
-| 31 | `DELETE` | `/finetune/workflows/{id}/records/topics/{topicName}` | Working | Local SQLite |
+| 22 | `GET` | `/finetune/workflows/{id}/records` | Working | Local SQLite |
+| 23 | `POST` | `/finetune/workflows/{id}/records` | Working | Local SQLite |
+| 24 | `PUT` | `/finetune/workflows/{id}/records` | Working | Local SQLite |
+| 25 | `DELETE` | `/finetune/workflows/{id}/records` | Working | Local SQLite |
+| 26 | `PATCH` | `/finetune/workflows/{id}/records/{recordId}` | Working | Local SQLite |
+| 27 | `PATCH` | `/finetune/workflows/{id}/records/topics` | Working | Local SQLite |
+| 28 | `PATCH` | `/finetune/workflows/{id}/records/{recordId}/data` | Working | Local SQLite |
+| 29 | `PATCH` | `/finetune/workflows/{id}/records/{recordId}/scores` | Working | Local SQLite |
+| 30 | `DELETE` | `/finetune/workflows/{id}/records/{recordId}` | Working | Local SQLite |
+| 31 | `DELETE` | `/finetune/workflows/{id}/records/topics` | Working | Local SQLite |
+| 32 | `PATCH` | `/finetune/workflows/{id}/records/rename-topic` | Working | Local SQLite |
+| 33 | `DELETE` | `/finetune/workflows/{id}/records/topics/{topicName}` | Working | Local SQLite |
 | | | **Eval Jobs** | | |
-| 32 | `POST` | `/finetune/workflows/{id}/eval-jobs` | Working | Local SQLite |
-| 33 | `GET` | `/finetune/workflows/{id}/eval-jobs` | Working | Local SQLite |
-| 34 | `GET` | `/finetune/workflows/{id}/eval-jobs/{jobId}` | Working | Local SQLite |
-| 35 | `PATCH` | `/finetune/workflows/{id}/eval-jobs/{jobId}` | Working | Local SQLite |
-| 36 | `DELETE` | `/finetune/workflows/{id}/eval-jobs/{jobId}` | Working | Local SQLite |
-| 37 | `DELETE` | `/finetune/workflows/{id}/eval-jobs` | Working | Local SQLite |
-| 38 | `GET` | `/finetune/eval-jobs?status=X` | Working | Local SQLite |
+| 34 | `POST` | `/finetune/workflows/{id}/eval-jobs` | Working | Local SQLite |
+| 35 | `GET` | `/finetune/workflows/{id}/eval-jobs` | Working | Local SQLite |
+| 36 | `GET` | `/finetune/workflows/{id}/eval-jobs/{jobId}` | Working | Local SQLite |
+| 37 | `PATCH` | `/finetune/workflows/{id}/eval-jobs/{jobId}` | Working | Local SQLite |
+| 38 | `DELETE` | `/finetune/workflows/{id}/eval-jobs/{jobId}` | Working | Local SQLite |
+| 39 | `DELETE` | `/finetune/workflows/{id}/eval-jobs` | Working | Local SQLite |
+| 40 | `GET` | `/finetune/eval-jobs?status=X` | Working | Local SQLite |
+| | | **Dataset Generation** | | |
+| 41 | `POST` | `/finetune/workflows/{id}/dataset/generate` | Placeholder | — |
+| 42 | `POST` | `/finetune/workflows/{id}/dataset/generate/status` | Placeholder | — |
 | | | **Evaluator Run** | | |
-| 39 | `POST` | `/finetune/workflows/{id}/evaluator/run` | Placeholder | — |
-| 40 | `GET` | `/finetune/workflows/{id}/evaluator/run/status` | Placeholder | — |
+| 43 | `POST` | `/finetune/workflows/{id}/evaluator/run` | Placeholder | — |
+| 44 | `GET` | `/finetune/workflows/{id}/evaluator/run/status` | Placeholder | — |
 | | | **Evaluator Config** | | |
-| 41 | `PATCH` | `/finetune/workflows/{id}/evaluator` | Working | Local SQLite (cloud sync at upload) |
-| 42 | `GET` | `/finetune/workflows/{id}/evaluator/versions` | Working | Cloud proxy |
+| 45 | `PATCH` | `/finetune/workflows/{id}/evaluator` | Working | Local SQLite (cloud sync at upload) |
+| 46 | `GET` | `/finetune/workflows/{id}/evaluator/versions` | Working | Cloud proxy |
 | | | **Training Jobs** | | |
-| 43 | `POST` | `/finetune/workflows/{id}/jobs` | Working | Cloud + Local SQLite |
-| 44 | `GET` | `/finetune/workflows/{id}/jobs` | Working | Local SQLite |
-| 45 | `GET` | `/finetune/workflows/{id}/jobs/{job_id}/status` | Working | Local SQLite (cloud fallback) |
-| 46 | `GET` | `/finetune/workflows/{id}/jobs/{job_id}/metrics` | Working | Cloud proxy |
-| 47 | `POST` | `/finetune/workflows/{id}/jobs/{job_id}/cancel` | Working | Cloud + Local SQLite |
-| 48 | `POST` | `/finetune/workflows/{id}/jobs/{job_id}/resume` | Working | Cloud + Local SQLite |
-| 49 | `GET` | `/finetune/workflows/{id}/jobs/{job_id}/weights/url` | Working | Cloud proxy |
-| | | **Dataset (cloud JSONL snapshot)** | | |
-| 50 | `POST` | `/finetune/workflows/{id}/dataset/upload` | Working | Cloud proxy |
-| 51 | `POST` | `/finetune/workflows/{id}/dataset/analytics/dry-run` | Working | Cloud proxy |
-| 52 | `GET` | `/finetune/workflows/{id}/dataset/analytics` | Working | Cloud proxy |
-| 53 | `GET` | `/finetune/workflows/{id}/dataset/finetune-evaluations` | Working | Cloud proxy |
+| 47 | `POST` | `/finetune/workflows/{id}/jobs` | Working | Cloud + Local SQLite |
+| 48 | `GET` | `/finetune/workflows/{id}/jobs` | Working | Local SQLite |
+| 49 | `GET` | `/finetune/workflows/{id}/jobs/{job_id}/status` | Working | Local SQLite (cloud fallback) |
+| 50 | `GET` | `/finetune/workflows/{id}/jobs/{job_id}/metrics` | Working | Cloud proxy |
+| 51 | `POST` | `/finetune/workflows/{id}/jobs/{job_id}/cancel` | Working | Cloud + Local SQLite |
+| 52 | `POST` | `/finetune/workflows/{id}/jobs/{job_id}/resume` | Working | Cloud + Local SQLite |
+| 53 | `GET` | `/finetune/workflows/{id}/jobs/{job_id}/weights/url` | Working | Cloud proxy |
+| | | **Analytics & Finetune Evaluations (cloud)** | | |
+| 54 | `POST` | `/finetune/analytics/dry-run` | Working | Cloud proxy |
+| 55 | `GET` | `/finetune/workflows/{id}/analytics` | Working | Cloud proxy |
+| 56 | `GET` | `/finetune/workflows/{id}/finetune-evaluations` | Working | Cloud proxy |
 | | | **Evaluations** | | |
-| 54 | `POST` | `/finetune/evaluations` | Working | Cloud proxy |
-| 55 | `GET` | `/finetune/evaluations/{run_id}` | Working | Cloud proxy |
+| 57 | `POST` | `/finetune/evaluations` | Working | Cloud proxy |
+| 58 | `GET` | `/finetune/evaluations/{run_id}` | Working | Cloud proxy |
 | | | **Deployments** | | |
-| 56 | `POST` | `/finetune/deployments` | Working | Cloud proxy |
-| 57 | `DELETE` | `/finetune/deployments/{id}` | Working | Cloud proxy |
+| 59 | `POST` | `/finetune/deployments` | Working | Cloud proxy |
+| 60 | `DELETE` | `/finetune/deployments/{id}` | Working | Cloud proxy |
 | | | **Topic Hierarchy (LLM)** | | |
-| 58 | `POST` | `/finetune/topic-hierarchy/generate` | Working | Local LLM |
-| 59 | `POST` | `/finetune/topic-hierarchy/adjust` | Working | Local LLM |
+| 61 | `POST` | `/finetune/topic-hierarchy/generate` | Working | Local LLM |
+| 62 | `POST` | `/finetune/topic-hierarchy/adjust` | Working | Local LLM |
 
 ---
 
@@ -173,7 +177,7 @@ The UI uses service interfaces (`src/services/`). The migration plan swaps Index
 
 | Category | Endpoints | Where data lives |
 |----------|-----------|-----------------|
-| **Cloud proxy** | Evaluations, dataset upload/analytics, evaluator versions, training metrics/weights, deployments | `api.langdb.cloud` via `LangdbCloudFinetuneClient` |
+| **Cloud proxy** | Evaluations, analytics, finetune-evaluations, evaluator versions, training metrics/weights, deployments | `api.langdb.cloud` via `LangdbCloudFinetuneClient` |
 | **Hybrid** | Create/cancel/resume training job, get job status | Cloud call + local `finetune_jobs` table |
 | **Local SQLite** | Workflow CRUD, list jobs, evaluator config | Gateway SQLite |
 | **Local LLM** | Topic hierarchy generate/adjust | LLM via `ExecutorContext` |
@@ -186,8 +190,10 @@ The UI uses service interfaces (`src/services/`). The migration plan swaps Index
 | **Dataset** | Packaged JSONL snapshot for eval/training (immutable) | Cloud `api.langdb.cloud` |
 
 - `/workflows/{id}/records/*` — local record CRUD
-- `/workflows/{id}/dataset/*` — cloud JSONL upload + analytics
+- `/workflows/{id}/analytics`, `/workflows/{id}/finetune-evaluations` — cloud analytics (under workflow scope)
+- `/finetune/analytics/dry-run` — stateless cloud analytics (no workflow context)
 - Record generation endpoints are planned but not yet registered in gateway routes (see [Missing Endpoints](#5-missing-endpoints))
+- **NOTE**: `POST /finetune/datasets` (upload) was removed — gateway auto-uploads via `ensure_dataset_uploaded()` before eval/training
 
 ---
 
@@ -319,7 +325,7 @@ No `current_step` column. Check top-to-bottom, first match wins:
 Cloud has no record-level CRUD — only bulk JSONL upload. Records live in `workflow_records` for mutable CRUD. Re-upload before every eval/training:
 
 ```
-Local SQLite (mutable CRUD)  →  Package as JSONL  →  POST /dataset/upload  →  Cloud snapshot
+Local SQLite (mutable CRUD)  →  Package as JSONL  →  (auto-upload at eval/training)  →  Cloud snapshot
 ```
 
 ### Evaluator script: local is source of truth
@@ -571,9 +577,9 @@ GET    /workflows/{id}/jobs                   → LOCAL  [finetune_jobs] per-wor
 ### K. Cloud Analytics (read-only)
 
 ```
-POST /workflows/{id}/dataset/analytics/dry-run  → CLOUD  score distribution, topic breakdown
-GET  /workflows/{id}/dataset/analytics          → CLOUD  record count, token stats
-GET  /workflows/{id}/dataset/finetune-evaluations → CLOUD  per-job eval scores
+POST /finetune/analytics/dry-run                → CLOUD  score distribution, topic breakdown
+GET  /workflows/{id}/analytics                  → CLOUD  record count, token stats
+GET  /workflows/{id}/finetune-evaluations       → CLOUD  per-job eval scores
 GET  /workflows/{id}/jobs/{id}/metrics          → CLOUD  loss curve, reward metrics
 GET  /workflows/{id}/jobs/{id}/weights/url      → CLOUD  signed download URL
 ```
@@ -595,11 +601,13 @@ GET  /workflows/{id}/jobs/{id}/weights/url      → CLOUD  signed download URL
 
 | Operation | Endpoint |
 |-----------|----------|
-| Upload JSONL | `POST /workflows/{id}/dataset/upload` |
+| Upload JSONL | _(auto — `ensure_dataset_uploaded()` before eval/training)_ |
 | Run evaluation | `POST /finetune/evaluations` |
 | Poll evaluation | `GET /finetune/evaluations/{run_id}` |
 | Evaluator versions | `GET /workflows/{id}/evaluator/versions` |
-| Dataset analytics | `GET /workflows/{id}/dataset/analytics` |
+| Dataset analytics | `GET /workflows/{id}/analytics` |
+| Finetune evaluations | `GET /workflows/{id}/finetune-evaluations` |
+| Dry-run analytics | `POST /finetune/analytics/dry-run` |
 | Training metrics | `GET /workflows/{id}/jobs/{id}/metrics` |
 | Weights URL | `GET /workflows/{id}/jobs/{id}/weights/url` |
 | Deploy / Undeploy | `POST /finetune/deployments`, `DELETE /finetune/deployments/{id}` |

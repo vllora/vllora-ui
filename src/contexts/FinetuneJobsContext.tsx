@@ -20,8 +20,8 @@ import {
   FinetuneJob,
   FinetuneJobStatus,
   FinetuneEvalResultsResponse,
-  listReinforcementJobs,
-  getReinforcementJobStatus,
+  listFinetuneJobs,
+  getFinetuneJobStatus,
   getFinetuneEvaluations,
 } from "@/services/finetune-api";
 import { workflowService, recordService } from "@/services/service-registry";
@@ -129,7 +129,7 @@ function useFinetuneJobsLogic() {
         return [];
       }
 
-      return listReinforcementJobs(
+      return listFinetuneJobs(
         filterDatasetId, // workflowId (scopes the listing)
       );
     },
@@ -142,7 +142,7 @@ function useFinetuneJobsLogic() {
   const refreshJob = useCallback(async (providerJobId: string) => {
     if (!currentDatasetId) return;
     try {
-      const updatedJob = await getReinforcementJobStatus(currentDatasetId, providerJobId);
+      const updatedJob = await getFinetuneJobStatus(currentDatasetId, providerJobId);
       setJobs((prevJobs) =>
         (prevJobs || []).map((job) =>
           job.provider_job_id === providerJobId ? updatedJob : job

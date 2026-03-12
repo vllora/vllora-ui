@@ -37,8 +37,8 @@ import {
 import {
   DEFAULT_TRAINING_CONFIG,
   DEFAULT_INFERENCE_PARAMETERS,
-  ReinforcementTrainingConfig,
-  ReinforcementInferenceParameters,
+  FinetuneTrainingConfig,
+  FinetuneInferenceParameters,
 } from "@/services/finetune-api";
 import { quickFinetune } from "@/services/quick-finetune";
 import { toast } from "sonner";
@@ -116,7 +116,7 @@ export function NewJobDialog({
 
     try {
       // Build training config (only include values that differ from defaults)
-      const trainingConfig: Partial<ReinforcementTrainingConfig> = {};
+      const trainingConfig: Partial<FinetuneTrainingConfig> = {};
       const lr = parseFloat(learningRate);
       if (!isNaN(lr) && lr !== DEFAULT_TRAINING_CONFIG.learning_rate) {
         trainingConfig.learning_rate = lr;
@@ -135,7 +135,7 @@ export function NewJobDialog({
       }
 
       // Build inference parameters
-      const inferenceParameters: Partial<ReinforcementInferenceParameters> = {};
+      const inferenceParameters: Partial<FinetuneInferenceParameters> = {};
       const mot = parseInt(maxOutputTokens, 10);
       if (
         !isNaN(mot) &&

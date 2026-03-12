@@ -20,10 +20,10 @@ import type {
 } from '../types';
 import {
   getFinetuneEvaluations,
-  getReinforcementJobStatus,
-  getReinforcementJobMetrics,
+  getFinetuneJobStatus,
+  getFinetuneJobMetrics,
   getEvaluatorVersions,
-  listReinforcementJobs,
+  listFinetuneJobs,
 } from '@/services/finetune-api';
 import type { FinetuneJob, RowEpochResults, EpochEvalResult } from '@/services/finetune-api';
 import { datasetService, recordService, iterationStateService, workflowService } from '@/services/service-registry';
@@ -79,20 +79,20 @@ async function resolveTrainingJob(
 
   // If explicit jobId provided, fetch it directly
   if (jobId) {
-    const job = await getReinforcementJobStatus(workflowId, jobId);
+    const job = await getFinetuneJobStatus(workflowId, jobId);
     return { job, workflowId };
   }
 
   // Otherwise, find job from workflow
   const workflow = await workflowService.getByDataset(workflowId);
   if (workflow?.training?.jobId) {
-    const job = await getReinforcementJobStatus(workflowId, workflow.training.jobId);
+    const job = await getFinetuneJobStatus(workflowId, workflow.training.jobId);
     return { job, workflowId };
   }
 
   // Fallback: list jobs for this dataset, pick most recent completed
   // The dataset ID is the backend dataset ID — they are always the same.
-  const jobs = await listReinforcementJobs(workflowId);
+  const jobs = await listFinetuneJobs(workflowId);
   const completed = jobs
     .filter((j) => j.status === 'succeeded' || j.status === 'failed')
     .sort((a, b) => (b.completed_at ?? b.updated_at).localeCompare(a.completed_at ?? a.updated_at));
@@ -532,14 +532,14 @@ export const analyzeTrainingHandler: ToolHandler = async (params) => {
     await updateOuterLoopState(workflowId, job.id, progressions);
     const evalBaseline = await lookupEvalBaseline(workflowId);
 
-    // 6b. Fetch evaluator version + reinforcement metrics (non-critical, parallel)
+    // 6b. Fetch evaluator version + finetune metrics (non-critical, parallel)
     let evaluator_version: { version: number; created_at: string; has_diff: boolean } | undefined;
-    let reinforcementMetrics: { reward: number | null; kl: number | null; loss: number | null; clipped_ratio: number | null } | undefined;
+    let finetuneMetrics: { reward: number | null; kl: number | null; loss: number | null; clipped_ratio: number | null } | undefined;
     try {
       const dataset = await datasetService.getById(workflowId);
       const [evalVersions, metricsResp] = await Promise.all([
         dataset ? getEvaluatorVersions(dataset.id).catch(() => []) : Promise.resolve([]),
-        getReinforcementJobMetrics(workflowId, job.provider_job_id).catch(() => ({ metrics: [] })),
+        getFinetuneJobMetrics(workflowId, job.provider_job_id).catch(() => ({ metrics: [] })),
       ]);
       if (evalVersions.length > 0) {
         const latest = evalVersions[0];
@@ -548,7 +548,7 @@ export const analyzeTrainingHandler: ToolHandler = async (params) => {
       const snapshots = metricsResp.metrics.map((m) => m.metrics);
       if (snapshots.length > 0) {
         const last = snapshots[snapshots.length - 1];
-        reinforcementMetrics = {
+        finetuneMetrics = {
           reward: typeof last.reward === 'number' ? last.reward : null,
           kl: typeof last.kl === 'number' ? last.kl : null,
           loss: typeof last.loss === 'number' ? last.loss : null,
@@ -581,7 +581,7 @@ export const analyzeTrainingHandler: ToolHandler = async (params) => {
       next_action: nextAction,
       eval_baseline: evalBaseline,
       evaluator_version,
-      reinforcement_metrics: reinforcementMetrics,
+      training_metrics: finetuneMetrics,
     } satisfies AnalyzeTrainingResult;
   } catch (error) {
     return {

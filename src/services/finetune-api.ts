@@ -1,5 +1,4 @@
-import { apiClient, handleApiResponse, getAuthToken } from "@/lib/api-client";
-import { getBackendUrl } from "@/config/api";
+import { apiClient, handleApiResponse } from "@/lib/api-client";
 import {
   DatasetWithRecords,
   DatasetRecord,
@@ -40,8 +39,8 @@ export interface FinetuningJob {
   error?: string;
 }
 
-// Reinforcement job types
-export interface ReinforcementTrainingConfig {
+// Finetune job types
+export interface FinetuneTrainingConfig {
   learning_rate?: number;
   max_context_length?: number;
   lora_rank?: number;
@@ -52,7 +51,7 @@ export interface ReinforcementTrainingConfig {
   batch_size_samples?: number;
 }
 
-export interface ReinforcementInferenceParameters {
+export interface FinetuneInferenceParameters {
   max_output_tokens?: number;
   temperature?: number;
   top_p?: number;
@@ -60,14 +59,14 @@ export interface ReinforcementInferenceParameters {
   response_candidates_count?: number;
 }
 
-export interface CreateReinforcementJobRequest {
+export interface CreateFinetuneJobRequest {
   dataset: string;
   base_model: string;
   output_model?: string;
   evaluation_dataset?: string;
   display_name?: string;
-  training_config?: ReinforcementTrainingConfig;
-  inference_parameters?: ReinforcementInferenceParameters;
+  training_config?: FinetuneTrainingConfig;
+  inference_parameters?: FinetuneInferenceParameters;
   chunk_size?: number;
   node_count?: number;
   /** Evaluator version to use during training. If omitted, uses the latest version. */
@@ -92,23 +91,23 @@ export interface EvaluatorVersionResponse {
 }
 
 // ============================================================================
-// Reinforcement Training Metrics Types
+// Finetune Training Metrics Types
 // ============================================================================
 
 /** A single point in the training metrics time series */
-export interface ReinforcementJobMetricPoint {
+export interface FinetuneJobMetricPoint {
   /** Raw metrics JSON blob from the training provider */
   metrics: TrainingMetricsSnapshot;
   created_at: string;
 }
 
 /** Response from GET /finetune/workflows/{workflowId}/jobs/{jobId}/metrics */
-export interface ReinforcementJobMetricsResponse {
+export interface FinetuneJobMetricsResponse {
   provider_job_id: string;
-  metrics: ReinforcementJobMetricPoint[];
+  metrics: FinetuneJobMetricPoint[];
 }
 
-/** Typed training metrics snapshot from GRPO/GSPO reinforcement fine-tuning */
+/** Typed training metrics snapshot from GRPO/GSPO fine-tuning */
 export interface TrainingMetricsSnapshot {
   // Progress / Schedule
   global_step?: number;
@@ -167,7 +166,7 @@ export interface FinetuneJob {
   base_model: string;
   fine_tuned_model?: string;
   provider: string;
-  training_config?: ReinforcementTrainingConfig;
+  training_config?: FinetuneTrainingConfig;
   suffix?: string;
   error_message?: string;
   training_file_id: string;
@@ -177,8 +176,14 @@ export interface FinetuneJob {
   completed_at?: string;
 }
 
-// Legacy type alias for backward compatibility
-export type ReinforcementJob = FinetuneJob;
+
+/** Normalize a job response that may have `dataset_id` (cloud) instead of `workflow_id` (gateway). */
+function normalizeFinetuneJob(raw: Record<string, unknown>): FinetuneJob {
+  if (!raw.workflow_id && raw.dataset_id) {
+    raw.workflow_id = raw.dataset_id;
+  }
+  return raw as unknown as FinetuneJob;
+}
 
 export interface DatasetUploadResponse {
   workflow_id: string;
@@ -186,7 +191,7 @@ export interface DatasetUploadResponse {
 }
 
 export interface StartFinetuneResult {
-  job: ReinforcementJob;
+  job: FinetuneJob;
   workflowId: string;
 }
 
@@ -357,96 +362,37 @@ export function datasetToJsonl(records: DatasetRecord[]): string {
 // API Functions
 // ============================================================================
 
-/**
- * Upload a dataset file (JSONL format) to the provider
- * @param jsonlContent - JSONL content for training
- * @param topicHierarchy - Optional topic hierarchy JSON string
- * @param evalScript - Optional JavaScript evaluator script
- */
-export async function uploadDataset(props: {
-  jsonlContent: string;
-  topicHierarchy?: string;
-  evalScript?: string;
-  workflowId: string;
-}): Promise<DatasetUploadResponse> {
-  const { jsonlContent, topicHierarchy, evalScript, workflowId } = props;
-  const apiUrl = getBackendUrl();
-  const formData = new FormData();
-
-  // Create a Blob from the JSONL content
-  const blob = new Blob([jsonlContent], { type: "application/x-ndjson" });
-  formData.append("file", blob, "training.jsonl");
-  formData.append("workflow_id", workflowId);
-
-  // Add topic hierarchy if provided
-  if (topicHierarchy) {
-    formData.append("topic_hierarchy", topicHierarchy);
-  }
-
-  // Add eval_script and evaluator config if provided
-  // Backend requires BOTH: evaluator config (with type: "js") AND eval_script
-  // The backend merges eval_script content into evaluator.config.script
-  if (evalScript) {
-    formData.append("eval_script", evalScript);
-    // Must also send evaluator config for backend to merge the script into
-    const evaluatorConfig = {
-      type: "js",
-      config: {
-        script: "", // Will be replaced by eval_script content on backend
-        completion_params: {
-          model: "gpt-4o-mini",
-          model_name: "gpt-4o-mini",
-          temperature: 0.0,
-          max_tokens: 300,
-        },
-      },
-    };
-    formData.append("evaluator", JSON.stringify(evaluatorConfig));
-  }
-
-  // Build headers
-  const headers: Record<string, string> = {};
-  const token = await getAuthToken();
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-
-  const response = await fetch(`${apiUrl}/finetune/datasets`, {
-    method: "POST",
-    headers,
-    body: formData,
-  });
-
-  return handleApiResponse<DatasetUploadResponse>(response);
-}
+// NOTE: uploadDataset() was removed — the gateway auto-uploads via ensure_dataset_uploaded()
+// inside create_evaluation and create_finetune_job handlers.
 
 /**
- * Create a reinforcement fine-tuning job
+ * Create a finetune job
  * @param workflowId - The workflow ID (same as dataset ID)
  * @param request - Job creation request
  */
-export async function createReinforcementJob(
+export async function createFinetuneJob(
   workflowId: string,
-  request: CreateReinforcementJobRequest,
-): Promise<ReinforcementJob> {
+  request: CreateFinetuneJobRequest,
+): Promise<FinetuneJob> {
   const response = await apiClient(`/finetune/workflows/${workflowId}/jobs`, {
     method: "POST",
     body: JSON.stringify(request),
   });
-  return handleApiResponse<ReinforcementJob>(response);
+  const raw = await handleApiResponse<Record<string, unknown>>(response);
+  return normalizeFinetuneJob(raw);
 }
 
 /**
- * List reinforcement fine-tuning jobs for a workflow
+ * List finetune jobs for a workflow
  * @param workflowId - The workflow ID (same as dataset ID) — scopes the listing
  * @param limit - Maximum number of jobs to return
  * @param after - Cursor for pagination
  */
-export async function listReinforcementJobs(
+export async function listFinetuneJobs(
   workflowId: string,
   limit?: number,
   after?: string,
-): Promise<ReinforcementJob[]> {
+): Promise<FinetuneJob[]> {
   const params = new URLSearchParams();
   if (limit) params.set("limit", String(limit));
   if (after) params.set("after", after);
@@ -456,33 +402,34 @@ export async function listReinforcementJobs(
   const endpoint = queryString ? `${base}?${queryString}` : base;
 
   const response = await apiClient(endpoint, { method: "GET" });
-  return handleApiResponse<ReinforcementJob[]>(response);
+  const rawJobs = await handleApiResponse<Record<string, unknown>[]>(response);
+  return rawJobs.map(normalizeFinetuneJob);
 }
 
 /**
- * Get reinforcement job status
+ * Get finetune job status
  * @param workflowId - The workflow ID (same as dataset ID)
  * @param jobId - The job ID
  */
-export async function getReinforcementJobStatus(
+export async function getFinetuneJobStatus(
   workflowId: string,
   jobId: string,
-): Promise<ReinforcementJob> {
+): Promise<FinetuneJob> {
   const response = await apiClient(
     `/finetune/workflows/${workflowId}/jobs/${jobId}/status`,
     {
       method: "GET",
     },
   );
-  return handleApiResponse<ReinforcementJob>(response);
+  return handleApiResponse<FinetuneJob>(response);
 }
 
 /**
- * Cancel a reinforcement fine-tuning job
+ * Cancel a finetune job
  * @param workflowId - The workflow ID (same as dataset ID)
  * @param jobId - The provider job ID to cancel
  */
-export async function cancelReinforcementJob(workflowId: string, jobId: string): Promise<void> {
+export async function cancelFinetuneJob(workflowId: string, jobId: string): Promise<void> {
   const response = await apiClient(
     `/finetune/workflows/${workflowId}/jobs/${jobId}/cancel`,
     {
@@ -498,11 +445,11 @@ export async function cancelReinforcementJob(workflowId: string, jobId: string):
 }
 
 /**
- * Resume a cancelled reinforcement fine-tuning job
+ * Resume a cancelled finetune job
  * @param workflowId - The workflow ID (same as dataset ID)
  * @param jobId - The provider job ID to resume
  */
-export async function resumeReinforcementJob(workflowId: string, jobId: string): Promise<void> {
+export async function resumeFinetuneJob(workflowId: string, jobId: string): Promise<void> {
   const response = await apiClient(
     `/finetune/workflows/${workflowId}/jobs/${jobId}/resume`,
     {
@@ -523,7 +470,7 @@ export interface WeightsDownloadUrlResponse {
 }
 
 /**
- * Get a signed URL to download trained weights for a completed reinforcement fine-tuning job
+ * Get a signed URL to download trained weights for a completed finetune job
  * @param workflowId - The workflow ID (same as dataset ID)
  * @param jobId - The provider job ID
  */
@@ -540,43 +487,12 @@ export async function getWeightsDownloadUrl(
   return handleApiResponse<WeightsDownloadUrlResponse>(response);
 }
 
-/**
- * Upload a dataset to the backend for finetuning
- * This is step 1 of the finetune process - should be called first so the
- * workflowId can be saved before attempting to create the job
- */
-export async function uploadDatasetForFinetune(
-  dataset: DatasetWithRecords,
-): Promise<{ workflowId: string; jsonlContent: string }> {
-  // Convert dataset to JSONL
-  const jsonlContent = datasetToJsonl(dataset.records);
-
-  if (!jsonlContent.trim()) {
-    throw new Error("No valid training records found");
-  }
-
-  // Extract topic hierarchy if available
-  const topicHierarchy = dataset.topicHierarchy?.hierarchy
-    ? JSON.stringify(dataset.topicHierarchy.hierarchy)
-    : undefined;
-
-  // Upload dataset with topic hierarchy and eval script
-  const uploadResult = await uploadDataset({
-    jsonlContent,
-    topicHierarchy,
-    evalScript: dataset.evalScript,
-    workflowId: dataset.id,
-  });
-
-  return {
-    workflowId: uploadResult.workflow_id,
-    jsonlContent,
-  };
-}
+// NOTE: uploadDatasetForFinetune() was removed — the gateway auto-uploads
+// via ensure_dataset_uploaded() inside create_evaluation / create_finetune_job.
 
 
 /** Default training configuration */
-export const DEFAULT_TRAINING_CONFIG: ReinforcementTrainingConfig = {
+export const DEFAULT_TRAINING_CONFIG: FinetuneTrainingConfig = {
   learning_rate: 0.00001,
   lora_rank: 8,
   gradient_accumulation_steps: 5,
@@ -585,7 +501,7 @@ export const DEFAULT_TRAINING_CONFIG: ReinforcementTrainingConfig = {
 };
 
 /** Default inference parameters */
-export const DEFAULT_INFERENCE_PARAMETERS: ReinforcementInferenceParameters = {
+export const DEFAULT_INFERENCE_PARAMETERS: FinetuneInferenceParameters = {
   max_output_tokens: 1000,
   temperature: 1.0,
   top_p: 1.0,
@@ -596,8 +512,8 @@ export interface CreateFinetuneJobOptions {
   baseModel?: string;
   outputModel?: string;
   displayName?: string;
-  trainingConfig?: Partial<ReinforcementTrainingConfig>;
-  inferenceParameters?: Partial<ReinforcementInferenceParameters>;
+  trainingConfig?: Partial<FinetuneTrainingConfig>;
+  inferenceParameters?: Partial<FinetuneInferenceParameters>;
   /** Chunk size for training data processing */
   chunkSize?: number;
   /** Number of nodes for distributed training */
@@ -614,7 +530,7 @@ export async function createFinetuneJobFromUpload(
   workflowId: string,
   datasetName: string,
   options?: CreateFinetuneJobOptions,
-): Promise<ReinforcementJob> {
+): Promise<FinetuneJob> {
   // Generate output model name from dataset name
   const timestamp = Date.now();
   const safeName = datasetName
@@ -624,18 +540,18 @@ export async function createFinetuneJobFromUpload(
   const defaultOutputModel = `${safeName}-${timestamp}`;
 
   // Merge user config with defaults
-  const trainingConfig: ReinforcementTrainingConfig = {
+  const trainingConfig: FinetuneTrainingConfig = {
     ...DEFAULT_TRAINING_CONFIG,
     ...options?.trainingConfig,
   };
 
-  const inferenceParameters: ReinforcementInferenceParameters = {
+  const inferenceParameters: FinetuneInferenceParameters = {
     ...DEFAULT_INFERENCE_PARAMETERS,
     ...options?.inferenceParameters,
   };
 
-  // Create reinforcement job request
-  const request: CreateReinforcementJobRequest = {
+  // Create finetune job request
+  const request: CreateFinetuneJobRequest = {
     dataset: workflowId,
     base_model: options?.baseModel || "unsloth/Qwen3.5-4B",
     output_model: options?.outputModel || defaultOutputModel,
@@ -655,33 +571,13 @@ export async function createFinetuneJobFromUpload(
     request.evaluator_version = options.evaluatorVersion;
   }
 
-  const job = await createReinforcementJob(workflowId, request);
+  const job = await createFinetuneJob(workflowId, request);
 
   return job;
 }
 
-/**
- * Start a finetune job with default configuration (convenience function)
- * This uploads the dataset and creates a reinforcement job in one step
- * Note: For better error handling, use uploadDatasetForFinetune + createFinetuneJobFromUpload
- * to save the dataset ID before attempting job creation
- */
-export async function startFinetuneJob(
-  dataset: DatasetWithRecords,
-  options?: {
-    baseModel?: string;
-    outputModel?: string;
-    displayName?: string;
-  },
-): Promise<StartFinetuneResult> {
-  const { workflowId } = await uploadDatasetForFinetune(dataset);
-  const job = await createFinetuneJobFromUpload(
-    workflowId,
-    dataset.name,
-    options,
-  );
-  return { job, workflowId };
-}
+// NOTE: startFinetuneJob() was removed — use createFinetuneJob() directly.
+// The gateway auto-uploads via ensure_dataset_uploaded().
 
 // Legacy function - kept for backward compatibility
 /**
@@ -805,8 +701,8 @@ export async function getFinetuneEvaluations(
 
   const queryString = params.toString();
   const endpoint = queryString
-    ? `/finetune/datasets/${workflowId}/finetune-evaluations?${queryString}`
-    : `/finetune/datasets/${workflowId}/finetune-evaluations`;
+    ? `/finetune/workflows/${workflowId}/finetune-evaluations?${queryString}`
+    : `/finetune/workflows/${workflowId}/finetune-evaluations`;
 
   const response = await apiClient(endpoint, { method: "GET" });
   return handleApiResponse<FinetuneEvalResultsResponse>(response);
@@ -874,7 +770,7 @@ export async function updateDatasetEvalScript(
 export async function getDryRunAnalytics(
   rows: unknown[],
 ): Promise<EvalAnalyticsResponse> {
-  const response = await apiClient("/finetune/datasets/analytics/dry-run", {
+  const response = await apiClient("/finetune/analytics/dry-run", {
     method: "POST",
     body: JSON.stringify({ rows }),
   });
@@ -901,22 +797,22 @@ export async function getEvaluatorVersions(
 }
 
 // ============================================================================
-// Reinforcement Training Metrics API Functions
+// Finetune Training Metrics API Functions
 // ============================================================================
 
 /**
- * Get training metrics time series for a reinforcement fine-tuning job
+ * Get training metrics time series for a finetune job
  * Returns raw GRPO/GSPO metrics (reward, KL, loss, grad_norm, completion stats)
  * @param workflowId - The workflow ID (same as dataset ID)
  * @param jobId - The finetune job ID
  */
-export async function getReinforcementJobMetrics(
+export async function getFinetuneJobMetrics(
   workflowId: string,
   jobId: string,
-): Promise<ReinforcementJobMetricsResponse> {
+): Promise<FinetuneJobMetricsResponse> {
   const response = await apiClient(
     `/finetune/workflows/${workflowId}/jobs/${jobId}/metrics`,
     { method: "GET" },
   );
-  return handleApiResponse<ReinforcementJobMetricsResponse>(response);
+  return handleApiResponse<FinetuneJobMetricsResponse>(response);
 }

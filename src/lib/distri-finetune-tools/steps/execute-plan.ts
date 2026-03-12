@@ -960,10 +960,10 @@ export const executePlanHandler: ToolHandler = async (
       emitProgress(progress);
 
       if (dynamicResult.success) {
-        await completePlanInDB(workflow_id, progress);
+        await completePlanInDB(workflow_id, progress, summary);
         emitter.emit('vllora_workflow_updated', { workflowId: workflow_id });
       } else {
-        await failPlanInDB(workflow_id, progress);
+        await failPlanInDB(workflow_id, progress, summary);
       }
 
       return {
@@ -1100,7 +1100,7 @@ export const executePlanHandler: ToolHandler = async (
         progress.is_complete = true;
         progress.has_error = true;
         emitProgress(progress);
-        await failPlanInDB(workflow_id, progress);
+        await failPlanInDB(workflow_id, progress, summary);
         throw new Error('Execution cancelled by user');
       }
 
@@ -1150,7 +1150,7 @@ export const executePlanHandler: ToolHandler = async (
     emitProgress(progress);
 
     // Directly persist completion to IndexedDB (belt-and-suspenders with event listeners)
-    await completePlanInDB(workflow_id, progress);
+    await completePlanInDB(workflow_id, progress, summary);
 
     emitter.emit('vllora_workflow_updated', { workflowId: workflow_id });
 
@@ -1181,7 +1181,7 @@ export const executePlanHandler: ToolHandler = async (
         steps: [],
         is_complete: true,
         has_error: true,
-      });
+      }, summary);
     }
 
     // Build an actionable error with completed/failed step info so the agent

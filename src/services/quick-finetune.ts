@@ -15,9 +15,9 @@
 import { datasetService, recordService, workflowService } from './service-registry';
 import {
   createFinetuneJobFromUpload,
-  listReinforcementJobs,
-  ReinforcementTrainingConfig,
-  ReinforcementInferenceParameters,
+  listFinetuneJobs,
+  FinetuneTrainingConfig,
+  FinetuneInferenceParameters,
 } from './finetune-api';
 import { emitter } from '@/utils/eventEmitter';
 
@@ -32,9 +32,9 @@ export interface QuickFinetuneResult {
 /** Training configuration options for finetune jobs */
 export interface TrainingConfigOptions {
   /** Training hyperparameters */
-  trainingConfig?: Partial<ReinforcementTrainingConfig>;
+  trainingConfig?: Partial<FinetuneTrainingConfig>;
   /** Inference parameters during training */
-  inferenceParameters?: Partial<ReinforcementInferenceParameters>;
+  inferenceParameters?: Partial<FinetuneInferenceParameters>;
   /** Chunk size for training data processing */
   chunkSize?: number;
   /** Number of nodes for distributed training */
@@ -96,7 +96,7 @@ export async function startFinetuneTraining(
 
   try {
     // Check for existing running/pending jobs for this dataset
-    const existingJobs = await listReinforcementJobs(workflowId);
+    const existingJobs = await listFinetuneJobs(workflowId);
     const activeJob = existingJobs.find(
       (job) => job.status === 'pending' || job.status === 'running'
     );

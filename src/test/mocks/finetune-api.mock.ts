@@ -120,15 +120,15 @@ export function mockFinetuneApi(opts: MockFinetuneApiOptions = {}) {
     ),
 
     // Training
-    createReinforcementJob: vi.fn().mockImplementation(() =>
+    createFinetuneJob: vi.fn().mockImplementation(() =>
       delayed({ id: 'ft-job-001', status: 'running' }, ms),
     ),
 
-    getReinforcementJobStatus: vi.fn().mockImplementation(() =>
+    getFinetuneJobStatus: vi.fn().mockImplementation(() =>
       delayed({ id: 'ft-job-001', status: 'succeeded' }, ms),
     ),
 
-    listReinforcementJobs: vi.fn().mockImplementation(() =>
+    listFinetuneJobs: vi.fn().mockImplementation(() =>
       delayed([], ms),
     ),
 
@@ -144,8 +144,8 @@ export function mockFinetuneApi(opts: MockFinetuneApiOptions = {}) {
       ], ms),
     ),
 
-    // Reinforcement training metrics
-    getReinforcementJobMetrics: vi.fn().mockImplementation(() =>
+    // Finetune training metrics
+    getFinetuneJobMetrics: vi.fn().mockImplementation(() =>
       delayed({ provider_job_id: 'ft-job-001', metrics: [] }, ms),
     ),
   };

@@ -13,7 +13,7 @@ import {
   makeCompletedTrainingResponse,
   makeFailedTrainingResponse,
   resolveTrainingPollResponse,
-  makeReinforcementMetricsResponse,
+  makeFinetuneMetricsResponse,
 } from '../scenarios/training-scenario-bridge';
 
 const BASE = 'http://localhost:8080';
@@ -52,7 +52,7 @@ export const trainingJobHandlers = [
     const scenario = getScenario();
     await delay(scenario.pollDelayMs);
 
-    return HttpResponse.json(makeReinforcementMetricsResponse(jobId, scenario.trainingScenario));
+    return HttpResponse.json(makeFinetuneMetricsResponse(jobId, scenario.trainingScenario));
   }),
 
   // GET /finetune/workflows/:workflowId/jobs — List training jobs

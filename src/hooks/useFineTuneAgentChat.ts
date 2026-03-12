@@ -20,7 +20,7 @@ import type { ExecutionProgress } from '@/lib/distri-finetune-tools/steps/execut
 import { stockfishTools, isChessDataset } from '@/lib/distri-finetune-tools/steps';
 import { workflowService, datasetService, recordService, evalJobService, iterationStateService } from '@/services/service-registry';
 import type { FinetuneWorkflowState, FinetuneStep } from '@/types/workflow-types';
-import { getReinforcementJobStatus, getFinetuneEvaluations, getEvaluatorVersions } from '@/services/finetune-api';
+import { getFinetuneJobStatus, getFinetuneEvaluations, getEvaluatorVersions } from '@/services/finetune-api';
 import type { EvalJob } from '@/types/eval-job';
 import type { IterationState } from '@/types/iteration-types';
 import type { TopicEvalStats } from '@/types/dataset-types';
@@ -543,7 +543,7 @@ async function resolveTrainingStatus(
   // If workflow says running, verify against the API (handles stale IndexedDB)
   if (status === 'running' || status === 'pending' || status === 'queued') {
     try {
-      const freshJob = await getReinforcementJobStatus(workflow.workflowId, t.jobId);
+      const freshJob = await getFinetuneJobStatus(workflow.workflowId, t.jobId);
       if (freshJob.status === 'succeeded') {
         status = 'completed';
         fineTunedModel = freshJob.fine_tuned_model ?? fineTunedModel;

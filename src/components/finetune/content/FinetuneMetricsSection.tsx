@@ -1,7 +1,7 @@
 /**
- * ReinforcementMetricsSection
+ * FinetuneMetricsSection
  *
- * Wrapper around ReinforcementMetricsChart with loading/error/empty states.
+ * Wrapper around FinetuneMetricsChart with loading/error/empty states.
  * Fetches training metrics from the API and polls for updates on active jobs.
  */
 
@@ -9,12 +9,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { RefreshCw, Loader2, Activity } from "lucide-react";
 import {
-  getReinforcementJobMetrics,
-  type ReinforcementJobMetricPoint,
+  getFinetuneJobMetrics,
+  type FinetuneJobMetricPoint,
 } from "@/services/finetune-api";
-import { ReinforcementMetricsChart } from "../ReinforcementMetricsChart";
+import { FinetuneMetricsChart } from "../FinetuneMetricsChart";
 
-interface ReinforcementMetricsSectionProps {
+interface FinetuneMetricsSectionProps {
   jobId: string;
   /** The workflow ID (same as dataset ID) — required for the API path */
   workflowId: string;
@@ -23,12 +23,12 @@ interface ReinforcementMetricsSectionProps {
 
 const POLL_INTERVAL = 15_000;
 
-export function ReinforcementMetricsSection({
+export function FinetuneMetricsSection({
   jobId,
   workflowId,
   isLive,
-}: ReinforcementMetricsSectionProps) {
-  const [metrics, setMetrics] = useState<ReinforcementJobMetricPoint[]>([]);
+}: FinetuneMetricsSectionProps) {
+  const [metrics, setMetrics] = useState<FinetuneJobMetricPoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +40,7 @@ export function ReinforcementMetricsSection({
     async (showRefresh: boolean) => {
       if (showRefresh) setIsRefreshing(true);
       try {
-        const response = await getReinforcementJobMetrics(workflowId, jobId);
+        const response = await getFinetuneJobMetrics(workflowId, jobId);
         setMetrics(response.metrics);
         hasDataRef.current = response.metrics.length > 0;
         setError(null);
@@ -127,7 +127,7 @@ export function ReinforcementMetricsSection({
 
   if (metrics.length > 0) {
     return (
-      <ReinforcementMetricsChart
+      <FinetuneMetricsChart
         metrics={metrics}
         isLive={isLive}
       />

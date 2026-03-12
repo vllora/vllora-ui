@@ -1,5 +1,5 @@
 /**
- * MSW Handler: /finetune/datasets/:id/finetune-evaluations
+ * MSW Handler: /finetune/workflows/:id/finetune-evaluations
  *
  * Returns per-epoch training evaluation data based on training scenario.
  */
@@ -12,7 +12,7 @@ const BASE = 'http://localhost:8080';
 
 export const finetuneEvaluationHandlers = [
   http.get(
-    `${BASE}/finetune/datasets/:workflowId/finetune-evaluations`,
+    `${BASE}/finetune/workflows/:workflowId/finetune-evaluations`,
     async () => {
       const scenario = getScenario();
       await delay(scenario.pollDelayMs);

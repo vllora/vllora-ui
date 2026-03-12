@@ -6,7 +6,7 @@
 
 import type { DistriFnTool } from '@distri/core';
 import { workflowService } from '@/services/service-registry';
-import { getReinforcementJobStatus } from '@/services/finetune-api';
+import { getFinetuneJobStatus } from '@/services/finetune-api';
 import { emitter } from '@/utils/eventEmitter';
 import type { ToolHandler } from '../types';
 
@@ -37,7 +37,7 @@ export const checkTrainingStatusHandler: ToolHandler = async (params) => {
     }
 
     // Get actual job status from backend API (source of truth)
-    const job = await getReinforcementJobStatus(workflow.workflowId, workflow.training.jobId);
+    const job = await getFinetuneJobStatus(workflow.workflowId, workflow.training.jobId);
 
     // Map backend status to workflow status
     const statusMap: Record<string, 'pending' | 'queued' | 'running' | 'completed' | 'failed'> = {

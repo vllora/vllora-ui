@@ -9,7 +9,7 @@ import type {
   FinetuneJob,
   FinetuneEvalResultsResponse,
   RowEpochResults,
-  ReinforcementJobMetricsResponse,
+  FinetuneJobMetricsResponse,
   TrainingMetricsSnapshot,
 } from '@/services/finetune-api';
 import type { TrainingScenarioKey } from './scenario-registry';
@@ -201,10 +201,10 @@ const TRAINING_METRICS: Record<
  * Build mock reinforcement training metrics response for a job.
  * Returns scenario-appropriate time series of GRPO metrics.
  */
-export function makeReinforcementMetricsResponse(
+export function makeFinetuneMetricsResponse(
   jobId: string,
   scenario: TrainingScenarioKey,
-): ReinforcementJobMetricsResponse {
+): FinetuneJobMetricsResponse {
   if (scenario === 'error') {
     return { provider_job_id: jobId, metrics: [] };
   }

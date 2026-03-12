@@ -31,7 +31,7 @@
 
 import express from 'express';
 import cors from 'cors';
-import multer from 'multer';
+// multer removed — upload endpoint no longer needed
 
 import {
   getScenario,
@@ -52,7 +52,7 @@ import {
   makeFailedTrainingResponse,
   makeFinetuneEvalResponse,
   resolveTrainingPollResponse,
-  makeReinforcementMetricsResponse,
+  makeFinetuneMetricsResponse,
 } from '../msw/scenarios/training-scenario-bridge';
 
 // =============================================================================
@@ -103,16 +103,9 @@ const mockTrainingJobs = new Map<string, string | null>();
 /** Maps provider_job_id → id so status polls with either ID resolve correctly. */
 const providerJobIdMap = new Map<string, string>();
 
-let datasetCounter = 0;
 let evalRunCounter = 0;
 let trainingJobCounter = 0;
 let mockDatasetIdOverride: string | null = null;
-
-function nextDatasetId(): string {
-  if (mockDatasetIdOverride) return mockDatasetIdOverride;
-  datasetCounter += 1;
-  return `mock-ds-${String(datasetCounter).padStart(3, '0')}`;
-}
 
 function nextEvalRunId(): string {
   evalRunCounter += 1;
@@ -124,40 +117,10 @@ function nextTrainingJobId(): string {
   return `mock-ft-${String(trainingJobCounter).padStart(3, '0')}`;
 }
 
-function registerDataset(workflowId: string, rowIds: string[] = []): MockDatasetEntry {
-  const entry: MockDatasetEntry = {
-    workflowId,
-    createdAt: new Date().toISOString(),
-    evalRunIds: [],
-    trainingJobIds: [],
-    rowIds,
-  };
-  mockDatasets.set(workflowId, entry);
-  return entry;
-}
-
-/** Parse row IDs from uploaded JSONL content. */
-function parseRowIdsFromJsonl(buffer: Buffer | undefined): string[] {
-  if (!buffer) return [];
-  try {
-    const text = buffer.toString('utf-8');
-    return text.split('\n')
-      .filter((line) => line.trim())
-      .map((line) => {
-        const parsed = JSON.parse(line);
-        return typeof parsed.id === 'string' ? parsed.id : '';
-      })
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
 function resetMockData(): void {
   mockDatasets.clear();
   mockTrainingJobs.clear();
   providerJobIdMap.clear();
-  datasetCounter = 0;
   evalRunCounter = 0;
   trainingJobCounter = 0;
   mockDatasetIdOverride = null;
@@ -173,7 +136,6 @@ function resolveJobId(rawJobId: string): string {
 // =============================================================================
 
 const app = express();
-const upload = multer({ storage: multer.memoryStorage() });
 
 app.use(cors());
 app.use(express.json());
@@ -222,33 +184,7 @@ app.get('/api/env', (_req, res) => {
   });
 });
 
-// =============================================================================
-// POST /finetune/datasets — Upload dataset
-// =============================================================================
-
-app.post('/finetune/datasets', upload.single('file'), async (req, res) => {
-  const scenario = getScenario();
-  await delayMs(scenario.createDelayMs);
-
-  if (scenario.uploadBehavior === 'error') {
-    res.status(400).json({ error: 'Upload failed: invalid format' });
-    return;
-  }
-
-  if (scenario.uploadBehavior === 'timeout') {
-    await delayMs(30_000);
-    res.status(504).json({ error: 'Request timed out' });
-    return;
-  }
-
-  // Parse row IDs from uploaded JSONL so eval responses use real IDs
-  const rowIds = parseRowIdsFromJsonl(req.file?.buffer);
-
-  const workflowId = nextDatasetId();
-  registerDataset(workflowId, rowIds);
-  console.log(`[mock] Dataset ${workflowId} uploaded with ${rowIds.length} rows`);
-  res.json({ workflow_id: workflowId });
-});
+// NOTE: POST /finetune/datasets (upload) was removed — gateway auto-uploads.
 
 // =============================================================================
 // GET /finetune/workflows/:workflowId/evaluator/versions
@@ -419,7 +355,7 @@ app.get('/finetune/workflows/:workflowId/jobs/:jobId/metrics', async (req, res) 
   const jobId = resolveJobId(req.params.jobId);
   const scenario = getScenario();
   await delayMs(scenario.pollDelayMs);
-  res.json(makeReinforcementMetricsResponse(jobId, scenario.trainingScenario));
+  res.json(makeFinetuneMetricsResponse(jobId, scenario.trainingScenario));
 });
 
 // =============================================================================
@@ -435,10 +371,10 @@ app.get('/finetune/workflows/:workflowId/jobs/:jobId/weights/url', async (_req, 
 });
 
 // =============================================================================
-// GET /finetune/datasets/:workflowId/finetune-evaluations
+// GET /finetune/workflows/:workflowId/finetune-evaluations
 // =============================================================================
 
-app.get('/finetune/datasets/:workflowId/finetune-evaluations', async (req, res) => {
+app.get('/finetune/workflows/:workflowId/finetune-evaluations', async (req, res) => {
   const scenario = getScenario();
   await delayMs(scenario.pollDelayMs);
   const entry = mockDatasets.get(req.params.workflowId);
@@ -448,10 +384,10 @@ app.get('/finetune/datasets/:workflowId/finetune-evaluations', async (req, res) 
 });
 
 // =============================================================================
-// POST /finetune/datasets/analytics/dry-run
+// POST /finetune/analytics/dry-run
 // =============================================================================
 
-app.post('/finetune/datasets/analytics/dry-run', async (_req, res) => {
+app.post('/finetune/analytics/dry-run', async (_req, res) => {
   await delayMs(getScenario().createDelayMs);
   res.json({
     analytics: {

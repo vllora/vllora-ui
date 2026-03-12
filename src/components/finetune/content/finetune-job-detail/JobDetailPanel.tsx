@@ -20,7 +20,7 @@ import { EpochProgressBar } from "./EpochProgressSection";
 import { FinetuneJobDetailsSection } from "./FinetuneJobDetailsSection";
 import { UsageGuideDialog } from "./UsageGuideSection";
 import { TrainingMetricsSection } from "../TrainingMetricsSection";
-import { ReinforcementMetricsSection } from "../ReinforcementMetricsSection";
+import { FinetuneMetricsSection } from "../FinetuneMetricsSection";
 import { PerRowDetailsSection } from "../PerRowDetailsSection";
 import { EvaluatorVersionHistory } from "../EvaluatorVersionHistory";
 import { ErrorLogSection } from "../ErrorLogSection";
@@ -32,8 +32,8 @@ import {
   showWeightsDownloadToast,
 } from "../utils";
 import {
-  cancelReinforcementJob,
-  resumeReinforcementJob,
+  cancelFinetuneJob,
+  resumeFinetuneJob,
   getWeightsDownloadUrl,
 } from "@/services/finetune-api";
 import type { FinetuneJob } from "@/services/finetune-api";
@@ -73,7 +73,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
     if (isActionLoading) return;
     setIsActionLoading(true);
     try {
-      await cancelReinforcementJob(job.workflow_id, job.provider_job_id);
+      await cancelFinetuneJob(job.workflow_id, job.provider_job_id);
       toast.success("Job cancelled");
     } catch (error) {
       toast.error(
@@ -88,7 +88,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
     if (isActionLoading) return;
     setIsActionLoading(true);
     try {
-      await resumeReinforcementJob(job.workflow_id, job.provider_job_id);
+      await resumeFinetuneJob(job.workflow_id, job.provider_job_id);
       toast.success("Job resumed");
     } catch (error) {
       toast.error(
@@ -274,8 +274,8 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
             )
           )}
 
-          {/* ── Reinforcement Training Metrics (reward, KL, loss, completions) ── */}
-          <ReinforcementMetricsSection
+          {/* ── Finetune Training Metrics (reward, KL, loss, completions) ── */}
+          <FinetuneMetricsSection
             jobId={job.id}
             workflowId={job.workflow_id}
             isLive={job.status === "running"}

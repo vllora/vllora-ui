@@ -1,5 +1,5 @@
 /**
- * MSW Handler: /finetune/datasets/analytics/dry-run
+ * MSW Handler: /finetune/analytics/dry-run
  *
  * Returns static analytics response for dry-run analytics requests.
  */
@@ -10,7 +10,7 @@ import { getScenario } from '../scenarios/scenario-registry';
 const BASE = 'http://localhost:8080';
 
 export const analyticsHandlers = [
-  http.post(`${BASE}/finetune/datasets/analytics/dry-run`, async () => {
+  http.post(`${BASE}/finetune/analytics/dry-run`, async () => {
     const scenario = getScenario();
     await delay(scenario.createDelayMs);
 

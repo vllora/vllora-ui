@@ -381,7 +381,7 @@ function TrainingActionButtons({ nextAction }: { nextAction: string }) {
 // =============================================================================
 
 function TrainingCheckpointCard({ result }: { result: AnalyzeTrainingResult }) {
-  const { overall_progression, per_topic, total_epochs, recommendations, next_action, eval_baseline, evaluator_version, reinforcement_metrics } = result;
+  const { overall_progression, per_topic, total_epochs, recommendations, next_action, eval_baseline, evaluator_version, training_metrics } = result;
 
   // Determine dominant pattern from per_topic
   const dominantPattern = per_topic && per_topic.length > 0
@@ -412,19 +412,19 @@ function TrainingCheckpointCard({ result }: { result: AnalyzeTrainingResult }) {
       )}
 
       {/* Reinforcement metrics snapshot */}
-      {reinforcement_metrics && (
+      {training_metrics && (
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
-          {reinforcement_metrics.reward != null && (
-            <span>Reward: <span className="font-mono text-foreground">{reinforcement_metrics.reward.toFixed(3)}</span></span>
+          {training_metrics.reward != null && (
+            <span>Reward: <span className="font-mono text-foreground">{training_metrics.reward.toFixed(3)}</span></span>
           )}
-          {reinforcement_metrics.kl != null && (
-            <span>KL: <span className="font-mono text-foreground">{reinforcement_metrics.kl.toFixed(4)}</span></span>
+          {training_metrics.kl != null && (
+            <span>KL: <span className="font-mono text-foreground">{training_metrics.kl.toFixed(4)}</span></span>
           )}
-          {reinforcement_metrics.loss != null && (
-            <span>Loss: <span className="font-mono text-foreground">{reinforcement_metrics.loss.toFixed(4)}</span></span>
+          {training_metrics.loss != null && (
+            <span>Loss: <span className="font-mono text-foreground">{training_metrics.loss.toFixed(4)}</span></span>
           )}
-          {reinforcement_metrics.clipped_ratio != null && (
-            <span>Clipped: <span className={`font-mono ${reinforcement_metrics.clipped_ratio > 0.3 ? 'text-amber-500' : 'text-foreground'}`}>{(reinforcement_metrics.clipped_ratio * 100).toFixed(1)}%</span></span>
+          {training_metrics.clipped_ratio != null && (
+            <span>Clipped: <span className={`font-mono ${training_metrics.clipped_ratio > 0.3 ? 'text-amber-500' : 'text-foreground'}`}>{(training_metrics.clipped_ratio * 100).toFixed(1)}%</span></span>
           )}
         </div>
       )}

@@ -18,8 +18,8 @@ import {
 } from "lucide-react";
 import {
   FinetuneJob,
-  cancelReinforcementJob,
-  resumeReinforcementJob,
+  cancelFinetuneJob,
+  resumeFinetuneJob,
   getWeightsDownloadUrl,
 } from "@/services/finetune-api";
 import { toast } from "sonner";
@@ -79,7 +79,7 @@ export function FinetuneJobTableRow({ job, onJobAction }: FinetuneJobTableRowPro
 
     setIsActionLoading(true);
     try {
-      await cancelReinforcementJob(job.workflow_id, job.provider_job_id);
+      await cancelFinetuneJob(job.workflow_id, job.provider_job_id);
       toast.success('Job cancelled successfully');
       onJobAction?.();
     } catch (error) {
@@ -95,7 +95,7 @@ export function FinetuneJobTableRow({ job, onJobAction }: FinetuneJobTableRowPro
 
     setIsActionLoading(true);
     try {
-      await resumeReinforcementJob(job.workflow_id, job.provider_job_id);
+      await resumeFinetuneJob(job.workflow_id, job.provider_job_id);
       toast.success('Job resumed successfully');
       onJobAction?.();
     } catch (error) {

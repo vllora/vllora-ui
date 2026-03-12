@@ -1,5 +1,5 @@
 /**
- * ReinforcementMetricsChart
+ * FinetuneMetricsChart
  *
  * Visualizes raw GRPO/GSPO training metrics (reward, KL, loss, completion stats)
  * with alert indicators based on the reinforcement_metrics_cheatsheet thresholds.
@@ -19,14 +19,14 @@ import {
 } from "recharts";
 import { cn } from "@/lib/utils";
 import { AlertTriangle, Activity, TrendingUp, Zap } from "lucide-react";
-import type { ReinforcementJobMetricPoint } from "@/services/finetune-api";
+import type { FinetuneJobMetricPoint } from "@/services/finetune-api";
 
 // =============================================================================
 // Types
 // =============================================================================
 
-interface ReinforcementMetricsChartProps {
-  metrics: ReinforcementJobMetricPoint[];
+interface FinetuneMetricsChartProps {
+  metrics: FinetuneJobMetricPoint[];
   className?: string;
   isLive?: boolean;
 }
@@ -85,7 +85,7 @@ interface MetricDef {
 const CLIPPED_RATIO_THRESHOLD = 0.7;
 const FRAC_ZERO_STD_THRESHOLD = 0.6;
 
-function getAlertCount(metrics: ReinforcementJobMetricPoint[]): number {
+function getAlertCount(metrics: FinetuneJobMetricPoint[]): number {
   if (metrics.length === 0) return 0;
   const latest = metrics[metrics.length - 1].metrics;
   let count = 0;
@@ -159,11 +159,11 @@ function formatMetricValue(value: number): string {
 // Main Component
 // =============================================================================
 
-export function ReinforcementMetricsChart({
+export function FinetuneMetricsChart({
   metrics,
   className,
   isLive,
-}: ReinforcementMetricsChartProps) {
+}: FinetuneMetricsChartProps) {
   const [activeTab, setActiveTab] = useState<MetricTab>("reward");
   const alertCount = useMemo(() => getAlertCount(metrics), [metrics]);
 
