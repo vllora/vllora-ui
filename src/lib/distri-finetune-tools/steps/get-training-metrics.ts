@@ -17,8 +17,7 @@ import {
   listReinforcementJobs,
 } from '@/services/finetune-api';
 import type { TrainingMetricsSnapshot } from '@/services/finetune-api';
-import { getDatasetById } from '@/services/datasets-db';
-import { getWorkflowByDataset } from '@/services/finetune-workflow-db';
+import { datasetService, workflowService } from '@/services/service-registry';
 
 // =============================================================================
 // Alert Thresholds (from reinforcement_metrics_cheatsheet.md)
@@ -99,15 +98,16 @@ async function resolveJobId(
 ): Promise<string> {
   if (jobId) return jobId;
 
-  const workflow = await getWorkflowByDataset(datasetId);
+  const workflow = await workflowService.getByDataset(datasetId);
   if (workflow?.training?.jobId) return workflow.training.jobId;
 
-  const dataset = await getDatasetById(datasetId);
-  if (!dataset?.backendDatasetId) {
-    throw new Error('Dataset not uploaded to backend');
+  const dataset = await datasetService.getById(datasetId);
+  if (!dataset) {
+    throw new Error('Dataset not found');
   }
 
-  const jobs = await listReinforcementJobs(undefined, undefined, dataset.backendDatasetId);
+  // The dataset ID is the backend dataset ID — they are always the same.
+  const jobs = await listReinforcementJobs(dataset.id);
   const active = jobs
     .filter((j) => j.status === 'running' || j.status === 'succeeded' || j.status === 'pending')
     .sort((a, b) => (b.updated_at).localeCompare(a.updated_at));
@@ -298,13 +298,18 @@ export const getTrainingMetricsHandler: ToolHandler = async (params) => {
       return { success: false, error: 'Either dataset_id or job_id is required' } satisfies GetTrainingMetricsResult;
     }
 
-    // Resolve job ID
-    const resolvedJobId = await resolveJobId(datasetId ?? '', jobId);
+    if (!datasetId) {
+      return { success: false, error: 'dataset_id is required for API calls (workflow scoping)' } satisfies GetTrainingMetricsResult;
+    }
+
+    // Resolve job ID (datasetId === workflowId)
+    const workflowId = datasetId;
+    const resolvedJobId = await resolveJobId(workflowId, jobId);
 
     // Fetch job status and metrics in parallel
     const [jobStatus, metricsResponse] = await Promise.all([
-      getReinforcementJobStatus(resolvedJobId),
-      getReinforcementJobMetrics(resolvedJobId),
+      getReinforcementJobStatus(workflowId, resolvedJobId),
+      getReinforcementJobMetrics(workflowId, resolvedJobId),
     ]);
 
     const snapshots = metricsResponse.metrics.map((m) => m.metrics);

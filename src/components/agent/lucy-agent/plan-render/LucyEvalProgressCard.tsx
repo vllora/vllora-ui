@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { emitter } from '@/utils/eventEmitter';
-import type { DryRunJob } from '@/types/dry-run-job';
+import type { EvalJob } from '@/types/eval-job';
 
 // =============================================================================
 // Types
@@ -26,7 +26,7 @@ interface EvalProgressCardProps {
   /** The dataset ID to filter events for */
   readonly datasetId: string;
   /** Initial job data (if already running when card mounts) */
-  readonly initialJob?: DryRunJob;
+  readonly initialJob?: EvalJob;
 }
 
 // =============================================================================
@@ -78,7 +78,7 @@ export function LucyEvalProgressCard({ datasetId, initialJob }: EvalProgressCard
 
   // Listen for job update events
   useEffect(() => {
-    const handleUpdate = ({ job }: { jobId: string; job: DryRunJob }) => {
+    const handleUpdate = ({ job }: { jobId: string; job: EvalJob }) => {
       if (job.datasetId !== datasetId) return;
 
       const snapshot = job.pollingSnapshot;

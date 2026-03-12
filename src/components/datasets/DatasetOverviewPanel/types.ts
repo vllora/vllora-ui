@@ -112,6 +112,6 @@ export interface StepDetailContext {
   stepResult: unknown;
   plan: import("@/lib/distri-finetune-tools/steps/propose-plan/types").Plan | null;
   dataset: import("@/types/dataset-types").Dataset | null | undefined;
-  dryRunJobs: import("@/types/dry-run-job").DryRunJob[];
+  dryRunJobs: import("@/types/eval-job").EvalJob[];
   finetuneJobs: import("@/services/finetune-api").FinetuneJob[];
 }

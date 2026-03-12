@@ -690,9 +690,6 @@ interface Dataset {
   topicHierarchy?: TopicHierarchyConfig;  // Full topic tree (Step 1 output)
   evalScript?: string;                     // JavaScript evaluation script (Step 4 output)
 
-  // Backend sync
-  backendDatasetId?: string;  // ID from backend after upload
-
   // Statistics for UI display
   coverageStats?: CoverageStats;
   dryRunStats?: DryRunStats;
@@ -877,6 +874,57 @@ Context:
 ```
 
 This context allows the agent to make informed decisions about which tools to use and what guidance to provide.
+
+---
+
+## Two Iteration Loops (Inner & Outer)
+
+Beyond the linear 7-step pipeline, Lucy supports two reactive iteration loops for improving dataset quality and training outcomes.
+
+```
+                    ┌──────────────────────────────────────────┐
+                    │         INNER LOOP (Dataset Iteration)    │
+                    │         Uses: DRY RUN (EVAL) SCORES       │
+                    │                                           │
+     ┌──────────┐   │  Generate → Upload → Eval → Analyze ──┐  │
+     │  Topics   │──►│                                    │  │  │
+     │  Grader   │   │  ◄── Adjust (Levers 1-3, 5) ◄─────┘  │  │
+     └──────────┘   │                                           │
+                    │  Dry run scores healthy? ──── YES ────────┤
+                    └───────────────────────────────────────────┘
+                                                                │
+                    ┌──────────────────────────────────────────┐
+                    │         OUTER LOOP (Training Iteration)   │
+                    │         Uses: TRAINING (FINETUNE) SCORES  │
+                    │                                           │
+                    │  Train → Analyze epochs → Post-eval ──┐  │
+                    │                                    │  │  │
+                    │  ◄── Adjust (Lever 4) ◄────────────┘  │  │
+                    │  ◄── Back to inner loop? ◄─────────┘  │  │
+                    │                                           │
+                    │  Fine-tuned > Base? ──── YES ────────────┤
+                    └───────────────────────────────────────────┘
+                                                                │
+                                                            DEPLOY
+```
+
+**Inner loop** uses `analyze_evaluation` (reactive, runs on eval completion or catch-up). Implements the full RFT decision tree (Steps A-F): score classification, health assessment, per-topic diagnosis, grader health, cross-iteration comparison, escalation ladder.
+
+**Outer loop** uses `analyze_training` + `get_training_metrics` (reactive, runs after training completes). Per-epoch analysis detects overfitting, no-learning, and reward hacking patterns.
+
+**Iteration step types** supported by `execute_plan`:
+```typescript
+type ExecutionStepId =
+  // Base pipeline
+  | 'topics' | 'adjust_topics' | 'categorize' | 'generate'
+  | 'grader' | 'upload' | 'dryrun' | 'finetune'
+  // Iteration steps (inner loop)
+  | 'regenerate_topic' | 'adjust_grader' | 'analyze'
+  // Outer loop
+  | 'post_training_eval';
+```
+
+Both loops work via agent instruction compliance + reactive analysis tools. Iteration state is persisted in IndexedDB for cross-iteration memory.
 
 ---
 

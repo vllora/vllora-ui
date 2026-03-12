@@ -21,7 +21,7 @@ import type { Plan } from "@/lib/distri-finetune-tools/steps/propose-plan";
 import type { PlanStatus } from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
 import { WorkspaceTabsConsumer } from "@/contexts/WorkspaceTabsContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
-import { getWorkflowByDataset } from "@/services/finetune-workflow-db";
+import { workflowService } from "@/services/service-registry";
 import { generateSkillPackageHandler } from "@/lib/distri-finetune-tools/steps/generate-skill-package";
 import { downloadSkillPackageHandler } from "@/lib/distri-finetune-tools/steps/download-skill-package";
 
@@ -173,7 +173,7 @@ function PlanDisplayView({
     }
     setIsDownloading(true);
     try {
-      const workflow = await getWorkflowByDataset(datasetId);
+      const workflow = await workflowService.getByDataset(datasetId);
       if (!workflow) {
         toast.error('No workflow found for this dataset');
         return;

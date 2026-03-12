@@ -8,7 +8,7 @@
 
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { FinetuneWorkflowState } from '@/services/finetune-workflow-db';
+import type { FinetuneWorkflowState } from '@/types/workflow-types';
 import type { PlanStatus } from '@/lib/distri-finetune-tools/steps/proposed-plan-store';
 
 // ============================================================================

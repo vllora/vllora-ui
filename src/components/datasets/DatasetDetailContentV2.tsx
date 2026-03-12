@@ -30,7 +30,7 @@ import { ExplorerSidebar, LucySidebar, TasksViewer, LogsViewer } from "./sidebar
 import { EvaluationConfigPanel } from "./evaluation-dialog/EvaluationConfigPanel";
 import { FinetuneConfigPanel } from "@/components/finetune/content/FinetuneConfigPanel";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
-import { DryRunJobsProvider } from "@/contexts/DryRunJobsContext";
+import { EvalJobsProvider } from "@/contexts/EvalJobsContext";
 import { PlanPreview } from "./PlanPreview";
 import { DatasetTitleBar, DatasetBreadcrumbBar } from "./DatasetBreadcrumbBar";
 import { useDatasetReadme } from "@/hooks/useDatasetReadme";
@@ -198,19 +198,19 @@ export function DatasetDetailContentV2() {
   );
 
   // Finetune jobs sidebar
-  const { setCurrentBackendDatasetId } = FinetuneJobsConsumer();
+  const { setCurrentDatasetId } = FinetuneJobsConsumer();
 
-  // Set the backend dataset ID for filtering jobs when dataset changes
+  // Set the dataset ID for filtering jobs when dataset changes
   useEffect(() => {
-    if (dataset?.backendDatasetId) {
-      setCurrentBackendDatasetId(dataset.backendDatasetId);
+    if (dataset?.id) {
+      setCurrentDatasetId(dataset.id);
     } else {
-      setCurrentBackendDatasetId(null);
+      setCurrentDatasetId(null);
     }
     return () => {
-      setCurrentBackendDatasetId(null);
+      setCurrentDatasetId(null);
     };
-  }, [dataset?.backendDatasetId, setCurrentBackendDatasetId]);
+  }, [dataset?.id, setCurrentDatasetId]);
 
   // Dialog state for records analytics
   const [analyticsDialogOpen, setAnalyticsDialogOpen] = useState(false);
@@ -714,7 +714,7 @@ export function DatasetDetailContentV2() {
   const contentSection: ContentSection = tabContentSection;
 
   return (
-    <DryRunJobsProvider dataset={dataset}>
+    <EvalJobsProvider dataset={dataset}>
      <WorkspaceTabsProvider datasetId={datasetId} initialTabs={emptyDatasetInitialTabs}>
       {/* Bridge: syncs workspace tab state ↔ parent content section */}
       <WorkspaceTabBridge openTabRef={openTabRef} onSectionChange={setTabContentSection} onActivePathChange={setActiveTabPath} />
@@ -1003,6 +1003,6 @@ export function DatasetDetailContentV2() {
         />
       </div>
      </WorkspaceTabsProvider>
-    </DryRunJobsProvider>
+    </EvalJobsProvider>
   );
 }

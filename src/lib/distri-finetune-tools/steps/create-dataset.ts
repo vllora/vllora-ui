@@ -9,7 +9,7 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import * as datasetsDB from '@/services/datasets-db';
+import { datasetService } from '@/services/service-registry';
 import { emitter } from '@/utils/eventEmitter';
 import type { ToolHandler } from '../types';
 
@@ -25,7 +25,7 @@ export const createDatasetHandler: ToolHandler = async (params) => {
       typeof objective === 'string' && objective.trim() ? objective.trim() : undefined;
 
     // Create dataset + auto-create workflow if objective is provided
-    const dataset = await datasetsDB.createDataset(name.trim(), resolvedObjective);
+    const dataset = await datasetService.create(name.trim(), resolvedObjective);
 
     // Navigate the browser to the new dataset
     emitter.emit('vllora_dataset_navigate' as never, {

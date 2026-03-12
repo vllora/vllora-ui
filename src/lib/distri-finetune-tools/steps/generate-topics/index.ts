@@ -5,9 +5,7 @@
  */
 
 import type { DistriFnTool } from "@distri/core";
-import * as workflowDB from "@/services/finetune-workflow-db";
-import * as datasetsDB from "@/services/datasets-db";
-import * as knowledgeDB from "@/services/knowledge-sources-db";
+import { workflowService, datasetService, recordService, knowledgeSourceService } from "@/services/service-registry";
 import type { ToolHandler } from "../../types";
 import type { TopicHierarchyNode } from "@/types/dataset-types";
 import { countLeafTopics } from "../helpers";
@@ -39,7 +37,7 @@ function hierarchyToProposedTopics(nodes: TopicHierarchyNode[]): ProposedTopic[]
  */
 async function getKnowledgeSourceTopics(datasetId: string): Promise<string[]> {
   try {
-    const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
+    const sources = await knowledgeSourceService.getByDataset(datasetId);
     const allTopics: string[] = [];
 
     for (const source of sources) {
@@ -121,7 +119,7 @@ async function generateTopicsCore(
   focusValue?: string,
 ): Promise<{ success: boolean; hierarchy?: TopicHierarchyNode[]; error?: string }> {
   if (USE_BACKEND_TOPIC_GENERATION) {
-    const records = await datasetsDB.getRecordsByDatasetId(datasetId);
+    const records = await recordService.getByDatasetId(datasetId);
     if (records.length === 0) {
       // For suggest mode (plan creation), empty records is fine
       // Fall through to frontend generation
@@ -199,7 +197,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
     // Used during plan creation to get topic suggestions
     // =========================================================================
     if (dataset_id && typeof dataset_id === "string" && !workflow_id) {
-      const dataset = await datasetsDB.getDatasetById(dataset_id);
+      const dataset = await datasetService.getById(dataset_id);
       if (!dataset) {
         return { success: false, error: `Dataset ${dataset_id} not found` };
       }
@@ -242,7 +240,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
       if (dataset.datasetObjective && !suggestNormalized) {
         try {
           suggestNormalized = await normalizeObjectiveToRole(dataset.datasetObjective);
-          await datasetsDB.updateDatasetObjective(dataset.id, dataset.datasetObjective, suggestNormalized);
+          await datasetService.updateObjective(dataset.id, dataset.datasetObjective, suggestNormalized);
         } catch {
           console.warn("[generate_topics] Objective normalization failed, will use heuristic fallback");
         }
@@ -274,7 +272,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
       return { success: false, error: "workflow_id or dataset_id is required" };
     }
 
-    const workflow = await workflowDB.getWorkflow(workflow_id);
+    const workflow = await workflowService.get(workflow_id);
     if (!workflow) {
       return { success: false, error: "Workflow not found" };
     }
@@ -289,7 +287,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
 
     // Auto-advance from not_started to topics_config when topic operations begin
     if (workflow.currentStep === "not_started") {
-      await workflowDB.advanceToStep(workflow_id, "topics_config");
+      await workflowService.advanceToStep(workflow_id, "topics_config");
     }
 
     let hierarchy: TopicHierarchyNode[];
@@ -316,7 +314,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
 
     // Append mode: merge with existing hierarchy from dataset
     if (mode === "append") {
-      const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
+      const dataset = await datasetService.getById(workflow.datasetId);
       const existingHierarchy = dataset?.topicHierarchy?.hierarchy;
       if (existingHierarchy && existingHierarchy.length > 0) {
         hierarchy = mergeHierarchies(existingHierarchy, hierarchy);
@@ -326,12 +324,12 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
 
     // Ensure the objective has a normalized "You are ..." role sentence
     if (workflow.trainingGoals) {
-      const workflowDataset = await datasetsDB.getDatasetById(workflow.datasetId);
+      const workflowDataset = await datasetService.getById(workflow.datasetId);
       let normalizedObj = workflowDataset?.normalizedObjective;
       if (!normalizedObj) {
         try {
           normalizedObj = await normalizeObjectiveToRole(workflow.trainingGoals);
-          await datasetsDB.updateDatasetObjective(workflow.datasetId, workflow.trainingGoals, normalizedObj);
+          await datasetService.updateObjective(workflow.datasetId, workflow.trainingGoals, normalizedObj);
         } catch {
           console.warn("[generate_topics] Objective normalization failed, will use heuristic fallback");
         }
@@ -348,7 +346,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
     const topicCount = countLeafTopics(hierarchy);
 
     // Save hierarchy to dataset (single source of truth)
-    await datasetsDB.updateDatasetTopicHierarchy(workflow.datasetId, {
+    await datasetService.updateTopicHierarchy(workflow.datasetId, {
       goals: workflow.trainingGoals,
       depth: depthValue,
       hierarchy,
@@ -356,7 +354,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
     });
 
     // Update workflow with metadata only (not the full hierarchy)
-    await workflowDB.updateStepData(workflow_id, "topicsConfig", {
+    await workflowService.updateStepData(workflow_id, "topicsConfig", {
       topicCount,
       depth: depthValue,
       generatedAt: Date.now(),
@@ -364,7 +362,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
     });
 
     // Get record counts for categorization info
-    const allRecords = await datasetsDB.getRecordsByDatasetId(workflow.datasetId);
+    const allRecords = await recordService.getByDatasetId(workflow.datasetId);
     const uncategorizedCount = allRecords.filter((r) => !r.topic).length;
 
     return {

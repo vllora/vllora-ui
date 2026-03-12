@@ -2,7 +2,7 @@
  * EvaluationBottomPanel
  *
  * VS Code-style bottom panel for dry run results.
- * Shows the DryRunActivityView split layout with job details on left and job list on right.
+ * Shows the EvalActivityView split layout with job details on left and job list on right.
  * Running jobs are shown inline in the split view.
  */
 
@@ -13,8 +13,8 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
-import { DryRunActivityView } from "../dry-run-dialog/DryRunActivityView";
-import { DryRunJobsConsumer } from "@/contexts/DryRunJobsContext";
+import { EvalActivityView } from "../eval-dialog";
+import { EvalJobsConsumer } from "@/contexts/EvalJobsContext";
 import { cn } from "@/lib/utils";
 
 const OPEN_DRY_RUN_JOB_EVENT = "vllora_select_dry_run_job";
@@ -44,7 +44,7 @@ export function EvaluationBottomPanel({
     lastCompletedJob,
     cancelDryRun,
     refreshJob,
-  } = DryRunJobsConsumer();
+  } = EvalJobsConsumer();
 
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
@@ -105,7 +105,7 @@ export function EvaluationBottomPanel({
     return (
       <div className="flex flex-col h-full overflow-hidden bg-background">
         <div className="flex-1 min-h-0 flex flex-col">
-          <DryRunActivityView
+          <EvalActivityView
             datasetId={datasetId}
             jobs={jobs}
             onCancelJob={handleCancel}
@@ -163,7 +163,7 @@ export function EvaluationBottomPanel({
       {/* Content area */}
       {!isCollapsed && (
         <div className="flex-1 min-h-0 flex flex-col">
-          <DryRunActivityView
+          <EvalActivityView
             datasetId={datasetId}
             jobs={jobs}
             onCancelJob={handleCancel}

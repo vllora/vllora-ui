@@ -14,7 +14,7 @@ The Lucy Dataset Agent follows a **3-tier architecture** with tools executing lo
 │  ┌────────────────────────┐   ┌─────────────────────────────────────┐  │
 │  │ LucyDatasetAssistant   │   │    distri-finetune-tools/           │  │
 │  │ - Sidebar UI           │   │    - Workflow tools (4)             │  │
-│  │ - Auto-analysis        │   │    - Step tools (43)                │  │
+│  │ - Auto-analysis        │   │    - Step tools (47)                │  │
 │  │ - Quick actions        │   │    - Execute locally in browser     │  │
 │  └────────────────────────┘   └─────────────────────────────────────┘  │
 │           │                              │                              │
@@ -45,7 +45,7 @@ The Lucy Dataset Agent follows a **3-tier architecture** with tools executing lo
 │  ┌───────────────────────┐   ┌────────────────────────────────────────┐│
 │  │   AgentOrchestrator   │   │     vllora-finetune-agent.md           ││
 │  │   - Loads agent defs  │◄──│     - Model: gpt-4.1                   ││
-│  │   - Tool execution    │   │     - 16 external + 3 builtin tools    ││
+│  │   - Tool execution    │   │     - 24 external + 3 builtin tools    ││
 │  │   - Message routing   │   │     - max_iterations: 30               ││
 │  │   - Sub-agent mgmt    │   │     - 3 sub-agents (topics, workflow,  ││
 │  │                       │   │       data_generation)                  ││
@@ -73,7 +73,7 @@ The Lucy Dataset Agent follows a **3-tier architecture** with tools executing lo
 | External Tool Timeout | `600s` (10 min for user responses) |
 | Sub-Agents | `finetune_topics`, `finetune_workflow`, `data_generation` |
 | Builtin Tools | 3 (`final`, `write_todos`, `transfer_to_agent`) |
-| External Tools | 16 (`ask_follow_up`, `get_workflow_status`, `get_dataset_state`, `get_dataset_records`, `update_objective`, `analyze_knowledge_sources`, `search_knowledge`, `generate_topics`, `generate_grader`, `propose_plan`, `adjust_plan`, `save_plan`, `execute_plan`, `update_plan_markdown`, `generate_skill_package`, `download_skill_package`) |
+| External Tools | 24 (`ask_follow_up`, `get_workflow_status`, `get_dataset_state`, `get_dataset_records`, `update_objective`, `analyze_knowledge_sources`, `search_knowledge`, `generate_topics`, `generate_grader`, `propose_plan`, `adjust_plan`, `save_plan`, `execute_plan`, `update_plan_markdown`, `apply_topic_hierarchy`, `generate_initial_data`, `configure_grader`, `upload_dataset`, `run_evaluation`, `start_training`, `start_finetune_workflow`, `advance_to_step`, `update_dataset_readme`, `analyze_evaluation`, `analyze_training`, `get_training_metrics`) |
 
 The orchestrator is the main agent users interact with. It handles plan-first routing (detecting when to create plans from knowledge sources), delegates specialized work to sub-agents via `transfer_to_agent`, and calls some tools directly (plan system, knowledge analysis, dataset access).
 
@@ -92,7 +92,7 @@ The orchestrator delegates specialized tasks to 3 sub-agents via `transfer_to_ag
 | Sub-Agent | File | Purpose | External Tools |
 |-----------|------|---------|---------------|
 | `finetune_topics` | `finetune-topics-agent.md` | Topic hierarchy generation, display, manipulation | 5: `generate_topics`, `apply_topic_hierarchy`, `adjust_topic_hierarchy`, `get_topic_hierarchy`, `get_dataset_records` |
-| `finetune_workflow` | `finetune-workflow-agent.md` | Workflow operations — data generation, grading, training, deployment, skill packaging, evaluation analysis, inner loop iteration | 27: all workflow control + data ops + grader + training + packaging + evaluation analysis + analyze_evaluation tools |
+| `finetune_workflow` | `finetune-workflow-agent.md` | Workflow operations — data generation, grading, training, deployment, skill packaging, evaluation analysis, inner loop iteration | 28: all workflow control + data ops + grader + training + packaging + evaluation analysis + analyze_evaluation tools |
 | `data_generation` | `data-generation-agent.md` | Interactive data gen with knowledge sources, previews, iterative refinement | 12: knowledge source tools + generation tools + dataset access |
 
 **Delegation Flow:**
@@ -119,9 +119,9 @@ vllora_finetune_agent (Orchestrator)
 - **Tool overlap**: Some tools appear on multiple agents (e.g., `get_dataset_records` on orchestrator + topics + data_generation) to allow each agent to access what it needs
 
 **Agent Definition Files** (`gateway/agents/finetune/`):
-- `vllora-finetune-agent.md` — Orchestrator (16 external + 3 builtin tools)
+- `vllora-finetune-agent.md` — Orchestrator (24 external + 3 builtin tools)
 - `finetune-topics-agent.md` — Topics specialist (5 external tools)
-- `finetune-workflow-agent.md` — Workflow executor (28 external tools, inner loop + outer loop analysis)
+- `finetune-workflow-agent.md` — Workflow executor (29 external tools, inner loop + outer loop analysis)
 - `data-generation-agent.md` — Data generation specialist (12 external tools)
 
 ---
@@ -267,7 +267,7 @@ const tools = useMemo<DistriAnyTool[]>(
 );
 ```
 
-- `finetuneTools`: All 47 function tools (4 workflow + 43 step tools)
+- `finetuneTools`: All 51 function tools (4 workflow + 47 step tools)
 - `createAskFollowUpTool()`: UI tool for presenting options to users
 
 **Context Injection Pattern:**
@@ -454,7 +454,7 @@ interface FinetuneWorkflowState {
 ## Key Design Decisions
 
 ### 1. Frontend Tool Execution
-All 41 tools execute in the browser via JavaScript handlers. This allows:
+All 51 tools execute in the browser via JavaScript handlers. This allows:
 - Direct access to IndexedDB
 - No backend API needed for data operations
 - Real-time UI updates via emitter events
@@ -524,7 +524,7 @@ Workflow snapshots stored in IndexedDB enable:
 
    These must stay in sync manually across 4 agent definition files.
 
-2. **Browser-Only Execution** - All 41 tools execute in browser. For operations like `start_training` or `deploy_model`, consider:
+2. **Browser-Only Execution** - All 51 tools execute in browser. For operations like `start_training` or `deploy_model`, consider:
    - Access to GPU resources
    - Long-running jobs
    - Secure API key handling
@@ -863,6 +863,97 @@ This config is consumed by `DatasetCard` (state badge), `DatasetsListHeader` (fi
 ### CSS Theme Variables Note
 
 Theme colors use CSS custom properties as space-separated RGB values (e.g., `--theme-500: 99 102 241`). The Tailwind opacity modifier `[rgb(var(--theme-500))]/50` does **not** work with these values. Use `rgba()` instead: `[rgba(var(--theme-500),0.5)]`.
+
+---
+
+## End-to-End Data Flow
+
+### Port Map
+
+| Service | Default Port | Env Override | Protocol |
+|---------|-------------|--------------|----------|
+| React UI (Vite) | 5173 | — | HTTP |
+| vLLora Gateway | 9090 | `VITE_BACKEND_PORT` | HTTP REST + SSE |
+| Distri Server | 8081 | `VITE_DISTRI_PORT` | HTTP + WebSocket |
+| OTEL Collector | 4317 | `VITE_OTEL_PORT` | gRPC |
+| LangDB Cloud | — | `LANGDB_API_URL` | HTTPS |
+
+### Connection Types
+
+1. **FE → Gateway (HTTP REST)**: All API calls via `src/services/finetune-api.ts`. Base URL from `VITE_BACKEND_PORT` (default 9090). `x-project-id` header for project scoping.
+2. **FE → Distri (WebSocket/A2A)**: Lucy chat via vendored `@distri/react` and `@distri/core`. WebSocket to `localhost:8081/v1`.
+3. **Gateway → Cloud API (HTTPS proxy)**: `LangdbCloudFinetuneClient` forwards `/finetune/*` requests to `https://api.langdb.cloud`. Auth via `LANGDB_API_KEY`.
+4. **Gateway → Distri (managed process)**: Gateway downloads and manages the Distri binary (`~/.vllora/distri/`), auto-starts with health checks.
+
+### Per-Step Data Flow
+
+| Step | What happens | Cloud API? |
+|------|-------------|-----------|
+| **Topics Config** | LLM generates hierarchy via Distri → tool saves to IndexedDB | No |
+| **Categorization** | Tool assigns topics to records in IndexedDB | No |
+| **Coverage & Generation** | Tool calls Gateway `POST /v1/chat/completions` for LLM data gen → saves to IndexedDB | No (uses LLM inference, not finetune API) |
+| **Grader Config** | Tool builds grader script locally; optional `test_grader_sample` uploads temp dataset | Only if auto_test |
+| **Evaluation (Dry Run)** | `POST /finetune/datasets` + `POST /finetune/evaluations` → DryRunPollingManager polls every 6s → scores saved to IndexedDB | Yes |
+| **Training** | `POST /finetune/reinforcement-jobs` → Gateway state tracker polls every 30s → SSE broadcast → FE updates | Yes |
+| **Deployment** | `POST /finetune/deployments` → model registered | Yes |
+
+### Finetune Endpoint Table
+
+All endpoints used in the finetune flow. Gateway base: `localhost:9090/lucy/v1`.
+
+| # | Method | Gateway Route | Pipeline Step | Purpose |
+|---|--------|--------------|---------------|---------|
+| 1 | POST | `/finetune/datasets` | Evaluation, Training | Upload JSONL dataset + grader (multipart) |
+| 2 | GET | `/finetune/datasets/{id}/analytics` | Evaluation | Dataset quality metrics |
+| 3 | POST | `/finetune/datasets/analytics/dry-run` | Evaluation | Preview analytics |
+| 4 | PATCH | `/finetune/datasets/{id}/evaluator` | Grader | Update grader config (new version) |
+| 5 | GET | `/finetune/datasets/{id}/evaluator/versions` | Grader | Evaluator version history |
+| 6 | POST | `/finetune/evaluations` | Evaluation | Start evaluation (dry run) |
+| 7 | GET | `/finetune/evaluations/{run_id}` | Evaluation (polling) | Poll eval status + per-row results |
+| 8 | GET | `/finetune/datasets/{id}/finetune-evaluations` | Training (analysis) | Per-record per-epoch training scores |
+| 9 | POST | `/finetune/reinforcement-jobs` | Training | Start RFT job |
+| 10 | GET | `/finetune/reinforcement-jobs` | Training | List cached jobs (local SQLite) |
+| 11 | GET | `/finetune/reinforcement-jobs/{id}/status` | Training (polling) | Job status (local first, cloud fallback) |
+| 12 | GET | `/finetune/reinforcement-jobs/{id}/metrics` | Training (analysis) | GRPO/GSPO reinforcement metrics |
+| 13 | POST | `/finetune/reinforcement-jobs/{id}/cancel` | Training | Cancel running job |
+| 14 | POST | `/finetune/reinforcement-jobs/{id}/resume` | Training | Resume cancelled job |
+| 15 | GET | `/finetune/reinforcement-jobs/{id}/weights/url` | Deployment | Signed URL for trained weights |
+| 16 | POST | `/finetune/deployments` | Deployment | Deploy fine-tuned model |
+| 17 | DELETE | `/finetune/deployments/{id}` | Deployment | Delete deployment |
+| 18 | POST | `/v1/chat/completions` | Coverage & Generation | LLM inference for synthetic data |
+| 19 | GET | `/events` | Training (polling) | Real-time job status via SSE |
+
+### Data Residency
+
+| Data | Where it lives | Persistence |
+|------|---------------|-------------|
+| Datasets (records, topics, metadata) | Browser IndexedDB | Permanent (local-first) |
+| Workflow state (7-step progress) | Browser IndexedDB | Permanent |
+| Evaluation jobs (status, results) | Browser IndexedDB + Cloud PostgreSQL | Both |
+| Per-record scores | Browser IndexedDB (copied from cloud on completion) | Permanent locally |
+| Training jobs | Cloud PostgreSQL + Gateway SQLite (cache) | Cloud is source of truth |
+| Training metrics (GRPO/GSPO) | Cloud PostgreSQL | Cloud is source of truth |
+| Iteration state (proposals, history) | Browser IndexedDB | Permanent |
+| Chat messages | Not persisted (fresh thread per session) | Ephemeral |
+| Trained model weights | Provider storage (Fireworks/OpenAI) | Provider-managed |
+
+### Event & Polling Architecture
+
+**Evaluation polling (FE-driven):**
+- `DryRunPollingManager` (singleton) polls `GET /finetune/evaluations/{run_id}` every 6s
+- Emits `vllora_dry_run_job_update` (progress) and `vllora_dry_run_job_completed` (done)
+- On complete: LucySidebar auto-triggers Lucy analysis, scores persisted to IndexedDB
+
+**Training polling (Gateway-driven + FE SSE):**
+- Gateway state tracker polls `GET /reinforcement-jobs/{id}/status` every 30s
+- Broadcasts `FinetuneJobUpdate` via SSE → FE `GET /events` → `FinetuneJobsContext`
+- On complete: emits `vllora_finetune_job_completed` → LucySidebar auto-triggers analysis
+
+**Session resumption (catch-up):**
+1. FE creates fresh thread (no message history)
+2. `buildCatchUpContext()` reads unreviewed jobs, iteration state, workflow state from IndexedDB
+3. Cross-references stale training status vs cloud API, fixes stale records
+4. `LucyCatchUpCard` renders as landing view with completed steps, score matrix, per-topic breakdown, action buttons
 
 ---
 

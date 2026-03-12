@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getDryRunAnalytics, type DryRunAnalyticsResponse } from "@/services/finetune-api";
+import { getDryRunAnalytics, type EvalAnalyticsResponse } from "@/services/finetune-api";
 import type { DatasetRecord, DataInfo } from "@/types/dataset-types";
 import { LoadingState, ErrorState, EmptyState } from "../DialogStates";
 import { AnalyticsContent } from "./AnalyticsContent";
@@ -91,7 +91,7 @@ export function RecordsAnalyticsDialog({
 }: RecordsAnalyticsDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [analytics, setAnalytics] = useState<DryRunAnalyticsResponse | null>(null);
+  const [analytics, setAnalytics] = useState<EvalAnalyticsResponse | null>(null);
 
   // Fetch analytics when dialog opens
   useEffect(() => {

@@ -6,8 +6,7 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import * as workflowDB from '@/services/finetune-workflow-db';
-import * as datasetsDB from '@/services/datasets-db';
+import { workflowService, datasetService } from '@/services/service-registry';
 import type { TopicHierarchyNode } from '@/types/dataset-types';
 import type { ToolHandler } from '../types';
 import { countLeafTopics, calculateMaxDepth } from './helpers';
@@ -59,7 +58,7 @@ export const getTopicHierarchyHandler: ToolHandler = async (params): Promise<Get
     let datasetIdToUse: string | null = null;
 
     if (workflow_id && typeof workflow_id === 'string') {
-      const workflow = await workflowDB.getWorkflow(workflow_id);
+      const workflow = await workflowService.get(workflow_id);
       if (!workflow) {
         return { success: false, error: 'Workflow not found' };
       }
@@ -70,7 +69,7 @@ export const getTopicHierarchyHandler: ToolHandler = async (params): Promise<Get
       return { success: false, error: 'Either workflow_id or dataset_id is required' };
     }
 
-    const dataset = await datasetsDB.getDatasetById(datasetIdToUse);
+    const dataset = await datasetService.getById(datasetIdToUse);
     if (!dataset) {
       return { success: false, error: 'Dataset not found' };
     }

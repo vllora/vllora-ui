@@ -21,7 +21,7 @@ import {
 } from './proposed-plan-store';
 import { diffPlans, type PlanDiff } from '@/components/datasets/plan-section/plan-markdown-utils';
 import { normalizePlanSteps, areStepListsEqual } from './plan-step-normalization';
-import * as datasetsDB from '@/services/datasets-db';
+import { datasetService } from '@/services/service-registry';
 
 // =============================================================================
 // Types
@@ -153,7 +153,7 @@ export const savePlanHandler: ToolHandler = async (
     // Agents often set the objective via update_objective (on the dataset) but
     // forget to mirror it into the plan object — this prevents a validation loop.
     if (!draft.objective?.trim() || !draft.dataset_name?.trim()) {
-      const dataset = await datasetsDB.getDatasetById(dataset_id);
+      const dataset = await datasetService.getById(dataset_id);
       if (dataset) {
         let patched = false;
         if (!draft.objective?.trim() && dataset.datasetObjective?.trim()) {

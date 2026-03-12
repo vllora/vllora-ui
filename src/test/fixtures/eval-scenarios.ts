@@ -6,7 +6,7 @@
  */
 
 import type { AnalyzeEvaluationResult } from '@/lib/distri-finetune-tools/types';
-import type { IterationHistoryEntry } from '@/services/finetune-iteration-db';
+import type { IterationHistoryEntry } from '@/types/iteration-types';
 
 // =============================================================================
 // Raw Evaluation Results (what the backend returns)

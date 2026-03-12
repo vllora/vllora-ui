@@ -5,8 +5,7 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import * as workflowDB from '@/services/finetune-workflow-db';
-import * as datasetsDB from '@/services/datasets-db';
+import { workflowService, datasetService, recordService } from '@/services/service-registry';
 import type {
   ToolHandler,
   StartWorkflowResult,
@@ -15,7 +14,7 @@ import type {
   RollbackResult,
 } from '../types';
 import { workflowToStatusResult } from '../types';
-import { FinetuneStep } from '@/services/finetune-workflow-db';
+import type { FinetuneStep, FinetuneWorkflowState, ValidationError } from '@/types/workflow-types';
 
 // =============================================================================
 // Event Emitter for UI Updates
@@ -149,7 +148,7 @@ export const startFinetuneWorkflowHandler: ToolHandler = async (params): Promise
       : 'topics_config';
 
     // Verify dataset exists
-    const dataset = await datasetsDB.getDatasetById(dataset_id);
+    const dataset = await datasetService.getById(dataset_id);
     if (!dataset) {
       return { success: false, error: `Dataset ${dataset_id} not found` };
     }
@@ -164,7 +163,7 @@ export const startFinetuneWorkflowHandler: ToolHandler = async (params): Promise
     }
 
     // Check if workflow already exists
-    const existingWorkflow = await workflowDB.getWorkflowByDataset(dataset_id);
+    const existingWorkflow = await workflowService.getByDataset(dataset_id);
     if (existingWorkflow && existingWorkflow.currentStep !== 'completed') {
       return {
         success: false,
@@ -173,8 +172,8 @@ export const startFinetuneWorkflowHandler: ToolHandler = async (params): Promise
     }
 
     // Get and validate records
-    const records = await datasetsDB.getRecordsByDatasetId(dataset_id);
-    const validationErrors: workflowDB.ValidationError[] = [];
+    const records = await recordService.getByDatasetId(dataset_id);
+    const validationErrors: ValidationError[] = [];
 
     // Basic validation: check records have input/output
     for (const record of records) {
@@ -191,10 +190,10 @@ export const startFinetuneWorkflowHandler: ToolHandler = async (params): Promise
     const invalidCount = validationErrors.length;
 
     // Create workflow
-    const workflow = await workflowDB.createWorkflow(dataset_id, effectiveGoals);
+    const workflow = await workflowService.create(dataset_id, effectiveGoals);
 
     // Update workflow with validation results
-    await workflowDB.updateStepData(workflow.id, 'inputValidation', {
+    await workflowService.updateStepData(workflow.id, 'inputValidation', {
       recordCount: records.length,
       validCount,
       invalidCount,
@@ -202,7 +201,7 @@ export const startFinetuneWorkflowHandler: ToolHandler = async (params): Promise
     });
 
     // Advance to target start step (quick path: grader_config, normal: topics_config)
-    await workflowDB.advanceToStep(workflow.id, targetStartStep);
+    await workflowService.advanceToStep(workflow.id, targetStartStep);
 
     // Emit event for UI update
     emitWorkflowUpdate(dataset_id, targetStartStep);
@@ -260,14 +259,14 @@ export const getWorkflowStatusHandler: ToolHandler = async (params): Promise<Wor
   try {
     const { workflow_id, dataset_id } = params;
 
-    let workflow: workflowDB.FinetuneWorkflowState | null = null;
+    let workflow: FinetuneWorkflowState | null = null;
     let datasetIdToCheck: string | null = null;
 
     if (workflow_id && typeof workflow_id === 'string') {
-      workflow = await workflowDB.getWorkflow(workflow_id);
+      workflow = await workflowService.get(workflow_id);
       datasetIdToCheck = workflow?.datasetId ?? null;
     } else if (dataset_id && typeof dataset_id === 'string') {
-      workflow = await workflowDB.getWorkflowByDataset(dataset_id);
+      workflow = await workflowService.getByDataset(dataset_id);
       datasetIdToCheck = dataset_id;
     } else {
       return { success: false, error: 'Either workflow_id or dataset_id is required' };
@@ -276,18 +275,18 @@ export const getWorkflowStatusHandler: ToolHandler = async (params): Promise<Wor
     // Check if dataset has evalScript (configured via UI)
     let datasetHasEvalScript = false;
     if (datasetIdToCheck) {
-      const dataset = await datasetsDB.getDatasetById(datasetIdToCheck);
+      const dataset = await datasetService.getById(datasetIdToCheck);
       datasetHasEvalScript = !!dataset?.evalScript;
 
       // Sync: If dataset has evalScript but workflow doesn't have graderConfig,
       // update workflow to reflect this
       if (workflow && datasetHasEvalScript && !workflow.graderConfig) {
-        await workflowDB.updateStepData(workflow.id, 'graderConfig', {
+        await workflowService.updateStepData(workflow.id, 'graderConfig', {
           type: 'js',
           configuredAt: Date.now(),
         });
         // Refresh workflow state
-        workflow = await workflowDB.getWorkflow(workflow.id);
+        workflow = await workflowService.get(workflow.id);
       }
     }
 
@@ -342,7 +341,7 @@ export const advanceToStepHandler: ToolHandler = async (params): Promise<Advance
       return { success: false, error: `Invalid step: ${step}` };
     }
 
-    const workflow = await workflowDB.getWorkflow(workflow_id);
+    const workflow = await workflowService.get(workflow_id);
     if (!workflow) {
       return { success: false, error: 'Workflow not found' };
     }
@@ -368,7 +367,7 @@ export const advanceToStepHandler: ToolHandler = async (params): Promise<Advance
     }
 
     const previousStep = workflow.currentStep;
-    await workflowDB.advanceToStep(workflow_id, targetStep);
+    await workflowService.advanceToStep(workflow_id, targetStep);
     return {
       success: true,
       previous_step: previousStep,
@@ -416,17 +415,17 @@ export const rollbackToStepHandler: ToolHandler = async (params): Promise<Rollba
       return { success: false, error: 'workflow_id is required' };
     }
 
-    const workflow = await workflowDB.getWorkflow(workflow_id);
+    const workflow = await workflowService.get(workflow_id);
     if (!workflow) {
       return { success: false, error: 'Workflow not found' };
     }
 
     // Get available snapshots
-    const snapshots = await workflowDB.getSnapshots(workflow_id);
+    const snapshots = await workflowService.getSnapshots(workflow_id);
 
     // If snapshot_id provided, use that
     if (snapshot_id && typeof snapshot_id === 'string') {
-      const restored = await workflowDB.rollbackToSnapshot(snapshot_id);
+      const restored = await workflowService.rollbackToSnapshot(snapshot_id);
       if (!restored) {
         return {
           success: false,
@@ -474,7 +473,7 @@ export const rollbackToStepHandler: ToolHandler = async (params): Promise<Rollba
         };
       }
 
-      const restored = await workflowDB.rollbackToSnapshot(matchingSnapshot.id);
+      const restored = await workflowService.rollbackToSnapshot(matchingSnapshot.id);
       if (!restored) {
         return { success: false, error: 'Failed to restore snapshot' };
       }

@@ -7,7 +7,7 @@
  */
 
 import type { DistriFnTool } from "@distri/core";
-import * as datasetsDB from "@/services/datasets-db";
+import { datasetService, recordService } from "@/services/service-registry";
 import type { DatasetRecord } from "@/types/dataset-types";
 import type { ToolHandler } from "../../types";
 
@@ -110,7 +110,7 @@ async function generateRFTRecordsForTopic(
 
     // Save all records to DB in one batch write
     try {
-      const addedRecords = await datasetsDB.addRecordsToDataset(
+      const addedRecords = await recordService.add(
         callbacks.datasetId,
         allRecordData,
       );
@@ -191,7 +191,7 @@ export async function generateTraces(
       return { success: false, error: "dataset_id is required" };
     }
 
-    const dataset = await datasetsDB.getDatasetById(resolvedDatasetId);
+    const dataset = await datasetService.getById(resolvedDatasetId);
     if (!dataset) {
       return {
         success: false,
@@ -204,7 +204,7 @@ export async function generateTraces(
     // Fetch seed records if IDs provided, otherwise use undefined as placeholder
     const selectedRecords =
       selectedIds.length > 0
-        ? await datasetsDB.getRecordsByDatasetId(resolvedDatasetId, selectedIds)
+        ? await recordService.getByDatasetId(resolvedDatasetId, selectedIds)
         : [];
     const seedRecords =
       selectedRecords.length > 0 ? selectedRecords : [undefined];

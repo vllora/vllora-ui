@@ -1,0 +1,141 @@
+- generic [ref=e2]:
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - img "vLLora" [ref=e8] [cursor=pointer]
+      - navigation [ref=e9]:
+        - list [ref=e10]:
+          - listitem [ref=e11]:
+            - link [ref=e12] [cursor=pointer]:
+              - /url: /
+              - img [ref=e13]
+          - listitem [ref=e16]:
+            - link [ref=e17] [cursor=pointer]:
+              - /url: /chat
+              - img [ref=e18]
+          - listitem [ref=e20]:
+            - link [ref=e21] [cursor=pointer]:
+              - /url: /finetune
+              - img [ref=e22]
+      - list [ref=e25]:
+        - listitem [ref=e26]:
+          - link [ref=e27] [cursor=pointer]:
+            - /url: /settings
+            - img [ref=e28]
+    - generic [ref=e31]:
+      - banner [ref=e32]:
+        - generic [ref=e33]:
+          - button "Default Project Default" [ref=e35] [cursor=pointer]:
+            - generic [ref=e36]:
+              - img [ref=e37]
+              - generic [ref=e39]: Default Project
+              - generic [ref=e40]: Default
+            - img [ref=e41]
+          - generic [ref=e43]:
+            - button "Base URL Information" [ref=e44] [cursor=pointer]:
+              - img [ref=e45]
+            - link "781" [ref=e47] [cursor=pointer]:
+              - /url: https://github.com/vllora/vllora
+              - generic [ref=e48]:
+                - img [ref=e49]
+                - generic [ref=e51]: "781"
+            - link "Join our Slack" [ref=e52] [cursor=pointer]:
+              - /url: https://join.slack.com/t/vllora/shared_invite/zt-2haf5kj6a-d7NX6TFJUPX45w~Ag4dzlg
+              - generic [ref=e53]:
+                - img [ref=e54]
+                - generic [ref=e56]: Join our Slack
+      - main [ref=e57]:
+        - generic [ref=e60]:
+          - generic [ref=e61]:
+            - button "Finetune Studio Build custom AI models" [ref=e62] [cursor=pointer]:
+              - generic [ref=e63]:
+                - img [ref=e64]
+                - generic [ref=e66]: Finetune Studio
+              - generic [ref=e67]: Build custom AI models
+            - button "LLM Gateway Route and monitor 200+ models" [ref=e68] [cursor=pointer]:
+              - generic [ref=e69]:
+                - img [ref=e70]
+                - generic [ref=e76]: LLM Gateway
+              - generic [ref=e77]: Route and monitor 200+ models
+          - generic [ref=e78]:
+            - generic [ref=e79]:
+              - heading "From idea to finetuned model" [level=1] [ref=e80]
+              - paragraph [ref=e81]: Define the vision. We handle the pipeline.
+            - generic [ref=e82]:
+              - generic [ref=e86]:
+                - generic [ref=e87]:
+                  - img [ref=e89]
+                  - textbox "Describe what you want your model to do... e.g. 'A specialized assistant for React performance optimization that speaks in a concise, technical tone.'" [ref=e92]
+                - generic [ref=e93]:
+                  - generic [ref=e94]:
+                    - button "Attach reference documents (PDFs, text files)" [ref=e95] [cursor=pointer]:
+                      - img [ref=e96]
+                    - button "Voice input" [ref=e98] [cursor=pointer]:
+                      - img [ref=e99]
+                  - button "Start Finetune" [disabled]:
+                    - text: Start Finetune
+                    - img
+              - generic [ref=e102]:
+                - generic [ref=e103]: Ideas to get started
+                - generic [ref=e104]:
+                  - button "Chess Tutor Assistant" [ref=e105] [cursor=pointer]:
+                    - img [ref=e106]
+                    - text: Chess Tutor Assistant
+                  - button "Financial Report Summarizer" [ref=e108] [cursor=pointer]:
+                    - img [ref=e109]
+                    - text: Financial Report Summarizer
+                  - button "Code Generation Assistant" [ref=e111] [cursor=pointer]:
+                    - img [ref=e112]
+                    - text: Code Generation Assistant
+            - generic [ref=e116]:
+              - button "Real conversations Build from live LLM calls" [ref=e117] [cursor=pointer]:
+                - img [ref=e119]
+                - generic [ref=e125]:
+                  - generic [ref=e126]: Real conversations
+                  - generic [ref=e127]: Build from live LLM calls
+              - button "Documentation Guides and API reference" [ref=e128] [cursor=pointer]:
+                - img [ref=e130]
+                - generic [ref=e132]:
+                  - generic [ref=e133]: Documentation
+                  - generic [ref=e134]: Guides and API reference
+  - generic [ref=e136]:
+    - generic [ref=e137]:
+      - generic [ref=e138]:
+        - img "Lucy" [ref=e141]
+        - generic [ref=e142]: Lucy
+        - generic [ref=e143]: Beta
+      - generic [ref=e144]:
+        - button [ref=e145] [cursor=pointer]:
+          - img [ref=e146]
+        - button [ref=e147] [cursor=pointer]:
+          - img [ref=e148]
+        - button [ref=e152] [cursor=pointer]:
+          - img [ref=e153]
+    - generic [ref=e157]:
+      - generic [ref=e160]:
+        - generic [ref=e161]:
+          - img "Lucy" [ref=e164]
+          - generic [ref=e165]: Lucy • Just now
+        - generic [ref=e166]:
+          - paragraph [ref=e167]: Hello! I'm Lucy, your fine-tuning assistant. I can help you organize training data, set up evaluation criteria, run evaluations, and start training jobs.
+          - paragraph [ref=e168]: How can I help you today?
+          - generic [ref=e169]:
+            - button "📊 Show me my traces" [ref=e170] [cursor=pointer]:
+              - generic [ref=e171]: 📊
+              - generic [ref=e172]: Show me my traces
+            - button "💡 What can you help me with?" [ref=e173] [cursor=pointer]:
+              - generic [ref=e174]: 💡
+              - generic [ref=e175]: What can you help me with?
+            - button "🔍 Find errors in my traces" [ref=e176] [cursor=pointer]:
+              - generic [ref=e177]: 🔍
+              - generic [ref=e178]: Find errors in my traces
+      - generic [ref=e181]:
+        - textbox "Ask Lucy to help with your dataset..." [ref=e182]
+        - generic [ref=e183]:
+          - generic [ref=e184]:
+            - button "Attach files" [ref=e185] [cursor=pointer]:
+              - img [ref=e186]
+            - button "Voice input" [ref=e188] [cursor=pointer]:
+              - img [ref=e189]
+          - button "Send message" [disabled]:
+            - img
+  - region "Notifications alt+T"

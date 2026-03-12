@@ -6,7 +6,7 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import * as datasetsDB from '@/services/datasets-db';
+import { datasetService } from '@/services/service-registry';
 import type { ToolHandler } from '../types';
 
 // =============================================================================
@@ -29,13 +29,13 @@ export const updateDatasetReadmeHandler: ToolHandler = async (params) => {
 
   try {
     // Verify dataset exists
-    const dataset = await datasetsDB.getDatasetById(dataset_id);
+    const dataset = await datasetService.getById(dataset_id);
     if (!dataset) {
       return { success: false, error: `Dataset ${dataset_id} not found` };
     }
 
     // Save agent-authored README to IndexedDB
-    await datasetsDB.updateDatasetReadme(dataset_id, readme_content, 'agent');
+    await datasetService.updateReadme(dataset_id, readme_content, 'agent');
 
     console.log('[updateDatasetReadme] Agent-authored README saved for dataset:', dataset_id);
 

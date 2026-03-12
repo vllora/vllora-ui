@@ -18,7 +18,7 @@ export const finetuneEvaluationHandlers = [
       await delay(scenario.pollDelayMs);
 
       return HttpResponse.json(
-        makeFinetuneEvalResponse(scenario.trainingScenario, scenario.trainingRowCount),
+        makeFinetuneEvalResponse(scenario.trainingScenario, scenario.trainingRowCount, [...scenario.trainingRowIds]),
       );
     },
   ),

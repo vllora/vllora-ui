@@ -237,6 +237,7 @@ interface ScenarioState {
   uploadBehavior: 'success' | 'error' | 'timeout';
   evalCreateBehavior: 'success' | 'error' | 'timeout';
   trainingCreateBehavior: 'success' | 'error' | 'timeout';
+  trainingRowCount: number;               // Rows returned by finetune-evaluations (set to match dataset record count)
 }
 ```
 

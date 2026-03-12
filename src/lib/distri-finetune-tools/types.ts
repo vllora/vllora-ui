@@ -4,7 +4,7 @@
  * Type definitions for finetune workflow tools.
  */
 
-import { FinetuneWorkflowState, FinetuneStep, GenerationStrategy, DryRunVerdict } from '@/services/finetune-workflow-db';
+import { FinetuneWorkflowState, FinetuneStep, GenerationStrategy, DryRunVerdict } from '@/types/workflow-types';
 import { TopicHierarchyNode } from '@/types/dataset-types';
 import type { PlanStatus } from './steps/proposed-plan-store';
 import type { ExecutionProgress, ExecutionStepId } from './steps/execute-plan';
@@ -177,7 +177,7 @@ export interface TestGraderResult {
   };
 }
 
-export interface DryRunResult {
+export interface EvalRunResult {
   success: boolean;
   error?: string;
   dry_run?: {

@@ -9,7 +9,7 @@ import { DistriClient, type DistriMessage } from '@distri/core';
 import { getDistriUrl } from '@/config/api';
 import { fetchLucyConfig, type LucyConfig } from '@/lib/agent-sync';
 import type { Span } from '@/types/common-type';
-import * as datasetsDB from '@/services/datasets-db';
+import { datasetService, recordService } from '@/services/service-registry';
 
 // Reuse types from topic-tools where possible or define new ones
 interface EvalPromptParams {
@@ -80,7 +80,7 @@ export async function generateEvaluationPrompt(
         // Resolve Dataset ID
         let targetDatasetId = paramDatasetId;
         if (!targetDatasetId && datasetName) {
-            const allDatasets = await datasetsDB.getAllDatasets();
+            const allDatasets = await datasetService.getAll();
             const match = allDatasets.find(d => d.name.toLowerCase() === datasetName.toLowerCase());
             targetDatasetId = match ? match.id : undefined;
         }
@@ -177,7 +177,7 @@ export async function runEvaluationOnDataset(
         // Resolve Dataset ID
         let targetDatasetId = paramDatasetId;
         if (!targetDatasetId && datasetName) {
-            const allDatasets = await datasetsDB.getAllDatasets();
+            const allDatasets = await datasetService.getAll();
             const match = allDatasets.find(d => d.name.toLowerCase() === datasetName.toLowerCase());
             targetDatasetId = match ? match.id : undefined;
         }
@@ -190,7 +190,7 @@ export async function runEvaluationOnDataset(
         }
 
         // Get Records
-        const records = await datasetsDB.getRecordsByDatasetId(targetDatasetId);
+        const records = await recordService.getByDatasetId(targetDatasetId);
         if (records.length === 0) {
             return {
                 success: false,
@@ -260,7 +260,7 @@ export async function runEvaluationOnDataset(
                     }
 
                     if (evalResult && typeof evalResult.score === 'number') {
-                        await datasetsDB.updateRecordEvaluation(targetDatasetId!, record.id, evalResult.score);
+                        await recordService.updateEvaluation(targetDatasetId!, record.id, evalResult.score);
                         updatedCount++;
                         results.push({ id: record.id, score: evalResult.score });
                     }

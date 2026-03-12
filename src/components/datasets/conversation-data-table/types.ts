@@ -65,10 +65,10 @@ export function datasetRecordToRow(record: DatasetRecord, index: number): Conver
 
   // Derive primary score from evaluation
   const evaluation = record.evaluation;
-  const dryRunScore = evaluation?.dryRunScore ?? (
+  const evalScore = evaluation?.evalScore ?? (
     evaluation?.score != null && !evaluation?.finetuneScore ? evaluation.score : undefined
   );
-  const primaryScore = dryRunScore ?? evaluation?.finetuneScore ?? null;
+  const primaryScore = evalScore ?? evaluation?.finetuneScore ?? null;
 
   return {
     id: record.id,

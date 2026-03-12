@@ -12,7 +12,8 @@ import { PlanConsumer } from "@/contexts/PlanContext";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { WorkspaceTabsConsumer } from "@/contexts/WorkspaceTabsContext";
 import { mapTabPathToSection } from "@/components/datasets/TabContentRouter";
-import { getIterationState, type IterationHistoryEntry } from "@/services/finetune-iteration-db";
+import { iterationStateService } from "@/services/service-registry";
+import type { IterationHistoryEntry } from "@/types/iteration-types";
 
 const STALL_THRESHOLD = 0.03;
 
@@ -45,7 +46,7 @@ export function PlanCard() {
   const { data: iterationState } = useRequest(
     async () => {
       if (!datasetId) return null;
-      return getIterationState(datasetId);
+      return iterationStateService.get(datasetId);
     },
     { refreshDeps: [datasetId] },
   );

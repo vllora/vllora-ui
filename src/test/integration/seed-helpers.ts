@@ -1,16 +1,18 @@
 /**
  * Integration Test Seed Helpers
  *
- * Utility functions for seeding IndexedDB with test data.
- * Uses the real DB modules (backed by fake-indexeddb in tests).
+ * Utility functions for seeding test data via service adapters.
  */
 
-import { getDB as getDatasetsDB } from '@/services/datasets-db';
-import { getDB as getFinetuneDB, createWorkflow } from '@/services/finetune-workflow-db';
-import { createDryRunJob } from '@/services/dry-run-jobs-db';
-import { saveIterationState } from '@/services/finetune-iteration-db';
+import {
+  datasetService,
+  recordService,
+  evalJobService,
+  workflowService,
+  iterationStateService,
+} from '@/services/service-registry';
 import type { EvaluationResultResponse, RowEpochResult } from '@/services/finetune-api';
-import type { IterationHistoryEntry, IterationState } from '@/services/finetune-iteration-db';
+import type { IterationHistoryEntry, IterationState } from '@/types/iteration-types';
 
 // =============================================================================
 // Types
@@ -19,7 +21,6 @@ import type { IterationHistoryEntry, IterationState } from '@/services/finetune-
 interface SeedDatasetOpts {
   readonly id?: string;
   readonly name?: string;
-  readonly backendDatasetId?: string;
   readonly evalScript?: string;
 }
 
@@ -33,70 +34,48 @@ interface SeedRecordOpts {
 // Dataset Seeding
 // =============================================================================
 
-/** Create a dataset directly in IndexedDB. */
+/** Create a dataset via the service adapter. */
 export async function seedDataset(opts: SeedDatasetOpts = {}): Promise<string> {
-  const db = await getDatasetsDB();
-  const id = opts.id ?? `ds-${crypto.randomUUID().slice(0, 8)}`;
-  const now = Date.now();
+  const dataset = await datasetService.create(
+    opts.name ?? 'Test Dataset',
+    'Test objective',
+  );
 
-  const dataset = {
-    id,
-    name: opts.name ?? 'Test Dataset',
-    createdAt: now,
-    updatedAt: now,
-    backendDatasetId: opts.backendDatasetId,
-    evalScript: opts.evalScript,
-  };
+  if (opts.evalScript) {
+    await datasetService.updateEvalScript(dataset.id, opts.evalScript);
+  }
 
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction('datasets', 'readwrite');
-    const store = tx.objectStore('datasets');
-    const request = store.put(dataset);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
-
-  return id;
+  return dataset.id;
 }
 
-/** Create records for a dataset in IndexedDB. */
+/** Create records for a dataset via the service adapter. */
 export async function seedRecords(
   datasetId: string,
   records: readonly SeedRecordOpts[],
 ): Promise<string[]> {
-  const db = await getDatasetsDB();
-  const now = Date.now();
-  const ids: string[] = [];
+  const created = await recordService.add(
+    datasetId,
+    records.map((rec) => ({
+      data: {
+        messages: [
+          { role: 'user', content: `Question about ${rec.topic ?? 'general'}` },
+          { role: 'assistant', content: 'Answer' },
+        ],
+      },
+      topic: rec.topic ?? 'Uncategorized',
+      is_generated: false,
+    })),
+  );
 
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction('records', 'readwrite');
-    const store = tx.objectStore('records');
+  const ids = created.map(r => r.id);
 
-    for (const rec of records) {
-      const id = rec.id ?? `row-${ids.length}`;
-      ids.push(id);
-
-      const record = {
-        id,
-        datasetId,
-        data: {
-          messages: [
-            { role: 'user', content: `Question about ${rec.topic ?? 'general'}` },
-            { role: 'assistant', content: 'Answer' },
-          ],
-        },
-        topic: rec.topic ?? 'Uncategorized',
-        createdAt: now,
-        updatedAt: now,
-        evaluation: rec.score != null ? { dryRunScore: rec.score } : undefined,
-      };
-
-      store.put(record);
+  // Update eval scores if provided
+  for (let i = 0; i < records.length; i++) {
+    const rec = records[i];
+    if (rec.score != null && ids[i]) {
+      await recordService.updateEvaluation(datasetId, ids[i], rec.score);
     }
-
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
+  }
 
   return ids;
 }
@@ -110,21 +89,16 @@ export async function seedWorkflow(
   datasetId: string,
   opts: { trainingGoals?: string; jobId?: string } = {},
 ): Promise<string> {
-  const workflow = await createWorkflow(datasetId, opts.trainingGoals ?? 'Test training');
+  const workflow = await workflowService.create(datasetId, opts.trainingGoals ?? 'Test training');
 
   if (opts.jobId) {
-    const db = await getFinetuneDB();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction('workflows', 'readwrite');
-      const store = tx.objectStore('workflows');
-      const getReq = store.get(workflow.id);
-      getReq.onsuccess = () => {
-        const wf = getReq.result;
-        wf.training = { jobId: opts.jobId, baseModel: 'unsloth/Qwen3.5-4B', status: 'succeeded' };
-        store.put(wf);
-      };
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
+    await workflowService.updateStepData(workflow.id, 'training', {
+      jobId: opts.jobId,
+      baseModel: 'unsloth/Qwen3.5-4B',
+      status: 'completed',
+      startedAt: Date.now(),
+      metrics: null,
+      modelId: null,
     });
   }
 
@@ -132,14 +106,13 @@ export async function seedWorkflow(
 }
 
 // =============================================================================
-// DryRunJob Seeding
+// EvalJob Seeding
 // =============================================================================
 
-/** Create a completed DryRunJob with evaluation results. */
-export async function seedCompletedDryRunJob(
+/** Create a completed EvalJob with evaluation results. */
+export async function seedCompletedEvalJob(
   datasetId: string,
   opts: {
-    backendDatasetId?: string;
     evaluationRunId?: string;
     scores: readonly { rowId: string; score: number; topic?: string }[];
   },
@@ -175,13 +148,20 @@ export async function seedCompletedDryRunJob(
     },
   };
 
-  const job = await createDryRunJob({
+  const job = await evalJobService.create({
     datasetId,
-    backendDatasetId: opts.backendDatasetId ?? 'ds-backend-001',
     evaluationRunId: opts.evaluationRunId ?? 'eval-run-001',
     status: 'completed',
     sampleSize: totalRows,
     createdAt: Date.now(),
+    completedAt: Date.now(),
+    pollingSnapshot,
+  });
+
+  // The API adapter's create only sends cloud_run_id, sample_size, rollout_model.
+  // Update the job to set status, pollingSnapshot, and completedAt.
+  await evalJobService.update(job.id, {
+    status: 'completed',
     completedAt: Date.now(),
     pollingSnapshot,
   });
@@ -209,5 +189,5 @@ export async function seedIterationHistory(
     updatedAt: Date.now(),
   };
 
-  await saveIterationState(state);
+  await iterationStateService.save(state);
 }

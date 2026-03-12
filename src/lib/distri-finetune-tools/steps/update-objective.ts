@@ -6,8 +6,7 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import * as datasetsDB from '@/services/datasets-db';
-import * as workflowDB from '@/services/finetune-workflow-db';
+import { datasetService, workflowService } from '@/services/service-registry';
 import type { ToolHandler } from '../types';
 import { normalizeObjectiveToRole } from './shared/topic-system-prompt';
 
@@ -48,7 +47,7 @@ export const updateObjectiveHandler: ToolHandler = async (
 
     const trimmedObjective = objective.trim();
 
-    const dataset = await datasetsDB.getDatasetById(dataset_id);
+    const dataset = await datasetService.getById(dataset_id);
     if (!dataset) {
       return { success: false, error: `Dataset ${dataset_id} not found`, new_objective: '', workflow_synced: false };
     }
@@ -63,14 +62,14 @@ export const updateObjectiveHandler: ToolHandler = async (
       console.warn('[updateObjective] Failed to normalize objective via LLM, will use heuristic fallback:', err);
     }
 
-    await datasetsDB.updateDatasetObjective(dataset_id, trimmedObjective, normalizedRole);
+    await datasetService.updateObjective(dataset_id, trimmedObjective, normalizedRole);
 
     let workflowSynced = false;
     try {
-      const workflow = await workflowDB.getWorkflowByDataset(dataset_id);
+      const workflow = await workflowService.getByDataset(dataset_id);
       if (workflow) {
         workflow.trainingGoals = trimmedObjective;
-        await workflowDB.updateWorkflow(workflow);
+        await workflowService.update(workflow);
         workflowSynced = true;
       }
     } catch (err) {

@@ -21,7 +21,7 @@ Tests what happens when a user refreshes the browser at various critical moments
   - [ ] Page reloads without crash
   - [ ] Dataset data preserved in IndexedDB (topics, records created so far)
   - [ ] Workflow state accurately reflects last completed step
-  - [ ] Lucy sidebar reopens with chat history
+  - [ ] Lucy sidebar reopens with fresh thread (catch-up cards if applicable)
   - [ ] Plan status shows correctly (not "executing" since page reloaded)
   - [ ] No half-completed steps in workflow state
 - **Soft checks**:

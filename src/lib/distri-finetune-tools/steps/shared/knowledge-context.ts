@@ -9,7 +9,7 @@
  * - generate-topics (for topic hierarchy generation)
  */
 
-import * as knowledgeDB from '@/services/knowledge-sources-db';
+import { knowledgeSourceService } from '@/services/service-registry';
 import type { FileContentBlock } from './lucy-client';
 import type { KnowledgeSource } from '@/types/dataset-types';
 
@@ -187,7 +187,7 @@ export function buildKnowledgeContextFromSources(
 export async function buildKnowledgeContext(
   datasetId: string
 ): Promise<KnowledgeSourceContext> {
-  const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
+  const sources = await knowledgeSourceService.getByDataset(datasetId);
   return buildKnowledgeContextFromSources(sources);
 }
 
@@ -311,7 +311,7 @@ export function buildContentBlocksFromSources(
 export async function buildKnowledgeContentBlocks(
   datasetId: string,
 ): Promise<KnowledgeContentBlocks> {
-  const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
+  const sources = await knowledgeSourceService.getByDataset(datasetId);
   return buildContentBlocksFromSources(sources);
 }
 

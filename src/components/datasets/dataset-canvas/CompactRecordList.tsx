@@ -52,7 +52,7 @@ function CompactRecordRow({ record, onDelete, onSelectRecord }: { record: Datase
   const userText = userMsg ? cleanText(userMsg.content) : "";
   const assistantText = assistantMsg ? cleanText(assistantMsg.content) : "";
 
-  const score = record.evaluation?.score ?? record.evaluation?.dryRunScore;
+  const score = record.evaluation?.score ?? record.evaluation?.evalScore;
   const scoreDotColor = score != null
     ? score >= 0.8 ? "bg-emerald-400" : score >= 0.6 ? "bg-amber-400" : "bg-red-400"
     : null;

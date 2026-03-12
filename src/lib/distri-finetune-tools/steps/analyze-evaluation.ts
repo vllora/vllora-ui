@@ -12,9 +12,8 @@ import type { DistriFnTool } from '@distri/core';
 import type { ToolHandler } from '../types';
 import { getEvaluationDetailsHandler } from './get-evaluation-details';
 import { getIterationHistoryHandler, logIterationHandler } from './iteration-history';
-import { getWorkflowByDataset } from '@/services/finetune-workflow-db';
 import { getEvaluatorVersions } from '@/services/finetune-api';
-import { getDatasetById } from '@/services/datasets-db';
+import { datasetService, workflowService } from '@/services/service-registry';
 
 // =============================================================================
 // Constants (from rft-decision-tree.md Section 2)
@@ -648,7 +647,7 @@ export const analyzeEvaluationHandler: ToolHandler = async (params) => {
     // If next_action is 'train' but training already succeeded, skip re-training
     if (nextAction === 'train') {
       try {
-        const workflow = await getWorkflowByDataset(dataset_id);
+        const workflow = await workflowService.getByDataset(dataset_id);
         if (workflow?.training?.status === 'completed') {
           nextAction = 'iterate';
         }
@@ -660,9 +659,9 @@ export const analyzeEvaluationHandler: ToolHandler = async (params) => {
     // 9b. Fetch evaluator version context (non-critical)
     let evaluator_version: { version: number; created_at: string; has_diff: boolean } | undefined;
     try {
-      const dataset = await getDatasetById(dataset_id);
-      if (dataset?.backendDatasetId) {
-        const versions = await getEvaluatorVersions(dataset.backendDatasetId);
+      const dataset = await datasetService.getById(dataset_id);
+      if (dataset) {
+        const versions = await getEvaluatorVersions(dataset.id);
         if (versions.length > 0) {
           const latest = versions[0];
           evaluator_version = {

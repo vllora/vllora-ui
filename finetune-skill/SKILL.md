@@ -8,9 +8,9 @@ description: |
 
 Fine-tune LLMs using the vLLora platform. You handle all the intelligence — generating training data, writing graders, designing topics, analyzing results. The vLLora backend handles what you can't do locally: running evaluations against a live model, executing training jobs, and serving the fine-tuned model.
 
-**You execute the entire pipeline yourself — including all API calls.** After you generate the training data and grader files, you must actually run the curl commands to upload the dataset, create evaluation jobs, poll for results, and submit training jobs.
+**You execute the entire pipeline yourself — including all API calls.** After you generate the training data and grader files, you must actually upload the dataset, create evaluation jobs, poll for results, and submit training jobs.
 
-**NEVER create shell scripts (.sh files).** Do not save curl commands to files, do not create `run-pipeline.sh` or similar. Do not tell the user "here's what to run." Instead, execute every curl command directly using Bash, capture the response in a variable, parse the response (e.g., extract `dataset_id` or `evaluation_run_id`), and use those values in the next API call. You are the operator — run every API call yourself, log the responses in execution-log.md, and keep iterating until the model is trained.
+> **CRITICAL:** Use the helper scripts in `scripts/` for API operations. They handle UUID generation, error handling, and polling automatically. Run them with `uv run` (PEP 723 — dependencies are inline). If `uv` is not available, fall back to direct curl commands. **NEVER create shell scripts (.sh files).** Do not save curl commands to files, do not create `run-pipeline.sh` or similar.
 
 ## How vLLora Fine-Tuning Works (Read This First)
 
@@ -51,7 +51,7 @@ finetune-project/
 ├── training.jsonl              # Training prompts (JSONL format)
 ├── grader.js                   # Evaluation/grader function
 ├── topics.json                 # Topic hierarchy
-├── knowledge/                  # Extracted domain knowledge (required when documents provided)
+├── reference/                  # Extracted domain knowledge (required when documents provided)
 │   ├── docling-result.json     # Raw Docling response (chunks + document)
 │   ├── knowledge_parts.json    # Typed parts: text, table, image (agent-created)
 │   ├── document-extraction.md  # Structured extraction summary
@@ -200,7 +200,7 @@ knowledge/
 
 ### Step 3: Build Topic Hierarchy
 
-Organize the domain into a topic tree and save it to `topics.json`. This ensures balanced training data across all areas. See `knowledge/topic-hierarchy.md` for the structure and design guidelines.
+Organize the domain into a topic tree and save it to `topics.json`. This ensures balanced training data across all areas. See `reference/topic-hierarchy.md` for the structure and design guidelines.
 
 Quick version — create a JSON array of topic nodes:
 ```json
@@ -221,7 +221,7 @@ Write prompts to `training.jsonl` — one JSON object per line. Each line is a *
 {"messages": [{"role": "system", "content": "You are..."}, {"role": "user", "content": "..."}], "id": "record-1"}
 ```
 
-For each leaf topic, generate 10-30 prompts covering: happy paths, edge cases, errors, ambiguous queries, and multi-turn follow-ups. See `knowledge/data-format.md` for format details and `templates/sample-conversation.jsonl` for examples.
+For each leaf topic, generate 10-30 prompts covering: happy paths, edge cases, errors, ambiguous queries, and multi-turn follow-ups. See `reference/data-format.md` for format details and `templates/sample-conversation.jsonl` for examples.
 
 **Generate enough data.** A useful dataset needs at least **100-200 total records** across all topics. With 10 leaf topics, that's 10-20 per topic minimum. Don't stop at a handful — the model needs volume and variety to learn. Generate all the data before moving to the next step.
 
@@ -239,40 +239,43 @@ async function evaluate(input) {
 }
 ```
 
-The grader can use `__langdb_call_llm_as_judge_obj({prompt, max_tokens})` to call an LLM for subjective quality assessment. See `knowledge/grader-writing.md` for patterns and `templates/grader-template.js` for a starter template.
+The grader can use `__langdb_call_llm_as_judge_obj({prompt, max_tokens})` to call an LLM for subjective quality assessment. See `reference/grader-writing.md` for patterns and `templates/grader-template.js` for a starter template.
+
+### Step 5.5: Validate Before Upload
+
+Before uploading, validate your dataset:
+
+```bash
+uv run scripts/validate_dataset.py training.jsonl
+```
+
+This checks: valid JSON, required fields (`messages`, `id`), message structure, no assistant messages (RFT), duplicate IDs, and record count. Fix any errors before proceeding.
 
 ### Step 6: Upload & Evaluate
 
-Now run the API calls using Bash. **Do not create any .sh files.** Execute each curl command directly via Bash, capture and parse the JSON response, extract the IDs you need, and use them in subsequent calls. See `knowledge/api-reference.md` for full endpoint docs.
+Use the helper scripts for API operations. They handle UUID generation, error handling, and response parsing automatically.
 
-**1. Upload the dataset.** First generate a UUID for the dataset, then run the curl command (from the working directory where training.jsonl and grader.js are):
+**1. Upload the dataset:**
 ```bash
-DATASET_UUID=$(uuidgen | tr '[:upper:]' '[:lower:]')
-curl -X POST http://localhost:9090/finetune/datasets \
-  -F "file=@training.jsonl;type=application/x-ndjson" \
-  -F "dataset_id=$DATASET_UUID" \
-  -F "eval_script=@grader.js" \
-  -F 'evaluator={"type":"js","config":{"script":"","completion_params":{"model":"gpt-4o-mini","temperature":0.0,"max_tokens":300}}}'
-```
-**Important:** The `dataset_id` must be a valid UUID (e.g., `a1b2c3d4-e5f6-7890-abcd-ef1234567890`). Plain strings like `my-dataset-v1` will be rejected with a 400 error. Extract the `backend_dataset_id` from the response — you need it for all subsequent calls.
-
-**2. Create an evaluation job.** Run this with the backend_dataset_id from step 1:
-```bash
-curl -X POST http://localhost:9090/finetune/evaluations \
-  -H "Content-Type: application/json" \
-  -d '{"dataset_id": "BACKEND_DATASET_ID", "rollout_model_params": {"model": "gpt-4o-mini"}}'
+uv run scripts/upload_dataset.py --file training.jsonl --grader grader.js
 ```
 
-**3. Poll until complete.** Run this every 2-3 seconds until `status` is `"completed"`:
+This generates a UUID, uploads the JSONL + grader, and prints the backend dataset ID. Save this ID — you need it for all subsequent calls.
+
+> **CRITICAL:** The `dataset_id` must be a valid UUID. The script handles this automatically. If using curl directly, generate one with `uuidgen | tr '[:upper:]' '[:lower:]'`.
+
+**2. Run evaluation:**
 ```bash
-curl http://localhost:9090/finetune/evaluations/EVAL_RUN_ID
+uv run scripts/run_evaluation.py --dataset-id BACKEND_DATASET_ID --output evaluations/eval-v1.json
 ```
 
-**4. Save the completed response** to `evaluations/eval-v1.json` and proceed to Step 7 to analyze results.
+This creates an eval job, polls until complete, prints summary stats, and saves the full response.
+
+**3. If `uv` is not available**, fall back to curl. See `reference/api-reference.md` for full endpoint docs and curl examples.
 
 ### Step 7: Analyze & Iterate
 
-This is where most of the work happens. Read `knowledge/iteration-strategy.md` for the full guide. The key analyses:
+This is where most of the work happens. Read `reference/iteration-strategy.md` for the full guide. The key analyses:
 
 **1. Evaluation results** — Read the `summary` (average score, pass rate) and individual record scores/reasons. Sort records by score and read the grader's `reason` on the lowest-scoring ones. Decide GO (avg > 0.6, pass rate > 70%) or NO-GO.
 
@@ -284,23 +287,19 @@ This is where most of the work happens. Read `knowledge/iteration-strategy.md` f
 - **Grader fix only**: `PATCH /finetune/datasets/{id}/evaluator` (no re-upload needed)
 - **Data fix**: Re-upload the entire dataset with a new `dataset_id`
 
-**5. If iterations stall** (3+ rounds with no improvement) — Don't keep making small tweaks. The `iteration-strategy.md` covers 10 specific stall patterns (Part 8) and a 6-level escalation ladder (Part 9) ranging from quick fixes (tighten grader, add partial credit) to drastic measures (narrow scope, change base model, start over). Key patterns to watch for: base model can't do the task at all, reward hacking (model games the grader), insufficient score variability, and ambiguous tasks where experts disagree on the right answer.
+**5. If iterations stall** (3+ rounds with no improvement) — Don't keep making small tweaks. See `reference/iteration-strategy.md` for 10 specific stall patterns (Part 8) and a 6-level escalation ladder (Part 9) ranging from quick fixes to drastic measures.
 
 ### Step 8: Train
 
-Once evaluation scores are good (avg > 0.6, pass rate > 70%), run this command to start training:
+Once evaluation scores are good (avg > 0.6, pass rate > 70%), start training:
 
 ```bash
-curl -X POST http://localhost:9090/finetune/reinforcement-jobs \
-  -H "Content-Type: application/json" \
-  -d '{"dataset": "BACKEND_DATASET_ID", "base_model": "unsloth/Qwen3.5-4B",
-       "output_model": "my-model-name", "display_name": "My Fine-tune",
-       "training_config": {"learning_rate": 0.00001, "lora_rank": 8, "epochs": 2.0, "batch_size": 100}}'
+uv run scripts/start_training.py --dataset-id BACKEND_DATASET_ID --output-model my-model-name --output training-jobs/job-001.json
 ```
 
-Poll `GET /finetune/reinforcement-jobs/{id}/status` every 10-30s until complete. Training takes 15-60 minutes.
+This creates the job, polls until complete (every 15s), and saves the response. Training takes 15-60 minutes.
 
-Save the job response to `training-jobs/job-001.json`. Once training succeeds, fetch per-epoch scores via `GET /finetune/datasets/{dataset_id}/finetune-evaluations?finetune_job_id=JOB_ID` and save to `training-jobs/job-001-epochs.json`. Scores should increase each epoch — if they don't, see `knowledge/iteration-strategy.md` Part 2.
+Once training succeeds, fetch per-epoch scores via `GET /finetune/datasets/{dataset_id}/finetune-evaluations?finetune_job_id=JOB_ID` and save to `training-jobs/job-001-epochs.json`. Scores should increase each epoch — if they don't, see `reference/iteration-strategy.md` Part 2.
 
 Update `iteration-log.md` with the job ID, base model, output model name, and epoch score progression.
 
@@ -316,16 +315,26 @@ curl -X POST http://localhost:9090/v1/chat/completions \
 
 Test each topic area with queries the model hasn't seen in training. Compare responses to the base model to verify improvement.
 
-## Knowledge Files (Deep Dives)
+## Reference Files (Deep Dives)
 
 Read these when you need more detail on a specific step:
 
 | File | When to read |
 |------|-------------|
-| `knowledge/api-reference.md` | When making API calls — full endpoint docs with examples |
-| `knowledge/data-format.md` | When generating JSONL — format rules, validation, quality tips |
-| `knowledge/grader-writing.md` | When writing the grader — 3 patterns, design guidelines, common mistakes |
-| `knowledge/topic-hierarchy.md` | When designing topics — structure, coverage analysis, balance scoring |
-| `knowledge/iteration-strategy.md` | When analyzing results — eval scores, topic distribution, data variety, diagnosing data vs grader issues |
-| `knowledge/extraction-guide.md` | When extracting documents — Docling API, response structure, knowledge_parts.json schema, creating parts |
-| `knowledge/workflow-guide.md` | For the full detailed walkthrough of every step |
+| `reference/api-reference.md` | When making API calls — full endpoint docs with curl examples |
+| `reference/data-format.md` | When generating JSONL — format rules, validation, quality tips |
+| `reference/grader-writing.md` | When writing the grader — 3 patterns, design guidelines, common mistakes |
+| `reference/topic-hierarchy.md` | When designing topics — structure, coverage analysis, balance scoring |
+| `reference/iteration-strategy.md` | When analyzing results — diagnosis, stall patterns, escalation ladder |
+| `reference/workflow-guide.md` | For the full detailed walkthrough of every step |
+
+## Helper Scripts
+
+These scripts handle API operations with proper error handling, UUID generation, and polling. Run with `uv run` (PEP 723 — dependencies declared inline).
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/validate_dataset.py` | Validate JSONL before upload — checks format, fields, RFT compliance |
+| `scripts/upload_dataset.py` | Upload dataset + grader to gateway — auto-generates UUID |
+| `scripts/run_evaluation.py` | Create eval job, poll until complete, save results |
+| `scripts/start_training.py` | Start training job, poll until complete, save response |

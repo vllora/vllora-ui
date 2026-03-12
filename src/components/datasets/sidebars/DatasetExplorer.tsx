@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
-import { DryRunJobsConsumer } from "@/contexts/DryRunJobsContext";
+import { EvalJobsConsumer } from "@/contexts/EvalJobsContext";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { PlanConsumer } from "@/contexts/PlanContext";
 import { WorkspaceTabsConsumer } from "@/contexts/WorkspaceTabsContext";
@@ -111,7 +111,7 @@ interface DatasetExplorerProps {
 export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
   const { dataset, records, isGeneratingTraces } = DatasetDetailConsumer();
   const { sources } = KnowledgeSourcesConsumer();
-  const { jobs: dryRunJobs, runningJob: runningEval, startDryRun } = DryRunJobsConsumer();
+  const { jobs: dryRunJobs, runningJob: runningEval, startDryRun } = EvalJobsConsumer();
   const { filteredJobs: finetuneJobs, loadJobs: loadFinetuneJobs } = FinetuneJobsConsumer();
   const { proposedPlan, planStatus, hasPlanProposed } = PlanConsumer();
   const { openTab } = WorkspaceTabsConsumer();

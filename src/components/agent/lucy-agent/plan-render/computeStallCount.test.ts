@@ -7,7 +7,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { ITERATION_HISTORIES } from '@/test/fixtures/eval-scenarios';
-import type { IterationHistoryEntry } from '@/services/finetune-iteration-db';
+import type { IterationHistoryEntry } from '@/types/iteration-types';
 
 // Re-implement computeStallCount here for unit testing
 // (the original is a module-private function in PlanCard.tsx)

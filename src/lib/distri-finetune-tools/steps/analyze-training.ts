@@ -26,9 +26,7 @@ import {
   listReinforcementJobs,
 } from '@/services/finetune-api';
 import type { FinetuneJob, RowEpochResults, EpochEvalResult } from '@/services/finetune-api';
-import { getDatasetById, getRecordsByDatasetId } from '@/services/datasets-db';
-import { getWorkflowByDataset } from '@/services/finetune-workflow-db';
-import { getOrCreateIterationState, saveIterationState } from '@/services/finetune-iteration-db';
+import { datasetService, recordService, iterationStateService, workflowService } from '@/services/service-registry';
 
 // =============================================================================
 // Constants (from rft-decision-tree.md Section 5)
@@ -54,7 +52,7 @@ interface Recommendation {
 
 interface ResolvedJob {
   readonly job: FinetuneJob;
-  readonly backendDatasetId: string;
+  readonly datasetId: string;
 }
 
 interface OverallProgression {
@@ -73,29 +71,28 @@ async function resolveTrainingJob(
   datasetId: string,
   jobId?: string,
 ): Promise<ResolvedJob> {
-  // Get dataset to find backendDatasetId
-  const dataset = await getDatasetById(datasetId);
-  if (!dataset?.backendDatasetId) {
-    throw new Error('Dataset not uploaded to backend — cannot fetch training results');
+  // Verify the dataset exists
+  const dataset = await datasetService.getById(datasetId);
+  if (!dataset) {
+    throw new Error('Dataset not found — cannot fetch training results');
   }
-
-  const backendDatasetId = dataset.backendDatasetId;
 
   // If explicit jobId provided, fetch it directly
   if (jobId) {
-    const job = await getReinforcementJobStatus(jobId);
-    return { job, backendDatasetId };
+    const job = await getReinforcementJobStatus(datasetId, jobId);
+    return { job, datasetId };
   }
 
   // Otherwise, find job from workflow
-  const workflow = await getWorkflowByDataset(datasetId);
+  const workflow = await workflowService.getByDataset(datasetId);
   if (workflow?.training?.jobId) {
-    const job = await getReinforcementJobStatus(workflow.training.jobId);
-    return { job, backendDatasetId };
+    const job = await getReinforcementJobStatus(datasetId, workflow.training.jobId);
+    return { job, datasetId };
   }
 
   // Fallback: list jobs for this dataset, pick most recent completed
-  const jobs = await listReinforcementJobs(undefined, undefined, backendDatasetId);
+  // The dataset ID is the backend dataset ID — they are always the same.
+  const jobs = await listReinforcementJobs(datasetId);
   const completed = jobs
     .filter((j) => j.status === 'succeeded' || j.status === 'failed')
     .sort((a, b) => (b.completed_at ?? b.updated_at).localeCompare(a.completed_at ?? a.updated_at));
@@ -104,7 +101,7 @@ async function resolveTrainingJob(
     throw new Error('No completed training job found for this dataset');
   }
 
-  return { job: completed[0], backendDatasetId };
+  return { job: completed[0], datasetId };
 }
 
 // =============================================================================
@@ -112,7 +109,7 @@ async function resolveTrainingJob(
 // =============================================================================
 
 async function buildTopicMap(datasetId: string): Promise<Map<string, string>> {
-  const records = await getRecordsByDatasetId(datasetId);
+  const records = await recordService.getByDatasetId(datasetId);
   const topicMap = new Map<string, string>();
   for (const record of records) {
     topicMap.set(record.id, record.topic ?? 'uncategorized');
@@ -424,7 +421,7 @@ function decideTrainingNextAction(
 
 /** Pull pre-training eval baseline from the last iteration history entry. */
 async function lookupEvalBaseline(datasetId: string): Promise<EvalBaseline | undefined> {
-  const state = await getOrCreateIterationState(datasetId);
+  const state = await iterationStateService.getOrCreate(datasetId);
   if (state.history.length === 0) return undefined;
 
   // Last iteration entry = the eval that preceded training
@@ -447,7 +444,7 @@ async function updateOuterLoopState(
   jobId: string,
   progressions: TopicEpochProgression[],
 ): Promise<void> {
-  const state = await getOrCreateIterationState(datasetId);
+  const state = await iterationStateService.getOrCreate(datasetId);
 
   // Build epoch scores map: topic → scores array
   const epochScores: Record<string, number[]> = {};
@@ -456,7 +453,7 @@ async function updateOuterLoopState(
     epochScores[p.topic] = sortedEpochs.map((e) => p.epoch_scores[e]);
   }
 
-  await saveIterationState({
+  await iterationStateService.save({
     ...state,
     phase: 'post_training',
     outerLoop: {
@@ -481,7 +478,7 @@ export const analyzeTrainingHandler: ToolHandler = async (params) => {
     }
 
     // 1. Resolve the training job
-    const { job, backendDatasetId } = await resolveTrainingJob(datasetId, jobId);
+    const { job } = await resolveTrainingJob(datasetId, jobId);
 
     // Handle failed jobs early
     if (job.status === 'failed') {
@@ -500,7 +497,7 @@ export const analyzeTrainingHandler: ToolHandler = async (params) => {
     }
 
     // 2. Fetch per-epoch evaluation results
-    const evalResponse = await getFinetuneEvaluations(backendDatasetId, job.provider_job_id);
+    const evalResponse = await getFinetuneEvaluations(datasetId, job.provider_job_id);
     const results = evalResponse.results;
 
     if (results.length === 0) {
@@ -539,10 +536,10 @@ export const analyzeTrainingHandler: ToolHandler = async (params) => {
     let evaluator_version: { version: number; created_at: string; has_diff: boolean } | undefined;
     let reinforcementMetrics: { reward: number | null; kl: number | null; loss: number | null; clipped_ratio: number | null } | undefined;
     try {
-      const dataset = await getDatasetById(datasetId);
+      const dataset = await datasetService.getById(datasetId);
       const [evalVersions, metricsResp] = await Promise.all([
-        dataset?.backendDatasetId ? getEvaluatorVersions(dataset.backendDatasetId).catch(() => []) : Promise.resolve([]),
-        getReinforcementJobMetrics(job.provider_job_id).catch(() => ({ metrics: [] })),
+        dataset ? getEvaluatorVersions(dataset.id).catch(() => []) : Promise.resolve([]),
+        getReinforcementJobMetrics(datasetId, job.provider_job_id).catch(() => ({ metrics: [] })),
       ]);
       if (evalVersions.length > 0) {
         const latest = evalVersions[0];

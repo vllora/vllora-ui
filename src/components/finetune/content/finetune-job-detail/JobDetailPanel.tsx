@@ -73,7 +73,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
     if (isActionLoading) return;
     setIsActionLoading(true);
     try {
-      await cancelReinforcementJob(job.provider_job_id);
+      await cancelReinforcementJob(job.dataset_id, job.provider_job_id);
       toast.success("Job cancelled");
     } catch (error) {
       toast.error(
@@ -82,13 +82,13 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
     } finally {
       setIsActionLoading(false);
     }
-  }, [job.provider_job_id, isActionLoading]);
+  }, [job.dataset_id, job.provider_job_id, isActionLoading]);
 
   const handleResume = useCallback(async () => {
     if (isActionLoading) return;
     setIsActionLoading(true);
     try {
-      await resumeReinforcementJob(job.provider_job_id);
+      await resumeReinforcementJob(job.dataset_id, job.provider_job_id);
       toast.success("Job resumed");
     } catch (error) {
       toast.error(
@@ -97,12 +97,13 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
     } finally {
       setIsActionLoading(false);
     }
-  }, [job.provider_job_id, isActionLoading]);
+  }, [job.dataset_id, job.provider_job_id, isActionLoading]);
 
   const handleDownloadWeights = useCallback(async () => {
     setIsDownloading(true);
     try {
       const { download_url } = await getWeightsDownloadUrl(
+        job.dataset_id,
         job.provider_job_id
       );
       triggerFileDownload(
@@ -119,7 +120,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
     } finally {
       setIsDownloading(false);
     }
-  }, [job.provider_job_id]);
+  }, [job.dataset_id, job.provider_job_id]);
 
   const canCancel = job.status === "pending" || job.status === "running";
   const canResume = job.status === "cancelled";
@@ -276,12 +277,13 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
           {/* ── Reinforcement Training Metrics (reward, KL, loss, completions) ── */}
           <ReinforcementMetricsSection
             jobId={job.id}
+            workflowId={job.dataset_id}
             isLive={job.status === "running"}
           />
 
           {/* ── Evaluator Version History ── */}
           {job.dataset_id && (
-            <EvaluatorVersionHistory backendDatasetId={job.dataset_id} />
+            <EvaluatorVersionHistory datasetId={job.dataset_id} />
           )}
 
           {/* ── Per-Row Details (themed to match panel) ── */}

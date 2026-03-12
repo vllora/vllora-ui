@@ -2,7 +2,7 @@
 
 A Claude Code skill that teaches AI agents how to execute the complete vLLora fine-tuning pipeline — from reading documents, through data generation and grader writing, to API execution and iterative improvement.
 
-This README is the full context for anyone (human or AI) working on this skill: why it exists, how it works, what's been tested, what's broken, and how to fix it.
+This README is the full context for anyone (human or AI) working on this skill: why it exists, how it works, what's planned, and how everything connects.
 
 ---
 
@@ -10,6 +10,7 @@ This README is the full context for anyone (human or AI) working on this skill: 
 
 - [Why This Skill Exists](#why-this-skill-exists)
 - [Architecture](#architecture)
+- [Two Operating Modes](#two-operating-modes)
 - [What We've Built](#what-weve-built)
 - [Key Design Decisions](#key-design-decisions)
 - [Testing History](#testing-history)
@@ -17,6 +18,7 @@ This README is the full context for anyone (human or AI) working on this skill: 
 - [How to Test](#how-to-test)
 - [How to Debug](#how-to-debug)
 - [Relationship to Lucy UI](#relationship-to-lucy-ui)
+- [Migration Plan: Shared Data via Gateway API](#migration-plan-shared-data-via-gateway-api)
 - [TODO & Future Work](#todo--future-work)
 
 ---
@@ -41,7 +43,7 @@ The skill gives the agent **knowledge of the APIs and fine-tuning concepts**. Th
 ### What the skill teaches
 
 1. How vLLora fine-tuning works (grader = training objective, RFT, smooth scoring)
-2. The 7-step pipeline (objective → knowledge → topics → data → grader → evaluate → iterate)
+2. The pipeline (objective → knowledge → topics → data → grader → evaluate → iterate → train)
 3. All vLLora API endpoints with curl examples
 4. How to write effective graders (hybrid, partial credit, reward hacking prevention)
 5. How to analyze evaluation results and iterate
@@ -55,21 +57,27 @@ The skill gives the agent **knowledge of the APIs and fine-tuning concepts**. Th
 
 ```
 finetune-skill/
-├── SKILL.md                    # Main entry point (~240 lines)
+├── SKILL.md                    # Main entry point (~300 lines)
 │   ├── YAML frontmatter        # name + description (auto-triggering)
 │   ├── Core concepts           # How RFT works, prerequisites
 │   ├── Working directory spec  # What files the agent creates
 │   ├── Execution log spec      # Timestamped log requirements
-│   └── 7-step pipeline         # Inline examples + curl commands
+│   └── Pipeline steps          # Inline examples + curl commands
 │
-├── knowledge/                  # Deep-dive reference files (read on demand)
-│   ├── api-reference.md        # ~380 lines — all REST endpoints
+├── reference/                  # Deep-dive reference files (read on demand)
+│   ├── api-reference.md        # ~380 lines — all REST endpoints with curl examples
 │   ├── data-format.md          # ~100 lines — JSONL format spec
 │   ├── extraction-guide.md     # ~200 lines — Docling Serve setup, API calls, section extraction
 │   ├── grader-writing.md       # ~290 lines — grader patterns + anti-patterns
 │   ├── topic-hierarchy.md      # ~270 lines — topic design + coverage analysis
 │   ├── iteration-strategy.md   # ~710 lines — analysis, diagnosis, escalation
 │   └── workflow-guide.md       # ~270 lines — per-step deep dive
+│
+├── scripts/                    # PEP 723 helper scripts (run with `uv run`)
+│   ├── validate_dataset.py     # Validate JSONL before upload
+│   ├── upload_dataset.py       # Upload dataset + grader to gateway
+│   ├── run_evaluation.py       # Create eval, poll until complete
+│   └── start_training.py       # Start training, poll until complete
 │
 ├── templates/                  # Starter files
 │   ├── sample-conversation.jsonl  # 4 example prompts (system + user only)
@@ -89,14 +97,14 @@ The YAML `description` field in SKILL.md is the primary trigger mechanism. It's 
 1. Claude Code reads SKILL.md (always loaded when triggered)
 2. SKILL.md references knowledge files with guidance on when to read each one
 3. Agent reads specific knowledge files as needed (progressive disclosure)
-4. Agent follows the 7-step pipeline, writing files and executing API calls
+4. Agent follows the pipeline, writing files and executing API calls
 5. Agent maintains an execution-log.md with full timestamps
 
 ### What the agent produces
 
 ```
 finetune-project/               # Agent creates this working directory
-├── knowledge/                  # Extracted domain knowledge from user documents
+├── reference/                  # Extracted domain knowledge from user documents
 │   └── document-extraction.md  # Structured extraction: sections, page numbers, key concepts
 ├── topics.json                 # Topic hierarchy with sourceChunkRefs
 ├── training.jsonl              # 100-200+ prompts (system + user messages only)
@@ -112,13 +120,61 @@ finetune-project/               # Agent creates this working directory
 
 ---
 
+## Two Operating Modes
+
+The skill supports two modes, controlled by whether the user wants to hand off to the vLLora UI or run the full pipeline in the CLI.
+
+### Mode A: Data Prep + Handoff to Lucy (UI)
+
+The agent prepares all data, then creates a workflow in the gateway so the vLLora UI can pick it up. Lucy takes over for evaluation, training, and iteration.
+
+```
+1. Define objective
+2. Read documents, extract knowledge
+3. Build topic hierarchy
+4. Generate JSONL training data
+5. Write grader
+6. Create workflow via API:  POST /finetune/workflows
+7. Upload records via API:   POST /finetune/workflows/{id}/records
+8. Upload topics + grader:   PUT  /finetune/workflows/{id}/topics
+                              PUT  /finetune/workflows/{id}/grader
+9. Print: "Open vLLora UI → select '{workflow_name}' → Lucy will take over"
+```
+
+**When to use**: User wants the visual UI experience for evaluation/training, or wants Lucy's guided workflow for the iteration loop.
+
+**Requires**: Gateway local API endpoints for workflows + records (see [Migration Plan](#migration-plan-shared-data-via-gateway-api)).
+
+### Mode B: Full CLI Pipeline (current, working)
+
+The agent handles everything end-to-end via API calls, with no UI dependency.
+
+```
+1. Define objective
+2. Read documents, extract knowledge
+3. Build topic hierarchy
+4. Generate JSONL training data
+5. Write grader
+6. Upload dataset to cloud:  POST /finetune/datasets
+7. Create evaluation:        POST /finetune/evaluations
+8. Poll results, analyze, iterate
+9. Start training:           POST /finetune/reinforcement-jobs
+10. At any point: "Open vLLora UI to see progress"
+```
+
+**When to use**: User wants maximum autonomy and CLI-first workflow, or doesn't have the vLLora UI running.
+
+**This is the currently working mode** — tested through v9 with live backend.
+
+---
+
 ## What We've Built
 
-### SKILL.md (~240 lines)
+### SKILL.md (~300 lines)
 
 - YAML frontmatter with pushy description for auto-triggering
 - Prerequisites check (base model capability, task clarity, smooth scoring)
-- 7-step pipeline with inline examples and curl commands
+- Pipeline with inline examples and curl commands
 - Working directory structure with evaluation/training job tracking
 - Execution log specification with full timestamps (`YYYY-MM-DD HH:MM:SS`)
 - Explicit directives: "execute curl directly, never create .sh files"
@@ -129,13 +185,26 @@ finetune-project/               # Agent creates this working directory
 
 | File | Lines | What it covers |
 |------|-------|---------------|
-| `api-reference.md` | ~380 | All vLLora REST endpoints with curl examples and response schemas |
+| `api-reference.md` | ~450 | All vLLora REST endpoints: cloud (datasets, eval, training) + local workflow API |
 | `data-format.md` | ~100 | JSONL format — prompts only (no assistant messages, since RFT) |
 | `extraction-guide.md` | ~200 | Docling Serve setup, convert/chunk API calls, section extraction, troubleshooting |
 | `grader-writing.md` | ~290 | 3 grader patterns, smooth scoring, reward hacking prevention |
 | `topic-hierarchy.md` | ~270 | Topic structure, source tracing, coverage analysis, per-topic scores |
 | `iteration-strategy.md` | ~710 | 9 parts: eval analysis, training, topics, variety, diagnosis, fixes, tracking, stalls, escalation |
 | `workflow-guide.md` | ~270 | Deep dive on each pipeline step |
+
+### Helper Scripts (PEP 723)
+
+All scripts use inline dependency declarations — run with `uv run script.py` (no separate install needed).
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/validate_dataset.py` | Validate JSONL: format, fields, RFT compliance, duplicate IDs, record count |
+| `scripts/upload_dataset.py` | Upload dataset + grader to gateway — auto-generates UUID, handles errors |
+| `scripts/run_evaluation.py` | Create eval job, poll until complete, print summary, save response |
+| `scripts/start_training.py` | Start training job, poll until complete, save response |
+
+These scripts solve the #1 testing issue (agents creating shell scripts instead of executing API calls) by providing ready-to-run commands.
 
 ### Templates
 
@@ -144,7 +213,7 @@ finetune-project/               # Agent creates this working directory
 - `extract-sections.py` — Generic markdown section extractor (splits on `##` headings, outputs `{document_title, sections}` JSON)
 - `project-config.json` — Configuration reference
 
-Total: ~2,500 lines across 13 files. SKILL.md is ~280 lines (under the 500-line guideline).
+Total: ~2,500 lines across 15 files. SKILL.md is ~300 lines (under the 500-line guideline).
 
 ---
 
@@ -157,7 +226,7 @@ vLLora uses reinforcement fine-tuning (RFT). The model generates its own respons
 No LLM API calls needed for data generation. The agent (Claude, GPT, etc.) writes JSONL prompts itself using its own intelligence. The skill doesn't call any external LLM for data — only the backend uses LLMs for evaluation.
 
 ### Only platform APIs documented
-The skill only covers endpoints the agent can't replicate locally: dataset upload, evaluation, training, and model serving. No Lucy chat completion endpoint, no IndexedDB, no browser-side tools.
+The skill only covers endpoints the agent can't replicate locally: dataset upload, evaluation, training, model serving, and local workflow management. No Lucy chat completion endpoint, no IndexedDB, no browser-side tools.
 
 ### Grader-first explanation
 The skill leads with "the grader IS your training objective" because understanding this is essential. Whatever the grader rewards, the model learns. This is the #1 concept users and agents need to internalize.
@@ -173,6 +242,9 @@ The skill requires `YYYY-MM-DD HH:MM:SS` format (not just date) so step duration
 
 ### Lightweight source tracing
 Topics link back to document sections via `sourceChunkRefs`. Records encode topic in their ID (e.g., `pins-003`). Just enough breadcrumbs to trace back when scores are low, without a formal tracking system.
+
+### Skill only talks to localhost:9090
+The skill ONLY communicates with the vLLora gateway at `localhost:9090`. It never calls cloud APIs directly. The gateway proxies cloud requests (eval, training, datasets) transparently. This simplifies the skill and keeps the gateway as the single integration point.
 
 ---
 
@@ -224,7 +296,7 @@ Tested with real chess PDF and live backend at localhost:9090.
 ### Current Test Status (v9)
 
 - PDF extraction via pdftotext: **working**
-- Knowledge extraction to `knowledge/document-extraction.md`: **working**
+- Knowledge extraction to `reference/document-extraction.md`: **working**
 - Topic hierarchy with real sourceChunkRefs: **working**
 - 131 training records across 20 topics: **working**
 - Hybrid grader (programmatic + LLM-as-judge): **working**
@@ -236,6 +308,7 @@ Tested with real chess PDF and live backend at localhost:9090.
 - Evaluation results analysis: **pending** (eval still running on backend)
 - Training job submission: **pending** (depends on eval results)
 - Iteration loop (re-evaluate after fixes): **not yet tested**
+- Mode A (handoff to UI): **not yet tested** (requires local workflow API)
 
 ---
 
@@ -255,90 +328,33 @@ using Bash, capture the response in a variable, parse the response, and use
 those values in the next API call.
 ```
 
-**Verification**: Check for `.sh` files in the output directory.
-
 ### Issue 2: Fabricated sourceChunkRefs
 
 **Symptom**: Agent creates topic nodes with `sourceChunkRefs` like `"hr-manual:ch1-leave-policies"` for documents it never read.
 
-**Root cause**: The skill originally said "add sourceChunkRefs when documents exist." Agents interpreted this as "guess what the document might contain."
-
-**Fix applied**: Changed to explicit instruction:
-```
-Only add sourceChunkRefs after you have actually read a document and
-extracted content from it. The values must reference real sections you
-read. Never fabricate sourceChunkRefs for documents you haven't read.
-```
-
-**Verification**: Cross-reference sourceChunkRefs with `knowledge/document-extraction.md` — every ref should match a real section heading or page number.
+**Fix applied**: Changed to explicit instruction requiring real section references from actually-read documents.
 
 ### Issue 3: dataset_id must be UUID
 
 **Symptom**: Upload fails with `400 Bad Request: Invalid dataset_id: invalid character`.
 
-**Root cause**: Backend requires UUID format (`a1b2c3d4-e5f6-7890-abcd-ef1234567890`). Skill examples used plain strings like `my-dataset-v1`.
-
-**Fix applied**: Updated SKILL.md Step 6 and api-reference.md to use `uuidgen`:
-```bash
-DATASET_UUID=$(uuidgen | tr '[:upper:]' '[:lower:]')
-curl -X POST .../finetune/datasets -F "dataset_id=$DATASET_UUID" ...
-```
-
-**Verification**: Check execution-log.md for successful upload response with `backend_dataset_id`.
+**Fix applied**: Updated SKILL.md and api-reference.md to use `uuidgen`.
 
 ### Issue 4: Date-only timestamps in execution log
 
-**Symptom**: Log entries show `[2026-03-06]` instead of `[2026-03-06 13:05:46]`.
-
-**Root cause**: Agents default to simple date format unless explicitly told otherwise.
-
-**Fix applied**: Added mandatory timestamp instruction:
-```
-Timestamps are mandatory. Every log entry MUST include a full timestamp
-in YYYY-MM-DD HH:MM:SS format. Get the current time by running
-date '+%Y-%m-%d %H:%M:%S' via Bash before each log entry.
-```
-
-**Verification**: Every line in execution-log.md should have `[YYYY-MM-DD HH:MM:SS]` format.
+**Fix applied**: Added mandatory timestamp instruction with `date '+%Y-%m-%d %H:%M:%S'` via Bash.
 
 ### Issue 5: PDF reading fails
 
-**Symptom**: Read tool returns error on PDF files (pdftoppm not installed or not in PATH).
-
-**Root cause**: Claude Code's Read tool may not support PDFs in all environments.
-
-**Fix applied**: Added pdftotext fallback in Step 2:
-```
-Reading PDF files: Extract text using pdftotext via Bash:
-/opt/homebrew/bin/pdftotext input.pdf output.txt
-If pdftotext is not found, try the full path or install poppler-utils.
-```
-
-**Verification**: Check that `/tmp/chess-extracted.txt` (or similar) exists and contains text.
+**Fix applied**: Added pdftotext fallback in Step 2 with full path `/opt/homebrew/bin/pdftotext`.
 
 ### Issue 6: Too few training records
 
-**Symptom**: Agent generates 20-25 records and moves on.
-
-**Root cause**: Without explicit guidance, agents generate a handful of examples and consider the task done.
-
-**Fix applied**: Added minimum volume requirement:
-```
-A useful dataset needs at least 100-200 total records across all topics.
-With 10 leaf topics, that's 10-20 per topic minimum.
-```
-
-**Verification**: `wc -l training.jsonl` should show 100+.
+**Fix applied**: Added minimum volume requirement (100-200 total records, 10-20 per topic).
 
 ### Issue 7: Execution log not updated incrementally
 
-**Symptom**: Log written once at the start, then never updated.
-
-**Fix applied**: Added rule:
-```
-Rule: Update the execution log after completing each step, before
-starting the next one. Don't batch log entries — write them incrementally.
-```
+**Fix applied**: Added rule: "Update the execution log after completing each step, before starting the next one."
 
 ---
 
@@ -346,8 +362,8 @@ starting the next one. Don't batch log entries — write them incrementally.
 
 ### Prerequisites
 
-1. vLLora backend running at `localhost:9090` (start via `npm run start:backend` or from gateway repo)
-2. A test PDF or document (e.g., `chess-tactics-and-combinations-dave-regis-646.pdf`)
+1. vLLora backend running at `localhost:9090`
+2. A test PDF or document
 3. Claude Code CLI installed
 4. `poppler` installed for pdftotext fallback (`brew install poppler` on macOS, `apt-get install poppler-utils` on Linux)
 5. Docker installed for Docling Serve extraction (optional but recommended — `docker run -p 5001:5001 ghcr.io/docling-project/docling-serve-cpu:latest`)
@@ -355,11 +371,9 @@ starting the next one. Don't batch log entries — write them incrementally.
 ### Setup test repo
 
 ```bash
-# Create or clean test repo
 mkdir -p /path/to/test-repo/.claude/skills/vllora-finetune
 cp -r /path/to/finetune-skill/* /path/to/test-repo/.claude/skills/vllora-finetune/
 
-# Allow Bash in test repo
 cat > /path/to/test-repo/.claude/settings.json << 'EOF'
 {
   "permissions": {
@@ -368,7 +382,6 @@ cat > /path/to/test-repo/.claude/settings.json << 'EOF'
 }
 EOF
 
-# Copy test document
 cp chess-tactics.pdf /path/to/test-repo/
 ```
 
@@ -385,7 +398,7 @@ a chess tactics tutor. Use the vLLora backend at http://localhost:9090.
 
 REQUIREMENTS:
 1. Read the PDF using pdftotext via Bash
-2. Save extracted content to knowledge/document-extraction.md
+2. Save extracted content to reference/document-extraction.md
 3. Build topics with REAL sourceChunkRefs
 4. Generate at least 100 training records
 5. Write a hybrid grader
@@ -403,26 +416,14 @@ Start now." \
 | Check | How | Pass Criteria |
 |-------|-----|---------------|
 | PDF extracted | `ls /tmp/*extracted*.txt` | File exists with text content |
-| Knowledge saved | `cat */knowledge/document-extraction.md` | Structured sections with page numbers |
+| Knowledge saved | `cat */reference/document-extraction.md` | Structured sections with page numbers |
 | Topics valid | `cat */topics.json \| python3 -m json.tool` | Real sourceChunkRefs matching extraction |
 | Enough records | `wc -l */training.jsonl` | 100+ lines |
 | No .sh files | `find . -name "*.sh"` | No results |
 | Full timestamps | `grep -E "\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]" */execution-log.md` | All log entries match |
 | Dataset uploaded | grep "POST /finetune/datasets" in log | 200 OK with backend_dataset_id |
 | Eval created | grep "POST /finetune/evaluations" in log | 200 OK with evaluation_run_id |
-| Eval completed | grep "status.*completed" in log | avg_score and pass_rate visible |
 | Grader is hybrid | `head -50 */grader.js` | Both programmatic checks AND `__langdb_call_llm_as_judge_obj` |
-
-### Running from the skill-creator eval framework
-
-If using the skill-creator's formal eval system:
-
-1. Evals are in `evals/evals.json` (3 test prompts defined)
-2. Spawn with-skill and without-skill agents per the skill-creator workflow
-3. Grade assertions, aggregate into `benchmark.json`
-4. Launch `eval-viewer/generate_review.py` for human review
-
-See the skill-creator skill docs for the full framework.
 
 ---
 
@@ -433,7 +434,7 @@ See the skill-creator skill docs for the full framework.
 1. Check if agent created .sh files: `find . -name "*.sh"`
 2. Read execution-log.md — does Step 6 have log entries?
 3. If log stops at Step 5: agent probably hit a permission issue with Bash
-4. If agent writes shell script: the "NEVER create .sh files" instruction isn't strong enough — make it more prominent in SKILL.md
+4. If agent writes shell script: the "NEVER create .sh files" instruction isn't strong enough
 
 ### API calls fail with 400
 
@@ -449,35 +450,20 @@ See the skill-creator skill docs for the full framework.
 3. Check if the eval model (gpt-4o-mini) has API access configured
 4. Large datasets (130+ rows) can take 5-10 minutes to complete
 
-### Agent fabricates sourceChunkRefs
-
-1. Read `knowledge/document-extraction.md` — are real sections listed?
-2. Cross-reference with `topics.json` sourceChunkRefs
-3. If extraction file doesn't exist: agent didn't actually read the document
-4. If extraction exists but refs don't match: agent guessed instead of referencing
-
-### Execution log has date-only timestamps
-
-1. Check if agent ran `date '+%Y-%m-%d %H:%M:%S'` — search execution log for time values
-2. If using `[2026-03-06]` format: the timestamp instruction isn't strong enough
-3. The example in SKILL.md should show full timestamps — verify it does
-
 ### Agent stops after generating data (doesn't call APIs)
 
-1. This is the most common failure mode
+1. Most common failure mode
 2. Check if agent hit max_turns limit
 3. Check if agent is waiting for user input
-4. The skill needs to be very explicit that the agent should proceed through ALL steps without stopping
+4. The skill needs to be very explicit that the agent should proceed through ALL steps
 
 ---
 
-## Relationship to Lucy Finetune Agent
+## Relationship to Lucy UI
 
-This skill and the Lucy finetune agent are **two interfaces to the same backend**. They share the same vLLora gateway API endpoints, the same evaluation engine, and the same training infrastructure. The difference is in how the AI orchestrates the pipeline.
+This skill and the Lucy finetune agent are **two interfaces to the same backend**. They share the same vLLora gateway API endpoints, the same evaluation engine, and the same training infrastructure.
 
 ### Shared Backend
-
-Both systems call the same REST APIs on the vLLora gateway (`localhost:9090`):
 
 ```
                     ┌─────────────────────────────┐
@@ -486,8 +472,7 @@ Both systems call the same REST APIs on the vLLora gateway (`localhost:9090`):
                     │  POST /finetune/datasets    │
                     │  POST /finetune/evaluations  │
                     │  POST /finetune/reinforcement-jobs │
-                    │  GET  /finetune/evaluations/{id}   │
-                    │  PATCH /finetune/datasets/{id}/evaluator │
+                    │  GET  /finetune/workflows (local)  │
                     └──────────┬──────────────────┘
                                │
               ┌────────────────┼────────────────┐
@@ -499,105 +484,72 @@ Both systems call the same REST APIs on the vLLora gateway (`localhost:9090`):
     └─────────────────┘  └────────────┘  └────────────┘
 ```
 
-The gateway doesn't know or care which client is calling it. A dataset uploaded by Lucy can be evaluated by an agent using this skill, and vice versa.
-
 ### How They Differ
 
 | Aspect | Lucy Agent (Browser UI) | This Skill (Claude Code CLI) |
 |--------|------------------------|------------------------------|
 | **Where it runs** | Browser (React app) | Terminal (Claude Code) |
-| **AI orchestration** | Distri server → 3 sub-agents (topics, workflow, data generation) | Single agent (Claude) reads skill + knowledge files |
+| **AI orchestration** | Distri server → 3 sub-agents | Single agent reads skill + knowledge files |
 | **Tool execution** | 50+ browser-side tools via @distri/react | Direct API calls via curl in Bash |
-| **Data storage** | IndexedDB (browser-local) | Local filesystem (JSONL, JSON, JS files) |
+| **Data storage** | IndexedDB (browser-local) → migrating to gateway API | Local filesystem (JSONL, JSON, JS files) |
 | **State machine** | Formal workflow state machine with validation rules | execution-log.md + iteration-log.md (informal) |
-| **User interaction** | Plan approval UI, progress cards, visual feedback | Agent runs autonomously, user reviews outputs |
-| **Workflow flexibility** | Fixed 7-step pipeline, steps run from hardcoded registry | Agent decides step order, can skip/repeat/branch |
-| **Analysis depth** | Summary stats (avg score, pass/fail count) | Full per-record scores with grader reasoning |
-| **Iteration strategy** | Re-run same plan with minor tweaks | Targeted fixes: regenerate weak topics, rewrite grader, escalate |
-| **Document handling** | Knowledge sources uploaded via UI, extracted by tools internally | Agent reads PDFs directly, extracts to knowledge/ dir |
-| **Grader writing** | Template-based criteria → auto-generated JS | Agent writes full custom JavaScript |
-| **Dependencies** | React UI + Distri server + vLLora Gateway | Only vLLora Gateway |
-
-### Lucy's Architecture (6 layers, 3 repos)
-
-```
-User ↔ React UI (vllora/ui repo)
-       ↕ useChat / @distri/react (vendored)
-     Distri Client (@distri/core — A2A protocol)
-       ↕ WebSocket/HTTP
-     Rust Gateway (vllora/gateway repo)
-       ↕ spawns
-     Distri Server (distri repo)
-       ├── Orchestrator Agent (vllora-finetune-agent.md)
-       │   ├── finetune_topics sub-agent (max 10 iterations)
-       │   ├── finetune_workflow sub-agent (max 20 iterations)
-       │   └── data_generation sub-agent (max 30 iterations)
-       └── Tools → sent back to browser for local execution
-       ↕
-     Browser-side tools (41 tools in src/lib/distri-finetune-tools/)
-       ↕
-     IndexedDB (datasets, workflows, records, evaluations)
-```
-
-### This Skill's Architecture (1 layer, 1 repo)
-
-```
-User ↔ Claude Code CLI
-       ↕ Reads SKILL.md + knowledge/ files
-     Claude (single agent, full autonomy)
-       ├── Read/Write local files
-       ├── Execute curl via Bash
-       └── Parse responses, iterate
-       ↕
-     vLLora Gateway (localhost:9090)
-```
+| **Workflow flexibility** | Fixed 7-step pipeline | Agent decides step order, can skip/repeat/branch |
 
 ### Why Both Exist
 
-**Lucy** is for users who want a **guided, visual experience** — plan approval, progress tracking, visual feedback. It's good for routine fine-tuning where the steps are predictable.
+**Lucy** is for users who want a **guided, visual experience** — plan approval, progress tracking, visual feedback. Good for routine fine-tuning.
 
-**This skill** is for users who want **maximum autonomy and intelligence** — the agent reads documents deeply, writes custom graders, diagnoses failures per-record, and escalates when stuck. It's good for complex or novel fine-tuning tasks.
-
-### Cross-Pollination
-
-Insights from building and testing this skill have informed improvements to Lucy:
-- The evaluation details gap (Lucy only sees summary stats) → proposed `get_evaluation_details` tool
-- The iteration memory gap (Lucy doesn't compare iterations) → proposed iteration history store
-- The fixed pipeline gap (Lucy can't branch after eval) → proposed `analyze_and_recommend` step
-- Full analysis documented in `/Users/anhthuduong/Documents/GitHub/vllora/ui/docs/enhance-lucy/`
-
-### Shared Concepts
-
-Both systems use the same fine-tuning concepts:
-- **Topic hierarchy** with sourceChunkRefs for document tracing
-- **Hybrid graders** (programmatic checks + LLM-as-judge)
-- **Prompts-only training data** (system + user messages, no assistant — RFT generates responses)
-- **GO/NO-GO decision** after evaluation (avg > 0.6, pass rate > 70%)
-- **Iteration loop** (evaluate → analyze → fix → re-evaluate)
-
-The skill's knowledge files (`grader-writing.md`, `iteration-strategy.md`, `topic-hierarchy.md`) codify the same best practices that Lucy's agent markdown files encode. If you improve one, consider updating the other.
+**This skill** is for users who want **maximum autonomy and intelligence** — the agent reads documents deeply, writes custom graders, diagnoses failures per-record. Good for complex or novel fine-tuning tasks.
 
 ---
 
-## Concepts & Research
+## Migration Plan: Shared Data via Gateway API
 
-### From research on RFT best practices (OpenAI, Fireworks, Predibase, GRPO)
+### The Problem (current state)
 
-1. **Base model must have some initial capability** — Can't bootstrap from 0% success rate. Need ~30-60% initial accuracy.
-2. **Smooth scoring over binary** — Partial credit (0.0-1.0 range) creates better training gradients than pass/fail.
-3. **Reward hacking prevention** — Model can learn shortcuts. Prevention: check outcomes not patterns, add negative criteria.
-4. **Task must be unambiguous and guess-proof** — If experts disagree, training signal is noisy.
-5. **Reward variability is essential** — If all scores cluster, gradients vanish. Need std 0.15-0.30.
-6. **Data quality over compute** — Tighten the grader, clean noisy data, then scale.
+The UI stores all finetune data in browser IndexedDB. The skill stores data in local files. These are two isolated worlds — data created by the skill is invisible to the UI, and vice versa.
 
-### Analysis guidance in the skill
+```
+Current:
+  Skill (CLI) → gateway API → cloud (datasets, eval, training)
+  UI (browser) → IndexedDB (datasets, records, workflows, jobs)
+  ❌ No shared state between skill and UI
+```
 
-- **Evaluation result analysis** — Reading API responses, bucketing records, pattern-spotting
-- **Per-epoch training progress** — Increasing = learning, flat = not learning, decreasing = overfitting
-- **Topic distribution** — Balance score formula, under-represented topic detection
-- **Per-topic score distribution** — 2x2 matrix (score quality x record count)
-- **Data variety checklist** — Question types, complexity, personas, scenarios
-- **10 stall patterns + 6-level escalation** — From quick fixes to "start over"
+### The Solution (planned)
+
+Both the skill and the UI read/write through the same gateway local API. The gateway's local SQLite becomes the single source of truth.
+
+```
+Target:
+  Skill (CLI) ──┐
+                 ├→ gateway API (localhost:9090) → local SQLite (workspace data)
+  UI (browser) ──┘                               → cloud API (eval, training)
+```
+
+### What This Enables
+
+1. **CLI → UI handoff**: Agent prepares data via skill → creates workflow in gateway → user opens vLLora UI → Lucy picks up where the agent left off
+2. **Shared visibility**: Datasets and workflows created by either tool are visible in both
+3. **Single source of truth**: No more IndexedDB ↔ API data isolation
+
+### Implementation Status
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| UI abstraction layer (service interfaces) | ✅ Done | 6 interfaces in `src/services/interfaces/` |
+| Gateway workflows table | ✅ Started | Basic CRUD in commit `e199769` |
+| Gateway records table | ❌ Not started | Needed for records storage |
+| Gateway expanded workflow fields | ❌ Not started | topics, grader, stats, etc. |
+| UI API adapters | ❌ Not started | Swap IndexedDB → API calls |
+| Skill Mode A (handoff) | ❌ Not started | Needs gateway workflow + records endpoints |
+| IndexedDB removal | ❌ Not started | Final step after full migration |
+
+### Spec Doc
+
+Full migration spec: `docs/enhance-lucy/skill-and-local-api-spec.md`
+
+Covers: gateway API design (SQL schemas, endpoint specs), UI abstraction layer, 5-phase migration plan, skill rewrite plan, and open decisions (event system, offline support, data migration, real-time updates).
 
 ---
 
@@ -611,22 +563,20 @@ The skill's knowledge files (`grader-writing.md`, `iteration-strategy.md`, `topi
 - [ ] Test evaluation results analysis (agent reads results and diagnoses)
 - [ ] Test iteration loop (agent fixes issues and re-evaluates)
 - [ ] Test training job submission (after good eval scores)
+- [ ] Test Mode A (handoff to UI via workflow API)
 - [ ] Test Docling Serve extraction (Docker required)
 - [ ] Test extract-sections.py on non-chess documents
 - [ ] Test fallback when Docling is not available
 - [ ] Test with different document types (not just chess PDF)
 - [ ] Test without any document (objective-only, no PDF)
-- [ ] Run skill-creator formal eval (with/without skill comparison)
-- [ ] Description optimization via skill-creator's `run_loop.py`
 
 ### Skill improvements
 
+- [ ] Add Mode A pipeline (handoff to Lucy) once gateway workflow API is ready
+- [ ] Update api-reference.md with local workflow endpoints when finalized
 - [ ] Add guidance for multi-turn conversation training data
 - [ ] Add guidance for structured output fine-tuning (JSON schema enforcement)
-- [ ] Add example of a complete end-to-end iteration log from a real project
-- [ ] Consider adding a "quick start" template that pre-fills the working directory
 - [ ] Test on Cowork (no local filesystem — may need adaptations)
-- [ ] Test with different base models (not just gpt-4o-mini)
 
 ### Known weaknesses
 
@@ -635,3 +585,4 @@ The skill's knowledge files (`grader-writing.md`, `iteration-strategy.md`, `topi
 - Polling loop timeout — if eval takes > 5 minutes, agent's poll loop may expire
 - No guidance on what to do if backend is down or returns unexpected errors
 - Skill doesn't cover multi-dataset experiments (A/B testing different data strategies)
+- Mode A not yet available (blocked on gateway local API implementation)

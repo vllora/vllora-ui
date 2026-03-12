@@ -11,13 +11,13 @@ import { DatasetReadmeViewer } from "@/components/datasets/readme-viewer";
 import { StructuredOverviewPane } from "@/components/datasets/overview-left-pane/StructuredOverviewPane";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { PlanConsumer } from "@/contexts/PlanContext";
-import { DryRunJobsConsumer } from "@/contexts/DryRunJobsContext";
+import { EvalJobsConsumer } from "@/contexts/EvalJobsContext";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { getStoredPlan } from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
 import { computeDatasetInsights, getLeafTopicsFromHierarchy } from "@/components/datasets/record-utils";
 import { DatasetOverviewCard } from "@/components/datasets/dataset-detail-header/overview-card/DatasetOverviewCard";
-import { getJobAverageScore, getJobCompletedRows, getJobTotalRows } from "@/types/dry-run-job";
+import { getJobAverageScore, getJobCompletedRows, getJobTotalRows } from "@/types/eval-job";
 import { emitter } from "@/utils/eventEmitter";
 import type { ExecutionProgress } from "@/lib/distri-finetune-tools/steps/execute-plan";
 import type { Dataset } from "@/types/dataset-types";
@@ -30,9 +30,9 @@ import {
   getStepDetails,
   getEvaluationDetails,
   getFinetuneDetails,
-  getDryRunStatsForStep,
+  getEvalStatsForStep,
   getFinetuneJobForStep,
-  navigateToDryRunJob,
+  navigateToEvalJob,
   navigateToFinetuneJob,
 } from "./utils";
 import { EvalHealthCard } from "./EvalHealthCard";
@@ -90,7 +90,7 @@ export function DatasetOverviewPanel({
   const planTimestamp = isExecuting ? Date.now() : historicalPlanTime;
 
   // Job/activity context used by multiple timeline entry types
-  const { jobs: dryRunJobs } = DryRunJobsConsumer();
+  const { jobs: dryRunJobs } = EvalJobsConsumer();
   const { filteredJobs, latestJob } = FinetuneJobsConsumer();
 
   // Step entries
@@ -102,7 +102,7 @@ export function DatasetOverviewPanel({
           const stepResult = asRecord(s.result);
           const matchedDryRun =
             s.id === "dryrun"
-              ? getDryRunStatsForStep(stepResult, dryRunJobs, dataset?.dryRunStats)
+              ? getEvalStatsForStep(stepResult, dryRunJobs, dataset?.evalStats)
               : undefined;
           const dryRunJobId =
             s.id === "dryrun"
@@ -142,7 +142,7 @@ export function DatasetOverviewPanel({
             action: dryRunJobId
               ? {
                   title: "Open evaluation job",
-                  onClick: () => navigateToDryRunJob(datasetId, dryRunJobId),
+                  onClick: () => navigateToEvalJob(datasetId, dryRunJobId),
                 }
               : finetuneJobId
               ? {
@@ -188,14 +188,14 @@ export function DatasetOverviewPanel({
               j.status === "running" && totalRows > 0
                 ? Math.round((completedRows / totalRows) * 100)
                 : undefined,
-            details: getEvaluationDetails(j, dataset?.dryRunStats),
+            details: getEvaluationDetails(j, dataset?.evalStats),
             action: {
               title: "Open evaluation job",
-              onClick: () => navigateToDryRunJob(datasetId, j.id),
+              onClick: () => navigateToEvalJob(datasetId, j.id),
             },
           };
         }),
-    [dryRunJobs, dataset?.dryRunStats, datasetId]
+    [dryRunJobs, dataset?.evalStats, datasetId]
   );
 
   // Finetune jobs
@@ -313,7 +313,7 @@ export function DatasetOverviewPanel({
                     window.dispatchEvent(new CustomEvent("vllora_highlight_record", { detail: { recordId } }));
                   }, 150);
                 }}
-                onOpenDryRunJob={(jobId) => navigateToDryRunJob(datasetId, jobId)}
+                onOpenEvalJob={(jobId) => navigateToEvalJob(datasetId, jobId)}
                 onOpenFinetuneJob={(jobId) => navigateToFinetuneJob(datasetId, jobId)}
                 className="h-full"
               />

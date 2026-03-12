@@ -6,8 +6,7 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import * as knowledgeDB from '@/services/knowledge-sources-db';
-import * as datasetsDB from '@/services/datasets-db';
+import { knowledgeSourceService, datasetService } from '@/services/service-registry';
 import type { ToolHandler } from '../types';
 import type { KnowledgeSourceType, ExtractedContent, MarkdownPurpose, KnowledgeSourceProgress } from '@/types/dataset-types';
 import { extractPdfContentNative, type ExtractionProgressCallback } from './pdf-native-extractor';
@@ -380,7 +379,7 @@ export const uploadKnowledgeSourceHandler: ToolHandler = async (params) => {
     }
 
     // Create the knowledge source
-    const source = await knowledgeDB.createKnowledgeSource(dataset_id, name, type, {
+    const source = await knowledgeSourceService.create(dataset_id, name, type, {
       content,
       mimeType: mime_type,
       size: content.length,
@@ -388,7 +387,7 @@ export const uploadKnowledgeSourceHandler: ToolHandler = async (params) => {
     });
 
     // Update status to processing
-    await knowledgeDB.updateKnowledgeSourceStatus(source.id, 'processing');
+    await knowledgeSourceService.updateStatus(source.id, 'processing');
 
     // Extract content in background (non-blocking)
     // This allows the UI to proceed immediately while extraction happens async
@@ -437,7 +436,7 @@ async function processExtractionInBackground(
       };
 
       // Update progress in DB
-      await knowledgeDB.updateKnowledgeSourceProgress(sourceId, progressInfo);
+      await knowledgeSourceService.updateProgress(sourceId, progressInfo);
 
       // Emit event to notify UI of progress change
       emitter.emit('vllora_knowledge_source_updated', { datasetId, sourceId, progress: progressInfo });
@@ -446,19 +445,19 @@ async function processExtractionInBackground(
     // Fetch objective from dataset (for PDF LLM extraction context)
     let objective: string | undefined;
     if (type === 'pdf') {
-      const dataset = await datasetsDB.getDatasetById(datasetId);
+      const dataset = await datasetService.getById(datasetId);
       objective = dataset?.datasetObjective;
     }
 
     // Extract content (LLM-primary for PDFs with embeddings fallback)
     const extractedContent = await extractContent(type, content, name, extractionMode, onProgress, objective, comment);
-    await knowledgeDB.updateKnowledgeSourceStatus(sourceId, 'ready', { extractedContent });
+    await knowledgeSourceService.updateStatus(sourceId, 'ready', { extractedContent });
     console.log(`[processExtractionInBackground] Extraction complete for ${sourceId}`);
     // Emit event to notify UI of status change
     emitter.emit('vllora_knowledge_source_updated', { datasetId });
   } catch (error) {
     console.error(`[processExtractionInBackground] Extraction failed for ${sourceId}:`, error);
-    await knowledgeDB.updateKnowledgeSourceStatus(sourceId, 'failed', {
+    await knowledgeSourceService.updateStatus(sourceId, 'failed', {
       error: error instanceof Error ? error.message : 'Extraction failed',
     });
     // Also emit event on failure so UI can show the failed state
@@ -478,7 +477,7 @@ export const listKnowledgeSourcesHandler: ToolHandler = async (params) => {
       return { success: false, error: 'dataset_id is required' };
     }
 
-    const sources = await knowledgeDB.getKnowledgeSourcesByDataset(dataset_id);
+    const sources = await knowledgeSourceService.getByDataset(dataset_id);
 
     return {
       success: true,
@@ -526,10 +525,10 @@ export const extractTopicsFromSourceHandler: ToolHandler = async (params) => {
 
     let sources;
     if (source_id) {
-      const source = await knowledgeDB.getKnowledgeSource(source_id);
+      const source = await knowledgeSourceService.get(source_id);
       sources = source ? [source] : [];
     } else {
-      sources = await knowledgeDB.getKnowledgeSourcesByDataset(dataset_id);
+      sources = await knowledgeSourceService.getByDataset(dataset_id);
     }
 
     const allTopics: string[] = [];
@@ -577,7 +576,7 @@ export const searchKnowledgeHandler: ToolHandler = async (params) => {
 
     // Fetch mode: return full text for a specific chunk
     if (chunk_id) {
-      const sources = await knowledgeDB.getKnowledgeSourcesByDataset(dataset_id);
+      const sources = await knowledgeSourceService.getByDataset(dataset_id);
       for (const source of sources) {
         if (source.status !== 'ready' || !source.extractedContent) continue;
         const metadata = source.extractedContent.metadata as Record<string, unknown> | undefined;
@@ -604,7 +603,7 @@ export const searchKnowledgeHandler: ToolHandler = async (params) => {
       return { success: false, error: 'Either query or chunk_id is required' };
     }
 
-    const results = await knowledgeDB.searchKnowledgeSources(dataset_id, query);
+    const results = await knowledgeSourceService.search(dataset_id, query);
 
     return {
       success: true,

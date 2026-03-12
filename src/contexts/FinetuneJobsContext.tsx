@@ -24,13 +24,7 @@ import {
   getReinforcementJobStatus,
   getFinetuneEvaluations,
 } from "@/services/finetune-api";
-import {
-  getCachedJobEvaluations,
-  saveJobEvaluationsCache,
-  isJobScoresPersisted,
-  markJobScoresPersisted,
-} from "@/services/finetune-workflow-db";
-import { persistFinetuneScoresToRecords } from "@/services/datasets-db";
+import { workflowService, recordService } from "@/services/service-registry";
 import { ProjectEventsConsumer } from "@/contexts/project-events";
 import {
   CustomEvent,
@@ -52,6 +46,52 @@ interface JobEvaluationState {
 const EVAL_POLL_INTERVAL = 20000;
 
 // ============================================================================
+// Helpers
+// ============================================================================
+
+/**
+ * Persist finetune evaluation scores to individual records.
+ * Computes average score across all epochs for each row, then updates via recordService.
+ */
+async function persistFinetuneScores(
+  datasetId: string,
+  results: Array<{
+    row_index: number;
+    row: { id: string; [key: string]: unknown };
+    epochs: Record<number, Array<{ score?: number; [key: string]: unknown }>>;
+  }>,
+  _previewOnly: boolean,
+  _finetuneModel?: string,
+): Promise<number> {
+  let persisted = 0;
+
+  for (const row of results) {
+    const recordId = row.row?.id;
+    if (!recordId) continue;
+
+    const allScores: number[] = [];
+    for (const epochEntries of Object.values(row.epochs)) {
+      for (const entry of epochEntries) {
+        if (typeof entry.score === 'number') {
+          allScores.push(entry.score);
+        }
+      }
+    }
+
+    if (allScores.length === 0) continue;
+
+    const avgScore = allScores.reduce((sum, s) => sum + s, 0) / allScores.length;
+
+    await recordService.updateEvalScores(datasetId, recordId, {
+      finetuneScore: avgScore,
+    });
+    persisted++;
+  }
+
+  return persisted;
+}
+
+// ============================================================================
 // Hook
 // ============================================================================
 
@@ -61,8 +101,8 @@ function useFinetuneJobsLogic() {
   // Sidebar visibility state
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // Dataset filtering - server-side filter via backend dataset ID
-  const [currentBackendDatasetId, setCurrentBackendDatasetId] = useState<string | null>(null);
+  // Dataset filtering - server-side filter via dataset ID
+  const [currentDatasetId, setCurrentDatasetId] = useState<string | null>(null);
 
   // Job evaluations state - keyed by job ID
   const [jobEvaluations, setJobEvaluations] = useState<Record<string, JobEvaluationState>>({});
@@ -82,7 +122,7 @@ function useFinetuneJobsLogic() {
   } = useRequest(
     async (datasetId?: string | null) => {
       // Use provided datasetId or fall back to current state
-      const filterDatasetId = datasetId !== undefined ? datasetId : currentBackendDatasetId;
+      const filterDatasetId = datasetId !== undefined ? datasetId : currentDatasetId;
 
       // If no backend dataset ID, return empty (dataset not uploaded yet)
       if (!filterDatasetId) {
@@ -90,20 +130,19 @@ function useFinetuneJobsLogic() {
       }
 
       return listReinforcementJobs(
-        undefined, // limit
-        undefined, // after
-        filterDatasetId // datasetId (server-side filter)
+        filterDatasetId, // workflowId (scopes the listing)
       );
     },
     {
-      manual: true, // We'll trigger manually based on currentBackendDatasetId
+      manual: true, // We'll trigger manually based on currentDatasetId
     }
   );
 
   // Refresh a specific job by ID
   const refreshJob = useCallback(async (providerJobId: string) => {
+    if (!currentDatasetId) return;
     try {
-      const updatedJob = await getReinforcementJobStatus(providerJobId);
+      const updatedJob = await getReinforcementJobStatus(currentDatasetId, providerJobId);
       setJobs((prevJobs) =>
         (prevJobs || []).map((job) =>
           job.provider_job_id === providerJobId ? updatedJob : job
@@ -112,7 +151,7 @@ function useFinetuneJobsLogic() {
     } catch (err) {
       console.error(`Failed to refresh job ${providerJobId}:`, err);
     }
-  }, [setJobs]);
+  }, [setJobs, currentDatasetId]);
 
   // Fetch evaluations for a specific job (stale-while-revalidate pattern)
   const fetchJobEvaluations = useCallback(async (job: FinetuneJob, isInitial = false) => {
@@ -123,7 +162,7 @@ function useFinetuneJobsLogic() {
     // On initial fetch, try to load from cache first (stale-while-revalidate)
     if (isInitial) {
       try {
-        const cached = await getCachedJobEvaluations(jobId);
+        const cached = await workflowService.getCachedJobEvaluations(jobId);
         if (cached) {
           // Show cached data immediately
           setJobEvaluations((prev) => ({
@@ -156,40 +195,37 @@ function useFinetuneJobsLogic() {
       }));
 
       // Save to cache in background
-      saveJobEvaluationsCache(jobId, results).catch((err) => {
-        console.warn('Failed to cache job evaluations:', err);
+      workflowService.saveJobEvaluationsCache(jobId, results).catch((cacheErr: unknown) => {
+        console.warn('Failed to cache job evaluations:', cacheErr);
       });
 
       // Persist finetune scores to records
       if (results.results.length > 0) {
         const isComplete = job.status !== 'pending' && job.status !== 'running';
         const modelName = job.base_model;
+        const datasetId = job.dataset_id!;
         try {
+          const previewOnly = !isComplete;
           if (isComplete) {
-            // Final persistence: increment count, mark as done (once per job)
-            const alreadyPersisted = await isJobScoresPersisted(jobId);
-            if (!alreadyPersisted) {
-              const { persisted, localDatasetId } = await persistFinetuneScoresToRecords(
-                job.dataset_id!, results.results, false, modelName
-              );
+            const alreadyPersisted = await workflowService.isJobScoresPersisted(jobId);
+            if (alreadyPersisted) {
+              // Already persisted — skip
+            } else {
+              const persisted = await persistFinetuneScores(datasetId, results.results, previewOnly, modelName);
               if (persisted > 0) {
-                await markJobScoresPersisted(jobId);
-                emitter.emit('vllora_dataset_refresh' as any,
-                  localDatasetId ? { datasetId: localDatasetId } : undefined);
+                await workflowService.markJobScoresPersisted(jobId);
+                emitter.emit('vllora_dataset_refresh' as any, { datasetId });
               }
             }
           } else {
             // Live preview: update scores without incrementing count (overwritten each poll)
-            const { persisted, localDatasetId } = await persistFinetuneScoresToRecords(
-              job.dataset_id!, results.results, true, modelName
-            );
+            const persisted = await persistFinetuneScores(datasetId, results.results, previewOnly, modelName);
             if (persisted > 0) {
-              emitter.emit('vllora_dataset_refresh' as any,
-                localDatasetId ? { datasetId: localDatasetId } : undefined);
+              emitter.emit('vllora_dataset_refresh' as any, { datasetId });
             }
           }
-        } catch (err) {
-          console.warn('[FinetuneJobs] Failed to persist finetune scores:', err);
+        } catch (scoreErr: unknown) {
+          console.warn('[FinetuneJobs] Failed to persist finetune scores:', scoreErr);
         }
       }
     } catch (err) {
@@ -302,12 +338,12 @@ function useFinetuneJobsLogic() {
           );
         } else {
           // Job not in list, trigger a full reload
-          loadJobs(currentBackendDatasetId);
+          loadJobs(currentDatasetId);
           return jobsList;
         }
       });
     },
-    [loadJobs, setJobs, currentBackendDatasetId]
+    [loadJobs, setJobs, currentDatasetId]
   );
 
   // Subscribe to SSE events
@@ -333,21 +369,21 @@ function useFinetuneJobsLogic() {
     };
   }, [subscribe, handleJobUpdateEvent]);
 
-  // Load jobs on mount and when currentBackendDatasetId changes
+  // Load jobs on mount and when currentDatasetId changes
   useEffect(() => {
-    loadJobs(currentBackendDatasetId);
-  }, [currentBackendDatasetId]); // eslint-disable-line react-hooks/exhaustive-deps
+    loadJobs(currentDatasetId);
+  }, [currentDatasetId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Listen for job created events from quickFinetune
   useEffect(() => {
-    const handleJobCreated = (event: { backendDatasetId: string }) => {
-      // Update the current backend dataset ID if it changed
-      const targetId = event.backendDatasetId || currentBackendDatasetId;
-      if (event.backendDatasetId && event.backendDatasetId !== currentBackendDatasetId) {
-        setCurrentBackendDatasetId(event.backendDatasetId);
-        // useEffect watching currentBackendDatasetId will call loadJobs
+    const handleJobCreated = (event: { datasetId: string }) => {
+      // Update the current dataset ID if it changed
+      const targetId = event.datasetId || currentDatasetId;
+      if (event.datasetId && event.datasetId !== currentDatasetId) {
+        setCurrentDatasetId(event.datasetId);
+        // useEffect watching currentDatasetId will call loadJobs
       } else {
-        // Same dataset — refresh directly (setCurrentBackendDatasetId would be a no-op)
+        // Same dataset — refresh directly (setCurrentDatasetId would be a no-op)
         loadJobs(targetId);
       }
       setIsSidebarOpen(true);
@@ -357,7 +393,7 @@ function useFinetuneJobsLogic() {
     return () => {
       emitter.off("vllora_finetune_job_created", handleJobCreated);
     };
-  }, [loadJobs, currentBackendDatasetId]);
+  }, [loadJobs, currentDatasetId]);
 
   // Jobs are now filtered server-side, so filteredJobs just returns jobs
   const filteredJobs = jobs;
@@ -394,8 +430,8 @@ function useFinetuneJobsLogic() {
     refreshJob,
     isSidebarOpen,
     setIsSidebarOpen,
-    currentBackendDatasetId,
-    setCurrentBackendDatasetId,
+    currentDatasetId,
+    setCurrentDatasetId,
     filteredJobs,
     latestJob,
     getJobEvaluations,

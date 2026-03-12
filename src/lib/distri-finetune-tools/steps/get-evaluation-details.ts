@@ -1,19 +1,18 @@
 /**
  * Get Evaluation Details Tool
  *
- * Retrieves detailed dry run evaluation results including per-record scores,
+ * Retrieves detailed evaluation results including per-record scores,
  * grader reasoning, and per-topic breakdown. Enables Lucy to analyze WHY
  * records scored poorly and make informed decisions about iteration.
  *
  * Data sources:
- * - DryRunJob.pollingSnapshot (EvaluationResultResponse) for per-row results
+ * - EvalJob.pollingSnapshot (EvaluationResultResponse) for per-row results
  * - DatasetRecord.topic for topic mapping
  * - flattenEvaluationResults() for normalized row data
  */
 
 import type { DistriFnTool } from '@distri/core';
-import { getDryRunJobsByDataset } from '@/services/dry-run-jobs-db';
-import { getRecordsByDatasetId } from '@/services/datasets-db';
+import { evalJobService, recordService } from '@/services/service-registry';
 import { flattenEvaluationResults } from '@/services/finetune-api';
 import type { FlatEvaluationResult } from '@/services/finetune-api';
 import type { ToolHandler } from '../types';
@@ -60,7 +59,7 @@ export const getEvaluationDetailsHandler: ToolHandler = async (params) => {
     }
 
     // Find the target evaluation job
-    const jobs = await getDryRunJobsByDataset(dataset_id);
+    const jobs = await evalJobService.getByDataset(dataset_id);
     const targetJob = evaluation_id
       ? jobs.find((j) => j.id === evaluation_id || j.evaluationRunId === evaluation_id)
       : jobs.find((j) => j.status === 'completed');
@@ -80,7 +79,7 @@ export const getEvaluationDetailsHandler: ToolHandler = async (params) => {
     const flatResults = flattenEvaluationResults(targetJob.pollingSnapshot.results);
 
     // Load dataset records for topic mapping
-    const records = await getRecordsByDatasetId(dataset_id);
+    const records = await recordService.getByDatasetId(dataset_id);
     const recordTopicMap = new Map<string, string>();
     for (const record of records) {
       recordTopicMap.set(record.id, record.topic ?? 'Uncategorized');

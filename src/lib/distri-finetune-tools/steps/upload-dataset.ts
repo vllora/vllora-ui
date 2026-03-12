@@ -7,42 +7,34 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import * as workflowDB from '@/services/finetune-workflow-db';
-import * as datasetsDB from '@/services/datasets-db';
+import { workflowService, datasetService, recordService } from '@/services/service-registry';
 import { uploadDatasetForFinetune } from '@/services/finetune-api';
 import type { ToolHandler } from '../types';
 
 export const uploadDatasetHandler: ToolHandler = async (params) => {
   try {
-    const { workflow_id, force_reupload = false } = params;
+    const { workflow_id } = params;
 
     if (!workflow_id || typeof workflow_id !== 'string') {
       return { success: false, error: 'workflow_id is required' };
     }
 
-    const workflow = await workflowDB.getWorkflow(workflow_id);
+    const workflow = await workflowService.get(workflow_id);
     if (!workflow) {
       return { success: false, error: 'Workflow not found' };
     }
 
     // Get dataset with records
-    const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
+    const dataset = await datasetService.getById(workflow.datasetId);
     if (!dataset) {
       return { success: false, error: 'Dataset not found' };
     }
 
-    // Check if already uploaded and not forcing reupload
-    if (dataset.backendDatasetId && !force_reupload) {
-      return {
-        success: true,
-        already_uploaded: true,
-        backend_dataset_id: dataset.backendDatasetId,
-        message: 'Dataset already uploaded to backend. Use force_reupload=true to re-upload.',
-      };
-    }
+    // The dataset ID is the backend dataset ID — they are always the same.
+    const datasetId = dataset.id;
 
     // Get records
-    const records = await datasetsDB.getRecordsByDatasetId(workflow.datasetId);
+    const records = await recordService.getByDatasetId(workflow.datasetId);
     if (records.length === 0) {
       return { success: false, error: 'Dataset has no records to upload' };
     }
@@ -54,10 +46,7 @@ export const uploadDatasetHandler: ToolHandler = async (params) => {
     };
 
     // Upload to backend (includes topic hierarchy and evaluator if configured)
-    const { backendDatasetId, jsonlContent } = await uploadDatasetForFinetune(datasetWithRecords);
-
-    // Save backend dataset ID to local dataset
-    await datasetsDB.updateDatasetBackendId(workflow.datasetId, backendDatasetId);
+    const { jsonlContent } = await uploadDatasetForFinetune(datasetWithRecords);
 
     // Count what was included
     const hasTopicHierarchy = !!dataset.topicHierarchy?.hierarchy?.length;
@@ -65,7 +54,7 @@ export const uploadDatasetHandler: ToolHandler = async (params) => {
 
     return {
       success: true,
-      backend_dataset_id: backendDatasetId,
+      backend_dataset_id: datasetId,
       records_uploaded: records.length,
       jsonl_size_bytes: jsonlContent.length,
       included: {

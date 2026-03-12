@@ -11,8 +11,8 @@ import {
   getJobTotalRows,
   getJobFailedRows,
   getJobFailedGradingCount,
-} from "@/types/dry-run-job";
-import { DryRunJobsConsumer } from "@/contexts/DryRunJobsContext";
+} from "@/types/eval-job";
+import { EvalJobsConsumer } from "@/contexts/EvalJobsContext";
 import { DryRunEmptyState } from "./EvaluationEmptyState";
 import { EvaluationFailedState } from "./EvaluationFailedState";
 import { EvaluationRunningState } from "./EvaluationRunningState";
@@ -29,7 +29,7 @@ export interface DryRunEvaluationCardProps {
 }
 
 export function DryRunEvaluationCard({ evalScript, onDryRunClick }: DryRunEvaluationCardProps) {
-  const { jobs, isLoading, runningJob, lastCompletedJob, cancelDryRun } = DryRunJobsConsumer();
+  const { jobs, isLoading, runningJob, lastCompletedJob, cancelDryRun } = EvalJobsConsumer();
 
   // No eval script - show setup prompt (clickable)
   if (!evalScript) {

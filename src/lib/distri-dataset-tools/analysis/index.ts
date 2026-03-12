@@ -9,7 +9,7 @@
  * - './analyze-coverage' - Analyze topic coverage
  * - './classify-records' - Classify records into topics
  * - './generate-hierarchy' - Generate hierarchy from topics
- * - './analyze-dry-run' - Analyze dry run results
+ * - './analyze-evaluation' - Analyze evaluation results
  */
 
 // Re-export commonly used functions for convenience
@@ -18,4 +18,4 @@ export { generateTraces } from './generate-traces';
 export { analyzeCoverage, calculateGenerationTargets } from './analyze-coverage';
 export { classifyRecords } from './classify-records';
 export { generateHierarchy } from './generate-hierarchy';
-export { calculateAndSaveDryRunStats } from './analyze-dry-run';
+export { calculateAndSaveEvalStats } from './analyze-evaluation';

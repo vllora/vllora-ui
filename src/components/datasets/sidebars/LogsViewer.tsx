@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
-import { DryRunJobsConsumer } from "@/contexts/DryRunJobsContext";
+import { EvalJobsConsumer } from "@/contexts/EvalJobsContext";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { buildActivityLog, type ActivityLogEntry, type LogEntryType } from "@/services/activity-log-service";
 import { cn } from "@/lib/utils";
@@ -60,7 +60,7 @@ function formatTime(ts: number): string {
 export function LogsViewer() {
   const { dataset } = DatasetDetailConsumer();
   const { sources } = KnowledgeSourcesConsumer();
-  const { jobs: dryRunJobs } = DryRunJobsConsumer();
+  const { jobs: dryRunJobs } = EvalJobsConsumer();
   const { filteredJobs: finetuneJobs } = FinetuneJobsConsumer();
 
   const entries = useMemo(

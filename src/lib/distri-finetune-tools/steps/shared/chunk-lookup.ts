@@ -6,7 +6,7 @@
  * generation to send only topic-relevant context to the LLM.
  */
 
-import * as knowledgeDB from '@/services/knowledge-sources-db';
+import { knowledgeSourceService } from '@/services/service-registry';
 import type { KnowledgeSource } from '@/types/dataset-types';
 
 /**
@@ -85,7 +85,7 @@ export async function resolveChunkRefs(
   if (preloadedSources) {
     sourceMap = new Map(preloadedSources);
   } else {
-    const sources = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
+    const sources = await knowledgeSourceService.getByDataset(datasetId);
     sourceMap = new Map<string, KnowledgeSource>();
     for (const s of sources) {
       if (s.status === 'ready') sourceMap.set(s.id, s);

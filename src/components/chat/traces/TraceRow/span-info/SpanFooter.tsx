@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/popover";
 import { Dataset } from "@/types/dataset-types";
 import { Span } from "@/types/common-type";
-import * as datasetsDB from "@/services/datasets-db";
+import { recordService } from "@/services/service-registry";
 import { AddToDatasetDialog } from "@/components/datasets/AddToDatasetDialog";
 import { Link } from "react-router-dom";
 
@@ -23,7 +23,7 @@ export const SpanFooter = ({ span }: SpanFooterProps) => {
   // Load datasets that contain this span
   const loadSpanDatasets = useCallback(() => {
     if (span?.span_id) {
-      datasetsDB.getDatasetsBySpanId(span.span_id).then(setSpanDatasets);
+      recordService.getDatasetsBySpanId(span.span_id).then(setSpanDatasets);
     } else {
       setSpanDatasets([]);
     }

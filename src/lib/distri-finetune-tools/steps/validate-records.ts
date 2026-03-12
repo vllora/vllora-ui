@@ -5,8 +5,7 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import * as workflowDB from '@/services/finetune-workflow-db';
-import * as datasetsDB from '@/services/datasets-db';
+import { workflowService, recordService } from '@/services/service-registry';
 import type { ToolHandler } from '../types';
 
 export const validateRecordsHandler: ToolHandler = async (params) => {
@@ -17,13 +16,13 @@ export const validateRecordsHandler: ToolHandler = async (params) => {
       return { success: false, error: 'workflow_id is required' };
     }
 
-    const workflow = await workflowDB.getWorkflow(workflow_id);
+    const workflow = await workflowService.get(workflow_id);
     if (!workflow) {
       return { success: false, error: 'Workflow not found' };
     }
 
     // Get records
-    const records = await datasetsDB.getRecordsByDatasetId(workflow.datasetId);
+    const records = await recordService.getByDatasetId(workflow.datasetId);
 
     // Validation checks
     const issues: Array<{ record_id: string; field: string; issue: string }> = [];

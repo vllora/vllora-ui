@@ -6,10 +6,10 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import * as workflowDB from '@/services/finetune-workflow-db';
-import * as datasetsDB from '@/services/datasets-db';
-import { DATASET_REFRESH_EVENT } from '@/services/datasets-db';
+import { workflowService, datasetService, recordService } from '@/services/service-registry';
 import { emitter } from '@/utils/eventEmitter';
+
+const DATASET_REFRESH_EVENT = 'vllora_dataset_refresh';
 import type { ToolHandler, CategorizeRecordsResult } from '../types';
 
 // Import the CORRECT classification tool that uses existing hierarchy
@@ -23,22 +23,22 @@ export const categorizeRecordsHandler: ToolHandler = async (params): Promise<Cat
       return { success: false, error: 'workflow_id is required' };
     }
 
-    const workflow = await workflowDB.getWorkflow(workflow_id);
+    const workflow = await workflowService.get(workflow_id);
     if (!workflow) {
       return { success: false, error: 'Workflow not found' };
     }
 
-    await workflowDB.advanceToStep(workflow_id, 'categorize');
+    await workflowService.advanceToStep(workflow_id, 'categorize');
 
     // Check dataset for topic hierarchy (single source of truth)
-    const dataset = await datasetsDB.getDatasetById(workflow.datasetId);
+    const dataset = await datasetService.getById(workflow.datasetId);
     if (!dataset?.topicHierarchy?.hierarchy) {
       return { success: false, error: 'Topic hierarchy must be configured first. Use generate_topics or apply_hierarchy.' };
     }
 
     console.log('===== dataset?.topicHierarchy?.hierarchy', JSON.stringify(dataset?.topicHierarchy?.hierarchy))
     // Get all records to classify
-    const records = await datasetsDB.getRecordsByDatasetId(workflow.datasetId);
+    const records = await recordService.getByDatasetId(workflow.datasetId);
     if (records.length === 0) {
       return { success: false, error: 'No records found in dataset' };
     }
@@ -61,7 +61,7 @@ export const categorizeRecordsHandler: ToolHandler = async (params): Promise<Cat
     // Apply classifications to records
     let assignedCount = 0;
     for (const [recordId, topic] of result.classifications) {
-      await datasetsDB.updateRecordTopic(workflow.datasetId, recordId, topic);
+      await recordService.updateTopic(workflow.datasetId, recordId, topic);
       assignedCount++;
     }
 
@@ -71,14 +71,14 @@ export const categorizeRecordsHandler: ToolHandler = async (params): Promise<Cat
     const threshold = typeof confidence_threshold === 'number' ? confidence_threshold : 0.7;
 
     // Update workflow
-    await workflowDB.updateStepData(workflow_id, 'categorization', {
+    await workflowService.updateStepData(workflow_id, 'categorization', {
       assignedCount,
       lowConfidenceCount: 0, // Would need confidence scores from the LLM
       confidenceThreshold: threshold,
     });
 
     // Get topic distribution after classification
-    const updatedRecords = await datasetsDB.getRecordsByDatasetId(workflow.datasetId);
+    const updatedRecords = await recordService.getByDatasetId(workflow.datasetId);
     const byTopic: Record<string, { count: number; avg_confidence: number }> = {};
 
     for (const record of updatedRecords) {

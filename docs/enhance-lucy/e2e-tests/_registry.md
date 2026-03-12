@@ -2,6 +2,20 @@
 
 Master list of all test cases (scenarios). Test results are stored separately in `e2e-runs/`.
 
+## Naming Convention
+
+When creating datasets during E2E testing, **always prefix the name with `[E2E]`** so they can be identified and cleaned up after the test run:
+
+```
+[E2E] Math Tutor - healthy eval test
+[E2E] Chess Tutor - warning scenario
+```
+
+After testing, run the cleanup script to remove all `[E2E]`-prefixed datasets:
+```bash
+# Copy src/test/e2e-cleanup.js contents → paste into browser console at localhost:5173
+```
+
 ## Status Legend
 
 | Status | Meaning |
@@ -33,6 +47,7 @@ Master list of all test cases (scenarios). Test results are stored separately in
 | TC-TRN-002 | Training - Overfitting detection | training | P0 | edge-case | trainingScenario=overfitting |
 | TC-TRN-003 | Training - No Learning → inner loop | training | P0 | edge-case | trainingScenario=noLearning |
 | TC-TRN-004 | Training - Error handling | training | P1 | error-case | trainingScenario=error |
+| TC-TRN-005 | Post-Training Dry Run Eval — Fine-tuned vs Base Model | training | P1 | edge-case | evalScenario=healthy,trainingScenario=improving |
 | TC-DEP-001 | Deployment - Happy Path | deployment | P0 | happy-path | trainingScenario=improving |
 
 ### Knowledge Source Tests
@@ -69,6 +84,8 @@ Master list of all test cases (scenarios). Test results are stored separately in
 | TC-LUCY-011 | New conversation reset and context cleanup | lucy-behavior | P1 | regression |
 | TC-LUCY-012 | Plan cancellation mid-execution | lucy-behavior | P0 | edge-case |
 | TC-LUCY-013 | Impossible requests and missing prerequisites | lucy-behavior | P0 | edge-case |
+| TC-LUCY-014 | Full Inner Loop Iteration Cycle — eval→propose→re-eval | lucy-behavior | P0 | edge-case |
+| TC-LUCY-015 | Stall Detection Across Multiple Iterations — Escalation Ladder | lucy-behavior | P1 | edge-case |
 
 ### Dummy User Tests (Unexpected Behavior)
 
@@ -109,6 +126,11 @@ Master list of all test cases (scenarios). Test results are stored separately in
 | TC-CC-005 | Session Resumption / Catch-Up | cross-cutting | P1 | regression |
 | TC-CC-006 | Multi-Dataset context switching and data isolation | cross-cutting | P0 | regression |
 | TC-CC-007 | Notification badge lifecycle | cross-cutting | P1 | regression |
+| TC-CC-008 | Auto-Trigger Analysis on Job Completion | cross-cutting | P1 | edge-case |
+| TC-CC-009 | Catch-Up After Navigate Away — Job Completes in Background | cross-cutting | P1 | edge-case |
+| TC-CC-010 | Catch-Up After Failed Job — Error Diagnosis on Return | cross-cutting | P1 | error-case |
+| TC-CC-011 | Auto-Continue Countdown After Healthy Evaluation | cross-cutting | P2 | happy-path |
+| TC-CC-012 | Background Transition Reminder During Long Evaluation | cross-cutting | P3 | happy-path |
 
 ---
 
@@ -121,17 +143,17 @@ Master list of all test cases (scenarios). Test results are stored separately in
 | Coverage/Gen | 1 | 0 | 1 |
 | Grader | 1 | 1 | 2 |
 | Evaluation | 3 | 1 | 4 |
-| Training | 3 | 1 | 4 |
+| Training | 3 | 2 | 5 |
 | Deployment | 1 | 0 | 1 |
 | Knowledge Sources | 2 | 0 | 2 |
 | Records/Data | 1 | 1 | 2 |
 | Dataset CRUD | 1 | 0 | 1 |
-| Lucy Behavior | 6 | 2 | 10 |
+| Lucy Behavior | 7 | 3 | 12 |
 | Dummy User | 4 | 1 | 5 |
 | UI Interactions | 1 | 2 | 3 |
 | Polling | 3 | 2 | 5 |
-| Cross-Cutting | 5 | 2 | 7 |
-| **Total** | **34** | **14** | **50** |
+| Cross-Cutting | 5 | 5+2 | 12 |
+| **Total** | **35** | **23** | **58** |
 
 ---
 
@@ -179,24 +201,32 @@ Run in this order for maximum coverage with minimum effort:
 27. TC-CC-004 — Stale data detection
 28. TC-CC-006 — Multi-dataset isolation
 
-### Phase 7: Iteration & Error Handling — 3 tests
+### Phase 7: Iteration & Error Handling — 4 tests
 29. TC-LUCY-009 — Replanning after iteration
-30. TC-EVAL-004 — Eval error
-31. TC-TRN-004 — Training error
+30. TC-LUCY-014 — Full inner loop iteration cycle (P0)
+31. TC-EVAL-004 — Eval error
+32. TC-TRN-004 — Training error
 
-### Phase 8: Polish & P1 (remaining) — 12 tests
-32. TC-DU-005 — Rapid messages/interruptions
-33. TC-LUCY-010 — Out-of-scope requests
-34. TC-LUCY-011 — New conversation reset
-35. TC-CC-005 — Session resumption
-36. TC-CC-007 — Notification badge lifecycle
-37. TC-POLL-004 — Progress updates during polling
-38. TC-POLL-005 — Job cancellation stops polling
-39. TC-UI-002 — Topic canvas interactions
-40. TC-UI-003 — Sidebar pin/collapse
-41. TC-SKL-001 — Skill package
-42. TC-GRD-002 — Grader edge cases
-43. TC-TOP-002 — Topics edge cases
+### Phase 8: Polish & P1 (remaining) — 17 tests
+33. TC-DU-005 — Rapid messages/interruptions
+34. TC-LUCY-010 — Out-of-scope requests
+35. TC-LUCY-011 — New conversation reset
+36. TC-LUCY-015 — Stall detection across multiple iterations
+37. TC-CC-005 — Session resumption
+38. TC-CC-007 — Notification badge lifecycle
+39. TC-CC-008 — Auto-trigger analysis on job completion
+40. TC-CC-009 — Catch-up after navigate away
+41. TC-CC-010 — Catch-up after failed job
+42. TC-TRN-005 — Post-training dry run eval
+43. TC-POLL-004 — Progress updates during polling
+44. TC-POLL-005 — Job cancellation stops polling
+45. TC-UI-002 — Topic canvas interactions
+46. TC-UI-003 — Sidebar pin/collapse
+47. TC-SKL-001 — Skill package
+48. TC-GRD-002 — Grader edge cases
+49. TC-TOP-002 — Topics edge cases
+50. TC-CC-011 — Auto-continue countdown after healthy eval
+51. TC-CC-012 — Background transition reminder during long eval
 
 ---
 

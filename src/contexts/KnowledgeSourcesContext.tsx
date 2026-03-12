@@ -18,7 +18,7 @@ import {
   type ReactNode,
 } from "react";
 import { emitter } from "@/utils/eventEmitter";
-import * as knowledgeDB from "@/services/knowledge-sources-db";
+import { knowledgeSourceService } from "@/services/service-registry";
 import type { KnowledgeSource } from "@/types/dataset-types";
 
 // ============================================================================
@@ -64,7 +64,7 @@ export function KnowledgeSourcesProvider({ datasetId, children }: KnowledgeSourc
   const fetchSources = useCallback(async () => {
     if (!datasetId) return;
     try {
-      const result = await knowledgeDB.getKnowledgeSourcesByDataset(datasetId);
+      const result = await knowledgeSourceService.getByDataset(datasetId);
       setSources(result);
       setHasLoaded(true);
     } catch (error) {

@@ -14,7 +14,7 @@ import {
   GenerationTargets,
   getBalanceRating,
 } from '@/types/coverage-types';
-import { getDatasetById, getRecordsByDatasetId, updateDatasetCoverageStats } from '@/services/datasets-db';
+import { datasetService, recordService } from '@/services/service-registry';
 import { computeCoverageStats } from '@/components/datasets/record-utils';
 
 /**
@@ -335,13 +335,13 @@ export async function calculateAndSaveCoverageStats(
   datasetId: string
 ): Promise<CoverageStats> {
   // Fetch dataset and records
-  const dataset = await getDatasetById(datasetId);
-  const records = await getRecordsByDatasetId(datasetId);
+  const dataset = await datasetService.getById(datasetId);
+  const records = await recordService.getByDatasetId(datasetId);
 
 
   const coverageStats = computeCoverageStats({records, topic_hierarchy: dataset?.topicHierarchy});
   // Save to dataset
-  await updateDatasetCoverageStats(datasetId, coverageStats);
+  await datasetService.updateCoverageStats(datasetId, coverageStats);
 
   return coverageStats;
 }

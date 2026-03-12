@@ -6,7 +6,7 @@
  * this handler just shows it to the user.
  */
 
-import * as datasetsDB from '@/services/datasets-db';
+import { datasetService } from '@/services/service-registry';
 import { emitter } from '@/utils/eventEmitter';
 import type { ToolHandler } from '../../types';
 import type {
@@ -120,7 +120,7 @@ export const proposePlanHandler: ToolHandler = async (
     emitter.emit('vllora_plan_generating', { datasetId: dataset_id });
 
     // Validate dataset exists
-    const dataset = await datasetsDB.getDatasetById(dataset_id);
+    const dataset = await datasetService.getById(dataset_id);
     if (!dataset) {
       return { success: false, error: `Dataset ${dataset_id} not found` };
     }
@@ -135,7 +135,7 @@ export const proposePlanHandler: ToolHandler = async (
 
     // Auto-rename dataset to the plan's clean display name
     if (plan.dataset_name && plan.dataset_name !== dataset.name) {
-      await datasetsDB.renameDataset(dataset_id, plan.dataset_name);
+      await datasetService.rename(dataset_id, plan.dataset_name);
       emitter.emit('vllora_dataset_refresh' as any);
     }
 

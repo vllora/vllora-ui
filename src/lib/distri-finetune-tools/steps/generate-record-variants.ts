@@ -7,7 +7,7 @@
 
 import type { DistriFnTool } from "@distri/core";
 import { DistriClient, type DistriMessage } from "@distri/core";
-import * as datasetsDB from "@/services/datasets-db";
+import { datasetService, recordService } from "@/services/service-registry";
 import { getDistriUrl } from "@/config/api";
 import { fetchLucyConfig, type LucyConfig } from "@/lib/agent-sync";
 import type { ToolHandler } from "../types";
@@ -339,7 +339,7 @@ export const generateRecordVariantsHandler: ToolHandler = async (
     }
 
     // Get the source record
-    const records = await datasetsDB.getRecordsByDatasetId(dataset_id);
+    const records = await recordService.getByDatasetId(dataset_id);
     const sourceRecord = records.find((r) => r.id === record_id);
 
     if (!sourceRecord) {
@@ -366,7 +366,7 @@ export const generateRecordVariantsHandler: ToolHandler = async (
     let resolvedChunkRefs: string[] = [];
     if (sourceRecord.topic) {
       try {
-        const dataset = await datasetsDB.getDatasetById(dataset_id);
+        const dataset = await datasetService.getById(dataset_id);
         const hierarchy = dataset?.topicHierarchy?.hierarchy;
         if (!hierarchy?.length) {
           console.log(`[generateRecordVariants] No hierarchy found for dataset "${dataset_id}"`);
@@ -425,7 +425,7 @@ export const generateRecordVariantsHandler: ToolHandler = async (
       },
     }));
 
-    const addedRecords = await datasetsDB.addRecordsToDataset(
+    const addedRecords = await recordService.add(
       dataset_id,
       recordsToAdd,
     );

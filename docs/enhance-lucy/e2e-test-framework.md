@@ -92,7 +92,7 @@ docs/enhance-lucy/
     {date}-run-{N}/          # One directory per test run
 ```
 
-**48 test cases** across 14 areas. See [_registry.md](./e2e-tests/_registry.md) for full list and execution priority.
+**58 test cases** across 16 areas. See [_registry.md](./e2e-tests/_registry.md) for full list and execution priority.
 
 ### Test Case ID Convention
 
@@ -107,7 +107,14 @@ Areas:
   EVAL  = Evaluation / Dry Run (Step 5)
   TRN   = Training (Step 6)
   DEP   = Deployment (Step 7)
+  KS    = Knowledge Sources
+  REC   = Records Management
+  DS    = Dataset CRUD
+  SKL   = Skill Package
+  POLL  = Polling
   LUCY  = Lucy Agent Behavior (planning, decisions, state awareness)
+  DU    = Dummy User (unexpected behavior)
+  UI    = UI Interactions
   CC    = Cross-Cutting (spans multiple steps)
 ```
 

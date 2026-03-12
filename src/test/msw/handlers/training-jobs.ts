@@ -1,8 +1,9 @@
 /**
- * MSW Handler: /finetune/reinforcement-jobs
+ * MSW Handler: /finetune/workflows/:workflowId/jobs
  *
  * Handles training job creation, status polling, and listing.
- * Uses stateful poll counters for deterministic polling transitions.
+ * Uses workflow-scoped paths and stateful poll counters for
+ * deterministic polling transitions.
  */
 
 import { http, HttpResponse, delay } from 'msw';
@@ -18,8 +19,8 @@ import {
 const BASE = 'http://localhost:8080';
 
 export const trainingJobHandlers = [
-  // POST /finetune/reinforcement-jobs — Create training job
-  http.post(`${BASE}/finetune/reinforcement-jobs`, async () => {
+  // POST /finetune/workflows/:workflowId/jobs — Create training job
+  http.post(`${BASE}/finetune/workflows/:workflowId/jobs`, async () => {
     const scenario = getScenario();
     await delay(scenario.createDelayMs);
 
@@ -33,8 +34,8 @@ export const trainingJobHandlers = [
     return HttpResponse.json(makeCreateTrainingResponse());
   }),
 
-  // GET /finetune/reinforcement-jobs/:jobId/status — Poll training status
-  http.get(`${BASE}/finetune/reinforcement-jobs/:jobId/status`, async ({ params }) => {
+  // GET /finetune/workflows/:workflowId/jobs/:jobId/status — Poll training status
+  http.get(`${BASE}/finetune/workflows/:workflowId/jobs/:jobId/status`, async ({ params }) => {
     const jobId = params.jobId as string;
     const scenario = getScenario();
     await delay(scenario.pollDelayMs);
@@ -45,8 +46,8 @@ export const trainingJobHandlers = [
     );
   }),
 
-  // GET /finetune/reinforcement-jobs/:jobId/metrics — Training metrics
-  http.get(`${BASE}/finetune/reinforcement-jobs/:jobId/metrics`, async ({ params }) => {
+  // GET /finetune/workflows/:workflowId/jobs/:jobId/metrics — Training metrics
+  http.get(`${BASE}/finetune/workflows/:workflowId/jobs/:jobId/metrics`, async ({ params }) => {
     const jobId = params.jobId as string;
     const scenario = getScenario();
     await delay(scenario.pollDelayMs);
@@ -54,8 +55,8 @@ export const trainingJobHandlers = [
     return HttpResponse.json(makeReinforcementMetricsResponse(jobId, scenario.trainingScenario));
   }),
 
-  // GET /finetune/reinforcement-jobs — List training jobs
-  http.get(`${BASE}/finetune/reinforcement-jobs`, async () => {
+  // GET /finetune/workflows/:workflowId/jobs — List training jobs
+  http.get(`${BASE}/finetune/workflows/:workflowId/jobs`, async () => {
     const scenario = getScenario();
     await delay(scenario.pollDelayMs);
 

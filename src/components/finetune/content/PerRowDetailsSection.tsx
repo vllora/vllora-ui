@@ -12,7 +12,7 @@ import {
   parseScoreBreakdown,
   getAllCriteriaNames,
 } from "@/utils/parse-score-breakdown";
-import { ResultsTable } from "@/components/datasets/dry-run-dialog/ResultsTable";
+import { ResultsTable } from "@/components/datasets/eval-dialog/ResultsTable";
 import { EpochScoresTable, type EpochScore } from "./EpochScoresTable";
 import { emitter } from "@/utils/eventEmitter";
 

@@ -2,7 +2,7 @@ import { DistriClient, type DistriMessage } from '@distri/core';
 import { getDistriUrl } from '@/config/api';
 import { fetchLucyConfig, type LucyConfig } from '@/lib/agent-sync';
 import type { DatasetRecord } from '@/types/dataset-types';
-import * as datasetsDB from '@/services/datasets-db';
+import { datasetService, recordService } from '@/services/service-registry';
 import { getInputSummary, getOutputSummary } from './helpers';
 
 // Cache for Lucy config
@@ -263,7 +263,7 @@ export async function analyzeRecordsForTopics(params: Record<string, unknown>): 
       return { success: false, error: 'Either datasetId or datasetName is required' };
     }
 
-    const allDatasets = await datasetsDB.getAllDatasets();
+    const allDatasets = await datasetService.getAll();
     let targetDatasetId = paramDatasetId;
 
     if (!targetDatasetId && datasetName) {
@@ -283,7 +283,7 @@ export async function analyzeRecordsForTopics(params: Record<string, unknown>): 
       return { success: false, error: `Dataset ${targetDatasetId} not found` };
     }
 
-    const allRecords = await datasetsDB.getRecordsByDatasetId(targetDatasetId);
+    const allRecords = await recordService.getByDatasetId(targetDatasetId);
 
     let selectedRecords = allRecords;
     if (recordIds && Array.isArray(recordIds) && recordIds.length > 0) {
@@ -323,7 +323,7 @@ export async function analyzeRecordsForTopics(params: Record<string, unknown>): 
         const deepestPath = normalizedPaths.reduce((a, b) => (b.length > a.length ? b : a), normalizedPaths[0]);
         const leafTopic = deepestPath[deepestPath.length - 1];
 
-        await datasetsDB.updateRecordTopic(targetDatasetId, entry.record_id, leafTopic);
+        await recordService.updateTopic(targetDatasetId, entry.record_id, leafTopic);
         appliedCount++;
       }
     }

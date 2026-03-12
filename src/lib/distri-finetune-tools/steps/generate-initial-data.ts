@@ -6,11 +6,9 @@
  */
 
 import type { DistriFnTool } from "@distri/core";
-import * as datasetsDB from "@/services/datasets-db";
-import * as knowledgeDB from "@/services/knowledge-sources-db";
+import { datasetService, recordService, knowledgeSourceService, workflowService } from "@/services/service-registry";
 import type { ToolHandler } from "../types";
 import type { DataInfo, TopicHierarchyNode } from "@/types/dataset-types";
-import * as workflowDB from "@/services/finetune-workflow-db";
 import { emitter } from "@/utils/eventEmitter";
 import {
   callLucy,
@@ -554,10 +552,10 @@ export const generateInitialDataHandler: ToolHandler = async (
     // ── Parallel setup: fetch all data in one round-trip ──
     const setupStart = Date.now();
     const [dataset, workflow, existingRecords, allKnowledgeSources] = await Promise.all([
-      datasetsDB.getDatasetById(dataset_id),
-      workflowDB.getWorkflowByDataset(dataset_id),
-      datasetsDB.getRecordsByDatasetId(dataset_id),
-      knowledgeDB.getKnowledgeSourcesByDataset(dataset_id),
+      datasetService.getById(dataset_id),
+      workflowService.getByDataset(dataset_id),
+      recordService.getByDatasetId(dataset_id),
+      knowledgeSourceService.getByDataset(dataset_id),
     ]);
 
     if (!dataset) {
@@ -566,7 +564,7 @@ export const generateInitialDataHandler: ToolHandler = async (
 
     if (workflow) {
       if (!workflow.currentStep || workflow.currentStep === "not_started") {
-        await workflowDB.advanceToStep(workflow.id, "topics_config");
+        await workflowService.advanceToStep(workflow.id, "topics_config");
       }
     }
 
@@ -795,7 +793,7 @@ export const generateInitialDataHandler: ToolHandler = async (
           const batchJob = job;
           const batchTopicProgress = currentTopicProgress;
           savePromises.push(
-            datasetsDB.addRecordsToDataset(dataset_id, topicRecords).then(addedRecords => {
+            recordService.add(dataset_id, topicRecords).then(addedRecords => {
               console.log(`[generateInitialData] Topic "${batchJob.topic.name}" batch ${batchJob.batchIndex + 1}: added ${addedRecords.length} records (topic: ${batchTopicProgress}, total: ${totalGenerated})`);
             }),
           );
@@ -915,7 +913,7 @@ export const generateInitialDataHandler: ToolHandler = async (
 
           const idx = batchIndex;
           standardSavePromises.push(
-            datasetsDB.addRecordsToDataset(dataset_id, batchRecords).then(addedBatchRecords => {
+            recordService.add(dataset_id, batchRecords).then(addedBatchRecords => {
               console.log(`[generateInitialData] Batch ${idx + 1} complete: added ${addedBatchRecords.length} records (total: ${totalGenerated})`);
             }),
           );

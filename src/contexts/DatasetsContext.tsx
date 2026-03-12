@@ -8,13 +8,9 @@
 import { createContext, useContext, useCallback, useState, useEffect, type ReactNode } from 'react';
 import { Dataset, DatasetEvaluation, DatasetWithRecords } from '@/types/dataset-types';
 import { Span } from '@/types/common-type';
-import * as datasetsDB from '@/services/datasets-db';
-import * as workflowDB from '@/services/finetune-workflow-db';
-import { deleteKnowledgeSourcesByDataset } from '@/services/knowledge-sources-db';
-import { deleteDryRunJobsByDataset } from '@/services/dry-run-jobs-db';
+import { datasetService, recordService, knowledgeSourceService, evalJobService, workflowService } from '@/services/service-registry';
 import { clearProposedPlan } from '@/lib/distri-finetune-tools/steps/proposed-plan-store';
 import { clearExecution } from '@/lib/distri-finetune-tools/steps/execution-state-store';
-import { cleanupOrphanedData } from '@/services/orphan-cleanup';
 import { emitter } from '@/utils/eventEmitter';
 import { toast } from 'sonner';
 
@@ -44,7 +40,7 @@ function useDatasets() {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await datasetsDB.getAllDatasets();
+      const data = await datasetService.getAll();
       setDatasets(data);
     } catch (err) {
       console.error('Failed to load datasets:', err);
@@ -63,10 +59,10 @@ function useDatasets() {
   const getDatasetWithRecords = useCallback(async (datasetId: string): Promise<DatasetWithRecords | null> => {
     try {
       // Fetch fresh dataset from IndexedDB to get latest data (including topicHierarchy)
-      const dataset = await datasetsDB.getDatasetById(datasetId);
+      const dataset = await datasetService.getById(datasetId);
       if (!dataset) return null;
 
-      const records = await datasetsDB.getRecordsByDatasetId(datasetId);
+      const records = await recordService.getByDatasetId(datasetId);
       return { ...dataset, records };
     } catch (err) {
       console.error('Failed to get dataset with records:', err);
@@ -77,7 +73,7 @@ function useDatasets() {
   // Get record count for a dataset
   const getRecordCount = useCallback(async (datasetId: string): Promise<number> => {
     try {
-      return await datasetsDB.getRecordCount(datasetId);
+      return await recordService.getCount(datasetId);
     } catch (err) {
       console.error('Failed to get record count:', err);
       return 0;
@@ -87,7 +83,7 @@ function useDatasets() {
   // Get topic coverage stats for a dataset
   const getTopicCoverageStats = useCallback(async (datasetId: string): Promise<{ total: number; withTopic: number }> => {
     try {
-      return await datasetsDB.getTopicCoverageStats(datasetId);
+      return await recordService.getTopicCoverageStats(datasetId);
     } catch (err) {
       console.error('Failed to get topic coverage stats:', err);
       return { total: 0, withTopic: 0 };
@@ -96,7 +92,7 @@ function useDatasets() {
 
   // Create a new dataset
   const createDataset = useCallback(async (name: string, datasetObjective?: string): Promise<Dataset> => {
-    const newDataset = await datasetsDB.createDataset(name, datasetObjective);
+    const newDataset = await datasetService.create(name, datasetObjective);
     setDatasets(prev => [newDataset, ...prev]);
     return newDataset;
   }, []);
@@ -107,7 +103,7 @@ function useDatasets() {
     spans: Span[],
     topic?: string
   ): Promise<number> => {
-    const addedCount = await datasetsDB.addSpansToDataset(datasetId, spans, topic);
+    const addedCount = await recordService.addFromSpans(datasetId, spans, topic);
     // Refresh datasets to get updated timestamps
     await loadDatasets();
     return addedCount;
@@ -119,7 +115,7 @@ function useDatasets() {
     records: Array<{ data: unknown; topic?: string; evaluation?: DatasetEvaluation }>,
     defaultTopic?: string
   ): Promise<number> => {
-    const addedRecords = await datasetsDB.addRecordsToDataset(datasetId, records, defaultTopic);
+    const addedRecords = await recordService.add(datasetId, records, defaultTopic);
     // Refresh datasets to get updated timestamps
     await loadDatasets();
     return addedRecords.length;
@@ -127,7 +123,7 @@ function useDatasets() {
 
   // Clear all records from a dataset (for replace import)
   const clearDatasetRecords = useCallback(async (datasetId: string): Promise<number> => {
-    const deletedCount = await datasetsDB.clearDatasetRecords(datasetId);
+    const deletedCount = await recordService.clearAll(datasetId);
     await loadDatasets();
     return deletedCount;
   }, [loadDatasets]);
@@ -135,19 +131,19 @@ function useDatasets() {
   // Delete a dataset and all related data across all IndexedDB stores
   const deleteDataset = useCallback(async (datasetId: string): Promise<void> => {
     // Delete associated finetune workflow (includes snapshots and generation history)
-    const workflow = await workflowDB.getWorkflowByDataset(datasetId);
+    const workflow = await workflowService.getByDataset(datasetId);
     if (workflow) {
-      await workflowDB.deleteWorkflow(workflow.id);
+      await workflowService.delete(workflow.id);
     }
 
     // Clean up all related data in parallel
     await Promise.all([
       // Dataset + records + finetune job associations (vllora-datasets DB)
-      datasetsDB.deleteDataset(datasetId),
+      datasetService.delete(datasetId),
       // Knowledge sources (vllora-knowledge-sources DB)
-      deleteKnowledgeSourcesByDataset(datasetId),
-      // Dry run jobs (vllora-finetune DB)
-      deleteDryRunJobsByDataset(datasetId),
+      knowledgeSourceService.deleteByDataset(datasetId),
+      // Dry run / eval jobs
+      evalJobService.deleteByDataset(datasetId),
       // Proposed plans (vllora-finetune DB)
       clearProposedPlan(datasetId),
     ]);
@@ -160,7 +156,7 @@ function useDatasets() {
 
   // Delete a single record from a dataset
   const deleteRecord = useCallback(async (datasetId: string, recordId: string): Promise<void> => {
-    await datasetsDB.deleteRecord(datasetId, recordId);
+    await recordService.delete(datasetId, recordId);
     // Refresh datasets to get updated timestamps
     await loadDatasets();
   }, [loadDatasets]);
@@ -171,7 +167,7 @@ function useDatasets() {
     recordId: string,
     topic: string
   ): Promise<void> => {
-    await datasetsDB.updateRecordTopic(datasetId, recordId, topic);
+    await recordService.updateTopic(datasetId, recordId, topic);
   }, []);
 
   // Update a record's data
@@ -180,7 +176,7 @@ function useDatasets() {
     recordId: string,
     data: unknown
   ): Promise<void> => {
-    await datasetsDB.updateRecordData(datasetId, recordId, data);
+    await recordService.updateData(datasetId, recordId, data);
   }, []);
 
   // Update a record's evaluation
@@ -189,12 +185,12 @@ function useDatasets() {
     recordId: string,
     score: number | undefined
   ): Promise<void> => {
-    await datasetsDB.updateRecordEvaluation(datasetId, recordId, score);
+    await recordService.updateEvaluation(datasetId, recordId, score);
   }, []);
 
   // Rename a dataset
   const renameDataset = useCallback(async (datasetId: string, newName: string): Promise<void> => {
-    await datasetsDB.renameDataset(datasetId, newName);
+    await datasetService.rename(datasetId, newName);
     setDatasets(prev => prev.map(ds =>
       ds.id === datasetId ? { ...ds, name: newName.trim(), updatedAt: Date.now() } : ds
     ));
@@ -205,13 +201,13 @@ function useDatasets() {
     datasetId: string,
     spanId: string
   ): Promise<boolean> => {
-    return await datasetsDB.spanExistsInDataset(datasetId, spanId);
+    return await recordService.spanExists(datasetId, spanId);
   }, []);
 
   // Get all datasets that contain a specific span
   const getDatasetsBySpanId = useCallback(async (spanId: string): Promise<Dataset[]> => {
     try {
-      return await datasetsDB.getDatasetsBySpanId(spanId);
+      return await recordService.getDatasetsBySpanId(spanId);
     } catch (err) {
       console.error('Failed to get datasets by span id:', err);
       return [];
@@ -220,7 +216,7 @@ function useDatasets() {
 
   // Load on mount + clean up any orphaned data from past incomplete deletes
   useEffect(() => {
-    loadDatasets().then(() => cleanupOrphanedData());
+    loadDatasets();
   }, [loadDatasets]);
 
   // Listen for dataset events from Lucy agent tools

@@ -31,22 +31,22 @@ export const datasetHandlers = [
     return HttpResponse.json(makeUploadResponse());
   }),
 
-  // GET /finetune/datasets/:datasetId/evaluator/versions — Evaluator version history
-  http.get(`${BASE}/finetune/datasets/:datasetId/evaluator/versions`, async ({ params }) => {
-    const datasetId = params.datasetId as string;
+  // GET /finetune/workflows/:workflowId/evaluator/versions — Evaluator version history
+  http.get(`${BASE}/finetune/workflows/:workflowId/evaluator/versions`, async ({ params }) => {
+    const workflowId = params.workflowId as string;
     const scenario = getScenario();
     await delay(scenario.pollDelayMs);
 
-    return HttpResponse.json(makeEvaluatorVersionsResponse(datasetId));
+    return HttpResponse.json(makeEvaluatorVersionsResponse(workflowId));
   }),
 
-  // PATCH /finetune/datasets/:datasetId/evaluator — Update eval script
-  http.patch(`${BASE}/finetune/datasets/:datasetId/evaluator`, async () => {
+  // PATCH /finetune/workflows/:workflowId/evaluator — Update eval script
+  http.patch(`${BASE}/finetune/workflows/:workflowId/evaluator`, async () => {
     const scenario = getScenario();
     await delay(scenario.createDelayMs);
 
     return HttpResponse.json({
-      dataset_id: 'ds-backend-001',
+      workflow_id: 'wf-backend-001',
       updated: true,
     });
   }),

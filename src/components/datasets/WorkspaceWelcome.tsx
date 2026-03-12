@@ -23,9 +23,9 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { DryRunJobsConsumer } from "@/contexts/DryRunJobsContext";
+import { EvalJobsConsumer } from "@/contexts/EvalJobsContext";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
-import { getJobAverageScore } from "@/types/dry-run-job";
+import { getJobAverageScore } from "@/types/eval-job";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -107,7 +107,7 @@ export function WorkspaceWelcome({
   hasReadme,
 }: WorkspaceWelcomeProps) {
   // Consume job contexts (we're rendered inside their providers)
-  const { lastCompletedJob } = DryRunJobsConsumer();
+  const { lastCompletedJob } = EvalJobsConsumer();
   const { filteredJobs, latestJob } = FinetuneJobsConsumer();
 
   // Derive eval stats from most recent completed job

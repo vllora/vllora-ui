@@ -14,7 +14,7 @@
  * skill packaging) works identically.
  */
 
-import * as datasetsDB from '@/services/datasets-db';
+import { datasetService, recordService } from '@/services/service-registry';
 import type { ToolHandler } from '@/lib/distri-finetune-tools/types';
 import type { TopicHierarchyNode } from '@/types/dataset-types';
 import { emitter } from '@/utils/eventEmitter';
@@ -205,7 +205,7 @@ export const mockGenerateInitialDataHandler: ToolHandler = async (
   }
 
   // Fetch dataset (hierarchy lives on the Dataset object)
-  const dataset = await datasetsDB.getDatasetById(dataset_id);
+  const dataset = await datasetService.getById(dataset_id);
 
   if (!dataset) {
     return { success: false, error: `Dataset ${dataset_id} not found` };
@@ -258,7 +258,7 @@ export const mockGenerateInitialDataHandler: ToolHandler = async (
           buildTopicRecord(topic.name, topicPath, systemPrompt, offset + i),
         );
 
-        await datasetsDB.addRecordsToDataset(dataset_id, records);
+        await recordService.add(dataset_id, records);
         totalGenerated += batchSize;
         batchIndex++;
 
@@ -288,7 +288,7 @@ export const mockGenerateInitialDataHandler: ToolHandler = async (
         buildFlatRecord(systemPrompt, offset + i),
       );
 
-      await datasetsDB.addRecordsToDataset(dataset_id, records);
+      await recordService.add(dataset_id, records);
       totalGenerated += batchSize;
 
       emitter.emit('vllora_data_generation_progress', {

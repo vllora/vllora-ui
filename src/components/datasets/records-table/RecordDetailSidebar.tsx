@@ -174,7 +174,7 @@ export function RecordDetailSidebar({
               {/* Evaluation */}
               <section className="space-y-4">
                 <SectionLabel title="Evaluation" />
-                {record.evaluation && (record.evaluation.dryRunScore != null || record.evaluation.finetuneScore != null || record.evaluation.score != null) ? (
+                {record.evaluation && (record.evaluation.evalScore != null || record.evaluation.finetuneScore != null || record.evaluation.score != null) ? (
                   <div className="space-y-2">
                     <EvaluationScores
                       evaluation={record.evaluation}
@@ -225,17 +225,17 @@ function EvaluationScores({ evaluation, onNavigate }: {
   evaluation: DatasetEvaluation;
   onNavigate?: (target: "evaluator" | "jobs") => void;
 }) {
-  const dryRun = evaluation.dryRunScore ?? (
+  const dryRun = evaluation.evalScore ?? (
     evaluation.score != null && !evaluation.finetuneScore ? evaluation.score : undefined
   );
   const finetune = evaluation.finetuneScore;
-  const dryRunCount = evaluation.dryRunCount ?? (dryRun != null ? 1 : 0);
+  const evalCount = evaluation.evalCount ?? (dryRun != null ? 1 : 0);
   const finetuneCount = evaluation.finetuneCount ?? 0;
 
-  const drLabel = dryRunCount > 1 ? "Avg Evaluation" : "Evaluation";
+  const drLabel = evalCount > 1 ? "Avg Evaluation" : "Evaluation";
   const ftLabel = finetuneCount > 1 ? "Avg Finetune" : "Finetune";
 
-  const drScore = dryRunCount > 1 && evaluation.dryRunAvg != null ? evaluation.dryRunAvg : dryRun;
+  const drScore = evalCount > 1 && evaluation.dryRunAvg != null ? evaluation.dryRunAvg : dryRun;
   const ftScore = finetuneCount > 1 && evaluation.finetuneAvg != null ? evaluation.finetuneAvg : finetune;
 
   const drTime = evaluation.dryRunEvaluatedAt ?? (dryRun != null ? evaluation.evaluatedAt : undefined);
@@ -244,7 +244,7 @@ function EvaluationScores({ evaluation, onNavigate }: {
   return (
     <div className="space-y-1.5">
       {drScore != null && (
-        <ScoreRow label={drLabel} score={drScore} model={evaluation.dryRunModel} timestamp={drTime} onClick={onNavigate ? () => onNavigate("evaluator") : undefined} />
+        <ScoreRow label={drLabel} score={drScore} model={evaluation.evalModel} timestamp={drTime} onClick={onNavigate ? () => onNavigate("evaluator") : undefined} />
       )}
       {ftScore != null && (
         <ScoreRow label={ftLabel} score={ftScore} model={evaluation.finetuneModel} timestamp={ftTime} onClick={onNavigate ? () => onNavigate("jobs") : undefined} />

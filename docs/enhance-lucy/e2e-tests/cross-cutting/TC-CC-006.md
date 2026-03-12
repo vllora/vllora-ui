@@ -58,7 +58,7 @@ Tests that switching between datasets properly isolates state, Lucy context, and
 - **Hard checks**:
   - [ ] Dataset B's records, topics, workflow intact
   - [ ] B's eval results preserved
-  - [ ] B's Lucy chat history preserved
+  - [ ] B's Lucy catch-up state preserved (fresh thread, catch-up cards show on reopen)
   - [ ] No orphaned references to deleted dataset
 
 ## Pass Criteria

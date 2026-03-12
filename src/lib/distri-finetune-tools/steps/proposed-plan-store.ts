@@ -8,8 +8,46 @@
 
 import type { Plan } from "./propose-plan";
 import type { ExecutionProgress } from "./execute-plan";
-import { getDB } from "@/services/finetune-workflow-db";
 import { normalizePlanSteps } from "./plan-step-normalization";
+
+// =============================================================================
+// Local IndexedDB access for proposedPlans store
+// =============================================================================
+
+const DB_NAME = 'vllora-finetune';
+const DB_VERSION = 7;
+let dbInstance: IDBDatabase | null = null;
+
+function getDB(): Promise<IDBDatabase> {
+  if (dbInstance) return Promise.resolve(dbInstance);
+
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+    request.onerror = () => reject(request.error);
+
+    request.onsuccess = () => {
+      dbInstance = request.result;
+
+      dbInstance.onversionchange = () => {
+        dbInstance?.close();
+        dbInstance = null;
+      };
+      dbInstance.onclose = () => {
+        dbInstance = null;
+      };
+
+      resolve(dbInstance);
+    };
+
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains('proposedPlans')) {
+        db.createObjectStore('proposedPlans', { keyPath: 'datasetId' });
+      }
+    };
+  });
+}
 
 // =============================================================================
 // Types

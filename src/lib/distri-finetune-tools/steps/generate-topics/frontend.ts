@@ -12,7 +12,7 @@ import type { DatasetRecord } from '@/types/dataset-types';
 import { DistriClient, type DistriMessage } from '@distri/core';
 import { getDistriUrl } from '@/config/api';
 import { fetchLucyConfig, type LucyConfig } from '@/lib/agent-sync';
-import * as datasetsDB from '@/services/datasets-db';
+import { recordService } from '@/services/service-registry';
 import {
   buildKnowledgeContext,
   DOCUMENT_DERIVED_TOPICS_INSTRUCTION,
@@ -403,7 +403,7 @@ export async function generateTopicsViaFrontend(
 ): Promise<GenerateTopicsResult> {
   try {
     // Get records for context
-    const records = await datasetsDB.getRecordsByDatasetId(datasetId);
+    const records = await recordService.getByDatasetId(datasetId);
 
     // Build rich knowledge context using shared module
     const knowledgeCtx = await buildKnowledgeContext(datasetId);

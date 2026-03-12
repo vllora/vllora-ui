@@ -51,7 +51,7 @@ Tests race conditions when a user manually changes data (topics, records, grader
   - [ ] Plan execution continues in background (not cancelled)
   - [ ] Navigating back shows correct progress
   - [ ] No "dataset not found" errors
-  - [ ] Lucy's chat history preserved when returning
+  - [ ] Lucy starts fresh thread on return with catch-up cards showing progress
 - **Evidence**: screenshot of returning to dataset mid-execution
 
 ### Step 5: Upload knowledge source while plan is executing

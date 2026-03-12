@@ -70,7 +70,7 @@ export function LucyWelcome({
           <>
             <p className="text-sm">
               Hello! I'm Lucy, your fine-tuning assistant. I can help you organize
-              training data, set up evaluation criteria, run dry-run tests, and
+              training data, set up evaluation criteria, run evaluations, and
               start training jobs.
             </p>
             <p className="text-sm">How can I help you today?</p>

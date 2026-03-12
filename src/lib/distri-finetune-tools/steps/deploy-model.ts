@@ -5,7 +5,7 @@
  */
 
 import type { DistriFnTool } from '@distri/core';
-import * as workflowDB from '@/services/finetune-workflow-db';
+import { workflowService } from '@/services/service-registry';
 import type { ToolHandler } from '../types';
 
 export const deployModelHandler: ToolHandler = async (params) => {
@@ -16,7 +16,7 @@ export const deployModelHandler: ToolHandler = async (params) => {
       return { success: false, error: 'workflow_id is required' };
     }
 
-    const workflow = await workflowDB.getWorkflow(workflow_id);
+    const workflow = await workflowService.get(workflow_id);
     if (!workflow) {
       return { success: false, error: 'Workflow not found' };
     }
@@ -34,7 +34,7 @@ export const deployModelHandler: ToolHandler = async (params) => {
     const name = typeof deployment_name === 'string' ? deployment_name : `finetune-${workflow.datasetId}`;
 
     // Update workflow
-    await workflowDB.updateStepData(workflow_id, 'deployment', {
+    await workflowService.updateStepData(workflow_id, 'deployment', {
       modelId,
       deploymentName: name,
       deployedAt: Date.now(),
@@ -42,7 +42,7 @@ export const deployModelHandler: ToolHandler = async (params) => {
     });
 
     // Mark workflow as completed
-    await workflowDB.advanceToStep(workflow_id, 'completed');
+    await workflowService.advanceToStep(workflow_id, 'completed');
 
     return {
       success: true,

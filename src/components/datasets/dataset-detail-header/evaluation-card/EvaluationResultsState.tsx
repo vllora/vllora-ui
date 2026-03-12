@@ -13,13 +13,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { ScoreDistribution } from "@/types/dataset-types";
-import type { DryRunJob } from "@/types/dry-run-job";
+import type { EvalJob } from "@/types/eval-job";
 
 interface EvaluationResultsStateProps {
   /** The completed dry run job */
-  job: DryRunJob;
+  job: EvalJob;
   /** Previous job for comparison */
-  previousJob?: DryRunJob;
+  previousJob?: EvalJob;
   /** Callback when clicking to view details */
   onDryRunClick?: () => void;
 }
