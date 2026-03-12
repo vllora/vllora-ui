@@ -221,6 +221,8 @@ export interface CreateEvaluationResponse {
 /** Individual evaluation entry within an epoch */
 export interface EpochEntry {
   dataset_row_id?: string;
+  /** Cloud API returns `workflow_row_id` (not `dataset_row_id`) */
+  workflow_row_id?: string;
   status?: string;
   score?: number | null;
   reason?: string | null;
@@ -283,7 +285,7 @@ export function flattenEvaluationResults(
     for (const entries of Object.values(row.epochs)) {
       for (const entry of entries) {
         flat.push({
-          dataset_row_id: entry.dataset_row_id ?? "",
+          dataset_row_id: entry.dataset_row_id ?? entry.workflow_row_id ?? row.row?.id ?? "",
           row_index: row.row_index,
           row: row.row,
           status: entry.status ?? "pending",

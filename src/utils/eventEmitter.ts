@@ -80,10 +80,10 @@ type VlloraEvents = {
   vllora_input_speechRecognitionEnd: Record<string, never>;
   // Finetune job events
   vllora_finetune_job_created: { jobId?: string; workflowId: string };
-  // Dry run job events
-  vllora_dry_run_job_update: { jobId: string; job: EvalJob };
-  // Dry run job completed/failed (triggers Lucy auto-analysis)
-  vllora_dry_run_job_completed: { jobId: string; workflowId: string; verdict: string };
+  // Eval job events
+  vllora_eval_job_update: { jobId: string; job: EvalJob };
+  // Eval job completed/failed (triggers Lucy auto-analysis)
+  vllora_eval_job_completed: { jobId: string; workflowId: string; verdict: string };
   // Finetune job completed/failed (triggers Lucy auto-analysis)
   vllora_finetune_job_completed: { jobId: string; workflowId: string };
   // Lucy assistant prompt trigger (from UI actions like "Generate for topic")
@@ -154,6 +154,8 @@ type VlloraEvents = {
   vllora_docs_awaiting_plan: { workflowId: string };
   // Filter records table by source document (from KnowledgeSourceCard clicks)
   vllora_filter_by_source: { workflowId: string; sourceId: string | null };
+  // Navigate to and highlight a record in the records table
+  vllora_highlight_record: { recordId: string };
 };
 
 // ============================================================================
@@ -169,3 +171,24 @@ export const eventEmitter = emitter;
 
 // Export types for use in tool handlers
 export type { DistriGetStateEvents, DistriChangeUiEvents };
+
+// =============================================================================
+// Pending Highlight Queue
+// =============================================================================
+// When navigating to the records tab from another tab (eval detail, overview),
+// the RecordsTable component unmounts and remounts. The highlight event may fire
+// before the new instance registers its listener. This queue bridges the gap:
+// producers call `setPendingHighlight()`, the RecordsTable calls `consumePendingHighlight()`
+// on mount to pick up any queued highlight.
+
+let pendingHighlightRecordId: string | null = null;
+
+export function setPendingHighlight(recordId: string): void {
+  pendingHighlightRecordId = recordId;
+}
+
+export function consumePendingHighlight(): string | null {
+  const id = pendingHighlightRecordId;
+  pendingHighlightRecordId = null;
+  return id;
+}

@@ -2,7 +2,9 @@
  * EvalJobsContext
  *
  * Provides reactive state for evaluation jobs to UI components.
- * Bridges between the singleton polling manager and React.
+ * Subscribes to SSE eval_job_update events from the BE state tracker.
+ * When an SSE event arrives for a running job, fetches fresh metrics
+ * from the cloud-proxy endpoint via evalPollingManager.
  */
 
 import {
@@ -12,12 +14,15 @@ import {
   useState,
   useCallback,
   useMemo,
+  useRef,
   type ReactNode,
 } from 'react';
 import type { EvalJob } from '@/types/eval-job';
 import type { Dataset } from '@/types/dataset-types';
 import { evalJobService } from '@/services/service-registry';
 import { evalPollingManager } from '@/services/eval-polling-manager';
+import { ProjectEventsConsumer } from '@/contexts/project-events';
+import type { CustomEvent, CustomEvalJobUpdateEventType } from '@/contexts/project-events/dto';
 import { emitter } from '@/utils/eventEmitter';
 
 // =============================================================================
@@ -41,12 +46,16 @@ function useEvalJobs(props: {
   const [isLoading, setIsLoading] = useState(true);
   const workflowId = dataset.id;
 
-  // Load jobs from IndexedDB
+  // SSE subscription
+  const { subscribe, isConnected } = ProjectEventsConsumer();
+  const subscriptionIdRef = useRef<string>(`eval-jobs-${workflowId}-${Date.now()}`);
+  const wasConnectedRef = useRef(false);
+
+  // Load jobs from gateway SQLite
   const loadJobs = useCallback(async () => {
     try {
       const fetchedJobs = await evalJobService.getByDataset(workflowId);
       setJobs(fetchedJobs);
-
     } catch (error) {
       console.error('[EvalJobsContext] Failed to load jobs:', error);
     } finally {
@@ -54,43 +63,109 @@ function useEvalJobs(props: {
     }
   }, [workflowId]);
 
-  // Initialize polling manager and load jobs on mount
+  // Initialize manager and load jobs on mount
   useEffect(() => {
     evalPollingManager.initialize();
     loadJobs();
   }, [loadJobs]);
 
-  // Listen for job update events
+  // Track which jobs we've started polling for (prevents restart loop)
+  const pollingJobIdsRef = useRef<Set<string>>(new Set());
+
+  // Track which completed jobs we've already refreshed (catch-up for race condition)
+  const refreshedJobIdsRef = useRef<Set<string>>(new Set());
+
+  // Start/stop polling based on job status (view-scoped via provider lifecycle)
+  useEffect(() => {
+    for (const job of jobs) {
+      const isActive = job.status === 'running';
+      if (isActive && job.evaluationRunId && !pollingJobIdsRef.current.has(job.id)) {
+        pollingJobIdsRef.current.add(job.id);
+        evalPollingManager.startPolling(job.id);
+      } else if (!isActive && pollingJobIdsRef.current.has(job.id)) {
+        pollingJobIdsRef.current.delete(job.id);
+        evalPollingManager.stopPolling(job.id);
+      }
+
+      // Catch-up: if job is terminal but has no results, fetch them now.
+      // This handles the race where the BE state tracker set "completed"
+      // before the FE polling manager fetched results from the cloud API.
+      const isTerminal = job.status === 'completed' || job.status === 'failed';
+      const hasResults = (job.pollingSnapshot?.completed_rows ?? 0) > 0;
+      if (isTerminal && !hasResults && job.evaluationRunId && !refreshedJobIdsRef.current.has(job.id)) {
+        refreshedJobIdsRef.current.add(job.id);
+        evalPollingManager.refreshJob(job.id).then(() => loadJobs());
+      }
+    }
+  }, [jobs, loadJobs]);
+
+  // Cleanup: stop all polling when provider unmounts (user navigates away)
+  useEffect(() => {
+    return () => {
+      for (const jobId of pollingJobIdsRef.current) {
+        evalPollingManager.stopPolling(jobId);
+      }
+      pollingJobIdsRef.current.clear();
+    };
+  }, []);
+
+  // Listen for local emitter events (from evalPollingManager after job creation/updates)
   useEffect(() => {
     const handleJobUpdate = (event: { jobId: string; job: EvalJob }) => {
-      // Only update if this job belongs to current dataset
-      if (event.job.workflowId === workflowId) {
-        setJobs((prevJobs) => {
-          const existingIndex = prevJobs.findIndex((j) => j.id === event.jobId);
-          if (existingIndex >= 0) {
-            // Update existing job
-            const newJobs = [...prevJobs];
-            newJobs[existingIndex] = event.job;
-            return newJobs;
-          } else {
-            // Add new job at the beginning
-            return [event.job, ...prevJobs];
-          }
-        });
-      }
+      if (event.job.workflowId !== workflowId) return;
+
+      setJobs((prevJobs) => {
+        const existingIndex = prevJobs.findIndex((j) => j.id === event.jobId);
+        if (existingIndex >= 0) {
+          const newJobs = [...prevJobs];
+          newJobs[existingIndex] = event.job;
+          return newJobs;
+        }
+        return [event.job, ...prevJobs];
+      });
     };
 
-    emitter.on('vllora_dry_run_job_update', handleJobUpdate);
-
-    return () => {
-      emitter.off('vllora_dry_run_job_update', handleJobUpdate);
-    };
+    emitter.on('vllora_eval_job_update', handleJobUpdate);
+    return () => { emitter.off('vllora_eval_job_update', handleJobUpdate); };
   }, [workflowId]);
 
-  // Start a new evaluation (delegates to polling manager which handles auto-upload and validation)
+  // Subscribe to SSE eval_job_update events from BE state tracker
+  useEffect(() => {
+    const unsubscribe = subscribe(
+      subscriptionIdRef.current,
+      (event) => {
+        if (event.type !== 'Custom') return;
+        const customEvent = event as CustomEvent;
+        if (customEvent.event.type !== 'eval_job_update') return;
+
+        const sseEvent = customEvent.event as CustomEvalJobUpdateEventType;
+        // Only handle events for this workflow
+        if (sseEvent.workflow_id !== workflowId) return;
+
+        // Trigger cloud-proxy fetch via the manager
+        // (manager will emit 'vllora_eval_job_update' after fetching,
+        //  which the local emitter listener above picks up)
+        evalPollingManager.handleSseStatusChange(sseEvent.job_id, sseEvent.status);
+      },
+      (event) => event.type === 'Custom',
+    );
+
+    return () => { unsubscribe(); };
+  }, [subscribe, workflowId]);
+
+  // Re-fetch jobs on SSE reconnect (covers BE restart gap)
+  useEffect(() => {
+    if (isConnected && !wasConnectedRef.current) {
+      // Just reconnected — refresh to catch any updates missed during downtime
+      loadJobs();
+    }
+    wasConnectedRef.current = isConnected;
+  }, [isConnected, loadJobs]);
+
+  // Start a new evaluation
   const startDryRun = useCallback(
     async (sampleSize: number, rolloutModel?: string): Promise<string> => {
-      return evalPollingManager.startEvalForDataset({
+      return evalPollingManager.createAndStartEval({
         workflowId,
         sampleSize,
         rolloutModel,
@@ -104,18 +179,17 @@ function useEvalJobs(props: {
     await evalPollingManager.cancelEval(jobId);
   }, []);
 
-  // Refresh a single job's data from the backend API
+  // Refresh a single job's data from the cloud-proxy
   const refreshJob = useCallback(async (jobId: string): Promise<void> => {
     await evalPollingManager.refreshJob(jobId);
   }, []);
 
-  // Compute derived state
+  // Computed state
   const runningJob = useMemo(
     () => jobs.find((j) => j.status === 'running' || j.status === 'pending') || null,
     [jobs]
   );
 
-  // Find most recent completed job with results
   const lastCompletedJob = useMemo(
     () => jobs.find((j) => j.status === 'completed' && j.result) || null,
     [jobs]

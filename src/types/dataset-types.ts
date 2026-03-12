@@ -363,6 +363,10 @@ export interface Dataset {
   readmeUpdatedAt?: number;
   // Whether the README was written by the agent or auto-generated from template
   readmeSource?: 'template' | 'agent';
+  // Enriched fields from GET /workflows/:id (not present in list response)
+  recordsCount?: number;
+  evalJobIds?: string[];
+  finetuneJobIds?: string[];
 }
 
 // Combined view for UI (dataset + its records)

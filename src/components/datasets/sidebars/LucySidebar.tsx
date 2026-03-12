@@ -319,10 +319,10 @@ export function LucySidebar() {
     };
     const handleJobReviewed = () => { checkUnreviewed(); };
 
-    emitter.on('vllora_dry_run_job_completed', handleJobCompleted);
+    emitter.on('vllora_eval_job_completed', handleJobCompleted);
     emitter.on('vllora_workflow_updated', handleJobReviewed);
     return () => {
-      emitter.off('vllora_dry_run_job_completed', handleJobCompleted);
+      emitter.off('vllora_eval_job_completed', handleJobCompleted);
       emitter.off('vllora_workflow_updated', handleJobReviewed);
     };
   }, [selectedDatasetId]);
@@ -363,8 +363,8 @@ export function LucySidebar() {
       emitter.emit('vllora_lucy_prompt', { prompt: msg });
     };
 
-    emitter.on('vllora_dry_run_job_completed', handleEvalCompleted);
-    return () => { emitter.off('vllora_dry_run_job_completed', handleEvalCompleted); };
+    emitter.on('vllora_eval_job_completed', handleEvalCompleted);
+    return () => { emitter.off('vllora_eval_job_completed', handleEvalCompleted); };
   }, [selectedDatasetId]);
 
   // Auto-prompt Lucy when training completes in background

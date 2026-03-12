@@ -21,6 +21,7 @@ import { DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
 import type { Dataset, DatasetRecord, TopicHierarchyConfig, TopicHierarchyNode } from "@/types/dataset-types";
 import { emitter } from "@/utils/eventEmitter";
 import { toast } from "sonner";
+import { ProjectEventsConsumer } from "@/contexts/project-events";
 import { quickFinetune } from "@/services/quick-finetune";
 import { datasetService, recordService } from "@/services/service-registry";
 import { filterAndSortRecords } from "@/components/datasets/record-filters";
@@ -70,7 +71,6 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
     deleteRecord,
     updateRecordTopic,
     updateRecordData,
-    updateRecordEvaluation,
     renameDataset,
     importRecords,
     clearDatasetRecords,
@@ -78,6 +78,9 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
 
   // Get selection state from UI context
   const { selectedRecordIds, setSelectedRecordIds } = DatasetsUIConsumer();
+
+  // Get project events for SSE subscription
+  const { subscribe } = ProjectEventsConsumer();
 
   // Core state
   const [dataset, setDataset] = useState<Dataset | null>(null);
@@ -284,9 +287,9 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
         refreshDataset();
       }
     };
-    emitter.on("vllora_dry_run_job_update", handleDryRunUpdate);
+    emitter.on("vllora_eval_job_update", handleDryRunUpdate);
     return () => {
-      emitter.off("vllora_dry_run_job_update", handleDryRunUpdate);
+      emitter.off("vllora_eval_job_update", handleDryRunUpdate);
     };
   }, [refreshDataset]);
 
@@ -332,6 +335,27 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
       emitter.off("vllora_dataset_records_deleted" as any, handleRecordsDeleted);
     };
   }, [workflowId, selectedRecordIds, setSelectedRecordIds]);
+
+  // Subscribe to SSE record_scores_updated events → refresh records
+  useEffect(() => {
+    if (!subscribe) return;
+    const subId = `dataset-detail-scores-${workflowId}`;
+    const unsubscribe = subscribe(
+      subId,
+      (event) => {
+        if (event.type !== "Custom") return;
+        const customEvent = (event as unknown as { event: { type: string; workflow_id?: string } }).event;
+        if (
+          customEvent.type === "record_scores_updated" &&
+          customEvent.workflow_id === workflowId
+        ) {
+          refreshDataset();
+        }
+      },
+      (event) => event.type === "Custom",
+    );
+    return () => { unsubscribe(); };
+  }, [subscribe, workflowId, refreshDataset]);
 
   // Listen for source document filter events (from KnowledgeSourceCard clicks)
   useEffect(() => {
@@ -526,31 +550,6 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
       }
     },
     [dataset, updateRecordTopic, expandedRecord, addNewTopicToHierarchy]
-  );
-
-  const handleUpdateRecordEvaluation = useCallback(
-    async (recordId: string, score: number | undefined) => {
-      if (!dataset) return;
-      try {
-        await updateRecordEvaluation(dataset.id, recordId, score);
-        const now = Date.now();
-        const newEvaluation = score === undefined ? undefined : { score, evaluatedAt: now };
-        setRecords((prev) =>
-          prev.map((r) =>
-            r.id === recordId ? { ...r, evaluation: newEvaluation, updatedAt: now } : r
-          )
-        );
-        if (expandedRecord?.id === recordId) {
-          setExpandedRecord((prev) =>
-            prev ? { ...prev, evaluation: newEvaluation, updatedAt: now } : null
-          );
-        }
-        toast.success(score === undefined ? "Evaluation cleared" : `Rated ${score}/5`);
-      } catch {
-        toast.error("Failed to update evaluation");
-      }
-    },
-    [dataset, updateRecordEvaluation, expandedRecord]
   );
 
   const handleDeleteConfirmHandler = useCallback(
@@ -1408,7 +1407,6 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
     handleUpdateObjective,
     handleDeleteRecord,
     handleUpdateRecordTopic,
-    handleUpdateRecordEvaluation,
     handleDeleteConfirm: handleDeleteConfirmHandler,
     handleBulkAssignTopic,
     handleGenerateTopics,

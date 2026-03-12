@@ -284,7 +284,7 @@ export function ResultsTable({
                 const isExpanded = expandedRowId === result.dataset_row_id;
                 return (
                   <div
-                    key={result.dataset_row_id}
+                    key={result.dataset_row_id || `row-${virtualRow.index}`}
                     ref={virtualizer.measureElement}
                     data-index={virtualRow.index}
                     style={{

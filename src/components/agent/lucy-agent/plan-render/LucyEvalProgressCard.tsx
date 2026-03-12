@@ -2,7 +2,7 @@
  * LucyEvalProgressCard
  *
  * Live progress card shown during active evaluation jobs.
- * Listens to `vllora_dry_run_job_update` events and shows
+ * Listens to `vllora_eval_job_update` events and shows
  * per-record progress, partial mean score, and elapsed time.
  *
  * Mockup Scenario #6: Active Watching
@@ -96,8 +96,8 @@ export function LucyEvalProgressCard({ workflowId, initialJob }: EvalProgressCar
       }
     };
 
-    emitter.on('vllora_dry_run_job_update', handleUpdate);
-    return () => { emitter.off('vllora_dry_run_job_update', handleUpdate); };
+    emitter.on('vllora_eval_job_update', handleUpdate);
+    return () => { emitter.off('vllora_eval_job_update', handleUpdate); };
   }, [workflowId]);
 
   const progress = totalRows > 0 ? (completedRows / totalRows) * 100 : 0;

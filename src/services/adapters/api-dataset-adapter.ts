@@ -36,6 +36,13 @@ interface DbWorkflowResponse {
   readonly deleted_at: string | null;
 }
 
+/** Extended response from GET /finetune/workflows/:id (single workflow) */
+interface DbWorkflowDetailResponse extends DbWorkflowResponse {
+  readonly records_count: number;
+  readonly eval_job_ids: string[];
+  readonly finetune_job_ids: string[];
+}
+
 function mapToFe(db: DbWorkflowResponse): Dataset {
   return {
     id: db.id,
@@ -44,6 +51,15 @@ function mapToFe(db: DbWorkflowResponse): Dataset {
     evalScript: db.eval_script ?? undefined,
     createdAt: new Date(db.created_at).getTime(),
     updatedAt: new Date(db.updated_at).getTime(),
+  };
+}
+
+function mapDetailToFe(db: DbWorkflowDetailResponse): Dataset {
+  return {
+    ...mapToFe(db),
+    recordsCount: db.records_count,
+    evalJobIds: db.eval_job_ids,
+    finetuneJobIds: db.finetune_job_ids,
   };
 }
 
@@ -175,8 +191,8 @@ export const apiDatasetAdapter: DatasetService = {
   async getById(id: string): Promise<Dataset | null> {
     const response = await api.get(`${BASE}/${id}`);
     if (!response.ok && response.status === 404) return null;
-    const db = await handleApiResponse<DbWorkflowResponse>(response);
-    const dataset = mapToFe(db);
+    const db = await handleApiResponse<DbWorkflowDetailResponse>(response);
+    const dataset = mapDetailToFe(db);
     const topicHierarchy = await fetchTopicHierarchy(id);
     if (topicHierarchy) dataset.topicHierarchy = topicHierarchy;
     return dataset;

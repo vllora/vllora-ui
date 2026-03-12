@@ -21,7 +21,7 @@ import { RunningView } from "./RunningView";
 import { RunsSidebar } from "./RunsSidebar";
 import { flattenEvaluationResults, getEvaluatorVersions } from "@/services/finetune-api";
 import { cn } from "@/lib/utils";
-import { emitter } from "@/utils/eventEmitter";
+import { emitter, setPendingHighlight } from "@/utils/eventEmitter";
 import type { EvalJob } from "@/types/eval-job";
 import { getJobTotalRows, getJobCompletedRows } from "@/types/eval-job";
 import { Code2 } from "lucide-react";
@@ -282,12 +282,16 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
                 job={job}
                 progress={pct}
                 onRecordIdClick={(recordId) => {
+                  // Store pending highlight so RecordsTable can pick it up on mount
+                  // (the tab switch causes conditional re-mount, so the event listener
+                  //  may not be registered yet when the event fires)
+                  (window as any).__pendingHighlightRecordId = recordId;
                   emitter.emit('vllora_switch_tab', { workflowId, tab: 'records' });
                   setTimeout(() => {
                     window.dispatchEvent(new CustomEvent('vllora_highlight_record', {
                       detail: { recordId }
                     }));
-                  }, 150);
+                  }, 500);
                 }}
               />
             </div>
@@ -353,12 +357,13 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
                 results={evaluationResults}
                 fillHeight
                 onRecordIdClick={(recordId) => {
+                  (window as any).__pendingHighlightRecordId = recordId;
                   emitter.emit('vllora_switch_tab', { workflowId, tab: 'records' });
                   setTimeout(() => {
                     window.dispatchEvent(new CustomEvent('vllora_highlight_record', {
                       detail: { recordId }
                     }));
-                  }, 150);
+                  }, 500);
                 }}
               />
             </div>

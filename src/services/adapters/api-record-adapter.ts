@@ -23,14 +23,26 @@ interface DbWorkflowRecordResponse {
   readonly span_id: string | null;
   readonly is_generated: number;
   readonly source_record_id: string | null;
-  readonly dry_run_score: number | null;
-  readonly finetune_score: number | null;
   readonly metadata: string | null;
   readonly created_at: string;
 }
 
-function mapToFe(db: DbWorkflowRecordResponse): DatasetRecord {
+interface DbWorkflowRecordScoreResponse {
+  readonly id: string;
+  readonly record_id: string;
+  readonly workflow_id: string;
+  readonly job_id: string;
+  readonly score_type: string;
+  readonly score: number;
+  readonly created_at: string;
+}
+
+function mapToFe(
+  db: DbWorkflowRecordResponse,
+  scores: readonly DbWorkflowRecordScoreResponse[],
+): DatasetRecord {
   const createdAt = new Date(db.created_at).getTime();
+  const recordScores = scores.filter(s => s.record_id === db.id);
   return {
     id: db.id,
     workflowId: db.workflow_id,
@@ -40,20 +52,35 @@ function mapToFe(db: DbWorkflowRecordResponse): DatasetRecord {
     is_generated: db.is_generated === 1,
     sourceRecordId: db.source_record_id ?? undefined,
     metadata: db.metadata ? JSON.parse(db.metadata) : undefined,
-    evaluation: buildEvaluation(db.dry_run_score, db.finetune_score),
+    evaluation: buildEvaluation(recordScores),
     createdAt,
     updatedAt: createdAt,
   };
 }
 
 function buildEvaluation(
-  evalScore: number | null,
-  finetuneScore: number | null,
+  scores: readonly DbWorkflowRecordScoreResponse[],
 ): DatasetRecord['evaluation'] {
-  if (evalScore == null && finetuneScore == null) return undefined;
+  if (scores.length === 0) return undefined;
+
+  const evalScores = scores.filter(s => s.score_type === 'eval');
+  const finetuneScores = scores.filter(s => s.score_type === 'finetune');
+
+  // Use the latest score (most recent created_at) for each type
+  const latestEval = evalScores.length > 0
+    ? evalScores.reduce((a, b) => a.created_at > b.created_at ? a : b)
+    : undefined;
+  const latestFinetune = finetuneScores.length > 0
+    ? finetuneScores.reduce((a, b) => a.created_at > b.created_at ? a : b)
+    : undefined;
+
+  if (!latestEval && !latestFinetune) return undefined;
+
   return {
-    evalScore: evalScore ?? undefined,
-    finetuneScore: finetuneScore ?? undefined,
+    evalScore: latestEval?.score,
+    evalCount: evalScores.length,
+    finetuneScore: latestFinetune?.score,
+    finetuneCount: finetuneScores.length,
   };
 }
 
@@ -65,9 +92,14 @@ function basePath(workflowId: string): string {
 
 export const apiRecordAdapter: RecordService = {
   async getByDatasetId(workflowId: string, recordIds?: string[]): Promise<DatasetRecord[]> {
-    const response = await api.get(basePath(workflowId));
-    const data = await handleApiResponse<{ records: DbWorkflowRecordResponse[] }>(response);
-    let records = data.records.map(mapToFe);
+    const [recordsResponse, scoresResponse] = await Promise.all([
+      api.get(basePath(workflowId)),
+      api.get(`${basePath(workflowId)}/scores`),
+    ]);
+    const recordsData = await handleApiResponse<{ records: DbWorkflowRecordResponse[] }>(recordsResponse);
+    const scoresData = await handleApiResponse<{ scores: DbWorkflowRecordScoreResponse[] }>(scoresResponse);
+
+    let records = recordsData.records.map(db => mapToFe(db, scoresData.scores));
 
     if (recordIds && recordIds.length > 0) {
       const idSet = new Set(recordIds);
@@ -78,9 +110,9 @@ export const apiRecordAdapter: RecordService = {
   },
 
   async getCount(workflowId: string): Promise<number> {
-    const response = await api.get(basePath(workflowId));
-    const data = await handleApiResponse<{ records: DbWorkflowRecordResponse[] }>(response);
-    return data.records.length;
+    const response = await api.get(`${basePath(workflowId)}/count`);
+    const data = await handleApiResponse<{ count: number }>(response);
+    return data.count;
   },
 
   async getTopicCoverageStats(workflowId: string): Promise<{ total: number; withTopic: number }> {
@@ -180,16 +212,6 @@ export const apiRecordAdapter: RecordService = {
     const response = await api.patch(
       `${basePath(workflowId)}/${recordId}/data`,
       { data: JSON.stringify(data) },
-    );
-    await handleApiResponse<{ updated: boolean }>(response);
-  },
-
-  async updateEvaluation(workflowId: string, recordId: string, score: number | undefined): Promise<void> {
-    const response = await api.patch(
-      `${basePath(workflowId)}/${recordId}/scores`,
-      {
-        dry_run_score: score ?? null,
-      },
     );
     await handleApiResponse<{ updated: boolean }>(response);
   },

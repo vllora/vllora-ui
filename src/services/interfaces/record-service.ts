@@ -32,7 +32,6 @@ export interface RecordService {
   updateTopic(workflowId: string, recordId: string, topic: string): Promise<void>;
   updateTopicsBatch(workflowId: string, updates: Map<string, string>): Promise<number>;
   updateData(workflowId: string, recordId: string, data: unknown): Promise<void>;
-  updateEvaluation(workflowId: string, recordId: string, score: number | undefined): Promise<void>;
 
   // Deletion & cleanup
   delete(workflowId: string, recordId: string): Promise<void>;

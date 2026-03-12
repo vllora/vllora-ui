@@ -102,6 +102,7 @@ export function PerRowDetailsSection({ results, workflowId }: PerRowDetailsSecti
 
   const handleRecordIdClick = useCallback((recordId: string) => {
     if (!workflowId) return;
+    (window as any).__pendingHighlightRecordId = recordId;
     emitter.emit('vllora_switch_tab', { workflowId, tab: 'records' });
     setTimeout(() => {
       window.dispatchEvent(new CustomEvent('vllora_highlight_record', {

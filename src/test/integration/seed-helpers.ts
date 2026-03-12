@@ -67,17 +67,7 @@ export async function seedRecords(
     })),
   );
 
-  const ids = created.map(r => r.id);
-
-  // Update eval scores if provided
-  for (let i = 0; i < records.length; i++) {
-    const rec = records[i];
-    if (rec.score != null && ids[i]) {
-      await recordService.updateEvaluation(workflowId, ids[i], rec.score);
-    }
-  }
-
-  return ids;
+  return created.map(r => r.id);
 }
 
 // =============================================================================

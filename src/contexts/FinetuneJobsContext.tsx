@@ -42,8 +42,7 @@ interface JobEvaluationState {
   error: string | null;
 }
 
-// Poll interval for evaluations (20 seconds)
-const EVAL_POLL_INTERVAL = 20000;
+// Evaluation polling removed — SSE events trigger on-demand cloud-proxy fetches
 
 // ============================================================================
 // Helpers
@@ -64,11 +63,13 @@ function useFinetuneJobsLogic() {
 
   // Job evaluations state - keyed by job ID
   const [jobEvaluations, setJobEvaluations] = useState<Record<string, JobEvaluationState>>({});
+  /** Active polling intervals for finetune evaluations, keyed by job ID */
   const evalPollIntervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
   // Get project events for SSE subscription
-  const { subscribe } = ProjectEventsConsumer();
+  const { subscribe, isConnected } = ProjectEventsConsumer();
   const subscriptionIdRef = useRef<string>(`finetune-jobs-${Date.now()}`);
+  const wasConnectedRef = useRef(false);
 
   // Use useRequest for jobs fetching with automatic refresh on dependency change
   const {
@@ -170,44 +171,12 @@ function useFinetuneJobsLogic() {
     }
   }, []);
 
-  // Start polling evaluations for active jobs
-  const startEvalPolling = useCallback((job: FinetuneJob) => {
-    const jobId = job.id;
-
-    // Don't start if already polling
-    if (evalPollIntervalsRef.current[jobId]) return;
-
-    // Initial fetch
-    fetchJobEvaluations(job, true);
-
-    // Start polling
-    evalPollIntervalsRef.current[jobId] = setInterval(() => {
-      fetchJobEvaluations(job);
-    }, EVAL_POLL_INTERVAL);
-  }, [fetchJobEvaluations]);
-
-  // Stop polling evaluations for a job
-  const stopEvalPolling = useCallback((jobId: string) => {
-    if (evalPollIntervalsRef.current[jobId]) {
-      clearInterval(evalPollIntervalsRef.current[jobId]);
-      delete evalPollIntervalsRef.current[jobId];
-    }
-  }, []);
-
-  // Get evaluation state for a job (triggers polling if active and not already polling)
+  // Get evaluation state for a job
   const getJobEvaluations = useCallback((jobId: string): JobEvaluationState => {
-    const job = jobs.find((j) => j.id === jobId);
-    const isActive = job && (job.status === 'pending' || job.status === 'running');
-
-    // Start polling for active jobs that aren't being polled yet
-    if (job && isActive && job.workflow_id && !evalPollIntervalsRef.current[jobId]) {
-      startEvalPolling(job);
-    }
-
     return jobEvaluations[jobId] ?? { data: null, isLoading: false, error: null };
-  }, [jobs, jobEvaluations, startEvalPolling]);
+  }, [jobEvaluations]);
 
-  // Manual refresh evaluations for a job
+  // Manual refresh evaluations for a job (on-demand cloud-proxy fetch)
   const refreshJobEvaluations = useCallback((jobId: string) => {
     const job = jobs.find((j) => j.id === jobId);
     if (job) {
@@ -215,23 +184,48 @@ function useFinetuneJobsLogic() {
     }
   }, [jobs, fetchJobEvaluations]);
 
-  // Start/stop polling based on job status changes
+  const stopEvalPolling = useCallback((jobId: string) => {
+    if (evalPollIntervalsRef.current[jobId]) {
+      clearInterval(evalPollIntervalsRef.current[jobId]);
+      delete evalPollIntervalsRef.current[jobId];
+    }
+  }, []);
+
+  // Start polling cloud-proxy for finetune evaluations while job is active
+  const startEvalPolling = useCallback((job: FinetuneJob) => {
+    const jobId = job.id;
+    if (evalPollIntervalsRef.current[jobId]) return;
+
+    // Initial fetch
+    fetchJobEvaluations(job, true);
+
+    // Poll cloud-proxy every 20s for progress (with stop condition)
+    evalPollIntervalsRef.current[jobId] = setInterval(() => {
+      // Check current job status — stop if no longer active
+      const currentJob = jobs.find((j) => j.id === jobId);
+      if (!currentJob || (currentJob.status !== 'pending' && currentJob.status !== 'running')) {
+        stopEvalPolling(jobId);
+        return;
+      }
+      fetchJobEvaluations(job);
+    }, 20_000);
+  }, [fetchJobEvaluations, jobs, stopEvalPolling]);
+
+  // Start/stop eval polling based on job status
   useEffect(() => {
     for (const job of jobs) {
       const isActive = job.status === 'pending' || job.status === 'running';
       const isPolling = !!evalPollIntervalsRef.current[job.id];
 
       if (isActive && job.workflow_id && !isPolling) {
-        // Job became active, start polling
         startEvalPolling(job);
       } else if (!isActive && isPolling) {
-        // Job is no longer active, stop polling (but keep data)
         stopEvalPolling(job.id);
       }
     }
   }, [jobs, startEvalPolling, stopEvalPolling]);
 
-  // Cleanup all polling on unmount
+  // Cleanup polling on unmount
   useEffect(() => {
     return () => {
       for (const jobId of Object.keys(evalPollIntervalsRef.current)) {
@@ -272,6 +266,7 @@ function useFinetuneJobsLogic() {
           return jobsList;
         }
       });
+
     },
     [loadJobs, setJobs, currentDatasetId]
   );
@@ -336,21 +331,26 @@ function useFinetuneJobsLogic() {
     )[0];
   }, [filteredJobs]);
 
-  // Track if we've already fetched evaluations for completed jobs (by job ID)
-  const completedJobsFetchedRef = useRef<Set<string>>(new Set());
+  // Track jobs whose evaluations have already been fetched (by job ID)
+  const evalsFetchedRef = useRef<Set<string>>(new Set());
 
-  // Fetch evaluations once for ALL completed jobs on mount/change
+  // Fetch evaluations once per job on mount/change (active + completed)
   useEffect(() => {
     for (const job of filteredJobs) {
-      const isCompleted = job.status !== 'pending' && job.status !== 'running';
-      const alreadyFetched = completedJobsFetchedRef.current.has(job.id);
+      if (!job.workflow_id || evalsFetchedRef.current.has(job.id)) continue;
 
-      if (isCompleted && job.workflow_id && !alreadyFetched) {
-        completedJobsFetchedRef.current.add(job.id);
-        fetchJobEvaluations(job, true);
-      }
+      evalsFetchedRef.current.add(job.id);
+      fetchJobEvaluations(job, true);
     }
   }, [filteredJobs, fetchJobEvaluations]);
+
+  // Re-fetch jobs on SSE reconnect (covers BE restart gap)
+  useEffect(() => {
+    if (isConnected && !wasConnectedRef.current) {
+      loadJobs(currentDatasetId);
+    }
+    wasConnectedRef.current = isConnected;
+  }, [isConnected, loadJobs, currentDatasetId]);
 
   return {
     jobs,

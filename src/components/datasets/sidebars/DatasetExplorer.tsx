@@ -616,8 +616,13 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         open={showNewEvalDialog}
         onOpenChange={setShowNewEvalDialog}
         onRun={async (sampleSize, rolloutModel) => {
-          await startDryRun(sampleSize, rolloutModel);
+          const jobId = await startDryRun(sampleSize, rolloutModel);
           toast.success(`Evaluation started with ${sampleSize} samples.`);
+          // Auto-navigate to the new eval job detail tab
+          const nodePath = `evaluations/jobs/${jobId}`;
+          setSelectedNodeId(nodePath);
+          openTab(nodePath);
+          onNavigate?.(nodePath);
         }}
       />
     </div>
