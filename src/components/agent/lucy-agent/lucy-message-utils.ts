@@ -144,8 +144,6 @@ export function getFriendlyToolMessage(toolName: string, input: any): string {
       return 'Starting fine-tune training...';
     case 'check_training_status':
       return 'Checking training status...';
-    case 'upload_dataset':
-      return 'Uploading training data...';
     case 'deploy_model':
       return 'Deploying model...';
 

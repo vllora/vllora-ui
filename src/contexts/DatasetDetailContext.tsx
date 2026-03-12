@@ -349,13 +349,18 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
     };
   }, [workflowId]);
 
-  // Update dataset from context when it changes
+  // Update dataset from context when the datasets list changes.
+  // `datasets` comes from getAll() which does NOT include topicHierarchy.
+  // Use functional updater to preserve detail fields already loaded by getById.
   useEffect(() => {
     const updated = datasets.find((d) => d.id === workflowId);
-    if (updated && dataset) {
-      setDataset(updated);
+    if (updated) {
+      setDataset((prev) => {
+        if (!prev) return updated;
+        return { ...prev, ...updated, topicHierarchy: prev.topicHierarchy };
+      });
     }
-  }, [datasets, workflowId, dataset]);
+  }, [datasets, workflowId]);
 
   // Load record counts for dropdown
   useEffect(() => {

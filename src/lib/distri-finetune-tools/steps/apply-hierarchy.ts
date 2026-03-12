@@ -245,8 +245,15 @@ export const applyTopicHierarchyHandler: ToolHandler = async (params) => {
       method: 'manual',
     });
 
+    // Switch UI to records view so the user sees the newly applied topics
+    window.dispatchEvent(
+      new CustomEvent('finetune-set-view-mode', { detail: { section: 'records' } }),
+    );
+
     // Notify detail view to refresh (scoped to current dataset, avoids reloading entire list)
     emitter.emit('vllora_dataset_detail_refresh' as any, { workflowId: workflow.workflowId });
+    // Also emit the broader refresh to update the datasets list and explorer sidebar
+    emitter.emit('vllora_dataset_refresh' as any);
 
     return {
       success: true,

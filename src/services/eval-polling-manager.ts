@@ -10,7 +10,6 @@ import { evalJobService } from './service-registry';
 import {
   createEvaluation,
   getEvaluationResult,
-  ensureDatasetUploaded,
   flattenEvaluationResults,
 } from './finetune-api';
 import { analyzeEvalResults } from '@/lib/distri-dataset-tools/analysis/analyze-evaluation';
@@ -141,10 +140,7 @@ class EvalPollingManager {
       throw new Error('Grader must be configured first');
     }
 
-    // Ensure dataset is uploaded (auto-uploads if needed)
-    await ensureDatasetUploaded(workflowId);
-
-    // Start the dry run
+    // Gateway auto-uploads dataset to cloud before creating eval
     return this.startEval({
       workflowId,
       sampleSize,

@@ -9,7 +9,6 @@
 import type { DistriFnTool } from '@distri/core';
 import { workflowService, datasetService, recordService } from '@/services/service-registry';
 import {
-  ensureDatasetUploaded,
   createEvaluation,
   waitForEvaluationComplete,
   flattenEvaluationResults,
@@ -47,8 +46,8 @@ export async function runGraderTest(
       return { success: false, error: 'Grader must be configured first' };
     }
 
-    // Ensure dataset is uploaded; the dataset ID is the backend dataset ID.
-    await ensureDatasetUploaded(workflowId);
+    // Sync eval script to gateway before creating evaluation
+    // (gateway auto-uploads dataset to cloud when creating eval)
     await updateDatasetEvalScript(workflowId, dataset.evalScript);
 
     const evalResponse = await createEvaluation({

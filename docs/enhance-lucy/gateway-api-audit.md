@@ -398,7 +398,7 @@ Only `eval_script` added. Everything else derived:
 
 Every user flow mapped to API calls and DB operations.
 
-**Legend:** `→ LOCAL` = local SQLite | `→ CLOUD` = `api.langdb.cloud` | `→ LLM` = local LLM | `[table]` = SQLite table
+**Legend:** `→ LOCAL` = local SQLite | `→ CLOUD` = `api.langdb.cloud` | `→ LLM` = local LLM | `[table]` = SQLite table | `(auto)` = gateway does this internally, no separate FE call
 
 ---
 
@@ -422,10 +422,8 @@ POST /workflows/{id}/records                  → LOCAL  [workflow_records] bulk
 PATCH /workflows/{id}/evaluator               → LOCAL  [workflows].eval_script
   │
   ▼
-POST /workflows/{id}/dataset/upload           → CLOUD  packages [workflow_records] + [workflow_topics]
-  │                                                     + [workflows].eval_script → JSONL → cloud
-  ▼
-POST /finetune/evaluations                    → CLOUD  creates eval run
+POST /finetune/evaluations                    → CLOUD  (auto) upserts dataset to cloud, then
+  │                                                     creates eval run
 POST /workflows/{id}/eval-jobs                → LOCAL  [eval_jobs] create
   │
   ▼  (poll every 6s)
@@ -434,9 +432,8 @@ PATCH /workflows/{id}/eval-jobs/{id}          → LOCAL  [eval_jobs] update stat
 PATCH /workflows/{id}/records/{id}/scores     → LOCAL  [workflow_records] update scores
   │
   ▼
-POST /workflows/{id}/dataset/upload           → CLOUD  re-upload (in case records changed)
-POST /workflows/{id}/jobs                     → CLOUD  create training job
-                                              → LOCAL  [finetune_jobs] create
+POST /workflows/{id}/jobs                     → CLOUD  (auto) upserts dataset to cloud, then
+                                              → LOCAL  creates training job + [finetune_jobs]
   │
   ▼  (poll)
 GET /workflows/{id}/jobs/{id}/status          → LOCAL  [finetune_jobs] (cloud fallback)
@@ -446,6 +443,8 @@ GET /workflows/{id}/jobs/{id}/metrics         → CLOUD  loss curves, eval metri
 POST /finetune/deployments                    → CLOUD  deploy model
 ```
 
+> **Auto-upload**: `create_evaluation` and `create_finetune_job` read records, topics, and eval_script from local SQLite, build JSONL, and upsert to cloud before proceeding. The frontend never calls a separate upload endpoint.
+
 ### B. Import Traces (no knowledge sources)
 
 ```
@@ -454,7 +453,7 @@ POST /workflows/{id}/records/from-spans       → LOCAL  [workflow_records] impo
 POST /workflows/{id}/topics                   → LOCAL  [workflow_topics] create
 PATCH /workflows/{id}/records/topics          → LOCAL  [workflow_records] batch categorize
   │
-  ▼  ... continues: grader → upload → eval → training (same as A)
+  ▼  ... continues: grader → eval → training (same as A)
 ```
 
 ### C. Record CRUD
@@ -469,7 +468,7 @@ DELETE /workflows/{id}/records                → LOCAL  [workflow_records] dele
 GET    /workflows/{id}/records                → LOCAL  [workflow_records] list + stats
 ```
 
-> After any record change, next eval/training must re-upload via `POST /dataset/upload`.
+> After any record change, the next eval/training call auto-upserts the latest data to cloud.
 
 ### D. Topic Management
 
@@ -508,15 +507,13 @@ ADD mid-workflow:
 
 ```
 RUN 1 (score low):
-  POST /workflows/{id}/dataset/upload         → CLOUD  upload
-  POST /finetune/evaluations                  → CLOUD  run eval → mean=0.3
+  POST /finetune/evaluations                  → CLOUD  (auto) upsert + eval → mean=0.3
 
 EDIT grader:
   PATCH /workflows/{id}/evaluator             → LOCAL  [workflows].eval_script
 
-RUN 2 (re-upload + re-eval):
-  POST /workflows/{id}/dataset/upload         → CLOUD  re-upload with new eval_script
-  POST /finetune/evaluations                  → CLOUD  run eval → mean=0.7 ✓
+RUN 2 (re-eval with new grader):
+  POST /finetune/evaluations                  → CLOUD  (auto) upsert with new eval_script + eval → mean=0.7 ✓
 
 COMPARE:
   GET /workflows/{id}/eval-jobs               → LOCAL  [eval_jobs] 2 rows, different cloud_run_id
@@ -536,12 +533,10 @@ EDIT records:
   PUT /workflows/{id}/records                 → LOCAL  replace all (atomic)
 
 RE-EVAL:
-  POST /workflows/{id}/dataset/upload         → CLOUD  re-upload
-  POST /finetune/evaluations                  → CLOUD  eval
+  POST /finetune/evaluations                  → CLOUD  (auto) upsert + eval
 
 JOB 2:
-  POST /workflows/{id}/dataset/upload         → CLOUD  re-upload latest
-  POST /workflows/{id}/jobs                   → CLOUD + LOCAL  [finetune_jobs] new row
+  POST /workflows/{id}/jobs                   → CLOUD + LOCAL  (auto) upsert + [finetune_jobs] new row
 
 COMPARE:
   GET /workflows/{id}/jobs                    → LOCAL  [finetune_jobs] both jobs
@@ -589,9 +584,9 @@ GET  /workflows/{id}/jobs/{id}/weights/url      → CLOUD  signed download URL
 
 | Table | Read by | Written by |
 |-------|---------|------------|
-| `workflows` | All flows | A (create), F (eval_script), J (soft delete) |
-| `workflow_records` | A, B, C, D, F, G | A, B, C, D, G (CRUD + categorize) |
-| `workflow_topics` | A, B, D | A, B, D (create, rename, delete) |
+| `workflows` | All flows, auto-upload (eval_script) | A (create), F (eval_script), J (soft delete) |
+| `workflow_records` | A, B, C, D, F, G, auto-upload (JSONL) | A, B, C, D, G (CRUD + categorize) |
+| `workflow_topics` | A, B, D, auto-upload (hierarchy) | A, B, D (create, rename, delete) |
 | `knowledge_sources` | A, E | A, E (create, soft delete) |
 | `eval_jobs` | A, F, J | A, F (create, update status) |
 | `finetune_jobs` | A, G, H, J, K | A, G, H (create, cancel, resume) |

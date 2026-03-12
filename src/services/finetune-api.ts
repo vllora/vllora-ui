@@ -5,8 +5,7 @@ import {
   DatasetRecord,
   DataInfo,
 } from "@/types/dataset-types";
-import { datasetService, recordService } from "@/services/service-registry";
-import { toast } from "sonner";
+
 
 // ============================================================================
 // Types
@@ -575,41 +574,6 @@ export async function uploadDatasetForFinetune(
   };
 }
 
-/**
- * Ensure dataset is uploaded to backend.
- * Since workflowId always equals the workflow ID, this simply uploads
- * the dataset content and returns the workflowId.
- *
- * @param workflowId - Dataset ID (same as workflow ID)
- * @returns workflowId
- * @throws Error if dataset not found, has no records, or upload fails
- */
-export async function ensureDatasetUploaded(
-  workflowId: string,
-): Promise<string> {
-  const dataset = await datasetService.getById(workflowId);
-  if (!dataset) {
-    throw new Error("Dataset not found");
-  }
-
-  const records = await recordService.getByDatasetId(workflowId);
-  if (records.length === 0) {
-    throw new Error("Dataset has no records");
-  }
-
-  toast.info("Uploading training data...");
-  try {
-    await uploadDatasetForFinetune({
-      ...dataset,
-      records,
-    });
-    toast.success("Training data uploaded");
-    return workflowId;
-  } catch (uploadError) {
-    toast.error("Failed to upload training data");
-    throw uploadError;
-  }
-}
 
 /** Default training configuration */
 export const DEFAULT_TRAINING_CONFIG: ReinforcementTrainingConfig = {

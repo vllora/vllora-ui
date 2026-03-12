@@ -178,7 +178,6 @@ export const apiDatasetAdapter: DatasetService = {
     const db = await handleApiResponse<DbWorkflowResponse>(response);
     const dataset = mapToFe(db);
     const topicHierarchy = await fetchTopicHierarchy(id);
-    console.log('[api-dataset] getById', id, 'topicHierarchy:', topicHierarchy ? `${topicHierarchy.hierarchy?.length} roots` : 'none');
     if (topicHierarchy) dataset.topicHierarchy = topicHierarchy;
     return dataset;
   },

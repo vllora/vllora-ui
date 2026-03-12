@@ -303,7 +303,6 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
     const topicChildren = topicHierarchy
       ? buildTopicChildren(topicHierarchy, "", topicCounts, expandedNodes)
       : [];
-
     const dataBadge: FileTreeBadge | undefined = isGeneratingTraces
       ? {
         label: "generating", variant: "loading" as const,

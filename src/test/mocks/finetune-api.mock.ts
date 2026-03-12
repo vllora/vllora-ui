@@ -72,13 +72,6 @@ export function mockFinetuneApi(opts: MockFinetuneApiOptions = {}) {
 
   return {
     // Dataset upload
-    ensureDatasetUploaded: vi.fn().mockImplementation(() => {
-      if (opts.uploadShouldFail) {
-        return delayed(Promise.reject(new Error('Upload failed')), ms);
-      }
-      return delayed(dsId, ms);
-    }),
-
     uploadDataset: vi.fn().mockImplementation(() =>
       delayed({ workflow_id: dsId }, ms),
     ),

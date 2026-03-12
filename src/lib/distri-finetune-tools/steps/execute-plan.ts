@@ -33,7 +33,6 @@ async function callGenerateInitialData(params: Record<string, unknown>) {
   );
   return maybeUseMockHandler(generateInitialDataHandler, params);
 }
-import { uploadDatasetHandler } from './upload-dataset';
 import { runEvaluationHandler } from './run-evaluation';
 
 // Import for finetune job creation (disabled)
@@ -95,7 +94,7 @@ export async function consumePendingPlan(workflowId: string): Promise<Plan | nul
 // =============================================================================
 
 export type ExecutionStepId =
-  | 'topics' | 'adjust_topics' | 'categorize' | 'generate' | 'grader' | 'upload' | 'dryrun' | 'finetune'
+  | 'topics' | 'adjust_topics' | 'categorize' | 'generate' | 'grader' | 'dryrun' | 'finetune'
   // Iteration loop steps (inner loop — dataset improvement)
   | 'regenerate_topic'    // regenerate data for specific weak topics
   | 'adjust_grader'       // modify grader based on analysis
@@ -248,15 +247,6 @@ function buildCompletedStepDetails(
     case 'grader': {
       const criteriaCount = plan.grader_config?.criteria?.length ?? 0;
       details.push(`Configured ${criteriaCount} criteria`);
-      break;
-    }
-    case 'upload': {
-      const uploaded = (res as any)?.records_uploaded;
-      if (typeof uploaded === 'number') {
-        details.push(`Uploaded ${uploaded} records`);
-      } else {
-        details.push('Dataset uploaded to backend');
-      }
       break;
     }
     case 'dryrun': {
@@ -500,33 +490,6 @@ async function executeGrader(ctx: StepContext): Promise<StepResult> {
   return { message: 'LLM-as-judge evaluator configured', result: { success: true, grader_type: 'llm-as-judge' } };
 }
 
-async function executeUpload(ctx: StepContext): Promise<StepResult> {
-  const { workflow_id, overrides } = ctx;
-
-  // Pre-flight: must have records to upload
-  const recordCount = await recordService.getCount(workflow_id);
-  if (recordCount === 0) {
-    throw new Error(
-      'Cannot upload: dataset has no records. ' +
-      'Recovery: add "generate" before "upload" in steps_to_execute and re-run execute_plan.'
-    );
-  }
-
-  const result = await uploadDatasetHandler({
-    workflow_id,
-    force_reupload: overrides?.upload?.force_reupload ?? true,
-  });
-
-  if (!(result as any).success && !(result as any).already_uploaded) {
-    throw new Error(
-      ((result as any).error || 'Failed to upload dataset') +
-      ' Recovery: retry with overrides.upload.force_reupload = true.'
-    );
-  }
-
-  return { message: 'Dataset uploaded', result };
-}
-
 async function executeDryRun(ctx: StepContext): Promise<StepResult> {
   const { workflow_id, plan, summary } = ctx;
 
@@ -684,7 +647,7 @@ export interface PlanValidationResult {
 /** Canonical ordered list of all step IDs — defines execution order */
 export const STEP_ORDER: ExecutionStepId[] = [
   'topics', 'adjust_topics', 'categorize', 'generate',
-  'grader', 'upload', 'dryrun', 'finetune',
+  'grader', 'dryrun', 'finetune',
   // Iteration loop steps (can appear in iteration plans)
   'regenerate_topic', 'adjust_grader', 'analyze', 'post_training_eval',
 ];
@@ -785,7 +748,6 @@ const STEP_REGISTRY: Record<ExecutionStepId, StepExecutor> = {
   categorize:    { name: 'Categorize Records',     workflowStep: 'categorize',          execute: executeCategorize },
   generate:      { name: 'Generate Data',          workflowStep: 'coverage_generation', execute: executeGenerate },
   grader:        { name: 'Configure Evaluator',    workflowStep: 'grader_config',       execute: executeGrader },
-  upload:        { name: 'Upload Dataset',                                               execute: executeUpload },
   dryrun:             { name: 'Run Evaluation',          workflowStep: 'dry_run',             execute: executeDryRun,            nonFatal: true },
   finetune:           { name: 'Start Finetune Job',                                           execute: executeFinetune,           nonFatal: true },
   // Iteration loop steps (inner loop)

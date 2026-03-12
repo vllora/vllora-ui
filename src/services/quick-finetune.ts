@@ -14,7 +14,6 @@
 
 import { datasetService, recordService, workflowService } from './service-registry';
 import {
-  ensureDatasetUploaded,
   createFinetuneJobFromUpload,
   listReinforcementJobs,
   ReinforcementTrainingConfig,
@@ -206,9 +205,7 @@ export async function quickFinetune(options: QuickFinetuneOptions): Promise<Quic
     // 4. Advance workflow to training step (skipping dry run)
     await workflowService.advanceToStep(workflow.id, 'training');
 
-    // 5. Ensure dataset is uploaded (auto-uploads if needed)
-    await ensureDatasetUploaded(workflowId);
-
+    // 5. Start training job (gateway auto-uploads dataset to cloud)
     // 6. Start training job using common function
     const result = await startFinetuneTraining({
       workflowId: workflow.id,

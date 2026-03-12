@@ -753,7 +753,7 @@ cargo test --lib metadata::services
 
 ### Test: Flow integration scripts
 
-Each script tests one flow from [gateway-api-audit.md § Flow Diagrams](./gateway-api-audit.md#6-flow-diagrams). Run against a live gateway at `localhost:9090`.
+Each script tests one flow from [gateway-api-audit.md § Flow Diagrams](hen ./gateway-api-audit.md#6-flow-diagrams). Run against a live gateway at `localhost:9090`.
 
 Save as `scripts/test-flows/`. Run individually or all at once via `scripts/test-flows/run-all.sh`.
 

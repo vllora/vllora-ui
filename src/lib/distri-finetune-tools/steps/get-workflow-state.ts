@@ -66,10 +66,6 @@ export interface DatasetState {
   grader: {
     configured: boolean;
   };
-  upload: {
-    uploaded: boolean;
-    backend_workflow_id: string | null;
-  };
   dry_run: {
     completed: boolean;
     verdict: string | null;
@@ -95,6 +91,16 @@ export interface DatasetState {
     completed_steps: string[];
     failed_step: string | null;
     remaining_steps: string[];
+    /** Proposed topics from the plan — needed by apply_topic_hierarchy during execution */
+    proposed_topics?: unknown[];
+    /** Grader config from the plan — needed by configure_grader during execution */
+    grader_config?: { criteria?: unknown[]; script?: string };
+    /** Estimated record count from the plan */
+    estimated_records?: number;
+    /** Output format from the plan */
+    output_format?: string;
+    /** Data generation config from the plan */
+    data_generation?: { grounded_in_knowledge?: boolean };
   };
 }
 
@@ -257,10 +263,6 @@ export const getDatasetStateHandler: ToolHandler = async (params) => {
       grader: {
         configured: !!dataset.evalScript,
       },
-      upload: {
-        uploaded: true,
-        backend_workflow_id: dataset.id,
-      },
       dry_run: {
         completed: !!workflow?.dryRun?.verdict,
         verdict: workflow?.dryRun?.verdict || null,
@@ -298,6 +300,12 @@ export const getDatasetStateHandler: ToolHandler = async (params) => {
           completed_steps: completedSteps,
           failed_step: failedStep,
           remaining_steps: remainingSteps,
+          // Include plan data so the agent can use it during execution
+          proposed_topics: storedPlan.plan?.proposed_topics,
+          grader_config: storedPlan.plan?.grader_config,
+          estimated_records: storedPlan.plan?.estimated_records,
+          output_format: storedPlan.plan?.output_format as string | undefined,
+          data_generation: storedPlan.plan?.data_generation,
         };
       })(),
     };
@@ -325,10 +333,9 @@ Returns:
 - sanitization: valid/invalid/duplicate counts, validation rate, errors, recommendations
 - knowledge_sources: total_count, ready_count, processing_count
 - grader: evaluator configured?
-- upload: uploaded to backend?
 - dry_run: completed? verdict?
 - training: job exists? status?
-- plan: exists? status? completed_steps, failed_step, remaining_steps
+- plan: exists? status? completed_steps, failed_step, remaining_steps, proposed_topics, grader_config, estimated_records, output_format, data_generation
 
 IMPORTANT: If plan.exists is true and plan.status is 'failed' or 'executing',
 do NOT create a new plan. Resume the existing plan by calling execute_plan
