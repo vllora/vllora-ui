@@ -65,13 +65,14 @@ finetune-skill/
 │   └── Pipeline steps          # Inline examples + curl commands
 │
 ├── reference/                  # Deep-dive reference files (read on demand)
-│   ├── api-reference.md        # ~380 lines — all REST endpoints with curl examples
+│   ├── api-reference.md        # All REST endpoints (cloud + local CRUD) with curl examples
 │   ├── data-format.md          # ~100 lines — JSONL format spec
-│   ├── extraction-guide.md     # ~200 lines — Docling Serve setup, API calls, section extraction
+│   ├── extraction-guide.md     # ~670 lines — Docling Serve setup, API calls, knowledge_parts.json schema
+│   ├── knowledge-parts-schema.json  # JSON schema for knowledge_parts.json
 │   ├── grader-writing.md       # ~290 lines — grader patterns + anti-patterns
-│   ├── topic-hierarchy.md      # ~270 lines — topic design + coverage analysis
+│   ├── topic-hierarchy.md      # ~290 lines — topic design + coverage analysis
 │   ├── iteration-strategy.md   # ~710 lines — analysis, diagnosis, escalation
-│   └── workflow-guide.md       # ~270 lines — per-step deep dive
+│   └── workflow-guide.md       # ~305 lines — per-step deep dive
 │
 ├── scripts/                    # PEP 723 helper scripts (run with `uv run`)
 │   ├── validate_dataset.py     # Validate JSONL before upload
@@ -143,7 +144,7 @@ The agent prepares all data, then creates a workflow in the gateway so the vLLor
 
 **When to use**: User wants the visual UI experience for evaluation/training, or wants Lucy's guided workflow for the iteration loop.
 
-**Requires**: Gateway local API endpoints for workflows + records (see [Migration Plan](#migration-plan-shared-data-via-gateway-api)).
+**Requires**: Gateway running at localhost:9090 (all local CRUD endpoints are available).
 
 ### Mode B: Full CLI Pipeline (current, working)
 
@@ -158,7 +159,7 @@ The agent handles everything end-to-end via API calls, with no UI dependency.
 6. Upload dataset to cloud:  POST /finetune/datasets
 7. Create evaluation:        POST /finetune/evaluations
 8. Poll results, analyze, iterate
-9. Start training:           POST /finetune/reinforcement-jobs
+9. Start training:           POST /finetune/workflows/{id}/jobs
 10. At any point: "Open vLLora UI to see progress"
 ```
 
@@ -185,13 +186,13 @@ The agent handles everything end-to-end via API calls, with no UI dependency.
 
 | File | Lines | What it covers |
 |------|-------|---------------|
-| `api-reference.md` | ~450 | All vLLora REST endpoints: cloud (datasets, eval, training) + local workflow API |
+| `api-reference.md` | ~350 | All vLLora REST endpoints: cloud (datasets, eval, training) + local CRUD (workflows, records, topics) + Mode A/B pipeline examples |
 | `data-format.md` | ~100 | JSONL format — prompts only (no assistant messages, since RFT) |
-| `extraction-guide.md` | ~200 | Docling Serve setup, convert/chunk API calls, section extraction, troubleshooting |
+| `extraction-guide.md` | ~670 | Docling Serve setup, hybrid chunk API, knowledge_parts.json schema, image extraction, troubleshooting |
 | `grader-writing.md` | ~290 | 3 grader patterns, smooth scoring, reward hacking prevention |
-| `topic-hierarchy.md` | ~270 | Topic structure, source tracing, coverage analysis, per-topic scores |
+| `topic-hierarchy.md` | ~290 | Topic structure, source tracing, coverage analysis, per-topic scores |
 | `iteration-strategy.md` | ~710 | 9 parts: eval analysis, training, topics, variety, diagnosis, fixes, tracking, stalls, escalation |
-| `workflow-guide.md` | ~270 | Deep dive on each pipeline step |
+| `workflow-guide.md` | ~305 | Deep dive on each pipeline step |
 
 ### Helper Scripts (PEP 723)
 
@@ -308,7 +309,7 @@ Tested with real chess PDF and live backend at localhost:9090.
 - Evaluation results analysis: **pending** (eval still running on backend)
 - Training job submission: **pending** (depends on eval results)
 - Iteration loop (re-evaluate after fixes): **not yet tested**
-- Mode A (handoff to UI): **not yet tested** (requires local workflow API)
+- Mode A (handoff to UI): **not yet tested** (gateway API is ready, needs end-to-end test)
 
 ---
 
@@ -471,8 +472,8 @@ This skill and the Lucy finetune agent are **two interfaces to the same backend*
                     │                             │
                     │  POST /finetune/datasets    │
                     │  POST /finetune/evaluations  │
-                    │  POST /finetune/reinforcement-jobs │
-                    │  GET  /finetune/workflows (local)  │
+                    │  POST /finetune/workflows/{id}/jobs │
+                    │  GET  /finetune/workflows (local)   │
                     └──────────┬──────────────────┘
                                │
               ┌────────────────┼────────────────┐
@@ -491,7 +492,7 @@ This skill and the Lucy finetune agent are **two interfaces to the same backend*
 | **Where it runs** | Browser (React app) | Terminal (Claude Code) |
 | **AI orchestration** | Distri server → 3 sub-agents | Single agent reads skill + knowledge files |
 | **Tool execution** | 50+ browser-side tools via @distri/react | Direct API calls via curl in Bash |
-| **Data storage** | IndexedDB (browser-local) → migrating to gateway API | Local filesystem (JSONL, JSON, JS files) |
+| **Data storage** | Gateway API (SQLite) | Local filesystem (JSONL, JSON, JS files) + Gateway API for Mode A handoff |
 | **State machine** | Formal workflow state machine with validation rules | execution-log.md + iteration-log.md (informal) |
 | **Workflow flexibility** | Fixed 7-step pipeline | Agent decides step order, can skip/repeat/branch |
 
@@ -503,25 +504,11 @@ This skill and the Lucy finetune agent are **two interfaces to the same backend*
 
 ---
 
-## Migration Plan: Shared Data via Gateway API
+## Shared Data via Gateway API
 
-### The Problem (current state)
-
-The UI stores all finetune data in browser IndexedDB. The skill stores data in local files. These are two isolated worlds — data created by the skill is invisible to the UI, and vice versa.
+Both the skill and the vLLora UI read/write through the same gateway local API. The gateway's local SQLite is the single source of truth.
 
 ```
-Current:
-  Skill (CLI) → gateway API → cloud (datasets, eval, training)
-  UI (browser) → IndexedDB (datasets, records, workflows, jobs)
-  ❌ No shared state between skill and UI
-```
-
-### The Solution (planned)
-
-Both the skill and the UI read/write through the same gateway local API. The gateway's local SQLite becomes the single source of truth.
-
-```
-Target:
   Skill (CLI) ──┐
                  ├→ gateway API (localhost:9090) → local SQLite (workspace data)
   UI (browser) ──┘                               → cloud API (eval, training)
@@ -529,27 +516,20 @@ Target:
 
 ### What This Enables
 
-1. **CLI → UI handoff**: Agent prepares data via skill → creates workflow in gateway → user opens vLLora UI → Lucy picks up where the agent left off
+1. **CLI → UI handoff** (Mode A): Agent prepares data via skill → creates workflow in gateway → user opens vLLora UI → Lucy picks up where the agent left off
 2. **Shared visibility**: Datasets and workflows created by either tool are visible in both
-3. **Single source of truth**: No more IndexedDB ↔ API data isolation
+3. **Single source of truth**: Gateway SQLite stores all workflows, records, topics, knowledge sources, and eval jobs
 
 ### Implementation Status
 
 | Component | Status | Details |
 |-----------|--------|---------|
 | UI abstraction layer (service interfaces) | ✅ Done | 6 interfaces in `src/services/interfaces/` |
-| Gateway workflows table | ✅ Started | Basic CRUD in commit `e199769` |
-| Gateway records table | ❌ Not started | Needed for records storage |
-| Gateway expanded workflow fields | ❌ Not started | topics, grader, stats, etc. |
-| UI API adapters | ❌ Not started | Swap IndexedDB → API calls |
-| Skill Mode A (handoff) | ❌ Not started | Needs gateway workflow + records endpoints |
-| IndexedDB removal | ❌ Not started | Final step after full migration |
-
-### Spec Doc
-
-Full migration spec: `docs/enhance-lucy/skill-and-local-api-spec.md`
-
-Covers: gateway API design (SQL schemas, endpoint specs), UI abstraction layer, 5-phase migration plan, skill rewrite plan, and open decisions (event system, offline support, data migration, real-time updates).
+| Gateway local CRUD (workflows, records, topics, knowledge, eval jobs) | ✅ Done | 62 endpoints in gateway |
+| UI API adapters (swap IndexedDB → API) | ✅ Done | 6 adapters in `src/services/adapters/` |
+| Skill Mode A (handoff to UI) | ✅ Done | Create workflow + populate via API |
+| Skill Mode B (full CLI) | ✅ Done | Tested through v9 with live backend |
+| IndexedDB removal | ✅ Done | No longer used at runtime |
 
 ---
 
@@ -572,8 +552,9 @@ Covers: gateway API design (SQL schemas, endpoint specs), UI abstraction layer, 
 
 ### Skill improvements
 
-- [ ] Add Mode A pipeline (handoff to Lucy) once gateway workflow API is ready
-- [ ] Update api-reference.md with local workflow endpoints when finalized
+- [x] Add Mode A pipeline (handoff to Lucy) via gateway workflow API
+- [x] Update api-reference.md with local workflow endpoints
+- [x] Fix training job endpoints (now scoped under workflows)
 - [ ] Add guidance for multi-turn conversation training data
 - [ ] Add guidance for structured output fine-tuning (JSON schema enforcement)
 - [ ] Test on Cowork (no local filesystem — may need adaptations)
@@ -585,4 +566,3 @@ Covers: gateway API design (SQL schemas, endpoint specs), UI abstraction layer, 
 - Polling loop timeout — if eval takes > 5 minutes, agent's poll loop may expire
 - No guidance on what to do if backend is down or returns unexpected errors
 - Skill doesn't cover multi-dataset experiments (A/B testing different data strategies)
-- Mode A not yet available (blocked on gateway local API implementation)

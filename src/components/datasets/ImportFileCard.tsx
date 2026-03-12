@@ -208,7 +208,7 @@ export function ImportFileCard() {
       navigate(`/finetune/${dataset.id}`);
     } catch (err) {
       console.error("Failed to create dataset:", err);
-      toast.error("Failed to create experiment");
+      toast.error("Failed to create workflow");
     } finally {
       setIsCreating(false);
     }
@@ -350,7 +350,7 @@ export function ImportFileCard() {
             <Input
               value={datasetName}
               onChange={(e) => setDatasetName(e.target.value)}
-              placeholder="Experiment name"
+              placeholder="Workflow name"
               className="h-9"
             />
             <Button

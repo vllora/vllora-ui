@@ -163,7 +163,7 @@ export function getFriendlyToolMessage(toolName: string, input: any): string {
 
     // Dataset state tools
     case 'get_dataset_state':
-      return 'Loading experiment state...';
+      return 'Loading workflow state...';
     case 'get_dataset_records':
       return 'Loading records...';
     case 'update_objective':

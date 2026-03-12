@@ -42,7 +42,7 @@ Pick the right tool for the job:
 
 **Decision flow**: Check `curl -s http://127.0.0.1:5001/health` first. If Docling is running, use it. If not, and you have Docker, start it. If no Docker at all, fall back to pdftotext.
 
-See `knowledge/extraction-guide.md` for the complete Docling workflow — curl commands, response structure, knowledge_parts.json schema, and troubleshooting.
+See `extraction-guide.md` for the complete Docling workflow — curl commands, response structure, knowledge_parts.json schema, and troubleshooting.
 
 ### Document Processing Strategy
 
@@ -228,7 +228,7 @@ The backend takes each training prompt, feeds it to a rollout model (typically `
 
 ### Re-uploading After Data Changes
 
-When you change the JSONL data, you must re-upload the entire dataset with a **new** `dataset_id`. The old backend dataset ID becomes stale. When you only change the grader, use `PATCH /finetune/datasets/{id}/evaluator` — no re-upload needed.
+When you change the JSONL data, you must re-upload the entire dataset with a **new** `dataset_id`. The old backend dataset ID becomes stale. When you only change the grader, use `PATCH /finetune/workflows/{id}/evaluator` — no re-upload needed.
 
 ---
 
@@ -274,7 +274,7 @@ The defaults work well for most cases. Adjust if:
 
 ### Monitoring Training
 
-Poll `GET /finetune/reinforcement-jobs/{id}/status`. Watch for:
+Poll `GET /finetune/workflows/{workflow_id}/jobs/{job_id}/status`. Watch for:
 - `status: "running"` → Training is in progress
 - `status: "succeeded"` → Model is ready to use
 - `status: "failed"` → Check `error_message` field

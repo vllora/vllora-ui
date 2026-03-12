@@ -21,7 +21,7 @@ export function DatasetsStatusBar({ datasetCount, totalRecords }: DatasetsStatus
     <div className="border-t border-border px-6 py-2.5 flex items-center justify-center gap-4 text-xs text-muted-foreground bg-background/50 shrink-0">
       <span>
         <span className="text-foreground font-medium">{datasetCount}</span>{" "}
-        {datasetCount === 1 ? "experiment" : "experiments"}
+        {datasetCount === 1 ? "workflow" : "workflows"}
       </span>
       <span className="text-border">•</span>
       <span>

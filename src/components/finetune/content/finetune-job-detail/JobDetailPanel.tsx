@@ -269,7 +269,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
           ) : (
             !(job.status === "failed") && (
               <div className="text-xs text-muted-foreground py-2">
-                No experiment linked to this job
+                No workflow linked to this job
               </div>
             )
           )}

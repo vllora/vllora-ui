@@ -138,15 +138,15 @@ export function ApiInitializeTab({ traces, onClear }: ApiInitializeTabProps) {
         });
 
         await recordService.add(dataset.id, records);
-        toast.success(`Created experiment with ${records.length} records`);
+        toast.success(`Created workflow with ${records.length} records`);
       } else {
-        toast.success("Created experiment");
+        toast.success("Created workflow");
       }
 
       navigate(`/finetune/${dataset.id}`);
     } catch (error) {
       console.error("Failed to create dataset:", error);
-      toast.error("Failed to create experiment");
+      toast.error("Failed to create workflow");
     } finally {
       setIsCreating(false);
     }

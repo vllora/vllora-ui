@@ -338,7 +338,7 @@ Pick 5 low-scoring records and manually review:
 
 **After changing the grader** — update without re-uploading data:
 ```bash
-curl -X PATCH http://localhost:9090/finetune/datasets/DATASET_ID/evaluator \
+curl -X PATCH http://localhost:9090/finetune/workflows/WORKFLOW_ID/evaluator \
   -H "Content-Type: application/json" \
   -d '{"evaluator": {"type": "js", "config": {"script": "async function evaluate(input) { ... }"}}}'
 ```
@@ -388,7 +388,7 @@ Key fields to use for analysis:
 - `results[].epochs["0"][0].reason` — grader's explanation (most valuable for diagnosis)
 - `results[].row.id` — maps back to your JSONL record ID
 
-**Training job results** — Save `GET /finetune/reinforcement-jobs/{id}/status` to `training-jobs/job-{N}.json`:
+**Training job results** — Save `GET /finetune/workflows/{workflow_id}/jobs/{job_id}/status` to `training-jobs/job-{N}.json`:
 ```json
 {
   "id": "ft_job_001",
@@ -644,7 +644,7 @@ If all scores cluster around the same value (e.g., everything scores 0.5-0.6), t
 
 **Fix:**
 1. **Make the grader more granular** — Add more criteria with different weights so scores spread across the range
-2. **Use partial credit** — Replace binary checks with graduated scoring (see `knowledge/grader-writing.md` "Smooth Scoring" section)
+2. **Use partial credit** — Replace binary checks with graduated scoring (see `reference/grader-writing.md` "Smooth Scoring" section)
 3. **Add both positive and negative criteria** — The gap between "has good qualities" and "also avoids bad qualities" creates natural score spread
 4. **Redesign the rubric** — If using LLM-as-judge, break evaluation into 4-5 specific subcategories each worth different points
 

@@ -81,7 +81,7 @@ export function FinetuneStudioTab() {
         navigate(`/finetune/${dataset.id}?autoGeneratePlan=true`);
       } catch (error) {
         console.error("Failed to create dataset with files:", error);
-        toast.error("Failed to create experiment");
+        toast.error("Failed to create workflow");
         setIsCreating(false);
       }
     } else {

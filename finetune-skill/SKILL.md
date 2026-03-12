@@ -69,7 +69,7 @@ finetune-project/
 
 **Save evaluation results** after each run — store the full API response from `GET /finetune/evaluations/{id}` (includes per-record scores, reasons, and summary). This lets you compare across iterations and spot patterns.
 
-**Save training job responses** — store the job creation response and final status from `GET /finetune/reinforcement-jobs/{id}/status`. After training completes, also save the per-epoch scores from `GET /finetune/datasets/{id}/finetune-evaluations` to see how the model improved during training.
+**Save training job responses** — store the job creation response and final status from `GET /finetune/workflows/{id}/jobs/{job_id}/status`. After training completes, also save the per-epoch scores from `GET /finetune/datasets/{dataset_id}/finetune-evaluations` to see how the model improved during training.
 
 **Keep an iteration log** — a simple markdown file tracking what you changed and the results:
 
@@ -174,11 +174,11 @@ Poll `/v1/status/poll/$TASK_ID` until success, then fetch `/v1/result/$TASK_ID` 
 
 3. **Read the document before writing any code.** Read chunks 0-9 to understand the document — title, structure, content type, heading patterns. Then read a few chunks from the middle and end. This context is critical for writing a good extraction script — without it you'll produce noise (chess moves as headings, blank pages as parts, domain patterns lost).
 
-4. **Write a script** to create `knowledge/knowledge_parts.json` — this is the required deliverable, not optional. The script must produce typed parts (text, table, image) with headings, cross-references, and image data matching the schema in `extraction-guide.md` Section 3. Normalized chunks or cleaned chunk lists are NOT sufficient — the downstream pipeline (topics, training data, UI) requires the full `knowledge_parts.json` format.
+4. **Write a script** to create `knowledge/knowledge_parts.json` — this is the required deliverable, not optional. The script must produce typed parts (text, table, image) with headings, cross-references, and image data matching the schema in `reference/extraction-guide.md` Section 3. Normalized chunks or cleaned chunk lists are NOT sufficient — the downstream pipeline (topics, training data, UI) requires the full `knowledge_parts.json` format.
 
 The Docling response contains both `chunks[]` (text segments with headings, pages, doc_item pointers) and `documents[0].content.json_content` (the full DoclingDocument with texts, tables, pictures). Your script resolves the pointers, classifies each item by type (text/table/image), extracts structured data, discovers images via caption `parent.$ref` (pictures are NOT in chunk doc_items), falls back to page-level renders when `pictures[].image` is null, and builds bidirectional cross-references.
 
-See `knowledge/extraction-guide.md` for the full response structure, schema, and step-by-step guidance.
+See `reference/extraction-guide.md` for the full response structure, schema, and step-by-step guidance.
 
 **Fallback — pdftotext** (when Docker is not available):
 ```bash
@@ -284,7 +284,7 @@ This is where most of the work happens. Read `reference/iteration-strategy.md` f
 **3. Data variety** — Within each topic, check that prompts cover different question types (direct, vague, frustrated), complexity levels (simple, medium, complex), and scenarios (happy path, error, edge case). Repetitive prompts waste training capacity.
 
 **4. Diagnose and fix** — If scores are bad, determine whether it's a data problem (prompts too vague, missing topics) or a grader problem (criteria misaligned, too strict/lenient):
-- **Grader fix only**: `PATCH /finetune/datasets/{id}/evaluator` (no re-upload needed)
+- **Grader fix only**: `PATCH /finetune/workflows/{id}/evaluator` (no re-upload needed)
 - **Data fix**: Re-upload the entire dataset with a new `dataset_id`
 
 **5. If iterations stall** (3+ rounds with no improvement) — Don't keep making small tweaks. See `reference/iteration-strategy.md` for 10 specific stall patterns (Part 8) and a 6-level escalation ladder (Part 9) ranging from quick fixes to drastic measures.
@@ -294,7 +294,14 @@ This is where most of the work happens. Read `reference/iteration-strategy.md` f
 Once evaluation scores are good (avg > 0.6, pass rate > 70%), start training:
 
 ```bash
-uv run scripts/start_training.py --dataset-id BACKEND_DATASET_ID --output-model my-model-name --output training-jobs/job-001.json
+uv run scripts/start_training.py --workflow-id WORKFLOW_ID --dataset-id BACKEND_DATASET_ID --output-model my-model-name --output training-jobs/job-001.json
+```
+
+Training jobs are scoped under a workflow. If you don't have a workflow yet, create one first:
+```bash
+curl -s -X POST http://localhost:9090/finetune/workflows \
+  -H "Content-Type: application/json" \
+  -d '{"name": "My Project", "objective": "..."}'
 ```
 
 This creates the job, polls until complete (every 15s), and saves the response. Training takes 15-60 minutes.
@@ -315,6 +322,29 @@ curl -X POST http://localhost:9090/v1/chat/completions \
 
 Test each topic area with queries the model hasn't seen in training. Compare responses to the base model to verify improvement.
 
+## Two Operating Modes
+
+### Mode A: Data Prep + Handoff to Lucy (UI)
+
+Prepare all data, then create a workflow in the gateway so the vLLora UI can pick it up:
+
+1. Define objective, extract documents, build topics, generate JSONL, write grader (Steps 1-5 above)
+2. Create workflow: `POST /finetune/workflows`
+3. Upload records: `POST /finetune/workflows/{id}/records`
+4. Save topics: `POST /finetune/workflows/{id}/topics`
+5. Save evaluator: `PATCH /finetune/workflows/{id}/evaluator`
+6. Tell the user: "Open vLLora UI → select your workflow → Lucy will take over"
+
+**When to use**: User wants the visual UI experience for evaluation/training, or wants Lucy's guided iteration loop.
+
+### Mode B: Full CLI Pipeline
+
+Handle everything end-to-end via API calls (Steps 1-9 above). No UI dependency.
+
+**When to use**: User wants maximum autonomy and CLI-first workflow.
+
+See `reference/api-reference.md` for complete curl examples for both modes.
+
 ## Reference Files (Deep Dives)
 
 Read these when you need more detail on a specific step:
@@ -323,6 +353,7 @@ Read these when you need more detail on a specific step:
 |------|-------------|
 | `reference/api-reference.md` | When making API calls — full endpoint docs with curl examples |
 | `reference/data-format.md` | When generating JSONL — format rules, validation, quality tips |
+| `reference/extraction-guide.md` | When extracting documents — Docling API, response structure, knowledge_parts.json schema |
 | `reference/grader-writing.md` | When writing the grader — 3 patterns, design guidelines, common mistakes |
 | `reference/topic-hierarchy.md` | When designing topics — structure, coverage analysis, balance scoring |
 | `reference/iteration-strategy.md` | When analyzing results — diagnosis, stall patterns, escalation ladder |

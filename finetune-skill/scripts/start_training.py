@@ -4,9 +4,9 @@
 """Start a reinforcement fine-tuning job on the vLLora gateway.
 
 Usage:
-  uv run scripts/start_training.py --dataset-id ds_abc123 --output-model my-model [--base-model unsloth/Qwen3.5-4B]
+  uv run scripts/start_training.py --workflow-id WF_ID --dataset-id ds_abc123 --output-model my-model [--base-model unsloth/Qwen3.5-4B]
 
-Creates a training job and polls until complete.
+Creates a training job under a workflow and polls until complete.
 """
 
 import argparse
@@ -24,6 +24,7 @@ MAX_POLL_ATTEMPTS = 300  # ~75 minutes
 
 
 def start_training(
+    workflow_id: str,
     dataset_id: str,
     output_model: str,
     base_model: str,
@@ -39,20 +40,20 @@ def start_training(
         "training_config": {
             "learning_rate": 0.00001,
             "lora_rank": 8,
-            "gradient_accumulation_steps": 40,
+            "gradient_accumulation_steps": 5,
             "epochs": 2.0,
-            "batch_size": 100,
+            "batch_size": 5,
         },
         "inference_parameters": {
             "max_output_tokens": 1000,
-            "temperature": 0.7,
-            "top_p": 0.9,
+            "temperature": 1.0,
+            "top_p": 1.0,
             "response_candidates_count": 2,
         },
     }
 
     resp = requests.post(
-        f"{base_url}/finetune/reinforcement-jobs",
+        f"{base_url}/finetune/workflows/{workflow_id}/jobs",
         json=payload,
         headers={"Content-Type": "application/json"},
     )
@@ -60,6 +61,7 @@ def start_training(
     job_data = resp.json()
     job_id = job_data.get("id")
     print(f"Training job created: {job_id}")
+    print(f"  Workflow:     {workflow_id}")
     print(f"  Base model:   {base_model}")
     print(f"  Output model: {output_model}")
 
@@ -70,7 +72,7 @@ def start_training(
     # Poll until complete
     for attempt in range(MAX_POLL_ATTEMPTS):
         time.sleep(POLL_INTERVAL)
-        resp = requests.get(f"{base_url}/finetune/reinforcement-jobs/{job_id}/status")
+        resp = requests.get(f"{base_url}/finetune/workflows/{workflow_id}/jobs/{job_id}/status")
         resp.raise_for_status()
         result = resp.json()
 
@@ -99,6 +101,7 @@ def start_training(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Start training job on vLLora gateway")
+    parser.add_argument("--workflow-id", required=True, help="Workflow ID (UUID)")
     parser.add_argument("--dataset-id", required=True, help="Backend dataset ID")
     parser.add_argument("--output-model", required=True, help="Name for the fine-tuned model")
     parser.add_argument("--base-model", default=DEFAULT_BASE_MODEL, help="Base model to fine-tune")
@@ -111,7 +114,7 @@ def main() -> None:
 
     try:
         start_training(
-            args.dataset_id, args.output_model, args.base_model,
+            args.workflow_id, args.dataset_id, args.output_model, args.base_model,
             args.base_url, args.display_name, output_path,
         )
     except requests.HTTPError as e:

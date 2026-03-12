@@ -1,7 +1,7 @@
 /**
  * api-initialize-tab
  *
- * All components for the "Use existing API calls" tab in the New Experiment page.
+ * All components for the "Use existing API calls" tab in the New Workflow page.
  */
 
 export { ApiInitializeTab } from "./ApiInitializeTab";

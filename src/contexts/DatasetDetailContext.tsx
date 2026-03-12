@@ -233,7 +233,7 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
       }
     } catch (err) {
       console.error("Failed to load dataset:", err);
-      toast.error("Failed to load experiment");
+      toast.error("Failed to load workflow");
     } finally {
       setIsLoading(false);
     }
@@ -431,9 +431,9 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
       try {
         await renameDataset(dataset.id, newName);
         setDataset({ ...dataset, name: newName });
-        toast.success("Experiment renamed");
+        toast.success("Workflow renamed");
       } catch {
-        toast.error("Failed to rename experiment");
+        toast.error("Failed to rename workflow");
       }
     },
     [dataset, renameDataset]
@@ -458,10 +458,10 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
     if (!dataset) return;
     try {
       await deleteDataset(dataset.id);
-      toast.success("Experiment deleted");
+      toast.success("Workflow deleted");
       onBack();
     } catch {
-      toast.error("Failed to delete experiment");
+      toast.error("Failed to delete workflow");
     }
   }, [dataset, deleteDataset, onBack]);
 
@@ -797,10 +797,10 @@ function useDatasetDetail({ datasetId, onBack, onSelectDataset }: DatasetDetailH
       const newDs = await createDataset(newDatasetName.trim());
       setCreateDatasetDialog(false);
       setNewDatasetName("");
-      toast.success("Experiment created");
+      toast.success("Workflow created");
       onSelectDataset?.(newDs.id);
     } catch {
-      toast.error("Failed to create experiment");
+      toast.error("Failed to create workflow");
     }
   }, [newDatasetName, createDataset, onSelectDataset]);
 
