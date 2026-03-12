@@ -2,9 +2,8 @@
  * EvalJobsContext
  *
  * Provides reactive state for evaluation jobs to UI components.
- * Subscribes to SSE eval_job_update events from the BE state tracker.
- * When an SSE event arrives for a running job, fetches fresh metrics
- * from the cloud-proxy endpoint via evalPollingManager.
+ * FE polls gateway every 10s for progress (reads BE's polling_snapshot).
+ * SSE removed — polling handles all status detection.
  */
 
 import {
@@ -22,7 +21,6 @@ import type { Dataset } from '@/types/dataset-types';
 import { evalJobService } from '@/services/service-registry';
 import { evalPollingManager } from '@/services/eval-polling-manager';
 import { ProjectEventsConsumer } from '@/contexts/project-events';
-import type { CustomEvent, CustomEvalJobUpdateEventType } from '@/contexts/project-events/dto';
 import { emitter } from '@/utils/eventEmitter';
 
 // =============================================================================
@@ -46,9 +44,8 @@ function useEvalJobs(props: {
   const [isLoading, setIsLoading] = useState(true);
   const workflowId = dataset.id;
 
-  // SSE subscription
-  const { subscribe, isConnected } = ProjectEventsConsumer();
-  const subscriptionIdRef = useRef<string>(`eval-jobs-${workflowId}-${Date.now()}`);
+  // SSE reconnect detection (re-fetch jobs after gateway restart)
+  const { isConnected } = ProjectEventsConsumer();
   const wasConnectedRef = useRef(false);
 
   // Load jobs from gateway SQLite
@@ -128,30 +125,6 @@ function useEvalJobs(props: {
     emitter.on('vllora_eval_job_update', handleJobUpdate);
     return () => { emitter.off('vllora_eval_job_update', handleJobUpdate); };
   }, [workflowId]);
-
-  // Subscribe to SSE eval_job_update events from BE state tracker
-  useEffect(() => {
-    const unsubscribe = subscribe(
-      subscriptionIdRef.current,
-      (event) => {
-        if (event.type !== 'Custom') return;
-        const customEvent = event as CustomEvent;
-        if (customEvent.event.type !== 'eval_job_update') return;
-
-        const sseEvent = customEvent.event as CustomEvalJobUpdateEventType;
-        // Only handle events for this workflow
-        if (sseEvent.workflow_id !== workflowId) return;
-
-        // Trigger cloud-proxy fetch via the manager
-        // (manager will emit 'vllora_eval_job_update' after fetching,
-        //  which the local emitter listener above picks up)
-        evalPollingManager.handleSseStatusChange(sseEvent.job_id, sseEvent.status);
-      },
-      (event) => event.type === 'Custom',
-    );
-
-    return () => { unsubscribe(); };
-  }, [subscribe, workflowId]);
 
   // Re-fetch jobs on SSE reconnect (covers BE restart gap)
   useEffect(() => {

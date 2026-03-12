@@ -188,26 +188,6 @@ export interface CustomBreakpointResumeEventType {
   updated_request?: any; // Optional ChatCompletionRequest
 }
 
-export interface CustomEvalJobUpdateEventType {
-  type: 'eval_job_update';
-  job_id: string;
-  workflow_id: string;
-  status: string;
-}
-
-export interface CustomFinetuneJobUpdateEventType {
-  type: 'finetune_job_update';
-  job_id: string;
-  status: string;
-}
-
-export interface CustomRecordScoresUpdatedEventType {
-  type: 'record_scores_updated';
-  workflow_id: string;
-  score_type: string;
-  updated_count: number;
-}
-
 // Discriminated union of all custom event types
 export type CustomEventType =
   | CustomSpanStartEventType
@@ -220,10 +200,7 @@ export type CustomEventType =
   | CustomCustomEventType
   | CustomBreakpointEventType
   | CustomBreakpointResumeEventType
-  | CustomGlobalBreakpointEventType
-  | CustomEvalJobUpdateEventType
-  | CustomFinetuneJobUpdateEventType
-  | CustomRecordScoresUpdatedEventType;
+  | CustomGlobalBreakpointEventType;
 
 export interface CustomEvent extends BaseEvent {
   type: 'Custom';

@@ -59,9 +59,13 @@ export interface FinetuneInferenceParameters {
   response_candidates_count?: number;
 }
 
+/** Unified job type for the POST /jobs endpoint */
+export type JobType = "provider_finetune" | "evaluation_run";
+
 export interface CreateFinetuneJobRequest {
-  dataset: string;
-  base_model: string;
+  job_type: JobType;
+  dataset?: string;
+  base_model?: string;
   output_model?: string;
   evaluation_dataset?: string;
   display_name?: string;
@@ -71,6 +75,15 @@ export interface CreateFinetuneJobRequest {
   node_count?: number;
   /** Evaluator version to use during training. If omitted, uses the latest version. */
   evaluator_version?: number;
+  /** Rollout model params for evaluation_run jobs */
+  rollout_model_params?: {
+    model: string;
+    temperature?: number;
+    top_p?: number;
+    max_tokens?: number;
+  };
+  offset?: number;
+  limit?: number;
 }
 
 // ============================================================================
@@ -554,6 +567,7 @@ export async function createFinetuneJobFromUpload(
 
   // Create finetune job request
   const request: CreateFinetuneJobRequest = {
+    job_type: "provider_finetune",
     dataset: workflowId,
     base_model: options?.baseModel || "unsloth/Qwen3.5-4B",
     output_model: options?.outputModel || defaultOutputModel,

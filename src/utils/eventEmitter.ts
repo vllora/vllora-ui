@@ -86,6 +86,8 @@ type VlloraEvents = {
   vllora_eval_job_completed: { jobId: string; workflowId: string; verdict: string };
   // Finetune job completed/failed (triggers Lucy auto-analysis)
   vllora_finetune_job_completed: { jobId: string; workflowId: string };
+  // Record scores updated (from BE state tracker via FE polling)
+  vllora_record_scores_updated: { workflowId: string; scoreType: string };
   // Lucy assistant prompt trigger (from UI actions like "Generate for topic")
   vllora_lucy_prompt: { prompt: string };
   // Knowledge source events

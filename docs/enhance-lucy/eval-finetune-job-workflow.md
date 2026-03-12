@@ -10,7 +10,7 @@ End-to-end flow diagrams for evaluation jobs and finetune (training) jobs — fr
 2. [Eval Job Flow](#2-eval-job-flow)
 3. [Finetune Job Flow](#3-finetune-job-flow)
 4. [Score Writeback Flow](#4-score-writeback-flow)
-5. [Real-Time UI Updates (SSE)](#5-real-time-ui-updates-sse)
+5. [UI Updates (Polling + Internal Events)](#5-ui-updates-polling--internal-events)
 6. [Data Model Reference](#6-data-model-reference)
 
 ---
@@ -127,56 +127,50 @@ User clicks "Run Evaluation" (or Lucy calls run_evaluation tool)
 ┌─────────────────────────────────────────────────────────┐
 │  Gateway: EvalJobStateTracker (eval_state_tracker.rs)    │
 │  Background task, polls cloud every 30s                 │
-│  Purpose: status tracking + score writeback             │
+│  Purpose: status tracking + score writeback ONLY        │
 │                                                         │
 │  Loop (every 30s):                                      │
 │    1. SELECT * FROM eval_jobs WHERE status IN            │
 │       ('pending', 'running')                            │
 │    2. For each job:                                     │
 │       GET cloud /evaluations/{cloud_run_id}             │
-│    3. On EVERY poll cycle (not just status change):     │
-│       a. Serialize full cloud API response as           │
-│          polling_snapshot in eval_jobs table             │
-│          (completed_rows, results, summary —            │
-│          always fresh, FE never needs its own           │
-│          cloud API polling for progress data)           │
-│       b. Write per-row scores → workflow_record_scores  │
-│          (see Score Writeback §4)                       │
-│       c. Broadcast SSE: RecordScoresUpdated             │
-│          → enables incremental score updates while      │
-│          running                                        │
-│    4. If status changed:                                │
-│       UPDATE eval_jobs SET status                       │
-│       Broadcast SSE: EvalJobUpdate                      │
-│       { job_id, workflow_id, status }                   │
+│    3. If status changed:                                │
+│       UPDATE eval_jobs SET status, error, completed_at  │
+│    4. On every poll (if results exist):                 │
+│       Write per-row scores → workflow_record_scores     │
+│       (see Score Writeback §4)                          │
+│       Scores extracted from same cloud response used    │
+│       for status — no extra API call needed             │
+│                                                         │
+│  No polling_snapshot stored. No SSE broadcast.          │
+│  Cloud is the source of truth for progress data.        │
 └─────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────┐
 │  FE: evalPollingManager (eval-polling-manager.ts)        │
-│  Polls BE every 10s for PROGRESS (reads polling_snapshot)│
+│  Polls cloud-proxy every 10s for PROGRESS               │
 │  VIEW-SCOPED: only polls when EvalJobsProvider mounted  │
 │                                                         │
-│  1. Fetches job from gateway SQLite (which now has       │
-│     fresh polling_snapshot from BE state tracker)       │
+│  1. GET /finetune/evaluations/{run_id} (cloud-proxy)    │
+│     → cloud is source of truth for progress data        │
 │  2. Emits vllora_eval_job_update for UI re-render       │
-│  3. If terminal status → process results                │
-│  4. Race condition guard (catch-up fetch):              │
-│     If pollJob() detects terminal status AND the        │
-│     pollingSnapshot has no results, the BE tracker      │
-│     may have updated status before writing results.     │
-│     In this case, pollJob() does one final fetch from   │
-│     the cloud API (GET /finetune/evaluations/{run_id})  │
-│     before stopping, ensuring results are never lost.   │
-│  5. Stop conditions:                                    │
+│  3. Emits vllora_record_scores_updated when             │
+│     completed_rows > 0 → triggers records table         │
+│     refresh in DatasetDetailContext                     │
+│  4. If terminal status → process results                │
+│  5. BE race condition guard:                            │
+│     If pollJob() sees job.status !== 'running'          │
+│     (BE tracker set terminal before FE polled),         │
+│     does one final cloud fetch for results before       │
+│     stopping, ensuring results are never lost.          │
+│  6. Stop conditions:                                    │
 │     a. pollJob() checks job.status !== 'running'        │
-│        (with catch-up fetch if results missing)         │
-│     b. handleJobComplete() / handleSseStatusChange()    │
-│        call stopPolling()                               │
+│     b. handleJobComplete() calls stopPolling()          │
 │     c. EvalJobsContext cleanup stops all on unmount     │
 └─────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────┐
-│  FE: EvalJobsContext (view lifecycle + SSE)               │
+│  FE: EvalJobsContext (view lifecycle)                     │
 │  Mounted in DatasetDetailContentV2 — scoped to page     │
 │                                                         │
 │  On mount:                                              │
@@ -187,23 +181,19 @@ User clicks "Run Evaluation" (or Lucy calls run_evaluation tool)
 │  On unmount (user navigates away):                      │
 │  4. Stops all active polling intervals                  │
 │                                                         │
-│  SSE subscription:                                      │
-│  5. On eval_job_update (completed/failed) → stops       │
-│     polling + processes final results immediately       │
-│  6. On SSE reconnect → re-fetches job list              │
-│  7. On-demand: evalPollingManager.refreshJob(jobId)     │
+│  On reconnect → re-fetches job list (covers             │
+│  gateway restart gap)                                   │
+│  On-demand: evalPollingManager.refreshJob(jobId)        │
 └─────────────────────────────────────────────────────────┘
 
-Why both polling + SSE?
-- BE polls cloud: WRITEBACK scores to records table + saves full
-  polling_snapshot to eval_jobs (progress data for FE) + status tracking.
-  Single source of truth — FE reads from BE, not cloud directly.
-- FE polls BE: reads polling_snapshot for PROGRESS (completed_rows,
-  scores). No direct cloud calls — BE snapshot is always fresh (30s).
-- SSE from BE: instant STATUS TRANSITIONS (running→completed)
-  Avoids waiting up to 10s for the next FE poll to detect completion.
-- Catch-up fetch: if FE sees terminal status but no results in
-  snapshot (race condition), it does one direct cloud fetch to recover.
+Architecture rationale (no SSE, no polling_snapshot):
+- Cloud is source of truth: FE polls cloud-proxy directly for
+  progress. No snapshot stored in SQLite — avoids storing huge
+  JSON blobs and keeps data always fresh.
+- BE only writes status + scores: extracts scores from the same
+  cloud response used for status tracking. No extra API calls.
+- SSE removed: polling already detects all status changes. The
+  10s worst-case delay is acceptable vs. added SSE complexity.
 ```
 
 ### 2.3 Eval Completion
@@ -233,7 +223,7 @@ FE: evalPollingManager.handleJobComplete()
 ┌─────────────────────────────────────────────────────────┐
 │  EvalJobDetail component                                │
 │                                                         │
-│  Data source: polling_snapshot from eval_jobs table      │
+│  Data source: cloud-proxy (polled every 10s by FE)       │
 │                                                         │
 │  Displays:                                              │
 │  ┌───────────────────────────────────────────────┐      │
@@ -290,34 +280,39 @@ User clicks "Start Training" (or Lucy calls start_training tool)
 │  1. Reads workflow state (base model, training config)  │
 │  2. Calls POST /finetune/workflows/{wf_id}/jobs         │
 │     Body: {                                             │
+│       job_type: "provider_finetune",                    │
 │       base_model, training_config,                      │
 │       evaluator_version, evaluation_dataset             │
 │     }                                                   │
 │  3. FE does NOT send records — gateway reads them       │
 │  4. Updates workflow step to "training: started"        │
-│  5. No FE polling — SSE events drive UI updates         │
+│  5. FE polls BE for status + cloud-proxy for evals      │
 └─────────────────────┬───────────────────────────────────┘
                       │
                       ▼
 ┌─────────────────────────────────────────────────────────┐
 │  Gateway: POST /finetune/workflows/{wf_id}/jobs         │
-│  (handlers/finetune.rs → create_finetune_job)           │
+│  (handlers/finetune.rs → create_job, UNIFIED endpoint)  │
+│  Accepts both provider_finetune and evaluation_run      │
+│  via job_type discriminator                             │
 │                                                         │
 │  1. ensure_dataset_uploaded(workflow_id):                │
 │     a. Reads records from LOCAL SQLite                  │
 │     b. Reads topics + eval_script from SQLite           │
 │     c. Builds JSONL from records                        │
 │     d. Uploads to cloud: POST /datasets (upsert)       │
-│  2. POST cloud /fine-tuning/jobs                        │
+│  2. POST cloud /jobs (unified)                          │
 │     Body: {                                             │
+│       job_type: "provider_finetune",                    │
 │       training_file: dataset_id (=workflow_id),         │
 │       model: base_model,                                │
 │       training_config, evaluator_version                │
 │     }                                                   │
 │  3. Receives { id: provider_job_id, status, ... }       │
-│  4. INSERT into finetune_jobs table (SQLite):           │
+│  4. If job_type == provider_finetune:                   │
+│     INSERT into finetune_jobs table (SQLite):           │
 │     { id (uuid), workflow_id, provider_job_id,          │
-│       base_model, status: "pending", ... }              │
+│       base_model, state: "pending", ... }               │
 │  5. Returns cloud response to FE                        │
 └─────────────────────┬───────────────────────────────────┘
                       │
@@ -339,34 +334,40 @@ User clicks "Start Training" (or Lucy calls start_training tool)
 │  Gateway: FinetuneJobStateTracker                       │
 │  (finetune_state_tracker.rs)                            │
 │  Background task, polls cloud every 30s                 │
-│  Purpose: status tracking + score writeback             │
+│  Purpose: status tracking + score writeback ONLY        │
 │                                                         │
 │  Loop (every 30s):                                      │
-│    1. SELECT * FROM finetune_jobs WHERE status IN        │
-│       ('pending', 'running', 'validating_model')        │
+│    1. SELECT * FROM finetune_jobs WHERE state IN        │
+│       ('pending', 'running')                            │
 │    2. For each job:                                     │
 │       GET cloud /fine-tuning/jobs/{provider_job_id}     │
 │    3. If status changed:                                │
-│       UPDATE finetune_jobs SET status, model_id, etc.   │
-│       Broadcast SSE: FinetuneJobUpdate                  │
-│       { job_id, status }                                │
+│       UPDATE finetune_jobs SET state, fine_tuned_model  │
 │    4. Every 3rd poll cycle (~90s), rate-limited:        │
 │       Fetch finetune scores from cloud                  │
 │       GET cloud /evaluations?job_id={provider_job_id}   │
 │       → Write per-row scores → workflow_record_scores   │
-│       → Broadcast SSE: RecordScoresUpdated              │
 │       (rate-limited because finetune evals update less  │
 │        frequently than eval jobs)                       │
+│                                                         │
+│  No SSE broadcast. BE only writes to SQLite.            │
 └─────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────┐
 │  FE: FinetuneJobsContext                                 │
+│  Polls BE every 15s for STATUS (listFinetuneJobs)       │
 │  Polls cloud-proxy every 20s for PROGRESS (evaluations) │
-│  SSE for STATUS TRANSITIONS                             │
 │  VIEW-SCOPED: only polls when FinetuneJobsProvider      │
 │  is mounted (DatasetDetailView)                         │
 │                                                         │
-│  Polling (active jobs only):                            │
+│  Status polling (15s, active jobs only):                │
+│  1. listFinetuneJobs(currentDatasetId) from BE SQLite   │
+│  2. Detects status transitions (pending/running →       │
+│     succeeded/failed/cancelled)                         │
+│  3. On terminal → emits vllora_finetune_job_completed   │
+│  4. Uses hasActiveJobsRef to skip when no active jobs   │
+│                                                         │
+│  Eval progress polling (20s, active jobs only):         │
 │  1. GET /finetune/workflows/{wf_id}/                    │
 │     finetune-evaluations?finetune_job_id=...            │
 │     (cloud-proxy — per-row scores across epochs)        │
@@ -377,12 +378,7 @@ User clicks "Start Training" (or Lucy calls start_training tool)
 │     b. useEffect stops polling when job status changes  │
 │     c. Cleanup effect stops all on unmount              │
 │                                                         │
-│  SSE subscription:                                      │
-│  1. On "finetune_job_update" → updates job status       │
-│  2. On terminal (succeeded/failed) → emits completion   │
-│     event, useEffect stops eval polling                 │
-│  3. On SSE reconnect → re-fetches job list              │
-│                                                         │
+│  On reconnect → re-fetches job list                     │
 │  On-demand: refreshJobEvaluations(jobId)                │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -459,9 +455,6 @@ EvalJobStateTracker polls cloud → gets results
 │  4. For each (record_id, score):                        │
 │     - Try UPDATE WHERE record_id + job_id + score_type  │
 │     - If 0 rows affected → INSERT new row               │
-│  5. Broadcast SSE: RecordScoresUpdated {                │
-│       workflow_id, score_type: "eval", updated_count    │
-│     }                                                   │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -487,10 +480,6 @@ FinetuneJobStateTracker (every 3rd poll cycle, ~90s)
 │       score_type: "finetune",                           │
 │       scores: [(record_id, score), ...]                 │
 │     )                                                   │
-│  4. Broadcast SSE: RecordScoresUpdated {                │
-│       workflow_id, score_type: "finetune",              │
-│       updated_count                                     │
-│     }                                                   │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -514,55 +503,48 @@ UNIQUE(record_id, job_id, score_type)
 
 ---
 
-## 5. Real-Time UI Updates (SSE)
+## 5. UI Updates (Polling + Internal Events)
 
-### 5.1 SSE Event Flow
+No SSE events are used for either eval or finetune jobs. All UI updates
+are driven by FE polling + internal emitter events (mitt).
+
+### 5.1 Event Flow
 
 ```
-Gateway broadcasts SSE event
-        │
-        ▼
 ┌─────────────────────────────────────────────────────────┐
-│  FE: ProjectEventsConsumer (project-events/)             │
+│  Eval jobs: FE polls cloud-proxy (10s)                   │
 │                                                         │
-│  Listens on EventSource connection to gateway            │
-│  Dispatches to subscribers by event type                │
-└────────┬───────────────────────┬────────────────────────┘
-         │                       │
-         ▼                       ▼
-┌──────────────────────┐ ┌─────────────────────────────┐
-│ EvalJobUpdate        │ │ RecordScoresUpdated          │
-│ {job_id, wf_id,      │ │ {workflow_id, score_type,    │
-│  status}             │ │  updated_count}              │
-│                      │ │                             │
-│ → EvalJobsContext    │ │ → DatasetDetailContext      │
-│   On terminal status:│ │   refreshes records table   │
-│   stops FE polling + │ │   (scores column updates)   │
-│   processes results  │ │                             │
-└──────────────────────┘ └─────────────────────────────┘
+│  evalPollingManager.pollJob() (every 10s)               │
+│    → GET /finetune/evaluations/{run_id} (cloud-proxy)   │
+│    → emits vllora_eval_job_update (progress UI)          │
+│    → emits vllora_record_scores_updated (records table)  │
+│    → handles terminal status (completion processing)     │
+└─────────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────┐
-│ FinetuneJobUpdate               │
-│ {job_id, status}                │
-│                                 │
-│ → FinetuneJobsContext           │
-│   updates job status in state   │
-│   if terminal → emits completion│
-│   event, useEffect stops polling│
-└─────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│  Finetune jobs: FE polls BE (15s)                        │
+│                                                         │
+│  FinetuneJobsContext status polling (every 15s)          │
+│    → listFinetuneJobs(workflowId) from BE SQLite        │
+│    → detects status transitions via prevStatusesRef      │
+│    → if terminal → emits vllora_finetune_job_completed   │
+│    → useEffect stops eval polling                        │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ### 5.2 Records Table View (Live Score Updates)
 
 ```
-SSE: RecordScoresUpdated { workflow_id, score_type, updated_count }
+evalPollingManager detects completed_rows > 0 in cloud response
+  → emits vllora_record_scores_updated { workflowId, scoreType }
         │
         ▼
 ┌─────────────────────────────────────────────────────────┐
 │  DatasetDetailContext                                    │
 │                                                         │
-│  useEffect subscribes to "record_scores_updated":       │
-│    if (event.workflow_id === currentWorkflowId)          │
+│  useEffect subscribes to emitter event                   │
+│  "vllora_record_scores_updated":                        │
+│    if (event.workflowId === currentWorkflowId)           │
 │      → refreshDataset() (re-fetches records + scores)   │
 │                                                         │
 │  Records table re-renders with updated scores:          │
@@ -592,10 +574,10 @@ SSE: RecordScoresUpdated { workflow_id, score_type, updated_count }
 | Table | Key Fields | Purpose |
 |-------|-----------|---------|
 | `workflows` | id, name, objective, eval_script, state | Dataset/workflow metadata |
-| `workflow_records` | id, workflow_id, data, topic, is_generated | Dataset rows |
+| `workflow_records` | id, workflow_id, data, topic_id, is_generated | Dataset rows |
 | `workflow_record_scores` | id, record_id, workflow_id, job_id, score_type, score | Per-row scores from eval/finetune |
-| `eval_jobs` | id, workflow_id, cloud_run_id, status, polling_snapshot, result | Tracks eval job lifecycle |
-| `finetune_jobs` | id, workflow_id, provider_job_id, base_model, status, metrics, model_id | Tracks training job lifecycle |
+| `eval_jobs` | id, workflow_id, cloud_run_id, status, result | Tracks eval job lifecycle |
+| `finetune_jobs` | id, project_id, workflow_id, provider_job_id, base_model, state, fine_tuned_model, training_config | Tracks training job lifecycle |
 
 ### 6.2 Key API Endpoints
 
@@ -607,8 +589,8 @@ SSE: RecordScoresUpdated { workflow_id, score_type, updated_count }
 | `/finetune/workflows/{id}/records/scores` | GET | List all scores for a workflow |
 | `/finetune/evaluations` | POST | Create eval job (triggers ensure_dataset_uploaded) |
 | `/finetune/evaluations/{id}` | GET | Poll eval results from cloud |
-| `/finetune/workflows/{id}/jobs` | POST | Create finetune job (triggers ensure_dataset_uploaded) |
-| `/finetune/workflows/{id}/jobs/{job_id}` | GET | Get finetune job status |
+| `/finetune/workflows/{id}/jobs` | POST | Unified job creation: `job_type: "provider_finetune"` or `"evaluation_run"` (triggers ensure_dataset_uploaded) |
+| `/finetune/workflows/{id}/jobs/{job_id}/status` | GET | Get finetune job status |
 | `/finetune/workflows/{id}/jobs/{job_id}/metrics` | GET | Get training metrics |
 
 ### 6.3 Key FE State
@@ -617,8 +599,8 @@ SSE: RecordScoresUpdated { workflow_id, score_type, updated_count }
 |---------|---------|-------------|
 | `DatasetsContext` | Dataset list + CRUD | GET /finetune/workflows |
 | `DatasetDetailContext` | Current dataset records + scores | GET /finetune/workflows/{id}/records + /scores |
-| `EvalJobsContext` | Eval jobs + progress polling | Reads BE `polling_snapshot` (10s) + SSE for status transitions. Catch-up cloud fetch on race condition. |
-| `FinetuneJobsContext` | Finetune jobs + eval polling | Polls cloud-proxy `GET /finetune-evaluations` (20s) + SSE for status transitions |
+| `EvalJobsContext` | Eval jobs + progress polling | FE polls cloud-proxy (10s) for progress. No SSE. Catch-up cloud fetch on race condition. |
+| `FinetuneJobsContext` | Finetune jobs + eval polling | Polls BE (15s) for status + cloud-proxy (20s) for eval progress. No SSE. |
 
 ### 6.4 FE Dataset Type (enriched fields)
 
@@ -633,35 +615,43 @@ interface Dataset {
 }
 ```
 
-### 6.5 SSE Event Types (CustomEventType variants)
+### 6.5 Event Types
 
-| SSE Event | Payload | FE Consumer | FE Reaction |
-|-----------|---------|-------------|-------------|
-| `eval_job_update` | `{ job_id, workflow_id, status }` | `EvalJobsContext` | If terminal (completed/failed) → stop polling + process final results |
-| `finetune_job_update` | `{ job_id, status }` | `FinetuneJobsContext` | Update status in local state; if terminal → emit completion event |
-| `record_scores_updated` | `{ workflow_id, score_type, updated_count }` | `DatasetDetailContext` | Refresh records table (scores column updates) |
+**No SSE events are consumed by the FE.** All UI updates use internal emitter events (mitt).
+
+**Internal Emitter Events (FE only, via mitt):**
+
+| Event | Payload | Producer | Consumer | Reaction |
+|-------|---------|----------|----------|----------|
+| `vllora_eval_job_update` | `{ jobId, job }` | `evalPollingManager` | `EvalJobsContext`, `LucyEvalProgressCard`, `DatasetsGrid` | Re-render progress UI |
+| `vllora_record_scores_updated` | `{ workflowId, scoreType }` | `evalPollingManager` | `DatasetDetailContext` | Refresh records table (scores column) |
+| `vllora_eval_job_completed` | `{ jobId, workflowId, verdict }` | `evalPollingManager` | Lucy auto-analysis | Trigger Lucy result review |
+| `vllora_finetune_job_completed` | `{ jobId, workflowId }` | `FinetuneJobsContext` | Lucy auto-analysis | Trigger Lucy result review |
+
 
 ### 6.6 Polling Architecture
 
-**FE polls cloud-proxy for progress + SSE for status transitions:**
+**No SSE. BE polls cloud for status + scores. FE polls cloud-proxy for progress, BE for status.**
 
 | Component | Location | Interval | Purpose |
 |-----------|----------|----------|---------|
-| `EvalJobStateTracker` | Gateway (background) | 30s | Status tracking + score writeback + polling_snapshot persistence. Saves full cloud response as `polling_snapshot` on every poll cycle (FE reads this for progress). Writes scores on every poll cycle. Broadcasts `EvalJobUpdate` SSE on status change + `RecordScoresUpdated` SSE on every score write. |
-| `FinetuneJobStateTracker` | Gateway (background) | 30s (scores every 3rd cycle, ~90s) | Status tracking + score writeback. Writes scores every 3rd poll (rate-limited). Broadcasts `FinetuneJobUpdate` SSE on status change + `RecordScoresUpdated` SSE on score write. |
-| `evalPollingManager` | FE (foreground, view-scoped) | 10s | Reads polling_snapshot from BE (no direct cloud calls). Performs catch-up fetch from cloud API if terminal status detected with no results (race condition guard). Started/stopped by EvalJobsContext lifecycle. Stops on terminal status or unmount. |
-| `FinetuneJobsContext` | FE (foreground, view-scoped) | 20s | Polls cloud-proxy `GET /finetune-evaluations` for training eval progress. Stops when job status is no longer active or on unmount. |
+| `EvalJobStateTracker` | Gateway (background) | 30s | Status tracking + score writeback. Writes scores from same cloud response used for status. No snapshot stored. |
+| `FinetuneJobStateTracker` | Gateway (background) | 30s (scores every 3rd cycle, ~90s) | Status tracking + score writeback. Writes scores every 3rd poll (rate-limited). |
+| `evalPollingManager` | FE (foreground, view-scoped) | 10s | Polls cloud-proxy for progress. Emits internal events for UI updates + records table refresh. Catch-up cloud fetch on race condition (BE set terminal before FE polled). |
+| `FinetuneJobsContext` | FE (foreground, view-scoped) | 15s (status) + 20s (evals) | Polls BE for status transitions (15s). Polls cloud-proxy for eval progress (20s). Stops when no active jobs or on unmount. |
 
 **Why each exists:**
-- **BE polls cloud** → writes per-row scores to `workflow_record_scores` on every poll cycle (incremental updates while running), saves full cloud response as `polling_snapshot` in eval_jobs (FE progress source), tracks status in SQLite, broadcasts SSE on transitions + score updates
-- **FE polls BE** → reads `polling_snapshot` from gateway SQLite for progress data (completed_rows, per-row scores). No direct cloud calls unless catch-up fetch needed (terminal status with missing results — race condition guard).
-- **SSE** → instant notification of status transitions (completed/failed) so FE doesn't wait for next poll cycle; `RecordScoresUpdated` triggers FE to re-fetch scores
+- **BE polls cloud** → writes per-row scores to `workflow_record_scores` (incremental updates while running), tracks status in SQLite. Scores piggyback on status poll response (no extra API calls).
+- **FE polls cloud-proxy (eval)** → cloud is source of truth for progress data. No snapshot stored. 10s polling is fast enough for UI updates.
+- **FE polls BE (finetune status)** → reads status from gateway SQLite (written by BE state tracker). 15s polling detects terminal transitions.
+- **FE polls cloud-proxy (finetune evals)** → reads training eval progress directly from cloud.
 
 **Data flow:**
 ```
-Cloud ← BE polls (30s) → SQLite (scores, status, polling_snapshot) → SSE (status transitions + score updates)
-SQLite (polling_snapshot) ← FE polls (10s) → UI state (progress, per-row data)
-Cloud ← FE catch-up fetch (only on race condition: terminal + no results)
+Cloud ← BE polls (30s) → SQLite (scores + status only, no snapshots)
+Cloud ← FE polls (10s eval, 20s finetune evals) → UI state (progress)
+                                                  → emitter events → records table
+SQLite (status) ← FE polls (15s finetune) → detects terminal transitions
 ```
 
 ### 6.7 Cascade Delete

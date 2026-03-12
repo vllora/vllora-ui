@@ -4,10 +4,9 @@
  * Singleton service that manages evaluation job lifecycle.
  *
  * Architecture:
- * - FE polls cloud-proxy for PROGRESS while job is active
- *   (GET /finetune/evaluations/{run_id} → gateway proxies to cloud)
- * - SSE from BE only for STATUS TRANSITIONS (running→completed/failed)
- *   and score writeback notifications
+ * - FE polls cloud-proxy for PROGRESS (cloud is source of truth)
+ * - BE state tracker handles STATUS tracking + SCORE WRITEBACK only
+ * - Internal emitter events for UI updates (no SSE)
  * - On-demand refresh when user clicks into job detail
  */
 
@@ -60,7 +59,7 @@ function friendlyEvalError(error: unknown): string {
 // Constants
 // =============================================================================
 
-/** Interval for polling cloud-proxy for progress (seconds) */
+/** Interval for polling cloud-proxy for progress (ms) */
 const POLL_INTERVAL_MS = 10_000;
 /** Max consecutive cloud-proxy errors before marking job failed */
 const MAX_CONSECUTIVE_ERRORS = 30;
@@ -131,7 +130,7 @@ class EvalJobManager {
   }
 
   /**
-   * Create a new eval job and start polling cloud-proxy for progress.
+   * Create a new eval job. Polling is started by EvalJobsContext.
    */
   async createEvalJob(params: StartEvalParams): Promise<string> {
     const { workflowId, sampleSize, rolloutModel = 'gpt-4o-mini' } = params;
@@ -175,26 +174,6 @@ class EvalJobManager {
       });
       toast.error('Failed to start evaluation', { description: friendly });
       throw error;
-    }
-  }
-
-  /**
-   * Handle SSE eval_job_update for status transitions only.
-   * When BE says completed/failed, stop polling and process final results.
-   */
-  async handleSseStatusChange(jobId: string, status: string): Promise<void> {
-    if (status !== 'completed' && status !== 'failed') return;
-
-    this.stopPolling(jobId);
-
-    const job = await evalJobService.get(jobId);
-    if (!job || !job.evaluationRunId) return;
-
-    try {
-      const result = await getEvaluationResult(job.evaluationRunId);
-      await this.handleJobComplete(jobId, result);
-    } catch (error) {
-      console.error(`[EvalJobManager] Failed to handle SSE completion for ${jobId}:`, error);
     }
   }
 
@@ -263,14 +242,12 @@ class EvalJobManager {
       return;
     }
 
-    // BE state tracker may have already set a terminal status before FE polled results.
-    // If so, do one final fetch to get the actual results before stopping.
+    // BE state tracker may have already set a terminal status before FE polled.
+    // If so, do one final cloud fetch to get results before stopping.
     if (job.status !== 'running') {
-      const hasResults = (job.pollingSnapshot?.completed_rows ?? 0) > 0;
-      if (!hasResults && job.evaluationRunId) {
+      if (job.evaluationRunId) {
         try {
           const result = await getEvaluationResult(job.evaluationRunId);
-          await evalJobService.update(jobId, { pollingSnapshot: result });
           if (result.status === 'completed' || result.status === 'failed') {
             await this.handleJobComplete(jobId, result);
           }
@@ -288,7 +265,7 @@ class EvalJobManager {
 
       this.consecutiveErrors.set(jobId, 0);
 
-      // Update snapshot for progress UI
+      // Update job snapshot for progress UI
       const updatedJob = await evalJobService.update(jobId, {
         pollingSnapshot: result,
       });
@@ -296,7 +273,15 @@ class EvalJobManager {
         emitter.emit('vllora_eval_job_update', { jobId, job: updatedJob });
       }
 
-      // If cloud says done, process results (don't wait for SSE)
+      // Notify records table if scores are available
+      if ((result.completed_rows ?? 0) > 0) {
+        emitter.emit('vllora_record_scores_updated', {
+          workflowId: job.workflowId,
+          scoreType: 'eval',
+        });
+      }
+
+      // If cloud says done, process results
       if (result.status === 'completed' || result.status === 'failed') {
         await this.handleJobComplete(jobId, result);
       }

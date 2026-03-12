@@ -1,8 +1,10 @@
 /**
  * FinetuneJobsContext
  *
- * Manages state for finetune jobs with real-time SSE updates.
- * Provides job list, loading state, and methods to refresh jobs.
+ * Manages state for finetune jobs with polling-based status detection.
+ * FE polls BE (listFinetuneJobs) every 15s for status changes.
+ * SSE removed — BE state tracker writes status + scores to SQLite,
+ * FE polls to detect transitions.
  */
 
 import {
@@ -26,10 +28,6 @@ import {
 } from "@/services/finetune-api";
 import { workflowService } from "@/services/service-registry";
 import { ProjectEventsConsumer } from "@/contexts/project-events";
-import {
-  CustomEvent,
-  CustomFinetuneJobUpdateEventType,
-} from "@/contexts/project-events/dto";
 import { emitter } from "@/utils/eventEmitter";
 
 // ============================================================================
@@ -66,9 +64,8 @@ function useFinetuneJobsLogic() {
   /** Active polling intervals for finetune evaluations, keyed by job ID */
   const evalPollIntervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
-  // Get project events for SSE subscription
-  const { subscribe, isConnected } = ProjectEventsConsumer();
-  const subscriptionIdRef = useRef<string>(`finetune-jobs-${Date.now()}`);
+  // SSE reconnect detection (re-fetch jobs after gateway restart)
+  const { isConnected } = ProjectEventsConsumer();
   const wasConnectedRef = useRef(false);
 
   // Use useRequest for jobs fetching with automatic refresh on dependency change
@@ -234,70 +231,70 @@ function useFinetuneJobsLogic() {
     };
   }, []);
 
-  // Handle SSE event for job updates
-  const handleJobUpdateEvent = useCallback(
-    (event: CustomFinetuneJobUpdateEventType) => {
-      const { job_id, status } = event;
-      const newStatus = status as FinetuneJobStatus;
-      const isTerminal = newStatus === 'succeeded' || newStatus === 'failed' || newStatus === 'cancelled';
+  // Poll BE for job status changes (replaces SSE subscription)
+  const prevStatusesRef = useRef<Record<string, FinetuneJobStatus>>({});
+  const hasActiveJobsRef = useRef(false);
 
-      setJobs((prevJobs) => {
-        const jobsList = prevJobs || [];
-        const existingJob = jobsList.find((j) => j.id === job_id);
-        if (existingJob) {
-          // Detect completion transition: was running/pending → now terminal
-          const wasActive = existingJob.status === 'running' || existingJob.status === 'pending';
-          if (wasActive && isTerminal && existingJob.workflow_id) {
+  // Track whether there are active jobs (avoids jobs in useEffect deps)
+  useEffect(() => {
+    hasActiveJobsRef.current = jobs.some(
+      (j) => j.status === 'pending' || j.status === 'running'
+    );
+  }, [jobs]);
+
+  useEffect(() => {
+    if (!currentDatasetId) return;
+
+    const interval = setInterval(async () => {
+      if (!hasActiveJobsRef.current) return;
+
+      try {
+        const freshJobs = await listFinetuneJobs(currentDatasetId);
+        const prevStatuses = prevStatusesRef.current;
+
+        // Detect completion transitions
+        for (const freshJob of freshJobs) {
+          const prevStatus = prevStatuses[freshJob.id];
+          const isTerminal = freshJob.status === 'succeeded' || freshJob.status === 'failed' || freshJob.status === 'cancelled';
+          const wasActive = prevStatus === 'running' || prevStatus === 'pending';
+
+          if (wasActive && isTerminal && freshJob.workflow_id) {
             emitter.emit('vllora_finetune_job_completed', {
-              jobId: job_id,
-              workflowId: existingJob.workflow_id,
+              jobId: freshJob.id,
+              workflowId: freshJob.workflow_id,
             });
           }
-
-          // Update existing job status
-          return jobsList.map((job) =>
-            job.id === job_id
-              ? { ...job, status: newStatus }
-              : job
-          );
-        } else {
-          // Job not in list, trigger a full reload
-          loadJobs(currentDatasetId);
-          return jobsList;
         }
-      });
 
-    },
-    [loadJobs, setJobs, currentDatasetId]
-  );
-
-  // Subscribe to SSE events
-  useEffect(() => {
-    const unsubscribe = subscribe(
-      subscriptionIdRef.current,
-      (event) => {
-        if (event.type === "Custom") {
-          const customEvent = event as CustomEvent;
-          if (customEvent.event.type === "finetune_job_update") {
-            handleJobUpdateEvent(
-              customEvent.event as CustomFinetuneJobUpdateEventType
-            );
-          }
+        // Update prev statuses
+        const newStatuses: Record<string, FinetuneJobStatus> = {};
+        for (const j of freshJobs) {
+          newStatuses[j.id] = j.status;
         }
-      },
-      // Filter to only receive Custom events
-      (event) => event.type === "Custom"
-    );
+        prevStatusesRef.current = newStatuses;
 
-    return () => {
-      unsubscribe();
-    };
-  }, [subscribe, handleJobUpdateEvent]);
+        setJobs(freshJobs);
+      } catch (err) {
+        console.error('[FinetuneJobsContext] Status poll failed:', err);
+      }
+    }, 15_000);
+
+    return () => clearInterval(interval);
+  }, [currentDatasetId]);
 
   // Load jobs on mount and when currentDatasetId changes
   useEffect(() => {
     loadJobs(currentDatasetId);
   }, [currentDatasetId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Seed prevStatusesRef whenever jobs list changes (so polling can detect transitions)
+  useEffect(() => {
+    const statuses: Record<string, FinetuneJobStatus> = {};
+    for (const j of jobs) {
+      statuses[j.id] = j.status;
+    }
+    prevStatusesRef.current = statuses;
+  }, [jobs]);
 
   // Listen for job created events from quickFinetune
   useEffect(() => {
@@ -344,7 +341,7 @@ function useFinetuneJobsLogic() {
     }
   }, [filteredJobs, fetchJobEvaluations]);
 
-  // Re-fetch jobs on SSE reconnect (covers BE restart gap)
+  // Re-fetch jobs on reconnect (covers BE restart gap)
   useEffect(() => {
     if (isConnected && !wasConnectedRef.current) {
       loadJobs(currentDatasetId);

@@ -21,7 +21,6 @@ import { DatasetsUIConsumer } from "@/contexts/DatasetsUIContext";
 import type { Dataset, DatasetRecord, TopicHierarchyConfig, TopicHierarchyNode } from "@/types/dataset-types";
 import { emitter } from "@/utils/eventEmitter";
 import { toast } from "sonner";
-import { ProjectEventsConsumer } from "@/contexts/project-events";
 import { quickFinetune } from "@/services/quick-finetune";
 import { datasetService, recordService } from "@/services/service-registry";
 import { filterAndSortRecords } from "@/components/datasets/record-filters";
@@ -78,9 +77,6 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
 
   // Get selection state from UI context
   const { selectedRecordIds, setSelectedRecordIds } = DatasetsUIConsumer();
-
-  // Get project events for SSE subscription
-  const { subscribe } = ProjectEventsConsumer();
 
   // Core state
   const [dataset, setDataset] = useState<Dataset | null>(null);
@@ -336,26 +332,19 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
     };
   }, [workflowId, selectedRecordIds, setSelectedRecordIds]);
 
-  // Subscribe to SSE record_scores_updated events → refresh records
+  // Subscribe to internal record_scores_updated events → refresh records
+  // (emitted by evalPollingManager when BE snapshot has new scores)
   useEffect(() => {
-    if (!subscribe) return;
-    const subId = `dataset-detail-scores-${workflowId}`;
-    const unsubscribe = subscribe(
-      subId,
-      (event) => {
-        if (event.type !== "Custom") return;
-        const customEvent = (event as unknown as { event: { type: string; workflow_id?: string } }).event;
-        if (
-          customEvent.type === "record_scores_updated" &&
-          customEvent.workflow_id === workflowId
-        ) {
-          refreshDataset();
-        }
-      },
-      (event) => event.type === "Custom",
-    );
-    return () => { unsubscribe(); };
-  }, [subscribe, workflowId, refreshDataset]);
+    const handleScoresUpdated = (event: { workflowId: string; scoreType: string }) => {
+      if (event.workflowId === workflowId) {
+        refreshDataset();
+      }
+    };
+    emitter.on("vllora_record_scores_updated", handleScoresUpdated);
+    return () => {
+      emitter.off("vllora_record_scores_updated", handleScoresUpdated);
+    };
+  }, [workflowId, refreshDataset]);
 
   // Listen for source document filter events (from KnowledgeSourceCard clicks)
   useEffect(() => {
