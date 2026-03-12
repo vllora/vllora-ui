@@ -420,7 +420,7 @@ This is the output you produce. Every document extraction must result in a `know
 7. **Flat list** — no sections grouping. Parts are ordered by document position. Consumers group by `heading_path` if needed.
 8. **`doc_item`** — JSON pointer back to the DoclingDocument item for traceability (e.g., `#/texts/13`, `#/tables/0`, `#/pictures/0`)
 
-The formal JSON Schema is at `knowledge/knowledge-parts-schema.json` — use it to validate your output.
+The formal JSON Schema is at `reference/knowledge-parts-schema.json` — use it to validate your output.
 
 **This schema is mandatory.** Do not invent alternative formats (e.g., normalized chunk lists, cleaned chunk JSON). Downstream consumers — topic generation, training data creation, and the UI — all expect `knowledge_parts.json` with typed parts, cross-references, and image data. If you skip this step, the entire pipeline breaks.
 

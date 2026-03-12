@@ -171,7 +171,7 @@ export function FinetuneJobDialog({
             Start Finetuning Job
           </DialogTitle>
           <DialogDescription>
-            Create a finetuning job using the records from "{dataset?.name || "experiment"}".
+            Create a finetuning job using the records from "{dataset?.name || "workflow"}".
           </DialogDescription>
         </DialogHeader>
 
