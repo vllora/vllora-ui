@@ -20,50 +20,50 @@ Without topics, training data tends to cluster around easy/common scenarios, lea
 {
   "id": "unique-path-id",
   "name": "Human-Readable Name",
-  "description": "What this topic covers — guides data generation",
-  "children": [],
-  "sourceChunkRefs": ["source1:chunk3", "source1:chunk7"]
+  "parent_id": null,
+  "system_prompt": "Focus on...",
+  "reference_id": "optional-external-ref"
 }
 ```
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `id` | Yes | Slash-separated path (e.g., `"billing/refunds"`) |
+| `id` | No | Topic identifier (auto-generated UUID if omitted) |
 | `name` | Yes | Display name |
-| `description` | No | Guides the agent when generating data for this topic |
-| `children` | Yes | Array of child topic nodes (empty for leaves) |
-| `sourceChunkRefs` | No | Which document sections informed this topic (e.g., `"product-manual:ch2-billing"`) |
+| `parent_id` | No | Parent topic ID (null for root topics) |
+| `system_prompt` | No | System prompt context for this topic — guides the model during training |
+| `reference_id` | No | External reference ID for topic-source linking |
 
 ---
 
-## Tracing Topics Back to Source Documents
+## Linking Topics to Source Documents
 
-When you build topics from user documents, note which sections informed each topic. This creates a lightweight traceability chain: **document section → topic → records**. You don't need a formal schema — just enough breadcrumbs so you can trace back when something goes wrong.
+When you build topics from user documents, link them to the relevant knowledge source parts using the **topic-source relations API**. This creates a formal traceability chain: **document part → relation → topic → records**.
 
-**Only add sourceChunkRefs after you have actually read the document and extracted content from specific sections.** The values must point to real sections you read — not guesses based on what a document might contain. If the user mentions having a PDF but you haven't read it yet, omit sourceChunkRefs entirely. Add them later when you actually process the document.
+**Only create relations after you have actually extracted parts from the document.** The `part_identifier` values must reference real knowledge source parts — not guesses. If you haven't extracted the document yet, skip linking and add relations later.
 
 **Why this matters:**
-- When a topic scores poorly in evaluation, you know which document sections to re-read for better prompts
+- When a topic scores poorly in evaluation, you know which document parts to re-read for better prompts
 - When you need more variety for a topic, you know where to look for additional source material
 - When the user updates a document, you know which topics and records may be affected
 
-**How to track it:**
+**How to link:**
 
-Use `sourceChunkRefs` on each topic node, and use a simple naming convention like `"filename:section"`:
+After creating topics and uploading knowledge source parts, link them via the relations API:
 
-```json
-{
-  "id": "billing/refunds",
-  "name": "Refunds",
-  "description": "Refund requests, policies, and processing timeframes",
-  "sourceChunkRefs": ["product-manual:ch3-refund-policy", "faq:billing-section"],
-  "children": []
-}
+```bash
+curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics/relations \
+  -H "Content-Type: application/json" \
+  -d '{"relations": [
+    {"topic_identifier": "billing-refunds", "part_identifier": "p-003"},
+    {"topic_identifier": "billing-refunds", "part_identifier": "p-004"}
+  ]}'
 ```
 
-For records, encode the topic in the ID (e.g., `billing-refunds-001`) so you can always map a record back to its topic and from there to the source document.
+- `topic_identifier` — the topic's `id` or `reference_id`
+- `part_identifier` — the knowledge source part's `id` or `reference_id` (alias: `source_identifier`)
 
-If you extract knowledge into the `knowledge/` directory, organize files to mirror the document structure. This makes it easy to find the right source material when generating prompts for a specific topic.
+For records, encode the topic in the ID (e.g., `billing-refunds-001`) so you can always map a record back to its topic and from there to the source parts.
 
 ---
 
@@ -72,8 +72,8 @@ If you extract knowledge into the `knowledge/` directory, organize files to mirr
 ### From Documents
 
 1. **Read the document structure** — chapters, sections, headings map naturally to topics
-2. **Group related sections** under parent topics
-3. **Note which sections inform each topic** — add `sourceChunkRefs` so you can trace back later
+2. **Group related sections** under parent topics using `parent_id`
+3. **Link topics to source parts** — after uploading, use the topic-source relations API to trace back later
 4. **Create leaf topics** specific enough to generate 5-20 unique training examples
 
 **Example: From a product manual**
@@ -97,35 +97,17 @@ Product Manual
 **Example: Customer support objective**
 ```json
 [
-  {
-    "id": "billing",
-    "name": "Billing",
-    "description": "Payment, subscription, and invoicing questions",
-    "children": [
-      {"id": "billing/refunds", "name": "Refunds", "description": "Refund requests, policies, and processing", "children": []},
-      {"id": "billing/upgrades", "name": "Plan Changes", "description": "Upgrading, downgrading, and switching plans", "children": []},
-      {"id": "billing/payment-issues", "name": "Payment Issues", "description": "Failed payments, card updates, billing errors", "children": []}
-    ]
-  },
-  {
-    "id": "technical",
-    "name": "Technical Support",
-    "description": "Technical issues and troubleshooting",
-    "children": [
-      {"id": "technical/api", "name": "API Issues", "description": "Authentication, rate limits, endpoint errors", "children": []},
-      {"id": "technical/integration", "name": "Integrations", "description": "Third-party integrations and webhooks", "children": []},
-      {"id": "technical/performance", "name": "Performance", "description": "Slow queries, timeouts, optimization", "children": []}
-    ]
-  },
-  {
-    "id": "account",
-    "name": "Account Management",
-    "description": "User accounts, access, and settings",
-    "children": [
-      {"id": "account/login", "name": "Login Issues", "description": "Password reset, 2FA, locked accounts", "children": []},
-      {"id": "account/permissions", "name": "Permissions", "description": "Roles, access control, team management", "children": []}
-    ]
-  }
+  {"id": "billing", "name": "Billing", "parent_id": null, "system_prompt": "Focus on payment, subscription, and invoicing questions"},
+  {"id": "billing-refunds", "name": "Refunds", "parent_id": "billing", "system_prompt": "Focus on refund requests, policies, and processing"},
+  {"id": "billing-upgrades", "name": "Plan Changes", "parent_id": "billing", "system_prompt": "Focus on upgrading, downgrading, and switching plans"},
+  {"id": "billing-payment-issues", "name": "Payment Issues", "parent_id": "billing", "system_prompt": "Focus on failed payments, card updates, billing errors"},
+  {"id": "technical", "name": "Technical Support", "parent_id": null, "system_prompt": "Focus on technical issues and troubleshooting"},
+  {"id": "technical-api", "name": "API Issues", "parent_id": "technical", "system_prompt": "Focus on authentication, rate limits, endpoint errors"},
+  {"id": "technical-integration", "name": "Integrations", "parent_id": "technical", "system_prompt": "Focus on third-party integrations and webhooks"},
+  {"id": "technical-performance", "name": "Performance", "parent_id": "technical", "system_prompt": "Focus on slow queries, timeouts, optimization"},
+  {"id": "account", "name": "Account Management", "parent_id": null, "system_prompt": "Focus on user accounts, access, and settings"},
+  {"id": "account-login", "name": "Login Issues", "parent_id": "account", "system_prompt": "Focus on password reset, 2FA, locked accounts"},
+  {"id": "account-permissions", "name": "Permissions", "parent_id": "account", "system_prompt": "Focus on roles, access control, team management"}
 ]
 ```
 

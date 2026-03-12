@@ -564,7 +564,65 @@ Skip text items whose `label` is `page_header` or `page_footer`. Optionally skip
 
 ---
 
-## Section 5: Fallback (pdftotext)
+## Section 5: Upload to Gateway
+
+After producing `knowledge/knowledge_parts.json`, upload the source document and its parts to the gateway in two steps.
+
+### Step 1: Create Knowledge Source (multipart)
+
+Upload the original file along with metadata. The API requires `multipart/form-data` — not JSON.
+
+```bash
+KS=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge \
+  -F "file=@document.pdf" \
+  -F "name=document.pdf" \
+  -F "description=Source document for training data" \
+  -F 'metadata={"total_pages":84,"extraction_method":"docling_hybrid","total_chunks":61}')
+KS_ID=$(echo "$KS" | python3 -c "import sys,json; print(json.load(sys.stdin)['knowledge_source']['id'])")
+echo "Created knowledge source: $KS_ID"
+```
+
+**Form fields:**
+| Field | Required | Description |
+|-------|----------|-------------|
+| `file` | Yes | The source document file |
+| `name` | Yes | Display name |
+| `reference_id` | No | External reference ID (unique per workflow) |
+| `description` | No | Document description |
+| `metadata` | No | JSON string with extraction metadata |
+
+### Step 2: Add Extracted Parts (JSON)
+
+Upload the parts from `knowledge_parts.json`. The body is a JSON array of parts — the API sets `source_id` automatically.
+
+```bash
+PARTS=$(python3 -c "import json; d=json.load(open('knowledge/knowledge_parts.json')); print(json.dumps(d['parts']))")
+curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge/$KS_ID/parts \
+  -H "Content-Type: application/json" -d "$PARTS"
+```
+
+Each part in the array matches the `knowledge_parts.json` schema from Section 3:
+- `type` (required): `text`, `table`, or `image`
+- `content` (required): the part content
+- `reference_id` (optional): used for topic-source linking later
+- `title`, `extraction_path`, `content_metadata`, `extraction_metadata`: optional metadata
+
+**Note:** The `source_id` field from `knowledge_parts.json` is not sent — the API sets it based on the URL path. The `id` field is optional; the API generates a UUID if omitted.
+
+### How `knowledge_parts.json` maps to API calls
+
+| `knowledge_parts.json` field | API call | Maps to |
+|------------------------------|----------|---------|
+| `source.name` | `POST /knowledge` | `-F "name=..."` |
+| `source.description` | `POST /knowledge` | `-F "description=..."` |
+| `source.reference_id` | `POST /knowledge` | `-F "reference_id=..."` |
+| `source.metadata` | `POST /knowledge` | `-F "metadata={...}"` |
+| `parts[]` | `POST /knowledge/{ks_id}/parts` | JSON body array |
+| `parts[].reference_id` | `POST /knowledge/{ks_id}/parts` | Used for topic-source linking |
+
+---
+
+## Section 6: Fallback (pdftotext)
 
 When Docker is not available, use `pdftotext` for basic text extraction:
 
@@ -585,7 +643,7 @@ This produces the flat `{document_title, sections: [{section_heading, section_te
 
 ---
 
-## Section 6: Options Reference
+## Section 7: Options Reference
 
 ### Hybrid chunk endpoint: `/v1/chunk/hybrid/file/async`
 

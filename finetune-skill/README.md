@@ -111,7 +111,7 @@ The YAML `description` field in SKILL.md is the primary trigger mechanism. It's 
 finetune-project/               # Agent creates this working directory
 ├── reference/                  # Extracted domain knowledge from user documents
 │   └── document-extraction.md  # Structured extraction: sections, page numbers, key concepts
-├── topics.json                 # Topic hierarchy with sourceChunkRefs
+├── topics.json                 # Topic hierarchy (flat, with parent_id)
 ├── training.jsonl              # 100-200+ prompts (system + user messages only)
 ├── grader.js                   # Hybrid grader (programmatic + LLM-as-judge)
 ├── evaluations/                # API responses from evaluation runs
@@ -224,7 +224,7 @@ The backend requires UUID-formatted dataset_id values. The skill includes `uuidg
 The skill requires `YYYY-MM-DD HH:MM:SS` format (not just date) so step durations are visible. Early tests showed agents using date-only timestamps, making it impossible to see how long each step took.
 
 ### Lightweight source tracing
-Topics link back to document sections via `sourceChunkRefs`. Records encode topic in their ID (e.g., `pins-003`). Just enough breadcrumbs to trace back when scores are low, without a formal tracking system.
+Topics link back to document parts via the topic-source relations API (`POST /topics/relations`). Records encode topic in their ID (e.g., `pins-003`). Just enough breadcrumbs to trace back when scores are low, using the formal relations endpoint instead of inline references.
 
 ### Skill only talks to localhost:9090
 The skill ONLY communicates with the vLLora gateway at `localhost:9090`. It never calls cloud APIs directly. The gateway proxies cloud requests (eval, training, datasets) transparently. This simplifies the skill and keeps the gateway as the single integration point.
@@ -258,7 +258,7 @@ Tested with 3 prompts (HR platform, bad eval diagnosis, medical grader) without 
 
 **Issues found**:
 1. Agents generated `curl-commands.sh` instead of executing API calls
-2. Agents fabricated `sourceChunkRefs` for documents they never read
+2. Agents fabricated topic-source references for documents they never read
 3. No actual evaluation or training jobs created
 4. Only 20-25 training records generated (not enough)
 5. Execution log not maintained
@@ -280,7 +280,7 @@ Tested with real chess PDF and live backend at localhost:9090.
 
 - PDF extraction via pdftotext: **working**
 - Knowledge extraction to `reference/document-extraction.md`: **working**
-- Topic hierarchy with real sourceChunkRefs: **working**
+- Topic hierarchy with real topic-source relations: **working**
 - 131 training records across 20 topics: **working**
 - Hybrid grader (programmatic + LLM-as-judge): **working**
 - Full timestamps `[YYYY-MM-DD HH:MM:SS]`: **working**
@@ -311,9 +311,9 @@ using Bash, capture the response in a variable, parse the response, and use
 those values in the next API call.
 ```
 
-### Issue 2: Fabricated sourceChunkRefs
+### Issue 2: Fabricated topic-source references
 
-**Symptom**: Agent creates topic nodes with `sourceChunkRefs` like `"hr-manual:ch1-leave-policies"` for documents it never read.
+**Symptom**: Agent creates topic-source relations referencing parts from documents it never read.
 
 **Fix applied**: Changed to explicit instruction requiring real section references from actually-read documents.
 
@@ -382,7 +382,7 @@ a chess tactics tutor. Use the vLLora backend at http://localhost:9090.
 REQUIREMENTS:
 1. Read the PDF using pdftotext via Bash
 2. Save extracted content to reference/document-extraction.md
-3. Build topics with REAL sourceChunkRefs
+3. Build topics and link to source parts via relations API
 4. Generate at least 100 training records
 5. Write a hybrid grader
 6. Execute ALL API calls directly via Bash curl — NEVER create .sh files
@@ -400,7 +400,7 @@ Start now." \
 |-------|-----|---------------|
 | PDF extracted | `ls /tmp/*extracted*.txt` | File exists with text content |
 | Knowledge saved | `cat */reference/document-extraction.md` | Structured sections with page numbers |
-| Topics valid | `cat */topics.json \| python3 -m json.tool` | Real sourceChunkRefs matching extraction |
+| Topics valid | `cat */topics.json \| python3 -m json.tool` | Flat format with parent_id, valid JSON |
 | Enough records | `wc -l */training.jsonl` | 100+ lines |
 | No .sh files | `find . -name "*.sh"` | No results |
 | Full timestamps | `grep -E "\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]" */execution-log.md` | All log entries match |

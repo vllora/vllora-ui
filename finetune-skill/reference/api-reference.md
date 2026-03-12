@@ -67,19 +67,25 @@ All endpoints use JSON unless noted. Auth via `Authorization: Bearer <token>` he
 | **Topics** (scoped to workflow) | | | |
 | 46 | GET | `/finetune/workflows/{id}/topics` | List topics |
 | 47 | POST | `/finetune/workflows/{id}/topics` | Create topics |
-| 48 | DELETE | `/finetune/workflows/{id}/topics` | Delete all topics |
+| 48 | PUT | `/finetune/workflows/{id}/topics` | Update topics |
+| 49 | DELETE | `/finetune/workflows/{id}/topics` | Delete topics |
+| 50 | GET | `/finetune/workflows/{id}/topics/relations` | List topic-source relations |
+| 51 | POST | `/finetune/workflows/{id}/topics/relations` | Create topic-source relations |
+| 52 | PUT | `/finetune/workflows/{id}/topics/relations` | Update topic-source relations |
+| 53 | DELETE | `/finetune/workflows/{id}/topics/relations` | Delete topic-source relations |
 | **Topic Hierarchy AI** | | | |
-| 49 | POST | `/finetune/topic-hierarchy/generate` | Generate topic hierarchy |
-| 50 | POST | `/finetune/topic-hierarchy/adjust` | Adjust topic hierarchy |
+| 54 | POST | `/finetune/topic-hierarchy/generate` | Generate topic hierarchy |
+| 55 | POST | `/finetune/topic-hierarchy/adjust` | Adjust topic hierarchy |
 | **Knowledge Sources** (scoped to workflow) | | | |
-| 51 | GET | `/finetune/workflows/{id}/knowledge` | List knowledge sources |
-| 52 | GET | `/finetune/workflows/{id}/knowledge/{ks_id}` | Get single knowledge source |
-| 53 | GET | `/finetune/workflows/{id}/knowledge/count` | Count knowledge sources |
-| 54 | POST | `/finetune/workflows/{id}/knowledge` | Create knowledge source |
-| 55 | PATCH | `/finetune/workflows/{id}/knowledge/{ks_id}/status` | Update status |
-| 56 | PATCH | `/finetune/workflows/{id}/knowledge/{ks_id}/chunks` | Update chunks |
-| 57 | DELETE | `/finetune/workflows/{id}/knowledge/{ks_id}` | Soft delete single |
-| 58 | DELETE | `/finetune/workflows/{id}/knowledge` | Soft delete all |
+| 56 | GET | `/finetune/workflows/{id}/knowledge` | List knowledge sources |
+| 57 | GET | `/finetune/workflows/{id}/knowledge/{ks_id}` | Get single knowledge source |
+| 58 | GET | `/finetune/workflows/{id}/knowledge/count` | Count knowledge sources |
+| 59 | POST | `/finetune/workflows/{id}/knowledge` | Create knowledge source (multipart) |
+| 60 | POST | `/finetune/workflows/{id}/knowledge/{ks_id}/parts` | Add parts |
+| 61 | GET | `/finetune/workflows/{id}/knowledge/{ks_id}/parts` | List parts |
+| 62 | DELETE | `/finetune/workflows/{id}/knowledge/{ks_id}/parts/{part_id}` | Delete single part |
+| 63 | DELETE | `/finetune/workflows/{id}/knowledge/{ks_id}` | Soft delete single |
+| 64 | DELETE | `/finetune/workflows/{id}/knowledge` | Soft delete all |
 
 ---
 
@@ -585,10 +591,13 @@ curl -X POST http://localhost:9090/finetune/topic-hierarchy/generate \
   -H "Content-Type: application/json" \
   -d '{"goals": "...", "depth": 3, "degree": 4}'
 
-# 3. Save new tree
+# 3. Save new topics (flat format with parent_id)
 curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/topics \
   -H "Content-Type: application/json" \
-  -d '{"topics": [...]}'
+  -d '{"topics": [
+    {"name": "Topic A", "parent_id": null},
+    {"name": "Subtopic A1", "parent_id": "topic-a-id"}
+  ]}'
 
 # 4. Re-categorize records
 curl -X PATCH http://localhost:9090/finetune/workflows/WORKFLOW_ID/records/topics \
@@ -600,44 +609,146 @@ curl -X PATCH http://localhost:9090/finetune/workflows/WORKFLOW_ID/records/topic
 
 ## 10. Knowledge Sources (Extended)
 
+### POST `/finetune/workflows/{workflow_id}/knowledge`
+
+Create a knowledge source. Uses `multipart/form-data` — the file is required.
+
+```bash
+curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge \
+  -F "file=@document.pdf" \
+  -F "name=document.pdf" \
+  -F "reference_id=doc-001" \
+  -F "description=Product manual v2" \
+  -F 'metadata={"total_pages":84,"extraction_method":"docling_hybrid"}' \
+  -F 'parts=[{"type":"text","content":"Chapter 1...","title":"Introduction","extraction_path":"[\"Introduction\"]"}]'
+```
+
+**Form fields:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `file` | file | Yes | The source document (PDF, etc.) |
+| `name` | string | Yes | Display name for the knowledge source |
+| `reference_id` | string | No | External reference ID (unique per workflow) |
+| `description` | string | No | Description of the document |
+| `metadata` | JSON string | No | Extraction metadata (total_pages, extraction_method, etc.) |
+| `parts` | JSON string | No | Array of parts to create inline (same format as POST /parts) |
+
+**Response:**
+```json
+{
+  "knowledge_source": {
+    "id": "a1b2c3d4-...",
+    "reference_id": "doc-001",
+    "workflow_id": "wf_abc123",
+    "name": "document.pdf",
+    "description": "Product manual v2",
+    "metadata": {"total_pages": 84, "extraction_method": "docling_hybrid"},
+    "parts": [...]
+  },
+  "document_path": ".knowledge_store/wf_abc123/a1b2c3d4-.../document.pdf"
+}
+```
+
+### POST `/finetune/workflows/{workflow_id}/knowledge/{ks_id}/parts`
+
+Add extracted parts to a knowledge source. Body is a JSON array of parts.
+
+```bash
+curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge/$KS_ID/parts \
+  -H "Content-Type: application/json" \
+  -d '[
+    {
+      "type": "text",
+      "content": "The dominant sequence transduction models...",
+      "title": "Abstract",
+      "extraction_path": "[\"Abstract\"]",
+      "reference_id": "p-001",
+      "content_metadata": null,
+      "extraction_metadata": {"pages": [1], "source_chunks": [2]}
+    },
+    {
+      "type": "table",
+      "content": "| Layer Type | Complexity |\n|---|---|\n| Self-Attention | O(n²·d) |",
+      "title": "3.4 Embeddings",
+      "extraction_path": "[\"3 Model Architecture\", \"3.4 Embeddings\"]",
+      "content_metadata": {"num_rows": 5, "num_cols": 4, "headers": ["Layer Type", "Complexity"]},
+      "extraction_metadata": {"pages": [6], "doc_item": "#/tables/0"}
+    }
+  ]'
+```
+
+**Part fields:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | Yes | `text`, `table`, or `image` |
+| `content` | string | Yes | Text content, markdown table, or base64 data URI |
+| `id` | string | No | Custom ID (auto-generated UUID if omitted) |
+| `reference_id` | string | No | External reference (used for topic-source linking) |
+| `title` | string | No | Section title |
+| `extraction_path` | string | No | JSON-encoded heading hierarchy |
+| `content_metadata` | object | No | Type-specific metadata (table headers/rows, image dimensions) |
+| `extraction_metadata` | object | No | Provenance (pages, source_chunks, doc_item) |
+
+**Response:**
+```json
+{
+  "parts": [
+    {"id": "uuid-1", "reference_id": "p-001", "source_id": "ks-id", "type": "text", ...},
+    {"id": "uuid-2", "source_id": "ks-id", "type": "table", ...}
+  ]
+}
+```
+
+### GET `/finetune/workflows/{workflow_id}/knowledge/{ks_id}/parts`
+
+List all parts for a knowledge source.
+
+```bash
+curl http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge/$KS_ID/parts
+```
+
+### DELETE `/finetune/workflows/{workflow_id}/knowledge/{ks_id}/parts/{part_id}`
+
+Delete a single part.
+
+```bash
+curl -X DELETE http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge/$KS_ID/parts/$PART_ID
+```
+
 ### GET `/finetune/workflows/{workflow_id}/knowledge/{ks_id}`
 
-Get a single knowledge source with full `extracted_content`.
+Get a single knowledge source with its parts.
 
 ### GET `/finetune/workflows/{workflow_id}/knowledge/count`
 
 Get count of active (non-deleted) knowledge sources.
 
-### PATCH `/finetune/workflows/{workflow_id}/knowledge/{ks_id}/status`
-
-Update knowledge source processing status.
-
-### PATCH `/finetune/workflows/{workflow_id}/knowledge/{ks_id}/chunks`
-
-Update extracted content chunks for a knowledge source.
-
-```bash
-curl -X PATCH http://localhost:9090/finetune/workflows/WORKFLOW_ID/knowledge/KS_ID/chunks \
-  -H "Content-Type: application/json" \
-  -d '{"chunks": [{"id": "c1", "text": "...", "heading": "3.2 Attention"}]}'
-```
-
 ### DELETE `/finetune/workflows/{workflow_id}/knowledge/{ks_id}`
 
-Soft delete a single knowledge source. Refs in topics/records remain valid but resolve to a deleted source.
+Soft delete a single knowledge source.
 
 ### Adding Knowledge Mid-Workflow
 
 ```bash
-# 1. Add new source
-curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/knowledge \
-  -H "Content-Type: application/json" \
-  -d '{"name": "new-doc.pdf", "type": "pdf", "extracted_content": {...}}'
+# 1. Upload the document (multipart)
+KS=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge \
+  -F "file=@new-doc.pdf" \
+  -F "name=new-doc.pdf" \
+  -F "description=Additional reference document")
+KS_ID=$(echo "$KS" | python3 -c "import sys,json; print(json.load(sys.stdin)['knowledge_source']['id'])")
 
-# 2. Regenerate topics (optional — or manually add new topics)
-# 3. Generate records for new topics
+# 2. Add extracted parts
+curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge/$KS_ID/parts \
+  -H "Content-Type: application/json" \
+  -d '[{"type": "text", "content": "...", "title": "...", "reference_id": "p-001"}]'
+
+# 3. Link parts to topics via relations (optional)
+curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics/relations \
+  -H "Content-Type: application/json" \
+  -d '{"relations": [{"topic_identifier": "billing", "part_identifier": "p-001"}]}'
+
 # 4. Re-upload dataset before next eval
-curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/dataset/upload
+curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/dataset/upload
 ```
 
 ---
@@ -733,15 +844,116 @@ curl -X PATCH http://localhost:9090/finetune/workflows/WORKFLOW_ID/records/topic
 
 ### POST `/finetune/workflows/{workflow_id}/topics`
 
-Save topic hierarchy.
+Create topics. Topics use a flat structure with `parent_id` for hierarchy (no nested `children[]`).
+
+```bash
+curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics \
+  -H "Content-Type: application/json" \
+  -d '{"topics": [
+    {"id": "billing", "name": "Billing", "parent_id": null, "system_prompt": "Focus on payment and subscription questions"},
+    {"id": "billing-refunds", "name": "Refunds", "parent_id": "billing", "system_prompt": "Focus on refund policies and processing"},
+    {"id": "technical", "name": "Technical Support", "parent_id": null}
+  ]}'
+```
+
+**Topic fields:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | No | Custom ID (auto-generated UUID if omitted) |
+| `reference_id` | string | No | External reference ID |
+| `name` | string | Yes | Display name |
+| `parent_id` | string | No | Parent topic ID (null for root topics) |
+| `system_prompt` | string | No | System prompt context for this topic |
 
 ### GET `/finetune/workflows/{workflow_id}/topics`
 
-List topics.
+List all topics for a workflow.
+
+### PUT `/finetune/workflows/{workflow_id}/topics`
+
+Update existing topics.
+
+```bash
+curl -X PUT http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics \
+  -H "Content-Type: application/json" \
+  -d '{"topics": [
+    {"identifier": "billing-refunds", "name": "Refund Policies", "system_prompt": "Updated prompt"}
+  ]}'
+```
+
+**Update fields:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `identifier` | string | Yes | Topic ID or reference_id to update |
+| `name` | string | No | New display name |
+| `reference_id` | string | No | New reference ID |
+| `parent_id` | string | No | New parent topic ID |
+| `system_prompt` | string | No | New system prompt |
 
 ### DELETE `/finetune/workflows/{workflow_id}/topics`
 
-Delete all topics.
+Delete specific topics by identifier.
+
+```bash
+curl -X DELETE http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics \
+  -H "Content-Type: application/json" \
+  -d '{"identifiers": ["billing-refunds", "technical"]}'
+```
+
+### Topic-Source Relations
+
+Link topics to knowledge source parts. This replaces the old `sourceChunkRefs` approach — instead of embedding references in the topic node, use a separate relations API.
+
+#### GET `/finetune/workflows/{workflow_id}/topics/relations`
+
+List all topic-source relations.
+
+```bash
+curl http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics/relations
+```
+
+#### POST `/finetune/workflows/{workflow_id}/topics/relations`
+
+Create topic-source relations. Links topics to knowledge source parts.
+
+```bash
+curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics/relations \
+  -H "Content-Type: application/json" \
+  -d '{"relations": [
+    {"topic_identifier": "billing", "part_identifier": "p-001", "reference_id": "rel-001"},
+    {"topic_identifier": "billing-refunds", "part_identifier": "p-002"}
+  ]}'
+```
+
+**Relation fields:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `topic_identifier` | string | Yes | Topic ID or reference_id |
+| `part_identifier` | string | Yes | Knowledge source part ID or reference_id (alias: `source_identifier`) |
+| `id` | string | No | Custom relation ID |
+| `reference_id` | string | No | External reference for this relation |
+
+#### PUT `/finetune/workflows/{workflow_id}/topics/relations`
+
+Update existing relations.
+
+```bash
+curl -X PUT http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics/relations \
+  -H "Content-Type: application/json" \
+  -d '{"relations": [
+    {"identifier": "rel-001", "topic_identifier": "billing-updated", "part_identifier": "p-003"}
+  ]}'
+```
+
+#### DELETE `/finetune/workflows/{workflow_id}/topics/relations`
+
+Delete specific relations by identifier.
+
+```bash
+curl -X DELETE http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics/relations \
+  -H "Content-Type: application/json" \
+  -d '{"identifiers": ["rel-001"]}'
+```
 
 ---
 
@@ -828,9 +1040,16 @@ WORKFLOW=$(curl -s -X POST http://localhost:9090/finetune/workflows \
 WORKFLOW_ID=$(echo "$WORKFLOW" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 
 # 2. Upload knowledge sources (if documents were extracted)
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge \
-  -H "Content-Type: application/json" \
-  -d '{"name": "document.pdf", "type": "pdf", "extracted_content": {...}}'
+KS=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge \
+  -F "file=@document.pdf" \
+  -F "name=document.pdf" \
+  -F "description=Source document")
+KS_ID=$(echo "$KS" | python3 -c "import sys,json; print(json.load(sys.stdin)['knowledge_source']['id'])")
+
+# 2b. Add extracted parts (if knowledge_parts.json exists)
+PARTS=$(python3 -c "import json; d=json.load(open('knowledge/knowledge_parts.json')); print(json.dumps(d['parts']))")
+curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge/$KS_ID/parts \
+  -H "Content-Type: application/json" -d "$PARTS"
 
 # 3. Upload records
 curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/records \
@@ -863,9 +1082,16 @@ WORKFLOW=$(curl -s -X POST http://localhost:9090/finetune/workflows \
 WORKFLOW_ID=$(echo "$WORKFLOW" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 
 # 2. Upload knowledge sources (if documents were extracted)
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge \
-  -H "Content-Type: application/json" \
-  -d '{"name": "document.pdf", "type": "pdf", "extracted_content": {...}}'
+KS=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge \
+  -F "file=@document.pdf" \
+  -F "name=document.pdf" \
+  -F "description=Source document")
+KS_ID=$(echo "$KS" | python3 -c "import sys,json; print(json.load(sys.stdin)['knowledge_source']['id'])")
+
+# 2b. Add extracted parts (if knowledge_parts.json exists)
+PARTS=$(python3 -c "import json; d=json.load(open('knowledge/knowledge_parts.json')); print(json.dumps(d['parts']))")
+curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge/$KS_ID/parts \
+  -H "Content-Type: application/json" -d "$PARTS"
 
 # 3. Upload records
 curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/records \

@@ -134,18 +134,22 @@ python3 .claude/skills/vllora-finetune/templates/extract-sections.py \
 
 ### Step 3: Build Topic Hierarchy
 
-Organize the domain into a topic tree and save it to `topics.json`. This ensures balanced training data. See `reference/topic-hierarchy.md` for design guidelines.
+**A topic = a type of training example you want to generate.** Each leaf topic answers the question: "what scenario should the model practice handling?" The hierarchy groups related scenarios together so you can balance coverage and spot gaps.
+
+Decide what topics to create based on:
+- **The objective** — what behaviors does the model need? Each distinct behavior cluster becomes a topic.
+- **The document** (if available) — what content exists to generate examples from? Use `extraction_path` values from `knowledge_parts.json` as a checklist to make sure your topics cover the available material, not as a template to copy directly.
+
+Save to `topics.json` as a **flat array** — every topic at the same level, hierarchy expressed via `parent_id`:
 
 ```json
-[{"id": "billing", "name": "Billing", "description": "Payment and subscription questions",
-  "children": [
-    {"id": "billing/refunds", "name": "Refunds", "description": "Refund requests and policies", "children": []}
-  ]}]
+[{"id": "billing", "name": "Billing", "parent_id": null, "system_prompt": "Focus on payment and subscription questions"},
+ {"id": "billing-refunds", "name": "Refunds", "parent_id": "billing", "system_prompt": "Focus on refund requests and policies"}]
 ```
 
-Aim for 3-7 root topics, 2-3 levels deep, each leaf supporting 10-30 training examples.
+Aim for 3-7 root topics, 2-3 levels deep, each leaf supporting 10-30 training examples. See `reference/topic-hierarchy.md` for design guidelines.
 
-**sourceChunkRefs**: Only add after you've actually read a document. Values must reference real sections — never fabricate them.
+**Topic-source linking**: After uploading knowledge source parts, link them to topics via the `POST /topics/relations` API. Only create links to parts you've actually extracted — never fabricate references. See `reference/api-reference.md` Section 13 for the relations API.
 
 ### Step 3.5: Categorize Existing Records
 
@@ -213,10 +217,18 @@ WORKFLOW=$(curl -s -X POST http://localhost:9090/finetune/workflows \
   -d '{"name": "My Project", "objective": "Train a model to..."}')
 WORKFLOW_ID=$(echo "$WORKFLOW" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 
-# 2. Upload knowledge sources (if documents were extracted)
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge \
-  -H "Content-Type: application/json" \
-  -d '{"name": "document.pdf", "type": "pdf", "extracted_content": {...}}'
+# 2a. Upload knowledge source (file + metadata)
+KS=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge \
+  -F "file=@document.pdf" \
+  -F "name=document.pdf" \
+  -F "description=Source document" \
+  -F 'metadata={"total_pages":84,"extraction_method":"docling_hybrid"}')
+KS_ID=$(echo "$KS" | python3 -c "import sys,json; print(json.load(sys.stdin)['knowledge_source']['id'])")
+
+# 2b. Add extracted parts
+PARTS=$(python3 -c "import json; d=json.load(open('knowledge/knowledge_parts.json')); print(json.dumps(d['parts']))")
+curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge/$KS_ID/parts \
+  -H "Content-Type: application/json" -d "$PARTS"
 
 # 3. Upload records (read training.jsonl, format as records array)
 curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/records \
@@ -225,10 +237,15 @@ curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/records \
     {"id": "record-1", "data": {"input": {"messages": [...]}}, "topic": "billing/refunds"}
   ]}'
 
-# 4. Save topics
+# 4. Save topics (flat format with parent_id)
 curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics \
   -H "Content-Type: application/json" \
-  -d '{"topics": [...]}'
+  -d "$(python3 -c "import json; print(json.dumps({'topics': json.load(open('topics.json'))}))")"
+
+# 4b. Link topics to knowledge source parts
+curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics/relations \
+  -H "Content-Type: application/json" \
+  -d '{"relations": [{"topic_identifier": "topic-id", "part_identifier": "part-reference-id"}]}'
 
 # 5. Save evaluator (grader)
 GRADER_SCRIPT=$(cat grader.js)

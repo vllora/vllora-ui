@@ -63,8 +63,8 @@ The `knowledge_parts.json` output maps to your topic hierarchy:
 - **Text parts** grouped by `extraction_path` → natural topic clusters
 - **Table parts** may become their own topics (e.g., a comparison table → a "comparison" subtopic)
 - **Image parts** provide context — figures illustrate concepts that become training scenarios
-- Use `extraction_path` values as `sourceChunkRefs` in topics.json (e.g., `"document-name:3.2 Attention"`)
-- Group related parts under parent topics for 2-3 levels of hierarchy
+- After uploading parts, link them to topics via the topic-source relations API (`POST /topics/relations`)
+- Group related parts under parent topics using `parent_id` for 2-3 levels of hierarchy
 
 Example mapping (after JSON-decoding `extraction_path` strings):
 ```
@@ -90,9 +90,17 @@ The goal is having domain knowledge accessible when you write training prompts.
 
 ### Linking Knowledge to Topics and Records
 
-As you extract knowledge, keep a mental (or written) map of which parts relate to which topics. When you build the topic hierarchy later, add `sourceChunkRefs` to each topic node pointing back to the relevant parts (e.g., `"document-name:3.2 Attention"`).
+As you extract knowledge, keep a mental (or written) map of which parts relate to which topics. After uploading knowledge source parts and creating topics, link them via the topic-source relations API:
 
-This traceability helps during iteration — when a topic scores poorly in evaluation, you can quickly find the source material to check whether the issue is missing knowledge, incorrect facts, or insufficient detail. See `topic-hierarchy.md` for the full approach.
+```bash
+curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics/relations \
+  -H "Content-Type: application/json" \
+  -d '{"relations": [
+    {"topic_identifier": "topic-id", "part_identifier": "part-reference-id"}
+  ]}'
+```
+
+This traceability helps during iteration — when a topic scores poorly in evaluation, you can query the relations to find the source parts and check whether the issue is missing knowledge, incorrect facts, or insufficient detail. See `topic-hierarchy.md` for the full approach.
 
 ---
 

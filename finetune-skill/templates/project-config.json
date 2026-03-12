@@ -14,15 +14,14 @@
       {
         "id": "topic-1",
         "name": "Topic 1",
-        "description": "What this topic covers",
-        "children": [
-          {
-            "id": "topic-1/subtopic-a",
-            "name": "Subtopic A",
-            "description": "Specific area within Topic 1",
-            "children": []
-          }
-        ]
+        "parent_id": null,
+        "system_prompt": "Focus on what this topic covers"
+      },
+      {
+        "id": "topic-1-subtopic-a",
+        "name": "Subtopic A",
+        "parent_id": "topic-1",
+        "system_prompt": "Focus on specific area within Topic 1"
       }
     ]
   },
