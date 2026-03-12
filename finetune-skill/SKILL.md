@@ -51,7 +51,7 @@ finetune-project/
 ├── training.jsonl              # Training prompts (JSONL format)
 ├── grader.js                   # Evaluation/grader function
 ├── topics.json                 # Topic hierarchy
-├── knowledge/                  # Extracted domain knowledge (required when documents provided)
+├── reference/                  # Extracted domain knowledge (required when documents provided)
 │   ├── docling-result.json     # Raw Docling response (chunks + document)
 │   ├── knowledge_parts.json    # Typed parts: text, table, image (agent-created)
 │   ├── document-extraction.md  # Structured extraction summary
