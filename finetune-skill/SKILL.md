@@ -46,9 +46,11 @@ finetune-project/
 ├── training.jsonl              # Training prompts (JSONL format)
 ├── grader.js                   # Evaluation/grader function
 ├── topics.json                 # Topic hierarchy
+├── relations.json              # Topic → part mappings for data generation
 ├── knowledge/                  # Extracted domain knowledge
 │   ├── docling-result.json     # Raw Docling response
 │   ├── knowledge_parts.json    # Typed parts: text, table, image
+│   ├── parts-index.json        # Lightweight part index with previews
 │   └── document-extraction.md  # Extraction notes
 └── execution-log.md            # Running log of every step
 ```
@@ -121,6 +123,8 @@ Poll `/v1/status/poll/$TASK_ID` until success, then fetch `/v1/result/$TASK_ID` 
 
 4. **Write a script** to create `knowledge/knowledge_parts.json` — this is the required deliverable. The script must produce typed source_parts (text, table, image) with titles, extraction paths, and provenance metadata matching the schema in `reference/extraction-guide.md` Section 3.
 
+The extraction script must also produce `knowledge/parts-index.json` — a lightweight index with `{id, type, title, extraction_path, pages, content_preview}` per part (first 200 chars of content). This index is small enough to read during topic design and is used to map parts to topics.
+
 See `reference/extraction-guide.md` for the full response structure, schema, and step-by-step guidance.
 
 **Fallback — pdftotext** (when Docker is not available):
@@ -150,6 +154,10 @@ Save to `topics.json` as a **flat array** — every topic at the same level, hie
 Aim for 3-7 root topics, 2-3 levels deep, each leaf supporting 10-30 training examples. See `reference/topic-hierarchy.md` for design guidelines.
 
 **Topic-source linking**: After uploading knowledge source parts, link them to topics via the `POST /topics/relations` API. Only create links to parts you've actually extracted — never fabricate references. See `reference/api-reference.md` Section 13 for the relations API.
+
+**Build topic-part relations.** After designing topics, delegate to the `relation-builder` subagent — it reads `knowledge/parts-index.json` and `topics.json`, iteratively matches parts to topics using a retrieve-and-verify loop, and writes `relations.json`. This keeps the parts-index scanning out of main context.
+
+If there are no documents (objective-only pipeline), skip this step — no relations.json needed.
 
 ### Step 3.5: Categorize Existing Records
 
@@ -225,8 +233,15 @@ KS=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowl
   -F 'metadata={"total_pages":84,"extraction_method":"docling_hybrid"}')
 KS_ID=$(echo "$KS" | python3 -c "import sys,json; print(json.load(sys.stdin)['knowledge_source']['id'])")
 
-# 2b. Add extracted parts
-PARTS=$(python3 -c "import json; d=json.load(open('knowledge/knowledge_parts.json')); print(json.dumps(d['parts']))")
+# 2b. Add extracted parts (move id → reference_id for safe re-uploads)
+PARTS=$(python3 -c "
+import json
+d = json.load(open('knowledge/knowledge_parts.json'))
+for p in d['parts']:
+    p['reference_id'] = p.pop('id', None)
+    p.pop('source_id', None)
+print(json.dumps(d['parts']))
+")
 curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge/$KS_ID/parts \
   -H "Content-Type: application/json" -d "$PARTS"
 
@@ -242,10 +257,13 @@ curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics \
   -H "Content-Type: application/json" \
   -d "$(python3 -c "import json; print(json.dumps({'topics': json.load(open('topics.json'))}))")"
 
-# 4b. Link topics to knowledge source parts
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics/relations \
-  -H "Content-Type: application/json" \
-  -d '{"relations": [{"topic_identifier": "topic-id", "part_identifier": "part-reference-id"}]}'
+# 4b. Link topics to knowledge source parts (if relations.json exists)
+if [ -f relations.json ]; then
+  RELATIONS=$(cat relations.json)
+  curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics/relations \
+    -H "Content-Type: application/json" \
+    -d "{\"relations\": $RELATIONS}"
+fi
 
 # 5. Save evaluator (grader)
 GRADER_SCRIPT=$(cat grader.js)

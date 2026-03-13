@@ -63,7 +63,9 @@ The `knowledge_parts.json` output maps to your topic hierarchy:
 - **Text parts** grouped by `extraction_path` → natural topic clusters
 - **Table parts** may become their own topics (e.g., a comparison table → a "comparison" subtopic)
 - **Image parts** provide context — figures illustrate concepts that become training scenarios
-- After uploading parts, link them to topics via the topic-source relations API (`POST /topics/relations`)
+- `knowledge/parts-index.json` is produced during extraction — a lightweight version of knowledge_parts.json with `{id, type, title, extraction_path, pages, content_preview}` per part
+- After topic design, the `relation-builder` subagent reads `parts-index.json` and `topics.json`, iteratively matches parts to topics using a retrieve-and-verify loop per leaf topic, and writes `relations.json`
+- The mapping uses iterative retrieval+verification per topic, not single-pass classification — this produces higher-quality relations
 - Group related parts under parent topics using `parent_id` for 2-3 levels of hierarchy
 
 Example mapping (after JSON-decoding `extraction_path` strings):
@@ -90,14 +92,17 @@ The goal is having domain knowledge accessible when you write training prompts.
 
 ### Linking Knowledge to Topics and Records
 
-As you extract knowledge, keep a mental (or written) map of which parts relate to which topics. After uploading knowledge source parts and creating topics, link them via the topic-source relations API:
+After designing topics, the `relation-builder` subagent builds `relations.json` — a mapping of which parts are relevant to each topic. It reads `knowledge/parts-index.json` and `topics.json`, runs an iterative retrieve-and-verify loop per leaf topic, and writes the result. This keeps parts-index scanning out of main context.
+
+During Step 6 (upload), `relations.json` is uploaded via the topic-source relations API:
 
 ```bash
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics/relations \
-  -H "Content-Type: application/json" \
-  -d '{"relations": [
-    {"topic_identifier": "topic-id", "part_identifier": "part-reference-id"}
-  ]}'
+if [ -f relations.json ]; then
+  RELATIONS=$(cat relations.json)
+  curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics/relations \
+    -H "Content-Type: application/json" \
+    -d "{\"relations\": $RELATIONS}"
+fi
 ```
 
 This traceability helps during iteration — when a topic scores poorly in evaluation, you can query the relations to find the source parts and check whether the issue is missing knowledge, incorrect facts, or insufficient detail. See `topic-hierarchy.md` for the full approach.

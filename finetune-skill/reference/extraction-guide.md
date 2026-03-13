@@ -530,6 +530,22 @@ After creating all parts, link them:
 - Wrap in the `knowledge_parts.json` envelope with the `source` object (id, workflow_id, name, description, metadata)
 - Write to `knowledge/knowledge_parts.json`
 
+Also produce `knowledge/parts-index.json` — a lightweight index for topic classification:
+```python
+index = []
+for part in parts:
+    index.append({
+        "id": part["id"],
+        "type": part["type"],
+        "title": part.get("title", ""),
+        "extraction_path": part.get("extraction_path", ""),
+        "pages": part.get("extraction_metadata", {}).get("pages", []),
+        "content_preview": part["content"][:200]
+    })
+with open("knowledge/parts-index.json", "w") as f:
+    json.dump(index, f, indent=2)
+```
+
 ### Step 7: Validate Output
 
 Before finalizing `knowledge_parts.json`, run these checks:
@@ -596,7 +612,14 @@ echo "Created knowledge source: $KS_ID"
 Upload the parts from `knowledge_parts.json`. The body is a JSON array of parts — the API sets `source_id` automatically.
 
 ```bash
-PARTS=$(python3 -c "import json; d=json.load(open('knowledge/knowledge_parts.json')); print(json.dumps(d['parts']))")
+PARTS=$(python3 -c "
+import json
+d = json.load(open('knowledge/knowledge_parts.json'))
+for p in d['parts']:
+    p['reference_id'] = p.pop('id', None)
+    p.pop('source_id', None)
+print(json.dumps(d['parts']))
+")
 curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge/$KS_ID/parts \
   -H "Content-Type: application/json" -d "$PARTS"
 ```
@@ -607,7 +630,7 @@ Each part in the array matches the `knowledge_parts.json` schema from Section 3:
 - `reference_id` (optional): used for topic-source linking later
 - `title`, `extraction_path`, `content_metadata`, `extraction_metadata`: optional metadata
 
-**Note:** The `source_id` field from `knowledge_parts.json` is not sent — the API sets it based on the URL path. The `id` field is optional; the API generates a UUID if omitted.
+**Note:** The `source_id` field from `knowledge_parts.json` is not sent — the API sets it based on the URL path. The `id` field is moved to `reference_id` before upload — the server generates a UUID for `id`, and the original `p-NNN` value is preserved in `reference_id` for topic-source linking via `relations.json`.
 
 ### How `knowledge_parts.json` maps to API calls
 

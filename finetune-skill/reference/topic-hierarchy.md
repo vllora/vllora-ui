@@ -38,30 +38,50 @@ Without topics, training data tends to cluster around easy/common scenarios, lea
 
 ## Linking Topics to Source Documents
 
-When you build topics from user documents, link them to the relevant knowledge source parts using the **topic-source relations API**. This creates a formal traceability chain: **document part → relation → topic → records**.
+Topic-source relations create a formal traceability chain: **document part → relation → topic → records**. The mapping is built in three phases across the pipeline:
 
-**Only create relations after you have actually extracted parts from the document.** The `part_identifier` values must reference real knowledge source parts — not guesses. If you haven't extracted the document yet, skip linking and add relations later.
+### Phase 1: Extraction (Step 2)
 
-**Why this matters:**
-- When a topic scores poorly in evaluation, you know which document parts to re-read for better prompts
-- When you need more variety for a topic, you know where to look for additional source material
-- When the user updates a document, you know which topics and records may be affected
+When extracting documents, the extraction script produces two files:
+- `knowledge/knowledge_parts.json` — full typed parts with content
+- `knowledge/parts-index.json` — lightweight index with `{id, type, title, extraction_path, pages, content_preview}` per part (first 200 chars of content)
 
-**How to link:**
+The parts-index is small enough to read in full during topic design and relation building.
 
-After creating topics and uploading knowledge source parts, link them via the relations API:
+### Phase 2: Relation Building (Step 3)
+
+After designing topics, the `relation-builder` subagent reads `knowledge/parts-index.json` and `topics.json`, then runs an iterative retrieve-and-verify loop per leaf topic:
+1. Search the index for parts matching the topic's subject (title, extraction_path, content_preview)
+2. Verify each candidate is actually relevant
+3. If fewer than 3 relations found, broaden the search (synonyms, parent topic context)
+
+The subagent writes `relations.json` — a flat array of `{topic_identifier, part_identifier}` pairs. This keeps the heavy index scanning out of the main context window.
+
+If there are no documents (objective-only pipeline), skip this phase — no relations needed.
+
+### Phase 3: Upload (Step 6)
+
+After uploading topics, upload the relations via the API:
 
 ```bash
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics/relations \
-  -H "Content-Type: application/json" \
-  -d '{"relations": [
-    {"topic_identifier": "billing-refunds", "part_identifier": "p-003"},
-    {"topic_identifier": "billing-refunds", "part_identifier": "p-004"}
-  ]}'
+if [ -f relations.json ]; then
+  RELATIONS=$(cat relations.json)
+  curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics/relations \
+    -H "Content-Type: application/json" \
+    -d "{\"relations\": $RELATIONS}"
+fi
 ```
 
 - `topic_identifier` — the topic's `id` or `reference_id`
 - `part_identifier` — the knowledge source part's `id` or `reference_id` (alias: `source_identifier`)
+
+### Why this matters
+
+- When a topic scores poorly in evaluation, you know which document parts to re-read for better prompts
+- When you need more variety for a topic, you know where to look for additional source material
+- When the user updates a document, you know which topics and records may be affected
+
+**Only create relations to parts you've actually extracted** — never fabricate references. If you haven't extracted the document yet, skip linking and add relations later.
 
 For records, encode the topic in the ID (e.g., `billing-refunds-001`) so you can always map a record back to its topic and from there to the source parts.
 
