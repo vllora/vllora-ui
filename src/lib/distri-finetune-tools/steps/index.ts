@@ -82,7 +82,6 @@ export { createDatasetHandler, createDatasetTool } from './create-dataset';
 // Evaluation Analysis (Phase 1: Give Lucy Eyes)
 export { getEvaluationDetailsHandler, getEvaluationDetailsTool } from './get-evaluation-details';
 export { logIterationHandler, logIterationTool, getIterationHistoryHandler, getIterationHistoryTool } from './iteration-history';
-export { markJobReviewedHandler, markJobReviewedTool } from './mark-job-reviewed';
 
 // Evaluation Analysis (Phase 2: Give Lucy Autonomy)
 export { analyzeEvaluationHandler, analyzeEvaluationTool } from './analyze-evaluation';
@@ -183,7 +182,6 @@ import { updatePlanMarkdownHandler, updatePlanMarkdownTool } from './update-plan
 import { createDatasetHandler, createDatasetTool } from './create-dataset';
 import { getEvaluationDetailsHandler, getEvaluationDetailsTool } from './get-evaluation-details';
 import { logIterationHandler, logIterationTool, getIterationHistoryHandler, getIterationHistoryTool } from './iteration-history';
-import { markJobReviewedHandler, markJobReviewedTool } from './mark-job-reviewed';
 import { analyzeEvaluationHandler, analyzeEvaluationTool } from './analyze-evaluation';
 import { analyzeTrainingHandler, analyzeTrainingTool } from './analyze-training';
 import { getTrainingMetricsHandler, getTrainingMetricsTool } from './get-training-metrics';
@@ -237,7 +235,6 @@ export const STEP_TOOL_NAMES = [
   'get_evaluation_details',
   'log_iteration',
   'get_iteration_history',
-  'mark_job_reviewed',
   // Evaluation Analysis (Phase 2: Give Lucy Autonomy)
   'analyze_evaluation',
   // Training Analysis (Phase 3: Give Lucy Wisdom)
@@ -301,7 +298,6 @@ export const stepTools: DistriFnTool[] = [
   getEvaluationDetailsTool,
   logIterationTool,
   getIterationHistoryTool,
-  markJobReviewedTool,
   // Evaluation Analysis (Phase 2: Give Lucy Autonomy)
   analyzeEvaluationTool,
   // Training Analysis (Phase 3: Give Lucy Wisdom)
@@ -361,7 +357,6 @@ export const stepToolHandlers: Record<string, ToolHandler> = {
   get_evaluation_details: getEvaluationDetailsHandler,
   log_iteration: logIterationHandler,
   get_iteration_history: getIterationHistoryHandler,
-  mark_job_reviewed: markJobReviewedHandler,
   // Evaluation Analysis (Phase 2: Give Lucy Autonomy)
   analyze_evaluation: analyzeEvaluationHandler,
   // Training Analysis (Phase 3: Give Lucy Wisdom)

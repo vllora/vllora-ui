@@ -26,7 +26,7 @@ import {
   getFinetuneJobStatus,
   getFinetuneEvaluations,
 } from "@/services/finetune-api";
-import { workflowService } from "@/services/service-registry";
+
 import { ProjectEventsConsumer } from "@/contexts/project-events";
 import { emitter } from "@/utils/eventEmitter";
 
@@ -109,53 +109,24 @@ function useFinetuneJobsLogic() {
     }
   }, [setJobs, currentDatasetId]);
 
-  // Fetch evaluations for a specific job (stale-while-revalidate pattern)
-  const fetchJobEvaluations = useCallback(async (job: FinetuneJob, isInitial = false) => {
+  // Fetch evaluations for a specific finetune job from the cloud API
+  const fetchJobEvaluations = useCallback(async (job: FinetuneJob, _isInitial = false) => {
     if (!job.workflow_id) return;
 
     const jobId = job.id;
 
-    // On initial fetch, try to load from cache first (stale-while-revalidate)
-    if (isInitial) {
-      try {
-        const cached = await workflowService.getCachedJobEvaluations(jobId);
-        if (cached) {
-          // Show cached data immediately
-          setJobEvaluations((prev) => ({
-            ...prev,
-            [jobId]: { data: cached.data, isLoading: true, error: null },
-          }));
-        } else {
-          setJobEvaluations((prev) => ({
-            ...prev,
-            [jobId]: { data: prev[jobId]?.data ?? null, isLoading: true, error: null },
-          }));
-        }
-      } catch {
-        // Cache read failed, continue with loading state
-        setJobEvaluations((prev) => ({
-          ...prev,
-          [jobId]: { data: prev[jobId]?.data ?? null, isLoading: true, error: null },
-        }));
-      }
-    }
+    setJobEvaluations((prev) => ({
+      ...prev,
+      [jobId]: { data: prev[jobId]?.data ?? null, isLoading: true, error: null },
+    }));
 
-    // Fetch fresh data from API (revalidate)
     try {
       const results = await getFinetuneEvaluations(job.workflow_id, job.provider_job_id);
 
-      // Update state with fresh data
       setJobEvaluations((prev) => ({
         ...prev,
         [jobId]: { data: results, isLoading: false, error: null },
       }));
-
-      // Save to cache in background
-      workflowService.saveJobEvaluationsCache(jobId, results).catch((cacheErr: unknown) => {
-        console.warn('Failed to cache job evaluations:', cacheErr);
-      });
-
-      // Per-record score persistence is handled by the gateway, not the FE.
     } catch (err) {
       setJobEvaluations((prev) => ({
         ...prev,

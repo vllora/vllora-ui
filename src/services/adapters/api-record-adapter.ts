@@ -19,12 +19,48 @@ interface DbWorkflowRecordResponse {
   readonly id: string;
   readonly workflow_id: string;
   readonly data: string;
-  readonly topic: string | null;
+  readonly topic_id: string | null;
   readonly span_id: string | null;
   readonly is_generated: number;
   readonly source_record_id: string | null;
   readonly metadata: string | null;
   readonly created_at: string;
+}
+
+interface DbTopicRow {
+  readonly id: string;
+  readonly name: string;
+  readonly parent_id: string | null;
+}
+
+/**
+ * Fetch workflow topics and build bidirectional name↔id maps.
+ * Caches per workflowId for the lifetime of the page.
+ */
+const topicCaches = new Map<string, { nameToId: Map<string, string>; idToName: Map<string, string> }>();
+
+async function getTopicMaps(workflowId: string): Promise<{ nameToId: Map<string, string>; idToName: Map<string, string> }> {
+  const cached = topicCaches.get(workflowId);
+  if (cached) return cached;
+
+  const response = await api.get(`/finetune/workflows/${workflowId}/topics`);
+  const data = await handleApiResponse<{ topics: DbTopicRow[] }>(response);
+
+  const nameToId = new Map<string, string>();
+  const idToName = new Map<string, string>();
+  for (const t of data.topics) {
+    nameToId.set(t.name, t.id);
+    idToName.set(t.id, t.name);
+  }
+
+  const maps = { nameToId, idToName };
+  topicCaches.set(workflowId, maps);
+  return maps;
+}
+
+/** Invalidate cached topic maps (call after topic hierarchy changes) */
+export function invalidateTopicCache(workflowId: string): void {
+  topicCaches.delete(workflowId);
 }
 
 interface DbWorkflowRecordScoreResponse {
@@ -40,14 +76,16 @@ interface DbWorkflowRecordScoreResponse {
 function mapToFe(
   db: DbWorkflowRecordResponse,
   scores: readonly DbWorkflowRecordScoreResponse[],
+  idToName?: Map<string, string>,
 ): DatasetRecord {
   const createdAt = new Date(db.created_at).getTime();
   const recordScores = scores.filter(s => s.record_id === db.id);
+  const topicName = db.topic_id && idToName ? idToName.get(db.topic_id) : undefined;
   return {
     id: db.id,
     workflowId: db.workflow_id,
     data: JSON.parse(db.data),
-    topic: db.topic ?? undefined,
+    topic: topicName,
     spanId: db.span_id ?? undefined,
     is_generated: db.is_generated === 1,
     sourceRecordId: db.source_record_id ?? undefined,
@@ -92,14 +130,15 @@ function basePath(workflowId: string): string {
 
 export const apiRecordAdapter: RecordService = {
   async getByDatasetId(workflowId: string, recordIds?: string[]): Promise<DatasetRecord[]> {
-    const [recordsResponse, scoresResponse] = await Promise.all([
+    const [recordsResponse, scoresResponse, topicMaps] = await Promise.all([
       api.get(basePath(workflowId)),
       api.get(`${basePath(workflowId)}/scores`),
+      getTopicMaps(workflowId),
     ]);
     const recordsData = await handleApiResponse<{ records: DbWorkflowRecordResponse[] }>(recordsResponse);
     const scoresData = await handleApiResponse<{ scores: DbWorkflowRecordScoreResponse[] }>(scoresResponse);
 
-    let records = recordsData.records.map(db => mapToFe(db, scoresData.scores));
+    let records = recordsData.records.map(db => mapToFe(db, scoresData.scores, topicMaps.idToName));
 
     if (recordIds && recordIds.length > 0) {
       const idSet = new Set(recordIds);
@@ -119,7 +158,7 @@ export const apiRecordAdapter: RecordService = {
     const response = await api.get(basePath(workflowId));
     const data = await handleApiResponse<{ records: DbWorkflowRecordResponse[] }>(response);
     const total = data.records.length;
-    const withTopic = data.records.filter(r => r.topic != null && r.topic !== '').length;
+    const withTopic = data.records.filter(r => r.topic_id != null && r.topic_id !== '').length;
     return { total, withTopic };
   },
 
@@ -141,19 +180,33 @@ export const apiRecordAdapter: RecordService = {
     records: readonly NewRecord[],
     defaultTopic?: string,
   ): Promise<DatasetRecord[]> {
+    // Resolve topic names → topic IDs for the FK constraint
+    const { nameToId } = await getTopicMaps(workflowId);
+
     const beRecords = records.map(r => {
-      const topic = r.topic?.trim() || defaultTopic?.trim() || undefined;
+      const topicName = r.topic?.trim() || defaultTopic?.trim() || undefined;
+      const topicId = topicName ? nameToId.get(topicName) : undefined;
       return {
         id: crypto.randomUUID(),
         data: r.data,
-        topic,
+        topic_id: topicId,
+        topicName,
         is_generated: r.is_generated ?? false,
         source_record_id: r.sourceRecordId,
         metadata: r.metadata ? JSON.stringify(r.metadata) : undefined,
       };
     });
 
-    const response = await api.post(basePath(workflowId), { records: beRecords });
+    const response = await api.post(basePath(workflowId), {
+      records: beRecords.map(r => ({
+        id: r.id,
+        data: r.data,
+        topic_id: r.topic_id,
+        is_generated: r.is_generated,
+        source_record_id: r.source_record_id,
+        metadata: r.metadata,
+      })),
+    });
     await handleApiResponse<{ added: number }>(response);
 
     // Server uses client-provided IDs for records (id is required in RecordInput)
@@ -163,7 +216,7 @@ export const apiRecordAdapter: RecordService = {
       workflowId,
       data: records[i].data,
       metadata: records[i].metadata,
-      topic: r.topic,
+      topic: r.topicName,
       is_generated: r.is_generated,
       sourceRecordId: r.source_record_id,
       evaluation: records[i].evaluation,
@@ -188,17 +241,20 @@ export const apiRecordAdapter: RecordService = {
   },
 
   async updateTopic(workflowId: string, recordId: string, topic: string): Promise<void> {
+    const { nameToId } = await getTopicMaps(workflowId);
+    const topicId = topic ? nameToId.get(topic) ?? null : null;
     const response = await api.patch(
       `${basePath(workflowId)}/${recordId}`,
-      { topic: topic || null },
+      { topic_id: topicId },
     );
     await handleApiResponse<{ updated: boolean }>(response);
   },
 
   async updateTopicsBatch(workflowId: string, updates: Map<string, string>): Promise<number> {
-    const updatesList = Array.from(updates.entries()).map(([recordId, topic]) => ({
+    const { nameToId } = await getTopicMaps(workflowId);
+    const updatesList = Array.from(updates.entries()).map(([recordId, topicName]) => ({
       record_id: recordId,
-      topic,
+      topic_id: nameToId.get(topicName) ?? topicName,
     }));
 
     const response = await api.patch(`${basePath(workflowId)}/topics`, {

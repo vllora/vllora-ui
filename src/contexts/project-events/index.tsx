@@ -240,8 +240,12 @@ export const useProjectEvents = (props: ProjectEventsHookProps) => {
         return;
       }
 
-      console.warn('Failed to connect to project events:', error);
       isConnectingRef.current = false;
+
+      // Only log on retries (not the initial attempt which often fails due to timing)
+      if (retryCountRef.current > 0) {
+        console.warn('Failed to connect to project events:', error);
+      }
 
       // Retry logic with exponential backoff if shouldConnect is still true
       if (shouldConnectRef.current && retryCountRef.current < maxRetries) {

@@ -243,15 +243,15 @@ async function buildCatchUpContext(workflowId: string): Promise<CatchUpResult> {
     }
 
     // --- Completed eval jobs (with per-topic breakdown + iteration delta) ---
-    const unreviewedCompleted = jobs.filter(
-      (j: EvalJob) => j.status === 'completed' && !j.reviewedByAgent
+    const recentCompleted = jobs.filter(
+      (j: EvalJob) => j.status === 'completed'
     );
-    const unreviewedFailed = jobs.filter(
-      (j: EvalJob) => j.status === 'failed' && !j.reviewedByAgent
+    const recentFailed = jobs.filter(
+      (j: EvalJob) => j.status === 'failed'
     );
 
-    if (unreviewedCompleted.length > 0) {
-      for (const j of unreviewedCompleted) {
+    if (recentCompleted.length > 0) {
+      for (const j of recentCompleted) {
         const avgScore = j.pollingSnapshot?.summary?.average_score;
         const byTopic = j.result?.byTopic;
 
@@ -285,31 +285,35 @@ async function buildCatchUpContext(workflowId: string): Promise<CatchUpResult> {
           rolloutModel: j.rolloutModel ?? undefined,
         });
       }
-      const jobSummaries = unreviewedCompleted.map((j: EvalJob) => {
+      const sorted = [...recentCompleted].sort(
+        (a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0),
+      );
+      const jobSummaries = sorted.map((j: EvalJob, i: number) => {
         const avgScore = j.pollingSnapshot?.summary?.average_score;
         const scoreStr = avgScore != null ? ` (avg score: ${avgScore.toFixed(3)})` : '';
-        return `- Job ${j.id}${scoreStr}, completed at ${new Date(j.completedAt ?? 0).toLocaleString()}`;
+        const latest = i === 0 ? ' [LATEST]' : '';
+        return `- Job ${j.id}${scoreStr}, completed at ${new Date(j.completedAt ?? 0).toLocaleString()}${latest}`;
       });
       sections.push(
-        `CATCH_UP: ${unreviewedCompleted.length} completed evaluation(s) not yet reviewed:\n${jobSummaries.join('\n')}\nUse get_evaluation_details to analyze results, then mark_job_reviewed after presenting to user.`
+        `CATCH_UP: ${sorted.length} completed evaluation(s) (sorted newest first):\n${jobSummaries.join('\n')}\nFocus on the LATEST evaluation. Use analyze_evaluation to present results.`
       );
     }
 
     // --- Failed eval jobs ---
-    if (unreviewedFailed.length > 0) {
-      for (const j of unreviewedFailed) {
+    if (recentFailed.length > 0) {
+      for (const j of recentFailed) {
         failedJobs.push({
           jobId: j.id,
           errorMessage: j.error ?? undefined,
           failedAt: j.completedAt ?? undefined,
         });
       }
-      const failSummaries = unreviewedFailed.map((j: EvalJob) => {
+      const failSummaries = recentFailed.map((j: EvalJob) => {
         const errMsg = j.error ? `: ${j.error.slice(0, 200)}` : '';
         return `- Job ${j.id} failed${errMsg}`;
       });
       sections.push(
-        `CATCH_UP: ${unreviewedFailed.length} failed evaluation(s):\n${failSummaries.join('\n')}\nPresent the error and suggest fixes, then mark_job_reviewed.`
+        `CATCH_UP: ${recentFailed.length} failed evaluation(s):\n${failSummaries.join('\n')}\nPresent the error and suggest fixes.`
       );
     }
 
@@ -541,7 +545,7 @@ async function resolveTrainingStatus(
   let errorMessage: string | undefined = status === 'failed' ? 'Training job failed' : undefined;
 
   // If workflow says running, verify against the API (handles stale IndexedDB)
-  if (status === 'running' || status === 'pending' || status === 'queued') {
+  if ((status === 'running' || status === 'pending' || status === 'queued') && t.jobId) {
     try {
       const freshJob = await getFinetuneJobStatus(workflow.workflowId, t.jobId);
       if (freshJob.status === 'succeeded') {
@@ -569,7 +573,7 @@ async function resolveTrainingStatus(
   // For completed training, fetch last-epoch scores (overall + per-topic)
   let metrics = t.metrics ?? undefined;
   let perTopic: CatchUpTopicScore[] | undefined;
-  if (status === 'completed' && !metrics) {
+  if (status === 'completed' && !metrics && t.jobId) {
     const trainingScores = await fetchTrainingEpochScores(workflow.workflowId, t.jobId);
     metrics = trainingScores?.metrics;
     perTopic = trainingScores?.perTopic;

@@ -130,21 +130,14 @@ class EvalJobManager {
   }
 
   /**
-   * Create a new eval job. Polling is started by EvalJobsContext.
+   * Create a new eval job. Gateway creates cloud eval + SQLite record in one call.
+   * Polling is started by EvalJobsContext when it sees the running job.
    */
   async createEvalJob(params: StartEvalParams): Promise<string> {
     const { workflowId, sampleSize, rolloutModel = 'gpt-4o-mini' } = params;
 
-    const job = await evalJobService.create({
-      workflowId,
-      evaluationRunId: '',
-      status: 'pending',
-      sampleSize,
-      rolloutModel,
-      createdAt: Date.now(),
-    });
-
     try {
+      // Single call: gateway uploads dataset, creates cloud eval, saves tracking record
       const evaluationResponse = await createEvaluation({
         workflow_id: workflowId,
         rollout_model_params: { model: rolloutModel },
@@ -152,26 +145,20 @@ class EvalJobManager {
         limit: sampleSize,
       });
 
-      const runningJob = await evalJobService.update(job.id, {
-        evaluationRunId: evaluationResponse.evaluation_run_id,
-        status: 'running',
-        startedAt: Date.now(),
-      });
+      // Fetch the eval job record the gateway just created
+      const jobs = await evalJobService.getByDataset(workflowId);
+      const job = jobs.find(
+        (j) => j.evaluationRunId === evaluationResponse.evaluation_run_id,
+      );
 
-      if (runningJob) {
-        emitter.emit('vllora_eval_job_update', { jobId: job.id, job: runningJob });
+      if (job) {
+        emitter.emit('vllora_eval_job_update', { jobId: job.id, job });
       }
 
-      // Polling is started by EvalJobsContext when it sees the running job
       toast.info('Evaluation started in background', { duration: 3000 });
-      return job.id;
+      return job?.id ?? evaluationResponse.evaluation_run_id;
     } catch (error) {
       const friendly = friendlyEvalError(error);
-      await evalJobService.update(job.id, {
-        status: 'failed',
-        error: friendly,
-        completedAt: Date.now(),
-      });
       toast.error('Failed to start evaluation', { description: friendly });
       throw error;
     }
@@ -293,11 +280,14 @@ class EvalJobManager {
 
       if (errorCount >= MAX_CONSECUTIVE_ERRORS) {
         this.stopPolling(jobId);
-        await evalJobService.update(jobId, {
+        const unreachableJob = await evalJobService.update(jobId, {
           status: 'failed',
           error: 'Unable to reach evaluation server after multiple attempts',
           completedAt: Date.now(),
         });
+        if (unreachableJob) {
+          emitter.emit('vllora_eval_job_update', { jobId, job: unreachableJob });
+        }
         await this.markWorkflowStepFailed(job.workflowId);
         toast.error('Evaluation failed: unable to reach evaluation server');
       }
@@ -319,11 +309,14 @@ class EvalJobManager {
 
     try {
       if (result.status === 'failed') {
-        await evalJobService.update(jobId, {
+        const failedJob = await evalJobService.update(jobId, {
           status: 'failed',
           error: 'Evaluation failed on backend',
           completedAt: Date.now(),
         });
+        if (failedJob) {
+          emitter.emit('vllora_eval_job_update', { jobId, job: failedJob });
+        }
         await this.markWorkflowStepFailed(job.workflowId);
         toast.error('Evaluation failed');
         emitter.emit('vllora_eval_job_completed', {
@@ -354,12 +347,15 @@ class EvalJobManager {
 
       await datasetService.updateEvalStats(job.workflowId, evalStats);
 
-      await evalJobService.update(jobId, {
+      const completedJob = await evalJobService.update(jobId, {
         status: 'completed',
         completedAt: Date.now(),
         result: evalStats,
         error: undefined,
       });
+      if (completedJob) {
+        emitter.emit('vllora_eval_job_update', { jobId, job: completedJob });
+      }
 
       // Update workflow step data
       try {
@@ -407,11 +403,14 @@ class EvalJobManager {
     } catch (error) {
       console.error('[EvalJobManager] Failed to process results:', error);
       const friendly = friendlyEvalError(error);
-      await evalJobService.update(jobId, {
+      const errorJob = await evalJobService.update(jobId, {
         status: 'failed',
         error: friendly,
         completedAt: Date.now(),
       });
+      if (errorJob) {
+        emitter.emit('vllora_eval_job_update', { jobId, job: errorJob });
+      }
       await this.markWorkflowStepFailed(job.workflowId);
       toast.error('Failed to process evaluation results', { description: friendly });
     }

@@ -12,6 +12,7 @@
  */
 
 import { api, handleApiResponse } from '@/lib/api-client';
+import { invalidateTopicCache } from '@/services/adapters/api-record-adapter';
 import type { DatasetService } from '@/services/interfaces/dataset-service';
 import type {
   Dataset,
@@ -232,8 +233,24 @@ export const apiDatasetAdapter: DatasetService = {
     const flat = topics.hierarchy?.length
       ? flattenHierarchy(topics.hierarchy, null)
       : [];
-    const response = await api.put(`${BASE}/${id}/topics`, { topics: flat });
-    await handleApiResponse<{ replaced: number }>(response);
+
+    // Delete existing topics first, then create new ones.
+    // PUT expects TopicUpdateInput (with identifier), but we generate fresh UUIDs,
+    // so delete-then-create is the correct pattern.
+    const existingRes = await api.get(`${BASE}/${id}/topics`);
+    const existing = await handleApiResponse<{ topics: DbTopicResponse[] }>(existingRes);
+    if (existing.topics.length > 0) {
+      const ids = existing.topics.map((t) => t.id);
+      await api.delete(`${BASE}/${id}/topics`, { body: JSON.stringify({ identifiers: ids }), headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (flat.length > 0) {
+      const response = await api.post(`${BASE}/${id}/topics`, { topics: flat });
+      await handleApiResponse<{ created: number }>(response);
+    }
+
+    // Invalidate record adapter's topic name↔id cache since IDs changed
+    invalidateTopicCache(id);
   },
 
   async updateEvalScript(id: string, script: string): Promise<void> {
