@@ -188,12 +188,6 @@ export interface CustomBreakpointResumeEventType {
   updated_request?: any; // Optional ChatCompletionRequest
 }
 
-export interface CustomFinetuneJobUpdateEventType {
-  type: 'finetune_job_update';
-  job_id: string;
-  status: string;
-}
-
 // Discriminated union of all custom event types
 export type CustomEventType =
   | CustomSpanStartEventType
@@ -206,8 +200,7 @@ export type CustomEventType =
   | CustomCustomEventType
   | CustomBreakpointEventType
   | CustomBreakpointResumeEventType
-  | CustomGlobalBreakpointEventType
-  | CustomFinetuneJobUpdateEventType;
+  | CustomGlobalBreakpointEventType;
 
 export interface CustomEvent extends BaseEvent {
   type: 'Custom';

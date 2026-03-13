@@ -179,15 +179,6 @@ function useDatasets() {
     await recordService.updateData(workflowId, recordId, data);
   }, []);
 
-  // Update a record's evaluation
-  const updateRecordEvaluation = useCallback(async (
-    workflowId: string,
-    recordId: string,
-    score: number | undefined
-  ): Promise<void> => {
-    await recordService.updateEvaluation(workflowId, recordId, score);
-  }, []);
-
   // Rename a dataset
   const renameDataset = useCallback(async (workflowId: string, newName: string): Promise<void> => {
     await datasetService.rename(workflowId, newName);
@@ -278,7 +269,6 @@ function useDatasets() {
     deleteRecord,
     updateRecordTopic,
     updateRecordData,
-    updateRecordEvaluation,
     renameDataset,
     spanExistsInDataset,
     getDatasetsBySpanId,

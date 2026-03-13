@@ -67,17 +67,7 @@ export async function seedRecords(
     })),
   );
 
-  const ids = created.map(r => r.id);
-
-  // Update eval scores if provided
-  for (let i = 0; i < records.length; i++) {
-    const rec = records[i];
-    if (rec.score != null && ids[i]) {
-      await recordService.updateEvaluation(workflowId, ids[i], rec.score);
-    }
-  }
-
-  return ids;
+  return created.map(r => r.id);
 }
 
 // =============================================================================
@@ -148,18 +138,16 @@ export async function seedCompletedEvalJob(
     },
   };
 
+  // Create eval job record in gateway SQLite, then update with full result data.
+  // The create endpoint only accepts cloud_run_id, sample_size, rollout_model.
   const job = await evalJobService.create({
     workflowId,
     evaluationRunId: opts.evaluationRunId ?? 'eval-run-001',
-    status: 'completed',
+    status: 'pending',
     sampleSize: totalRows,
     createdAt: Date.now(),
-    completedAt: Date.now(),
-    pollingSnapshot,
   });
 
-  // The API adapter's create only sends cloud_run_id, sample_size, rollout_model.
-  // Update the job to set status, pollingSnapshot, and completedAt.
   await evalJobService.update(job.id, {
     status: 'completed',
     completedAt: Date.now(),

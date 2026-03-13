@@ -17,6 +17,7 @@ import { RecordsTableFooter } from "./RecordsTableFooter";
 import { SeeAllLink } from "./SeeAllLink";
 import { getTopicColor, type AvailableTopic } from "../record-utils";
 import type { RecordRole } from "../record-filters";
+import { emitter, consumePendingHighlight } from "@/utils/eventEmitter";
 
 interface RecordsTableProps {
   records: DatasetRecord[];
@@ -131,6 +132,9 @@ export function RecordsTable({
   // Refs for record rows to enable scrolling
   const recordRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
+  // Ref to virtualizer for scrollToIndex from event handler
+  const virtualizerRef = useRef<ReturnType<typeof useVirtualizer<HTMLDivElement, Element>> | null>(null);
+
   // Use controlled or internal state
   const selectedIds = controlledSelectedIds ?? internalSelectedIds;
   const setSelectedIds = onSelectionChange ?? setInternalSelectedIds;
@@ -139,35 +143,49 @@ export function RecordsTable({
   const hasMore = maxRecords > 0 && records.length > maxRecords;
   const shouldVirtualize = displayRecords.length > VIRTUALIZATION_THRESHOLD && !groupByTopic;
 
-  // Listen for highlight record events (from variant source clicks)
+  // Highlight a record: set state, scroll into view, clear after animation
+  const highlightRecord = useCallback((recordId: string) => {
+    const recordIndex = displayRecords.findIndex(r => r.id === recordId);
+    if (recordIndex < 0) return;
+
+    setHighlightedRecordId(recordId);
+
+    // Scroll: use virtualizer only when actually rendering virtualized rows
+    // (not in groupByTopic/tree mode where TopicRecordTree renders instead)
+    if (shouldVirtualize && virtualizerRef.current) {
+      virtualizerRef.current.scrollToIndex(recordIndex, { align: 'center', behavior: 'smooth' });
+    } else {
+      // DOM-based scroll for tree/grouped/small list modes
+      requestAnimationFrame(() => {
+        const recordElement = recordRefs.current.get(recordId);
+        if (recordElement) {
+          recordElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      });
+    }
+
+    setTimeout(() => { setHighlightedRecordId(null); }, 2000);
+  }, [displayRecords, shouldVirtualize]);
+
+  // Listen for highlight record events (from variant source clicks / eval job detail)
   useEffect(() => {
-    const handleHighlightRecord = (event: CustomEvent<{ recordId: string }>) => {
-      const { recordId } = event.detail;
-
-      // Find if this record exists in our list
-      const recordExists = displayRecords.some(r => r.id === recordId);
-      if (!recordExists) return;
-
-      // Set highlighted state
-      setHighlightedRecordId(recordId);
-
-      // Scroll to the record
-      const recordElement = recordRefs.current.get(recordId);
-      if (recordElement) {
-        recordElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-
-      // Clear highlight after animation
-      setTimeout(() => {
-        setHighlightedRecordId(null);
-      }, 2000);
+    const handleHighlightRecord = ({ recordId }: { recordId: string }) => {
+      highlightRecord(recordId);
     };
 
-    window.addEventListener('vllora_highlight_record', handleHighlightRecord as EventListener);
+    emitter.on('vllora_highlight_record', handleHighlightRecord);
+
+    // Check for pending highlight (set before tab switch, before this component mounted).
+    // Use setTimeout to ensure record refs are populated after the first paint.
+    const pendingId = consumePendingHighlight();
+    if (pendingId) {
+      setTimeout(() => { highlightRecord(pendingId); }, 100);
+    }
+
     return () => {
-      window.removeEventListener('vllora_highlight_record', handleHighlightRecord as EventListener);
+      emitter.off('vllora_highlight_record', handleHighlightRecord);
     };
-  }, [displayRecords]);
+  }, [highlightRecord]);
 
   // Callback ref to store record element references
   const setRecordRef = useCallback((recordId: string) => (el: HTMLDivElement | null) => {
@@ -248,6 +266,7 @@ export function RecordsTable({
     },
     overscan: 5,
   });
+  virtualizerRef.current = virtualizer;
 
   // Selection handlers
   const handleSelectAll = useCallback((checked: boolean) => {

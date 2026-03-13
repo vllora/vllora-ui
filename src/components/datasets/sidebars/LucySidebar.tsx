@@ -32,7 +32,7 @@ import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { PlanConsumer } from "@/contexts/PlanContext";
-import { evalJobService, iterationStateService } from "@/services/service-registry";
+import { iterationStateService } from "@/services/service-registry";
 import { useFineTuneAgentChat } from "@/hooks/useFineTuneAgentChat";
 import {
   LucyChat,
@@ -96,9 +96,6 @@ export function LucySidebar() {
   const collapsedMessageCountRef = useRef(0);
   const isCollapsedRef = useRef(isCollapsed);
   isCollapsedRef.current = isCollapsed;
-
-  // Unreviewed job results badge
-  const [hasUnreviewedResults, setHasUnreviewedResults] = useState(false);
 
   // Iteration number badge
   const [iterationNumber, setIterationNumber] = useState(0);
@@ -292,41 +289,6 @@ export function LucySidebar() {
     return () => { emitter.off('vllora_docs_awaiting_plan', handleDocsAwaiting); };
   }, [selectedDatasetId]);
 
-  // Check for unreviewed dry run job results (notification badge)
-  useEffect(() => {
-    if (!selectedDatasetId) {
-      setHasUnreviewedResults(false);
-      return;
-    }
-
-    const checkUnreviewed = async () => {
-      try {
-        const jobs = await evalJobService.getByDataset(selectedDatasetId);
-        const hasUnreviewed = jobs.some(
-          (j) => (j.status === 'completed' || j.status === 'failed') && !j.reviewedByAgent
-        );
-        setHasUnreviewedResults(hasUnreviewed);
-      } catch {
-        // Non-critical — don't break the sidebar
-      }
-    };
-
-    checkUnreviewed();
-
-    // Re-check when dry run jobs complete or get reviewed
-    const handleJobCompleted = ({ workflowId }: { jobId: string; workflowId: string; verdict: string }) => {
-      if (workflowId === selectedDatasetId) setHasUnreviewedResults(true);
-    };
-    const handleJobReviewed = () => { checkUnreviewed(); };
-
-    emitter.on('vllora_dry_run_job_completed', handleJobCompleted);
-    emitter.on('vllora_workflow_updated', handleJobReviewed);
-    return () => {
-      emitter.off('vllora_dry_run_job_completed', handleJobCompleted);
-      emitter.off('vllora_workflow_updated', handleJobReviewed);
-    };
-  }, [selectedDatasetId]);
-
   // Track iteration number for sidebar badge
   useEffect(() => {
     if (!selectedDatasetId) {
@@ -363,8 +325,8 @@ export function LucySidebar() {
       emitter.emit('vllora_lucy_prompt', { prompt: msg });
     };
 
-    emitter.on('vllora_dry_run_job_completed', handleEvalCompleted);
-    return () => { emitter.off('vllora_dry_run_job_completed', handleEvalCompleted); };
+    emitter.on('vllora_eval_job_completed', handleEvalCompleted);
+    return () => { emitter.off('vllora_eval_job_completed', handleEvalCompleted); };
   }, [selectedDatasetId]);
 
   // Auto-prompt Lucy when training completes in background
@@ -617,9 +579,6 @@ export function LucySidebar() {
                     {!providersLoading && !isOpenAIConfigured && (
                       <span className="absolute top-0.5 right-0.5 w-2.5 h-2.5 bg-destructive rounded-full border-2 border-background" />
                     )}
-                    {hasUnreviewedResults && isOpenAIConfigured && (
-                      <span className="absolute top-0.5 right-0.5 w-2.5 h-2.5 bg-amber-500 rounded-full border-2 border-background" />
-                    )}
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="left">Expand Lucy</TooltipContent>
@@ -666,12 +625,7 @@ export function LucySidebar() {
           // Expanded header: Lucy label + action buttons
           <>
             <div className="flex items-center gap-2 min-w-0">
-              <div className="relative">
-                <LucyAvatar size="sm" />
-                {hasUnreviewedResults && (
-                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-amber-500 rounded-full border-2 border-background" />
-                )}
-              </div>
+              <LucyAvatar size="sm" />
               <span className="text-[13px] font-semibold text-foreground">Lucy</span>
               {iterationNumber > 0 && (
                 <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground">

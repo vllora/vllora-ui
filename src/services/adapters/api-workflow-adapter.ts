@@ -513,21 +513,10 @@ export const apiWorkflowAdapter: WorkflowService = {
   },
 };
 
-// ─── Helper: find workflow ID that owns a given eval job ─────────────────────
+// ─── Helper: find workflow ID that owns a given job (eval or finetune) ───────
 
 async function findWorkflowIdForJob(jobId: string): Promise<string | null> {
-  // Try to find the eval job directly (uses the non-scoped route)
-  try {
-    const response = await api.get(`/finetune/eval-jobs/${jobId}`);
-    if (response.ok) {
-      const job = await handleApiResponse<{ id: string; workflow_id: string }>(response);
-      return job.workflow_id;
-    }
-  } catch {
-    // Fall through to scan approach
-  }
-
-  // Fallback: scan all workflows for cached entry
+  // First: scan workflow blobs for cached entry (works for both eval and finetune jobs)
   try {
     const response = await api.get(BASE);
     const rows = await handleApiResponse<DbWorkflowResponse[]>(response);
@@ -537,7 +526,18 @@ async function findWorkflowIdForJob(jobId: string): Promise<string | null> {
       if (blob.evalCache.some((c) => c.jobId === jobId)) return row.id;
     }
   } catch {
-    // Nothing we can do
+    // Fall through to API lookup
+  }
+
+  // Fallback: try the eval-jobs endpoint (only works for eval job IDs)
+  try {
+    const response = await api.get(`/finetune/eval-jobs/${jobId}`);
+    if (response.ok) {
+      const job = await handleApiResponse<{ id: string; workflow_id: string }>(response);
+      return job.workflow_id;
+    }
+  } catch {
+    // Not an eval job or API error — give up
   }
 
   return null;

@@ -57,12 +57,6 @@ export interface EvalJob {
 
   /** Error message (populated on failure) */
   error?: string;
-
-  /** Whether Lucy has presented these results to the user */
-  reviewedByAgent?: boolean;
-
-  /** When Lucy presented the results (epoch ms) */
-  reviewedByAgentAt?: number;
 }
 
 // =============================================================================

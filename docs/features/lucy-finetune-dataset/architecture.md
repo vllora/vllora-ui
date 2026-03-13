@@ -944,9 +944,9 @@ All endpoints used in the finetune flow. Gateway base: `localhost:9090/lucy/v1`.
 - Emits `vllora_dry_run_job_update` (progress) and `vllora_dry_run_job_completed` (done)
 - On complete: LucySidebar auto-triggers Lucy analysis, scores persisted to IndexedDB
 
-**Training polling (Gateway-driven + FE SSE):**
-- Gateway state tracker polls `GET /reinforcement-jobs/{id}/status` every 30s
-- Broadcasts `FinetuneJobUpdate` via SSE → FE `GET /events` → `FinetuneJobsContext`
+**Training polling (Gateway-driven + FE polling):**
+- Gateway state tracker polls cloud every 30s → writes status + scores to SQLite
+- FE polls BE `listFinetuneJobs` every 15s → detects status transitions
 - On complete: emits `vllora_finetune_job_completed` → LucySidebar auto-triggers analysis
 
 **Session resumption (catch-up):**

@@ -211,8 +211,8 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
 
   // Re-run loadStats whenever a dry-run job updates (so progress bar refreshes during polling)
   useEffect(() => {
-    emitter.on('vllora_dry_run_job_update', loadStats);
-    return () => emitter.off('vllora_dry_run_job_update', loadStats);
+    emitter.on('vllora_eval_job_update', loadStats);
+    return () => emitter.off('vllora_eval_job_update', loadStats);
   }, [loadStats]);
 
   // Handlers

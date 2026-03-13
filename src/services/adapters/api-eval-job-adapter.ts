@@ -116,7 +116,6 @@ export const apiEvalJobAdapter: EvalJobService = {
         ? JSON.stringify(updates.result)
         : null;
     }
-
     if (Object.keys(payload).length === 0) return this.get(id);
 
     const response = await api.patch(`/finetune/eval-jobs/${id}`, payload);

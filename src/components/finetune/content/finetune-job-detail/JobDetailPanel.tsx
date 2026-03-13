@@ -276,7 +276,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
 
           {/* ── Finetune Training Metrics (reward, KL, loss, completions) ── */}
           <FinetuneMetricsSection
-            jobId={job.id}
+            jobId={job.provider_job_id}
             workflowId={job.workflow_id}
             isLive={job.status === "running"}
           />

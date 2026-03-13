@@ -36,8 +36,6 @@ interface RecordRow {
   span_id: string | null;
   is_generated: number;
   source_record_id: string | null;
-  dry_run_score: number | null;
-  finetune_score: number | null;
   metadata: string | null;
   created_at: string;
 }
@@ -116,14 +114,24 @@ export const gatewayCrudHandlers = [
     return HttpResponse.json(all.map(toWorkflowResponse));
   }),
 
-  // GET /finetune/workflows/:id — Get single workflow
+  // GET /finetune/workflows/:id — Get single workflow (enriched with counts/IDs)
   http.get(`${BASE}/finetune/workflows/:id`, ({ params }) => {
     const id = params.id as string;
     const row = workflows.get(id);
     if (!row || row.deleted_at != null) {
       return HttpResponse.json({ error: 'Not found' }, { status: 404 });
     }
-    return HttpResponse.json(toWorkflowResponse(row));
+    const recordRows = records.get(id) ?? [];
+    const evalJobIds = [...evalJobs.values()]
+      .filter(j => j.workflow_id === id)
+      .map(j => j.id);
+    const finetuneJobIds: string[] = [];
+    return HttpResponse.json({
+      ...toWorkflowResponse(row),
+      records_count: recordRows.length,
+      eval_job_ids: evalJobIds,
+      finetune_job_ids: finetuneJobIds,
+    });
   }),
 
   // PUT /finetune/workflows/:id — Update workflow fields
@@ -177,8 +185,6 @@ export const gatewayCrudHandlers = [
         span_id: (r.span_id as string) ?? null,
         is_generated: r.is_generated ? 1 : 0,
         source_record_id: (r.source_record_id as string) ?? null,
-        dry_run_score: null,
-        finetune_score: null,
         metadata: (r.metadata as string) ?? null,
         created_at: now,
       }));
@@ -198,35 +204,11 @@ export const gatewayCrudHandlers = [
     },
   ),
 
-  // PATCH /finetune/workflows/:workflowId/records/:recordId/scores — Update scores
-  http.patch(
-    `${BASE}/finetune/workflows/:workflowId/records/:recordId/scores`,
-    async ({ params, request }) => {
-      const workflowId = params.workflowId as string;
-      const recordId = params.recordId as string;
-      const body = (await request.json()) as Record<string, unknown>;
-      const rows = records.get(workflowId) ?? [];
-
-      const idx = rows.findIndex((r) => r.id === recordId);
-      if (idx === -1) {
-        return HttpResponse.json({ error: 'Record not found' }, { status: 404 });
-      }
-
-      const row = rows[idx];
-      const updated: RecordRow = { ...row };
-
-      if ('dry_run_score' in body) {
-        updated.dry_run_score = body.dry_run_score as number | null;
-      }
-      if ('finetune_score' in body) {
-        updated.finetune_score = body.finetune_score as number | null;
-      }
-
-      const updatedRows = [...rows];
-      updatedRows[idx] = updated;
-      records.set(workflowId, updatedRows);
-
-      return HttpResponse.json({ updated: true });
+  // GET /finetune/workflows/:workflowId/records/scores — List scores
+  http.get(
+    `${BASE}/finetune/workflows/:workflowId/records/scores`,
+    () => {
+      return HttpResponse.json({ scores: [] });
     },
   ),
 

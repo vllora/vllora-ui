@@ -70,7 +70,6 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
     deleteRecord,
     updateRecordTopic,
     updateRecordData,
-    updateRecordEvaluation,
     renameDataset,
     importRecords,
     clearDatasetRecords,
@@ -284,9 +283,9 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
         refreshDataset();
       }
     };
-    emitter.on("vllora_dry_run_job_update", handleDryRunUpdate);
+    emitter.on("vllora_eval_job_update", handleDryRunUpdate);
     return () => {
-      emitter.off("vllora_dry_run_job_update", handleDryRunUpdate);
+      emitter.off("vllora_eval_job_update", handleDryRunUpdate);
     };
   }, [refreshDataset]);
 
@@ -332,6 +331,20 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
       emitter.off("vllora_dataset_records_deleted" as any, handleRecordsDeleted);
     };
   }, [workflowId, selectedRecordIds, setSelectedRecordIds]);
+
+  // Subscribe to internal record_scores_updated events → refresh records
+  // (emitted by evalPollingManager when BE snapshot has new scores)
+  useEffect(() => {
+    const handleScoresUpdated = (event: { workflowId: string; scoreType: string }) => {
+      if (event.workflowId === workflowId) {
+        refreshDataset();
+      }
+    };
+    emitter.on("vllora_record_scores_updated", handleScoresUpdated);
+    return () => {
+      emitter.off("vllora_record_scores_updated", handleScoresUpdated);
+    };
+  }, [workflowId, refreshDataset]);
 
   // Listen for source document filter events (from KnowledgeSourceCard clicks)
   useEffect(() => {
@@ -526,31 +539,6 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
       }
     },
     [dataset, updateRecordTopic, expandedRecord, addNewTopicToHierarchy]
-  );
-
-  const handleUpdateRecordEvaluation = useCallback(
-    async (recordId: string, score: number | undefined) => {
-      if (!dataset) return;
-      try {
-        await updateRecordEvaluation(dataset.id, recordId, score);
-        const now = Date.now();
-        const newEvaluation = score === undefined ? undefined : { score, evaluatedAt: now };
-        setRecords((prev) =>
-          prev.map((r) =>
-            r.id === recordId ? { ...r, evaluation: newEvaluation, updatedAt: now } : r
-          )
-        );
-        if (expandedRecord?.id === recordId) {
-          setExpandedRecord((prev) =>
-            prev ? { ...prev, evaluation: newEvaluation, updatedAt: now } : null
-          );
-        }
-        toast.success(score === undefined ? "Evaluation cleared" : `Rated ${score}/5`);
-      } catch {
-        toast.error("Failed to update evaluation");
-      }
-    },
-    [dataset, updateRecordEvaluation, expandedRecord]
   );
 
   const handleDeleteConfirmHandler = useCallback(
@@ -1408,7 +1396,6 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
     handleUpdateObjective,
     handleDeleteRecord,
     handleUpdateRecordTopic,
-    handleUpdateRecordEvaluation,
     handleDeleteConfirm: handleDeleteConfirmHandler,
     handleBulkAssignTopic,
     handleGenerateTopics,
