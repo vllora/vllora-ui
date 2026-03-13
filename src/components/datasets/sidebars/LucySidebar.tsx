@@ -199,8 +199,9 @@ export function LucySidebar() {
   const planStatusRef = useRef(planStatus);
   planStatusRef.current = planStatus;
 
-  // Knowledge sources from context
-  const { count: knowledgeSourcesCount, isProcessing: docsProcessing } = KnowledgeSourcesConsumer();
+  // Knowledge sources from context (all backend sources are ready — no processing state)
+  const { count: knowledgeSourcesCount } = KnowledgeSourcesConsumer();
+  const docsProcessing = false;
   const knowledgeSourcesCountRef = useRef(knowledgeSourcesCount);
   knowledgeSourcesCountRef.current = knowledgeSourcesCount;
 

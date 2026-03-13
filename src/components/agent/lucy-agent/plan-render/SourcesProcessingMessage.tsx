@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Loader2, CheckCircle2, RefreshCw } from 'lucide-react';
 import { emitter } from '@/utils/eventEmitter';
 import { knowledgeSourceService } from '@/services/service-registry';
+import type { KnowledgeSource } from '@/types/knowledge-types';
 
 interface SourcesProcessingMessageProps {
   workflowId: string;
@@ -37,8 +38,9 @@ export function SourcesProcessingMessage({
   const checkSources = useCallback(async () => {
     if (!workflowId) return;
     try {
-      const sources = await knowledgeSourceService.getByDataset(workflowId);
-      const processing = sources.filter((s) => s.status === 'processing');
+      const sources = await knowledgeSourceService.list(workflowId);
+      // In skill-first mode, sources are always ready (written by skill)
+      const processing: KnowledgeSource[] = [];
       if (processing.length === 0 && sources.length > 0) {
         setSourcesReady(true);
       }

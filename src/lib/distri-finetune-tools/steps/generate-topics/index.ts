@@ -37,13 +37,15 @@ function hierarchyToProposedTopics(nodes: TopicHierarchyNode[]): ProposedTopic[]
  */
 async function getKnowledgeSourceTopics(workflowId: string): Promise<string[]> {
   try {
-    const sources = await knowledgeSourceService.getByDataset(workflowId);
+    const sources = await knowledgeSourceService.list(workflowId);
     const allTopics: string[] = [];
 
     for (const source of sources) {
-      if (source.status === "ready" && source.extractedContent?.sectionHeadings) {
-        allTopics.push(...source.extractedContent.sectionHeadings);
-      }
+      const titles = source.parts
+        .filter(p => p.type === "text")
+        .map(p => p.title)
+        .filter((t): t is string => Boolean(t));
+      allTopics.push(...titles);
     }
 
     // Deduplicate and return

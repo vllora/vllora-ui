@@ -1,27 +1,31 @@
 /**
- * Knowledge Source Search Types
+ * Knowledge Source Types
  *
- * Extracted from knowledge-sources-db.ts to remove IndexedDB dependency.
+ * Matches the BE API contract (gateway SQLite).
+ * KnowledgeSource (parent) → KnowledgeSourcePart[] (children)
  */
 
-import type { KnowledgeSource } from '@/types/dataset-types';
+export type KnowledgePartType = 'text' | 'image' | 'table';
 
-export interface ChunkMatch {
-  chunk_id: string;
-  heading: string;
-  summary: string;
-  pages: string;
-  sentence_count: number;
-  /** Matching sentences from this chunk */
-  matching_sentences: string[];
-  /** Full chunk text (for grounded generation) */
-  text: string;
+export interface KnowledgeSourcePart {
+  readonly id: string;
+  readonly referenceId?: string;
+  readonly sourceId: string;
+  readonly type: KnowledgePartType;
+  readonly content: string;
+  readonly contentMetadata?: Record<string, unknown>;
+  readonly title?: string;
+  readonly extractionPath?: string;
+  readonly extractionMetadata?: Record<string, unknown>;
 }
 
-export interface SearchResult {
-  source: KnowledgeSource;
-  /** Legacy string matches (for non-chunked sources) */
-  matches: string[];
-  /** Structured chunk matches (for local-semantic sources) */
-  chunk_matches?: ChunkMatch[];
+export interface KnowledgeSource {
+  readonly id: string;
+  readonly referenceId?: string;
+  readonly workflowId: string;
+  readonly name: string;
+  readonly description?: string;
+  readonly metadata?: Record<string, unknown>;
+  readonly parts: KnowledgeSourcePart[];
+  readonly createdAt: string;
 }

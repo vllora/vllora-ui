@@ -18,9 +18,10 @@ import { PlanEditor } from "./plan-section/PlanEditor";
 import LazyMarkdownRenderer from "@/components/chat/LazyMarkdownRenderer";
 import { emitter } from "@/utils/eventEmitter";
 import type { Plan } from "@/lib/distri-finetune-tools/steps/propose-plan";
+import { IS_LUCY_ENABLED } from "@/lib/feature-flags";
 import type { PlanStatus } from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
 import { WorkspaceTabsConsumer } from "@/contexts/WorkspaceTabsContext";
-import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
+// KnowledgeSourcesConsumer removed — skill-first mode has no processing state
 import { workflowService } from "@/services/service-registry";
 import { generateSkillPackageHandler } from "@/lib/distri-finetune-tools/steps/generate-skill-package";
 import { downloadSkillPackageHandler } from "@/lib/distri-finetune-tools/steps/download-skill-package";
@@ -294,8 +295,7 @@ function PlanEmptyView({
   // run get_workflow_state or analyze_knowledge_sources first).
   const isLucyStreaming = useChatStateStore((state) => state.isStreaming);
 
-  // Get processing source details for progress display
-  const { processingSources } = KnowledgeSourcesConsumer();
+  // In skill-first mode, sources are always ready (no processing state)
 
   useEffect(() => {
     if (isGenerating) {
@@ -371,22 +371,7 @@ function PlanEmptyView({
                   Lucy will create a plan once extraction is ready.
                 </p>
               </div>
-              {/* Per-source progress */}
-              {processingSources.length > 0 && (
-                <div className="space-y-2">
-                  {processingSources.map((source) => (
-                    <div key={source.id} className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Loader2 className="w-3 h-3 animate-spin shrink-0" />
-                      <span className="truncate">{source.name}</span>
-                      {source.progress?.percent != null && (
-                        <span className="text-[rgb(var(--theme-500))] shrink-0">
-                          {Math.round(source.progress.percent)}%
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+              {/* Per-source progress (no-op in skill-first mode — sources are always ready) */}
             </>
           ) : showLoading ? (
             <>
@@ -412,37 +397,43 @@ function PlanEmptyView({
               <div>
                 <h3 className="text-base font-medium text-foreground mb-1">No plan yet</h3>
                 <p className="text-sm text-muted-foreground">
-                  Let Lucy create a plan with topics, data generation strategy, and evaluation criteria.
+                  {IS_LUCY_ENABLED
+                    ? "Let Lucy create a plan with topics, data generation strategy, and evaluation criteria."
+                    : "Use the finetune skill from your CLI to generate a plan for this workflow."}
                 </p>
               </div>
-              {hasTimedOut && (
+              {IS_LUCY_ENABLED && hasTimedOut && (
                 <div className="flex items-center justify-center gap-2 text-sm text-amber-500">
                   <AlertCircle className="w-4 h-4" />
                   <span>Lucy doesn't seem to be responding.</span>
                 </div>
               )}
-              <div className="flex items-center justify-center gap-3">
-                <Button
-                  onClick={handleGenerate}
-                  className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  {hasTimedOut ? "Retry" : "Generate Plan"}
-                </Button>
-                {!hasKnowledgeSources && onOpenDocs && (
+              {IS_LUCY_ENABLED && (
+                <div className="flex items-center justify-center gap-3">
                   <Button
-                    variant="outline"
-                    onClick={onOpenDocs}
-                    className="gap-2"
+                    onClick={handleGenerate}
+                    className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
                   >
-                    <FolderOpen className="w-4 h-4" />
-                    Upload Docs First
+                    <Sparkles className="w-4 h-4" />
+                    {hasTimedOut ? "Retry" : "Generate Plan"}
                   </Button>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                You can also ask Lucy directly in the chat
-              </p>
+                  {!hasKnowledgeSources && onOpenDocs && (
+                    <Button
+                      variant="outline"
+                      onClick={onOpenDocs}
+                      className="gap-2"
+                    >
+                      <FolderOpen className="w-4 h-4" />
+                      Upload Docs First
+                    </Button>
+                  )}
+                </div>
+              )}
+              {IS_LUCY_ENABLED && (
+                <p className="text-xs text-muted-foreground">
+                  You can also ask Lucy directly in the chat
+                </p>
+              )}
             </>
           )}
         </div>

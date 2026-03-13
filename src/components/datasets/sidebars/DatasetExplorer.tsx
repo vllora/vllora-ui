@@ -30,6 +30,10 @@ import {
   Clock,
   AlertTriangle,
   Circle,
+  Type,
+  ImageIcon,
+  Table2,
+  Library,
 } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
@@ -40,6 +44,7 @@ import { WorkspaceTabsConsumer } from "@/contexts/WorkspaceTabsContext";
 import { useChatStateStore } from "@distri/react";
 import { toast } from "sonner";
 import { FileTreeItem } from "./FileTreeItem";
+import { IS_LUCY_ENABLED } from "@/lib/feature-flags";
 import { NewJobDialog } from "@/components/finetune/content/NewJobDialog";
 import { NewEvaluationDialog } from "@/components/datasets/evaluation-dialog/NewEvaluationDialog";
 import type { FileTreeNode, FileTreeBadge } from "./types";
@@ -210,13 +215,16 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       };
     })();
 
-    nodes.push({
-      id: "plan.md",
-      name: "plan.md",
-      type: "file",
-      icon: <ScrollText className={`${ICON_CLS} text-[rgb(var(--theme-500))]`} />,
-      badge: planBadge,
-    });
+    // Show plan.md only when Lucy is enabled or a plan already exists
+    if (IS_LUCY_ENABLED || hasPlanProposed || planStatus === "completed" || planStatus === "executing" || planStatus === "failed") {
+      nodes.push({
+        id: "plan.md",
+        name: "plan.md",
+        type: "file",
+        icon: <ScrollText className={`${ICON_CLS} text-[rgb(var(--theme-500))]`} />,
+        badge: planBadge,
+      });
+    }
 
     // tasks.md — only shown when there are active tasks
     const activeTodos = todos.filter((t) => t.status !== "done");
@@ -242,57 +250,50 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       });
     }
 
-    // --- documents/ (only shown when there are knowledge sources) ---
+    // --- knowledge/ (only shown when there are knowledge sources) ---
     if (sources.length > 0) {
-      const docChildren: FileTreeNode[] = sources.map((src) => {
-        const statusBadge: FileTreeBadge | undefined = (() => {
-          if (src.status === "processing") return {
-            label: "loading", variant: "loading" as const,
-            icon: <Loader2 className={`${BADGE_CLS} animate-spin`} />,
-            tooltip: "Processing document",
+      const partIcon = (type: string) => {
+        if (type === 'image') return <ImageIcon className={`${ICON_CLS} text-purple-400`} />;
+        if (type === 'table') return <Table2 className={`${ICON_CLS} text-amber-400`} />;
+        return <Type className={`${ICON_CLS} text-green-400`} />;
+      };
+
+      const sourceChildren: FileTreeNode[] = sources.map((src) => {
+        const partChildren: FileTreeNode[] = src.parts.map((part, idx) => {
+          const label = part.title || `${part.type.charAt(0).toUpperCase() + part.type.slice(1)} #${idx + 1}`;
+          return {
+            id: `knowledge/${src.id}/${part.id}`,
+            name: label,
+            type: "file" as const,
+            icon: partIcon(part.type),
           };
-          if (src.status === "ready") {
-            const recCount = sourceRecordStats.get(src.id)?.recordCount;
-            if (recCount && recCount > 0) {
-              return {
-                label: `${recCount} rec`, variant: "count" as const,
-                tooltip: `${recCount} record${recCount !== 1 ? "s" : ""} generated from this document`,
-              };
-            }
-            return {
-              label: "done", variant: "success" as const,
-              icon: <CheckCircle2 className={BADGE_CLS} />,
-              tooltip: "Document ready",
-            };
-          }
-          if (src.status === "failed") return {
-            label: "error", variant: "error" as const,
-            icon: <XCircle className={BADGE_CLS} />,
-            tooltip: "Processing failed",
-          };
-          if (src.status === "pending") return {
-            label: "pending", variant: "default" as const,
-            icon: <Clock className={BADGE_CLS} />,
-            tooltip: "Waiting to process",
-          };
-          return undefined;
-        })();
+        });
+
+        const recCount = sourceRecordStats.get(src.id)?.recordCount;
+        const badge: FileTreeBadge | undefined = recCount && recCount > 0
+          ? { label: `${recCount} rec`, variant: "count" as const, tooltip: `${recCount} record${recCount !== 1 ? "s" : ""} from this source` }
+          : src.parts.length > 0
+            ? { label: String(src.parts.length), variant: "count" as const, tooltip: `${src.parts.length} part${src.parts.length !== 1 ? "s" : ""}` }
+            : undefined;
 
         return {
-          id: `documents/${src.id}`,
+          id: `knowledge/${src.id}`,
           name: src.name,
-          type: "file" as const,
+          type: "folder" as const,
           icon: <FileText className={`${ICON_CLS} text-blue-400`} />,
-          badge: statusBadge,
+          badge,
+          children: partChildren,
+          isExpandable: partChildren.length > 0,
         };
       });
 
       nodes.push({
-        id: "documents",
-        name: "documents",
+        id: "knowledge",
+        name: "knowledge",
         type: "folder",
+        icon: <Library className={`${ICON_CLS} text-blue-500`} />,
         badge: { label: String(sources.length), variant: "count" },
-        children: docChildren,
+        children: sourceChildren,
         isExpandable: true,
         isSection: true,
       });
@@ -567,11 +568,24 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
   // Navigation: map tree node click → existing section navigation
   // ============================================================================
 
+  // Build flat nodeId → label map for tab display names
+  const nodeLabelMap = useMemo(() => {
+    const map = new Map<string, string>();
+    const walk = (nodes: FileTreeNode[]) => {
+      for (const n of nodes) {
+        map.set(n.id, n.name);
+        if (n.children) walk(n.children);
+      }
+    };
+    walk(tree);
+    return map;
+  }, [tree]);
+
   const handleSelect = useCallback((nodeId: string) => {
     setSelectedNodeId(nodeId);
-    openTab(nodeId);
+    openTab(nodeId, nodeLabelMap.get(nodeId));
     onNavigate?.(nodeId);
-  }, [openTab, onNavigate]);
+  }, [openTab, onNavigate, nodeLabelMap]);
 
   // ============================================================================
   // Render

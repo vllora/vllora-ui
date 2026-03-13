@@ -19,7 +19,7 @@ export type ContentSection =
   | "deploy"
   | "plan"
   | "readme"
-  | "documents"
+  | "knowledge"
   | "tasks"
   | "logs"
   | "insights"
@@ -57,8 +57,8 @@ export function mapTabPathToSection(path: string | null): ContentSection {
   if (path.startsWith("evaluations/")) return "evaluator";
   if (path === "finetune") return "jobs";
   if (path.startsWith("finetune/")) return "jobs";
-  if (path === "documents") return "documents";
-  if (path.startsWith("documents/")) return "documents";
+  if (path === "knowledge") return "knowledge";
+  if (path.startsWith("knowledge/")) return "knowledge";
   if (path === "skill") return "skill";
   if (path.startsWith("skill/")) return "skill";
 
@@ -122,14 +122,31 @@ export function getSkillFileFromPath(path: string | null): string | null {
 }
 
 /**
- * Extract knowledge source ID from `documents/{sourceId}`.
+ * Extract knowledge source ID from `knowledge/{sourceId}`.
  * Returns null for the folder path itself or invalid paths.
  */
-export function getDocumentSourceIdFromPath(path: string | null): string | null {
+export function getKnowledgeSourceIdFromPath(path: string | null): string | null {
   if (!path) return null;
-  const prefix = "documents/";
+  const prefix = "knowledge/";
   if (!path.startsWith(prefix)) return null;
-  const sourceId = path.slice(prefix.length).trim();
-  if (!sourceId || sourceId.includes("/")) return null;
-  return sourceId;
+  const rest = path.slice(prefix.length).trim();
+  if (!rest) return null;
+  // Return just the sourceId (first segment)
+  const slashIdx = rest.indexOf("/");
+  return slashIdx === -1 ? rest : rest.slice(0, slashIdx);
+}
+
+/**
+ * Extract knowledge part ID from `knowledge/{sourceId}/{partId}`.
+ * Returns null if path doesn't include a part ID.
+ */
+export function getKnowledgePartIdFromPath(path: string | null): string | null {
+  if (!path) return null;
+  const prefix = "knowledge/";
+  if (!path.startsWith(prefix)) return null;
+  const rest = path.slice(prefix.length).trim();
+  const slashIdx = rest.indexOf("/");
+  if (slashIdx === -1) return null;
+  const partId = rest.slice(slashIdx + 1).trim();
+  return partId || null;
 }

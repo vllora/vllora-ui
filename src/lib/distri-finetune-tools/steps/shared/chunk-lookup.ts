@@ -7,18 +7,18 @@
  */
 
 import { knowledgeSourceService } from '@/services/service-registry';
-import type { KnowledgeSource } from '@/types/dataset-types';
+import type { KnowledgeSource } from '@/types/knowledge-types';
 
 /**
- * Build a ready-source map from an array of knowledge sources.
- * Only includes sources with status "ready".
+ * Build a source map from an array of knowledge sources.
+ * All sources from the backend are ready.
  */
 export function buildReadySourceMap(
   sources: readonly KnowledgeSource[],
 ): ReadonlyMap<string, KnowledgeSource> {
   const map = new Map<string, KnowledgeSource>();
   for (const s of sources) {
-    if (s.status === 'ready') map.set(s.id, s);
+    map.set(s.id, s);
   }
   return map;
 }
@@ -67,12 +67,12 @@ export function normalizeChunkRef(ref: string): string | null {
 /**
  * Resolve an array of composite chunk refs to their full content.
  *
- * - For `local-semantic` sources: looks up chunks from `metadata.chunks` by chunk ID
- * - For legacy sources: parses `section-{index}` and indexes into `extractedContent.sections`
- * - Unknown refs are silently skipped (graceful degradation)
+ * For sources with semantic chunks in metadata: looks up chunks by chunk ID.
+ * For parts-based sources: matches part by ID directly.
+ * Unknown refs are silently skipped (graceful degradation).
  *
- * @param preloadedSources Optional pre-fetched source map (sourceId → KnowledgeSource).
- *   Pass this to avoid redundant IndexedDB fetches when calling resolveChunkRefs in a loop.
+ * @param preloadedSources Optional pre-fetched source map (sourceId -> KnowledgeSource).
+ *   Pass this to avoid redundant API fetches when calling resolveChunkRefs in a loop.
  */
 export async function resolveChunkRefs(
   workflowId: string,
@@ -85,10 +85,10 @@ export async function resolveChunkRefs(
   if (preloadedSources) {
     sourceMap = new Map(preloadedSources);
   } else {
-    const sources = await knowledgeSourceService.getByDataset(workflowId);
+    const sources = await knowledgeSourceService.list(workflowId);
     sourceMap = new Map<string, KnowledgeSource>();
     for (const s of sources) {
-      if (s.status === 'ready') sourceMap.set(s.id, s);
+      sourceMap.set(s.id, s);
     }
   }
 
@@ -101,7 +101,7 @@ export async function resolveChunkRefs(
     const source = sourceMap.get(parsed.sourceId);
     if (!source) continue;
 
-    const metadata = source.extractedContent?.metadata as Record<string, unknown> | undefined;
+    const metadata = source.metadata as Record<string, unknown> | undefined;
     const extractionMethod = (metadata?.extractionMethod as string) || 'unknown';
 
     if (extractionMethod === 'local-semantic') {
@@ -129,21 +129,16 @@ export async function resolveChunkRefs(
         });
       }
     } else {
-      // Legacy sections: parse "section-{index}"
-      const sectionMatch = parsed.chunkId.match(/^section-(\d+)$/);
-      if (!sectionMatch) continue;
-
-      const sectionIndex = parseInt(sectionMatch[1], 10);
-      const sections = source.extractedContent?.sections || [];
-      if (sectionIndex >= 0 && sectionIndex < sections.length) {
-        const section = sections[sectionIndex];
+      // Parts-based: find part by ID
+      const part = source.parts.find(p => p.id === parsed.chunkId);
+      if (part) {
         resolved.push({
           sourceId: source.id,
           sourceName: source.name,
           chunkId: parsed.chunkId,
-          heading: section.title || 'Untitled',
-          summary: section.content?.substring(0, 200) || '',
-          text: section.content || '',
+          heading: part.title || 'Untitled',
+          summary: part.content?.substring(0, 200) || '',
+          text: part.content || '',
         });
       }
     }

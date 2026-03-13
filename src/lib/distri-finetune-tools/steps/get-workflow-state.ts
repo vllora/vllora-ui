@@ -220,7 +220,7 @@ export const getDatasetStateHandler: ToolHandler = async (params) => {
       recordService.getByDatasetId(workflow_id),
       workflowService.getByDataset(workflow_id),
       getStoredPlan(workflow_id).catch(() => null),
-      knowledgeSourceService.getByDataset(workflow_id).catch(() => [] as Awaited<ReturnType<typeof knowledgeSourceService.getByDataset>>),
+      knowledgeSourceService.list(workflow_id).catch(() => [] as Awaited<ReturnType<typeof knowledgeSourceService.list>>),
     ]);
 
     // Compute stats (includes sanitization)
@@ -263,11 +263,11 @@ export const getDatasetStateHandler: ToolHandler = async (params) => {
         recommendations: stats.sanitization?.recommendations ?? [],
       },
 
-      // Knowledge sources
+      // Knowledge sources (all sources from BE are ready)
       knowledge_sources: {
         total_count: knowledgeSources.length,
-        ready_count: knowledgeSources.filter(s => s.status === 'ready').length,
-        processing_count: knowledgeSources.filter(s => s.status === 'processing').length,
+        ready_count: knowledgeSources.length,
+        processing_count: 0,
       },
 
       // Pipeline status

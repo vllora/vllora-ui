@@ -33,31 +33,17 @@ function collectLeafNodes(
 export async function analyzeKnowledgeCoverage(
   workflowId: string,
 ): Promise<KnowledgeCoverageStats | null> {
-  const sources = await knowledgeSourceService.getByDataset(workflowId);
-  const readySources = sources.filter((s) => s.status === 'ready');
+  const sources = await knowledgeSourceService.list(workflowId);
 
-  if (readySources.length === 0) return null;
+  if (sources.length === 0) return null;
 
-  // Build the universe of all chunks across all sources
+  // Build the universe of all parts across all sources
   const allChunkRefs = new Map<string, { sourceName: string; sourceId: string; chunkId: string }>();
 
-  for (const source of readySources) {
-    const metadata = source.extractedContent?.metadata as Record<string, unknown> | undefined;
-    const chunks = (metadata?.chunks as Array<{ id: string }>) || [];
-    const sections = source.extractedContent?.sections || [];
-
-    if (chunks.length > 0) {
-      // Semantic extraction with chunk IDs
-      for (const chunk of chunks) {
-        const ref = `${source.id}:${chunk.id}`;
-        allChunkRefs.set(ref, { sourceName: source.name, sourceId: source.id, chunkId: chunk.id });
-      }
-    } else if (sections.length > 0) {
-      // Legacy section-based extraction
-      for (let i = 0; i < sections.length; i++) {
-        const ref = `${source.id}:section-${i}`;
-        allChunkRefs.set(ref, { sourceName: source.name, sourceId: source.id, chunkId: `section-${i}` });
-      }
+  for (const source of sources) {
+    for (const part of source.parts) {
+      const ref = `${source.id}:${part.id}`;
+      allChunkRefs.set(ref, { sourceName: source.name, sourceId: source.id, chunkId: part.id });
     }
   }
 

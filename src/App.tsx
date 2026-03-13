@@ -25,6 +25,7 @@ import { AvailableApiKeysProvider, CurrentAppProvider, VirtualModelsProvider } f
 import { ThreadAndTracesPageProvider } from "./contexts/ThreadAndTracesPageContext"
 import { DistriProvider } from "./providers/DistriProvider"
 import { AgentPanelWrapper } from "./components/agent"
+import { IS_LUCY_ENABLED } from "./lib/feature-flags"
 import { AgentPanelProvider } from "./contexts/AgentPanelContext"
 import { DatasetsProvider } from "./contexts/DatasetsContext"
 import { NewDatasetAdvancedPage } from "./pages/datasets/new-advanced"
@@ -61,7 +62,7 @@ function App() {
                               <ProviderModalProvider>
                                 <DatasetsProvider>
                                   <Layout />
-                                  <AgentPanelWrapper />
+                                  {IS_LUCY_ENABLED && <AgentPanelWrapper />}
                                 </DatasetsProvider>
                               </ProviderModalProvider>
                             </ProviderKeysProvider>

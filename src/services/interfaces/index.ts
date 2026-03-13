@@ -15,10 +15,6 @@ export type { WorkflowService, GenerationData } from './workflow-service';
 export type { EvalJobService } from './eval-job-service';
 export type {
   KnowledgeSourceService,
-  ChunkMatch,
-  SearchResult,
-  CreateKnowledgeSourceOptions,
-  UpdateStatusOptions,
 } from './knowledge-source-service';
 export type {
   IterationStateService,

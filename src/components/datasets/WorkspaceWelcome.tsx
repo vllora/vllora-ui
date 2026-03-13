@@ -142,8 +142,8 @@ export function WorkspaceWelcome({
       active: recordCount > 0,
     },
     {
-      path: "documents",
-      label: "Documents",
+      path: "knowledge",
+      label: "Knowledge",
       icon: FolderOpen,
       iconColor: "text-blue-400",
       status: knowledgeSourcesCount > 0

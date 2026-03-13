@@ -11,7 +11,7 @@
  * - FinetuneJob (created/updated/completed)
  */
 
-import type { KnowledgeSource } from "@/types/dataset-types";
+import type { KnowledgeSource } from "@/types/knowledge-types";
 import type { EvalJob } from "@/types/eval-job";
 import type { FinetuneJob } from "@/services/finetune-api";
 
@@ -86,24 +86,18 @@ export function buildActivityLog(params: {
     });
   }
 
-  // Knowledge sources
+  // Knowledge sources (all backend sources are "ready" — no status/processedAt)
   for (const src of params.knowledgeSources) {
+    const ts = typeof src.createdAt === "number"
+      ? src.createdAt
+      : new Date(src.createdAt).getTime();
     entries.push({
       id: `doc-${src.id}`,
-      timestamp: src.createdAt,
+      timestamp: ts,
       type: "document",
       title: `Document uploaded: ${src.name}`,
-      detail: src.status === "ready" ? "Processed" : src.status,
+      detail: `${src.parts.length} part${src.parts.length !== 1 ? "s" : ""}`,
     });
-
-    if (src.processedAt) {
-      entries.push({
-        id: `doc-done-${src.id}`,
-        timestamp: src.processedAt,
-        type: "document",
-        title: `Document processed: ${src.name}`,
-      });
-    }
   }
 
   // Dry run jobs

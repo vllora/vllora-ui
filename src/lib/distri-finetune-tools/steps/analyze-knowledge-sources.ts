@@ -12,8 +12,6 @@
 import type { DistriFnTool } from '@distri/core';
 import { datasetService, knowledgeSourceService } from '@/services/service-registry';
 import type { ToolHandler } from '../types';
-import { type ExtractedSection } from './shared/knowledge-context';
-import { emitter } from '@/utils/eventEmitter';
 
 // =============================================================================
 // Types
@@ -95,30 +93,11 @@ export const analyzeKnowledgeSourcesHandler: ToolHandler = async (
       };
     }
 
-    // Check knowledge source status
-    const sources = await knowledgeSourceService.getByDataset(workflow_id);
-    const readySources = sources.filter((s) => s.status === 'ready');
-    const processingSources = sources.filter((s) => s.status === 'processing');
-
-    // If ANY documents are still processing, wait for ALL to complete
-    if (processingSources.length > 0) {
-      const total = readySources.length + processingSources.length;
-      const statusMessage = readySources.length === 0
-        ? `${processingSources.length} document(s) are still processing.`
-        : `${readySources.length} of ${total} document(s) are ready, ${processingSources.length} still processing.`;
-
-      // Signal the UI to auto-prompt Lucy when processing completes
-      emitter.emit('vllora_docs_awaiting_plan', { workflowId: workflow_id });
-
-      return {
-        success: false,
-        sources_processing: true,
-        error: `${statusMessage} STOP: Do NOT call this tool again. Tell the user their documents are still being processed (usually 30-60 seconds per document) and that you will create the plan once processing is complete. The frontend will notify you when documents are ready.`,
-      };
-    }
+    // Get knowledge sources from backend (all sources from BE are ready)
+    const sources = await knowledgeSourceService.list(workflow_id);
 
     // No knowledge sources
-    if (readySources.length === 0) {
+    if (sources.length === 0) {
       return {
         success: true,
         objective,
@@ -127,73 +106,25 @@ export const analyzeKnowledgeSourcesHandler: ToolHandler = async (
       };
     }
 
-    // Extract data from knowledge sources (pure IndexedDB read)
-    console.log('[analyzeKnowledgeSources] Extracting data from', readySources.length, 'knowledge sources');
-
-    const knowledgeSources: KnowledgeSourceInfo[] = readySources.map((source) => {
-      const extracted = source.extractedContent;
-      const topics = extracted?.sectionHeadings || [];
-      const metadata = extracted?.metadata as Record<string, unknown> | undefined;
-      const extractionMethod = (metadata?.extractionMethod as string) || 'unknown';
-
-      // Local-semantic extraction: use chunk structure
-      if (extractionMethod === 'local-semantic') {
-        const chunks = (metadata?.chunks as Array<{
-          id: string;
-          heading: string;
-          summary: string;
-          sentences: string[];
-          pageStart: number;
-          pageEnd: number;
-        }>) || [];
-        const totalPages = (metadata?.totalPages as number) || 0;
-        const totalChunks = (metadata?.totalChunks as number) || chunks.length;
-
-        // Build first chunk's summary as overall document summary
-        const overallSummary = chunks.length > 0
-          ? chunks[0].summary
-          : '';
-
-        return {
-          name: source.name,
-          type: source.type || 'unknown',
-          extraction_method: extractionMethod,
-          extraction_phase: source.extractionPhase || (metadata?.extractionPhase as string) || 'basic',
-          comment: source.comment,
-          document_type: 'pdf',
-          summary: overallSummary,
-          total_pages: totalPages,
-          total_chunks: totalChunks,
-          chunks: chunks.map((c) => {
-            const pageRange = c.pageStart === c.pageEnd
-              ? `${c.pageStart}`
-              : `${c.pageStart}–${c.pageEnd}`;
-            return {
-              id: c.id,
-              ref: `${source.id}:${c.id}`,
-              heading: c.heading,
-              pages: pageRange,
-            };
-          }),
-          section_headings: topics,
-        };
-      }
-
-      // LLM extraction: use legacy sections format
-      const sections = ((extracted?.sections || []) as ExtractedSection[]).slice(0, 15);
+    // Extract data from knowledge sources
+    const knowledgeSources: KnowledgeSourceInfo[] = sources.map((source) => {
+      const metadata = source.metadata;
+      const textParts = source.parts.filter(p => p.type === 'text');
+      const topics = textParts
+        .map(p => p.title)
+        .filter((t): t is string => Boolean(t));
 
       return {
         name: source.name,
-        type: source.type || 'unknown',
-        extraction_method: extractionMethod,
-        extraction_phase: source.extractionPhase || (metadata?.extractionPhase as string) || undefined,
-        comment: source.comment,
+        type: 'document',
+        extraction_method: 'backend',
+        comment: source.description,
         document_type: (metadata?.document_type as string) || '',
         summary: (metadata?.document_summary as string) || (metadata?.documentSummary as string) || '',
-        sections: sections.map((s, i) => ({
-          title: s.title || 'Untitled',
-          content_preview: s.content?.substring(0, 200) || '',
-          ref: `${source.id}:section-${i}`,
+        sections: textParts.slice(0, 15).map((p, i) => ({
+          title: p.title || 'Untitled',
+          content_preview: p.content?.substring(0, 200) || '',
+          ref: `${source.id}:${p.id || `part-${i}`}`,
         })),
         section_headings: topics,
       };
@@ -210,10 +141,10 @@ export const analyzeKnowledgeSourcesHandler: ToolHandler = async (
     return {
       success: true,
       objective,
-      source_count: readySources.length,
+      source_count: sources.length,
       knowledge_sources: knowledgeSources,
       document_sections: allSectionHeadings,
-      message: `Found ${readySources.length} knowledge source(s) with ${allSectionHeadings.length} document section headings.`,
+      message: `Found ${sources.length} knowledge source(s) with ${allSectionHeadings.length} document section headings.`,
     };
   } catch (error) {
     console.error('[analyzeKnowledgeSources] Failed:', error);

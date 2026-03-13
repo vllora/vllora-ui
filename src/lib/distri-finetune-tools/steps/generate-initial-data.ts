@@ -159,13 +159,9 @@ interface GenerateInitialDataResult {
  * Build knowledge context from pre-fetched sources (no IndexedDB call).
  */
 function buildKnowledgeContextFromArray(
-  allSources: readonly import("@/types/dataset-types").KnowledgeSource[],
+  allSources: readonly import("@/types/knowledge-types").KnowledgeSource[],
 ): KnowledgeContext {
-  const readySources = allSources.filter(
-    (s) => s.status === "ready" && s.extractedContent
-  );
-
-  if (readySources.length === 0) {
+  if (allSources.length === 0) {
     return {
       hasKnowledge: false,
       sourceCount: 0,
@@ -181,29 +177,32 @@ function buildKnowledgeContextFromArray(
   const allSections: Array<{ title: string; content: string }> = [];
   const textParts: string[] = [];
 
-  for (const source of readySources) {
+  for (const source of allSources) {
     sourceNames.push(source.name);
-    const extracted = source.extractedContent!;
 
-    // Collect section headings
-    if (extracted.sectionHeadings) {
-      allTopics.push(...extracted.sectionHeadings);
+    // Collect titles from text parts as topics
+    const textPartTitles = source.parts
+      .filter(p => p.type === "text")
+      .map(p => p.title)
+      .filter((t): t is string => Boolean(t));
+    allTopics.push(...textPartTitles);
+
+    // Collect parts as sections (limit content length per section)
+    for (const part of source.parts.filter(p => p.type === "text")) {
+      allSections.push({
+        title: part.title || "Untitled",
+        content: part.content.substring(0, 1000),
+      });
     }
 
-    // Collect sections (limit content length per section)
-    if (extracted.sections) {
-      for (const section of extracted.sections) {
-        allSections.push({
-          title: section.title,
-          content: section.content.substring(0, 1000),
-        });
-      }
-    }
-
-    // Collect text (limit per source to avoid token overflow)
-    if (extracted.text) {
+    // Collect text content (limit per source to avoid token overflow)
+    const combinedPartText = source.parts
+      .filter(p => p.type === "text")
+      .map(p => p.content)
+      .join("\n\n");
+    if (combinedPartText) {
       textParts.push(
-        `--- From: ${source.name} ---\n${extracted.text.substring(0, 3000)}`
+        `--- From: ${source.name} ---\n${combinedPartText.substring(0, 3000)}`
       );
     }
   }
@@ -213,7 +212,7 @@ function buildKnowledgeContextFromArray(
 
   return {
     hasKnowledge: true,
-    sourceCount: readySources.length,
+    sourceCount: allSources.length,
     sourceNames,
     combinedText: textParts.join("\n\n"),
     topics: uniqueTopics,
@@ -224,28 +223,16 @@ function buildKnowledgeContextFromArray(
 /**
  * Build all chunk refs from pre-fetched knowledge sources (no IndexedDB call).
  * Used as fallback when topic-level sourceChunkRefs are empty but documents exist.
- * Returns refs in "sourceId:chunkId" format.
+ * Returns refs in "sourceId:partId" format.
  */
 function buildAllChunkRefsFromSources(
-  allSources: readonly import("@/types/dataset-types").KnowledgeSource[],
+  allSources: readonly import("@/types/knowledge-types").KnowledgeSource[],
 ): string[] {
-  const readySources = allSources.filter(s => s.status === "ready" && s.extractedContent);
   const refs: string[] = [];
 
-  for (const source of readySources) {
-    const metadata = source.extractedContent?.metadata as Record<string, unknown> | undefined;
-    const extractionMethod = metadata?.extractionMethod as string | undefined;
-
-    if (extractionMethod === "local-semantic") {
-      const chunks = (metadata?.chunks as Array<{ id: string }>) || [];
-      for (const chunk of chunks) {
-        refs.push(`${source.id}:${chunk.id}`);
-      }
-    } else {
-      const sections = source.extractedContent?.sections || [];
-      for (let i = 0; i < sections.length; i++) {
-        refs.push(`${source.id}:section-${i}`);
-      }
+  for (const source of allSources) {
+    for (const part of source.parts) {
+      refs.push(`${source.id}:${part.id}`);
     }
   }
 
@@ -555,7 +542,7 @@ export const generateInitialDataHandler: ToolHandler = async (
       datasetService.getById(workflow_id),
       workflowService.getByDataset(workflow_id),
       recordService.getByDatasetId(workflow_id),
-      knowledgeSourceService.getByDataset(workflow_id),
+      knowledgeSourceService.list(workflow_id),
     ]);
 
     if (!dataset) {

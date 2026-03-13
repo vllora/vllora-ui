@@ -9,10 +9,10 @@
  */
 
 import { useState } from "react";
-import { FileText, Trash2, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { FileText, Trash2, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { KnowledgeSource } from "@/types/dataset-types";
+import type { KnowledgeSource } from "@/types/knowledge-types";
 
 /** Number of sections shown before "Show all" toggle */
 const COLLAPSED_SECTION_COUNT = 5;
@@ -34,30 +34,6 @@ interface KnowledgeSourceCardProps {
   onFilterBySource?: () => void;
 }
 
-/**
- * Get status badge color based on source status
- */
-function getStatusColor(status: KnowledgeSource["status"]) {
-  switch (status) {
-    case "ready":
-      return "bg-green-500/20 text-green-500";
-    case "processing":
-      return "bg-blue-500/20 text-blue-500";
-    case "failed":
-      return "bg-red-500/20 text-red-500";
-    default:
-      return "bg-muted text-muted-foreground";
-  }
-}
-
-/**
- * Get file type icon color - using muted foreground for a cleaner look
- */
-function getTypeColor(_type: KnowledgeSource["type"]) {
-  // Use consistent muted color for all file types
-  return "text-muted-foreground";
-}
-
 // ---------------------------------------------------------------------------
 // Expanded sections panel — unified numbered list with content previews
 // ---------------------------------------------------------------------------
@@ -69,48 +45,24 @@ interface ExpandedSectionsProps {
 }
 
 /**
- * Build a unified section list from extracted content.
- * Prefers `sections` (title + content) over bare `sectionHeadings`.
+ * Build a unified section list from source parts.
  */
 function buildSectionItems(source: KnowledgeSource): Array<{ title: string; preview: string }> {
-  const extracted = source.extractedContent;
-  if (!extracted) return [];
+  const textParts = source.parts.filter(p => p.type === 'text');
+  if (textParts.length === 0) return [];
 
-  // Rich sections with content
-  if (extracted.sections && extracted.sections.length > 0) {
-    return extracted.sections.map((s) => ({
-      title: s.title,
-      preview: s.content
-        ? s.content.length > CONTENT_PREVIEW_LENGTH
-          ? s.content.slice(0, CONTENT_PREVIEW_LENGTH) + '…'
-          : s.content
-        : '',
-    }));
-  }
-
-  // Bare headings (no content body available)
-  if (extracted.sectionHeadings && extracted.sectionHeadings.length > 0) {
-    return extracted.sectionHeadings.map((h) => ({ title: h, preview: '' }));
-  }
-
-  return [];
+  return textParts.map((p) => ({
+    title: p.title || 'Untitled',
+    preview: p.content
+      ? p.content.length > CONTENT_PREVIEW_LENGTH
+        ? p.content.slice(0, CONTENT_PREVIEW_LENGTH) + '\u2026'
+        : p.content
+      : '',
+  }));
 }
 
 function ExpandedSections({ source, showAll, onToggleShowAll }: ExpandedSectionsProps) {
   const items = buildSectionItems(source);
-  const hasTextOnly = items.length === 0 && !!source.extractedContent?.text;
-
-  // Text-only fallback (no structured sections)
-  if (hasTextOnly) {
-    return (
-      <div className="border-t border-border bg-muted/30 p-3">
-        <p className="text-xs font-medium text-muted-foreground mb-1.5">Content Preview</p>
-        <p className="text-xs text-muted-foreground leading-relaxed line-clamp-6">
-          {source.extractedContent!.text!.substring(0, 600)}
-        </p>
-      </div>
-    );
-  }
 
   if (items.length === 0) return null;
 
@@ -172,11 +124,8 @@ export function KnowledgeSourceCard({
 }: KnowledgeSourceCardProps) {
   const [showAllSections, setShowAllSections] = useState(false);
 
-  const hasContent =
-    source.extractedContent &&
-    (source.extractedContent.text ||
-      (source.extractedContent.sectionHeadings && source.extractedContent.sectionHeadings.length > 0) ||
-      (source.extractedContent.sections && source.extractedContent.sections.length > 0));
+  const textPartCount = source.parts.filter(p => p.type === 'text').length;
+  const hasContent = source.parts.length > 0;
 
   return (
     <div className="border border-border rounded-lg overflow-hidden">
@@ -202,19 +151,16 @@ export function KnowledgeSourceCard({
         )}
 
         {/* File icon */}
-        <FileText className={cn("w-5 h-5 shrink-0", getTypeColor(source.type))} />
+        <FileText className="w-5 h-5 shrink-0 text-muted-foreground" />
 
-        {/* Name and type */}
+        {/* Name and part count */}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium truncate">{source.name}</p>
           <p className="text-xs text-muted-foreground">
-            {source.type.toUpperCase()}
-            {/* Show section count — prefer sections over sectionHeadings to avoid duplication */}
-            {source.extractedContent?.sections && source.extractedContent.sections.length > 0 ? (
-              <> &middot; {source.extractedContent.sections.length} sections</>
-            ) : source.extractedContent?.sectionHeadings && source.extractedContent.sectionHeadings.length > 0 ? (
-              <> &middot; {source.extractedContent.sectionHeadings.length} sections</>
-            ) : null}
+            {source.parts.length} part{source.parts.length !== 1 ? 's' : ''}
+            {textPartCount > 0 && (
+              <> &middot; {textPartCount} section{textPartCount !== 1 ? 's' : ''}</>
+            )}
             {recordCount != null && recordCount > 0 && (
               <>
                 {' '}&middot;{' '}
@@ -237,14 +183,9 @@ export function KnowledgeSourceCard({
           </p>
         </div>
 
-        {/* Status badge */}
-        <span
-          className={cn(
-            "px-2 py-0.5 text-[10px] font-medium rounded-full uppercase",
-            getStatusColor(source.status)
-          )}
-        >
-          {source.status}
+        {/* Ready badge (all backend sources are ready) */}
+        <span className="px-2 py-0.5 text-[10px] font-medium rounded-full uppercase bg-green-500/20 text-green-500">
+          ready
         </span>
 
         {/* Delete button (hidden in compact mode) */}
@@ -262,38 +203,6 @@ export function KnowledgeSourceCard({
           </Button>
         )}
       </div>
-
-      {/* Processing progress indicator */}
-      {source.status === "processing" && source.progress && (
-        <div className="border-t border-border bg-muted/30 px-3 py-2">
-          <div className="flex items-center gap-2">
-            <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-muted-foreground truncate">
-                {source.progress.step}
-              </p>
-              {source.progress.percent !== undefined && (
-                <div className="mt-1 flex items-center gap-2">
-                  <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-300"
-                      style={{
-                        width: `${Math.min(100, source.progress.percent)}%`,
-                        backgroundColor: 'rgb(var(--theme-500))'
-                      }}
-                    />
-                  </div>
-                  <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
-                    {source.progress.current !== undefined && source.progress.total !== undefined
-                      ? `${source.progress.current}/${source.progress.total}`
-                      : `${Math.round(source.progress.percent)}%`}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Expanded content */}
       {isExpanded && hasContent && (

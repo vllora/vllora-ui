@@ -13,7 +13,7 @@
  */
 
 import { useState, useMemo, useCallback, useEffect, useRef, type ReactNode } from "react";
-import { FileText, Search, ChevronRight, ChevronDown, X, Loader2, Database } from "lucide-react";
+import { FileText, Search, ChevronRight, ChevronDown, X, Database, ImageIcon, Table2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDebounceFn } from "ahooks";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
@@ -274,6 +274,81 @@ function LegacySectionCard({
   );
 }
 
+// ─── Non-text part card (table / image) ───
+
+interface NonTextPartDisplay {
+  readonly id: string;
+  readonly type: 'table' | 'image';
+  readonly title: string;
+  readonly content: string;
+}
+
+function partTypeIcon(type: 'table' | 'image') {
+  if (type === 'table') return <Table2 className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />;
+  return <ImageIcon className="w-3.5 h-3.5 text-purple-400 shrink-0 mt-0.5" />;
+}
+
+function NonTextPartCard({
+  part,
+  searchTerms,
+  isExpanded,
+  onToggle,
+}: {
+  readonly part: NonTextPartDisplay;
+  readonly searchTerms: readonly string[];
+  readonly isExpanded: boolean;
+  readonly onToggle: () => void;
+}) {
+  const typeLabel = part.type === 'table' ? 'Table' : 'Image';
+  return (
+    <div className="rounded-md">
+      <button
+        type="button"
+        className="w-full text-left px-3 py-2 flex items-start gap-2 hover:bg-muted/20 rounded-md transition-colors"
+        onClick={onToggle}
+      >
+        {isExpanded
+          ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
+          : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            {partTypeIcon(part.type)}
+            <span className="text-xs font-medium text-foreground">
+              {highlightTerms(part.title, searchTerms)}
+            </span>
+            <span className={cn(
+              "text-[10px] px-1.5 py-0.5 rounded font-medium uppercase tracking-wider",
+              part.type === 'table'
+                ? "bg-amber-500/10 text-amber-400"
+                : "bg-purple-500/10 text-purple-400",
+            )}>
+              {typeLabel}
+            </span>
+          </div>
+          {!isExpanded && (
+            <p className="text-[11px] text-muted-foreground/60 line-clamp-1 mt-0.5 leading-relaxed">
+              {highlightTerms(part.content.substring(0, 200), searchTerms)}
+            </p>
+          )}
+        </div>
+      </button>
+      {isExpanded && (
+        <div className="px-3 pb-3 pt-0 ml-5.5">
+          {part.type === 'table' ? (
+            <pre className="text-[11px] text-foreground/80 leading-relaxed whitespace-pre-wrap mt-1 font-mono bg-muted/30 rounded-md p-2 overflow-x-auto">
+              {highlightTerms(part.content, searchTerms)}
+            </pre>
+          ) : (
+            <p className="text-[11px] text-foreground/80 leading-relaxed whitespace-pre-wrap mt-1">
+              {highlightTerms(part.content, searchTerms)}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main component ───
 
 interface KnowledgeSourceViewerProps {
@@ -306,21 +381,39 @@ export function KnowledgeSourceViewer({ sourceId, chunkRecordCounts }: Knowledge
     [sources, sourceId],
   );
 
-  // Parse semantic chunks from metadata
+  // Build semantic chunks from source parts
   const chunks = useMemo((): readonly SemanticChunk[] => {
-    const metadata = source?.extractedContent?.metadata as Record<string, unknown> | undefined;
-    const method = (metadata?.extractionMethod as string) || "";
-    if (method === "local-semantic" && Array.isArray(metadata?.chunks)) {
-      return metadata.chunks as SemanticChunk[];
-    }
-    return [];
+    if (!source) return [];
+    const textParts = source.parts.filter(p => p.type === 'text');
+    if (textParts.length === 0) return [];
+    return textParts.map((part, i) => ({
+      id: part.id,
+      heading: part.title || `Section ${i + 1}`,
+      summary: part.content?.substring(0, 200) || '',
+      sentences: part.content ? part.content.split(/(?<=[.!?])\s+/).filter(Boolean) : [],
+      text: part.content || '',
+      pageStart: (part.extractionMetadata as Record<string, unknown>)?.pageStart as number || 1,
+      pageEnd: (part.extractionMetadata as Record<string, unknown>)?.pageEnd as number || 1,
+    }));
   }, [source]);
 
-  // Legacy sections fallback
+  // Build non-text parts (table / image)
+  const nonTextParts = useMemo((): readonly NonTextPartDisplay[] => {
+    if (!source) return [];
+    return source.parts
+      .filter(p => p.type === 'table' || p.type === 'image')
+      .map((part, i) => ({
+        id: part.id,
+        type: part.type as 'table' | 'image',
+        title: part.title || `${part.type.charAt(0).toUpperCase() + part.type.slice(1)} ${i + 1}`,
+        content: part.content || '',
+      }));
+  }, [source]);
+
+  // Legacy sections fallback (not used with new parts-based sources)
   const legacySections = useMemo((): readonly LegacySection[] => {
-    if (chunks.length > 0) return [];
-    return (source?.extractedContent?.sections as LegacySection[] | undefined) ?? [];
-  }, [chunks, source]);
+    return [];
+  }, []);
 
   // Search terms
   const searchTerms = useMemo(() => {
@@ -347,6 +440,15 @@ export function KnowledgeSourceViewer({ sourceId, chunkRecordCounts }: Knowledge
       return searchTerms.every(t => searchable.includes(t));
     });
   }, [legacySections, searchTerms]);
+
+  // Filtered non-text parts
+  const filteredNonTextParts = useMemo(() => {
+    if (searchTerms.length === 0) return nonTextParts;
+    return nonTextParts.filter(p => {
+      const searchable = `${p.title} ${p.content}`.toLowerCase();
+      return searchTerms.every(t => searchable.includes(t));
+    });
+  }, [nonTextParts, searchTerms]);
 
   const toggleExpanded = useCallback((id: string) => {
     setExpandedIds(prev => {
@@ -459,27 +561,11 @@ export function KnowledgeSourceViewer({ sourceId, chunkRecordCounts }: Knowledge
     );
   }
 
-  if (source.status === "processing" || source.status === "pending") {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-2 text-muted-foreground">
-        <Loader2 className="w-5 h-5 animate-spin" />
-        <span className="text-sm">Processing document...</span>
-      </div>
-    );
-  }
+  // All backend sources are ready — no processing/failed states
 
-  if (source.status === "failed") {
-    return (
-      <div className="flex-1 flex items-center justify-center text-red-400 text-sm">
-        Extraction failed: {source.error || "unknown error"}
-      </div>
-    );
-  }
-
-  const totalItems = chunks.length || legacySections.length;
-  const filteredCount = chunks.length > 0 ? filteredChunks.length : filteredSections.length;
-  const extractedMetadata = source.extractedContent?.metadata as Record<string, unknown> | undefined;
-  const totalPages = (extractedMetadata?.totalPages as number) || 0;
+  const totalItems = (chunks.length || legacySections.length) + nonTextParts.length;
+  const filteredCount = (chunks.length > 0 ? filteredChunks.length : filteredSections.length) + filteredNonTextParts.length;
+  const totalPages = 0; // Page count not available in parts-based sources
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -489,7 +575,7 @@ export function KnowledgeSourceViewer({ sourceId, chunkRecordCounts }: Knowledge
           <FileText className="w-4 h-4 text-blue-400 shrink-0" />
           <h2 className="text-sm font-medium text-foreground truncate">{source.name}</h2>
           <span className="text-[10px] text-muted-foreground/60 uppercase tracking-wide shrink-0">
-            {source.type}
+            {source.parts.length} parts
           </span>
           {totalItems > 0 && (
             <span className="text-[10px] text-muted-foreground/50 shrink-0">
@@ -555,6 +641,21 @@ export function KnowledgeSourceViewer({ sourceId, chunkRecordCounts }: Knowledge
               recordCount={getRecordCount(chunk.id)}
               onToggle={() => toggleExpanded(chunk.id)}
               refSetter={setChunkRef(chunk.id)}
+            />
+          </div>
+        ))}
+
+        {/* Non-text parts (table / image) */}
+        {filteredNonTextParts.map((part) => (
+          <div key={part.id}>
+            {(filteredChunks.length > 0 || filteredNonTextParts.indexOf(part) > 0) && (
+              <div className="mx-3 border-b border-border/20" />
+            )}
+            <NonTextPartCard
+              part={part}
+              searchTerms={searchTerms}
+              isExpanded={expandedIds.has(part.id)}
+              onToggle={() => toggleExpanded(part.id)}
             />
           </div>
         ))}

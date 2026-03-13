@@ -21,9 +21,9 @@ import type { DistriFnTool } from '@distri/core';
 import { workflowService, datasetService, recordService, knowledgeSourceService } from '@/services/service-registry';
 import type {
   DatasetRecord,
-  KnowledgeSource,
   TopicHierarchyNode,
 } from '@/types/dataset-types';
+import type { KnowledgeSource } from '@/types/knowledge-types';
 import type { ToolHandler } from '../types';
 import { getProposedPlan } from './proposed-plan-store';
 import type { GraderCriterion } from './propose-plan/types';
@@ -293,8 +293,7 @@ function buildKnowledgeDoc(
   sources: readonly KnowledgeSource[],
   sectionEntries?: ReadonlyArray<{ path: string; title: string; sourceName: string; pageRange?: string }>,
 ): string | null {
-  const readySources = sources.filter((s) => s.status === 'ready' && s.extractedContent);
-  if (readySources.length === 0) return null;
+  if (sources.length === 0) return null;
 
   // Only sections with a reference document (page range from PDF extraction)
   const entriesWithRef =
@@ -342,65 +341,35 @@ function collectSectionsFromSources(
   sources: readonly KnowledgeSource[],
 ): SectionEntry[] {
   const entries: SectionEntry[] = [];
-  const readySources = sources.filter((s) => s.status === 'ready' && s.extractedContent);
 
-  for (const source of readySources) {
-    const content = source.extractedContent!;
-    const metadata = content.metadata as Record<string, unknown> | undefined;
-    const extractionMethod = (metadata?.extractionMethod as string) || 'unknown';
+  for (const source of sources) {
     const sourceSlug = slugifySegment(source.name);
+    const textParts = source.parts.filter(p => p.type === 'text');
 
-    if (extractionMethod === 'local-semantic') {
-      const chunks = (metadata?.chunks as Array<{
-        id: string;
-        heading: string;
-        summary: string;
-        text: string;
-        pageStart: number;
-        pageEnd: number;
-      }>) || [];
-      for (let i = 0; i < chunks.length; i++) {
-        const c = chunks[i];
-        const pageRange =
-          c.pageStart === c.pageEnd
-            ? `p.${c.pageStart}`
-            : `pp.${c.pageStart}–${c.pageEnd}`;
-        entries.push({
-          sourceName: source.name,
-          sourceSlug,
-          title: c.heading,
-          slug: slugifySegment(c.heading) || `chunk-${i + 1}`,
-          content: [
-            `# ${c.heading}`,
-            '',
-            `**Source:** ${source.name} | **Pages:** ${pageRange}`,
-            '',
-            `**Summary:** ${c.summary}`,
-            '',
-            c.text,
-          ].join('\n'),
-          pageRange,
-        });
-      }
-    } else {
-      const sections = (content.sections || []) as Array<{ title: string; content: string; level?: number }>;
-      for (let i = 0; i < sections.length; i++) {
-        const s = sections[i];
-        const slug = slugifySegment(s.title) || `section-${i + 1}`;
-        entries.push({
-          sourceName: source.name,
-          sourceSlug,
-          title: s.title || 'Untitled',
-          slug,
-          content: [
-            `# ${s.title || 'Untitled'}`,
-            '',
-            `**Source:** ${source.name}`,
-            '',
-            s.content,
-          ].join('\n'),
-        });
-      }
+    for (let i = 0; i < textParts.length; i++) {
+      const part = textParts[i];
+      const partTitle = part.title || 'Untitled';
+      const slug = slugifySegment(partTitle) || `part-${i + 1}`;
+      const pageRange = (part.extractionMetadata?.pageStart != null && part.extractionMetadata?.pageEnd != null)
+        ? (part.extractionMetadata.pageStart === part.extractionMetadata.pageEnd
+            ? `p.${part.extractionMetadata.pageStart}`
+            : `pp.${part.extractionMetadata.pageStart}–${part.extractionMetadata.pageEnd}`)
+        : undefined;
+
+      entries.push({
+        sourceName: source.name,
+        sourceSlug,
+        title: partTitle,
+        slug,
+        content: [
+          `# ${partTitle}`,
+          '',
+          `**Source:** ${source.name}${pageRange ? ` | **Pages:** ${pageRange}` : ''}`,
+          '',
+          part.content,
+        ].join('\n'),
+        pageRange,
+      });
     }
   }
 
@@ -720,7 +689,7 @@ export async function assembleSkillPackageFiles(
   const records = await recordService.getByDatasetId(workflowId);
   if (records.length === 0) return null;
 
-  const knowledgeSources = await knowledgeSourceService.getByDataset(workflowId);
+  const knowledgeSources = await knowledgeSourceService.list(workflowId);
 
   const plan = await getProposedPlan(workflowId);
   const graderCriteria: readonly GraderCriterion[] = plan?.grader_config?.criteria ?? [];
@@ -746,7 +715,8 @@ export async function assembleSkillPackageFiles(
       ? buildTopicHierarchyList(dataset.topicHierarchy.hierarchy)
       : '';
 
-  const readySources = knowledgeSources.filter((s) => s.status === 'ready');
+  // All sources from the backend are ready
+  const readySources = knowledgeSources;
 
   // Extract top-level topic names for the YAML description trigger list
   const topicNames: readonly string[] = dataset.topicHierarchy?.hierarchy

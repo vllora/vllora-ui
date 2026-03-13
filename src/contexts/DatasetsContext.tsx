@@ -141,7 +141,7 @@ function useDatasets() {
       // Dataset + records + finetune job associations (vllora-datasets DB)
       datasetService.delete(workflowId),
       // Knowledge sources (vllora-knowledge-sources DB)
-      knowledgeSourceService.deleteByDataset(workflowId),
+      knowledgeSourceService.deleteAll(workflowId),
       // Dry run / eval jobs
       evalJobService.deleteByDataset(workflowId),
       // Proposed plans (vllora-finetune DB)

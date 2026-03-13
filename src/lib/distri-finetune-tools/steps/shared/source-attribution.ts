@@ -6,7 +6,7 @@
  * async IndexedDB calls on every render.
  */
 
-import type { KnowledgeSource } from '@/types/dataset-types';
+import type { KnowledgeSource } from '@/types/knowledge-types';
 import { parseChunkRef } from './chunk-lookup';
 
 // ============================================================================

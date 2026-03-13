@@ -1,6 +1,30 @@
 # vLLora UI
 
-React/TypeScript frontend for building AI finetune datasets with an AI assistant (Lucy).
+React/TypeScript frontend for visualizing and managing AI finetune datasets.
+
+## Current Focus: Skill-First Pipeline (Lucy Disabled)
+
+The UI is currently a **visualization layer**. The finetune pipeline (extract documents, generate data, topics, link references) is driven by external skills (Codex agent, Claude Code) — not by the in-app Lucy AI assistant.
+
+**Feature flag**: `VITE_LUCY_ENABLED` in `.env` (default: `false` / absent = off).
+- Set `VITE_LUCY_ENABLED=true` in `.env` to re-enable Lucy sidebar, agent panel, and plan.md auto-generation.
+- The flag is centralized in `src/lib/feature-flags.ts` as `IS_LUCY_ENABLED`.
+- When off: no Lucy sidebar, no agent panel, no plan.md in explorer (unless a plan exists), no "Generate Plan" buttons.
+- When on: full Lucy experience (sidebar chat, auto-plan, catch-up protocol).
+
+**What the UI does now** (Lucy off):
+- Visualize workflow data: records, topics, evaluations, training jobs, coverage
+- Browse and inspect individual records, eval results, training metrics
+- Navigate the file-tree explorer (data, evaluations, grader, finetune jobs, insights)
+- Create workflows via the homepage objective input (but no auto-plan generation)
+
+**What the skill handles** (external):
+- Document extraction (PDF, images, etc.)
+- Data generation and topic creation
+- Linking data, topics, and documents with references
+- Running evaluations and training
+
+Later, the same skill will power Lucy in-app.
 
 ## Tech Stack
 
@@ -397,13 +421,15 @@ Multi-agent teams for complex tasks. Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TE
 
 7. **Cross-repo tool contracts**: Tool definitions in agent md files (gateway repo) must match tool implementations in `distri-finetune-tools/` (this repo). Mismatches cause silent failures.
 
-8. **Auth for E2E testing**: Set `localStorage.setItem('vlora_user_email', 'test@e2e.local')` — no login UI needed.
+8. **Lucy is disabled by default**: `VITE_LUCY_ENABLED` defaults to `false`. The UI is a visualization layer — the finetune pipeline is driven by external skills (Codex/Claude Code). All Lucy-gated code uses `IS_LUCY_ENABLED` from `src/lib/feature-flags.ts`. Gated: `LucySidebar`, `AgentPanelWrapper`, `SidebarAgentButton`, plan.md in explorer (when no plan exists), PlanPreview empty state buttons, default tab seeding.
 
-9. **Backend restart after agent md changes**: When you modify any agent definition file in `gateway/agents/finetune/` (e.g., `vllora-finetune-agent.md`, `finetune-workflow-agent.md`), the backend must be restarted to pick up changes. Run `scripts/restart-backend.sh` — this kills ports 8081/9090/9091, cleans the Distri cache, and restarts both the Distri server and vLLora gateway. Warn the user that a restart is needed after editing agent files.
+9. **Auth for E2E testing**: Set `localStorage.setItem('vlora_user_email', 'test@e2e.local')` — no login UI needed.
 
-10. **Testing with Chrome MCP browser**: When verifying UI changes, use the **Claude in Chrome** MCP tools (`mcp__Claude_in_Chrome__*`) instead of Preview tools. The user's Chrome browser already has existing data (datasets, jobs, evaluations) which makes testing realistic. Use `tabs_context_mcp` first to get available tabs, then navigate to `localhost:5173` and use `computer` (screenshot), `read_page` (accessibility tree), `find` (element search), and `javascript_tool` (DOM inspection) to verify changes. Do NOT use `preview_*` tools for visual verification.
+10. **Backend restart after agent md changes**: When you modify any agent definition file in `gateway/agents/finetune/` (e.g., `vllora-finetune-agent.md`, `finetune-workflow-agent.md`), the backend must be restarted to pick up changes. Run `scripts/restart-backend.sh` — this kills ports 8081/9090/9091, cleans the Distri cache, and restarts both the Distri server and vLLora gateway. Warn the user that a restart is needed after editing agent files.
 
-11. **Browser MCP context efficiency**: MCP browser tools return large responses that fill the context window fast. Follow these rules to stay efficient:
+11. **Testing with Chrome MCP browser**: When verifying UI changes, use the **Claude in Chrome** MCP tools (`mcp__Claude_in_Chrome__*`) instead of Preview tools. The user's Chrome browser already has existing data (datasets, jobs, evaluations) which makes testing realistic. Use `tabs_context_mcp` first to get available tabs, then navigate to `localhost:5173` and use `computer` (screenshot), `read_page` (accessibility tree), `find` (element search), and `javascript_tool` (DOM inspection) to verify changes. Do NOT use `preview_*` tools for visual verification.
+
+12. **Browser MCP context efficiency**: MCP browser tools return large responses that fill the context window fast. Follow these rules to stay efficient:
 
     **Prefer lightweight tools first** (ordered by context cost):
     | Tool | Context Cost | When to Use |

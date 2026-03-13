@@ -19,7 +19,7 @@ import {
 } from "react";
 import { emitter } from "@/utils/eventEmitter";
 import { knowledgeSourceService } from "@/services/service-registry";
-import type { KnowledgeSource } from "@/types/dataset-types";
+import type { KnowledgeSource } from "@/types/knowledge-types";
 
 // ============================================================================
 // Types
@@ -30,12 +30,8 @@ interface KnowledgeSourcesContextType {
   sources: KnowledgeSource[];
   /** Total count of knowledge sources */
   count: number;
-  /** Number of sources currently processing */
-  processingCount: number;
-  /** Whether any sources are still processing */
-  isProcessing: boolean;
-  /** Sources that are currently processing (for per-doc status UI) */
-  processingSources: KnowledgeSource[];
+  /** Total number of parts across all sources */
+  totalParts: number;
   /** Whether the initial fetch from IndexedDB has completed */
   hasLoaded: boolean;
   /** Manually trigger a refresh */
@@ -64,7 +60,7 @@ export function KnowledgeSourcesProvider({ workflowId, children }: KnowledgeSour
   const fetchSources = useCallback(async () => {
     if (!workflowId) return;
     try {
-      const result = await knowledgeSourceService.getByDataset(workflowId);
+      const result = await knowledgeSourceService.list(workflowId);
       setSources(result);
       setHasLoaded(true);
     } catch (error) {
@@ -91,16 +87,12 @@ export function KnowledgeSourcesProvider({ workflowId, children }: KnowledgeSour
 
   // Derived state
   const count = sources.length;
-  const processingSources = sources.filter((s) => s.status === "processing");
-  const processingCount = processingSources.length;
-  const isProcessing = processingCount > 0;
+  const totalParts = sources.flatMap((s) => s.parts).length;
 
   const value: KnowledgeSourcesContextType = {
     sources,
     count,
-    processingCount,
-    isProcessing,
-    processingSources,
+    totalParts,
     hasLoaded,
     refreshSources: fetchSources,
   };

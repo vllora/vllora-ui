@@ -20,7 +20,8 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
-import type { DatasetRecord, KnowledgeSource } from "@/types/dataset-types";
+import type { DatasetRecord } from "@/types/dataset-types";
+import type { KnowledgeSource } from "@/types/knowledge-types";
 import type { AvailableTopic } from "../record-utils";
 import { SelectionCheckbox, QualityIndicator, RecordActions } from "../records-table/cells";
 import { RecordDataDialog } from "../records-table/RecordDataDialog";
@@ -323,7 +324,7 @@ export function ConversationDataTable({
                         sources={sources}
                         onNavigateToSource={workflowId ? (sourceId) => {
                           const chunkRefs = (record.metadata?.sourceChunkRefs as string[] | undefined) ?? [];
-                          emitter.emit("vllora_switch_tab", { workflowId, tab: `documents/${sourceId}` });
+                          emitter.emit("vllora_switch_tab", { workflowId, tab: `knowledge/${sourceId}` });
                           // Phase 2: highlight specific chunks + sentences after viewer renders
                           if (chunkRefs.length > 0) {
                             const recordText = `${row.user} ${row.assistant}`;

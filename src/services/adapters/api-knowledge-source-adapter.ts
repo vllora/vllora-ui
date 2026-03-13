@@ -2,48 +2,62 @@
  * API adapter for KnowledgeSourceService.
  *
  * Calls gateway /finetune/workflows/{workflowId}/knowledge endpoints.
- * Replaces IndexedDB adapter (indexeddb-knowledge-source-adapter.ts).
- *
- * Mapping: FE workflowId → BE workflowId (same ID after migration)
+ * Read-only visualization layer — writes happen via CLI skill.
  */
 
 import { api, handleApiResponse } from '@/lib/api-client';
-import type { KnowledgeSourceService, CreateKnowledgeSourceOptions, UpdateStatusOptions } from '@/services/interfaces/knowledge-source-service';
-import type { SearchResult } from '@/types/knowledge-types';
-import type {
-  KnowledgeSource,
-  KnowledgeSourceType,
-  KnowledgeSourceStatus,
-  KnowledgeSourceProgress,
-  ExtractedContent,
-} from '@/types/dataset-types';
+import type { KnowledgeSourceService } from '@/services/interfaces/knowledge-source-service';
+import type { KnowledgeSource, KnowledgeSourcePart, KnowledgePartType } from '@/types/knowledge-types';
 
 // ─── BE → FE type mapping ────────────────────────────────────────────────────
 
-interface DbKnowledgeSourceResponse {
+interface DbPartResponse {
   readonly id: string;
-  readonly workflow_id: string;
-  readonly name: string;
-  readonly type: KnowledgeSourceType;
-  readonly content: string | null;
-  readonly extracted_content: string | null;
-  readonly status: string;
-  readonly progress: string | null;
-  readonly created_at: string;
-  readonly deleted_at: string | null;
+  readonly reference_id: string | null;
+  readonly source_id: string;
+  readonly type: KnowledgePartType;
+  readonly content: string;
+  readonly content_metadata: unknown | null;
+  readonly title: string | null;
+  readonly extraction_path: string | null;
+  readonly extraction_metadata: unknown | null;
 }
 
-function mapToFe(db: DbKnowledgeSourceResponse): KnowledgeSource {
+interface DbSourceResponse {
+  readonly id: string;
+  readonly reference_id: string | null;
+  readonly workflow_id: string;
+  readonly name: string;
+  readonly description: string | null;
+  readonly metadata: unknown | null;
+  readonly part: DbPartResponse[];
+  readonly created_at?: string;
+}
+
+function mapPart(db: DbPartResponse): KnowledgeSourcePart {
   return {
     id: db.id,
+    referenceId: db.reference_id ?? undefined,
+    sourceId: db.source_id,
+    type: db.type,
+    content: db.content,
+    contentMetadata: (db.content_metadata as Record<string, unknown>) ?? undefined,
+    title: db.title ?? undefined,
+    extractionPath: db.extraction_path ?? undefined,
+    extractionMetadata: (db.extraction_metadata as Record<string, unknown>) ?? undefined,
+  };
+}
+
+function mapSource(db: DbSourceResponse): KnowledgeSource {
+  return {
+    id: db.id,
+    referenceId: db.reference_id ?? undefined,
     workflowId: db.workflow_id,
     name: db.name,
-    type: db.type,
-    status: db.status as KnowledgeSourceStatus,
-    content: db.content ?? undefined,
-    extractedContent: db.extracted_content ? JSON.parse(db.extracted_content) : undefined,
-    progress: db.progress ? JSON.parse(db.progress) : undefined,
-    createdAt: new Date(db.created_at).getTime(),
+    description: db.description ?? undefined,
+    metadata: (db.metadata as Record<string, unknown>) ?? undefined,
+    parts: (db.part ?? []).map(mapPart),
+    createdAt: db.created_at ?? '',
   };
 }
 
@@ -54,33 +68,17 @@ function basePath(workflowId: string): string {
 }
 
 export const apiKnowledgeSourceAdapter: KnowledgeSourceService = {
-  async create(
-    workflowId: string,
-    name: string,
-    type: KnowledgeSourceType,
-    options?: CreateKnowledgeSourceOptions,
-  ): Promise<KnowledgeSource> {
-    const response = await api.post(basePath(workflowId), {
-      name,
-      type,
-      content: options?.content,
-    });
-    const db = await handleApiResponse<DbKnowledgeSourceResponse>(response);
-    return mapToFe(db);
-  },
-
-  async get(id: string): Promise<KnowledgeSource | null> {
-    // Route requires workflow_id but handler ignores it. Use placeholder.
-    const response = await api.get(`/finetune/workflows/_/knowledge/${id}`);
-    if (!response.ok && response.status === 404) return null;
-    const db = await handleApiResponse<DbKnowledgeSourceResponse>(response);
-    return mapToFe(db);
-  },
-
-  async getByDataset(workflowId: string): Promise<KnowledgeSource[]> {
+  async list(workflowId: string): Promise<KnowledgeSource[]> {
     const response = await api.get(basePath(workflowId));
-    const data = await handleApiResponse<{ knowledge_sources: DbKnowledgeSourceResponse[] }>(response);
-    return data.knowledge_sources.map(mapToFe);
+    const data = await handleApiResponse<{ knowledge_sources: DbSourceResponse[] }>(response);
+    return data.knowledge_sources.map(mapSource);
+  },
+
+  async get(workflowId: string, idOrRef: string): Promise<KnowledgeSource | null> {
+    const response = await api.get(`${basePath(workflowId)}/${idOrRef}`);
+    if (!response.ok && response.status === 404) return null;
+    const db = await handleApiResponse<DbSourceResponse>(response);
+    return mapSource(db);
   },
 
   async getCount(workflowId: string): Promise<number> {
@@ -89,47 +87,13 @@ export const apiKnowledgeSourceAdapter: KnowledgeSourceService = {
     return data.count;
   },
 
-  async updateStatus(
-    id: string,
-    status: KnowledgeSourceStatus,
-    _options?: UpdateStatusOptions,
-  ): Promise<void> {
-    // We need the workflow_id for the route. Extract from a prior call or pass via context.
-    // For now, use a workaround: the handler uses path (workflow_id, ks_id) but only uses ks_id.
-    // We pass a placeholder workflow_id since the handler ignores it.
-    const response = await api.patch(`/finetune/workflows/_/knowledge/${id}/status`, { status });
-    await handleApiResponse<{ updated: boolean }>(response);
-  },
-
-  async updateProgress(_id: string, _progress: KnowledgeSourceProgress): Promise<void> {
-    // Progress is tracked client-side during extraction. No BE endpoint needed.
-    // This is a no-op in the API adapter.
-  },
-
-  async updateChunks(
-    id: string,
-    content: ExtractedContent,
-    _phase: 'basic' | 'enhanced',
-  ): Promise<void> {
-    const response = await api.patch(`/finetune/workflows/_/knowledge/${id}/chunks`, {
-      extracted_content: content,
-    });
-    await handleApiResponse<{ updated: boolean }>(response);
-  },
-
-  async delete(id: string): Promise<void> {
-    const response = await api.delete(`/finetune/workflows/_/knowledge/${id}`);
+  async delete(workflowId: string, idOrRef: string): Promise<void> {
+    const response = await api.delete(`${basePath(workflowId)}/${idOrRef}`);
     await handleApiResponse<{ deleted: boolean }>(response);
   },
 
-  async deleteByDataset(workflowId: string): Promise<void> {
+  async deleteAll(workflowId: string): Promise<void> {
     const response = await api.delete(basePath(workflowId));
     await handleApiResponse<{ deleted: number }>(response);
-  },
-
-  async search(_workflowId: string, _query: string): Promise<SearchResult[]> {
-    // Search is done client-side with extracted content. No BE endpoint yet.
-    // TODO: Implement POST /finetune/workflows/{id}/knowledge/search on BE
-    return [];
   },
 };

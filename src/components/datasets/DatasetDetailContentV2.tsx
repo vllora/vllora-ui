@@ -27,6 +27,7 @@ import { RecordsAnalyticsDialog } from "./dataset-detail-header/detail-records-a
 import { DatasetMainContent } from "./DatasetMainContent";
 import { DatasetNotFound } from "./DatasetNotFound";
 import { ExplorerSidebar, LucySidebar, TasksViewer, LogsViewer } from "./sidebars";
+import { IS_LUCY_ENABLED } from "@/lib/feature-flags";
 import { EvaluationConfigPanel } from "./evaluation-dialog/EvaluationConfigPanel";
 import { FinetuneConfigPanel } from "@/components/finetune/content/FinetuneConfigPanel";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
@@ -48,12 +49,14 @@ import {
   getInsightTypeFromPath,
   getFinetuneJobIdFromPath,
   getSkillFileFromPath,
-  getDocumentSourceIdFromPath,
+  getKnowledgeSourceIdFromPath,
+  getKnowledgePartIdFromPath,
   type ContentSection,
 } from "./TabContentRouter";
 import { InsightsPane } from "./InsightsPane";
 import { SkillFileViewer } from "./SkillFileViewer";
 import { KnowledgeSourceViewer } from "./KnowledgeSourceViewer";
+import { KnowledgePartViewer } from "./KnowledgePartViewer";
 import { WorkspaceWelcome } from "./WorkspaceWelcome";
 import type { CoverageStats, TopicHierarchyNode } from "@/types/dataset-types";
 
@@ -192,8 +195,12 @@ export function DatasetDetailContentV2() {
     () => getFinetuneJobIdFromPath(activeTabPath),
     [activeTabPath]
   );
-  const selectedDocumentSourceId = useMemo(
-    () => getDocumentSourceIdFromPath(activeTabPath),
+  const selectedKnowledgeSourceId = useMemo(
+    () => getKnowledgeSourceIdFromPath(activeTabPath),
+    [activeTabPath]
+  );
+  const selectedKnowledgePartId = useMemo(
+    () => getKnowledgePartIdFromPath(activeTabPath),
     [activeTabPath]
   );
 
@@ -219,10 +226,11 @@ export function DatasetDetailContentV2() {
   const {
     sources: knowledgeSources,
     count: knowledgeSourcesCount,
-    isProcessing: docsProcessing,
-    processingCount: docsProcessingCount,
     hasLoaded: knowledgeSourcesLoaded,
   } = KnowledgeSourcesConsumer();
+  // In skill-first mode, sources are always ready (no processing state)
+  const docsProcessing = false;
+  const docsProcessingCount = 0;
 
   // Resolve source document filter name for UI display
   const sourceDocumentFilterName = sourceDocumentFilter
@@ -326,7 +334,7 @@ export function DatasetDetailContentV2() {
     // Map old drawer opens to workspace tabs
     const handleOpenDrawer = ({ type }: { type: 'docs' | 'readme' }) => {
       if (type === 'docs') {
-        openTabRef.current("documents", "Documents", false);
+        openTabRef.current("knowledge", "Knowledge", false);
       } else if (type === 'readme') {
         openTabRef.current("readme.md", "readme.md", false);
       }
@@ -623,12 +631,14 @@ export function DatasetDetailContentV2() {
   const hasRecords = sortedRecords.length > 0;
   const hasEvaluator = !!dataset?.evalScript;
 
-  // For empty datasets with no plan, seed the tab system with plan.md so the user
-  // sees Lucy's plan creation immediately instead of an empty Overview.
+  // For empty datasets with no plan, seed the tab system so the user
+  // sees content immediately instead of an empty Overview.
+  // When Lucy is enabled → open plan.md. When Lucy is off → show overview.
   // MUST be before early returns to satisfy React's Rules of Hooks.
   const hasUrlTab = !!searchParams.get("tab") || !!searchParams.get("view");
   const emptyDatasetInitialTabs = useMemo(() => {
     if (hasUrlTab) return undefined;
+    if (!IS_LUCY_ENABLED) return undefined;
     const isEmpty = sortedRecords.length === 0;
     const hasNoPlan = !proposedPlan && planStatus !== "proposed" && planStatus !== "approved";
     if (isEmpty && hasNoPlan) {
@@ -782,7 +792,7 @@ export function DatasetDetailContentV2() {
               availableTopics={availableTopics}
               topicFilter={activeTabPath?.startsWith("data/") ? activeTabPath.slice(5) : undefined}
               onImportClick={() => setImportDialog(true)}
-              onDocsClick={() => openTabRef.current("documents", "Documents", false)}
+              onDocsClick={() => openTabRef.current("knowledge", "Knowledge", false)}
               selectedTopic={selectedTopic}
               onSelectTopic={setSelectedTopic}
               selectedRecord={selectedRecord}
@@ -864,7 +874,7 @@ export function DatasetDetailContentV2() {
               onApprove={approvePlan}
               onSubmitEdited={submitEditedPlan}
               onDismiss={dismissPlan}
-              onOpenDocs={() => openTabRef.current("documents", "Documents", false)}
+              onOpenDocs={() => openTabRef.current("knowledge", "Knowledge", false)}
               isGenerating={isGeneratingPlan}
               isLoadingPlan={isLoadingPlan}
               isExecuting={isExecuting}
@@ -884,10 +894,12 @@ export function DatasetDetailContentV2() {
               />
             </div>
           )}
-          {contentSection === "documents" && (
+          {contentSection === "knowledge" && (
             <div className="flex-1 flex flex-col overflow-hidden">
-              {selectedDocumentSourceId ? (
-                <KnowledgeSourceViewer sourceId={selectedDocumentSourceId} chunkRecordCounts={chunkRecordCounts} />
+              {selectedKnowledgeSourceId && selectedKnowledgePartId ? (
+                <KnowledgePartViewer sourceId={selectedKnowledgeSourceId} partId={selectedKnowledgePartId} />
+              ) : selectedKnowledgeSourceId ? (
+                <KnowledgeSourceViewer sourceId={selectedKnowledgeSourceId} chunkRecordCounts={chunkRecordCounts} />
               ) : (
                 <KnowledgeSourcesPanel
                   workflowId={workflowId}
@@ -913,8 +925,8 @@ export function DatasetDetailContentV2() {
           )}
         </div>
 
-          {/* Lucy AI assistant on the right */}
-          <LucySidebar />
+          {/* Lucy AI assistant — gated by VITE_LUCY_ENABLED */}
+          {IS_LUCY_ENABLED && <LucySidebar />}
         </div>
 
         {/* Dialogs */}

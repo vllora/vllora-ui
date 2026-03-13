@@ -13,18 +13,17 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { LucyAvatar } from "./lucy-agent"
+import { IS_LUCY_ENABLED } from "@/lib/feature-flags"
 
 interface SidebarAgentButtonProps {
   isCollapsed: boolean
 }
 
-const isLucyEnabled = import.meta.env.VITE_LUCY_ENABLED === 'true'
-
 export function SidebarAgentButton({ isCollapsed }: SidebarAgentButtonProps) {
   const { toggle: toggleAgentPanel, isOpen: isAgentPanelOpen } = useAgentPanel()
 
   // Don't render if Lucy is disabled via feature flag
-  if (!isLucyEnabled) {
+  if (!IS_LUCY_ENABLED) {
     return null
   }
 

@@ -11,7 +11,7 @@
 
 import { knowledgeSourceService } from '@/services/service-registry';
 import type { FileContentBlock } from './lucy-client';
-import type { KnowledgeSource } from '@/types/dataset-types';
+import type { KnowledgeSource } from '@/types/knowledge-types';
 
 export interface KnowledgeSourceContext {
   /** Formatted context string for LLM prompts */
@@ -22,9 +22,9 @@ export interface KnowledgeSourceContext {
   allSectionHeadings: string[];
   /** Number of ready sources */
   readyCount: number;
-  /** Number of processing sources */
+  /** Number of processing sources (always 0 in skill-first mode) */
   processingCount: number;
-  /** All valid chunk refs (sourceId:chunkId) for validation and fallback */
+  /** All valid chunk refs (sourceId:partId) for validation and fallback */
   validRefs: Set<string>;
   /** Map heading (lowercase) → refs for heading-based topic→chunk fallback */
   headingToRefs: Map<string, string[]>;
@@ -40,13 +40,13 @@ export interface ExtractedSection {
 
 /**
  * Build rich knowledge context from pre-fetched knowledge sources.
- * Core implementation — avoids IndexedDB fetch so callers can reuse a single fetch.
+ * Core implementation — avoids redundant API calls so callers can reuse a single fetch.
  */
 export function buildKnowledgeContextFromSources(
   allSources: readonly KnowledgeSource[],
 ): KnowledgeSourceContext {
-  const readySources = allSources.filter((s) => s.status === 'ready');
-  const processingSources = allSources.filter((s) => s.status === 'processing');
+  // In skill-first mode all sources are ready (no processing state)
+  const readySources = allSources;
 
   const sourcesSummary: Array<{ name: string; section_headings: string[] }> = [];
   const allSectionHeadings: string[] = [];
@@ -56,9 +56,9 @@ export function buildKnowledgeContextFromSources(
   const summaryMap = new Map<string, string>();
 
   for (const source of readySources) {
-    const extracted = source.extractedContent;
-    const topics = extracted?.sectionHeadings || [];
-    const metadata = extracted?.metadata as Record<string, unknown> | undefined;
+    const textParts = source.parts.filter(p => p.type === 'text');
+    const topics = textParts.map(p => p.title).filter((t): t is string => Boolean(t));
+    const metadata = source.metadata as Record<string, unknown> | undefined;
     const extractionMethod = (metadata?.extractionMethod as string) || 'unknown';
 
     sourcesSummary.push({
@@ -70,28 +70,30 @@ export function buildKnowledgeContextFromSources(
     // Build rich context that emphasizes document structure
     const sourceParts: string[] = [`## Document: ${source.name}`];
 
-    // Include user comment/objective if provided
-    if (source.comment) {
-      sourceParts.push(`User Note: ${source.comment}`);
+    // Include user description if provided
+    if (source.description) {
+      sourceParts.push(`User Note: ${source.description}`);
     }
 
+    // Check for semantic chunks in metadata
+    const chunks = (metadata?.chunks as Array<{
+      id: string;
+      heading: string;
+      summary: string;
+      sentences: string[];
+      pageStart: number;
+      pageEnd: number;
+    }>) || [];
+
     // --- Local-semantic extraction: use chunk structure ---
-    if (extractionMethod === 'local-semantic') {
+    if (extractionMethod === 'local-semantic' && chunks.length > 0) {
       const totalPages = (metadata?.totalPages as number) || 0;
-      const chunks = (metadata?.chunks as Array<{
-        id: string;
-        heading: string;
-        summary: string;
-        sentences: string[];
-        pageStart: number;
-        pageEnd: number;
-      }>) || [];
 
       if (totalPages > 0) {
         sourceParts.push(`Pages: ${totalPages} | Chunks: ${chunks.length}`);
       }
 
-      if (chunks.length > 0 && chunks[0].summary) {
+      if (chunks[0].summary) {
         sourceParts.push(`Summary: ${chunks[0].summary}`);
       }
 
@@ -101,37 +103,34 @@ export function buildKnowledgeContextFromSources(
         );
       }
 
-      if (chunks.length > 0) {
-        sourceParts.push(`\n### Document Chunks (semantic sections):`);
-        sourceParts.push(`Use ref format "sourceId:chunkId" in source_chunks (e.g. "${source.id}:${chunks[0].id}")`);
-        for (const chunk of chunks) {
-          const ref = `${source.id}:${chunk.id}`;
-          validRefs.add(ref);
-          const headingKey = chunk.heading.toLowerCase().trim();
-          if (!headingToRefs.has(headingKey)) headingToRefs.set(headingKey, []);
-          headingToRefs.get(headingKey)!.push(ref);
-          if (chunk.summary) summaryMap.set(ref, chunk.summary.toLowerCase());
-          const pageRange = chunk.pageStart === chunk.pageEnd
-            ? `p.${chunk.pageStart}`
-            : `pp.${chunk.pageStart}–${chunk.pageEnd}`;
-          const sentenceCount = chunk.sentences?.length || 0;
-          sourceParts.push(
-            `- [ref:${ref}] **${chunk.heading}** [${pageRange}, ${sentenceCount} sentences]: ${chunk.summary}`
-          );
-        }
+      sourceParts.push(`\n### Document Chunks (semantic sections):`);
+      sourceParts.push(`Use ref format "sourceId:chunkId" in source_chunks (e.g. "${source.id}:${chunks[0].id}")`);
+      for (const chunk of chunks) {
+        const ref = `${source.id}:${chunk.id}`;
+        validRefs.add(ref);
+        const headingKey = chunk.heading.toLowerCase().trim();
+        if (!headingToRefs.has(headingKey)) headingToRefs.set(headingKey, []);
+        headingToRefs.get(headingKey)!.push(ref);
+        if (chunk.summary) summaryMap.set(ref, chunk.summary.toLowerCase());
+        const pageRange = chunk.pageStart === chunk.pageEnd
+          ? `p.${chunk.pageStart}`
+          : `pp.${chunk.pageStart}–${chunk.pageEnd}`;
+        const sentenceCount = chunk.sentences?.length || 0;
+        sourceParts.push(
+          `- [ref:${ref}] **${chunk.heading}** [${pageRange}, ${sentenceCount} sentences]: ${chunk.summary}`
+        );
       }
     } else {
-      // --- LLM extraction: use legacy sections format ---
-      const sections = (extracted?.sections || []) as ExtractedSection[];
-      const summary = (metadata?.document_summary as string) || (metadata?.documentSummary as string) || '';
+      // --- Parts-based extraction ---
+      const docSummary = (metadata?.document_summary as string) || (metadata?.documentSummary as string) || '';
       const docType = (metadata?.document_type as string) || '';
 
       if (docType) {
         sourceParts.push(`Type: ${docType}`);
       }
 
-      if (summary) {
-        sourceParts.push(`Summary: ${summary}`);
+      if (docSummary) {
+        sourceParts.push(`Summary: ${docSummary}`);
       }
 
       if (topics.length > 0) {
@@ -140,24 +139,24 @@ export function buildKnowledgeContextFromSources(
         );
       }
 
-      if (sections.length > 0) {
+      if (textParts.length > 0) {
         sourceParts.push(`\n### Document Sections (USE THESE FOR TOPIC GENERATION):`);
-        sourceParts.push(`Use ref format "sourceId:chunkId" in source_chunks (e.g. "${source.id}:section-0")`);
-        for (let i = 0; i < Math.min(sections.length, 10); i++) {
-          const section = sections[i];
-          const ref = `${source.id}:section-${i}`;
+        sourceParts.push(`Use ref format "sourceId:partId" in source_chunks (e.g. "${source.id}:${textParts[0].id}")`);
+        for (let i = 0; i < Math.min(textParts.length, 10); i++) {
+          const part = textParts[i];
+          const ref = `${source.id}:${part.id}`;
           validRefs.add(ref);
-          const sectionTitle = section.title || 'Untitled';
-          const headingKey = sectionTitle.toLowerCase().trim();
+          const partTitle = part.title || 'Untitled';
+          const headingKey = partTitle.toLowerCase().trim();
           if (!headingToRefs.has(headingKey)) headingToRefs.set(headingKey, []);
           headingToRefs.get(headingKey)!.push(ref);
-          const contentPreview = section.content?.substring(0, 150) || '';
+          const contentPreview = part.content?.substring(0, 150) || '';
           sourceParts.push(
-            `- [ref:${ref}] **${sectionTitle}**: ${contentPreview}${contentPreview.length >= 150 ? '...' : ''}`
+            `- [ref:${ref}] **${partTitle}**: ${contentPreview}${contentPreview.length >= 150 ? '...' : ''}`
           );
         }
-        if (sections.length > 10) {
-          sourceParts.push(`  ...and ${sections.length - 10} more sections`);
+        if (textParts.length > 10) {
+          sourceParts.push(`  ...and ${textParts.length - 10} more sections`);
         }
       }
     }
@@ -173,7 +172,7 @@ export function buildKnowledgeContextFromSources(
     sourcesSummary,
     allSectionHeadings: uniqueSectionHeadings,
     readyCount: readySources.length,
-    processingCount: processingSources.length,
+    processingCount: 0,
     validRefs,
     headingToRefs,
     summaryMap,
@@ -182,12 +181,12 @@ export function buildKnowledgeContextFromSources(
 
 /**
  * Build rich knowledge context from all knowledge sources for a dataset.
- * Convenience wrapper that fetches sources from IndexedDB then delegates.
+ * Convenience wrapper that fetches sources then delegates.
  */
 export async function buildKnowledgeContext(
   workflowId: string
 ): Promise<KnowledgeSourceContext> {
-  const sources = await knowledgeSourceService.getByDataset(workflowId);
+  const sources = await knowledgeSourceService.list(workflowId);
   return buildKnowledgeContextFromSources(sources);
 }
 
@@ -204,10 +203,6 @@ When knowledge sources are provided:
 - If a document is about a specific subject (e.g., "Progressive Chess"), ALL topics should be about that subject
 - Match the terminology, concepts, and sections found in the documents`;
 
-/**
- * Wrap knowledge context with appropriate instructions for topic generation.
- * Handles both cases: with documents and without documents.
- */
 // =============================================================================
 // Native File Content Blocks
 // =============================================================================
@@ -226,68 +221,51 @@ export interface KnowledgeContentBlocks {
   sourcesSummary: Array<{ name: string; section_headings: string[] }>;
   /** Number of ready sources */
   readyCount: number;
-  /** Number of processing sources */
+  /** Number of processing sources (always 0 in skill-first mode) */
   processingCount: number;
 }
 
 /**
- * Infer MIME type from a KnowledgeSource.
- * Uses mimeType if available, otherwise infers from source type.
- */
-function inferMimeType(source: KnowledgeSource): string {
-  if (source.mimeType) return source.mimeType;
-
-  switch (source.type) {
-    case 'pdf':
-      return 'application/pdf';
-    case 'text':
-      return 'text/plain';
-    case 'markdown':
-      return 'text/markdown';
-    case 'image':
-      return 'image/png'; // default; mimeType field should have the real type
-    default:
-      return 'application/octet-stream';
-  }
-}
-
-/**
  * Build native file content blocks from pre-fetched knowledge sources.
- * Core implementation — avoids IndexedDB fetch so callers can reuse a single fetch.
+ * Core implementation — avoids redundant API calls so callers can reuse a single fetch.
+ *
+ * In skill-first mode, sources don't carry raw file content (base64).
+ * File blocks are only produced if metadata has base64 data.
  */
 export function buildContentBlocksFromSources(
   allSources: readonly KnowledgeSource[],
 ): KnowledgeContentBlocks {
-  const readySources = allSources.filter((s) => s.status === 'ready');
-  const processingSources = allSources.filter((s) => s.status === 'processing');
+  // All sources from the backend are ready in skill-first mode
+  const readySources = allSources;
 
   const fileBlocks: FileContentBlock[] = [];
   const sourcesSummary: Array<{ name: string; section_headings: string[] }> = [];
 
   for (const source of readySources) {
-    const sectionHeadings = source.extractedContent?.sectionHeadings || [];
+    const textParts = source.parts.filter(p => p.type === 'text');
+    const sectionHeadings = textParts
+      .map(p => p.title)
+      .filter((t): t is string => Boolean(t));
     sourcesSummary.push({ name: source.name, section_headings: sectionHeadings });
 
-    // Skip raw file blocks for locally-extracted sources — text is already extracted
-    const extractionMethod = (source.extractedContent?.metadata as Record<string, unknown> | undefined)?.extractionMethod as string | undefined;
+    // Check metadata for extraction method — skip file blocks for locally-extracted sources
+    const metadata = source.metadata as Record<string, unknown> | undefined;
+    const extractionMethod = (metadata?.extractionMethod as string) || '';
     if (extractionMethod === 'local-semantic') {
       continue;
     }
 
-    // Build file content block if raw base64 content is available
-    if (source.content && source.content.length <= MAX_FILE_BASE64_SIZE) {
-      const mimeType = inferMimeType(source);
+    // Check for base64 content in metadata (for sources that carry raw files)
+    const rawContent = (metadata?.base64Content as string) || '';
+    const mimeType = (metadata?.mimeType as string) || 'application/octet-stream';
+    if (rawContent && rawContent.length <= MAX_FILE_BASE64_SIZE) {
       fileBlocks.push({
         type: 'file',
         file: {
           filename: source.name,
-          file_data: `data:${mimeType};base64,${source.content}`,
+          file_data: `data:${mimeType};base64,${rawContent}`,
         },
       });
-    } else if (source.content && source.content.length > MAX_FILE_BASE64_SIZE) {
-      console.warn(
-        `[knowledge-context] Skipping file block for "${source.name}": base64 size ${(source.content.length / (1024 * 1024)).toFixed(1)} MB exceeds 20 MB limit`,
-      );
     }
   }
 
@@ -300,18 +278,18 @@ export function buildContentBlocksFromSources(
     hasFileBlocks: fileBlocks.length > 0,
     sourcesSummary,
     readyCount: readySources.length,
-    processingCount: processingSources.length,
+    processingCount: 0,
   };
 }
 
 /**
  * Build native file content blocks from all knowledge sources for a dataset.
- * Convenience wrapper that fetches sources from IndexedDB then delegates.
+ * Convenience wrapper that fetches sources then delegates.
  */
 export async function buildKnowledgeContentBlocks(
   workflowId: string,
 ): Promise<KnowledgeContentBlocks> {
-  const sources = await knowledgeSourceService.getByDataset(workflowId);
+  const sources = await knowledgeSourceService.list(workflowId);
   return buildContentBlocksFromSources(sources);
 }
 
