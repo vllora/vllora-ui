@@ -147,6 +147,16 @@ export function KnowledgePartViewer({ sourceId, partId }: KnowledgePartViewerPro
 
   const config = partTypeConfig(part.type);
 
+  // Extract metadata for provenance sidebar
+  const extractionMeta = part.extractionMetadata as Record<string, unknown> | undefined;
+  const pageStart = extractionMeta?.pageStart as number | undefined;
+  const pageEnd = extractionMeta?.pageEnd as number | undefined;
+  const extractionPath = part.extractionPath;
+
+  // Find sibling parts for navigation context
+  const partIndex = source.parts.findIndex(p => p.id === partId);
+  const totalParts = source.parts.length;
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
@@ -162,19 +172,53 @@ export function KnowledgePartViewer({ sourceId, partId }: KnowledgePartViewerPro
           )}>
             {config.label}
           </span>
+          {partIndex >= 0 && (
+            <span className="text-[10px] text-muted-foreground/40 shrink-0">
+              {partIndex + 1} of {totalParts}
+            </span>
+          )}
         </div>
-        {/* Source breadcrumb */}
-        <div className="flex items-center gap-1.5 mt-1.5 text-[10px] text-muted-foreground/50">
-          <FileText className="w-3 h-3" />
-          <span>{source.name}</span>
+        {/* Source breadcrumb + extraction context */}
+        <div className="flex items-center gap-3 mt-1.5 text-[10px] text-muted-foreground/50">
+          <span className="inline-flex items-center gap-1">
+            <FileText className="w-3 h-3" />
+            {source.name}
+          </span>
+          {(pageStart != null) && (
+            <span>
+              {pageStart === pageEnd || !pageEnd
+                ? `p.${pageStart}`
+                : `pp.${pageStart}–${pageEnd}`}
+            </span>
+          )}
+          {extractionPath && (
+            <span className="truncate max-w-[200px]" title={extractionPath}>
+              {extractionPath}
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Content */}
+      {/* Content area */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {part.type === "text" && <TextContent content={part.content} />}
         {part.type === "table" && <TableContent content={part.content} />}
         {part.type === "image" && <ImageContent content={part.content} />}
+
+        {/* Content metadata footer */}
+        {part.contentMetadata && Object.keys(part.contentMetadata).length > 0 && (
+          <div className="mt-6 pt-4 border-t border-border/30">
+            <p className="text-[10px] text-muted-foreground/40 uppercase tracking-wider mb-2">Metadata</p>
+            <div className="space-y-1">
+              {Object.entries(part.contentMetadata).map(([key, value]) => (
+                <div key={key} className="flex items-start gap-2 text-[11px]">
+                  <span className="text-muted-foreground/50 shrink-0">{key}:</span>
+                  <span className="text-foreground/60 break-all">{String(value)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
