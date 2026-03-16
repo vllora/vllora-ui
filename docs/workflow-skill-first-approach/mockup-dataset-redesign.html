@@ -1,0 +1,3682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>vLLora Dataset Visualization - Redesign Mockup</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg-primary: #0a0a0f;
+    --bg-secondary: #111118;
+    --bg-tertiary: #1a1a24;
+    --bg-card: #15151f;
+    --bg-hover: #1e1e2a;
+    --border: #2a2a3a;
+    --border-subtle: #1e1e2e;
+    --text-primary: #e8e8f0;
+    --text-secondary: #9898b0;
+    --text-muted: #5a5a70;
+    --text-dim: #3a3a50;
+    --accent: #7c5cfc;
+    --accent-dim: rgba(124, 92, 252, 0.12);
+    --accent-glow: rgba(124, 92, 252, 0.25);
+    --emerald: #34d399;
+    --emerald-dim: rgba(52, 211, 153, 0.12);
+    --amber: #fbbf24;
+    --amber-dim: rgba(251, 191, 36, 0.12);
+    --red: #f87171;
+    --red-dim: rgba(248, 113, 113, 0.1);
+    --blue: #60a5fa;
+    --blue-dim: rgba(96, 165, 250, 0.1);
+    --cyan: #22d3ee;
+    --cyan-dim: rgba(34, 211, 238, 0.1);
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, system-ui, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ── Layout ── */
+  .app-layout {
+    display: grid;
+    grid-template-columns: 56px 240px 1fr;
+    grid-template-rows: 48px 1fr;
+    height: 100vh;
+  }
+
+  /* ── Icon Rail (far left) ── */
+  .icon-rail {
+    grid-row: 1 / -1;
+    background: var(--bg-primary);
+    border-right: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px 0;
+    gap: 4px;
+  }
+  .icon-rail .logo {
+    width: 28px; height: 28px;
+    background: var(--accent);
+    border-radius: 8px;
+    margin-bottom: 16px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 14px; color: white;
+  }
+  .icon-rail button {
+    width: 36px; height: 36px;
+    border: none; background: transparent;
+    border-radius: 8px; cursor: pointer;
+    color: var(--text-muted);
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .icon-rail button:hover { background: var(--bg-tertiary); color: var(--text-secondary); }
+  .icon-rail button.active { background: var(--accent-dim); color: var(--accent); }
+
+  /* ── Top Bar ── */
+  .top-bar {
+    grid-column: 2 / -1;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 12px;
+  }
+  .top-bar .breadcrumb {
+    font-size: 13px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .top-bar .breadcrumb .sep { color: var(--text-dim); }
+  .top-bar .breadcrumb .current { color: var(--text-primary); font-weight: 500; }
+  .top-bar .spacer { flex: 1; }
+  .top-bar .view-toggle {
+    display: flex;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .top-bar .view-toggle button {
+    padding: 5px 12px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .top-bar .view-toggle button.active {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border-subtle);
+    overflow-y: auto;
+    padding: 16px 0;
+  }
+  .sidebar-section {
+    margin-bottom: 8px;
+  }
+  .sidebar-section-title {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 8px 16px 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .sidebar-section-title .count {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-weight: 400;
+  }
+  .sidebar-item {
+    padding: 6px 16px 6px 24px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.1s;
+  }
+  .sidebar-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .sidebar-item.active { background: var(--accent-dim); color: var(--accent); }
+  .sidebar-item .icon { width: 14px; height: 14px; opacity: 0.5; flex-shrink: 0; }
+  .sidebar-item .badge {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--text-dim);
+    background: var(--bg-tertiary);
+    padding: 1px 6px;
+    border-radius: 10px;
+  }
+  .sidebar-item.nested { padding-left: 40px; font-size: 12px; }
+  .sidebar-divider { height: 1px; background: var(--border-subtle); margin: 8px 16px; }
+
+  /* ── Main Content ── */
+  .main-content {
+    background: var(--bg-primary);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Data Flow Banner ── */
+  .data-flow-banner {
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-shrink: 0;
+  }
+  .flow-stage {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .flow-stage:hover { background: var(--bg-hover); }
+  .flow-stage.active { background: var(--accent-dim); }
+  .flow-stage .stage-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .flow-stage .stage-icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+  .flow-stage .stage-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .flow-stage .stage-value {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1;
+  }
+  .flow-stage .stage-detail {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+  .flow-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    flex-shrink: 0;
+    position: relative;
+  }
+  .flow-arrow svg { color: var(--text-dim); }
+  .flow-arrow .flow-line {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent-dim), var(--accent), var(--accent-dim));
+    transform: translateY(-50%);
+    border-radius: 1px;
+  }
+
+  /* ── Canvas Area ── */
+  .canvas-area {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+  }
+  .canvas-viewport {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 20% 80%, rgba(124, 92, 252, 0.03), transparent 50%),
+      radial-gradient(circle at 80% 20%, rgba(34, 211, 238, 0.02), transparent 50%),
+      var(--bg-primary);
+  }
+  /* Dot grid pattern */
+  .canvas-viewport::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(circle, var(--border-subtle) 1px, transparent 1px);
+    background-size: 24px 24px;
+    opacity: 0.5;
+  }
+
+  /* ── Topic Nodes on Canvas ── */
+  .canvas-nodes {
+    position: absolute;
+    inset: 0;
+    padding: 40px;
+  }
+
+  .topic-node {
+    position: absolute;
+    width: 260px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    cursor: pointer;
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+    z-index: 5;
+  }
+  .topic-node:hover {
+    border-color: var(--text-dim);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
+  .topic-node.root {
+    width: 200px;
+    background: linear-gradient(135deg, var(--bg-card), var(--bg-tertiary));
+  }
+
+  .node-header {
+    padding: 12px 14px 8px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .node-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.3;
+  }
+  .node-count {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    padding: 2px 8px;
+    border-radius: 10px;
+    flex-shrink: 0;
+    line-height: 1.4;
+  }
+
+  .node-coverage-bar {
+    margin: 0 14px 6px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--bg-tertiary);
+    overflow: hidden;
+  }
+  .node-coverage-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s ease;
+  }
+  .node-coverage-fill.good { background: var(--emerald); }
+  .node-coverage-fill.warn { background: var(--amber); }
+  .node-coverage-fill.low { background: var(--red); }
+
+  .node-footer {
+    padding: 6px 14px 10px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .node-footer .quality-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .node-footer .source-tag {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* Root node special */
+  .root-node-inner {
+    padding: 14px;
+    text-align: center;
+  }
+  .root-node-inner .objective {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    line-height: 1.3;
+  }
+  .root-stats {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .root-stat {
+    text-align: center;
+  }
+  .root-stat .val { font-size: 16px; font-weight: 600; }
+  .root-stat .lbl { font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+  /* ── Edge Lines (SVG overlay) ── */
+  .canvas-edges {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  /* ── Zoom Animation ── */
+  .canvas-inner {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+    transform-origin: 0 0;
+    will-change: transform;
+  }
+
+  .topic-node.faded, .topic-node.root.faded {
+    opacity: 0.15;
+    filter: blur(1px);
+    pointer-events: none;
+  }
+  .topic-node.zoomed-selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent), 0 0 40px var(--accent-glow);
+    z-index: 20;
+  }
+
+  .canvas-edges.faded { opacity: 0.1; }
+
+  /* Vignette */
+  .vignette-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 10;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.6) 100%);
+  }
+  .vignette-overlay.active { opacity: 1; }
+
+  /* Focus ring */
+  .focus-ring {
+    position: absolute;
+    border: 2px solid var(--accent);
+    border-radius: 16px;
+    pointer-events: none;
+    z-index: 19;
+    opacity: 0;
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 0 30px var(--accent-glow), 0 0 60px rgba(124, 92, 252, 0.1);
+  }
+  .focus-ring.active {
+    opacity: 1;
+    animation: ringPulse 2s ease-in-out infinite;
+  }
+  @keyframes ringPulse {
+    0%, 100% { box-shadow: 0 0 20px var(--accent-glow), 0 0 40px rgba(124, 92, 252, 0.05); }
+    50% { box-shadow: 0 0 30px var(--accent-glow), 0 0 60px rgba(124, 92, 252, 0.15); }
+  }
+
+  /* Source ghost nodes */
+  .source-ghosts-layer {
+    position: absolute;
+    z-index: 15;
+    opacity: 0;
+    transition: opacity 0.4s ease 0.3s;
+    pointer-events: none;
+  }
+  .source-ghosts-layer.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Ghost edge connections */
+  .ghost-edges-svg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 14;
+    opacity: 0;
+    transition: opacity 0.4s ease 0.4s;
+  }
+  .ghost-edges-svg.visible { opacity: 1; }
+
+  /* ── Bottom Drawer ── */
+  .bottom-drawer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 320px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    z-index: 50;
+    transform: translateY(100%);
+    transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+                height 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .bottom-drawer.open {
+    transform: translateY(0);
+  }
+  .bottom-drawer.no-transition {
+    transition: none !important;
+  }
+
+  .drawer-handle {
+    width: 100%;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: ns-resize;
+    flex-shrink: 0;
+    position: relative;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .drawer-handle:hover::after { background: var(--text-muted); width: 48px; }
+  .drawer-handle::after {
+    content: '';
+    width: 36px; height: 3px;
+    background: var(--text-dim);
+    border-radius: 2px;
+    transition: all 0.15s;
+  }
+  .drawer-handle.dragging::after { background: var(--accent); width: 48px; }
+  .drawer-close-btn {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24px; height: 24px;
+    border: none; background: var(--bg-tertiary);
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+    transition: all 0.1s;
+  }
+  .drawer-close-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+  .drawer-body {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  /* Drawer columns */
+  .drawer-info {
+    width: 260px;
+    border-right: 1px solid var(--border-subtle);
+    padding: 0 20px 16px;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+  .di-title { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  .di-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 14px; }
+  .di-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 14px; }
+  .di-stat { background: var(--bg-tertiary); border-radius: 8px; padding: 10px; text-align: center; }
+  .di-stat-val { font-size: 18px; font-weight: 600; }
+  .di-stat-lbl { font-size: 9px; color: var(--text-muted); margin-top: 2px; }
+  .di-bar-bg { height: 5px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden; }
+  .di-bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--emerald), var(--cyan)); }
+  .di-bar-labels { display: flex; justify-content: space-between; font-size: 9px; color: var(--text-dim); margin-top: 3px; }
+  .di-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
+  .di-btn {
+    padding: 8px 12px; border-radius: 7px; border: 1px solid var(--border);
+    background: var(--bg-tertiary); color: var(--text-secondary);
+    font-size: 11px; font-weight: 500; cursor: pointer; text-align: center; transition: all 0.15s;
+  }
+  .di-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .di-btn.primary { background: var(--accent); border-color: var(--accent); color: white; }
+  .di-btn.primary:hover { background: #8d6ffd; }
+
+  .drawer-sources {
+    width: 300px;
+    border-right: 1px solid var(--border-subtle);
+    padding: 0 16px 16px;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+  .ds-section-title {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--text-dim); margin-bottom: 10px; display: flex; align-items: center; gap: 6px;
+  }
+  .ds-card {
+    background: var(--bg-tertiary); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;
+    cursor: pointer; border: 1px solid transparent; transition: all 0.15s;
+  }
+  .ds-card:hover { border-color: var(--border); background: var(--bg-hover); }
+  .ds-card-header { display: flex; align-items: center; gap: 8px; }
+  .ds-card-icon {
+    width: 28px; height: 28px; border-radius: 6px; background: var(--red-dim);
+    display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0;
+  }
+  .ds-card-title { font-size: 12px; font-weight: 600; }
+  .ds-card-meta { font-size: 10px; color: var(--text-dim); margin-top: 1px; }
+  .ds-card-preview {
+    font-size: 11px; color: var(--text-secondary); line-height: 1.5; margin-top: 6px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; opacity: 0.7;
+  }
+
+  .drawer-records {
+    flex: 1; padding: 0 16px 16px; overflow-y: auto; min-width: 0;
+  }
+  .dr-record {
+    background: var(--bg-tertiary); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;
+    border-left: 3px solid var(--accent-dim); transition: border-color 0.15s;
+  }
+  .dr-record:hover { border-left-color: var(--accent); }
+  .dr-role { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 3px; }
+  .dr-role.user { color: var(--blue); }
+  .dr-role.asst { color: var(--emerald); }
+  .dr-text {
+    font-size: 12px; color: var(--text-secondary); line-height: 1.5;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .dr-divider { height: 1px; background: var(--border-subtle); margin: 5px 0; }
+  .dr-score { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-muted); margin-top: 4px; }
+  .dr-score .qdot { width: 5px; height: 5px; border-radius: 50%; }
+
+  /* ── Full view layout ── */
+  .drawer-full {
+    flex: 1; display: none; flex-direction: column; overflow: hidden; min-height: 0;
+  }
+  .full-header {
+    display: flex; align-items: center; gap: 20px;
+    padding: 0 24px 14px; border-bottom: 1px solid var(--border-subtle); flex-shrink: 0;
+  }
+  .full-header .fh-title { font-size: 20px; font-weight: 700; }
+  .full-header .fh-stats { display: flex; gap: 20px; margin-left: auto; }
+  .fh-stat { text-align: center; }
+  .fh-stat-val { font-size: 16px; font-weight: 600; }
+  .fh-stat-lbl { font-size: 9px; color: var(--text-muted); text-transform: uppercase; }
+  .fh-actions { display: flex; gap: 8px; margin-left: 20px; }
+  .fh-btn {
+    padding: 6px 14px; border-radius: 7px; border: 1px solid var(--border);
+    background: var(--bg-tertiary); color: var(--text-secondary);
+    font-size: 11px; font-weight: 500; cursor: pointer; transition: all 0.15s;
+  }
+  .fh-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .fh-btn.primary { background: var(--accent); border-color: var(--accent); color: white; }
+
+  .full-tabs {
+    display: flex; gap: 0; padding: 0 24px;
+    border-bottom: 1px solid var(--border-subtle); flex-shrink: 0;
+  }
+  .full-tab {
+    padding: 10px 16px; font-size: 12px; font-weight: 500;
+    color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent;
+    transition: all 0.15s; background: none; border-top: none; border-left: none; border-right: none;
+  }
+  .full-tab:hover { color: var(--text-secondary); }
+  .full-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .full-tab-content { flex: 1; overflow-y: auto; min-height: 0; }
+
+  .records-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .records-table th {
+    text-align: left; padding: 10px 16px; font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim);
+    background: var(--bg-tertiary); position: sticky; top: 0; z-index: 1;
+  }
+  .records-table td {
+    padding: 10px 16px; border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-secondary); vertical-align: top;
+  }
+  .records-table tr:hover td { background: var(--bg-hover); }
+  .records-table .td-input { max-width: 340px; }
+  .records-table .td-output { max-width: 420px; }
+  .records-table .td-score { width: 70px; text-align: center; }
+  .score-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500;
+  }
+  .score-good { background: var(--emerald-dim); color: var(--emerald); }
+  .score-warn { background: var(--amber-dim); color: var(--amber); }
+  .score-low { background: var(--red-dim); color: var(--red); }
+
+  .sources-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px 24px; }
+  .source-full-card {
+    background: var(--bg-tertiary); border-radius: 10px; padding: 16px;
+    border: 1px solid transparent; cursor: pointer; transition: all 0.15s;
+  }
+  .source-full-card:hover { border-color: var(--border); background: var(--bg-hover); }
+  .sfc-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .sfc-icon {
+    width: 32px; height: 32px; border-radius: 8px; background: var(--red-dim);
+    display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0;
+  }
+  .sfc-title { font-size: 13px; font-weight: 600; }
+  .sfc-meta { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+  .sfc-preview {
+    font-size: 12px; color: var(--text-secondary); line-height: 1.6;
+    display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .sfc-topics { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-subtle); }
+  .sfc-chip {
+    font-size: 10px; padding: 2px 8px; border-radius: 10px;
+    background: var(--accent-dim); color: var(--accent); font-weight: 500;
+  }
+
+  /* Zoom state label */
+  .zoom-state-label {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 18px;
+    font-size: 12px;
+    color: var(--text-muted);
+    z-index: 200;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    display: none;
+    align-items: center;
+    gap: 8px;
+  }
+  .zoom-state-label.visible { display: flex; }
+  .zoom-state-label .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+    animation: dotPulse 1.5s ease infinite;
+  }
+  @keyframes dotPulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
+
+
+  /* ── Source Ghost Nodes ── */
+  .source-ghost {
+    position: absolute;
+    background: var(--bg-card);
+    border: 1px dashed var(--accent-dim);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    animation: fadeInGhost 0.3s ease;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .source-ghost:hover {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+  }
+  .source-ghost .ghost-icon {
+    font-size: 14px;
+    opacity: 0.6;
+  }
+  .source-ghost .ghost-label {
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  @keyframes fadeInGhost {
+    from { opacity: 0; transform: translateX(10px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  /* ── Table Page ── */
+  .table-page { display: none; height: 100vh; }
+  .table-page.visible { display: grid; }
+  .table-main {
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .table-toolbar {
+    padding: 12px 20px;
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+  }
+  .table-search {
+    flex: 1; max-width: 320px;
+    padding: 7px 12px; border-radius: 7px;
+    border: 1px solid var(--border); background: var(--bg-tertiary);
+    color: var(--text-primary); font-size: 12px; font-family: inherit;
+    outline: none; transition: border-color 0.15s;
+  }
+  .table-search:focus { border-color: var(--accent); }
+  .table-search::placeholder { color: var(--text-dim); }
+  .table-filter {
+    padding: 6px 12px; border-radius: 7px;
+    border: 1px solid var(--border); background: var(--bg-tertiary);
+    color: var(--text-secondary); font-size: 11px; font-weight: 500;
+    cursor: pointer; display: flex; align-items: center; gap: 5px;
+    font-family: inherit;
+  }
+  .table-filter:hover { background: var(--bg-hover); }
+  .table-count { font-size: 11px; color: var(--text-muted); margin-left: auto; }
+
+  /* ── Hierarchical Table ── */
+  .all-records-table {
+    width: 100%; border-collapse: collapse; font-size: 12px;
+  }
+  .all-records-table th {
+    text-align: left; padding: 10px 16px; font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim);
+    background: var(--bg-secondary); position: sticky; top: 0; z-index: 2;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .all-records-table td {
+    padding: 10px 16px; border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-secondary); vertical-align: top;
+  }
+  .all-records-table tr:hover td { background: var(--bg-hover); }
+  .all-records-table .col-id { width: 40px; color: var(--text-dim); }
+  .all-records-table .col-score { width: 70px; text-align: center; }
+  .all-records-table .col-source { width: 100px; font-size: 10px; color: var(--text-dim); }
+
+  /* Group header rows — parent topics */
+  .group-header td {
+    background: var(--bg-secondary); padding: 0; border-bottom: 1px solid var(--border);
+    cursor: pointer; user-select: none;
+  }
+  .group-header:hover td { background: var(--bg-hover) !important; }
+  .group-header-inner {
+    display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+  }
+  .group-chevron {
+    width: 16px; height: 16px; color: var(--text-dim); flex-shrink: 0;
+    transition: transform 0.2s ease;
+  }
+  .group-header.collapsed .group-chevron { transform: rotate(-90deg); }
+  .group-name { font-weight: 600; font-size: 13px; color: var(--text-primary); }
+  .group-stats {
+    display: flex; align-items: center; gap: 12px; margin-left: auto;
+    font-size: 11px; color: var(--text-muted);
+  }
+  .group-stat {
+    display: flex; align-items: center; gap: 4px;
+  }
+  .group-stat .val { font-weight: 600; color: var(--text-secondary); }
+  .group-coverage-bar {
+    width: 60px; height: 4px; border-radius: 2px; background: var(--bg-tertiary);
+    overflow: hidden;
+  }
+  .group-coverage-fill {
+    height: 100%; border-radius: 2px; transition: width 0.3s ease;
+  }
+  .group-coverage-fill.good { background: var(--emerald); }
+  .group-coverage-fill.warn { background: var(--amber); }
+  .group-coverage-fill.low { background: var(--red); }
+
+  /* Sub-group header — child topics */
+  .subgroup-header td {
+    background: rgba(99, 102, 241, 0.03); padding: 0;
+    border-bottom: 1px solid var(--border-subtle);
+    cursor: pointer; user-select: none;
+  }
+  .subgroup-header:hover td { background: var(--bg-hover) !important; }
+  .subgroup-header-inner {
+    display: flex; align-items: center; gap: 8px; padding: 7px 16px 7px 44px;
+  }
+  .subgroup-chevron {
+    width: 14px; height: 14px; color: var(--text-dim); flex-shrink: 0;
+    transition: transform 0.2s ease;
+  }
+  .subgroup-header.collapsed .subgroup-chevron { transform: rotate(-90deg); }
+  .tree-line {
+    width: 16px; height: 16px; position: relative; flex-shrink: 0;
+  }
+  .tree-line::before {
+    content: ''; position: absolute; left: 6px; top: 0; bottom: 50%;
+    border-left: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    width: 8px; border-bottom-left-radius: 3px;
+  }
+  .subgroup-name { font-weight: 500; font-size: 12px; color: var(--text-primary); }
+  .subgroup-count {
+    font-size: 10px; padding: 1px 7px; border-radius: 8px;
+    background: var(--bg-tertiary); color: var(--text-muted); font-weight: 500;
+  }
+  .subgroup-stats {
+    display: flex; align-items: center; gap: 10px; margin-left: auto;
+    font-size: 10px; color: var(--text-muted);
+  }
+
+  /* ── Sticky Prompt Panel (above table) ── */
+  .prompt-panel {
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-secondary);
+    overflow: hidden;
+    transition: max-height 0.3s ease, opacity 0.3s ease;
+    max-height: 0; opacity: 0;
+  }
+  .prompt-panel.visible {
+    max-height: 300px; opacity: 1;
+  }
+  .prompt-panel-inner {
+    padding: 12px 20px;
+  }
+  .prompt-panel-header {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+  }
+  .prompt-panel-title {
+    font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--text-dim);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .prompt-panel-title svg { width: 13px; height: 13px; color: var(--accent); }
+  .prompt-breadcrumb {
+    display: flex; align-items: center; gap: 4px;
+    font-size: 11px; color: var(--text-muted); margin-left: 4px;
+  }
+  .prompt-breadcrumb .crumb {
+    padding: 2px 8px; border-radius: 4px; font-weight: 500;
+    font-size: 10px;
+  }
+  .prompt-breadcrumb .crumb.root { background: var(--bg-tertiary); color: var(--text-muted); }
+  .prompt-breadcrumb .crumb.parent { background: var(--bg-hover); color: var(--text-secondary); }
+  .prompt-breadcrumb .crumb.leaf { background: var(--accent-dim); color: var(--accent); }
+  .prompt-breadcrumb .arrow { color: var(--text-dim); font-size: 10px; }
+  .prompt-panel-close {
+    margin-left: auto; background: none; border: none;
+    color: var(--text-dim); cursor: pointer; padding: 2px;
+    border-radius: 4px; display: flex; align-items: center;
+  }
+  .prompt-panel-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .prompt-chain {
+    display: flex; gap: 6px; overflow-x: auto;
+    transition: opacity 0.15s ease;
+  }
+  .prompt-card {
+    flex: 1; min-width: 180px; padding: 8px 12px;
+    border-radius: 8px; border: 1px solid var(--border-subtle);
+    font-size: 11px; line-height: 1.5;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    position: relative;
+  }
+  .prompt-card.inherited {
+    background: var(--bg-tertiary); color: var(--text-muted);
+    border-color: var(--border-subtle);
+  }
+  .prompt-card.own {
+    background: rgba(99, 102, 241, 0.06); color: var(--text-secondary);
+    border-color: rgba(99, 102, 241, 0.2);
+    box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.1);
+  }
+  .prompt-card-label {
+    font-size: 9px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; margin-bottom: 4px;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .prompt-card.inherited .prompt-card-label { color: var(--text-dim); }
+  .prompt-card.own .prompt-card-label { color: var(--accent); }
+  .prompt-card-text {
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+    overflow: hidden; word-break: break-word;
+  }
+  .prompt-card-text.expanded {
+    -webkit-line-clamp: unset; overflow: visible;
+  }
+  .prompt-card-expand {
+    font-size: 10px; color: var(--accent); cursor: pointer;
+    margin-top: 4px; font-weight: 500; font-family: inherit;
+    background: none; border: none; padding: 0;
+  }
+  .prompt-chain-arrow {
+    display: flex; align-items: center; color: var(--text-dim);
+    flex-shrink: 0; font-size: 16px;
+  }
+
+  /* Subgroup header prompt icon */
+  .prompt-icon-btn {
+    width: 22px; height: 22px; border-radius: 5px;
+    border: 1px solid var(--border-subtle); background: var(--bg-tertiary);
+    color: var(--text-dim); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: all 0.15s;
+  }
+  .prompt-icon-btn:hover {
+    background: var(--accent-dim); color: var(--accent);
+    border-color: rgba(99, 102, 241, 0.3);
+  }
+  .prompt-icon-btn.active {
+    background: var(--accent-dim); color: var(--accent);
+    border-color: rgba(99, 102, 241, 0.3);
+  }
+  .prompt-icon-btn svg { width: 12px; height: 12px; }
+
+  /* Record rows inside groups — indented */
+  .record-row td:first-child { padding-left: 72px; }
+  .record-row.hidden { display: none; }
+  .record-row.selected td { background: var(--accent-dim) !important; }
+  .record-row { cursor: pointer; }
+
+  .topic-badge {
+    display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 10px;
+    font-weight: 500; white-space: nowrap;
+  }
+  .topic-badge.basic { background: var(--accent-dim); color: var(--accent); }
+  .topic-badge.advanced { background: var(--amber-dim); color: var(--amber); }
+  .topic-badge.endgame { background: var(--emerald-dim); color: var(--emerald); }
+  .table-wrapper { flex: 1; overflow-y: auto; }
+
+  /* ── Page Indicator ── */
+  .page-indicator {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 8px 16px;
+    z-index: 100;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+  }
+  .page-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .page-dot.active {
+    background: var(--accent);
+    width: 24px;
+    border-radius: 4px;
+  }
+  .page-dot:hover { background: var(--text-muted); }
+
+  .page-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-left: 12px;
+    display: flex;
+    align-items: center;
+  }
+
+  /* ── Pages ── */
+  .page { display: none; height: 100vh; }
+  .page.visible { display: block; }
+
+  /* ── Page 2: Knowledge Sources ── */
+  .knowledge-page {
+    display: none;
+    height: 100vh;
+  }
+  .knowledge-page.visible { display: grid; }
+
+  .knowledge-main {
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .knowledge-grid {
+    flex: 1; display: grid; grid-template-columns: 1fr 1fr;
+    gap: 0; overflow: hidden;
+  }
+  .knowledge-left {
+    border-right: 1px solid var(--border-subtle);
+    overflow-y: auto; padding: 16px;
+  }
+  .knowledge-right {
+    overflow-y: auto; background: var(--bg-secondary);
+    display: flex; flex-direction: column;
+  }
+
+  /* ── Coverage Matrix ── */
+  .coverage-matrix {
+    margin-bottom: 16px; padding: 14px;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  .coverage-matrix-title {
+    font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 10px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .coverage-matrix-title svg { width: 12px; height: 12px; color: var(--accent); }
+  .coverage-grid {
+    display: grid; gap: 3px;
+    grid-template-columns: 120px repeat(3, 1fr); /* topics header + 3 docs */
+  }
+  .cov-header {
+    font-size: 9px; font-weight: 600; text-transform: uppercase;
+    color: var(--text-dim); letter-spacing: 0.04em;
+    padding: 4px 6px; text-align: center;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .cov-topic-label {
+    font-size: 10px; color: var(--text-secondary); padding: 3px 6px;
+    display: flex; align-items: center; gap: 4px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .cov-cell {
+    height: 22px; border-radius: 4px; display: flex;
+    align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 600;
+  }
+  .cov-cell.has-parts { background: rgba(16, 185, 129, 0.15); color: var(--emerald); }
+  .cov-cell.no-parts { background: var(--bg-tertiary); color: var(--text-dim); }
+  .cov-cell.gap { background: rgba(239, 68, 68, 0.1); color: var(--red); border: 1px dashed rgba(239, 68, 68, 0.3); }
+
+  /* ── Document Card (redesigned) ── */
+  .doc-card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px; margin-bottom: 12px;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .doc-card:hover { border-color: var(--text-dim); box-shadow: 0 2px 12px rgba(0,0,0,0.2); }
+  .doc-card.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .doc-card-header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+  .doc-icon {
+    width: 36px; height: 36px; border-radius: 8px; background: var(--red-dim);
+    display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0;
+  }
+  .doc-card-title { font-size: 13px; font-weight: 600; }
+  .doc-card-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .doc-card-stats {
+    display: flex; gap: 12px; margin-left: auto; flex-shrink: 0;
+  }
+  .doc-stat {
+    text-align: center; font-size: 10px; color: var(--text-dim);
+  }
+  .doc-stat .val { font-size: 14px; font-weight: 700; color: var(--text-primary); display: block; }
+
+  /* Part outline — structured list */
+  .part-outline { margin-top: 0; }
+  .part-outline-section {
+    margin-bottom: 2px;
+  }
+  .part-outline-section-header {
+    font-size: 9px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--text-dim);
+    padding: 6px 0 4px 0; display: flex; align-items: center; gap: 4px;
+  }
+  .part-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 8px; border-radius: 6px;
+    transition: background 0.15s; cursor: pointer;
+  }
+  .part-item:hover { background: var(--bg-hover); }
+  .part-item.active { background: rgba(99, 102, 241, 0.08); }
+  .part-type-icon {
+    width: 18px; height: 18px; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; flex-shrink: 0;
+  }
+  .part-type-icon.text { background: var(--emerald-dim); color: var(--emerald); }
+  .part-type-icon.table { background: var(--amber-dim); color: var(--amber); }
+  .part-type-icon.image { background: rgba(167,139,250,0.15); color: #a78bfa; }
+  .part-item-info { flex: 1; min-width: 0; }
+  .part-item-title { font-size: 11px; font-weight: 500; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .part-item-detail { font-size: 9px; color: var(--text-dim); margin-top: 1px; }
+  .part-item-links {
+    display: flex; gap: 3px; flex-shrink: 0;
+  }
+  .part-link-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent); opacity: 0.4;
+  }
+  .part-link-dot.active { opacity: 1; }
+
+  .doc-topics-linked {
+    margin-top: 10px; padding-top: 10px;
+    border-top: 1px solid var(--border-subtle);
+    display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
+  }
+  .topic-chip {
+    font-size: 10px; padding: 2px 8px; border-radius: 10px;
+    background: var(--accent-dim); color: var(--accent); font-weight: 500;
+  }
+  .topic-chip.gap {
+    background: rgba(239, 68, 68, 0.1); color: var(--red);
+    border: 1px dashed rgba(239, 68, 68, 0.3);
+  }
+
+  /* ── Part Viewer (redesigned) ── */
+  .part-viewer-header {
+    padding: 16px 20px; border-bottom: 1px solid var(--border-subtle);
+  }
+  .pv-title-row { display: flex; align-items: center; gap: 8px; }
+  .pv-title-row h3 { font-size: 14px; font-weight: 600; margin: 0; }
+  .pv-type-badge {
+    font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 4px;
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .pv-type-badge.text { background: var(--emerald-dim); color: var(--emerald); }
+  .pv-type-badge.table { background: var(--amber-dim); color: var(--amber); }
+  .pv-type-badge.image { background: rgba(167,139,250,0.15); color: #a78bfa; }
+  .pv-nav {
+    font-size: 11px; color: var(--text-dim); margin-left: auto;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .pv-nav button {
+    width: 22px; height: 22px; border-radius: 5px;
+    border: 1px solid var(--border); background: var(--bg-tertiary);
+    color: var(--text-muted); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+  }
+  .pv-nav button:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .pv-meta-row {
+    display: flex; gap: 12px; margin-top: 6px; flex-wrap: wrap;
+  }
+  .pv-meta-tag {
+    font-size: 10px; color: var(--text-muted);
+    display: flex; align-items: center; gap: 4px;
+  }
+  .pv-meta-tag svg { width: 11px; height: 11px; color: var(--text-dim); }
+  .part-viewer-content {
+    padding: 20px; font-size: 13px; color: var(--text-secondary); line-height: 1.7;
+    flex: 1; overflow-y: auto;
+  }
+  .part-viewer-footer {
+    border-top: 1px solid var(--border-subtle);
+    background: var(--bg-tertiary); padding: 12px 20px;
+    display: flex; gap: 20px; flex-wrap: wrap;
+  }
+  .pv-footer-section { }
+  .pv-footer-label {
+    font-size: 9px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 6px;
+  }
+  .pv-footer-chips { display: flex; gap: 4px; flex-wrap: wrap; }
+  .pv-record-count {
+    font-size: 10px; color: var(--text-muted);
+    display: flex; align-items: center; gap: 4px;
+  }
+  .pv-record-count .val { font-weight: 600; color: var(--accent); }
+
+  /* Type dots for legacy compat */
+  .type-text { background: var(--emerald); }
+  .type-table { background: var(--amber); }
+  .type-image { background: #a78bfa; }
+
+  /* ── Utility ── */
+  .flex { display: flex; }
+  .items-center { align-items: center; }
+  .gap-2 { gap: 8px; }
+  .mt-1 { margin-top: 4px; }
+  .text-xs { font-size: 11px; }
+  .text-muted { color: var(--text-muted); }
+
+  /* ════════════════════════════════════════ */
+  /* IMPROVEMENT: Mockup State Controls       */
+  /* ════════════════════════════════════════ */
+  .mockup-controls {
+    position: fixed;
+    top: 56px;
+    right: 12px;
+    z-index: 9999;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 16px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    min-width: 220px;
+    font-size: 11px;
+    transition: all 0.2s;
+  }
+  .mockup-controls.collapsed {
+    min-width: auto;
+    padding: 8px 12px;
+  }
+  .mockup-controls.collapsed .mc-body { display: none; }
+  .mc-header {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; cursor: pointer; user-select: none;
+  }
+  .mc-header .mc-title {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--accent);
+  }
+  .mc-toggle-btn {
+    width: 18px; height: 18px; border-radius: 4px;
+    border: 1px solid var(--border); background: var(--bg-tertiary);
+    color: var(--text-muted); cursor: pointer; font-size: 10px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .mc-body { margin-top: 10px; }
+  .mc-group { margin-bottom: 8px; }
+  .mc-group-label {
+    font-size: 9px; font-weight: 600; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px;
+  }
+  .mc-options { display: flex; flex-wrap: wrap; gap: 4px; }
+  .mc-opt {
+    padding: 3px 10px; border-radius: 6px; font-size: 10px; font-weight: 500;
+    border: 1px solid var(--border); background: var(--bg-tertiary);
+    color: var(--text-secondary); cursor: pointer; transition: all 0.15s;
+  }
+  .mc-opt:hover { background: var(--bg-hover); }
+  .mc-opt.active { background: var(--accent-dim); color: var(--accent); border-color: rgba(124,92,252,0.3); }
+  .mc-divider { height: 1px; background: var(--border-subtle); margin: 8px 0; }
+
+  /* ════════════════════════════════════════ */
+  /* IMPROVEMENT: Empty State                 */
+  /* ════════════════════════════════════════ */
+  .empty-state-overlay {
+    display: none;
+    position: absolute; inset: 0; z-index: 30;
+    background: var(--bg-primary);
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 16px; padding: 40px;
+  }
+  .empty-state-overlay.visible { display: flex; }
+  .empty-icon {
+    width: 64px; height: 64px; border-radius: 16px;
+    background: var(--bg-tertiary); border: 2px dashed var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; color: var(--text-dim);
+  }
+  .empty-title { font-size: 16px; font-weight: 600; color: var(--text-secondary); }
+  .empty-desc { font-size: 12px; color: var(--text-muted); text-align: center; max-width: 360px; line-height: 1.6; }
+  .empty-action {
+    padding: 10px 24px; border-radius: 8px;
+    background: var(--accent); color: white; border: none;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: background 0.15s;
+  }
+  .empty-action:hover { background: #8d6ffd; }
+  .empty-hint {
+    margin-top: 8px; padding: 12px 20px; border-radius: 8px;
+    background: var(--bg-tertiary); border: 1px solid var(--border-subtle);
+    font-size: 11px; color: var(--text-muted); line-height: 1.5;
+    max-width: 400px; text-align: center;
+  }
+  .empty-hint code {
+    background: var(--bg-hover); padding: 1px 5px; border-radius: 3px;
+    font-family: 'SF Mono', monospace; font-size: 10px; color: var(--accent);
+  }
+
+  /* Empty flow banner */
+  .flow-stage.empty-stage .stage-value { color: var(--text-dim); font-size: 18px; }
+  .flow-stage.empty-stage .stage-detail { color: var(--text-dim); font-style: italic; }
+  .flow-stage.empty-stage .stage-icon { opacity: 0.4; }
+  .flow-arrow.empty-arrow svg { opacity: 0.2; }
+  .flow-arrow.empty-arrow .flow-line { opacity: 0.1; }
+
+  /* ════════════════════════════════════════ */
+  /* IMPROVEMENT: Loading/Extracting State    */
+  /* ════════════════════════════════════════ */
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(124,92,252,0); }
+    50% { box-shadow: 0 0 12px 2px rgba(124,92,252,0.2); }
+  }
+  .flow-stage.extracting {
+    animation: pulse-glow 2s ease-in-out infinite;
+    border: 1px solid rgba(124,92,252,0.2);
+    border-radius: 10px;
+  }
+  .flow-stage.extracting .stage-value {
+    background: linear-gradient(90deg, var(--text-primary), var(--accent), var(--text-primary));
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 2s ease-in-out infinite;
+  }
+  .flow-stage.extracting::after {
+    content: '';
+    position: absolute; bottom: 4px; left: 16px; right: 16px;
+    height: 2px; border-radius: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+  .extracting-label {
+    display: none;
+    font-size: 9px; font-weight: 600; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 2px 8px; border-radius: 4px;
+    background: var(--accent-dim);
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+  .flow-stage.extracting .extracting-label { display: inline-flex; }
+
+  /* ════════════════════════════════════════ */
+  /* IMPROVEMENT: Source Ghost Overflow        */
+  /* ════════════════════════════════════════ */
+  .ghost-overflow {
+    position: absolute;
+    font-size: 10px; font-weight: 600;
+    color: var(--accent); cursor: pointer;
+    padding: 4px 10px; border-radius: 6px;
+    background: var(--accent-dim);
+    border: 1px dashed rgba(124,92,252,0.3);
+    transition: all 0.15s;
+    display: none;
+  }
+  .ghost-overflow:hover { background: rgba(124,92,252,0.2); }
+  .source-ghosts-layer.visible .ghost-overflow { display: block; }
+
+  /* ════════════════════════════════════════ */
+  /* IMPROVEMENT: Keyboard Shortcuts Help     */
+  /* ════════════════════════════════════════ */
+  .kbd-help {
+    position: fixed;
+    bottom: 60px; right: 16px;
+    z-index: 200;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    display: none;
+    font-size: 11px;
+    min-width: 200px;
+  }
+  .kbd-help.visible { display: block; }
+  .kbd-help-title {
+    font-size: 10px; font-weight: 700; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px;
+  }
+  .kbd-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 3px 0; gap: 12px;
+  }
+  .kbd-row .label { color: var(--text-muted); }
+  .kbd-row kbd {
+    background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;
+    font-size: 10px; border: 1px solid var(--border); font-family: inherit;
+    color: var(--text-secondary);
+  }
+  .kbd-trigger {
+    position: fixed; bottom: 16px; right: 16px; z-index: 200;
+    width: 32px; height: 32px; border-radius: 8px;
+    background: var(--bg-card); border: 1px solid var(--border);
+    color: var(--text-muted); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    transition: all 0.15s;
+  }
+  .kbd-trigger:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* ════════════════════════════════════════ */
+  /* IMPROVEMENT: Markdown Part Viewer        */
+  /* ════════════════════════════════════════ */
+  .part-viewer-content h4 {
+    font-size: 14px; font-weight: 700; color: var(--text-primary);
+    margin: 16px 0 8px; padding-bottom: 4px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .part-viewer-content h4:first-child { margin-top: 0; }
+  .part-viewer-content ul {
+    padding-left: 20px; margin: 8px 0;
+  }
+  .part-viewer-content li {
+    margin-bottom: 4px; line-height: 1.6;
+    color: var(--text-secondary);
+  }
+  .part-viewer-content li strong { color: var(--text-primary); }
+  .part-viewer-content .chess-notation {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    background: var(--bg-tertiary); padding: 1px 5px; border-radius: 3px;
+    font-size: 12px; color: var(--cyan);
+  }
+  .part-viewer-content blockquote {
+    border-left: 3px solid var(--accent-dim); padding: 8px 14px;
+    margin: 12px 0; background: rgba(99,102,241,0.04); border-radius: 0 6px 6px 0;
+    font-style: italic; color: var(--text-muted);
+  }
+
+  /* ════════════════════════════════════════ */
+  /* IMPROVEMENT: Table Column Resize          */
+  /* ════════════════════════════════════════ */
+  .all-records-table th.resizable {
+    position: relative;
+  }
+  .all-records-table th.resizable::after {
+    content: '';
+    position: absolute; right: 0; top: 25%; bottom: 25%; width: 3px;
+    cursor: col-resize; border-radius: 2px;
+    background: transparent; transition: background 0.15s;
+  }
+  .all-records-table th.resizable:hover::after { background: var(--accent-dim); }
+  .all-records-table th.resizable:active::after { background: var(--accent); }
+
+  /* ════════════════════════════════════════ */
+  /* IMPROVEMENT: Record Detail Sidebar        */
+  /* ════════════════════════════════════════ */
+  .record-detail-sidebar {
+    position: fixed; top: 48px; right: 0; bottom: 0;
+    width: 420px; background: var(--bg-secondary);
+    border-left: 1px solid var(--border);
+    z-index: 60; transform: translateX(100%);
+    transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+    overflow-y: auto; display: flex; flex-direction: column;
+  }
+  .record-detail-sidebar.open { transform: translateX(0); }
+  .rds-header {
+    padding: 16px 20px; border-bottom: 1px solid var(--border-subtle);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .rds-header h3 { font-size: 14px; font-weight: 600; margin: 0; }
+  .rds-close {
+    width: 24px; height: 24px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--bg-tertiary);
+    color: var(--text-muted); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; font-size: 14px;
+  }
+  .rds-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .rds-section { padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
+  .rds-section-title {
+    font-size: 9px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 10px;
+  }
+  .rds-message {
+    padding: 10px 14px; border-radius: 8px; margin-bottom: 8px;
+    font-size: 13px; line-height: 1.6;
+  }
+  .rds-message.user { background: var(--bg-tertiary); color: var(--text-secondary); }
+  .rds-message.assistant { background: rgba(99,102,241,0.05); color: var(--text-secondary); border: 1px solid rgba(99,102,241,0.1); }
+  .rds-message .msg-role {
+    font-size: 9px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.04em; margin-bottom: 4px;
+  }
+  .rds-message.user .msg-role { color: var(--blue); }
+  .rds-message.assistant .msg-role { color: var(--emerald); }
+  .rds-meta-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  }
+  .rds-meta-item {
+    background: var(--bg-tertiary); border-radius: 8px; padding: 10px;
+  }
+  .rds-meta-item .val { font-size: 16px; font-weight: 600; }
+  .rds-meta-item .lbl { font-size: 9px; color: var(--text-muted); margin-top: 2px; }
+  .rds-system-prompt {
+    background: var(--bg-tertiary); border-radius: 8px; padding: 10px 14px;
+    font-size: 11px; line-height: 1.5; color: var(--text-muted);
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    max-height: 120px; overflow-y: auto;
+  }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- PAGE 1: Canvas View (Main Experience)                       -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<div class="app-layout" id="page-canvas">
+
+  <!-- Icon Rail -->
+  <div class="icon-rail">
+    <div class="logo">V</div>
+    <button class="active" title="Home">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+    </button>
+    <button title="Datasets">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+    </button>
+    <button title="Settings">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    </button>
+  </div>
+
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <div class="breadcrumb">
+      <span>Projects</span>
+      <span class="sep">/</span>
+      <span class="current">Chess Tutor Assistant</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="view-toggle">
+      <button class="active" onclick="showPage('canvas')">Canvas</button>
+      <button onclick="showPage('knowledge')">Sources</button>
+      <button onclick="showPage('table')">Table</button>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Source Documents <span class="count">3</span></div>
+      <div class="sidebar-item" onclick="showPage('knowledge')">
+        <span>&#128196;</span> chess-tactics.pdf
+        <span class="badge">10</span>
+      </div>
+      <div class="sidebar-item" onclick="showPage('knowledge')">
+        <span>&#128196;</span> strategy-guide.pdf
+        <span class="badge">6</span>
+      </div>
+      <div class="sidebar-item" onclick="showPage('knowledge')">
+        <span>&#128196;</span> opening-theory.pdf
+        <span class="badge">3</span>
+      </div>
+    </div>
+
+    <div class="sidebar-divider"></div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Training Data <span class="count">150</span></div>
+      <div class="sidebar-item active">
+        <span>&#128200;</span> All Topics
+        <span class="badge">150</span>
+      </div>
+      <div class="sidebar-item nested">Forks <span class="badge">14</span></div>
+      <div class="sidebar-item nested">Pins and Skewers <span class="badge">12</span></div>
+      <div class="sidebar-item nested">Discovered Attacks <span class="badge">8</span></div>
+      <div class="sidebar-item nested">Sacrifices <span class="badge">18</span></div>
+      <div class="sidebar-item nested">Overloading <span class="badge">10</span></div>
+      <div class="sidebar-item nested">Opening Principles <span class="badge">25</span></div>
+      <div class="sidebar-item nested">Back Rank Mates <span class="badge">22</span></div>
+      <div class="sidebar-item nested">Pawn Promotion <span class="badge">16</span></div>
+      <div class="sidebar-item nested">Positional Themes <span class="badge">25</span></div>
+    </div>
+
+    <div class="sidebar-divider"></div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Eval Runs <span class="count">2</span></div>
+      <div class="sidebar-item">
+        <span>&#9889;</span> eval-v2
+        <span class="badge" style="background:var(--emerald-dim);color:var(--emerald)">done</span>
+      </div>
+      <div class="sidebar-item">
+        <span>&#9889;</span> eval-v1
+        <span class="badge" style="background:var(--emerald-dim);color:var(--emerald)">done</span>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Training Jobs <span class="count">1</span></div>
+      <div class="sidebar-item">
+        <span>&#128295;</span> ft-a13e42
+        <span class="badge" style="background:var(--blue-dim);color:var(--blue)">running</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+
+    <!-- Data Flow Banner -->
+    <div class="data-flow-banner">
+      <div class="flow-stage" onclick="showPage('knowledge')">
+        <div class="stage-header">
+          <div class="stage-icon" style="background:var(--red-dim);color:var(--red)">&#128196;</div>
+          <div>
+            <div class="stage-label">Documents</div>
+            <div class="stage-value">3</div>
+          </div>
+        </div>
+        <div class="stage-detail">chess-tactics.pdf, strategy-guide.pdf, +1</div>
+      </div>
+
+      <div class="flow-arrow">
+        <div class="flow-line" style="background: linear-gradient(90deg, transparent, var(--border), transparent);"></div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position:relative;z-index:1;background:var(--bg-secondary);padding:2px"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+
+      <div class="flow-stage">
+        <div class="stage-header">
+          <div class="stage-icon" style="background:var(--amber-dim);color:var(--amber)">&#128209;</div>
+          <div>
+            <div class="stage-label">Extracted</div>
+            <div class="stage-value">19</div>
+          </div>
+        </div>
+        <div class="stage-detail">14 text &middot; 3 tables &middot; 2 images</div>
+      </div>
+
+      <div class="flow-arrow">
+        <div class="flow-line" style="background: linear-gradient(90deg, transparent, var(--border), transparent);"></div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position:relative;z-index:1;background:var(--bg-secondary);padding:2px"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+
+      <div class="flow-stage active">
+        <div class="stage-header">
+          <div class="stage-icon" style="background:var(--accent-dim);color:var(--accent)">&#127991;</div>
+          <div>
+            <div class="stage-label">Topics</div>
+            <div class="stage-value">12</div>
+          </div>
+        </div>
+        <div class="stage-detail">5 categories &middot; 7 leaf topics</div>
+      </div>
+
+      <div class="flow-arrow">
+        <div class="flow-line" style="background: linear-gradient(90deg, transparent, var(--border), transparent);"></div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position:relative;z-index:1;background:var(--bg-secondary);padding:2px"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+
+      <div class="flow-stage">
+        <div class="stage-header">
+          <div class="stage-icon" style="background:var(--emerald-dim);color:var(--emerald)">&#128172;</div>
+          <div>
+            <div class="stage-label">Records</div>
+            <div class="stage-value">150</div>
+          </div>
+        </div>
+        <div class="stage-detail">0.82 avg quality &middot; 12.4k tokens</div>
+      </div>
+    </div>
+
+    <!-- Canvas -->
+    <div class="canvas-area">
+      <div class="canvas-viewport" id="canvasViewport">
+        <div class="canvas-inner" id="canvasInner">
+
+          <!-- SVG Edges -->
+          <svg class="canvas-edges" id="edgesSvg" width="100%" height="100%">
+            <path d="M 185 240 C 240 240 260 120 310 120" stroke="#2a2a3a" stroke-width="1.5" fill="none" opacity="0.5"/>
+            <path d="M 185 240 C 240 240 260 240 310 240" stroke="#2a2a3a" stroke-width="1.5" fill="none" opacity="0.5"/>
+            <path d="M 185 240 C 240 240 260 360 310 360" stroke="#2a2a3a" stroke-width="1.5" fill="none" opacity="0.5"/>
+            <path d="M 540 120 C 580 120 600 70 630 70" stroke="#2a2a3a" stroke-width="1.5" fill="none" opacity="0.4"/>
+            <path d="M 540 120 C 580 120 600 160 630 160" stroke="#2a2a3a" stroke-width="1.5" fill="none" opacity="0.4"/>
+            <path d="M 540 240 C 580 240 600 250 630 250" stroke="#2a2a3a" stroke-width="1.5" fill="none" opacity="0.4"/>
+            <path d="M 540 240 C 580 240 600 340 630 340" stroke="#2a2a3a" stroke-width="1.5" fill="none" opacity="0.4"/>
+            <path d="M 540 360 C 580 360 600 420 630 420" stroke="#2a2a3a" stroke-width="1.5" fill="none" opacity="0.4"/>
+            <path d="M 540 360 C 580 360 600 500 630 500" stroke="#2a2a3a" stroke-width="1.5" fill="none" opacity="0.4"/>
+          </svg>
+
+          <!-- Ghost edges (visible when zoomed) -->
+          <svg class="ghost-edges-svg" id="ghostEdges" width="100%" height="100%">
+            <path d="M 220 48 C 420 48 580 50 630 50" stroke="var(--accent)" stroke-width="1.2" fill="none" stroke-dasharray="5 5" opacity="0.4"/>
+            <path d="M 220 104 C 420 104 580 55 630 55" stroke="var(--accent)" stroke-width="1.2" fill="none" stroke-dasharray="5 5" opacity="0.4"/>
+            <path d="M 220 160 C 420 160 580 58 630 60" stroke="var(--accent)" stroke-width="1.2" fill="none" stroke-dasharray="5 5" opacity="0.3"/>
+          </svg>
+
+          <!-- Source ghost nodes -->
+          <div class="source-ghosts-layer" id="sourceGhosts">
+            <div class="source-ghost" style="left:20px; top:30px;">
+              <span class="ghost-icon">&#128196;</span>
+              <div>
+                <div style="font-size:11px; font-weight:500;">The ABC of tactics</div>
+                <div class="ghost-label">chess-tactics.pdf &middot; ch.1 &middot; pp.8-12</div>
+              </div>
+            </div>
+            <div class="source-ghost" style="left:20px; top:86px;">
+              <span class="ghost-icon">&#128196;</span>
+              <div>
+                <div style="font-size:11px; font-weight:500;">Take a piece for nothing</div>
+                <div class="ghost-label">chess-tactics.pdf &middot; ch.2.1 &middot; pp.13-20</div>
+              </div>
+            </div>
+            <div class="source-ghost" style="left:20px; top:142px;">
+              <span class="ghost-icon">&#128196;</span>
+              <div>
+                <div style="font-size:11px; font-weight:500;">Combinations primer</div>
+                <div class="ghost-label">chess-tactics.pdf &middot; ch.3</div>
+              </div>
+            </div>
+            <div class="ghost-overflow" id="ghostOverflow" style="left:20px; top:198px;">
+              +3 more sources...
+            </div>
+          </div>
+
+          <!-- Empty State Overlay (canvas) -->
+          <div class="empty-state-overlay" id="emptyCanvasState">
+            <div class="empty-icon">&#128203;</div>
+            <div class="empty-title">No topics yet</div>
+            <div class="empty-desc">
+              Upload source documents, then run a skill to extract topics and generate training data. The topic hierarchy will appear here.
+            </div>
+            <button class="empty-action" onclick="showPage('knowledge')">Upload Documents</button>
+            <div class="empty-hint">
+              Or run the vLLora finetune skill from Claude Code:<br>
+              <code>claude /run finetune chess-tactics.pdf</code>
+            </div>
+          </div>
+
+          <!-- Vignette -->
+          <div class="vignette-overlay" id="vignette"></div>
+
+          <!-- Focus ring -->
+          <div class="focus-ring" id="focusRing"></div>
+
+          <!-- Root Node -->
+          <div class="topic-node root" id="node-root" style="left:80px; top:195px;">
+            <div class="root-node-inner">
+              <div style="font-size:13px; font-weight:600;">Chess Tutor</div>
+              <div class="objective">Train a chess tutor that teaches tactical patterns</div>
+              <div class="root-stats">
+                <div class="root-stat"><div class="val">12</div><div class="lbl">Topics</div></div>
+                <div class="root-stat"><div class="val">150</div><div class="lbl">Records</div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Parent: Basic Tactical -->
+          <div class="topic-node" data-node onclick="zoomToNode(this)" style="left:310px; top:80px;">
+            <div class="node-header"><div class="node-name">Basic Tactical Patterns</div><div class="node-count">34</div></div>
+            <div class="node-coverage-bar"><div class="node-coverage-fill good" style="width:82%"></div></div>
+            <div class="node-footer">
+              <span style="display:flex;align-items:center;gap:4px"><span class="quality-dot" style="background:var(--emerald)"></span> 0.85</span>
+              <span class="source-tag">&#128196; 4 sources</span>
+            </div>
+          </div>
+
+          <!-- Parent: Advanced -->
+          <div class="topic-node" data-node onclick="zoomToNode(this)" style="left:310px; top:200px;">
+            <div class="node-header"><div class="node-name">Advanced Combinations</div><div class="node-count">28</div></div>
+            <div class="node-coverage-bar"><div class="node-coverage-fill warn" style="width:55%"></div></div>
+            <div class="node-footer">
+              <span style="display:flex;align-items:center;gap:4px"><span class="quality-dot" style="background:var(--amber)"></span> 0.71</span>
+              <span class="source-tag">&#128196; 2 sources</span>
+            </div>
+          </div>
+
+          <!-- Parent: Endgame -->
+          <div class="topic-node" data-node onclick="zoomToNode(this)" style="left:310px; top:320px;">
+            <div class="node-header"><div class="node-name">Endgame & Mating</div><div class="node-count">38</div></div>
+            <div class="node-coverage-bar"><div class="node-coverage-fill good" style="width:90%"></div></div>
+            <div class="node-footer">
+              <span style="display:flex;align-items:center;gap:4px"><span class="quality-dot" style="background:var(--emerald)"></span> 0.89</span>
+              <span class="source-tag">&#128196; 3 sources</span>
+            </div>
+          </div>
+
+          <!-- Leaf: Forks -->
+          <div class="topic-node" id="node-forks" data-node data-sources="true" onclick="zoomToNode(this)" style="left:630px; top:32px;">
+            <div class="node-header"><div class="node-name">Forks</div><div class="node-count">14</div></div>
+            <div class="node-coverage-bar"><div class="node-coverage-fill good" style="width:82%"></div></div>
+            <div class="node-footer">
+              <span style="display:flex;align-items:center;gap:4px"><span class="quality-dot" style="background:var(--emerald)"></span> 0.82</span>
+              <span class="source-tag">&#128196; 2</span>
+            </div>
+          </div>
+
+          <!-- Leaf: Pins -->
+          <div class="topic-node" data-node onclick="zoomToNode(this)" style="left:630px; top:126px;">
+            <div class="node-header"><div class="node-name">Pins and Skewers</div><div class="node-count">12</div></div>
+            <div class="node-coverage-bar"><div class="node-coverage-fill warn" style="width:60%"></div></div>
+            <div class="node-footer">
+              <span style="display:flex;align-items:center;gap:4px"><span class="quality-dot" style="background:var(--amber)"></span> 0.74</span>
+              <span class="source-tag">&#128196; 1</span>
+            </div>
+          </div>
+
+          <!-- Leaf: Sacrifices -->
+          <div class="topic-node" data-node onclick="zoomToNode(this)" style="left:630px; top:220px;">
+            <div class="node-header"><div class="node-name">Sacrifices</div><div class="node-count">18</div></div>
+            <div class="node-coverage-bar"><div class="node-coverage-fill good" style="width:75%"></div></div>
+            <div class="node-footer">
+              <span style="display:flex;align-items:center;gap:4px"><span class="quality-dot" style="background:var(--emerald)"></span> 0.80</span>
+              <span class="source-tag">&#128196; 2</span>
+            </div>
+          </div>
+
+          <!-- Leaf: Overloading -->
+          <div class="topic-node" data-node onclick="zoomToNode(this)" style="left:630px; top:314px;">
+            <div class="node-header"><div class="node-name">Overloading</div><div class="node-count">10</div></div>
+            <div class="node-coverage-bar"><div class="node-coverage-fill low" style="width:30%"></div></div>
+            <div class="node-footer">
+              <span style="display:flex;align-items:center;gap:4px"><span class="quality-dot" style="background:var(--red)"></span> 0.52</span>
+              <span class="source-tag">&#128196; 1</span>
+            </div>
+          </div>
+
+          <!-- Leaf: Back Rank Mates -->
+          <div class="topic-node" data-node onclick="zoomToNode(this)" style="left:630px; top:398px;">
+            <div class="node-header"><div class="node-name">Back Rank Mates</div><div class="node-count">22</div></div>
+            <div class="node-coverage-bar"><div class="node-coverage-fill good" style="width:92%"></div></div>
+            <div class="node-footer">
+              <span style="display:flex;align-items:center;gap:4px"><span class="quality-dot" style="background:var(--emerald)"></span> 0.91</span>
+              <span class="source-tag">&#128196; 2</span>
+            </div>
+          </div>
+
+          <!-- Leaf: Pawn Promotion -->
+          <div class="topic-node" data-node onclick="zoomToNode(this)" style="left:630px; top:482px;">
+            <div class="node-header"><div class="node-name">Pawn Promotion</div><div class="node-count">16</div></div>
+            <div class="node-coverage-bar"><div class="node-coverage-fill warn" style="width:65%"></div></div>
+            <div class="node-footer">
+              <span style="display:flex;align-items:center;gap:4px"><span class="quality-dot" style="background:var(--amber)"></span> 0.68</span>
+              <span class="source-tag">&#128196; 1</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom Drawer (shared across canvas view) -->
+<div class="bottom-drawer" id="bottomDrawer">
+  <div class="drawer-handle" id="drawerHandle">
+    <button class="drawer-close-btn" onclick="zoomOut()" title="Close (Esc)">&times;</button>
+  </div>
+  <div class="drawer-body" id="drawerBody">
+    <div class="drawer-info">
+      <div class="di-title" id="drawerTitle">Forks</div>
+      <div class="di-desc" id="drawerDesc">Knight forks, queen forks, and fork setups. Covers simultaneous attacks on multiple pieces.</div>
+      <div class="di-stats">
+        <div class="di-stat"><div class="di-stat-val" id="drawerRecords">14</div><div class="di-stat-lbl">Records</div></div>
+        <div class="di-stat"><div class="di-stat-val" style="color:var(--emerald)" id="drawerScore">0.82</div><div class="di-stat-lbl">Avg Score</div></div>
+        <div class="di-stat"><div class="di-stat-val" id="drawerCoverage">9.3%</div><div class="di-stat-lbl">Coverage</div></div>
+        <div class="di-stat"><div class="di-stat-val" id="drawerEvaluated">12</div><div class="di-stat-lbl">Evaluated</div></div>
+      </div>
+      <div>
+        <div class="di-bar-bg"><div class="di-bar-fill" style="width:82%"></div></div>
+        <div class="di-bar-labels"><span>12/14 evaluated</span><span>82%</span></div>
+      </div>
+      <div class="di-actions">
+        <button class="di-btn primary">View all records &rarr;</button>
+        <button class="di-btn">+ Generate more</button>
+      </div>
+    </div>
+    <div class="drawer-sources">
+      <div class="ds-section-title">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Source Material (2)
+      </div>
+      <div class="ds-card">
+        <div class="ds-card-header">
+          <div class="ds-card-icon">&#128196;</div>
+          <div>
+            <div class="ds-card-title">The ABC of tactics</div>
+            <div class="ds-card-meta">chess-tactics.pdf &middot; ch.1 &middot; pp.8-12</div>
+          </div>
+        </div>
+        <div class="ds-card-preview">Here is a collection of very short games organised by tactical theme. The main aim is to give you a quick run-through the basic tactical ideas...</div>
+      </div>
+      <div class="ds-card">
+        <div class="ds-card-header">
+          <div class="ds-card-icon">&#128196;</div>
+          <div>
+            <div class="ds-card-title">Take a piece for nothing</div>
+            <div class="ds-card-meta">chess-tactics.pdf &middot; ch.2.1 &middot; pp.13-20</div>
+          </div>
+        </div>
+        <div class="ds-card-preview">A free gift: When your opponent leaves a piece undefended, that's the most basic tactical opportunity. Forks exploit this by attacking two pieces at once...</div>
+      </div>
+    </div>
+    <div class="drawer-records">
+      <div class="ds-section-title">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        Sample Records
+      </div>
+      <div class="dr-record">
+        <div class="dr-role user">User</div>
+        <div class="dr-text">Explain the knight fork tactic and why it's so effective in chess games</div>
+        <div class="dr-divider"></div>
+        <div class="dr-role asst">Assistant</div>
+        <div class="dr-text">A knight fork is when a knight attacks two or more pieces simultaneously. Since the knight's unique L-shaped move can't be blocked by intervening pieces, opponents often fail to see fork threats coming.</div>
+        <div class="dr-score"><span class="qdot" style="background:var(--emerald)"></span> 0.93</div>
+      </div>
+      <div class="dr-record">
+        <div class="dr-role user">User</div>
+        <div class="dr-text">What is a family fork in chess?</div>
+        <div class="dr-divider"></div>
+        <div class="dr-role asst">Assistant</div>
+        <div class="dr-text">A family fork (royal fork) is when a knight simultaneously attacks the king, queen, and often a rook. Because the king must move out of check, the queen is invariably lost.</div>
+        <div class="dr-score"><span class="qdot" style="background:var(--emerald)"></span> 0.88</div>
+      </div>
+      <div class="dr-record">
+        <div class="dr-role user">User</div>
+        <div class="dr-text">How do you set up a knight fork?</div>
+        <div class="dr-divider"></div>
+        <div class="dr-role asst">Assistant</div>
+        <div class="dr-text">Setting up a fork often requires a preparatory move — a sacrifice or exchange that places enemy pieces on squares vulnerable to the knight's attack pattern.</div>
+        <div class="dr-score"><span class="qdot" style="background:var(--amber)"></span> 0.72</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full View Layout (sibling of drawer-body, shown when expanded) -->
+  <div class="drawer-full" id="drawerFull">
+      <div class="full-header">
+        <div class="fh-title" id="fullTitle">Forks</div>
+        <div class="fh-stats">
+          <div class="fh-stat"><div class="fh-stat-val">14</div><div class="fh-stat-lbl">Records</div></div>
+          <div class="fh-stat"><div class="fh-stat-val" style="color:var(--emerald)">0.82</div><div class="fh-stat-lbl">Avg Score</div></div>
+          <div class="fh-stat"><div class="fh-stat-val">9.3%</div><div class="fh-stat-lbl">Coverage</div></div>
+          <div class="fh-stat"><div class="fh-stat-val">12/14</div><div class="fh-stat-lbl">Evaluated</div></div>
+        </div>
+        <div class="fh-actions">
+          <button class="fh-btn">+ Generate more</button>
+          <button class="fh-btn primary">Export &rarr;</button>
+        </div>
+      </div>
+      <div class="full-tabs">
+        <button class="full-tab active" onclick="switchFullTab('records')">Records (14)</button>
+        <button class="full-tab" onclick="switchFullTab('sources')">Sources (2)</button>
+      </div>
+      <div class="full-tab-content">
+        <div id="fullTabRecords">
+          <table class="records-table">
+            <thead><tr><th>#</th><th class="td-input">Input</th><th class="td-output">Output</th><th class="td-score">Score</th><th>Source</th></tr></thead>
+            <tbody>
+              <tr><td style="color:var(--text-dim)">1</td><td class="td-input">Explain the knight fork tactic and why it's so effective</td><td class="td-output">A knight fork is when a knight attacks two or more pieces simultaneously. Since the knight's unique L-shaped move can't be blocked, opponents often fail to see fork threats coming.</td><td class="td-score"><span class="score-pill score-good">0.93</span></td><td style="font-size:10px;color:var(--text-dim)">ch.1</td></tr>
+              <tr><td style="color:var(--text-dim)">2</td><td class="td-input">What is a family fork in chess?</td><td class="td-output">A family fork (royal fork) is when a knight simultaneously attacks the king, queen, and often a rook. Because the king must move out of check, the queen is invariably lost.</td><td class="td-score"><span class="score-pill score-good">0.88</span></td><td style="font-size:10px;color:var(--text-dim)">ch.1</td></tr>
+              <tr><td style="color:var(--text-dim)">3</td><td class="td-input">How do you set up a knight fork?</td><td class="td-output">Setting up a fork often requires a preparatory move — a sacrifice or exchange that places enemy pieces on squares vulnerable to the knight's attack pattern.</td><td class="td-score"><span class="score-pill score-warn">0.72</span></td><td style="font-size:10px;color:var(--text-dim)">ch.2.1</td></tr>
+              <tr><td style="color:var(--text-dim)">4</td><td class="td-input">What pieces are best for executing forks?</td><td class="td-output">Knights are the most common forking piece due to their unique movement. However, pawns, bishops, rooks, and queens can also execute forks.</td><td class="td-score"><span class="score-pill score-good">0.85</span></td><td style="font-size:10px;color:var(--text-dim)">ch.1</td></tr>
+              <tr><td style="color:var(--text-dim)">5</td><td class="td-input">Can you give an example of a pawn fork?</td><td class="td-output">A pawn fork occurs when a pawn moves forward diagonally to attack two pieces at once. A central pawn advance can fork the queen and bishop.</td><td class="td-score"><span class="score-pill score-good">0.81</span></td><td style="font-size:10px;color:var(--text-dim)">ch.2.1</td></tr>
+              <tr><td style="color:var(--text-dim)">6</td><td class="td-input">How to defend against knight forks?</td><td class="td-output">Key strategies: keep king and queen apart, control fork squares with pawns, be aware of knight hop patterns, move the more valuable piece first when threatened.</td><td class="td-score"><span class="score-pill score-good">0.90</span></td><td style="font-size:10px;color:var(--text-dim)">ch.1</td></tr>
+              <tr><td style="color:var(--text-dim)">7</td><td class="td-input">What's the difference between a fork and a double attack?</td><td class="td-output">A fork is a specific type of double attack where one piece attacks two or more enemy pieces simultaneously. Double attack is the broader category including discovered attacks.</td><td class="td-score"><span class="score-pill score-warn">0.74</span></td><td style="font-size:10px;color:var(--text-dim)">ch.2.1</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="fullTabSources" style="display:none">
+          <div class="sources-grid">
+            <div class="source-full-card">
+              <div class="sfc-header"><div class="sfc-icon">&#128196;</div><div><div class="sfc-title">The ABC of tactics</div><div class="sfc-meta">chess-tactics.pdf &middot; ch.1 &middot; pp.8-12 &middot; 2,340 words</div></div></div>
+              <div class="sfc-preview">Here is a collection of very short games organised by tactical theme. The main aim is to give you a quick run-through the basic tactical ideas in genuine positions. The knight fork is the most common fork in chess.</div>
+              <div class="sfc-topics"><span class="sfc-chip">Forks</span><span class="sfc-chip">Basic Tactical Patterns</span></div>
+            </div>
+            <div class="source-full-card">
+              <div class="sfc-header"><div class="sfc-icon">&#128196;</div><div><div class="sfc-title">Take a piece for nothing</div><div class="sfc-meta">chess-tactics.pdf &middot; ch.2.1 &middot; pp.13-20 &middot; 3,180 words</div></div></div>
+              <div class="sfc-preview">A free gift: When your opponent leaves a piece undefended, that's the most basic tactical opportunity. Forks exploit this by attacking two pieces at once.</div>
+              <div class="sfc-topics"><span class="sfc-chip">Forks</span><span class="sfc-chip">Discovered Attacks</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Zoom state label -->
+<div class="zoom-state-label" id="zoomLabel">
+  <span class="dot"></span>
+  <span id="zoomLabelText">Click any topic node to zoom in</span>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- PAGE 2: Knowledge Sources View                              -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<div class="knowledge-page app-layout" id="page-knowledge">
+
+  <!-- Icon Rail (same) -->
+  <div class="icon-rail">
+    <div class="logo">V</div>
+    <button class="active">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+    </button>
+    <button><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></button>
+    <button><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg></button>
+  </div>
+
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <div class="breadcrumb">
+      <span>Projects</span>
+      <span class="sep">/</span>
+      <span>Chess Tutor Assistant</span>
+      <span class="sep">/</span>
+      <span class="current" id="ksBreadcrumb">chess-tactics.pdf</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="view-toggle">
+      <button onclick="showPage('canvas')">Canvas</button>
+      <button class="active" onclick="showPage('knowledge')">Sources</button>
+      <button onclick="showPage('table')">Table</button>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Source Documents <span class="count">3</span></div>
+      <div class="sidebar-item" data-ks="all" onclick="selectKnowledgeSource('all')">
+        <span>&#128202;</span> All Sources
+        <span class="badge">19</span>
+      </div>
+      <div class="sidebar-item active" data-ks="chess-tactics" onclick="selectKnowledgeSource('chess-tactics')">
+        <span>&#128196;</span> chess-tactics.pdf
+        <span class="badge">10</span>
+      </div>
+      <div class="sidebar-item" data-ks="strategy-guide" onclick="selectKnowledgeSource('strategy-guide')">
+        <span>&#128196;</span> strategy-guide.pdf
+        <span class="badge">6</span>
+      </div>
+      <div class="sidebar-item" data-ks="opening-theory" onclick="selectKnowledgeSource('opening-theory')">
+        <span>&#128196;</span> opening-theory.pdf
+        <span class="badge">3</span>
+      </div>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Training Data <span class="count">150</span></div>
+      <div class="sidebar-item" onclick="showPage('canvas')">
+        <span>&#128200;</span> All Topics
+        <span class="badge">150</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Knowledge Main -->
+  <div class="knowledge-main">
+
+    <!-- Data Flow Banner -->
+    <div class="data-flow-banner">
+      <div class="flow-stage active" onclick="showPage('knowledge')">
+        <div class="stage-header">
+          <div class="stage-icon" style="background:var(--red-dim);color:var(--red)">&#128196;</div>
+          <div>
+            <div class="stage-label">Documents</div>
+            <div class="stage-value">3</div>
+          </div>
+        </div>
+        <div class="stage-detail">chess-tactics.pdf, strategy-guide.pdf, +1</div>
+      </div>
+      <div class="flow-arrow">
+        <div class="flow-line" style="background: linear-gradient(90deg, transparent, var(--border), transparent);"></div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position:relative;z-index:1;background:var(--bg-secondary);padding:2px"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="flow-stage">
+        <div class="stage-header">
+          <div class="stage-icon" style="background:var(--amber-dim);color:var(--amber)">&#128209;</div>
+          <div>
+            <div class="stage-label">Extracted</div>
+            <div class="stage-value">19</div>
+          </div>
+        </div>
+        <div class="stage-detail">14 text &middot; 3 tables &middot; 2 images</div>
+      </div>
+      <div class="flow-arrow">
+        <div class="flow-line" style="background: linear-gradient(90deg, transparent, var(--border), transparent);"></div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position:relative;z-index:1;background:var(--bg-secondary);padding:2px"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="flow-stage" onclick="showPage('canvas')">
+        <div class="stage-header">
+          <div class="stage-icon" style="background:var(--accent-dim);color:var(--accent)">&#127991;</div>
+          <div>
+            <div class="stage-label">Topics</div>
+            <div class="stage-value">12</div>
+          </div>
+        </div>
+        <div class="stage-detail">5 categories &middot; 7 leaf topics</div>
+      </div>
+      <div class="flow-arrow">
+        <div class="flow-line" style="background: linear-gradient(90deg, transparent, var(--border), transparent);"></div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position:relative;z-index:1;background:var(--bg-secondary);padding:2px"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="flow-stage">
+        <div class="stage-header">
+          <div class="stage-icon" style="background:var(--emerald-dim);color:var(--emerald)">&#128172;</div>
+          <div>
+            <div class="stage-label">Records</div>
+            <div class="stage-value">150</div>
+          </div>
+        </div>
+        <div class="stage-detail">0.82 avg quality &middot; 12.4k tokens</div>
+      </div>
+    </div>
+
+    <!-- Split: Doc List + Coverage | Part Viewer -->
+    <div class="knowledge-grid">
+      <div class="knowledge-left">
+
+        <!-- ═══ ALL SOURCES VIEW (coverage matrix + all doc cards) ═══ -->
+        <div id="allSourcesView" style="display:none;">
+
+        <!-- Coverage Matrix -->
+        <div class="coverage-matrix">
+          <div class="coverage-matrix-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            Topic &times; Source Coverage
+          </div>
+          <div class="coverage-grid">
+            <!-- Header row -->
+            <div class="cov-header" style="text-align:left">Topic</div>
+            <div class="cov-header">chess-tactics</div>
+            <div class="cov-header">strategy-guide</div>
+            <div class="cov-header">opening-theory</div>
+            <!-- Forks -->
+            <div class="cov-topic-label"><span style="width:5px;height:5px;border-radius:50%;background:var(--emerald);flex-shrink:0"></span> Forks</div>
+            <div class="cov-cell has-parts">3</div>
+            <div class="cov-cell no-parts">&mdash;</div>
+            <div class="cov-cell no-parts">&mdash;</div>
+            <!-- Pins -->
+            <div class="cov-topic-label"><span style="width:5px;height:5px;border-radius:50%;background:var(--emerald);flex-shrink:0"></span> Pins</div>
+            <div class="cov-cell has-parts">2</div>
+            <div class="cov-cell no-parts">&mdash;</div>
+            <div class="cov-cell no-parts">&mdash;</div>
+            <!-- Discovered -->
+            <div class="cov-topic-label"><span style="width:5px;height:5px;border-radius:50%;background:var(--amber);flex-shrink:0"></span> Discovered</div>
+            <div class="cov-cell has-parts">1</div>
+            <div class="cov-cell no-parts">&mdash;</div>
+            <div class="cov-cell no-parts">&mdash;</div>
+            <!-- Sacrifices -->
+            <div class="cov-topic-label"><span style="width:5px;height:5px;border-radius:50%;background:var(--emerald);flex-shrink:0"></span> Sacrifices</div>
+            <div class="cov-cell has-parts">2</div>
+            <div class="cov-cell has-parts">1</div>
+            <div class="cov-cell no-parts">&mdash;</div>
+            <!-- Overloading -->
+            <div class="cov-topic-label"><span style="width:5px;height:5px;border-radius:50%;background:var(--red);flex-shrink:0"></span> Overloading</div>
+            <div class="cov-cell has-parts">1</div>
+            <div class="cov-cell no-parts">&mdash;</div>
+            <div class="cov-cell gap">gap</div>
+            <!-- Back Rank -->
+            <div class="cov-topic-label"><span style="width:5px;height:5px;border-radius:50%;background:var(--emerald);flex-shrink:0"></span> Back Rank</div>
+            <div class="cov-cell has-parts">2</div>
+            <div class="cov-cell no-parts">&mdash;</div>
+            <div class="cov-cell no-parts">&mdash;</div>
+            <!-- Promotion -->
+            <div class="cov-topic-label"><span style="width:5px;height:5px;border-radius:50%;background:var(--amber);flex-shrink:0"></span> Promotion</div>
+            <div class="cov-cell no-parts">&mdash;</div>
+            <div class="cov-cell no-parts">&mdash;</div>
+            <div class="cov-cell gap">gap</div>
+          </div>
+        </div>
+
+        <!-- Doc Card 1 -->
+        <div class="doc-card" data-doc="chess-tactics">
+          <div class="doc-card-header">
+            <div class="doc-icon">&#128196;</div>
+            <div>
+              <div class="doc-card-title">chess-tactics-and-combinations.pdf</div>
+              <div class="doc-card-meta">646 pages &middot; 12.4 MB &middot; Extracted via Docling Serve</div>
+            </div>
+            <div class="doc-card-stats">
+              <div class="doc-stat"><span class="val">10</span> parts</div>
+              <div class="doc-stat"><span class="val">7</span> topics</div>
+              <div class="doc-stat"><span class="val">84K</span> chars</div>
+            </div>
+          </div>
+          <div class="part-outline">
+            <div class="part-outline-section">
+              <div class="part-outline-section-header">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                Part I &mdash; Foundations
+              </div>
+              <div class="part-item">
+                <div class="part-type-icon text">T</div>
+                <div class="part-item-info">
+                  <div class="part-item-title">Introduction</div>
+                  <div class="part-item-detail">pp. 1-8 &middot; 2.1K chars</div>
+                </div>
+                <div class="part-item-links"><span class="part-link-dot"></span></div>
+              </div>
+              <div class="part-item">
+                <div class="part-type-icon text">T</div>
+                <div class="part-item-info">
+                  <div class="part-item-title">ABC of Tactics</div>
+                  <div class="part-item-detail">pp. 9-22 &middot; 8.4K chars</div>
+                </div>
+                <div class="part-item-links"><span class="part-link-dot active"></span><span class="part-link-dot active"></span></div>
+              </div>
+            </div>
+            <div class="part-outline-section">
+              <div class="part-outline-section-header">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                Part II &mdash; Tactical Motifs
+              </div>
+              <div class="part-item active">
+                <div class="part-type-icon text">T</div>
+                <div class="part-item-info">
+                  <div class="part-item-title">Forks</div>
+                  <div class="part-item-detail">pp. 28-35 &middot; 12.3K chars &middot; Chapter 3.1</div>
+                </div>
+                <div class="part-item-links"><span class="part-link-dot active"></span><span class="part-link-dot active"></span><span class="part-link-dot active"></span></div>
+              </div>
+              <div class="part-item">
+                <div class="part-type-icon text">T</div>
+                <div class="part-item-info">
+                  <div class="part-item-title">Pins and Skewers</div>
+                  <div class="part-item-detail">pp. 36-48 &middot; 9.7K chars &middot; Chapter 3.2</div>
+                </div>
+                <div class="part-item-links"><span class="part-link-dot active"></span><span class="part-link-dot active"></span></div>
+              </div>
+              <div class="part-item">
+                <div class="part-type-icon text">T</div>
+                <div class="part-item-info">
+                  <div class="part-item-title">Discovered Attacks</div>
+                  <div class="part-item-detail">pp. 49-58 &middot; 7.2K chars &middot; Chapter 3.3</div>
+                </div>
+                <div class="part-item-links"><span class="part-link-dot active"></span></div>
+              </div>
+              <div class="part-item">
+                <div class="part-type-icon text">T</div>
+                <div class="part-item-info">
+                  <div class="part-item-title">Overloading</div>
+                  <div class="part-item-detail">pp. 59-66 &middot; 5.1K chars &middot; Chapter 3.4</div>
+                </div>
+                <div class="part-item-links"><span class="part-link-dot active"></span></div>
+              </div>
+            </div>
+            <div class="part-outline-section">
+              <div class="part-outline-section-header">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                Part III &mdash; Combinations & Endgame
+              </div>
+              <div class="part-item">
+                <div class="part-type-icon text">T</div>
+                <div class="part-item-info">
+                  <div class="part-item-title">Combinations</div>
+                  <div class="part-item-detail">pp. 72-95 &middot; 18.6K chars</div>
+                </div>
+                <div class="part-item-links"><span class="part-link-dot active"></span><span class="part-link-dot active"></span></div>
+              </div>
+              <div class="part-item">
+                <div class="part-type-icon text">T</div>
+                <div class="part-item-info">
+                  <div class="part-item-title">Checkmate Patterns</div>
+                  <div class="part-item-detail">pp. 96-120 &middot; 14.2K chars</div>
+                </div>
+                <div class="part-item-links"><span class="part-link-dot active"></span><span class="part-link-dot active"></span></div>
+              </div>
+              <div class="part-item">
+                <div class="part-type-icon table">&#9638;</div>
+                <div class="part-item-info">
+                  <div class="part-item-title">Opening Index</div>
+                  <div class="part-item-detail">pp. 121-124 &middot; 3.8K chars &middot; 42 rows</div>
+                </div>
+                <div class="part-item-links"><span class="part-link-dot"></span></div>
+              </div>
+              <div class="part-item">
+                <div class="part-type-icon text">T</div>
+                <div class="part-item-info">
+                  <div class="part-item-title">Best & Test Positions</div>
+                  <div class="part-item-detail">pp. 125-140 &middot; 6.9K chars</div>
+                </div>
+                <div class="part-item-links"></div>
+              </div>
+            </div>
+          </div>
+          <div class="doc-topics-linked">
+            <span style="font-size:10px;color:var(--text-dim);margin-right:4px;">Linked to:</span>
+            <span class="topic-chip">Forks</span>
+            <span class="topic-chip">Pins</span>
+            <span class="topic-chip">Discovered</span>
+            <span class="topic-chip">Overloading</span>
+            <span class="topic-chip">Sacrifices</span>
+            <span class="topic-chip">Back Rank</span>
+            <span class="topic-chip">+1</span>
+          </div>
+        </div>
+
+        <!-- Doc Card 2 -->
+        <div class="doc-card" data-doc="strategy-guide">
+          <div class="doc-card-header">
+            <div class="doc-icon">&#128196;</div>
+            <div>
+              <div class="doc-card-title">middlegame-strategy-guide.pdf</div>
+              <div class="doc-card-meta">124 pages &middot; 3.2 MB &middot; Extracted via Docling Serve</div>
+            </div>
+            <div class="doc-card-stats">
+              <div class="doc-stat"><span class="val">6</span> parts</div>
+              <div class="doc-stat"><span class="val">2</span> topics</div>
+              <div class="doc-stat"><span class="val">28K</span> chars</div>
+            </div>
+          </div>
+          <div class="part-outline">
+            <div class="part-item">
+              <div class="part-type-icon text">T</div>
+              <div class="part-item-info">
+                <div class="part-item-title">Pawn Structure</div>
+                <div class="part-item-detail">pp. 1-22 &middot; 11.2K chars</div>
+              </div>
+              <div class="part-item-links"><span class="part-link-dot active"></span></div>
+            </div>
+            <div class="part-item">
+              <div class="part-type-icon table">&#9638;</div>
+              <div class="part-item-info">
+                <div class="part-item-title">Structure Comparison Table</div>
+                <div class="part-item-detail">pp. 23-24 &middot; 2.1K chars &middot; 18 rows</div>
+              </div>
+              <div class="part-item-links"></div>
+            </div>
+            <div class="part-item">
+              <div class="part-type-icon text">T</div>
+              <div class="part-item-info">
+                <div class="part-item-title">Piece Activity</div>
+                <div class="part-item-detail">pp. 25-48 &middot; 8.4K chars</div>
+              </div>
+              <div class="part-item-links"><span class="part-link-dot active"></span></div>
+            </div>
+          </div>
+          <div class="doc-topics-linked">
+            <span style="font-size:10px;color:var(--text-dim);margin-right:4px;">Linked to:</span>
+            <span class="topic-chip">Sacrifices</span>
+            <span class="topic-chip">Overloading</span>
+          </div>
+        </div>
+
+        <!-- Doc Card 3 -->
+        <div class="doc-card" data-doc="opening-theory">
+          <div class="doc-card-header">
+            <div class="doc-icon">&#128196;</div>
+            <div>
+              <div class="doc-card-title">chess-opening-theory.pdf</div>
+              <div class="doc-card-meta">86 pages &middot; 1.8 MB &middot; Extracted via pymupdf</div>
+            </div>
+            <div class="doc-card-stats">
+              <div class="doc-stat"><span class="val">3</span> parts</div>
+              <div class="doc-stat"><span class="val">0</span> topics</div>
+              <div class="doc-stat"><span class="val">9K</span> chars</div>
+            </div>
+          </div>
+          <div class="part-outline">
+            <div class="part-item">
+              <div class="part-type-icon text">T</div>
+              <div class="part-item-info">
+                <div class="part-item-title">Italian Game</div>
+                <div class="part-item-detail">pp. 1-28 &middot; 4.2K chars</div>
+              </div>
+              <div class="part-item-links"></div>
+            </div>
+            <div class="part-item">
+              <div class="part-type-icon text">T</div>
+              <div class="part-item-info">
+                <div class="part-item-title">Sicilian Defense</div>
+                <div class="part-item-detail">pp. 29-56 &middot; 3.1K chars</div>
+              </div>
+              <div class="part-item-links"></div>
+            </div>
+            <div class="part-item">
+              <div class="part-type-icon text">T</div>
+              <div class="part-item-info">
+                <div class="part-item-title">French Defense</div>
+                <div class="part-item-detail">pp. 57-86 &middot; 1.8K chars</div>
+              </div>
+              <div class="part-item-links"></div>
+            </div>
+          </div>
+          <div class="doc-topics-linked">
+            <span style="font-size:10px;color:var(--text-dim);margin-right:4px;">Not linked to any topic</span>
+            <span class="topic-chip gap">unlinked</span>
+          </div>
+        </div>
+
+        </div><!-- /allSourcesView -->
+
+        <!-- ═══ SINGLE DOC VIEW (shown when a specific doc is selected) ═══ -->
+        <div id="singleDocView">
+
+          <!-- Doc header summary -->
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding:14px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;">
+            <div class="doc-icon">&#128196;</div>
+            <div style="flex:1;min-width:0;">
+              <div id="sdvTitle" style="font-size:14px;font-weight:700;">chess-tactics-and-combinations.pdf</div>
+              <div id="sdvMeta" style="font-size:11px;color:var(--text-muted);margin-top:2px;">646 pages &middot; 12.4 MB &middot; Extracted via Docling Serve</div>
+            </div>
+            <div style="display:flex;gap:14px;flex-shrink:0;">
+              <div class="doc-stat"><span class="val" id="sdvParts">10</span> parts</div>
+              <div class="doc-stat"><span class="val" id="sdvTopics">7</span> topics</div>
+              <div class="doc-stat"><span class="val" id="sdvChars">84K</span> chars</div>
+            </div>
+          </div>
+
+          <!-- Topic coverage for this doc only -->
+          <div style="margin-bottom:16px;padding:12px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;">
+            <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-dim);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+              Topics covered by this document
+            </div>
+            <div id="sdvTopicBars">
+              <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+                <span style="font-size:11px;color:var(--text-secondary);width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Forks</span>
+                <div style="flex:1;height:6px;background:var(--bg-tertiary);border-radius:3px;overflow:hidden;"><div style="height:100%;width:100%;background:var(--emerald);border-radius:3px;"></div></div>
+                <span style="font-size:10px;color:var(--text-muted);width:50px;text-align:right;">3 parts</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+                <span style="font-size:11px;color:var(--text-secondary);width:120px;">Pins</span>
+                <div style="flex:1;height:6px;background:var(--bg-tertiary);border-radius:3px;overflow:hidden;"><div style="height:100%;width:66%;background:var(--emerald);border-radius:3px;"></div></div>
+                <span style="font-size:10px;color:var(--text-muted);width:50px;text-align:right;">2 parts</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+                <span style="font-size:11px;color:var(--text-secondary);width:120px;">Discovered</span>
+                <div style="flex:1;height:6px;background:var(--bg-tertiary);border-radius:3px;overflow:hidden;"><div style="height:100%;width:33%;background:var(--amber);border-radius:3px;"></div></div>
+                <span style="font-size:10px;color:var(--text-muted);width:50px;text-align:right;">1 part</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+                <span style="font-size:11px;color:var(--text-secondary);width:120px;">Sacrifices</span>
+                <div style="flex:1;height:6px;background:var(--bg-tertiary);border-radius:3px;overflow:hidden;"><div style="height:100%;width:66%;background:var(--emerald);border-radius:3px;"></div></div>
+                <span style="font-size:10px;color:var(--text-muted);width:50px;text-align:right;">2 parts</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+                <span style="font-size:11px;color:var(--text-secondary);width:120px;">Overloading</span>
+                <div style="flex:1;height:6px;background:var(--bg-tertiary);border-radius:3px;overflow:hidden;"><div style="height:100%;width:33%;background:var(--amber);border-radius:3px;"></div></div>
+                <span style="font-size:10px;color:var(--text-muted);width:50px;text-align:right;">1 part</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+                <span style="font-size:11px;color:var(--text-secondary);width:120px;">Back Rank</span>
+                <div style="flex:1;height:6px;background:var(--bg-tertiary);border-radius:3px;overflow:hidden;"><div style="height:100%;width:66%;background:var(--emerald);border-radius:3px;"></div></div>
+                <span style="font-size:10px;color:var(--text-muted);width:50px;text-align:right;">2 parts</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Parts list (expanded — all parts for this doc) -->
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-dim);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+            Extracted Parts (10)
+          </div>
+          <div id="sdvPartsList">
+            <div class="part-outline">
+              <div class="part-outline-section">
+                <div class="part-outline-section-header">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                  Part I &mdash; Foundations
+                </div>
+                <div class="part-item" onclick="selectPart(this)">
+                  <div class="part-type-icon text">T</div>
+                  <div class="part-item-info">
+                    <div class="part-item-title">Introduction</div>
+                    <div class="part-item-detail">pp. 1-8 &middot; 2.1K chars</div>
+                  </div>
+                  <div class="part-item-links"><span class="part-link-dot"></span></div>
+                </div>
+                <div class="part-item" onclick="selectPart(this)">
+                  <div class="part-type-icon text">T</div>
+                  <div class="part-item-info">
+                    <div class="part-item-title">ABC of Tactics</div>
+                    <div class="part-item-detail">pp. 9-22 &middot; 8.4K chars</div>
+                  </div>
+                  <div class="part-item-links"><span class="part-link-dot active"></span><span class="part-link-dot active"></span></div>
+                </div>
+              </div>
+              <div class="part-outline-section">
+                <div class="part-outline-section-header">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                  Part II &mdash; Tactical Motifs
+                </div>
+                <div class="part-item active" onclick="selectPart(this)">
+                  <div class="part-type-icon text">T</div>
+                  <div class="part-item-info">
+                    <div class="part-item-title">Forks</div>
+                    <div class="part-item-detail">pp. 28-35 &middot; 12.3K chars &middot; Chapter 3.1</div>
+                  </div>
+                  <div class="part-item-links"><span class="part-link-dot active"></span><span class="part-link-dot active"></span><span class="part-link-dot active"></span></div>
+                </div>
+                <div class="part-item" onclick="selectPart(this)">
+                  <div class="part-type-icon text">T</div>
+                  <div class="part-item-info">
+                    <div class="part-item-title">Pins and Skewers</div>
+                    <div class="part-item-detail">pp. 36-48 &middot; 9.7K chars &middot; Chapter 3.2</div>
+                  </div>
+                  <div class="part-item-links"><span class="part-link-dot active"></span><span class="part-link-dot active"></span></div>
+                </div>
+                <div class="part-item" onclick="selectPart(this)">
+                  <div class="part-type-icon text">T</div>
+                  <div class="part-item-info">
+                    <div class="part-item-title">Discovered Attacks</div>
+                    <div class="part-item-detail">pp. 49-58 &middot; 7.2K chars &middot; Chapter 3.3</div>
+                  </div>
+                  <div class="part-item-links"><span class="part-link-dot active"></span></div>
+                </div>
+                <div class="part-item" onclick="selectPart(this)">
+                  <div class="part-type-icon text">T</div>
+                  <div class="part-item-info">
+                    <div class="part-item-title">Overloading</div>
+                    <div class="part-item-detail">pp. 59-66 &middot; 5.1K chars &middot; Chapter 3.4</div>
+                  </div>
+                  <div class="part-item-links"><span class="part-link-dot active"></span></div>
+                </div>
+              </div>
+              <div class="part-outline-section">
+                <div class="part-outline-section-header">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                  Part III &mdash; Combinations & Endgame
+                </div>
+                <div class="part-item" onclick="selectPart(this)">
+                  <div class="part-type-icon text">T</div>
+                  <div class="part-item-info">
+                    <div class="part-item-title">Combinations</div>
+                    <div class="part-item-detail">pp. 72-95 &middot; 18.6K chars</div>
+                  </div>
+                  <div class="part-item-links"><span class="part-link-dot active"></span><span class="part-link-dot active"></span></div>
+                </div>
+                <div class="part-item" onclick="selectPart(this)">
+                  <div class="part-type-icon text">T</div>
+                  <div class="part-item-info">
+                    <div class="part-item-title">Checkmate Patterns</div>
+                    <div class="part-item-detail">pp. 96-120 &middot; 14.2K chars</div>
+                  </div>
+                  <div class="part-item-links"><span class="part-link-dot active"></span><span class="part-link-dot active"></span></div>
+                </div>
+                <div class="part-item" onclick="selectPart(this)">
+                  <div class="part-type-icon table">&#9638;</div>
+                  <div class="part-item-info">
+                    <div class="part-item-title">Opening Index</div>
+                    <div class="part-item-detail">pp. 121-124 &middot; 3.8K chars &middot; 42 rows</div>
+                  </div>
+                  <div class="part-item-links"><span class="part-link-dot"></span></div>
+                </div>
+                <div class="part-item" onclick="selectPart(this)">
+                  <div class="part-type-icon text">T</div>
+                  <div class="part-item-info">
+                    <div class="part-item-title">Best & Test Positions</div>
+                    <div class="part-item-detail">pp. 125-140 &middot; 6.9K chars</div>
+                  </div>
+                  <div class="part-item-links"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div><!-- /singleDocView -->
+
+      </div>
+
+      <!-- Right: Part Viewer (redesigned) -->
+      <div class="knowledge-right">
+        <div class="part-viewer-header">
+          <div class="pv-title-row">
+            <h3>Forks</h3>
+            <span class="pv-type-badge text">Text</span>
+            <div class="pv-nav">
+              <span>3 of 10</span>
+              <button>&lsaquo;</button>
+              <button>&rsaquo;</button>
+            </div>
+          </div>
+          <div class="pv-meta-row">
+            <div class="pv-meta-tag">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+              chess-tactics.pdf
+            </div>
+            <div class="pv-meta-tag">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+              Chapter 3.1 &middot; pp. 28-35
+            </div>
+            <div class="pv-meta-tag">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+              12.3K chars
+            </div>
+          </div>
+        </div>
+
+        <div class="part-viewer-content">
+          <h4>The Knight Fork</h4>
+          <p>The knight fork is the most common fork in chess. Because of the knight's unique L-shaped move, it can attack pieces that cannot attack it back.</p>
+
+          <blockquote>
+            "The knight fork is the most feared tactic in chess &mdash; its ability to jump over pieces makes it nearly impossible to anticipate."
+          </blockquote>
+
+          <h4>Types of Forks</h4>
+          <ul>
+            <li><strong>Family fork (Royal fork)</strong> &mdash; The knight simultaneously attacks the king, queen, and a rook. Since the king must move out of check, the queen is invariably lost. Example: <span class="chess-notation">Ne7+</span> attacking Kg8 and Qd5.</li>
+            <li><strong>Double fork</strong> &mdash; Attacking two pieces of significant value. Common pattern: <span class="chess-notation">Nf7</span> forking the rook on h8 and queen on d8.</li>
+            <li><strong>Pawn fork</strong> &mdash; A pawn advance attacking two pieces diagonally. Often seen with <span class="chess-notation">d5</span> or <span class="chess-notation">e5</span> in the center.</li>
+          </ul>
+
+          <h4>Setting Up a Fork</h4>
+          <p>Setting up a fork often requires a preparatory move &mdash; a sacrifice or exchange that places the enemy pieces on the right squares. Watch for positions where two valuable pieces are separated by a knight's move distance.</p>
+
+          <h4>Defense Against Forks</h4>
+          <ul>
+            <li>Keep king and queen on <strong>different-colored squares</strong> to reduce knight fork vulnerability</li>
+            <li>Control potential fork squares with pawns</li>
+            <li>Be aware of knight "hop" patterns &mdash; the L-shape covers specific squares</li>
+            <li>When forked, move the <strong>more valuable piece</strong> first</li>
+          </ul>
+        </div>
+
+        <div class="part-viewer-footer">
+          <div class="pv-footer-section">
+            <div class="pv-footer-label">Referenced by Topics</div>
+            <div class="pv-footer-chips">
+              <span class="topic-chip">Forks</span>
+              <span class="topic-chip">Basic Tactical Patterns</span>
+            </div>
+          </div>
+          <div class="pv-footer-section">
+            <div class="pv-footer-label">Records Generated</div>
+            <div class="pv-record-count">
+              <span class="val">14</span> records from this part &middot; avg score <span class="val">0.84</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- PAGE 3: Table View                                          -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<div class="table-page app-layout" id="page-table">
+
+  <!-- Icon Rail -->
+  <div class="icon-rail">
+    <div class="logo">V</div>
+    <button class="active"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></button>
+    <button><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></button>
+    <button><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg></button>
+  </div>
+
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <div class="breadcrumb">
+      <span>Projects</span>
+      <span class="sep">/</span>
+      <span>Chess Tutor Assistant</span>
+      <span class="sep">/</span>
+      <span class="current">All Records</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="view-toggle">
+      <button onclick="showPage('canvas')">Canvas</button>
+      <button onclick="showPage('knowledge')">Sources</button>
+      <button class="active" onclick="showPage('table')">Table</button>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Source Documents <span class="count">3</span></div>
+      <div class="sidebar-item" onclick="showPage('knowledge')"><span>&#128196;</span> chess-tactics.pdf <span class="badge">10</span></div>
+      <div class="sidebar-item" onclick="showPage('knowledge')"><span>&#128196;</span> strategy-guide.pdf <span class="badge">6</span></div>
+      <div class="sidebar-item" onclick="showPage('knowledge')"><span>&#128196;</span> opening-theory.pdf <span class="badge">3</span></div>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Training Data <span class="count">150</span></div>
+      <div class="sidebar-item active"><span>&#128200;</span> All Topics <span class="badge">150</span></div>
+    </div>
+  </div>
+
+  <!-- Table Main -->
+  <div class="table-main">
+    <div class="table-toolbar">
+      <input class="table-search" type="text" placeholder="Search records...">
+      <button class="table-filter">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+        All Topics
+      </button>
+      <button class="table-filter">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        All Scores
+      </button>
+      <span class="table-count">150 records</span>
+    </div>
+
+    <!-- ── Sticky Prompt Panel (shows when a topic is selected) ── -->
+    <div class="prompt-panel" id="promptPanel">
+      <div class="prompt-panel-inner">
+        <div class="prompt-panel-header">
+          <div class="prompt-panel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            System Prompt
+          </div>
+          <div class="prompt-breadcrumb" id="promptBreadcrumb">
+            <span class="crumb root">Chess Tutor</span>
+            <span class="arrow">&rsaquo;</span>
+            <span class="crumb parent">Basic Tactical</span>
+            <span class="arrow">&rsaquo;</span>
+            <span class="crumb leaf">Forks</span>
+          </div>
+          <button class="prompt-panel-close" onclick="closePromptPanel()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="prompt-chain" id="promptChain">
+          <div class="prompt-card inherited">
+            <div class="prompt-card-label">Root &middot; Chess Tutor</div>
+            <div class="prompt-card-text">You are an expert chess tutor. Explain concepts clearly and concisely. Use standard algebraic notation. Assume the student has basic knowledge of how pieces move.</div>
+          </div>
+          <div class="prompt-chain-arrow">&rsaquo;</div>
+          <div class="prompt-card inherited">
+            <div class="prompt-card-label">Parent &middot; Basic Tactical Patterns</div>
+            <div class="prompt-card-text">Focus on fundamental tactical motifs that appear in beginner and intermediate games. Explain patterns step-by-step with concrete examples. Emphasize recognition.</div>
+          </div>
+          <div class="prompt-chain-arrow">&rsaquo;</div>
+          <div class="prompt-card own">
+            <div class="prompt-card-label">This Topic &middot; Forks</div>
+            <div class="prompt-card-text">Specialize in fork tactics — especially knight forks, but also bishop, rook, queen, and pawn forks. When explaining a fork, always describe: (1) which pieces are attacked, (2) why the opponent can't save both, (3) how the fork was set up.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-wrapper">
+      <table class="all-records-table">
+        <thead>
+          <tr>
+            <th class="col-id">#</th>
+            <th class="resizable" style="width:30%">Input</th>
+            <th class="resizable" style="width:40%">Output</th>
+            <th class="col-score">Score</th>
+            <th class="col-source">Source</th>
+          </tr>
+        </thead>
+        <tbody>
+
+          <!-- ═══ GROUP 1: Basic Tactical Patterns ═══ -->
+          <tr class="group-header" onclick="toggleGroup(this)" data-group="basic">
+            <td colspan="5">
+              <div class="group-header-inner">
+                <svg class="group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                <span class="group-name">Basic Tactical Patterns</span>
+                <div class="group-stats">
+                  <div class="group-stat"><span class="val">34</span> records</div>
+                  <div class="group-stat">avg <span class="val" style="color:var(--emerald)">0.85</span></div>
+                  <div class="group-coverage-bar"><div class="group-coverage-fill good" style="width:82%"></div></div>
+                  <span style="font-size:10px">82%</span>
+                </div>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Sub-group: Forks -->
+          <tr class="subgroup-header" data-parent="basic" data-subgroup="forks">
+            <td colspan="5">
+              <div class="subgroup-header-inner" onclick="toggleSubgroup(this.closest('.subgroup-header'))">
+                <div class="tree-line"></div>
+                <svg class="subgroup-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                <span class="subgroup-name">Forks</span>
+                <span class="subgroup-count">14</span>
+                <div class="subgroup-stats">
+                  <span style="display:flex;align-items:center;gap:3px"><span class="quality-dot" style="background:var(--emerald);width:6px;height:6px;border-radius:50%;display:inline-block"></span> 0.84</span>
+                  <span>&#128196; 2 sources</span>
+                </div>
+                <button class="prompt-icon-btn" onclick="event.stopPropagation(); showPrompt('basic','forks')" title="View system prompt">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+          <tr class="record-row" data-parent="basic" data-topic="forks"><td class="col-id">1</td><td>Explain the knight fork tactic and why it's so effective</td><td>A knight fork is when a knight attacks two or more pieces simultaneously. Since the knight's unique L-shaped move can't be blocked...</td><td class="col-score"><span class="score-pill score-good">0.93</span></td><td class="col-source">ch.1</td></tr>
+          <tr class="record-row" data-parent="basic" data-topic="forks"><td class="col-id">2</td><td>What is a family fork in chess?</td><td>A family fork (royal fork) is when a knight simultaneously attacks the king, queen, and often a rook...</td><td class="col-score"><span class="score-pill score-good">0.88</span></td><td class="col-source">ch.1</td></tr>
+          <tr class="record-row" data-parent="basic" data-topic="forks"><td class="col-id">3</td><td>How do you set up a knight fork?</td><td>Setting up a fork often requires a preparatory move — a sacrifice or exchange that places enemy pieces on vulnerable squares.</td><td class="col-score"><span class="score-pill score-warn">0.72</span></td><td class="col-source">ch.2.1</td></tr>
+
+          <!-- Sub-group: Pins and Skewers -->
+          <tr class="subgroup-header" data-parent="basic" data-subgroup="pins">
+            <td colspan="5">
+              <div class="subgroup-header-inner" onclick="toggleSubgroup(this.closest('.subgroup-header'))">
+                <div class="tree-line"></div>
+                <svg class="subgroup-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                <span class="subgroup-name">Pins and Skewers</span>
+                <span class="subgroup-count">12</span>
+                <div class="subgroup-stats">
+                  <span style="display:flex;align-items:center;gap:3px"><span class="quality-dot" style="background:var(--amber);width:6px;height:6px;border-radius:50%;display:inline-block"></span> 0.74</span>
+                  <span>&#128196; 1 source</span>
+                </div>
+                <button class="prompt-icon-btn" onclick="event.stopPropagation(); showPrompt('basic','pins')" title="View system prompt">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+          <tr class="record-row" data-parent="basic" data-topic="pins"><td class="col-id">4</td><td>What is a pin in chess and why is it important?</td><td>A pin is when a piece cannot move because doing so would expose a more valuable piece behind it to attack...</td><td class="col-score"><span class="score-pill score-good">0.86</span></td><td class="col-source">ch.3</td></tr>
+          <tr class="record-row" data-parent="basic" data-topic="pins"><td class="col-id">5</td><td>What's the difference between absolute and relative pins?</td><td>An absolute pin is against the king — the pinned piece literally cannot move. A relative pin is against any other piece — moving is legal but costly.</td><td class="col-score"><span class="score-pill score-good">0.82</span></td><td class="col-source">ch.3</td></tr>
+
+          <!-- Sub-group: Discovered Attacks -->
+          <tr class="subgroup-header" data-parent="basic" data-subgroup="discovered">
+            <td colspan="5">
+              <div class="subgroup-header-inner" onclick="toggleSubgroup(this.closest('.subgroup-header'))">
+                <div class="tree-line"></div>
+                <svg class="subgroup-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                <span class="subgroup-name">Discovered Attacks</span>
+                <span class="subgroup-count">8</span>
+                <div class="subgroup-stats">
+                  <span style="display:flex;align-items:center;gap:3px"><span class="quality-dot" style="background:var(--amber);width:6px;height:6px;border-radius:50%;display:inline-block"></span> 0.68</span>
+                  <span>&#128196; 1 source</span>
+                </div>
+                <button class="prompt-icon-btn" onclick="event.stopPropagation(); showPrompt('basic','discovered')" title="View system prompt">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+          <tr class="record-row" data-parent="basic" data-topic="discovered"><td class="col-id">6</td><td>What is a discovered attack?</td><td>A discovered attack occurs when moving one piece reveals an attack by another piece behind it. It's like a hidden ambush.</td><td class="col-score"><span class="score-pill score-warn">0.68</span></td><td class="col-source">ch.4</td></tr>
+          <tr class="record-row" data-parent="basic" data-topic="discovered"><td class="col-id">7</td><td>How does a discovered check differ from a regular discovered attack?</td><td>A discovered check is when the revealed attack is a check on the king, forcing the opponent to deal with the check while your moved piece wreaks havoc elsewhere.</td><td class="col-score"><span class="score-pill score-warn">0.71</span></td><td class="col-source">ch.4</td></tr>
+
+          <!-- ═══ GROUP 2: Advanced Combinations ═══ -->
+          <tr class="group-header" onclick="toggleGroup(this)" data-group="advanced">
+            <td colspan="5">
+              <div class="group-header-inner">
+                <svg class="group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                <span class="group-name">Advanced Combinations</span>
+                <div class="group-stats">
+                  <div class="group-stat"><span class="val">28</span> records</div>
+                  <div class="group-stat">avg <span class="val" style="color:var(--amber)">0.71</span></div>
+                  <div class="group-coverage-bar"><div class="group-coverage-fill warn" style="width:55%"></div></div>
+                  <span style="font-size:10px">55%</span>
+                </div>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Sub-group: Sacrifices -->
+          <tr class="subgroup-header" data-parent="advanced" data-subgroup="sacrifices">
+            <td colspan="5">
+              <div class="subgroup-header-inner" onclick="toggleSubgroup(this.closest('.subgroup-header'))">
+                <div class="tree-line"></div>
+                <svg class="subgroup-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                <span class="subgroup-name">Sacrifices</span>
+                <span class="subgroup-count">18</span>
+                <div class="subgroup-stats">
+                  <span style="display:flex;align-items:center;gap:3px"><span class="quality-dot" style="background:var(--emerald);width:6px;height:6px;border-radius:50%;display:inline-block"></span> 0.80</span>
+                  <span>&#128196; 2 sources</span>
+                </div>
+                <button class="prompt-icon-btn" onclick="event.stopPropagation(); showPrompt('advanced','sacrifices')" title="View system prompt">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+          <tr class="record-row" data-parent="advanced" data-topic="sacrifices"><td class="col-id">8</td><td>When should you sacrifice material in chess?</td><td>Material sacrifices are justified when they lead to a decisive attack, forced checkmate, or significant positional advantage that outweighs the material deficit.</td><td class="col-score"><span class="score-pill score-good">0.80</span></td><td class="col-source">ch.5</td></tr>
+          <tr class="record-row" data-parent="advanced" data-topic="sacrifices"><td class="col-id">9</td><td>Explain the Greek gift sacrifice (Bxh7+)</td><td>The Greek gift is a classic bishop sacrifice on h7, typically followed by Ng5+ and Qh5. It works when the opponent has castled kingside with a knight on f6 and the f-pawn hasn't moved.</td><td class="col-score"><span class="score-pill score-good">0.91</span></td><td class="col-source">ch.5</td></tr>
+          <tr class="record-row" data-parent="advanced" data-topic="sacrifices"><td class="col-id">10</td><td>What is a positional sacrifice vs a tactical sacrifice?</td><td>A tactical sacrifice has a concrete, calculable payoff (checkmate, material win). A positional sacrifice gives up material for long-term advantages like better pawn structure, open files, or piece activity.</td><td class="col-score"><span class="score-pill score-warn">0.74</span></td><td class="col-source">ch.5</td></tr>
+
+          <!-- Sub-group: Overloading -->
+          <tr class="subgroup-header" data-parent="advanced" data-subgroup="overloading">
+            <td colspan="5">
+              <div class="subgroup-header-inner" onclick="toggleSubgroup(this.closest('.subgroup-header'))">
+                <div class="tree-line"></div>
+                <svg class="subgroup-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                <span class="subgroup-name">Overloading</span>
+                <span class="subgroup-count">10</span>
+                <div class="subgroup-stats">
+                  <span style="display:flex;align-items:center;gap:3px"><span class="quality-dot" style="background:var(--red);width:6px;height:6px;border-radius:50%;display:inline-block"></span> 0.52</span>
+                  <span>&#128196; 1 source</span>
+                </div>
+                <button class="prompt-icon-btn" onclick="event.stopPropagation(); showPrompt('advanced','overloading')" title="View system prompt">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+          <tr class="record-row" data-parent="advanced" data-topic="overloading"><td class="col-id">11</td><td>What does it mean to overload a piece in chess?</td><td>Overloading means forcing a single piece to defend too many targets at once. When overloaded, the piece can't fulfill all its defensive duties.</td><td class="col-score"><span class="score-pill score-low">0.52</span></td><td class="col-source">ch.6</td></tr>
+          <tr class="record-row" data-parent="advanced" data-topic="overloading"><td class="col-id">12</td><td>How do you identify an overloaded piece?</td><td>Look for pieces performing multiple defensive tasks: guarding a back rank, protecting another piece, and controlling a key square. If removing one task collapses the defense, the piece is overloaded.</td><td class="col-score"><span class="score-pill score-low">0.58</span></td><td class="col-source">ch.6</td></tr>
+
+          <!-- ═══ GROUP 3: Endgame & Mating ═══ -->
+          <tr class="group-header" onclick="toggleGroup(this)" data-group="endgame">
+            <td colspan="5">
+              <div class="group-header-inner">
+                <svg class="group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                <span class="group-name">Endgame & Mating Patterns</span>
+                <div class="group-stats">
+                  <div class="group-stat"><span class="val">38</span> records</div>
+                  <div class="group-stat">avg <span class="val" style="color:var(--emerald)">0.89</span></div>
+                  <div class="group-coverage-bar"><div class="group-coverage-fill good" style="width:90%"></div></div>
+                  <span style="font-size:10px">90%</span>
+                </div>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Sub-group: Back Rank Mates -->
+          <tr class="subgroup-header" data-parent="endgame" data-subgroup="backrank">
+            <td colspan="5">
+              <div class="subgroup-header-inner" onclick="toggleSubgroup(this.closest('.subgroup-header'))">
+                <div class="tree-line"></div>
+                <svg class="subgroup-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                <span class="subgroup-name">Back Rank Mates</span>
+                <span class="subgroup-count">22</span>
+                <div class="subgroup-stats">
+                  <span style="display:flex;align-items:center;gap:3px"><span class="quality-dot" style="background:var(--emerald);width:6px;height:6px;border-radius:50%;display:inline-block"></span> 0.91</span>
+                  <span>&#128196; 2 sources</span>
+                </div>
+                <button class="prompt-icon-btn" onclick="event.stopPropagation(); showPrompt('endgame','backrank')" title="View system prompt">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+          <tr class="record-row" data-parent="endgame" data-topic="backrank"><td class="col-id">13</td><td>How do you execute a back rank checkmate?</td><td>A back rank mate occurs when a rook or queen delivers checkmate along the opponent's back rank, while their own pawns prevent the king from escaping.</td><td class="col-score"><span class="score-pill score-good">0.91</span></td><td class="col-source">ch.8</td></tr>
+          <tr class="record-row" data-parent="endgame" data-topic="backrank"><td class="col-id">14</td><td>How to prevent back rank mate threats?</td><td>The simplest prevention is creating "luft" — an escape square for your king by pushing one of the pawns in front of it (usually h3/h6 or g3/g6).</td><td class="col-score"><span class="score-pill score-good">0.89</span></td><td class="col-source">ch.8</td></tr>
+          <tr class="record-row" data-parent="endgame" data-topic="backrank"><td class="col-id">15</td><td>What is Anastasia's mate?</td><td>Anastasia's mate is a back rank pattern where a knight on e7 (or similar) cuts off the king's escape while a rook delivers mate along the h-file or a-file.</td><td class="col-score"><span class="score-pill score-good">0.87</span></td><td class="col-source">ch.8</td></tr>
+
+          <!-- Sub-group: Pawn Promotion -->
+          <tr class="subgroup-header" data-parent="endgame" data-subgroup="promotion">
+            <td colspan="5">
+              <div class="subgroup-header-inner" onclick="toggleSubgroup(this.closest('.subgroup-header'))">
+                <div class="tree-line"></div>
+                <svg class="subgroup-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                <span class="subgroup-name">Pawn Promotion</span>
+                <span class="subgroup-count">16</span>
+                <div class="subgroup-stats">
+                  <span style="display:flex;align-items:center;gap:3px"><span class="quality-dot" style="background:var(--amber);width:6px;height:6px;border-radius:50%;display:inline-block"></span> 0.68</span>
+                  <span>&#128196; 1 source</span>
+                </div>
+                <button class="prompt-icon-btn" onclick="event.stopPropagation(); showPrompt('endgame','promotion')" title="View system prompt">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+          <tr class="record-row" data-parent="endgame" data-topic="promotion"><td class="col-id">16</td><td>When should you promote a pawn to something other than a queen?</td><td>Underpromotion to a knight is used when a knight fork is needed. Promoting to a rook or bishop avoids stalemate in some endgame positions.</td><td class="col-score"><span class="score-pill score-warn">0.68</span></td><td class="col-source">ch.9</td></tr>
+          <tr class="record-row" data-parent="endgame" data-topic="promotion"><td class="col-id">17</td><td>What is the key to winning a king and pawn endgame?</td><td>The key is achieving opposition — placing your king directly facing the enemy king with one square between them. The side without opposition must give way, allowing the pawn to advance.</td><td class="col-score"><span class="score-pill score-warn">0.72</span></td><td class="col-source">ch.9</td></tr>
+
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Record Detail Sidebar (slides in from right when clicking a record row) -->
+<div class="record-detail-sidebar" id="recordDetailSidebar">
+  <div class="rds-header">
+    <h3>Record #<span id="rdsRecordNum">1</span></h3>
+    <button class="rds-close" onclick="closeRecordDetail()">&times;</button>
+  </div>
+  <div class="rds-section">
+    <div class="rds-section-title">Messages</div>
+    <div class="rds-message user">
+      <div class="msg-role">User</div>
+      <div id="rdsUserMsg">Explain the knight fork tactic and why it's so effective</div>
+    </div>
+    <div class="rds-message assistant">
+      <div class="msg-role">Assistant</div>
+      <div id="rdsAsstMsg">A knight fork is when a knight attacks two or more pieces simultaneously. Since the knight's unique L-shaped move can't be blocked by intervening pieces, opponents often fail to see fork threats coming.</div>
+    </div>
+  </div>
+  <div class="rds-section">
+    <div class="rds-section-title">System Prompt</div>
+    <div class="rds-system-prompt" id="rdsSystemPrompt">You are an expert chess tutor. Explain concepts clearly and concisely. Use standard algebraic notation. Focus on fundamental tactical motifs. Specialize in fork tactics &mdash; especially knight forks.</div>
+  </div>
+  <div class="rds-section">
+    <div class="rds-section-title">Metadata</div>
+    <div class="rds-meta-grid">
+      <div class="rds-meta-item"><div class="val" style="color:var(--emerald)" id="rdsScore">0.93</div><div class="lbl">Eval Score</div></div>
+      <div class="rds-meta-item"><div class="val" id="rdsTopic">Forks</div><div class="lbl">Topic</div></div>
+      <div class="rds-meta-item"><div class="val" id="rdsSource">ch.1</div><div class="lbl">Source Part</div></div>
+      <div class="rds-meta-item"><div class="val" id="rdsTokens">284</div><div class="lbl">Tokens</div></div>
+    </div>
+  </div>
+  <div class="rds-section">
+    <div class="rds-section-title">Source Context</div>
+    <div style="background:var(--bg-tertiary);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--text-muted);line-height:1.6;">
+      <div style="font-size:10px;font-weight:600;color:var(--text-dim);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;">chess-tactics.pdf &middot; Chapter 3.1</div>
+      <span style="color:var(--text-secondary)">"The knight fork is the most common fork in chess. Because of the knight's unique L-shaped move, it can attack pieces that cannot attack it back..."</span>
+    </div>
+  </div>
+</div>
+
+<!-- Page switcher -->
+<div class="page-indicator">
+  <div class="page-dot active" onclick="showPage('canvas')" title="Canvas View"></div>
+  <div class="page-dot" onclick="showPage('knowledge')" title="Knowledge Sources"></div>
+  <div class="page-dot" onclick="showPage('table')" title="Table View"></div>
+  <div class="page-label">Click to switch views</div>
+</div>
+
+<script>
+// ── Page switching ──
+function showPage(page) {
+  document.getElementById('page-canvas').style.display = page === 'canvas' ? 'grid' : 'none';
+  document.getElementById('page-knowledge').style.display = page === 'knowledge' ? 'grid' : 'none';
+  document.getElementById('page-table').style.display = page === 'table' ? 'grid' : 'none';
+  const dots = document.querySelectorAll('.page-dot');
+  dots[0].classList.toggle('active', page === 'canvas');
+  dots[1].classList.toggle('active', page === 'knowledge');
+  if (dots[2]) dots[2].classList.toggle('active', page === 'table');
+  // Update view-toggle active states across all pages
+  document.querySelectorAll('.view-toggle').forEach(toggle => {
+    toggle.querySelectorAll('button').forEach(btn => {
+      const text = btn.textContent.trim().toLowerCase();
+      const map = { 'canvas': 'canvas', 'sources': 'knowledge', 'table': 'table' };
+      btn.classList.toggle('active', map[text] === page);
+    });
+  });
+  if (page !== 'canvas' && isZoomed) zoomOut();
+}
+showPage('canvas');
+
+// ── Hierarchical Table Toggle ──
+function toggleGroup(headerRow) {
+  const group = headerRow.dataset.group;
+  const isCollapsed = headerRow.classList.toggle('collapsed');
+  // Toggle all subgroup headers and record rows belonging to this group
+  document.querySelectorAll(`[data-parent="${group}"]`).forEach(row => {
+    row.style.display = isCollapsed ? 'none' : '';
+  });
+}
+
+function toggleSubgroup(headerRow) {
+  const subgroup = headerRow.dataset.subgroup;
+  const parent = headerRow.dataset.parent;
+  const isCollapsed = headerRow.classList.toggle('collapsed');
+  document.querySelectorAll(`.record-row[data-parent="${parent}"][data-topic="${subgroup}"]`).forEach(row => {
+    row.style.display = isCollapsed ? 'none' : '';
+  });
+}
+
+// ── Prompt Panel Data ──
+const PROMPT_DATA = {
+  root: { label: 'Chess Tutor', text: 'You are an expert chess tutor. Explain concepts clearly and concisely. Use standard algebraic notation. Assume the student has basic knowledge of how pieces move.' },
+  parents: {
+    basic: { label: 'Basic Tactical Patterns', text: 'Focus on fundamental tactical motifs that appear in beginner and intermediate games. Explain patterns step-by-step with concrete examples. Emphasize recognition — teach the student to spot these patterns on the board quickly.' },
+    advanced: { label: 'Advanced Combinations', text: 'Focus on advanced tactical themes that require multi-move calculation. The student should already understand basic forks, pins, and skewers. Teach how to combine multiple tactical motifs into a single combination. Use complex positions from master games.' },
+    endgame: { label: 'Endgame & Mating', text: 'Focus on endgame technique and checkmate patterns. Teach concrete, memorizable patterns rather than abstract principles. For mating patterns, provide the pattern name, the piece configuration, and how to force it.' },
+  },
+  topics: {
+    forks: { label: 'Forks', text: 'Specialize in fork tactics — especially knight forks, but also bishop, rook, queen, and pawn forks. When explaining a fork, always describe: (1) which pieces are attacked, (2) why the opponent can\'t save both, (3) how the fork was set up.' },
+    pins: { label: 'Pins and Skewers', text: 'Specialize in pins and skewers. Always distinguish between absolute pins (against the king) and relative pins. For skewers, explain how they are the "reverse" of a pin. Describe which pieces are most effective at pinning.' },
+    discovered: { label: 'Discovered Attacks', text: 'Specialize in discovered attacks and discovered checks. Explain the "battery" concept — two pieces aligned with a movable piece in front. Show how discovered attacks create devastating double-threats.' },
+    sacrifices: { label: 'Sacrifices', text: 'Specialize in material sacrifices. Categorize: tactical (concrete calculation), positional (long-term compensation), exchange sacrifice. For each, explain: what is given up, what compensation is gained, how to evaluate soundness.' },
+    overloading: { label: 'Overloading', text: 'Specialize in overloading and deflection tactics. Teach how to identify defenders handling multiple tasks. Show how to exploit an overloaded piece by attacking one responsibility, forcing it to abandon the other.' },
+    backrank: { label: 'Back Rank Mates', text: 'Specialize in back rank checkmate patterns. Cover: classic back rank mate, Anastasia\'s mate, hook mate. Always explain prevention (luft, back rank defense). Teach when an opponent\'s back rank is weak.' },
+    promotion: { label: 'Pawn Promotion', text: 'Specialize in pawn promotion endgames. Cover: queen promotion, underpromotion (knight for fork, rook/bishop to avoid stalemate), the "square of the pawn" rule, key squares, opposition.' },
+  }
+};
+
+let activePromptKey = null;
+
+function showPrompt(parentKey, topicKey) {
+  const key = parentKey + '/' + topicKey;
+  const panel = document.getElementById('promptPanel');
+
+  // Toggle off if same topic clicked again
+  if (activePromptKey === key) { closePromptPanel(); return; }
+  activePromptKey = key;
+
+  const root = PROMPT_DATA.root;
+  const parent = PROMPT_DATA.parents[parentKey];
+  const topic = PROMPT_DATA.topics[topicKey];
+
+  // Update breadcrumb
+  document.getElementById('promptBreadcrumb').innerHTML =
+    `<span class="crumb root">${root.label}</span><span class="arrow">&rsaquo;</span>` +
+    `<span class="crumb parent">${parent.label}</span><span class="arrow">&rsaquo;</span>` +
+    `<span class="crumb leaf">${topic.label}</span>`;
+
+  // Update prompt chain cards
+  document.getElementById('promptChain').innerHTML =
+    `<div class="prompt-card inherited"><div class="prompt-card-label">Root &middot; ${root.label}</div><div class="prompt-card-text">${root.text}</div></div>` +
+    `<div class="prompt-chain-arrow">&rsaquo;</div>` +
+    `<div class="prompt-card inherited"><div class="prompt-card-label">Parent &middot; ${parent.label}</div><div class="prompt-card-text">${parent.text}</div></div>` +
+    `<div class="prompt-chain-arrow">&rsaquo;</div>` +
+    `<div class="prompt-card own"><div class="prompt-card-label">This Topic &middot; ${topic.label}</div><div class="prompt-card-text">${topic.text}</div></div>`;
+
+  panel.classList.add('visible');
+
+  // Highlight active button
+  document.querySelectorAll('.prompt-icon-btn').forEach(b => b.classList.remove('active'));
+  const activeBtn = document.querySelector(`.subgroup-header[data-subgroup="${topicKey}"][data-parent="${parentKey}"] .prompt-icon-btn`);
+  if (activeBtn) activeBtn.classList.add('active');
+}
+
+function closePromptPanel() {
+  document.getElementById('promptPanel').classList.remove('visible');
+  document.querySelectorAll('.prompt-icon-btn').forEach(b => b.classList.remove('active'));
+  activePromptKey = null;
+  autoPromptEnabled = false; // user closed it, stop auto-tracking
+}
+
+// ── Scroll-based auto-tracking ──
+let autoPromptEnabled = false; // starts OFF — panel is closed by default
+let scrollObserverSetup = false;
+
+function setupScrollObserver() {
+  if (scrollObserverSetup) return;
+  scrollObserverSetup = true;
+
+  const tableWrapper = document.querySelector('#page-table .table-wrapper');
+  if (!tableWrapper) return;
+
+  tableWrapper.addEventListener('scroll', () => {
+    if (!autoPromptEnabled) return;
+    updatePromptFromScroll(tableWrapper);
+  }, { passive: true });
+}
+
+function updatePromptFromScroll(container) {
+  const headers = document.querySelectorAll('#page-table .subgroup-header');
+  const containerRect = container.getBoundingClientRect();
+  const detectionY = containerRect.top + 60; // just below sticky table header
+
+  let currentHeader = null;
+  headers.forEach(header => {
+    if (header.style.display === 'none') return;
+    const rect = header.getBoundingClientRect();
+    if (rect.top <= detectionY) {
+      currentHeader = header;
+    }
+  });
+
+  if (!currentHeader) return;
+  const parentKey = currentHeader.dataset.parent;
+  const topicKey = currentHeader.dataset.subgroup;
+  if (!parentKey || !topicKey) return;
+
+  const key = parentKey + '/' + topicKey;
+  if (key === activePromptKey) return; // no change
+
+  // Crossfade: fade out the chain, update, fade in
+  const chain = document.getElementById('promptChain');
+  chain.style.opacity = '0';
+  setTimeout(() => {
+    updatePromptContent(parentKey, topicKey);
+    chain.style.opacity = '1';
+  }, 150);
+}
+
+// Separated content update from showPrompt so crossfade can use it
+function updatePromptContent(parentKey, topicKey) {
+  const key = parentKey + '/' + topicKey;
+  activePromptKey = key;
+
+  const root = PROMPT_DATA.root;
+  const parent = PROMPT_DATA.parents[parentKey];
+  const topic = PROMPT_DATA.topics[topicKey];
+
+  document.getElementById('promptBreadcrumb').innerHTML =
+    `<span class="crumb root">${root.label}</span><span class="arrow">&rsaquo;</span>` +
+    `<span class="crumb parent">${parent.label}</span><span class="arrow">&rsaquo;</span>` +
+    `<span class="crumb leaf">${topic.label}</span>`;
+
+  document.getElementById('promptChain').innerHTML =
+    `<div class="prompt-card inherited"><div class="prompt-card-label">Root &middot; ${root.label}</div><div class="prompt-card-text">${root.text}</div></div>` +
+    `<div class="prompt-chain-arrow">&rsaquo;</div>` +
+    `<div class="prompt-card inherited"><div class="prompt-card-label">Parent &middot; ${parent.label}</div><div class="prompt-card-text">${parent.text}</div></div>` +
+    `<div class="prompt-chain-arrow">&rsaquo;</div>` +
+    `<div class="prompt-card own"><div class="prompt-card-label">This Topic &middot; ${topic.label}</div><div class="prompt-card-text">${topic.text}</div></div>`;
+
+  // Highlight active button
+  document.querySelectorAll('.prompt-icon-btn').forEach(b => b.classList.remove('active'));
+  const activeBtn = document.querySelector(`.subgroup-header[data-subgroup="${topicKey}"][data-parent="${parentKey}"] .prompt-icon-btn`);
+  if (activeBtn) activeBtn.classList.add('active');
+}
+
+// Override showPrompt — clicking icon opens panel + enables auto-tracking
+const origShowPrompt = showPrompt;
+showPrompt = function(parentKey, topicKey) {
+  const panel = document.getElementById('promptPanel');
+  const key = parentKey + '/' + topicKey;
+
+  // If panel is open and same topic clicked, close it
+  if (panel.classList.contains('visible') && activePromptKey === key) {
+    closePromptPanel();
+    return;
+  }
+
+  // Open panel, enable auto-tracking, update content
+  updatePromptContent(parentKey, topicKey);
+  panel.classList.add('visible');
+  autoPromptEnabled = true;
+  setupScrollObserver();
+};
+
+// Setup observer when switching to table page (but don't auto-open)
+const origShowPage = showPage;
+showPage = function(page) {
+  origShowPage(page);
+  if (page === 'table') {
+    setTimeout(() => setupScrollObserver(), 100);
+  }
+};
+
+// ── Zoom + Drawer ──
+let isZoomed = false;
+let currentNode = null;
+
+function zoomToNode(target) {
+  if (isZoomed) return;
+  isZoomed = true;
+  currentNode = target;
+
+  const inner = document.getElementById('canvasInner');
+  const viewport = document.getElementById('canvasViewport');
+  const drawer = document.getElementById('bottomDrawer');
+  const vignette = document.getElementById('vignette');
+  const focusRing = document.getElementById('focusRing');
+  const edgesSvg = document.getElementById('edgesSvg');
+  const ghostEdges = document.getElementById('ghostEdges');
+  const sourceGhosts = document.getElementById('sourceGhosts');
+  const zoomLabel = document.getElementById('zoomLabel');
+
+  // Get viewport dimensions
+  const vpRect = viewport.getBoundingClientRect();
+  const viewW = vpRect.width;
+  const viewH = vpRect.height;
+
+  // Node center in canvas coords
+  const nodeCenterX = target.offsetLeft + target.offsetWidth / 2;
+  const nodeCenterY = target.offsetTop + target.offsetHeight / 2;
+
+  const scale = 1.4;
+  const drawerHeight = 320;
+  const availableH = viewH - drawerHeight;
+  const tx = viewW / 2 - nodeCenterX * scale;
+  const ty = availableH / 2 - nodeCenterY * scale;
+
+  inner.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+
+  // Fade non-selected
+  document.querySelectorAll('[data-node]').forEach(n => {
+    if (n !== target) n.classList.add('faded');
+  });
+  document.getElementById('node-root').classList.add('faded');
+  target.classList.add('zoomed-selected');
+
+  // Effects
+  vignette.classList.add('active');
+  edgesSvg.classList.add('faded');
+
+  // Focus ring
+  focusRing.style.left = (target.offsetLeft - 6) + 'px';
+  focusRing.style.top = (target.offsetTop - 6) + 'px';
+  focusRing.style.width = (target.offsetWidth + 12) + 'px';
+  focusRing.style.height = (target.offsetHeight + 12) + 'px';
+  focusRing.classList.add('active');
+
+  // Source ghosts (only for Forks node)
+  if (target.dataset.sources) {
+    sourceGhosts.classList.add('visible');
+    ghostEdges.classList.add('visible');
+  }
+
+  // Update drawer content from node
+  const name = target.querySelector('.node-name').textContent;
+  document.getElementById('drawerTitle').textContent = name;
+
+  // Open drawer
+  setTimeout(() => { drawer.classList.add('open'); }, 150);
+
+  // Show zoom label
+  zoomLabel.classList.add('visible');
+  document.getElementById('zoomLabelText').innerHTML =
+    'Viewing: <strong style="color:var(--text-primary)">' + name + '</strong> &middot; Press <kbd style="background:var(--bg-hover);padding:1px 5px;border-radius:3px;font-size:10px;border:1px solid var(--border);font-family:inherit;">Esc</kbd> to zoom out';
+
+  // Hide page indicator
+  document.querySelector('.page-indicator').style.display = 'none';
+}
+
+function zoomOut() {
+  if (!isZoomed) return;
+  isZoomed = false;
+
+  const inner = document.getElementById('canvasInner');
+  const drawer = document.getElementById('bottomDrawer');
+  const vignette = document.getElementById('vignette');
+  const focusRing = document.getElementById('focusRing');
+  const edgesSvg = document.getElementById('edgesSvg');
+  const ghostEdges = document.getElementById('ghostEdges');
+  const sourceGhosts = document.getElementById('sourceGhosts');
+  const zoomLabel = document.getElementById('zoomLabel');
+
+  drawer.classList.remove('open');
+  drawer.style.height = '320px';
+  drawerHeight = 320;
+  document.getElementById('drawerBody').style.display = 'flex';
+  document.getElementById('drawerFull').style.display = 'none';
+
+  sourceGhosts.classList.remove('visible');
+  ghostEdges.classList.remove('visible');
+
+  setTimeout(() => {
+    inner.style.transform = 'translate(0, 0) scale(1)';
+    document.querySelectorAll('[data-node]').forEach(n => {
+      n.classList.remove('faded');
+      n.classList.remove('zoomed-selected');
+    });
+    document.getElementById('node-root').classList.remove('faded');
+    vignette.classList.remove('active');
+    focusRing.classList.remove('active');
+    edgesSvg.classList.remove('faded');
+  }, 100);
+
+  zoomLabel.classList.remove('visible');
+  document.querySelector('.page-indicator').style.display = '';
+  currentNode = null;
+}
+
+// Esc to zoom out
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') zoomOut(); });
+
+// Click canvas background to zoom out
+document.getElementById('canvasViewport').addEventListener('click', (e) => {
+  if (e.target.closest('[data-node]') || e.target.closest('.topic-node.root') || e.target.closest('.source-ghost')) return;
+  if (isZoomed) zoomOut();
+});
+
+// ── Drag-to-resize drawer ──
+const MIN_DRAWER_H = 200;
+const MAX_DRAWER_H = window.innerHeight - 48;
+const SNAP_THRESHOLD = 80;
+let drawerHeight = 320;
+
+(function initDrag() {
+  const handle = document.getElementById('drawerHandle');
+  const drawer = document.getElementById('bottomDrawer');
+  let isDragging = false;
+  let startY = 0;
+  let startH = 0;
+
+  handle.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.drawer-close-btn')) return;
+    isDragging = true;
+    startY = e.clientY;
+    startH = drawer.offsetHeight;
+    drawer.classList.add('no-transition');
+    handle.classList.add('dragging');
+    document.body.style.cursor = 'ns-resize';
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    const dy = startY - e.clientY;
+    const newH = Math.max(MIN_DRAWER_H, Math.min(MAX_DRAWER_H, startH + dy));
+    drawerHeight = newH;
+    drawer.style.height = newH + 'px';
+    updateDrawerLayout();
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!isDragging) return;
+    isDragging = false;
+    drawer.classList.remove('no-transition');
+    handle.classList.remove('dragging');
+    document.body.style.cursor = '';
+    if (drawerHeight > MAX_DRAWER_H - SNAP_THRESHOLD) {
+      drawerHeight = MAX_DRAWER_H;
+      drawer.style.height = MAX_DRAWER_H + 'px';
+    } else if (drawerHeight < MIN_DRAWER_H + SNAP_THRESHOLD) {
+      drawerHeight = MIN_DRAWER_H;
+      drawer.style.height = MIN_DRAWER_H + 'px';
+    }
+    updateDrawerLayout();
+  });
+
+  handle.addEventListener('dblclick', () => {
+    drawer.classList.remove('no-transition');
+    if (drawerHeight >= MAX_DRAWER_H - 10) {
+      drawerHeight = 320;
+    } else {
+      drawerHeight = MAX_DRAWER_H;
+    }
+    drawer.style.height = drawerHeight + 'px';
+    updateDrawerLayout();
+  });
+})();
+
+// ── Switch partial vs full layout based on height ──
+const FULL_THRESHOLD_RATIO = 0.6;
+
+function updateDrawerLayout() {
+  const vh = window.innerHeight;
+  const drawerBody = document.getElementById('drawerBody');
+  const drawerFull = document.getElementById('drawerFull');
+  if (!drawerBody || !drawerFull) return;
+  const isFullView = drawerHeight >= vh * FULL_THRESHOLD_RATIO;
+  drawerBody.style.display = isFullView ? 'none' : 'flex';
+  drawerFull.style.display = isFullView ? 'flex' : 'none';
+}
+
+function switchFullTab(tab) {
+  document.getElementById('fullTabRecords').style.display = tab === 'records' ? '' : 'none';
+  document.getElementById('fullTabSources').style.display = tab === 'sources' ? '' : 'none';
+  document.querySelectorAll('.full-tab').forEach((t, i) => {
+    t.classList.toggle('active', (i === 0 && tab === 'records') || (i === 1 && tab === 'sources'));
+  });
+}
+
+// ═══════════════════════════════════════════════════
+// IMPROVEMENT: Knowledge Source Selection
+// ═══════════════════════════════════════════════════
+const KS_DATA = {
+  'chess-tactics': { title: 'chess-tactics-and-combinations.pdf', meta: '646 pages \u00b7 12.4 MB \u00b7 Extracted via Docling Serve', parts: '10', topics: '7', chars: '84K' },
+  'strategy-guide': { title: 'middlegame-strategy-guide.pdf', meta: '124 pages \u00b7 3.2 MB \u00b7 Extracted via Docling Serve', parts: '6', topics: '2', chars: '28K' },
+  'opening-theory': { title: 'chess-opening-theory.pdf', meta: '86 pages \u00b7 1.8 MB \u00b7 Extracted via pymupdf', parts: '3', topics: '0', chars: '9K' },
+};
+
+function selectKnowledgeSource(key) {
+  const allView = document.getElementById('allSourcesView');
+  const singleView = document.getElementById('singleDocView');
+  const breadcrumb = document.getElementById('ksBreadcrumb');
+
+  // Update sidebar active state
+  document.querySelectorAll('#page-knowledge .sidebar [data-ks]').forEach(item => {
+    item.classList.toggle('active', item.dataset.ks === key);
+  });
+
+  if (key === 'all') {
+    allView.style.display = '';
+    singleView.style.display = 'none';
+    breadcrumb.textContent = 'All Sources';
+  } else {
+    allView.style.display = 'none';
+    singleView.style.display = '';
+    const data = KS_DATA[key];
+    if (data) {
+      document.getElementById('sdvTitle').textContent = data.title;
+      document.getElementById('sdvMeta').textContent = data.meta;
+      document.getElementById('sdvParts').textContent = data.parts;
+      document.getElementById('sdvTopics').textContent = data.topics;
+      document.getElementById('sdvChars').textContent = data.chars;
+      breadcrumb.textContent = data.title;
+    }
+  }
+}
+
+function selectPart(el) {
+  document.querySelectorAll('#singleDocView .part-item').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+}
+
+// Initialize: chess-tactics selected by default
+selectKnowledgeSource('chess-tactics');
+
+// ═══════════════════════════════════════════════════
+// IMPROVEMENT: Mockup State Controls
+// ═══════════════════════════════════════════════════
+let currentMockupState = 'normal';
+
+function setMockupState(state) {
+  currentMockupState = state;
+  // Update control buttons
+  document.querySelectorAll('[data-state-opt]').forEach(opt => {
+    opt.classList.toggle('active', opt.dataset.stateOpt === state);
+  });
+
+  const emptyOverlay = document.getElementById('emptyCanvasState');
+  const allNodes = document.querySelectorAll('.topic-node, .topic-node.root');
+  const canvasEdges = document.getElementById('edgesSvg');
+  const flowStages = document.querySelectorAll('#page-canvas .flow-stage');
+  const flowArrows = document.querySelectorAll('#page-canvas .flow-arrow');
+
+  // Reset all states
+  emptyOverlay.classList.remove('visible');
+  allNodes.forEach(n => { n.style.display = ''; n.style.visibility = ''; });
+  if (canvasEdges) canvasEdges.style.display = '';
+  flowStages.forEach(s => { s.classList.remove('empty-stage', 'extracting'); });
+  flowArrows.forEach(a => a.classList.remove('empty-arrow'));
+
+  if (state === 'empty') {
+    emptyOverlay.classList.add('visible');
+    allNodes.forEach(n => { n.style.visibility = 'hidden'; });
+    if (canvasEdges) canvasEdges.style.display = 'none';
+    // Make flow banner show empty state
+    flowStages.forEach((s, i) => {
+      s.classList.add('empty-stage');
+      const val = s.querySelector('.stage-value');
+      const detail = s.querySelector('.stage-detail');
+      if (i === 0) { val.textContent = '0'; detail.textContent = 'No documents yet'; }
+      else if (i === 1) { val.textContent = '—'; detail.textContent = 'waiting for extraction'; }
+      else if (i === 2) { val.textContent = '—'; detail.textContent = 'waiting for topics'; }
+      else { val.textContent = '—'; detail.textContent = 'waiting for generation'; }
+    });
+    flowArrows.forEach(a => a.classList.add('empty-arrow'));
+  }
+  else if (state === 'extracting') {
+    // Show extraction in progress — Documents done, Extracted animating, rest waiting
+    flowStages.forEach((s, i) => {
+      const val = s.querySelector('.stage-value');
+      const detail = s.querySelector('.stage-detail');
+      if (i === 0) { val.textContent = '1'; detail.textContent = 'chess-tactics.pdf'; }
+      else if (i === 1) {
+        s.classList.add('extracting');
+        val.textContent = '7...';
+        detail.innerHTML = '<span class="extracting-label">extracting</span> 5 text &middot; 1 table &middot; processing...';
+      }
+      else if (i === 2) { s.classList.add('empty-stage'); val.textContent = '—'; detail.textContent = 'waiting for extraction'; }
+      else { s.classList.add('empty-stage'); val.textContent = '—'; detail.textContent = 'waiting for topics'; }
+    });
+    flowArrows.forEach((a, i) => { if (i > 0) a.classList.add('empty-arrow'); });
+  }
+  else {
+    // Normal — restore values
+    flowStages.forEach((s, i) => {
+      const val = s.querySelector('.stage-value');
+      const detail = s.querySelector('.stage-detail');
+      if (i === 0) { val.textContent = '3'; detail.textContent = 'chess-tactics.pdf, strategy-guide.pdf, +1'; }
+      else if (i === 1) { val.textContent = '19'; detail.innerHTML = '14 text &middot; 3 tables &middot; 2 images'; }
+      else if (i === 2) { val.textContent = '12'; detail.innerHTML = '5 categories &middot; 7 leaf topics'; }
+      else { val.textContent = '150'; detail.innerHTML = '0.82 avg quality &middot; 12.4k tokens'; }
+    });
+  }
+}
+
+function toggleMockupControls() {
+  document.querySelector('.mockup-controls').classList.toggle('collapsed');
+}
+
+// ═══════════════════════════════════════════════════
+// IMPROVEMENT: Record Detail Sidebar
+// ═══════════════════════════════════════════════════
+function openRecordDetail(row) {
+  const cells = row.querySelectorAll('td');
+  if (cells.length < 5) return;
+
+  const sidebar = document.getElementById('recordDetailSidebar');
+  document.getElementById('rdsRecordNum').textContent = cells[0].textContent;
+  document.getElementById('rdsUserMsg').textContent = cells[1].textContent;
+  document.getElementById('rdsAsstMsg').textContent = cells[2].textContent;
+  const scoreEl = cells[3].querySelector('.score-pill');
+  document.getElementById('rdsScore').textContent = scoreEl ? scoreEl.textContent : '—';
+  document.getElementById('rdsSource').textContent = cells[4].textContent;
+
+  // Get topic from parent subgroup
+  const topic = row.dataset.topic || 'Unknown';
+  const topicLabels = { forks:'Forks', pins:'Pins and Skewers', discovered:'Discovered Attacks',
+    sacrifices:'Sacrifices', overloading:'Overloading', backrank:'Back Rank Mates', promotion:'Pawn Promotion' };
+  document.getElementById('rdsTopic').textContent = topicLabels[topic] || topic;
+
+  sidebar.classList.add('open');
+
+  // Highlight row
+  document.querySelectorAll('.record-row.selected').forEach(r => r.classList.remove('selected'));
+  row.classList.add('selected');
+}
+
+function closeRecordDetail() {
+  document.getElementById('recordDetailSidebar').classList.remove('open');
+  document.querySelectorAll('.record-row.selected').forEach(r => r.classList.remove('selected'));
+}
+
+// Add click handlers to record rows
+document.querySelectorAll('.record-row').forEach(row => {
+  row.style.cursor = 'pointer';
+  row.addEventListener('click', () => openRecordDetail(row));
+});
+
+// Close on Escape
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeRecordDetail();
+  }
+});
+
+// ═══════════════════════════════════════════════════
+// IMPROVEMENT: Keyboard Shortcuts Help
+// ═══════════════════════════════════════════════════
+function toggleKbdHelp() {
+  document.getElementById('kbdHelp').classList.toggle('visible');
+}
+
+// Keyboard navigation
+document.addEventListener('keydown', (e) => {
+  // ? to toggle keyboard help
+  if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    toggleKbdHelp();
+    return;
+  }
+  // 1/2/3 to switch pages
+  if (e.key === '1' && !e.ctrlKey && !e.metaKey && !e.target.matches('input')) showPage('canvas');
+  if (e.key === '2' && !e.ctrlKey && !e.metaKey && !e.target.matches('input')) showPage('knowledge');
+  if (e.key === '3' && !e.ctrlKey && !e.metaKey && !e.target.matches('input')) showPage('table');
+});
+</script>
+
+<!-- Mockup State Controls Panel -->
+<div class="mockup-controls" id="mockupControls">
+  <div class="mc-header" onclick="toggleMockupControls()">
+    <span class="mc-title">Mockup Controls</span>
+    <button class="mc-toggle-btn">&mdash;</button>
+  </div>
+  <div class="mc-body">
+    <div class="mc-group">
+      <div class="mc-group-label">Dataset State</div>
+      <div class="mc-options">
+        <div class="mc-opt active" data-state-opt="normal" onclick="setMockupState('normal')">Normal</div>
+        <div class="mc-opt" data-state-opt="empty" onclick="setMockupState('empty')">Empty</div>
+        <div class="mc-opt" data-state-opt="extracting" onclick="setMockupState('extracting')">Extracting</div>
+      </div>
+    </div>
+    <div class="mc-divider"></div>
+    <div class="mc-group">
+      <div class="mc-group-label">Quick Navigation</div>
+      <div class="mc-options">
+        <div class="mc-opt" onclick="showPage('canvas')">1 Canvas</div>
+        <div class="mc-opt" onclick="showPage('knowledge')">2 Sources</div>
+        <div class="mc-opt" onclick="showPage('table')">3 Table</div>
+      </div>
+    </div>
+    <div class="mc-divider"></div>
+    <div class="mc-group">
+      <div class="mc-group-label" style="color:var(--text-muted);font-size:8px;letter-spacing:0">
+        Press <kbd style="background:var(--bg-tertiary);padding:1px 4px;border-radius:2px;font-size:9px;border:1px solid var(--border)">1</kbd>
+        <kbd style="background:var(--bg-tertiary);padding:1px 4px;border-radius:2px;font-size:9px;border:1px solid var(--border)">2</kbd>
+        <kbd style="background:var(--bg-tertiary);padding:1px 4px;border-radius:2px;font-size:9px;border:1px solid var(--border)">3</kbd>
+        to switch pages &middot;
+        <kbd style="background:var(--bg-tertiary);padding:1px 4px;border-radius:2px;font-size:9px;border:1px solid var(--border)">?</kbd>
+        for all shortcuts
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Keyboard Shortcuts Help -->
+<div class="kbd-help" id="kbdHelp">
+  <div class="kbd-help-title">Keyboard Shortcuts</div>
+  <div class="kbd-row"><span class="label">Canvas view</span><kbd>1</kbd></div>
+  <div class="kbd-row"><span class="label">Sources view</span><kbd>2</kbd></div>
+  <div class="kbd-row"><span class="label">Table view</span><kbd>3</kbd></div>
+  <div style="height:1px;background:var(--border-subtle);margin:6px 0"></div>
+  <div class="kbd-row"><span class="label">Zoom out / Close</span><kbd>Esc</kbd></div>
+  <div class="kbd-row"><span class="label">This help</span><kbd>?</kbd></div>
+</div>
+
+<!-- Keyboard Help Trigger -->
+<button class="kbd-trigger" onclick="toggleKbdHelp()" title="Keyboard shortcuts (?)">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h0M10 10h0M14 10h0M18 10h0M8 14h8"/></svg>
+</button>
+
+</body>
+</html>
