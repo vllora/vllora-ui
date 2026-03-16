@@ -321,6 +321,19 @@ async function evaluate(input) {
 
 The grader can use `__langdb_call_llm_as_judge_obj({prompt, max_tokens})` for subjective quality assessment. See `reference/grader-writing.md` for patterns and `templates/grader-template.js` for a starter.
 
+**After writing the grader, dry-run it against a sample row** to verify it executes without errors:
+
+```bash
+uv run scripts/dry_run_grader.py \
+  --workflow-id $WORKFLOW_ID \
+  --script grader.js \
+  --row '{"messages": [{"role": "system", "content": "You are..."}, {"role": "user", "content": "What is X?"}, {"role": "assistant", "content": "X is..."}]}'
+```
+
+This sends the grader + one row to the gateway's QuickJS sandbox and returns score/reason/errors instantly — no dataset upload needed. Use it to confirm the script compiles, check scoring logic on a known example, and iterate before committing to a full evaluation.
+
+**Note:** The sandbox does NOT support `console.log` — use the `reason` field for debug output. If the dry-run fails, the reason contains the JS error.
+
 ### Step 5.5: Validate Before Upload
 
 ```bash
@@ -426,3 +439,4 @@ Run with `uv run` (PEP 723 — dependencies declared inline).
 | `scripts/run_evaluation.py` | Create eval job, poll until complete, save results |
 | `scripts/start_training.py` | Start training job, poll until complete, save response |
 | `scripts/chat_completion.py` | Call LLM via gateway — for generating prompts, variants, validation |
+| `scripts/dry_run_grader.py` | Dry-run grader on a single row — instant syntax/logic check |

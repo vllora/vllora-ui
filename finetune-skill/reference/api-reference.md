@@ -38,6 +38,7 @@ All endpoints use JSON unless noted. Auth via `Authorization: Bearer <token>` he
 | **Evaluator** (scoped to workflow) | | | |
 | 21 | PATCH | `/finetune/workflows/{id}/evaluator` | Update evaluator script |
 | 22 | GET | `/finetune/workflows/{id}/evaluator/versions` | Evaluator version history |
+| 23 | POST | `/finetune/workflows/{id}/evaluator/dry-run` | Test grader on single row |
 | **Dataset Package** (workflow → cloud) | | | |
 | 23 | POST | `/finetune/workflows/{id}/dataset/upload` | Package records+topics+evaluator → cloud JSONL |
 | 24 | POST | `/finetune/workflows/{id}/dataset/analytics/dry-run` | Dataset analytics (workflow-scoped) |
@@ -163,6 +164,29 @@ curl -X PATCH http://localhost:9090/finetune/workflows/WORKFLOW_ID/evaluator \
 ### GET `/finetune/workflows/{workflow_id}/evaluator/versions`
 
 View evaluator version history with git-style diffs between consecutive versions.
+
+### POST `/finetune/workflows/{workflow_id}/evaluator/dry-run`
+
+Test a grader script against a single row without creating an evaluation run.
+
+```bash
+curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/evaluator/dry-run \
+  -H "Content-Type: application/json" \
+  -d '{"script": "async function evaluate(input) { ... }", "row": {"messages": [...]}}'
+```
+
+**Request body** (JSON):
+| Field | Type | Description |
+|-------|------|-------------|
+| `script` | string | Full JS source of the grader function |
+| `row` | object | Single row with `messages` array |
+
+**Response:**
+```json
+{"score": 0.8, "reason": "Good response", "logs": [], "is_success": true}
+```
+
+**Notes:** The QuickJS sandbox does NOT support `console.log` — use the `reason` field for debug output.
 
 ---
 

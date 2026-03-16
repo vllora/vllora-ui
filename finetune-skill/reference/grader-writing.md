@@ -274,13 +274,26 @@ Reward hacking happens when the model finds shortcuts that score well without ge
 
 ## Testing Your Grader
 
-Before deploying, test the grader mentally on these scenarios:
+**Dry-run against sample rows** to verify before deploying:
 
+```bash
+# Test with a good response — should score high
+uv run scripts/dry_run_grader.py --workflow-id $WORKFLOW_ID --script grader.js \
+  --row '{"messages": [{"role": "user", "content": "..."}, {"role": "assistant", "content": "<good response>"}]}'
+
+# Test with a bad response — should score low
+uv run scripts/dry_run_grader.py --workflow-id $WORKFLOW_ID --script grader.js \
+  --row '{"messages": [{"role": "user", "content": "..."}, {"role": "assistant", "content": "<bad response>"}]}'
+```
+
+Verify across these scenarios:
 1. **Perfect response**: Should score 0.8-1.0
 2. **Mediocre response**: Should score 0.4-0.6
 3. **Bad response**: Should score 0.0-0.2
 4. **Empty response**: Should score 0.0
 5. **Off-topic response**: Should score low
-6. **Correct but rude response**: Should score moderately (good info, bad tone)
+6. **Correct but rude response**: Should score moderately
 
 If your grader doesn't differentiate these scenarios, revise the criteria.
+
+**Note:** The sandbox does NOT support `console.log` — use the `reason` field for debug output.
