@@ -44,7 +44,7 @@ import type { ImportMode } from "@/components/datasets/IngestDataDialog";
 // ============================================================================
 
 /** View mode within records section */
-export type ViewMode = "canvas" | "table";
+export type ViewMode = "canvas" | "sources" | "table";
 
 /** Active section tab */
 export type DatasetSection = "overview" | "records" | "evaluator" | "jobs" | "deploy";

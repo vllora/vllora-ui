@@ -572,7 +572,7 @@ export function TopicTreeNodeRow({
   }, [datasetObjective, hasChildren, currentPath, node.name, currentDescriptions, normalizedObjective, currentSegments]);
 
   return (
-    <div className="relative">
+    <div className="relative" data-topic-group={node.id || node.name}>
       <div ref={headerRef}>
         <TopicNodeHeader
           path={currentPath}

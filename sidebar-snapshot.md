@@ -1,0 +1,100 @@
+- generic [ref=e2]:
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - img "vLLora" [ref=e8] [cursor=pointer]
+      - navigation [ref=e9]:
+        - list [ref=e10]:
+          - listitem [ref=e11]:
+            - link [active] [ref=e12] [cursor=pointer]:
+              - /url: /
+              - img [ref=e13]
+          - listitem [ref=e16]:
+            - link [ref=e17] [cursor=pointer]:
+              - /url: /chat
+              - img [ref=e18]
+          - listitem [ref=e20]:
+            - link [ref=e21] [cursor=pointer]:
+              - /url: /finetune
+              - img [ref=e22]
+      - list [ref=e25]:
+        - listitem [ref=e26]:
+          - link [ref=e27] [cursor=pointer]:
+            - /url: /settings
+            - img [ref=e28]
+    - generic [ref=e31]:
+      - banner [ref=e276]:
+        - generic [ref=e277]:
+          - button "Default Project Default" [ref=e279] [cursor=pointer]:
+            - generic [ref=e280]:
+              - img [ref=e281]
+              - generic [ref=e283]: Default Project
+              - generic [ref=e284]: Default
+            - img [ref=e285]
+          - generic [ref=e287]:
+            - button "Base URL Information" [ref=e288] [cursor=pointer]:
+              - img [ref=e289]
+            - link "785" [ref=e291] [cursor=pointer]:
+              - /url: https://github.com/vllora/vllora
+              - generic [ref=e292]:
+                - img [ref=e293]
+                - generic [ref=e295]: "785"
+            - link "Join our Slack" [ref=e296] [cursor=pointer]:
+              - /url: https://join.slack.com/t/vllora/shared_invite/zt-2haf5kj6a-d7NX6TFJUPX45w~Ag4dzlg
+              - generic [ref=e297]:
+                - img [ref=e298]
+                - generic [ref=e300]: Join our Slack
+      - main [ref=e57]:
+        - generic [ref=e303]:
+          - generic [ref=e304]:
+            - button "Finetune Studio Build custom AI models" [ref=e305] [cursor=pointer]:
+              - generic [ref=e306]:
+                - img [ref=e307]
+                - generic [ref=e309]: Finetune Studio
+              - generic [ref=e310]: Build custom AI models
+            - button "LLM Gateway Route and monitor 200+ models" [ref=e311] [cursor=pointer]:
+              - generic [ref=e312]:
+                - img [ref=e313]
+                - generic [ref=e319]: LLM Gateway
+              - generic [ref=e320]: Route and monitor 200+ models
+          - generic [ref=e321]:
+            - generic [ref=e322]:
+              - heading "From idea to finetuned model" [level=1] [ref=e323]
+              - paragraph [ref=e324]: Define the vision. We handle the pipeline.
+            - generic [ref=e325]:
+              - generic [ref=e329]:
+                - generic [ref=e330]:
+                  - img [ref=e332]
+                  - textbox "Describe what you want your model to do... e.g. 'A specialized assistant for React performance optimization that speaks in a concise, technical tone.'" [ref=e335]
+                - generic [ref=e336]:
+                  - generic [ref=e337]:
+                    - button "Attach reference documents (PDFs, text files)" [ref=e338] [cursor=pointer]:
+                      - img [ref=e339]
+                    - button "Voice input" [ref=e341] [cursor=pointer]:
+                      - img [ref=e342]
+                  - button "Start Finetune" [disabled]:
+                    - text: Start Finetune
+                    - img
+              - generic [ref=e345]:
+                - generic [ref=e346]: Ideas to get started
+                - generic [ref=e347]:
+                  - button "Chess Tutor Assistant" [ref=e348] [cursor=pointer]:
+                    - img [ref=e349]
+                    - text: Chess Tutor Assistant
+                  - button "Financial Report Summarizer" [ref=e351] [cursor=pointer]:
+                    - img [ref=e352]
+                    - text: Financial Report Summarizer
+                  - button "Code Generation Assistant" [ref=e354] [cursor=pointer]:
+                    - img [ref=e355]
+                    - text: Code Generation Assistant
+            - generic [ref=e359]:
+              - button "Real conversations Build from live LLM calls" [ref=e360] [cursor=pointer]:
+                - img [ref=e362]
+                - generic [ref=e368]:
+                  - generic [ref=e369]: Real conversations
+                  - generic [ref=e370]: Build from live LLM calls
+              - button "Documentation Guides and API reference" [ref=e371] [cursor=pointer]:
+                - img [ref=e373]
+                - generic [ref=e375]:
+                  - generic [ref=e376]: Documentation
+                  - generic [ref=e377]: Guides and API reference
+  - region "Notifications alt+T"

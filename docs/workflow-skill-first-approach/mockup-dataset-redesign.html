@@ -1154,11 +1154,13 @@
   .part-item-links {
     display: flex; gap: 3px; flex-shrink: 0;
   }
-  .part-link-dot {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: var(--accent); opacity: 0.4;
+  .topic-link-badge {
+    font-size: 9px; font-weight: 500; padding: 1px 6px;
+    border-radius: 10px; white-space: nowrap;
   }
-  .part-link-dot.active { opacity: 1; }
+  .topic-link-badge.high { background: rgba(16,185,129,0.15); color: var(--emerald); }
+  .topic-link-badge.mid { background: var(--accent-dim); color: var(--accent); }
+  .topic-link-badge.low { background: var(--bg-tertiary); color: var(--text-dim); }
 
   .doc-topics-linked {
     margin-top: 10px; padding-top: 10px;
@@ -1534,6 +1536,129 @@
     font-family: 'SF Mono', 'Fira Code', monospace;
     max-height: 120px; overflow-y: auto;
   }
+
+  /* ── Sidebar Topic Hierarchy ── */
+  .sidebar-item.parent {
+    padding-left: 24px;
+    font-weight: 500;
+    gap: 6px;
+  }
+  .sidebar-item.parent .chevron {
+    font-size: 8px;
+    width: 12px;
+    text-align: center;
+    transition: transform 0.15s;
+    color: var(--text-dim);
+  }
+  .sidebar-item.child {
+    padding-left: 52px;
+    font-size: 12px;
+  }
+
+  /* ── Page 4: Topic Detail ── */
+  #page-topic-detail {
+    display: none;
+    grid-template-columns: 56px 240px 1fr;
+    grid-template-rows: 48px 1fr;
+  }
+  .topic-detail-header {
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .topic-breadcrumb {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .topic-detail-header h2 {
+    font-size: 18px;
+    font-weight: 700;
+    margin-top: 2px;
+  }
+  .topic-detail-stats {
+    display: flex;
+    gap: 24px;
+  }
+  .td-stat { text-align: center; }
+  .td-stat .val { font-size: 18px; font-weight: 600; display: block; }
+  .td-stat .lbl { font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .topic-tabs {
+    display: flex;
+    gap: 0;
+    padding: 0 24px;
+    border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+  }
+  .topic-tab {
+    padding: 10px 16px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    border: none;
+    background: none;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+  }
+  .topic-tab:hover { color: var(--text-secondary); }
+  .topic-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .linked-sources-grid {
+    padding: 20px 24px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .linked-source-card {
+    background: var(--bg-tertiary);
+    border-radius: 10px;
+    padding: 16px;
+    border: 1px solid var(--border-subtle);
+    transition: all 0.15s;
+  }
+  .linked-source-card:hover { border-color: var(--border); }
+  .ls-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .ls-icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    background: var(--red-dim);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+  }
+  .ls-title { font-size: 13px; font-weight: 600; }
+  .ls-meta { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+  .ls-preview {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .ls-topics {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .ls-topic-tag {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--accent-dim);
+    color: var(--accent);
+  }
+  .topic-tab-content { flex: 1; overflow-y: auto; min-height: 0; }
+  .topic-tab-content.hidden { display: none; }
 </style>
 </head>
 <body>
@@ -1564,12 +1689,6 @@
       <span class="sep">/</span>
       <span class="current">Chess Tutor Assistant</span>
     </div>
-    <div class="spacer"></div>
-    <div class="view-toggle">
-      <button class="active" onclick="showPage('canvas')">Canvas</button>
-      <button onclick="showPage('knowledge')">Sources</button>
-      <button onclick="showPage('table')">Table</button>
-    </div>
   </div>
 
   <!-- Sidebar -->
@@ -1598,15 +1717,31 @@
         <span>&#128200;</span> All Topics
         <span class="badge">150</span>
       </div>
-      <div class="sidebar-item nested">Forks <span class="badge">14</span></div>
-      <div class="sidebar-item nested">Pins and Skewers <span class="badge">12</span></div>
-      <div class="sidebar-item nested">Discovered Attacks <span class="badge">8</span></div>
-      <div class="sidebar-item nested">Sacrifices <span class="badge">18</span></div>
-      <div class="sidebar-item nested">Overloading <span class="badge">10</span></div>
-      <div class="sidebar-item nested">Opening Principles <span class="badge">25</span></div>
-      <div class="sidebar-item nested">Back Rank Mates <span class="badge">22</span></div>
-      <div class="sidebar-item nested">Pawn Promotion <span class="badge">16</span></div>
-      <div class="sidebar-item nested">Positional Themes <span class="badge">25</span></div>
+      <div class="sidebar-item parent" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.style.display = this.classList.contains('collapsed') ? 'none' : 'block'">
+        <span class="chevron">&#9662;</span> Basic Tactical Patterns <span class="badge">62</span>
+      </div>
+      <div class="sidebar-children">
+        <div class="sidebar-item child">Forks <span class="badge">14</span></div>
+        <div class="sidebar-item child">Pins and Skewers <span class="badge">12</span></div>
+        <div class="sidebar-item child">Discovered Attacks <span class="badge">8</span></div>
+        <div class="sidebar-item child">Sacrifices <span class="badge">18</span></div>
+        <div class="sidebar-item child" onclick="showPage('topic-detail')">Overloading <span class="badge">10</span></div>
+      </div>
+      <div class="sidebar-item parent" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.style.display = this.classList.contains('collapsed') ? 'none' : 'block'">
+        <span class="chevron">&#9662;</span> Advanced Combinations <span class="badge">48</span>
+      </div>
+      <div class="sidebar-children">
+        <div class="sidebar-item child">Opening Principles <span class="badge">25</span></div>
+        <div class="sidebar-item child">Positional Themes <span class="badge">23</span></div>
+      </div>
+      <div class="sidebar-item parent" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.style.display = this.classList.contains('collapsed') ? 'none' : 'block'">
+        <span class="chevron">&#9662;</span> Endgame &amp; Mating <span class="badge">40</span>
+      </div>
+      <div class="sidebar-children">
+        <div class="sidebar-item child">Back Rank Mates <span class="badge">22</span></div>
+        <div class="sidebar-item child">Pawn Promotion <span class="badge">16</span></div>
+        <div class="sidebar-item child">Test Topic <span class="badge">2</span></div>
+      </div>
     </div>
 
     <div class="sidebar-divider"></div>
@@ -2043,12 +2178,6 @@
       <span class="sep">/</span>
       <span class="current" id="ksBreadcrumb">chess-tactics.pdf</span>
     </div>
-    <div class="spacer"></div>
-    <div class="view-toggle">
-      <button onclick="showPage('canvas')">Canvas</button>
-      <button class="active" onclick="showPage('knowledge')">Sources</button>
-      <button onclick="showPage('table')">Table</button>
-    </div>
   </div>
 
   <!-- Sidebar -->
@@ -2078,6 +2207,31 @@
       <div class="sidebar-item" onclick="showPage('canvas')">
         <span>&#128200;</span> All Topics
         <span class="badge">150</span>
+      </div>
+      <div class="sidebar-item parent" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.style.display = this.classList.contains('collapsed') ? 'none' : 'block'">
+        <span class="chevron">&#9662;</span> Basic Tactical Patterns <span class="badge">62</span>
+      </div>
+      <div class="sidebar-children">
+        <div class="sidebar-item child">Forks <span class="badge">14</span></div>
+        <div class="sidebar-item child">Pins and Skewers <span class="badge">12</span></div>
+        <div class="sidebar-item child">Discovered Attacks <span class="badge">8</span></div>
+        <div class="sidebar-item child">Sacrifices <span class="badge">18</span></div>
+        <div class="sidebar-item child" onclick="showPage('topic-detail')">Overloading <span class="badge">10</span></div>
+      </div>
+      <div class="sidebar-item parent" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.style.display = this.classList.contains('collapsed') ? 'none' : 'block'">
+        <span class="chevron">&#9662;</span> Advanced Combinations <span class="badge">48</span>
+      </div>
+      <div class="sidebar-children">
+        <div class="sidebar-item child">Opening Principles <span class="badge">25</span></div>
+        <div class="sidebar-item child">Positional Themes <span class="badge">23</span></div>
+      </div>
+      <div class="sidebar-item parent" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.style.display = this.classList.contains('collapsed') ? 'none' : 'block'">
+        <span class="chevron">&#9662;</span> Endgame &amp; Mating <span class="badge">40</span>
+      </div>
+      <div class="sidebar-children">
+        <div class="sidebar-item child">Back Rank Mates <span class="badge">22</span></div>
+        <div class="sidebar-item child">Pawn Promotion <span class="badge">16</span></div>
+        <div class="sidebar-item child">Test Topic <span class="badge">2</span></div>
       </div>
     </div>
   </div>
@@ -2224,7 +2378,7 @@
                   <div class="part-item-title">Introduction</div>
                   <div class="part-item-detail">pp. 1-8 &middot; 2.1K chars</div>
                 </div>
-                <div class="part-item-links"><span class="part-link-dot"></span></div>
+                <div class="part-item-links"></div>
               </div>
               <div class="part-item">
                 <div class="part-type-icon text">T</div>
@@ -2232,7 +2386,7 @@
                   <div class="part-item-title">ABC of Tactics</div>
                   <div class="part-item-detail">pp. 9-22 &middot; 8.4K chars</div>
                 </div>
-                <div class="part-item-links"><span class="part-link-dot active"></span><span class="part-link-dot active"></span></div>
+                <div class="part-item-links"><span class="topic-link-badge mid">2 topics</span></div>
               </div>
             </div>
             <div class="part-outline-section">
@@ -2246,7 +2400,7 @@
                   <div class="part-item-title">Forks</div>
                   <div class="part-item-detail">pp. 28-35 &middot; 12.3K chars &middot; Chapter 3.1</div>
                 </div>
-                <div class="part-item-links"><span class="part-link-dot active"></span><span class="part-link-dot active"></span><span class="part-link-dot active"></span></div>
+                <div class="part-item-links"><span class="topic-link-badge high">3 topics</span></div>
               </div>
               <div class="part-item">
                 <div class="part-type-icon text">T</div>
@@ -2254,7 +2408,7 @@
                   <div class="part-item-title">Pins and Skewers</div>
                   <div class="part-item-detail">pp. 36-48 &middot; 9.7K chars &middot; Chapter 3.2</div>
                 </div>
-                <div class="part-item-links"><span class="part-link-dot active"></span><span class="part-link-dot active"></span></div>
+                <div class="part-item-links"><span class="topic-link-badge mid">2 topics</span></div>
               </div>
               <div class="part-item">
                 <div class="part-type-icon text">T</div>
@@ -2262,7 +2416,7 @@
                   <div class="part-item-title">Discovered Attacks</div>
                   <div class="part-item-detail">pp. 49-58 &middot; 7.2K chars &middot; Chapter 3.3</div>
                 </div>
-                <div class="part-item-links"><span class="part-link-dot active"></span></div>
+                <div class="part-item-links"><span class="topic-link-badge low">1 topic</span></div>
               </div>
               <div class="part-item">
                 <div class="part-type-icon text">T</div>
@@ -2270,7 +2424,7 @@
                   <div class="part-item-title">Overloading</div>
                   <div class="part-item-detail">pp. 59-66 &middot; 5.1K chars &middot; Chapter 3.4</div>
                 </div>
-                <div class="part-item-links"><span class="part-link-dot active"></span></div>
+                <div class="part-item-links"><span class="topic-link-badge low">1 topic</span></div>
               </div>
             </div>
             <div class="part-outline-section">
@@ -2284,7 +2438,7 @@
                   <div class="part-item-title">Combinations</div>
                   <div class="part-item-detail">pp. 72-95 &middot; 18.6K chars</div>
                 </div>
-                <div class="part-item-links"><span class="part-link-dot active"></span><span class="part-link-dot active"></span></div>
+                <div class="part-item-links"><span class="topic-link-badge mid">2 topics</span></div>
               </div>
               <div class="part-item">
                 <div class="part-type-icon text">T</div>
@@ -2292,7 +2446,7 @@
                   <div class="part-item-title">Checkmate Patterns</div>
                   <div class="part-item-detail">pp. 96-120 &middot; 14.2K chars</div>
                 </div>
-                <div class="part-item-links"><span class="part-link-dot active"></span><span class="part-link-dot active"></span></div>
+                <div class="part-item-links"><span class="topic-link-badge mid">2 topics</span></div>
               </div>
               <div class="part-item">
                 <div class="part-type-icon table">&#9638;</div>
@@ -2300,7 +2454,7 @@
                   <div class="part-item-title">Opening Index</div>
                   <div class="part-item-detail">pp. 121-124 &middot; 3.8K chars &middot; 42 rows</div>
                 </div>
-                <div class="part-item-links"><span class="part-link-dot"></span></div>
+                <div class="part-item-links"></div>
               </div>
               <div class="part-item">
                 <div class="part-type-icon text">T</div>
@@ -2345,7 +2499,7 @@
                 <div class="part-item-title">Pawn Structure</div>
                 <div class="part-item-detail">pp. 1-22 &middot; 11.2K chars</div>
               </div>
-              <div class="part-item-links"><span class="part-link-dot active"></span></div>
+              <div class="part-item-links"><span class="topic-link-badge low">1 topic</span></div>
             </div>
             <div class="part-item">
               <div class="part-type-icon table">&#9638;</div>
@@ -2361,7 +2515,7 @@
                 <div class="part-item-title">Piece Activity</div>
                 <div class="part-item-detail">pp. 25-48 &middot; 8.4K chars</div>
               </div>
-              <div class="part-item-links"><span class="part-link-dot active"></span></div>
+              <div class="part-item-links"><span class="topic-link-badge low">1 topic</span></div>
             </div>
           </div>
           <div class="doc-topics-linked">
@@ -2494,7 +2648,7 @@
                     <div class="part-item-title">Introduction</div>
                     <div class="part-item-detail">pp. 1-8 &middot; 2.1K chars</div>
                   </div>
-                  <div class="part-item-links"><span class="part-link-dot"></span></div>
+                  <div class="part-item-links"></div>
                 </div>
                 <div class="part-item" onclick="selectPart(this)">
                   <div class="part-type-icon text">T</div>
@@ -2502,7 +2656,7 @@
                     <div class="part-item-title">ABC of Tactics</div>
                     <div class="part-item-detail">pp. 9-22 &middot; 8.4K chars</div>
                   </div>
-                  <div class="part-item-links"><span class="part-link-dot active"></span><span class="part-link-dot active"></span></div>
+                  <div class="part-item-links"><span class="topic-link-badge mid">2 topics</span></div>
                 </div>
               </div>
               <div class="part-outline-section">
@@ -2516,7 +2670,7 @@
                     <div class="part-item-title">Forks</div>
                     <div class="part-item-detail">pp. 28-35 &middot; 12.3K chars &middot; Chapter 3.1</div>
                   </div>
-                  <div class="part-item-links"><span class="part-link-dot active"></span><span class="part-link-dot active"></span><span class="part-link-dot active"></span></div>
+                  <div class="part-item-links"><span class="topic-link-badge high">3 topics</span></div>
                 </div>
                 <div class="part-item" onclick="selectPart(this)">
                   <div class="part-type-icon text">T</div>
@@ -2524,7 +2678,7 @@
                     <div class="part-item-title">Pins and Skewers</div>
                     <div class="part-item-detail">pp. 36-48 &middot; 9.7K chars &middot; Chapter 3.2</div>
                   </div>
-                  <div class="part-item-links"><span class="part-link-dot active"></span><span class="part-link-dot active"></span></div>
+                  <div class="part-item-links"><span class="topic-link-badge mid">2 topics</span></div>
                 </div>
                 <div class="part-item" onclick="selectPart(this)">
                   <div class="part-type-icon text">T</div>
@@ -2532,7 +2686,7 @@
                     <div class="part-item-title">Discovered Attacks</div>
                     <div class="part-item-detail">pp. 49-58 &middot; 7.2K chars &middot; Chapter 3.3</div>
                   </div>
-                  <div class="part-item-links"><span class="part-link-dot active"></span></div>
+                  <div class="part-item-links"><span class="topic-link-badge low">1 topic</span></div>
                 </div>
                 <div class="part-item" onclick="selectPart(this)">
                   <div class="part-type-icon text">T</div>
@@ -2540,7 +2694,7 @@
                     <div class="part-item-title">Overloading</div>
                     <div class="part-item-detail">pp. 59-66 &middot; 5.1K chars &middot; Chapter 3.4</div>
                   </div>
-                  <div class="part-item-links"><span class="part-link-dot active"></span></div>
+                  <div class="part-item-links"><span class="topic-link-badge low">1 topic</span></div>
                 </div>
               </div>
               <div class="part-outline-section">
@@ -2554,7 +2708,7 @@
                     <div class="part-item-title">Combinations</div>
                     <div class="part-item-detail">pp. 72-95 &middot; 18.6K chars</div>
                   </div>
-                  <div class="part-item-links"><span class="part-link-dot active"></span><span class="part-link-dot active"></span></div>
+                  <div class="part-item-links"><span class="topic-link-badge mid">2 topics</span></div>
                 </div>
                 <div class="part-item" onclick="selectPart(this)">
                   <div class="part-type-icon text">T</div>
@@ -2562,7 +2716,7 @@
                     <div class="part-item-title">Checkmate Patterns</div>
                     <div class="part-item-detail">pp. 96-120 &middot; 14.2K chars</div>
                   </div>
-                  <div class="part-item-links"><span class="part-link-dot active"></span><span class="part-link-dot active"></span></div>
+                  <div class="part-item-links"><span class="topic-link-badge mid">2 topics</span></div>
                 </div>
                 <div class="part-item" onclick="selectPart(this)">
                   <div class="part-type-icon table">&#9638;</div>
@@ -2570,7 +2724,7 @@
                     <div class="part-item-title">Opening Index</div>
                     <div class="part-item-detail">pp. 121-124 &middot; 3.8K chars &middot; 42 rows</div>
                   </div>
-                  <div class="part-item-links"><span class="part-link-dot"></span></div>
+                  <div class="part-item-links"></div>
                 </div>
                 <div class="part-item" onclick="selectPart(this)">
                   <div class="part-type-icon text">T</div>
@@ -2684,12 +2838,6 @@
       <span class="sep">/</span>
       <span class="current">All Records</span>
     </div>
-    <div class="spacer"></div>
-    <div class="view-toggle">
-      <button onclick="showPage('canvas')">Canvas</button>
-      <button onclick="showPage('knowledge')">Sources</button>
-      <button class="active" onclick="showPage('table')">Table</button>
-    </div>
   </div>
 
   <!-- Sidebar -->
@@ -2704,6 +2852,31 @@
     <div class="sidebar-section">
       <div class="sidebar-section-title">Training Data <span class="count">150</span></div>
       <div class="sidebar-item active"><span>&#128200;</span> All Topics <span class="badge">150</span></div>
+      <div class="sidebar-item parent" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.style.display = this.classList.contains('collapsed') ? 'none' : 'block'">
+        <span class="chevron">&#9662;</span> Basic Tactical Patterns <span class="badge">62</span>
+      </div>
+      <div class="sidebar-children">
+        <div class="sidebar-item child">Forks <span class="badge">14</span></div>
+        <div class="sidebar-item child">Pins and Skewers <span class="badge">12</span></div>
+        <div class="sidebar-item child">Discovered Attacks <span class="badge">8</span></div>
+        <div class="sidebar-item child">Sacrifices <span class="badge">18</span></div>
+        <div class="sidebar-item child" onclick="showPage('topic-detail')">Overloading <span class="badge">10</span></div>
+      </div>
+      <div class="sidebar-item parent" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.style.display = this.classList.contains('collapsed') ? 'none' : 'block'">
+        <span class="chevron">&#9662;</span> Advanced Combinations <span class="badge">48</span>
+      </div>
+      <div class="sidebar-children">
+        <div class="sidebar-item child">Opening Principles <span class="badge">25</span></div>
+        <div class="sidebar-item child">Positional Themes <span class="badge">23</span></div>
+      </div>
+      <div class="sidebar-item parent" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.style.display = this.classList.contains('collapsed') ? 'none' : 'block'">
+        <span class="chevron">&#9662;</span> Endgame &amp; Mating <span class="badge">40</span>
+      </div>
+      <div class="sidebar-children">
+        <div class="sidebar-item child">Back Rank Mates <span class="badge">22</span></div>
+        <div class="sidebar-item child">Pawn Promotion <span class="badge">16</span></div>
+        <div class="sidebar-item child">Test Topic <span class="badge">2</span></div>
+      </div>
     </div>
   </div>
 
@@ -2977,6 +3150,203 @@
   </div>
 </div>
 
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- PAGE 4: Topic Detail View                                    -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<div class="app-layout" id="page-topic-detail">
+
+  <!-- Icon Rail -->
+  <div class="icon-rail">
+    <div class="logo">V</div>
+    <button class="active"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></button>
+    <button><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></button>
+    <button><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg></button>
+  </div>
+
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <div class="breadcrumb">
+      <span>Projects</span>
+      <span class="sep">/</span>
+      <span>Chess Tutor Assistant</span>
+      <span class="sep">/</span>
+      <span class="current">Overloading &amp; Deflection</span>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Source Documents <span class="count">3</span></div>
+      <div class="sidebar-item" onclick="showPage('knowledge')"><span>&#128196;</span> chess-tactics.pdf <span class="badge">10</span></div>
+      <div class="sidebar-item" onclick="showPage('knowledge')"><span>&#128196;</span> strategy-guide.pdf <span class="badge">6</span></div>
+      <div class="sidebar-item" onclick="showPage('knowledge')"><span>&#128196;</span> opening-theory.pdf <span class="badge">3</span></div>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Training Data <span class="count">150</span></div>
+      <div class="sidebar-item" onclick="showPage('canvas')">
+        <span>&#128200;</span> All Topics
+        <span class="badge">150</span>
+      </div>
+      <div class="sidebar-item parent" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.style.display = this.classList.contains('collapsed') ? 'none' : 'block'">
+        <span class="chevron">&#9662;</span> Basic Tactical Patterns <span class="badge">62</span>
+      </div>
+      <div class="sidebar-children">
+        <div class="sidebar-item child">Forks <span class="badge">14</span></div>
+        <div class="sidebar-item child">Pins and Skewers <span class="badge">12</span></div>
+        <div class="sidebar-item child">Discovered Attacks <span class="badge">8</span></div>
+        <div class="sidebar-item child">Sacrifices <span class="badge">18</span></div>
+        <div class="sidebar-item child active">Overloading <span class="badge">10</span></div>
+      </div>
+      <div class="sidebar-item parent" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.style.display = this.classList.contains('collapsed') ? 'none' : 'block'">
+        <span class="chevron">&#9662;</span> Advanced Combinations <span class="badge">48</span>
+      </div>
+      <div class="sidebar-children">
+        <div class="sidebar-item child">Opening Principles <span class="badge">25</span></div>
+        <div class="sidebar-item child">Positional Themes <span class="badge">23</span></div>
+      </div>
+      <div class="sidebar-item parent" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.style.display = this.classList.contains('collapsed') ? 'none' : 'block'">
+        <span class="chevron">&#9662;</span> Endgame &amp; Mating <span class="badge">40</span>
+      </div>
+      <div class="sidebar-children">
+        <div class="sidebar-item child">Back Rank Mates <span class="badge">22</span></div>
+        <div class="sidebar-item child">Pawn Promotion <span class="badge">16</span></div>
+        <div class="sidebar-item child">Test Topic <span class="badge">2</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+
+    <!-- Data Flow Banner -->
+    <div class="data-flow-banner">
+      <div class="flow-stage" onclick="showPage('knowledge')">
+        <div class="stage-header">
+          <div class="stage-icon" style="background:var(--red-dim);color:var(--red)">&#128196;</div>
+          <div>
+            <div class="stage-label">Documents</div>
+            <div class="stage-value">3</div>
+          </div>
+        </div>
+        <div class="stage-detail">chess-tactics.pdf, strategy-guide.pdf, +1</div>
+      </div>
+      <div class="flow-arrow">
+        <div class="flow-line" style="background: linear-gradient(90deg, transparent, var(--border), transparent);"></div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position:relative;z-index:1;background:var(--bg-secondary);padding:2px"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="flow-stage">
+        <div class="stage-header">
+          <div class="stage-icon" style="background:var(--amber-dim);color:var(--amber)">&#128209;</div>
+          <div>
+            <div class="stage-label">Extracted</div>
+            <div class="stage-value">19</div>
+          </div>
+        </div>
+        <div class="stage-detail">14 text &middot; 3 tables &middot; 2 images</div>
+      </div>
+      <div class="flow-arrow">
+        <div class="flow-line" style="background: linear-gradient(90deg, transparent, var(--border), transparent);"></div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position:relative;z-index:1;background:var(--bg-secondary);padding:2px"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="flow-stage active">
+        <div class="stage-header">
+          <div class="stage-icon" style="background:var(--accent-dim);color:var(--accent)">&#127991;</div>
+          <div>
+            <div class="stage-label">Topics</div>
+            <div class="stage-value">12</div>
+          </div>
+        </div>
+        <div class="stage-detail">5 categories &middot; 7 leaf topics</div>
+      </div>
+      <div class="flow-arrow">
+        <div class="flow-line" style="background: linear-gradient(90deg, transparent, var(--border), transparent);"></div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position:relative;z-index:1;background:var(--bg-secondary);padding:2px"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="flow-stage" onclick="showPage('table')">
+        <div class="stage-header">
+          <div class="stage-icon" style="background:var(--emerald-dim);color:var(--emerald)">&#128203;</div>
+          <div>
+            <div class="stage-label">Records</div>
+            <div class="stage-value">150</div>
+          </div>
+        </div>
+        <div class="stage-detail">avg score 0.82 &middot; 2 evals</div>
+      </div>
+    </div>
+
+    <!-- Topic Detail Header -->
+    <div class="topic-detail-header">
+      <div class="topic-detail-title">
+        <span class="topic-breadcrumb">Basic Tactical Patterns &#8250;</span>
+        <h2>Overloading &amp; Deflection</h2>
+      </div>
+      <div class="topic-detail-stats">
+        <div class="td-stat"><span class="val">2</span><span class="lbl">Records</span></div>
+        <div class="td-stat"><span class="val">&mdash;</span><span class="lbl">Avg Score</span></div>
+        <div class="td-stat"><span class="val">1</span><span class="lbl">Sources</span></div>
+      </div>
+    </div>
+
+    <!-- Tab Bar -->
+    <div class="topic-tabs">
+      <button class="topic-tab active" onclick="showTopicTab('records')">Records (2)</button>
+      <button class="topic-tab" onclick="showTopicTab('sources')">Linked Sources (1)</button>
+    </div>
+
+    <!-- Records Tab Content -->
+    <div class="topic-tab-content" id="topicTabRecords">
+      <table class="records-table" style="width:100%">
+        <thead>
+          <tr>
+            <th style="width:40px">#</th>
+            <th>Input</th>
+            <th>Output</th>
+            <th style="width:70px;text-align:center">Score</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="color:var(--text-dim)">1</td>
+            <td>What happens when a piece is overloaded with multiple defensive duties?</td>
+            <td>When a piece is overloaded, it cannot adequately fulfill all its defensive responsibilities. The attacker can exploit this by forcing the overloaded piece to abandon one of its tasks, creating a tactical opportunity.</td>
+            <td style="text-align:center"><span class="score-pill score-warn">0.71</span></td>
+          </tr>
+          <tr>
+            <td style="color:var(--text-dim)">2</td>
+            <td>Explain the concept of deflection in chess tactics.</td>
+            <td>Deflection is a tactic where you force an opponent's piece away from a critical square or defensive duty. By attacking or luring the defender, you create an opportunity to exploit the position it was guarding.</td>
+            <td style="text-align:center"><span class="score-pill score-warn">0.68</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Linked Sources Tab Content -->
+    <div class="topic-tab-content hidden" id="topicTabSources">
+      <div class="linked-sources-grid">
+        <div class="linked-source-card">
+          <div class="ls-card-header">
+            <div class="ls-icon">&#128196;</div>
+            <div>
+              <div class="ls-title">chess-tactics-docling.pdf</div>
+              <div class="ls-meta">Part 7 &middot; Chapter 6 &mdash; Deflection &amp; Overloading</div>
+            </div>
+          </div>
+          <div class="ls-preview">
+            Deflection is a tactic where you force an opponent's piece away from a critical defensive duty. When a piece is overloaded — responsible for defending multiple targets simultaneously — the attacker can exploit this weakness by forcing the piece to choose which duty to abandon. This creates immediate tactical opportunities, often winning material or delivering checkmate.
+          </div>
+          <div class="ls-topics">
+            <span class="ls-topic-tag">Overloading &amp; Deflection</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <!-- Record Detail Sidebar (slides in from right when clicking a record row) -->
 <div class="record-detail-sidebar" id="recordDetailSidebar">
   <div class="rds-header">
@@ -3021,6 +3391,7 @@
   <div class="page-dot active" onclick="showPage('canvas')" title="Canvas View"></div>
   <div class="page-dot" onclick="showPage('knowledge')" title="Knowledge Sources"></div>
   <div class="page-dot" onclick="showPage('table')" title="Table View"></div>
+  <div class="page-dot" onclick="showPage('topic-detail')" title="Topic Detail"></div>
   <div class="page-label">Click to switch views</div>
 </div>
 
@@ -3030,10 +3401,12 @@ function showPage(page) {
   document.getElementById('page-canvas').style.display = page === 'canvas' ? 'grid' : 'none';
   document.getElementById('page-knowledge').style.display = page === 'knowledge' ? 'grid' : 'none';
   document.getElementById('page-table').style.display = page === 'table' ? 'grid' : 'none';
+  document.getElementById('page-topic-detail').style.display = page === 'topic-detail' ? 'grid' : 'none';
   const dots = document.querySelectorAll('.page-dot');
   dots[0].classList.toggle('active', page === 'canvas');
   dots[1].classList.toggle('active', page === 'knowledge');
   if (dots[2]) dots[2].classList.toggle('active', page === 'table');
+  if (dots[3]) dots[3].classList.toggle('active', page === 'topic-detail');
   // Update view-toggle active states across all pages
   document.querySelectorAll('.view-toggle').forEach(toggle => {
     toggle.querySelectorAll('button').forEach(btn => {
@@ -3043,6 +3416,24 @@ function showPage(page) {
     });
   });
   if (page !== 'canvas' && isZoomed) zoomOut();
+}
+
+// ── Topic Detail Tab Switching ──
+function showTopicTab(tab) {
+  const recordsTab = document.getElementById('topicTabRecords');
+  const sourcesTab = document.getElementById('topicTabSources');
+  const buttons = document.querySelectorAll('.topic-tab');
+  if (tab === 'records') {
+    recordsTab.classList.remove('hidden');
+    sourcesTab.classList.add('hidden');
+    buttons[0].classList.add('active');
+    buttons[1].classList.remove('active');
+  } else {
+    recordsTab.classList.add('hidden');
+    sourcesTab.classList.remove('hidden');
+    buttons[0].classList.remove('active');
+    buttons[1].classList.add('active');
+  }
 }
 showPage('canvas');
 
@@ -3621,6 +4012,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === '1' && !e.ctrlKey && !e.metaKey && !e.target.matches('input')) showPage('canvas');
   if (e.key === '2' && !e.ctrlKey && !e.metaKey && !e.target.matches('input')) showPage('knowledge');
   if (e.key === '3' && !e.ctrlKey && !e.metaKey && !e.target.matches('input')) showPage('table');
+  if (e.key === '4' && !e.ctrlKey && !e.metaKey && !e.target.matches('input')) showPage('topic-detail');
 });
 </script>
 
@@ -3646,6 +4038,7 @@ document.addEventListener('keydown', (e) => {
         <div class="mc-opt" onclick="showPage('canvas')">1 Canvas</div>
         <div class="mc-opt" onclick="showPage('knowledge')">2 Sources</div>
         <div class="mc-opt" onclick="showPage('table')">3 Table</div>
+        <div class="mc-opt" onclick="showPage('topic-detail')">4 Topic Detail</div>
       </div>
     </div>
     <div class="mc-divider"></div>
@@ -3654,6 +4047,7 @@ document.addEventListener('keydown', (e) => {
         Press <kbd style="background:var(--bg-tertiary);padding:1px 4px;border-radius:2px;font-size:9px;border:1px solid var(--border)">1</kbd>
         <kbd style="background:var(--bg-tertiary);padding:1px 4px;border-radius:2px;font-size:9px;border:1px solid var(--border)">2</kbd>
         <kbd style="background:var(--bg-tertiary);padding:1px 4px;border-radius:2px;font-size:9px;border:1px solid var(--border)">3</kbd>
+        <kbd style="background:var(--bg-tertiary);padding:1px 4px;border-radius:2px;font-size:9px;border:1px solid var(--border)">4</kbd>
         to switch pages &middot;
         <kbd style="background:var(--bg-tertiary);padding:1px 4px;border-radius:2px;font-size:9px;border:1px solid var(--border)">?</kbd>
         for all shortcuts
@@ -3668,6 +4062,7 @@ document.addEventListener('keydown', (e) => {
   <div class="kbd-row"><span class="label">Canvas view</span><kbd>1</kbd></div>
   <div class="kbd-row"><span class="label">Sources view</span><kbd>2</kbd></div>
   <div class="kbd-row"><span class="label">Table view</span><kbd>3</kbd></div>
+  <div class="kbd-row"><span class="label">Topic Detail</span><kbd>4</kbd></div>
   <div style="height:1px;background:var(--border-subtle);margin:6px 0"></div>
   <div class="kbd-row"><span class="label">Zoom out / Close</span><kbd>Esc</kbd></div>
   <div class="kbd-row"><span class="label">This help</span><kbd>?</kbd></div>

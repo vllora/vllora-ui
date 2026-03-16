@@ -11,13 +11,16 @@ import { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import { Loader2, ChevronDown, ChevronRight, Check, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RecordRow } from "./RecordRow";
-import { TopicRecordTree } from "./TopicRecordTree";
 import { RecordsTableHeader } from "./RecordsTableHeader";
 import { RecordsTableFooter } from "./RecordsTableFooter";
+import { PromptInheritancePanel } from "./PromptInheritancePanel";
+import { UnifiedRecordTable } from "./UnifiedRecordTable";
+import { UnifiedTableToolbar } from "./UnifiedTableToolbar";
 import { SeeAllLink } from "./SeeAllLink";
 import { getTopicColor, type AvailableTopic } from "../record-utils";
 import type { RecordRole } from "../record-filters";
 import { emitter, consumePendingHighlight } from "@/utils/eventEmitter";
+import { usePromptScrollTracking } from "@/hooks/usePromptScrollTracking";
 
 interface RecordsTableProps {
   records: DatasetRecord[];
@@ -102,18 +105,18 @@ export function RecordsTable({
   selectedIds: controlledSelectedIds,
   onSelectionChange,
   onExpand,
-  viewingRecordId,
+  viewingRecordId: _viewingRecordId,
   groupByTopic = false,
   availableTopics = [],
   topicHierarchy,
-  onDeleteTopic,
-  onGenerateForTopic,
-  onGenerateSubtopics,
+  onDeleteTopic: _onDeleteTopic,
+  onGenerateForTopic: _onGenerateForTopic,
+  onGenerateSubtopics: _onGenerateSubtopics,
   roleFilter,
   onRoleFilterChange,
-  datasetObjective,
-  normalizedObjective,
-  onUpdatePromptTemplate,
+  datasetObjective: _datasetObjective,
+  normalizedObjective: _normalizedObjective,
+  onUpdatePromptTemplate: _onUpdatePromptTemplate,
 }: RecordsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -128,6 +131,15 @@ export function RecordsTable({
 
   // Highlighted record state (for scrolling to variant source)
   const [highlightedRecordId, setHighlightedRecordId] = useState<string | null>(null);
+
+  // Prompt inheritance panel state
+  const [promptPanelTopicId, setPromptPanelTopicId] = useState<string | null>(null);
+
+  // Scroll tracking for auto-updating prompt panel
+  const { visibleTopicId, isAutoTracking, enableTracking } = usePromptScrollTracking({
+    containerRef: parentRef,
+    enabled: promptPanelTopicId !== null,
+  });
 
   // Refs for record rows to enable scrolling
   const recordRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -320,41 +332,72 @@ export function RecordsTable({
     );
   }
 
-  // Hierarchical tree rendering (when topic hierarchy is available)
+  // Build prompt chain for the prompt inheritance panel
+  const activePromptTopicId = isAutoTracking && visibleTopicId ? visibleTopicId : promptPanelTopicId;
+
+  const promptChainData = useMemo(() => {
+    if (!activePromptTopicId || !topicHierarchy) return null;
+
+    // Walk hierarchy to find the path to the topic
+    const findPath = (nodes: TopicHierarchyNode[], trail: TopicHierarchyNode[]): TopicHierarchyNode[] | null => {
+      for (const node of nodes) {
+        const nodeId = node.id || node.name;
+        if (nodeId === activePromptTopicId || node.name === activePromptTopicId) {
+          return [...trail, node];
+        }
+        if (node.children?.length) {
+          const result = findPath(node.children, [...trail, node]);
+          if (result) return result;
+        }
+      }
+      return null;
+    };
+
+    const path = findPath(topicHierarchy, []);
+    if (!path || path.length === 0) return null;
+
+    const breadcrumb = path.map(n => n.name);
+    const chain = path.map((node, i) => ({
+      label: i === 0 && path.length > 1 ? "Root" : i === path.length - 1 ? "Leaf" : "Parent",
+      level: (i === 0 && path.length > 1 ? "root" : i === path.length - 1 ? "leaf" : "parent") as "root" | "parent" | "leaf",
+      prompt: node.description || node.normalizedPromptSegment || `Topic: ${node.name}`,
+    }));
+
+    return { breadcrumb, chain };
+  }, [activePromptTopicId, topicHierarchy]);
+
+  // Listen for prompt panel toggle events from topic headers
+  useEffect(() => {
+    const handleTogglePrompt = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.topicId) {
+        setPromptPanelTopicId(prev => prev === detail.topicId ? null : detail.topicId);
+        enableTracking();
+      }
+    };
+    window.addEventListener("vllora_toggle_prompt_panel", handleTogglePrompt);
+    return () => window.removeEventListener("vllora_toggle_prompt_panel", handleTogglePrompt);
+  }, [enableTracking]);
+
+  // Unified single-table rendering (when topic hierarchy is available)
   // Show topic structure even with 0 records so users can see their topics
   if (groupByTopic && topicHierarchy && topicHierarchy.length > 0) {
     return (
-      <div className="flex flex-col min-h-0" style={containerStyle}>
-        {/* No column header in tree mode — the tree has its own visual structure */}
-        <div className="flex-1 overflow-auto min-h-0 bg-background">
-          <div className="pt-3">
-            <TopicRecordTree
-              hierarchy={topicHierarchy}
-              records={displayRecords}
-              workflowId={workflowId || ''}
-              onUpdateTopic={onUpdateTopic}
-              onDelete={onDelete}
-              onSave={onSave}
-              selectable={selectable}
-              selectedIds={selectedIds}
-              onSelectRecord={handleSelectRecord}
-              onExpand={onExpand}
-              viewingRecordId={viewingRecordId}
-              availableTopics={availableTopics}
-              onDeleteTopic={onDeleteTopic}
-              onGenerateForTopic={onGenerateForTopic}
-              onGenerateSubtopics={onGenerateSubtopics}
-              highlightedRecordId={highlightedRecordId}
-              setRecordRef={setRecordRef}
-              datasetObjective={datasetObjective}
-              normalizedObjective={normalizedObjective}
-              onUpdatePromptTemplate={onUpdatePromptTemplate}
-            />
-          </div>
-        </div>
-        {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
-        {showFooter && <RecordsTableFooter records={displayRecords} selectedCount={selectedIds.size} workflowId={workflowId} />}
-      </div>
+      <UnifiedTableView
+        hierarchy={topicHierarchy}
+        records={displayRecords}
+        containerStyle={containerStyle}
+        parentRef={parentRef}
+        promptChainData={promptChainData}
+        isAutoTracking={isAutoTracking}
+        onClosePromptPanel={() => setPromptPanelTopicId(null)}
+        onExpand={onExpand}
+        hasMore={hasMore}
+        onSeeAll={onSeeAll}
+        showFooter={showFooter}
+        selectedCount={selectedIds.size}
+        workflowId={workflowId}
+      />
     );
   }
 
@@ -581,6 +624,108 @@ export function RecordsTable({
       </div>
       {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
       {showFooter && <RecordsTableFooter records={displayRecords} selectedCount={selectedIds.size} workflowId={workflowId} />}
+    </div>
+  );
+}
+
+// ─── Unified Table View (used when topic hierarchy is available) ───
+
+interface UnifiedTableViewProps {
+  hierarchy: TopicHierarchyNode[];
+  records: DatasetRecord[];
+  containerStyle: React.CSSProperties;
+  parentRef: React.RefObject<HTMLDivElement | null>;
+  promptChainData: { breadcrumb: string[]; chain: { label: string; level: "root" | "parent" | "leaf"; prompt: string }[] } | null;
+  isAutoTracking: boolean;
+  onClosePromptPanel: () => void;
+  onExpand?: (record: DatasetRecord) => void;
+  hasMore: boolean;
+  onSeeAll?: () => void;
+  showFooter: boolean;
+  selectedCount: number;
+  workflowId?: string;
+}
+
+function UnifiedTableView({
+  hierarchy,
+  records,
+  containerStyle,
+  parentRef,
+  promptChainData,
+  isAutoTracking,
+  onClosePromptPanel,
+  onExpand,
+  hasMore,
+  onSeeAll,
+  showFooter,
+  selectedCount,
+  workflowId,
+}: UnifiedTableViewProps) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [topicFilter, setTopicFilter] = useState("all");
+  const [scoreFilter, setScoreFilter] = useState("all");
+
+  // Count filtered records for toolbar display
+  const filteredCount = useMemo(() => {
+    let count = 0;
+    const queryLower = searchQuery.toLowerCase();
+    for (const record of records) {
+      // Topic filter
+      if (topicFilter !== "all" && record.topic !== topicFilter) continue;
+      // Search filter (simple check on stringified data)
+      if (queryLower) {
+        const dataStr = JSON.stringify(record.data ?? "").toLowerCase();
+        if (!dataStr.includes(queryLower)) continue;
+      }
+      // Score filter
+      const score = record.evaluation?.score ?? record.evaluation?.evalScore;
+      if (scoreFilter === "high" && (score === undefined || score < 0.8)) continue;
+      if (scoreFilter === "mid" && (score === undefined || score < 0.6 || score >= 0.8)) continue;
+      if (scoreFilter === "low" && (score === undefined || score >= 0.6)) continue;
+      count++;
+    }
+    return count;
+  }, [records, searchQuery, topicFilter, scoreFilter]);
+
+  return (
+    <div className="flex flex-col min-h-0" style={containerStyle}>
+      {/* Prompt inheritance panel — shown when a topic is focused */}
+      {promptChainData && (
+        <PromptInheritancePanel
+          breadcrumb={promptChainData.breadcrumb}
+          chain={promptChainData.chain}
+          onClose={onClosePromptPanel}
+          isAutoTracking={isAutoTracking}
+        />
+      )}
+
+      {/* Toolbar */}
+      <UnifiedTableToolbar
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        topicFilter={topicFilter}
+        onTopicFilterChange={setTopicFilter}
+        scoreFilter={scoreFilter}
+        onScoreFilterChange={setScoreFilter}
+        totalRecords={records.length}
+        filteredRecords={filteredCount}
+        hierarchy={hierarchy}
+      />
+
+      {/* Unified table */}
+      <div ref={parentRef} className="flex-1 overflow-auto min-h-0 bg-background">
+        <UnifiedRecordTable
+          hierarchy={hierarchy}
+          records={records}
+          searchQuery={searchQuery}
+          topicFilter={topicFilter}
+          scoreFilter={scoreFilter}
+          onExpand={onExpand}
+        />
+      </div>
+
+      {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
+      {showFooter && <RecordsTableFooter records={records} selectedCount={selectedCount} workflowId={workflowId} />}
     </div>
   );
 }

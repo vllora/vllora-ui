@@ -170,13 +170,26 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
   // Full dialog mode (vs slide-in panel)
   const [isFullDialogMode, setIsFullDialogMode] = useState(false);
 
+  // Zoom-to-inspect: which topic is zoomed in (null = none)
+  const [zoomedTopicId, setZoomedTopicId] = useState<string | null>(null);
+
+  const zoomToTopic = useCallback((topicId: string) => {
+    setZoomedTopicId(topicId);
+  }, []);
+
+  const zoomOut = useCallback(() => {
+    setZoomedTopicId(null);
+  }, []);
+
   const openTopicModal = useCallback((topicId: string) => {
     setViewingTopicId(topicId);
+    setZoomedTopicId(topicId);
   }, []);
 
   const closeTopicModal = useCallback(() => {
     setViewingTopicId(null);
     setIsFullDialogMode(false);
+    setZoomedTopicId(null);
   }, []);
 
   const openFullDialog = useCallback(() => {
@@ -430,6 +443,10 @@ function useTopicCanvas(props: Omit<TopicCanvasProviderProps, "children">) {
     datasetObjective,
     // Per-topic quality scores for node display
     topicQualityScores,
+    // Zoom-to-inspect
+    zoomedTopicId,
+    zoomToTopic,
+    zoomOut,
   };
 }
 

@@ -2,20 +2,35 @@
  * DatasetMainContent
  *
  * Main content area for displaying dataset records.
- * Includes header with overview card, and switches between Canvas/Table views.
+ * Includes DataFlowBanner, header with stats, and switches between Canvas/Sources/Table views.
  * Note: Evaluator is now a separate section, not handled here.
  */
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import type { ViewMode } from "./dataset-detail-header/ViewModeToggle";
 import type { CoverageStats, DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import type { AvailableTopic } from "./record-utils";
 import { RecordsSectionHeader } from "./dataset-detail-header/RecordsSectionHeader";
+import { DataFlowBanner, type BannerState } from "./DataFlowBanner";
 import { TopicHierarchyCanvas } from "./dataset-canvas/TopicHierarchyCanvas";
 import { RecordsTable } from "./records-table/RecordsTable";
 import { RecordDetailSidebar } from "./records-table/RecordDetailSidebar";
+import { SourcesView } from "./sources-view/SourcesView";
 import { EmptyRecordsState } from "./EmptyRecordsState";
 import { filterRecords, type StatFilter, type RecordRole } from "./record-filters";
+
+/** Count all nodes in a topic hierarchy tree */
+function countAllNodes(nodes: TopicHierarchyNode[]): number {
+  let count = 0;
+  for (const node of nodes) {
+    count += 1;
+    if (node.children) {
+      count += countAllNodes(node.children);
+    }
+  }
+  return count;
+}
 
 export interface DatasetMainContentProps {
   viewMode: ViewMode;
@@ -72,6 +87,12 @@ export interface DatasetMainContentProps {
 
   /** Per-topic quality scores for canvas node display */
   topicQualityScores?: Record<string, { avg: number; count: number; evaluated: number }>;
+
+  // Data flow banner counts
+  /** Number of knowledge source documents */
+  documentCount?: number;
+  /** Number of extracted parts across all sources */
+  partCount?: number;
 }
 
 export function DatasetMainContent({
@@ -109,7 +130,39 @@ export function DatasetMainContent({
   onClearSourceDocumentFilter,
   onUpdatePromptTemplate,
   topicQualityScores,
+  documentCount = 0,
+  partCount = 0,
 }: DatasetMainContentProps) {
+  // Keyboard shortcuts: 1/2/3 switch views, Esc closes record detail
+  useKeyboardShortcuts({
+    onViewModeChange,
+    onEscape: () => onSelectRecordId(null),
+  });
+
+  // Selected source ID for sources view (driven by explorer sidebar)
+  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+
+  // Listen for view switch events from explorer sidebar (e.g., "All Sources" click)
+  useEffect(() => {
+    const handleSwitchView = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.viewMode) {
+        // If ifCurrently is set, only switch if current view matches
+        if (detail.ifCurrently && viewMode !== detail.ifCurrently) return;
+
+        onViewModeChange(detail.viewMode);
+        // If switching to sources with a specific sourceId, set it
+        if (detail.sourceId !== undefined) {
+          setSelectedSourceId(detail.sourceId);
+        } else if (detail.viewMode === "sources") {
+          setSelectedSourceId(null); // All Sources
+        }
+      }
+    };
+    window.addEventListener("vllora_switch_view", handleSwitchView);
+    return () => window.removeEventListener("vllora_switch_view", handleSwitchView);
+  }, [onViewModeChange, viewMode]);
+
   // P0-19: Stat filter state for RecordsSectionHeader clickable chips
   const [activeStatFilter, setActiveStatFilter] = useState<StatFilter>("all");
   // P0-9: Role filter state for RecordsTableHeader
@@ -224,28 +277,59 @@ export function DatasetMainContent({
     );
   }
 
+  // Derive banner state from data availability
+  const bannerState: BannerState = documentCount === 0 && partCount === 0 && records.length === 0
+    ? "empty"
+    : docsProcessing
+      ? "extracting"
+      : "normal";
+
+  // Count unique topics for banner
+  const uniqueTopicCount = useMemo(() => {
+    const topics = new Set<string>();
+    for (const r of records) {
+      if (r.topic) topics.add(r.topic);
+    }
+    return topics.size;
+  }, [records]);
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Stats bar + view controls */}
-      <div className="px-4 py-2 border-b border-border shrink-0 bg-background">
-        <RecordsSectionHeader
-          viewMode={viewMode}
-          onViewModeChange={onViewModeChange}
-          onExport={onExport}
-          records={topicFilteredRecords}
-          workflowId={workflowId}
-          activeStatFilter={activeStatFilter}
-          onStatFilterChange={setActiveStatFilter}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          sourceDocumentFilterName={sourceDocumentFilterName}
-          onClearSourceDocumentFilter={onClearSourceDocumentFilter}
+      {/* Data Flow Banner — pipeline visualization (Canvas + Sources only, not Table per mockup) */}
+      {viewMode !== "table" && (
+        <DataFlowBanner
+          state={bannerState}
+          activeViewMode={viewMode}
+          onNavigate={onViewModeChange}
+          documentCount={documentCount}
+          partCount={partCount}
+          topicCount={displayHierarchy ? countAllNodes(displayHierarchy) : uniqueTopicCount}
+          recordCount={records.length}
         />
-      </div>
+      )}
+
+      {/* Stats bar + view controls — Canvas and Table only (Sources has its own layout) */}
+      {viewMode !== "sources" && (
+        <div className="px-4 py-2 border-b border-border shrink-0 bg-background">
+          <RecordsSectionHeader
+            viewMode={viewMode}
+            onViewModeChange={onViewModeChange}
+            onExport={onExport}
+            records={topicFilteredRecords}
+            workflowId={workflowId}
+            activeStatFilter={activeStatFilter}
+            onStatFilterChange={setActiveStatFilter}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            sourceDocumentFilterName={sourceDocumentFilterName}
+            onClearSourceDocumentFilter={onClearSourceDocumentFilter}
+          />
+        </div>
+      )}
 
       {/* Main content area */}
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-      {viewMode === "canvas" ? (
+      {viewMode === "canvas" && (
         <TopicHierarchyCanvas
           hierarchy={displayHierarchy}
           records={filteredRecords}
@@ -268,7 +352,20 @@ export function DatasetMainContent({
           normalizedObjective={normalizedObjective}
           topicQualityScores={topicQualityScores}
         />
-      ) : (
+      )}
+      {viewMode === "sources" && (
+        <SourcesView
+          selectedSourceId={selectedSourceId}
+          onSelectSource={(sourceId) => {
+            setSelectedSourceId(sourceId);
+            // Also notify explorer sidebar to highlight the source
+            window.dispatchEvent(new CustomEvent("vllora_switch_view", {
+              detail: { viewMode: "sources", sourceId },
+            }));
+          }}
+        />
+      )}
+      {viewMode === "table" && (
         <RecordsTable
           records={filteredRecords}
           workflowId={workflowId}

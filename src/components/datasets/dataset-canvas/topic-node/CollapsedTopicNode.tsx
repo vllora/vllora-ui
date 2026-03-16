@@ -2,25 +2,14 @@
  * CollapsedTopicNode
  *
  * Collapsed state display for a topic node.
- * Shows: header (name + count), quality score row, description line.
- *
- * - Quality row: colored dot + avg score + evaluated count
- * - Description: topic description or simplified prompt segment
- * - Parent nodes show child count indicator
- * - P0-15: Shows pulsing border when data is being generated for this topic
+ * Simplified to 3 signals only: header (name + count), coverage bar, source count.
+ * P0-15: Shows pulsing border when data is being generated for this topic.
  */
 
-import { AlertTriangle, FileText } from "lucide-react";
+import { FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TopicNodeHeader } from "../TopicNodeHeader";
 import { TopicCanvasConsumer } from "../TopicCanvasContext";
-import { formatTopicName } from "../TopicNodeHeader";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 interface CollapsedTopicNodeProps {
   name: string;
@@ -47,21 +36,7 @@ interface CollapsedTopicNodeProps {
 }
 
 // Fixed width for collapsed state
-export const COLLAPSED_WIDTH = 300;
-
-/** Get color class for quality score */
-function getScoreColor(avg: number): string {
-  if (avg >= 0.8) return "text-emerald-500";
-  if (avg >= 0.6) return "text-amber-500";
-  return "text-red-500";
-}
-
-/** Get dot fill color for quality score */
-function getScoreDotColor(avg: number): string {
-  if (avg >= 0.8) return "bg-emerald-500";
-  if (avg >= 0.6) return "bg-amber-500";
-  return "bg-red-500";
-}
+export const COLLAPSED_WIDTH = 260;
 
 export function CollapsedTopicNode({
   name,
@@ -71,36 +46,20 @@ export function CollapsedTopicNode({
   isSelected,
   coveragePercentage,
   onRename,
-  fullPath,
-  hasChildren = false,
-  description,
   sourceRefCount = 0,
 }: CollapsedTopicNodeProps) {
   const {
     generatingTopicName,
     getMatchingCount,
     isFilterActive,
+    zoomedTopicId,
     topicQualityScores,
   } = TopicCanvasConsumer();
 
-  // P0-15: Check if this topic is currently generating
   const isGenerating = generatingTopicName === name;
-
-  // 7.4: Filtered count when stat filter is active
+  const isZoomed = zoomedTopicId === name;
   const matchingCount = isFilterActive ? getMatchingCount(name) : null;
-
-  // Quality scores for this topic
   const quality = topicQualityScores?.[name];
-  const hasQuality = quality && quality.evaluated > 0;
-
-  // Build description line: use topic description if available, else formatted name context
-  const descriptionText = description
-    || (fullPath && fullPath.includes("/")
-      ? `Part of ${formatTopicName(fullPath.split("/").slice(0, -1).join(" / "))}`
-      : undefined);
-
-  // Count children from fullPath for parent indicator
-  // (We pass hasChildren directly for accuracy)
 
   return (
     <div
@@ -109,16 +68,19 @@ export function CollapsedTopicNode({
         isSelected
           ? "border-[rgb(var(--theme-500))]"
           : "border-border hover:border-muted-foreground/50",
-        // P0-15: pulsing border when generating
-        isGenerating && "animate-pulse border-[rgba(var(--theme-500),0.6)]"
+        isGenerating && "animate-pulse border-[rgba(var(--theme-500),0.6)]",
+        isZoomed && "ring-2 ring-[rgba(var(--theme-500),0.4)] ring-offset-2 ring-offset-background"
       )}
       style={{
         width: COLLAPSED_WIDTH,
-        boxShadow: isSelected
-          ? '0 0 15px rgba(var(--theme-500), 0.15), 0 0 30px rgba(var(--theme-500), 0.08)'
-          : undefined,
+        boxShadow: isZoomed
+          ? '0 0 20px rgba(var(--theme-500), 0.25), 0 0 40px rgba(var(--theme-500), 0.12), 0 0 60px rgba(var(--theme-500), 0.06)'
+          : isSelected
+            ? '0 0 15px rgba(var(--theme-500), 0.15), 0 0 30px rgba(var(--theme-500), 0.08)'
+            : undefined,
       }}
     >
+      {/* Signal 1: Header — name + record count */}
       <TopicNodeHeader
         name={name}
         recordCount={recordCount}
@@ -130,95 +92,55 @@ export function CollapsedTopicNode({
         filteredCount={matchingCount}
       />
 
-      {/* Quality score row — colored dot + average + evaluated count */}
-      {!isRoot && (
+      {/* Signal 2: Coverage bar — color-coded: emerald ≥80%, amber ≥60%, red <60% */}
+      {!isRoot && coveragePercentage !== undefined && coveragePercentage > 0 && (
         <div className="px-3 -mt-0.5 flex items-center gap-1.5">
-          {hasQuality ? (
-            <TooltipProvider delayDuration={200}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1.5 cursor-help">
-                    <span className={cn("w-2 h-2 rounded-full shrink-0", getScoreDotColor(quality.avg))} />
-                    <span className={cn("text-[11px] font-medium tabular-nums", getScoreColor(quality.avg))}>
-                      {quality.avg.toFixed(2)}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground/60">
-                      avg · {quality.evaluated} evaluated
-                    </span>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <div className="text-xs space-y-0.5">
-                    <p>Average quality score: {quality.avg.toFixed(3)}</p>
-                    <p>{quality.evaluated} of {quality.count} records evaluated</p>
-                    {quality.evaluated < quality.count && (
-                      <p className="text-muted-foreground">{quality.count - quality.evaluated} not yet evaluated</p>
-                    )}
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          ) : (
-            <span className="text-[10px] text-muted-foreground/40 italic">Not evaluated</span>
-          )}
-        </div>
-      )}
-
-      {/* Knowledge source references badge */}
-      {!isRoot && sourceRefCount > 0 && (
-        <div className="px-3 -mt-0.5 flex items-center gap-1.5">
-          <FileText className="w-3 h-3 text-muted-foreground/50" />
-          <span className={cn(
-            "text-[10px] font-medium",
-            sourceRefCount >= 3 ? "text-emerald-500/80" : "text-amber-500/80"
-          )}>
-            {sourceRefCount} source{sourceRefCount !== 1 ? "s" : ""}
+          <div className="flex-1 h-1.5 bg-muted/50 rounded-full overflow-hidden">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all",
+                coveragePercentage >= 80 ? "bg-emerald-500" : coveragePercentage >= 60 ? "bg-amber-500" : "bg-red-500"
+              )}
+              style={{ width: `${Math.min(coveragePercentage, 100)}%` }}
+            />
+          </div>
+          <span className="text-[9px] text-muted-foreground/50 tabular-nums shrink-0">
+            {coveragePercentage.toFixed(0)}%
           </span>
         </div>
       )}
 
-      {/* Description line — topic description or parent path context */}
-      {!isRoot && (
-        <div className="px-3 pb-2 mt-0.5 flex flex-col gap-1">
-          <div className="flex items-center gap-1.5">
-            {descriptionText ? (
-              <p className="text-[10px] text-muted-foreground/60 truncate leading-tight flex-1 min-w-0">
-                {descriptionText}
-              </p>
-            ) : (
-              <p className="text-[10px] text-muted-foreground/30 italic truncate leading-tight flex-1 min-w-0">
-                No description
-              </p>
-            )}
-            {/* Parent indicator */}
-            {hasChildren && aggregatedRecordCount !== undefined && (
-              <span className="text-[9px] text-muted-foreground/50 bg-muted/50 px-1.5 py-0.5 rounded shrink-0">
-                parent
+      {/* Signal 3: Quality score + Source count footer */}
+      {!isRoot && ((quality?.evaluated ?? 0) > 0 || sourceRefCount > 0) ? (
+        <div className="px-3 pb-2 -mt-0.5 flex items-center gap-1.5">
+          {quality && quality.evaluated > 0 && (
+            <>
+              <span className={cn(
+                "w-2 h-2 rounded-full shrink-0",
+                quality.avg >= 0.8 ? "bg-emerald-500" : quality.avg >= 0.6 ? "bg-amber-500" : "bg-red-500"
+              )} />
+              <span className={cn(
+                "text-[10px] font-medium tabular-nums",
+                quality.avg >= 0.8 ? "text-emerald-500/80" : quality.avg >= 0.6 ? "text-amber-500/80" : "text-red-500/80"
+              )}>
+                {quality.avg.toFixed(2)}
               </span>
-            )}
-          </div>
-          {/* Reassignment nudge — parent node has direct records that should be on leaves */}
-          {hasChildren && recordCount > 0 && (
-            <TooltipProvider delayDuration={200}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1 cursor-help">
-                    <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />
-                    <span className="text-[10px] text-amber-500/80">
-                      {recordCount} records need reassignment
-                    </span>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[240px]">
-                  <p className="text-xs">
-                    This topic has {recordCount} records assigned directly, but it also has
-                    child topics. Move these records to a child topic for proper organization.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            </>
+          )}
+          {sourceRefCount > 0 && (
+            <>
+              <FileText className="w-3 h-3 text-muted-foreground/50" />
+              <span className={cn(
+                "text-[10px] font-medium",
+                sourceRefCount >= 3 ? "text-emerald-500/80" : "text-amber-500/80"
+              )}>
+                {sourceRefCount} source{sourceRefCount !== 1 ? "s" : ""}
+              </span>
+            </>
           )}
         </div>
+      ) : (
+        !isRoot && <div className="pb-1" />
       )}
     </div>
   );

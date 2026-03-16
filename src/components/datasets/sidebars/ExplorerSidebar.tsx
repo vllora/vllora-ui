@@ -78,14 +78,7 @@ export function ExplorerSidebar() {
       className="relative flex-shrink-0 border-r border-border flex flex-col min-h-0 bg-background"
       style={{ width }}
     >
-      {/* Header */}
-      <div className="flex items-center px-3 py-2 border-b border-border shrink-0">
-        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          Explorer
-        </span>
-      </div>
-
-      {/* File tree */}
+      {/* Content */}
       <div className="flex-1 overflow-hidden">
         <DatasetExplorer onNavigate={() => {}} />
       </div>

@@ -21,13 +21,16 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Loader2, X } from "lucide-react";
-import { TopicNodeComponent } from "./topic-node/TopicNodeComponent";
+import { TopicNodeComponent, type TopicNodeData } from "./topic-node/TopicNodeComponent";
 import { TopicInputNodeComponent } from "./TopicInputNode";
 import { RootNodeComponent } from "./RootNodeComponent";
 import { CanvasToolbar } from "./CanvasToolbar";
 import { TopicCanvasProvider, TopicCanvasConsumer } from "./TopicCanvasContext";
 import { TopicRecordsDialogWrapper } from "./TopicRecordsDialogWrapper";
-import { RecordsPanel } from "./RecordsPanel";
+import { TopicInspectorDrawer } from "./TopicInspectorDrawer";
+import { SourceGhostNodes } from "./SourceGhostNodes";
+import { CanvasEmptyState } from "./CanvasEmptyState";
+import { findTopicInHierarchy } from "../record-utils";
 import type { CanvasNode } from "./useDagreLayout";
 import {
   useDagreLayout,
@@ -93,7 +96,7 @@ function TopicHierarchyCanvasInner({
 }: {
   hierarchy?: TopicHierarchyNode[];
 }) {
-  const { records, expandedNodes, nodeSizes, selectedTopic, setSelectedTopic, pendingAddParentId, layoutVersion, operationProgress } = TopicCanvasConsumer();
+  const { records, expandedNodes, nodeSizes, selectedTopic, setSelectedTopic, pendingAddParentId, layoutVersion, operationProgress, zoomedTopicId, zoomOut } = TopicCanvasConsumer();
 
   // Compute record counts by topic
   const recordCountsByTopic = useMemo(() => {
@@ -217,9 +220,64 @@ function TopicHierarchyCanvasInner({
   // Don't clear if there's a pending add (to avoid accidentally canceling)
   const onPaneClick = () => {
     if (pendingAddParentId === undefined) {
+      if (zoomedTopicId) {
+        zoomOut();
+      }
       setSelectedTopic(null);
     }
   };
+
+  // Zoom-to-inspect: when a topic is zoomed, zoom the viewport to center on it
+  useEffect(() => {
+    if (!zoomedTopicId || !reactFlowInstance.current) return;
+
+    // Find the node matching the zoomed topic
+    const targetNode = nodes.find(n => {
+      const data = n.data as TopicNodeData;
+      return data?.name === zoomedTopicId || data?.topicKey === zoomedTopicId;
+    });
+
+    if (targetNode && targetNode.position) {
+      const nodeWidth = targetNode.measured?.width ?? 300;
+      const nodeHeight = targetNode.measured?.height ?? 105;
+      reactFlowInstance.current.setCenter(
+        targetNode.position.x + nodeWidth / 2,
+        targetNode.position.y + nodeHeight / 2,
+        { zoom: 1.2, duration: 400 },
+      );
+    }
+  }, [zoomedTopicId, nodes]);
+
+  // Apply fade/blur to non-zoomed nodes
+  useEffect(() => {
+    if (!zoomedTopicId) {
+      // Restore all nodes to normal
+      setNodes(current =>
+        current.map(n => ({
+          ...n,
+          className: undefined,
+          style: { ...n.style, opacity: undefined, filter: undefined, transition: 'opacity 0.3s, filter 0.3s' },
+        }))
+      );
+      return;
+    }
+
+    setNodes(current =>
+      current.map(n => {
+        const data = n.data as TopicNodeData;
+        const isZoomed = data?.name === zoomedTopicId || data?.topicKey === zoomedTopicId;
+        return {
+          ...n,
+          style: {
+            ...n.style,
+            opacity: isZoomed ? 1 : 0.15,
+            filter: isZoomed ? undefined : 'blur(1px)',
+            transition: 'opacity 0.3s, filter 0.3s',
+          },
+        };
+      })
+    );
+  }, [zoomedTopicId, setNodes]);
 
   // 3.7: Banner dismiss state — reset when new operation starts
   const [bannerDismissed, setBannerDismissed] = useState(false);
@@ -239,8 +297,14 @@ function TopicHierarchyCanvasInner({
     });
   };
 
+  // Show empty state when no hierarchy exists
+  const hasHierarchy = hierarchy && hierarchy.length > 0;
+  if (!hasHierarchy && records.length === 0) {
+    return <CanvasEmptyState />;
+  }
+
   return (
-    <div className="flex-1 relative min-w-0 transition-all duration-200">
+    <div className="h-full relative min-w-0 transition-all duration-200">
       {/* P0-15: Operation progress banner */}
       {operationProgress && !bannerDismissed && (
         <div className="absolute top-3 left-3 z-10 flex items-center gap-2 px-3 py-2 bg-background/95 backdrop-blur-sm border border-border rounded-lg shadow-lg">
@@ -268,6 +332,15 @@ function TopicHierarchyCanvasInner({
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
+      )}
+      {/* Vignette overlay when zoomed to inspect */}
+      {zoomedTopicId && (
+        <div
+          className="absolute inset-0 z-[1] pointer-events-none transition-opacity duration-300"
+          style={{
+            background: 'radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.3) 100%)',
+          }}
+        />
       )}
       <CanvasToolbar onFitView={handleFitView} />
       <ReactFlow
@@ -301,15 +374,30 @@ function TopicHierarchyCanvasInner({
   );
 }
 
-// Layout wrapper: canvas (full width) + optional records panel overlay
+// Layout wrapper: canvas + bottom inspector drawer + ghost nodes overlay
 function CanvasWithPanel({ hierarchy }: { hierarchy?: TopicHierarchyNode[] }) {
-  const { viewingTopicId, isFullDialogMode } = TopicCanvasConsumer();
-  const showPanel = viewingTopicId !== null && !isFullDialogMode;
+  const { viewingTopicId, zoomedTopicId, workflowId } = TopicCanvasConsumer();
+  const showDrawer = viewingTopicId !== null;
+
+  // Resolve source refs for ghost nodes when a topic is zoomed
+  const zoomedSourceRefs = useMemo(() => {
+    if (!zoomedTopicId || !hierarchy) return [];
+    const node = findTopicInHierarchy(hierarchy, zoomedTopicId);
+    return (node?.sourceChunkRefs ?? []) as string[];
+  }, [zoomedTopicId, hierarchy]);
 
   return (
-    <div className="relative flex h-full w-full">
-      <TopicHierarchyCanvasInner hierarchy={hierarchy} />
-      {showPanel && <RecordsPanel />}
+    <div className="relative flex flex-col h-full w-full">
+      <div className="flex-1 relative min-h-0">
+        <TopicHierarchyCanvasInner hierarchy={hierarchy} />
+        {/* Source ghost nodes — floating overlay when a topic is zoomed */}
+        {zoomedTopicId && zoomedSourceRefs.length > 0 && (
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 z-10 pointer-events-auto">
+            <SourceGhostNodes sourceChunkRefs={zoomedSourceRefs} workflowId={workflowId} />
+          </div>
+        )}
+      </div>
+      {showDrawer && <TopicInspectorDrawer />}
     </div>
   );
 }

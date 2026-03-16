@@ -21,8 +21,8 @@ export type CanvasNode = TopicNode | TopicInputNode | RootNode;
 const NODE_WIDTH_EXPANDED = 700;
 const NODE_HEIGHT_COLLAPSED = 105; // Includes quality row + description line
 const NODE_HEIGHT_EXPANDED = 500;
-const NODE_SPACING = 50;
-const RANK_SPACING = 100;
+const NODE_SPACING = 40;
+const RANK_SPACING = 120;
 
 // Root node size (wider pill with objective + stats)
 const ROOT_NODE_WIDTH = 200;
@@ -158,44 +158,13 @@ function getLayoutedElements(
   // Run dagre layout
   dagre.layout(dagreGraph);
 
-  // Calculate depth (rank) of each node from parent relationships
-  // Use -1 as a "processing" marker to detect and break cycles
-  const nodeDepths: Record<string, number> = {};
-  const calculateDepth = (nodeId: string, visited: Set<string> = new Set()): number => {
-    // Already calculated
-    if (nodeDepths[nodeId] !== undefined && nodeDepths[nodeId] >= 0) {
-      return nodeDepths[nodeId];
-    }
-
-    // Cycle detection - if we've seen this node in current path, break the cycle
-    if (visited.has(nodeId)) {
-      console.warn(`[useDagreLayout] Cycle detected at node: ${nodeId}`);
-      nodeDepths[nodeId] = 0;
-      return 0;
-    }
-
-    const parentId = nodeIdToParentId[nodeId];
-    if (!parentId) {
-      nodeDepths[nodeId] = 0;
-      return 0;
-    }
-
-    // Mark as visited in current path
-    visited.add(nodeId);
-    const parentDepth = calculateDepth(parentId, visited);
-    nodeDepths[nodeId] = parentDepth + 1;
-    return nodeDepths[nodeId];
-  };
-  nodes.forEach((node) => calculateDepth(node.id, new Set()));
-
-  // First pass: convert dagre positions to top-left using actual dimensions
-  const nodesWithPositions = nodes.map((node) => {
+  // Convert dagre center-based positions to top-left coordinates
+  const layoutedNodes: CanvasNode[] = nodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
 
     let nodeWidth: number;
     let nodeHeight: number;
 
-    // Simple root node has fixed compact size
     if (node.type === "root") {
       nodeWidth = ROOT_NODE_WIDTH;
       nodeHeight = ROOT_NODE_HEIGHT;
@@ -216,31 +185,12 @@ function getLayoutedElements(
     }
 
     return {
-      node,
-      depth: nodeDepths[node.id],
-      x: nodeWithPosition.x - nodeWidth / 2,
-      y: nodeWithPosition.y - nodeHeight / 2,
-    };
-  });
-
-  // Second pass: align nodes at the same depth by their left edge
-  // Find minimum x for each depth level
-  const minXByDepth: Record<number, number> = {};
-  nodesWithPositions.forEach(({ depth, x }) => {
-    if (minXByDepth[depth] === undefined || x < minXByDepth[depth]) {
-      minXByDepth[depth] = x;
-    }
-  });
-
-  // Apply aligned positions
-  const layoutedNodes: CanvasNode[] = nodesWithPositions.map(({ node, depth, y }) => {
-    return {
       ...node,
       targetPosition: isHorizontal ? Position.Left : Position.Top,
       sourcePosition: isHorizontal ? Position.Right : Position.Bottom,
       position: {
-        x: minXByDepth[depth], // Align left edge with minimum x at this depth
-        y,
+        x: nodeWithPosition.x - nodeWidth / 2,
+        y: nodeWithPosition.y - nodeHeight / 2,
       },
     };
   });

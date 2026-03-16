@@ -1,0 +1,276 @@
+- generic [ref=e2]:
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - img "vLLora" [ref=e8] [cursor=pointer]
+      - navigation [ref=e9]:
+        - list [ref=e10]:
+          - listitem [ref=e11]:
+            - link [ref=e12] [cursor=pointer]:
+              - /url: /
+              - img [ref=e13]
+          - listitem [ref=e16]:
+            - link [ref=e17] [cursor=pointer]:
+              - /url: /chat
+              - img [ref=e18]
+          - listitem [ref=e20]:
+            - link [ref=e21] [cursor=pointer]:
+              - /url: /finetune
+              - img [ref=e22]
+      - list [ref=e25]:
+        - listitem [ref=e26]:
+          - link [ref=e27] [cursor=pointer]:
+            - /url: /settings
+            - img [ref=e28]
+    - main [ref=e32]:
+      - generic [ref=e35]:
+        - generic [ref=e36]:
+          - img [ref=e37]
+          - button "Chess Tutor - Docling E2E" [ref=e41] [cursor=pointer]:
+            - generic [ref=e42]: Chess Tutor - Docling E2E
+            - img [ref=e43]
+        - generic [ref=e46]:
+          - generic [ref=e47]:
+            - generic [ref=e49]: Explorer
+            - generic [ref=e52]:
+              - treeitem "readme.md" [ref=e53] [cursor=pointer]:
+                - img [ref=e56]
+                - generic [ref=e58]: readme.md
+                - img [ref=e60]
+              - treeitem "logs.md" [ref=e62] [cursor=pointer]:
+                - img [ref=e65]
+                - generic [ref=e68]: logs.md
+              - treeitem "knowledge 1" [ref=e69] [cursor=pointer]:
+                - img [ref=e71]
+                - generic [ref=e73]: knowledge
+                - generic [ref=e74]: "1"
+              - treeitem "data 14" [ref=e75] [cursor=pointer]:
+                - img [ref=e77]
+                - generic [ref=e79]: data
+                - generic [ref=e80]: "14"
+              - treeitem "Basic Tactical Patterns" [ref=e81] [cursor=pointer]:
+                - img [ref=e84]
+                - generic [ref=e87]: Basic Tactical Patterns
+              - treeitem "Advanced Combinations" [ref=e88] [cursor=pointer]:
+                - img [ref=e91]
+                - generic [ref=e94]: Advanced Combinations
+              - treeitem "Positional Themes 2" [ref=e95] [cursor=pointer]:
+                - img [ref=e98]
+                - generic [ref=e101]: Positional Themes
+                - generic [ref=e102]: "2"
+              - treeitem "Opening Principles 1" [ref=e103] [cursor=pointer]:
+                - img [ref=e106]
+                - generic [ref=e109]: Opening Principles
+                - generic [ref=e110]: "1"
+              - treeitem "Endgame & Mating Patterns" [ref=e111] [cursor=pointer]:
+                - img [ref=e114]
+                - generic [ref=e117]: Endgame & Mating Patterns
+              - treeitem "Forks 2" [ref=e118] [cursor=pointer]:
+                - img [ref=e121]
+                - generic [ref=e124]: Forks
+                - generic [ref=e125]: "2"
+              - treeitem "Pins and Skewers 2" [ref=e126] [cursor=pointer]:
+                - img [ref=e129]
+                - generic [ref=e132]: Pins and Skewers
+                - generic [ref=e133]: "2"
+              - treeitem "Discovered Attacks 1" [ref=e134] [cursor=pointer]:
+                - img [ref=e137]
+                - generic [ref=e140]: Discovered Attacks
+                - generic [ref=e141]: "1"
+              - treeitem "Sacrifices 1" [ref=e142] [cursor=pointer]:
+                - img [ref=e145]
+                - generic [ref=e148]: Sacrifices
+                - generic [ref=e149]: "1"
+              - treeitem "Overloading & Deflection 2" [ref=e150] [cursor=pointer]:
+                - img [ref=e153]
+                - generic [ref=e156]: Overloading & Deflection
+                - generic [ref=e157]: "2"
+              - treeitem "Back Rank Mates 2" [ref=e158] [cursor=pointer]:
+                - img [ref=e161]
+                - generic [ref=e164]: Back Rank Mates
+                - generic [ref=e165]: "2"
+              - treeitem "Pawn Promotion 1" [ref=e166] [cursor=pointer]:
+                - img [ref=e169]
+                - generic [ref=e172]: Pawn Promotion
+                - generic [ref=e173]: "1"
+              - treeitem "Test Topic" [ref=e174] [cursor=pointer]:
+                - img [ref=e177]
+                - generic [ref=e180]: Test Topic
+              - treeitem "evaluations" [ref=e181] [cursor=pointer]:
+                - img [ref=e183]
+                - generic [ref=e185]: evaluations
+              - treeitem "grader-script.ts" [ref=e186] [cursor=pointer]:
+                - img [ref=e189]
+                - generic [ref=e194]: grader-script.ts
+                - img [ref=e196]
+              - treeitem "jobs" [ref=e198] [cursor=pointer]:
+                - img [ref=e200]
+                - img [ref=e203]
+                - generic [ref=e205]: jobs
+                - button "New evaluation" [ref=e207]:
+                  - img [ref=e208]
+              - treeitem "finetune" [ref=e209] [cursor=pointer]:
+                - img [ref=e211]
+                - generic [ref=e213]: finetune
+                - button "New finetune job" [ref=e215]:
+                  - img [ref=e216]
+              - generic [ref=e217]: No finetune jobs yet
+              - treeitem "insights" [ref=e218] [cursor=pointer]:
+                - img [ref=e220]
+                - generic [ref=e222]: insights
+              - treeitem "coverage.md" [ref=e223] [cursor=pointer]:
+                - img [ref=e226]
+                - generic [ref=e228]: coverage.md
+                - img [ref=e230]
+          - generic [ref=e234]:
+            - button "Data" [ref=e236] [cursor=pointer]:
+              - generic [ref=e237]: Data
+              - button [ref=e238]:
+                - img [ref=e239]
+            - generic [ref=e242]:
+              - generic [ref=e243]:
+                - button "Documents 1" [disabled] [ref=e245]:
+                  - img [ref=e246]
+                  - generic [ref=e249]:
+                    - generic [ref=e250]: Documents
+                    - generic [ref=e251]: "1"
+                - generic [ref=e252]:
+                  - img [ref=e253]
+                  - button "Extracted 10" [ref=e255] [cursor=pointer]:
+                    - img [ref=e256]
+                    - generic [ref=e260]:
+                      - generic [ref=e261]: Extracted
+                      - generic [ref=e262]: "10"
+                - generic [ref=e263]:
+                  - img [ref=e264]
+                  - button "Topics 13" [ref=e266] [cursor=pointer]:
+                    - img [ref=e267]
+                    - generic [ref=e271]:
+                      - generic [ref=e272]: Topics
+                      - generic [ref=e273]: "13"
+                - generic [ref=e274]:
+                  - img [ref=e275]
+                  - button "Records 14" [ref=e277] [cursor=pointer]:
+                    - img [ref=e278]
+                    - generic [ref=e280]:
+                      - generic [ref=e281]: Records
+                      - generic [ref=e282]: "14"
+              - generic [ref=e284]:
+                - generic [ref=e285]:
+                  - button "14 records" [ref=e286] [cursor=pointer]:
+                    - generic [ref=e287]: "14"
+                    - text: records
+                  - generic [ref=e288]: ·
+                  - button "0 from traces" [ref=e289] [cursor=pointer]:
+                    - generic [ref=e290]: "0"
+                    - text: from traces
+                  - generic [ref=e291]: ·
+                  - generic [ref=e292]: 9 topics
+                  - generic [ref=e293]: ·
+                  - button "14 labeled" [ref=e294] [cursor=pointer]:
+                    - generic [ref=e295]: "14"
+                    - text: labeled
+                  - generic [ref=e296]: ·
+                  - button "0 evaluated" [ref=e297] [cursor=pointer]:
+                    - generic [ref=e298]: "0"
+                    - text: evaluated
+                - generic [ref=e299]:
+                  - generic [ref=e300]:
+                    - img [ref=e301]
+                    - textbox "Search records..." [ref=e304]
+                  - button "Export" [ref=e305] [cursor=pointer]:
+                    - img [ref=e306]
+                    - text: Export
+                  - generic [ref=e309]:
+                    - button [ref=e310] [cursor=pointer]:
+                      - img [ref=e311]
+                    - button [active] [ref=e316] [cursor=pointer]:
+                      - img [ref=e317]
+                    - button [ref=e320] [cursor=pointer]:
+                      - img [ref=e321]
+              - generic [ref=e1596]:
+                - generic [ref=e1597]:
+                  - generic [ref=e1598]: Documents
+                  - generic [ref=e1599]:
+                    - button "All Sources 1" [ref=e1600] [cursor=pointer]:
+                      - img [ref=e1601]
+                      - generic [ref=e1605]: All Sources
+                      - generic [ref=e1606]: "1"
+                    - button "chess-tactics-docling.pdf 10" [ref=e1607] [cursor=pointer]:
+                      - img [ref=e1608]
+                      - generic [ref=e1611]: chess-tactics-docling.pdf
+                      - generic [ref=e1612]: "10"
+                - generic [ref=e1614]:
+                  - generic [ref=e1615]:
+                    - generic [ref=e1616]: 1 document
+                    - generic [ref=e1617]: "|"
+                    - generic [ref=e1618]: 10 parts extracted
+                  - table [ref=e1620]:
+                    - rowgroup [ref=e1621]:
+                      - row "Topic chess-tactic…" [ref=e1622]:
+                        - columnheader "Topic" [ref=e1623]
+                        - columnheader "chess-tactic…" [ref=e1624]:
+                          - button "chess-tactic…" [ref=e1625] [cursor=pointer]
+                    - rowgroup [ref=e1626]:
+                      - row "Basic Tactical Patterns Basic Tactical Patterns ↔ chess-tactics-docling.pdf" [ref=e1627]:
+                        - cell "Basic Tactical Patterns" [ref=e1628]
+                        - cell "Basic Tactical Patterns ↔ chess-tactics-docling.pdf" [ref=e1629]:
+                          - generic "Basic Tactical Patterns ↔ chess-tactics-docling.pdf" [ref=e1630]
+                      - row "Advanced Combinations Advanced Combinations ↔ chess-tactics-docling.pdf" [ref=e1631]:
+                        - cell "Advanced Combinations" [ref=e1632]
+                        - cell "Advanced Combinations ↔ chess-tactics-docling.pdf" [ref=e1633]:
+                          - generic "Advanced Combinations ↔ chess-tactics-docling.pdf" [ref=e1634]
+                      - row "Positional Themes Positional Themes ↔ chess-tactics-docling.pdf" [ref=e1635]:
+                        - cell "Positional Themes" [ref=e1636]
+                        - cell "Positional Themes ↔ chess-tactics-docling.pdf" [ref=e1637]:
+                          - generic "Positional Themes ↔ chess-tactics-docling.pdf" [ref=e1638]
+                      - row "Opening Principles Opening Principles ↔ chess-tactics-docling.pdf" [ref=e1639]:
+                        - cell "Opening Principles" [ref=e1640]
+                        - cell "Opening Principles ↔ chess-tactics-docling.pdf" [ref=e1641]:
+                          - generic "Opening Principles ↔ chess-tactics-docling.pdf" [ref=e1642]
+                      - 'row "Endgame & Mating Patterns No link: Endgame & Mating Patterns / chess-tactics-docling.pdf" [ref=e1643]':
+                        - cell "Endgame & Mating Patterns" [ref=e1644]
+                        - 'cell "No link: Endgame & Mating Patterns / chess-tactics-docling.pdf" [ref=e1645]':
+                          - 'generic "No link: Endgame & Mating Patterns / chess-tactics-docling.pdf" [ref=e1646]'
+                      - row "Forks Forks ↔ chess-tactics-docling.pdf" [ref=e1647]:
+                        - cell "Forks" [ref=e1648]
+                        - cell "Forks ↔ chess-tactics-docling.pdf" [ref=e1649]:
+                          - generic "Forks ↔ chess-tactics-docling.pdf" [ref=e1650]
+                      - row "Pins and Skewers Pins and Skewers ↔ chess-tactics-docling.pdf" [ref=e1651]:
+                        - cell "Pins and Skewers" [ref=e1652]
+                        - cell "Pins and Skewers ↔ chess-tactics-docling.pdf" [ref=e1653]:
+                          - generic "Pins and Skewers ↔ chess-tactics-docling.pdf" [ref=e1654]
+                      - row "Discovered Attacks Discovered Attacks ↔ chess-tactics-docling.pdf" [ref=e1655]:
+                        - cell "Discovered Attacks" [ref=e1656]
+                        - cell "Discovered Attacks ↔ chess-tactics-docling.pdf" [ref=e1657]:
+                          - generic "Discovered Attacks ↔ chess-tactics-docling.pdf" [ref=e1658]
+                      - row "Sacrifices Sacrifices ↔ chess-tactics-docling.pdf" [ref=e1659]:
+                        - cell "Sacrifices" [ref=e1660]
+                        - cell "Sacrifices ↔ chess-tactics-docling.pdf" [ref=e1661]:
+                          - generic "Sacrifices ↔ chess-tactics-docling.pdf" [ref=e1662]
+                      - row "Overloading & Deflection Overloading & Deflection ↔ chess-tactics-docling.pdf" [ref=e1663]:
+                        - cell "Overloading & Deflection" [ref=e1664]
+                        - cell "Overloading & Deflection ↔ chess-tactics-docling.pdf" [ref=e1665]:
+                          - generic "Overloading & Deflection ↔ chess-tactics-docling.pdf" [ref=e1666]
+                      - 'row "Back Rank Mates No link: Back Rank Mates / chess-tactics-docling.pdf" [ref=e1667]':
+                        - cell "Back Rank Mates" [ref=e1668]
+                        - 'cell "No link: Back Rank Mates / chess-tactics-docling.pdf" [ref=e1669]':
+                          - 'generic "No link: Back Rank Mates / chess-tactics-docling.pdf" [ref=e1670]'
+                      - 'row "Pawn Promotion No link: Pawn Promotion / chess-tactics-docling.pdf" [ref=e1671]':
+                        - cell "Pawn Promotion" [ref=e1672]
+                        - 'cell "No link: Pawn Promotion / chess-tactics-docling.pdf" [ref=e1673]':
+                          - 'generic "No link: Pawn Promotion / chess-tactics-docling.pdf" [ref=e1674]'
+                      - 'row "Test Topic No link: Test Topic / chess-tactics-docling.pdf" [ref=e1675]':
+                        - cell "Test Topic" [ref=e1676]
+                        - 'cell "No link: Test Topic / chess-tactics-docling.pdf" [ref=e1677]':
+                          - 'generic "No link: Test Topic / chess-tactics-docling.pdf" [ref=e1678]'
+                  - button "chess-tactics-docling.pdf 10 parts · 21.0K chars 10" [ref=e1680] [cursor=pointer]:
+                    - generic [ref=e1681]:
+                      - img [ref=e1682]
+                      - generic [ref=e1685]:
+                        - heading "chess-tactics-docling.pdf" [level=4] [ref=e1686]
+                        - paragraph [ref=e1687]: 10 parts · 21.0K chars
+                        - generic [ref=e1689]:
+                          - img [ref=e1690]
+                          - text: "10"
+                      - img [ref=e1692]
+  - region "Notifications alt+T"

@@ -5,7 +5,7 @@
  * Shows breadcrumb path, record count, coverage indicator, and action buttons.
  */
 
-import { ChevronRight, Trash2, GitBranch, Grid2X2Plus, Loader2, Sparkles } from "lucide-react";
+import { ChevronRight, Trash2, GitBranch, Grid2X2Plus, Loader2, Sparkles, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CoverageIndicator } from "../dataset-canvas/CoverageIndicator";
 import { BreadcrumbPath } from "./BreadcrumbPath";
@@ -192,6 +192,29 @@ export function TopicNodeHeader({
               </Tooltip>
             )}
           </div>
+        )}
+
+        {/* Prompt icon — dispatches event to open PromptInheritancePanel */}
+        {!isUnassigned && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.dispatchEvent(new CustomEvent("vllora_toggle_prompt_panel", {
+                    detail: { topicId: topicPath },
+                  }));
+                }}
+                className="flex items-center justify-center w-6 h-6 rounded hover:bg-muted transition-colors text-muted-foreground/40 hover:text-[rgb(var(--theme-500))] shrink-0"
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" sideOffset={4}>
+              View prompt chain
+            </TooltipContent>
+          </Tooltip>
         )}
 
         {/* Record count and coverage indicator - hide when expanded with children */}

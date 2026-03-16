@@ -1,108 +1,50 @@
 /**
  * DatasetExplorer
  *
- * VS Code-style file tree for the dataset sidebar.
- * Consumes 5+ React contexts to build a virtual file tree representing
- * the dataset's structure: readme, plan, tasks, logs, documents, topics,
- * evaluations, finetune jobs, and quick stats.
+ * Section-based sidebar for the dataset detail view.
+ * Matches the mockup design: grouped sections with items, badges, and
+ * nested topic hierarchy under "Training Data".
  *
- * Each "file" maps to real data in IndexedDB/contexts.
- * Clicking a node navigates to the appropriate workspace section.
+ * Sections:
+ * - Source Documents (knowledge sources)
+ * - Training Data (topics + "All Topics" nav)
+ * - Eval Runs (evaluation jobs)
+ * - Training Jobs (finetune jobs)
  */
 
 import { useState, useMemo, useCallback } from "react";
 import {
   FileText,
-  FolderOpen,
-  Folder,
-  FileCode,
-  ClipboardCheck,
-  Brain,
   BarChart3,
-  ScrollText,
-  ListChecks,
-  BookOpen,
-  Sparkles,
-  Plus,
-  CheckCircle2,
+  Brain,
   Loader2,
-  XCircle,
-  Clock,
-  AlertTriangle,
-  Circle,
-  Type,
-  ImageIcon,
-  Table2,
+  Plus,
   Library,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { EvalJobsConsumer } from "@/contexts/EvalJobsContext";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
-import { PlanConsumer } from "@/contexts/PlanContext";
 import { WorkspaceTabsConsumer } from "@/contexts/WorkspaceTabsContext";
-import { useChatStateStore } from "@distri/react";
 import { toast } from "sonner";
-import { FileTreeItem } from "./FileTreeItem";
-import { IS_LUCY_ENABLED } from "@/lib/feature-flags";
+import { cn } from "@/lib/utils";
 import { NewJobDialog } from "@/components/finetune/content/NewJobDialog";
 import { NewEvaluationDialog } from "@/components/datasets/evaluation-dialog/NewEvaluationDialog";
-import type { FileTreeNode, FileTreeBadge } from "./types";
 import type { TopicHierarchyNode } from "@/types/dataset-types";
-import { computeSourceRecordStats } from "@/lib/distri-finetune-tools/steps/shared/source-record-counts";
 
 // ============================================================================
-// Icon helpers (consistent sizing for tree items)
+// Types
 // ============================================================================
 
-const ICON_CLS = "w-4 h-4";
-const BADGE_CLS = "w-3.5 h-3.5";
-
-function folderIcon(expandedSet: Set<string>, id: string) {
-  return expandedSet.has(id)
-    ? <FolderOpen className={`${ICON_CLS} text-amber-500`} />
-    : <Folder className={`${ICON_CLS} text-amber-500`} />;
-}
-
-// ============================================================================
-// Tree builders
-// ============================================================================
-
-function buildTopicChildren(
-  nodes: TopicHierarchyNode[],
-  parentPath: string,
-  topicCounts: Map<string, number>,
-  expandedNodes: Set<string>,
-): FileTreeNode[] {
-  return nodes.map((node) => {
-    const path = parentPath ? `${parentPath}/${node.name}` : node.name;
-    const nodeId = `data/${path}`;
-    const count = getTopicRecordCount(node, topicCounts);
-    const hasChildren = node.children && node.children.length > 0;
-
-    return {
-      id: nodeId,
-      name: node.name,
-      type: hasChildren ? "folder" : "file",
-      icon: hasChildren
-        ? folderIcon(expandedNodes, nodeId)
-        : <FileText className={`${ICON_CLS} text-muted-foreground`} />,
-      badge: count > 0 ? { label: String(count), variant: "count" as const } : undefined,
-      children: hasChildren
-        ? buildTopicChildren(node.children!, path, topicCounts, expandedNodes)
-        : undefined,
-    };
-  });
-}
-
-function getTopicRecordCount(node: TopicHierarchyNode, topicCounts: Map<string, number>): number {
-  let total = topicCounts.get(node.name) || 0;
-  if (node.children) {
-    for (const child of node.children) {
-      total += getTopicRecordCount(child, topicCounts);
-    }
-  }
-  return total;
+interface SidebarItemProps {
+  readonly icon: React.ReactNode;
+  readonly label: string;
+  readonly badge?: React.ReactNode;
+  readonly isActive?: boolean;
+  readonly isNested?: boolean;
+  readonly onClick?: () => void;
 }
 
 // ============================================================================
@@ -118,34 +60,20 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
   const { sources } = KnowledgeSourcesConsumer();
   const { jobs: dryRunJobs, runningJob: runningEval, startDryRun } = EvalJobsConsumer();
   const { filteredJobs: finetuneJobs, loadJobs: loadFinetuneJobs } = FinetuneJobsConsumer();
-  const { proposedPlan, planStatus, hasPlanProposed } = PlanConsumer();
   const { openTab } = WorkspaceTabsConsumer();
-  const todos = useChatStateStore((s) => s.todos);
 
-  // Expanded/selected state
-  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(
-    () => new Set(["documents", "data", "evaluations", "finetune", "insights"])
-  );
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-
-  // Per-source record counts for document node badges
-  const sourceRecordStats = useMemo(
-    () => computeSourceRecordStats(records, dataset?.knowledgeCoverageStats),
-    [records, dataset?.knowledgeCoverageStats],
-  );
-
-  // New finetune job dialog
   const [showNewJobDialog, setShowNewJobDialog] = useState(false);
-  // New evaluation dialog
   const [showNewEvalDialog, setShowNewEvalDialog] = useState(false);
+  const [collapsedParents, setCollapsedParents] = useState<Set<string>>(new Set());
 
-  const toggleExpand = useCallback((nodeId: string) => {
-    setExpandedNodes((prev) => {
+  const toggleParent = useCallback((name: string) => {
+    setCollapsedParents((prev) => {
       const next = new Set(prev);
-      if (next.has(nodeId)) {
-        next.delete(nodeId);
+      if (next.has(name)) {
+        next.delete(name);
       } else {
-        next.add(nodeId);
+        next.add(name);
       }
       return next;
     });
@@ -156,7 +84,6 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
     const counts = new Map<string, number>();
     for (const r of records) {
       if (r.topic) {
-        // Use the leaf topic name (last segment of path)
         const leaf = r.topic.split("/").pop() || r.topic;
         counts.set(leaf, (counts.get(leaf) || 0) + 1);
       }
@@ -164,455 +91,173 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
     return counts;
   }, [records]);
 
-  // ============================================================================
-  // Build the virtual file tree
-  // ============================================================================
-
-  const tree = useMemo((): FileTreeNode[] => {
-    const nodes: FileTreeNode[] = [];
-
-    // --- Top-level files ---
-
-    // readme.md
-    nodes.push({
-      id: "readme.md",
-      name: "readme.md",
-      type: "file",
-      icon: <BookOpen className={`${ICON_CLS} text-blue-500`} />,
-      badge: dataset?.readme ? undefined : {
-        label: "empty", variant: "default",
-        icon: <Circle className={`${BADGE_CLS} opacity-40`} />,
-        tooltip: "No content yet",
-      },
-    });
-
-    // plan.md
-    const planBadge: FileTreeBadge | undefined = (() => {
-      if (planStatus === "executing") return {
-        label: "executing", variant: "loading" as const,
-        icon: <Loader2 className={`${BADGE_CLS} animate-spin`} />,
-        tooltip: "Plan executing",
-      };
-      if (planStatus === "completed") return {
-        label: "done", variant: "success" as const,
-        icon: <CheckCircle2 className={BADGE_CLS} />,
-        tooltip: "Plan completed",
-      };
-      if (planStatus === "failed") return {
-        label: "failed", variant: "error" as const,
-        icon: <XCircle className={BADGE_CLS} />,
-        tooltip: "Plan failed",
-      };
-      if (hasPlanProposed) return {
-        label: "proposed", variant: "warning" as const,
-        icon: <AlertTriangle className={BADGE_CLS} />,
-        tooltip: "Plan proposed — review needed",
-      };
-      return {
-        label: "empty", variant: "default" as const,
-        icon: <Circle className={`${BADGE_CLS} opacity-40`} />,
-        tooltip: "No plan yet",
-      };
-    })();
-
-    // Show plan.md only when Lucy is enabled or a plan already exists
-    if (IS_LUCY_ENABLED || hasPlanProposed || planStatus === "completed" || planStatus === "executing" || planStatus === "failed") {
-      nodes.push({
-        id: "plan.md",
-        name: "plan.md",
-        type: "file",
-        icon: <ScrollText className={`${ICON_CLS} text-[rgb(var(--theme-500))]`} />,
-        badge: planBadge,
-      });
-    }
-
-    // tasks.md — only shown when there are active tasks
-    const activeTodos = todos.filter((t) => t.status !== "done");
-    if (activeTodos.length > 0) {
-      nodes.push({
-        id: "tasks.md",
-        name: "tasks.md",
-        type: "file",
-        icon: <ListChecks className={`${ICON_CLS} text-orange-500`} />,
-        badge: { label: String(activeTodos.length), variant: "count" },
-      });
-    }
-
-    // logs.md — only shown when there's activity to display
-    const hasLogs = sources.length > 0 || dryRunJobs.length > 0 ||
-      finetuneJobs.length > 0 || !!dataset?.topicHierarchy?.generatedAt;
-    if (hasLogs) {
-      nodes.push({
-        id: "logs.md",
-        name: "logs.md",
-        type: "file",
-        icon: <FileText className={`${ICON_CLS} text-muted-foreground`} />,
-      });
-    }
-
-    // --- knowledge/ (only shown when there are knowledge sources) ---
-    if (sources.length > 0) {
-      const partIcon = (type: string) => {
-        if (type === 'image') return <ImageIcon className={`${ICON_CLS} text-purple-400`} />;
-        if (type === 'table') return <Table2 className={`${ICON_CLS} text-amber-400`} />;
-        return <Type className={`${ICON_CLS} text-green-400`} />;
-      };
-
-      const sourceChildren: FileTreeNode[] = sources.map((src) => {
-        const partChildren: FileTreeNode[] = src.parts.map((part, idx) => {
-          const label = part.title || `${part.type.charAt(0).toUpperCase() + part.type.slice(1)} #${idx + 1}`;
-          return {
-            id: `knowledge/${src.id}/${part.id}`,
-            name: label,
-            type: "file" as const,
-            icon: partIcon(part.type),
-          };
-        });
-
-        const recCount = sourceRecordStats.get(src.id)?.recordCount;
-        const badge: FileTreeBadge | undefined = recCount && recCount > 0
-          ? { label: `${recCount} rec`, variant: "count" as const, tooltip: `${recCount} record${recCount !== 1 ? "s" : ""} from this source` }
-          : src.parts.length > 0
-            ? { label: String(src.parts.length), variant: "count" as const, tooltip: `${src.parts.length} part${src.parts.length !== 1 ? "s" : ""}` }
-            : undefined;
-
-        return {
-          id: `knowledge/${src.id}`,
-          name: src.name,
-          type: "folder" as const,
-          icon: <FileText className={`${ICON_CLS} text-blue-400`} />,
-          badge,
-          children: partChildren,
-          isExpandable: partChildren.length > 0,
-        };
-      });
-
-      nodes.push({
-        id: "knowledge",
-        name: "knowledge",
-        type: "folder",
-        icon: <Library className={`${ICON_CLS} text-blue-500`} />,
-        badge: { label: String(sources.length), variant: "count" },
-        children: sourceChildren,
-        isExpandable: true,
-        isSection: true,
-      });
-    }
-
-    // --- data/ (always shown) ---
-    const topicHierarchy = dataset?.topicHierarchy?.hierarchy;
-    const topicChildren = topicHierarchy
-      ? buildTopicChildren(topicHierarchy, "", topicCounts, expandedNodes)
-      : [];
-    const dataBadge: FileTreeBadge | undefined = isGeneratingTraces
-      ? {
-        label: "generating", variant: "loading" as const,
-        icon: <Loader2 className={`${BADGE_CLS} animate-spin`} />,
-        tooltip: "Generating training data",
-      }
-      : records.length > 0
-        ? { label: String(records.length), variant: "count" }
-        : undefined;
-
-    nodes.push({
-      id: "data",
-      name: "data",
-      type: "folder",
-      badge: dataBadge,
-      children: topicChildren,
-      isExpandable: topicChildren.length > 0,
-      isSection: true,
-      emptyText: "No training data yet",
-    });
-
-    // --- evaluations/ (always shown) ---
-    {
-      const evalChildren: FileTreeNode[] = [];
-
-      // grader-script.ts
-      evalChildren.push({
-        id: "evaluations/grader-script.ts",
-        name: "grader-script.ts",
-        type: "file",
-        icon: <FileCode className={`${ICON_CLS} text-yellow-500`} />,
-        badge: dataset?.evalScript
-          ? undefined
-          : {
-            label: "configure", variant: "warning" as const,
-            icon: <AlertTriangle className={BADGE_CLS} />,
-            tooltip: "Required — configure a grader script to run evaluations",
-          },
-      });
-
-      // evaluations/jobs/ (always shown so "+" action is accessible)
-      const hasGraderScript = !!dataset?.evalScript;
-      const jobChildren: FileTreeNode[] = dryRunJobs.map((job) => {
-        const statusBadge: FileTreeBadge | undefined = (() => {
-          if (job.status === "running") return {
-            label: "running", variant: "loading" as const,
-            icon: <Loader2 className={`${BADGE_CLS} animate-spin`} />,
-            tooltip: "Evaluation running",
-          };
-          if (job.status === "completed") return {
-            label: "pass", variant: "success" as const,
-            icon: <CheckCircle2 className={BADGE_CLS} />,
-            tooltip: "Evaluation completed",
-          };
-          if (job.status === "failed") return {
-            label: "fail", variant: "error" as const,
-            icon: <XCircle className={BADGE_CLS} />,
-            tooltip: "Evaluation failed",
-          };
-          return {
-            label: job.status, variant: "default" as const,
-            icon: <Clock className={BADGE_CLS} />,
-            tooltip: `Status: ${job.status}`,
-          };
-        })();
-
-        return {
-          id: `evaluations/jobs/${job.id}`,
-          name: `eval-${job.id.slice(0, 6)}`,
-          type: "file" as const,
-          icon: <ClipboardCheck className={`${ICON_CLS} text-violet-500`} />,
-          badge: statusBadge,
-        };
-      });
-
-      evalChildren.push({
-        id: "evaluations/jobs",
-        name: "jobs",
-        type: "folder",
-        icon: folderIcon(expandedNodes, "evaluations/jobs"),
-        children: jobChildren,
-        isExpandable: true,
-        emptyText: "No evaluation runs yet",
-        actions: [
-          {
-            key: "run-eval",
-            icon: <Plus className="w-3.5 h-3.5" />,
-            title: "New evaluation",
-            onClick: () => {
-              if (!hasGraderScript) {
-                toast.info("Configure and save a grader script first.");
-              } else if (runningEval) {
-                toast.info("An evaluation is already running. Wait for it to finish.");
-              } else {
-                setShowNewEvalDialog(true);
-              }
-            },
-          },
-        ],
-      });
-
-      const evalSectionBadge: FileTreeBadge | undefined = runningEval
-        ? {
-          label: "running", variant: "loading" as const,
-          icon: <Loader2 className={`${BADGE_CLS} animate-spin`} />,
-          tooltip: "Evaluation running",
-        }
-        : undefined;
-
-      nodes.push({
-        id: "evaluations",
-        name: "evaluations",
-        type: "folder",
-        badge: evalSectionBadge,
-        children: evalChildren,
-        isExpandable: true,
-        isSection: true,
-        emptyText: "No evaluations run yet",
-      });
-    }
-
-    // --- finetune/ (always shown — users need access to start training manually) ---
-    {
-      const finetuneChildren: FileTreeNode[] = finetuneJobs.map((job) => {
-        const statusBadge: FileTreeBadge | undefined = (() => {
-          if (job.status === "running") return {
-            label: "running", variant: "loading" as const,
-            icon: <Loader2 className={`${BADGE_CLS} animate-spin`} />,
-            tooltip: "Training in progress",
-          };
-          if (job.status === "succeeded") return {
-            label: "done", variant: "success" as const,
-            icon: <CheckCircle2 className={BADGE_CLS} />,
-            tooltip: "Training completed",
-          };
-          if (job.status === "failed") return {
-            label: "failed", variant: "error" as const,
-            icon: <XCircle className={BADGE_CLS} />,
-            tooltip: "Training failed",
-          };
-          if (job.status === "pending") return {
-            label: "queued", variant: "default" as const,
-            icon: <Clock className={BADGE_CLS} />,
-            tooltip: "Queued — waiting to start",
-          };
-          return {
-            label: job.status, variant: "default" as const,
-            icon: <Clock className={BADGE_CLS} />,
-            tooltip: `Status: ${job.status}`,
-          };
-        })();
-
-        const displayName = job.suffix || `ft-${job.id.slice(0, 6)}`;
-
-        return {
-          id: `finetune/${job.id}`,
-          name: displayName,
-          type: "file" as const,
-          icon: <Brain className={`${ICON_CLS} text-orange-500`} />,
-          badge: statusBadge,
-        };
-      });
-
-      const hasActiveJob = finetuneJobs.some(
-        (j) => j.status === "running" || j.status === "pending"
-      );
-
-      const finetuneSectionBadge: FileTreeBadge | undefined = hasActiveJob
-        ? {
-          label: "training", variant: "loading" as const,
-          icon: <Loader2 className={`${BADGE_CLS} animate-spin`} />,
-          tooltip: "Finetune job in progress",
-        }
-        : finetuneJobs.length > 0
-          ? { label: String(finetuneJobs.length), variant: "count" }
-          : undefined;
-
-      nodes.push({
-        id: "finetune",
-        name: "finetune",
-        type: "folder",
-        badge: finetuneSectionBadge,
-        children: finetuneChildren,
-        isExpandable: true,
-        isSection: true,
-        emptyText: "No finetune jobs yet",
-        actions: [
-          {
-            key: "new-job",
-            icon: <Plus className="w-3.5 h-3.5" />,
-            title: "New finetune job",
-            onClick: () => {
-              if (hasActiveJob) {
-                toast.info("A finetune job is already running. Wait for it to finish before starting a new one.");
-              } else {
-                setShowNewJobDialog(true);
-              }
-            },
-          },
-        ],
-      });
-    }
-
-    // --- insights/ (always shown, children are data-driven) ---
-    {
-      const statsChildren: FileTreeNode[] = [];
-
-      // coverage.md — shown when there are records with topics (coverage can be computed)
-      const hasCoverage = records.length > 0 && !!dataset?.topicHierarchy?.hierarchy;
-      if (hasCoverage) {
-        statsChildren.push({
-          id: "insights/coverage.md",
-          name: "coverage.md",
-          type: "file",
-          icon: <BarChart3 className={`${ICON_CLS} text-cyan-500`} />,
-          badge: dataset?.coverageStats
-            ? { label: "ready", variant: "success" as const, icon: <CheckCircle2 className={BADGE_CLS} />, tooltip: "Coverage analysis available" }
-            : { label: "pending", variant: "default" as const, icon: <Circle className={`${BADGE_CLS} opacity-40`} />, tooltip: "Run coverage analysis to populate" },
-        });
-      }
-
-      // balance.md — shown when coverage stats exist (balance score is computed)
-      if (dataset?.coverageStats?.balanceScore != null) {
-        statsChildren.push({
-          id: "insights/balance.md",
-          name: "balance.md",
-          type: "file",
-          icon: <BarChart3 className={`${ICON_CLS} text-cyan-500`} />,
-        });
-      }
-
-      // quality-scores.md — shown when evaluations have been completed
-      const hasCompletedEval = dryRunJobs.some((j) => j.status === "completed");
-      if (hasCompletedEval) {
-        statsChildren.push({
-          id: "insights/quality-scores.md",
-          name: "quality-scores.md",
-          type: "file",
-          icon: <Sparkles className={`${ICON_CLS} text-cyan-500`} />,
-        });
-      }
-
-      nodes.push({
-        id: "insights",
-        name: "insights",
-        type: "folder",
-        children: statsChildren,
-        isExpandable: true,
-        isSection: true,
-        emptyText: "Insights will appear as you progress",
-      });
-    }
-
-    return nodes;
-  }, [
-    dataset, records, sources, dryRunJobs, finetuneJobs,
-    proposedPlan, planStatus, hasPlanProposed, todos,
-    topicCounts, expandedNodes, isGeneratingTraces,
-  ]);
-
-  // ============================================================================
-  // Navigation: map tree node click → existing section navigation
-  // ============================================================================
-
-  // Build flat nodeId → label map for tab display names
-  const nodeLabelMap = useMemo(() => {
-    const map = new Map<string, string>();
-    const walk = (nodes: FileTreeNode[]) => {
-      for (const n of nodes) {
-        map.set(n.id, n.name);
-        if (n.children) walk(n.children);
-      }
-    };
-    walk(tree);
-    return map;
-  }, [tree]);
-
   const handleSelect = useCallback((nodeId: string) => {
     setSelectedNodeId(nodeId);
-    openTab(nodeId, nodeLabelMap.get(nodeId));
-    onNavigate?.(nodeId);
-  }, [openTab, onNavigate, nodeLabelMap]);
 
-  // ============================================================================
-  // Render
-  // ============================================================================
+    // Route all knowledge/* clicks to Sources view via the "data" tab
+    if (nodeId.startsWith("knowledge/")) {
+      const sourceId = nodeId === "knowledge/all-sources"
+        ? null
+        : nodeId.replace("knowledge/", "");
+      // Open "data" tab first so DatasetMainContent mounts and can catch the view switch
+      openTab("data");
+      // Dispatch after a tick so the component mounts first
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("vllora_switch_view", {
+          detail: { viewMode: "sources", sourceId },
+        }));
+      }, 50);
+      return;
+    }
+
+    openTab(nodeId);
+    // When navigating to a data/* node, ensure we leave sources view
+    if (nodeId === "data" || nodeId.startsWith("data/")) {
+      window.dispatchEvent(new CustomEvent("vllora_switch_view", {
+        detail: { viewMode: "table", ifCurrently: "sources" },
+      }));
+    }
+    onNavigate?.(nodeId);
+  }, [openTab, onNavigate]);
 
   const hasActiveJob = finetuneJobs.some(
     (j) => j.status === "running" || j.status === "pending"
   );
+  const hasGraderScript = !!dataset?.evalScript;
+  const topicHierarchy = dataset?.topicHierarchy?.hierarchy;
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-      {/* File tree */}
-      <div className="flex-1 overflow-y-auto py-1">
-        {tree.map((node) => (
-          <FileTreeItem
-            key={node.id}
+    <div className="flex flex-col h-full min-h-0 overflow-y-auto py-4">
+      {/* ── Source Documents ── */}
+      {sources.length > 0 && (
+        <SidebarSection title="Source Documents" count={sources.length}>
+          <SidebarItem
+            icon={<Library className="w-3.5 h-3.5" />}
+            label="All Sources"
+            badge={<CountBadge count={sources.length} />}
+            isActive={selectedNodeId === "knowledge/all-sources"}
+            onClick={() => handleSelect("knowledge/all-sources")}
+          />
+          {sources.map((src) => (
+            <SidebarItem
+              key={src.id}
+              icon={<FileText className="w-3.5 h-3.5" />}
+              label={src.name}
+              badge={<CountBadge count={src.parts.length} />}
+              isActive={selectedNodeId === `knowledge/${src.id}`}
+              isNested
+              onClick={() => handleSelect(`knowledge/${src.id}`)}
+            />
+          ))}
+        </SidebarSection>
+      )}
+
+      {sources.length > 0 && <SidebarDivider />}
+
+      {/* ── Training Data ── */}
+      <SidebarSection
+        title="Training Data"
+        count={records.length}
+        isLoading={isGeneratingTraces}
+      >
+        {/* All Topics item */}
+        <SidebarItem
+          icon={<Library className="w-3.5 h-3.5" />}
+          label="All Topics"
+          badge={<CountBadge count={records.length} />}
+          isActive={selectedNodeId === "data"}
+          onClick={() => handleSelect("data")}
+        />
+
+        {/* Nested topic items */}
+        {topicHierarchy && topicHierarchy.map((node) => (
+          <TopicTreeItems
+            key={node.id || node.name}
             node={node}
-            level={0}
-            expandedNodes={expandedNodes}
+            topicCounts={topicCounts}
             selectedNodeId={selectedNodeId}
-            onToggle={toggleExpand}
             onSelect={handleSelect}
+            depth={0}
+            collapsedParents={collapsedParents}
+            onToggleParent={toggleParent}
           />
         ))}
-      </div>
+      </SidebarSection>
 
-      {/* New finetune job dialog (triggered from finetune folder "+" action) */}
+      <SidebarDivider />
+
+      {/* ── Eval Runs ── */}
+      <SidebarSection
+        title="Eval Runs"
+        count={dryRunJobs.length}
+        action={{
+          icon: <Plus className="w-3 h-3" />,
+          title: "New evaluation",
+          onClick: () => {
+            if (!hasGraderScript) {
+              toast.info("Configure and save a grader script first.");
+            } else if (runningEval) {
+              toast.info("An evaluation is already running.");
+            } else {
+              setShowNewEvalDialog(true);
+            }
+          },
+        }}
+      >
+        {dryRunJobs.map((job) => {
+          const statusInfo = getEvalJobStatus(job.status);
+          return (
+            <SidebarItem
+              key={job.id}
+              icon={<BarChart3 className="w-3.5 h-3.5" />}
+              label={`eval-${job.id.slice(0, 6)}`}
+              badge={<StatusBadge {...statusInfo} />}
+              isActive={selectedNodeId === `evaluations/jobs/${job.id}`}
+              onClick={() => handleSelect(`evaluations/jobs/${job.id}`)}
+            />
+          );
+        })}
+        {dryRunJobs.length === 0 && (
+          <p className="px-6 py-2 text-[11px] text-muted-foreground/40 italic">No evaluation runs yet</p>
+        )}
+      </SidebarSection>
+
+      {/* ── Training Jobs ── */}
+      <SidebarSection
+        title="Training Jobs"
+        count={finetuneJobs.length}
+        action={{
+          icon: <Plus className="w-3 h-3" />,
+          title: "New finetune job",
+          onClick: () => {
+            if (hasActiveJob) {
+              toast.info("A finetune job is already running.");
+            } else {
+              setShowNewJobDialog(true);
+            }
+          },
+        }}
+      >
+        {finetuneJobs.map((job) => {
+          const statusInfo = getFinetuneJobStatus(job.status);
+          const displayName = job.suffix || `ft-${job.id.slice(0, 6)}`;
+          return (
+            <SidebarItem
+              key={job.id}
+              icon={<Brain className="w-3.5 h-3.5" />}
+              label={displayName}
+              badge={<StatusBadge {...statusInfo} />}
+              isActive={selectedNodeId === `finetune/${job.id}`}
+              onClick={() => handleSelect(`finetune/${job.id}`)}
+            />
+          );
+        })}
+        {finetuneJobs.length === 0 && (
+          <p className="px-6 py-2 text-[11px] text-muted-foreground/40 italic">No finetune jobs yet</p>
+        )}
+      </SidebarSection>
+
+      {/* ── Dialogs ── */}
       {dataset?.id && (
         <NewJobDialog
           workflowId={dataset.id}
@@ -624,7 +269,6 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         />
       )}
 
-      {/* New evaluation dialog (triggered from jobs folder "+" action) */}
       <NewEvaluationDialog
         recordCount={records.length}
         open={showNewEvalDialog}
@@ -632,7 +276,6 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         onRun={async (sampleSize, rolloutModel) => {
           const jobId = await startDryRun(sampleSize, rolloutModel);
           toast.success(`Evaluation started with ${sampleSize} samples.`);
-          // Auto-navigate to the new eval job detail tab
           const nodePath = `evaluations/jobs/${jobId}`;
           setSelectedNodeId(nodePath);
           openTab(nodePath);
@@ -641,4 +284,208 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       />
     </div>
   );
+}
+
+// ============================================================================
+// Section & Item Components
+// ============================================================================
+
+function SidebarSection({
+  title,
+  count,
+  isLoading,
+  action,
+  children,
+}: {
+  readonly title: string;
+  readonly count?: number;
+  readonly isLoading?: boolean;
+  readonly action?: { icon: React.ReactNode; title: string; onClick: () => void };
+  readonly children: React.ReactNode;
+}) {
+  return (
+    <div className="mb-2">
+      <div className="flex items-center justify-between px-4 py-1.5">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+          {title}
+          {count !== undefined && (
+            <span className="ml-1.5 text-muted-foreground/40 font-normal">{count}</span>
+          )}
+        </span>
+        <div className="flex items-center gap-1">
+          {isLoading && <Loader2 className="w-3 h-3 animate-spin text-[rgb(var(--theme-500))]" />}
+          {action && (
+            <button
+              type="button"
+              onClick={action.onClick}
+              title={action.title}
+              className="p-0.5 rounded text-muted-foreground/40 hover:text-foreground hover:bg-muted transition-colors"
+            >
+              {action.icon}
+            </button>
+          )}
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function SidebarItem({ icon, label, badge, isActive, isNested, onClick }: SidebarItemProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "w-full flex items-center gap-2 text-[13px] transition-colors text-left",
+        isNested ? "py-1.5 pl-10 pr-4" : "py-1.5 pl-6 pr-4",
+        isActive
+          ? "bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+      )}
+    >
+      <span className="opacity-50 shrink-0">{icon}</span>
+      <span className="flex-1 truncate min-w-0">{label}</span>
+      {badge}
+    </button>
+  );
+}
+
+function SidebarDivider() {
+  return <div className="h-px bg-border/50 mx-4 my-2" />;
+}
+
+// ============================================================================
+// Badge Components
+// ============================================================================
+
+function CountBadge({ count }: { readonly count: number }) {
+  if (count === 0) return null;
+  return (
+    <span className="ml-auto text-[10px] text-muted-foreground/50 bg-muted/50 px-1.5 py-px rounded-full tabular-nums shrink-0">
+      {count}
+    </span>
+  );
+}
+
+function StatusBadge({ label, color }: { readonly label: string; readonly color: string }) {
+  return (
+    <span className={cn(
+      "ml-auto text-[10px] px-1.5 py-px rounded-full shrink-0 font-medium",
+      color,
+    )}>
+      {label}
+    </span>
+  );
+}
+
+// ============================================================================
+// Topic Tree Items (recursive, nested under Training Data)
+// ============================================================================
+
+function TopicTreeItems({
+  node,
+  topicCounts,
+  selectedNodeId,
+  onSelect,
+  depth,
+  collapsedParents,
+  onToggleParent,
+}: {
+  readonly node: TopicHierarchyNode;
+  readonly topicCounts: Map<string, number>;
+  readonly selectedNodeId: string | null;
+  readonly onSelect: (nodeId: string) => void;
+  readonly depth: number;
+  readonly collapsedParents: Set<string>;
+  readonly onToggleParent: (name: string) => void;
+}) {
+  const nodeId = `data/${node.name}`;
+  const count = getTopicRecordCount(node, topicCounts);
+  const hasChildren = (node.children?.length ?? 0) > 0;
+  const isCollapsed = collapsedParents.has(node.name);
+  const paddingLeft = 24 + depth * 16;
+
+  if (hasChildren) {
+    // Parent node — collapsible with chevron
+    const Chevron = isCollapsed ? ChevronRight : ChevronDown;
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => onToggleParent(node.name)}
+          className={cn(
+            "w-full flex items-center gap-1.5 text-[13px] py-1.5 pr-4 transition-colors text-left",
+            selectedNodeId === nodeId
+              ? "bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+          )}
+          style={{ paddingLeft }}
+        >
+          <Chevron className="w-3 h-3 shrink-0 opacity-50" />
+          <span className="flex-1 truncate min-w-0 font-medium">{node.name}</span>
+          <CountBadge count={count} />
+        </button>
+        {!isCollapsed && node.children!.map((child) => (
+          <TopicTreeItems
+            key={child.id || child.name}
+            node={child}
+            topicCounts={topicCounts}
+            selectedNodeId={selectedNodeId}
+            onSelect={onSelect}
+            depth={depth + 1}
+            collapsedParents={collapsedParents}
+            onToggleParent={onToggleParent}
+          />
+        ))}
+      </>
+    );
+  }
+
+  // Leaf node — clickable, indented
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(nodeId)}
+      className={cn(
+        "w-full flex items-center gap-2 text-[13px] py-1.5 pr-4 transition-colors text-left",
+        selectedNodeId === nodeId
+          ? "bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+      )}
+      style={{ paddingLeft: paddingLeft + 14 }}
+    >
+      <span className="flex-1 truncate min-w-0">{node.name}</span>
+      <CountBadge count={count} />
+    </button>
+  );
+}
+
+function getTopicRecordCount(node: TopicHierarchyNode, topicCounts: Map<string, number>): number {
+  let total = topicCounts.get(node.name) || 0;
+  if (node.children) {
+    for (const child of node.children) {
+      total += getTopicRecordCount(child, topicCounts);
+    }
+  }
+  return total;
+}
+
+// ============================================================================
+// Status helpers
+// ============================================================================
+
+function getEvalJobStatus(status: string): { label: string; color: string } {
+  if (status === "running") return { label: "running", color: "bg-blue-500/15 text-blue-400" };
+  if (status === "completed") return { label: "done", color: "bg-emerald-500/15 text-emerald-400" };
+  if (status === "failed") return { label: "failed", color: "bg-red-500/15 text-red-400" };
+  return { label: status, color: "bg-muted/50 text-muted-foreground" };
+}
+
+function getFinetuneJobStatus(status: string): { label: string; color: string } {
+  if (status === "running") return { label: "running", color: "bg-blue-500/15 text-blue-400" };
+  if (status === "succeeded") return { label: "done", color: "bg-emerald-500/15 text-emerald-400" };
+  if (status === "failed") return { label: "failed", color: "bg-red-500/15 text-red-400" };
+  if (status === "pending") return { label: "queued", color: "bg-amber-500/15 text-amber-400" };
+  return { label: status, color: "bg-muted/50 text-muted-foreground" };
 }

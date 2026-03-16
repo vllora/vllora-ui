@@ -12,7 +12,7 @@ import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
+import { DatasetDetailConsumer, type ViewMode } from "@/contexts/DatasetDetailContext";
 import { emitter } from "@/utils/eventEmitter";
 import { DeleteConfirmationDialog } from "./DeleteConfirmationDialog";
 import { AssignTopicDialog } from "./AssignTopicDialog";
@@ -610,7 +610,7 @@ export function DatasetDetailContentV2() {
   }, []);
 
   // 5.3: Preserve context across view switches
-  const handleViewModeChange = useCallback((mode: "canvas" | "table") => {
+  const handleViewModeChange = useCallback((mode: ViewMode) => {
     if (mode === "table" && selectedTopic) {
       // Switching from canvas to table — focus the selected topic after mount
       setViewMode(mode);
@@ -818,6 +818,8 @@ export function DatasetDetailContentV2() {
               onClearSourceDocumentFilter={() => setSourceDocumentFilter(null)}
               onUpdatePromptTemplate={handleUpdatePromptTemplate}
               topicQualityScores={topicQualityScores}
+              documentCount={knowledgeSourcesCount}
+              partCount={knowledgeSources.flatMap(s => s.parts).length}
             />
           )}
           {contentSection === "evaluator-script" && (
