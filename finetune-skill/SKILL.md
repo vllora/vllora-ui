@@ -57,8 +57,35 @@ finetune-project/
 
 ### Execution Log
 
-Keep an execution log (`execution-log.md`) — append after EVERY step. Every log entry MUST include a full timestamp in `YYYY-MM-DD HH:MM:SS` format. Get the time by running `date '+%Y-%m-%d %H:%M:%S'` via Bash.
+Maintain `execution-log.md` as an **append-only** chronological record. After every action (not just step boundaries), delegate to the `execution-logger` subagent to append entries.
 
+**Delegate logging after each action:**
+
+```
+Log to execution-log.md:
+- Step: Step 4 — Generate Training Data
+- Action: Pass 1 — LLM-driven generation for 18 leaf topics
+- Strategy: chat_completion.py, model gpt-4o-mini, temperature 0.8, response_format json_object, 10 prompts per topic grounded in linked knowledge chunks
+- Results: 180 records generated (centre-control: 10, tactical-sacrifices: 10, ...)
+- Issues: None
+```
+
+The subagent will:
+1. Read the current `execution-log.md` (or create it if it doesn't exist)
+2. Get the current timestamp via `date '+%Y-%m-%d %H:%M:%S'`
+3. Append new entries — **never overwrite or delete previous entries**
+4. Format consistently using the template below
+
+**Log entry format:**
+```markdown
+## Step N: Step Name
+- [YYYY-MM-DD HH:MM:SS] Action description
+  - Strategy: approach, model, parameters (for LLM-driven actions)
+  - Results: counts, files written, outputs
+  - Issues: failures, retries, what was fixed (if any)
+```
+
+**Example log** (showing multi-pass generation with a retry):
 ```markdown
 ## Step 1: Define Objective
 - [2026-03-06 10:32:15] System prompt defined: "You are a chess tactics tutor..."
@@ -69,9 +96,19 @@ Keep an execution log (`execution-log.md`) — append after EVERY step. Every lo
 
 ## Step 3: Build Topics
 - [2026-03-06 10:36:45] Created 6 root topics, 18 leaf topics, saved to topics.json
+- [2026-03-06 10:37:00] Delegated to relation-builder: linked 42 parts across 18 topics
 
 ## Step 4: Generate Training Data
-- [2026-03-06 10:45:30] 120 total records across 18 topics, saved to training.jsonl
+- [2026-03-06 10:40:00] Strategy: LLM-driven generation via chat_completion.py
+  - Model: gpt-4o-mini, temperature: 0.8, response_format: json_object
+  - Approach: 1 pass per leaf topic, 10 prompts each, grounded in linked knowledge chunks
+  - Generation prompt: "Generate N diverse user prompts varying difficulty, tone, type"
+  - Prompt types targeted: explain-why, compare, what-if, analyze, teach-me
+- [2026-03-06 10:42:00] Pass 1 results: 180 records across 18 leaf topics
+  - centre-control: 10, centre-opening-plans: 10, tactical-sacrifices: 10, ...
+- [2026-03-06 10:43:00] Validation: 178/180 passed — 2 records had empty content, removed
+- [2026-03-06 10:44:00] Pass 2 (edge cases): +36 records for under-represented topics
+- [2026-03-06 10:45:30] Final: 214 records saved to training.jsonl
 
 ## Step 5: Write Grader
 - [2026-03-06 10:47:00] Grader written to grader.js (hybrid: programmatic + LLM-as-judge)
@@ -79,13 +116,17 @@ Keep an execution log (`execution-log.md`) — append after EVERY step. Every lo
 ## Step 6: Push to Gateway
 - [2026-03-06 10:48:00] POST /finetune/workflows → created, id: "wf_abc123"
 - [2026-03-06 10:48:10] POST /workflows/{id}/knowledge → uploaded 1 knowledge source
-- [2026-03-06 10:48:20] POST /workflows/{id}/records → uploaded 120 records
+- [2026-03-06 10:48:20] POST /workflows/{id}/records → uploaded 214 records
 - [2026-03-06 10:48:25] POST /workflows/{id}/topics → saved 18 topics
 - [2026-03-06 10:48:30] PATCH /workflows/{id}/evaluator → saved grader
 - [2026-03-06 10:48:31] Ready! Tell user to open vLLora UI
 ```
 
-**Rule: Update the execution log after completing each step, before starting the next one.**
+**Rules:**
+1. **Delegate after every action** — not just step boundaries. Each pass, fix, retry, and validation gets its own log entry.
+2. **Log the strategy** — for LLM-driven actions, always record: model, parameters, prompt approach, and rationale.
+3. **Never overwrite** — re-running a step adds new entries below the old ones. Previous entries are history.
+4. **Log failures** — if something fails, log what failed and why before fixing it.
 
 ---
 
@@ -177,18 +218,92 @@ Write prompts to `training.jsonl` — one JSON object per line. Each line is a *
 {"messages": [{"role": "system", "content": "You are..."}, {"role": "user", "content": "..."}], "id": "record-1", "topic": "billing/refunds"}
 ```
 
-For each leaf topic, generate 10-30 prompts covering: happy paths, edge cases, errors, ambiguous queries, and multi-turn follow-ups. See `reference/data-format.md` for format details.
+Use `scripts/chat_completion.py` to generate user prompts via LLM, grounded in the knowledge chunks linked to each topic:
+
+1. **Read the structured data** — `topics.json`, `relations.json`, `knowledge/knowledge_parts.json`
+2. **For each leaf topic:**
+   - Find related part IDs from `relations.json` where `topic_identifier` matches
+   - Read the content for those parts from `knowledge_parts.json`
+   - Build a prompt asking the LLM to generate N user messages, using the chunks as grounding material
+   - Call `chat_completion.py` with `response_format` for structured JSON output
+   - Parse the response and write records to `training.jsonl`
+
+**Example generation call** (for one topic):
+
+```bash
+python3 -c "
+import json, subprocess
+
+topics = json.load(open('topics.json'))
+relations = json.load(open('relations.json'))
+parts = {p['id']: p for p in json.load(open('knowledge/knowledge_parts.json'))['parts']}
+
+# Find leaf topics (not a parent of any other topic)
+parent_ids = {t['parent_id'] for t in topics if t['parent_id']}
+leaves = [t for t in topics if t['id'] not in parent_ids]
+
+record_num = 0
+with open('training.jsonl', 'w') as out:
+    for topic in leaves:
+        # Get chunks linked to this topic via relations
+        part_ids = [r['part_identifier'] for r in relations if r['topic_identifier'] == topic['id']]
+        chunks = [parts[pid] for pid in part_ids if pid in parts]
+        chunk_text = '\n---\n'.join(f\"[{c['id']}] {c.get('title','')}\n{c['content']}\" for c in chunks[:20])
+
+        request = json.dumps({
+            'messages': [{'role': 'user', 'content': f'''Generate 10 diverse user prompts for fine-tuning.
+
+Topic: {topic['name']}
+Focus: {topic['system_prompt']}
+
+Source material:
+{chunk_text}
+
+Each prompt should be a realistic question/request grounded in the source material.
+Vary: difficulty, tone, type (explain-why, compare, what-if, analyze, teach-me).
+Return JSON: {{\"prompts\": [\"prompt1\", \"prompt2\", ...]}}''}],
+            'model': 'gpt-4o-mini',
+            'temperature': 0.8,
+            'response_format': {'type': 'json_object'}
+        })
+
+        result = subprocess.run(
+            ['uv', 'run', 'scripts/chat_completion.py'],
+            input=request, capture_output=True, text=True
+        )
+        prompts = json.loads(result.stdout)['prompts']
+
+        for p in prompts:
+            record_num += 1
+            record = {
+                'messages': [
+                    {'role': 'system', 'content': SYSTEM_PROMPT},
+                    {'role': 'user', 'content': p}
+                ],
+                'id': f'r-{record_num:03d}',
+                'topic': topic['id']
+            }
+            out.write(json.dumps(record) + '\n')
+"
+```
+
+This is a starting point — adapt the generation prompt, number of records, and number of passes to the project. You can:
+- Run multiple passes (basic questions, then edge cases, then multi-turn)
+- Validate generated prompts with a second LLM call
+- Generate more for under-represented topics
+- Use `parts-index.json` instead of full content if chunks are too large for context
 
 **Generate enough data.** At least **100-200 total records** across all topics.
 
 ### Step 4.5: Generate Variants for Augmentation
 
-If some topics are under-represented, create variants of existing records:
+If some topics are under-represented, use `scripts/chat_completion.py` to create variants:
 
-1. Keep system prompt and prior turns unchanged
-2. Vary only the final user message — change scenario, specifics, tone, complexity
-3. Track lineage: `"source_record_id"` pointing to the original
-4. Generate 3-5 variants per source record
+1. Select seed records from under-represented topics
+2. Call the LLM with the seed prompt + instructions to vary scenario, specifics, tone, complexity
+3. Keep system prompt and prior turns unchanged — vary only the final user message
+4. Track lineage: `"source_record_id"` pointing to the original
+5. Generate 3-5 variants per source record, append to `training.jsonl`
 
 ### Step 5: Write the Grader
 
@@ -310,3 +425,4 @@ Run with `uv run` (PEP 723 — dependencies declared inline).
 | `scripts/upload_dataset.py` | Upload dataset + grader to gateway (standalone mode) |
 | `scripts/run_evaluation.py` | Create eval job, poll until complete, save results |
 | `scripts/start_training.py` | Start training job, poll until complete, save response |
+| `scripts/chat_completion.py` | Call LLM via gateway — for generating prompts, variants, validation |
