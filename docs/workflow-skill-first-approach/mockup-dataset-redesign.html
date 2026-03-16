@@ -1604,6 +1604,26 @@
   }
   .topic-tab:hover { color: var(--text-secondary); }
   .topic-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .topic-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    text-align: center;
+  }
+  .topic-empty-icon {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: var(--bg-tertiary);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 12px; font-size: 20px; color: var(--text-dim);
+  }
+  .topic-empty-title {
+    font-size: 14px; font-weight: 500; color: var(--text-secondary); margin-bottom: 4px;
+  }
+  .topic-empty-desc {
+    font-size: 12px; color: var(--text-dim); max-width: 280px; line-height: 1.5;
+  }
   .linked-sources-grid {
     padding: 20px 24px;
     display: grid;
@@ -3282,17 +3302,23 @@
         <span class="topic-breadcrumb">Basic Tactical Patterns &#8250;</span>
         <h2>Overloading &amp; Deflection</h2>
       </div>
-      <div class="topic-detail-stats">
-        <div class="td-stat"><span class="val">2</span><span class="lbl">Records</span></div>
-        <div class="td-stat"><span class="val">&mdash;</span><span class="lbl">Avg Score</span></div>
-        <div class="td-stat"><span class="val">1</span><span class="lbl">Sources</span></div>
+      <div class="topic-detail-stats" id="topicStats">
+        <div class="td-stat"><span class="val" id="tdRecordCount">2</span><span class="lbl">Records</span></div>
+        <div class="td-stat"><span class="val" id="tdAvgScore">&mdash;</span><span class="lbl">Avg Score</span></div>
+        <div class="td-stat"><span class="val" id="tdSourceCount">1</span><span class="lbl">Sources</span></div>
       </div>
     </div>
 
+    <!-- Toggle empty state demo button -->
+    <div style="padding:0 24px 0;display:flex;gap:8px;align-items:center;">
+      <button onclick="toggleTopicEmpty()" style="font-size:10px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--text-secondary);cursor:pointer;">Toggle Empty State</button>
+      <span style="font-size:10px;color:var(--text-dim);" id="topicEmptyLabel">Showing: with data</span>
+    </div>
+
     <!-- Tab Bar -->
-    <div class="topic-tabs">
-      <button class="topic-tab active" onclick="showTopicTab('records')">Records (2)</button>
-      <button class="topic-tab" onclick="showTopicTab('sources')">Linked Sources (1)</button>
+    <div class="topic-tabs" id="topicTabBar">
+      <button class="topic-tab active" onclick="showTopicTab('records')">Records (<span id="tabRecordCount">2</span>)</button>
+      <button class="topic-tab" onclick="showTopicTab('sources')">Linked Sources (<span id="tabSourceCount">1</span>)</button>
     </div>
 
     <!-- Records Tab Content -->
@@ -3341,6 +3367,24 @@
             <span class="ls-topic-tag">Overloading &amp; Deflection</span>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Empty State: Records (hidden by default) -->
+    <div class="topic-tab-content hidden" id="topicTabRecordsEmpty">
+      <div class="topic-empty-state">
+        <div class="topic-empty-icon">&#10024;</div>
+        <div class="topic-empty-title">No records yet</div>
+        <div class="topic-empty-desc">Generate training data for this topic to see records here.</div>
+      </div>
+    </div>
+
+    <!-- Empty State: Linked Sources (hidden by default) -->
+    <div class="topic-tab-content hidden" id="topicTabSourcesEmpty">
+      <div class="topic-empty-state">
+        <div class="topic-empty-icon">&#128196;</div>
+        <div class="topic-empty-title">No linked sources</div>
+        <div class="topic-empty-desc">Link knowledge source parts to this topic to see them here.</div>
       </div>
     </div>
 
@@ -3419,21 +3463,38 @@ function showPage(page) {
 }
 
 // ── Topic Detail Tab Switching ──
+let topicEmptyMode = false;
+let currentTopicTab = 'records';
+
 function showTopicTab(tab) {
-  const recordsTab = document.getElementById('topicTabRecords');
-  const sourcesTab = document.getElementById('topicTabSources');
+  currentTopicTab = tab;
+  const allTabs = ['topicTabRecords', 'topicTabSources', 'topicTabRecordsEmpty', 'topicTabSourcesEmpty'];
+  allTabs.forEach(id => document.getElementById(id).classList.add('hidden'));
+
   const buttons = document.querySelectorAll('.topic-tab');
   if (tab === 'records') {
-    recordsTab.classList.remove('hidden');
-    sourcesTab.classList.add('hidden');
+    const target = topicEmptyMode ? 'topicTabRecordsEmpty' : 'topicTabRecords';
+    document.getElementById(target).classList.remove('hidden');
     buttons[0].classList.add('active');
     buttons[1].classList.remove('active');
   } else {
-    recordsTab.classList.add('hidden');
-    sourcesTab.classList.remove('hidden');
+    const target = topicEmptyMode ? 'topicTabSourcesEmpty' : 'topicTabSources';
+    document.getElementById(target).classList.remove('hidden');
     buttons[0].classList.remove('active');
     buttons[1].classList.add('active');
   }
+}
+
+function toggleTopicEmpty() {
+  topicEmptyMode = !topicEmptyMode;
+  document.getElementById('topicEmptyLabel').textContent = topicEmptyMode ? 'Showing: empty state' : 'Showing: with data';
+  // Update stats
+  document.getElementById('tdRecordCount').textContent = topicEmptyMode ? '0' : '2';
+  document.getElementById('tdSourceCount').textContent = topicEmptyMode ? '0' : '1';
+  document.getElementById('tabRecordCount').textContent = topicEmptyMode ? '0' : '2';
+  document.getElementById('tabSourceCount').textContent = topicEmptyMode ? '0' : '1';
+  // Re-render current tab
+  showTopicTab(currentTopicTab);
 }
 showPage('canvas');
 
