@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/tooltip";
 import { BreadcrumbPath } from "../records-table/BreadcrumbPath";
 import { TopicCanvasConsumer } from "./TopicCanvasContext";
+import { TopicSourceReferences } from "./TopicSourceReferences";
 import { CompactRecordList } from "./CompactRecordList";
 import { filterRecords, type RecordFilterOptions } from "../record-filters";
 import { findTopicInHierarchy } from "../record-utils";
@@ -37,6 +38,7 @@ export function RecordsPanel() {
     recordsByTopic,
     hierarchy,
     totalRecordCount,
+    workflowId,
     onDeleteRecord,
     onSelectRecordId,
     onViewInTable,
@@ -256,6 +258,14 @@ export function RecordsPanel() {
           )}
         </div>
       </div>
+
+      {/* Source references linked to this topic */}
+      {topicNode?.sourceChunkRefs && topicNode.sourceChunkRefs.length > 0 && (
+        <TopicSourceReferences
+          sourceChunkRefs={topicNode.sourceChunkRefs}
+          workflowId={workflowId}
+        />
+      )}
 
       {/* Compact record list — independent from RecordsTable */}
       <div className="flex-1 overflow-hidden min-h-0">

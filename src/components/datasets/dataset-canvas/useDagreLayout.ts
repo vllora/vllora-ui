@@ -376,6 +376,7 @@ export function useDagreLayout(
             fullPath, // Full hierarchical path for prompts
             depth: nodeDepth, // For system prompt segment display
             description: node.description, // Topic description for node display
+            sourceRefCount: node.sourceChunkRefs?.length ?? 0,
           },
         });
 

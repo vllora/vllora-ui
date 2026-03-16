@@ -10,7 +10,7 @@
  * - P0-15: Shows pulsing border when data is being generated for this topic
  */
 
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TopicNodeHeader } from "../TopicNodeHeader";
 import { TopicCanvasConsumer } from "../TopicCanvasContext";
@@ -42,6 +42,8 @@ interface CollapsedTopicNodeProps {
   hasChildren?: boolean;
   /** Topic description from hierarchy node */
   description?: string;
+  /** Count of linked knowledge source parts */
+  sourceRefCount?: number;
 }
 
 // Fixed width for collapsed state
@@ -72,6 +74,7 @@ export function CollapsedTopicNode({
   fullPath,
   hasChildren = false,
   description,
+  sourceRefCount = 0,
 }: CollapsedTopicNodeProps) {
   const {
     generatingTopicName,
@@ -158,6 +161,19 @@ export function CollapsedTopicNode({
           ) : (
             <span className="text-[10px] text-muted-foreground/40 italic">Not evaluated</span>
           )}
+        </div>
+      )}
+
+      {/* Knowledge source references badge */}
+      {!isRoot && sourceRefCount > 0 && (
+        <div className="px-3 -mt-0.5 flex items-center gap-1.5">
+          <FileText className="w-3 h-3 text-muted-foreground/50" />
+          <span className={cn(
+            "text-[10px] font-medium",
+            sourceRefCount >= 3 ? "text-emerald-500/80" : "text-amber-500/80"
+          )}>
+            {sourceRefCount} source{sourceRefCount !== 1 ? "s" : ""}
+          </span>
         </div>
       )}
 

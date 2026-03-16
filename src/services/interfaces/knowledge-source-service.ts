@@ -10,6 +10,8 @@ export interface KnowledgeSourceService {
   list(workflowId: string): Promise<KnowledgeSource[]>;
   get(workflowId: string, idOrRef: string): Promise<KnowledgeSource | null>;
   getCount(workflowId: string): Promise<number>;
+  /** URL to download the original uploaded file (PDF, image, etc.) */
+  getFileUrl(workflowId: string, sourceId: string): string;
   delete(workflowId: string, idOrRef: string): Promise<void>;
   deleteAll(workflowId: string): Promise<void>;
 }

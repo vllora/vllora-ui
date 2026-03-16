@@ -6,9 +6,11 @@
  */
 
 import { useMemo } from "react";
-import { Type, Table2, ImageIcon, FileText } from "lucide-react";
+import { Type, Table2, ImageIcon, FileText, Link2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
+import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
+import { buildPartTopicIndex } from "@/lib/distri-finetune-tools/steps/shared/build-part-topic-index";
 import type { KnowledgePartType } from "@/types/knowledge-types";
 
 // ─── Type badge + icon helpers ───
@@ -126,6 +128,7 @@ interface KnowledgePartViewerProps {
 
 export function KnowledgePartViewer({ sourceId, partId }: KnowledgePartViewerProps) {
   const { sources } = KnowledgeSourcesConsumer();
+  const { dataset } = DatasetDetailConsumer();
 
   const source = useMemo(
     () => sources.find(s => s.id === sourceId) ?? null,
@@ -136,6 +139,14 @@ export function KnowledgePartViewer({ sourceId, partId }: KnowledgePartViewerPro
     () => source?.parts.find(p => p.id === partId) ?? null,
     [source, partId],
   );
+
+  // Build reverse index: which topics reference this part?
+  const referencingTopics = useMemo(() => {
+    const hierarchy = dataset?.topicHierarchy?.hierarchy;
+    if (!hierarchy || !partId) return [];
+    const index = buildPartTopicIndex(hierarchy);
+    return index.get(partId) ?? [];
+  }, [dataset?.topicHierarchy?.hierarchy, partId]);
 
   if (!source || !part) {
     return (
@@ -198,6 +209,28 @@ export function KnowledgePartViewer({ sourceId, partId }: KnowledgePartViewerPro
           )}
         </div>
       </div>
+
+      {/* Referenced by topics — backlinks */}
+      {referencingTopics.length > 0 && (
+        <div className="px-4 py-2.5 border-b border-border/30 bg-muted/10 shrink-0">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Link2 className="w-3 h-3 text-muted-foreground/50" />
+            <span className="text-[10px] text-muted-foreground/50 uppercase tracking-wider">
+              Referenced by
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {referencingTopics.map((topicName) => (
+              <span
+                key={topicName}
+                className="inline-flex items-center rounded-full bg-[rgba(var(--theme-500),0.1)] px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--theme-500))]"
+              >
+                {topicName}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Content area */}
       <div className="flex-1 overflow-y-auto px-4 py-4">

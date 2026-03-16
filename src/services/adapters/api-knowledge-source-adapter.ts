@@ -6,6 +6,7 @@
  */
 
 import { api, handleApiResponse } from '@/lib/api-client';
+import { getBackendUrl } from '@/config/api';
 import type { KnowledgeSourceService } from '@/services/interfaces/knowledge-source-service';
 import type { KnowledgeSource, KnowledgeSourcePart, KnowledgePartType } from '@/types/knowledge-types';
 
@@ -90,6 +91,10 @@ export const apiKnowledgeSourceAdapter: KnowledgeSourceService = {
   async delete(workflowId: string, idOrRef: string): Promise<void> {
     const response = await api.delete(`${basePath(workflowId)}/${idOrRef}`);
     await handleApiResponse<{ deleted: boolean }>(response);
+  },
+
+  getFileUrl(workflowId: string, sourceId: string): string {
+    return `${getBackendUrl()}${basePath(workflowId)}/${sourceId}/file`;
   },
 
   async deleteAll(workflowId: string): Promise<void> {

@@ -84,6 +84,14 @@ interface TopicMetadata {
   normalizedPromptSegment?: string;
 }
 
+/** Row from the workflow_topic_sources bridge table */
+interface DbTopicRelation {
+  readonly id: string;
+  readonly topic_id: string;
+  readonly source_part_id: string;
+  readonly reference_id: string | null;
+}
+
 type FlatTopic = { id: string; name: string; parent_id: string | null; selected: boolean; source_chunk_refs: TopicMetadata | null };
 
 /** Flatten a FE hierarchy tree into flat rows with parent_id for the BE.
@@ -166,6 +174,34 @@ function calcMaxDepth(nodes: readonly TopicHierarchyNode[], depth = 1): number {
   return max;
 }
 
+/** Merge relations from the bridge table into hierarchy nodes' sourceChunkRefs.
+ *  Relations store plain partId UUIDs; Lucy path stores "sourceId:chunkId" composites.
+ *  Both formats are kept — resolvePartRef() handles either at render time. */
+function mergeRelationsIntoHierarchy(
+  nodes: TopicHierarchyNode[],
+  relations: readonly DbTopicRelation[],
+): void {
+  const relMap = new Map<string, string[]>();
+  for (const rel of relations) {
+    const existing = relMap.get(rel.topic_id) ?? [];
+    existing.push(rel.source_part_id);
+    relMap.set(rel.topic_id, existing);
+  }
+
+  const walk = (list: TopicHierarchyNode[]) => {
+    for (const node of list) {
+      const partIds = relMap.get(node.id);
+      if (partIds?.length) {
+        const merged = new Set(node.sourceChunkRefs ?? []);
+        for (const pid of partIds) merged.add(pid);
+        node.sourceChunkRefs = [...merged];
+      }
+      if (node.children) walk(node.children);
+    }
+  };
+  walk(nodes);
+}
+
 /** Fetch topics from gateway and reconstruct as TopicHierarchyConfig */
 async function fetchTopicHierarchy(workflowId: string): Promise<TopicHierarchyConfig | undefined> {
   try {
@@ -174,6 +210,18 @@ async function fetchTopicHierarchy(workflowId: string): Promise<TopicHierarchyCo
     if (!data.topics || data.topics.length === 0) return undefined;
 
     const hierarchy = buildHierarchyTree(data.topics);
+
+    // Merge relations from bridge table (skill-uploaded path)
+    try {
+      const relResponse = await api.get(`${BASE}/${workflowId}/topics/relations`);
+      if (relResponse.ok) {
+        const relData = await handleApiResponse<{ relations: DbTopicRelation[] }>(relResponse);
+        if (relData.relations?.length) {
+          mergeRelationsIntoHierarchy(hierarchy, relData.relations);
+        }
+      }
+    } catch { /* relations endpoint may not exist — degrade gracefully */ }
+
     return {
       hierarchy,
       depth: calcMaxDepth(hierarchy),

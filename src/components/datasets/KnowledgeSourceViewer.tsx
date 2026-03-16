@@ -13,10 +13,11 @@
  */
 
 import { useState, useMemo, useCallback, useEffect, useRef, type ReactNode } from "react";
-import { FileText, Search, ChevronRight, ChevronDown, X, Database, ImageIcon, Table2 } from "lucide-react";
+import { FileText, Search, ChevronRight, ChevronDown, X, Database, ImageIcon, Table2, PanelLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDebounceFn } from "ahooks";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
+import { knowledgeSourceService } from "@/services/service-registry";
 import { parseChunkRef } from "@/lib/distri-finetune-tools/steps/shared/chunk-lookup";
 
 // ─── Chunk types (matches metadata.chunks structure from semantic extractor) ───
@@ -53,6 +54,11 @@ function highlightTerms(text: string, terms: readonly string[]): ReactNode {
       ? <mark key={i} className="bg-yellow-500/30 text-foreground rounded-sm px-0.5">{part}</mark>
       : part,
   );
+}
+
+function isImageUrl(content: string): boolean {
+  const trimmed = content.trim();
+  return /^https?:\/\/.+/i.test(trimmed) || /^data:image\//i.test(trimmed);
 }
 
 // ─── Record-context term extraction ───
@@ -338,10 +344,19 @@ function NonTextPartCard({
             <pre className="text-[11px] text-foreground/80 leading-relaxed whitespace-pre-wrap mt-1 font-mono bg-muted/30 rounded-md p-2 overflow-x-auto">
               {highlightTerms(part.content, searchTerms)}
             </pre>
+          ) : isImageUrl(part.content) ? (
+            <img
+              src={part.content}
+              alt={part.title}
+              className="mt-1 max-w-full max-h-80 rounded-md border border-border/30 object-contain"
+            />
           ) : (
-            <p className="text-[11px] text-foreground/80 leading-relaxed whitespace-pre-wrap mt-1">
-              {highlightTerms(part.content, searchTerms)}
-            </p>
+            <div className="mt-1 flex items-start gap-2 bg-muted/20 rounded-md p-3 border border-border/20">
+              <ImageIcon className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+              <p className="text-[11px] text-foreground/80 leading-relaxed whitespace-pre-wrap italic">
+                {highlightTerms(part.content, searchTerms)}
+              </p>
+            </div>
           )}
         </div>
       )}
@@ -360,6 +375,7 @@ interface KnowledgeSourceViewerProps {
 export function KnowledgeSourceViewer({ sourceId, chunkRecordCounts }: KnowledgeSourceViewerProps) {
   const { sources } = KnowledgeSourcesConsumer();
   const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(new Set());
+  const [showPreview, setShowPreview] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [highlightedChunkIds, setHighlightedChunkIds] = useState<ReadonlySet<string>>(new Set());
@@ -587,6 +603,21 @@ export function KnowledgeSourceViewer({ sourceId, chunkRecordCounts }: Knowledge
               {totalPages} pages
             </span>
           )}
+          {/* Preview toggle — show original PDF side-by-side */}
+          <button
+            type="button"
+            className={cn(
+              "ml-auto inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-colors shrink-0",
+              showPreview
+                ? "bg-blue-500/20 text-blue-400"
+                : "text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/30",
+            )}
+            onClick={() => setShowPreview(prev => !prev)}
+            title="Toggle original document preview"
+          >
+            <PanelLeft className="w-3 h-3" />
+            {showPreview ? "Hide original" : "Show original"}
+          </button>
         </div>
 
         {/* Search bar */}
@@ -620,8 +651,20 @@ export function KnowledgeSourceViewer({ sourceId, chunkRecordCounts }: Knowledge
         </div>
       )}
 
-      {/* Content — clean list with subtle dividers */}
-      <div className="flex-1 overflow-y-auto px-2 py-1">
+      {/* Content area — optionally split with PDF preview */}
+      <div className={cn("flex-1 flex overflow-hidden", showPreview ? "flex-row" : "flex-col")}>
+        {/* Original document preview */}
+        {showPreview && (
+          <div className="w-1/2 border-r border-border flex flex-col overflow-hidden">
+            <iframe
+              src={knowledgeSourceService.getFileUrl(source.workflowId, source.id)}
+              className="flex-1 w-full bg-white"
+              title={`Preview: ${source.name}`}
+            />
+          </div>
+        )}
+
+      <div className={cn("overflow-y-auto px-2 py-1", showPreview ? "w-1/2" : "flex-1")}>
         {totalItems === 0 && (
           <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">
             No extracted content available.
@@ -691,6 +734,7 @@ export function KnowledgeSourceViewer({ sourceId, chunkRecordCounts }: Knowledge
             </button>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

@@ -24,6 +24,7 @@ export interface TopicNodeData extends Record<string, unknown> {
   fullPath?: string; // Full hierarchical path (e.g., "Openings/Principles")
   depth?: number; // 0-based depth in hierarchy (for system prompt segment display)
   description?: string; // Topic description for display on node
+  sourceRefCount?: number; // Count of linked knowledge source parts
 }
 
 // Define the full node type for React Flow
@@ -43,6 +44,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
     fullPath,
     depth = 0,
     description,
+    sourceRefCount = 0,
   } = data;
 
   // Get state and handlers from context
@@ -159,6 +161,7 @@ export const TopicNodeComponent = memo(function TopicNodeComponent({
         fullPath={fullPath}
         hasChildren={hasChildren}
         description={description}
+        sourceRefCount={sourceRefCount}
       />
     </div>
   );
