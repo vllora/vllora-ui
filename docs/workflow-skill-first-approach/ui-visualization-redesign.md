@@ -333,10 +333,6 @@ The following items from the initial review have been addressed in the mockup:
 | Record detail on click | Done | Slide-in sidebar with full messages, prompt, metadata |
 | Sources sidebar selection | Done | "All Sources" vs specific doc drives left panel content |
 
-### Implementation Status
-
-See **[ui-redesign-implementation-status.md](./ui-redesign-implementation-status.md)** for detailed phase-by-phase tracking of what's implemented, what's partial, and what's missing.
-
 ### Remaining Open Items
 
 1. **Prompt data source** — System prompts come from topic metadata or data generation config. Need to define the API contract.

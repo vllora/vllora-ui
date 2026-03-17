@@ -33,6 +33,9 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { NewJobDialog } from "@/components/finetune/content/NewJobDialog";
 import { NewEvaluationDialog } from "@/components/datasets/evaluation-dialog/NewEvaluationDialog";
+import type { GraderInfo, PreviousBestInfo, EvaluatorVersionInfo } from "@/components/datasets/evaluation-dialog/NewEvaluationDialog";
+import { useEvaluatorVersions } from "@/hooks/useEvaluatorVersions";
+import { getJobAverageScore } from "@/types/eval-job";
 import type { TopicHierarchyNode } from "@/types/dataset-types";
 
 // ============================================================================
@@ -67,6 +70,44 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
   const [showNewJobDialog, setShowNewJobDialog] = useState(false);
   const [showNewEvalDialog, setShowNewEvalDialog] = useState(false);
   const [collapsedParents, setCollapsedParents] = useState<Set<string>>(new Set());
+
+  // ── Eval dialog enrichment data ──
+  const { latestVersion, isLoading: isLoadingVersions } = useEvaluatorVersions(dataset?.id);
+
+  const graderInfo = useMemo((): GraderInfo | undefined => {
+    if (!dataset?.evalScript) return undefined;
+    return {
+      name: "grader-script.js",
+      type: "LLM-as-judge",
+      model: "gpt-4o-mini",
+    };
+  }, [dataset?.evalScript]);
+
+  const previousBest = useMemo((): PreviousBestInfo | undefined => {
+    const completedJobs = dryRunJobs
+      .filter((j) => j.status === "completed")
+      .sort((a, b) => b.createdAt - a.createdAt);
+
+    for (const job of completedJobs) {
+      const score = getJobAverageScore(job);
+      if (score != null) {
+        return { score, timestamp: job.createdAt };
+      }
+    }
+    return undefined;
+  }, [dryRunJobs]);
+
+  const versionInfo = useMemo((): EvaluatorVersionInfo | undefined => {
+    if (isLoadingVersions || !dataset?.evalScript) return undefined;
+    // If we have versions, the grader is "modified" if the local script
+    // has been edited since the last version was snapshotted.
+    // For now, we show the latest version. Staleness detection will be
+    // enhanced once the cloud returns `eval_script_updated_at`.
+    return {
+      latestVersion,
+      isGraderModified: false,
+    };
+  }, [latestVersion, isLoadingVersions, dataset?.evalScript]);
 
   const toggleParent = useCallback((name: string) => {
     setCollapsedParents((prev) => {
@@ -310,6 +351,16 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         recordCount={records.length}
         open={showNewEvalDialog}
         onOpenChange={setShowNewEvalDialog}
+        graderInfo={graderInfo}
+        previousBest={previousBest}
+        versionInfo={versionInfo}
+        onEditGrader={() => {
+          setShowNewEvalDialog(false);
+          const nodePath = "grader";
+          setSelectedNodeId(nodePath);
+          openTab(nodePath);
+          onNavigate?.(nodePath);
+        }}
         onRun={async (sampleSize, rolloutModel) => {
           const jobId = await startDryRun(sampleSize, rolloutModel);
           toast.success(`Evaluation started with ${sampleSize} samples.`);

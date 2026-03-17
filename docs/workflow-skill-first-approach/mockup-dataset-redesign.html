@@ -1615,6 +1615,43 @@
   }
   .topic-tab:hover { color: var(--text-secondary); }
   .topic-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .prompt-toggle-btn {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 10px; border-radius: 6px; border: none;
+    font-size: 11px; cursor: pointer; transition: all 0.15s;
+    background: transparent; color: var(--text-dim);
+  }
+  .prompt-toggle-btn:hover { color: var(--text-secondary); background: var(--bg-tertiary); }
+  .prompt-toggle-btn.active { color: var(--accent); background: var(--accent-dim); }
+  .prompt-chain-panel {
+    display: none; border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-secondary); padding: 12px 24px; overflow-x: auto; flex-shrink: 0;
+  }
+  .prompt-chain-panel.visible { display: flex; align-items: stretch; gap: 8px; }
+  .prompt-chain-card {
+    display: flex; flex-direction: column;
+    min-width: 180px; max-width: 280px;
+    border-radius: 8px; border: 1px solid var(--border); padding: 10px;
+    background: var(--bg-tertiary); flex-shrink: 0;
+  }
+  .prompt-chain-card.leaf {
+    border-color: rgba(124, 92, 252, 0.3);
+    background: rgba(124, 92, 252, 0.05);
+  }
+  .prompt-chain-card .card-label {
+    font-size: 9px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; margin-bottom: 4px; color: var(--text-dim);
+  }
+  .prompt-chain-card.leaf .card-label { color: var(--accent); }
+  .prompt-chain-card .card-text {
+    font-size: 11px; color: var(--text-secondary); font-family: monospace;
+    line-height: 1.5; white-space: pre-wrap;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .prompt-chain-chevron {
+    display: flex; align-items: center; color: var(--text-dim); font-size: 14px; flex-shrink: 0;
+  }
   .topic-empty-state {
     display: flex;
     flex-direction: column;
@@ -1690,6 +1727,318 @@
   }
   .topic-tab-content { flex: 1; overflow-y: auto; min-height: 0; }
   .topic-tab-content.hidden { display: none; }
+
+  /* ── Eval Detail Page ── */
+  #page-eval-detail, #page-finetune-detail, #page-grader { display: none; }
+
+  .eval-header {
+    display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+    border-bottom: 1px solid var(--border-subtle); flex-shrink: 0;
+  }
+  .eval-header .pill {
+    font-size: 10px; font-weight: 600; padding: 3px 10px; border-radius: 12px;
+  }
+  .pill-model { background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border); }
+  .pill-running { background: var(--blue-dim); color: var(--blue); animation: pulse 2s infinite; }
+  .pill-done { background: var(--emerald-dim); color: var(--emerald); }
+  .pill-failed { background: var(--red-dim); color: var(--red); }
+  .pill-go { background: var(--emerald-dim); color: var(--emerald); font-weight: 700; }
+  .pill-warning { background: var(--amber-dim); color: var(--amber); font-weight: 700; }
+  .pill-nogo { background: var(--red-dim); color: var(--red); font-weight: 700; }
+
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+  .eval-body { flex: 1; overflow-y: auto; padding: 16px; }
+  .eval-section { margin-bottom: 20px; }
+  .eval-section-title {
+    font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-dim); margin-bottom: 8px;
+  }
+
+  /* Score Stats Grid */
+  .score-stats {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  }
+  .score-stat-card {
+    background: var(--bg-tertiary); border: 1px solid var(--border-subtle);
+    border-radius: 8px; padding: 10px 12px; text-align: center;
+  }
+  .score-stat-card .stat-val {
+    font-size: 20px; font-weight: 700; font-family: 'SF Mono', monospace; color: var(--text-primary);
+  }
+  .score-stat-card .stat-lbl {
+    font-size: 9px; text-transform: uppercase; color: var(--text-dim); margin-top: 2px;
+  }
+
+  /* Score Histogram */
+  .score-histogram {
+    display: flex; align-items: flex-end; gap: 2px; height: 60px;
+    padding: 0 4px; margin-bottom: 4px;
+  }
+  .histo-bar {
+    flex: 1; border-radius: 2px 2px 0 0; min-height: 2px;
+    transition: height 0.3s;
+  }
+  .histo-labels {
+    display: flex; justify-content: space-between; padding: 0 4px;
+    font-size: 9px; color: var(--text-dim); font-family: monospace;
+  }
+
+  /* Eval Results Table */
+  .eval-results-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .eval-results-table th {
+    text-align: left; font-size: 10px; font-weight: 600; text-transform: uppercase;
+    color: var(--text-dim); padding: 6px 8px; border-bottom: 1px solid var(--border-subtle);
+  }
+  .eval-results-table td {
+    padding: 8px; border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary);
+    vertical-align: top;
+  }
+  .eval-results-table tr:hover td { background: var(--bg-hover); }
+  .status-pass { color: var(--emerald); }
+  .status-fail { color: var(--red); }
+
+  /* Insight Banner */
+  .insight-banner {
+    background: var(--bg-tertiary); border: 1px solid var(--border-subtle);
+    border-radius: 8px; padding: 10px 14px; font-size: 11px; color: var(--text-secondary);
+    line-height: 1.5; display: flex; align-items: flex-start; gap: 8px;
+  }
+  .insight-banner .insight-icon { flex-shrink: 0; font-size: 14px; }
+
+  /* ── Finetune Detail Page ── */
+  .ft-header {
+    display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+    border-bottom: 1px solid var(--border-subtle); flex-shrink: 0;
+  }
+  .ft-body { flex: 1; overflow-y: auto; padding: 16px; }
+
+  /* Epoch Progress */
+  .epoch-progress { margin-bottom: 16px; }
+  .epoch-bar-bg {
+    height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden;
+    border: 1px solid var(--border-subtle);
+  }
+  .epoch-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+  .epoch-labels {
+    display: flex; justify-content: space-between; margin-top: 4px;
+    font-size: 10px; color: var(--text-dim); font-family: monospace;
+  }
+
+  /* Job Details Grid */
+  .ft-details-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px;
+  }
+  .ft-detail-card {
+    background: var(--bg-tertiary); border: 1px solid var(--border-subtle);
+    border-radius: 8px; padding: 10px 12px;
+  }
+  .ft-detail-card .ft-label {
+    font-size: 9px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 4px;
+  }
+  .ft-detail-card .ft-value {
+    font-size: 13px; font-weight: 600; color: var(--text-primary); font-family: monospace;
+  }
+
+  /* Training Metrics Chart (placeholder) */
+  .metrics-chart-placeholder {
+    background: var(--bg-tertiary); border: 1px solid var(--border-subtle);
+    border-radius: 8px; padding: 20px; min-height: 200px;
+    display: flex; flex-direction: column;
+  }
+  .metrics-chart-header {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;
+  }
+  .chart-area {
+    flex: 1; display: flex; align-items: flex-end; gap: 4px; min-height: 120px;
+  }
+  .chart-line {
+    width: 100%; height: 100%; position: relative;
+  }
+  .chart-dot {
+    width: 6px; height: 6px; border-radius: 50%; position: absolute; transform: translate(-50%, 50%);
+  }
+
+  /* ── Grader Page ── */
+  .grader-layout { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+  .grader-toolbar {
+    display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+    border-bottom: 1px solid var(--border-subtle); flex-shrink: 0;
+  }
+  .grader-toolbar .tool-btn {
+    padding: 4px 8px; border: 1px solid var(--border); background: var(--bg-tertiary);
+    color: var(--text-secondary); border-radius: 4px; font-size: 10px; cursor: pointer;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .grader-toolbar .tool-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .grader-toolbar .tool-btn.primary {
+    background: var(--emerald); color: var(--bg-primary); border-color: var(--emerald); font-weight: 600;
+  }
+  .grader-editor {
+    flex: 1; min-height: 0; overflow: auto; background: var(--bg-secondary);
+    font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; line-height: 1.7;
+    padding: 12px 16px; color: var(--text-secondary);
+  }
+  .grader-editor .line-num {
+    display: inline-block; width: 30px; text-align: right; color: var(--text-dim);
+    margin-right: 16px; user-select: none;
+  }
+  .grader-editor .kw { color: #c792ea; }
+  .grader-editor .fn { color: #82aaff; }
+  .grader-editor .str { color: #c3e88d; }
+  .grader-editor .cmt { color: #546e7a; font-style: italic; }
+  .grader-editor .num { color: #f78c6c; }
+  .grader-editor .op { color: #89ddff; }
+
+  .grader-bottom {
+    border-top: 1px solid var(--border-subtle); flex-shrink: 0;
+    max-height: 200px; overflow-y: auto;
+  }
+  .grader-bottom-tabs {
+    display: flex; gap: 0; border-bottom: 1px solid var(--border-subtle);
+  }
+  .grader-bottom-tab {
+    padding: 6px 14px; font-size: 10px; font-weight: 600; text-transform: uppercase;
+    color: var(--text-dim); cursor: pointer; border-bottom: 2px solid transparent;
+  }
+  .grader-bottom-tab.active { color: var(--text-primary); border-bottom-color: var(--accent); }
+  .grader-bottom-content { padding: 10px 14px; font-size: 11px; color: var(--text-secondary); }
+
+  /* ── Evaluator Version Badge ── */
+  .ver-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;
+    background: var(--bg-tertiary); border: 1px solid var(--border);
+    color: var(--text-secondary); cursor: pointer; transition: all 0.15s;
+    font-family: monospace;
+  }
+  .ver-badge:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--accent); }
+  .ver-badge.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+  .ver-badge .ver-icon { font-size: 11px; }
+  .ver-badge .ver-warn {
+    color: var(--amber); font-size: 11px; animation: pulse 2s infinite;
+  }
+
+  /* ── Evaluator Snapshot Panel ── */
+  .ver-snapshot {
+    display: none; margin: 0 16px 12px; border-radius: 8px; overflow: hidden;
+    border: 1px solid var(--border); background: var(--bg-secondary);
+  }
+  .ver-snapshot.visible { display: block; }
+  .ver-snapshot-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .ver-snapshot-header .snap-title {
+    font-size: 11px; font-weight: 600; color: var(--text-primary);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .ver-snapshot-header .snap-close {
+    background: none; border: none; color: var(--text-dim); cursor: pointer;
+    font-size: 14px; padding: 2px 4px; border-radius: 3px;
+  }
+  .ver-snapshot-header .snap-close:hover { color: var(--text-primary); background: var(--bg-hover); }
+  .ver-snapshot-code {
+    padding: 10px 14px; font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 11px; line-height: 1.6; color: var(--text-secondary);
+    max-height: 200px; overflow-y: auto;
+  }
+  .ver-snapshot-footer {
+    padding: 6px 12px; font-size: 10px; color: var(--text-dim);
+    border-top: 1px solid var(--border-subtle); background: var(--bg-tertiary);
+    display: flex; align-items: center; gap: 12px;
+  }
+
+  /* ── Diff View ── */
+  .ver-diff {
+    display: none; margin: 0 16px 12px; border-radius: 8px; overflow: hidden;
+    border: 1px solid var(--amber); background: var(--bg-secondary);
+  }
+  .ver-diff.visible { display: block; }
+  .ver-diff-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; background: var(--amber-dim);
+    border-bottom: 1px solid rgba(251,191,36,0.2);
+  }
+  .ver-diff-header .diff-title {
+    font-size: 11px; font-weight: 600; color: var(--amber);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .ver-diff-body {
+    display: grid; grid-template-columns: 1fr 1fr; font-family: monospace;
+    font-size: 11px; line-height: 1.6;
+  }
+  .ver-diff-col {
+    padding: 8px 12px; overflow-x: auto;
+  }
+  .ver-diff-col:first-child { border-right: 1px solid var(--border-subtle); }
+  .ver-diff-col-header {
+    font-size: 9px; font-weight: 600; text-transform: uppercase;
+    color: var(--text-dim); padding: 6px 12px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-tertiary);
+  }
+  .diff-line { white-space: pre; }
+  .diff-line.removed { background: rgba(248,113,113,0.08); color: var(--red); }
+  .diff-line.added { background: rgba(52,211,153,0.08); color: var(--emerald); }
+  .diff-line.context { color: var(--text-dim); }
+  .ver-diff-footer {
+    padding: 8px 12px; font-size: 10px;
+    border-top: 1px solid var(--border-subtle); background: var(--bg-tertiary);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .ver-diff-footer .diff-meta { color: var(--text-dim); }
+  .ver-diff-footer .diff-action {
+    padding: 4px 10px; border-radius: 4px; font-size: 10px; font-weight: 600;
+    background: var(--emerald); color: var(--bg-primary); border: none;
+    cursor: pointer;
+  }
+  .ver-diff-footer .diff-action:hover { opacity: 0.9; }
+  .ver-diff-warning {
+    padding: 6px 12px; font-size: 10px; color: var(--amber);
+    background: var(--amber-dim); display: flex; align-items: center; gap: 6px;
+  }
+
+  /* ── Version History (Grader page) ── */
+  .ver-history { margin-top: 8px; }
+  .ver-history-item {
+    display: flex; align-items: flex-start; gap: 10px; padding: 8px 12px;
+    border-bottom: 1px solid var(--border-subtle); font-size: 11px;
+  }
+  .ver-history-item:last-child { border-bottom: none; }
+  .ver-history-dot {
+    width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex-shrink: 0;
+  }
+  .ver-history-dot.current { background: var(--emerald); }
+  .ver-history-dot.past { background: var(--text-dim); }
+  .ver-history-info { flex: 1; }
+  .ver-history-label { font-weight: 600; color: var(--text-primary); }
+  .ver-history-label .current-tag {
+    font-size: 9px; font-weight: 600; color: var(--emerald);
+    background: var(--emerald-dim); padding: 1px 6px; border-radius: 3px;
+    margin-left: 6px;
+  }
+  .ver-history-date { color: var(--text-dim); margin-left: 8px; font-family: monospace; }
+  .ver-history-desc { color: var(--text-secondary); margin-top: 2px; }
+  .ver-history-jobs {
+    margin-top: 3px; font-size: 10px; color: var(--text-dim);
+    display: flex; align-items: center; gap: 4px;
+  }
+  .ver-history-jobs .job-pill {
+    padding: 1px 6px; border-radius: 3px; font-size: 9px;
+    background: var(--bg-tertiary); border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+  }
+  .ver-history-actions {
+    display: flex; gap: 6px; margin-top: 4px;
+  }
+  .ver-history-actions button {
+    font-size: 9px; padding: 2px 6px; border-radius: 3px;
+    background: none; border: 1px solid var(--border);
+    color: var(--text-dim); cursor: pointer;
+  }
+  .ver-history-actions button:hover { color: var(--text-primary); border-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -1752,38 +2101,45 @@
         <span class="chevron">&#9662;</span> Basic Tactical Patterns <span class="badge">62</span>
       </div>
       <div class="sidebar-children">
-        <div class="sidebar-item child">Forks <span class="badge">14</span></div>
-        <div class="sidebar-item child">Pins and Skewers <span class="badge">12</span></div>
-        <div class="sidebar-item child">Discovered Attacks <span class="badge">8</span></div>
-        <div class="sidebar-item child">Sacrifices <span class="badge">18</span></div>
-        <div class="sidebar-item child" onclick="showPage('topic-detail')">Overloading <span class="badge">10</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Forks')">Forks <span class="badge">14</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Pins and Skewers')">Pins and Skewers <span class="badge">12</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Discovered Attacks')">Discovered Attacks <span class="badge">8</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Sacrifices')">Sacrifices <span class="badge">18</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Overloading')">Overloading <span class="badge">10</span></div>
       </div>
       <div class="sidebar-item parent" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.style.display = this.classList.contains('collapsed') ? 'none' : 'block'">
         <span class="chevron">&#9662;</span> Advanced Combinations <span class="badge">48</span>
       </div>
       <div class="sidebar-children">
-        <div class="sidebar-item child">Opening Principles <span class="badge">25</span></div>
-        <div class="sidebar-item child">Positional Themes <span class="badge">23</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Opening Principles')">Opening Principles <span class="badge">25</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Positional Themes')">Positional Themes <span class="badge">23</span></div>
       </div>
       <div class="sidebar-item parent" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.style.display = this.classList.contains('collapsed') ? 'none' : 'block'">
         <span class="chevron">&#9662;</span> Endgame &amp; Mating <span class="badge">40</span>
       </div>
       <div class="sidebar-children">
-        <div class="sidebar-item child">Back Rank Mates <span class="badge">22</span></div>
-        <div class="sidebar-item child">Pawn Promotion <span class="badge">16</span></div>
-        <div class="sidebar-item child">Test Topic <span class="badge">2</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Back Rank Mates')">Back Rank Mates <span class="badge">22</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Pawn Promotion')">Pawn Promotion <span class="badge">16</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Test Topic')">Test Topic <span class="badge">2</span></div>
       </div>
     </div>
 
     <div class="sidebar-divider"></div>
 
     <div class="sidebar-section">
+      <div class="sidebar-section-title">Evaluator</div>
+      <div class="sidebar-item" onclick="showPage('grader')">
+        <span>📝</span> grader-script.js
+      </div>
+    </div>
+
+    <div class="sidebar-section">
       <div class="sidebar-section-title">Eval Runs <span class="count">2</span></div>
-      <div class="sidebar-item">
+      <div class="sidebar-item" onclick="showPage('eval-detail')">
         <span>&#9889;</span> eval-v2
         <span class="badge" style="background:var(--emerald-dim);color:var(--emerald)">done</span>
       </div>
-      <div class="sidebar-item">
+      <div class="sidebar-item" onclick="showPage('eval-detail')">
         <span>&#9889;</span> eval-v1
         <span class="badge" style="background:var(--emerald-dim);color:var(--emerald)">done</span>
       </div>
@@ -1791,7 +2147,7 @@
 
     <div class="sidebar-section">
       <div class="sidebar-section-title">Training Jobs <span class="count">1</span></div>
-      <div class="sidebar-item">
+      <div class="sidebar-item" onclick="showPage('finetune-detail')">
         <span>&#128295;</span> ft-a13e42
         <span class="badge" style="background:var(--blue-dim);color:var(--blue)">running</span>
       </div>
@@ -2181,26 +2537,26 @@
         <span class="chevron">&#9662;</span> Basic Tactical Patterns <span class="badge">62</span>
       </div>
       <div class="sidebar-children">
-        <div class="sidebar-item child">Forks <span class="badge">14</span></div>
-        <div class="sidebar-item child">Pins and Skewers <span class="badge">12</span></div>
-        <div class="sidebar-item child">Discovered Attacks <span class="badge">8</span></div>
-        <div class="sidebar-item child">Sacrifices <span class="badge">18</span></div>
-        <div class="sidebar-item child" onclick="showPage('topic-detail')">Overloading <span class="badge">10</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Forks')">Forks <span class="badge">14</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Pins and Skewers')">Pins and Skewers <span class="badge">12</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Discovered Attacks')">Discovered Attacks <span class="badge">8</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Sacrifices')">Sacrifices <span class="badge">18</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Overloading')">Overloading <span class="badge">10</span></div>
       </div>
       <div class="sidebar-item parent" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.style.display = this.classList.contains('collapsed') ? 'none' : 'block'">
         <span class="chevron">&#9662;</span> Advanced Combinations <span class="badge">48</span>
       </div>
       <div class="sidebar-children">
-        <div class="sidebar-item child">Opening Principles <span class="badge">25</span></div>
-        <div class="sidebar-item child">Positional Themes <span class="badge">23</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Opening Principles')">Opening Principles <span class="badge">25</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Positional Themes')">Positional Themes <span class="badge">23</span></div>
       </div>
       <div class="sidebar-item parent" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.style.display = this.classList.contains('collapsed') ? 'none' : 'block'">
         <span class="chevron">&#9662;</span> Endgame &amp; Mating <span class="badge">40</span>
       </div>
       <div class="sidebar-children">
-        <div class="sidebar-item child">Back Rank Mates <span class="badge">22</span></div>
-        <div class="sidebar-item child">Pawn Promotion <span class="badge">16</span></div>
-        <div class="sidebar-item child">Test Topic <span class="badge">2</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Back Rank Mates')">Back Rank Mates <span class="badge">22</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Pawn Promotion')">Pawn Promotion <span class="badge">16</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Test Topic')">Test Topic <span class="badge">2</span></div>
       </div>
     </div>
   </div>
@@ -2769,26 +3125,26 @@
         <span class="chevron">&#9662;</span> Basic Tactical Patterns <span class="badge">62</span>
       </div>
       <div class="sidebar-children">
-        <div class="sidebar-item child">Forks <span class="badge">14</span></div>
-        <div class="sidebar-item child">Pins and Skewers <span class="badge">12</span></div>
-        <div class="sidebar-item child">Discovered Attacks <span class="badge">8</span></div>
-        <div class="sidebar-item child">Sacrifices <span class="badge">18</span></div>
-        <div class="sidebar-item child" onclick="showPage('topic-detail')">Overloading <span class="badge">10</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Forks')">Forks <span class="badge">14</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Pins and Skewers')">Pins and Skewers <span class="badge">12</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Discovered Attacks')">Discovered Attacks <span class="badge">8</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Sacrifices')">Sacrifices <span class="badge">18</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Overloading')">Overloading <span class="badge">10</span></div>
       </div>
       <div class="sidebar-item parent" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.style.display = this.classList.contains('collapsed') ? 'none' : 'block'">
         <span class="chevron">&#9662;</span> Advanced Combinations <span class="badge">48</span>
       </div>
       <div class="sidebar-children">
-        <div class="sidebar-item child">Opening Principles <span class="badge">25</span></div>
-        <div class="sidebar-item child">Positional Themes <span class="badge">23</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Opening Principles')">Opening Principles <span class="badge">25</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Positional Themes')">Positional Themes <span class="badge">23</span></div>
       </div>
       <div class="sidebar-item parent" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.style.display = this.classList.contains('collapsed') ? 'none' : 'block'">
         <span class="chevron">&#9662;</span> Endgame &amp; Mating <span class="badge">40</span>
       </div>
       <div class="sidebar-children">
-        <div class="sidebar-item child">Back Rank Mates <span class="badge">22</span></div>
-        <div class="sidebar-item child">Pawn Promotion <span class="badge">16</span></div>
-        <div class="sidebar-item child">Test Topic <span class="badge">2</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Back Rank Mates')">Back Rank Mates <span class="badge">22</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Pawn Promotion')">Pawn Promotion <span class="badge">16</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Test Topic')">Test Topic <span class="badge">2</span></div>
       </div>
     </div>
   </div>
@@ -3106,26 +3462,26 @@
         <span class="chevron">&#9662;</span> Basic Tactical Patterns <span class="badge">62</span>
       </div>
       <div class="sidebar-children">
-        <div class="sidebar-item child">Forks <span class="badge">14</span></div>
-        <div class="sidebar-item child">Pins and Skewers <span class="badge">12</span></div>
-        <div class="sidebar-item child">Discovered Attacks <span class="badge">8</span></div>
-        <div class="sidebar-item child">Sacrifices <span class="badge">18</span></div>
-        <div class="sidebar-item child active">Overloading <span class="badge">10</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Forks')">Forks <span class="badge">14</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Pins and Skewers')">Pins and Skewers <span class="badge">12</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Discovered Attacks')">Discovered Attacks <span class="badge">8</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Sacrifices')">Sacrifices <span class="badge">18</span></div>
+        <div class="sidebar-item child active" onclick="showTopicDetail('Overloading')">Overloading <span class="badge">10</span></div>
       </div>
       <div class="sidebar-item parent" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.style.display = this.classList.contains('collapsed') ? 'none' : 'block'">
         <span class="chevron">&#9662;</span> Advanced Combinations <span class="badge">48</span>
       </div>
       <div class="sidebar-children">
-        <div class="sidebar-item child">Opening Principles <span class="badge">25</span></div>
-        <div class="sidebar-item child">Positional Themes <span class="badge">23</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Opening Principles')">Opening Principles <span class="badge">25</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Positional Themes')">Positional Themes <span class="badge">23</span></div>
       </div>
       <div class="sidebar-item parent" onclick="this.classList.toggle('collapsed'); this.nextElementSibling.style.display = this.classList.contains('collapsed') ? 'none' : 'block'">
         <span class="chevron">&#9662;</span> Endgame &amp; Mating <span class="badge">40</span>
       </div>
       <div class="sidebar-children">
-        <div class="sidebar-item child">Back Rank Mates <span class="badge">22</span></div>
-        <div class="sidebar-item child">Pawn Promotion <span class="badge">16</span></div>
-        <div class="sidebar-item child">Test Topic <span class="badge">2</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Back Rank Mates')">Back Rank Mates <span class="badge">22</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Pawn Promotion')">Pawn Promotion <span class="badge">16</span></div>
+        <div class="sidebar-item child" onclick="showTopicDetail('Test Topic')">Test Topic <span class="badge">2</span></div>
       </div>
     </div>
   </div>
@@ -3164,6 +3520,25 @@
     <div class="topic-tabs" id="topicTabBar">
       <button class="topic-tab active" onclick="showTopicTab('records')">Records (<span id="tabRecordCount">2</span>)</button>
       <button class="topic-tab" onclick="showTopicTab('sources')">Linked Sources (<span id="tabSourceCount">1</span>)</button>
+      <button class="prompt-toggle-btn" id="promptToggleBtn" onclick="togglePromptChain()">💬 <span>Prompt</span></button>
+    </div>
+
+    <!-- Prompt Chain Panel (hidden by default, toggled by 💬 button) -->
+    <div class="prompt-chain-panel" id="promptChainPanel">
+      <div class="prompt-chain-card" id="promptChainRoot">
+        <div class="card-label">Root Prompt</div>
+        <div class="card-text" id="promptChainRootText">You are an expert chess tutor. Explain concepts clearly with examples. Use standard algebraic notation when relevant.</div>
+      </div>
+      <div class="prompt-chain-chevron">›</div>
+      <div class="prompt-chain-card" id="promptChainParent">
+        <div class="card-label" id="promptChainParentLabel">Basic Tactical Patterns</div>
+        <div class="card-text" id="promptChainParentText">Specialize in: Basic Tactical Patterns</div>
+      </div>
+      <div class="prompt-chain-chevron">›</div>
+      <div class="prompt-chain-card leaf" id="promptChainLeaf">
+        <div class="card-label" id="promptChainLeafLabel">Overloading</div>
+        <div class="card-text" id="promptChainLeafText">Focus on: Overloading</div>
+      </div>
     </div>
 
     <!-- Records Tab Content -->
@@ -3275,6 +3650,544 @@
   </div>
 </div>
 
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- PAGE 5: Eval Job Detail                                       -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<div class="app-layout" id="page-eval-detail">
+  <!-- Icon Rail -->
+  <div class="icon-rail">
+    <div class="logo">V</div>
+    <button onclick="showPage('canvas')" title="Home">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    </button>
+    <button onclick="showPage('canvas')" title="Datasets">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    </button>
+  </div>
+
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <div class="breadcrumb">
+      <span>Projects</span> <span class="sep">/</span> <span>Chess Tutor Assistant</span> <span class="sep">/</span> <span class="current">Eval Run</span>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Evaluator</div>
+      <div class="sidebar-item" onclick="showPage('grader')">
+        <span>📝</span> grader-script.js
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Eval Runs <span class="count">2</span></div>
+      <div class="sidebar-item active" id="evalSidebarV2" onclick="showEvalDetail('eval-v2')">
+        <span>⚡</span> eval-v2
+        <span class="badge" style="background:var(--emerald-dim);color:var(--emerald)">done</span>
+      </div>
+      <div class="sidebar-item" id="evalSidebarV1" onclick="showEvalDetail('eval-v1')">
+        <span>⚡</span> eval-v1
+        <span class="badge" style="background:var(--emerald-dim);color:var(--emerald)">done</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content" style="display:flex;flex-direction:column;">
+    <!-- Header -->
+    <div class="eval-header">
+      <span class="pill pill-model">gpt-4o-mini</span>
+      <span class="pill pill-done">Completed</span>
+      <span class="pill pill-go">GO</span>
+      <span class="ver-badge" id="evalVerBadge" onclick="toggleEvalSnapshot()" title="Click to view grader code used for this run">
+        <span class="ver-icon">📝</span> v2
+        <span class="ver-warn">⚠</span>
+      </span>
+      <span style="font-size:12px;font-family:monospace;color:var(--text-secondary)">50 samples · Avg <span style="color:var(--emerald)">0.82</span></span>
+      <span style="flex:1"></span>
+      <span style="font-size:10px;color:var(--text-dim)">Mar 15, 14:32</span>
+    </div>
+
+    <!-- Evaluator Snapshot Panel (toggle via badge click) -->
+    <div class="ver-snapshot" id="evalSnapshot">
+      <div class="ver-snapshot-header">
+        <span class="snap-title">📝 Evaluator v2 <span style="font-weight:400;color:var(--text-dim)">(used for this run)</span></span>
+        <button class="snap-close" onclick="toggleEvalSnapshot()">×</button>
+      </div>
+      <div class="ver-snapshot-code">
+<span style="color:var(--text-dim)"> 1</span>  <span style="color:#546e7a">// Grader Script — LLM-as-Judge Evaluation</span>
+<span style="color:var(--text-dim)"> 2</span>  <span style="color:#546e7a">// Scores each training record 0-1 using GPT-4o as judge</span>
+<span style="color:var(--text-dim)"> 3</span>
+<span style="color:var(--text-dim)"> 4</span>  <span style="color:#c792ea">const</span> { <span style="color:#82aaff">callLLM</span> } = <span style="color:#82aaff">require</span>(<span style="color:#c3e88d">'vllora/eval'</span>);
+<span style="color:var(--text-dim)"> 5</span>
+<span style="color:var(--text-dim)"> 6</span>  <span style="color:#c792ea">async function</span> <span style="color:#82aaff">evaluate</span>(input) {
+<span style="color:var(--text-dim)"> 7</span>    <span style="color:#c792ea">const</span> messages = input.messages || [];
+<span style="color:var(--text-dim)"> 8</span>    <span style="color:#c792ea">const</span> response = input.output?.messages?.[<span style="color:#f78c6c">0</span>]?.content || <span style="color:#c3e88d">''</span>;
+<span style="color:var(--text-dim)"> 9</span>    <span style="color:#c792ea">const</span> userMsg = messages.<span style="color:#82aaff">find</span>(m => m.role === <span style="color:#c3e88d">'user'</span>)?.content || <span style="color:#c3e88d">''</span>;
+<span style="color:var(--text-dim)">10</span>
+<span style="color:var(--text-dim)">11</span>    <span style="color:#c792ea">const</span> result = <span style="color:#c792ea">await</span> <span style="color:#82aaff">callLLM</span>({
+<span style="color:var(--text-dim)">12</span>      model: <span style="color:#c3e88d">'gpt-4o'</span>,
+<span style="color:var(--text-dim)">13</span>      messages: [
+<span style="color:var(--text-dim)">14</span>        { role: <span style="color:#c3e88d">'system'</span>, content: <span style="color:#c3e88d">`Score the response on accuracy and clarity.`</span> },
+<span style="color:var(--text-dim)">15</span>        ...
+<span style="color:var(--text-dim)">16</span>    });
+<span style="color:var(--text-dim)">17</span>    <span style="color:#c792ea">return</span> { score, reason };
+<span style="color:var(--text-dim)">18</span>  }
+      </div>
+      <div class="ver-snapshot-footer">
+        <span>Saved Mar 15, 14:30</span>
+        <span>·</span>
+        <span>32 lines</span>
+        <span>·</span>
+        <span>Judge: gpt-4o</span>
+        <span style="flex:1"></span>
+        <span style="color:var(--amber);cursor:pointer" onclick="toggleEvalDiff()">⚠ Grader updated → View diff</span>
+      </div>
+    </div>
+
+    <!-- Diff View (toggle via warning click) -->
+    <div class="ver-diff" id="evalDiff">
+      <div class="ver-diff-header">
+        <span class="diff-title">⚠ Evaluator Changed: v2 → v3 (current)</span>
+        <button class="snap-close" onclick="toggleEvalDiff()">×</button>
+      </div>
+      <div class="ver-diff-warning">
+        ⚠ Scores from this run used v2. The grader has since been updated to v3.
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;">
+        <div class="ver-diff-col-header">v2 (this run)</div>
+        <div class="ver-diff-col-header">v3 (current)</div>
+      </div>
+      <div class="ver-diff-body">
+        <div class="ver-diff-col">
+          <div class="diff-line context">13  messages: [</div>
+          <div class="diff-line context">14    { role: 'system',</div>
+          <div class="diff-line context">15      content: `Score the</div>
+          <div class="diff-line context">16      response on accuracy</div>
+          <div class="diff-line removed">17-     and clarity.` },</div>
+          <div class="diff-line context">18    { role: 'user', ... }</div>
+          <div class="diff-line context">19  ],</div>
+        </div>
+        <div class="ver-diff-col">
+          <div class="diff-line context">13  messages: [</div>
+          <div class="diff-line context">14    { role: 'system',</div>
+          <div class="diff-line context">15      content: `Score the</div>
+          <div class="diff-line context">16      response on accuracy,</div>
+          <div class="diff-line added">17+     clarity, and use of</div>
+          <div class="diff-line added">18+     algebraic notation.`},</div>
+          <div class="diff-line context">19    { role: 'user', ... }</div>
+          <div class="diff-line context">20  ],</div>
+        </div>
+      </div>
+      <div class="ver-diff-footer">
+        <span class="diff-meta">2 lines changed · v2 saved Mar 15 · v3 saved Mar 17</span>
+        <button class="diff-action" title="Re-run evaluation with current grader">▶ Re-run with v3</button>
+      </div>
+    </div>
+
+    <div class="eval-body">
+      <!-- Insight Banner -->
+      <div class="eval-section">
+        <div class="insight-banner">
+          <span class="insight-icon">💡</span>
+          <span>Scores range from 0.45 to 0.98 with moderate spread — good differentiation across sample quality. 48 of 50 samples passed (96% pass rate).</span>
+        </div>
+      </div>
+
+      <!-- Score Stats -->
+      <div class="eval-section">
+        <div class="eval-section-title">Score Statistics</div>
+        <div class="score-stats">
+          <div class="score-stat-card">
+            <div class="stat-val" style="color:var(--emerald)">0.82</div>
+            <div class="stat-lbl">Mean</div>
+          </div>
+          <div class="score-stat-card">
+            <div class="stat-val">0.14</div>
+            <div class="stat-lbl">Std Dev</div>
+          </div>
+          <div class="score-stat-card">
+            <div class="stat-val" style="color:var(--red)">0.45</div>
+            <div class="stat-lbl">Min</div>
+          </div>
+          <div class="score-stat-card">
+            <div class="stat-val" style="color:var(--emerald)">0.98</div>
+            <div class="stat-lbl">Max</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Score Distribution -->
+      <div class="eval-section">
+        <div class="eval-section-title">Score Distribution</div>
+        <div class="score-histogram">
+          <div class="histo-bar" style="height:4%;background:var(--red)"></div>
+          <div class="histo-bar" style="height:2%;background:var(--red)"></div>
+          <div class="histo-bar" style="height:4%;background:#f59e0b"></div>
+          <div class="histo-bar" style="height:6%;background:#f59e0b"></div>
+          <div class="histo-bar" style="height:8%;background:#eab308"></div>
+          <div class="histo-bar" style="height:14%;background:#84cc16"></div>
+          <div class="histo-bar" style="height:22%;background:#22c55e"></div>
+          <div class="histo-bar" style="height:100%;background:var(--emerald)"></div>
+          <div class="histo-bar" style="height:70%;background:var(--emerald)"></div>
+          <div class="histo-bar" style="height:30%;background:var(--emerald)"></div>
+        </div>
+        <div class="histo-labels">
+          <span>0.0</span><span>0.2</span><span>0.4</span><span>0.6</span><span>0.8</span><span>1.0</span>
+        </div>
+      </div>
+
+      <!-- Sample Results -->
+      <div class="eval-section">
+        <div class="eval-section-title">Sample Results (showing 10 of 50)</div>
+        <table class="eval-results-table">
+          <thead>
+            <tr><th style="width:40px">#</th><th>Input</th><th style="width:60px">Score</th><th style="width:60px">Status</th></tr>
+          </thead>
+          <tbody>
+            <tr><td style="color:var(--text-dim)">1</td><td>What is an absolute pin in chess?</td><td><span class="score-pill score-good">0.95</span></td><td class="status-pass">✓ Pass</td></tr>
+            <tr><td style="color:var(--text-dim)">2</td><td>Explain the difference between a pin and a skewer.</td><td><span class="score-pill score-good">0.87</span></td><td class="status-pass">✓ Pass</td></tr>
+            <tr><td style="color:var(--text-dim)">3</td><td>What is a discovered attack?</td><td><span class="score-pill score-good">0.92</span></td><td class="status-pass">✓ Pass</td></tr>
+            <tr><td style="color:var(--text-dim)">4</td><td>Describe an exchange sacrifice example.</td><td><span class="score-pill score-warn">0.74</span></td><td class="status-pass">✓ Pass</td></tr>
+            <tr><td style="color:var(--text-dim)">5</td><td>What is overloading a piece?</td><td><span class="score-pill score-good">0.88</span></td><td class="status-pass">✓ Pass</td></tr>
+            <tr><td style="color:var(--text-dim)">6</td><td>Explain back rank mate patterns.</td><td><span class="score-pill score-good">0.91</span></td><td class="status-pass">✓ Pass</td></tr>
+            <tr><td style="color:var(--text-dim)">7</td><td>When should you promote to a knight?</td><td><span class="score-pill score-bad">0.45</span></td><td class="status-fail">✗ Fail</td></tr>
+            <tr><td style="color:var(--text-dim)">8</td><td>How do opening principles apply to the Italian Game?</td><td><span class="score-pill score-good">0.83</span></td><td class="status-pass">✓ Pass</td></tr>
+            <tr><td style="color:var(--text-dim)">9</td><td>Explain positional themes in the Sicilian.</td><td><span class="score-pill score-good">0.81</span></td><td class="status-pass">✓ Pass</td></tr>
+            <tr><td style="color:var(--text-dim)">10</td><td>What is the idea behind a Greek gift sacrifice?</td><td><span class="score-pill score-good">0.90</span></td><td class="status-pass">✓ Pass</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- PAGE 6: Finetune Job Detail                                   -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<div class="app-layout" id="page-finetune-detail">
+  <!-- Icon Rail -->
+  <div class="icon-rail">
+    <div class="logo">V</div>
+    <button onclick="showPage('canvas')" title="Home">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    </button>
+    <button onclick="showPage('canvas')" title="Datasets">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    </button>
+  </div>
+
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <div class="breadcrumb">
+      <span>Projects</span> <span class="sep">/</span> <span>Chess Tutor Assistant</span> <span class="sep">/</span> <span class="current">Training Job</span>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Training Jobs <span class="count">2</span></div>
+      <div class="sidebar-item active" id="ftSidebarRunning" onclick="showFinetuneDetail('running')">
+        <span>🧠</span> ft-a13e42
+        <span class="badge" style="background:var(--blue-dim);color:var(--blue)">running</span>
+      </div>
+      <div class="sidebar-item" id="ftSidebarDone" onclick="showFinetuneDetail('done')">
+        <span>🧠</span> ft-b28d91
+        <span class="badge" style="background:var(--emerald-dim);color:var(--emerald)">succeeded</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content" style="display:flex;flex-direction:column;">
+    <!-- Header -->
+    <div class="ft-header" id="ftHeader">
+      <span class="pill pill-running" id="ftStatusPill">Running</span>
+      <span class="pill" style="background:var(--emerald-dim);color:var(--emerald)">gpt-4o-mini-2024-07-18</span>
+      <span class="ver-badge" title="Evaluator version used for training evaluation">
+        <span class="ver-icon">📝</span> v2
+      </span>
+      <span style="font-size:12px;font-family:monospace;color:var(--text-secondary)" id="ftHeaderSummary">Epoch 2/3 · Avg Score <span style="color:var(--emerald)">0.79</span> · 150 rows</span>
+      <span style="flex:1"></span>
+      <span style="font-size:10px;color:var(--text-dim)" id="ftHeaderDate">Mar 16, 09:45</span>
+      <button style="padding:4px 10px;border:1px solid var(--border);background:var(--bg-tertiary);color:var(--red);border-radius:4px;font-size:10px;cursor:pointer">⏹ Cancel</button>
+    </div>
+
+    <div class="ft-body">
+      <!-- Epoch Progress -->
+      <div class="epoch-progress" id="ftEpochProgress">
+        <div class="eval-section-title">Epoch Progress</div>
+        <div class="epoch-bar-bg">
+          <div class="epoch-bar-fill" style="width:66%;background:linear-gradient(90deg, var(--accent), var(--emerald))"></div>
+        </div>
+        <div class="epoch-labels">
+          <span>Epoch 2 of 3</span>
+          <span>66%</span>
+        </div>
+      </div>
+
+      <!-- Job Details -->
+      <div class="eval-section">
+        <div class="eval-section-title">Job Details</div>
+        <div class="ft-details-grid">
+          <div class="ft-detail-card">
+            <div class="ft-label">Provider</div>
+            <div class="ft-value">OpenAI</div>
+          </div>
+          <div class="ft-detail-card">
+            <div class="ft-label">Base Model</div>
+            <div class="ft-value" style="font-size:11px">gpt-4o-mini</div>
+          </div>
+          <div class="ft-detail-card">
+            <div class="ft-label">Records</div>
+            <div class="ft-value">150</div>
+          </div>
+          <div class="ft-detail-card">
+            <div class="ft-label">Learning Rate</div>
+            <div class="ft-value">1.8e-5</div>
+          </div>
+          <div class="ft-detail-card">
+            <div class="ft-label">Batch Size</div>
+            <div class="ft-value">4</div>
+          </div>
+          <div class="ft-detail-card">
+            <div class="ft-label">Epochs</div>
+            <div class="ft-value">3</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Eval Score Chart -->
+      <div class="eval-section">
+        <div class="eval-section-title">Eval Score by Epoch</div>
+        <div class="metrics-chart-placeholder">
+          <div class="metrics-chart-header">
+            <span style="font-size:10px;color:var(--text-dim)">Average grader score per epoch</span>
+            <span style="font-size:10px;color:var(--emerald);font-family:monospace">Current: 0.79</span>
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:24px;flex:1;padding:0 20px 8px;">
+            <!-- Epoch 1 -->
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+              <div style="width:100%;background:var(--accent);border-radius:4px 4px 0 0;height:120px;opacity:0.7"></div>
+              <span style="font-size:10px;color:var(--text-dim)">E1</span>
+              <span style="font-size:11px;color:var(--text-secondary);font-family:monospace">0.68</span>
+            </div>
+            <!-- Epoch 2 -->
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+              <div style="width:100%;background:var(--emerald);border-radius:4px 4px 0 0;height:140px"></div>
+              <span style="font-size:10px;color:var(--text-dim)">E2</span>
+              <span style="font-size:11px;color:var(--emerald);font-family:monospace;font-weight:600">0.79</span>
+            </div>
+            <!-- Epoch 3 (pending) -->
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+              <div style="width:100%;background:var(--bg-tertiary);border:1px dashed var(--border);border-radius:4px 4px 0 0;height:40px"></div>
+              <span style="font-size:10px;color:var(--text-dim)">E3</span>
+              <span style="font-size:11px;color:var(--text-dim);font-family:monospace">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Training Metrics -->
+      <div class="eval-section">
+        <div class="eval-section-title">Training Metrics</div>
+        <div class="ft-details-grid" style="grid-template-columns: repeat(4, 1fr);">
+          <div class="ft-detail-card">
+            <div class="ft-label">Loss</div>
+            <div class="ft-value" style="color:var(--emerald)">0.342</div>
+          </div>
+          <div class="ft-detail-card">
+            <div class="ft-label">Reward</div>
+            <div class="ft-value" style="color:var(--emerald)">2.14</div>
+          </div>
+          <div class="ft-detail-card">
+            <div class="ft-label">KL Divergence</div>
+            <div class="ft-value">0.087</div>
+          </div>
+          <div class="ft-detail-card">
+            <div class="ft-label">Completion Tokens</div>
+            <div class="ft-value">12.4K</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- PAGE 7: Grader / Eval Function Editor                         -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<div class="app-layout" id="page-grader">
+  <!-- Icon Rail -->
+  <div class="icon-rail">
+    <div class="logo">V</div>
+    <button onclick="showPage('canvas')" title="Home">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    </button>
+    <button onclick="showPage('canvas')" title="Datasets">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    </button>
+  </div>
+
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <div class="breadcrumb">
+      <span>Projects</span> <span class="sep">/</span> <span>Chess Tutor Assistant</span> <span class="sep">/</span> <span class="current">Grader</span>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Evaluator</div>
+      <div class="sidebar-item active">
+        <span>📝</span> grader-script.js
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Eval Runs <span class="count">2</span></div>
+      <div class="sidebar-item" onclick="showPage('eval-detail')">
+        <span>⚡</span> eval-v2
+        <span class="badge" style="background:var(--emerald-dim);color:var(--emerald)">done</span>
+      </div>
+      <div class="sidebar-item" onclick="showPage('eval-detail')">
+        <span>⚡</span> eval-v1
+        <span class="badge" style="background:var(--emerald-dim);color:var(--emerald)">done</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content" style="display:flex;flex-direction:column;">
+    <div class="grader-layout">
+      <!-- Toolbar -->
+      <div class="grader-toolbar">
+        <span style="font-size:11px;font-weight:600;color:var(--text-primary)">📝 grader-script.js</span>
+        <span style="flex:1"></span>
+        <button class="tool-btn" title="Load template">📄 Template</button>
+        <button class="tool-btn" title="Copy code">📋 Copy</button>
+        <button class="tool-btn" title="Save">💾 Save</button>
+        <button class="tool-btn primary" title="Run evaluation">▶ Run Eval</button>
+      </div>
+
+      <!-- Code Editor -->
+      <div class="grader-editor">
+<span class="line-num"> 1</span><span class="cmt">// Grader Script — LLM-as-Judge Evaluation</span>
+<span class="line-num"> 2</span><span class="cmt">// Scores each training record 0-1 using GPT-4o as judge</span>
+<span class="line-num"> 3</span>
+<span class="line-num"> 4</span><span class="kw">const</span> { <span class="fn">callLLM</span> } = <span class="fn">require</span>(<span class="str">'vllora/eval'</span>);
+<span class="line-num"> 5</span>
+<span class="line-num"> 6</span><span class="kw">async function</span> <span class="fn">evaluate</span>(input) {
+<span class="line-num"> 7</span>  <span class="kw">const</span> messages = input.messages || [];
+<span class="line-num"> 8</span>  <span class="kw">const</span> response = input.output?.messages?.[<span class="num">0</span>]?.content || <span class="str">''</span>;
+<span class="line-num"> 9</span>  <span class="kw">const</span> userMsg = messages.<span class="fn">find</span>(m <span class="op">=></span> m.role <span class="op">===</span> <span class="str">'user'</span>)?.content || <span class="str">''</span>;
+<span class="line-num">10</span>
+<span class="line-num">11</span>  <span class="kw">const</span> result = <span class="kw">await</span> <span class="fn">callLLM</span>({
+<span class="line-num">12</span>    model: <span class="str">'gpt-4o'</span>,
+<span class="line-num">13</span>    messages: [
+<span class="line-num">14</span>      { role: <span class="str">'system'</span>, content: <span class="str">`You are an expert chess tutor evaluator.
+<span class="line-num">15</span>Score the assistant's response on accuracy, clarity,
+<span class="line-num">16</span>and use of algebraic notation. Return JSON:
+<span class="line-num">17</span>{"score": 0-1, "reason": "brief explanation"}`</span> },
+<span class="line-num">18</span>      { role: <span class="str">'user'</span>, content: <span class="str">`Question: ${userMsg}
+<span class="line-num">19</span>
+<span class="line-num">20</span>Response: ${response}`</span> }
+<span class="line-num">21</span>    ],
+<span class="line-num">22</span>    response_format: { type: <span class="str">'json_object'</span> }
+<span class="line-num">23</span>  });
+<span class="line-num">24</span>
+<span class="line-num">25</span>  <span class="kw">const</span> parsed = <span class="fn">JSON.parse</span>(result);
+<span class="line-num">26</span>  <span class="kw">return</span> {
+<span class="line-num">27</span>    score: <span class="fn">Math.max</span>(<span class="num">0</span>, <span class="fn">Math.min</span>(<span class="num">1</span>, parsed.score)),
+<span class="line-num">28</span>    reason: parsed.reason || <span class="str">'No reason provided'</span>
+<span class="line-num">29</span>  };
+<span class="line-num">30</span>}
+<span class="line-num">31</span>
+<span class="line-num">32</span>module.<span class="fn">exports</span> = { <span class="fn">evaluate</span> };
+      </div>
+
+      <!-- Bottom Panel -->
+      <div class="grader-bottom" style="max-height:280px">
+        <div class="grader-bottom-tabs">
+          <div class="grader-bottom-tab active" onclick="showGraderTab('results')">Results</div>
+          <div class="grader-bottom-tab" onclick="showGraderTab('versions')">Versions</div>
+        </div>
+        <div class="grader-bottom-content" id="graderTabResults">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <span style="color:var(--emerald)">✓</span>
+            <span>Last run: 50 samples · Avg score <span style="color:var(--emerald);font-weight:600">0.82</span> · 48 passed, 2 failed</span>
+          </div>
+          <div style="display:flex;gap:16px;font-size:10px;color:var(--text-dim)">
+            <span>Version 3 (current) · saved Mar 17, 10:00</span>
+            <span>·</span>
+            <span>Model: gpt-4o</span>
+            <span>·</span>
+            <span>Duration: 2m 14s</span>
+          </div>
+        </div>
+        <div class="grader-bottom-content ver-history" id="graderTabVersions" style="display:none">
+          <div class="ver-history-item">
+            <div class="ver-history-dot current"></div>
+            <div class="ver-history-info">
+              <div>
+                <span class="ver-history-label">v3</span>
+                <span class="current-tag">current</span>
+                <span class="ver-history-date">Mar 17, 10:00</span>
+              </div>
+              <div class="ver-history-desc">Added algebraic notation scoring criteria</div>
+              <div class="ver-history-jobs">No jobs yet</div>
+            </div>
+          </div>
+          <div class="ver-history-item">
+            <div class="ver-history-dot past"></div>
+            <div class="ver-history-info">
+              <div>
+                <span class="ver-history-label">v2</span>
+                <span class="ver-history-date">Mar 15, 14:30</span>
+              </div>
+              <div class="ver-history-desc">Switched to GPT-4o judge, added clarity criteria</div>
+              <div class="ver-history-jobs">
+                Used by:
+                <span class="job-pill">⚡ eval-v2</span>
+                <span class="job-pill">🧠 ft-a13e42</span>
+              </div>
+              <div class="ver-history-actions">
+                <button onclick="showPage('eval-detail')">View code</button>
+                <button>Diff v2 → v3</button>
+              </div>
+            </div>
+          </div>
+          <div class="ver-history-item">
+            <div class="ver-history-dot past"></div>
+            <div class="ver-history-info">
+              <div>
+                <span class="ver-history-label">v1</span>
+                <span class="ver-history-date">Mar 12, 09:15</span>
+              </div>
+              <div class="ver-history-desc">Initial grader — rule-based keyword matching</div>
+              <div class="ver-history-jobs">
+                Used by:
+                <span class="job-pill">⚡ eval-v1</span>
+              </div>
+              <div class="ver-history-actions">
+                <button>View code</button>
+                <button>Diff v1 → v3</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Page switcher -->
 <div class="page-indicator">
   <div class="page-dot active" onclick="showPage('canvas')" title="Canvas View"></div>
@@ -3341,6 +4254,10 @@ function renderLiveData(topics, records, sources, relations) {
       recordsByTopic[tid].push(r);
     }
   }
+
+  // Store globally for showTopicDetail live fallback
+  window._liveTopics = topics;
+  window._liveRecordsByTopic = recordsByTopic;
 
   // Count records per parent (sum of children)
   const recordsByParent = {};
@@ -3470,13 +4387,15 @@ function updateAllSidebars(parentTopics, childTopics, recordsByTopic, recordsByP
           const children = childTopics.filter(c => c.parent_id === parent.id);
           const childItems = container.querySelectorAll('.sidebar-item.child');
 
-          // Clear existing and rebuild
+          // Clear existing and rebuild with onclick handlers
           container.innerHTML = '';
           children.forEach(child => {
             const count = (recordsByTopic[child.id] || []).length;
             const div = document.createElement('div');
             div.className = 'sidebar-item child';
+            div.style.cursor = 'pointer';
             div.innerHTML = child.name + ' <span class="badge">' + count + '</span>';
+            div.onclick = function() { showTopicDetail(child.name); };
             container.appendChild(div);
           });
         }
@@ -3849,11 +4768,170 @@ if (document.readyState !== 'loading') {
 }
 
 // ── Page switching ──
+// ── Topic detail data (sample records per topic) ──
+const topicData = {
+  'Forks': { parent: 'Basic Tactical Patterns', count: 14, records: [
+    { input: 'What is a knight fork and why is it effective?', output: 'A knight fork attacks two or more pieces simultaneously. The L-shaped move cannot be blocked, making it devastating.', score: 0.92 },
+    { input: 'Explain the difference between a fork and a pin.', output: 'A fork attacks two pieces at once, forcing the opponent to lose one. A pin restricts a piece from moving because it would expose a more valuable piece behind it.', score: 0.88 },
+    { input: 'How do you set up a fork in the middlegame?', output: 'Look for squares where your knight or pawn can simultaneously attack two valuable pieces. Create threats that force your opponent into vulnerable positions.', score: 0.85 },
+  ], sources: [{ name: 'chess-tactics.pdf', part: 'Part II — Tactical Motifs', preview: 'A fork occurs when a single piece attacks two or more enemy pieces simultaneously...' }] },
+  'Pins and Skewers': { parent: 'Basic Tactical Patterns', count: 12, records: [
+    { input: 'What is an absolute pin in chess?', output: 'An absolute pin is when a piece cannot legally move because doing so would expose the king to check. The pinned piece is completely immobilized.', score: 0.90 },
+    { input: 'Explain the difference between a pin and a skewer.', output: 'In a pin, the less valuable piece is in front. In a skewer, the more valuable piece is in front and must move, exposing the piece behind it to capture.', score: 0.87 },
+  ], sources: [{ name: 'chess-tactics.pdf', part: 'Part II — Tactical Motifs', preview: 'Pins and skewers exploit the alignment of pieces along ranks, files, and diagonals...' }] },
+  'Discovered Attacks': { parent: 'Basic Tactical Patterns', count: 8, records: [
+    { input: 'What is a discovered attack?', output: 'A discovered attack occurs when moving one piece reveals an attack from another piece behind it. This creates a double threat that is very difficult to defend against.', score: 0.84 },
+    { input: 'What makes a discovered check so powerful?', output: 'In a discovered check, the revealed attack is a check on the king. Since the king must address the check, the moving piece can capture or threaten freely.', score: 0.79 },
+  ], sources: [{ name: 'chess-tactics.pdf', part: 'Part II — Tactical Motifs', preview: 'Discovered attacks are among the most powerful tactical motifs...' }] },
+  'Sacrifices': { parent: 'Basic Tactical Patterns', count: 18, records: [
+    { input: 'When should you sacrifice material in chess?', output: 'Sacrifice material when you gain a decisive positional advantage, a mating attack, or forced win of more material back. The sacrifice must lead to concrete compensation.', score: 0.91 },
+    { input: 'What is a Greek Gift sacrifice?', output: 'The Greek Gift is a classic bishop sacrifice on h7 (Bxh7+). After the king takes, the knight jumps to g5+ with a devastating attack. It requires specific conditions to work.', score: 0.86 },
+    { input: 'Explain positional vs tactical sacrifices.', output: 'Tactical sacrifices lead to forced sequences with concrete calculation. Positional sacrifices offer long-term compensation like better pawn structure, activity, or king safety.', score: 0.82 },
+  ], sources: [{ name: 'chess-tactics.pdf', part: 'Part III — Combinations', preview: 'Material sacrifice is the deliberate giving up of material for positional or tactical compensation...' }, { name: 'strategy-guide.pdf', part: 'Part I — Fundamentals', preview: 'Understanding when to sacrifice requires evaluating the resulting position...' }] },
+  'Overloading': { parent: 'Basic Tactical Patterns', count: 10, records: [
+    { input: 'What happens when a piece is overloaded with multiple defensive duties?', output: 'When a piece is overloaded, it cannot adequately fulfill all its defensive responsibilities. The attacker can exploit this by forcing the overloaded piece to abandon one of its tasks.', score: 0.71 },
+    { input: 'Explain the concept of deflection in chess tactics.', output: 'Deflection is a tactic where you force an opponent\'s piece away from a critical square or defensive duty. By attacking or luring the defender, you create an opportunity to exploit the position.', score: 0.68 },
+  ], sources: [{ name: 'chess-tactics.pdf', part: 'Part II — Tactical Motifs', preview: 'Deflection and overloading exploit the limitations of defensive pieces...' }] },
+  'Opening Principles': { parent: 'Advanced Combinations', count: 25, records: [
+    { input: 'What are the three main principles of opening play?', output: 'The three main principles are: 1) Control the center, 2) Develop your pieces, 3) Castle early for king safety. These form the foundation of sound opening play.', score: 0.93 },
+    { input: 'Why is controlling the center important in the opening?', output: 'Center control provides more mobility for your pieces, allows faster development, and creates attacking opportunities. Pieces in the center influence more squares.', score: 0.89 },
+  ], sources: [{ name: 'strategy-guide.pdf', part: 'Part I — Fundamentals', preview: 'Opening principles form the foundation of good chess play...' }] },
+  'Positional Themes': { parent: 'Advanced Combinations', count: 23, records: [
+    { input: 'What are weak squares and how do they arise?', output: 'Weak squares are squares that can no longer be defended by pawns. They arise when pawns advance or are exchanged, leaving gaps in the pawn structure that opponents can exploit.', score: 0.87 },
+    { input: 'Explain the concept of a good bishop vs a bad bishop.', output: 'A good bishop has most of its own pawns on the opposite color, giving it open diagonals. A bad bishop is blocked by its own pawns on the same color squares.', score: 0.83 },
+  ], sources: [{ name: 'strategy-guide.pdf', part: 'Part II — Pawn Structure', preview: 'Positional understanding separates strong players from beginners...' }] },
+  'Back Rank Mates': { parent: 'Endgame & Mating', count: 22, records: [
+    { input: 'What is a back rank mate and how do you prevent it?', output: 'A back rank mate occurs when a rook or queen checkmates the king on its first rank because the king is trapped by its own pawns. Prevent it by creating a luft (escape square) with h3/g3.', score: 0.94 },
+    { input: 'Give an example of a famous back rank mate.', output: 'One classic example is when a rook sacrifices to deflect a defending piece, then the other rook delivers mate on the back rank. This pattern appears frequently in practical games.', score: 0.88 },
+  ], sources: [{ name: 'chess-tactics.pdf', part: 'Part IV — Endgame', preview: 'Back rank mates are one of the most common tactical patterns in chess...' }] },
+  'Pawn Promotion': { parent: 'Endgame & Mating', count: 16, records: [
+    { input: 'When is underpromotion better than promoting to a queen?', output: 'Underpromotion to a knight is useful when it delivers check or avoids stalemate. Promoting to a rook or bishop may also avoid stalemate in specific positions.', score: 0.85 },
+    { input: 'What is the rule of the square for pawn promotion?', output: 'The rule of the square determines if a king can catch a passed pawn. Draw a diagonal from the pawn to the promotion square — if the king is inside this square, it can catch the pawn.', score: 0.90 },
+  ], sources: [{ name: 'chess-tactics.pdf', part: 'Part IV — Endgame', preview: 'Pawn promotion is the ultimate goal of every passed pawn...' }] },
+  'Test Topic': { parent: 'Endgame & Mating', count: 2, records: [
+    { input: 'What is a test question for this topic?', output: 'This is a test record used for development and validation of the topic hierarchy system.', score: 0.50 },
+  ], sources: [] },
+};
+
+function showTopicDetail(topicName) {
+  let data = topicData[topicName];
+
+  // Fall back to live data if not in static topicData
+  if (!data && window._liveTopics) {
+    const topic = window._liveTopics.find(t => t.name === topicName);
+    if (topic) {
+      const parent = topic.parent_id ? window._liveTopics.find(t => t.id === topic.parent_id) : null;
+      const topicRecords = (window._liveRecordsByTopic || {})[topic.id] || [];
+      data = {
+        parent: parent ? parent.name : '',
+        count: topicRecords.length,
+        records: topicRecords.slice(0, 10).map(r => {
+          const parsed = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+          const msgs = parsed?.input?.messages || [];
+          const outMsgs = parsed?.output?.messages || [];
+          const userMsg = msgs.find(m => m.role === 'user');
+          const asstMsg = outMsgs.find(m => m.role === 'assistant');
+          return {
+            input: (userMsg?.content || '').slice(0, 200),
+            output: (asstMsg?.content || typeof parsed?.output?.content === 'string' ? parsed.output.content : '').slice(0, 300),
+            score: r.scores?.[0]?.score ?? 0,
+          };
+        }),
+        sources: [],
+      };
+    }
+  }
+
+  if (!data) { showPage('topic-detail'); return; }
+
+  // Update prompt chain panel content
+  const rootText = document.getElementById('promptChainRootText');
+  const parentLabel = document.getElementById('promptChainParentLabel');
+  const parentText = document.getElementById('promptChainParentText');
+  const leafLabel = document.getElementById('promptChainLeafLabel');
+  const leafText = document.getElementById('promptChainLeafText');
+  if (rootText) rootText.textContent = 'You are an expert chess tutor. Explain concepts clearly with examples. Use standard algebraic notation when relevant.';
+  if (parentLabel) parentLabel.textContent = data.parent || 'Parent';
+  if (parentText) parentText.textContent = 'Specialize in: ' + (data.parent || 'General');
+  if (leafLabel) leafLabel.textContent = topicName;
+  if (leafText) leafText.textContent = 'Focus on: ' + topicName;
+
+  // Update breadcrumb in top bar
+  const topBar = document.querySelector('#page-topic-detail .breadcrumb .current');
+  if (topBar) topBar.textContent = topicName;
+
+  // Update detail header
+  const breadcrumb = document.querySelector('#page-topic-detail [style*="font-size:11px;color:var(--text-dim)"]');
+  if (breadcrumb) breadcrumb.innerHTML = data.parent + ' &#8250;';
+
+  const title = document.querySelector('#page-topic-detail h2');
+  if (title) title.textContent = topicName;
+
+  // Update counts
+  const tdRecordCount = document.getElementById('tdRecordCount');
+  if (tdRecordCount) tdRecordCount.textContent = data.records.length + ' records';
+  const tabRecordCount = document.getElementById('tabRecordCount');
+  if (tabRecordCount) tabRecordCount.textContent = data.records.length;
+  const tabSourceCount = document.getElementById('tabSourceCount');
+  if (tabSourceCount) tabSourceCount.textContent = data.sources.length;
+  const tdSourceCount = document.getElementById('tdSourceCount');
+  if (tdSourceCount) tdSourceCount.textContent = data.sources.length;
+
+  // Update records table
+  const tbody = document.querySelector('#topicTabRecords tbody');
+  if (tbody) {
+    tbody.innerHTML = data.records.map((r, i) => {
+      const scoreClass = r.score >= 0.8 ? 'score-good' : r.score >= 0.6 ? 'score-warn' : 'score-bad';
+      return '<tr>' +
+        '<td style="color:var(--text-dim)">' + (i + 1) + '</td>' +
+        '<td>' + r.input + '</td>' +
+        '<td>' + r.output + '</td>' +
+        '<td style="text-align:center"><span class="score-pill ' + scoreClass + '">' + r.score.toFixed(2) + '</span></td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  // Update linked sources
+  const sourcesDiv = document.getElementById('topicTabSources');
+  if (sourcesDiv) {
+    if (data.sources.length > 0) {
+      sourcesDiv.innerHTML = '<div class="linked-sources-grid">' + data.sources.map(s =>
+        '<div class="linked-source-card">' +
+        '<div class="ls-card-header"><div class="ls-icon">&#128196;</div><div>' +
+        '<div class="ls-title">' + s.name + '</div>' +
+        '<div class="ls-meta">' + s.part + '</div>' +
+        '</div></div>' +
+        '<div class="ls-preview">' + s.preview + '</div>' +
+        '<div class="ls-topics"><span class="ls-topic-tag">' + topicName + '</span></div>' +
+        '</div>'
+      ).join('') + '</div>';
+    } else {
+      sourcesDiv.innerHTML = '<div class="topic-empty-state"><div class="topic-empty-icon">&#128196;</div><div class="topic-empty-title">No linked sources</div><div class="topic-empty-desc">Link knowledge source parts to this topic to see them here.</div></div>';
+    }
+  }
+
+  // Update sidebar active state
+  document.querySelectorAll('#page-topic-detail .sidebar-item.child').forEach(item => {
+    const text = item.textContent.replace(/\d+/g, '').trim();
+    item.classList.toggle('active', text === topicName);
+  });
+
+  // Reset to records tab and non-empty mode
+  topicEmptyMode = false;
+  const label = document.getElementById('topicEmptyLabel');
+  if (label) label.textContent = 'Showing: with data';
+  showTopicTab('records');
+
+  showPage('topic-detail');
+}
+
 function showPage(page) {
-  document.getElementById('page-canvas').style.display = page === 'canvas' ? 'grid' : 'none';
-  document.getElementById('page-knowledge').style.display = page === 'knowledge' ? 'grid' : 'none';
-  document.getElementById('page-table').style.display = page === 'table' ? 'grid' : 'none';
-  document.getElementById('page-topic-detail').style.display = page === 'topic-detail' ? 'grid' : 'none';
+  const pages = ['canvas', 'knowledge', 'table', 'topic-detail', 'eval-detail', 'finetune-detail', 'grader'];
+  const pageIds = ['page-canvas', 'page-knowledge', 'page-table', 'page-topic-detail', 'page-eval-detail', 'page-finetune-detail', 'page-grader'];
+  pageIds.forEach((id, i) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = pages[i] === page ? 'grid' : 'none';
+  });
   const dots = document.querySelectorAll('.page-dot');
   dots[0].classList.toggle('active', page === 'canvas');
   dots[1].classList.toggle('active', page === 'knowledge');
@@ -3873,6 +4951,78 @@ function showPage(page) {
 // ── Topic Detail Tab Switching ──
 let topicEmptyMode = false;
 let currentTopicTab = 'records';
+
+function toggleEvalSnapshot() {
+  const panel = document.getElementById('evalSnapshot');
+  const badge = document.getElementById('evalVerBadge');
+  const diff = document.getElementById('evalDiff');
+  if (!panel || !badge) return;
+  const isVisible = panel.classList.contains('visible');
+  panel.classList.toggle('visible', !isVisible);
+  badge.classList.toggle('active', !isVisible);
+  // Hide diff when closing snapshot
+  if (isVisible && diff) diff.classList.remove('visible');
+}
+
+function toggleEvalDiff() {
+  const diff = document.getElementById('evalDiff');
+  if (!diff) return;
+  diff.classList.toggle('visible');
+}
+
+function showGraderTab(tab) {
+  const results = document.getElementById('graderTabResults');
+  const versions = document.getElementById('graderTabVersions');
+  const tabs = document.querySelectorAll('#page-grader .grader-bottom-tab');
+  if (tab === 'results') {
+    if (results) results.style.display = '';
+    if (versions) versions.style.display = 'none';
+    tabs[0]?.classList.add('active');
+    tabs[1]?.classList.remove('active');
+  } else {
+    if (results) results.style.display = 'none';
+    if (versions) versions.style.display = '';
+    tabs[0]?.classList.remove('active');
+    tabs[1]?.classList.add('active');
+  }
+}
+
+function showEvalDetail(evalId) {
+  showPage('eval-detail');
+  // Update sidebar active state
+  const v2 = document.getElementById('evalSidebarV2');
+  const v1 = document.getElementById('evalSidebarV1');
+  if (v2) v2.classList.toggle('active', evalId === 'eval-v2');
+  if (v1) v1.classList.toggle('active', evalId === 'eval-v1');
+}
+
+function showFinetuneDetail(state) {
+  showPage('finetune-detail');
+  const running = document.getElementById('ftSidebarRunning');
+  const done = document.getElementById('ftSidebarDone');
+  if (running) running.classList.toggle('active', state === 'running');
+  if (done) done.classList.toggle('active', state === 'done');
+
+  // Update header and content based on state
+  const statusPill = document.getElementById('ftStatusPill');
+  const summary = document.getElementById('ftHeaderSummary');
+  if (state === 'done') {
+    if (statusPill) { statusPill.textContent = 'Succeeded'; statusPill.className = 'pill pill-done'; }
+    if (summary) summary.innerHTML = 'Epoch 3/3 · Avg Score <span style="color:var(--emerald)">0.85</span> · 150 rows';
+  } else {
+    if (statusPill) { statusPill.textContent = 'Running'; statusPill.className = 'pill pill-running'; }
+    if (summary) summary.innerHTML = 'Epoch 2/3 · Avg Score <span style="color:var(--emerald)">0.79</span> · 150 rows';
+  }
+}
+
+function togglePromptChain() {
+  const panel = document.getElementById('promptChainPanel');
+  const btn = document.getElementById('promptToggleBtn');
+  if (!panel || !btn) return;
+  const isVisible = panel.classList.contains('visible');
+  panel.classList.toggle('visible', !isVisible);
+  btn.classList.toggle('active', !isVisible);
+}
 
 function showTopicTab(tab) {
   currentTopicTab = tab;
@@ -4591,6 +5741,9 @@ document.addEventListener('keydown', (e) => {
   if (e.key === '2' && !e.ctrlKey && !e.metaKey && !e.target.matches('input')) showPage('knowledge');
   if (e.key === '3' && !e.ctrlKey && !e.metaKey && !e.target.matches('input')) showPage('table');
   if (e.key === '4' && !e.ctrlKey && !e.metaKey && !e.target.matches('input')) showPage('topic-detail');
+  if (e.key === '5' && !e.ctrlKey && !e.metaKey && !e.target.matches('input')) showPage('eval-detail');
+  if (e.key === '6' && !e.ctrlKey && !e.metaKey && !e.target.matches('input')) showPage('finetune-detail');
+  if (e.key === '7' && !e.ctrlKey && !e.metaKey && !e.target.matches('input')) showPage('grader');
 });
 </script>
 
@@ -4617,6 +5770,9 @@ document.addEventListener('keydown', (e) => {
         <div class="mc-opt" onclick="showPage('knowledge')">2 Sources</div>
         <div class="mc-opt" onclick="showPage('table')">3 Table</div>
         <div class="mc-opt" onclick="showPage('topic-detail')">4 Topic Detail</div>
+        <div class="mc-opt" onclick="showPage('eval-detail')">5 Eval Job</div>
+        <div class="mc-opt" onclick="showPage('finetune-detail')">6 Finetune Job</div>
+        <div class="mc-opt" onclick="showPage('grader')">7 Grader</div>
       </div>
     </div>
     <div class="mc-divider"></div>
@@ -4641,6 +5797,9 @@ document.addEventListener('keydown', (e) => {
   <div class="kbd-row"><span class="label">Sources view</span><kbd>2</kbd></div>
   <div class="kbd-row"><span class="label">Table view</span><kbd>3</kbd></div>
   <div class="kbd-row"><span class="label">Topic Detail</span><kbd>4</kbd></div>
+  <div class="kbd-row"><span class="label">Eval Job</span><kbd>5</kbd></div>
+  <div class="kbd-row"><span class="label">Finetune Job</span><kbd>6</kbd></div>
+  <div class="kbd-row"><span class="label">Grader</span><kbd>7</kbd></div>
   <div style="height:1px;background:var(--border-subtle);margin:6px 0"></div>
   <div class="kbd-row"><span class="label">Zoom out / Close</span><kbd>Esc</kbd></div>
   <div class="kbd-row"><span class="label">This help</span><kbd>?</kbd></div>
