@@ -396,6 +396,7 @@ function TopicTreeItems({
   depth,
   collapsedParents,
   onToggleParent,
+  parentPath = "data",
 }: {
   readonly node: TopicHierarchyNode;
   readonly topicCounts: Map<string, number>;
@@ -404,8 +405,9 @@ function TopicTreeItems({
   readonly depth: number;
   readonly collapsedParents: Set<string>;
   readonly onToggleParent: (name: string) => void;
+  readonly parentPath?: string;
 }) {
-  const nodeId = `data/${node.name}`;
+  const nodeId = `${parentPath}/${node.name}`;
   const count = getTopicRecordCount(node, topicCounts);
   const hasChildren = (node.children?.length ?? 0) > 0;
   const isCollapsed = collapsedParents.has(node.name);
@@ -441,6 +443,7 @@ function TopicTreeItems({
             depth={depth + 1}
             collapsedParents={collapsedParents}
             onToggleParent={onToggleParent}
+            parentPath={nodeId}
           />
         ))}
       </>

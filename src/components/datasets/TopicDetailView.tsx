@@ -6,7 +6,7 @@
  */
 
 import { useState, useMemo } from "react";
-import { FileText, Sparkles } from "lucide-react";
+import { FileText, Sparkles, MessageSquare, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { resolveAndGroupBySource } from "@/lib/distri-finetune-tools/steps/shared/resolve-part-ref";
@@ -17,10 +17,14 @@ type Tab = "records" | "linked-sources";
 export interface TopicDetailViewProps {
   /** The matched topic node in the hierarchy */
   readonly topicNode: TopicHierarchyNode;
+  /** Ancestor nodes from root to parent (excludes the current node) */
+  readonly ancestorNodes?: TopicHierarchyNode[];
   /** Records assigned to this topic and its descendants */
   readonly records: DatasetRecord[];
   /** Called when a record row is clicked */
   readonly onSelectRecord?: (recordId: string) => void;
+  /** LLM-normalized "You are ..." role sentence (root prompt) */
+  readonly normalizedObjective?: string;
 }
 
 /** Collect all sourceChunkRefs from a node and its descendants */
@@ -36,10 +40,13 @@ function collectAllRefs(node: TopicHierarchyNode): string[] {
 
 export function TopicDetailView({
   topicNode,
+  ancestorNodes = [],
   records,
   onSelectRecord,
+  normalizedObjective,
 }: TopicDetailViewProps) {
   const [activeTab, setActiveTab] = useState<Tab>("records");
+  const [isPromptOpen, setIsPromptOpen] = useState(false);
   const { sources } = KnowledgeSourcesConsumer();
 
   // Collect all source refs from this topic and descendants
@@ -54,9 +61,48 @@ export function TopicDetailView({
 
   const sourceCount = groupedSources.size;
 
+  // Extract system prompt from the first record's data (the actual generated prompt)
+  const recordSystemPrompt = useMemo(() => {
+    for (const record of records) {
+      const data = record.data as { input?: { messages?: Array<{ role?: string; content?: string }> } } | undefined;
+      const msgs = data?.input?.messages;
+      if (!msgs) continue;
+      const sysMsg = msgs.find(m => m.role === "system");
+      if (sysMsg?.content) return sysMsg.content;
+    }
+    return null;
+  }, [records]);
+
+  // Build prompt chain: hierarchy metadata OR fallback to record's system prompt
+  const promptChain = useMemo(() => {
+    const chain: { label: string; level: "root" | "parent" | "leaf"; prompt: string }[] = [];
+
+    // Try hierarchy-based chain first
+    if (normalizedObjective) {
+      chain.push({ label: "Root", level: "root", prompt: normalizedObjective });
+    }
+    for (const ancestor of ancestorNodes) {
+      const prompt = ancestor.description || ancestor.normalizedPromptSegment;
+      if (prompt) {
+        chain.push({ label: ancestor.name, level: "parent", prompt });
+      }
+    }
+    const leafPrompt = topicNode.description || topicNode.normalizedPromptSegment;
+    if (leafPrompt) {
+      chain.push({ label: topicNode.name, level: "leaf", prompt: leafPrompt });
+    }
+
+    // If no hierarchy prompts found, fall back to the actual system prompt from records
+    if (chain.length === 0 && recordSystemPrompt) {
+      chain.push({ label: "System Prompt", level: "leaf", prompt: recordSystemPrompt });
+    }
+
+    return chain;
+  }, [normalizedObjective, ancestorNodes, topicNode, recordSystemPrompt]);
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Tabs */}
+      {/* Tabs + prompt toggle */}
       <div className="px-4 shrink-0 border-b border-border">
         <div className="flex items-center gap-0">
           <TabButton
@@ -69,8 +115,29 @@ export function TopicDetailView({
             label={`Linked Sources (${sourceCount})`}
             onClick={() => setActiveTab("linked-sources")}
           />
+          {promptChain.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setIsPromptOpen(prev => !prev)}
+              className={cn(
+                "ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs transition-colors",
+                isPromptOpen
+                  ? "bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]"
+                  : "text-muted-foreground/50 hover:text-foreground hover:bg-muted/50",
+              )}
+              title="View system prompt chain"
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Prompt</span>
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Prompt chain panel */}
+      {isPromptOpen && promptChain.length > 0 && (
+        <PromptChainPanel chain={promptChain} />
+      )}
 
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto">
@@ -264,6 +331,49 @@ function LinkedSourcesTabContent({
           ))}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ─── Prompt Chain Panel ───
+
+function PromptChainPanel({
+  chain,
+}: {
+  readonly chain: readonly { label: string; level: "root" | "parent" | "leaf"; prompt: string }[];
+}) {
+  return (
+    <div className="border-b border-border bg-background/95 backdrop-blur-sm shrink-0">
+      <div className="flex items-stretch gap-2 px-4 py-3 overflow-x-auto">
+        {chain.map((link, i) => {
+          const isLeaf = link.level === "leaf";
+          return (
+            <div key={i} className="flex items-center gap-2">
+              {i > 0 && (
+                <ChevronRight className="w-4 h-4 text-muted-foreground/30 shrink-0" />
+              )}
+              <div
+                className={cn(
+                  "flex flex-col min-w-[180px] max-w-[280px] rounded-lg border p-2.5",
+                  isLeaf
+                    ? "border-[rgba(var(--theme-500),0.3)] bg-[rgba(var(--theme-500),0.05)]"
+                    : "border-border/50 bg-muted/30",
+                )}
+              >
+                <span className={cn(
+                  "text-[9px] font-semibold uppercase tracking-wider mb-1",
+                  isLeaf ? "text-[rgb(var(--theme-500))]" : "text-muted-foreground/60",
+                )}>
+                  {link.label}
+                </span>
+                <p className="text-[11px] text-muted-foreground font-mono leading-relaxed whitespace-pre-wrap line-clamp-3">
+                  {link.prompt}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

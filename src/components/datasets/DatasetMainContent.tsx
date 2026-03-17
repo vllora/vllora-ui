@@ -25,11 +25,12 @@ function findTopicByName(
   nodes: TopicHierarchyNode[],
   name: string,
   path: string[] = [],
-): { node: TopicHierarchyNode; breadcrumb: string[] } | null {
+  nodePath: TopicHierarchyNode[] = [],
+): { node: TopicHierarchyNode; breadcrumb: string[]; nodePath: TopicHierarchyNode[] } | null {
   for (const node of nodes) {
-    if (node.name === name) return { node, breadcrumb: path };
+    if (node.name === name) return { node, breadcrumb: path, nodePath };
     if (node.children) {
-      const found = findTopicByName(node.children, name, [...path, node.name]);
+      const found = findTopicByName(node.children, name, [...path, node.name], [...nodePath, node]);
       if (found) return found;
     }
   }
@@ -325,8 +326,10 @@ export function DatasetMainContent({
       {viewMode === "table" && topicDetail && (
         <TopicDetailView
           topicNode={topicDetail.node}
+          ancestorNodes={topicDetail.nodePath}
           records={filteredRecords}
           onSelectRecord={onSelectRecordId}
+          normalizedObjective={normalizedObjective}
         />
       )}
       {viewMode === "table" && !topicDetail && (

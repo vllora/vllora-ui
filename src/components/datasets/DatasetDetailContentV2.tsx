@@ -790,7 +790,7 @@ export function DatasetDetailContentV2() {
               topicHierarchy={dataset.topicHierarchy?.hierarchy}
               coverageStats={canvasCoverageStats}
               availableTopics={availableTopics}
-              topicFilter={activeTabPath?.startsWith("data/") ? activeTabPath.slice(5) : undefined}
+              topicFilter={activeTabPath?.startsWith("data/") ? (activeTabPath.split("/").pop() || activeTabPath.slice(5)) : undefined}
               onImportClick={() => setImportDialog(true)}
               onDocsClick={() => openTabRef.current("knowledge", "Knowledge", false)}
               selectedTopic={selectedTopic}
