@@ -2,8 +2,8 @@
  * CoverageMatrix
  *
  * Grid showing topics (rows) × documents (columns) for the "All Sources" view.
- * Cells indicate how many parts from a source are linked to a topic.
- * Matches mockup: card container, colored dots, part counts, gap highlights.
+ * Shows depth-2 topics (children of roots) with aggregated coverage from descendants.
+ * Matches mockup: compact parent-level rows, colored dots, part counts, gap highlights.
  */
 
 import { useMemo } from "react";
@@ -18,28 +18,73 @@ interface CoverageMatrixProps {
   readonly onSelectSource: (sourceId: string) => void;
 }
 
-/** Flatten topic hierarchy into leaf topics with their full path */
-function collectLeafTopics(
-  nodes: TopicHierarchyNode[],
-  parentPath: string[] = [],
-): { name: string; path: string[]; sourceChunkRefs: readonly string[] }[] {
-  const leaves: { name: string; path: string[]; sourceChunkRefs: readonly string[] }[] = [];
-  for (const node of nodes) {
-    const currentPath = [...parentPath, node.name];
-    if (node.children && node.children.length > 0) {
-      leaves.push(...collectLeafTopics(node.children, currentPath));
-    } else {
-      leaves.push({
-        name: node.name,
-        path: currentPath,
-        sourceChunkRefs: node.sourceChunkRefs ?? [],
-      });
+/** Collect all sourceChunkRefs from a node and all its descendants */
+function collectAllRefs(node: TopicHierarchyNode): string[] {
+  const refs: string[] = [...(node.sourceChunkRefs ?? [])];
+  if (node.children) {
+    for (const child of node.children) {
+      refs.push(...collectAllRefs(child));
     }
   }
-  return leaves;
+  return refs;
 }
 
-/** Count how many parts from this source appear in the topic's refs */
+/**
+ * Collect display topics for the matrix.
+ * For deep hierarchies (3+ levels): show depth-2 nodes (children of roots),
+ *   aggregating all descendant refs.
+ * For shallow hierarchies (1-2 levels): show leaf nodes directly.
+ */
+function collectDisplayTopics(
+  hierarchy: TopicHierarchyNode[],
+): { name: string; allRefs: readonly string[] }[] {
+  const maxDepth = calcDepth(hierarchy);
+
+  if (maxDepth <= 2) {
+    // Shallow: show leaves directly
+    const leaves: { name: string; allRefs: readonly string[] }[] = [];
+    const collectLeaves = (nodes: TopicHierarchyNode[]) => {
+      for (const node of nodes) {
+        if (node.children && node.children.length > 0) {
+          collectLeaves(node.children);
+        } else {
+          leaves.push({ name: node.name, allRefs: node.sourceChunkRefs ?? [] });
+        }
+      }
+    };
+    collectLeaves(hierarchy);
+    return leaves;
+  }
+
+  // Deep hierarchy: show depth-2 nodes with aggregated refs
+  const topics: { name: string; allRefs: readonly string[] }[] = [];
+  for (const root of hierarchy) {
+    if (root.children && root.children.length > 0) {
+      for (const child of root.children) {
+        topics.push({
+          name: child.name,
+          allRefs: collectAllRefs(child),
+        });
+      }
+    } else {
+      // Root with no children — show as-is
+      topics.push({ name: root.name, allRefs: root.sourceChunkRefs ?? [] });
+    }
+  }
+  return topics;
+}
+
+function calcDepth(nodes: TopicHierarchyNode[], depth = 1): number {
+  let max = depth;
+  for (const node of nodes) {
+    if (node.children && node.children.length > 0) {
+      max = Math.max(max, calcDepth(node.children, depth + 1));
+    }
+  }
+  return max;
+}
+
+/** Count how many parts from this source appear in the refs */
 function countLinks(source: KnowledgeSource, refs: readonly string[]): number {
   if (refs.length === 0) return 0;
   const refSet = new Set(refs);
@@ -50,36 +95,40 @@ function countLinks(source: KnowledgeSource, refs: readonly string[]): number {
   return count;
 }
 
-/** Color dot based on linked part count */
-function getCoverageColor(count: number, totalSources: number): string {
-  if (count === 0) return "text-muted-foreground/30";
-  const ratio = count / Math.max(totalSources, 1);
-  if (ratio >= 0.6) return "text-emerald-500";
-  if (ratio >= 0.3) return "text-amber-500";
-  return "text-red-500";
+/** Dot color based on total linked parts across all sources */
+function getDotColor(totalLinks: number): "emerald" | "amber" | "red" | "muted" {
+  if (totalLinks === 0) return "muted";
+  if (totalLinks >= 3) return "emerald";
+  if (totalLinks >= 2) return "amber";
+  return "red";
 }
+
+const DOT_STYLES: Record<ReturnType<typeof getDotColor>, string> = {
+  emerald: "rgb(16,185,129)",
+  amber: "rgb(245,158,11)",
+  red: "rgb(239,68,68)",
+  muted: "",
+};
 
 export function CoverageMatrix({ onSelectSource }: CoverageMatrixProps) {
   const { sources } = KnowledgeSourcesConsumer();
   const { dataset } = DatasetDetailConsumer();
-
   const hierarchy = dataset?.topicHierarchy?.hierarchy;
 
-  const leafTopics = useMemo(() => {
+  const displayTopics = useMemo(() => {
     if (!hierarchy) return [];
-    return collectLeafTopics(hierarchy);
+    return collectDisplayTopics(hierarchy);
   }, [hierarchy]);
 
-  // Build matrix data: for each topic × source, count linked parts
   const matrix = useMemo(() => {
-    return leafTopics.map(topic => ({
-      topic,
-      cells: sources.map(source => countLinks(source, topic.sourceChunkRefs)),
-      totalLinks: sources.reduce((sum, source) => sum + countLinks(source, topic.sourceChunkRefs), 0),
-    }));
-  }, [leafTopics, sources]);
+    return displayTopics.map(topic => {
+      const cells = sources.map(source => countLinks(source, topic.allRefs));
+      const totalLinks = cells.reduce((sum, c) => sum + c, 0);
+      return { topic, cells, totalLinks };
+    });
+  }, [displayTopics, sources]);
 
-  if (leafTopics.length === 0 || sources.length === 0) {
+  if (displayTopics.length === 0 || sources.length === 0) {
     return (
       <div className="text-xs text-muted-foreground/50 text-center py-8">
         Coverage matrix requires both topics and documents.
@@ -107,7 +156,7 @@ export function CoverageMatrix({ onSelectSource }: CoverageMatrixProps) {
       {/* Grid */}
       <div
         className="grid gap-[3px]"
-        style={{ gridTemplateColumns: `120px repeat(${colCount}, 1fr)` }}
+        style={{ gridTemplateColumns: `140px repeat(${colCount}, 1fr)` }}
       >
         {/* Header row */}
         <div className="text-left text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50 px-1.5 py-1">
@@ -121,7 +170,7 @@ export function CoverageMatrix({ onSelectSource }: CoverageMatrixProps) {
             className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50 px-1.5 py-1 text-center truncate hover:text-foreground transition-colors"
             title={source.name}
           >
-            {source.name.length > 14 ? `${source.name.slice(0, 14)}…` : source.name}
+            {source.name.length > 16 ? `${source.name.slice(0, 16)}…` : source.name}
           </button>
         ))}
 
@@ -132,7 +181,6 @@ export function CoverageMatrix({ onSelectSource }: CoverageMatrixProps) {
             topicName={topic.name}
             cells={cells}
             totalLinks={totalLinks}
-            totalSources={sources.length}
           />
         ))}
       </div>
@@ -144,21 +192,23 @@ function CoverageRow({
   topicName,
   cells,
   totalLinks,
-  totalSources,
 }: {
   readonly topicName: string;
   readonly cells: number[];
   readonly totalLinks: number;
-  readonly totalSources: number;
 }) {
-  const dotColor = getCoverageColor(totalLinks, totalSources);
+  const color = getDotColor(totalLinks);
 
   return (
     <>
       {/* Topic label with colored dot */}
-      <div className="flex items-center gap-1 text-[10px] text-foreground/70 px-1.5 py-[3px] truncate">
-        <span className={cn("w-[5px] h-[5px] rounded-full shrink-0", dotColor === "text-muted-foreground/30" ? "bg-muted-foreground/30" : "")}
-          style={dotColor !== "text-muted-foreground/30" ? { background: dotColor.includes("emerald") ? "rgb(16,185,129)" : dotColor.includes("amber") ? "rgb(245,158,11)" : "rgb(239,68,68)" } : undefined}
+      <div className="flex items-center gap-1.5 text-[10px] text-foreground/70 px-1.5 py-[3px] truncate">
+        <span
+          className={cn(
+            "w-[5px] h-[5px] rounded-full shrink-0",
+            color === "muted" && "bg-muted-foreground/30",
+          )}
+          style={color !== "muted" ? { background: DOT_STYLES[color] } : undefined}
         />
         <span className="truncate">{topicName}</span>
       </div>

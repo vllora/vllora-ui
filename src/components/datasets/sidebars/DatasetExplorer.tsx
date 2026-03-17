@@ -111,10 +111,15 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
     }
 
     openTab(nodeId);
-    // When navigating to a data/* node, ensure we leave sources view
-    if (nodeId === "data" || nodeId.startsWith("data/")) {
+    // "All Topics" (nodeId === "data") → switch to canvas view
+    if (nodeId === "data") {
       window.dispatchEvent(new CustomEvent("vllora_switch_view", {
-        detail: { viewMode: "table", ifCurrently: "sources" },
+        detail: { viewMode: "canvas" },
+      }));
+    } else if (nodeId.startsWith("data/")) {
+      // Specific topic → always switch to table view (TopicDetailView)
+      window.dispatchEvent(new CustomEvent("vllora_switch_view", {
+        detail: { viewMode: "table" },
       }));
     }
     onNavigate?.(nodeId);

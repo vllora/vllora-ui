@@ -12,24 +12,28 @@ import type { CoverageStats, DatasetRecord, TopicHierarchyNode } from "@/types/d
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import type { AvailableTopic } from "./record-utils";
 import { RecordsSectionHeader } from "./dataset-detail-header/RecordsSectionHeader";
-import { DataFlowBanner, type BannerState } from "./DataFlowBanner";
 import { TopicHierarchyCanvas } from "./dataset-canvas/TopicHierarchyCanvas";
 import { RecordsTable } from "./records-table/RecordsTable";
 import { RecordDetailSidebar } from "./records-table/RecordDetailSidebar";
 import { SourcesView } from "./sources-view/SourcesView";
 import { EmptyRecordsState } from "./EmptyRecordsState";
+import { TopicDetailView } from "./TopicDetailView";
 import { filterRecords, type StatFilter, type RecordRole } from "./record-filters";
 
-/** Count all nodes in a topic hierarchy tree */
-function countAllNodes(nodes: TopicHierarchyNode[]): number {
-  let count = 0;
+/** Recursively find a topic node by name anywhere in the hierarchy, returning it and its parent path */
+function findTopicByName(
+  nodes: TopicHierarchyNode[],
+  name: string,
+  path: string[] = [],
+): { node: TopicHierarchyNode; breadcrumb: string[] } | null {
   for (const node of nodes) {
-    count += 1;
+    if (node.name === name) return { node, breadcrumb: path };
     if (node.children) {
-      count += countAllNodes(node.children);
+      const found = findTopicByName(node.children, name, [...path, node.name]);
+      if (found) return found;
     }
   }
-  return count;
+  return null;
 }
 
 export interface DatasetMainContentProps {
@@ -130,8 +134,6 @@ export function DatasetMainContent({
   onClearSourceDocumentFilter,
   onUpdatePromptTemplate,
   topicQualityScores,
-  documentCount = 0,
-  partCount = 0,
 }: DatasetMainContentProps) {
   // Keyboard shortcuts: 1/2/3 switch views, Esc closes record detail
   useKeyboardShortcuts({
@@ -174,19 +176,8 @@ export function DatasetMainContent({
   const topicFilteredRecords = useMemo(() => {
     if (!topicFilter || !topicHierarchy) return records;
 
-    // Find the node matching the topic path (e.g., "FEN Position Analysis")
-    // and collect all descendant topic IDs so we show its entire subtree
-    const pathSegments = topicFilter.split("/");
-    let currentNodes: TopicHierarchyNode[] | undefined = topicHierarchy;
-    let matchedNode: TopicHierarchyNode | undefined;
-
-    for (const segment of pathSegments) {
-      matchedNode = currentNodes?.find((n) => n.name === segment);
-      if (!matchedNode) break;
-      currentNodes = matchedNode.children;
-    }
-
-    if (!matchedNode) return records;
+    const match = findTopicByName(topicHierarchy, topicFilter);
+    if (!match) return records;
 
     // Collect all topic names and IDs under this node (including itself)
     const names = new Set<string>();
@@ -195,16 +186,13 @@ export function DatasetMainContent({
       names.add(node.name);
       node.children?.forEach(collect);
     };
-    collect(matchedNode);
+    collect(match.node);
 
     return records.filter((r) => {
       if (!r.topic) return false;
-      // Direct match (covers most cases — record.topic is the leaf name)
       if (names.has(r.topic)) return true;
-      // Leaf extraction fallback (handles path-format topics like "parent/child/leaf")
       const leaf = r.topic.includes("/") ? r.topic.split("/").pop() : undefined;
       if (leaf && names.has(leaf)) return true;
-      // topic_path metadata fallback (handles " > " separated paths)
       const metaPath = r.metadata?.topic_path;
       if (typeof metaPath === "string") {
         const metaLeaf = metaPath.split(" > ").pop()?.trim();
@@ -242,18 +230,14 @@ export function DatasetMainContent({
   const displayHierarchy = useMemo(() => {
     if (!topicFilter || !topicHierarchy) return topicHierarchy;
 
-    const pathSegments = topicFilter.split("/");
-    let currentNodes: TopicHierarchyNode[] | undefined = topicHierarchy;
-    let matchedNode: TopicHierarchyNode | undefined;
+    const match = findTopicByName(topicHierarchy, topicFilter);
+    return match ? [match.node] : topicHierarchy;
+  }, [topicFilter, topicHierarchy]);
 
-    for (const segment of pathSegments) {
-      matchedNode = currentNodes?.find((n) => n.name === segment);
-      if (!matchedNode) break;
-      currentNodes = matchedNode.children;
-    }
-
-    // Return the matched node as a single-root hierarchy
-    return matchedNode ? [matchedNode] : topicHierarchy;
+  // Resolve matched topic node + breadcrumb for TopicDetailView
+  const topicDetail = useMemo(() => {
+    if (!topicFilter || !topicHierarchy) return null;
+    return findTopicByName(topicHierarchy, topicFilter);
   }, [topicFilter, topicHierarchy]);
 
   const hasTopics = displayHierarchy && displayHierarchy.length > 0;
@@ -277,36 +261,8 @@ export function DatasetMainContent({
     );
   }
 
-  // Derive banner state from data availability
-  const bannerState: BannerState = documentCount === 0 && partCount === 0 && records.length === 0
-    ? "empty"
-    : docsProcessing
-      ? "extracting"
-      : "normal";
-
-  // Count unique topics for banner
-  const uniqueTopicCount = useMemo(() => {
-    const topics = new Set<string>();
-    for (const r of records) {
-      if (r.topic) topics.add(r.topic);
-    }
-    return topics.size;
-  }, [records]);
-
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Data Flow Banner — pipeline visualization (Canvas + Sources only, not Table per mockup) */}
-      {viewMode !== "table" && (
-        <DataFlowBanner
-          state={bannerState}
-          activeViewMode={viewMode}
-          onNavigate={onViewModeChange}
-          documentCount={documentCount}
-          partCount={partCount}
-          topicCount={displayHierarchy ? countAllNodes(displayHierarchy) : uniqueTopicCount}
-          recordCount={records.length}
-        />
-      )}
 
       {/* Stats bar + view controls — Canvas and Table only (Sources has its own layout) */}
       {viewMode !== "sources" && (
@@ -323,6 +279,7 @@ export function DatasetMainContent({
             onSearchChange={setSearchQuery}
             sourceDocumentFilterName={sourceDocumentFilterName}
             onClearSourceDocumentFilter={onClearSourceDocumentFilter}
+            hideViewToggle={!!topicDetail}
           />
         </div>
       )}
@@ -365,7 +322,14 @@ export function DatasetMainContent({
           }}
         />
       )}
-      {viewMode === "table" && (
+      {viewMode === "table" && topicDetail && (
+        <TopicDetailView
+          topicNode={topicDetail.node}
+          records={filteredRecords}
+          onSelectRecord={onSelectRecordId}
+        />
+      )}
+      {viewMode === "table" && !topicDetail && (
         <RecordsTable
           records={filteredRecords}
           workflowId={workflowId}

@@ -32,6 +32,8 @@ export interface RecordsSectionHeaderProps {
   sourceDocumentFilterName?: string | null;
   /** Called to clear the source document filter */
   onClearSourceDocumentFilter?: () => void;
+  /** Hide the view mode toggle (e.g., when showing topic detail) */
+  hideViewToggle?: boolean;
 }
 
 export function RecordsSectionHeader({
@@ -46,6 +48,7 @@ export function RecordsSectionHeader({
   onSearchChange,
   sourceDocumentFilterName,
   onClearSourceDocumentFilter,
+  hideViewToggle = false,
 }: RecordsSectionHeaderProps) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [generationProgress, setGenerationProgress] = useState<{
@@ -228,7 +231,7 @@ export function RecordsSectionHeader({
           <Download className="w-3.5 h-3.5" />
           Export
         </Button>
-        <ViewModeToggle viewMode={viewMode} onViewModeChange={onViewModeChange} />
+        {!hideViewToggle && <ViewModeToggle viewMode={viewMode} onViewModeChange={onViewModeChange} />}
       </div>
     </div>
   );
