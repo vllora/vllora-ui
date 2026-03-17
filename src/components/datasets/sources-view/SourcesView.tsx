@@ -815,10 +815,10 @@ function PartViewer({
 
       {/* I5: Footer — separate sections for topics + records (matches mockup) */}
       {(linkedTopics.length > 0 || linkedRecordsCount > 0) && (
-        <div className="border-t border-border/50 bg-muted/30 px-5 py-3 shrink-0 flex gap-5 flex-wrap">
+        <div className="border-t border-border/50 bg-muted/30 px-5 py-3 shrink-0 grid grid-cols-[auto_1fr] gap-x-8 gap-y-1.5 items-baseline">
           {linkedTopics.length > 0 && (
-            <div>
-              <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50 mb-1.5">Referenced by Topics</div>
+            <>
+              <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50">Referenced by Topics</div>
               <div className="flex items-center gap-1 flex-wrap">
                 {linkedTopics.map(topic => (
                   <span
@@ -829,15 +829,15 @@ function PartViewer({
                   </span>
                 ))}
               </div>
-            </div>
+            </>
           )}
           {linkedRecordsCount > 0 && (
-            <div>
-              <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50 mb-1.5">Records Generated</div>
+            <>
+              <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50">Records Generated</div>
               <span className="text-[10px] text-muted-foreground">
                 <span className="font-semibold text-[rgb(var(--theme-500))]">{linkedRecordsCount}</span> records from this part
               </span>
-            </div>
+            </>
           )}
         </div>
       )}
