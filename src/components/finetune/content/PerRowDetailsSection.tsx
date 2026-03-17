@@ -27,6 +27,27 @@ interface RowEpochData {
   criteriaNames: string[];
 }
 
+/** Compute score difference between the latest and previous epoch.
+ *  Returns undefined if fewer than 2 epochs have scores. */
+function computeEpochTrend(
+  epochs: Record<number, { score?: number }[]>,
+  sortedEpochNumbers: readonly number[],
+): number | undefined {
+  if (sortedEpochNumbers.length < 2) return undefined;
+
+  const latestEpoch = sortedEpochNumbers[sortedEpochNumbers.length - 1];
+  const prevEpoch = sortedEpochNumbers[sortedEpochNumbers.length - 2];
+
+  const latestScore = epochs[latestEpoch]?.[0]?.score;
+  const prevScore = epochs[prevEpoch]?.[0]?.score;
+
+  if (typeof latestScore !== "number" || typeof prevScore !== "number") {
+    return undefined;
+  }
+
+  return latestScore - prevScore;
+}
+
 export function PerRowDetailsSection({ results }: PerRowDetailsSectionProps) {
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
 
@@ -73,6 +94,9 @@ export function PerRowDetailsSection({ results }: PerRowDetailsSectionProps) {
 
       const rowId = row.row?.id ?? `finetune-row-${row.row_index}`;
 
+      // Compute trend: score diff between latest and previous epoch
+      const trend = computeEpochTrend(row.epochs, epochNumbers);
+
       flat.push({
         dataset_row_id: rowId,
         row_index: row.row_index,
@@ -81,6 +105,8 @@ export function PerRowDetailsSection({ results }: PerRowDetailsSectionProps) {
         score: latestResult?.score ?? undefined,
         reason: latestResult?.reason ?? undefined,
         logs: latestResult?.logs ?? undefined,
+        epoch: latestEpoch,
+        trend,
       });
 
       const criteriaNames = getAllCriteriaNames(rowEpochs.map(e => e.breakdown));

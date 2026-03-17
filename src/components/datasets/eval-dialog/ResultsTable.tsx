@@ -109,6 +109,9 @@ export function ResultsTable({
     };
   }, [processedResults, virtualizer]);
 
+  const hasEpochData = results.some((r) => r.epoch != null);
+  const hasTrendData = results.some((r) => r.trend != null);
+
   if (results.length === 0) {
     return (
       <div className="text-center py-8 text-muted-foreground text-sm">
@@ -160,8 +163,10 @@ export function ResultsTable({
       {/* Table header */}
       <div className="flex items-center text-[10px] font-semibold uppercase tracking-wider text-zinc-500 border-b border-zinc-700/50 shrink-0">
         <div className="w-10 shrink-0 px-3 py-2">#</div>
+        {hasEpochData && <div className="w-[50px] shrink-0 text-center py-2">Epoch</div>}
         <div className="flex-1 min-w-0 py-2">Input</div>
         <div className="w-16 shrink-0 text-right pr-4 py-2">Score</div>
+        {hasTrendData && <div className="w-[50px] shrink-0 text-center py-2">Trend</div>}
         <div className="w-16 shrink-0 text-right pr-4 py-2">Status</div>
         <div className="w-10 shrink-0 text-center py-2">Logs</div>
       </div>

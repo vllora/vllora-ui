@@ -293,6 +293,10 @@ export interface FlatEvaluationResult {
   reason?: string;
   error_message?: string;
   logs?: string[];
+  /** Latest epoch number (1-based) — present for finetune per-row results */
+  epoch?: number;
+  /** Score change from previous epoch — present when multiple epochs exist */
+  trend?: number;
 }
 
 

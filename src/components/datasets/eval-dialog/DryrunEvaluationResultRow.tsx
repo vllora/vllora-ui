@@ -17,6 +17,17 @@ interface DryrunEvaluationResultRowProps {
   readonly onClick?: () => void;
 }
 
+/** Render a trend value as a colored arrow + delta string */
+function renderTrend(trend: number): React.ReactNode {
+  if (trend > 0.005) {
+    return <span className="text-emerald-400">↑ +{trend.toFixed(2)}</span>;
+  }
+  if (trend < -0.005) {
+    return <span className="text-red-400">↓ {trend.toFixed(2)}</span>;
+  }
+  return <span className="text-zinc-500">→ 0.00</span>;
+}
+
 /** Extract the first user message from the row data as the input text */
 function getInputText(row?: { messages?: unknown[]; [key: string]: unknown }): string {
   if (!row?.messages || !Array.isArray(row.messages)) return "—";
@@ -56,6 +67,13 @@ export function DryrunEvaluationResultRow({
         {index + 1}
       </div>
 
+      {/* Epoch (only for finetune per-row results) */}
+      {result.epoch != null && (
+        <div className="w-[50px] shrink-0 text-center font-mono text-[11px] text-zinc-400 tabular-nums">
+          E{result.epoch}
+        </div>
+      )}
+
       {/* Input */}
       <div className={cn(
         "flex-1 min-w-0 pr-4 text-[12px] text-zinc-300 truncate",
@@ -83,6 +101,13 @@ export function DryrunEvaluationResultRow({
           <span className="font-mono text-[11px] text-zinc-600">—</span>
         )}
       </div>
+
+      {/* Trend (only for finetune per-row results) */}
+      {result.trend != null && (
+        <div className="w-[50px] shrink-0 text-center font-mono text-[11px] tabular-nums">
+          {renderTrend(result.trend)}
+        </div>
+      )}
 
       {/* Status */}
       <div className="w-16 shrink-0 text-right pr-4 text-[12px]">

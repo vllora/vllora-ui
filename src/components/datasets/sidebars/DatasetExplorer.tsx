@@ -32,6 +32,7 @@ import { WorkspaceTabsConsumer } from "@/contexts/WorkspaceTabsContext";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { NewJobDialog } from "@/components/finetune/content/NewJobDialog";
+import type { TrainingEvalContext } from "@/components/finetune/content/NewJobDialog";
 import { NewEvaluationDialog } from "@/components/datasets/evaluation-dialog/NewEvaluationDialog";
 import type { GraderInfo, PreviousBestInfo, EvaluatorVersionInfo } from "@/components/datasets/evaluation-dialog/NewEvaluationDialog";
 import { useEvaluatorVersions } from "@/hooks/useEvaluatorVersions";
@@ -108,6 +109,30 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       isGraderModified: false,
     };
   }, [latestVersion, isLoadingVersions, dataset?.evalScript]);
+
+  const trainingEvalContext = useMemo((): TrainingEvalContext | undefined => {
+    const completedEvals = dryRunJobs
+      .filter((j) => j.status === "completed")
+      .sort((a, b) => b.createdAt - a.createdAt);
+
+    const latestCompleted = completedEvals[0];
+    const latestScore = latestCompleted ? getJobAverageScore(latestCompleted) : undefined;
+
+    if (latestScore == null || !latestCompleted) return undefined;
+
+    return {
+      latestEval: {
+        score: latestScore,
+        timestamp: latestCompleted.createdAt,
+        sampleSize: latestCompleted.sampleSize,
+        model: latestCompleted.rolloutModel ?? "gpt-4o-mini",
+      },
+      evaluatorVersion: latestVersion,
+      isGraderModified: versionInfo?.isGraderModified ?? false,
+      previousBestTrainingScore: previousBest?.score,
+      previousBestTimestamp: previousBest?.timestamp,
+    };
+  }, [dryRunJobs, latestVersion, versionInfo, previousBest]);
 
   const toggleParent = useCallback((name: string) => {
     setCollapsedParents((prev) => {
@@ -342,6 +367,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
           open={showNewJobDialog}
           onOpenChange={setShowNewJobDialog}
           initialConfig={dataset.trainingConfig}
+          evalContext={trainingEvalContext}
         />
       )}
 

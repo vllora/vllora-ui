@@ -2,6 +2,8 @@
  * NewJobDialog
  *
  * Compact dialog for creating a new finetune job.
+ * Shows an eval summary card at the top when evaluation data is available.
+ * Adapts to 3 states: first-run, returning (with previous best), grader-changed.
  * Styled consistently with NewEvaluationDialog for visual coherence.
  */
 
@@ -33,16 +35,23 @@ import {
   Loader2,
   Sparkles,
   Settings2,
+  TriangleAlert,
 } from "lucide-react";
 import {
   DEFAULT_TRAINING_CONFIG,
   DEFAULT_INFERENCE_PARAMETERS,
-  FinetuneTrainingConfig,
-  FinetuneInferenceParameters,
 } from "@/services/finetune-api";
 import { quickFinetune } from "@/services/quick-finetune";
 import { toast } from "sonner";
 import { BASE_MODELS } from "./constants";
+import {
+  EvalSummaryCard,
+  PreviousBestCard,
+  AdvancedTrainingFields,
+  AdvancedInferenceFields,
+  buildTrainingConfig,
+  buildInferenceParams,
+} from "./NewJobDialogParts";
 import type { SampleTrainingConfig } from "@/types/dataset-types";
 
 /* ── Shared input classes (matches NewEvaluationDialog) ── */
@@ -51,14 +60,31 @@ const SELECT_CLS =
 const INPUT_CLS =
   "h-8 text-xs border-border/50 bg-muted/30 focus-visible:ring-0 focus-visible:ring-offset-0";
 
+export interface LatestEvalInfo {
+  readonly score: number;
+  readonly timestamp: number;
+  readonly sampleSize: number;
+  readonly model: string;
+}
+
+export interface TrainingEvalContext {
+  readonly latestEval?: LatestEvalInfo;
+  readonly evaluatorVersion?: number | null;
+  readonly isGraderModified?: boolean;
+  readonly previousBestTrainingScore?: number;
+  readonly previousBestTimestamp?: number;
+}
+
 interface NewJobDialogProps {
-  workflowId: string;
-  onSuccess: () => void;
-  disabled?: boolean;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  readonly workflowId: string;
+  readonly onSuccess: () => void;
+  readonly disabled?: boolean;
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
   /** Initial training config (from sample dataset or user-configured) */
-  initialConfig?: SampleTrainingConfig;
+  readonly initialConfig?: SampleTrainingConfig;
+  /** Eval context for showing eval summary card */
+  readonly evalContext?: TrainingEvalContext;
 }
 
 export function NewJobDialog({
@@ -68,89 +94,50 @@ export function NewJobDialog({
   open,
   onOpenChange,
   initialConfig,
+  evalContext,
 }: NewJobDialogProps) {
-  // Use initial config from sample dataset if available, otherwise use defaults
   const defaultBaseModel = initialConfig?.base_model || "unsloth/Qwen3.5-4B";
-  const defaultLearningRate =
-    initialConfig?.training_config?.learning_rate ??
-    DEFAULT_TRAINING_CONFIG.learning_rate;
   const defaultEpochs =
     initialConfig?.training_config?.epochs ?? DEFAULT_TRAINING_CONFIG.epochs;
-  const defaultBatchSize =
-    initialConfig?.training_config?.batch_size ??
-    DEFAULT_TRAINING_CONFIG.batch_size;
-  const defaultLoraRank =
-    initialConfig?.training_config?.lora_rank ??
-    DEFAULT_TRAINING_CONFIG.lora_rank;
-  const defaultMaxOutputTokens =
-    initialConfig?.inference_parameters?.max_output_tokens ??
-    DEFAULT_INFERENCE_PARAMETERS.max_output_tokens;
-  const defaultTemperature =
-    initialConfig?.inference_parameters?.temperature ??
-    DEFAULT_INFERENCE_PARAMETERS.temperature;
-  const defaultResponseCandidatesCount =
-    initialConfig?.inference_parameters?.response_candidates_count ??
-    DEFAULT_INFERENCE_PARAMETERS.response_candidates_count;
 
   const [baseModel, setBaseModel] = useState(defaultBaseModel);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Training config
-  const [learningRate, setLearningRate] = useState(String(defaultLearningRate));
+  const [learningRate, setLearningRate] = useState(
+    String(initialConfig?.training_config?.learning_rate ?? DEFAULT_TRAINING_CONFIG.learning_rate),
+  );
   const [epochs, setEpochs] = useState(String(defaultEpochs));
-  const [batchSize, setBatchSize] = useState(String(defaultBatchSize));
-  const [loraRank, setLoraRank] = useState(String(defaultLoraRank));
+  const [batchSize, setBatchSize] = useState(
+    String(initialConfig?.training_config?.batch_size ?? DEFAULT_TRAINING_CONFIG.batch_size),
+  );
+  const [loraRank, setLoraRank] = useState(
+    String(initialConfig?.training_config?.lora_rank ?? DEFAULT_TRAINING_CONFIG.lora_rank),
+  );
 
   // Inference parameters
   const [maxOutputTokens, setMaxOutputTokens] = useState(
-    String(defaultMaxOutputTokens),
+    String(initialConfig?.inference_parameters?.max_output_tokens ?? DEFAULT_INFERENCE_PARAMETERS.max_output_tokens),
   );
-  const [temperature, setTemperature] = useState(String(defaultTemperature));
-  const [responseCandidatesCount, setResponseCandidatesCount] = useState(String(defaultResponseCandidatesCount));
+  const [temperature, setTemperature] = useState(
+    String(initialConfig?.inference_parameters?.temperature ?? DEFAULT_INFERENCE_PARAMETERS.temperature),
+  );
+  const [responseCandidatesCount, setResponseCandidatesCount] = useState(
+    String(initialConfig?.inference_parameters?.response_candidates_count ?? DEFAULT_INFERENCE_PARAMETERS.response_candidates_count),
+  );
+
+  const isGraderStale = evalContext?.isGraderModified ?? false;
+  const hasEvalVersion = (evalContext?.evaluatorVersion ?? 0) > 0;
+  const epochCount = parseFloat(epochs) || defaultEpochs;
 
   const handleSubmit = useCallback(async () => {
     if (!workflowId || isSubmitting) return;
-
     setIsSubmitting(true);
 
     try {
-      // Build training config (only include values that differ from defaults)
-      const trainingConfig: Partial<FinetuneTrainingConfig> = {};
-      const lr = parseFloat(learningRate);
-      if (!isNaN(lr) && lr !== DEFAULT_TRAINING_CONFIG.learning_rate) {
-        trainingConfig.learning_rate = lr;
-      }
-      const ep = parseFloat(epochs);
-      if (!isNaN(ep) && ep !== DEFAULT_TRAINING_CONFIG.epochs) {
-        trainingConfig.epochs = ep;
-      }
-      const bs = parseInt(batchSize, 10);
-      if (!isNaN(bs) && bs !== DEFAULT_TRAINING_CONFIG.batch_size) {
-        trainingConfig.batch_size = bs;
-      }
-      const lr_rank = parseInt(loraRank, 10);
-      if (!isNaN(lr_rank) && lr_rank !== DEFAULT_TRAINING_CONFIG.lora_rank) {
-        trainingConfig.lora_rank = lr_rank;
-      }
-
-      // Build inference parameters
-      const inferenceParameters: Partial<FinetuneInferenceParameters> = {};
-      const mot = parseInt(maxOutputTokens, 10);
-      if (
-        !isNaN(mot) &&
-        mot !== DEFAULT_INFERENCE_PARAMETERS.max_output_tokens
-      ) {
-        inferenceParameters.max_output_tokens = mot;
-      }
-      const temp = parseFloat(temperature);
-      if (!isNaN(temp) && temp !== DEFAULT_INFERENCE_PARAMETERS.temperature) {
-        inferenceParameters.temperature = temp;
-      }
-      const rcc = parseInt(responseCandidatesCount, 10);
-      if (!isNaN(rcc) && rcc !== DEFAULT_INFERENCE_PARAMETERS.response_candidates_count) {
-        inferenceParameters.response_candidates_count = rcc;
-      }
+      const trainingConfig = buildTrainingConfig(learningRate, epochs, batchSize, loraRank);
+      const inferenceParameters = buildInferenceParams(maxOutputTokens, temperature, responseCandidatesCount);
 
       const result = await quickFinetune({
         workflowId,
@@ -178,18 +165,9 @@ export function NewJobDialog({
       setIsSubmitting(false);
     }
   }, [
-    workflowId,
-    baseModel,
-    learningRate,
-    epochs,
-    batchSize,
-    loraRank,
-    maxOutputTokens,
-    temperature,
-    responseCandidatesCount,
-    isSubmitting,
-    onSuccess,
-    onOpenChange,
+    workflowId, baseModel, learningRate, epochs, batchSize, loraRank,
+    maxOutputTokens, temperature, responseCandidatesCount,
+    isSubmitting, onSuccess, onOpenChange,
   ]);
 
   return (
@@ -201,25 +179,59 @@ export function NewJobDialog({
             Start Training
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Fine-tune a model with your dataset.
+            Fine-tune a model with your evaluated dataset
           </DialogDescription>
         </DialogHeader>
 
-        {/* Base Model */}
-        <div className="space-y-1.5">
-          <label className="text-xs text-muted-foreground">Base Model</label>
-          <Select value={baseModel} onValueChange={setBaseModel}>
-            <SelectTrigger className={SELECT_CLS}>
-              <SelectValue placeholder="Select base model" />
-            </SelectTrigger>
-            <SelectContent>
-              {BASE_MODELS.map((model) => (
-                <SelectItem key={model.value} value={model.value}>
-                  {model.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* Eval summary card */}
+        {evalContext?.latestEval && (
+          <EvalSummaryCard
+            eval={evalContext.latestEval}
+            evaluatorVersion={evalContext.evaluatorVersion}
+            isStale={isGraderStale}
+          />
+        )}
+
+        {/* Stale warning banner */}
+        {isGraderStale && hasEvalVersion && (
+          <div className="flex items-center gap-1.5 rounded-md border border-amber-500/12 bg-amber-500/[0.04] px-2.5 py-2 text-[11px] text-amber-600 dark:text-amber-400/80">
+            <TriangleAlert className="h-3 w-3 shrink-0" />
+            Grader was modified since the last eval (v{evalContext?.evaluatorVersion}).
+            Consider re-running evaluation before training.
+          </div>
+        )}
+
+        {/* Config: Base Model + Epochs */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Base Model
+            </label>
+            <Select value={baseModel} onValueChange={setBaseModel}>
+              <SelectTrigger className={SELECT_CLS}>
+                <SelectValue placeholder="Select base model" />
+              </SelectTrigger>
+              <SelectContent>
+                {BASE_MODELS.map((model) => (
+                  <SelectItem key={model.value} value={model.value}>
+                    {model.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Epochs
+            </label>
+            <Input
+              type="number"
+              step="0.5"
+              value={epochs}
+              onChange={(e) => setEpochs(e.target.value)}
+              className={INPUT_CLS}
+            />
+          </div>
         </div>
 
         {/* Advanced Settings */}
@@ -237,108 +249,32 @@ export function NewJobDialog({
           </CollapsibleTrigger>
 
           <CollapsibleContent className="pt-3 space-y-3">
-            {/* Training Config */}
-            <div className="space-y-2">
-              <span className="text-[10px] font-medium text-muted-foreground/50 uppercase tracking-wider">
-                Training
-              </span>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <label className="text-[11px] text-muted-foreground">
-                    Learning Rate
-                  </label>
-                  <Input
-                    type="number"
-                    step="0.00001"
-                    value={learningRate}
-                    onChange={(e) => setLearningRate(e.target.value)}
-                    className={INPUT_CLS}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] text-muted-foreground">
-                    Epochs
-                  </label>
-                  <Input
-                    type="number"
-                    step="0.5"
-                    value={epochs}
-                    onChange={(e) => setEpochs(e.target.value)}
-                    className={INPUT_CLS}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] text-muted-foreground">
-                    Batch Size
-                  </label>
-                  <Input
-                    type="number"
-                    value={batchSize}
-                    onChange={(e) => setBatchSize(e.target.value)}
-                    className={INPUT_CLS}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] text-muted-foreground">
-                    LoRA Rank
-                  </label>
-                  <Input
-                    type="number"
-                    value={loraRank}
-                    onChange={(e) => setLoraRank(e.target.value)}
-                    className={INPUT_CLS}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Inference Parameters */}
-            <div className="space-y-2">
-              <span className="text-[10px] font-medium text-muted-foreground/50 uppercase tracking-wider">
-                Inference
-              </span>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <label className="text-[11px] text-muted-foreground">
-                    Max Tokens
-                  </label>
-                  <Input
-                    type="number"
-                    value={maxOutputTokens}
-                    onChange={(e) => setMaxOutputTokens(e.target.value)}
-                    className={INPUT_CLS}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] text-muted-foreground">
-                    Temperature
-                  </label>
-                  <Input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="2"
-                    value={temperature}
-                    onChange={(e) => setTemperature(e.target.value)}
-                    className={INPUT_CLS}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] text-muted-foreground">
-                    Response Candidates
-                  </label>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={responseCandidatesCount}
-                    onChange={(e) => setResponseCandidatesCount(e.target.value)}
-                    className={INPUT_CLS}
-                  />
-                </div>
-              </div>
-            </div>
+            <AdvancedTrainingFields
+              learningRate={learningRate}
+              batchSize={batchSize}
+              loraRank={loraRank}
+              onLearningRateChange={setLearningRate}
+              onBatchSizeChange={setBatchSize}
+              onLoraRankChange={setLoraRank}
+            />
+            <AdvancedInferenceFields
+              maxOutputTokens={maxOutputTokens}
+              temperature={temperature}
+              responseCandidatesCount={responseCandidatesCount}
+              onMaxOutputTokensChange={setMaxOutputTokens}
+              onTemperatureChange={setTemperature}
+              onResponseCandidatesCountChange={setResponseCandidatesCount}
+            />
           </CollapsibleContent>
         </Collapsible>
+
+        {/* Previous best training score */}
+        {evalContext?.previousBestTrainingScore != null && (
+          <PreviousBestCard
+            score={evalContext.previousBestTrainingScore}
+            timestamp={evalContext.previousBestTimestamp}
+          />
+        )}
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-2">
@@ -364,7 +300,7 @@ export function NewJobDialog({
             ) : (
               <>
                 <Sparkles className="h-3.5 w-3.5" />
-                Start Training
+                Start Training &middot; {epochCount} epochs
               </>
             )}
           </Button>
