@@ -309,17 +309,45 @@ If some topics are under-represented, use `scripts/chat_completion.py` to create
 
 Write a JavaScript grader function to `grader.js`. Scores model responses 0-1, runs server-side during evaluation and training.
 
+**Before writing the grader, analyze the training data:**
+1. Read 10-15 sample rows from `training.jsonl` spanning different topics
+2. For each, think about what a perfect vs. mediocre vs. bad response looks like
+3. Identify 3-5 domain-specific qualities that separate good from bad
+4. Design criteria and weight allocation
+5. Then write the JS grader informed by this analysis
+
 ```javascript
-async function evaluate(input) {
-  const messages = input.messages || [];
-  const lastAssistant = messages.filter(m => m.role === "assistant").pop();
-  if (!lastAssistant) return { score: 0, reason: "No response" };
-  // Score the response...
-  return { score: 0.8, reason: "Good response with accurate info" };
+function evaluate(input) {
+  // Extract response and history
+  let response = "";
+  let history = "";
+  if (input.response && typeof input.response === "string") {
+      response = input.response;
+      history = input.history || (input.messages ? JSON.stringify(input.messages) : "");
+  } else if (input.messages && Array.isArray(input.messages) && input.messages.length > 0) {
+      const lastMessage = input.messages[input.messages.length - 1];
+      if (lastMessage.content) response = lastMessage.content;
+      history = JSON.stringify(input.messages.slice(0, input.messages.length - 1));
+  }
+  if (!response) return { score: 0, reason: "No response" };
+
+  // Define LLM judge config
+  const config = {
+      prompt_template: [
+          { role: "system", content: "You are an expert evaluator." },
+          { role: "user", content: "History:\n{{history}}\n\nResponse:\n{{response}}\n\nRate 0-5 on criteria..." }
+      ],
+      output_schema: { type: "object", properties: { reasoning: { type: "string" }, score: { type: "number" } }, required: ["reasoning", "score"] },
+      completion_params: { model_name: "gpt-4.1", temperature: 0.0, max_tokens: 1000 }
+  };
+  input.history = history;
+  input.response = response;
+  const result = __langdb_call_llm_as_judge_obj(config, input);
+  return { score: result.score || 0, reason: result.reasoning || "" };
 }
 ```
 
-The grader can use `__langdb_call_llm_as_judge_obj({prompt, max_tokens})` for subjective quality assessment. See `reference/grader-writing.md` for patterns and `templates/grader-template.js` for a starter.
+The grader can use `__langdb_call_llm_as_judge_obj(config, input)` for subjective quality assessment — `config` has `prompt_template` (array of `{role, content}` messages with `{{history}}`/`{{response}}` template vars), `output_schema` (JSON Schema for structured output), and `completion_params` (`{model_name, temperature, max_tokens}`). Set `input.history` and `input.response` before calling. See `reference/grader-writing.md` for patterns and `templates/grader-template.js` for a starter.
 
 **After writing the grader, dry-run it against a sample row** to verify it executes without errors:
 
