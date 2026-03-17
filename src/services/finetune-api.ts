@@ -768,20 +768,17 @@ export async function updateDatasetEvalScript(
   workflowId: string,
   script: string,
 ): Promise<UpdateEvaluatorResponse> {
-  // const evaluator = {
-  //   type: 'js',
-  //   config: {
-  //     script,
-  //     completion_params: {
-  //       model: 'gpt-4o-mini',
-  //     },
-  //   },
-  // };
+  const formData = new FormData();
+  const scriptFile = new File([script], "evaluator.js", {
+    type: "text/javascript",
+  });
+  formData.append("file", scriptFile);
+
   const response = await apiClient(
     `/finetune/workflows/${workflowId}/evaluator`,
     {
       method: "PATCH",
-      body: JSON.stringify({ evaluator: { type: "js", config: { script } } }),
+      body: formData,
     },
   );
   return handleApiResponse<UpdateEvaluatorResponse>(response);

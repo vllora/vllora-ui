@@ -51,12 +51,10 @@ export async function apiClient(
   options: RequestInit = {}
 ): Promise<Response> {
   const apiUrl = getBackendUrl();
-  let url = `${apiUrl}${endpoint}`;
+  const url = `${apiUrl}${endpoint}`;
 
   // Build headers object
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
+  const headers: Record<string, string> = {};
 
   // Add authentication token if provider is configured
   if (globalTokenProvider) {
@@ -75,6 +73,15 @@ export async function apiClient(
   if (options.headers) {
     const customHeaders = options.headers as Record<string, string>;
     Object.assign(headers, customHeaders);
+  }
+
+  // Default to JSON only when caller did not provide Content-Type and body is not multipart.
+  // Browser must set multipart boundaries for FormData requests.
+  const hasContentTypeHeader = Object.keys(headers).some(
+    (k) => k.toLowerCase() === 'content-type'
+  );
+  if (!hasContentTypeHeader && !(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
   }
 
   // Make the request
