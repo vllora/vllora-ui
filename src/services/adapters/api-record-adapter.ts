@@ -130,13 +130,14 @@ function basePath(workflowId: string): string {
 
 export const apiRecordAdapter: RecordService = {
   async getByDatasetId(workflowId: string, recordIds?: string[]): Promise<DatasetRecord[]> {
-    const [recordsResponse, scoresResponse, topicMaps] = await Promise.all([
+    const [recordsResponse, scoresData, topicMaps] = await Promise.all([
       api.get(basePath(workflowId)),
-      api.get(`${basePath(workflowId)}/scores`),
+      api.get(`${basePath(workflowId)}/scores`)
+        .then(r => handleApiResponse<{ scores: DbWorkflowRecordScoreResponse[] }>(r))
+        .catch(() => ({ scores: [] as DbWorkflowRecordScoreResponse[] })),
       getTopicMaps(workflowId),
     ]);
     const recordsData = await handleApiResponse<{ records: DbWorkflowRecordResponse[] }>(recordsResponse);
-    const scoresData = await handleApiResponse<{ scores: DbWorkflowRecordScoreResponse[] }>(scoresResponse);
 
     let records = recordsData.records.map(db => mapToFe(db, scoresData.scores, topicMaps.idToName));
 
