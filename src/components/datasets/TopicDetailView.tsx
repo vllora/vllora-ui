@@ -73,29 +73,25 @@ export function TopicDetailView({
     return null;
   }, [records]);
 
-  // Build prompt chain: hierarchy metadata OR fallback to record's system prompt
+  // Build prompt chain: root system prompt → parent topics → current topic
   const promptChain = useMemo(() => {
     const chain: { label: string; level: "root" | "parent" | "leaf"; prompt: string }[] = [];
 
-    // Try hierarchy-based chain first
-    if (normalizedObjective) {
-      chain.push({ label: "Root", level: "root", prompt: normalizedObjective });
-    }
-    for (const ancestor of ancestorNodes) {
-      const prompt = ancestor.description || ancestor.normalizedPromptSegment;
-      if (prompt) {
-        chain.push({ label: ancestor.name, level: "parent", prompt });
-      }
-    }
-    const leafPrompt = topicNode.description || topicNode.normalizedPromptSegment;
-    if (leafPrompt) {
-      chain.push({ label: topicNode.name, level: "leaf", prompt: leafPrompt });
+    // Root: use normalizedObjective or fall back to record's system prompt
+    const rootPrompt = normalizedObjective || recordSystemPrompt;
+    if (rootPrompt) {
+      chain.push({ label: "Root Prompt", level: "root", prompt: rootPrompt });
     }
 
-    // If no hierarchy prompts found, fall back to the actual system prompt from records
-    if (chain.length === 0 && recordSystemPrompt) {
-      chain.push({ label: "System Prompt", level: "leaf", prompt: recordSystemPrompt });
+    // Ancestors: use description/normalizedPromptSegment or topic name as context
+    for (const ancestor of ancestorNodes) {
+      const prompt = ancestor.description || ancestor.normalizedPromptSegment || `Specialize in: ${ancestor.name}`;
+      chain.push({ label: ancestor.name, level: "parent", prompt });
     }
+
+    // Current topic (leaf)
+    const leafPrompt = topicNode.description || topicNode.normalizedPromptSegment || `Focus on: ${topicNode.name}`;
+    chain.push({ label: topicNode.name, level: "leaf", prompt: leafPrompt });
 
     return chain;
   }, [normalizedObjective, ancestorNodes, topicNode, recordSystemPrompt]);
