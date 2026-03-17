@@ -107,10 +107,15 @@ function AllSourcesView({
     [selectedPartState, hierarchy],
   );
 
-  const linkedRecordsCount = useMemo(() => {
-    if (linkedTopics.length === 0) return 0;
+  const linkedRecordsStats = useMemo(() => {
+    if (linkedTopics.length === 0) return { count: 0, avgScore: undefined as number | undefined };
     const topicSet = new Set(linkedTopics);
-    return records.filter(r => r.topic && topicSet.has(r.topic)).length;
+    const matched = records.filter(r => r.topic && topicSet.has(r.topic));
+    const scores = matched.map(r => r.evaluation?.score ?? r.evaluation?.evalScore).filter((s): s is number => s != null);
+    return {
+      count: matched.length,
+      avgScore: scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : undefined,
+    };
   }, [linkedTopics, records]);
 
   return (
@@ -149,7 +154,8 @@ function AllSourcesView({
             totalParts={allParts.length}
             onNavigate={navigatePart}
             linkedTopics={linkedTopics}
-            linkedRecordsCount={linkedRecordsCount}
+            linkedRecordsCount={linkedRecordsStats.count}
+            linkedAvgScore={linkedRecordsStats.avgScore}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center p-8 text-muted-foreground text-xs">
@@ -502,10 +508,15 @@ function SingleDocView({ source }: { readonly source: KnowledgeSource }) {
     [selectedPart, hierarchy],
   );
 
-  const linkedRecordsCount = useMemo(() => {
-    if (linkedTopics.length === 0) return 0;
+  const linkedRecordsStats = useMemo(() => {
+    if (linkedTopics.length === 0) return { count: 0, avgScore: undefined as number | undefined };
     const topicSet = new Set(linkedTopics);
-    return records.filter(r => r.topic && topicSet.has(r.topic)).length;
+    const matched = records.filter(r => r.topic && topicSet.has(r.topic));
+    const scores = matched.map(r => r.evaluation?.score ?? r.evaluation?.evalScore).filter((s): s is number => s != null);
+    return {
+      count: matched.length,
+      avgScore: scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : undefined,
+    };
   }, [linkedTopics, records]);
 
   return (
@@ -514,31 +525,35 @@ function SingleDocView({ source }: { readonly source: KnowledgeSource }) {
       <div className="flex-1 grid grid-cols-2 overflow-hidden">
         {/* Left: Document info + topic coverage + parts outline */}
         <div className="border-r border-border/50 overflow-y-auto p-4 space-y-4">
-          {/* Doc header card — matches mockup: dark card, red-tint icon, stats */}
-          <div className="flex items-start gap-3 p-4 bg-card border border-border rounded-xl">
+          {/* Doc header card — icon + name/description left, stat columns right */}
+          <div className="flex items-center gap-3 p-4 bg-card border border-border rounded-xl">
             <div className="w-11 h-11 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
               <FileText className="w-5 h-5 text-red-400" />
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-[14px] font-bold text-foreground truncate">{source.name}</h3>
-              <p className="text-[11px] text-muted-foreground/60 mt-0.5">
-                {source.metadata?.pageCount ? `${source.metadata.pageCount} pages · ` : ""}
-                {source.metadata?.fileSize ? `${(Number(source.metadata.fileSize) / (1024 * 1024)).toFixed(1)} MB · ` : ""}
-                Extracted via Docling Serve
-              </p>
-              {/* Stat row below metadata */}
-              <div className="flex items-center gap-1 mt-2 text-[11px] text-muted-foreground/70">
-                <span className="font-semibold text-foreground">{source.parts.length}</span> parts
-                {topicCoverage.length > 0 && (
-                  <>
-                    <span className="mx-1 text-border">/</span>
-                    <span className="font-semibold text-foreground">{topicCoverage.length}</span> topics
-                  </>
+              <p className="text-[11px] text-muted-foreground/60 mt-0.5 truncate">
+                {source.description || (
+                  [source.metadata?.pageCount && `${source.metadata.pageCount} pages`,
+                   source.metadata?.fileSize && `${(Number(source.metadata.fileSize) / (1024 * 1024)).toFixed(1)} MB`]
+                    .filter(Boolean).join(" · ") || "Knowledge source"
                 )}
-                <span className="mx-1 text-border">/</span>
-                <span className="font-semibold text-foreground">
+              </p>
+            </div>
+            <div className="flex items-center gap-5 shrink-0">
+              <div className="text-center">
+                <div className="text-[15px] font-bold text-foreground tabular-nums">{source.parts.length}</div>
+                <div className="text-[10px] text-muted-foreground/50">parts</div>
+              </div>
+              <div className="text-center">
+                <div className="text-[15px] font-bold text-foreground tabular-nums">{topicCoverage.length}</div>
+                <div className="text-[10px] text-muted-foreground/50">topics</div>
+              </div>
+              <div className="text-center">
+                <div className="text-[15px] font-bold text-foreground tabular-nums">
                   {totalChars >= 1000 ? `${(totalChars / 1000).toFixed(1)}K` : totalChars}
-                </span> chars
+                </div>
+                <div className="text-[10px] text-muted-foreground/50">chars</div>
               </div>
             </div>
           </div>
@@ -635,7 +650,8 @@ function SingleDocView({ source }: { readonly source: KnowledgeSource }) {
               totalParts={source.parts.length}
               onNavigate={navigatePart}
               linkedTopics={linkedTopics}
-              linkedRecordsCount={linkedRecordsCount}
+              linkedRecordsCount={linkedRecordsStats.count}
+              linkedAvgScore={linkedRecordsStats.avgScore}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center p-8 text-muted-foreground text-xs">
@@ -725,6 +741,7 @@ function PartViewer({
   onNavigate,
   linkedTopics,
   linkedRecordsCount,
+  linkedAvgScore,
 }: {
   readonly part: KnowledgeSourcePart;
   readonly sourceName: string;
@@ -733,6 +750,7 @@ function PartViewer({
   readonly onNavigate: (direction: -1 | 1) => void;
   readonly linkedTopics: string[];
   readonly linkedRecordsCount: number;
+  readonly linkedAvgScore?: number;
 }) {
   const typeBadge = part.type === "table" ? "TABLE" : part.type === "image" ? "IMAGE" : "TEXT";
   const typeBadgeColor = part.type === "table"
@@ -836,6 +854,9 @@ function PartViewer({
               <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50">Records Generated</div>
               <span className="text-[10px] text-muted-foreground">
                 <span className="font-semibold text-[rgb(var(--theme-500))]">{linkedRecordsCount}</span> records from this part
+                {linkedAvgScore != null && (
+                  <> · avg score <span className="font-semibold text-foreground">{linkedAvgScore.toFixed(2)}</span></>
+                )}
               </span>
             </>
           )}

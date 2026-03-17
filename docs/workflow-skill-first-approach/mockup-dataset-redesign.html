@@ -161,6 +161,17 @@
     align-items: center;
     gap: 8px;
     transition: all 0.1s;
+    min-width: 0;
+  }
+  .sidebar-item > span:not(.badge):not(.chevron):not(.count) {
+    flex-shrink: 0;
+  }
+  .sidebar-item .item-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    flex: 1;
   }
   .sidebar-item:hover { background: var(--bg-hover); color: var(--text-primary); }
   .sidebar-item.active { background: var(--accent-dim); color: var(--accent); }
@@ -2143,19 +2154,19 @@
     <div class="sidebar-section">
       <div class="sidebar-section-title">Source Documents <span class="count">3</span></div>
       <div class="sidebar-item" data-ks="all" onclick="selectKnowledgeSource('all')">
-        <span>&#128202;</span> All Sources
+        <span>&#128202;</span><span class="item-label">All Sources</span>
         <span class="badge">19</span>
       </div>
       <div class="sidebar-item active" data-ks="chess-tactics" onclick="selectKnowledgeSource('chess-tactics')">
-        <span>&#128196;</span> chess-tactics.pdf
+        <span>&#128196;</span><span class="item-label">chess-tactics.pdf</span>
         <span class="badge">10</span>
       </div>
       <div class="sidebar-item" data-ks="strategy-guide" onclick="selectKnowledgeSource('strategy-guide')">
-        <span>&#128196;</span> strategy-guide.pdf
+        <span>&#128196;</span><span class="item-label">strategy-guide.pdf</span>
         <span class="badge">6</span>
       </div>
       <div class="sidebar-item" data-ks="opening-theory" onclick="selectKnowledgeSource('opening-theory')">
-        <span>&#128196;</span> opening-theory.pdf
+        <span>&#128196;</span><span class="item-label">opening-theory.pdf</span>
         <span class="badge">3</span>
       </div>
     </div>
@@ -2533,9 +2544,9 @@
           </div>
 
           <!-- Parts list (expanded — all parts for this doc) -->
-          <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-dim);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+          <div id="sdvPartsLabel" style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-dim);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
-            Extracted Parts (10)
+            <span id="sdvPartsLabelText">Extracted Parts (10)</span>
           </div>
           <div id="sdvPartsList">
             <div class="part-outline">
@@ -3274,6 +3285,569 @@
 </div>
 
 <script>
+// ═══════════════════════════════════════════════════
+// LIVE DATA: Fetch from gateway API so mockup matches real UI
+// ═══════════════════════════════════════════════════
+const WORKFLOW_ID = '26ba505e-0129-46ef-92c0-99bded030c5b';
+const GATEWAY = 'http://localhost:9090';
+
+async function fetchJSON(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.warn('[mockup] fetch failed:', url, err.message);
+    return null;
+  }
+}
+
+function sourceKey(name) {
+  return name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase();
+}
+
+async function loadLiveData() {
+  const [topicsRes, recordsRes, knowledgeRes, relationsRes] = await Promise.all([
+    fetchJSON(`${GATEWAY}/finetune/workflows/${WORKFLOW_ID}/topics`),
+    fetchJSON(`${GATEWAY}/finetune/workflows/${WORKFLOW_ID}/records`),
+    fetchJSON(`${GATEWAY}/finetune/workflows/${WORKFLOW_ID}/knowledge`),
+    fetchJSON(`${GATEWAY}/finetune/workflows/${WORKFLOW_ID}/topics/relations`),
+  ]);
+
+  if (!topicsRes || !recordsRes) {
+    console.warn('[mockup] Could not load live data — using static fallback');
+    return;
+  }
+
+  const topics = topicsRes.topics || [];
+  const records = recordsRes.records || [];
+  const sources = (knowledgeRes || {}).knowledge_sources || [];
+  const relations = (relationsRes || {}).relations || [];
+
+  renderLiveData(topics, records, sources, relations);
+}
+
+function renderLiveData(topics, records, sources, relations) {
+  // ── Build topic tree ──
+  const parentTopics = topics.filter(t => !t.parent_id);
+  const childTopics = topics.filter(t => t.parent_id);
+
+  // Count records per topic
+  const recordsByTopic = {};
+  for (const r of records) {
+    const tid = r.topic_id;
+    if (tid) {
+      if (!recordsByTopic[tid]) recordsByTopic[tid] = [];
+      recordsByTopic[tid].push(r);
+    }
+  }
+
+  // Count records per parent (sum of children)
+  const recordsByParent = {};
+  for (const p of parentTopics) {
+    const children = childTopics.filter(c => c.parent_id === p.id);
+    let count = 0;
+    for (const c of children) {
+      count += (recordsByTopic[c.id] || []).length;
+    }
+    // Also add records directly on parent
+    count += (recordsByTopic[p.id] || []).length;
+    recordsByParent[p.id] = count;
+  }
+
+  const totalRecords = records.length;
+  const totalTopics = topics.length;
+  const totalParts = sources.reduce((s, ks) => s + (ks.part || []).length, 0);
+
+  // ── Build source name map for relations ──
+  const partToSource = {};
+  for (const ks of sources) {
+    for (const part of (ks.part || [])) {
+      partToSource[part.id] = ks.name;
+    }
+  }
+
+  // Count relations per topic
+  const relationsPerTopic = {};
+  for (const rel of relations) {
+    if (!relationsPerTopic[rel.topic_id]) relationsPerTopic[rel.topic_id] = [];
+    relationsPerTopic[rel.topic_id].push(rel);
+  }
+
+  // ── Update all sidebar topic trees (4 copies across pages) ──
+  updateAllSidebars(parentTopics, childTopics, recordsByTopic, recordsByParent, totalRecords, sources);
+
+  // ── Update flow banner stats (canvas page, "normal" state) ──
+  updateFlowBanner(sources, totalParts, topics, totalRecords);
+
+  // ── Update canvas nodes ──
+  updateCanvasNodes(parentTopics, childTopics, recordsByTopic, recordsByParent, totalRecords, totalTopics);
+
+  // ── Update table page records ──
+  updateTableRecords(parentTopics, childTopics, recordsByTopic, recordsByParent, records, relationsPerTopic, totalRecords);
+
+  // ── Update KS_DATA for knowledge source selection ──
+  updateKnowledgeData(sources, relationsPerTopic, topics, relations);
+
+  // ── Update table toolbar count ──
+  document.querySelectorAll('.table-count').forEach(el => {
+    el.textContent = totalRecords + ' records';
+  });
+}
+
+function updateAllSidebars(parentTopics, childTopics, recordsByTopic, recordsByParent, totalRecords, sources) {
+  // Find all sidebar sections with "Training Data" title
+  const allSidebars = document.querySelectorAll('.sidebar');
+
+  allSidebars.forEach(sidebar => {
+    // Update source document counts (skip knowledge page — handled by updateKnowledgeData)
+    const isKnowledgeSidebar = sidebar.closest('#page-knowledge') !== null;
+    if (!isKnowledgeSidebar) {
+      const sourceSection = sidebar.querySelector('.sidebar-section');
+      if (sourceSection) {
+        const sourceTitle = sourceSection.querySelector('.sidebar-section-title');
+        if (sourceTitle && sourceTitle.textContent.includes('Source Documents')) {
+          const countEl = sourceTitle.querySelector('.count');
+          if (countEl) countEl.textContent = sources.length;
+
+          // Remove all source items except section title, then rebuild
+          const oldItems = sourceSection.querySelectorAll('.sidebar-item');
+          oldItems.forEach(item => item.remove());
+
+          // Individual source items — click navigates to knowledge page
+          sources.forEach(ks => {
+            const partCount = (ks.part || []).length;
+            const key = sourceKey(ks.name);
+            const div = document.createElement('div');
+            div.className = 'sidebar-item';
+            div.style.cursor = 'pointer';
+            div.innerHTML = '<span>&#128196;</span><span class="item-label">' + ks.name + '</span><span class="badge">' + partCount + '</span>';
+            div.onclick = function() {
+              showPage('knowledge');
+              selectKnowledgeSource(key);
+            };
+            sourceSection.appendChild(div);
+          });
+        }
+      }
+    }
+
+    // Update training data section
+    const sections = sidebar.querySelectorAll('.sidebar-section');
+    sections.forEach(section => {
+      const title = section.querySelector('.sidebar-section-title');
+      if (!title || !title.textContent.includes('Training Data')) return;
+
+      const countEl = title.querySelector('.count');
+      if (countEl) countEl.textContent = totalRecords;
+
+      // Update "All Topics" badge
+      const allTopicsItem = section.querySelector('.sidebar-item .badge');
+      if (allTopicsItem) allTopicsItem.textContent = totalRecords;
+
+      // Update parent topic items and their children
+      const parentItems = section.querySelectorAll('.sidebar-item.parent');
+      const childContainers = section.querySelectorAll('.sidebar-children');
+
+      parentTopics.forEach((parent, idx) => {
+        if (idx >= parentItems.length) return;
+        const parentItem = parentItems[idx];
+        const badge = parentItem.querySelector('.badge');
+        if (badge) badge.textContent = recordsByParent[parent.id] || 0;
+
+        // Update text
+        const textContent = parentItem.childNodes;
+        for (const node of textContent) {
+          if (node.nodeType === 3 && node.textContent.trim().length > 0) {
+            node.textContent = ' ' + parent.name + ' ';
+            break;
+          }
+        }
+
+        // Update children
+        if (idx < childContainers.length) {
+          const container = childContainers[idx];
+          const children = childTopics.filter(c => c.parent_id === parent.id);
+          const childItems = container.querySelectorAll('.sidebar-item.child');
+
+          // Clear existing and rebuild
+          container.innerHTML = '';
+          children.forEach(child => {
+            const count = (recordsByTopic[child.id] || []).length;
+            const div = document.createElement('div');
+            div.className = 'sidebar-item child';
+            div.innerHTML = child.name + ' <span class="badge">' + count + '</span>';
+            container.appendChild(div);
+          });
+        }
+      });
+    });
+  });
+}
+
+function updateFlowBanner(sources, totalParts, topics, totalRecords) {
+  // Store values so setMockupState('normal') can restore them
+  window._liveFlowData = { sources, totalParts, topics, totalRecords };
+
+  // Update flow banner immediately if in normal state
+  if (!currentMockupState || currentMockupState === 'normal') {
+    const flowStages = document.querySelectorAll('#page-canvas .flow-stage');
+    const sourceNames = sources.map(ks => ks.name);
+    const sourceLabel = sourceNames.length <= 2 ? sourceNames.join(', ') : sourceNames.slice(0, 2).join(', ') + ', +' + (sourceNames.length - 2);
+    const parentCount = topics.filter(t => !t.parent_id).length;
+    const leafCount = topics.filter(t => t.parent_id).length;
+
+    flowStages.forEach((s, i) => {
+      const val = s.querySelector('.stage-value');
+      const detail = s.querySelector('.stage-detail');
+      if (i === 0) { val.textContent = sources.length; detail.textContent = sourceLabel; }
+      else if (i === 1) { val.textContent = totalParts; detail.innerHTML = totalParts + ' extracted parts'; }
+      else if (i === 2) { val.textContent = topics.length; detail.innerHTML = parentCount + ' categories &middot; ' + leafCount + ' leaf topics'; }
+      else { val.textContent = totalRecords; detail.innerHTML = totalRecords + ' training records'; }
+    });
+  }
+}
+
+function updateCanvasNodes(parentTopics, childTopics, recordsByTopic, recordsByParent, totalRecords, totalTopics) {
+  // Update root node stats
+  const rootStats = document.querySelectorAll('#node-root .root-stat .val');
+  if (rootStats.length >= 2) {
+    rootStats[0].textContent = totalTopics;
+    rootStats[1].textContent = totalRecords;
+  }
+
+  // Update parent nodes on canvas (order: Basic, Advanced, Endgame)
+  const canvasParentNodes = document.querySelectorAll('#canvasInner > .topic-node:not(.root):not(#node-forks)');
+  const nodesByPosition = [];
+  canvasParentNodes.forEach(node => {
+    const top = parseInt(node.style.top);
+    const left = parseInt(node.style.left);
+    if (left < 600) { // parent nodes are at left ~310
+      nodesByPosition.push({ node, top });
+    }
+  });
+  nodesByPosition.sort((a, b) => a.top - b.top);
+
+  parentTopics.forEach((parent, idx) => {
+    if (idx >= nodesByPosition.length) return;
+    const node = nodesByPosition[idx].node;
+    const nameEl = node.querySelector('.node-name');
+    const countEl = node.querySelector('.node-count');
+    if (nameEl) nameEl.textContent = parent.name;
+    if (countEl) countEl.textContent = recordsByParent[parent.id] || 0;
+  });
+
+  // Update leaf nodes (right side, left ~630)
+  const leafNodes = [];
+  canvasParentNodes.forEach(node => {
+    const left = parseInt(node.style.left);
+    if (left >= 600) {
+      leafNodes.push({ node, top: parseInt(node.style.top) });
+    }
+  });
+  // Also get named nodes like #node-forks
+  const forksNode = document.getElementById('node-forks');
+  if (forksNode) {
+    leafNodes.push({ node: forksNode, top: parseInt(forksNode.style.top) });
+  }
+  leafNodes.sort((a, b) => a.top - b.top);
+
+  // Collect all leaf topics in display order
+  const allLeaves = [];
+  parentTopics.forEach(parent => {
+    const children = childTopics.filter(c => c.parent_id === parent.id);
+    allLeaves.push(...children);
+  });
+
+  allLeaves.forEach((leaf, idx) => {
+    if (idx >= leafNodes.length) return;
+    const node = leafNodes[idx].node;
+    const nameEl = node.querySelector('.node-name');
+    const countEl = node.querySelector('.node-count');
+    if (nameEl) nameEl.textContent = leaf.name;
+    if (countEl) countEl.textContent = (recordsByTopic[leaf.id] || []).length;
+  });
+}
+
+function parseRecordData(record) {
+  let data = record.data;
+  if (typeof data === 'string') {
+    try { data = JSON.parse(data); } catch { return { userMsg: '', asstMsg: '' }; }
+  }
+  if (!data) return { userMsg: '', asstMsg: '' };
+
+  const inputMsgs = (data.input && data.input.messages) || [];
+  const outputMsgs = (data.output && data.output.messages) || [];
+
+  const userMsg = inputMsgs.find(m => m.role === 'user');
+  const asstMsg = outputMsgs.find(m => m.role === 'assistant');
+
+  return {
+    userMsg: userMsg ? userMsg.content : '',
+    asstMsg: asstMsg ? asstMsg.content : '',
+  };
+}
+
+function truncate(str, len) {
+  if (!str) return '';
+  return str.length > len ? str.substring(0, len) + '...' : str;
+}
+
+function updateTableRecords(parentTopics, childTopics, recordsByTopic, recordsByParent, allRecords, relationsPerTopic, totalRecords) {
+  const tbody = document.querySelector('#page-table .all-records-table tbody');
+  if (!tbody) return;
+
+  // Clear existing rows
+  tbody.innerHTML = '';
+
+  // Map parent IDs to group keys for prompt panel compatibility
+  const parentKeyMap = {};
+  const parentKeys = ['basic', 'advanced', 'endgame'];
+  parentTopics.forEach((p, i) => {
+    parentKeyMap[p.id] = parentKeys[i] || 'group' + i;
+  });
+
+  let recordNum = 0;
+
+  parentTopics.forEach(parent => {
+    const parentKey = parentKeyMap[parent.id];
+    const children = childTopics.filter(c => c.parent_id === parent.id);
+    const parentRecordCount = recordsByParent[parent.id] || 0;
+
+    // Group header
+    const groupRow = document.createElement('tr');
+    groupRow.className = 'group-header';
+    groupRow.setAttribute('onclick', 'toggleGroup(this)');
+    groupRow.dataset.group = parentKey;
+    groupRow.innerHTML = `<td colspan="5"><div class="group-header-inner">
+      <svg class="group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+      <span class="group-name">${parent.name}</span>
+      <div class="group-stats">
+        <div class="group-stat"><span class="val">${parentRecordCount}</span> records</div>
+      </div>
+    </div></td>`;
+    tbody.appendChild(groupRow);
+
+    children.forEach(child => {
+      const topicRecords = recordsByTopic[child.id] || [];
+      const childKey = child.name.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 12);
+      const relCount = (relationsPerTopic[child.id] || []).length;
+
+      // Subgroup header
+      const subRow = document.createElement('tr');
+      subRow.className = 'subgroup-header';
+      subRow.dataset.parent = parentKey;
+      subRow.dataset.subgroup = childKey;
+      subRow.innerHTML = `<td colspan="5"><div class="subgroup-header-inner" onclick="toggleSubgroup(this.closest('.subgroup-header'))">
+        <div class="tree-line"></div>
+        <svg class="subgroup-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        <span class="subgroup-name">${child.name}</span>
+        <span class="subgroup-count">${topicRecords.length}</span>
+        <div class="subgroup-stats">
+          <span>${relCount > 0 ? '&#128196; ' + relCount + ' source' + (relCount > 1 ? 's' : '') : 'no sources'}</span>
+        </div>
+      </div></td>`;
+      tbody.appendChild(subRow);
+
+      // Record rows (show up to 5 per topic to keep mockup manageable)
+      const displayRecords = topicRecords.slice(0, 5);
+      displayRecords.forEach(record => {
+        recordNum++;
+        const { userMsg, asstMsg } = parseRecordData(record);
+        const tr = document.createElement('tr');
+        tr.className = 'record-row';
+        tr.dataset.parent = parentKey;
+        tr.dataset.topic = childKey;
+        tr.innerHTML = `<td class="col-id">${recordNum}</td>` +
+          `<td>${truncate(userMsg, 120)}</td>` +
+          `<td>${truncate(asstMsg, 200)}</td>` +
+          `<td class="col-score"><span class="score-pill score-good">--</span></td>` +
+          `<td class="col-source">generated</td>`;
+        tr.style.cursor = 'pointer';
+        tr.addEventListener('click', () => openRecordDetail(tr));
+        tbody.appendChild(tr);
+      });
+
+      // Show "and N more" if truncated
+      if (topicRecords.length > 5) {
+        const moreRow = document.createElement('tr');
+        moreRow.className = 'record-row';
+        moreRow.dataset.parent = parentKey;
+        moreRow.dataset.topic = childKey;
+        moreRow.innerHTML = `<td class="col-id" colspan="5" style="text-align:center;color:var(--text-muted);font-style:italic;padding-left:72px;">
+          + ${topicRecords.length - 5} more records in "${child.name}"
+        </td>`;
+        tbody.appendChild(moreRow);
+      }
+    });
+  });
+}
+
+function updateKnowledgeData(sources, relationsPerTopic, topics, relations) {
+  // Build topic name map
+  const topicNameMap = {};
+  for (const t of topics) topicNameMap[t.id] = t.name;
+
+  // Count topics per source via relations
+  const topicsPerSource = {};
+  for (const ks of sources) {
+    const sourceTopicIds = new Set();
+    for (const part of (ks.part || [])) {
+      // Find relations that reference this part
+      for (const topicId of Object.keys(relationsPerTopic)) {
+        const rels = relationsPerTopic[topicId] || [];
+        for (const rel of rels) {
+          if (rel.source_part_id === part.id) {
+            sourceTopicIds.add(topicId);
+          }
+        }
+      }
+    }
+    topicsPerSource[ks.id] = sourceTopicIds;
+  }
+
+  // Build a clean key from source name
+  // (uses global sourceKey function defined below)
+
+  // Update KS_DATA global
+  const newKSData = {};
+  sources.forEach(ks => {
+    const key = sourceKey(ks.name);
+    const parts = (ks.part || []);
+    const topicCount = (topicsPerSource[ks.id] || new Set()).size;
+    const totalChars = parts.reduce((sum, p) => sum + (p.content || '').length, 0);
+    const charsLabel = totalChars > 1000 ? Math.round(totalChars / 1000) + 'K' : totalChars + '';
+    const meta = ks.description || (ks.metadata && ks.metadata.description) || '';
+
+    // Build linked topic names per part
+    const partLinkedTopics = {};
+    for (const part of parts) {
+      const linked = [];
+      for (const rel of (relations || [])) {
+        if (rel.source_part_id === part.id) {
+          const tName = topicNameMap[rel.topic_id];
+          if (tName) linked.push(tName);
+        }
+      }
+      partLinkedTopics[part.id] = linked;
+    }
+
+    newKSData[key] = {
+      title: ks.name,
+      meta: meta,
+      parts: parts.length + '',
+      topics: topicCount + '',
+      chars: charsLabel,
+      partsData: parts,
+      partLinkedTopics: partLinkedTopics,
+    };
+  });
+
+  // Replace global KS_DATA
+  Object.keys(KS_DATA).forEach(k => delete KS_DATA[k]);
+  Object.assign(KS_DATA, newKSData);
+
+  // Update knowledge page sidebar source items
+  const ksSidebar = document.querySelector('#page-knowledge .sidebar');
+  if (ksSidebar) {
+    const sourceSection = ksSidebar.querySelector('.sidebar-section');
+    if (sourceSection) {
+      // Update section title count
+      const sourceTitle = sourceSection.querySelector('.sidebar-section-title');
+      if (sourceTitle) {
+        const countEl = sourceTitle.querySelector('.count');
+        if (countEl) countEl.textContent = sources.length;
+      }
+
+      // Remove all old sidebar items, rebuild from scratch
+      sourceSection.querySelectorAll('.sidebar-item').forEach(item => item.remove());
+
+      const totalParts = sources.reduce((s, ks) => s + (ks.part || []).length, 0);
+
+      // "All Sources" item
+      const allDiv = document.createElement('div');
+      allDiv.className = 'sidebar-item';
+      allDiv.dataset.ks = 'all';
+      allDiv.setAttribute('onclick', "selectKnowledgeSource('all')");
+      allDiv.innerHTML = '<span>&#128202;</span><span class="item-label">All Sources</span><span class="badge">' + totalParts + '</span>';
+      sourceSection.appendChild(allDiv);
+
+      // Individual source items
+      const keys = Object.keys(newKSData);
+      keys.forEach(key => {
+        const data = newKSData[key];
+        const div = document.createElement('div');
+        div.className = 'sidebar-item';
+        div.dataset.ks = key;
+        div.setAttribute('onclick', `selectKnowledgeSource('${key}')`);
+        div.innerHTML = `<span>&#128196;</span><span class="item-label">${data.title}</span><span class="badge">${data.parts}</span>`;
+        sourceSection.appendChild(div);
+      });
+
+      // Auto-select first source
+      if (keys.length > 0) {
+        selectKnowledgeSource(keys[0]);
+      }
+    }
+  }
+
+  // Update "All Sources" view doc cards
+  updateAllSourcesView(sources, topicsPerSource, topicNameMap);
+}
+
+function updateAllSourcesView(sources, topicsPerSource, topicNameMap) {
+  const allView = document.getElementById('allSourcesView');
+  if (!allView) return;
+
+  // Remove existing doc-card elements (keep coverage matrix for now)
+  allView.querySelectorAll('.doc-card').forEach(card => card.remove());
+
+  sources.forEach(ks => {
+    const parts = ks.part || [];
+    const topicIds = topicsPerSource[ks.id] || new Set();
+    const topicNames = Array.from(topicIds).map(id => topicNameMap[id] || 'Unknown');
+    const totalChars = parts.reduce((sum, p) => sum + (p.content || '').length, 0);
+    const charsLabel = totalChars > 1000 ? Math.round(totalChars / 1000) + 'K' : totalChars + '';
+    const meta = ks.description || (ks.metadata && ks.metadata.description) || '';
+
+    const card = document.createElement('div');
+    card.className = 'doc-card';
+    card.innerHTML = `
+      <div class="doc-card-header">
+        <div class="doc-icon">&#128196;</div>
+        <div>
+          <div class="doc-card-title">${ks.name}</div>
+          <div class="doc-card-meta">${meta}</div>
+        </div>
+        <div class="doc-card-stats">
+          <div class="doc-stat"><span class="val">${parts.length}</span> parts</div>
+          <div class="doc-stat"><span class="val">${topicIds.size}</span> topics</div>
+          <div class="doc-stat"><span class="val">${charsLabel}</span> chars</div>
+        </div>
+      </div>
+      <div class="doc-topics-linked">
+        <span style="font-size:10px;color:var(--text-dim);margin-right:4px;">${topicNames.length > 0 ? 'Linked to:' : 'Not linked to any topic'}</span>
+        ${topicNames.length > 0
+          ? topicNames.map(n => `<span class="topic-chip">${n}</span>`).join('')
+          : '<span class="topic-chip gap">unlinked</span>'}
+      </div>`;
+    allView.appendChild(card);
+  });
+}
+
+// Patch setMockupState to use live data for "normal" restore
+const _origSetMockupState = typeof setMockupState === 'function' ? setMockupState : null;
+
+// Load live data on page load
+document.addEventListener('DOMContentLoaded', () => {
+  loadLiveData();
+});
+
+// Also try immediately in case DOMContentLoaded already fired
+if (document.readyState !== 'loading') {
+  loadLiveData();
+}
+
 // ── Page switching ──
 function showPage(page) {
   document.getElementById('page-canvas').style.display = page === 'canvas' ? 'grid' : 'none';
@@ -3756,6 +4330,103 @@ function selectKnowledgeSource(key) {
       document.getElementById('sdvTopics').textContent = data.topics;
       document.getElementById('sdvChars').textContent = data.chars;
       breadcrumb.textContent = data.title;
+
+      // Rebuild parts list if live data available
+      if (data.partsData) {
+        const partsList = document.getElementById('sdvPartsList');
+        if (partsList) {
+          partsList.innerHTML = '';
+          data.partsData.forEach((part, idx) => {
+            const linkedTopics = (data.partLinkedTopics && data.partLinkedTopics[part.id]) || [];
+            const topicCount = linkedTopics.length;
+            const charCount = (part.content || '').length;
+            const charLabel = charCount > 1000 ? (charCount / 1000).toFixed(1) + 'K' : charCount;
+            const badgeClass = topicCount >= 3 ? 'high' : topicCount >= 2 ? 'mid' : 'low';
+
+            const div = document.createElement('div');
+            div.className = 'part-item' + (idx === 0 ? ' active' : '');
+            div.onclick = function() {
+              selectPart(this);
+              showPartContent(part, data.title);
+            };
+            div.innerHTML =
+              '<div class="part-type-icon text">T</div>' +
+              '<div class="part-item-info">' +
+                '<div class="part-item-title">' + (part.title || 'Part ' + (idx + 1)) + '</div>' +
+                '<div class="part-item-detail">' +
+                  (part.extraction_path ? part.extraction_path + ' &middot; ' : '') +
+                  charLabel + ' chars' +
+                '</div>' +
+              '</div>' +
+              (topicCount > 0
+                ? '<div class="part-item-links"><span class="topic-link-badge ' + badgeClass + '">' + topicCount + ' topic' + (topicCount > 1 ? 's' : '') + '</span></div>'
+                : '<div class="part-item-links"></div>');
+            partsList.appendChild(div);
+          });
+
+          // Show first part content in viewer
+          if (data.partsData.length > 0) {
+            showPartContent(data.partsData[0], data.title);
+          }
+        }
+
+        // Update "Extracted Parts" label count
+        const partsLabelText = document.getElementById('sdvPartsLabelText');
+        if (partsLabelText) {
+          partsLabelText.textContent = 'Extracted Parts (' + data.partsData.length + ')';
+        }
+      }
+    }
+  }
+}
+
+function showPartContent(part, sourceName) {
+  // Update the right-side part viewer header
+  const titleRow = document.querySelector('.knowledge-right .pv-title-row h3');
+  if (titleRow) titleRow.textContent = part.title || 'Untitled';
+
+  const charCount = (part.content || '').length;
+  const charLabel = charCount > 1000 ? (charCount / 1000).toFixed(1) + 'K' : charCount;
+
+  // Update meta tags
+  const metaTags = document.querySelectorAll('.knowledge-right .pv-meta-tag');
+  if (metaTags.length >= 1 && sourceName) {
+    metaTags[0].innerHTML = metaTags[0].querySelector('svg').outerHTML + ' ' + sourceName;
+  }
+  if (metaTags.length >= 2) {
+    metaTags[1].innerHTML = metaTags[1].querySelector('svg').outerHTML + ' ' + (part.extraction_path || 'N/A');
+  }
+  if (metaTags.length >= 3) {
+    metaTags[2].innerHTML = metaTags[2].querySelector('svg').outerHTML + ' ' + charLabel + ' chars';
+  }
+
+  // Update content area
+  const contentArea = document.querySelector('.knowledge-right .part-viewer-content');
+  if (contentArea) {
+    contentArea.innerHTML =
+      '<h4>' + (part.title || 'Untitled') + '</h4>' +
+      '<p>' + (part.content || 'No content available.') + '</p>';
+  }
+
+  // Update footer with linked topics
+  const footer = document.querySelector('.knowledge-right .part-viewer-footer');
+  if (footer) {
+    const linkedTopics = [];
+    // Find linked topics from KS_DATA
+    for (const ksKey of Object.keys(KS_DATA)) {
+      const ksData = KS_DATA[ksKey];
+      if (ksData.partLinkedTopics && ksData.partLinkedTopics[part.id]) {
+        linkedTopics.push(...ksData.partLinkedTopics[part.id]);
+      }
+    }
+    if (linkedTopics.length > 0) {
+      const chips = linkedTopics.map(t => '<span class="topic-chip">' + t + '</span>').join('');
+      footer.innerHTML =
+        '<div style="font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-dim);margin-bottom:6px;">Referenced by Topics</div>' +
+        '<div style="display:flex;gap:4px;flex-wrap:wrap;">' + chips + '</div>';
+      footer.style.display = '';
+    } else {
+      footer.style.display = 'none';
     }
   }
 }
@@ -3826,14 +4497,26 @@ function setMockupState(state) {
     flowArrows.forEach((a, i) => { if (i > 0) a.classList.add('empty-arrow'); });
   }
   else {
-    // Normal — restore values
+    // Normal — restore values (use live data if available)
+    const live = window._liveFlowData;
     flowStages.forEach((s, i) => {
       const val = s.querySelector('.stage-value');
       const detail = s.querySelector('.stage-detail');
-      if (i === 0) { val.textContent = '3'; detail.textContent = 'chess-tactics.pdf, strategy-guide.pdf, +1'; }
-      else if (i === 1) { val.textContent = '19'; detail.innerHTML = '14 text &middot; 3 tables &middot; 2 images'; }
-      else if (i === 2) { val.textContent = '12'; detail.innerHTML = '5 categories &middot; 7 leaf topics'; }
-      else { val.textContent = '150'; detail.innerHTML = '0.82 avg quality &middot; 12.4k tokens'; }
+      if (live) {
+        const sourceNames = live.sources.map(ks => ks.name);
+        const sourceLabel = sourceNames.length <= 2 ? sourceNames.join(', ') : sourceNames.slice(0, 2).join(', ') + ', +' + (sourceNames.length - 2);
+        const parentCount = live.topics.filter(t => !t.parent_id).length;
+        const leafCount = live.topics.filter(t => t.parent_id).length;
+        if (i === 0) { val.textContent = live.sources.length; detail.textContent = sourceLabel; }
+        else if (i === 1) { val.textContent = live.totalParts; detail.innerHTML = live.totalParts + ' extracted parts'; }
+        else if (i === 2) { val.textContent = live.topics.length; detail.innerHTML = parentCount + ' categories &middot; ' + leafCount + ' leaf topics'; }
+        else { val.textContent = live.totalRecords; detail.innerHTML = live.totalRecords + ' training records'; }
+      } else {
+        if (i === 0) { val.textContent = '3'; detail.textContent = 'chess-tactics.pdf, strategy-guide.pdf, +1'; }
+        else if (i === 1) { val.textContent = '19'; detail.innerHTML = '14 text &middot; 3 tables &middot; 2 images'; }
+        else if (i === 2) { val.textContent = '12'; detail.innerHTML = '5 categories &middot; 7 leaf topics'; }
+        else { val.textContent = '150'; detail.innerHTML = '0.82 avg quality &middot; 12.4k tokens'; }
+      }
     });
   }
 }
