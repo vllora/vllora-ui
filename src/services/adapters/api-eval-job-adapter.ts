@@ -25,7 +25,6 @@ interface DbEvalJobResponse {
   readonly error: string | null;
   readonly completed_at: string | null;
   readonly started_at: string | null;
-  readonly polling_snapshot: string | null;
   readonly result: string | null;
   readonly created_at: string;
   readonly updated_at: string;
@@ -42,7 +41,6 @@ function mapToFe(db: DbEvalJobResponse): EvalJob {
     error: db.error ?? undefined,
     completedAt: db.completed_at ? new Date(db.completed_at).getTime() : undefined,
     startedAt: db.started_at ? new Date(db.started_at).getTime() : undefined,
-    pollingSnapshot: db.polling_snapshot ? JSON.parse(db.polling_snapshot) : undefined,
     result: db.result ? JSON.parse(db.result) : undefined,
     createdAt: new Date(db.created_at).getTime(),
   };
