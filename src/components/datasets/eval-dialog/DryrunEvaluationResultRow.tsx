@@ -1,243 +1,103 @@
 /**
  * DryrunEvaluationResultRow
  *
- * Displays a single evaluation result row with status indicator, score, and message.
- * Shows logs in a popover when available.
+ * Clean, minimal row for evaluation results.
+ * Columns: # | Input (user question) | Score (colored) | Status (✓/✗) | Logs
  */
 
-import { useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { AlertCircle, CheckCircle2, ChevronRight, ChevronDown, Copy, Check } from "lucide-react";
 import type { FlatEvaluationResult } from "@/services/finetune-api";
 import { getScoreColorClass, formatScore } from "@/utils/parse-score-breakdown";
 import { LogsPopover } from "./LogsPopover";
 
-type EvaluationResult = FlatEvaluationResult;
-
 interface DryrunEvaluationResultRowProps {
-  result: EvaluationResult;
-  index: number;
-  isExpandable?: boolean;
-  isExpanded?: boolean;
-  isHighlighted?: boolean;
-  onClick?: () => void;
-  onRecordIdClick?: (recordId: string) => void;
+  readonly result: FlatEvaluationResult;
+  readonly index: number;
+  readonly isHighlighted?: boolean;
+  readonly onClick?: () => void;
 }
 
-/**
- * Highlights keywords in error/reason text with styled badges
- */
-function HighlightedText({ text }: { text: string }) {
-  // Keywords to highlight (common error patterns)
-  const keywords = [
-    "model",
-    "model_params",
-    "completion_params",
-    "prompt_v2",
-    "required",
-    "error",
-    "failed",
-    "timeout",
-    "invalid",
-  ];
-
-  // Split text by keywords and highlight them
-  const parts: Array<{ text: string; isKeyword: boolean }> = [];
-  let remaining = text;
-
-  while (remaining.length > 0) {
-    let foundKeyword = false;
-    for (const keyword of keywords) {
-      const lowerRemaining = remaining.toLowerCase();
-      const index = lowerRemaining.indexOf(keyword.toLowerCase());
-      if (index !== -1) {
-        // Add text before keyword
-        if (index > 0) {
-          parts.push({ text: remaining.slice(0, index), isKeyword: false });
-        }
-        // Add keyword
-        parts.push({
-          text: remaining.slice(index, index + keyword.length),
-          isKeyword: true,
-        });
-        remaining = remaining.slice(index + keyword.length);
-        foundKeyword = true;
-        break;
-      }
-    }
-    if (!foundKeyword) {
-      parts.push({ text: remaining, isKeyword: false });
-      break;
-    }
-  }
-
-  return (
-    <span>
-      {parts.map((part, i) =>
-        part.isKeyword ? (
-          <code
-            key={i}
-            className="mx-0.5 px-1 py-0.5 rounded bg-red-500/10 text-red-400 font-mono text-[11px]"
-          >
-            {part.text}
-          </code>
-        ) : (
-          <span key={i}>{part.text}</span>
-        )
-      )}
-    </span>
-  );
-}
-
-/** Extract a short human-readable label from the evaluation row data */
-function getRecordLabel(row?: { messages?: unknown[]; [key: string]: unknown }): string | null {
-  if (!row?.messages || !Array.isArray(row.messages)) return null;
-  // Find the first user message to use as label
+/** Extract the first user message from the row data as the input text */
+function getInputText(row?: { messages?: unknown[]; [key: string]: unknown }): string {
+  if (!row?.messages || !Array.isArray(row.messages)) return "—";
   const userMsg = row.messages.find(
-    (m: any) => m?.role === 'user' && typeof m?.content === 'string',
+    (m: unknown) => {
+      const msg = m as Record<string, unknown>;
+      return msg?.role === "user" && typeof msg?.content === "string";
+    },
   ) as { content: string } | undefined;
-  if (!userMsg) return null;
-  const text = userMsg.content.trim();
-  return text.length > 40 ? `${text.slice(0, 37)}...` : text;
-}
-
-function RecordIdCell({
-  recordId,
-  row,
-  onNavigate,
-}: {
-  recordId: string;
-  row?: { messages?: unknown[]; [key: string]: unknown };
-  onNavigate: (e: React.MouseEvent) => void;
-}) {
-  const [copied, setCopied] = useState(false);
-  const shortId = recordId.length > 8 ? recordId.slice(0, 8) : recordId;
-  const label = getRecordLabel(row) || shortId;
-
-  const handleCopy = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    navigator.clipboard.writeText(recordId);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  }, [recordId]);
-
-  return (
-    <div className="flex-1 min-w-[96px] py-1 pr-2 group/id">
-      <div className="flex items-center gap-0.5">
-        <button
-          className="text-[11px] text-[rgb(var(--theme-400))] hover:text-[rgb(var(--theme-300))] hover:underline transition-colors truncate max-w-[180px]"
-          onClick={onNavigate}
-          title={`Go to record ${recordId}`}
-        >
-          {label}
-        </button>
-        <button
-          onClick={handleCopy}
-          className="opacity-0 group-hover/id:opacity-100 p-0.5 text-zinc-600 hover:text-zinc-300 transition-all"
-          title="Copy full ID"
-        >
-          {copied ? (
-            <Check className="h-2.5 w-2.5 text-emerald-400" />
-          ) : (
-            <Copy className="h-2.5 w-2.5" />
-          )}
-        </button>
-      </div>
-    </div>
-  );
+  if (!userMsg) return "—";
+  return userMsg.content.trim();
 }
 
 export function DryrunEvaluationResultRow({
   result,
   index,
-  isExpandable,
-  isExpanded,
   isHighlighted,
   onClick,
-  onRecordIdClick,
 }: DryrunEvaluationResultRowProps) {
   const isSuccess = result.status === "completed" && !result.error_message;
   const isFailed = result.status === "failed" || !!result.error_message;
   const isPending = result.status === "pending" || result.status === "running";
   const hasLogs = result.logs && result.logs.length > 0;
-
-  // Show appropriate message based on status
-  const message = isPending
-    ? "Waiting for evaluation..."
-    : result.error_message || result.reason || "Evaluation completed";
+  const inputText = getInputText(result.row);
 
   return (
     <div
       className={cn(
-        "flex items-center border-t border-zinc-800/40 first:border-t-0",
-        isExpandable ? "cursor-pointer hover:bg-zinc-800/25" : "h-full",
-        isExpanded && "bg-zinc-800/20 border-l-2 border-l-[rgb(var(--theme-500))]",
-        !isExpanded && "border-l-2 border-l-transparent",
-        isHighlighted && "animate-record-highlight"
+        "group flex items-center border-b border-zinc-800/40 h-[38px]",
+        onClick && "cursor-pointer hover:bg-zinc-800/20",
+        isHighlighted && "animate-record-highlight",
       )}
-      style={{ minHeight: 34 }}
       onClick={onClick}
     >
-      {/* Expand chevron / empty column */}
-      <div className="w-6 shrink-0 flex items-center justify-center">
-        {isExpandable ? (
-          isExpanded ? (
-            <ChevronDown className="h-3 w-3 text-zinc-400" />
-          ) : (
-            <ChevronRight className="h-3 w-3 text-zinc-600" />
-          )
-        ) : null}
-      </div>
-
-      {/* Row index column */}
-      <div className="w-12 shrink-0 py-1.5 pr-2 font-mono text-[11px] text-zinc-500 tabular-nums">
+      {/* # */}
+      <div className="w-10 shrink-0 px-3 font-mono text-[11px] text-zinc-600 tabular-nums">
         {index + 1}
       </div>
 
-      {/* Record ID column — only shown when onRecordIdClick is provided */}
-      {onRecordIdClick && (
-        <RecordIdCell
-          recordId={result.dataset_row_id}
-          row={result.row}
-          onNavigate={(e) => {
-            e.stopPropagation();
-            onRecordIdClick(result.dataset_row_id);
-          }}
-        />
-      )}
+      {/* Input */}
+      <div className={cn(
+        "flex-1 min-w-0 pr-4 text-[12px] text-zinc-300 truncate",
+        onClick && "group-hover:underline group-hover:text-zinc-100",
+      )}>
+        {inputText}
+      </div>
 
-      {/* Score column */}
-      <div className="w-16 shrink-0 py-1.5 pr-2">
-        {result.score != null && isSuccess ? (
-          <span className={cn("font-mono text-[11px] font-semibold tabular-nums", getScoreColorClass(result.score))}>
+      {/* Score */}
+      <div className="w-16 shrink-0 text-right pr-4">
+        {result.score != null && !isPending ? (
+          <span
+            className={cn(
+              "font-mono text-[13px] font-semibold tabular-nums",
+              isSuccess
+                ? getScoreColorClass(result.score)
+                : "text-zinc-500",
+            )}
+          >
             {formatScore(result.score)}
           </span>
         ) : isPending ? (
-          <div className="h-3 w-3 rounded-full border-2 border-zinc-600 border-t-zinc-400 animate-spin" />
+          <div className="inline-block h-3 w-3 rounded-full border-2 border-zinc-600 border-t-zinc-400 animate-spin" />
         ) : (
-          <span className="font-mono text-[11px] text-zinc-600">-</span>
+          <span className="font-mono text-[11px] text-zinc-600">—</span>
         )}
       </div>
 
-      {/* Status column */}
-      <div className="w-12 shrink-0 py-1.5 pr-2 flex items-center">
+      {/* Status */}
+      <div className="w-16 shrink-0 text-right pr-4 text-[12px]">
         {isSuccess ? (
-          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/80" />
+          <span className="text-emerald-400">✓ Pass</span>
         ) : isFailed ? (
-          <AlertCircle className="h-3.5 w-3.5 text-red-400/80" />
-        ) : (
-          <div className="h-3 w-3 rounded-full border-2 border-zinc-700 border-t-zinc-500 animate-spin" />
-        )}
+          <span className="text-red-400">✗ Fail</span>
+        ) : isPending ? (
+          <span className="text-zinc-600">…</span>
+        ) : null}
       </div>
 
-      {/* Message/Reasoning column */}
-      <div className="flex-[2] py-1.5 pr-2 text-[11px] text-zinc-500 truncate min-w-0">
-        {isFailed ? <HighlightedText text={message} /> : message}
-      </div>
-
-      {/* Logs button column */}
+      {/* Logs */}
       <div className="w-10 shrink-0 flex items-center justify-center">
-        {hasLogs && <LogsPopover logs={result.logs!} rowIndex={index} />}
+        {hasLogs ? <LogsPopover logs={result.logs!} rowIndex={index} /> : null}
       </div>
     </div>
   );

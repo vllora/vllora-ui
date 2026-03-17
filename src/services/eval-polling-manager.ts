@@ -4,13 +4,13 @@
  * Singleton service that manages evaluation job lifecycle.
  *
  * Architecture:
- * - FE polls cloud-proxy for PROGRESS (in-memory only, never persisted to BE)
+ * - FE polls cloud-proxy for PROGRESS (single call per cycle, no BE round-trip)
  * - BE state tracker handles STATUS tracking + SCORE WRITEBACK independently
  * - Internal emitter events for UI updates (no SSE)
  * - On-demand refresh when user clicks into job detail
  */
 
-import type { StartEvalParams } from '@/types/eval-job';
+import type { EvalJob, StartEvalParams } from '@/types/eval-job';
 import { evalJobService } from './service-registry';
 import {
   createEvaluation,
@@ -56,6 +56,18 @@ function friendlyEvalError(error: unknown): string {
 }
 
 // =============================================================================
+// Types
+// =============================================================================
+
+/** Minimal job info needed for polling (stored in-memory, no BE re-fetch) */
+interface PollingJobInfo {
+  readonly jobId: string;
+  readonly evaluationRunId: string;
+  readonly workflowId: string;
+  readonly sampleSize: number;
+}
+
+// =============================================================================
 // Constants
 // =============================================================================
 
@@ -75,6 +87,8 @@ class EvalJobManager {
   private readonly pollingIntervals = new Map<string, ReturnType<typeof setInterval>>();
   /** Consecutive error count per job */
   private readonly consecutiveErrors = new Map<string, number>();
+  /** In-memory job info for active polls (avoids BE round-trip) */
+  private readonly pollingJobs = new Map<string, PollingJobInfo>();
 
   private constructor() {}
 
@@ -179,6 +193,8 @@ class EvalJobManager {
   /**
    * On-demand refresh: fetch fresh metrics from cloud proxy.
    * Used when user clicks into job detail or catch-up after page refresh.
+   * This is the ONLY place we need evalJobService.get() — for one-off refreshes
+   * where the caller doesn't have the full job object.
    */
   async refreshJob(jobId: string): Promise<void> {
     const job = await evalJobService.get(jobId);
@@ -194,26 +210,39 @@ class EvalJobManager {
       (result.status === 'completed' || result.status === 'failed') &&
       job.status !== result.status
     ) {
-      await this.handleJobComplete(jobId, result);
+      await this.handleJobComplete(job, result);
     }
   }
 
   // =============================================================================
-  // Polling (cloud-proxy for progress)
+  // Polling (cloud-proxy only — no BE round-trip per cycle)
   // =============================================================================
 
-  startPolling(jobId: string): void {
-    if (this.pollingIntervals.has(jobId)) return;
+  /**
+   * Start polling for a job. Stores job info in-memory so each poll cycle
+   * only makes ONE call: directly to cloud via gateway proxy.
+   */
+  startPolling(job: EvalJob): void {
+    if (this.pollingIntervals.has(job.id)) return;
+    if (!job.evaluationRunId) return;
 
-    this.consecutiveErrors.set(jobId, 0);
+    const jobInfo: PollingJobInfo = {
+      jobId: job.id,
+      evaluationRunId: job.evaluationRunId,
+      workflowId: job.workflowId,
+      sampleSize: job.sampleSize,
+    };
+
+    this.pollingJobs.set(job.id, jobInfo);
+    this.consecutiveErrors.set(job.id, 0);
 
     const interval = setInterval(() => {
-      this.pollJob(jobId);
+      this.pollJob(jobInfo);
     }, POLL_INTERVAL_MS);
-    this.pollingIntervals.set(jobId, interval);
+    this.pollingIntervals.set(job.id, interval);
 
     // Immediate first poll
-    this.pollJob(jobId);
+    this.pollJob(jobInfo);
   }
 
   stopPolling(jobId: string): void {
@@ -223,53 +252,45 @@ class EvalJobManager {
       this.pollingIntervals.delete(jobId);
     }
     this.consecutiveErrors.delete(jobId);
+    this.pollingJobs.delete(jobId);
   }
 
-  private async pollJob(jobId: string): Promise<void> {
-    const job = await evalJobService.get(jobId);
-    if (!job) {
-      this.stopPolling(jobId);
-      return;
-    }
-
-    // BE state tracker may have already set a terminal status before FE polled.
-    // If so, do one final cloud fetch to get results before stopping.
-    if (job.status !== 'running') {
-      if (job.evaluationRunId) {
-        try {
-          const result = await getEvaluationResult(job.evaluationRunId);
-          if (result.status === 'completed' || result.status === 'failed') {
-            await this.handleJobComplete(jobId, result);
-          }
-        } catch {
-          // Best-effort: if fetch fails, just stop polling
-        }
-      }
-      this.stopPolling(jobId);
-      return;
-    }
+  private async pollJob(jobInfo: PollingJobInfo): Promise<void> {
+    const { jobId, evaluationRunId, workflowId } = jobInfo;
 
     try {
-      // Fetch progress from cloud via gateway proxy
-      const result = await getEvaluationResult(job.evaluationRunId);
+      // Single call: fetch progress from cloud via gateway proxy
+      const result = await getEvaluationResult(evaluationRunId);
 
       this.consecutiveErrors.set(jobId, 0);
 
-      // Emit in-memory snapshot for progress UI (no PATCH to BE — BE has its own polling)
-      const jobWithSnapshot = { ...job, pollingSnapshot: result };
+      // Emit in-memory snapshot for progress UI
+      const jobWithSnapshot: EvalJob = {
+        id: jobId,
+        evaluationRunId,
+        workflowId,
+        sampleSize: jobInfo.sampleSize,
+        status: 'running',
+        createdAt: 0,
+        pollingSnapshot: result,
+      };
       emitter.emit('vllora_eval_job_update', { jobId, job: jobWithSnapshot });
 
       // Notify records table if scores are available
       if ((result.completed_rows ?? 0) > 0) {
         emitter.emit('vllora_record_scores_updated', {
-          workflowId: job.workflowId,
+          workflowId,
           scoreType: 'eval',
         });
       }
 
       // If cloud says done, process results
       if (result.status === 'completed' || result.status === 'failed') {
-        await this.handleJobComplete(jobId, result);
+        // Fetch full job from BE for handleJobComplete (needs sampleSize, etc.)
+        const fullJob = await evalJobService.get(jobId);
+        if (fullJob) {
+          await this.handleJobComplete(fullJob, result);
+        }
       }
     } catch (error) {
       console.error(`[EvalJobManager] Poll failed for ${jobId}:`, error);
@@ -281,7 +302,7 @@ class EvalJobManager {
         this.stopPolling(jobId);
         const lastError = error instanceof Error ? error.message : String(error);
         const errorMsg = lastError.includes('not found')
-          ? `Evaluation run not found on server (ID: ${job.evaluationRunId})`
+          ? `Evaluation run not found on server (ID: ${evaluationRunId})`
           : `Unable to reach evaluation server: ${lastError}`;
         const unreachableJob = await evalJobService.update(jobId, {
           status: 'failed',
@@ -291,7 +312,7 @@ class EvalJobManager {
         if (unreachableJob) {
           emitter.emit('vllora_eval_job_update', { jobId, job: unreachableJob });
         }
-        await this.markWorkflowStepFailed(job.workflowId);
+        await this.markWorkflowStepFailed(workflowId);
         toast.error(`Evaluation failed: ${errorMsg}`);
       }
     }
@@ -302,13 +323,10 @@ class EvalJobManager {
   // =============================================================================
 
   private async handleJobComplete(
-    jobId: string,
+    job: EvalJob,
     result: Awaited<ReturnType<typeof getEvaluationResult>>
   ): Promise<void> {
-    this.stopPolling(jobId);
-
-    const job = await evalJobService.get(jobId);
-    if (!job) return;
+    this.stopPolling(job.id);
 
     try {
       if (result.status === 'failed') {
@@ -322,18 +340,18 @@ class EvalJobManager {
             ? `${failedCount}/${totalCount} rows failed during evaluation`
             : 'Evaluation failed on the cloud server';
 
-        const failedJob = await evalJobService.update(jobId, {
+        const failedJob = await evalJobService.update(job.id, {
           status: 'failed',
           error: errorDetail,
           completedAt: Date.now(),
         });
         if (failedJob) {
-          emitter.emit('vllora_eval_job_update', { jobId, job: failedJob });
+          emitter.emit('vllora_eval_job_update', { jobId: job.id, job: failedJob });
         }
         await this.markWorkflowStepFailed(job.workflowId);
         toast.error(`Evaluation failed: ${errorDetail}`);
         emitter.emit('vllora_eval_job_completed', {
-          jobId,
+          jobId: job.id,
           workflowId: job.workflowId,
           verdict: 'FAILED',
         });
@@ -360,14 +378,14 @@ class EvalJobManager {
 
       await datasetService.updateEvalStats(job.workflowId, evalStats);
 
-      const completedJob = await evalJobService.update(jobId, {
+      const completedJob = await evalJobService.update(job.id, {
         status: 'completed',
         completedAt: Date.now(),
         result: evalStats,
         error: undefined,
       });
       if (completedJob) {
-        emitter.emit('vllora_eval_job_update', { jobId, job: completedJob });
+        emitter.emit('vllora_eval_job_update', { jobId: job.id, job: completedJob });
       }
 
       // Update workflow step data
@@ -409,20 +427,20 @@ class EvalJobManager {
       }
 
       emitter.emit('vllora_eval_job_completed', {
-        jobId,
+        jobId: job.id,
         workflowId: job.workflowId,
         verdict,
       });
     } catch (error) {
       console.error('[EvalJobManager] Failed to process results:', error);
       const friendly = friendlyEvalError(error);
-      const errorJob = await evalJobService.update(jobId, {
+      const errorJob = await evalJobService.update(job.id, {
         status: 'failed',
         error: friendly,
         completedAt: Date.now(),
       });
       if (errorJob) {
-        emitter.emit('vllora_eval_job_update', { jobId, job: errorJob });
+        emitter.emit('vllora_eval_job_update', { jobId: job.id, job: errorJob });
       }
       await this.markWorkflowStepFailed(job.workflowId);
       toast.error('Failed to process evaluation results', { description: friendly });

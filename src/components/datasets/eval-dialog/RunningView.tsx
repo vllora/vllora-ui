@@ -95,7 +95,12 @@ export function RunningView({ job, progress, onRecordIdClick }: RunningViewProps
 
       {/* Results table - flexible height */}
       <div className="flex-1 min-h-0 mt-2">
-        <ResultsTable results={results} fillHeight onRecordIdClick={onRecordIdClick} />
+        <ResultsTable
+          results={results}
+          totalRows={totalRows}
+          fillHeight
+          onRowClick={onRecordIdClick ? (r) => onRecordIdClick(r.dataset_row_id) : undefined}
+        />
       </div>
     </div>
   );

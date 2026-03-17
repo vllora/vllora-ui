@@ -14,7 +14,7 @@ import {
 } from "@/utils/parse-score-breakdown";
 import { ResultsTable } from "@/components/datasets/eval-dialog/ResultsTable";
 import { EpochScoresTable, type EpochScore } from "./EpochScoresTable";
-import { emitter, setPendingHighlight } from "@/utils/eventEmitter";
+
 
 interface PerRowDetailsSectionProps {
   results: FinetuneEvalResultsResponse["results"];
@@ -27,7 +27,7 @@ interface RowEpochData {
   criteriaNames: string[];
 }
 
-export function PerRowDetailsSection({ results, workflowId }: PerRowDetailsSectionProps) {
+export function PerRowDetailsSection({ results }: PerRowDetailsSectionProps) {
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
 
   // Auto-expand row when navigating from QualityIndicator finetune score click
@@ -100,15 +100,6 @@ export function PerRowDetailsSection({ results, workflowId }: PerRowDetailsSecti
     return <EpochScoresTable epochs={data.epochs} criteriaNames={data.criteriaNames} />;
   }, [epochDataMap]);
 
-  const handleRecordIdClick = useCallback((recordId: string) => {
-    if (!workflowId) return;
-    setPendingHighlight(recordId);
-    emitter.emit('vllora_switch_tab', { workflowId, tab: 'records' });
-    setTimeout(() => {
-      emitter.emit('vllora_highlight_record', { recordId });
-    }, 150);
-  }, [workflowId]);
-
   if (flatResults.length === 0) {
     return (
       <div className="text-xs text-muted-foreground py-2">
@@ -123,7 +114,6 @@ export function PerRowDetailsSection({ results, workflowId }: PerRowDetailsSecti
       expandedRowId={expandedRowId}
       onRowClick={handleRowClick}
       renderExpandedContent={renderExpandedContent}
-      onRecordIdClick={workflowId ? handleRecordIdClick : undefined}
     />
   );
 }

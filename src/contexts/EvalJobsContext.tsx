@@ -78,7 +78,7 @@ function useEvalJobs(props: {
       const isActive = job.status === 'running';
       if (isActive && job.evaluationRunId && !pollingJobIdsRef.current.has(job.id)) {
         pollingJobIdsRef.current.add(job.id);
-        evalPollingManager.startPolling(job.id);
+        evalPollingManager.startPolling(job);
       } else if (!isActive && pollingJobIdsRef.current.has(job.id)) {
         pollingJobIdsRef.current.delete(job.id);
         evalPollingManager.stopPolling(job.id);

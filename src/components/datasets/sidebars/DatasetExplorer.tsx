@@ -62,7 +62,7 @@ interface DatasetExplorerProps {
 export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
   const { dataset, records, isGeneratingTraces } = DatasetDetailConsumer();
   const { sources } = KnowledgeSourcesConsumer();
-  const { jobs: dryRunJobs, runningJob: runningEval, startDryRun } = EvalJobsConsumer();
+  const { jobs: dryRunJobs, startDryRun } = EvalJobsConsumer();
   const { filteredJobs: finetuneJobs, loadJobs: loadFinetuneJobs } = FinetuneJobsConsumer();
   const { openTab } = WorkspaceTabsConsumer();
 
@@ -274,8 +274,6 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
           onClick: () => {
             if (!hasGraderScript) {
               toast.info("Configure and save a grader script first.");
-            } else if (runningEval) {
-              toast.info("An evaluation is already running.");
             } else {
               setShowNewEvalDialog(true);
             }

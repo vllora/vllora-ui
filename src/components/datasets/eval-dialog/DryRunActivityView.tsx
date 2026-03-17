@@ -21,7 +21,7 @@ import { RunningView } from "./RunningView";
 import { RunsSidebar } from "./RunsSidebar";
 import { flattenEvaluationResults } from "@/services/finetune-api";
 import { cn } from "@/lib/utils";
-import { emitter, setPendingHighlight } from "@/utils/eventEmitter";
+import { emitter } from "@/utils/eventEmitter";
 import type { EvalJob } from "@/types/eval-job";
 import { getJobTotalRows, getJobCompletedRows } from "@/types/eval-job";
 import { EvaluatorVersionBadge } from "@/components/shared/EvaluatorVersionBadge";
@@ -269,14 +269,7 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
                 job={job}
                 progress={pct}
                 onRecordIdClick={(recordId) => {
-                  // Store pending highlight so RecordsTable can pick it up on mount
-                  // (the tab switch causes conditional re-mount, so the event listener
-                  //  may not be registered yet when the event fires)
-                  setPendingHighlight(recordId);
-                  emitter.emit('vllora_switch_tab', { workflowId, tab: 'records' });
-                  setTimeout(() => {
-                    emitter.emit('vllora_highlight_record', { recordId });
-                  }, 500);
+                  emitter.emit('vllora_navigate_to_record', { workflowId, recordId });
                 }}
               />
             </div>
@@ -341,12 +334,8 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
               <ResultsTable
                 results={evaluationResults}
                 fillHeight
-                onRecordIdClick={(recordId) => {
-                  setPendingHighlight(recordId);
-                  emitter.emit('vllora_switch_tab', { workflowId, tab: 'records' });
-                  setTimeout(() => {
-                    emitter.emit('vllora_highlight_record', { recordId });
-                  }, 500);
+                onRowClick={(result) => {
+                  emitter.emit('vllora_navigate_to_record', { workflowId, recordId: result.dataset_row_id });
                 }}
               />
             </div>

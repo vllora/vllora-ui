@@ -158,6 +158,8 @@ type VlloraEvents = {
   vllora_filter_by_source: { workflowId: string; sourceId: string | null };
   // Navigate to and highlight a record in the records table
   vllora_highlight_record: { recordId: string };
+  // Navigate to a record's topic tab and highlight it (from eval results click)
+  vllora_navigate_to_record: { workflowId: string; recordId: string };
 };
 
 // ============================================================================

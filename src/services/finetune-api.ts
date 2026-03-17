@@ -243,7 +243,7 @@ export interface CreateEvaluationResponse {
 /** Individual evaluation entry within an epoch */
 export interface EpochEntry {
   dataset_row_id?: string;
-  /** Cloud API returns `workflow_row_id` (not `dataset_row_id`) */
+  /** Cloud DB row ID — matches our local record ID (same UUID used as PK) */
   workflow_row_id?: string;
   status?: string;
   score?: number | null;

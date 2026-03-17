@@ -13,7 +13,7 @@ import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { DatasetDetailConsumer, type ViewMode } from "@/contexts/DatasetDetailContext";
-import { emitter } from "@/utils/eventEmitter";
+import { emitter, setPendingHighlight } from "@/utils/eventEmitter";
 import { DeleteConfirmationDialog } from "./DeleteConfirmationDialog";
 import { AssignTopicDialog } from "./AssignTopicDialog";
 import { IngestDataDialog } from "./IngestDataDialog";
@@ -347,6 +347,41 @@ export function DatasetDetailContentV2() {
       emitter.off("vllora_open_drawer", handleOpenDrawer);
     };
   }, [workflowId]);
+
+  // Navigate to a record's topic tab and highlight it (from eval results click)
+  useEffect(() => {
+    const handleNavigateToRecord = ({ workflowId: wfId, recordId }: { workflowId: string; recordId: string }) => {
+      if (wfId !== workflowId) return;
+
+      const record = sortedRecords.find(r => r.id === recordId);
+      const topic = record?.topic;
+
+      if (topic) {
+        // Open the leaf topic's tab and switch to table view
+        const tabPath = `data/${topic}`;
+        const topicLabel = topic.split("/").pop() ?? topic;
+        openTabRef.current(tabPath, topicLabel, false);
+        window.dispatchEvent(new CustomEvent("vllora_switch_view", {
+          detail: { viewMode: "table" },
+        }));
+      } else {
+        // No topic — open "All Topics" data tab
+        openTabRef.current("data", "data", false);
+        window.dispatchEvent(new CustomEvent("vllora_switch_view", {
+          detail: { viewMode: "table" },
+        }));
+      }
+
+      // Highlight the record after the view mounts
+      setPendingHighlight(recordId);
+      setTimeout(() => {
+        emitter.emit("vllora_highlight_record", { recordId });
+      }, 500);
+    };
+
+    emitter.on("vllora_navigate_to_record", handleNavigateToRecord);
+    return () => { emitter.off("vllora_navigate_to_record", handleNavigateToRecord); };
+  }, [workflowId, sortedRecords]);
 
   // 8.1: Show toast when data generation completes (Lucy action attribution)
   useEffect(() => {
