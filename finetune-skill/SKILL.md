@@ -428,19 +428,178 @@ curl -X PATCH http://localhost:9090/finetune/workflows/$WORKFLOW_ID/evaluator \
   -d "{\"evaluator\": {\"type\": \"js\", \"config\": {\"script\": $(echo "$GRADER_SCRIPT" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')}}}"
 ```
 
-**Done!** Tell the user:
+### Step 7: Run Evaluation
 
-> Your finetune dataset is ready in the vLLora UI. Open **http://localhost:5173**, select the **"My Project"** workflow, and Lucy will guide you through evaluation, iteration, and training.
+Run the grader against a rollout model (e.g., `gpt-4o-mini`) that generates responses for each prompt. The gateway auto-uploads your local records + evaluator to the cloud when you create an evaluation.
 
-### What Lucy Handles Next
+**Using the helper script** (recommended):
+```bash
+uv run scripts/run_evaluation.py --dataset-id $WORKFLOW_ID --output evaluations/eval-v1.json
+```
 
-Once the user opens the vLLora UI, Lucy takes over with visual tools for:
-- **Evaluation**: Run the grader against a rollout model, see per-record scores
-- **Iteration**: Tune the grader, fix weak records, re-evaluate until scores are good
-- **Training**: Start training jobs, monitor metrics in real-time, view loss curves
-- **Deployment**: Deploy the fine-tuned model and test it
+This creates the eval run, polls every 3 seconds, prints summary (average score, pass/fail counts), and saves results.
 
-These interactive tasks are better in the UI — visual score distributions, per-record drilldown, real-time metrics charts, and Lucy's guided iteration loop.
+**Or manually:**
+```bash
+# Create evaluation (dataset_id = your workflow_id — gateway auto-uploads)
+EVAL=$(curl -s -X POST http://localhost:9090/finetune/evaluations \
+  -H "Content-Type: application/json" \
+  -d "{\"dataset_id\": \"$WORKFLOW_ID\", \"rollout_model_params\": {\"model\": \"gpt-4o-mini\"}}")
+EVAL_ID=$(echo "$EVAL" | python3 -c "import sys,json; print(json.load(sys.stdin)['evaluation_run_id'])")
+
+# Poll until status == "completed" (every 3 seconds)
+while true; do
+  RESULT=$(curl -s http://localhost:9090/finetune/evaluations/$EVAL_ID)
+  STATUS=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+  echo "Status: $STATUS"
+  [ "$STATUS" = "completed" ] && break
+  [ "$STATUS" = "failed" ] && echo "FAILED" && exit 1
+  sleep 3
+done
+
+# Print summary
+echo "$RESULT" | python3 -c "
+import sys,json
+r=json.load(sys.stdin)
+s=r.get('summary',{})
+print(f'Average: {s.get(\"average_score\",\"N/A\")}')
+print(f'Passed: {s.get(\"passed_count\",\"N/A\")}, Failed: {s.get(\"failed_count\",\"N/A\")}')
+"
+```
+
+**Tip:** Use `--limit 10` for a quick test before running on the full dataset.
+
+Save results to `evaluations/eval-v1.json` — you'll compare against later iterations.
+
+### Step 8: Analyze & Iterate
+
+Read the eval results and decide whether to proceed to training or iterate.
+
+**Decision framework:**
+
+| Verdict | Criteria | Action |
+|---------|----------|--------|
+| **GO** | avg > 0.6 AND pass rate > 70% | Proceed to Step 9 (Training) |
+| **WARNING** | avg 0.5-0.6 OR pass rate 60-70% | Can train, but iteration may help |
+| **NO-GO** | avg < 0.5 OR pass rate < 60% | Must iterate before training |
+
+**Quick diagnosis:**
+1. **All scores ~0 or ~1** → Grader broken or too lenient — check criteria
+2. **One topic consistently low** → Data problem for that topic — regenerate prompts
+3. **Good responses scoring low** → Grader criteria misaligned with objective
+4. **Contradictory reasons** → LLM judge prompt too vague — make it more specific
+
+**Fixing the grader** (no data re-upload needed):
+```bash
+# Edit grader.js, then update:
+GRADER_SCRIPT=$(cat grader.js)
+curl -X PATCH http://localhost:9090/finetune/workflows/$WORKFLOW_ID/evaluator \
+  -H "Content-Type: application/json" \
+  -d "{\"evaluator\": {\"type\": \"js\", \"config\": {\"script\": $(echo "$GRADER_SCRIPT" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')}}}"
+```
+
+**Fixing the data** (requires re-upload of records):
+- Regenerate weak topics, add edge cases, improve prompt variety
+- Re-validate: `uv run scripts/validate_dataset.py training.jsonl`
+- Re-upload records: `PUT /finetune/workflows/$WORKFLOW_ID/records`
+
+**After each change**, re-run evaluation:
+```bash
+uv run scripts/run_evaluation.py --dataset-id $WORKFLOW_ID --output evaluations/eval-v2.json
+```
+
+**Tracking progress:** Save each eval result to `evaluations/eval-v{N}.json`. Log what changed and scores before/after in `execution-log.md`. Stop iterating when avg > 0.6 AND pass rate > 70%, or after 3+ iterations with no improvement.
+
+See `reference/iteration-strategy.md` for the full 9-part diagnosis framework.
+
+### Step 9: Start Training
+
+Once evaluation scores are satisfactory, start a reinforcement fine-tuning job.
+
+**Base model selection:**
+| Model | Best for |
+|-------|----------|
+| `unsloth/Qwen3.5-4B` | Fast experiments, narrow tasks |
+| Larger models (7B+) | Complex reasoning, broad domains |
+
+Start with the smaller model. Scale up after validation.
+
+**Using the helper script** (recommended):
+```bash
+uv run scripts/start_training.py \
+  --workflow-id $WORKFLOW_ID \
+  --dataset-id $WORKFLOW_ID \
+  --output-model my-finetuned-model \
+  --output training-jobs/job-v1.json
+```
+
+Polls every 15 seconds until training completes (~10-60 min depending on data size).
+
+**Or manually:**
+```bash
+JOB=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "dataset": "'$WORKFLOW_ID'",
+    "base_model": "unsloth/Qwen3.5-4B",
+    "output_model": "my-finetuned-model",
+    "display_name": "Training run 1",
+    "training_config": {
+      "learning_rate": 0.00001,
+      "lora_rank": 8,
+      "gradient_accumulation_steps": 5,
+      "epochs": 2,
+      "batch_size": 5
+    },
+    "inference_parameters": {
+      "max_output_tokens": 1000,
+      "temperature": 1.0,
+      "top_p": 1.0,
+      "response_candidates_count": 2
+    }
+  }')
+JOB_ID=$(echo "$JOB" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+
+# Poll status
+curl -s http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs/$JOB_ID/status
+# Status: pending → running → succeeded | failed
+
+# Monitor metrics (while running)
+curl -s http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs/$JOB_ID/metrics
+```
+
+**Config adjustments:**
+| Situation | Adjustment |
+|-----------|------------|
+| < 50 records | `epochs: 1` (avoid overfitting) |
+| > 500 records | `epochs: 3-4` |
+| Complex task | `lora_rank: 16` |
+| Simple task | `lora_rank: 4` |
+
+**Metrics to watch** (from the metrics endpoint):
+| Metric | Healthy | Warning |
+|--------|---------|---------|
+| `reward` | Trending up | Flat or declining |
+| `kl` | < 0.5, stable | Rising > 1.5x → lower learning rate |
+| `clipped_ratio` | < 0.20 | > 0.70 → increase `max_output_tokens` |
+| `loss` | Decreasing | NaN/Inf → cancel immediately |
+| `frac_reward_zero_std` | < 0.60 | > 0.60 → grader not differentiating |
+
+**After training succeeds:**
+- Test the model with prompts NOT in the training set
+- Compare fine-tuned vs base model behavior
+- If quality is insufficient, return to Step 8 (iterate) or retrain with different config
+
+**Done!** Tell the user their model is ready.
+
+### Using the vLLora UI
+
+The vLLora UI at **http://localhost:5173** provides visual tools for the same steps above:
+- Score distributions and per-record drilldown for evaluation results
+- Real-time training metrics charts and loss curves
+- Interactive grader editing and data management
+
+If the user prefers the visual experience, tell them to open the UI after Step 6.
 
 ## Reference Files (Deep Dives)
 
