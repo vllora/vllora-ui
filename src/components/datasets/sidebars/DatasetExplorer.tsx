@@ -12,7 +12,7 @@
  * - Training Jobs (finetune jobs)
  */
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import {
   FileText,
   BarChart3,
@@ -79,6 +79,24 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
     });
   }, []);
 
+  // Listen for view switch events to sync sidebar selection + tab label (e.g., CoverageMatrix column click)
+  useEffect(() => {
+    const handleSwitchView = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.viewMode === "sources") {
+        const sourceId = detail.sourceId as string | null | undefined;
+        setSelectedNodeId(sourceId ? `knowledge/${sourceId}` : "knowledge/all-sources");
+        // Update tab label to match the selected source
+        const sourceName = sourceId
+          ? sources.find(s => s.id === sourceId)?.name ?? "All Sources"
+          : "All Sources";
+        openTab("data", sourceName);
+      }
+    };
+    window.addEventListener("vllora_switch_view", handleSwitchView);
+    return () => window.removeEventListener("vllora_switch_view", handleSwitchView);
+  }, [sources, openTab]);
+
   // Build topic counts map from records
   const topicCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -99,8 +117,11 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       const sourceId = nodeId === "knowledge/all-sources"
         ? null
         : nodeId.replace("knowledge/", "");
-      // Open "data" tab first so DatasetMainContent mounts and can catch the view switch
-      openTab("data");
+      // Use the source document name as tab label, or "All Sources" for the overview
+      const sourceName = sourceId
+        ? sources.find(s => s.id === sourceId)?.name ?? "All Sources"
+        : "All Sources";
+      openTab("data", sourceName);
       // Dispatch after a tick so the component mounts first
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent("vllora_switch_view", {

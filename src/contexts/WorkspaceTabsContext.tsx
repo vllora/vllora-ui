@@ -188,9 +188,14 @@ export function WorkspaceTabsProvider({ workflowId, initialTabs, children }: Wor
     setActiveTabPath(path);
 
     setTabs((prev) => {
-      // Already open? No tab list changes needed
+      // Already open? Update label if it changed, otherwise no changes needed
       const existing = prev.find((t) => t.path === path);
-      if (existing) return prev;
+      if (existing) {
+        if (label && existing.label !== displayLabel) {
+          return prev.map((t) => t.path === path ? { ...t, label: displayLabel } : t);
+        }
+        return prev;
+      }
 
       if (preview) {
         // Replace existing preview tab (if any)

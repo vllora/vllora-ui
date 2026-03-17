@@ -73,7 +73,11 @@ function AllSourcesView({
 }) {
   const { dataset, records } = DatasetDetailConsumer();
   const hierarchy = dataset?.topicHierarchy?.hierarchy;
-  const [selectedPartState, setSelectedPartState] = useState<{ source: KnowledgeSource; part: KnowledgeSourcePart } | null>(null);
+  const [selectedPartState, setSelectedPartState] = useState<{ source: KnowledgeSource; part: KnowledgeSourcePart } | null>(() => {
+    const firstSource = sources[0];
+    const firstPart = firstSource?.parts[0];
+    return firstSource && firstPart ? { source: firstSource, part: firstPart } : null;
+  });
 
   // Find all parts across all sources for part viewer navigation
   const allParts = useMemo(() => {
@@ -601,7 +605,7 @@ function SingleDocView({ source }: { readonly source: KnowledgeSource }) {
           </div>
 
           {/* Parts outline — I2: grouped by extractionPath */}
-          <div className="rounded-xl border border-border overflow-hidden">
+          <div className="overflow-hidden">
             {hasMultipleGroups ? (
               partGroups.map(group => (
                 <div key={group.path}>
