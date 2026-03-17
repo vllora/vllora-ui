@@ -4,8 +4,8 @@
  * Singleton service that manages evaluation job lifecycle.
  *
  * Architecture:
- * - FE polls cloud-proxy for PROGRESS (cloud is source of truth)
- * - BE state tracker handles STATUS tracking + SCORE WRITEBACK only
+ * - FE polls cloud-proxy for PROGRESS (in-memory only, never persisted to BE)
+ * - BE state tracker handles STATUS tracking + SCORE WRITEBACK independently
  * - Internal emitter events for UI updates (no SSE)
  * - On-demand refresh when user clicks into job detail
  */
@@ -178,14 +178,17 @@ class EvalJobManager {
 
   /**
    * On-demand refresh: fetch fresh metrics from cloud proxy.
-   * Used when user clicks into job detail.
+   * Used when user clicks into job detail or catch-up after page refresh.
    */
   async refreshJob(jobId: string): Promise<void> {
     const job = await evalJobService.get(jobId);
     if (!job || !job.evaluationRunId) return;
 
     const result = await getEvaluationResult(job.evaluationRunId);
-    await evalJobService.update(jobId, { pollingSnapshot: result });
+
+    // Emit in-memory snapshot for UI (no PATCH to BE)
+    const jobWithSnapshot = { ...job, pollingSnapshot: result };
+    emitter.emit('vllora_eval_job_update', { jobId, job: jobWithSnapshot });
 
     if (
       (result.status === 'completed' || result.status === 'failed') &&
@@ -252,13 +255,9 @@ class EvalJobManager {
 
       this.consecutiveErrors.set(jobId, 0);
 
-      // Update job snapshot for progress UI
-      const updatedJob = await evalJobService.update(jobId, {
-        pollingSnapshot: result,
-      });
-      if (updatedJob) {
-        emitter.emit('vllora_eval_job_update', { jobId, job: updatedJob });
-      }
+      // Emit in-memory snapshot for progress UI (no PATCH to BE — BE has its own polling)
+      const jobWithSnapshot = { ...job, pollingSnapshot: result };
+      emitter.emit('vllora_eval_job_update', { jobId, job: jobWithSnapshot });
 
       // Notify records table if scores are available
       if ((result.completed_rows ?? 0) > 0) {
@@ -280,16 +279,20 @@ class EvalJobManager {
 
       if (errorCount >= MAX_CONSECUTIVE_ERRORS) {
         this.stopPolling(jobId);
+        const lastError = error instanceof Error ? error.message : String(error);
+        const errorMsg = lastError.includes('not found')
+          ? `Evaluation run not found on server (ID: ${job.evaluationRunId})`
+          : `Unable to reach evaluation server: ${lastError}`;
         const unreachableJob = await evalJobService.update(jobId, {
           status: 'failed',
-          error: 'Unable to reach evaluation server after multiple attempts',
+          error: errorMsg,
           completedAt: Date.now(),
         });
         if (unreachableJob) {
           emitter.emit('vllora_eval_job_update', { jobId, job: unreachableJob });
         }
         await this.markWorkflowStepFailed(job.workflowId);
-        toast.error('Evaluation failed: unable to reach evaluation server');
+        toast.error(`Evaluation failed: ${errorMsg}`);
       }
     }
   }
@@ -309,16 +312,26 @@ class EvalJobManager {
 
     try {
       if (result.status === 'failed') {
+        // Extract error detail from cloud response
+        const failedCount = result.failed_rows ?? 0;
+        const totalCount = result.total_rows ?? 0;
+        const cloudError = (result as unknown as Record<string, unknown>).error;
+        const errorDetail = typeof cloudError === 'string'
+          ? cloudError
+          : failedCount > 0
+            ? `${failedCount}/${totalCount} rows failed during evaluation`
+            : 'Evaluation failed on the cloud server';
+
         const failedJob = await evalJobService.update(jobId, {
           status: 'failed',
-          error: 'Evaluation failed on backend',
+          error: errorDetail,
           completedAt: Date.now(),
         });
         if (failedJob) {
           emitter.emit('vllora_eval_job_update', { jobId, job: failedJob });
         }
         await this.markWorkflowStepFailed(job.workflowId);
-        toast.error('Evaluation failed');
+        toast.error(`Evaluation failed: ${errorDetail}`);
         emitter.emit('vllora_eval_job_completed', {
           jobId,
           workflowId: job.workflowId,

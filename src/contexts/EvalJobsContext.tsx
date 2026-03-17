@@ -2,7 +2,7 @@
  * EvalJobsContext
  *
  * Provides reactive state for evaluation jobs to UI components.
- * FE polls gateway every 10s for progress (reads BE's polling_snapshot).
+ * FE polls cloud every 10s for progress (in-memory only, BE tracks status independently).
  * SSE removed — polling handles all status detection.
  */
 
@@ -84,11 +84,11 @@ function useEvalJobs(props: {
         evalPollingManager.stopPolling(job.id);
       }
 
-      // Catch-up: if job is terminal but has no results, fetch them now.
+      // Catch-up: if job is terminal but has no analyzed results, fetch from cloud now.
       // This handles the race where the BE state tracker set "completed"
       // before the FE polling manager fetched results from the cloud API.
       const isTerminal = job.status === 'completed' || job.status === 'failed';
-      const hasResults = (job.pollingSnapshot?.completed_rows ?? 0) > 0;
+      const hasResults = !!job.result;
       if (isTerminal && !hasResults && job.evaluationRunId && !refreshedJobIdsRef.current.has(job.id)) {
         refreshedJobIdsRef.current.add(job.id);
         evalPollingManager.refreshJob(job.id).then(() => loadJobs());

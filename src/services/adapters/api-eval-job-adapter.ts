@@ -106,11 +106,7 @@ export const apiEvalJobAdapter: EvalJobService = {
         ? new Date(updates.startedAt).toISOString()
         : null;
     }
-    if (updates.pollingSnapshot !== undefined) {
-      payload.polling_snapshot = updates.pollingSnapshot
-        ? JSON.stringify(updates.pollingSnapshot)
-        : null;
-    }
+    // pollingSnapshot is in-memory only — never persisted to BE
     if (updates.result !== undefined) {
       payload.result = updates.result
         ? JSON.stringify(updates.result)
