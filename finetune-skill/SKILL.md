@@ -512,30 +512,12 @@ uv run scripts/run_evaluation.py --dataset-id $WORKFLOW_ID --output evaluations/
 
 See `reference/iteration-strategy.md` for the full 9-part diagnosis framework.
 
-### Step 9: Start Training
+### Step 9: Train & Iterate
 
-Once evaluation scores are satisfactory, start a reinforcement fine-tuning job.
+Start training and delegate monitoring to a background subagent. If anomalies are detected, diagnose the issue, adjust, and start a new iteration. **Max 5 iterations.**
 
-**Base model selection:**
-| Model | Best for |
-|-------|----------|
-| `unsloth/Qwen3.5-4B` | Fast experiments, narrow tasks |
-| Larger models (7B+) | Complex reasoning, broad domains |
+#### 9a. Start the first training run
 
-Start with the smaller model. Scale up after validation.
-
-**Using the helper script** (recommended):
-```bash
-uv run scripts/start_training.py \
-  --workflow-id $WORKFLOW_ID \
-  --dataset-id $WORKFLOW_ID \
-  --output-model my-finetuned-model \
-  --output training-jobs/job-v1.json
-```
-
-Polls every 15 seconds until training completes (~10-60 min depending on data size).
-
-**Or manually:**
 ```bash
 JOB=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs \
   -H "Content-Type: application/json" \
@@ -559,16 +541,18 @@ JOB=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs
     }
   }')
 JOB_ID=$(echo "$JOB" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-
-# Poll status
-curl -s http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs/$JOB_ID/status
-# Status: pending → running → succeeded | failed
-
-# Monitor metrics (while running)
-curl -s http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs/$JOB_ID/metrics
+echo "Started job: $JOB_ID"
 ```
 
-**Config adjustments:**
+**Base model selection:**
+| Model | Best for |
+|-------|----------|
+| `unsloth/Qwen3.5-4B` | Fast experiments, narrow tasks |
+| Larger models (7B+) | Complex reasoning, broad domains |
+
+Start with the smaller model. After 2 failed iterations on the same model, escalate: `Qwen3.5-4B` → `7B` → larger.
+
+**Config adjustments (initial):**
 | Situation | Adjustment |
 |-----------|------------|
 | < 50 records | `epochs: 1` (avoid overfitting) |
@@ -576,21 +560,121 @@ curl -s http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs/$JOB_ID/metri
 | Complex task | `lora_rank: 16` |
 | Simple task | `lora_rank: 4` |
 
-**Metrics to watch** (from the metrics endpoint):
-| Metric | Healthy | Warning |
-|--------|---------|---------|
-| `reward` | Trending up | Flat or declining |
-| `kl` | < 0.5, stable | Rising > 1.5x → lower learning rate |
-| `clipped_ratio` | < 0.20 | > 0.70 → increase `max_output_tokens` |
-| `loss` | Decreasing | NaN/Inf → cancel immediately |
-| `frac_reward_zero_std` | < 0.60 | > 0.60 → grader not differentiating |
+#### 9b. Spawn a monitor subagent
 
-**After training succeeds:**
-- Test the model with prompts NOT in the training set
-- Compare fine-tuned vs base model behavior
-- If quality is insufficient, return to Step 8 (iterate) or retrain with different config
+After starting each job, spawn the `training-monitor` subagent **in the background** with the job_id and workflow_id. Use the Agent tool:
 
-**Done!** Tell the user their model is ready.
+```
+Agent(
+  subagent_type: "training-monitor",
+  run_in_background: true,
+  prompt: "Monitor training job {JOB_ID} on workflow {WORKFLOW_ID}.
+    GATEWAY_URL=http://localhost:9090
+    WORKFLOW_ID={workflow_id}
+    JOB_ID={job_id}
+    Poll metrics every 15s. Report anomalies immediately. Report when done."
+)
+```
+
+The monitor polls `GET /jobs/{job_id}/metrics` and `GET /jobs/{job_id}/status` every 15 seconds and reports back when:
+- Job **succeeds** → report final metrics
+- Job **fails** → report error
+- **Anomaly detected** → report anomaly type + metrics (monitor does NOT cancel — that's the main agent's call)
+
+#### 9c. Handle the monitor's report
+
+When the background monitor returns, act based on its **status** field:
+
+**If `succeeded`:**
+1. Fetch per-epoch scores:
+   ```bash
+   curl -s "http://localhost:9090/finetune/workflows/$WORKFLOW_ID/dataset/finetune-evaluations?finetune_job_id=$JOB_ID"
+   ```
+2. Save results to `training-jobs/job-v{N}.json`
+3. Log to `execution-log.md`
+4. Test the model with prompts NOT in the training set
+5. Compare fine-tuned vs base model behavior
+6. Report to user — **done!**
+
+**If `failed`:**
+1. Read the error from the monitor's report
+2. Log failure to `execution-log.md`
+3. If retryable (e.g. infra error), start a new job with same config → go to 9b
+4. If not retryable, report to user
+
+**If `anomaly_detected`:**
+Diagnose and start the next iteration (see 9d).
+
+#### 9d. Diagnose and iterate on anomaly
+
+1. **Cancel the running job** (the monitor only reports — cancellation is the main agent's decision):
+   ```bash
+   curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs/$JOB_ID/cancel
+   ```
+
+2. **Fetch per-epoch reasons** to understand what's failing:
+   ```bash
+   curl -s "http://localhost:9090/finetune/workflows/$WORKFLOW_ID/dataset/finetune-evaluations?finetune_job_id=$JOB_ID"
+   ```
+3. Read `reason` fields from lowest-scoring records
+
+4. **Apply fix** based on the anomaly type reported by the monitor + your diagnosis:
+
+   | Anomaly | Config Fix |
+   |---------|-----------|
+   | NaN/Inf loss | Lower `learning_rate` by 2x |
+   | KL divergence | Lower `learning_rate` by 2x |
+   | High clipping | Increase `max_output_tokens` by 2x |
+   | Weak signal | Rewrite grader for better differentiation |
+   | Reward collapse | Increase `lora_rank` (4→8→16) |
+   | No learning (flat epochs) | Try larger base model |
+   | Overfitting (scores peak then decline) | Reduce `epochs` to peak epoch |
+
+5. **If data or grader changed**, sync to cloud before next run:
+   ```bash
+   # If grader was updated:
+   curl -s -X PATCH http://localhost:9090/finetune/workflows/$WORKFLOW_ID/evaluator \
+     -H "Content-Type: application/json" \
+     -d '{ "evaluator": "<updated grader code>" }'
+
+   # If records were updated:
+   curl -s -X PUT http://localhost:9090/finetune/workflows/$WORKFLOW_ID/records \
+     -H "Content-Type: application/json" \
+     -d @updated-records.json
+
+   # Sync changes:
+   curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/dataset/upload
+   ```
+
+6. **Start a new training job** with the adjusted config (back to 9a with updated params)
+7. **Spawn a new `training-monitor`** for the new job (9b)
+8. **Log the iteration** to `execution-log.md`
+
+#### 9e. Iteration limits and escalation
+
+- **Max 5 iterations.** After 5 failed iterations, stop and report a full diagnosis to the user including all anomalies encountered, fixes attempted, and metric trends.
+- **Base model escalation:** After 2 failed iterations on the same base model, escalate to a larger model: `Qwen3.5-4B` → `7B` → larger.
+
+#### 9f. Iteration log format
+
+Track every iteration in `execution-log.md`:
+```markdown
+## Training Iteration 1
+- [2026-03-17 14:30:00] Started job ft_job_001
+  - Base: Qwen3.5-4B, lr: 0.00001, lora_rank: 8, epochs: 2
+- [2026-03-17 14:45:00] Monitor: anomaly detected — KL divergence (0.3→0.8→1.2)
+- [2026-03-17 14:45:05] Cancelled job ft_job_001
+- [2026-03-17 14:46:00] Diagnosis: learning rate too high for this dataset size
+- [2026-03-17 14:46:00] Fix: lr 0.00001 → 0.000005
+
+## Training Iteration 2
+- [2026-03-17 14:47:00] Started job ft_job_002
+  - Base: Qwen3.5-4B, lr: 0.000005, lora_rank: 8, epochs: 2
+- [2026-03-17 15:10:00] Monitor: job succeeded
+  - Final reward: 0.72, epochs completed: 2
+  - Per-epoch progression: 0→0.55, 1→0.68, 2→0.72
+- [2026-03-17 15:10:30] Saved to training-jobs/job-v2.json
+```
 
 ### Using the vLLora UI
 
