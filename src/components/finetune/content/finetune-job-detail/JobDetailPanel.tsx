@@ -23,6 +23,8 @@ import { TrainingMetricsSection } from "../TrainingMetricsSection";
 import { FinetuneMetricsSection } from "../FinetuneMetricsSection";
 import { PerRowDetailsSection } from "../PerRowDetailsSection";
 import { EvaluatorVersionHistory } from "../EvaluatorVersionHistory";
+import { EvaluatorVersionBadge } from "@/components/shared/EvaluatorVersionBadge";
+import { useEvaluatorVersions } from "@/hooks/useEvaluatorVersions";
 import { ErrorLogSection } from "../ErrorLogSection";
 import {
   formatFinetuneJobDate,
@@ -48,6 +50,7 @@ import {
 } from "@/components/ui/tooltip";
 
 export function JobDetailPanel({ job }: { job: FinetuneJob }) {
+  const { latestVersion } = useEvaluatorVersions(job.workflow_id);
   const { getJobEvaluations, refreshJobEvaluations } = FinetuneJobsConsumer();
   const {
     data: evalResults,
@@ -139,6 +142,12 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
           <span className="inline-flex items-center rounded-full bg-[#10b981]/10 px-3 py-1 text-xs font-medium text-[#10b981]">
             {getModelDisplayName(job.base_model)}
           </span>
+          {job.evaluator_version != null && latestVersion != null && (
+            <EvaluatorVersionBadge
+              jobVersion={job.evaluator_version}
+              latestVersion={latestVersion}
+            />
+          )}
         </div>
 
         {/* Center: Summary text */}

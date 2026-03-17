@@ -187,6 +187,8 @@ export interface FinetuneJob {
   created_at: string;
   updated_at: string;
   completed_at?: string;
+  /** Evaluator version used for this job (extracted from request blob) */
+  evaluator_version?: number;
 }
 
 
@@ -194,6 +196,13 @@ export interface FinetuneJob {
 function normalizeFinetuneJob(raw: Record<string, unknown>): FinetuneJob {
   if (!raw.workflow_id && raw.dataset_id) {
     raw.workflow_id = raw.dataset_id;
+  }
+  // Extract evaluator_version from the request JSON blob if not at top level
+  if (raw.evaluator_version == null && raw.request != null) {
+    const request = raw.request as Record<string, unknown>;
+    if (typeof request.evaluator_version === "number") {
+      raw.evaluator_version = request.evaluator_version;
+    }
   }
   return raw as unknown as FinetuneJob;
 }

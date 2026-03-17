@@ -19,12 +19,13 @@ import { ScoreStrip } from "./ScoreStrip";
 import { ResultsTable } from "./ResultsTable";
 import { RunningView } from "./RunningView";
 import { RunsSidebar } from "./RunsSidebar";
-import { flattenEvaluationResults, getEvaluatorVersions } from "@/services/finetune-api";
+import { flattenEvaluationResults } from "@/services/finetune-api";
 import { cn } from "@/lib/utils";
 import { emitter, setPendingHighlight } from "@/utils/eventEmitter";
 import type { EvalJob } from "@/types/eval-job";
 import { getJobTotalRows, getJobCompletedRows } from "@/types/eval-job";
-import { Code2 } from "lucide-react";
+import { EvaluatorVersionBadge } from "@/components/shared/EvaluatorVersionBadge";
+import { useEvaluatorVersions } from "@/hooks/useEvaluatorVersions";
 
 interface EvalActivityViewProps {
   /** Dataset ID for navigation (click record ID → switch to Records tab) */
@@ -82,32 +83,18 @@ function getScoreInsight(stats: { mean: number; std: number; min: number; max: n
   return `Average score is ${mean.toFixed(2)} with ${std < 0.15 ? "low" : "moderate"} variance across samples.`;
 }
 
-/** Compact evaluator version badge for eval job header */
-function EvaluatorVersionBadge({ workflowId }: { workflowId: string }) {
-  const [version, setVersion] = useState<{ version: number; total: number } | null>(null);
+/** Evaluator version badge that shows staleness for eval jobs */
+function EvalJobVersionBadge({ workflowId, jobCreatedAt }: { workflowId: string; jobCreatedAt: number }) {
+  const { latestVersion, inferVersionForTimestamp } = useEvaluatorVersions(workflowId);
+  const jobVersion = inferVersionForTimestamp(jobCreatedAt);
 
-  useEffect(() => {
-    let cancelled = false;
-    getEvaluatorVersions(workflowId)
-      .then((versions) => {
-        if (!cancelled && versions.length > 0) {
-          setVersion({ version: versions[0].version, total: versions.length });
-        }
-      })
-      .catch(() => { /* non-critical */ });
-    return () => { cancelled = true; };
-  }, [workflowId]);
-
-  if (!version || version.total <= 1) return null;
+  if (jobVersion == null || latestVersion == null) return null;
 
   return (
-    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-800 text-[10px] font-mono text-zinc-400 border border-zinc-700/50">
-      <Code2 className="h-2.5 w-2.5" />
-      v{version.version}
-      {version.total > 1 && (
-        <span className="text-zinc-600">({version.total})</span>
-      )}
-    </span>
+    <EvaluatorVersionBadge
+      jobVersion={jobVersion}
+      latestVersion={latestVersion}
+    />
   );
 }
 
@@ -196,7 +183,7 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
                     </span>
                   )}
                   {job.workflowId && (
-                    <EvaluatorVersionBadge workflowId={job.workflowId} />
+                    <EvalJobVersionBadge workflowId={job.workflowId} jobCreatedAt={job.createdAt} />
                   )}
                   {result && <VerdictBadge verdict={result.diagnosis.verdict} />}
                   {job.status === "failed" && !result && (

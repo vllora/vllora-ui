@@ -22,6 +22,7 @@ import {
   Library,
   ChevronDown,
   ChevronRight,
+  Code2,
 } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
@@ -211,6 +212,16 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       </SidebarSection>
 
       <SidebarDivider />
+
+      {/* ── Evaluator (Grader Script) ── */}
+      <SidebarSection title="Evaluator">
+        <SidebarItem
+          icon={<Code2 className="w-3.5 h-3.5" />}
+          label="grader-script.js"
+          isActive={selectedNodeId === "evaluations/grader-script.ts"}
+          onClick={() => handleSelect("evaluations/grader-script.ts")}
+        />
+      </SidebarSection>
 
       {/* ── Eval Runs ── */}
       <SidebarSection
