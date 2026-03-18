@@ -11,7 +11,7 @@
  * Derived metadata (coverageStats, evalStats, etc.) is computed on-demand.
  */
 
-import { api, handleApiResponse } from '@/lib/api-client';
+import { api, handleApiResponse, parseUtcTimestamp } from '@/lib/api-client';
 import { invalidateTopicCache } from '@/services/adapters/api-record-adapter';
 import type { DatasetService } from '@/services/interfaces/dataset-service';
 import type {
@@ -50,8 +50,8 @@ function mapToFe(db: DbWorkflowResponse): Dataset {
     name: db.name,
     datasetObjective: db.objective,
     evalScript: db.eval_script ?? undefined,
-    createdAt: new Date(db.created_at).getTime(),
-    updatedAt: new Date(db.updated_at).getTime(),
+    createdAt: parseUtcTimestamp(db.created_at),
+    updatedAt: parseUtcTimestamp(db.updated_at),
   };
 }
 
@@ -225,7 +225,7 @@ async function fetchTopicHierarchy(workflowId: string): Promise<TopicHierarchyCo
     return {
       hierarchy,
       depth: calcMaxDepth(hierarchy),
-      generatedAt: new Date(data.topics[0].created_at).getTime(),
+      generatedAt: parseUtcTimestamp(data.topics[0].created_at),
     };
   } catch {
     return undefined;

@@ -48,6 +48,7 @@ TASK_RESPONSE=$(curl -sS -X POST "http://127.0.0.1:5001/v1/chunk/hybrid/file/asy
   -F "convert_include_images=true" \
   -F "convert_image_export_mode=embedded" \
   -F "chunking_merge_peers=true" \
+  -F "chunking_max_tokens=1024" \
   -F "chunking_tokenizer=BAAI/bge-small-en-v1.5" \
   -F "chunking_use_markdown_tables=true")
 
@@ -512,6 +513,134 @@ Process chunks by `chunk_index` to maintain reading order. For each chunk:
 - Set `content` to the base64 data URI (e.g., `"data:image/png;base64,..."`)
 - Link the image part to its caption part immediately (bidirectional `content_metadata.caption_part_id` / `content_metadata.caption_for_part_id`)
 
+### Step 4.5: Consolidate Parts (Quality Gate)
+
+**This step is mandatory.** Creating one part per Docling text item produces hundreds of tiny fragments — a 100-page PDF should NOT yield 1000+ parts. Consolidate before proceeding.
+
+#### Merge adjacent text parts under the same heading
+
+Adjacent text parts (same `extraction_path`) should be merged into a single part:
+
+```python
+def consolidate_parts(parts):
+    """Merge adjacent text parts sharing the same extraction_path."""
+    if not parts:
+        return parts
+
+    merged = []
+    buffer = None
+
+    for part in parts:
+        # Never merge tables or images — only text parts
+        if part["type"] != "text":
+            if buffer:
+                merged.append(buffer)
+                buffer = None
+            merged.append(part)
+            continue
+
+        # Start new buffer or merge into existing
+        if buffer is None:
+            buffer = dict(part)  # shallow copy
+            buffer["content"] = part["content"]
+            buffer["_source_chunks"] = list(part.get("extraction_metadata", {}).get("source_chunks", []))
+        elif part.get("extraction_path") == buffer.get("extraction_path"):
+            # Same heading context — merge content
+            buffer["content"] += "\n\n" + part["content"]
+            buffer["_source_chunks"].extend(
+                part.get("extraction_metadata", {}).get("source_chunks", [])
+            )
+            # Extend page list
+            buf_pages = buffer.get("extraction_metadata", {}).get("pages", [])
+            new_pages = part.get("extraction_metadata", {}).get("pages", [])
+            buffer.setdefault("extraction_metadata", {})["pages"] = sorted(
+                set(buf_pages + new_pages)
+            )
+        else:
+            # Different heading — flush buffer, start new
+            merged.append(buffer)
+            buffer = dict(part)
+            buffer["content"] = part["content"]
+            buffer["_source_chunks"] = list(part.get("extraction_metadata", {}).get("source_chunks", []))
+
+    if buffer:
+        merged.append(buffer)
+
+    # Clean up temp field
+    for p in merged:
+        if "_source_chunks" in p:
+            p.setdefault("extraction_metadata", {})["source_chunks"] = sorted(set(p.pop("_source_chunks")))
+
+    return merged
+```
+
+#### Drop parts that are too small
+
+After merging, remove text parts with fewer than 50 characters — these are typically isolated headings, page numbers, or noise fragments:
+
+```python
+MIN_CONTENT_LENGTH = 50
+
+consolidated = [
+    p for p in consolidated
+    if p["type"] != "text" or len(p.get("content", "")) >= MIN_CONTENT_LENGTH
+]
+```
+
+#### Validate title diversity
+
+If more than 50% of parts share the same title, the heading detection failed. Fix it before proceeding:
+
+```python
+from collections import Counter
+
+title_counts = Counter(p.get("title", "") for p in consolidated)
+most_common_title, most_common_count = title_counts.most_common(1)[0]
+title_diversity = 1 - (most_common_count / len(consolidated))
+
+if title_diversity < 0.5:
+    print(f"WARNING: {most_common_count}/{len(consolidated)} parts share title "
+          f"'{most_common_title}' — heading detection is broken!")
+    print("FIX: Rebuild heading context from doc['texts'] section_headers instead of chunk headings.")
+    # Common fix: scan texts[] for label='section_header', build page→heading map,
+    # assign heading by matching part page numbers to the nearest preceding heading.
+```
+
+**When title diversity is low**, the extraction script relied on chunk `headings` which were unreliable for this document. Rebuild heading context from the document structure:
+
+1. Scan `doc['texts']` for all items with `label: "section_header"`
+2. Filter out noise headings (chess moves, page numbers, repeated document titles)
+3. Build a `page_number → heading` map sorted by page
+4. For each part, look up its page number in the map to find the correct heading
+5. Re-derive `title` and `extraction_path` from this corrected heading context
+
+#### Validate parts-per-page ratio
+
+A healthy extraction produces roughly **2-10 parts per page**. Flag outliers:
+
+```python
+total_pages = source_metadata.get("total_pages", 1)
+parts_per_page = len(consolidated) / max(total_pages, 1)
+
+if parts_per_page > 15:
+    print(f"WARNING: {len(consolidated)} parts / {total_pages} pages = "
+          f"{parts_per_page:.1f} parts/page — too granular!")
+    print("Check: are adjacent text items being merged? Is heading detection splitting too aggressively?")
+elif parts_per_page < 1:
+    print(f"WARNING: {len(consolidated)} parts / {total_pages} pages = "
+          f"{parts_per_page:.1f} parts/page — extraction may be incomplete.")
+```
+
+**Target ranges by document type:**
+| Document type | Expected parts/page | Notes |
+|--------------|-------------------|-------|
+| Dense textbook | 2-5 | Long paragraphs, few images |
+| Technical manual | 3-8 | Mixed text, tables, diagrams |
+| Reference/collection | 5-12 | Many short entries (e.g., game annotations) |
+| Image-heavy (chess diagrams) | 3-6 | Text parts + image parts per page |
+
+If your extraction is far outside these ranges, something is wrong. Fix the extraction script before uploading — bad parts poison all downstream steps.
+
 ### Step 5: Build cross-references
 
 After creating all parts, link them:
@@ -553,7 +682,79 @@ with open(f"knowledge/doc-{N}/parts-index.json", "w") as f:
 
 ### Step 7: Validate Output
 
-Before finalizing `knowledge_parts.json`, run these checks:
+Before finalizing `knowledge_parts.json`, run **all** of these checks. If any fail, fix the extraction script and re-run — bad parts poison all downstream steps (topics, records, training).
+
+#### 7a. Quantitative health checks (run as code)
+
+```python
+import json
+from collections import Counter
+
+with open(f"knowledge/{doc_slug}/knowledge_parts.json") as f:
+    kp = json.load(f)
+
+parts = kp["parts"]
+total_pages = kp["source"]["metadata"].get("total_pages", 1)
+text_parts = [p for p in parts if p["type"] == "text"]
+table_parts = [p for p in parts if p["type"] == "table"]
+image_parts = [p for p in parts if p["type"] == "image"]
+
+# --- Check 1: Parts-per-page ratio ---
+ppp = len(parts) / max(total_pages, 1)
+status = "OK" if 1 <= ppp <= 15 else "FAIL"
+print(f"[{status}] Parts/page: {ppp:.1f} ({len(parts)} parts / {total_pages} pages)")
+if ppp > 15:
+    print("  → Too granular. Merge adjacent text parts under same heading.")
+if ppp < 1:
+    print("  → Too few parts. Check if extraction is incomplete.")
+
+# --- Check 2: Minimum content length ---
+short_parts = [p for p in text_parts if len(p.get("content", "")) < 50]
+status = "OK" if len(short_parts) == 0 else "WARN" if len(short_parts) < 5 else "FAIL"
+print(f"[{status}] Short parts (<50 chars): {len(short_parts)}/{len(text_parts)}")
+if short_parts:
+    for sp in short_parts[:3]:
+        print(f"  → '{sp.get('title', '?')}': {len(sp.get('content', ''))} chars")
+
+# --- Check 3: Title diversity ---
+titles = [p.get("title", "") for p in parts]
+title_counts = Counter(titles)
+top_title, top_count = title_counts.most_common(1)[0]
+diversity = 1 - (top_count / len(parts))
+status = "OK" if diversity >= 0.5 else "FAIL"
+print(f"[{status}] Title diversity: {diversity:.0%} (most common: '{top_title}' × {top_count})")
+if diversity < 0.5:
+    print("  → Heading detection is broken. Rebuild from doc structure, not chunk headings.")
+
+# --- Check 4: Average content length ---
+avg_len = sum(len(p.get("content", "")) for p in text_parts) / max(len(text_parts), 1)
+status = "OK" if avg_len >= 200 else "WARN" if avg_len >= 100 else "FAIL"
+print(f"[{status}] Avg text part length: {avg_len:.0f} chars")
+if avg_len < 200:
+    print("  → Parts are too short for meaningful training data. Merge more aggressively.")
+
+# --- Check 5: Content type distribution ---
+print(f"[INFO] Distribution: {len(text_parts)} text, {len(table_parts)} table, {len(image_parts)} image")
+
+# --- Check 6: Unique extraction paths ---
+paths = set(p.get("extraction_path", "") for p in parts)
+print(f"[INFO] Unique extraction paths: {len(paths)}")
+if len(paths) <= 2:
+    print("  → Very few unique paths — heading hierarchy may be flat or broken.")
+
+# --- Summary ---
+checks_passed = all([
+    1 <= ppp <= 15,
+    len(short_parts) < 5,
+    diversity >= 0.5,
+    avg_len >= 100,
+])
+print(f"\n{'PASS' if checks_passed else 'FAIL'}: {'Ready to upload' if checks_passed else 'Fix extraction before uploading'}")
+```
+
+**All FAIL checks must be resolved before uploading.** WARN checks should be investigated but may be acceptable depending on the document type.
+
+#### 7b. Qualitative spot-checks (manual)
 
 1. **Sample 10 parts and verify titles make sense** — titles should be real section titles, not chess moves, page numbers, or noise. If titles look wrong, fix the extraction logic (add domain-specific filters, rebuild heading hierarchy from the document structure).
 2. **Check image parts have non-empty `content`** — every type=image part must have a base64 data URI in `content`. If any are empty, use the page-level fallback from `pages{}`.
@@ -562,6 +763,19 @@ Before finalizing `knowledge_parts.json`, run these checks:
 5. **Spot-check text content** — read a few text parts. Are they meaningful content or garbled OCR noise?
 
 If validation reveals problems, fix the extraction script and re-run — don't ship bad parts downstream.
+
+### Encoding: always use `ensure_ascii=False`
+
+When writing `knowledge_parts.json`, always preserve Unicode characters:
+
+```python
+with open(f"knowledge/{doc_slug}/knowledge_parts.json", "w", encoding="utf-8") as f:
+    json.dump(output, f, indent=2, ensure_ascii=False)
+```
+
+Without `ensure_ascii=False`, non-ASCII characters (Cyrillic, CJK, accented Latin) get stored as `\u0xxx` escape sequences. These render as garbage in the UI and produce nonsensical extraction paths like `["\u041f\u043e\u0436\u0430..."]` instead of readable section names.
+
+**Also check**: when reading the Docling response, always use `json.load()` (not manual string parsing) to properly decode Unicode. Never use `repr()` or `ascii()` on text strings.
 
 ### Noise filtering
 

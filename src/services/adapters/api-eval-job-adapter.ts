@@ -9,7 +9,7 @@
  *          FE evaluationRunId -> BE cloud_run_id
  */
 
-import { api, handleApiResponse } from '@/lib/api-client';
+import { api, handleApiResponse, parseUtcTimestamp } from '@/lib/api-client';
 import type { EvalJobService } from '@/services/interfaces/eval-job-service';
 import type { EvalJob, EvalJobStatus } from '@/types/eval-job';
 
@@ -39,10 +39,10 @@ function mapToFe(db: DbEvalJobResponse): EvalJob {
     sampleSize: db.sample_size ?? 0,
     rolloutModel: db.rollout_model ?? undefined,
     error: db.error ?? undefined,
-    completedAt: db.completed_at ? new Date(db.completed_at).getTime() : undefined,
-    startedAt: db.started_at ? new Date(db.started_at).getTime() : undefined,
+    completedAt: db.completed_at ? parseUtcTimestamp(db.completed_at) : undefined,
+    startedAt: db.started_at ? parseUtcTimestamp(db.started_at) : undefined,
     result: db.result ? JSON.parse(db.result) : undefined,
-    createdAt: new Date(db.created_at).getTime(),
+    createdAt: parseUtcTimestamp(db.created_at),
   };
 }
 

@@ -14,6 +14,7 @@
 import type { KnowledgeSource } from "@/types/knowledge-types";
 import type { EvalJob } from "@/types/eval-job";
 import type { FinetuneJob } from "@/services/finetune-api";
+import { parseUtcTimestamp } from "@/lib/api-client";
 
 export type LogEntryType =
   | "workflow"
@@ -122,7 +123,7 @@ export function buildActivityLog(params: {
 
   // Finetune jobs
   for (const job of params.finetuneJobs) {
-    const createdTs = new Date(job.created_at).getTime();
+    const createdTs = parseUtcTimestamp(job.created_at);
     entries.push({
       id: `ft-${job.id}`,
       timestamp: createdTs,
@@ -132,7 +133,7 @@ export function buildActivityLog(params: {
     });
 
     if (job.completed_at) {
-      const completedTs = new Date(job.completed_at).getTime();
+      const completedTs = parseUtcTimestamp(job.completed_at);
       entries.push({
         id: `ft-done-${job.id}`,
         timestamp: completedTs,

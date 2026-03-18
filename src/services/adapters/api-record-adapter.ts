@@ -7,7 +7,7 @@
  * Mapping: FE workflowId → BE workflowId (same ID after migration)
  */
 
-import { api, handleApiResponse } from '@/lib/api-client';
+import { api, handleApiResponse, parseUtcTimestamp } from '@/lib/api-client';
 import { extractDataInfoFromSpan } from '@/utils/modelUtils';
 import type { RecordService, NewRecord } from '@/services/interfaces/record-service';
 import type { DatasetRecord, Dataset } from '@/types/dataset-types';
@@ -78,7 +78,7 @@ function mapToFe(
   scores: readonly DbWorkflowRecordScoreResponse[],
   idToName?: Map<string, string>,
 ): DatasetRecord {
-  const createdAt = new Date(db.created_at).getTime();
+  const createdAt = parseUtcTimestamp(db.created_at);
   const recordScores = scores.filter(s => s.record_id === db.id);
   const topicName = db.topic_id && idToName ? idToName.get(db.topic_id) : undefined;
   return {

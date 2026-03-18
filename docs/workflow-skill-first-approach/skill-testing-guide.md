@@ -157,7 +157,102 @@ cat finetune-project/execution-log.md
 - All documents were extracted (one subdirectory per source document, named by slugified filename)
 - `all-parts-index.json` was generated with parts from all documents
 
-### 2. Verify data in gateway SQLite
+### 2. Verify extraction quality
+
+**CRITICAL** — extraction quality issues cascade through the entire pipeline. Bad parts → bad topics → bad training data. Catch these early.
+
+```bash
+DB=~/.vllora/vllora.db
+WF_ID=$(sqlite3 $DB "SELECT id FROM workflows ORDER BY created_at DESC LIMIT 1;")
+
+echo "=== Extraction Quality Report ==="
+
+# Parts-per-source ratio (expect 2-10 parts/page, flag >15)
+echo ""
+echo "--- Parts per Knowledge Source ---"
+sqlite3 $DB "
+  SELECT ks.name,
+         COUNT(ksp.id) as parts,
+         json_extract(ks.metadata, '$.total_pages') as pages,
+         CASE
+           WHEN json_extract(ks.metadata, '$.total_pages') IS NOT NULL
+           THEN ROUND(CAST(COUNT(ksp.id) AS FLOAT) / json_extract(ks.metadata, '$.total_pages'), 1)
+           ELSE 'N/A'
+         END as parts_per_page
+  FROM knowledge_sources ks
+  LEFT JOIN knowledge_source_parts ksp ON ks.id = ksp.source_id
+  WHERE ks.workflow_id='$WF_ID'
+  GROUP BY ks.id;"
+
+# Title diversity — detect broken heading detection
+echo ""
+echo "--- Title Diversity (top 5 most common) ---"
+sqlite3 $DB "
+  SELECT title, COUNT(*) as cnt
+  FROM knowledge_source_parts
+  WHERE source_id IN (SELECT id FROM knowledge_sources WHERE workflow_id='$WF_ID')
+  GROUP BY title
+  ORDER BY cnt DESC LIMIT 5;"
+
+# Short parts — detect extraction fragmentation
+echo ""
+echo "--- Short Parts (<50 chars) ---"
+sqlite3 $DB "
+  SELECT COUNT(*) as short_parts,
+         (SELECT COUNT(*) FROM knowledge_source_parts WHERE source_id IN
+           (SELECT id FROM knowledge_sources WHERE workflow_id='$WF_ID')) as total_parts
+  FROM knowledge_source_parts
+  WHERE source_id IN (SELECT id FROM knowledge_sources WHERE workflow_id='$WF_ID')
+    AND LENGTH(content) < 50;"
+
+# Average content length per source
+echo ""
+echo "--- Avg Content Length per Source ---"
+sqlite3 $DB "
+  SELECT ks.name,
+         ROUND(AVG(LENGTH(ksp.content))) as avg_chars,
+         MIN(LENGTH(ksp.content)) as min_chars,
+         MAX(LENGTH(ksp.content)) as max_chars
+  FROM knowledge_sources ks
+  JOIN knowledge_source_parts ksp ON ks.id = ksp.source_id
+  WHERE ks.workflow_id='$WF_ID'
+  GROUP BY ks.id;"
+
+# Unicode/encoding issues — detect unescaped Unicode sequences
+echo ""
+echo "--- Unicode Encoding Issues ---"
+sqlite3 $DB "
+  SELECT COUNT(*) as bad_encoding_parts
+  FROM knowledge_source_parts
+  WHERE source_id IN (SELECT id FROM knowledge_sources WHERE workflow_id='$WF_ID')
+    AND (content LIKE '%\u0%' OR title LIKE '%\u0%'
+         OR extraction_path LIKE '%\u0%');"
+
+# Nonsense extraction paths — detect garbage headings
+echo ""
+echo "--- Extraction Path Samples (first 10) ---"
+sqlite3 $DB "
+  SELECT DISTINCT extraction_path
+  FROM knowledge_source_parts
+  WHERE source_id IN (SELECT id FROM knowledge_sources WHERE workflow_id='$WF_ID')
+    AND extraction_path IS NOT NULL
+  LIMIT 10;"
+```
+
+**What to look for:**
+
+| Check | Healthy | Problem |
+|-------|---------|---------|
+| Parts per page | 2-10 | >15 = too granular, <1 = incomplete extraction |
+| Title diversity | Many unique titles | >50% share same title = heading detection broken |
+| Short parts (<50 chars) | <5% of total | >20% = fragmentation, parts not merged |
+| Avg content length | 200-2000 chars | <100 = too fragmented, >5000 = chunks too large |
+| Unicode encoding | 0 bad parts | >0 = extraction script didn't decode Unicode |
+| Extraction paths | Real section names | `\u0xxx` sequences or document title repeated = broken |
+
+**If any check fails**, the extraction needs to be re-run with fixes before proceeding. See "Common Issues" section below for specific fixes.
+
+### 3. Verify data in gateway SQLite
 
 ```bash
 DB=~/.vllora/vllora.db
@@ -279,6 +374,69 @@ echo "Source: $DOC_COUNT | Extracted: $EXTRACTED_COUNT"
 ```
 
 **Fix**: SKILL.md now includes a hard validation check (Step 2e) that blocks progression to Step 3 unless all documents are extracted. Each document should be uploaded separately via `finetune.py upload-knowledge`. If the agent still skips documents, increase `--max-turns` or explicitly list all documents in the prompt.
+
+### Issue: Too many parts per document (>15 parts/page)
+
+**Cause**: The extraction script creates one part per Docling text item instead of merging adjacent text items under the same heading. A 100-page PDF should NOT produce 1000+ parts.
+
+**Symptoms in UI**:
+- Source detail shows hundreds of tiny parts (26-135 chars each)
+- All parts have the same generic title (e.g., "Chess Workbook")
+- Scrolling through parts list takes forever
+
+**How to detect**:
+```bash
+sqlite3 $DB "
+  SELECT ks.name, COUNT(ksp.id) as parts,
+         json_extract(ks.metadata, '$.total_pages') as pages
+  FROM knowledge_sources ks
+  JOIN knowledge_source_parts ksp ON ks.id = ksp.source_id
+  WHERE ks.workflow_id='$WF_ID'
+  GROUP BY ks.id;"
+```
+If parts/pages > 15, extraction is too granular.
+
+**Fix**: The extraction script must consolidate adjacent text parts that share the same `extraction_path`. See `reference/extraction-guide.md` Step 4.5 for the merging algorithm. Also enforce a minimum content length (50 chars) — parts below that threshold should be merged with neighbors or dropped.
+
+### Issue: All parts have the same title (broken heading detection)
+
+**Cause**: The extraction script relied on Docling's chunk `headings` field, which often contains noise (document title repeated, chess moves parsed as headings, page numbers). When heading detection fails, every part gets the document title as its heading.
+
+**Symptoms in UI**:
+- Every part in the source detail has the same name
+- Extraction paths all show the document title instead of section names
+- Topic hierarchy (if auto-generated) is flat or nonsensical
+
+**How to detect**:
+```bash
+sqlite3 $DB "
+  SELECT title, COUNT(*) as cnt
+  FROM knowledge_source_parts
+  WHERE source_id IN (SELECT id FROM knowledge_sources WHERE workflow_id='$WF_ID')
+  GROUP BY title ORDER BY cnt DESC LIMIT 5;"
+```
+If the top title accounts for >50% of parts, heading detection is broken.
+
+**Fix**: Rebuild heading context from the document structure (`doc['texts']` array, filtering for `label: "section_header"`) instead of chunk headings. See `reference/extraction-guide.md` Step 4.5 title diversity validation.
+
+### Issue: Unicode escape sequences in extraction paths or content
+
+**Cause**: The extraction script stored raw `\u043e\u043f...` escape sequences instead of decoded Unicode text. This happens when JSON strings containing non-ASCII characters (Cyrillic, CJK, accented Latin) are not properly decoded during extraction.
+
+**Symptoms in UI**:
+- Part titles or extraction paths show `\u0xxx` sequences
+- Content appears as escaped Unicode instead of readable text
+- Mixed-language documents show garbled section names
+
+**How to detect**:
+```bash
+sqlite3 $DB "
+  SELECT COUNT(*) FROM knowledge_source_parts
+  WHERE source_id IN (SELECT id FROM knowledge_sources WHERE workflow_id='$WF_ID')
+    AND (content LIKE '%\\u0%' OR title LIKE '%\\u0%' OR extraction_path LIKE '%\\u0%');"
+```
+
+**Fix**: The extraction script must use `json.dumps(..., ensure_ascii=False)` when writing `knowledge_parts.json` to preserve Unicode characters. When reading Docling's JSON response, ensure `json.load()` (not manual string parsing) is used to properly decode Unicode escapes.
 
 ### Issue: Canvas shows 0% coverage on all nodes
 
@@ -502,6 +660,7 @@ The skill produces records in **OpenAI format** locally (`{"messages": [...]}`),
 After running the test, evaluate:
 
 - [ ] **Completeness**: Did all pipeline steps execute (Steps 1-6 for data prep, optionally Steps 7-9 for eval/training)?
+- [ ] **Extraction quality**: Parts-per-page ratio 2-10? Title diversity >50%? Avg content length >200 chars? No Unicode escapes?
 - [ ] **Data quality**: Are records diverse, well-formed, and grounded in source documents?
 - [ ] **Topic coverage**: Does each topic have roughly equal record counts?
 - [ ] **Grader quality**: Does the grader script check multiple quality dimensions (accuracy, completeness, tone)?
@@ -515,3 +674,4 @@ After running the test, evaluate:
 - [ ] **Turn efficiency**: How many agent turns consumed vs `--max-turns` limit?
 - [ ] **Source linking accuracy**: Do `sourceChunkRefs` in records match actual knowledge source part IDs?
 - [ ] **Relations completeness**: Do all leaf topics have at least one topic-source relation?
+- [ ] **Encoding correctness**: No `\u0xxx` escape sequences in titles, extraction paths, or content?

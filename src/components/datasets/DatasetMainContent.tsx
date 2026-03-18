@@ -320,6 +320,48 @@ export function DatasetMainContent({
     }
   }, [topicDetail, onViewModeChange]);
 
+  // Sources view takes priority — always render when viewMode is "sources",
+  // even if records/topics are empty (sources exist independently of records).
+  if (viewMode === "sources") {
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          <SourcesView
+            selectedSourceId={selectedSourceId}
+            focusPartId={focusPartId}
+            backTo={backTo}
+            onBackToRecord={handleBackToRecord}
+            onSelectSource={(sourceId) => {
+              setSelectedSourceId(sourceId);
+              setFocusPartId(null);
+              setBackTo(null);
+              window.dispatchEvent(new CustomEvent("vllora_switch_view", {
+                detail: { viewMode: "sources", sourceId },
+              }));
+            }}
+          />
+        </div>
+        <RecordDetailSidebar
+          record={selectedRecord}
+          onClose={() => onSelectRecordId(null)}
+          availableTopics={availableTopics}
+          onUpdateTopic={onUpdateRecordTopic}
+          onDelete={(recordId) => {
+            onDeleteRecord(recordId);
+            onSelectRecordId(null);
+          }}
+          onSave={onSaveRecord}
+          records={filteredRecords}
+          onNavigate={onSelectRecordId}
+          jobColumns={jobColumns}
+          getScoresForRecord={getScoresForRecord}
+          topicHierarchy={topicHierarchy}
+          normalizedObjective={normalizedObjective}
+        />
+      </div>
+    );
+  }
+
   // Show empty state only when no records AND no topic hierarchy
   // If topics exist, show the table/canvas with empty topic groups
   if (records.length === 0 && !hasTopics) {
@@ -393,47 +435,6 @@ export function DatasetMainContent({
   }
 
   // ── All Topics view with tabbed layout ──
-  // Sources view is handled separately (triggered by navigate-to-source events)
-  if (viewMode === "sources") {
-    return (
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-          <SourcesView
-            selectedSourceId={selectedSourceId}
-            focusPartId={focusPartId}
-            backTo={backTo}
-            onBackToRecord={handleBackToRecord}
-            onSelectSource={(sourceId) => {
-              setSelectedSourceId(sourceId);
-              setFocusPartId(null);
-              setBackTo(null);
-              window.dispatchEvent(new CustomEvent("vllora_switch_view", {
-                detail: { viewMode: "sources", sourceId },
-              }));
-            }}
-          />
-        </div>
-        <RecordDetailSidebar
-          record={selectedRecord}
-          onClose={() => onSelectRecordId(null)}
-          availableTopics={availableTopics}
-          onUpdateTopic={onUpdateRecordTopic}
-          onDelete={(recordId) => {
-            onDeleteRecord(recordId);
-            onSelectRecordId(null);
-          }}
-          onSave={onSaveRecord}
-          records={filteredRecords}
-          onNavigate={onSelectRecordId}
-          jobColumns={jobColumns}
-          getScoresForRecord={getScoresForRecord}
-          topicHierarchy={topicHierarchy}
-          normalizedObjective={normalizedObjective}
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
 

@@ -106,9 +106,14 @@ The subagent will:
   - opening-theory.pdf (120 pages) → opening-theory/
   - endgame-manual.pdf (56 pages) → endgame-manual/
 - [2026-03-06 10:35:12] All 3 Docling tasks complete
-- [2026-03-06 10:36:00] Processed chess-tactics: 10 parts, opening-theory: 15 parts, endgame-manual: 8 parts
-- [2026-03-06 10:36:10] Merged all-parts-index.json: 33 parts across 3 documents
-- [2026-03-06 10:36:20] POST /workflows/{id}/knowledge → uploaded 3 knowledge sources with parts
+- [2026-03-06 10:36:00] Processed chess-tactics: 42 raw parts → consolidated to 10 parts (4.2/page)
+  - Quality gate: parts/page 4.2 OK, title diversity 85% OK, avg length 480 chars OK
+- [2026-03-06 10:36:30] Processed opening-theory: 68 raw → 15 parts (3.0/page)
+  - Quality gate: parts/page 3.0 OK, title diversity 78% OK, avg length 620 chars OK
+- [2026-03-06 10:37:00] Processed endgame-manual: 29 raw → 8 parts (2.9/page)
+  - Quality gate: parts/page 2.9 OK, title diversity 90% OK, avg length 550 chars OK
+- [2026-03-06 10:37:10] Merged all-parts-index.json: 33 parts across 3 documents
+- [2026-03-06 10:37:20] POST /workflows/{id}/knowledge → uploaded 3 knowledge sources with parts
 
 ## Step 3: Build Topics
 - [2026-03-06 10:36:45] Created 6 root topics, 18 leaf topics, saved to topics.json
@@ -207,7 +212,8 @@ for DOC in "${DOCS[@]}"; do
     -F "include_converted_doc=true" \
     -F "convert_do_ocr=true" -F "convert_do_table_structure=true" \
     -F "convert_include_images=true" -F "convert_image_export_mode=embedded" \
-    -F "chunking_merge_peers=true" -F "chunking_tokenizer=BAAI/bge-small-en-v1.5")
+    -F "chunking_merge_peers=true" -F "chunking_max_tokens=1024" \
+    -F "chunking_tokenizer=BAAI/bge-small-en-v1.5")
   TASK_ID=$(echo "$TASK_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['task_id'])")
   TASK_IDS+=("$TASK_ID")
 
@@ -247,7 +253,11 @@ For **each** document directory, produce `knowledge_parts.json` and `parts-index
 
    **Important**: Prefix all part IDs with the document identifier (typically the slugified filename) to keep them unique across documents. For example: `chess-tactics-chapter-3`, `strategy-guide-section-5`.
 
-3. The extraction script must also produce `{doc-slug}/parts-index.json` — a lightweight index with `{id, type, title, extraction_path, pages, content_preview, source_doc}` per part (first 200 chars of content, plus the source document filename).
+3. **Consolidate parts before saving** — merge adjacent text parts under the same heading, drop parts under 50 chars, and validate title diversity. See `reference/extraction-guide.md` Step 4.5 for the merging algorithm and quality gates. **A healthy extraction produces 2-10 parts per page.** If you have >15 parts/page or >50% of parts share the same title, the extraction is broken — fix it before proceeding.
+
+4. The extraction script must also produce `{doc-slug}/parts-index.json` — a lightweight index with `{id, type, title, extraction_path, pages, content_preview, source_doc}` per part (first 200 chars of content, plus the source document filename).
+
+5. **Run the validation checks** from `reference/extraction-guide.md` Step 7. All FAIL checks must be resolved before uploading. Print the validation output and log it to `execution-log.md`.
 
 See `reference/extraction-guide.md` for the full response structure, schema, and step-by-step guidance.
 

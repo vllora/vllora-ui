@@ -1,6 +1,13 @@
 import { getBackendUrl } from '@/config/api';
 import { tryParseJson } from '@/utils/modelUtils';
 
+/** Gateway returns timestamps without timezone (e.g. "2026-03-18 09:55:18").
+ *  These are UTC — append 'Z' so Date parses them correctly. */
+export function parseUtcTimestamp(ts: string): number {
+  const normalized = ts.endsWith('Z') || ts.includes('+') ? ts : `${ts}Z`;
+  return new Date(normalized).getTime();
+}
+
 /**
  * Type for the token provider function
  * Returns a token string or null if no authentication is needed
