@@ -61,17 +61,13 @@ export function UploadedRecordsSection({
 
     const query = debouncedSearch.toLowerCase();
     return records.filter((record) => {
-      // Search in messages content
-      const inputMessages = record.data.input?.messages;
-      const outputMessages = record.data.output?.messages;
-
-      const searchInMessages = (messages: unknown): boolean => {
-        if (!messages) return false;
-        const str = JSON.stringify(messages).toLowerCase();
-        return str.includes(query);
-      };
-
-      return searchInMessages(inputMessages) || searchInMessages(outputMessages);
+      // Search in all messages (supports both OpenAI and vLLora formats)
+      const d = record.data as unknown as Record<string, unknown>;
+      const allMessages = Array.isArray(d?.messages)
+        ? d.messages
+        : [...(record.data.input?.messages ?? []), ...(Array.isArray(record.data.output?.messages) ? record.data.output.messages : record.data.output?.messages ? [record.data.output.messages] : [])];
+      const str = JSON.stringify(allMessages).toLowerCase();
+      return str.includes(query);
     });
   }, [records, debouncedSearch]);
 
@@ -112,11 +108,10 @@ export function UploadedRecordsSection({
     try {
       const jsonlContent = selectedRecords
         .map((record) => {
-          const inputMessages = (record.data.input?.messages as unknown[]) || [];
-          const outputMessage = record.data.output?.messages;
-          const messages = outputMessage
-            ? [...inputMessages, outputMessage]
-            : inputMessages;
+          const rd = record.data as unknown as Record<string, unknown>;
+          const messages = Array.isArray(rd?.messages)
+            ? rd.messages
+            : [...((record.data.input?.messages as unknown[]) || []), ...(record.data.output?.messages ? [record.data.output.messages] : [])];
           const tools = (record.data.input?.tools as unknown[]) || [];
 
           return JSON.stringify({ messages, tools });

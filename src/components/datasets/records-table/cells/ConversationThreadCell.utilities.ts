@@ -39,33 +39,29 @@ function extractContent(content: unknown): string {
 }
 
 /**
- * Extract messages from DataInfo structure
+ * Extract messages from record data.
+ * Supports two formats:
+ *   - OpenAI / skill format: { messages: [...], id?: string }
+ *   - vLLora format:         { input: { messages: [...] }, output?: { messages: [...] } }
  */
 export function extractMessages(data: unknown): MessagePreview[] {
   if (!data || typeof data !== "object") return [];
 
+  const d = data as Record<string, unknown>;
+
+  // OpenAI / skill format: top-level "messages" array
+  if (Array.isArray(d.messages)) {
+    return extractFromArray(d.messages);
+  }
+
+  // vLLora format: nested input/output
   const dataInfo = data as DataInfo;
   const messages: MessagePreview[] = [];
 
-  // Input messages (system, user)
   if (dataInfo?.input?.messages && Array.isArray(dataInfo.input.messages)) {
-    for (const msg of dataInfo.input.messages) {
-      if (msg && typeof msg === "object") {
-        const role = (msg as Record<string, unknown>).role;
-        const content = (msg as Record<string, unknown>).content || msg.toolCalls;
-        if (role && content !== undefined) {
-          let contentExtracted = extractContent(content);
-          
-          messages.push({
-            role: String(role),
-            content: contentExtracted,
-          });
-        }
-      }
-    }
+    messages.push(...extractFromArray(dataInfo.input.messages));
   }
 
-  // Output messages (assistant)
   if (dataInfo?.output?.messages) {
     const outputMsgs = Array.isArray(dataInfo.output.messages)
       ? dataInfo.output.messages
@@ -76,21 +72,31 @@ export function extractMessages(data: unknown): MessagePreview[] {
         const msgObj = msg as Record<string, unknown>;
         const role = msgObj.role || "assistant";
         const content = msgObj.content || msgObj.tool_calls || msg;
-       
-        messages.push({
-          role: String(role),
-          content: extractContent(content),
-        });
+        messages.push({ role: String(role), content: extractContent(content) });
       } else if (typeof msg === "string") {
-        messages.push({
-          role: "assistant",
-          content: msg,
-        });
+        messages.push({ role: "assistant", content: msg });
       }
     }
   }
 
   return messages;
+}
+
+/** Parse a flat messages array into MessagePreview[] */
+function extractFromArray(msgs: unknown[]): MessagePreview[] {
+  const out: MessagePreview[] = [];
+  for (const msg of msgs) {
+    if (msg && typeof msg === "object") {
+      const role = (msg as Record<string, unknown>).role;
+      const content =
+        (msg as Record<string, unknown>).content ||
+        (msg as Record<string, unknown>).toolCalls;
+      if (role && content !== undefined) {
+        out.push({ role: String(role), content: extractContent(content) });
+      }
+    }
+  }
+  return out;
 }
 
 /**

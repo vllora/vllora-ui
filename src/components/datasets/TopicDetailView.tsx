@@ -82,8 +82,8 @@ export function TopicDetailView({
   // Extract system prompt from the first record's data (the actual generated prompt)
   const recordSystemPrompt = useMemo(() => {
     for (const record of records) {
-      const data = record.data as { input?: { messages?: Array<{ role?: string; content?: string }> } } | undefined;
-      const msgs = data?.input?.messages;
+      const d = record.data as Record<string, unknown> | undefined;
+      const msgs = (Array.isArray(d?.messages) ? d.messages : (d?.input as Record<string, unknown> | undefined)?.messages) as Array<{ role?: string; content?: string }> | undefined;
       if (!msgs) continue;
       const sysMsg = msgs.find(m => m.role === "system");
       if (sysMsg?.content) return sysMsg.content;
@@ -161,8 +161,11 @@ export function TopicDetailView({
 function extractRecordUserText(data: unknown): string {
   if (!data || typeof data !== "object") return "";
   const d = data as Record<string, unknown>;
-  const input = d.input as Record<string, unknown> | undefined;
-  const inputMsgs = (input?.messages ?? []) as Array<Record<string, unknown>>;
+  // Support both OpenAI format (top-level messages) and vLLora format (input.messages)
+  const rawMsgs = Array.isArray(d.messages)
+    ? d.messages
+    : ((d.input as Record<string, unknown> | undefined)?.messages ?? []);
+  const inputMsgs = rawMsgs as Array<Record<string, unknown>>;
   const userMsg = inputMsgs.find(m => m.role === "user");
   if (!userMsg) return "";
   return typeof userMsg.content === "string"

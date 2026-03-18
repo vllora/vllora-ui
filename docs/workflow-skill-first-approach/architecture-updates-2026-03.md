@@ -44,7 +44,7 @@ If you need to add new data to the polling UI (e.g., per-row progress), fetch it
 | Layer | Key file | What it does |
 |-------|----------|-------------|
 | FE | `src/services/eval-polling.ts` | Polling loop, `pollingJobs` Map, cloud API calls |
-| FE | `src/contexts/DryRunJobsContext.tsx` | Consumes polling events, updates UI state |
+| FE | `src/contexts/EvalJobsContext.tsx` | Consumes polling events, updates UI state |
 | BE | `cloud/src/server/handler/finetune/` | BE-side polling (30s), result writeback |
 
 ---

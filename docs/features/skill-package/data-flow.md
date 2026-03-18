@@ -2,7 +2,9 @@
 
 ## End-to-End Flow
 
-This document traces how data flows from IndexedDB through skill package assembly.
+This document traces how data flows from the Gateway API (SQLite at `~/.vllora/vllora.db`) through skill package assembly.
+
+> **Note**: This doc was originally written when IndexedDB was the primary store. The function names (e.g., `datasetsDB.getDatasetById`) now map to Gateway API adapter calls in `src/services/adapters/`. The data shapes are the same — only the transport changed.
 
 ---
 
@@ -185,7 +187,7 @@ eval_scores (record.evaluations[jobId].score)
 
 **Why `base_score` was removed from JSONL:** The LLM self-assessed score (set during generation) was less informative than external grader scores. Including both created confusion about which to trust. `eval_scores` from actual graders are more reliable.
 
-**Why no auto-filtering by score:** Whatever records exist in IndexedDB go into the package. The user has full control — they see scores in the UI and can tell Lucy to remove records. Automatic filtering is dangerous (broken grader -> empty package) and premature.
+**Why no auto-filtering by score:** Whatever records exist in the Gateway database go into the package. The user has full control — they see scores in the UI and can tell Lucy to remove records. Automatic filtering is dangerous (broken grader -> empty package) and premature.
 
 ---
 
@@ -313,4 +315,4 @@ Uploads the dataset file to the evaluation API. Backend generates responses with
 
 ## Key Principle
 
-**What you see is what you get.** Whatever records exist in IndexedDB go into the skill package. No automatic filtering by scores, diversity flags, or evaluation results. The user has full control through the UI.
+**What you see is what you get.** Whatever records exist in the Gateway database go into the skill package. No automatic filtering by scores, diversity flags, or evaluation results. The user has full control through the UI.

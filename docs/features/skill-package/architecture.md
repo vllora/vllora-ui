@@ -6,7 +6,7 @@
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `src/lib/distri-finetune-tools/steps/generate-skill-package.ts` | ~900 | **Main file** — assembles all skill package content from IndexedDB |
+| `src/lib/distri-finetune-tools/steps/generate-skill-package.ts` | ~900 | **Main file** — assembles all skill package content from Gateway API |
 | `src/lib/distri-finetune-tools/steps/download-skill-package.ts` | ~88 | Triggers browser download of a generated ZIP blob |
 
 ### UI Components

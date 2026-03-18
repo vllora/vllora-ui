@@ -1,30 +1,49 @@
 # vLLora UI
 
-React/TypeScript frontend for visualizing and managing AI finetune datasets.
+This repo contains **two products being actively developed**:
 
-## Current Focus: Skill-First Pipeline (Lucy Disabled)
+1. **`finetune-skill/`** — A user-facing Claude Code skill (the pipeline driver). Users plug this into their project to finetune models via CLI. **Currently in active development (v1-v9 testing).**
+2. **`src/`** — A React/TypeScript UI that visualizes finetune workflow data (the presentation layer).
 
-The UI is currently a **visualization layer**. The finetune pipeline (extract documents, generate data, topics, link references) is driven by external skills (Codex agent, Claude Code) — not by the in-app Lucy AI assistant.
+## How It Works: Skill-First Architecture
 
-**Feature flag**: `VITE_LUCY_ENABLED` in `.env` (default: `false` / absent = off).
-- Set `VITE_LUCY_ENABLED=true` in `.env` to re-enable Lucy sidebar, agent panel, and plan.md auto-generation.
-- The flag is centralized in `src/lib/feature-flags.ts` as `IS_LUCY_ENABLED`.
-- When off: no Lucy sidebar, no agent panel, no plan.md in explorer (unless a plan exists), no "Generate Plan" buttons.
-- When on: full Lucy experience (sidebar chat, auto-plan, catch-up protocol).
+```
+finetune-skill/ (user's Claude Code)       UI (this repo's src/)
+  → Extracts documents (PDF/images)          → Visualizes workflow data
+  → Generates training data                  → Browse records, topics, evals
+  → Creates topic hierarchies                → Inspect training metrics
+  → Links topics ↔ sources                   → Navigate canvas/sources/table views
+  → Runs evaluations & training              → Read-only — no pipeline orchestration
+  → Writes everything to Gateway API         → Reads from Gateway API
+```
 
-**What the UI does now** (Lucy off):
-- Visualize workflow data: records, topics, evaluations, training jobs, coverage
-- Browse and inspect individual records, eval results, training metrics
-- Navigate the file-tree explorer (data, evaluations, grader, finetune jobs, insights)
-- Create workflows via the homepage objective input (but no auto-plan generation)
+**The skill drives the pipeline. The UI displays the results.** Both are under active development.
 
-**What the skill handles** (external):
-- Document extraction (PDF, images, etc.)
-- Data generation and topic creation
-- Linking data, topics, and documents with references
-- Running evaluations and training
+### The Finetune Skill (`finetune-skill/`) — USER-FACING PRODUCT
 
-Later, the same skill will power Lucy in-app.
+**This is the product we're building for end users**, NOT a Claude Code internal skill for our development.
+
+Users download/copy this skill into their own project, then use Claude Code (or Codex) to run the full finetune pipeline against the vLLora API. The skill tells Claude how to extract documents, generate training data, create topics, run evals, and train models.
+
+**We are actively developing this skill.** It's currently in testing (v1-v9 iterations with Chess Tactics PDF).
+
+| File | Purpose |
+|------|---------|
+| `finetune-skill/SKILL.md` | Main skill definition (6-step pipeline, constraints, execution format) |
+| `finetune-skill/README.md` | **Read first** — architecture, 9 test iterations, known issues, debugging |
+| `finetune-skill/reference/` | 7 reference docs (API, extraction, graders, topics, iteration, workflow, data format) |
+| `finetune-skill/scripts/` | 6 Python helpers (eval, training, validation) |
+| `finetune-skill/templates/` | Sample JSONL, project config, grader template |
+
+**Relationship to UI**: The skill writes data to the Gateway API → the UI reads and visualizes it. They are two halves of the same product.
+
+### Lucy AI Assistant (Disabled — Future)
+
+Lucy is the in-app AI sidebar. Currently disabled via `VITE_LUCY_ENABLED` flag (default: `false`).
+- Flag: `src/lib/feature-flags.ts` → `IS_LUCY_ENABLED`
+- Gated: `LucySidebar`, `AgentPanelWrapper`, `SidebarAgentButton`, plan.md in explorer, PlanPreview buttons
+- Set `VITE_LUCY_ENABLED=true` in `.env` to re-enable for testing
+- Later, Lucy will call the same skill functions — same pipeline, different interface
 
 ## Tech Stack
 
@@ -34,7 +53,7 @@ Later, the same skill will power Lucy in-app.
 | Build | Vite 7 |
 | Styling | Tailwind CSS 3.4, Radix UI, shadcn/ui |
 | State | React Context + ahooks `useRequest` |
-| Persistence | IndexedDB (local-first, no backend DB) |
+| Persistence | Gateway API (SQLite at `~/.vllora/vllora.db`). IndexedDB only for ephemeral UI state |
 | Package Manager | pnpm |
 | Testing | Vitest, @testing-library/react |
 | AI Agent | Distri A2A protocol (@distri/core, @distri/react) |
@@ -160,20 +179,26 @@ Each test case file has YAML frontmatter (`id`, `title`, `area`, `priority`, `ty
 ## Project Structure
 
 ```
+finetune-skill/                        # Claude Code skill (THE pipeline driver)
+├── SKILL.md                           # Main skill definition
+├── README.md                          # Architecture, testing, debugging
+├── reference/                         # 7 reference docs (API, extraction, graders, etc.)
+├── scripts/                           # 6 Python helpers
+└── templates/                         # Sample data, configs, grader template
 src/
 ├── components/
-│   ├── datasets/          # Main finetune UI (35+ components)
-│   ├── agent/lucy-agent/  # Lucy AI assistant components
+│   ├── datasets/          # Main finetune UI (44 components)
+│   ├── agent/lucy-agent/  # Lucy AI assistant components (disabled by default)
 │   ├── chat/              # Chat/messaging UI
 │   ├── ui/                # shadcn/ui primitives (32 files)
 │   └── ...                # settings, models, traces, debug
-├── contexts/              # 33 React Contexts (all shared state lives here)
-├── services/              # 27 service modules (API clients, IndexedDB, polling)
+├── contexts/              # 27 React Contexts (all shared state lives here)
+├── services/              # 22 service modules (API adapters, polling, helpers)
 ├── lib/
-│   ├── distri-finetune-tools/  # 53 finetune tool implementations
+│   ├── distri-finetune-tools/  # 70 finetune tool files (45 per-step)
 │   ├── distri-dataset-tools/   # Dataset analysis & validation
 │   └── distri-data-tools/      # Trace data fetching
-├── types/                 # 8 type definition files
+├── types/                 # 11 type definition files
 └── ...
 docs/
 ├── state-management-pattern.md     # MANDATORY: read before writing state code
@@ -189,9 +214,9 @@ docs/
 
 ---
 
-## Lucy Finetune Dataset Feature (Active Development)
+## Finetune Pipeline Architecture (Reference)
 
-The main feature. An AI assistant (Lucy) in the sidebar guides users through building finetune datasets. Think Claude Code in VS Code: Lucy proposes plans, shows progress, executes — while the main area shows the workspace.
+The finetune pipeline is driven by `finetune-skill/` (external) and visualized by the UI. Lucy (in-app AI sidebar) is disabled but the architecture remains — it will reuse the same skill functions when re-enabled.
 
 ### 7-Step Pipeline
 
@@ -221,23 +246,32 @@ User ↔ React UI (this repo)
 
 ### Key Docs (read these first)
 
+**Finetune Skill (user-facing product — active development):**
+
 | Doc | What it covers |
 |-----|---------------|
-| `docs/workflow-skill-first-approach/README.md` | **UI Redesign** — current active work, mockup, implementation status |
-| `docs/workflow-skill-first-approach/implementation-status.md` | What's done, architecture decisions, file map for UI redesign |
-| `docs/workflow-skill-first-approach/architecture-updates-2026-03.md` | March 2026 refactoring: eval polling, ID mapping, cross-view navigation, training UI |
-| `docs/features/lucy-finetune-dataset/README.md` | Overview and index |
-| `docs/features/lucy-finetune-dataset/architecture.md` | 3-tier system, tool definitions, state management |
-| `docs/features/lucy-finetune-dataset/state-machine.md` | Workflow steps, transitions, validation rules, `WorkflowState` type |
-| `docs/features/lucy-finetune-dataset/guided-onboarding.md` | Onboarding flow, plan types, step registry |
-| `docs/features/lucy-finetune-dataset/data-generation-agent.md` | Synthetic training data generation |
-| `docs/features/lucy-finetune-dataset/dataset-readme-generation.md` | Auto-generated dataset README |
-| `docs/features/lucy-finetune-dataset/event-emitter-guide.md` | 14 events, emitters/listeners map, context architecture |
-| `docs/features/lucy-finetune-dataset/vendored-distri-packages.md` | Vendored package details |
-| `docs/features/skill-package/README.md` | Skill package overview, output format, how Claude uses it |
-| `docs/features/skill-package/architecture.md` | Skill package source map, types, functions, debugging |
-| `docs/features/skill-package/data-flow.md` | End-to-end data flow from IndexedDB through packaging |
+| `finetune-skill/README.md` | **START HERE for skill work** — architecture, 9 test iterations, known issues, debugging |
+| `finetune-skill/SKILL.md` | The actual skill definition users get — 6-step pipeline, constraints |
+| `finetune-skill/reference/api-reference.md` | All 58 gateway API endpoints |
+| `finetune-skill/reference/workflow-guide.md` | Per-step deep dives |
+
+**UI (visualization layer):**
+
+| Doc | What it covers |
+|-----|---------------|
+| `docs/workflow-skill-first-approach/README.md` | **START HERE for UI work** — redesign status, mockup, implementation |
+| `docs/workflow-skill-first-approach/implementation-status.md` | What's done, architecture decisions, file map |
+| `docs/workflow-skill-first-approach/architecture-updates-2026-03.md` | March 2026: eval polling, ID mapping, navigation, training UI |
 | `docs/state-management-pattern.md` | **MANDATORY** — Context + ahooks pattern |
+
+**Architecture reference (read on demand):**
+
+| Doc | What it covers |
+|-----|---------------|
+| `docs/features/lucy-finetune-dataset/architecture.md` | 3-tier system, tool definitions, state management |
+| `docs/features/lucy-finetune-dataset/state-machine.md` | Workflow steps, transitions, validation rules |
+| `docs/features/lucy-finetune-dataset/event-emitter-guide.md` | 14 events, emitters/listeners map |
+| `docs/features/skill-package/README.md` | Skill package output format, how Claude uses it |
 
 ---
 
@@ -254,11 +288,22 @@ When investigating issues, check the relevant layer(s). Paths are relative to th
 | `../gateway/agents/finetune/finetune-workflow-agent.md` | Workflow execution sub-agent |
 | `../gateway/agents/finetune/data-generation-agent.md` | Data generation sub-agent |
 
-### Layer 2: Rust Gateway
+### Layer 2: Rust Gateway (localhost:9090)
+
+To investigate BE endpoints, start here:
 
 | File | Purpose |
 |------|---------|
+| `../gateway/src/http.rs` | **START HERE** — all HTTP route definitions for the gateway API |
 | `../gateway/src/distri.rs` | Downloads distri binary, starts server, health checks |
+
+### Layer 2b: Cloud Backend (LangDB Cloud)
+
+To investigate cloud endpoints (eval, training), start here:
+
+| File | Purpose |
+|------|---------|
+| `/Users/anhthuduong/Documents/GitHub/langdb-cloud/cloud/src/server/rest.rs` | **START HERE** — all cloud REST route definitions |
 
 ### Layer 3: Distri Server (Rust)
 
@@ -280,10 +325,10 @@ When investigating issues, check the relevant layer(s). Paths are relative to th
 | `src/components/agent/lucy-agent/LucyChat.tsx` | Lucy chat component (messages, input, tool rendering) |
 | `src/lib/distri-finetune-tools/index.ts` | Tool registry and exports |
 | `src/lib/distri-finetune-tools/types.ts` | Shared TypeScript types |
-| `src/lib/distri-finetune-tools/steps/` | 42 per-step tool implementations |
+| `src/lib/distri-finetune-tools/steps/` | 45 per-step tool implementations |
 | `src/lib/distri-finetune-tools/workflow/` | Workflow state machine |
-| `src/contexts/` | All shared state (33 contexts) |
-| `src/services/` | API clients, IndexedDB, polling (27 modules) |
+| `src/contexts/` | All shared state (27 contexts) |
+| `src/services/` | API adapters, polling, helpers (22 modules) |
 
 ### Layer 5: @distri/react & @distri/core (vendored — DO NOT edit in this repo)
 
@@ -320,11 +365,11 @@ When investigating issues, check the relevant layer(s). Paths are relative to th
 
 | Context | Purpose |
 |---------|---------|
-| `DatasetsContext` | Dataset CRUD + IndexedDB |
+| `DatasetsContext` | Dataset CRUD (Gateway API) |
 | `DatasetsUIContext` | Navigation, selection, search/sort |
 | `DatasetDetailContext` | Current dataset detail state |
 | `FinetuneProcessContext` | Finetune pipeline step state |
-| `DryRunJobsContext` | Evaluation job management |
+| `EvalJobsContext` | Evaluation job management (internal code still uses `dryRun` naming) |
 | `KnowledgeSourcesContext` | Knowledge source state |
 | `PlanContext` | Finetune plan state |
 | `AgentPanelContext` | Lucy agent panel state |
@@ -335,7 +380,7 @@ When investigating issues, check the relevant layer(s). Paths are relative to th
 - Run `npx tsc --noEmit` after every change (**automated** — PostToolUse hook runs this after `.ts`/`.tsx` edits)
 - @distri/react and @distri/core are **vendored** — changes must be made in the distri repo and synced via `scripts/sync-distrijs.sh`
 - Tools execute **locally in the browser**, not on the server
-- IndexedDB is the primary persistence layer (datasets, workflows, jobs)
+- Gateway API (SQLite at `~/.vllora/vllora.db`) is the primary persistence layer — IndexedDB only for upload sessions and plan state
 - Auth: localStorage key `vlora_user_email` (for E2E testing: set to `test@e2e.local`)
 
 ### Hooks (`.claude/settings.json`)
@@ -356,19 +401,18 @@ Hook scripts live in `.claude/hooks/`. Configuration is in `.claude/settings.jso
 
 ## Documentation Sync Rule
 
-After ANY code change, check whether it affects behavior documented in `docs/features/`. If it does, **update the relevant doc file(s) in the same change**:
+After ANY code change, check whether it affects behavior documented in `docs/features/` or `finetune-skill/`. If it does, **update the relevant doc file(s) in the same change**:
 
 | What changed | Update |
 |-------------|--------|
-| State machine transitions | `lucy-finetune-dataset/state-machine.md` |
-| Tools added/removed/modified | `lucy-finetune-dataset/architecture.md` |
-| Onboarding flow or planning | `lucy-finetune-dataset/guided-onboarding.md` |
-| Data generation logic | `lucy-finetune-dataset/data-generation-agent.md` |
-| README generation | `lucy-finetune-dataset/dataset-readme-generation.md` |
-| Vendored packages updated | `lucy-finetune-dataset/vendored-distri-packages.md` |
-| Event emitters added/changed | `lucy-finetune-dataset/event-emitter-guide.md` |
+| Skill pipeline steps or constraints | `finetune-skill/SKILL.md` |
+| Skill API usage or new endpoints | `finetune-skill/reference/api-reference.md` |
+| Skill known issues or testing | `finetune-skill/README.md` |
+| State machine transitions | `docs/features/lucy-finetune-dataset/state-machine.md` |
+| Tools added/removed/modified | `docs/features/lucy-finetune-dataset/architecture.md` |
+| Event emitters added/changed | `docs/features/lucy-finetune-dataset/event-emitter-guide.md` |
 | Agent prompt/tools changed | The relevant agent md in `gateway/agents/finetune/` |
-| Skill packaging logic (generate, download, viewer) | `skill-package/README.md`, `architecture.md`, or `data-flow.md` |
+| Skill packaging logic | `docs/features/skill-package/README.md`, `architecture.md`, or `data-flow.md` |
 
 ---
 
@@ -419,9 +463,9 @@ Multi-agent teams for complex tasks. Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TE
 
 2. **Vendored @distri packages**: These live in `vendor/` and are NOT editable in this repo. `Edit` and `Write` on `vendor/**` are **denied** in `.claude/settings.json`. To change them: edit in the distri repo → build → run `scripts/sync-distrijs.sh`.
 
-3. **IndexedDB is the source of truth**: Datasets, workflows, evaluation jobs, and knowledge sources are all stored in IndexedDB. There is no backend database — the backend only handles API calls to external services (OpenAI, eval server).
+3. **Gateway API (SQLite) is the source of truth**: Datasets, workflows, records, evaluation jobs, and knowledge sources are all stored in the Gateway's SQLite database at `~/.vllora/vllora.db`. The UI fetches everything via API adapters in `src/services/adapters/`. IndexedDB is only used for ephemeral UI state (upload sessions in `upload-session-db.ts`, plan state in `proposed-plan-store.ts`). To inspect data directly: `sqlite3 ~/.vllora/vllora.db ".tables"`
 
-4. **Tools execute in the browser**: All 53 finetune tools run locally via the @distri/react tool execution pipeline. They are NOT server-side.
+4. **Tools execute in the browser**: All 70 finetune tool files (45 per-step) run locally via the @distri/react tool execution pipeline. They are NOT server-side.
 
 5. **Event emitter cleanup**: When using `emitter.on()` in a React component, ALWAYS return a cleanup function in `useEffect`. Missing cleanup = memory leaks + stale listeners. See `event-emitter-guide.md` for the full event map.
 

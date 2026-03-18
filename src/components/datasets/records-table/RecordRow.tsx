@@ -129,8 +129,8 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
   // Handler to trigger Lucy for variant generation
   const handleGenerateVariants = useCallback(() => {
     // Extract a brief summary from the record for context
-    const data = record.data as { input?: { messages?: Array<{ role: string; content: string }> } } | null;
-    const messages = data?.input?.messages || [];
+    const d = record.data as Record<string, unknown> | null;
+    const messages = (Array.isArray(d?.messages) ? d.messages : (d?.input as Record<string, unknown> | undefined)?.messages ?? []) as Array<{ role: string; content: string }>;
     const userMessage = messages.find(m => m.role === "user")?.content || "";
     const preview = userMessage.length > 100 ? userMessage.substring(0, 100) + "..." : userMessage;
 

@@ -231,7 +231,7 @@ coverage_generation -> skill_packaging -> download (instant)
                     -> grader_config -> dry_run -> training (hours)
 ```
 
-**Key principle: what you see is what you get.** Whatever records exist in IndexedDB go into the skill package. No automatic filtering by scores, diversity flags, or evaluation results.
+**Key principle: what you see is what you get.** Whatever records exist in the Gateway database go into the skill package. No automatic filtering by scores, diversity flags, or evaluation results.
 
 ---
 
@@ -256,4 +256,4 @@ Claude Code auto-discovers skills in `~/.claude/skills/` and `.claude/skills/`.
 |----------|---------------|
 | [README.md](./README.md) | This file — overview, output format, how it works |
 | [architecture.md](./architecture.md) | Source map, key functions, types, debugging guide |
-| [data-flow.md](./data-flow.md) | End-to-end data flow from IndexedDB through packaging |
+| [data-flow.md](./data-flow.md) | End-to-end data flow from Gateway API through packaging |

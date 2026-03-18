@@ -178,13 +178,13 @@ const {
 ```
 
 **Features**:
-- Fetches datasets from IndexedDB on mount
+- Fetches datasets from Gateway API on mount
 - Provides CRUD operations for datasets and records
 - Listens for Lucy agent events to update state:
   - `vllora_dataset_created` - adds new dataset to state
   - `vllora_dataset_deleted` - removes dataset from state
   - `vllora_dataset_renamed` - updates dataset name in state
-  - `vllora_dataset_refresh` - reloads all datasets from IndexedDB
+  - `vllora_dataset_refresh` - reloads all datasets from Gateway API
 - Shared across DatasetsPage, AddToDatasetDialog, etc.
 
 ### DatasetsUIContext

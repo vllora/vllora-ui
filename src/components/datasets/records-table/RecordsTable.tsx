@@ -364,8 +364,8 @@ export function RecordsTable({
   // Extract system prompt from the first record as fallback when normalizedObjective is not set
   const recordSystemPrompt = useMemo(() => {
     for (const record of displayRecords) {
-      const data = record.data as { input?: { messages?: Array<{ role?: string; content?: string }> } } | undefined;
-      const msgs = data?.input?.messages;
+      const d = record.data as Record<string, unknown> | undefined;
+      const msgs = (Array.isArray(d?.messages) ? d.messages : (d?.input as Record<string, unknown> | undefined)?.messages) as Array<{ role?: string; content?: string }> | undefined;
       if (!msgs) continue;
       const sysMsg = msgs.find(m => m.role === "system");
       if (sysMsg?.content) return sysMsg.content;

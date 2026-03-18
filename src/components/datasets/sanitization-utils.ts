@@ -11,6 +11,20 @@
 
 import type { DatasetRecord, DataInfo } from "@/types/dataset-types";
 
+/**
+ * Extract the messages array from record data, supporting both formats:
+ *   - OpenAI / skill format: { messages: [...] }
+ *   - vLLora format:         { input: { messages: [...] } }
+ */
+function getMessages(data: unknown): unknown[] | undefined {
+  if (!data || typeof data !== "object") return undefined;
+  const d = data as Record<string, unknown>;
+  if (Array.isArray(d.messages)) return d.messages;
+  const dataInfo = data as DataInfo;
+  if (Array.isArray(dataInfo.input?.messages)) return dataInfo.input.messages as unknown[];
+  return undefined;
+}
+
 // Validation error types
 export type ValidationError =
   | 'invalid_data_structure'
@@ -92,13 +106,8 @@ export function validateRecord(
     return { valid: false, error: 'invalid_data_structure' };
   }
 
-  // 2. Check input exists
-  if (!dataInfo.input) {
-    return { valid: false, error: 'missing_input' };
-  }
-
-  // 3. Check messages exist
-  const messages = dataInfo.input.messages as Message[] | undefined;
+  // 2-3. Check messages exist (supports both OpenAI and vLLora formats)
+  const messages = getMessages(dataInfo) as Message[] | undefined;
 
   if (!messages) {
     return { valid: false, error: 'missing_messages' };
@@ -222,8 +231,7 @@ function estimateTokens(messages: Message[]): number {
  * Compute content hash for deduplication
  */
 function computeContentHash(record: DatasetRecord): string {
-  const dataInfo = record.data as DataInfo;
-  const content = JSON.stringify(dataInfo.input?.messages || []);
+  const content = JSON.stringify(getMessages(record.data) || []);
   // Simple hash function
   let hash = 0;
   for (let i = 0; i < content.length; i++) {
@@ -355,8 +363,7 @@ export async function sanitizeRecords(
  * Extract user content from a record (utility used by other modules)
  */
 export function extractUserContent(record: DatasetRecord): string {
-  const dataInfo = record.data as DataInfo;
-  const messages = (dataInfo.input?.messages || []) as Message[];
+  const messages = (getMessages(record.data) || []) as Message[];
 
   // Get last user message content
   const userMessages = messages.filter(m => m.role === 'user');
