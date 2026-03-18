@@ -96,6 +96,21 @@ Read the `reason` field from 5-10 low-scoring records. Look for:
 | **WARNING** | avg 0.5-0.6 or pass rate 60-70% | Can train, but improvements likely help |
 | **NO-GO** | avg < 0.5 or pass rate < 60% or std < 0.1 | Must fix before training |
 
+### Step 6: Continuation Readiness (for `finetuned/{cloud_job_id}` or `checkpointed/{cloud_job_id}`)
+
+Before launching a continuation run, verify the source job is eligible:
+
+| Check | Required value | Why |
+|-------|----------------|-----|
+| Source job status (`finetuned/`) | `succeeded` | Final-adapter continuation requires a successful source run |
+| Source job status (`checkpointed/`) | terminal: `succeeded`/`failed`/`cancelled` | Checkpoint continuation may resume from failed/cancelled terminal runs |
+| Provider live status (`finetuned/`) | succeeded | Guards against stale local state for final-adapter continuation |
+| Provider live status (`checkpointed/`) | terminal: succeeded/failed/cancelled | Allows checkpoint resume from failed terminal runs |
+| Final adapter exists (`finetuned/`) | Yes | Required to load prior adapter |
+| Checkpoint exists (`checkpointed/`) | latest `checkpoint-step-*` present | Required to resume from checkpoint |
+
+If any check fails, do not continue training from that source job. Fix/re-run the source job first.
+
 ---
 
 ## Part 2: Analyzing Training Progress (Per-Epoch Results)

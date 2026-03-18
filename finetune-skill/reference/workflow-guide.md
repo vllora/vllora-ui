@@ -372,6 +372,45 @@ This shows git-style diffs between consecutive versions. Log version numbers in 
 
 Start with the smaller model for faster iteration. Scale up once you've validated your dataset and grader.
 
+### Continuing from Previous Jobs
+
+You can start new training from an earlier successful cloud job:
+
+- `finetuned/{cloud_job_id}`: load final adapter from that job.
+- `checkpointed/{cloud_job_id}`: load latest checkpoint from that job.
+
+For checkpoint continuation, optional `resume_mode`:
+
+- `weights-only` (default): restore adapter weights only.
+- `full-state`: restore adapter and optimizer state when checkpoint contains `optimizer.pt`.
+
+Example requests:
+
+```bash
+# Continue from final adapter
+curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "base_model": "finetuned/2b08db0e-6a5e-4d62-b89f-8d2e8b246d44",
+    "output_model": "my-model-v2"
+  }'
+```
+
+```bash
+# Continue from latest checkpoint, restore full state when possible
+curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "base_model": "checkpointed/2b08db0e-6a5e-4d62-b89f-8d2e8b246d44",
+    "resume_mode": "full-state",
+    "output_model": "my-model-v3"
+  }'
+```
+
+Continuation validation is mode-specific:
+- `finetuned/{cloud_job_id}`: source job must be successful (`succeeded`).
+- `checkpointed/{cloud_job_id}`: source job may be any terminal state (`succeeded`, `failed`, `cancelled`), which allows resuming from failed runs.
+
 ### Training Config Guidance
 
 The defaults work well for most cases. Adjust if:

@@ -307,6 +307,43 @@ curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
   }'
 ```
 
+#### Continuing from a previous job
+
+You can continue from a prior successful cloud finetune job by setting `base_model` to one of:
+
+- `finetuned/{cloud_job_id}`: load final adapter weights from the prior job.
+- `checkpointed/{cloud_job_id}`: load latest checkpoint from the prior job.
+
+When using `checkpointed/{cloud_job_id}`, you can optionally control resume depth with `resume_mode`:
+
+- `weights-only` (default): restore checkpoint adapter weights only.
+- `full-state`: restore checkpoint adapter + optimizer state when available.
+
+Example (`finetuned`):
+```bash
+curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "base_model": "finetuned/2b08db0e-6a5e-4d62-b89f-8d2e8b246d44",
+    "output_model": "my-model-v2"
+  }'
+```
+
+Example (`checkpointed` + full-state):
+```bash
+curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "base_model": "checkpointed/2b08db0e-6a5e-4d62-b89f-8d2e8b246d44",
+    "resume_mode": "full-state",
+    "output_model": "my-model-v3"
+  }'
+```
+
+**Validation gate:**
+- `finetuned/{cloud_job_id}` requires source job success (`succeeded`) and provider success.
+- `checkpointed/{cloud_job_id}` allows any terminal source state (`succeeded`, `failed`, `cancelled`) as long as provider status is also terminal.
+
 **Training Config Defaults:**
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -330,6 +367,7 @@ curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
 | `chunk_size` | Chunk size for data processing |
 | `node_count` | Nodes for distributed training |
 | `evaluator_version` | Which evaluator version to use |
+| `resume_mode` | Only for `checkpointed/{cloud_job_id}`. `weights-only` (default) or `full-state` |
 
 **Response:**
 ```json
