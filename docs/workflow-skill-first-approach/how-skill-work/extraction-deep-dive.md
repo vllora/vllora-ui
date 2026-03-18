@@ -58,7 +58,7 @@ Docling Serve is a local document processing service that:
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/health` | GET | Check if Docling is running |
-| `/v1/chunk/hybrid/file/async` | POST | Submit a document for processing (returns `task_id`) |
+| `/v1/chunk/hybrid/file/async` | POST | Submit a document for processing (returns `task_id`). Use `chunking_max_tokens=1024` for fine-tuning (default ~512 is optimized for RAG) |
 | `/v1/status/poll/{task_id}` | GET | Check if processing is complete |
 | `/v1/result/{task_id}` | GET | Fetch the processed result |
 
@@ -135,6 +135,26 @@ The extraction script transforms raw Docling output into structured, typed parts
    b. Create image parts with captions from adjacent text
 6. Write knowledge_parts.json and parts-index.json
 ```
+
+### Post-Extraction Consolidation
+
+After the extraction script produces `knowledge_parts.json`, run `scripts/consolidate_parts.py` to improve quality:
+
+```bash
+uv run scripts/consolidate_parts.py knowledge/{doc-slug}/knowledge_parts.json
+```
+
+**What it does**:
+1. **Merges adjacent text parts** sharing the same `extraction_path` — reduces fragmentation from Docling's chunking
+2. **Drops short fragments** — text parts under 50 chars (configurable via `--min-chars`) are removed
+3. **Fixes Unicode escapes** — decodes `\u0xxx` sequences caused by `json.dumps(ensure_ascii=True)`
+4. **Reassigns IDs** — sequential IDs with document-slug prefix (e.g., `chess-tactics-p-001`)
+5. **Regenerates `parts-index.json`** — lightweight index updated to match consolidated parts
+6. **Validates quality** — reports parts/page ratio, title diversity, avg content length
+
+**Why this is needed**: Docling's HybridChunker produces many small fragments (known issue — see Docling GitHub #1207, #1174). A 100-page PDF can produce 1000+ tiny parts; consolidation reduces this to 30-80 meaningful parts.
+
+**Encoding rule**: When writing `knowledge_parts.json`, always use `json.dump(..., ensure_ascii=False)` to preserve non-ASCII characters (Cyrillic, CJK, accented Latin). Without this, characters become `\u0xxx` escape sequences that pollute extraction paths and titles.
 
 ### Part Types
 
@@ -234,6 +254,32 @@ for p in json.load(open('knowledge/chess-tactics/knowledge_parts.json'))['parts'
     if not p['id'].startswith('chess-tactics'):
         print(f'BAD ID: {p[\"id\"]}')
 "
+```
+
+### Parts are too short or have duplicate titles
+
+The extraction script didn't consolidate properly. Run the quality gate:
+```bash
+uv run scripts/validate_extraction.py finetune-project/knowledge/
+```
+
+If it reports FAIL, auto-fix with:
+```bash
+uv run scripts/validate_extraction.py finetune-project/knowledge/ --fix
+```
+
+Or consolidate a single document:
+```bash
+uv run scripts/consolidate_parts.py knowledge/{doc-slug}/knowledge_parts.json
+```
+
+**Healthy thresholds**: 2-10 parts/page, title diversity >50%, avg content >200 chars, <5% short parts.
+
+### Unicode escape sequences in extraction paths/titles
+
+Caused by `json.dumps(ensure_ascii=True)` (Python default). Fix by re-running the extraction script with `ensure_ascii=False`, or run consolidation which auto-fixes Unicode escapes:
+```bash
+uv run scripts/consolidate_parts.py knowledge/{doc-slug}/knowledge_parts.json
 ```
 
 ### `all-parts-index.json` is empty or missing

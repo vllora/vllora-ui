@@ -61,6 +61,7 @@ Key parameters:
 - `convert_include_images=true` + `convert_image_export_mode=embedded` — images are base64-encoded in the response
 - `convert_do_table_structure=true` — extracts table cell structure (rows, columns, headers)
 - `chunking_merge_peers=true` — merges small adjacent chunks under the same heading
+- `chunking_max_tokens=1024` — maximum tokens per chunk. Set higher than the RAG default (512) because fine-tuning needs larger, more coherent knowledge parts — not retrieval-sized fragments
 - `chunking_tokenizer=BAAI/bge-small-en-v1.5` — tokenizer for chunk size counting (matches the embedding model used downstream; default `sentence-transformers/all-MiniLM-L6-v2` under-counts tokens for BGE embeddings)
 
 ### Poll until complete
@@ -516,6 +517,12 @@ Process chunks by `chunk_index` to maintain reading order. For each chunk:
 ### Step 4.5: Consolidate Parts (Quality Gate)
 
 **This step is mandatory.** Creating one part per Docling text item produces hundreds of tiny fragments — a 100-page PDF should NOT yield 1000+ parts. Consolidate before proceeding.
+
+> **Shortcut**: Instead of implementing the logic below manually, use the provided script:
+> ```bash
+> python3 scripts/consolidate_parts.py knowledge/{doc-slug}/knowledge_parts.json
+> ```
+> This handles merging, min-length filtering, Unicode fixes, ID reassignment, and quality validation in one step. The logic below explains what the script does.
 
 #### Merge adjacent text parts under the same heading
 

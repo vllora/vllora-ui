@@ -41,6 +41,8 @@ Other helper scripts:
 
 | Script | Step | What it does |
 |--------|------|-------------|
+| `consolidate_parts.py` | 2c | Merges adjacent text parts, drops short fragments, fixes Unicode, validates quality |
+| `validate_extraction.py` | 2e | Cross-document extraction quality gate (parts/page, title diversity, avg length) |
 | `generate_records.py` | 4 | Generates records per leaf topic via LLM (calls `chat_completion.py`) |
 | `chat_completion.py` | 4 | Calls LLM API — validates JSON when `response_format` is `json_object` |
 | `validate_dataset.py` | 5.5 | Validates JSONL format, fields, RFT compliance, cross-refs topics/parts |
@@ -140,7 +142,7 @@ This is the longest and most complex step. It has 4 sub-stages.
 
 **Key detail**: Submissions happen sequentially (one curl per document), but Docling processes them **in parallel** on the server side. So 3 documents are all being processed at the same time.
 
-**API calls**: `POST http://127.0.0.1:5001/v1/chunk/hybrid/file/async` (one per document)
+**API calls**: `POST http://127.0.0.1:5001/v1/chunk/hybrid/file/async` (one per document, with `chunking_max_tokens=1024` for larger coherent chunks suitable for fine-tuning)
 
 **What to watch for**:
 - Docker may need to pull the Docling image (~2GB) on first run
@@ -185,15 +187,23 @@ curl -s http://127.0.0.1:5001/v1/status/poll/{task_id} | python3 -c "import sys,
 1. **Reads the Docling result** — examines chunks 0-9, then samples from middle and end to understand the document structure
 2. **Writes a Python extraction script** — tailored to each document's structure (heading patterns, noise filters, table handling)
 3. **Runs the script** — transforms raw Docling output into typed, structured `knowledge_parts.json`
+4. **Runs consolidation** — `scripts/consolidate_parts.py` merges adjacent text parts under the same heading, drops short fragments (<50 chars), fixes Unicode escape sequences, reassigns sequential IDs, and regenerates `parts-index.json`
 
 This is where the agent spends the most **context window** — it reads large JSON files to understand the document, then writes custom code. This is the step most likely to get stuck if the Docling result is very large (>30MB).
+
+**Consolidation** (run after the extraction script):
+```bash
+uv run scripts/consolidate_parts.py knowledge/{doc-slug}/knowledge_parts.json
+```
+
+This reduces part count (e.g., 1018 raw → 45 consolidated), improves title diversity, and ensures content is long enough for meaningful training data. Use `--dry-run` to validate without modifying.
 
 **Files produced** (per document):
 ```
 finetune-project/knowledge/{doc-slug}/
 ├── docling-result.json        # From step 2b (already exists)
-├── knowledge_parts.json       # Structured parts: text, table, image
-└── parts-index.json           # Lightweight index for topic design
+├── knowledge_parts.json       # Structured parts: text, table, image (consolidated)
+└── parts-index.json           # Lightweight index for topic design (regenerated)
 ```
 
 Where `{doc-slug}` is the slugified filename (e.g., `chess-tactics/`, `strategy-guide/`).
@@ -266,8 +276,9 @@ finetune-project/knowledge/
 
 ### 2e. Verify ALL documents were processed
 
-**CRITICAL CHECK — do NOT proceed to Step 3 until this passes.** The agent counts source PDFs vs extracted `knowledge_parts.json` files and blocks if any are missing:
+**CRITICAL CHECK — do NOT proceed to Step 3 until this passes.** Two checks run:
 
+**Check 1: Document completeness** — counts source PDFs vs extracted `knowledge_parts.json`:
 ```bash
 DOC_COUNT=$(ls *.pdf 2>/dev/null | wc -l | tr -d ' ')
 EXTRACTED_COUNT=$(find finetune-project/knowledge -mindepth 2 -name 'knowledge_parts.json' 2>/dev/null | wc -l | tr -d ' ')
@@ -279,7 +290,17 @@ if [ "$EXTRACTED_COUNT" -lt "$DOC_COUNT" ]; then
 fi
 ```
 
-If any documents are missing, the agent goes back to Step 2a-2c for the missing ones.
+**Check 2: Extraction quality gate** — validates all documents pass quality thresholds:
+```bash
+uv run scripts/validate_extraction.py finetune-project/knowledge/
+```
+
+This checks per-document: parts-per-page ratio (>15 = FAIL), short parts (<50 chars, >20% = FAIL), title diversity (<50% = FAIL), avg content length (<100 chars = FAIL), and Unicode encoding issues. Use `--fix` to auto-run `consolidate_parts.py` on failing documents:
+```bash
+uv run scripts/validate_extraction.py finetune-project/knowledge/ --fix
+```
+
+If any documents are missing, the agent goes back to Step 2a-2c. If quality checks fail, the agent re-runs consolidation or fixes the extraction script.
 
 ### 2f. Upload knowledge sources
 
@@ -597,10 +618,10 @@ t=1m   (workflow created in gateway DB)             ← Step 1 done, UI shows wo
 t=2m   knowledge/chess-tactics/docling-result.json    ← Step 2b (first doc done)
 t=3m   knowledge/strategy-guide/docling-result.json  ← Step 2b (second doc done)
 t=4m   knowledge/endgame-manual/docling-result.json  ← Step 2b (third doc done)
-t=6m   knowledge/chess-tactics/knowledge_parts.json  ← Step 2c (first doc processed)
+t=6m   knowledge/chess-tactics/knowledge_parts.json  ← Step 2c (first doc extracted + consolidated)
 t=6m   knowledge/chess-tactics/parts-index.json
-t=8m   knowledge/strategy-guide/knowledge_parts.json ← Step 2c (second doc processed)
-t=10m  knowledge/endgame-manual/knowledge_parts.json ← Step 2c (third doc processed)
+t=8m   knowledge/strategy-guide/knowledge_parts.json ← Step 2c (second doc extracted + consolidated)
+t=10m  knowledge/endgame-manual/knowledge_parts.json ← Step 2c (third doc extracted + consolidated)
 t=10m  knowledge/all-parts-index.json               ← Step 2d (merged)
 t=10m  knowledge/extraction-notes.md
 t=10m  (knowledge sources uploaded to gateway)       ← UI shows Sources view

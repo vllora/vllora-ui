@@ -253,11 +253,18 @@ For **each** document directory, produce `knowledge_parts.json` and `parts-index
 
    **Important**: Prefix all part IDs with the document identifier (typically the slugified filename) to keep them unique across documents. For example: `chess-tactics-chapter-3`, `strategy-guide-section-5`.
 
-3. **Consolidate parts before saving** — merge adjacent text parts under the same heading, drop parts under 50 chars, and validate title diversity. See `reference/extraction-guide.md` Step 4.5 for the merging algorithm and quality gates. **A healthy extraction produces 2-10 parts per page.** If you have >15 parts/page or >50% of parts share the same title, the extraction is broken — fix it before proceeding.
+3. **Consolidate parts** — after producing `knowledge_parts.json`, run the consolidation script to merge small fragments, fix Unicode encoding, and validate quality:
 
-4. The extraction script must also produce `{doc-slug}/parts-index.json` — a lightweight index with `{id, type, title, extraction_path, pages, content_preview, source_doc}` per part (first 200 chars of content, plus the source document filename).
+   ```bash
+   python3 scripts/consolidate_parts.py "$DOC_DIR/knowledge_parts.json"
+   ```
 
-5. **Run the validation checks** from `reference/extraction-guide.md` Step 7. All FAIL checks must be resolved before uploading. Print the validation output and log it to `execution-log.md`.
+   This merges adjacent text parts under the same heading, drops parts under 50 chars, fixes Unicode escapes, reassigns IDs, and regenerates `parts-index.json`. **A healthy extraction produces 2-10 parts per page.** If the script reports FAIL, fix the extraction script and re-run.
+
+   You can also dry-run to check quality without modifying:
+   ```bash
+   python3 scripts/consolidate_parts.py "$DOC_DIR/knowledge_parts.json" --dry-run
+   ```
 
 See `reference/extraction-guide.md` for the full response structure, schema, and step-by-step guidance.
 
@@ -297,7 +304,7 @@ Then write extraction scripts per document as above.
 
 **Save your extraction notes** to `knowledge/extraction-notes.md` — for each document: name, page count, section headings, key concepts, number of parts extracted.
 
-#### 2e. Verify ALL documents were processed
+#### 2e. Verify ALL documents were processed and pass quality gates
 
 **CRITICAL CHECK — do NOT proceed to Step 3 until this passes:**
 ```bash
@@ -313,9 +320,17 @@ if [ "$EXTRACTED_COUNT" -lt "$DOC_COUNT" ]; then
 else
   echo "OK: All $DOC_COUNT documents extracted."
 fi
+
+# Run quality validation across all documents
+python3 scripts/validate_extraction.py finetune-project/knowledge/
 ```
 
-If any documents are missing, go back to Step 2a-2c and process the missing ones before continuing. Each document MUST have its own subdirectory (slugified filename) with `knowledge_parts.json` and `parts-index.json`.
+If any documents are missing, go back to Step 2a-2c and process the missing ones. If the quality validation fails, run the consolidation script on the failing documents:
+```bash
+python3 scripts/validate_extraction.py finetune-project/knowledge/ --fix
+```
+
+If consolidation alone doesn't fix the issues (e.g., broken heading detection), fix the extraction script and re-extract the failing documents.
 
 **Upload immediately** — push each document's knowledge source + parts to the gateway so the UI shows sources as they're extracted:
 ```bash
