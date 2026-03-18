@@ -39,9 +39,9 @@ def load_relations(relations_path: Path) -> list[dict]:
 
 
 def load_all_parts(knowledge_dir: Path) -> dict[str, dict]:
-    """Load all parts from doc-N/knowledge_parts.json files, keyed by part ID."""
+    """Load all parts from {doc-slug}/knowledge_parts.json files, keyed by part ID."""
     parts: dict[str, dict] = {}
-    pattern = str(knowledge_dir / "doc-*" / "knowledge_parts.json")
+    pattern = str(knowledge_dir / "*" / "knowledge_parts.json")
     for kp_file in sorted(glob.glob(pattern)):
         try:
             data = json.loads(Path(kp_file).read_text())

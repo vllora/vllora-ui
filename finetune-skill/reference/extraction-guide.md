@@ -441,9 +441,9 @@ The formal JSON Schema is at `reference/knowledge-parts-schema.json` — use it 
 
 ## Section 4: How to Create Parts
 
-**You must produce a `knowledge_parts.json` per document** (in `knowledge/doc-N/knowledge_parts.json`) matching the Section 3 schema. This is not optional. Normalized chunks, cleaned chunk lists, or any other intermediate format are NOT the deliverable — they are steps along the way. The final output must have a `source` object and a flat `parts[]` array where every part has `id`, `source_id`, `type` (text|table|image), `content`, `title`, and `extraction_path`. Image parts must have the base64 data URI as `content` (use page fallback if needed). Caption links must be bidirectional via `content_metadata`.
+**You must produce a `knowledge_parts.json` per document** (in `knowledge/{doc-slug}/knowledge_parts.json`, where `{doc-slug}` is the slugified filename) matching the Section 3 schema. This is not optional. Normalized chunks, cleaned chunk lists, or any other intermediate format are NOT the deliverable — they are steps along the way. The final output must have a `source` object and a flat `parts[]` array where every part has `id`, `source_id`, `type` (text|table|image), `content`, `title`, and `extraction_path`. Image parts must have the base64 data URI as `content` (use page fallback if needed). Caption links must be bidirectional via `content_metadata`.
 
-**Important**: Prefix all part IDs with the document identifier (e.g., `doc-1-chapter-3`) to keep them unique when parts from multiple documents are merged into `all-parts-index.json`.
+**Important**: Prefix all part IDs with the document identifier — typically the slugified filename (e.g., `chess-tactics-chapter-3`) to keep them unique when parts from multiple documents are merged into `all-parts-index.json`.
 
 Write your own extraction script tailored to the document. There is no template — each document is different and may require domain-specific filtering or restructuring. Here's the general approach:
 
@@ -532,9 +532,9 @@ After creating all parts, link them:
 - JSON-encode each part's `extraction_path` as a string (e.g., `json.dumps(["Ch 1", "1.2 Intro"])`)
 - Sort parts by first appearance (first `extraction_metadata.source_chunks` value)
 - Wrap in the `knowledge_parts.json` envelope with the `source` object (id, workflow_id, name, description, metadata)
-- Write to `knowledge/doc-N/knowledge_parts.json` (per-document subdirectory)
+- Write to `knowledge/{doc-slug}/knowledge_parts.json` (per-document subdirectory)
 
-Also produce `knowledge/doc-N/parts-index.json` — a lightweight index for topic classification:
+Also produce `knowledge/{doc-slug}/parts-index.json` — a lightweight index for topic classification:
 ```python
 index = []
 for part in parts:
@@ -587,7 +587,7 @@ Skip text items whose `label` is `page_header` or `page_footer`. Optionally skip
 
 ## Section 5: Upload to Gateway
 
-After producing `knowledge_parts.json` for each document (in `knowledge/doc-N/`), upload each source document and its parts to the gateway. **Repeat these two steps for each document.**
+After producing `knowledge_parts.json` for each document (in `knowledge/{doc-slug}/`), upload each source document and its parts to the gateway. **Repeat these two steps for each document.**
 
 ### Step 1: Create Knowledge Source (multipart)
 

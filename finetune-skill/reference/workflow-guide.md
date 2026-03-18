@@ -83,11 +83,11 @@ Keep extracted knowledge organized so you can reference it while generating data
 
 ```
 knowledge/
-├── doc-1/                     # Per-document subdirectory
+├── chess-tactics/              # Per-document subdirectory (slugified filename)
 │   ├── docling-result.json    # Raw Docling response
 │   ├── knowledge_parts.json   # Typed parts for this document
 │   └── parts-index.json       # Part index for this document
-├── doc-2/                     # Second document
+├── strategy-guide/             # Second document
 │   └── ...
 ├── all-parts-index.json       # Merged index across all documents
 └── extraction-notes.md        # Summary with key concepts per document

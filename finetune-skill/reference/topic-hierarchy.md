@@ -42,9 +42,9 @@ Topic-source relations create a formal traceability chain: **document part → r
 
 ### Phase 1: Extraction (Step 2)
 
-When extracting documents, each document produces its own files in a per-document subdirectory (`knowledge/doc-N/`):
-- `doc-N/knowledge_parts.json` — full typed parts with content for that document
-- `doc-N/parts-index.json` — lightweight index with `{id, type, title, extraction_path, pages, content_preview, source_doc}` per part
+When extracting documents, each document produces its own files in a per-document subdirectory (`knowledge/{doc-slug}/`, where `{doc-slug}` is the slugified filename):
+- `{doc-slug}/knowledge_parts.json` — full typed parts with content for that document
+- `{doc-slug}/parts-index.json` — lightweight index with `{id, type, title, extraction_path, pages, content_preview, source_doc}` per part
 
 After all documents are processed, a merged `knowledge/all-parts-index.json` combines all per-document indexes. This merged index is small enough to read in full during topic design and relation building.
 

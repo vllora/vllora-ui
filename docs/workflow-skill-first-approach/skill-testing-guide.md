@@ -274,7 +274,7 @@ curl -X POST http://localhost:9090/finetune/evaluations \
 **How to detect**: Compare PDF count vs knowledge source count:
 ```bash
 DOC_COUNT=$(ls *.pdf 2>/dev/null | wc -l | tr -d ' ')
-EXTRACTED_COUNT=$(ls -d finetune-project/knowledge/doc-*/ 2>/dev/null | wc -l | tr -d ' ')
+EXTRACTED_COUNT=$(find finetune-project/knowledge -mindepth 2 -name 'knowledge_parts.json' 2>/dev/null | wc -l | tr -d ' ')
 echo "Source: $DOC_COUNT | Extracted: $EXTRACTED_COUNT"
 ```
 
@@ -297,7 +297,7 @@ echo "Source: $DOC_COUNT | Extracted: $EXTRACTED_COUNT"
   ],
   "id": "forks-001",
   "topic": "forks",
-  "source_parts": ["doc-1-chapter-3"]
+  "source_parts": ["chess-tactics-chapter-3"]
 }
 ```
 
@@ -330,15 +330,15 @@ echo "Source: $DOC_COUNT | Extracted: $EXTRACTED_COUNT"
 ### Relations
 ```json
 [
-  {"topic_identifier": "forks", "part_identifier": "doc-1-chapter-3"},
-  {"topic_identifier": "pins", "part_identifier": "doc-1-chapter-4"}
+  {"topic_identifier": "forks", "part_identifier": "chess-tactics-chapter-3"},
+  {"topic_identifier": "pins", "part_identifier": "chess-tactics-chapter-4"}
 ]
 ```
 
 ### Knowledge source part
 ```json
 {
-  "id": "doc-1-chapter-3",
+  "id": "chess-tactics-chapter-3",
   "type": "text",
   "title": "Chapter 3: Tactical Motifs",
   "content": "The fork is a tactic...",

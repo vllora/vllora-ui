@@ -118,11 +118,11 @@ finetune-project/               # Agent creates this working directory
 ├── topics.json                 # Topic hierarchy (flat, with parent_id)
 ├── relations.json              # Topic → part mappings for data generation
 ├── knowledge/                  # Extracted domain knowledge
-│   ├── doc-1/                  # Per-document subdirectory
+│   ├── chess-tactics/           # Per-document subdirectory (slugified filename)
 │   │   ├── docling-result.json # Raw Docling response
 │   │   ├── knowledge_parts.json# Typed parts (text, table, image)
 │   │   └── parts-index.json    # Lightweight part index
-│   ├── doc-2/                  # Second document
+│   ├── strategy-guide/          # Second document
 │   │   └── ...
 │   ├── all-parts-index.json    # Merged index across all documents
 │   └── extraction-notes.md     # Extraction notes
