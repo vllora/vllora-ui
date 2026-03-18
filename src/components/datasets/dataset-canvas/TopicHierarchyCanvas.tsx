@@ -388,7 +388,7 @@ function CanvasWithPanel({ hierarchy }: { hierarchy?: TopicHierarchyNode[] }) {
 
   return (
     <div className="relative flex flex-col h-full w-full">
-      <div className="flex-1 relative min-h-0">
+      <div className="flex-1 relative min-h-0 overflow-hidden">
         <TopicHierarchyCanvasInner hierarchy={hierarchy} />
         {/* Source ghost nodes — floating overlay when a topic is zoomed */}
         {zoomedTopicId && zoomedSourceRefs.length > 0 && (
@@ -397,7 +397,11 @@ function CanvasWithPanel({ hierarchy }: { hierarchy?: TopicHierarchyNode[] }) {
           </div>
         )}
       </div>
-      {showDrawer && <TopicInspectorDrawer />}
+      {showDrawer && (
+        <div className="relative z-20">
+          <TopicInspectorDrawer />
+        </div>
+      )}
     </div>
   );
 }

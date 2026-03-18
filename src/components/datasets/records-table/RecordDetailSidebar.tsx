@@ -125,7 +125,11 @@ export function RecordDetailSidebar({
     record ?? ({ metadata: {} } as DatasetRecord),
     sources,
   );
-  const sourceCount = partRefs.length;
+  // Count unique source *documents* (not parts) — avoids confusion with row's part count
+  const uniqueSourceCount = useMemo(() => {
+    const sourceIds = new Set(resolvedParts.map(r => r.source.id));
+    return sourceIds.size;
+  }, [resolvedParts]);
 
   return (
     <Sheet open={record !== null} onOpenChange={(open) => !open && onClose()}>
@@ -171,7 +175,7 @@ export function RecordDetailSidebar({
               {/* Details Grid */}
               <DetailsGrid
                 data={record.data}
-                sourceCount={sourceCount}
+                sourceCount={uniqueSourceCount}
               />
             </div>
           </>
