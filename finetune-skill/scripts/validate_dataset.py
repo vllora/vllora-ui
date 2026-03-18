@@ -5,10 +5,16 @@
 
 Usage:
   uv run scripts/validate_dataset.py training.jsonl
+  uv run scripts/validate_dataset.py training.jsonl --topics topics.json --parts knowledge/all-parts-index.json
 
 Checks: valid JSON per line, required fields (messages, id), message structure
 (role + content), system + user messages present, no assistant messages (RFT),
-and prints summary stats.
+duplicate IDs, minimum record count, and optionally cross-references topic and
+source_parts IDs against topics.json and all-parts-index.json.
+
+Exit codes:
+  0 - all records valid
+  1 - validation errors found
 """
 
 import json
@@ -44,6 +50,8 @@ def validate_record(line_num: int, line: str) -> list[str]:
                 errors.append(f"Line {line_num}, message {i}: Missing 'role'")
             if "content" not in msg:
                 errors.append(f"Line {line_num}, message {i}: Missing 'content'")
+            elif not msg["content"] or not msg["content"].strip():
+                errors.append(f"Line {line_num}, message {i}: Empty content")
 
         if "system" not in roles:
             errors.append(f"Line {line_num}: No system message found")
@@ -52,23 +60,82 @@ def validate_record(line_num: int, line: str) -> list[str]:
         if "assistant" in roles:
             errors.append(f"Line {line_num}: Contains assistant message (RFT uses prompts only, remove assistant messages)")
 
+        # Check user message is not trivially short
+        user_messages = [m for m in messages if isinstance(m, dict) and m.get("role") == "user"]
+        for um in user_messages:
+            content = um.get("content", "")
+            if content and len(content.strip()) < 10:
+                errors.append(f"Line {line_num}: User message too short ({len(content.strip())} chars) — likely not a useful prompt")
+
     if "id" not in record:
         errors.append(f"Line {line_num}: Missing recommended field 'id'")
 
     return errors
 
 
+def load_valid_topics(topics_path: Path) -> set[str]:
+    """Load topic IDs from topics.json."""
+    data = json.loads(topics_path.read_text())
+    topics = data if isinstance(data, list) else data.get("topics", [])
+    return {t["id"] for t in topics if isinstance(t, dict) and "id" in t}
+
+
+def load_valid_parts(parts_path: Path) -> set[str]:
+    """Load part IDs from all-parts-index.json."""
+    data = json.loads(parts_path.read_text())
+    if isinstance(data, dict) and "parts" in data:
+        parts = data["parts"]
+    elif isinstance(data, list):
+        parts = data
+    else:
+        return set()
+    return {p["id"] for p in parts if isinstance(p, dict) and "id" in p}
+
+
 def main() -> None:
     if len(sys.argv) < 2:
-        print("Usage: validate_dataset.py <file.jsonl>", file=sys.stderr)
+        print("Usage: validate_dataset.py <file.jsonl> [--topics topics.json] [--parts all-parts-index.json]", file=sys.stderr)
         sys.exit(1)
 
+    # Simple arg parsing (positional + optional flags)
     file_path = Path(sys.argv[1])
+    topics_path = None
+    parts_path = None
+    i = 2
+    while i < len(sys.argv):
+        if sys.argv[i] == "--topics" and i + 1 < len(sys.argv):
+            topics_path = Path(sys.argv[i + 1])
+            i += 2
+        elif sys.argv[i] == "--parts" and i + 1 < len(sys.argv):
+            parts_path = Path(sys.argv[i + 1])
+            i += 2
+        else:
+            i += 1
+
     if not file_path.exists():
         print(f"Error: File not found: {file_path}", file=sys.stderr)
         sys.exit(1)
 
+    # Load cross-reference data if provided
+    valid_topics: set[str] | None = None
+    valid_parts: set[str] | None = None
+
+    if topics_path:
+        if not topics_path.exists():
+            print(f"Warning: Topics file not found: {topics_path} — skipping topic validation", file=sys.stderr)
+        else:
+            valid_topics = load_valid_topics(topics_path)
+            print(f"Cross-referencing against {len(valid_topics)} topics from {topics_path.name}")
+
+    if parts_path:
+        if not parts_path.exists():
+            print(f"Warning: Parts file not found: {parts_path} — skipping parts validation", file=sys.stderr)
+        else:
+            valid_parts = load_valid_parts(parts_path)
+            print(f"Cross-referencing against {len(valid_parts)} parts from {parts_path.name}")
+
     all_errors: list[str] = []
+    warnings: list[str] = []
     record_count = 0
     topic_counts: Counter[str] = Counter()
     ids_seen: set[str] = set()
@@ -95,6 +162,15 @@ def main() -> None:
                 topic = record.get("topic", "")
                 if topic:
                     topic_counts[topic] += 1
+                    if valid_topics is not None and topic not in valid_topics:
+                        warnings.append(f"Line {line_num}: Topic '{topic}' not found in topics.json")
+
+                source_parts = record.get("source_parts", [])
+                if valid_parts is not None:
+                    for sp in source_parts:
+                        if sp not in valid_parts:
+                            warnings.append(f"Line {line_num}: source_parts ref '{sp}' not found in parts index")
+
             except (json.JSONDecodeError, AttributeError):
                 pass
 
@@ -108,15 +184,27 @@ def main() -> None:
     if topic_counts:
         print(f"Topics found:  {len(topic_counts)}")
         for topic, count in topic_counts.most_common():
-            print(f"  {topic}: {count}")
+            marker = ""
+            if valid_topics is not None and topic not in valid_topics:
+                marker = " (UNKNOWN)"
+            print(f"  {topic}: {count}{marker}")
 
     if duplicate_ids:
         print(f"\n⚠️  Duplicate IDs: {len(duplicate_ids)}")
         for dup in duplicate_ids[:5]:
             print(f"  - {dup}")
 
-    if record_count < 100:
+    if record_count < 50:
+        print(f"\n⚠️  Only {record_count} records. Minimum 50 for meaningful training, recommend 100-200+.")
+    elif record_count < 100:
         print(f"\n⚠️  Only {record_count} records. Recommend 100-200+ for effective training.")
+
+    if warnings:
+        print(f"\n⚠️  {len(warnings)} cross-reference warning(s):")
+        for w in warnings[:20]:
+            print(f"  {w}")
+        if len(warnings) > 20:
+            print(f"  ... and {len(warnings) - 20} more")
 
     if all_errors:
         print(f"\n❌ {len(all_errors)} error(s) found:")

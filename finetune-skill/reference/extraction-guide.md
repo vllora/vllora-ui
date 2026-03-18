@@ -2,7 +2,9 @@
 
 Extract structured knowledge parts from PDFs using Docling Serve — a local Docker container that handles OCR, tables, images, and complex layouts.
 
-**Your deliverable is `knowledge/knowledge_parts.json`** — a typed, linked parts file matching the schema in Section 3. Every text passage, table, and image becomes a `source_part` with a title, extraction path, and provenance metadata. Normalized chunks or raw Docling output are intermediate steps, NOT the final output.
+**Your deliverable is a `knowledge_parts.json` per document** (stored in `knowledge/doc-N/knowledge_parts.json`) — a typed, linked parts file matching the schema in Section 3. Every text passage, table, and image becomes a `source_part` with a title, extraction path, and provenance metadata. Normalized chunks or raw Docling output are intermediate steps, NOT the final output.
+
+**Multi-document note**: When processing multiple documents, each gets its own subdirectory (`knowledge/doc-1/`, `knowledge/doc-2/`, etc.). Submit all documents to Docling in parallel (async API), then process each result separately. Prefix part IDs with the document identifier (e.g., `doc-1-chapter-3`) to keep them unique across documents. See SKILL.md Step 2 for the full multi-document workflow.
 
 ---
 
@@ -439,7 +441,9 @@ The formal JSON Schema is at `reference/knowledge-parts-schema.json` — use it 
 
 ## Section 4: How to Create Parts
 
-**You must produce `knowledge/knowledge_parts.json` matching the Section 3 schema.** This is not optional. Normalized chunks, cleaned chunk lists, or any other intermediate format are NOT the deliverable — they are steps along the way. The final output must have a `source` object and a flat `parts[]` array where every part has `id`, `source_id`, `type` (text|table|image), `content`, `title`, and `extraction_path`. Image parts must have the base64 data URI as `content` (use page fallback if needed). Caption links must be bidirectional via `content_metadata`.
+**You must produce a `knowledge_parts.json` per document** (in `knowledge/doc-N/knowledge_parts.json`) matching the Section 3 schema. This is not optional. Normalized chunks, cleaned chunk lists, or any other intermediate format are NOT the deliverable — they are steps along the way. The final output must have a `source` object and a flat `parts[]` array where every part has `id`, `source_id`, `type` (text|table|image), `content`, `title`, and `extraction_path`. Image parts must have the base64 data URI as `content` (use page fallback if needed). Caption links must be bidirectional via `content_metadata`.
+
+**Important**: Prefix all part IDs with the document identifier (e.g., `doc-1-chapter-3`) to keep them unique when parts from multiple documents are merged into `all-parts-index.json`.
 
 Write your own extraction script tailored to the document. There is no template — each document is different and may require domain-specific filtering or restructuring. Here's the general approach:
 
@@ -528,9 +532,9 @@ After creating all parts, link them:
 - JSON-encode each part's `extraction_path` as a string (e.g., `json.dumps(["Ch 1", "1.2 Intro"])`)
 - Sort parts by first appearance (first `extraction_metadata.source_chunks` value)
 - Wrap in the `knowledge_parts.json` envelope with the `source` object (id, workflow_id, name, description, metadata)
-- Write to `knowledge/knowledge_parts.json`
+- Write to `knowledge/doc-N/knowledge_parts.json` (per-document subdirectory)
 
-Also produce `knowledge/parts-index.json` — a lightweight index for topic classification:
+Also produce `knowledge/doc-N/parts-index.json` — a lightweight index for topic classification:
 ```python
 index = []
 for part in parts:
@@ -540,9 +544,10 @@ for part in parts:
         "title": part.get("title", ""),
         "extraction_path": part.get("extraction_path", ""),
         "pages": part.get("extraction_metadata", {}).get("pages", []),
-        "content_preview": part["content"][:200]
+        "content_preview": part["content"][:200],
+        "source_doc": source_filename  # e.g., "chess-tactics.pdf"
     })
-with open("knowledge/parts-index.json", "w") as f:
+with open(f"knowledge/doc-{N}/parts-index.json", "w") as f:
     json.dump(index, f, indent=2)
 ```
 
@@ -582,7 +587,7 @@ Skip text items whose `label` is `page_header` or `page_footer`. Optionally skip
 
 ## Section 5: Upload to Gateway
 
-After producing `knowledge/knowledge_parts.json`, upload the source document and its parts to the gateway in two steps.
+After producing `knowledge_parts.json` for each document (in `knowledge/doc-N/`), upload each source document and its parts to the gateway. **Repeat these two steps for each document.**
 
 ### Step 1: Create Knowledge Source (multipart)
 
@@ -614,7 +619,8 @@ Upload the parts from `knowledge_parts.json`. The body is a JSON array of parts 
 ```bash
 PARTS=$(python3 -c "
 import json
-d = json.load(open('knowledge/knowledge_parts.json'))
+# Replace DOC_DIR with the per-document directory (e.g., 'knowledge/doc-1')
+d = json.load(open(f'{DOC_DIR}/knowledge_parts.json'))
 for p in d['parts']:
     p['reference_id'] = p.pop('id', None)
     p.pop('source_id', None)

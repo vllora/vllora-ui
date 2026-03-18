@@ -21,7 +21,7 @@ import requests
 DEFAULT_BASE_URL = "http://localhost:9090"
 DEFAULT_MODEL = "gpt-4o-mini"
 POLL_INTERVAL = 3
-MAX_POLL_ATTEMPTS = 200
+MAX_POLL_ATTEMPTS = 600  # ~30 minutes (large datasets with 200+ records need 20-30 min)
 
 
 def run_evaluation(
@@ -91,6 +91,7 @@ def main() -> None:
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL, help="Gateway base URL")
     parser.add_argument("--output", help="Path to save full response JSON")
     parser.add_argument("--limit", type=int, help="Max rows to evaluate")
+    parser.add_argument("--timeout", type=int, default=1800, help="Max seconds to wait (default: 1800)")
     args = parser.parse_args()
 
     output_path = Path(args.output) if args.output else None

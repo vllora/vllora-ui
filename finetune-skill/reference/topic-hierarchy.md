@@ -42,15 +42,15 @@ Topic-source relations create a formal traceability chain: **document part → r
 
 ### Phase 1: Extraction (Step 2)
 
-When extracting documents, the extraction script produces two files:
-- `knowledge/knowledge_parts.json` — full typed parts with content
-- `knowledge/parts-index.json` — lightweight index with `{id, type, title, extraction_path, pages, content_preview}` per part (first 200 chars of content)
+When extracting documents, each document produces its own files in a per-document subdirectory (`knowledge/doc-N/`):
+- `doc-N/knowledge_parts.json` — full typed parts with content for that document
+- `doc-N/parts-index.json` — lightweight index with `{id, type, title, extraction_path, pages, content_preview, source_doc}` per part
 
-The parts-index is small enough to read in full during topic design and relation building.
+After all documents are processed, a merged `knowledge/all-parts-index.json` combines all per-document indexes. This merged index is small enough to read in full during topic design and relation building.
 
 ### Phase 2: Relation Building (Step 3)
 
-After designing topics, the `relation-builder` subagent reads `knowledge/parts-index.json` and `topics.json`, then runs an iterative retrieve-and-verify loop per leaf topic:
+After designing topics, the `relation-builder` subagent reads `knowledge/all-parts-index.json` and `topics.json`, then runs an iterative retrieve-and-verify loop per leaf topic:
 1. Search the index for parts matching the topic's subject (title, extraction_path, content_preview)
 2. Verify each candidate is actually relevant
 3. If fewer than 3 relations found, broaden the search (synonyms, parent topic context)

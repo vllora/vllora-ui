@@ -9,6 +9,14 @@ Usage:
 
 Reads a JSON object from stdin with at least a "messages" field.
 Prints the assistant's response content to stdout.
+
+When response_format is set to json_object, validates the LLM output
+is valid JSON before printing. On parse failure, prints a JSON error
+object so callers can detect and handle it.
+
+Exit codes:
+  0 - success
+  1 - error (details on stderr)
 """
 
 import argparse
@@ -42,6 +50,13 @@ def main() -> None:
     data = json.load(sys.stdin)
     messages = data.pop("messages")
     model = args.model or data.pop("model", DEFAULT_MODEL)
+
+    # Check if caller expects structured JSON output
+    expects_json = False
+    response_format = data.get("response_format")
+    if isinstance(response_format, dict) and response_format.get("type") == "json_object":
+        expects_json = True
+
     # Remaining keys (temperature, response_format, etc.) pass through
     try:
         result = chat_completion(messages, model, args.base_url, **data)
@@ -52,6 +67,19 @@ def main() -> None:
         print(f"Error: Request failed with status {e.response.status_code}", file=sys.stderr)
         print(f"  Response: {e.response.text}", file=sys.stderr)
         sys.exit(1)
+
+    # Validate JSON output when response_format is json_object
+    if expects_json:
+        try:
+            json.loads(result)
+        except json.JSONDecodeError as e:
+            print(f"Error: LLM returned invalid JSON (response_format was json_object)", file=sys.stderr)
+            print(f"  Parse error: {e}", file=sys.stderr)
+            print(f"  Raw content: {result[:500]}", file=sys.stderr)
+            # Print a structured error so callers can detect it programmatically
+            print(json.dumps({"error": "invalid_json", "raw_content": result[:1000]}))
+            sys.exit(1)
+
     print(result)
 
 

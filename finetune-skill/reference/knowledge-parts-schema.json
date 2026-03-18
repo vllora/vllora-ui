@@ -48,12 +48,11 @@
       "description": "Flat list of source_parts ordered by document position. Maps to knowledge_source_parts table. API field name is 'part' (singular) on KnowledgeSource responses.",
       "items": {
         "type": "object",
-        "required": ["id", "source_id", "type", "content"],
+        "required": ["id", "type", "content"],
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^p-\\d{3,}$",
-            "description": "Sequential ID: p-001, p-002, etc. Auto-generated UUID by API if omitted on create."
+            "description": "Part ID. Use document-prefixed IDs for multi-doc projects (e.g., 'doc-1-chapter-3') or sequential IDs (e.g., 'p-001'). Auto-generated UUID by API if omitted on create."
           },
           "reference_id": {
             "type": "string",
@@ -62,7 +61,7 @@
           "source_id": {
             "type": "string",
             "format": "uuid",
-            "description": "FK to the parent source. Set automatically from URL path on API create."
+            "description": "FK to the parent source. Present in the local file but stripped before upload — the API sets it automatically from the URL path."
           },
           "type": {
             "type": "string",

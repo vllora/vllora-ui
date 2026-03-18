@@ -5,8 +5,8 @@
 Training data uses JSONL format — one JSON object per line. Each line is a **prompt** the model will practice on during training. The model generates its own responses — the grader scores them. You only need to provide the system prompt and user messages.
 
 ```jsonl
-{"messages": [{"role": "system", "content": "You are..."}, {"role": "user", "content": "..."}], "id": "record-1"}
-{"messages": [{"role": "system", "content": "You are..."}, {"role": "user", "content": "A follow-up scenario..."}], "id": "record-2"}
+{"messages": [{"role": "system", "content": "You are..."}, {"role": "user", "content": "..."}], "id": "record-1", "topic": "billing/refunds", "source_parts": ["p-001", "p-003"]}
+{"messages": [{"role": "system", "content": "You are..."}, {"role": "user", "content": "A follow-up scenario..."}], "id": "record-2", "topic": "billing/refunds", "source_parts": ["p-002"]}
 ```
 
 ### Fields
@@ -15,6 +15,8 @@ Training data uses JSONL format — one JSON object per line. Each line is a **p
 |-------|----------|-------------|
 | `messages` | Yes | Array of conversation messages (system + user prompts) |
 | `id` | Yes | Unique identifier for tracking in evaluation results |
+| `topic` | No | Leaf topic ID this record belongs to (e.g., `"billing/refunds"`) |
+| `source_parts` | No | Array of knowledge part IDs used as grounding material for this record. Enables traceability from record → source document sections. Part IDs reference entries in `knowledge/doc-N/knowledge_parts.json` (per-document subdirectories). |
 
 ### Message Roles
 
@@ -42,20 +44,18 @@ A valid training record must:
 ], "id": "billing-refunds-001"}
 ```
 
-## Example: Multi-turn
+## Example: Multi-turn Context
 
-For multi-turn scenarios, include the conversation history as context so the model understands what follow-up it's responding to:
+For multi-turn scenarios, embed prior conversation turns directly in the user message as context. Do **not** use `assistant` role messages — `validate_dataset.py` will flag them as errors since RFT uses prompts only:
 
 ```json
 {"messages": [
   {"role": "system", "content": "You are a senior Python developer who explains concepts clearly with code examples."},
-  {"role": "user", "content": "How do I handle file operations safely in Python?"},
-  {"role": "assistant", "content": "Use context managers (the `with` statement). This guarantees cleanup even if an exception occurs."},
-  {"role": "user", "content": "What about writing to files?"}
+  {"role": "user", "content": "I previously asked about handling file operations safely in Python, and you suggested using context managers (the `with` statement). Now I want to know: what about writing to files?"}
 ], "id": "python-file-ops-001"}
 ```
 
-In multi-turn examples, prior assistant messages serve as **conversation context** — they set up the scenario for the final user message. The model will generate a fresh response to the last user turn, and the grader will score it.
+Multi-turn context is embedded in the user message itself, not as separate conversation turns. The model will generate a fresh response, and the grader will score it.
 
 ---
 

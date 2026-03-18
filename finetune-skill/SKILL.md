@@ -31,9 +31,12 @@ The training data defines the *prompts* the model practices on. The grader defin
 ## The Pipeline
 
 ```
-Define Objective → Extract Documents → Build Topics → Generate Data → Write Grader
-→ Push to Gateway → Open vLLora UI → Lucy handles evaluation, iteration, training
+Define Objective → Extract Documents → Build Topics → Generate Data → Write Grader → Verify & Hand Off
+     ↓ upload          ↓ upload          ↓ upload        ↓ upload        ↓ upload
+   (workflow)      (knowledge)        (topics)        (records)       (grader)
 ```
+
+**Each step uploads to the gateway immediately** — the vLLora UI shows progress in real time. You don't wait until the end to push data.
 
 You execute Steps 1-6. Then the vLLora UI + Lucy take over for the interactive loop (evaluation, grader tuning, iteration, training, deployment).
 
@@ -48,12 +51,18 @@ finetune-project/
 ├── topics.json                 # Topic hierarchy
 ├── relations.json              # Topic → part mappings for data generation
 ├── knowledge/                  # Extracted domain knowledge
-│   ├── docling-result.json     # Raw Docling response
-│   ├── knowledge_parts.json    # Typed parts: text, table, image
-│   ├── parts-index.json        # Lightweight part index with previews
-│   └── document-extraction.md  # Extraction notes
+│   ├── doc-1/                  # Per-document subdirectory
+│   │   ├── docling-result.json # Raw Docling response for this document
+│   │   ├── knowledge_parts.json# Typed parts for this document
+│   │   └── parts-index.json   # Part index for this document
+│   ├── doc-2/                  # Second document
+│   │   └── ...
+│   ├── all-parts-index.json    # Merged part index across ALL documents
+│   └── extraction-notes.md     # Extraction notes for all documents
 └── execution-log.md            # Running log of every step
 ```
+
+**Multi-document handling**: Each source document gets its own subdirectory under `knowledge/` named `doc-1/`, `doc-2/`, etc. (or a slugified document name like `chess-tactics/`). Each subdirectory contains that document's `docling-result.json`, `knowledge_parts.json`, and `parts-index.json`. A merged `knowledge/all-parts-index.json` combines all per-document indexes for topic design and data generation.
 
 ### Execution Log
 
@@ -89,14 +98,22 @@ The subagent will:
 ```markdown
 ## Step 1: Define Objective
 - [2026-03-06 10:32:15] System prompt defined: "You are a chess tactics tutor..."
+- [2026-03-06 10:32:20] POST /finetune/workflows → created, id: "wf_abc123"
 
 ## Step 2: Extract Documents
-- [2026-03-06 10:32:40] Reading document: chess-tactics.pdf (84 pages)
-- [2026-03-06 10:35:12] Extracted 10 sections, saved to knowledge/document-extraction.md
+- [2026-03-06 10:32:40] Submitted 3 documents to Docling in parallel
+  - chess-tactics.pdf (84 pages) → doc-1/
+  - opening-theory.pdf (120 pages) → doc-2/
+  - endgame-manual.pdf (56 pages) → doc-3/
+- [2026-03-06 10:35:12] All 3 Docling tasks complete
+- [2026-03-06 10:36:00] Processed doc-1: 10 parts, doc-2: 15 parts, doc-3: 8 parts
+- [2026-03-06 10:36:10] Merged all-parts-index.json: 33 parts across 3 documents
+- [2026-03-06 10:36:20] POST /workflows/{id}/knowledge → uploaded 3 knowledge sources with parts
 
 ## Step 3: Build Topics
 - [2026-03-06 10:36:45] Created 6 root topics, 18 leaf topics, saved to topics.json
 - [2026-03-06 10:37:00] Delegated to relation-builder: linked 42 parts across 18 topics
+- [2026-03-06 10:37:10] POST /workflows/{id}/topics → saved 18 topics + 42 relations
 
 ## Step 4: Generate Training Data
 - [2026-03-06 10:40:00] Strategy: LLM-driven generation via chat_completion.py
@@ -109,17 +126,16 @@ The subagent will:
 - [2026-03-06 10:43:00] Validation: 178/180 passed — 2 records had empty content, removed
 - [2026-03-06 10:44:00] Pass 2 (edge cases): +36 records for under-represented topics
 - [2026-03-06 10:45:30] Final: 214 records saved to training.jsonl
+- [2026-03-06 10:45:35] POST /workflows/{id}/records → uploaded 214 records
 
 ## Step 5: Write Grader
 - [2026-03-06 10:47:00] Grader written to grader.js (hybrid: programmatic + LLM-as-judge)
+- [2026-03-06 10:47:05] PATCH /workflows/{id}/evaluator → saved grader
 
-## Step 6: Push to Gateway
-- [2026-03-06 10:48:00] POST /finetune/workflows → created, id: "wf_abc123"
-- [2026-03-06 10:48:10] POST /workflows/{id}/knowledge → uploaded 1 knowledge source
-- [2026-03-06 10:48:20] POST /workflows/{id}/records → uploaded 214 records
-- [2026-03-06 10:48:25] POST /workflows/{id}/topics → saved 18 topics
-- [2026-03-06 10:48:30] PATCH /workflows/{id}/evaluator → saved grader
-- [2026-03-06 10:48:31] Ready! Tell user to open vLLora UI
+## Step 6: Verify & Hand Off
+- [2026-03-06 10:48:00] Verified all data in gateway DB
+  - Records: 214, Topics: 18, Sources: 3, Parts: 33, Relations: 42, Evaluator: YES
+- [2026-03-06 10:48:01] Ready! Told user to open vLLora UI
 ```
 
 **Rules:**
@@ -136,46 +152,142 @@ Ask the user what behaviors the model should learn. Produce two things:
 - An **objective statement** describing desired behaviors and constraints
 - A **system prompt** ("You are...") that will prefix every training conversation
 
+**Upload immediately** — create the workflow on the gateway so the UI shows progress from the start:
+```bash
+WORKFLOW_ID=$(uv run scripts/finetune.py create-workflow \
+  --name "My Project" \
+  --objective "Train a model to..." \
+  --system-prompt "You are..." | tail -1)
+echo "Workflow created: $WORKFLOW_ID"
+```
+Save `$WORKFLOW_ID` — every subsequent step uses it to upload data incrementally.
+
 ### Step 2: Extract Documents
 
-Read the user's documents (PDFs, markdown, text). Extract typed, linked source_parts — text passages, tables (with cell structure), and images (with base64 data) — into `knowledge_parts.json`.
+Read the user's documents (PDFs, markdown, text). Extract typed, linked source_parts — text passages, tables (with cell structure), and images (with base64 data). Each document produces its own `knowledge_parts.json` in a per-document subdirectory.
 
-**Primary method — Docling Serve** (best quality, handles tables/images/complex layouts):
+**Process each document through these stages:**
 
-1. Check if Docling Serve is running:
+#### 2a. Submit all documents to Docling in parallel
+
+Check if Docling Serve is running:
 ```bash
 curl -sS http://127.0.0.1:5001/health
 ```
-If not running, start it: `docker run -p 5001:5001 ghcr.io/docling-project/docling-serve-cpu:latest` — wait for startup to complete, then verify with the health check.
-
-2. Call the hybrid chunk API with images:
+If not running, check if Docker is available:
 ```bash
-TASK_RESPONSE=$(curl -sS -X POST "http://127.0.0.1:5001/v1/chunk/hybrid/file/async" \
-  -F "files=@document.pdf;type=application/pdf" \
-  -F "include_converted_doc=true" \
-  -F "convert_do_ocr=true" -F "convert_do_table_structure=true" \
-  -F "convert_include_images=true" -F "convert_image_export_mode=embedded" \
-  -F "chunking_merge_peers=true" -F "chunking_tokenizer=BAAI/bge-small-en-v1.5")
-TASK_ID=$(echo "$TASK_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['task_id'])")
+docker info > /dev/null 2>&1 && echo "Docker OK" || echo "Docker NOT available"
 ```
-Poll `/v1/status/poll/$TASK_ID` until success, then fetch `/v1/result/$TASK_ID` and save as `knowledge/docling-result.json`.
+- **Docker available**: Start Docling: `docker run -p 5001:5001 ghcr.io/docling-project/docling-serve-cpu:latest` — wait for startup to complete, then verify with the health check.
+- **Docker NOT available**: Skip to the **pdftotext fallback** at the end of this step. You lose table structure and image extraction but can still produce text-based knowledge parts.
 
-3. **Read the document before writing any code.** Read chunks 0-9 to understand the document — title, structure, content type, heading patterns. Then read a few chunks from the middle and end. This context is critical for writing a good extraction script.
+**Submit ALL documents at once** — Docling processes them asynchronously, so fire all requests before polling:
+```bash
+# Create per-document directories and submit all in parallel
+DOCS=(*.pdf)  # or list specific files
+TASK_IDS=()
 
-4. **Write a script** to create `knowledge/knowledge_parts.json` — this is the required deliverable. The script must produce typed source_parts (text, table, image) with titles, extraction paths, and provenance metadata matching the schema in `reference/extraction-guide.md` Section 3.
+for i in "${!DOCS[@]}"; do
+  DOC="${DOCS[$i]}"
+  DOC_DIR="finetune-project/knowledge/doc-$((i+1))"
+  mkdir -p "$DOC_DIR"
 
-The extraction script must also produce `knowledge/parts-index.json` — a lightweight index with `{id, type, title, extraction_path, pages, content_preview}` per part (first 200 chars of content). This index is small enough to read during topic design and is used to map parts to topics.
+  TASK_RESPONSE=$(curl -sS -X POST "http://127.0.0.1:5001/v1/chunk/hybrid/file/async" \
+    -F "files=@${DOC};type=application/pdf" \
+    -F "include_converted_doc=true" \
+    -F "convert_do_ocr=true" -F "convert_do_table_structure=true" \
+    -F "convert_include_images=true" -F "convert_image_export_mode=embedded" \
+    -F "chunking_merge_peers=true" -F "chunking_tokenizer=BAAI/bge-small-en-v1.5")
+  TASK_ID=$(echo "$TASK_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['task_id'])")
+  TASK_IDS+=("$TASK_ID")
+
+  echo "Submitted $DOC → task $TASK_ID → $DOC_DIR"
+done
+```
+
+#### 2b. Poll all tasks until complete
+
+```bash
+for i in "${!TASK_IDS[@]}"; do
+  TASK_ID="${TASK_IDS[$i]}"
+  DOC_DIR="finetune-project/knowledge/doc-$((i+1))"
+
+  # Poll until done
+  while true; do
+    STATUS=$(curl -sS "http://127.0.0.1:5001/v1/status/poll/$TASK_ID" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','pending'))")
+    [ "$STATUS" = "success" ] && break
+    sleep 5
+  done
+
+  # Fetch result
+  curl -sS "http://127.0.0.1:5001/v1/result/$TASK_ID" -o "$DOC_DIR/docling-result.json"
+  echo "Saved result for ${DOCS[$i]} → $DOC_DIR/docling-result.json"
+done
+```
+
+#### 2c. Process each document into knowledge parts
+
+For **each** document directory, produce `knowledge_parts.json` and `parts-index.json`:
+
+1. **Read the Docling result before writing any code.** Read chunks 0-9 to understand the document — title, structure, content type, heading patterns. Then read a few chunks from the middle and end. This context is critical for writing a good extraction script.
+
+2. **Write a script** to create `doc-N/knowledge_parts.json` — the required deliverable per document. The script must produce typed source_parts (text, table, image) with titles, extraction paths, and provenance metadata matching the schema in `reference/extraction-guide.md` Section 3.
+
+   **Important**: Prefix all part IDs with the document identifier to keep them unique across documents. For example: `doc-1-chapter-3`, `doc-2-section-5`.
+
+3. The extraction script must also produce `doc-N/parts-index.json` — a lightweight index with `{id, type, title, extraction_path, pages, content_preview, source_doc}` per part (first 200 chars of content, plus the source document filename).
 
 See `reference/extraction-guide.md` for the full response structure, schema, and step-by-step guidance.
 
-**Fallback — pdftotext** (when Docker is not available):
+#### 2d. Merge part indexes
+
+After processing all documents, merge the per-document indexes into a single `knowledge/all-parts-index.json`:
+
 ```bash
-pdftotext input.pdf output.txt
-python3 .claude/skills/vllora-finetune/templates/extract-sections.py \
-  knowledge/converted.md knowledge/sections.json
+python3 -c "
+import json, glob
+all_parts = []
+for idx_file in sorted(glob.glob('finetune-project/knowledge/doc-*/parts-index.json')):
+    parts = json.load(open(idx_file))
+    if isinstance(parts, dict) and 'parts' in parts:
+        all_parts.extend(parts['parts'])
+    elif isinstance(parts, list):
+        all_parts.extend(parts)
+json.dump({'parts': all_parts}, open('finetune-project/knowledge/all-parts-index.json', 'w'), indent=2)
+print(f'Merged {len(all_parts)} parts from {len(glob.glob(\"finetune-project/knowledge/doc-*/parts-index.json\"))} documents')
+"
 ```
 
-**Save your extraction notes** to `knowledge/document-extraction.md` — document name, page count, section headings, key concepts.
+This merged index is what you use for topic design (Step 3) and data generation (Step 4) — it's small enough to read in context and covers all documents.
+
+**Fallback — pdftotext** (when Docker is not available):
+```bash
+for DOC in *.pdf; do
+  DOC_DIR="finetune-project/knowledge/$(echo "$DOC" | sed 's/.pdf//')"
+  mkdir -p "$DOC_DIR"
+  pdftotext "$DOC" "$DOC_DIR/converted.txt"
+done
+```
+Then write extraction scripts per document as above.
+
+**Save your extraction notes** to `knowledge/extraction-notes.md` — for each document: name, page count, section headings, key concepts, number of parts extracted.
+
+**Upload immediately** — push each document's knowledge source + parts to the gateway so the UI shows sources as they're extracted:
+```bash
+for i in "${!DOCS[@]}"; do
+  DOC="${DOCS[$i]}"
+  DOC_DIR="finetune-project/knowledge/doc-$((i+1))"
+  [ -f "$DOC_DIR/knowledge_parts.json" ] || continue
+
+  uv run scripts/finetune.py upload-knowledge \
+    --workflow-id $WORKFLOW_ID \
+    --file "$DOC" \
+    --parts-file "$DOC_DIR/knowledge_parts.json" \
+    --name "$DOC" \
+    --description "Source document: $DOC" \
+    --metadata '{"extraction_method":"docling_hybrid"}'
+done
+```
 
 ### Step 3: Build Topic Hierarchy
 
@@ -183,7 +295,7 @@ python3 .claude/skills/vllora-finetune/templates/extract-sections.py \
 
 Decide what topics to create based on:
 - **The objective** — what behaviors does the model need? Each distinct behavior cluster becomes a topic.
-- **The document** (if available) — what content exists to generate examples from? Use `extraction_path` values from `knowledge_parts.json` as a checklist to make sure your topics cover the available material, not as a template to copy directly.
+- **The documents** (if available) — what content exists to generate examples from? Read `knowledge/all-parts-index.json` (the merged index across all documents) and use `extraction_path` values as a checklist to make sure your topics cover the available material, not as a template to copy directly.
 
 Save to `topics.json` as a **flat array** — every topic at the same level, hierarchy expressed via `parent_id`:
 
@@ -196,9 +308,21 @@ Aim for 3-7 root topics, 2-3 levels deep, each leaf supporting 10-30 training ex
 
 **Topic-source linking**: After uploading knowledge source parts, link them to topics via the `POST /topics/relations` API. Only create links to parts you've actually extracted — never fabricate references. See `reference/api-reference.md` Section 13 for the relations API.
 
-**Build topic-part relations.** After designing topics, delegate to the `relation-builder` subagent — it reads `knowledge/parts-index.json` and `topics.json`, iteratively matches parts to topics using a retrieve-and-verify loop, and writes `relations.json`. This keeps the parts-index scanning out of main context.
+**Build topic-part relations.** After designing topics, delegate to the `relation-builder` subagent — it reads `knowledge/all-parts-index.json` (the merged index across all documents) and `topics.json`, iteratively matches parts to topics using a retrieve-and-verify loop, and writes `relations.json`. This keeps the parts-index scanning out of main context.
 
 If there are no documents (objective-only pipeline), skip this step — no relations.json needed.
+
+**Upload immediately** — push topics and relations to the gateway so the UI shows the topic hierarchy and coverage:
+```bash
+uv run scripts/finetune.py upload-topics \
+  --workflow-id $WORKFLOW_ID --file topics.json
+
+# Upload relations (if they exist)
+if [ -f relations.json ]; then
+  uv run scripts/finetune.py upload-relations \
+    --workflow-id $WORKFLOW_ID --file relations.json
+fi
+```
 
 ### Step 3.5: Categorize Existing Records
 
@@ -215,85 +339,44 @@ Skip this step if generating all data from scratch.
 Write prompts to `training.jsonl` — one JSON object per line. Each line is a **prompt** (system + user messages only — no assistant messages):
 
 ```jsonl
-{"messages": [{"role": "system", "content": "You are..."}, {"role": "user", "content": "..."}], "id": "record-1", "topic": "billing/refunds"}
+{"messages": [{"role": "system", "content": "You are..."}, {"role": "user", "content": "..."}], "id": "record-1", "topic": "billing/refunds", "source_parts": ["p-001", "p-003"]}
 ```
 
-Use `scripts/chat_completion.py` to generate user prompts via LLM, grounded in the knowledge chunks linked to each topic:
+Each record includes `source_parts` — the IDs of the knowledge parts used as grounding material. This enables traceability from any record back to the specific document sections it was derived from.
 
-1. **Read the structured data** — `topics.json`, `relations.json`, `knowledge/knowledge_parts.json`
-2. **For each leaf topic:**
-   - Find related part IDs from `relations.json` where `topic_identifier` matches
-   - Read the content for those parts from `knowledge_parts.json`
-   - Build a prompt asking the LLM to generate N user messages, using the chunks as grounding material
-   - Call `chat_completion.py` with `response_format` for structured JSON output
-   - Parse the response and write records to `training.jsonl`
-
-**Example generation call** (for one topic):
+Use `scripts/generate_records.py` to generate user prompts via LLM, grounded in the knowledge chunks linked to each topic:
 
 ```bash
-python3 -c "
-import json, subprocess
-
-topics = json.load(open('topics.json'))
-relations = json.load(open('relations.json'))
-parts = {p['id']: p for p in json.load(open('knowledge/knowledge_parts.json'))['parts']}
-
-# Find leaf topics (not a parent of any other topic)
-parent_ids = {t['parent_id'] for t in topics if t['parent_id']}
-leaves = [t for t in topics if t['id'] not in parent_ids]
-
-record_num = 0
-with open('training.jsonl', 'w') as out:
-    for topic in leaves:
-        # Get chunks linked to this topic via relations
-        part_ids = [r['part_identifier'] for r in relations if r['topic_identifier'] == topic['id']]
-        chunks = [parts[pid] for pid in part_ids if pid in parts]
-        chunk_text = '\n---\n'.join(f\"[{c['id']}] {c.get('title','')}\n{c['content']}\" for c in chunks[:20])
-
-        request = json.dumps({
-            'messages': [{'role': 'user', 'content': f'''Generate 10 diverse user prompts for fine-tuning.
-
-Topic: {topic['name']}
-Focus: {topic['system_prompt']}
-
-Source material:
-{chunk_text}
-
-Each prompt should be a realistic question/request grounded in the source material.
-Vary: difficulty, tone, type (explain-why, compare, what-if, analyze, teach-me).
-Return JSON: {{\"prompts\": [\"prompt1\", \"prompt2\", ...]}}''}],
-            'model': 'gpt-4o-mini',
-            'temperature': 0.8,
-            'response_format': {'type': 'json_object'}
-        })
-
-        result = subprocess.run(
-            ['uv', 'run', 'scripts/chat_completion.py'],
-            input=request, capture_output=True, text=True
-        )
-        prompts = json.loads(result.stdout)['prompts']
-
-        for p in prompts:
-            record_num += 1
-            record = {
-                'messages': [
-                    {'role': 'system', 'content': SYSTEM_PROMPT},
-                    {'role': 'user', 'content': p}
-                ],
-                'id': f'r-{record_num:03d}',
-                'topic': topic['id']
-            }
-            out.write(json.dumps(record) + '\n')
-"
+uv run scripts/generate_records.py \
+  --topics finetune-project/topics.json \
+  --relations finetune-project/relations.json \
+  --knowledge-dir finetune-project/knowledge \
+  --system-prompt "You are an expert chess tutor..." \
+  --output finetune-project/training.jsonl \
+  --records-per-topic 10
 ```
 
-This is a starting point — adapt the generation prompt, number of records, and number of passes to the project. You can:
+The script:
+1. Loads topics, relations, and all knowledge parts from per-document `knowledge_parts.json` files
+2. Finds leaf topics (topics that aren't parents of any other topic)
+3. For each leaf topic: gathers linked source chunks via `relations.json`, calls `chat_completion.py` to generate grounded user prompts, writes records incrementally
+4. Reports progress per topic and summarizes failures at the end
+
+If some topics fail, use `--append` to retry only the missing ones without overwriting existing records.
+
+**Customizing generation:** Adapt `--records-per-topic`, `--model`, and `--temperature` to the project. You can also:
 - Run multiple passes (basic questions, then edge cases, then multi-turn)
 - Validate generated prompts with a second LLM call
 - Generate more for under-represented topics
 - Use `parts-index.json` instead of full content if chunks are too large for context
 
 **Generate enough data.** At least **100-200 total records** across all topics.
+
+**Upload immediately** — push records to the gateway so the UI shows training data as it's generated:
+```bash
+uv run scripts/finetune.py upload-records \
+  --workflow-id $WORKFLOW_ID --file training.jsonl
+```
 
 ### Step 4.5: Generate Variants for Augmentation
 
@@ -349,7 +432,9 @@ function evaluate(input) {
 
 The grader can use `__langdb_call_llm_as_judge_obj(config, input)` for subjective quality assessment — `config` has `prompt_template` (array of `{role, content}` messages with `{{history}}`/`{{response}}` template vars), `output_schema` (JSON Schema for structured output), and `completion_params` (`{model_name, temperature, max_tokens}`). Set `input.history` and `input.response` before calling. See `reference/grader-writing.md` for patterns and `templates/grader-template.js` for a starter.
 
-**After writing the grader, dry-run it against a sample row** to verify it executes without errors:
+#### Step 5.1: Mandatory Dry-Run
+
+**You MUST dry-run the grader before uploading.** This catches syntax errors, runtime crashes, and scoring logic bugs before they waste an entire evaluation run:
 
 ```bash
 uv run scripts/dry_run_grader.py \
@@ -358,74 +443,42 @@ uv run scripts/dry_run_grader.py \
   --row '{"messages": [{"role": "system", "content": "You are..."}, {"role": "user", "content": "What is X?"}, {"role": "assistant", "content": "X is..."}]}'
 ```
 
-This sends the grader + one row to the gateway's QuickJS sandbox and returns score/reason/errors instantly — no dataset upload needed. Use it to confirm the script compiles, check scoring logic on a known example, and iterate before committing to a full evaluation.
+This sends the grader + one row to the gateway's QuickJS sandbox and returns score/reason/errors instantly — no dataset upload needed. Verify:
+1. **No errors** — the script compiles and runs
+2. **Score is reasonable** — not always 0 or always 1
+3. **Reason is informative** — explains why the score was given
+
+If the dry-run fails, fix the grader and re-run. Do NOT proceed to upload until the dry-run passes.
 
 **Note:** The sandbox does NOT support `console.log` — use the `reason` field for debug output. If the dry-run fails, the reason contains the JS error.
+
+**Upload immediately** — push the grader to the gateway so the UI shows it's ready for evaluation:
+```bash
+uv run scripts/finetune.py upload-grader \
+  --workflow-id $WORKFLOW_ID --file grader.js
+```
 
 ### Step 5.5: Validate Before Upload
 
 ```bash
-uv run scripts/validate_dataset.py training.jsonl
+uv run scripts/validate_dataset.py finetune-project/training.jsonl \
+  --topics finetune-project/topics.json \
+  --parts finetune-project/knowledge/all-parts-index.json
 ```
 
-Checks: valid JSON, required fields, message structure, no assistant messages (RFT), duplicate IDs, record count. Fix errors before proceeding.
+Checks: valid JSON, required fields, message structure, no assistant messages (RFT), duplicate IDs, record count (minimum 50, recommend 100-200+), and short user messages (< 10 chars). The `--topics` and `--parts` flags cross-reference `topic` and `source_parts` fields against the actual topic hierarchy and parts index — flagging any orphaned references. Fix errors before proceeding.
 
-### Step 6: Push to Gateway & Hand Off
+### Step 6: Verify & Hand Off
 
-Create a workflow in the gateway and populate it with all your data. This makes everything visible in the vLLora UI where Lucy takes over.
+Since each step uploaded data immediately, the gateway already has the full workflow. Verify everything landed correctly before handing off to the UI.
 
 ```bash
-# 1. Create workflow
-WORKFLOW=$(curl -s -X POST http://localhost:9090/finetune/workflows \
-  -H "Content-Type: application/json" \
-  -d '{"name": "My Project", "objective": "Train a model to..."}')
-WORKFLOW_ID=$(echo "$WORKFLOW" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-
-# 2a. Upload knowledge source (file + metadata)
-KS=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge \
-  -F "file=@document.pdf" \
-  -F "name=document.pdf" \
-  -F "description=Source document" \
-  -F 'metadata={"total_pages":84,"extraction_method":"docling_hybrid"}')
-KS_ID=$(echo "$KS" | python3 -c "import sys,json; print(json.load(sys.stdin)['knowledge_source']['id'])")
-
-# 2b. Add extracted parts (move id → reference_id for safe re-uploads)
-PARTS=$(python3 -c "
-import json
-d = json.load(open('knowledge/knowledge_parts.json'))
-for p in d['parts']:
-    p['reference_id'] = p.pop('id', None)
-    p.pop('source_id', None)
-print(json.dumps(d['parts']))
-")
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge/$KS_ID/parts \
-  -H "Content-Type: application/json" -d "$PARTS"
-
-# 3. Upload records (read training.jsonl, format as records array)
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/records \
-  -H "Content-Type: application/json" \
-  -d '{"records": [
-    {"id": "record-1", "data": {"input": {"messages": [...]}}, "topic": "billing/refunds"}
-  ]}'
-
-# 4. Save topics (flat format with parent_id)
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics \
-  -H "Content-Type: application/json" \
-  -d "$(python3 -c "import json; print(json.dumps({'topics': json.load(open('topics.json'))}))")"
-
-# 4b. Link topics to knowledge source parts (if relations.json exists)
-if [ -f relations.json ]; then
-  RELATIONS=$(cat relations.json)
-  curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics/relations \
-    -H "Content-Type: application/json" \
-    -d "{\"relations\": $RELATIONS}"
-fi
-
-# 5. Save evaluator (grader)
-# This endpoint requires multipart; JSON payloads fail with "Multipart boundary is not found".
-curl -X PATCH http://localhost:9090/finetune/workflows/$WORKFLOW_ID/evaluator \
-  -F "file=@grader.js"
+uv run scripts/finetune.py verify --workflow-id $WORKFLOW_ID
 ```
+
+**Expected**: All counts > 0 and evaluator = YES. If any are missing, re-run the upload for that step.
+
+Tell the user: **"Open http://localhost:5173/finetune to see your workflow. Everything is ready for evaluation."**
 
 ### Step 7: Run Evaluation
 
@@ -634,9 +687,8 @@ Diagnose and start the next iteration (see 9d).
      -F "file=@grader.js"
 
    # If records were updated:
-   curl -s -X PUT http://localhost:9090/finetune/workflows/$WORKFLOW_ID/records \
-     -H "Content-Type: application/json" \
-     -d @updated-records.json
+   uv run scripts/finetune.py upload-records \
+     --workflow-id $WORKFLOW_ID --file training.jsonl
 
    # Sync changes:
    curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/dataset/upload
@@ -687,7 +739,7 @@ Read these when you need more detail on a specific step:
 
 | File | When to read |
 |------|-------------|
-| `reference/api-reference.md` | When making API calls — all 58 gateway endpoints with curl examples |
+| `reference/api-reference.md` | When making API calls — all 64 gateway endpoints with curl examples |
 | `reference/data-format.md` | When generating JSONL — format rules, validation, quality tips |
 | `reference/extraction-guide.md` | When extracting documents — Docling API, response structure, knowledge_parts.json schema |
 | `reference/grader-writing.md` | When writing the grader — 3 patterns, design guidelines, common mistakes |
@@ -701,9 +753,11 @@ Run with `uv run` (PEP 723 — dependencies declared inline).
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/validate_dataset.py` | Validate JSONL before upload — checks format, fields, RFT compliance |
+| `scripts/finetune.py` | Gateway API wrapper — create workflow, upload knowledge/topics/records/grader, verify |
+| `scripts/generate_records.py` | Generate training records from topics + knowledge — calls LLM per leaf topic |
+| `scripts/validate_dataset.py` | Validate JSONL before upload — format, fields, RFT compliance, cross-reference topics/parts |
 | `scripts/upload_dataset.py` | Upload dataset + grader to gateway (standalone mode) |
-| `scripts/run_evaluation.py` | Create eval job, poll until complete, save results |
+| `scripts/run_evaluation.py` | Create eval job, poll until complete (~30 min timeout), save results |
 | `scripts/start_training.py` | Start training job, poll until complete, save response |
-| `scripts/chat_completion.py` | Call LLM via gateway — for generating prompts, variants, validation |
+| `scripts/chat_completion.py` | Call LLM via gateway — validates JSON output when `response_format` is `json_object` |
 | `scripts/dry_run_grader.py` | Dry-run grader on a single row — instant syntax/logic check |

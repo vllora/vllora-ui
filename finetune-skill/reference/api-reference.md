@@ -4,7 +4,7 @@ Base URL: `http://localhost:9090` (configurable)
 
 All endpoints use JSON unless noted. Auth via `Authorization: Bearer <token>` header when configured.
 
-**Note:** These are the platform APIs for dataset management, evaluation, and training. Data generation, topic design, and grader writing are handled by the agent directly — no LLM API calls needed.
+**Note:** These are the platform APIs for dataset management, evaluation, and training. Data generation uses `scripts/generate_records.py` which calls the LLM via `scripts/chat_completion.py` (through the `/v1/chat/completions` endpoint). Topic design and grader writing are handled by the agent directly.
 
 ---
 
@@ -169,7 +169,7 @@ Test a grader script against a single row without creating an evaluation run.
 ```bash
 curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/evaluator/dry-run \
   -H "Content-Type: application/json" \
-  -d '{"script": "async function evaluate(input) { ... }", "row": {"messages": [...]}}'
+  -d '{"script": "function evaluate(input) { ... }", "row": {"messages": [...]}}'
 ```
 
 **Request body** (JSON):

@@ -353,18 +353,15 @@ Pick 5 low-scoring records and manually review:
 
 **After changing the grader** — update without re-uploading data:
 ```bash
-curl -X PATCH http://localhost:9090/finetune/workflows/WORKFLOW_ID/evaluator \
-  -H "Content-Type: application/json" \
-  -d '{"evaluator": {"type": "js", "config": {"script": "async function evaluate(input) { ... }"}}}'
+uv run scripts/finetune.py upload-grader --workflow-id $WORKFLOW_ID --file grader.js
 ```
 
-**After changing the data** — requires full re-upload with a new dataset_id:
+**After changing the data** — re-upload records and sync to cloud:
 ```bash
-curl -X POST http://localhost:9090/finetune/datasets \
-  -F "file=@training.jsonl;type=application/x-ndjson" \
-  -F "dataset_id=my-dataset-v2" \
-  -F "eval_script=@grader.js" \
-  -F 'evaluator={"type":"js","config":{"script":"","completion_params":{"model":"gpt-4o-mini","temperature":0.0,"max_tokens":300}}}'
+uv run scripts/finetune.py upload-records --workflow-id $WORKFLOW_ID --file training.jsonl
+
+# Sync changes to cloud:
+curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/dataset/upload
 ```
 
 ---

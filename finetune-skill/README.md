@@ -61,12 +61,12 @@ The skill gives the agent **knowledge of the APIs and fine-tuning concepts**. Th
 
 ```
 finetune-skill/
-├── SKILL.md                    # Main entry point (~280 lines)
+├── SKILL.md                    # Main entry point (~760 lines)
 │   ├── YAML frontmatter        # name + description (auto-triggering)
 │   ├── Core concepts           # How RFT works, prerequisites
 │   ├── Working directory spec  # What files the agent creates
 │   ├── Execution log spec      # Timestamped log requirements
-│   └── Pipeline steps          # Inline examples + curl commands
+│   └── Pipeline steps          # 9-step pipeline with finetune.py commands
 │
 ├── reference/                  # Deep-dive reference files (read on demand)
 │   ├── api-reference.md        # All REST endpoints (cloud + local CRUD) with curl examples
@@ -79,9 +79,13 @@ finetune-skill/
 │   └── workflow-guide.md       # ~305 lines — per-step deep dive
 │
 ├── scripts/                    # PEP 723 helper scripts (run with `uv run`)
-│   ├── validate_dataset.py     # Validate JSONL before upload
-│   ├── upload_dataset.py       # Upload dataset + grader to gateway
-│   ├── run_evaluation.py       # Create eval, poll until complete
+│   ├── finetune.py             # Gateway API wrapper (create workflow, upload, verify)
+│   ├── generate_records.py     # LLM-based training record generation per leaf topic
+│   ├── chat_completion.py      # LLM chat completions (validates JSON output)
+│   ├── dry_run_grader.py       # Test grader on one record via gateway sandbox
+│   ├── validate_dataset.py     # Validate JSONL (format, fields, cross-ref topics/parts)
+│   ├── upload_dataset.py       # Upload dataset + grader to gateway (standalone)
+│   ├── run_evaluation.py       # Create eval, poll until complete (~30 min timeout)
 │   └── start_training.py       # Start training, poll until complete
 │
 ├── templates/                  # Starter files
@@ -109,18 +113,24 @@ The YAML `description` field in SKILL.md is the primary trigger mechanism. It's 
 
 ```
 finetune-project/               # Agent creates this working directory
-├── reference/                  # Extracted domain knowledge from user documents
-│   └── document-extraction.md  # Structured extraction: sections, page numbers, key concepts
-├── topics.json                 # Topic hierarchy (flat, with parent_id)
 ├── training.jsonl              # 100-200+ prompts (system + user messages only)
 ├── grader.js                   # Hybrid grader (programmatic + LLM-as-judge)
+├── topics.json                 # Topic hierarchy (flat, with parent_id)
+├── relations.json              # Topic → part mappings for data generation
+├── knowledge/                  # Extracted domain knowledge
+│   ├── doc-1/                  # Per-document subdirectory
+│   │   ├── docling-result.json # Raw Docling response
+│   │   ├── knowledge_parts.json# Typed parts (text, table, image)
+│   │   └── parts-index.json    # Lightweight part index
+│   ├── doc-2/                  # Second document
+│   │   └── ...
+│   ├── all-parts-index.json    # Merged index across all documents
+│   └── extraction-notes.md     # Extraction notes
 ├── evaluations/                # API responses from evaluation runs
-│   ├── eval-v1.json
-│   └── eval-v2.json
+│   └── eval-v1.json
 ├── training-jobs/              # API responses from training submissions
 │   └── job-v1.json
-├── execution-log.md            # Timestamped log of every step
-└── iteration-log.md            # What changed each iteration and why
+└── execution-log.md            # Timestamped log of every step (append-only)
 ```
 
 ---
@@ -148,27 +158,27 @@ Agent (CLI)                                      UI (Lucy)
 
 **Requires**: Gateway running at localhost:9090.
 
-The `reference/api-reference.md` documents all 58 gateway endpoints for completeness (including evaluation, training, and deployment). These are available if an advanced user wants to do everything from CLI, but SKILL.md focuses on the data prep pipeline only.
+The `reference/api-reference.md` documents all 64 gateway endpoints for completeness (including evaluation, training, and deployment). These are available if an advanced user wants to do everything from CLI, but SKILL.md focuses on the data prep pipeline only.
 
 ---
 
 ## What We've Built
 
-### SKILL.md (~530 lines)
+### SKILL.md (~760 lines)
 
 - YAML frontmatter with pushy description for auto-triggering
 - Prerequisites check (base model capability, task clarity, smooth scoring)
-- 6-step data prep pipeline: objective → extraction → topics → data generation → grader → push to gateway → hand off to UI
-- Working directory structure
+- 9-step pipeline: objective → extraction → topics → data generation → grader → verify → evaluation → iterate → training
+- Working directory structure with multi-document knowledge layout
 - Execution log specification with full timestamps (`YYYY-MM-DD HH:MM:SS`)
-- Explicit directives: "execute curl directly, never create .sh files"
-- Gateway API calls for workflow creation and data population
+- Explicit directives: "execute commands directly, never create .sh files"
+- All gateway API calls via `scripts/finetune.py` wrapper
 
 ### Knowledge Files
 
 | File | Lines | What it covers |
 |------|-------|---------------|
-| `api-reference.md` | ~950 | All 58 vLLora REST endpoints: cloud (datasets, eval, training, deployments) + local CRUD (workflows, records, topics, knowledge, eval-jobs) + dataset/upload + record scores + topic management + training metrics + Mode A/B pipeline examples |
+| `api-reference.md` | ~950 | All 64 vLLora REST endpoints: cloud (datasets, eval, training, deployments) + local CRUD (workflows, records, topics, knowledge, eval-jobs) + dataset/upload + record scores + topic management + training metrics + Mode A/B pipeline examples |
 | `data-format.md` | ~100 | JSONL format — prompts only (no assistant messages, since RFT) |
 | `extraction-guide.md` | ~670 | Docling Serve setup, hybrid chunk API, knowledge_parts.json schema, image extraction, troubleshooting |
 | `grader-writing.md` | ~290 | 3 grader patterns, smooth scoring, reward hacking prevention |
@@ -182,9 +192,13 @@ All scripts use inline dependency declarations — run with `uv run script.py` (
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/validate_dataset.py` | Validate JSONL: format, fields, RFT compliance, duplicate IDs, record count |
-| `scripts/upload_dataset.py` | Upload dataset + grader to gateway — auto-generates UUID, handles errors |
-| `scripts/run_evaluation.py` | Create eval job, poll until complete, print summary, save response |
+| `scripts/finetune.py` | Gateway API wrapper — create workflow, upload knowledge/topics/records/grader, verify |
+| `scripts/generate_records.py` | Generate training records from topics + knowledge — calls LLM per leaf topic |
+| `scripts/chat_completion.py` | Call LLM via gateway — validates JSON output when `response_format` is `json_object` |
+| `scripts/dry_run_grader.py` | Dry-run grader on a single row — instant syntax/logic check via gateway sandbox |
+| `scripts/validate_dataset.py` | Validate JSONL: format, fields, RFT compliance, cross-reference topics/parts |
+| `scripts/upload_dataset.py` | Upload dataset + grader to gateway (standalone, not used in pipeline) |
+| `scripts/run_evaluation.py` | Create eval job, poll until complete (~30 min timeout), save response |
 | `scripts/start_training.py` | Start training job, poll until complete, save response |
 
 These scripts solve the #1 testing issue (agents creating shell scripts instead of executing API calls) by providing ready-to-run commands.
@@ -196,7 +210,7 @@ These scripts solve the #1 testing issue (agents creating shell scripts instead 
 - `extract-sections.py` — Generic markdown section extractor (splits on `##` headings, outputs `{document_title, sections}` JSON)
 - `project-config.json` — Configuration reference
 
-Total: ~3,500 lines across 15 files. SKILL.md is ~280 lines (well under the 500-line guideline).
+Total: ~4,500 lines across 16 files.
 
 ---
 
@@ -205,8 +219,8 @@ Total: ~3,500 lines across 15 files. SKILL.md is ~280 lines (well under the 500-
 ### Prompts only, no assistant messages
 vLLora uses reinforcement fine-tuning (RFT). The model generates its own responses during training and the grader scores them. Training data only needs system + user messages. We don't call it "RFT" in the skill — just "fine-tuning" to keep it simple.
 
-### Agent generates data directly
-No LLM API calls needed for data generation. The agent (Claude, GPT, etc.) writes JSONL prompts itself using its own intelligence. The skill doesn't call any external LLM for data — only the backend uses LLMs for evaluation.
+### LLM-assisted data generation
+The skill uses `scripts/generate_records.py` to generate training records via LLM API calls (through `scripts/chat_completion.py`). For each leaf topic, the script gathers linked source material from knowledge parts, then calls the LLM to generate grounded user prompts. This produces more diverse, document-grounded prompts than the agent writing them directly.
 
 ### Only platform APIs documented
 The skill only covers endpoints the agent can't replicate locally: dataset upload, evaluation, training, model serving, and local workflow management. No Lucy chat completion endpoint, no IndexedDB, no browser-side tools.
@@ -503,7 +517,7 @@ Both write through the same gateway API → same SQLite database. Workflows, rec
 ### Skill improvements
 
 - [x] Add Mode A pipeline (handoff to Lucy) via gateway workflow API
-- [x] Update api-reference.md with all 58 gateway endpoints
+- [x] Update api-reference.md with all 64 gateway endpoints
 - [x] Fix training job endpoints (now scoped under workflows)
 - [x] Simplify SKILL.md to focus on data prep + handoff (removed Mode B complexity)
 - [ ] Add guidance for multi-turn conversation training data

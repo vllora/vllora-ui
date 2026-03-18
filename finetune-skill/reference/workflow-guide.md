@@ -63,8 +63,9 @@ The `knowledge_parts.json` output maps to your topic hierarchy:
 - **Text parts** grouped by `extraction_path` → natural topic clusters
 - **Table parts** may become their own topics (e.g., a comparison table → a "comparison" subtopic)
 - **Image parts** provide context — figures illustrate concepts that become training scenarios
-- `knowledge/parts-index.json` is produced during extraction — a lightweight version of knowledge_parts.json with `{id, type, title, extraction_path, pages, content_preview}` per part
-- After topic design, the `relation-builder` subagent reads `parts-index.json` and `topics.json`, iteratively matches parts to topics using a retrieve-and-verify loop per leaf topic, and writes `relations.json`
+- Each document's `parts-index.json` is produced during extraction — a lightweight version of knowledge_parts.json with `{id, type, title, extraction_path, pages, content_preview, source_doc}` per part
+- After all documents are processed, `knowledge/all-parts-index.json` merges all per-document indexes
+- After topic design, the `relation-builder` subagent reads `all-parts-index.json` and `topics.json`, iteratively matches parts to topics using a retrieve-and-verify loop per leaf topic, and writes `relations.json`
 - The mapping uses iterative retrieval+verification per topic, not single-pass classification — this produces higher-quality relations
 - Group related parts under parent topics using `parent_id` for 2-3 levels of hierarchy
 
@@ -82,17 +83,21 @@ Keep extracted knowledge organized so you can reference it while generating data
 
 ```
 knowledge/
-├── docling-result.json     # Raw Docling response (chunks + document)
-├── knowledge_parts.json    # Typed parts: text, table, image (agent-created)
-├── document-extraction.md  # Human-readable summary with key concepts
-└── ...                     # Additional files per document
+├── doc-1/                     # Per-document subdirectory
+│   ├── docling-result.json    # Raw Docling response
+│   ├── knowledge_parts.json   # Typed parts for this document
+│   └── parts-index.json       # Part index for this document
+├── doc-2/                     # Second document
+│   └── ...
+├── all-parts-index.json       # Merged index across all documents
+└── extraction-notes.md        # Summary with key concepts per document
 ```
 
 The goal is having domain knowledge accessible when you write training prompts.
 
 ### Linking Knowledge to Topics and Records
 
-After designing topics, the `relation-builder` subagent builds `relations.json` — a mapping of which parts are relevant to each topic. It reads `knowledge/parts-index.json` and `topics.json`, runs an iterative retrieve-and-verify loop per leaf topic, and writes the result. This keeps parts-index scanning out of main context.
+After designing topics, the `relation-builder` subagent builds `relations.json` — a mapping of which parts are relevant to each topic. It reads `knowledge/all-parts-index.json` (merged across all documents) and `topics.json`, runs an iterative retrieve-and-verify loop per leaf topic, and writes the result. This keeps parts-index scanning out of main context.
 
 During Step 6 (upload), `relations.json` is uploaded via the topic-source relations API:
 
