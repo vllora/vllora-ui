@@ -898,8 +898,32 @@
     background: rgba(124,92,252,0.06); border: 1px solid rgba(124,92,252,0.12);
     border-radius: 4px; padding: 2px 6px; white-space: nowrap;
     max-width: 140px; overflow: hidden; text-overflow: ellipsis;
+    cursor: pointer; transition: background 0.15s, color 0.15s;
+  }
+  .source-ref-tag:hover {
+    background: rgba(124,92,252,0.14); color: var(--text-primary);
+    border-color: rgba(124,92,252,0.25);
   }
   .source-ref-tag .ref-icon { font-size: 9px; opacity: 0.6; }
+
+  /* Back to record banner */
+  .back-to-record-banner {
+    display: none; /* shown via JS */
+    align-items: center; gap: 8px;
+    padding: 8px 16px;
+    background: rgba(124,92,252,0.08);
+    border-bottom: 1px solid rgba(124,92,252,0.2);
+    flex-shrink: 0;
+  }
+  .back-to-record-banner.visible { display: flex; }
+  .back-to-record-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 500; color: var(--accent);
+    background: none; border: none; cursor: pointer; padding: 0;
+    transition: color 0.15s;
+  }
+  .back-to-record-btn:hover { color: var(--text-primary); }
+  .back-to-record-btn svg { width: 14px; height: 14px; }
   .source-generated {
     font-size: 10px; color: var(--text-dim); font-style: italic;
   }
@@ -2798,6 +2822,14 @@
 
   <!-- Knowledge Main -->
   <div class="knowledge-main">
+
+    <!-- Back to record banner (shown when navigated from record Source column) -->
+    <div class="back-to-record-banner" id="backToRecordBanner">
+      <button class="back-to-record-btn" onclick="navigateBackToRecord()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        Back to record
+      </button>
+    </div>
 
     <!-- Split: Doc List + Coverage | Part Viewer -->
     <div class="knowledge-grid">
@@ -4981,11 +5013,21 @@ function updateTableRecords(parentTopics, childTopics, recordsByTopic, recordsBy
         const trendText = trend > 0.005 ? '↑' : trend < -0.005 ? '↓' : '→';
         const pillClass = (s) => s >= 0.8 ? 'score-good' : s >= 0.6 ? 'score-warn' : 'score-low';
 
-        // Source reference from topic relations
-        const topicRels = relationsPerTopic[child.id] || [];
-        const sourceRef = topicRels.length > 0
-          ? `<span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ${topicRels.length} source${topicRels.length > 1 ? 's' : ''}</span>`
-          : `<span class="source-generated">generated</span>`;
+        // Source reference — per-record source_parts from metadata
+        const meta = record.metadata || {};
+        const srcParts = meta.source_parts || [];
+        let sourceRef;
+        if (srcParts.length > 0) {
+          const label = srcParts.length === 1
+            ? (srcParts[0].substring(0, 8) + '...')
+            : srcParts.length + ' parts';
+          sourceRef = `<span class="source-ref-tag" data-source-parts='${JSON.stringify(srcParts)}'><span class="ref-icon">&#128196;</span> ${label}</span>`;
+        } else {
+          const topicRels = relationsPerTopic[child.id] || [];
+          sourceRef = topicRels.length > 0
+            ? `<span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ${topicRels.length} source${topicRels.length > 1 ? 's' : ''}</span>`
+            : `<span class="source-generated">—</span>`;
+        }
 
         // Eval v3 (running) — some rows show partial score, others just spinner
         const hasPartial = recordNum % 3 !== 0;
@@ -5020,6 +5062,14 @@ function updateTableRecords(parentTopics, childTopics, recordsByTopic, recordsBy
         </td>`;
         tbody.appendChild(moreRow);
       }
+    });
+  });
+
+  // Re-attach click handlers on dynamically created source-ref-tags
+  tbody.querySelectorAll('.source-ref-tag').forEach(function(tag) {
+    tag.addEventListener('click', function(e) {
+      e.stopPropagation();
+      navigateToSourceFromRecord(tag);
     });
   });
 }
@@ -6021,6 +6071,75 @@ function selectPart(el) {
 
 // Initialize: chess-tactics selected by default
 selectKnowledgeSource('chess-tactics');
+
+// ═══════════════════════════════════════════════════
+// FEATURE: Click source badge → navigate to Sources view
+// ═══════════════════════════════════════════════════
+let sourceNavBackState = null; // stores { page, topicFilter } for back navigation
+
+// Map source ref text → knowledge source key + part highlight
+const SOURCE_REF_MAP = {
+  'ch.1 Forks': { ks: 'chess-tactics', partTitle: 'Forks' },
+  'ch.2.1': { ks: 'chess-tactics', partTitle: null },
+  'ch.3 Pins': { ks: 'chess-tactics', partTitle: 'Pins' },
+  'ch.4': { ks: 'chess-tactics', partTitle: null },
+  'ch.5 Intro': { ks: 'chess-tactics', partTitle: null },
+  'ch.6 Sacs': { ks: 'chess-tactics', partTitle: 'Sacrifices' },
+  'ch.7 Deflect': { ks: 'chess-tactics', partTitle: 'Deflection' },
+};
+
+function navigateToSourceFromRecord(refTag) {
+  const text = refTag.textContent.replace(/^[^\w]*/, '').trim();
+  const mapping = SOURCE_REF_MAP[text];
+  const ksKey = mapping ? mapping.ks : 'chess-tactics';
+
+  // Save where we came from
+  const currentPage = document.getElementById('page-table').style.display !== 'none' ? 'table'
+    : document.getElementById('page-topic-detail')?.style.display !== 'none' ? 'topic-detail'
+    : 'canvas';
+  sourceNavBackState = { page: currentPage };
+
+  // Switch to knowledge sources page
+  showPage('knowledge');
+  selectKnowledgeSource(ksKey);
+
+  // Show back banner
+  const banner = document.getElementById('backToRecordBanner');
+  if (banner) banner.classList.add('visible');
+
+  // Highlight matching part if possible
+  if (mapping && mapping.partTitle) {
+    setTimeout(function() {
+      const partItems = document.querySelectorAll('#singleDocView .part-item');
+      partItems.forEach(function(item) {
+        const title = item.querySelector('.part-item-title');
+        if (title && title.textContent.includes(mapping.partTitle)) {
+          selectPart(item);
+          item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      });
+    }, 150);
+  }
+}
+
+function navigateBackToRecord() {
+  const banner = document.getElementById('backToRecordBanner');
+  if (banner) banner.classList.remove('visible');
+  if (sourceNavBackState) {
+    showPage(sourceNavBackState.page);
+    sourceNavBackState = null;
+  } else {
+    showPage('table');
+  }
+}
+
+// Attach click handlers to all source-ref-tags (script runs after DOM)
+document.querySelectorAll('.source-ref-tag').forEach(function(tag) {
+  tag.addEventListener('click', function(e) {
+    e.stopPropagation();
+    navigateToSourceFromRecord(tag);
+  });
+});
 
 // ═══════════════════════════════════════════════════
 // IMPROVEMENT: Mockup State Controls

@@ -150,6 +150,10 @@ export function DatasetMainContent({
 
   // Selected source ID for sources view (driven by explorer sidebar)
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+  // Focus a specific part when navigating from record table Source column
+  const [focusPartId, setFocusPartId] = useState<string | null>(null);
+  // "Back to record" state — stores the previous view + record context
+  const [backTo, setBackTo] = useState<{ viewMode: ViewMode; topicFilter?: string; recordId?: string } | null>(null);
 
   // Listen for view switch events from explorer sidebar (e.g., "All Sources" click)
   useEffect(() => {
@@ -166,11 +170,39 @@ export function DatasetMainContent({
         } else if (detail.viewMode === "sources") {
           setSelectedSourceId(null); // All Sources
         }
+        // Clear focus/back state on manual view switches
+        setFocusPartId(null);
+        setBackTo(null);
       }
     };
     window.addEventListener("vllora_switch_view", handleSwitchView);
     return () => window.removeEventListener("vllora_switch_view", handleSwitchView);
   }, [onViewModeChange, viewMode]);
+
+  // Listen for "navigate to source" events from record table Source column clicks
+  useEffect(() => {
+    const handleNavigateToSource = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!detail?.sourceId) return;
+
+      // Save current view state for "back" navigation
+      setBackTo({ viewMode, topicFilter, recordId: selectedRecordId ?? undefined });
+      // Switch to sources view with the target source + part
+      setSelectedSourceId(detail.sourceId);
+      setFocusPartId(detail.partId ?? null);
+      onViewModeChange("sources");
+    };
+    window.addEventListener("vllora_navigate_to_source", handleNavigateToSource);
+    return () => window.removeEventListener("vllora_navigate_to_source", handleNavigateToSource);
+  }, [viewMode, topicFilter, selectedRecordId, onViewModeChange]);
+
+  // Handle "back to record" from Sources view
+  const handleBackToRecord = useCallback(() => {
+    if (!backTo) return;
+    onViewModeChange(backTo.viewMode);
+    setBackTo(null);
+    setFocusPartId(null);
+  }, [backTo, onViewModeChange]);
 
   // P0-19: Stat filter state for RecordsSectionHeader clickable chips
   const [activeStatFilter, setActiveStatFilter] = useState<StatFilter>("all");
@@ -320,8 +352,13 @@ export function DatasetMainContent({
       {viewMode === "sources" && (
         <SourcesView
           selectedSourceId={selectedSourceId}
+          focusPartId={focusPartId}
+          backTo={backTo}
+          onBackToRecord={handleBackToRecord}
           onSelectSource={(sourceId) => {
             setSelectedSourceId(sourceId);
+            setFocusPartId(null); // Clear part focus on manual source change
+            setBackTo(null);
             // Also notify explorer sidebar to highlight the source
             window.dispatchEvent(new CustomEvent("vllora_switch_view", {
               detail: { viewMode: "sources", sourceId },

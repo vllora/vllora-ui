@@ -228,7 +228,7 @@ function RecordsTabContent({
           <th className="px-4 py-2.5">Input</th>
           {hasJobColumns ? (
             jobColumns.map((col) => (
-              <th key={col.id} className="px-2 py-2.5 w-[72px] text-center">
+              <th key={col.id} className="px-2 py-2.5 w-[82px] text-center">
                 <ScoreColumnHeader column={col} />
               </th>
             ))
@@ -320,12 +320,12 @@ function ScoreCell({ jobScore }: { readonly jobScore?: RecordJobScore }) {
   );
 }
 
-/** Format resolved source parts for the Source column */
+/** Format resolved source parts for the Source column — clickable to navigate to Sources view */
 function SourcePartsCell({
   resolvedParts,
   unresolvedCount,
 }: {
-  readonly resolvedParts: readonly { source: { name: string }; part: { title?: string; extractionPath?: string } }[];
+  readonly resolvedParts: readonly { source: { id: string; name: string }; part: { id: string; title?: string; extractionPath?: string } }[];
   readonly unresolvedCount: number;
 }) {
   if (resolvedParts.length === 0 && unresolvedCount === 0) {
@@ -366,14 +366,25 @@ function SourcePartsCell({
       : `${resolvedParts[0].part.title ?? resolvedParts[0].source.name} +${resolvedParts.length - 1}`
     : `${sourceCount} docs · ${resolvedParts.length} parts`;
 
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Navigate to the first resolved part's source + part
+    const first = resolvedParts[0];
+    window.dispatchEvent(new CustomEvent("vllora_navigate_to_source", {
+      detail: { sourceId: first.source.id, partId: first.part.id },
+    }));
+  };
+
   return (
-    <span
-      className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60 bg-primary/5 border border-primary/10 rounded px-1.5 py-0.5 max-w-[160px] truncate"
-      title={tooltip}
+    <button
+      type="button"
+      onClick={handleClick}
+      className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60 bg-primary/5 border border-primary/10 rounded px-1.5 py-0.5 max-w-[160px] truncate hover:bg-primary/10 hover:text-foreground/80 transition-colors cursor-pointer"
+      title={`${tooltip}\n\nClick to view in Sources`}
     >
       <FileText className="w-3 h-3 shrink-0 opacity-50" />
       <span className="truncate">{label}</span>
-    </span>
+    </button>
   );
 }
 

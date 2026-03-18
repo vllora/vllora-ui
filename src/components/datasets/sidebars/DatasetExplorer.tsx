@@ -39,6 +39,7 @@ import { useEvaluatorVersions } from "@/hooks/useEvaluatorVersions";
 import { getJobAverageScore } from "@/types/eval-job";
 import type { TopicHierarchyNode } from "@/types/dataset-types";
 import { JobStatusBadge, normalizeJobStatus } from "@/components/datasets/shared/JobStatusBadge";
+import { evalJobDisplayName, finetuneJobDisplayName } from "@/lib/job-display-name";
 
 // ============================================================================
 // Types
@@ -312,7 +313,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
             <SidebarItem
               key={job.id}
               icon={<BarChart3 className="w-3.5 h-3.5" />}
-              label={`eval-${job.id.slice(0, 6)}`}
+              label={evalJobDisplayName(job.id)}
               badge={<JobStatusBadge status={normalized} className="ml-auto" />}
               isActive={selectedNodeId === `evaluations/jobs/${job.id}`}
               onClick={() => handleSelect(`evaluations/jobs/${job.id}`)}
@@ -342,7 +343,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       >
         {finetuneJobs.map((job) => {
           const normalized = normalizeJobStatus(job.status);
-          const displayName = job.suffix || `ft-${job.id.slice(0, 6)}`;
+          const displayName = finetuneJobDisplayName(job.id, job.suffix);
           return (
             <SidebarItem
               key={job.id}

@@ -13,6 +13,7 @@ import { emitter } from '@/utils/eventEmitter';
 import { workflowService, datasetService, recordService } from '@/services/service-registry';
 import type { FinetuneStep, StepStatus } from '@/types/workflow-types';
 import type { ToolHandler } from '../types';
+import { evalJobDisplayName, finetuneJobDisplayName } from '@/lib/job-display-name';
 import type { Plan } from './propose-plan';
 import type { TopicHierarchyNode } from '@/types/dataset-types';
 // NOTE: executeFinetuneTool is imported lazily (dynamic import) inside
@@ -251,7 +252,7 @@ function buildCompletedStepDetails(
     }
     case 'dryrun': {
       const jobId = (res as any)?.dry_run_job_id as string | undefined;
-      if (jobId) details.push(`[eval-${jobId.slice(0, 6)}](evaluations/jobs/${jobId})`);
+      if (jobId) details.push(`[${evalJobDisplayName(jobId)}](evaluations/jobs/${jobId})`);
       const passRate = summary.dry_run_pass_rate;
       if (typeof passRate === 'number') {
         details.push(`Pass rate: ${Math.round(passRate * 100)}%`);
@@ -260,7 +261,7 @@ function buildCompletedStepDetails(
     }
     case 'finetune': {
       const ftId = summary.finetune_job_id;
-      if (ftId) details.push(`[ft-${ftId.slice(0, 6)}](finetune/${ftId})`);
+      if (ftId) details.push(`[${finetuneJobDisplayName(ftId)}](finetune/${ftId})`);
       break;
     }
     case 'regenerate_topic': {

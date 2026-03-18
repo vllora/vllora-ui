@@ -14,8 +14,8 @@
  * - I5: Footer with topic chips + records count
  */
 
-import { useState, useMemo, useCallback } from "react";
-import { FileText, Tags, ChevronRight, ChevronLeft, FolderOpen } from "lucide-react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { FileText, Tags, ChevronRight, ChevronLeft, FolderOpen, ArrowLeft } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
@@ -27,11 +27,17 @@ import type { TopicHierarchyNode } from "@/types/dataset-types";
 interface SourcesViewProps {
   /** Currently selected source ID (null = all sources view) */
   readonly selectedSourceId?: string | null;
+  /** Part ID to focus/scroll to when navigating from record table */
+  readonly focusPartId?: string | null;
+  /** "Back to record" context — shows banner when navigated from record table */
+  readonly backTo?: { viewMode: string; topicFilter?: string; recordId?: string } | null;
+  /** Called when user clicks "Back to record" banner */
+  readonly onBackToRecord?: () => void;
   /** Called when user selects a source from AllSourcesView cards/matrix */
   readonly onSelectSource?: (sourceId: string) => void;
 }
 
-export function SourcesView({ selectedSourceId, onSelectSource }: SourcesViewProps) {
+export function SourcesView({ selectedSourceId, focusPartId, backTo, onBackToRecord, onSelectSource }: SourcesViewProps) {
   const { sources, count, totalParts } = KnowledgeSourcesConsumer();
 
   const activeSource = selectedSourceId
@@ -50,12 +56,18 @@ export function SourcesView({ selectedSourceId, onSelectSource }: SourcesViewPro
 
   // No internal sidebar — explorer sidebar handles document navigation
   return (
-    <div className="flex-1 overflow-hidden">
-      {activeSource ? (
-        <SingleDocView source={activeSource} />
-      ) : (
-        <AllSourcesView sources={sources} totalParts={totalParts} onSelectSource={handleSelectSource} />
+    <div className="flex-1 overflow-hidden flex flex-col">
+      {/* Back to record banner */}
+      {backTo && onBackToRecord && (
+        <BackToRecordBanner onClick={onBackToRecord} />
       )}
+      <div className="flex-1 overflow-hidden">
+        {activeSource ? (
+          <SingleDocView source={activeSource} focusPartId={focusPartId} />
+        ) : (
+          <AllSourcesView sources={sources} totalParts={totalParts} onSelectSource={handleSelectSource} />
+        )}
+      </div>
     </div>
   );
 }
@@ -454,9 +466,22 @@ function findTopicsForPart(
   return topics;
 }
 
-function SingleDocView({ source }: { readonly source: KnowledgeSource }) {
-  const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
+function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSource; readonly focusPartId?: string | null }) {
+  const [selectedPartId, setSelectedPartId] = useState<string | null>(focusPartId ?? null);
+  const outlineRef = useRef<HTMLDivElement>(null);
   const { dataset, records } = DatasetDetailConsumer();
+
+  // Scroll to focused part in the outline when navigated from record table
+  useEffect(() => {
+    if (!focusPartId || !outlineRef.current) return;
+    setSelectedPartId(focusPartId);
+    // Wait for render, then scroll the part into view
+    const timer = setTimeout(() => {
+      const el = outlineRef.current?.querySelector(`[data-part-id="${focusPartId}"]`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [focusPartId]);
   const hierarchy = dataset?.topicHierarchy?.hierarchy;
 
   const selectedPart = selectedPartId
@@ -605,7 +630,7 @@ function SingleDocView({ source }: { readonly source: KnowledgeSource }) {
           </div>
 
           {/* Parts outline — I2: grouped by extractionPath */}
-          <div className="overflow-hidden">
+          <div className="overflow-hidden" ref={outlineRef}>
             {hasMultipleGroups ? (
               partGroups.map(group => (
                 <div key={group.path}>
@@ -690,6 +715,7 @@ function PartOutlineItem({
   return (
     <button
       type="button"
+      data-part-id={part.id}
       onClick={() => onSelect(part.id)}
       className={cn(
         "w-full text-left py-[5px] px-2 flex items-center gap-2 rounded-md transition-colors",
@@ -866,6 +892,23 @@ function PartViewer({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Back To Record Banner ───
+
+function BackToRecordBanner({ onClick }: { readonly onClick: () => void }) {
+  return (
+    <div className="px-4 py-2 bg-[rgba(var(--theme-500),0.08)] border-b border-[rgba(var(--theme-500),0.2)] flex items-center gap-2 shrink-0">
+      <button
+        type="button"
+        onClick={onClick}
+        className="inline-flex items-center gap-1.5 text-xs text-[rgb(var(--theme-500))] hover:text-foreground transition-colors font-medium"
+      >
+        <ArrowLeft className="w-3.5 h-3.5" />
+        Back to record
+      </button>
     </div>
   );
 }

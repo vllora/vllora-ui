@@ -7,6 +7,7 @@
 
 import type { EvalJob } from "@/types/eval-job";
 import type { FinetuneJob, FinetuneJobStatus } from "@/services/finetune-api";
+import { evalJobDisplayName, finetuneJobDisplayName } from "@/lib/job-display-name";
 
 // ─── Types ───
 
@@ -45,7 +46,7 @@ function mapFinetuneStatus(status: FinetuneJobStatus): JobColumnStatus {
 
 /**
  * Build a chronologically sorted list of job columns from eval + finetune jobs.
- * Labels are auto-numbered per type: "Eval v1", "Eval v2", "Train v1", etc.
+ * Labels use actual job IDs (e.g., "eval-f05e2c", "ft-abc123") matching the sidebar.
  */
 export function buildJobColumns(
   evalJobs: readonly EvalJob[],
@@ -58,21 +59,21 @@ export function buildJobColumns(
     (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
   );
 
-  sortedEvals.forEach((job, i) => {
+  sortedEvals.forEach((job) => {
     combined.push({
       id: job.id,
       type: "eval",
-      label: `Eval v${i + 1}`,
+      label: evalJobDisplayName(job.id),
       status: mapEvalStatus(job.status),
       createdAt: job.createdAt,
     });
   });
 
-  sortedFinetunes.forEach((job, i) => {
+  sortedFinetunes.forEach((job) => {
     combined.push({
       id: job.id,
       type: "finetune",
-      label: `Train v${i + 1}`,
+      label: finetuneJobDisplayName(job.id, job.suffix),
       status: mapFinetuneStatus(job.status),
       createdAt: new Date(job.created_at).getTime(),
     });
