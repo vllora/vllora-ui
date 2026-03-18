@@ -331,7 +331,10 @@ export function DatasetMainContent({
   }
 
   // ── Leaf topic detail view (existing TopicDetailView) ──
-  if (topicDetail) {
+  // Parent topics (with children) fall through to the "All Topics" tabbed layout
+  // which already scopes displayHierarchy and filteredRecords to the selected subtree.
+  const isLeafTopic = topicDetail && (!topicDetail.node.children || topicDetail.node.children.length === 0);
+  if (isLeafTopic) {
     return (
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="px-4 py-2 border-b border-border shrink-0 bg-background">

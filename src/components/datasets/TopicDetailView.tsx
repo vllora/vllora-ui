@@ -9,7 +9,7 @@
  */
 
 import { useState, useMemo } from "react";
-import { FileText, Sparkles, MessageSquare, ChevronRight } from "lucide-react";
+import { FileText, Sparkles, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { resolveAndGroupBySource } from "@/lib/distri-finetune-tools/steps/shared/resolve-part-ref";
@@ -61,7 +61,6 @@ export function TopicDetailView({
   normalizedObjective,
 }: TopicDetailViewProps) {
   const [activeTab, setActiveTab] = useState<Tab>("records");
-  const [isPromptOpen, setIsPromptOpen] = useState(false);
   const { sources } = KnowledgeSourcesConsumer();
 
   // Job score columns (eval + finetune)
@@ -130,27 +129,11 @@ export function TopicDetailView({
             label={`Linked Sources (${sourceCount})`}
             onClick={() => setActiveTab("linked-sources")}
           />
-          {promptChain.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setIsPromptOpen(prev => !prev)}
-              className={cn(
-                "ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs transition-colors",
-                isPromptOpen
-                  ? "bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]"
-                  : "text-muted-foreground/50 hover:text-foreground hover:bg-muted/50",
-              )}
-              title="View system prompt chain"
-            >
-              <MessageSquare className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Prompt</span>
-            </button>
-          )}
         </div>
       </div>
 
       {/* Prompt chain panel */}
-      {isPromptOpen && promptChain.length > 0 && (
+      {promptChain.length > 0 && (
         <PromptChainPanel chain={promptChain} />
       )}
 

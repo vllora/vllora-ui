@@ -166,6 +166,8 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
     return () => window.removeEventListener("vllora_switch_view", handleSwitchView);
   }, [sources, openTab]);
 
+  const topicHierarchy = dataset?.topicHierarchy?.hierarchy;
+
   // Build topic counts map from records
   const topicCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -207,19 +209,23 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         detail: { viewMode: "canvas" },
       }));
     } else if (nodeId.startsWith("data/")) {
-      // Specific topic → always switch to table view (TopicDetailView)
+      // Check if this is a parent topic (has children) — show canvas like All Topics
+      // Leaf topics → table view (TopicDetailView)
+      const topicName = nodeId.split("/").pop() ?? "";
+      const isParent = topicHierarchy
+        ? hasChildrenInHierarchy(topicHierarchy, topicName)
+        : false;
       window.dispatchEvent(new CustomEvent("vllora_switch_view", {
-        detail: { viewMode: "table" },
+        detail: { viewMode: isParent ? "canvas" : "table" },
       }));
     }
     onNavigate?.(nodeId);
-  }, [openTab, onNavigate]);
+  }, [openTab, onNavigate, topicHierarchy]);
 
   const hasActiveJob = finetuneJobs.some(
     (j) => j.status === "running" || j.status === "pending"
   );
   const hasGraderScript = !!dataset?.evalScript;
-  const topicHierarchy = dataset?.topicHierarchy?.hierarchy;
 
   return (
     <div className="flex flex-col h-full min-h-0 overflow-y-auto py-4">
@@ -517,21 +523,31 @@ function TopicTreeItems({
     const Chevron = isCollapsed ? ChevronRight : ChevronDown;
     return (
       <>
-        <button
-          type="button"
-          onClick={() => onToggleParent(node.name)}
+        <div
           className={cn(
-            "w-full flex items-center gap-1.5 text-[13px] py-1.5 pr-4 transition-colors text-left",
+            "w-full flex items-center gap-0 text-[13px] py-1.5 pr-4 transition-colors text-left",
             selectedNodeId === nodeId
               ? "bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]"
               : "text-muted-foreground hover:bg-muted hover:text-foreground",
           )}
           style={{ paddingLeft }}
         >
-          <Chevron className="w-3 h-3 shrink-0 opacity-50" />
-          <span className="flex-1 truncate min-w-0 font-medium">{node.name}</span>
-          <CountBadge count={count} />
-        </button>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onToggleParent(node.name); }}
+            className="p-0.5 shrink-0 hover:bg-muted/50 rounded"
+          >
+            <Chevron className="w-3 h-3 opacity-50" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onSelect(nodeId)}
+            className="flex-1 flex items-center gap-1.5 min-w-0 text-left ml-1"
+          >
+            <span className="flex-1 truncate min-w-0 font-medium">{node.name}</span>
+            <CountBadge count={count} />
+          </button>
+        </div>
         {!isCollapsed && node.children!.map((child) => (
           <TopicTreeItems
             key={child.id || child.name}
@@ -576,6 +592,15 @@ function getTopicRecordCount(node: TopicHierarchyNode, topicCounts: Map<string, 
     }
   }
   return total;
+}
+
+/** Check if a topic name corresponds to a parent node (has children) in the hierarchy */
+function hasChildrenInHierarchy(nodes: TopicHierarchyNode[], name: string): boolean {
+  for (const node of nodes) {
+    if (node.name === name) return (node.children?.length ?? 0) > 0;
+    if (node.children && hasChildrenInHierarchy(node.children, name)) return true;
+  }
+  return false;
 }
 
 // ============================================================================
