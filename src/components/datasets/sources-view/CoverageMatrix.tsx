@@ -181,6 +181,8 @@ export function CoverageMatrix({ onSelectSource }: CoverageMatrixProps) {
             topicName={topic.name}
             cells={cells}
             totalLinks={totalLinks}
+            sources={sources}
+            onSelectSource={onSelectSource}
           />
         ))}
       </div>
@@ -192,10 +194,14 @@ function CoverageRow({
   topicName,
   cells,
   totalLinks,
+  sources,
+  onSelectSource,
 }: {
   readonly topicName: string;
   readonly cells: number[];
   readonly totalLinks: number;
+  readonly sources: readonly KnowledgeSource[];
+  readonly onSelectSource: (sourceId: string) => void;
 }) {
   const color = getDotColor(totalLinks);
 
@@ -215,10 +221,14 @@ function CoverageRow({
 
       {/* Cells */}
       {cells.map((count, idx) => (
-        <div
+        <button
           key={idx}
+          type="button"
+          onClick={() => onSelectSource(sources[idx].id)}
+          title={`${sources[idx].name}: ${count} linked part${count !== 1 ? "s" : ""}`}
           className={cn(
-            "h-[22px] rounded flex items-center justify-center text-[9px] font-semibold",
+            "h-[22px] rounded flex items-center justify-center text-[9px] font-semibold transition-all cursor-pointer",
+            "hover:ring-1 hover:ring-foreground/20",
             count > 0
               ? "bg-emerald-500/15 text-emerald-400"
               : totalLinks > 0
@@ -227,7 +237,7 @@ function CoverageRow({
           )}
         >
           {count > 0 ? count : totalLinks > 0 ? "—" : "gap"}
-        </div>
+        </button>
       ))}
     </>
   );

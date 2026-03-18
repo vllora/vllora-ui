@@ -58,10 +58,12 @@ export function ScoreCell({ jobScore }: { readonly jobScore?: RecordJobScore }) 
     return (
       <span className="inline-flex items-center gap-1">
         <Loader2 className="w-3 h-3 text-primary animate-spin" />
-        {jobScore.score !== undefined && (
+        {jobScore.score !== undefined ? (
           <span className="font-mono text-[10px] text-muted-foreground/50 tabular-nums">
             {jobScore.score.toFixed(2)}
           </span>
+        ) : (
+          <span className="text-[10px] text-muted-foreground/40 italic">pending</span>
         )}
       </span>
     );

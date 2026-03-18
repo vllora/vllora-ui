@@ -119,6 +119,7 @@ export function RecordsSectionHeader({
               isActive={activeStatFilter === "all"}
               onClick={() => handleStatClick("all")}
               clickable={!!onStatFilterChange}
+              tooltip="Click to show all records"
             />
             <span className="text-border">·</span>
             <StatChip
@@ -127,6 +128,7 @@ export function RecordsSectionHeader({
               isActive={activeStatFilter === "from_spans"}
               onClick={() => handleStatClick("from_spans")}
               clickable={!!onStatFilterChange}
+              tooltip="Click to filter records extracted from traces"
             />
             <span className="text-border">·</span>
             <StatChip
@@ -135,6 +137,7 @@ export function RecordsSectionHeader({
               isActive={false}
               onClick={() => {}}
               clickable={false}
+              tooltip="Number of unique topics in this dataset"
             />
             <span className="text-border">·</span>
             <StatChip
@@ -143,6 +146,7 @@ export function RecordsSectionHeader({
               isActive={activeStatFilter === "labeled"}
               onClick={() => handleStatClick("labeled")}
               clickable={!!onStatFilterChange}
+              tooltip="Click to filter records with topic labels"
             />
             <span className="text-border">·</span>
             <StatChip
@@ -151,6 +155,7 @@ export function RecordsSectionHeader({
               isActive={activeStatFilter === "evaluated"}
               onClick={() => handleStatClick("evaluated")}
               clickable={!!onStatFilterChange}
+              tooltip="Click to filter records with evaluation scores"
             />
             {/* Source document filter chip */}
             {sourceDocumentFilterName && onClearSourceDocumentFilter && (
@@ -244,16 +249,18 @@ function StatChip({
   isActive,
   onClick,
   clickable,
+  tooltip,
 }: {
   count: number;
   label: string;
   isActive: boolean;
   onClick: () => void;
   clickable: boolean;
+  tooltip?: string;
 }) {
   if (!clickable) {
     return (
-      <span>
+      <span title={tooltip}>
         <span className="font-medium text-foreground">{count}</span> {label}
       </span>
     );
@@ -262,6 +269,7 @@ function StatChip({
   return (
     <button
       onClick={onClick}
+      title={tooltip}
       className={cn(
         "inline-flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors",
         isActive

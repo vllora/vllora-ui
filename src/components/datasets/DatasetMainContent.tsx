@@ -168,6 +168,10 @@ export function DatasetMainContent({
         if (detail.ifCurrently && viewMode !== detail.ifCurrently) return;
 
         onViewModeChange(detail.viewMode);
+        // Reset to Canvas tab when switching to canvas view mode
+        if (detail.viewMode === "canvas") {
+          setAllTopicsTab("canvas");
+        }
         // If switching to sources with a specific sourceId, set it
         if (detail.sourceId !== undefined) {
           setSelectedSourceId(detail.sourceId);
@@ -276,6 +280,11 @@ export function DatasetMainContent({
 
   // All Topics tab state (canvas | records | linked-sources)
   const [allTopicsTab, setAllTopicsTab] = useState<AllTopicsTab>("canvas");
+
+  // Reset to Canvas tab when navigating to a different topic or "All Topics"
+  useEffect(() => {
+    setAllTopicsTab("canvas");
+  }, [topicFilter]);
 
   // Collect all source refs from entire hierarchy for "Linked Sources" tab
   const { sources } = KnowledgeSourcesConsumer();
@@ -438,8 +447,6 @@ export function DatasetMainContent({
           workflowId={workflowId}
           activeStatFilter={activeStatFilter}
           onStatFilterChange={setActiveStatFilter}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
           sourceDocumentFilterName={sourceDocumentFilterName}
           onClearSourceDocumentFilter={onClearSourceDocumentFilter}
           hideViewToggle

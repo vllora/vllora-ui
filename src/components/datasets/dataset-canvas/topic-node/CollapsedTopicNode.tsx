@@ -60,6 +60,7 @@ export function CollapsedTopicNode({
   const isZoomed = zoomedTopicId === name;
   const matchingCount = isFilterActive ? getMatchingCount(name) : null;
   const quality = topicQualityScores?.[name];
+  const hasEvaluations = (quality?.evaluated ?? 0) > 0;
 
   return (
     <div
@@ -99,7 +100,9 @@ export function CollapsedTopicNode({
             <div
               className={cn(
                 "h-full rounded-full transition-all",
-                coveragePercentage >= 80 ? "bg-emerald-500" : coveragePercentage >= 60 ? "bg-amber-500" : "bg-red-500"
+                hasEvaluations
+                  ? (coveragePercentage >= 80 ? "bg-emerald-500" : coveragePercentage >= 60 ? "bg-amber-500" : "bg-red-500")
+                  : "bg-muted-foreground/40"
               )}
               style={{ width: `${Math.min(coveragePercentage, 100)}%` }}
             />
