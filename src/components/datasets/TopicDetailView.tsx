@@ -3,19 +3,29 @@
  *
  * Full-page topic detail shown when a topic is selected from the explorer sidebar.
  * Matches mockup: breadcrumb + title + stats header, then 2 tabs (Records / Linked Sources).
+ *
+ * Record rows use shared cell components from shared-record-cells.tsx
+ * to ensure consistent display with UnifiedRecordTable (All Topics view).
  */
 
 import { useState, useMemo } from "react";
-import { FileText, Sparkles, MessageSquare, ChevronRight, Loader2 } from "lucide-react";
+import { FileText, Sparkles, MessageSquare, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
-import { resolveAndGroupBySource, resolvePartRef } from "@/lib/distri-finetune-tools/steps/shared/resolve-part-ref";
+import { resolveAndGroupBySource } from "@/lib/distri-finetune-tools/steps/shared/resolve-part-ref";
 import type { KnowledgeSource } from "@/types/knowledge-types";
 import type { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { useJobScoreColumns } from "@/hooks/useJobScoreColumns";
 import type { JobColumn, RecordJobScore } from "./records-table/job-score-columns";
-import { JobStatusBadge } from "./shared/JobStatusBadge";
+import {
+  ScorePill,
+  FallbackScorePill,
+  ScoreCell,
+  JobColumnHeader,
+  SourcePartsCell,
+  useResolvedSourceParts,
+} from "./records-table/shared-record-cells";
 
 type Tab = "records" | "linked-sources";
 
@@ -33,7 +43,7 @@ export interface TopicDetailViewProps {
 }
 
 /** Collect all sourceChunkRefs from a node and its descendants */
-function collectAllRefs(node: TopicHierarchyNode): string[] {
+export function collectAllRefs(node: TopicHierarchyNode): string[] {
   const refs = [...(node.sourceChunkRefs ?? [])];
   if (node.children) {
     for (const child of node.children) {
@@ -164,34 +174,20 @@ export function TopicDetailView({
 
 // ─── Records Tab ───
 
-/** Extract user and assistant text from record data */
-function extractRecordMessages(data: unknown): { user: string; assistant: string } {
-  if (!data || typeof data !== "object") return { user: "", assistant: "" };
+/** Extract user text from record data */
+function extractRecordUserText(data: unknown): string {
+  if (!data || typeof data !== "object") return "";
   const d = data as Record<string, unknown>;
   const input = d.input as Record<string, unknown> | undefined;
-  const output = d.output as Record<string, unknown> | undefined;
-
   const inputMsgs = (input?.messages ?? []) as Array<Record<string, unknown>>;
   const userMsg = inputMsgs.find(m => m.role === "user");
-  const userText = userMsg
-    ? (typeof userMsg.content === "string" ? userMsg.content : JSON.stringify(userMsg.content).slice(0, 300))
-    : "";
-
-  const outputMsgs = (output?.messages ?? []) as Array<Record<string, unknown>>;
-  const assistantMsg = outputMsgs.find(m => m.role === "assistant");
-  let assistantText = "";
-  if (assistantMsg) {
-    assistantText = typeof assistantMsg.content === "string"
-      ? assistantMsg.content
-      : JSON.stringify(assistantMsg.content).slice(0, 300);
-  } else if (typeof output?.content === "string") {
-    assistantText = (output as Record<string, string>).content;
-  }
-
-  return { user: userText, assistant: assistantText };
+  if (!userMsg) return "";
+  return typeof userMsg.content === "string"
+    ? userMsg.content
+    : JSON.stringify(userMsg.content).slice(0, 300);
 }
 
-function RecordsTabContent({
+export function RecordsTabContent({
   records,
   onSelectRecord,
   jobColumns = [],
@@ -229,7 +225,7 @@ function RecordsTabContent({
           {hasJobColumns ? (
             jobColumns.map((col) => (
               <th key={col.id} className="px-2 py-2.5 w-[100px] text-center">
-                <ScoreColumnHeader column={col} />
+                <JobColumnHeader column={col} />
               </th>
             ))
           ) : (
@@ -255,148 +251,6 @@ function RecordsTabContent({
   );
 }
 
-function ScoreColumnHeader({ column }: { readonly column: JobColumn }) {
-  const isActive = column.status === "running";
-  const isQueued = column.status === "queued";
-
-  return (
-    <div className="flex flex-col items-center gap-px normal-case tracking-normal">
-      <span className="text-[10px] font-medium">{column.label}</span>
-      {isActive ? (
-        <JobStatusBadge status="running" />
-      ) : isQueued ? (
-        <JobStatusBadge status="queued" />
-      ) : (
-        <span className="text-[8px] text-muted-foreground/40">
-          {column.type === "eval" ? "evaluation" : "finetune"}
-        </span>
-      )}
-    </div>
-  );
-}
-
-
-function ScorePill({ score }: { readonly score: number }) {
-  const colorClass = score >= 0.8
-    ? "bg-emerald-500/15 text-emerald-400"
-    : score >= 0.6
-      ? "bg-amber-500/15 text-amber-400"
-      : "bg-red-500/15 text-red-400";
-
-  return (
-    <span className={cn("inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-medium font-mono tabular-nums", colorClass)}>
-      {score.toFixed(2)}
-    </span>
-  );
-}
-
-function TrendArrow({ trend }: { readonly trend: number }) {
-  if (trend > 0.005) return <span className="text-[9px] text-emerald-400 font-mono">↑</span>;
-  if (trend < -0.005) return <span className="text-[9px] text-red-400 font-mono">↓</span>;
-  return null;
-}
-
-function ScoreCell({ jobScore }: { readonly jobScore?: RecordJobScore }) {
-  if (!jobScore) return <span className="text-muted-foreground/20">—</span>;
-  if (jobScore.status === "queued") return <span className="text-[10px] text-muted-foreground/30 italic">queued</span>;
-  if (jobScore.status === "running") {
-    return (
-      <span className="inline-flex items-center gap-1">
-        <Loader2 className="w-3 h-3 text-primary animate-spin" />
-        {jobScore.score !== undefined && (
-          <span className="font-mono text-[10px] text-muted-foreground/50 tabular-nums">{jobScore.score.toFixed(2)}</span>
-        )}
-      </span>
-    );
-  }
-  if (jobScore.status === "failed") return <span className="text-[10px] text-red-400/60">failed</span>;
-  if (jobScore.score === undefined) return <span className="text-muted-foreground/20">—</span>;
-
-  return (
-    <span className="inline-flex items-center gap-0.5">
-      <ScorePill score={jobScore.score} />
-      {jobScore.trend !== undefined && <TrendArrow trend={jobScore.trend} />}
-    </span>
-  );
-}
-
-/** Format resolved source parts for the Source column — clickable to navigate to Sources view */
-function SourcePartsCell({
-  resolvedParts,
-  unresolvedCount,
-}: {
-  readonly resolvedParts: readonly { source: { id: string; name: string }; part: { id: string; title?: string; extractionPath?: string } }[];
-  readonly unresolvedCount: number;
-}) {
-  if (resolvedParts.length === 0 && unresolvedCount === 0) {
-    return <span className="text-muted-foreground/20">—</span>;
-  }
-
-  if (resolvedParts.length === 0) {
-    return (
-      <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/50">
-        <FileText className="w-3 h-3 shrink-0 opacity-40" />
-        {unresolvedCount} part{unresolvedCount !== 1 ? "s" : ""}
-      </span>
-    );
-  }
-
-  // Group by source document to detect cross-document refs
-  const bySource = new Map<string, string[]>();
-  for (const r of resolvedParts) {
-    const partLabel = r.part.title ?? r.part.extractionPath ?? "untitled";
-    const existing = bySource.get(r.source.name);
-    if (existing) {
-      existing.push(partLabel);
-    } else {
-      bySource.set(r.source.name, [partLabel]);
-    }
-  }
-
-  const sourceCount = bySource.size;
-  const tooltip = [...bySource.entries()]
-    .map(([doc, parts]) => `${doc}: ${parts.join(", ")}`)
-    .join("\n");
-
-  // Single source → show part title
-  // Multiple sources → show "N docs" to indicate cross-doc refs
-  const label = sourceCount === 1
-    ? resolvedParts.length === 1
-      ? (resolvedParts[0].part.title ?? resolvedParts[0].source.name)
-      : `${resolvedParts[0].part.title ?? resolvedParts[0].source.name} +${resolvedParts.length - 1}`
-    : `${sourceCount} docs · ${resolvedParts.length} parts`;
-
-  const handleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    // Navigate to the first resolved part's source + part
-    const first = resolvedParts[0];
-    window.dispatchEvent(new CustomEvent("vllora_navigate_to_source", {
-      detail: { sourceId: first.source.id, partId: first.part.id },
-    }));
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60 bg-primary/5 border border-primary/10 rounded px-1.5 py-0.5 max-w-[160px] truncate hover:bg-primary/10 hover:text-foreground/80 transition-colors cursor-pointer"
-      title={`${tooltip}\n\nClick to view in Sources`}
-    >
-      <FileText className="w-3 h-3 shrink-0 opacity-50" />
-      <span className="truncate">{label}</span>
-    </button>
-  );
-}
-
-/** Extract source_parts from record metadata */
-function getRecordSourceParts(record: DatasetRecord): string[] {
-  const meta = record.metadata as Record<string, unknown> | undefined;
-  const parts = meta?.source_parts ?? meta?.sourceChunkRef;
-  if (Array.isArray(parts)) return parts.filter((p): p is string => typeof p === "string");
-  if (typeof parts === "string") return [parts];
-  return [];
-}
-
 function RecordTableRow({
   record,
   index,
@@ -412,22 +266,13 @@ function RecordTableRow({
   readonly getScoresForRecord?: (recordId: string) => ReadonlyMap<string, RecordJobScore>;
   readonly sources?: readonly KnowledgeSource[];
 }) {
-  const { user } = useMemo(
-    () => extractRecordMessages(record.data),
-    [record.data],
-  );
+  const userText = useMemo(() => extractRecordUserText(record.data), [record.data]);
   const hasJobColumns = jobColumns.length > 0;
   const scores = useMemo(
     () => getScoresForRecord?.(record.id),
     [getScoresForRecord, record.id],
   );
-  const partRefs = useMemo(() => getRecordSourceParts(record), [record]);
-  const resolvedParts = useMemo(() => {
-    if (partRefs.length === 0 || sources.length === 0) return [];
-    return partRefs
-      .map(ref => resolvePartRef(ref, sources))
-      .filter((r): r is NonNullable<typeof r> => r !== null);
-  }, [partRefs, sources]);
+  const { partRefs, resolvedParts } = useResolvedSourceParts(record, sources);
   const fallbackScore = record.evaluation?.score ?? record.evaluation?.evalScore;
 
   return (
@@ -440,7 +285,7 @@ function RecordTableRow({
       </td>
       <td className="px-4 py-2.5 text-xs text-foreground/80 leading-relaxed align-top">
         <span className="line-clamp-2">
-          {user || <span className="text-muted-foreground/50 italic">No user message</span>}
+          {userText || <span className="text-muted-foreground/50 italic">No user message</span>}
         </span>
       </td>
       {hasJobColumns ? (
@@ -454,7 +299,7 @@ function RecordTableRow({
           {fallbackScore != null ? (
             <ScorePill score={fallbackScore} />
           ) : (
-            <span className="text-muted-foreground/30">—</span>
+            <FallbackScorePill />
           )}
         </td>
       )}
@@ -467,7 +312,7 @@ function RecordTableRow({
 
 // ─── Linked Sources Tab ───
 
-function LinkedSourcesTabContent({
+export function LinkedSourcesTabContent({
   groupedSources,
 }: {
   readonly groupedSources: Map<string, { source: { id: string; name: string }; parts: Array<{ id: string; title?: string; type: string; content?: string; extractionPath?: string }> }>;
@@ -499,7 +344,7 @@ function LinkedSourcesTabContent({
               <h4 className="text-[13px] font-semibold text-foreground truncate">{source.name}</h4>
               <p className="text-[11px] text-muted-foreground/60 mt-0.5">
                 {parts.length > 1
-                  ? `${parts.map(p => `Part ${parts.indexOf(p) + 1}`).join(", ")}`
+                  ? `${parts.map((_p, i) => `Part ${i + 1}`).join(", ")}`
                   : `Part 1`}
                 {parts[0]?.extractionPath ? ` — ${parts[0].extractionPath}` : ""}
               </p>

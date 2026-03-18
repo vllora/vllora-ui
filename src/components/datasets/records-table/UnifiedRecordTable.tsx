@@ -4,20 +4,27 @@
  * Single `<table>` layout with 3 row types:
  * - Parent group header row (collapsible, aggregated stats)
  * - Subgroup header row (topic name, score, source count)
- * - Record row (input, per-job score pills, source ref tag)
+ * - Record row (input, per-job score pills, source parts cell)
  *
  * Score columns are dynamic — one per eval/finetune job.
+ * Source column uses shared SourcePartsCell (same as TopicDetailView).
  */
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { ChevronDown, ChevronRight, MessageSquare, FileText, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
+import type { KnowledgeSource } from "@/types/knowledge-types";
 import { extractMessages, cleanText } from "./cells/ConversationThreadCell.utilities";
 import { emitter } from "@/utils/eventEmitter";
 import type { JobColumn, RecordJobScore } from "./job-score-columns";
-import { JobStatusBadge } from "../shared/JobStatusBadge";
-import type { JobStatusType } from "../shared/JobStatusBadge";
+import {
+  FallbackScorePill,
+  ScoreCell,
+  JobColumnHeader,
+  SourcePartsCell,
+  useResolvedSourceParts,
+} from "./shared-record-cells";
 
 // ─── Types ───
 
@@ -35,6 +42,7 @@ export interface UnifiedRecordTableProps {
   readonly onExpand?: (record: DatasetRecord) => void;
   readonly jobColumns?: readonly JobColumn[];
   readonly getScoresForRecord?: (recordId: string) => ReadonlyMap<string, RecordJobScore>;
+  readonly sources?: readonly KnowledgeSource[];
 }
 
 // ─── Helpers ───
@@ -57,13 +65,6 @@ function extractRecordText(record: DatasetRecord): { userText: string } {
   };
 }
 
-function getSourceRef(record: DatasetRecord): string | null {
-  const meta = record.metadata as Record<string, unknown> | undefined;
-  const ref = meta?.sourceChunkRef;
-  if (typeof ref === "string") return ref;
-  return null;
-}
-
 // ─── Component ───
 
 export function UnifiedRecordTable({
@@ -75,6 +76,7 @@ export function UnifiedRecordTable({
   onExpand,
   jobColumns = [],
   getScoresForRecord,
+  sources = [],
 }: UnifiedRecordTableProps) {
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [highlightedRecordId, setHighlightedRecordId] = useState<string | null>(null);
@@ -365,31 +367,12 @@ export function UnifiedRecordTable({
               onExpand={onExpand}
               jobColumns={jobColumns}
               getScoresForRecord={getScoresForRecord}
+              sources={sources}
             />
           );
         })}
       </tbody>
     </table>
-  );
-}
-
-// ─── Job Column Header ───
-
-function JobColumnHeader({ column }: { readonly column: JobColumn }) {
-  const status = column.status as JobStatusType | undefined;
-  const isActiveStatus = status === "running" || status === "queued";
-
-  return (
-    <div className="flex flex-col items-center gap-0.5">
-      <span className="text-[10px] font-medium normal-case tracking-normal">{column.label}</span>
-      {isActiveStatus && status ? (
-        <JobStatusBadge status={status} />
-      ) : (
-        <span className="text-[8px] text-muted-foreground/40 normal-case tracking-normal">
-          {column.type === "eval" ? "evaluation" : "finetune"}
-        </span>
-      )}
-    </div>
   );
 }
 
@@ -523,6 +506,7 @@ function RecordTableRow({
   onExpand,
   jobColumns = [],
   getScoresForRecord,
+  sources = [],
 }: {
   readonly record: DatasetRecord;
   readonly depth: number;
@@ -531,9 +515,9 @@ function RecordTableRow({
   readonly onExpand?: (record: DatasetRecord) => void;
   readonly jobColumns?: readonly JobColumn[];
   readonly getScoresForRecord?: (recordId: string) => ReadonlyMap<string, RecordJobScore>;
+  readonly sources?: readonly KnowledgeSource[];
 }) {
   const { userText } = useMemo(() => extractRecordText(record), [record]);
-  const sourceRef = getSourceRef(record);
   const paddingLeft = 12 + depth * 20;
   const hasJobColumns = jobColumns.length > 0;
 
@@ -541,6 +525,8 @@ function RecordTableRow({
     () => getScoresForRecord?.(record.id),
     [getScoresForRecord, record.id],
   );
+
+  const { partRefs, resolvedParts } = useResolvedSourceParts(record, sources);
 
   return (
     <tr
@@ -571,97 +557,8 @@ function RecordTableRow({
         </td>
       )}
       <td className="px-3 py-2">
-        <SourceRefTag sourceRef={sourceRef} />
+        <SourcePartsCell resolvedParts={resolvedParts} unresolvedCount={partRefs.length} />
       </td>
     </tr>
-  );
-}
-
-// ─── Score Cell ───
-
-function ScoreCell({ jobScore }: { readonly jobScore?: RecordJobScore }) {
-  if (!jobScore) return <span className="text-muted-foreground/20">—</span>;
-
-  if (jobScore.status === "queued") {
-    return <span className="text-[10px] text-muted-foreground/30 italic">queued</span>;
-  }
-
-  if (jobScore.status === "running") {
-    return (
-      <span className="inline-flex items-center gap-1">
-        <Loader2 className="w-3 h-3 text-primary animate-spin" />
-        {jobScore.score !== undefined && (
-          <span className="font-mono text-[10px] text-muted-foreground/50 tabular-nums">
-            {jobScore.score.toFixed(2)}
-          </span>
-        )}
-      </span>
-    );
-  }
-
-  if (jobScore.status === "failed") {
-    return <span className="text-[10px] text-red-400/60">failed</span>;
-  }
-
-  if (jobScore.score === undefined) {
-    return <span className="text-muted-foreground/20">—</span>;
-  }
-
-  return (
-    <span className="inline-flex items-center gap-0.5">
-      <ScorePill score={jobScore.score} />
-      {jobScore.trend !== undefined && <TrendArrow trend={jobScore.trend} />}
-    </span>
-  );
-}
-
-// ─── Score Pill ───
-
-function ScorePill({ score }: { readonly score: number }) {
-  const bg = score >= 0.8
-    ? "bg-emerald-500/15 text-emerald-400"
-    : score >= 0.6
-      ? "bg-amber-500/15 text-amber-400"
-      : "bg-red-500/15 text-red-400";
-
-  return (
-    <span className={cn("inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-medium font-mono tabular-nums", bg)}>
-      {score.toFixed(2)}
-    </span>
-  );
-}
-
-function FallbackScorePill({ score }: { readonly score?: number }) {
-  if (score === undefined) return <span className="text-muted-foreground/30">—</span>;
-  return <ScorePill score={score} />;
-}
-
-// ─── Trend Arrow ───
-
-function TrendArrow({ trend }: { readonly trend: number }) {
-  if (trend > 0.005) {
-    return <span className="text-[9px] text-emerald-400 font-mono">↑</span>;
-  }
-  if (trend < -0.005) {
-    return <span className="text-[9px] text-red-400 font-mono">↓</span>;
-  }
-  return null;
-}
-
-// ─── Source Ref Tag ───
-
-function SourceRefTag({ sourceRef }: { readonly sourceRef: string | null }) {
-  if (!sourceRef) {
-    return <span className="text-[10px] text-muted-foreground/30 italic">generated</span>;
-  }
-
-  return (
-    <span
-      className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60 bg-primary/5 border border-primary/10 rounded px-1.5 py-0.5 max-w-[130px] truncate"
-      title={sourceRef}
-    >
-      <FileText className="w-3 h-3 shrink-0 opacity-50" />
-      <span className="truncate">{sourceRef}</span>
-    </span>
   );
 }

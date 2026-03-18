@@ -22,6 +22,7 @@ import type { RecordRole } from "../record-filters";
 import { emitter, consumePendingHighlight } from "@/utils/eventEmitter";
 import { usePromptScrollTracking } from "@/hooks/usePromptScrollTracking";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
+import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { useJobScoreColumns } from "@/hooks/useJobScoreColumns";
 
 interface RecordsTableProps {
@@ -671,6 +672,9 @@ function UnifiedTableView({
   const finetuneCtx = FinetuneJobsConsumer();
   const { columns: jobColumns, getScoresForRecord } = useJobScoreColumns(finetuneCtx);
 
+  // Knowledge sources for resolving source_parts refs in record rows
+  const { sources } = KnowledgeSourcesConsumer();
+
   // Count filtered records for toolbar display
   const filteredCount = useMemo(() => {
     let count = 0;
@@ -729,6 +733,7 @@ function UnifiedTableView({
           onExpand={onExpand}
           jobColumns={jobColumns}
           getScoresForRecord={getScoresForRecord}
+          sources={sources}
         />
       </div>
 

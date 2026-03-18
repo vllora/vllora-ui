@@ -24,9 +24,11 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { DatasetRecord, DataInfo } from "@/types/dataset-types";
+import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import type { AvailableTopic } from "../record-utils";
 import type { JobColumn, RecordJobScore } from "./job-score-columns";
 import { estimateTokens, countTurns } from "./cells/StatsBadge";
+import { SourcePartsCell, useResolvedSourceParts } from "./shared-record-cells";
 
 // ─── Types ───
 
@@ -78,8 +80,13 @@ export function RecordDetailSidebar({
     return extractMessages(record.data);
   }, [record]);
 
-  const sourceRefs = record?.metadata?.sourceChunkRefs as string[] | undefined;
-  const sourceCount = sourceRefs?.length ?? 0;
+  // Resolve source_parts refs (same logic as table rows)
+  const { sources } = KnowledgeSourcesConsumer();
+  const { partRefs, resolvedParts } = useResolvedSourceParts(
+    record ?? ({ metadata: {} } as DatasetRecord),
+    sources,
+  );
+  const sourceCount = partRefs.length;
 
   return (
     <Sheet open={record !== null} onOpenChange={(open) => !open && onClose()}>
@@ -113,11 +120,13 @@ export function RecordDetailSidebar({
               )}
 
               {/* Source Context Section */}
-              {sourceCount > 0 && (
-                <SourceContextSection
-                  sourceRefs={sourceRefs!}
-                  record={record}
-                />
+              {resolvedParts.length > 0 && (
+                <div className="px-5 py-4 border-b border-border/50">
+                  <SectionLabel title="Source Context" />
+                  <div className="mt-3">
+                    <SourcePartsCell resolvedParts={resolvedParts} unresolvedCount={partRefs.length} />
+                  </div>
+                </div>
               )}
 
               {/* Details Grid */}
@@ -301,12 +310,12 @@ function ScoreGroup({
         <span className="text-[10px] font-medium text-muted-foreground">{label}</span>
       </div>
       <div className="space-y-1">
-        {columns.map((col, i) => {
+        {columns.map((col) => {
           const scoreData = scores.get(col.id);
           return (
             <ScoreBarRow
               key={col.id}
-              label={`v${i + 1}`}
+              label={col.label}
               scoreData={scoreData}
             />
           );
@@ -377,20 +386,24 @@ interface ExtractedMessage {
   readonly content: string;
 }
 
+function extractMessageContent(msg: { role?: string; content?: unknown }): string {
+  if (typeof msg.content === "string") return msg.content;
+  if (Array.isArray(msg.content)) {
+    return msg.content.map((c: { text?: string }) => c.text || "").join("");
+  }
+  return "";
+}
+
 function extractMessages(data: unknown): ExtractedMessage[] {
   const dataInfo = data as DataInfo | undefined;
   if (!dataInfo) return [];
 
   const result: ExtractedMessage[] = [];
 
+  // Input messages (system + user)
   if (dataInfo.input?.messages && Array.isArray(dataInfo.input.messages)) {
     for (const msg of dataInfo.input.messages) {
-      const content = typeof msg.content === "string"
-        ? msg.content
-        : Array.isArray(msg.content)
-          ? msg.content.map((c: { text?: string }) => c.text || "").join("")
-          : "";
-      result.push({ role: msg.role || "user", content });
+      result.push({ role: msg.role || "user", content: extractMessageContent(msg) });
     }
   }
 
@@ -398,82 +411,59 @@ function extractMessages(data: unknown): ExtractedMessage[] {
 }
 
 function ConversationSection({ messages }: { readonly messages: readonly ExtractedMessage[] }) {
-  const systemMsg = messages.find((m) => m.role === "system");
-  const userMsg = messages.find((m) => m.role === "user");
+  if (messages.length === 0) {
+    return (
+      <div className="px-5 py-4 border-b border-border/50">
+        <SectionLabel title="Conversation" />
+        <p className="mt-3 text-xs text-muted-foreground/50 italic">No messages</p>
+      </div>
+    );
+  }
 
   return (
     <div className="px-5 py-4 border-b border-border/50">
       <SectionLabel title="Conversation" />
       <div className="mt-3 space-y-3">
-        {systemMsg && (
-          <div className="rounded-lg border border-dashed border-border/60 bg-muted/10 p-3">
-            <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50 block mb-1.5">
-              System
-            </span>
-            <p className="text-xs text-muted-foreground/70 leading-relaxed">
-              {systemMsg.content}
-            </p>
-          </div>
-        )}
-        {userMsg && (
-          <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
-            <span className="text-[9px] font-semibold uppercase tracking-wider text-emerald-400/70 block mb-1.5">
-              User
-            </span>
-            <p className="text-xs text-foreground leading-relaxed">
-              {userMsg.content}
-            </p>
-          </div>
-        )}
-        {!systemMsg && !userMsg && (
-          <p className="text-xs text-muted-foreground/50 italic">No messages</p>
-        )}
+        {messages.map((msg, i) => (
+          <MessageBubble key={i} role={msg.role} content={msg.content} />
+        ))}
       </div>
     </div>
   );
 }
 
-// ─── Source Context Section ───
+const ROLE_STYLES: Record<string, { labelClass: string; borderClass: string; bgClass: string; textClass: string }> = {
+  system: {
+    labelClass: "text-muted-foreground/50",
+    borderClass: "border-dashed border-border/60",
+    bgClass: "bg-muted/10",
+    textClass: "text-muted-foreground/70",
+  },
+  user: {
+    labelClass: "text-emerald-400/70",
+    borderClass: "border-border/60",
+    bgClass: "bg-muted/20",
+    textClass: "text-foreground",
+  },
+  assistant: {
+    labelClass: "text-blue-400/70",
+    borderClass: "border-blue-500/20",
+    bgClass: "bg-blue-500/5",
+    textClass: "text-foreground/90",
+  },
+};
 
-function SourceContextSection({
-  sourceRefs,
-  record,
-}: {
-  readonly sourceRefs: string[];
-  readonly record: DatasetRecord;
-}) {
-  // Extract source info from metadata
-  const sourceLabel = useMemo(() => {
-    const refs = sourceRefs;
-    if (refs.length === 0) return null;
-
-    // Try to extract source file name from ref format "sourceId:chunkId" or "sourceId/chunkId"
-    const firstRef = refs[0];
-    const separatorIdx = Math.max(firstRef.indexOf(":"), firstRef.indexOf("/"));
-    const sourceId = separatorIdx > 0 ? firstRef.substring(0, separatorIdx) : firstRef;
-
-    return {
-      name: record.metadata?.sourceName as string | undefined || sourceId,
-      refCount: refs.length,
-    };
-  }, [sourceRefs, record.metadata]);
-
-  if (!sourceLabel) return null;
+function MessageBubble({ role, content }: { readonly role: string; readonly content: string }) {
+  const style = ROLE_STYLES[role.toLowerCase()] ?? ROLE_STYLES.user;
 
   return (
-    <div className="px-5 py-4 border-b border-border/50">
-      <SectionLabel title="Source Context" />
-      <div className="mt-3 rounded-lg border border-border/50 bg-muted/10 p-3">
-        <div className="flex items-center gap-2 mb-2">
-          <FileText className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-          <div className="min-w-0">
-            <div className="text-xs font-medium text-foreground truncate">{sourceLabel.name}</div>
-            <div className="text-[10px] text-muted-foreground">
-              {sourceLabel.refCount} source{sourceLabel.refCount !== 1 ? "s" : ""}
-            </div>
-          </div>
-        </div>
-      </div>
+    <div className={cn("rounded-lg border p-3", style.borderClass, style.bgClass)}>
+      <span className={cn("text-[9px] font-semibold uppercase tracking-wider block mb-1.5", style.labelClass)}>
+        {role}
+      </span>
+      <p className={cn("text-xs leading-relaxed whitespace-pre-wrap", style.textClass)}>
+        {content}
+      </p>
     </div>
   );
 }

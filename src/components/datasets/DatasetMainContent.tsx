@@ -11,16 +11,21 @@ import type { ViewMode } from "./dataset-detail-header/ViewModeToggle";
 import type { CoverageStats, DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import type { AvailableTopic } from "./record-utils";
+import { cn } from "@/lib/utils";
+import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
+import { resolveAndGroupBySource } from "@/lib/distri-finetune-tools/steps/shared/resolve-part-ref";
 import { RecordsSectionHeader } from "./dataset-detail-header/RecordsSectionHeader";
 import { TopicHierarchyCanvas } from "./dataset-canvas/TopicHierarchyCanvas";
 import { RecordsTable } from "./records-table/RecordsTable";
 import { RecordDetailSidebar } from "./records-table/RecordDetailSidebar";
 import { SourcesView } from "./sources-view/SourcesView";
 import { EmptyRecordsState } from "./EmptyRecordsState";
-import { TopicDetailView } from "./TopicDetailView";
+import { TopicDetailView, LinkedSourcesTabContent, collectAllRefs } from "./TopicDetailView";
 import { filterRecords, type StatFilter, type RecordRole } from "./record-filters";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { useJobScoreColumns } from "@/hooks/useJobScoreColumns";
+
+type AllTopicsTab = "canvas" | "records" | "linked-sources";
 
 /** Recursively find a topic node by name anywhere in the hierarchy, returning it and its parent path */
 function findTopicByName(
@@ -135,7 +140,6 @@ export function DatasetMainContent({
   docsTotal,
   sourceDocumentFilterName,
   onClearSourceDocumentFilter,
-  onUpdatePromptTemplate,
   topicQualityScores,
 }: DatasetMainContentProps) {
   // Job score columns for record detail sidebar
@@ -206,8 +210,8 @@ export function DatasetMainContent({
 
   // P0-19: Stat filter state for RecordsSectionHeader clickable chips
   const [activeStatFilter, setActiveStatFilter] = useState<StatFilter>("all");
-  // P0-9: Role filter state for RecordsTableHeader
-  const [roleFilter, setRoleFilter] = useState<RecordRole>("all");
+  // P0-9: Role filter state (currently always "all" — no UI to change it in tabbed layout)
+  const [roleFilter] = useState<RecordRole>("all");
   // Search query state
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -254,17 +258,6 @@ export function DatasetMainContent({
     });
   }, [topicFilteredRecords, activeStatFilter, roleFilter, searchQuery]);
 
-  // Handle "View in Table" from canvas panel — switch to table view and focus the topic
-  const handleViewInTable = useCallback((topicId: string) => {
-    onViewModeChange("table");
-    // Dispatch focus event after a short delay to let the table mount
-    setTimeout(() => {
-      window.dispatchEvent(new CustomEvent("vllora_focus_topic", {
-        detail: { topicId, topicName: topicId },
-      }));
-    }, 100);
-  }, [onViewModeChange]);
-
   // When filtering by topic, narrow the hierarchy to just the matched subtree
   const displayHierarchy = useMemo(() => {
     if (!topicFilter || !topicHierarchy) return topicHierarchy;
@@ -280,6 +273,43 @@ export function DatasetMainContent({
   }, [topicFilter, topicHierarchy]);
 
   const hasTopics = displayHierarchy && displayHierarchy.length > 0;
+
+  // All Topics tab state (canvas | records | linked-sources)
+  const [allTopicsTab, setAllTopicsTab] = useState<AllTopicsTab>("canvas");
+
+  // Collect all source refs from entire hierarchy for "Linked Sources" tab
+  const { sources } = KnowledgeSourcesConsumer();
+  const allHierarchyRefs = useMemo(() => {
+    if (!displayHierarchy) return [];
+    const refs: string[] = [];
+    for (const node of displayHierarchy) {
+      refs.push(...collectAllRefs(node));
+    }
+    return [...new Set(refs)];
+  }, [displayHierarchy]);
+  const allGroupedSources = useMemo(
+    () => resolveAndGroupBySource(allHierarchyRefs, sources),
+    [allHierarchyRefs, sources],
+  );
+
+  // "View in Table" from canvas — switch to records tab (All Topics) or table view (topic detail)
+  const handleViewInTable = useCallback((topicId: string) => {
+    if (!topicDetail) {
+      setAllTopicsTab("records");
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("vllora_focus_topic", {
+          detail: { topicId, topicName: topicId },
+        }));
+      }, 100);
+    } else {
+      onViewModeChange("table");
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("vllora_focus_topic", {
+          detail: { topicId, topicName: topicId },
+        }));
+      }, 100);
+    }
+  }, [topicDetail, onViewModeChange]);
 
   // Show empty state only when no records AND no topic hierarchy
   // If topics exist, show the table/canvas with empty topic groups
@@ -300,11 +330,10 @@ export function DatasetMainContent({
     );
   }
 
-  return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-
-      {/* Stats bar + view controls — Canvas and Table only (Sources has its own layout) */}
-      {viewMode !== "sources" && (
+  // ── Leaf topic detail view (existing TopicDetailView) ──
+  if (topicDetail) {
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden">
         <div className="px-4 py-2 border-b border-border shrink-0 bg-background">
           <RecordsSectionHeader
             viewMode={viewMode}
@@ -318,88 +347,176 @@ export function DatasetMainContent({
             onSearchChange={setSearchQuery}
             sourceDocumentFilterName={sourceDocumentFilterName}
             onClearSourceDocumentFilter={onClearSourceDocumentFilter}
-            hideViewToggle={!!topicDetail}
+            hideViewToggle
           />
         </div>
-      )}
-
-      {/* Main content area */}
-      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-      {viewMode === "canvas" && (
-        <TopicHierarchyCanvas
-          hierarchy={displayHierarchy}
-          records={filteredRecords}
-          workflowId={workflowId}
-          coverageStats={coverageStats}
-          onSelectTopic={onSelectTopic}
-          selectedTopic={selectedTopic}
-          onAddTopic={onAddTopic}
-          onRenameTopic={onRenameTopic}
-          onDeleteTopic={onDeleteTopic}
-          onUpdateRecordTopic={onUpdateRecordTopic}
-          onDeleteRecord={onDeleteRecord}
-          onSaveRecord={onSaveRecord}
-          onCreateChildTopic={onCreateChildTopic}
-          onGenerateForTopic={onGenerateForTopic}
-          onGenerateSubtopics={onGenerateSubtopics}
-          onSelectRecordId={onSelectRecordId}
-          onViewInTable={handleViewInTable}
-          datasetObjective={datasetObjective}
-          normalizedObjective={normalizedObjective}
-          topicQualityScores={topicQualityScores}
-        />
-      )}
-      {viewMode === "sources" && (
-        <SourcesView
-          selectedSourceId={selectedSourceId}
-          focusPartId={focusPartId}
-          backTo={backTo}
-          onBackToRecord={handleBackToRecord}
-          onSelectSource={(sourceId) => {
-            setSelectedSourceId(sourceId);
-            setFocusPartId(null); // Clear part focus on manual source change
-            setBackTo(null);
-            // Also notify explorer sidebar to highlight the source
-            window.dispatchEvent(new CustomEvent("vllora_switch_view", {
-              detail: { viewMode: "sources", sourceId },
-            }));
-          }}
-        />
-      )}
-      {viewMode === "table" && topicDetail && (
-        <TopicDetailView
-          topicNode={topicDetail.node}
-          ancestorNodes={topicDetail.nodePath}
-          records={filteredRecords}
-          onSelectRecord={onSelectRecordId}
-          normalizedObjective={normalizedObjective}
-        />
-      )}
-      {viewMode === "table" && !topicDetail && (
-        <RecordsTable
-          records={filteredRecords}
-          workflowId={workflowId}
-          showHeader={true}
-          showFooter={false}
-          height="auto"
-          groupByTopic={true}
-          topicHierarchy={displayHierarchy}
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          <TopicDetailView
+            topicNode={topicDetail.node}
+            ancestorNodes={topicDetail.nodePath}
+            records={filteredRecords}
+            onSelectRecord={onSelectRecordId}
+            normalizedObjective={normalizedObjective}
+          />
+        </div>
+        <RecordDetailSidebar
+          record={selectedRecord}
+          onClose={() => onSelectRecordId(null)}
           availableTopics={availableTopics}
           onUpdateTopic={onUpdateRecordTopic}
-          onDelete={onDeleteRecord}
+          onDelete={(recordId) => {
+            onDeleteRecord(recordId);
+            onSelectRecordId(null);
+          }}
           onSave={onSaveRecord}
-          onExpand={(record) => onSelectRecordId(record.id)}
-          viewingRecordId={selectedRecordId}
-          onDeleteTopic={onDeleteTopic}
-          onGenerateForTopic={onGenerateForTopic}
-          onGenerateSubtopics={onGenerateSubtopics}
-          roleFilter={roleFilter}
-          onRoleFilterChange={setRoleFilter}
-          datasetObjective={datasetObjective}
-          normalizedObjective={normalizedObjective}
-          onUpdatePromptTemplate={onUpdatePromptTemplate}
+          records={filteredRecords}
+          onNavigate={onSelectRecordId}
+          jobColumns={jobColumns}
+          getScoresForRecord={getScoresForRecord}
         />
-      )}
+      </div>
+    );
+  }
+
+  // ── All Topics view with tabbed layout ──
+  // Sources view is handled separately (triggered by navigate-to-source events)
+  if (viewMode === "sources") {
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          <SourcesView
+            selectedSourceId={selectedSourceId}
+            focusPartId={focusPartId}
+            backTo={backTo}
+            onBackToRecord={handleBackToRecord}
+            onSelectSource={(sourceId) => {
+              setSelectedSourceId(sourceId);
+              setFocusPartId(null);
+              setBackTo(null);
+              window.dispatchEvent(new CustomEvent("vllora_switch_view", {
+                detail: { viewMode: "sources", sourceId },
+              }));
+            }}
+          />
+        </div>
+        <RecordDetailSidebar
+          record={selectedRecord}
+          onClose={() => onSelectRecordId(null)}
+          availableTopics={availableTopics}
+          onUpdateTopic={onUpdateRecordTopic}
+          onDelete={(recordId) => {
+            onDeleteRecord(recordId);
+            onSelectRecordId(null);
+          }}
+          onSave={onSaveRecord}
+          records={filteredRecords}
+          onNavigate={onSelectRecordId}
+          jobColumns={jobColumns}
+          getScoresForRecord={getScoresForRecord}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+
+      {/* Stats bar — always hide view toggle for All Topics (tabs handle switching) */}
+      <div className="px-4 py-2 border-b border-border shrink-0 bg-background">
+        <RecordsSectionHeader
+          viewMode={viewMode}
+          onViewModeChange={onViewModeChange}
+          onExport={onExport}
+          records={topicFilteredRecords}
+          workflowId={workflowId}
+          activeStatFilter={activeStatFilter}
+          onStatFilterChange={setActiveStatFilter}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          sourceDocumentFilterName={sourceDocumentFilterName}
+          onClearSourceDocumentFilter={onClearSourceDocumentFilter}
+          hideViewToggle
+        />
+      </div>
+
+      {/* Tab bar: Canvas | Records | Linked Sources */}
+      <div className="px-4 shrink-0 border-b border-border">
+        <div className="flex items-center gap-0">
+          <AllTopicsTabButton
+            active={allTopicsTab === "canvas"}
+            label="Canvas"
+            onClick={() => setAllTopicsTab("canvas")}
+          />
+          <AllTopicsTabButton
+            active={allTopicsTab === "records"}
+            label={`Records (${filteredRecords.length})`}
+            onClick={() => setAllTopicsTab("records")}
+          />
+          <AllTopicsTabButton
+            active={allTopicsTab === "linked-sources"}
+            label={`Linked Sources (${allGroupedSources.size})`}
+            onClick={() => setAllTopicsTab("linked-sources")}
+          />
+        </div>
+      </div>
+
+      {/* Tab content */}
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        {allTopicsTab === "canvas" && (
+          <TopicHierarchyCanvas
+            hierarchy={displayHierarchy}
+            records={filteredRecords}
+            workflowId={workflowId}
+            coverageStats={coverageStats}
+            onSelectTopic={onSelectTopic}
+            selectedTopic={selectedTopic}
+            onAddTopic={onAddTopic}
+            onRenameTopic={onRenameTopic}
+            onDeleteTopic={onDeleteTopic}
+            onUpdateRecordTopic={onUpdateRecordTopic}
+            onDeleteRecord={onDeleteRecord}
+            onSaveRecord={onSaveRecord}
+            onCreateChildTopic={onCreateChildTopic}
+            onGenerateForTopic={onGenerateForTopic}
+            onGenerateSubtopics={onGenerateSubtopics}
+            onSelectRecordId={onSelectRecordId}
+            onViewInTable={handleViewInTable}
+            datasetObjective={datasetObjective}
+            normalizedObjective={normalizedObjective}
+            topicQualityScores={topicQualityScores}
+          />
+        )}
+        {allTopicsTab === "records" && (
+          <div className="flex-1 overflow-y-auto">
+            <RecordsTable
+              records={filteredRecords}
+              workflowId={workflowId}
+              showHeader={true}
+              showFooter={false}
+              height="auto"
+              groupByTopic={true}
+              topicHierarchy={displayHierarchy}
+              availableTopics={availableTopics}
+              onUpdateTopic={onUpdateRecordTopic}
+              onDelete={onDeleteRecord}
+              onSave={onSaveRecord}
+              onExpand={(record) => onSelectRecordId(record.id)}
+              viewingRecordId={selectedRecordId}
+              onDeleteTopic={onDeleteTopic}
+              onGenerateForTopic={onGenerateForTopic}
+              onGenerateSubtopics={onGenerateSubtopics}
+              roleFilter={roleFilter}
+              onRoleFilterChange={() => {}}
+              datasetObjective={datasetObjective}
+              normalizedObjective={normalizedObjective}
+            />
+          </div>
+        )}
+        {allTopicsTab === "linked-sources" && (
+          <div className="flex-1 overflow-y-auto">
+            <LinkedSourcesTabContent groupedSources={allGroupedSources} />
+          </div>
+        )}
       </div>
 
       {/* Record Detail Sidebar — shared across both table and canvas views (renders via portal) */}
@@ -419,5 +536,32 @@ export function DatasetMainContent({
         getScoresForRecord={getScoresForRecord}
       />
     </div>
+  );
+}
+
+// ─── Tab Button (matches TopicDetailView style) ───
+
+function AllTopicsTabButton({
+  active,
+  label,
+  onClick,
+}: {
+  readonly active: boolean;
+  readonly label: string;
+  readonly onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "px-4 py-2.5 text-xs font-medium border-b-2 transition-colors",
+        active
+          ? "border-[rgb(var(--theme-500))] text-foreground"
+          : "border-transparent text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {label}
+    </button>
   );
 }
