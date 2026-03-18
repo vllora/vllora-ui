@@ -422,10 +422,9 @@ if [ -f relations.json ]; then
 fi
 
 # 5. Save evaluator (grader)
-GRADER_SCRIPT=$(cat grader.js)
+# This endpoint requires multipart; JSON payloads fail with "Multipart boundary is not found".
 curl -X PATCH http://localhost:9090/finetune/workflows/$WORKFLOW_ID/evaluator \
-  -H "Content-Type: application/json" \
-  -d "{\"evaluator\": {\"type\": \"js\", \"config\": {\"script\": $(echo "$GRADER_SCRIPT" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')}}}"
+  -F "file=@grader.js"
 ```
 
 ### Step 7: Run Evaluation
@@ -492,10 +491,8 @@ Read the eval results and decide whether to proceed to training or iterate.
 **Fixing the grader** (no data re-upload needed):
 ```bash
 # Edit grader.js, then update:
-GRADER_SCRIPT=$(cat grader.js)
 curl -X PATCH http://localhost:9090/finetune/workflows/$WORKFLOW_ID/evaluator \
-  -H "Content-Type: application/json" \
-  -d "{\"evaluator\": {\"type\": \"js\", \"config\": {\"script\": $(echo "$GRADER_SCRIPT" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')}}}"
+  -F "file=@grader.js"
 ```
 
 **Fixing the data** (requires re-upload of records):
@@ -634,8 +631,7 @@ Diagnose and start the next iteration (see 9d).
    ```bash
    # If grader was updated:
    curl -s -X PATCH http://localhost:9090/finetune/workflows/$WORKFLOW_ID/evaluator \
-     -H "Content-Type: application/json" \
-     -d '{ "evaluator": "<updated grader code>" }'
+     -F "file=@grader.js"
 
    # If records were updated:
    curl -s -X PUT http://localhost:9090/finetune/workflows/$WORKFLOW_ID/records \

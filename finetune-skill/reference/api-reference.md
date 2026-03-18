@@ -148,17 +148,14 @@ The returned `dataset_id` is the **cloud/backend dataset ID** — different from
 
 Update the evaluation script for a workflow without re-uploading data. Also syncs to the cloud dataset's evaluator. Use this when iterating on the grader.
 
+> **Request format:** This endpoint expects `multipart/form-data` with a `file` field containing the grader JavaScript source.
+>
+> If you send JSON (for example `Content-Type: application/json` with `{"evaluator": ...}`), Multipart parsing fails before the handler can read the payload, and you will see errors like:
+> `Invalid multipart field: Multipart boundary is not found`.
+
 ```bash
 curl -X PATCH http://localhost:9090/finetune/workflows/WORKFLOW_ID/evaluator \
-  -H "Content-Type: application/json" \
-  -d '{
-    "evaluator": {
-      "type": "js",
-      "config": {
-        "script": "async function evaluate(input) { ... }"
-      }
-    }
-  }'
+  -F "file=@grader.js"
 ```
 
 ### GET `/finetune/workflows/{workflow_id}/evaluator/versions`
@@ -280,10 +277,20 @@ All training job endpoints are scoped under a workflow.
 
 Create a fine-tuning job.
 
+> **Required field:** `job_type` is mandatory.
+>
+> For training jobs, set `"job_type": "provider_finetune"`.  
+> Valid enum values are:
+> - `provider_finetune`
+> - `evaluation_run`
+>
+> If `job_type` is missing, the API returns: `Json deserialize error: missing field 'job_type'`.
+
 ```bash
 curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
   -H "Content-Type: application/json" \
   -d '{
+    "job_type": "provider_finetune",
     "dataset": "ds_abc123",
     "base_model": "unsloth/Qwen3.5-4B",
     "output_model": "my-custom-model-1234567890",
@@ -324,6 +331,7 @@ Example (`finetuned`):
 curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
   -H "Content-Type: application/json" \
   -d '{
+    "job_type": "provider_finetune",
     "base_model": "finetuned/2b08db0e-6a5e-4d62-b89f-8d2e8b246d44",
     "output_model": "my-model-v2"
   }'
@@ -334,6 +342,7 @@ Example (`checkpointed` + full-state):
 curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
   -H "Content-Type: application/json" \
   -d '{
+    "job_type": "provider_finetune",
     "base_model": "checkpointed/2b08db0e-6a5e-4d62-b89f-8d2e8b246d44",
     "resume_mode": "full-state",
     "output_model": "my-model-v3"
@@ -859,6 +868,10 @@ Soft delete.
 
 Add records to a workflow.
 
+> **Prerequisite:** Create/upload topics first. Records have a foreign key on `topic`, so you should do topics first, then records.
+>
+> Topics need to be uploaded first — the records have a foreign key on topic. Let me do topics first, then records.
+
 ```bash
 curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/records \
   -H "Content-Type: application/json" \
@@ -1125,8 +1138,7 @@ curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics \
 
 # 5. Save evaluator
 curl -X PATCH http://localhost:9090/finetune/workflows/$WORKFLOW_ID/evaluator \
-  -H "Content-Type: application/json" \
-  -d '{"evaluator": {"type": "js", "config": {"script": "..."}}}'
+  -F "file=@grader.js"
 
 # 6. Tell user to open the UI
 echo "Open vLLora UI → select '$WORKFLOW_NAME' → Lucy will take over from evaluation step"
@@ -1167,8 +1179,7 @@ curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics \
 
 # 5. Save evaluator
 curl -X PATCH http://localhost:9090/finetune/workflows/$WORKFLOW_ID/evaluator \
-  -H "Content-Type: application/json" \
-  -d '{"evaluator": {"type": "js", "config": {"script": "..."}}}'
+  -F "file=@grader.js"
 
 # 6. Package and upload to cloud
 curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/dataset/upload
@@ -1190,15 +1201,14 @@ curl -X PATCH http://localhost:9090/finetune/workflows/$WORKFLOW_ID/records/RECO
 
 # 9. Iterate: fix grader or data, then re-upload and re-eval
 curl -X PATCH http://localhost:9090/finetune/workflows/$WORKFLOW_ID/evaluator \
-  -H "Content-Type: application/json" \
-  -d '{"evaluator": {"type": "js", "config": {"script": "..."}}}'
+  -F "file=@grader.js"
 curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/dataset/upload
 # Run eval again...
 
 # 10. Start training
 curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs \
   -H "Content-Type: application/json" \
-  -d '{"dataset": "'$WORKFLOW_ID'", "base_model": "unsloth/Qwen3.5-4B", "output_model": "my-model"}'
+  -d '{"job_type": "provider_finetune", "dataset": "'$WORKFLOW_ID'", "base_model": "unsloth/Qwen3.5-4B", "output_model": "my-model"}'
 
 # 11. Monitor metrics
 curl -s "http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs/JOB_ID/metrics"
