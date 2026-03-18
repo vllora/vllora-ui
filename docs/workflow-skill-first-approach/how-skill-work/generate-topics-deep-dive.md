@@ -131,10 +131,10 @@ Matching parts to topics requires scanning `all-parts-index.json` (potentially 3
 
 ```json
 [
-  {"topic_identifier": "forks", "part_identifier": "doc-1-chapter-3-forks"},
-  {"topic_identifier": "forks", "part_identifier": "doc-2-section-tactical-combinations"},
-  {"topic_identifier": "pins", "part_identifier": "doc-1-chapter-3-pins"},
-  {"topic_identifier": "pins", "part_identifier": "doc-3-exercise-pins"}
+  {"topic_identifier": "forks", "part_identifier": "chess-tactics-chapter-3-forks"},
+  {"topic_identifier": "forks", "part_identifier": "workbook-section-tactical-combinations"},
+  {"topic_identifier": "pins", "part_identifier": "chess-tactics-chapter-3-pins"},
+  {"topic_identifier": "pins", "part_identifier": "game-collection-exercise-pins"}
 ]
 ```
 
@@ -144,9 +144,9 @@ Matching parts to topics requires scanning `all-parts-index.json` (potentially 3
 ### Multi-Document Relations
 
 Relations can link a topic to parts from **different documents**. For example, a "forks" topic might link to:
-- `doc-1-chapter-3-forks` (from the tactics textbook)
-- `doc-2-section-5-knight-forks` (from the workbook)
-- `doc-3-game-analysis-fork-examples` (from the game collection)
+- `chess-tactics-chapter-3-forks` (from the tactics textbook)
+- `workbook-section-5-knight-forks` (from the workbook)
+- `game-collection-game-analysis-fork-examples` (from the game collection)
 
 This is why part IDs are prefixed with the document identifier — it keeps them unique when merged.
 

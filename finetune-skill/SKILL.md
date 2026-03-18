@@ -102,11 +102,11 @@ The subagent will:
 
 ## Step 2: Extract Documents
 - [2026-03-06 10:32:40] Submitted 3 documents to Docling in parallel
-  - chess-tactics.pdf (84 pages) → doc-1/
-  - opening-theory.pdf (120 pages) → doc-2/
-  - endgame-manual.pdf (56 pages) → doc-3/
+  - chess-tactics.pdf (84 pages) → chess-tactics/
+  - opening-theory.pdf (120 pages) → opening-theory/
+  - endgame-manual.pdf (56 pages) → endgame-manual/
 - [2026-03-06 10:35:12] All 3 Docling tasks complete
-- [2026-03-06 10:36:00] Processed doc-1: 10 parts, doc-2: 15 parts, doc-3: 8 parts
+- [2026-03-06 10:36:00] Processed chess-tactics: 10 parts, opening-theory: 15 parts, endgame-manual: 8 parts
 - [2026-03-06 10:36:10] Merged all-parts-index.json: 33 parts across 3 documents
 - [2026-03-06 10:36:20] POST /workflows/{id}/knowledge → uploaded 3 knowledge sources with parts
 
@@ -245,7 +245,7 @@ For **each** document directory, produce `knowledge_parts.json` and `parts-index
 
 2. **Write a script** to create `{doc-slug}/knowledge_parts.json` — the required deliverable per document. The script must produce typed source_parts (text, table, image) with titles, extraction paths, and provenance metadata matching the schema in `reference/extraction-guide.md` Section 3.
 
-   **Important**: Prefix all part IDs with the document identifier to keep them unique across documents. For example: `doc-1-chapter-3`, `doc-2-section-5`.
+   **Important**: Prefix all part IDs with the document identifier (typically the slugified filename) to keep them unique across documents. For example: `chess-tactics-chapter-3`, `strategy-guide-section-5`.
 
 3. The extraction script must also produce `{doc-slug}/parts-index.json` — a lightweight index with `{id, type, title, extraction_path, pages, content_preview, source_doc}` per part (first 200 chars of content, plus the source document filename).
 
@@ -277,7 +277,8 @@ This merged index is what you use for topic design (Step 3) and data generation 
 **Fallback — pdftotext** (when Docker is not available):
 ```bash
 for DOC in *.pdf; do
-  DOC_DIR="finetune-project/knowledge/$(echo "$DOC" | sed 's/.pdf//')"
+  DOC_SLUG=$(echo "${DOC%.pdf}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+  DOC_DIR="finetune-project/knowledge/$DOC_SLUG"
   mkdir -p "$DOC_DIR"
   pdftotext "$DOC" "$DOC_DIR/converted.txt"
 done

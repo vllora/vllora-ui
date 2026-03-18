@@ -80,12 +80,12 @@ Each local file maps to a gateway API endpoint. The `finetune.py` script handles
 
 The skill writes records in **OpenAI format** locally:
 ```json
-{"messages": [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}], "id": "r-001", "topic": "forks", "source_parts": ["doc-1-ch3"]}
+{"messages": [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}], "id": "r-001", "topic": "forks", "source_parts": ["chess-tactics-ch3"]}
 ```
 
 `finetune.py upload-records` transforms each record to **gateway format** before uploading:
 ```json
-{"id": "r-001", "data": {"input": {"messages": [...]}, "output": {}}, "topic": "forks", "metadata": "{\"source_parts\": [\"doc-1-ch3\"]}", "is_generated": true}
+{"id": "r-001", "data": {"input": {"messages": [...]}, "output": {}}, "topic": "forks", "metadata": "{\"source_parts\": [\"chess-tactics-ch3\"]}", "is_generated": true}
 ```
 
 The gateway DB stores the **wrapped format** (`data.input.messages`). The UI handles both formats via `extractMessages()`.
@@ -103,7 +103,14 @@ WORKFLOW_ID=$(uv run scripts/finetune.py create-workflow \
   --system-prompt "You are..." | tail -1)
 ```
 
-**Files produced**: None (data goes straight to the gateway DB).
+**Persist the workflow ID** to a config file so it's easy to find later:
+```bash
+cat > finetune-project/config.json << EOF
+{"workflow_id": "$WORKFLOW_ID", "gateway_url": "http://localhost:9090"}
+EOF
+```
+
+**Files produced**: `finetune-project/config.json` (workflow ID + gateway URL). Data goes straight to the gateway DB.
 
 **How to verify progress**:
 ```bash
@@ -155,18 +162,18 @@ This is the longest and most complex step. It has 4 sub-stages.
 **Files produced** (per document):
 ```
 finetune-project/knowledge/
-├── doc-1/
+├── chess-tactics/              # Slugified filename (not doc-1/)
 │   └── docling-result.json    # Raw Docling output (can be 10-50MB+)
-├── doc-2/
+├── strategy-guide/
 │   └── docling-result.json
-└── doc-3/
+└── endgame-manual/
     └── docling-result.json
 ```
 
 **How to verify progress**:
 ```bash
 # Check which documents have been extracted
-ls -lh finetune-project/knowledge/doc-*/docling-result.json
+ls -lh finetune-project/knowledge/*/docling-result.json
 
 # Check if Docling is still processing
 curl -s http://127.0.0.1:5001/v1/status/poll/{task_id} | python3 -c "import sys,json; print(json.load(sys.stdin))"
@@ -183,24 +190,26 @@ This is where the agent spends the most **context window** — it reads large JS
 
 **Files produced** (per document):
 ```
-finetune-project/knowledge/doc-1/
+finetune-project/knowledge/{doc-slug}/
 ├── docling-result.json        # From step 2b (already exists)
 ├── knowledge_parts.json       # Structured parts: text, table, image
 └── parts-index.json           # Lightweight index for topic design
 ```
 
+Where `{doc-slug}` is the slugified filename (e.g., `chess-tactics/`, `strategy-guide/`).
+
 **`knowledge_parts.json` structure**:
 ```json
 {
   "source": {
-    "id": "doc-1",
+    "id": "chess-tactics",
     "name": "chess-tactics.pdf",
     "description": "Chess tactics textbook"
   },
   "parts": [
     {
-      "id": "doc-1-chapter-3",
-      "source_id": "doc-1",
+      "id": "chess-tactics-chapter-3",
+      "source_id": "chess-tactics",
       "type": "text",
       "title": "Chapter 3: Tactical Motifs",
       "content": "The fork is a tactic where...",
@@ -208,7 +217,7 @@ finetune-project/knowledge/doc-1/
       "extraction_metadata": { "pages": [42, 43], "source_chunks": [20] }
     },
     {
-      "id": "doc-1-table-1",
+      "id": "chess-tactics-table-1",
       "type": "table",
       "title": "Common Fork Patterns",
       "content": "| Pattern | Frequency | ...",
@@ -222,7 +231,7 @@ finetune-project/knowledge/doc-1/
 ```json
 [
   {
-    "id": "doc-1-chapter-3",
+    "id": "chess-tactics-chapter-3",
     "type": "text",
     "title": "Chapter 3: Tactical Motifs",
     "extraction_path": "[\"3 Tactical Motifs\"]",
@@ -236,10 +245,10 @@ finetune-project/knowledge/doc-1/
 **How to verify progress**:
 ```bash
 # Check which documents have been processed
-ls finetune-project/knowledge/doc-*/knowledge_parts.json 2>/dev/null
+ls finetune-project/knowledge/*/knowledge_parts.json 2>/dev/null
 
 # Count parts per document
-for f in finetune-project/knowledge/doc-*/knowledge_parts.json; do
+for f in finetune-project/knowledge/*/knowledge_parts.json; do
   echo "$f: $(python3 -c "import json; print(len(json.load(open('$f')).get('parts',[])))" 2>/dev/null) parts"
 done
 ```
@@ -255,7 +264,24 @@ finetune-project/knowledge/
 └── extraction-notes.md        # Summary of all documents extracted
 ```
 
-### 2e. Upload knowledge sources
+### 2e. Verify ALL documents were processed
+
+**CRITICAL CHECK — do NOT proceed to Step 3 until this passes.** The agent counts source PDFs vs extracted `knowledge_parts.json` files and blocks if any are missing:
+
+```bash
+DOC_COUNT=$(ls *.pdf 2>/dev/null | wc -l | tr -d ' ')
+EXTRACTED_COUNT=$(find finetune-project/knowledge -mindepth 2 -name 'knowledge_parts.json' 2>/dev/null | wc -l | tr -d ' ')
+echo "Source documents: $DOC_COUNT | Extracted: $EXTRACTED_COUNT"
+
+if [ "$EXTRACTED_COUNT" -lt "$DOC_COUNT" ]; then
+  echo "ERROR: Only $EXTRACTED_COUNT of $DOC_COUNT documents extracted!"
+  exit 1
+fi
+```
+
+If any documents are missing, the agent goes back to Step 2a-2c for the missing ones.
+
+### 2f. Upload knowledge sources
 
 **What happens**: Each document is uploaded as a separate knowledge source with its extracted parts.
 
@@ -301,9 +327,9 @@ finetune-project/
 **`relations.json` structure**:
 ```json
 [
-  {"topic_identifier": "forks", "part_identifier": "doc-1-chapter-3"},
-  {"topic_identifier": "forks", "part_identifier": "doc-2-section-5"},
-  {"topic_identifier": "pins", "part_identifier": "doc-1-chapter-4"}
+  {"topic_identifier": "forks", "part_identifier": "chess-tactics-chapter-3"},
+  {"topic_identifier": "forks", "part_identifier": "strategy-guide-section-5"},
+  {"topic_identifier": "pins", "part_identifier": "chess-tactics-chapter-4"}
 ]
 ```
 
@@ -336,7 +362,7 @@ If the user provides existing training data (not generated by the skill), the ag
 
 **What happens**: For each leaf topic, the agent:
 1. Finds related parts via `relations.json`
-2. Reads the full content from the relevant `doc-N/knowledge_parts.json`
+2. Reads the full content from the relevant `{doc-slug}/knowledge_parts.json`
 3. Calls an LLM (via `scripts/chat_completion.py`) to generate user prompts grounded in that content
 4. Writes each record to `training.jsonl`
 
@@ -344,7 +370,7 @@ This step makes **multiple LLM API calls** — typically one per leaf topic, eac
 
 **External dependency**: Requires an LLM API key (OpenAI, etc.) configured for `chat_completion.py`.
 
-**Which files to read for source material**: The agent reads full part content from `doc-N/knowledge_parts.json` files (not the merged index, which only has previews). It uses `all-parts-index.json` to locate which document a part belongs to.
+**Which files to read for source material**: The agent reads full part content from `{doc-slug}/knowledge_parts.json` files (not the merged index, which only has previews). It uses `all-parts-index.json` to locate which document a part belongs to.
 
 **Files produced**:
 ```
@@ -354,7 +380,7 @@ finetune-project/
 
 **Record format** (OpenAI/skill format — no assistant messages for RFT):
 ```json
-{"messages": [{"role": "system", "content": "You are..."}, {"role": "user", "content": "Explain the knight fork"}], "id": "forks-001", "topic": "forks", "source_parts": ["doc-1-chapter-3"]}
+{"messages": [{"role": "system", "content": "You are..."}, {"role": "user", "content": "Explain the knight fork"}], "id": "forks-001", "topic": "forks", "source_parts": ["chess-tactics-chapter-3"]}
 ```
 
 **Upload** (immediately after generation):
@@ -568,13 +594,13 @@ During a successful run, files appear in this order:
 t=0    finetune-project/execution-log.md           ← Step 1 starts
 t=1m   (workflow created in gateway DB)             ← Step 1 done, UI shows workflow card
 
-t=2m   knowledge/doc-1/docling-result.json          ← Step 2b (first doc done)
-t=3m   knowledge/doc-2/docling-result.json          ← Step 2b (second doc done)
-t=4m   knowledge/doc-3/docling-result.json          ← Step 2b (third doc done)
-t=6m   knowledge/doc-1/knowledge_parts.json         ← Step 2c (first doc processed)
-t=6m   knowledge/doc-1/parts-index.json
-t=8m   knowledge/doc-2/knowledge_parts.json         ← Step 2c (second doc processed)
-t=10m  knowledge/doc-3/knowledge_parts.json         ← Step 2c (third doc processed)
+t=2m   knowledge/chess-tactics/docling-result.json    ← Step 2b (first doc done)
+t=3m   knowledge/strategy-guide/docling-result.json  ← Step 2b (second doc done)
+t=4m   knowledge/endgame-manual/docling-result.json  ← Step 2b (third doc done)
+t=6m   knowledge/chess-tactics/knowledge_parts.json  ← Step 2c (first doc processed)
+t=6m   knowledge/chess-tactics/parts-index.json
+t=8m   knowledge/strategy-guide/knowledge_parts.json ← Step 2c (second doc processed)
+t=10m  knowledge/endgame-manual/knowledge_parts.json ← Step 2c (third doc processed)
 t=10m  knowledge/all-parts-index.json               ← Step 2d (merged)
 t=10m  knowledge/extraction-notes.md
 t=10m  (knowledge sources uploaded to gateway)       ← UI shows Sources view
@@ -604,10 +630,10 @@ echo "=== Execution Log (last 5 lines) ==="
 tail -5 "$PROJECT_DIR/execution-log.md" 2>/dev/null || echo "  (not started)"
 
 echo -e "\n=== Docling Results ==="
-ls -lh "$PROJECT_DIR/knowledge/doc-*/docling-result.json" 2>/dev/null || echo "  (none yet)"
+ls -lh "$PROJECT_DIR/knowledge/*/docling-result.json" 2>/dev/null || echo "  (none yet)"
 
 echo -e "\n=== Knowledge Parts ==="
-for f in "$PROJECT_DIR/knowledge/doc-*/knowledge_parts.json"; do
+for f in "$PROJECT_DIR/knowledge/*/knowledge_parts.json"; do
   [ -f "$f" ] && echo "  $f: $(python3 -c "import json; print(len(json.load(open('$f')).get('parts',[])))" 2>/dev/null) parts"
 done
 ls "$PROJECT_DIR/knowledge/all-parts-index.json" 2>/dev/null && echo "  Merged index: YES" || echo "  Merged index: NO"

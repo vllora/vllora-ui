@@ -14,7 +14,7 @@ A training record is a **prompt** — a system message + user message that the m
   ],
   "id": "forks-001",
   "topic": "forks",
-  "source_parts": ["doc-1-chapter-3-forks", "doc-2-section-5"]
+  "source_parts": ["chess-tactics-chapter-3-forks", "strategy-guide-section-5"]
 }
 ```
 
@@ -27,7 +27,7 @@ A training record is a **prompt** — a system message + user message that the m
                                     │
   relations.json ───────────────────┤
                                     ▼
-  doc-N/knowledge_parts.json   ┌─────────────────────────┐
+  {doc-slug}/knowledge_parts.json   ┌─────────────────────────┐
   (full content per doc)  ────►│  For each leaf topic:    │
                                │  1. Find linked parts    │
                                │  2. Read part content    │
@@ -50,7 +50,7 @@ A training record is a **prompt** — a system message + user message that the m
 The agent reads:
 - **`topics.json`** — to identify leaf topics (topics that aren't parents of any other topic)
 - **`relations.json`** — to find which parts are linked to each topic
-- **`doc-N/knowledge_parts.json`** — to read the full content of linked parts
+- **`{doc-slug}/knowledge_parts.json`** — to read the full content of linked parts
 
 ```python
 # Identify leaf topics
@@ -65,7 +65,7 @@ leaves = [t for t in topics if t['id'] not in parent_ids]
 part_ids = [r['part_identifier'] for r in relations
             if r['topic_identifier'] == topic['id']]
 
-# Read full content from the relevant doc-N/knowledge_parts.json
+# Read full content from the relevant {doc-slug}/knowledge_parts.json
 chunks = [parts[pid] for pid in part_ids if pid in parts]
 ```
 
@@ -82,10 +82,10 @@ Topic: Forks
 Focus: Focus on fork tactics — knight forks, pawn forks, queen forks
 
 Source material:
-[doc-1-chapter-3-forks] Chapter 3: Fork Tactics
+[chess-tactics-chapter-3-forks] Chapter 3: Fork Tactics
 The fork is a tactic where a single piece attacks two or more pieces...
 ---
-[doc-2-section-5] Common Fork Patterns
+[strategy-guide-section-5] Common Fork Patterns
 Knight forks are the most common. The knight's unique movement...
 
 Each prompt should be a realistic question/request grounded in the source material.
@@ -174,7 +174,7 @@ for t, n in c.most_common():
 | `messages` | Yes | `[{role, content}, ...]` | The training prompt (system + user) |
 | `id` | Yes | `"forks-001"` | Unique ID, appears in eval results |
 | `topic` | No | `"forks"` | Links record to topic for coverage analysis |
-| `source_parts` | No | `["doc-1-ch3"]` | Links record to source material for traceability |
+| `source_parts` | No | `["chess-tactics-ch3"]` | Links record to source material for traceability |
 
 ### Message roles in training records
 
@@ -212,7 +212,7 @@ The script transforms each record from skill format to gateway format automatica
 
 ```python
 # training.jsonl (skill format — what the agent writes)
-{"messages": [...], "id": "forks-001", "topic": "forks", "source_parts": ["doc-1-ch3"]}
+{"messages": [...], "id": "forks-001", "topic": "forks", "source_parts": ["chess-tactics-ch3"]}
 
 # ↓ finetune.py transforms to gateway format ↓
 
@@ -222,7 +222,7 @@ The script transforms each record from skill format to gateway format automatica
     "id": "forks-001",
     "data": {"input": {"messages": [...]}, "output": {}},
     "topic": "forks",
-    "metadata": "{\"source_parts\": [\"doc-1-ch3\"]}",
+    "metadata": "{\"source_parts\": [\"chess-tactics-ch3\"]}",
     "is_generated": true
   }]
 }

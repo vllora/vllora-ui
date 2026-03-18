@@ -16,7 +16,8 @@ The skill generates training data **grounded in source documents**. Without extr
                                │
                     ┌──────────┼──────────┐
                     ▼          ▼          ▼
-              doc-1/       doc-2/      doc-3/
+              chess-       strategy-   endgame-
+              tactics/     guide/      manual/
               docling-     docling-    docling-
               result.json  result.json result.json
                     │          │          │
@@ -145,16 +146,16 @@ The extraction script transforms raw Docling output into structured, typed parts
 
 ### Part ID Naming
 
-Part IDs must be unique across all documents. The convention is:
+Part IDs must be unique across all documents. Prefix with a document identifier (typically the slugified filename or a short alias):
 
 ```
-doc-{N}-{descriptive-slug}
+{doc-identifier}-{descriptive-slug}
 ```
 
 Examples:
-- `doc-1-chapter-3-tactical-motifs`
-- `doc-1-table-common-fork-patterns`
-- `doc-2-section-opening-principles`
+- `chess-tactics-chapter-3-tactical-motifs`
+- `chess-tactics-table-common-fork-patterns`
+- `strategy-guide-section-opening-principles`
 
 ## How Parts Connect to the Rest of the Pipeline
 
@@ -168,16 +169,16 @@ The relation-builder subagent matches parts to topics:
 ```json
 // relations.json
 [
-  {"topic_identifier": "forks", "part_identifier": "doc-1-chapter-3-tactical-motifs"},
-  {"topic_identifier": "pins", "part_identifier": "doc-1-chapter-4-pins-and-skewers"}
+  {"topic_identifier": "forks", "part_identifier": "chess-tactics-chapter-3-tactical-motifs"},
+  {"topic_identifier": "pins", "part_identifier": "chess-tactics-chapter-4-pins-and-skewers"}
 ]
 ```
 
 ### Parts → Training Records (Step 4)
 
-During data generation, the agent reads full part content from `doc-N/knowledge_parts.json` to ground the training prompts. Each record tracks which parts it was generated from:
+During data generation, the agent reads full part content from `{doc-slug}/knowledge_parts.json` to ground the training prompts. Each record tracks which parts it was generated from:
 ```json
-{"messages": [...], "id": "forks-001", "topic": "forks", "source_parts": ["doc-1-chapter-3-tactical-motifs"]}
+{"messages": [...], "id": "forks-001", "topic": "forks", "source_parts": ["chess-tactics-chapter-3-tactical-motifs"]}
 ```
 
 ### Parts → Gateway (uploaded immediately after Step 2)
@@ -188,7 +189,7 @@ Each document is uploaded as a separate **knowledge source** with its parts via 
 uv run scripts/finetune.py upload-knowledge \
   --workflow-id $WORKFLOW_ID \
   --file "chess-tactics.pdf" \
-  --parts-file "knowledge/doc-1/knowledge_parts.json" \
+  --parts-file "knowledge/chess-tactics/knowledge_parts.json" \
   --name "chess-tactics.pdf"
 ```
 
@@ -220,17 +221,17 @@ The Docling result is too large for the agent's context. Solutions:
 The extraction script failed. Check:
 1. Does the script exist? The agent writes it as a Python file
 2. Did it error? Check the execution log for Python tracebacks
-3. Is the Docling result valid JSON? `python3 -c "import json; json.load(open('doc-1/docling-result.json'))"`
+3. Is the Docling result valid JSON? `python3 -c "import json; json.load(open('chess-tactics/docling-result.json'))"`
 
 ### Parts have wrong IDs (no document prefix)
 
 The agent didn't follow the multi-document naming convention. Parts from different documents will collide. Check:
 ```bash
-# All part IDs should start with doc-N-
+# All part IDs should share a common prefix (typically the doc slug)
 python3 -c "
 import json
-for p in json.load(open('knowledge/doc-1/knowledge_parts.json'))['parts']:
-    if not p['id'].startswith('doc-1'):
+for p in json.load(open('knowledge/chess-tactics/knowledge_parts.json'))['parts']:
+    if not p['id'].startswith('chess-tactics'):
         print(f'BAD ID: {p[\"id\"]}')
 "
 ```
@@ -239,7 +240,7 @@ for p in json.load(open('knowledge/doc-1/knowledge_parts.json'))['parts']:
 
 The merge step didn't run. Check if individual `parts-index.json` files exist:
 ```bash
-ls -la finetune-project/knowledge/doc-*/parts-index.json
+ls -la finetune-project/knowledge/*/parts-index.json
 ```
 
 If they exist but the merge didn't happen, run it manually:
@@ -247,7 +248,7 @@ If they exist but the merge didn't happen, run it manually:
 python3 -c "
 import json, glob
 all_parts = []
-for f in sorted(glob.glob('finetune-project/knowledge/doc-*/parts-index.json')):
+for f in sorted(glob.glob('finetune-project/knowledge/*/parts-index.json')):
     data = json.load(open(f))
     parts = data.get('parts', data) if isinstance(data, dict) else data
     all_parts.extend(parts)
