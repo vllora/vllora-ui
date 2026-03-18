@@ -4,17 +4,18 @@
  * Single `<table>` layout with 3 row types:
  * - Parent group header row (collapsible, aggregated stats)
  * - Subgroup header row (topic name, score, source count)
- * - Record row (input, output, score pill, source ref)
+ * - Record row (input, per-job score pills, source ref tag)
  *
- * Replaces per-group separate tables with one unified view.
+ * Score columns are dynamic — one per eval/finetune job.
  */
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { ChevronDown, ChevronRight, MessageSquare } from "lucide-react";
+import { ChevronDown, ChevronRight, MessageSquare, FileText, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import { extractMessages, cleanText } from "./cells/ConversationThreadCell.utilities";
 import { emitter } from "@/utils/eventEmitter";
+import type { JobColumn, RecordJobScore } from "./job-score-columns";
 
 // ─── Types ───
 
@@ -30,6 +31,8 @@ export interface UnifiedRecordTableProps {
   readonly topicFilter: string;
   readonly scoreFilter: string;
   readonly onExpand?: (record: DatasetRecord) => void;
+  readonly jobColumns?: readonly JobColumn[];
+  readonly getScoresForRecord?: (recordId: string) => ReadonlyMap<string, RecordJobScore>;
 }
 
 // ─── Helpers ───
@@ -38,7 +41,7 @@ function getRecordScore(record: DatasetRecord): number | undefined {
   return record.evaluation?.score ?? record.evaluation?.evalScore;
 }
 
-function extractRecordText(record: DatasetRecord): { userText: string; assistantText: string } {
+function extractRecordText(record: DatasetRecord): { userText: string } {
   const msgs = extractMessages(record.data).filter(
     (m) => m.role.toLowerCase() !== "system",
   );
@@ -46,14 +49,9 @@ function extractRecordText(record: DatasetRecord): { userText: string; assistant
     const r = m.role.toLowerCase();
     return r === "user" || r === "human";
   });
-  const assistantMsg = msgs.find((m) => {
-    const r = m.role.toLowerCase();
-    return r === "assistant" || r === "ai" || r === "model";
-  });
 
   return {
     userText: userMsg ? cleanText(userMsg.content) : (msgs[0] ? cleanText(msgs[0].content) : ""),
-    assistantText: assistantMsg ? cleanText(assistantMsg.content) : "",
   };
 }
 
@@ -73,10 +71,16 @@ export function UnifiedRecordTable({
   topicFilter,
   scoreFilter,
   onExpand,
+  jobColumns = [],
+  getScoresForRecord,
 }: UnifiedRecordTableProps) {
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [highlightedRecordId, setHighlightedRecordId] = useState<string | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
+
+  const hasJobColumns = jobColumns.length > 0;
+  // # + Input + (N job columns or 1 fallback score) + Source
+  const totalColumns = hasJobColumns ? 3 + jobColumns.length : 4;
 
   // Group records by topic
   const recordsByTopic = useMemo(() => {
@@ -139,19 +143,15 @@ export function UnifiedRecordTable({
     for (const [topic, topicRecords] of recordsByTopic) {
       let filtered = topicRecords;
 
-      // Topic filter
       if (topicFilter !== "all" && topic !== topicFilter) continue;
 
-      // Search filter
       if (queryLower) {
         filtered = filtered.filter((r) => {
-          const { userText, assistantText } = extractRecordText(r);
-          return userText.toLowerCase().includes(queryLower) ||
-                 assistantText.toLowerCase().includes(queryLower);
+          const { userText } = extractRecordText(r);
+          return userText.toLowerCase().includes(queryLower);
         });
       }
 
-      // Score filter
       if (scoreFilter !== "all") {
         filtered = filtered.filter((r) => {
           const s = getRecordScore(r);
@@ -183,7 +183,6 @@ export function UnifiedRecordTable({
       const isCollapsed = collapsedIds.has(nodeId);
 
       if (hasChildren) {
-        // Parent group header
         rows.push({
           type: "parent",
           node,
@@ -194,17 +193,14 @@ export function UnifiedRecordTable({
         });
 
         if (!isCollapsed) {
-          // Direct records under this parent
           for (const record of directRecords) {
             rows.push({ type: "record", record, depth: depth + 1, parentTopic: node.name });
           }
-          // Child nodes
           for (const child of node.children!) {
             walkNode(child, depth + 1);
           }
         }
       } else {
-        // Leaf = subgroup header
         rows.push({
           type: "subgroup",
           node,
@@ -226,7 +222,6 @@ export function UnifiedRecordTable({
       walkNode(node, 0);
     }
 
-    // Unassigned records
     const unassigned = activeRecords.get("__unassigned__");
     if (unassigned && unassigned.length > 0) {
       rows.push({
@@ -264,7 +259,6 @@ export function UnifiedRecordTable({
     const handleFocusTopic = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (!detail?.topicId) return;
-      // Expand ancestors
       const expandAncestors = (nodes: TopicHierarchyNode[], target: string, path: string[]): string[] | null => {
         for (const node of nodes) {
           const nodeId = node.id || node.name;
@@ -313,9 +307,16 @@ export function UnifiedRecordTable({
       <thead>
         <tr className="border-b border-border/50 text-[10px] text-muted-foreground/60 uppercase tracking-wider">
           <th className="text-left px-3 py-2 w-8">#</th>
-          <th className="text-left px-3 py-2" style={{ width: "30%" }}>Input</th>
-          <th className="text-left px-3 py-2" style={{ width: "40%" }}>Output</th>
-          <th className="text-left px-3 py-2 w-20">Score</th>
+          <th className="text-left px-3 py-2">Input</th>
+          {hasJobColumns ? (
+            jobColumns.map((col) => (
+              <th key={col.id} className="text-center px-2 py-2 w-[72px]">
+                <JobColumnHeader column={col} />
+              </th>
+            ))
+          ) : (
+            <th className="text-left px-3 py-2 w-20">Score</th>
+          )}
           <th className="text-left px-3 py-2 w-28">Source</th>
         </tr>
       </thead>
@@ -332,6 +333,7 @@ export function UnifiedRecordTable({
                 coveragePct={row.coveragePct}
                 isCollapsed={collapsedIds.has(row.node.id || row.node.name)}
                 onToggle={() => toggleCollapsed(row.node.id || row.node.name)}
+                colSpan={totalColumns}
               />
             );
           }
@@ -347,6 +349,7 @@ export function UnifiedRecordTable({
                 isCollapsed={collapsedIds.has(row.node.id || row.node.name)}
                 onToggle={() => toggleCollapsed(row.node.id || row.node.name)}
                 onPromptToggle={() => handlePromptToggle(row.node.id || row.node.name)}
+                colSpan={totalColumns}
               />
             );
           }
@@ -358,11 +361,41 @@ export function UnifiedRecordTable({
               index={i}
               isHighlighted={highlightedRecordId === row.record.id}
               onExpand={onExpand}
+              jobColumns={jobColumns}
+              getScoresForRecord={getScoresForRecord}
             />
           );
         })}
       </tbody>
     </table>
+  );
+}
+
+// ─── Job Column Header ───
+
+function JobColumnHeader({ column }: { readonly column: JobColumn }) {
+  const isActive = column.status === "running";
+  const isQueued = column.status === "queued";
+
+  return (
+    <div className="flex flex-col items-center gap-0.5">
+      <span className="text-[10px] font-medium normal-case tracking-normal">{column.label}</span>
+      {isActive ? (
+        <span className="inline-flex items-center gap-1 text-[7px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-primary/15 text-primary">
+          <span className="w-1 h-1 rounded-full bg-primary animate-pulse" />
+          running
+        </span>
+      ) : isQueued ? (
+        <span className="inline-flex items-center gap-1 text-[7px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground/50">
+          <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
+          queued
+        </span>
+      ) : (
+        <span className="text-[8px] text-muted-foreground/40 normal-case tracking-normal">
+          {column.type === "eval" ? "evaluation" : "finetune"}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -376,6 +409,7 @@ function ParentHeaderRow({
   coveragePct,
   isCollapsed,
   onToggle,
+  colSpan,
 }: {
   readonly node: TopicHierarchyNode;
   readonly depth: number;
@@ -384,6 +418,7 @@ function ParentHeaderRow({
   readonly coveragePct: number;
   readonly isCollapsed: boolean;
   readonly onToggle: () => void;
+  readonly colSpan: number;
 }) {
   const Chevron = isCollapsed ? ChevronRight : ChevronDown;
   const paddingLeft = 12 + depth * 20;
@@ -393,7 +428,7 @@ function ParentHeaderRow({
       className="border-b border-border/30 bg-muted/40 hover:bg-muted/60 cursor-pointer transition-colors"
       onClick={onToggle}
     >
-      <td colSpan={5} className="py-2.5" style={{ paddingLeft }}>
+      <td colSpan={colSpan} className="py-2.5" style={{ paddingLeft }}>
         <div className="flex items-center gap-2">
           <Chevron className="w-4 h-4 text-muted-foreground shrink-0" />
           <span className="text-sm font-semibold text-foreground">{node.name}</span>
@@ -432,6 +467,7 @@ function SubgroupHeaderRow({
   isCollapsed,
   onToggle,
   onPromptToggle,
+  colSpan,
 }: {
   readonly node: TopicHierarchyNode;
   readonly depth: number;
@@ -441,6 +477,7 @@ function SubgroupHeaderRow({
   readonly isCollapsed: boolean;
   readonly onToggle: () => void;
   readonly onPromptToggle: () => void;
+  readonly colSpan: number;
 }) {
   const Chevron = isCollapsed ? ChevronRight : ChevronDown;
   const paddingLeft = 12 + depth * 20;
@@ -450,9 +487,8 @@ function SubgroupHeaderRow({
       className="border-b border-border/20 bg-muted/20 hover:bg-muted/40 cursor-pointer transition-colors"
       onClick={onToggle}
     >
-      <td colSpan={5} className="py-2" style={{ paddingLeft }}>
+      <td colSpan={colSpan} className="py-2" style={{ paddingLeft }}>
         <div className="flex items-center gap-2">
-          {/* Tree line indicator */}
           <span className="w-3 border-l border-b border-border/40 h-3 shrink-0" />
           <Chevron className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
           <span className="text-xs font-medium text-foreground">{node.name}</span>
@@ -491,17 +527,26 @@ function RecordTableRow({
   index,
   isHighlighted,
   onExpand,
+  jobColumns = [],
+  getScoresForRecord,
 }: {
   readonly record: DatasetRecord;
   readonly depth: number;
   readonly index: number;
   readonly isHighlighted: boolean;
   readonly onExpand?: (record: DatasetRecord) => void;
+  readonly jobColumns?: readonly JobColumn[];
+  readonly getScoresForRecord?: (recordId: string) => ReadonlyMap<string, RecordJobScore>;
 }) {
-  const { userText, assistantText } = useMemo(() => extractRecordText(record), [record]);
-  const score = getRecordScore(record);
+  const { userText } = useMemo(() => extractRecordText(record), [record]);
   const sourceRef = getSourceRef(record);
   const paddingLeft = 12 + depth * 20;
+  const hasJobColumns = jobColumns.length > 0;
+
+  const scores = useMemo(
+    () => getScoresForRecord?.(record.id),
+    [getScoresForRecord, record.id],
+  );
 
   return (
     <tr
@@ -517,28 +562,66 @@ function RecordTableRow({
       <td className="px-3 py-2">
         <p className="text-foreground/80 line-clamp-2 leading-relaxed">{userText || "—"}</p>
       </td>
+      {hasJobColumns ? (
+        jobColumns.map((col) => {
+          const jobScore = scores?.get(col.id);
+          return (
+            <td key={col.id} className="px-1 py-2 text-center">
+              <ScoreCell jobScore={jobScore} />
+            </td>
+          );
+        })
+      ) : (
+        <td className="px-3 py-2">
+          <FallbackScorePill score={getRecordScore(record)} />
+        </td>
+      )}
       <td className="px-3 py-2">
-        <p className="text-foreground/60 line-clamp-2 leading-relaxed">{assistantText || "—"}</p>
-      </td>
-      <td className="px-3 py-2">
-        {score !== undefined ? (
-          <ScorePill score={score} />
-        ) : (
-          <span className="text-muted-foreground/30">—</span>
-        )}
-      </td>
-      <td className="px-3 py-2">
-        {sourceRef ? (
-          <span className="text-[10px] text-muted-foreground/50 truncate block max-w-[120px]" title={sourceRef}>
-            {sourceRef}
-          </span>
-        ) : (
-          <span className="text-muted-foreground/30">—</span>
-        )}
+        <SourceRefTag sourceRef={sourceRef} />
       </td>
     </tr>
   );
 }
+
+// ─── Score Cell ───
+
+function ScoreCell({ jobScore }: { readonly jobScore?: RecordJobScore }) {
+  if (!jobScore) return <span className="text-muted-foreground/20">—</span>;
+
+  if (jobScore.status === "queued") {
+    return <span className="text-[10px] text-muted-foreground/30 italic">queued</span>;
+  }
+
+  if (jobScore.status === "running") {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <Loader2 className="w-3 h-3 text-primary animate-spin" />
+        {jobScore.score !== undefined && (
+          <span className="font-mono text-[10px] text-muted-foreground/50 tabular-nums">
+            {jobScore.score.toFixed(2)}
+          </span>
+        )}
+      </span>
+    );
+  }
+
+  if (jobScore.status === "failed") {
+    return <span className="text-[10px] text-red-400/60">failed</span>;
+  }
+
+  if (jobScore.score === undefined) {
+    return <span className="text-muted-foreground/20">—</span>;
+  }
+
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      <ScorePill score={jobScore.score} />
+      {jobScore.trend !== undefined && <TrendArrow trend={jobScore.trend} />}
+    </span>
+  );
+}
+
+// ─── Score Pill ───
 
 function ScorePill({ score }: { readonly score: number }) {
   const bg = score >= 0.8
@@ -548,8 +631,43 @@ function ScorePill({ score }: { readonly score: number }) {
       : "bg-red-500/15 text-red-400";
 
   return (
-    <span className={cn("inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium tabular-nums", bg)}>
+    <span className={cn("inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-medium font-mono tabular-nums", bg)}>
       {score.toFixed(2)}
+    </span>
+  );
+}
+
+function FallbackScorePill({ score }: { readonly score?: number }) {
+  if (score === undefined) return <span className="text-muted-foreground/30">—</span>;
+  return <ScorePill score={score} />;
+}
+
+// ─── Trend Arrow ───
+
+function TrendArrow({ trend }: { readonly trend: number }) {
+  if (trend > 0.005) {
+    return <span className="text-[9px] text-emerald-400 font-mono">↑</span>;
+  }
+  if (trend < -0.005) {
+    return <span className="text-[9px] text-red-400 font-mono">↓</span>;
+  }
+  return null;
+}
+
+// ─── Source Ref Tag ───
+
+function SourceRefTag({ sourceRef }: { readonly sourceRef: string | null }) {
+  if (!sourceRef) {
+    return <span className="text-[10px] text-muted-foreground/30 italic">generated</span>;
+  }
+
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60 bg-primary/5 border border-primary/10 rounded px-1.5 py-0.5 max-w-[130px] truncate"
+      title={sourceRef}
+    >
+      <FileText className="w-3 h-3 shrink-0 opacity-50" />
+      <span className="truncate">{sourceRef}</span>
     </span>
   );
 }

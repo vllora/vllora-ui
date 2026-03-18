@@ -19,6 +19,8 @@ import { SourcesView } from "./sources-view/SourcesView";
 import { EmptyRecordsState } from "./EmptyRecordsState";
 import { TopicDetailView } from "./TopicDetailView";
 import { filterRecords, type StatFilter, type RecordRole } from "./record-filters";
+import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
+import { useJobScoreColumns } from "@/hooks/useJobScoreColumns";
 
 /** Recursively find a topic node by name anywhere in the hierarchy, returning it and its parent path */
 function findTopicByName(
@@ -136,6 +138,10 @@ export function DatasetMainContent({
   onUpdatePromptTemplate,
   topicQualityScores,
 }: DatasetMainContentProps) {
+  // Job score columns for record detail sidebar
+  const finetuneCtx = FinetuneJobsConsumer();
+  const { columns: jobColumns, getScoresForRecord } = useJobScoreColumns(finetuneCtx);
+
   // Keyboard shortcuts: 1/2/3 switch views, Esc closes record detail
   useKeyboardShortcuts({
     onViewModeChange,
@@ -372,6 +378,8 @@ export function DatasetMainContent({
         onSave={onSaveRecord}
         records={filteredRecords}
         onNavigate={onSelectRecordId}
+        jobColumns={jobColumns}
+        getScoresForRecord={getScoresForRecord}
       />
     </div>
   );

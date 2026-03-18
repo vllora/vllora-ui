@@ -21,6 +21,8 @@ import { getTopicColor, type AvailableTopic } from "../record-utils";
 import type { RecordRole } from "../record-filters";
 import { emitter, consumePendingHighlight } from "@/utils/eventEmitter";
 import { usePromptScrollTracking } from "@/hooks/usePromptScrollTracking";
+import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
+import { useJobScoreColumns } from "@/hooks/useJobScoreColumns";
 
 interface RecordsTableProps {
   records: DatasetRecord[];
@@ -665,6 +667,10 @@ function UnifiedTableView({
   const [topicFilter, setTopicFilter] = useState("all");
   const [scoreFilter, setScoreFilter] = useState("all");
 
+  // Job score columns (eval + finetune)
+  const finetuneCtx = FinetuneJobsConsumer();
+  const { columns: jobColumns, getScoresForRecord } = useJobScoreColumns(finetuneCtx);
+
   // Count filtered records for toolbar display
   const filteredCount = useMemo(() => {
     let count = 0;
@@ -721,6 +727,8 @@ function UnifiedTableView({
           topicFilter={topicFilter}
           scoreFilter={scoreFilter}
           onExpand={onExpand}
+          jobColumns={jobColumns}
+          getScoresForRecord={getScoresForRecord}
         />
       </div>
 

@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Training Job – Mockup</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a0a; color: #d4d4d8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; }
+
+  /* ── Layout ── */
+  .shell { display: flex; height: 100vh; }
+  .sidebar { width: 220px; border-right: 1px solid #1e1e1e; display: flex; flex-direction: column; background: #0a0a0a; }
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ── Sidebar ── */
+  .sidebar-section { padding: 12px 14px 6px; }
+  .sidebar-label { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #52525b; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; }
+  .sidebar-label .count { background: #27272a; color: #71717a; font-size: 9px; padding: 1px 5px; border-radius: 3px; }
+  .sidebar-label .plus { cursor: pointer; color: #52525b; font-size: 14px; line-height: 1; }
+  .sidebar-label .plus:hover { color: #a1a1aa; }
+  .sidebar-item { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 12px; color: #a1a1aa; }
+  .sidebar-item:hover { background: #18181b; }
+  .sidebar-item.active { background: rgba(16, 185, 129, 0.08); color: #10b981; }
+  .sidebar-item .icon { width: 14px; height: 14px; opacity: 0.5; }
+  .sidebar-item .badge { margin-left: auto; font-size: 9px; padding: 1px 6px; border-radius: 9px; font-weight: 600; }
+  .badge-running { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+  .badge-succeeded { background: rgba(16, 185, 129, 0.15); color: #10b981; }
+  .badge-failed { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+
+  /* ── Header bar ── */
+  .header { display: flex; align-items: center; gap: 10px; padding: 8px 16px; border-bottom: 1px solid #1e1e1e; flex-shrink: 0; }
+  .pill { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
+  .pill-running { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+  .pill-model { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+  .pill-version { background: rgba(168, 85, 247, 0.12); color: #a78bfa; font-size: 10px; }
+  .header-summary { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; color: #a1a1aa; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .header-summary .accent { color: #10b981; font-weight: 600; }
+  .header-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .header-time { font-size: 11px; color: #52525b; margin-right: 4px; }
+  .icon-btn { padding: 5px; border-radius: 4px; background: none; border: none; color: #52525b; cursor: pointer; font-size: 12px; }
+  .icon-btn:hover { background: rgba(255,255,255,0.05); color: #a1a1aa; }
+  .action-btn { display: flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 6px; font-size: 11px; font-weight: 600; border: none; cursor: pointer; }
+  .btn-cancel { background: none; color: #71717a; }
+  .btn-cancel:hover { color: #f87171; background: rgba(239, 68, 68, 0.1); }
+  .btn-primary { background: #10b981; color: #0a0a0a; }
+  .btn-primary:hover { background: #34d399; }
+
+  /* ── Content ── */
+  .content { flex: 1; overflow-y: auto; padding: 16px; }
+  .content > * + * { margin-top: 16px; }
+
+  /* ── Epoch progress ── */
+  .epoch-bar { display: flex; align-items: center; gap: 10px; }
+  .epoch-label { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; color: #52525b; white-space: nowrap; }
+  .epoch-track { flex: 1; height: 6px; background: #1e1e1e; border-radius: 9999px; overflow: hidden; }
+  .epoch-fill { height: 100%; background: linear-gradient(90deg, rgba(16,185,129,0.4), #10b981); border-radius: 9999px; transition: width 0.5s ease; }
+  .epoch-pct { font-size: 10px; font-family: monospace; font-weight: 600; color: #10b981; }
+
+  /* ── Job details strip ── */
+  .details-strip { display: flex; flex-wrap: wrap; gap: 4px 0; font-size: 11px; }
+  .detail-item { display: flex; align-items: center; gap: 5px; }
+  .detail-item .label { color: #52525b; }
+  .detail-item .value { color: #a1a1aa; }
+  .detail-item .value.mono { font-family: monospace; }
+  .detail-item .value.green { color: #10b981; font-family: monospace; }
+  .detail-sep { color: #3f3f46; margin: 0 8px; }
+  .copy-btn { background: none; border: none; color: #52525b; cursor: pointer; font-size: 9px; padding: 2px; }
+  .copy-btn:hover { color: #a1a1aa; }
+
+  /* ── Section headers ── */
+  .section-header { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #52525b; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+  .section-header .right { font-size: 11px; font-family: monospace; font-weight: 600; }
+
+  /* ── Eval Score Chart ── */
+  .chart-container { background: #111; border: 1px solid #1e1e1e; border-radius: 8px; padding: 16px; }
+  .chart-subtitle { font-size: 11px; color: #52525b; margin-bottom: 12px; }
+  .chart-area { display: flex; align-items: flex-end; gap: 4px; height: 140px; padding: 0 20px; }
+  .chart-bar-wrapper { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .chart-bar { width: 100%; border-radius: 4px 4px 0 0; min-height: 4px; transition: height 0.3s; }
+  .chart-bar-label { font-size: 10px; font-family: monospace; color: #71717a; }
+  .chart-epoch-label { font-size: 9px; color: #52525b; }
+  .live-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #10b981; animation: pulse 2s infinite; margin-right: 4px; vertical-align: middle; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  /* ── Training Metrics cards ── */
+  .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .metric-card { background: #111; border: 1px solid #1e1e1e; border-radius: 8px; padding: 12px 14px; }
+  .metric-label { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #52525b; margin-bottom: 6px; }
+  .metric-value { font-size: 18px; font-family: 'SF Mono', monospace; font-weight: 700; color: #10b981; }
+
+  /* ── Per-Row Results table ── */
+  .results-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .results-title { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #52525b; }
+  .sort-btns { display: flex; gap: 2px; }
+  .sort-btn { padding: 2px 6px; font-size: 10px; border-radius: 3px; background: none; border: none; color: #52525b; cursor: pointer; }
+  .sort-btn:hover { color: #a1a1aa; }
+  .sort-btn.active { background: rgba(113,113,122,0.2); color: #d4d4d8; }
+
+  .table-header { display: flex; align-items: center; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #52525b; border-bottom: 1px solid rgba(113,113,122,0.2); }
+  .table-header > div { padding: 6px 0; }
+
+  .table-row { display: flex; align-items: center; border-bottom: 1px solid rgba(39,39,42,0.5); height: 36px; cursor: pointer; }
+  .table-row:hover { background: rgba(39,39,42,0.3); }
+  .table-row:hover .row-input { text-decoration: underline; color: #e4e4e7; }
+
+  .col-num { width: 36px; padding-left: 12px; font-family: monospace; font-size: 11px; color: #3f3f46; flex-shrink: 0; }
+  .col-input { flex: 1; min-width: 0; font-size: 12px; color: #a1a1aa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 12px; }
+  .col-epoch { width: 50px; text-align: center; font-size: 10px; color: #71717a; flex-shrink: 0; }
+  .col-score { width: 56px; text-align: right; padding-right: 12px; font-family: monospace; font-size: 13px; font-weight: 600; flex-shrink: 0; }
+  .col-trend { width: 50px; text-align: center; font-size: 11px; flex-shrink: 0; }
+  .col-status { width: 56px; text-align: right; padding-right: 12px; font-size: 12px; flex-shrink: 0; }
+  .col-logs { width: 36px; text-align: center; font-size: 11px; color: #52525b; flex-shrink: 0; }
+
+  .score-high { color: #10b981; }
+  .score-mid { color: #f59e0b; }
+  .score-low { color: #f87171; }
+  .trend-up { color: #10b981; }
+  .trend-down { color: #f87171; }
+  .trend-flat { color: #52525b; }
+  .status-pass { color: #10b981; }
+  .status-fail { color: #f87171; }
+
+  /* ── Expanded row (epoch breakdown) ── */
+  .expanded-row { background: rgba(17,17,17,0.6); border-bottom: 1px solid #1e1e1e; padding: 8px 12px 8px 48px; }
+  .epoch-scores { display: flex; gap: 16px; font-size: 11px; }
+  .epoch-score-item { display: flex; align-items: center; gap: 6px; }
+  .epoch-score-label { color: #52525b; font-size: 10px; }
+  .epoch-score-val { font-family: monospace; font-weight: 600; }
+
+  /* ── State views ── */
+  .state-selector { position: fixed; top: 16px; right: 16px; z-index: 100; background: #18181b; border: 1px solid #27272a; border-radius: 8px; padding: 12px; }
+  .state-selector h3 { font-size: 11px; font-weight: 700; color: #f87171; text-transform: uppercase; margin-bottom: 8px; }
+  .state-selector label { font-size: 10px; color: #71717a; text-transform: uppercase; margin-bottom: 4px; display: block; }
+  .state-btns { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
+  .state-btn { padding: 4px 10px; font-size: 11px; border-radius: 4px; border: 1px solid #27272a; background: #0a0a0a; color: #a1a1aa; cursor: pointer; }
+  .state-btn:hover { border-color: #3f3f46; }
+  .state-btn.active { background: #10b981; color: #0a0a0a; border-color: #10b981; font-weight: 600; }
+  .state-selector .hint { font-size: 9px; color: #3f3f46; margin-top: 4px; }
+
+  /* ── Succeeded extras ── */
+  .success-banner { display: flex; align-items: center; gap: 8px; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #a1a1aa; }
+  .success-banner .icon { font-size: 16px; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- ── State Selector (mockup controls) ── -->
+<div class="state-selector" id="controls">
+  <h3>Mockup Controls</h3>
+  <label>Job State</label>
+  <div class="state-btns">
+    <button class="state-btn active" onclick="setState('running')">Running</button>
+    <button class="state-btn" onclick="setState('succeeded')">Succeeded</button>
+    <button class="state-btn" onclick="setState('failed')">Failed</button>
+  </div>
+  <div class="hint">Click to switch states</div>
+</div>
+
+<div class="shell">
+  <!-- ── Sidebar ── -->
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">
+        Training Jobs <span class="count">2</span>
+        <span class="plus" title="New training job">+</span>
+      </div>
+      <div class="sidebar-item active">
+        <span>&#x1F525;</span>
+        <span>ft-a13e42</span>
+        <span class="badge badge-running" id="sidebar-badge-1">running</span>
+      </div>
+      <div class="sidebar-item">
+        <span>&#x2705;</span>
+        <span>ft-b28d91</span>
+        <span class="badge badge-succeeded">succeeded</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Main ── -->
+  <div class="main">
+
+    <!-- ── Header ── -->
+    <div class="header">
+      <span class="pill pill-running" id="header-status">Running</span>
+      <span class="pill pill-model">gpt-4o-mini</span>
+      <span class="pill pill-version">&lt;/&gt; v2</span>
+      <span class="header-summary" id="header-summary">
+        Epoch <span class="accent">2</span>/3 &middot; Avg Score <span class="accent">0.79</span> &middot; 150 rows
+      </span>
+      <div class="header-actions">
+        <span class="header-time">Mar 17 08:00 AM</span>
+        <button class="icon-btn" title="Refresh">&#x21bb;</button>
+        <button class="action-btn btn-cancel" id="btn-cancel">&#x23F9; Cancel</button>
+        <button class="action-btn btn-primary hidden" id="btn-download">&#x2B07; Weights</button>
+        <button class="action-btn btn-primary hidden" id="btn-usage">&#x1F4CB; Usage</button>
+      </div>
+    </div>
+
+    <!-- ── Scrollable content ── -->
+    <div class="content">
+
+      <!-- Epoch Progress -->
+      <div class="epoch-bar" id="epoch-bar">
+        <span class="epoch-label" id="epoch-text">Epoch 2/3</span>
+        <div class="epoch-track">
+          <div class="epoch-fill" id="epoch-fill" style="width: 66%"></div>
+        </div>
+        <span class="epoch-pct" id="epoch-pct">66%</span>
+      </div>
+
+      <!-- Job Details Strip -->
+      <div class="details-strip">
+        <span class="detail-item">
+          <span class="label">Provider</span>
+          <span class="value">OpenAI</span>
+        </span>
+        <span class="detail-sep">&middot;</span>
+        <span class="detail-item">
+          <span class="label">Job</span>
+          <span class="value mono">a13e42&hellip;f8b2</span>
+          <button class="copy-btn" title="Copy job ID">&#x1F4CB;</button>
+        </span>
+        <span class="detail-sep">&middot;</span>
+        <span class="detail-item" id="detail-model-output" style="display:none">
+          <span class="label">Model</span>
+          <span class="value green" id="output-model-name">ft:gpt-4o-mini:chess&hellip;</span>
+          <button class="copy-btn" title="Copy model ID">&#x1F4CB;</button>
+        </span>
+        <span class="detail-sep" id="detail-model-sep" style="display:none">&middot;</span>
+        <span class="detail-item">
+          <span class="label">Batch</span>
+          <span class="value">4</span>
+        </span>
+        <span class="detail-sep">&middot;</span>
+        <span class="detail-item">
+          <span class="label">LoRA</span>
+          <span class="value">16</span>
+        </span>
+        <span class="detail-sep">&middot;</span>
+        <span class="detail-item">
+          <span class="label">LR</span>
+          <span class="value mono">1.8e-5</span>
+        </span>
+      </div>
+
+      <!-- Error banner (hidden by default) -->
+      <div id="error-banner" class="hidden" style="background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); border-radius: 8px; padding: 10px 14px; display: flex; align-items: flex-start; gap: 8px;">
+        <span style="color: #f87171; font-size: 14px;">&#x26A0;</span>
+        <div>
+          <div style="font-size: 12px; color: #f87171; font-weight: 600;">Training failed</div>
+          <div style="font-size: 11px; color: #a1a1aa; margin-top: 2px;" id="error-msg">Rate limit exceeded. Try again with a smaller batch size or wait a few minutes.</div>
+        </div>
+      </div>
+
+      <!-- Success banner (hidden by default) -->
+      <div id="success-banner" class="success-banner hidden">
+        <span class="icon">&#x2705;</span>
+        <div>
+          <div style="font-weight: 600; color: #10b981;">Training complete</div>
+          <div style="font-size: 11px; color: #71717a; margin-top: 2px;">Model <span style="font-family: monospace; color: #10b981;">ft:gpt-4o-mini:chess-tutor-2024</span> is ready. Download weights or view usage guide.</div>
+        </div>
+      </div>
+
+      <!-- Eval Score by Epoch -->
+      <div class="chart-container" id="chart-section">
+        <div class="section-header">
+          <span>Eval Score by Epoch</span>
+          <span class="right" id="chart-current"><span class="live-dot" id="live-dot"></span>Current: <span style="color: #10b981;">0.79</span></span>
+        </div>
+        <div class="chart-subtitle">Average grader score per epoch</div>
+        <div class="chart-area">
+          <div class="chart-bar-wrapper">
+            <div class="chart-bar" style="height: 68%; background: #a78bfa;"></div>
+            <div class="chart-bar-label">0.68</div>
+            <div class="chart-epoch-label">E1</div>
+          </div>
+          <div class="chart-bar-wrapper">
+            <div class="chart-bar" style="height: 79%; background: #10b981;"></div>
+            <div class="chart-bar-label">0.79</div>
+            <div class="chart-epoch-label">E2</div>
+          </div>
+          <div class="chart-bar-wrapper" id="epoch3-bar" style="opacity: 0.3;">
+            <div class="chart-bar" style="height: 10%; background: #27272a;"></div>
+            <div class="chart-bar-label" style="color: #27272a;">—</div>
+            <div class="chart-epoch-label">E3</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Training Metrics -->
+      <div id="metrics-section">
+        <div class="section-header">Training Metrics</div>
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-label">Loss</div>
+            <div class="metric-value">0.342</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Reward</div>
+            <div class="metric-value">2.14</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">KL Divergence</div>
+            <div class="metric-value">0.087</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Completion Tokens</div>
+            <div class="metric-value">12.4K</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Per-Row Results -->
+      <div id="results-section">
+        <div class="results-header">
+          <span class="results-title">Results (showing 10 of 150)</span>
+          <div class="sort-btns">
+            <button class="sort-btn">#</button>
+            <button class="sort-btn active">Score &#x2193;</button>
+            <button class="sort-btn">Score &#x2191;</button>
+            <button class="sort-btn">Status</button>
+          </div>
+        </div>
+
+        <!-- Table header -->
+        <div class="table-header">
+          <div class="col-num">#</div>
+          <div class="col-input">Input</div>
+          <div class="col-epoch">Epoch</div>
+          <div class="col-score">Score</div>
+          <div class="col-trend">Trend</div>
+          <div class="col-status">Status</div>
+          <div class="col-logs">Logs</div>
+        </div>
+
+        <!-- Table rows -->
+        <div class="table-row" onclick="toggleExpand(this)">
+          <div class="col-num">1</div>
+          <div class="col-input row-input">What is an absolute pin in chess?</div>
+          <div class="col-epoch">E2</div>
+          <div class="col-score score-high">0.95</div>
+          <div class="col-trend trend-up">&#x2191; +0.12</div>
+          <div class="col-status status-pass">&#x2713; Pass</div>
+          <div class="col-logs">&hellip;</div>
+        </div>
+        <div class="expanded-row hidden" id="expand-1">
+          <div class="epoch-scores">
+            <div class="epoch-score-item">
+              <span class="epoch-score-label">E1</span>
+              <span class="epoch-score-val score-mid">0.83</span>
+            </div>
+            <div class="epoch-score-item">
+              <span class="epoch-score-label">E2</span>
+              <span class="epoch-score-val score-high">0.95</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-row">
+          <div class="col-num">2</div>
+          <div class="col-input row-input">Explain the difference between a pin and a skewer.</div>
+          <div class="col-epoch">E2</div>
+          <div class="col-score score-high">0.87</div>
+          <div class="col-trend trend-up">&#x2191; +0.05</div>
+          <div class="col-status status-pass">&#x2713; Pass</div>
+          <div class="col-logs">&hellip;</div>
+        </div>
+
+        <div class="table-row">
+          <div class="col-num">3</div>
+          <div class="col-input row-input">What is a discovered attack?</div>
+          <div class="col-epoch">E2</div>
+          <div class="col-score score-high">0.92</div>
+          <div class="col-trend trend-up">&#x2191; +0.08</div>
+          <div class="col-status status-pass">&#x2713; Pass</div>
+          <div class="col-logs">&hellip;</div>
+        </div>
+
+        <div class="table-row">
+          <div class="col-num">4</div>
+          <div class="col-input row-input">Describe an exchange sacrifice example.</div>
+          <div class="col-epoch">E2</div>
+          <div class="col-score score-mid">0.74</div>
+          <div class="col-trend trend-up">&#x2191; +0.11</div>
+          <div class="col-status status-pass">&#x2713; Pass</div>
+          <div class="col-logs">&hellip;</div>
+        </div>
+
+        <div class="table-row">
+          <div class="col-num">5</div>
+          <div class="col-input row-input">What is overloading a piece?</div>
+          <div class="col-epoch">E2</div>
+          <div class="col-score score-high">0.88</div>
+          <div class="col-trend trend-flat">&#x2192; 0.00</div>
+          <div class="col-status status-pass">&#x2713; Pass</div>
+          <div class="col-logs">&hellip;</div>
+        </div>
+
+        <div class="table-row">
+          <div class="col-num">6</div>
+          <div class="col-input row-input">Explain back rank mate patterns.</div>
+          <div class="col-epoch">E2</div>
+          <div class="col-score score-high">0.91</div>
+          <div class="col-trend trend-up">&#x2191; +0.06</div>
+          <div class="col-status status-pass">&#x2713; Pass</div>
+          <div class="col-logs">&hellip;</div>
+        </div>
+
+        <div class="table-row">
+          <div class="col-num">7</div>
+          <div class="col-input row-input">When should you promote to a knight?</div>
+          <div class="col-epoch">E2</div>
+          <div class="col-score score-mid">0.45</div>
+          <div class="col-trend trend-down">&#x2193; -0.10</div>
+          <div class="col-status status-fail">&#x2717; Fail</div>
+          <div class="col-logs">&hellip;</div>
+        </div>
+
+        <div class="table-row">
+          <div class="col-num">8</div>
+          <div class="col-input row-input">How do opening principles apply to the Italian Game?</div>
+          <div class="col-epoch">E2</div>
+          <div class="col-score score-high">0.83</div>
+          <div class="col-trend trend-up">&#x2191; +0.03</div>
+          <div class="col-status status-pass">&#x2713; Pass</div>
+          <div class="col-logs">&hellip;</div>
+        </div>
+
+        <div class="table-row">
+          <div class="col-num">9</div>
+          <div class="col-input row-input">Explain positional themes in the Sicilian.</div>
+          <div class="col-epoch">E2</div>
+          <div class="col-score score-high">0.81</div>
+          <div class="col-trend trend-up">&#x2191; +0.14</div>
+          <div class="col-status status-pass">&#x2713; Pass</div>
+          <div class="col-logs">&hellip;</div>
+        </div>
+
+        <div class="table-row">
+          <div class="col-num">10</div>
+          <div class="col-input row-input">What is the idea behind a Greek gift sacrifice?</div>
+          <div class="col-epoch">E2</div>
+          <div class="col-score score-high">0.90</div>
+          <div class="col-trend trend-up">&#x2191; +0.07</div>
+          <div class="col-status status-pass">&#x2713; Pass</div>
+          <div class="col-logs">&hellip;</div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /shell -->
+
+<script>
+function setState(state) {
+  // Update buttons
+  document.querySelectorAll('.state-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+
+  const headerStatus = document.getElementById('header-status');
+  const headerSummary = document.getElementById('header-summary');
+  const sidebarBadge = document.getElementById('sidebar-badge-1');
+  const epochBar = document.getElementById('epoch-bar');
+  const epochFill = document.getElementById('epoch-fill');
+  const epochText = document.getElementById('epoch-text');
+  const epochPct = document.getElementById('epoch-pct');
+  const chartCurrent = document.getElementById('chart-current');
+  const liveDot = document.getElementById('live-dot');
+  const epoch3 = document.getElementById('epoch3-bar');
+  const btnCancel = document.getElementById('btn-cancel');
+  const btnDownload = document.getElementById('btn-download');
+  const btnUsage = document.getElementById('btn-usage');
+  const errorBanner = document.getElementById('error-banner');
+  const successBanner = document.getElementById('success-banner');
+  const detailModelOutput = document.getElementById('detail-model-output');
+  const detailModelSep = document.getElementById('detail-model-sep');
+
+  // Reset
+  errorBanner.classList.add('hidden');
+  successBanner.classList.add('hidden');
+  detailModelOutput.style.display = 'none';
+  detailModelSep.style.display = 'none';
+  btnCancel.classList.remove('hidden');
+  btnDownload.classList.add('hidden');
+  btnUsage.classList.add('hidden');
+  document.getElementById('chart-section').classList.remove('hidden');
+  document.getElementById('metrics-section').classList.remove('hidden');
+  document.getElementById('results-section').classList.remove('hidden');
+
+  if (state === 'running') {
+    headerStatus.textContent = 'Running';
+    headerStatus.className = 'pill pill-running';
+    sidebarBadge.textContent = 'running';
+    sidebarBadge.className = 'badge badge-running';
+    headerSummary.innerHTML = 'Epoch <span class="accent">2</span>/3 &middot; Avg Score <span class="accent">0.79</span> &middot; 150 rows';
+    epochText.textContent = 'Epoch 2/3';
+    epochFill.style.width = '66%';
+    epochPct.textContent = '66%';
+    epoch3.style.opacity = '0.3';
+    liveDot.style.display = 'inline-block';
+    chartCurrent.innerHTML = '<span class="live-dot"></span>Current: <span style="color: #10b981;">0.79</span>';
+  }
+  else if (state === 'succeeded') {
+    headerStatus.textContent = 'Succeeded';
+    headerStatus.className = 'pill';
+    headerStatus.style.background = 'rgba(16,185,129,0.15)';
+    headerStatus.style.color = '#10b981';
+    sidebarBadge.textContent = 'succeeded';
+    sidebarBadge.className = 'badge badge-succeeded';
+    headerSummary.innerHTML = 'Epoch <span class="accent">3</span>/3 &middot; Avg Score <span class="accent">0.84</span> &middot; 150 rows';
+    epochText.textContent = 'Epoch 3/3';
+    epochFill.style.width = '100%';
+    epochPct.textContent = '100%';
+    epoch3.style.opacity = '1';
+    epoch3.querySelector('.chart-bar').style.height = '84%';
+    epoch3.querySelector('.chart-bar').style.background = '#10b981';
+    epoch3.querySelector('.chart-bar-label').textContent = '0.84';
+    epoch3.querySelector('.chart-bar-label').style.color = '#71717a';
+    liveDot.style.display = 'none';
+    chartCurrent.innerHTML = 'Final: <span style="color: #10b981;">0.84</span>';
+    btnCancel.classList.add('hidden');
+    btnDownload.classList.remove('hidden');
+    btnUsage.classList.remove('hidden');
+    successBanner.classList.remove('hidden');
+    detailModelOutput.style.display = 'flex';
+    detailModelSep.style.display = 'inline';
+  }
+  else if (state === 'failed') {
+    headerStatus.textContent = 'Failed';
+    headerStatus.className = 'pill';
+    headerStatus.style.background = 'rgba(239,68,68,0.15)';
+    headerStatus.style.color = '#f87171';
+    sidebarBadge.textContent = 'failed';
+    sidebarBadge.className = 'badge badge-failed';
+    headerSummary.innerHTML = 'Epoch <span class="accent">2</span>/3 &middot; Avg Score <span class="accent">0.79</span> &middot; 150 rows';
+    epochText.textContent = 'Epoch 2/3';
+    epochFill.style.width = '66%';
+    epochPct.textContent = '66%';
+    epoch3.style.opacity = '0.3';
+    liveDot.style.display = 'none';
+    chartCurrent.innerHTML = 'Last: <span style="color: #f87171;">0.79</span>';
+    btnCancel.classList.add('hidden');
+    errorBanner.classList.remove('hidden');
+  }
+}
+
+function toggleExpand(row) {
+  const expanded = row.nextElementSibling;
+  if (expanded && expanded.classList.contains('expanded-row')) {
+    expanded.classList.toggle('hidden');
+  }
+}
+</script>
+</body>
+</html>

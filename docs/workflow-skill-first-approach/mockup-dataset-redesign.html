@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>vLLora Dataset Visualization - Redesign Mockup</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -680,15 +680,12 @@
   }
   .records-table tr:hover td { background: var(--bg-hover); }
   .records-table .td-input { max-width: 340px; }
-  .records-table .td-output { max-width: 420px; }
   .records-table .td-score { width: 70px; text-align: center; }
-  .score-pill {
-    display: inline-flex; align-items: center; gap: 4px;
-    padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500;
-  }
   .score-good { background: var(--emerald-dim); color: var(--emerald); }
   .score-warn { background: var(--amber-dim); color: var(--amber); }
   .score-low { background: var(--red-dim); color: var(--red); }
+  .score-bad { background: var(--red-dim); color: var(--red); }
+  .score-none { color: var(--text-dim); }
 
   .sources-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px 24px; }
   .source-full-card {
@@ -824,7 +821,88 @@
   .all-records-table tr:hover td { background: var(--bg-hover); }
   .all-records-table .col-id { width: 40px; color: var(--text-dim); }
   .all-records-table .col-score { width: 70px; text-align: center; }
-  .all-records-table .col-source { width: 100px; font-size: 10px; color: var(--text-dim); }
+  .all-records-table .col-source { width: 120px; }
+
+  /* ── Multi-score job columns (Option A) ── */
+  .score-col-header {
+    display: flex; flex-direction: column; align-items: center; gap: 1px;
+  }
+  .score-col-header .job-type {
+    font-size: 8px; color: var(--text-dim); font-weight: 400;
+    text-transform: none; letter-spacing: 0;
+  }
+  .score-col-header .job-name { font-size: 10px; }
+
+  .score-pill {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 7px; border-radius: 10px; font-size: 11px; font-weight: 500;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .trend {
+    font-family: 'JetBrains Mono', monospace; font-size: 9px; margin-left: 1px;
+  }
+  .trend-up { color: var(--emerald); }
+  .trend-down { color: var(--red); }
+  .trend-flat { color: var(--text-dim); }
+
+  /* ── Running / queued job states ── */
+  .score-spinner {
+    display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+    border: 2px solid var(--border); border-top-color: var(--accent);
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .score-running {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10px; color: var(--text-muted);
+  }
+  .score-running .partial {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--text-secondary); opacity: 0.7;
+  }
+
+  .score-queued {
+    font-size: 10px; color: var(--text-dim); font-style: italic;
+    letter-spacing: 0.02em;
+  }
+
+  .job-status-badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 7px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; padding: 1px 5px; border-radius: 6px;
+  }
+  .job-status-badge.running {
+    background: rgba(124,92,252,0.15); color: var(--accent);
+  }
+  .job-status-badge.queued {
+    background: rgba(90,90,112,0.15); color: var(--text-dim);
+  }
+  .job-status-badge .badge-dot {
+    width: 4px; height: 4px; border-radius: 50%;
+  }
+  .job-status-badge.running .badge-dot {
+    background: var(--accent); animation: pulse-dot 1.5s ease-in-out infinite;
+  }
+  .job-status-badge.queued .badge-dot {
+    background: var(--text-dim);
+  }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .source-ref-tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10px; color: var(--text-muted);
+    background: rgba(124,92,252,0.06); border: 1px solid rgba(124,92,252,0.12);
+    border-radius: 4px; padding: 2px 6px; white-space: nowrap;
+    max-width: 140px; overflow: hidden; text-overflow: ellipsis;
+  }
+  .source-ref-tag .ref-icon { font-size: 9px; opacity: 0.6; }
+  .source-generated {
+    font-size: 10px; color: var(--text-dim); font-style: italic;
+  }
 
   /* Group header rows — parent topics */
   .group-header td {
@@ -1001,6 +1079,17 @@
   .record-row.hidden { display: none; }
   .record-row.selected td { background: var(--accent-dim) !important; }
   .record-row { cursor: pointer; }
+
+  /* Parent-level records (assigned to non-leaf topic) */
+  .record-row.parent-record td:first-child { padding-left: 48px; }
+  .record-row.parent-record td { background: rgba(251, 191, 36, 0.03); }
+  .parent-topic-tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 9px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--amber); background: var(--amber-dim);
+    padding: 1px 6px; border-radius: 4px; margin-left: 8px;
+    vertical-align: middle;
+  }
 
   .topic-badge {
     display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 10px;
@@ -1497,50 +1586,196 @@
   /* ════════════════════════════════════════ */
   .record-detail-sidebar {
     position: fixed; top: 48px; right: 0; bottom: 0;
-    width: 420px; background: var(--bg-secondary);
+    width: 520px; background: var(--bg-secondary);
     border-left: 1px solid var(--border);
-    z-index: 60; transform: translateX(100%);
+    z-index: 10000; transform: translateX(100%);
     transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
-    overflow-y: auto; display: flex; flex-direction: column;
+    display: flex; flex-direction: column;
   }
   .record-detail-sidebar.open { transform: translateX(0); }
+
+  /* ── Header ── */
   .rds-header {
-    padding: 16px 20px; border-bottom: 1px solid var(--border-subtle);
+    padding: 12px 20px; border-bottom: 1px solid var(--border-subtle);
     display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0;
   }
+  .rds-header-left { display: flex; align-items: center; gap: 10px; }
   .rds-header h3 { font-size: 14px; font-weight: 600; margin: 0; }
-  .rds-close {
-    width: 24px; height: 24px; border-radius: 6px;
-    border: 1px solid var(--border); background: var(--bg-tertiary);
+  .rds-nav-group {
+    display: flex; align-items: center; gap: 0;
+    background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-subtle);
+  }
+  .rds-nav-btn {
+    width: 28px; height: 26px; border: none; background: transparent;
+    color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center;
+    font-size: 13px; transition: all 0.15s;
+  }
+  .rds-nav-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+  .rds-nav-btn:first-child { border-radius: 5px 0 0 5px; }
+  .rds-nav-btn:last-child { border-radius: 0 5px 5px 0; }
+  .rds-nav-sep { width: 1px; height: 14px; background: var(--border-subtle); }
+  .rds-nav-count { font-size: 10px; color: var(--text-dim); padding: 0 6px; }
+  .rds-header-actions { display: flex; align-items: center; gap: 4px; }
+  .rds-action-btn {
+    width: 28px; height: 28px; border-radius: 6px;
+    border: 1px solid var(--border-subtle); background: transparent;
     color: var(--text-muted); cursor: pointer;
-    display: flex; align-items: center; justify-content: center; font-size: 14px;
+    display: flex; align-items: center; justify-content: center; font-size: 13px;
+    transition: all 0.15s;
+  }
+  .rds-action-btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border); }
+  .rds-action-btn.danger:hover { background: var(--red-dim); color: var(--red); border-color: rgba(248,113,113,0.3); }
+  .rds-close {
+    width: 28px; height: 28px; border-radius: 6px;
+    border: 1px solid var(--border-subtle); background: transparent;
+    color: var(--text-muted); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; font-size: 15px;
+    transition: all 0.15s;
   }
   .rds-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+  /* ── Topic breadcrumb ── */
+  .rds-topic-bar {
+    padding: 10px 20px; border-bottom: 1px solid var(--border-subtle);
+    display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+  }
+  .rds-topic-crumb {
+    font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 4px;
+  }
+  .rds-topic-crumb .sep { color: var(--text-dim); font-size: 10px; }
+  .rds-topic-leaf {
+    font-size: 11px; font-weight: 600; color: var(--accent);
+    background: var(--accent-dim); padding: 2px 8px; border-radius: 4px;
+  }
+
+  /* ── Scrollable body ── */
+  .rds-body { flex: 1; overflow-y: auto; }
+
+  /* ── Score rows ── */
   .rds-section { padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
   .rds-section-title {
     font-size: 9px; font-weight: 600; text-transform: uppercase;
     letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 10px;
   }
-  .rds-message {
-    padding: 10px 14px; border-radius: 8px; margin-bottom: 8px;
-    font-size: 13px; line-height: 1.6;
+  .rds-score-rows { display: flex; flex-direction: column; gap: 6px; }
+  .rds-score-group { margin-bottom: 10px; }
+  .rds-score-group:last-child { margin-bottom: 0; }
+  .rds-score-group-title {
+    font-size: 10px; font-weight: 500; color: var(--text-muted);
+    margin-bottom: 6px; display: flex; align-items: center; gap: 6px;
   }
-  .rds-message.user { background: var(--bg-tertiary); color: var(--text-secondary); }
-  .rds-message.assistant { background: rgba(99,102,241,0.05); color: var(--text-secondary); border: 1px solid rgba(99,102,241,0.1); }
-  .rds-message .msg-role {
+  .rds-score-group-title .group-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+  }
+  .rds-score-group-title .group-dot.eval { background: var(--blue); }
+  .rds-score-group-title .group-dot.train { background: var(--emerald); }
+  .rds-score-group-rows { display: flex; flex-direction: column; gap: 4px; }
+  .rds-score-row {
+    display: flex; align-items: center; gap: 10px; height: 28px;
+  }
+  .rds-score-row-label {
+    width: 28px; font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 5px;
+    flex-shrink: 0;
+  }
+  .rds-score-bar-track {
+    flex: 1; height: 20px; background: var(--bg-tertiary); border-radius: 4px;
+    overflow: hidden; position: relative;
+  }
+  .rds-score-bar-fill {
+    height: 100%; border-radius: 4px; transition: width 0.4s ease;
+    position: absolute; left: 0; top: 0;
+  }
+  .rds-score-bar-fill.good { background: linear-gradient(90deg, rgba(52,211,153,0.15), rgba(52,211,153,0.3)); }
+  .rds-score-bar-fill.warn { background: linear-gradient(90deg, rgba(251,191,36,0.15), rgba(251,191,36,0.3)); }
+  .rds-score-bar-fill.bad { background: linear-gradient(90deg, rgba(248,113,113,0.15), rgba(248,113,113,0.3)); }
+  .rds-score-bar-fill.running {
+    background: linear-gradient(90deg, rgba(124,92,252,0.1), rgba(124,92,252,0.2));
+    animation: barPulse 2s ease-in-out infinite;
+  }
+  @keyframes barPulse { 0%,100% { opacity: 0.6; } 50% { opacity: 1; } }
+  .rds-score-row-val {
+    width: 44px; text-align: right; flex-shrink: 0;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600;
+  }
+  .rds-score-row-val.good { color: var(--emerald); }
+  .rds-score-row-val.warn { color: var(--amber); }
+  .rds-score-row-val.bad { color: var(--red); }
+  .rds-score-row-val.running { color: var(--accent); }
+  .rds-score-row-val.queued { color: var(--text-dim); font-weight: 400; font-style: italic; font-family: inherit; font-size: 11px; }
+  .rds-score-row-trend {
+    width: 16px; font-size: 11px; flex-shrink: 0; text-align: center;
+  }
+  .rds-score-row-trend.up { color: var(--emerald); }
+  .rds-score-row-trend.down { color: var(--red); }
+  .rds-score-row-trend.flat { color: var(--text-dim); }
+
+  /* ── Messages ── */
+  .rds-messages { display: flex; flex-direction: column; gap: 10px; }
+  .rds-msg {
+    padding: 12px 14px; border-radius: 10px;
+    font-size: 13px; line-height: 1.65;
+  }
+  .rds-msg.user {
+    background: var(--bg-tertiary); color: var(--text-primary);
+    border: 1px solid var(--border-subtle);
+  }
+  .rds-msg .msg-label {
     font-size: 9px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.04em; margin-bottom: 4px;
+    letter-spacing: 0.04em; margin-bottom: 6px;
   }
-  .rds-message.user .msg-role { color: var(--blue); }
-  .rds-message.assistant .msg-role { color: var(--emerald); }
+  .rds-msg.system {
+    background: var(--bg-tertiary); color: var(--text-muted);
+    border: 1px dashed var(--border-subtle); font-size: 12px;
+  }
+  .rds-msg.system .msg-label { color: var(--text-dim); }
+  .rds-msg.user .msg-label { color: var(--blue); }
+
+
+  /* ── Source context ── */
+  .rds-source-card {
+    background: var(--bg-tertiary); border-radius: 10px; border: 1px solid var(--border-subtle);
+    overflow: hidden;
+  }
+  .rds-source-header {
+    padding: 10px 14px; display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid var(--border-subtle); background: rgba(124,92,252,0.04);
+  }
+  .rds-source-icon {
+    width: 28px; height: 28px; border-radius: 6px;
+    background: var(--accent-dim); display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+  .rds-source-meta { flex: 1; }
+  .rds-source-name { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+  .rds-source-part { font-size: 10px; color: var(--text-muted); }
+  .rds-source-body {
+    padding: 14px; font-size: 12px; line-height: 1.7; color: var(--text-muted);
+    max-height: 120px; overflow-y: auto;
+  }
+  .rds-source-body mark {
+    background: rgba(251,191,36,0.15); color: var(--amber);
+    padding: 1px 2px; border-radius: 2px;
+  }
+
+  /* ── Metadata grid ── */
   .rds-meta-grid {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;
   }
   .rds-meta-item {
-    background: var(--bg-tertiary); border-radius: 8px; padding: 10px;
+    background: var(--bg-tertiary); border-radius: 8px; padding: 10px 12px;
   }
-  .rds-meta-item .val { font-size: 16px; font-weight: 600; }
-  .rds-meta-item .lbl { font-size: 9px; color: var(--text-muted); margin-top: 2px; }
+  .rds-meta-item .val { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+  .rds-meta-item .lbl { font-size: 9px; color: var(--text-dim); margin-top: 3px; }
+
+  /* ── Scores grid (legacy compat) ── */
+  .rds-scores-grid { display: flex; gap: 6px; }
+  .rds-score-item { flex: 1; background: var(--bg-tertiary); border-radius: 8px; padding: 8px 10px; text-align: center; }
+  .rds-score-val {
+    font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 600;
+    padding: 2px 8px; border-radius: 8px; display: inline-block;
+  }
+  .rds-score-item .lbl { font-size: 9px; color: var(--text-muted); margin-top: 4px; }
   .rds-system-prompt {
     background: var(--bg-tertiary); border-radius: 8px; padding: 10px 14px;
     font-size: 11px; line-height: 1.5; color: var(--text-muted);
@@ -2442,15 +2677,15 @@
       <div class="full-tab-content">
         <div id="fullTabRecords">
           <table class="records-table">
-            <thead><tr><th>#</th><th class="td-input">Input</th><th class="td-output">Output</th><th class="td-score">Score</th><th>Source</th></tr></thead>
+            <thead><tr><th>#</th><th class="td-input">Input</th><th class="td-score"><div class="score-col-header"><span class="job-name">Eval v1</span><span class="job-type">evaluation</span></div></th><th class="td-score"><div class="score-col-header"><span class="job-name">Eval v2</span><span class="job-type">evaluation</span></div></th><th class="td-score"><div class="score-col-header"><span class="job-name">Train v1</span><span class="job-type">finetune</span></div></th><th class="td-score"><div class="score-col-header"><span class="job-name">Eval v3</span><span class="job-status-badge running"><span class="badge-dot"></span>running</span></div></th><th class="td-score"><div class="score-col-header"><span class="job-name">Train v2</span><span class="job-status-badge queued"><span class="badge-dot"></span>queued</span></div></th><th>Source</th></tr></thead>
             <tbody>
-              <tr><td style="color:var(--text-dim)">1</td><td class="td-input">Explain the knight fork tactic and why it's so effective</td><td class="td-output">A knight fork is when a knight attacks two or more pieces simultaneously. Since the knight's unique L-shaped move can't be blocked, opponents often fail to see fork threats coming.</td><td class="td-score"><span class="score-pill score-good">0.93</span></td><td style="font-size:10px;color:var(--text-dim)">ch.1</td></tr>
-              <tr><td style="color:var(--text-dim)">2</td><td class="td-input">What is a family fork in chess?</td><td class="td-output">A family fork (royal fork) is when a knight simultaneously attacks the king, queen, and often a rook. Because the king must move out of check, the queen is invariably lost.</td><td class="td-score"><span class="score-pill score-good">0.88</span></td><td style="font-size:10px;color:var(--text-dim)">ch.1</td></tr>
-              <tr><td style="color:var(--text-dim)">3</td><td class="td-input">How do you set up a knight fork?</td><td class="td-output">Setting up a fork often requires a preparatory move — a sacrifice or exchange that places enemy pieces on squares vulnerable to the knight's attack pattern.</td><td class="td-score"><span class="score-pill score-warn">0.72</span></td><td style="font-size:10px;color:var(--text-dim)">ch.2.1</td></tr>
-              <tr><td style="color:var(--text-dim)">4</td><td class="td-input">What pieces are best for executing forks?</td><td class="td-output">Knights are the most common forking piece due to their unique movement. However, pawns, bishops, rooks, and queens can also execute forks.</td><td class="td-score"><span class="score-pill score-good">0.85</span></td><td style="font-size:10px;color:var(--text-dim)">ch.1</td></tr>
-              <tr><td style="color:var(--text-dim)">5</td><td class="td-input">Can you give an example of a pawn fork?</td><td class="td-output">A pawn fork occurs when a pawn moves forward diagonally to attack two pieces at once. A central pawn advance can fork the queen and bishop.</td><td class="td-score"><span class="score-pill score-good">0.81</span></td><td style="font-size:10px;color:var(--text-dim)">ch.2.1</td></tr>
-              <tr><td style="color:var(--text-dim)">6</td><td class="td-input">How to defend against knight forks?</td><td class="td-output">Key strategies: keep king and queen apart, control fork squares with pawns, be aware of knight hop patterns, move the more valuable piece first when threatened.</td><td class="td-score"><span class="score-pill score-good">0.90</span></td><td style="font-size:10px;color:var(--text-dim)">ch.1</td></tr>
-              <tr><td style="color:var(--text-dim)">7</td><td class="td-input">What's the difference between a fork and a double attack?</td><td class="td-output">A fork is a specific type of double attack where one piece attacks two or more enemy pieces simultaneously. Double attack is the broader category including discovered attacks.</td><td class="td-score"><span class="score-pill score-warn">0.74</span></td><td style="font-size:10px;color:var(--text-dim)">ch.2.1</td></tr>
+              <tr><td style="color:var(--text-dim)">1</td><td class="td-input">Explain the knight fork tactic and why it's so effective</td><td class="td-score"><span class="score-pill score-good">0.93</span></td><td class="td-score"><span class="score-pill score-good">0.95</span><span class="trend trend-up">↑</span></td><td class="td-score"><span class="score-pill score-good">0.91</span></td><td class="td-score"><span class="score-running"><span class="score-spinner"></span><span class="partial">0.92</span></span></td><td class="td-score"><span class="score-queued">queued</span></td><td><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.1</span></td></tr>
+              <tr><td style="color:var(--text-dim)">2</td><td class="td-input">What is a family fork in chess?</td><td class="td-score"><span class="score-pill score-good">0.88</span></td><td class="td-score"><span class="score-pill score-good">0.90</span><span class="trend trend-up">↑</span></td><td class="td-score"><span class="score-pill score-good">0.87</span></td><td class="td-score"><span class="score-running"><span class="score-spinner"></span></span></td><td class="td-score"><span class="score-queued">queued</span></td><td><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.1</span></td></tr>
+              <tr><td style="color:var(--text-dim)">3</td><td class="td-input">How do you set up a knight fork?</td><td class="td-score"><span class="score-pill score-warn">0.72</span></td><td class="td-score"><span class="score-pill score-good">0.81</span><span class="trend trend-up">↑</span></td><td class="td-score"><span class="score-pill score-warn">0.78</span></td><td class="td-score"><span class="score-running"><span class="score-spinner"></span><span class="partial">0.80</span></span></td><td class="td-score"><span class="score-queued">queued</span></td><td><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.2.1</span></td></tr>
+              <tr><td style="color:var(--text-dim)">4</td><td class="td-input">What pieces are best for executing forks?</td><td class="td-score"><span class="score-pill score-good">0.85</span></td><td class="td-score"><span class="score-pill score-good">0.88</span><span class="trend trend-up">↑</span></td><td class="td-score"><span class="score-pill score-good">0.86</span></td><td class="td-score"><span class="score-running"><span class="score-spinner"></span></span></td><td class="td-score"><span class="score-queued">queued</span></td><td><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.1</span></td></tr>
+              <tr><td style="color:var(--text-dim)">5</td><td class="td-input">Can you give an example of a pawn fork?</td><td class="td-score"><span class="score-pill score-good">0.81</span></td><td class="td-score"><span class="score-pill score-good">0.84</span><span class="trend trend-up">↑</span></td><td class="td-score"><span class="score-pill score-good">0.82</span></td><td class="td-score"><span class="score-running"><span class="score-spinner"></span><span class="partial">0.83</span></span></td><td class="td-score"><span class="score-queued">queued</span></td><td><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.2.1</span></td></tr>
+              <tr><td style="color:var(--text-dim)">6</td><td class="td-input">How to defend against knight forks?</td><td class="td-score"><span class="score-pill score-good">0.90</span></td><td class="td-score"><span class="score-pill score-good">0.92</span><span class="trend trend-up">↑</span></td><td class="td-score"><span class="score-pill score-good">0.89</span></td><td class="td-score"><span class="score-running"><span class="score-spinner"></span></span></td><td class="td-score"><span class="score-queued">queued</span></td><td><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.1</span></td></tr>
+              <tr><td style="color:var(--text-dim)">7</td><td class="td-input">What's the difference between a fork and a double attack?</td><td class="td-score"><span class="score-pill score-warn">0.74</span></td><td class="td-score"><span class="score-pill score-warn">0.79</span><span class="trend trend-up">↑</span></td><td class="td-score"><span class="score-pill score-warn">0.76</span></td><td class="td-score"><span class="score-running"><span class="score-spinner"></span><span class="partial">0.77</span></span></td><td class="td-score"><span class="score-queued">queued</span></td><td><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.2.1</span></td></tr>
             </tbody>
           </table>
         </div>
@@ -3207,9 +3442,12 @@
         <thead>
           <tr>
             <th class="col-id">#</th>
-            <th class="resizable" style="width:30%">Input</th>
-            <th class="resizable" style="width:40%">Output</th>
-            <th class="col-score">Score</th>
+            <th class="resizable">Input</th>
+            <th class="col-score"><div class="score-col-header"><span class="job-name">Eval v1</span><span class="job-type">evaluation</span></div></th>
+            <th class="col-score"><div class="score-col-header"><span class="job-name">Eval v2</span><span class="job-type">evaluation</span></div></th>
+            <th class="col-score"><div class="score-col-header"><span class="job-name">Train v1</span><span class="job-type">finetune</span></div></th>
+            <th class="col-score"><div class="score-col-header"><span class="job-name">Eval v3</span><span class="job-status-badge running"><span class="badge-dot"></span>running</span></div></th>
+            <th class="col-score"><div class="score-col-header"><span class="job-name">Train v2</span><span class="job-status-badge queued"><span class="badge-dot"></span>queued</span></div></th>
             <th class="col-source">Source</th>
           </tr>
         </thead>
@@ -3217,7 +3455,7 @@
 
           <!-- ═══ GROUP 1: Basic Tactical Patterns ═══ -->
           <tr class="group-header" onclick="toggleGroup(this)" data-group="basic">
-            <td colspan="5">
+            <td colspan="8">
               <div class="group-header-inner">
                 <svg class="group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
                 <span class="group-name">Basic Tactical Patterns</span>
@@ -3233,7 +3471,7 @@
 
           <!-- Sub-group: Forks -->
           <tr class="subgroup-header" data-parent="basic" data-subgroup="forks">
-            <td colspan="5">
+            <td colspan="8">
               <div class="subgroup-header-inner" onclick="toggleSubgroup(this.closest('.subgroup-header'))">
                 <div class="tree-line"></div>
                 <svg class="subgroup-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
@@ -3249,13 +3487,13 @@
               </div>
             </td>
           </tr>
-          <tr class="record-row" data-parent="basic" data-topic="forks"><td class="col-id">1</td><td>Explain the knight fork tactic and why it's so effective</td><td>A knight fork is when a knight attacks two or more pieces simultaneously. Since the knight's unique L-shaped move can't be blocked...</td><td class="col-score"><span class="score-pill score-good">0.93</span></td><td class="col-source">ch.1</td></tr>
-          <tr class="record-row" data-parent="basic" data-topic="forks"><td class="col-id">2</td><td>What is a family fork in chess?</td><td>A family fork (royal fork) is when a knight simultaneously attacks the king, queen, and often a rook...</td><td class="col-score"><span class="score-pill score-good">0.88</span></td><td class="col-source">ch.1</td></tr>
-          <tr class="record-row" data-parent="basic" data-topic="forks"><td class="col-id">3</td><td>How do you set up a knight fork?</td><td>Setting up a fork often requires a preparatory move — a sacrifice or exchange that places enemy pieces on vulnerable squares.</td><td class="col-score"><span class="score-pill score-warn">0.72</span></td><td class="col-source">ch.2.1</td></tr>
+          <tr class="record-row" data-parent="basic" data-topic="forks"><td class="col-id">1</td><td>Explain the knight fork tactic and why it's so effective</td><td class="col-score"><span class="score-pill score-good">0.93</span></td><td class="col-score"><span class="score-pill score-good">0.95</span><span class="trend trend-up">↑</span></td><td class="col-score"><span class="score-pill score-good">0.91</span></td><td class="col-score"><span class="score-running"><span class="score-spinner"></span></span></td><td class="col-score"><span class="score-queued">queued</span></td><td class="col-source"><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.1 Forks</span></td></tr>
+          <tr class="record-row" data-parent="basic" data-topic="forks"><td class="col-id">2</td><td>What is a family fork in chess?</td><td class="col-score"><span class="score-pill score-good">0.88</span></td><td class="col-score"><span class="score-pill score-good">0.90</span><span class="trend trend-up">↑</span></td><td class="col-score"><span class="score-pill score-good">0.87</span></td><td class="col-score"><span class="score-running"><span class="score-spinner"></span><span class="partial">0.84</span></span></td><td class="col-score"><span class="score-queued">queued</span></td><td class="col-source"><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.1 Forks</span></td></tr>
+          <tr class="record-row" data-parent="basic" data-topic="forks"><td class="col-id">3</td><td>How do you set up a knight fork?</td><td class="col-score"><span class="score-pill score-warn">0.72</span></td><td class="col-score"><span class="score-pill score-good">0.81</span><span class="trend trend-up">↑</span></td><td class="col-score"><span class="score-pill score-warn">0.78</span></td><td class="col-score"><span class="score-running"><span class="score-spinner"></span><span class="partial">0.91</span></span></td><td class="col-score"><span class="score-queued">queued</span></td><td class="col-source"><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.2.1</span></td></tr>
 
           <!-- Sub-group: Pins and Skewers -->
           <tr class="subgroup-header" data-parent="basic" data-subgroup="pins">
-            <td colspan="5">
+            <td colspan="8">
               <div class="subgroup-header-inner" onclick="toggleSubgroup(this.closest('.subgroup-header'))">
                 <div class="tree-line"></div>
                 <svg class="subgroup-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
@@ -3271,12 +3509,12 @@
               </div>
             </td>
           </tr>
-          <tr class="record-row" data-parent="basic" data-topic="pins"><td class="col-id">4</td><td>What is a pin in chess and why is it important?</td><td>A pin is when a piece cannot move because doing so would expose a more valuable piece behind it to attack...</td><td class="col-score"><span class="score-pill score-good">0.86</span></td><td class="col-source">ch.3</td></tr>
-          <tr class="record-row" data-parent="basic" data-topic="pins"><td class="col-id">5</td><td>What's the difference between absolute and relative pins?</td><td>An absolute pin is against the king — the pinned piece literally cannot move. A relative pin is against any other piece — moving is legal but costly.</td><td class="col-score"><span class="score-pill score-good">0.82</span></td><td class="col-source">ch.3</td></tr>
+          <tr class="record-row" data-parent="basic" data-topic="pins"><td class="col-id">4</td><td>What is a pin in chess and why is it important?</td><td class="col-score"><span class="score-pill score-good">0.86</span></td><td class="col-score"><span class="score-pill score-good">0.89</span><span class="trend trend-up">↑</span></td><td class="col-score"><span class="score-pill score-good">0.85</span></td><td class="col-score"><span class="score-running"><span class="score-spinner"></span></span></td><td class="col-score"><span class="score-queued">queued</span></td><td class="col-source"><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.3 Pins</span></td></tr>
+          <tr class="record-row" data-parent="basic" data-topic="pins"><td class="col-id">5</td><td>What's the difference between absolute and relative pins?</td><td class="col-score"><span class="score-pill score-good">0.82</span></td><td class="col-score"><span class="score-pill score-good">0.84</span><span class="trend trend-up">↑</span></td><td class="col-score"><span class="score-pill score-warn">0.79</span></td><td class="col-score"><span class="score-running"><span class="score-spinner"></span><span class="partial">0.84</span></span></td><td class="col-score"><span class="score-queued">queued</span></td><td class="col-source"><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.3 Pins</span></td></tr>
 
           <!-- Sub-group: Discovered Attacks -->
           <tr class="subgroup-header" data-parent="basic" data-subgroup="discovered">
-            <td colspan="5">
+            <td colspan="8">
               <div class="subgroup-header-inner" onclick="toggleSubgroup(this.closest('.subgroup-header'))">
                 <div class="tree-line"></div>
                 <svg class="subgroup-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
@@ -3292,17 +3530,17 @@
               </div>
             </td>
           </tr>
-          <tr class="record-row" data-parent="basic" data-topic="discovered"><td class="col-id">6</td><td>What is a discovered attack?</td><td>A discovered attack occurs when moving one piece reveals an attack by another piece behind it. It's like a hidden ambush.</td><td class="col-score"><span class="score-pill score-warn">0.68</span></td><td class="col-source">ch.4</td></tr>
-          <tr class="record-row" data-parent="basic" data-topic="discovered"><td class="col-id">7</td><td>How does a discovered check differ from a regular discovered attack?</td><td>A discovered check is when the revealed attack is a check on the king, forcing the opponent to deal with the check while your moved piece wreaks havoc elsewhere.</td><td class="col-score"><span class="score-pill score-warn">0.71</span></td><td class="col-source">ch.4</td></tr>
+          <tr class="record-row" data-parent="basic" data-topic="discovered"><td class="col-id">6</td><td>What is a discovered attack?</td><td class="col-score"><span class="score-pill score-warn">0.68</span></td><td class="col-score"><span class="score-pill score-warn">0.75</span><span class="trend trend-up">↑</span></td><td class="col-score"><span class="score-pill score-warn">0.72</span></td><td class="col-score"><span class="score-running"><span class="score-spinner"></span><span class="partial">0.91</span></span></td><td class="col-score"><span class="score-queued">queued</span></td><td class="col-source"><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.4</span></td></tr>
+          <tr class="record-row" data-parent="basic" data-topic="discovered"><td class="col-id">7</td><td>How does a discovered check differ from a regular discovered attack?</td><td class="col-score"><span class="score-pill score-warn">0.71</span></td><td class="col-score"><span class="score-pill score-warn">0.76</span><span class="trend trend-up">↑</span></td><td class="col-score"><span class="score-pill score-warn">0.73</span></td><td class="col-score"><span class="score-running"><span class="score-spinner"></span></span></td><td class="col-score"><span class="score-queued">queued</span></td><td class="col-source"><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.4</span></td></tr>
 
           <!-- ═══ GROUP 2: Advanced Combinations ═══ -->
           <tr class="group-header" onclick="toggleGroup(this)" data-group="advanced">
-            <td colspan="5">
+            <td colspan="8">
               <div class="group-header-inner">
                 <svg class="group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
                 <span class="group-name">Advanced Combinations</span>
                 <div class="group-stats">
-                  <div class="group-stat"><span class="val">28</span> records</div>
+                  <div class="group-stat"><span class="val">31</span> records</div>
                   <div class="group-stat">avg <span class="val" style="color:var(--amber)">0.71</span></div>
                   <div class="group-coverage-bar"><div class="group-coverage-fill warn" style="width:55%"></div></div>
                   <span style="font-size:10px">55%</span>
@@ -3311,9 +3549,14 @@
             </td>
           </tr>
 
+          <!-- Parent-level records (assigned to non-leaf "Advanced Combinations" directly) -->
+          <tr class="record-row parent-record" data-parent="advanced" data-topic="__parent__"><td class="col-id">8<span class="parent-topic-tag">parent topic</span></td><td>What makes a combination "advanced" vs basic?</td><td class="col-score"><span class="score-pill score-warn">0.76</span></td><td class="col-score"><span class="score-pill score-good">0.80</span><span class="trend trend-up">↑</span></td><td class="col-score"><span class="score-pill score-warn">0.78</span></td><td class="col-score"><span class="score-running"><span class="score-spinner"></span></span></td><td class="col-score"><span class="score-queued">queued</span></td><td class="col-source"><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.5 Intro</span></td></tr>
+          <tr class="record-row parent-record" data-parent="advanced" data-topic="__parent__"><td class="col-id">9<span class="parent-topic-tag">parent topic</span></td><td>How do you calculate a multi-move combination?</td><td class="col-score"><span class="score-pill score-good">0.83</span></td><td class="col-score"><span class="score-pill score-good">0.86</span><span class="trend trend-up">↑</span></td><td class="col-score"><span class="score-pill score-good">0.84</span></td><td class="col-score"><span class="score-running"><span class="score-spinner"></span><span class="partial">0.88</span></span></td><td class="col-score"><span class="score-queued">queued</span></td><td class="col-source"><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.5 Intro</span></td></tr>
+          <tr class="record-row parent-record" data-parent="advanced" data-topic="__parent__"><td class="col-id">10<span class="parent-topic-tag">parent topic</span></td><td>When is it better to play quietly vs launching a combination?</td><td class="col-score"><span class="score-pill score-warn">0.69</span></td><td class="col-score"><span class="score-pill score-warn">0.74</span><span class="trend trend-up">↑</span></td><td class="col-score"><span class="score-pill score-warn">0.71</span></td><td class="col-score"><span class="score-running"><span class="score-spinner"></span></span></td><td class="col-score"><span class="score-queued">queued</span></td><td class="col-source"><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.5 Intro</span></td></tr>
+
           <!-- Sub-group: Sacrifices -->
           <tr class="subgroup-header" data-parent="advanced" data-subgroup="sacrifices">
-            <td colspan="5">
+            <td colspan="8">
               <div class="subgroup-header-inner" onclick="toggleSubgroup(this.closest('.subgroup-header'))">
                 <div class="tree-line"></div>
                 <svg class="subgroup-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
@@ -3329,13 +3572,13 @@
               </div>
             </td>
           </tr>
-          <tr class="record-row" data-parent="advanced" data-topic="sacrifices"><td class="col-id">8</td><td>When should you sacrifice material in chess?</td><td>Material sacrifices are justified when they lead to a decisive attack, forced checkmate, or significant positional advantage that outweighs the material deficit.</td><td class="col-score"><span class="score-pill score-good">0.80</span></td><td class="col-source">ch.5</td></tr>
-          <tr class="record-row" data-parent="advanced" data-topic="sacrifices"><td class="col-id">9</td><td>Explain the Greek gift sacrifice (Bxh7+)</td><td>The Greek gift is a classic bishop sacrifice on h7, typically followed by Ng5+ and Qh5. It works when the opponent has castled kingside with a knight on f6 and the f-pawn hasn't moved.</td><td class="col-score"><span class="score-pill score-good">0.91</span></td><td class="col-source">ch.5</td></tr>
-          <tr class="record-row" data-parent="advanced" data-topic="sacrifices"><td class="col-id">10</td><td>What is a positional sacrifice vs a tactical sacrifice?</td><td>A tactical sacrifice has a concrete, calculable payoff (checkmate, material win). A positional sacrifice gives up material for long-term advantages like better pawn structure, open files, or piece activity.</td><td class="col-score"><span class="score-pill score-warn">0.74</span></td><td class="col-source">ch.5</td></tr>
+          <tr class="record-row" data-parent="advanced" data-topic="sacrifices"><td class="col-id">11</td><td>When should you sacrifice material in chess?</td><td class="col-score"><span class="score-pill score-good">0.80</span></td><td class="col-score"><span class="score-pill score-good">0.83</span><span class="trend trend-up">↑</span></td><td class="col-score"><span class="score-pill score-good">0.81</span></td><td class="col-score"><span class="score-running"><span class="score-spinner"></span><span class="partial">0.84</span></span></td><td class="col-score"><span class="score-queued">queued</span></td><td class="col-source"><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.5</span></td></tr>
+          <tr class="record-row" data-parent="advanced" data-topic="sacrifices"><td class="col-id">12</td><td>Explain the Greek gift sacrifice (Bxh7+)</td><td class="col-score"><span class="score-pill score-good">0.91</span></td><td class="col-score"><span class="score-pill score-good">0.93</span><span class="trend trend-up">↑</span></td><td class="col-score"><span class="score-pill score-good">0.90</span></td><td class="col-score"><span class="score-running"><span class="score-spinner"></span><span class="partial">0.91</span></span></td><td class="col-score"><span class="score-queued">queued</span></td><td class="col-source"><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.5</span></td></tr>
+          <tr class="record-row" data-parent="advanced" data-topic="sacrifices"><td class="col-id">13</td><td>What is a positional sacrifice vs a tactical sacrifice?</td><td class="col-score"><span class="score-pill score-warn">0.74</span></td><td class="col-score"><span class="score-pill score-warn">0.78</span><span class="trend trend-up">↑</span></td><td class="col-score"><span class="score-pill score-warn">0.76</span></td><td class="col-score"><span class="score-running"><span class="score-spinner"></span></span></td><td class="col-score"><span class="score-queued">queued</span></td><td class="col-source"><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.5</span></td></tr>
 
           <!-- Sub-group: Overloading -->
           <tr class="subgroup-header" data-parent="advanced" data-subgroup="overloading">
-            <td colspan="5">
+            <td colspan="8">
               <div class="subgroup-header-inner" onclick="toggleSubgroup(this.closest('.subgroup-header'))">
                 <div class="tree-line"></div>
                 <svg class="subgroup-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
@@ -3351,12 +3594,12 @@
               </div>
             </td>
           </tr>
-          <tr class="record-row" data-parent="advanced" data-topic="overloading"><td class="col-id">11</td><td>What does it mean to overload a piece in chess?</td><td>Overloading means forcing a single piece to defend too many targets at once. When overloaded, the piece can't fulfill all its defensive duties.</td><td class="col-score"><span class="score-pill score-low">0.52</span></td><td class="col-source">ch.6</td></tr>
-          <tr class="record-row" data-parent="advanced" data-topic="overloading"><td class="col-id">12</td><td>How do you identify an overloaded piece?</td><td>Look for pieces performing multiple defensive tasks: guarding a back rank, protecting another piece, and controlling a key square. If removing one task collapses the defense, the piece is overloaded.</td><td class="col-score"><span class="score-pill score-low">0.58</span></td><td class="col-source">ch.6</td></tr>
+          <tr class="record-row" data-parent="advanced" data-topic="overloading"><td class="col-id">14</td><td>What does it mean to overload a piece in chess?</td><td class="col-score"><span class="score-pill score-low">0.52</span></td><td class="col-score"><span class="score-pill score-warn">0.61</span><span class="trend trend-up">↑</span></td><td class="col-score"><span class="score-pill score-warn">0.60</span></td><td class="col-score"><span class="score-running"><span class="score-spinner"></span><span class="partial">0.84</span></span></td><td class="col-score"><span class="score-queued">queued</span></td><td class="col-source"><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.6</span></td></tr>
+          <tr class="record-row" data-parent="advanced" data-topic="overloading"><td class="col-id">15</td><td>How do you identify an overloaded piece?</td><td class="col-score"><span class="score-pill score-low">0.58</span></td><td class="col-score"><span class="score-pill score-warn">0.65</span><span class="trend trend-up">↑</span></td><td class="col-score"><span class="score-pill score-warn">0.63</span></td><td class="col-score"><span class="score-running"><span class="score-spinner"></span><span class="partial">0.91</span></span></td><td class="col-score"><span class="score-queued">queued</span></td><td class="col-source"><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.6</span></td></tr>
 
           <!-- ═══ GROUP 3: Endgame & Mating ═══ -->
           <tr class="group-header" onclick="toggleGroup(this)" data-group="endgame">
-            <td colspan="5">
+            <td colspan="8">
               <div class="group-header-inner">
                 <svg class="group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
                 <span class="group-name">Endgame & Mating Patterns</span>
@@ -3372,7 +3615,7 @@
 
           <!-- Sub-group: Back Rank Mates -->
           <tr class="subgroup-header" data-parent="endgame" data-subgroup="backrank">
-            <td colspan="5">
+            <td colspan="8">
               <div class="subgroup-header-inner" onclick="toggleSubgroup(this.closest('.subgroup-header'))">
                 <div class="tree-line"></div>
                 <svg class="subgroup-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
@@ -3388,13 +3631,13 @@
               </div>
             </td>
           </tr>
-          <tr class="record-row" data-parent="endgame" data-topic="backrank"><td class="col-id">13</td><td>How do you execute a back rank checkmate?</td><td>A back rank mate occurs when a rook or queen delivers checkmate along the opponent's back rank, while their own pawns prevent the king from escaping.</td><td class="col-score"><span class="score-pill score-good">0.91</span></td><td class="col-source">ch.8</td></tr>
-          <tr class="record-row" data-parent="endgame" data-topic="backrank"><td class="col-id">14</td><td>How to prevent back rank mate threats?</td><td>The simplest prevention is creating "luft" — an escape square for your king by pushing one of the pawns in front of it (usually h3/h6 or g3/g6).</td><td class="col-score"><span class="score-pill score-good">0.89</span></td><td class="col-source">ch.8</td></tr>
-          <tr class="record-row" data-parent="endgame" data-topic="backrank"><td class="col-id">15</td><td>What is Anastasia's mate?</td><td>Anastasia's mate is a back rank pattern where a knight on e7 (or similar) cuts off the king's escape while a rook delivers mate along the h-file or a-file.</td><td class="col-score"><span class="score-pill score-good">0.87</span></td><td class="col-source">ch.8</td></tr>
+          <tr class="record-row" data-parent="endgame" data-topic="backrank"><td class="col-id">16</td><td>How do you execute a back rank checkmate?</td><td class="col-score"><span class="score-pill score-good">0.91</span></td><td class="col-score"><span class="score-pill score-good">0.93</span><span class="trend trend-up">↑</span></td><td class="col-score"><span class="score-pill score-good">0.92</span></td><td class="col-score"><span class="score-running"><span class="score-spinner"></span></span></td><td class="col-score"><span class="score-queued">queued</span></td><td class="col-source"><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.8</span></td></tr>
+          <tr class="record-row" data-parent="endgame" data-topic="backrank"><td class="col-id">17</td><td>How to prevent back rank mate threats?</td><td class="col-score"><span class="score-pill score-good">0.89</span></td><td class="col-score"><span class="score-pill score-good">0.91</span><span class="trend trend-up">↑</span></td><td class="col-score"><span class="score-pill score-good">0.88</span></td><td class="col-score"><span class="score-running"><span class="score-spinner"></span><span class="partial">0.84</span></span></td><td class="col-score"><span class="score-queued">queued</span></td><td class="col-source"><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.8</span></td></tr>
+          <tr class="record-row" data-parent="endgame" data-topic="backrank"><td class="col-id">18</td><td>What is Anastasia's mate?</td><td class="col-score"><span class="score-pill score-good">0.87</span></td><td class="col-score"><span class="score-pill score-good">0.90</span><span class="trend trend-up">↑</span></td><td class="col-score"><span class="score-pill score-good">0.88</span></td><td class="col-score"><span class="score-running"><span class="score-spinner"></span><span class="partial">0.91</span></span></td><td class="col-score"><span class="score-queued">queued</span></td><td class="col-source"><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.8</span></td></tr>
 
           <!-- Sub-group: Pawn Promotion -->
           <tr class="subgroup-header" data-parent="endgame" data-subgroup="promotion">
-            <td colspan="5">
+            <td colspan="8">
               <div class="subgroup-header-inner" onclick="toggleSubgroup(this.closest('.subgroup-header'))">
                 <div class="tree-line"></div>
                 <svg class="subgroup-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
@@ -3410,8 +3653,8 @@
               </div>
             </td>
           </tr>
-          <tr class="record-row" data-parent="endgame" data-topic="promotion"><td class="col-id">16</td><td>When should you promote a pawn to something other than a queen?</td><td>Underpromotion to a knight is used when a knight fork is needed. Promoting to a rook or bishop avoids stalemate in some endgame positions.</td><td class="col-score"><span class="score-pill score-warn">0.68</span></td><td class="col-source">ch.9</td></tr>
-          <tr class="record-row" data-parent="endgame" data-topic="promotion"><td class="col-id">17</td><td>What is the key to winning a king and pawn endgame?</td><td>The key is achieving opposition — placing your king directly facing the enemy king with one square between them. The side without opposition must give way, allowing the pawn to advance.</td><td class="col-score"><span class="score-pill score-warn">0.72</span></td><td class="col-source">ch.9</td></tr>
+          <tr class="record-row" data-parent="endgame" data-topic="promotion"><td class="col-id">19</td><td>When should you promote a pawn to something other than a queen?</td><td class="col-score"><span class="score-pill score-warn">0.68</span></td><td class="col-score"><span class="score-pill score-warn">0.73</span><span class="trend trend-up">↑</span></td><td class="col-score"><span class="score-pill score-warn">0.70</span></td><td class="col-score"><span class="score-running"><span class="score-spinner"></span></span></td><td class="col-score"><span class="score-queued">queued</span></td><td class="col-source"><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.9</span></td></tr>
+          <tr class="record-row" data-parent="endgame" data-topic="promotion"><td class="col-id">20</td><td>What is the key to winning a king and pawn endgame?</td><td class="col-score"><span class="score-pill score-warn">0.72</span></td><td class="col-score"><span class="score-pill score-warn">0.77</span><span class="trend trend-up">↑</span></td><td class="col-score"><span class="score-pill score-warn">0.74</span></td><td class="col-score"><span class="score-running"><span class="score-spinner"></span><span class="partial">0.84</span></span></td><td class="col-score"><span class="score-queued">queued</span></td><td class="col-source"><span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ch.9</span></td></tr>
 
         </tbody>
       </table>
@@ -3548,22 +3791,31 @@
           <tr>
             <th style="width:40px">#</th>
             <th>Input</th>
-            <th>Output</th>
-            <th style="width:70px;text-align:center">Score</th>
+            <th style="width:70px;text-align:center"><div class="score-col-header"><span class="job-name">Eval v1</span><span class="job-type">evaluation</span></div></th>
+            <th style="width:70px;text-align:center"><div class="score-col-header"><span class="job-name">Eval v2</span><span class="job-type">evaluation</span></div></th>
+            <th style="width:70px;text-align:center"><div class="score-col-header"><span class="job-name">Train v1</span><span class="job-type">finetune</span></div></th>
+            <th style="width:70px;text-align:center"><div class="score-col-header"><span class="job-name">Eval v3</span><span class="job-status-badge running"><span class="badge-dot"></span>running</span></div></th>
+            <th style="width:70px;text-align:center"><div class="score-col-header"><span class="job-name">Train v2</span><span class="job-status-badge queued"><span class="badge-dot"></span>queued</span></div></th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td style="color:var(--text-dim)">1</td>
             <td>What happens when a piece is overloaded with multiple defensive duties?</td>
-            <td>When a piece is overloaded, it cannot adequately fulfill all its defensive responsibilities. The attacker can exploit this by forcing the overloaded piece to abandon one of its tasks, creating a tactical opportunity.</td>
             <td style="text-align:center"><span class="score-pill score-warn">0.71</span></td>
+            <td style="text-align:center"><span class="score-pill score-warn">0.76</span><span class="trend trend-up">↑</span></td>
+            <td style="text-align:center"><span class="score-pill score-warn">0.73</span></td>
+            <td style="text-align:center"><span class="score-running"><span class="score-spinner"></span><span class="partial">0.74</span></span></td>
+            <td style="text-align:center"><span class="score-queued">queued</span></td>
           </tr>
           <tr>
             <td style="color:var(--text-dim)">2</td>
             <td>Explain the concept of deflection in chess tactics.</td>
-            <td>Deflection is a tactic where you force an opponent's piece away from a critical square or defensive duty. By attacking or luring the defender, you create an opportunity to exploit the position it was guarding.</td>
             <td style="text-align:center"><span class="score-pill score-warn">0.68</span></td>
+            <td style="text-align:center"><span class="score-pill score-warn">0.74</span><span class="trend trend-up">↑</span></td>
+            <td style="text-align:center"><span class="score-pill score-warn">0.71</span></td>
+            <td style="text-align:center"><span class="score-running"><span class="score-spinner"></span></span></td>
+            <td style="text-align:center"><span class="score-queued">queued</span></td>
           </tr>
         </tbody>
       </table>
@@ -3613,40 +3865,131 @@
 
 <!-- Record Detail Sidebar (slides in from right when clicking a record row) -->
 <div class="record-detail-sidebar" id="recordDetailSidebar">
+
+  <!-- Header with nav + actions -->
   <div class="rds-header">
-    <h3>Record #<span id="rdsRecordNum">1</span></h3>
-    <button class="rds-close" onclick="closeRecordDetail()">&times;</button>
-  </div>
-  <div class="rds-section">
-    <div class="rds-section-title">Messages</div>
-    <div class="rds-message user">
-      <div class="msg-role">User</div>
-      <div id="rdsUserMsg">Explain the knight fork tactic and why it's so effective</div>
+    <div class="rds-header-left">
+      <h3>Record #<span id="rdsRecordNum">1</span></h3>
+      <div class="rds-nav-group">
+        <button class="rds-nav-btn" id="rdsPrevBtn" title="Previous record">&#8249;</button>
+        <div class="rds-nav-sep"></div>
+        <span class="rds-nav-count"><span id="rdsNavIndex">1</span>/<span id="rdsNavTotal">14</span></span>
+        <div class="rds-nav-sep"></div>
+        <button class="rds-nav-btn" id="rdsNextBtn" title="Next record">&#8250;</button>
+      </div>
     </div>
-    <div class="rds-message assistant">
-      <div class="msg-role">Assistant</div>
-      <div id="rdsAsstMsg">A knight fork is when a knight attacks two or more pieces simultaneously. Since the knight's unique L-shaped move can't be blocked by intervening pieces, opponents often fail to see fork threats coming.</div>
-    </div>
-  </div>
-  <div class="rds-section">
-    <div class="rds-section-title">System Prompt</div>
-    <div class="rds-system-prompt" id="rdsSystemPrompt">You are an expert chess tutor. Explain concepts clearly and concisely. Use standard algebraic notation. Focus on fundamental tactical motifs. Specialize in fork tactics &mdash; especially knight forks.</div>
-  </div>
-  <div class="rds-section">
-    <div class="rds-section-title">Metadata</div>
-    <div class="rds-meta-grid">
-      <div class="rds-meta-item"><div class="val" style="color:var(--emerald)" id="rdsScore">0.93</div><div class="lbl">Eval Score</div></div>
-      <div class="rds-meta-item"><div class="val" id="rdsTopic">Forks</div><div class="lbl">Topic</div></div>
-      <div class="rds-meta-item"><div class="val" id="rdsSource">ch.1</div><div class="lbl">Source Part</div></div>
-      <div class="rds-meta-item"><div class="val" id="rdsTokens">284</div><div class="lbl">Tokens</div></div>
+    <div class="rds-header-actions">
+      <button class="rds-action-btn" title="Edit record">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      </button>
+      <button class="rds-action-btn danger" title="Delete record">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+      </button>
+      <button class="rds-close" onclick="closeRecordDetail()">&times;</button>
     </div>
   </div>
-  <div class="rds-section">
-    <div class="rds-section-title">Source Context</div>
-    <div style="background:var(--bg-tertiary);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--text-muted);line-height:1.6;">
-      <div style="font-size:10px;font-weight:600;color:var(--text-dim);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;">chess-tactics.pdf &middot; Chapter 3.1</div>
-      <span style="color:var(--text-secondary)">"The knight fork is the most common fork in chess. Because of the knight's unique L-shaped move, it can attack pieces that cannot attack it back..."</span>
+
+  <!-- Topic breadcrumb -->
+  <div class="rds-topic-bar" id="rdsTopicBar">
+    <div class="rds-topic-crumb">
+      <span id="rdsTopicParent">Basic Tactical Patterns</span>
+      <span class="sep">&#8250;</span>
     </div>
+    <span class="rds-topic-leaf" id="rdsTopic">Forks</span>
+  </div>
+
+  <!-- Scrollable body -->
+  <div class="rds-body">
+
+    <!-- Scores -->
+    <div class="rds-section">
+      <div class="rds-section-title">Scores</div>
+      <div class="rds-score-rows" id="rdsScoreRows">
+        <div class="rds-score-group">
+          <div class="rds-score-group-title"><span class="group-dot eval"></span> Evaluations</div>
+          <div class="rds-score-group-rows">
+            <div class="rds-score-row">
+              <div class="rds-score-row-label">v1</div>
+              <div class="rds-score-bar-track"><div class="rds-score-bar-fill good" style="width:93%"></div></div>
+              <div class="rds-score-row-val good">0.93</div>
+              <div class="rds-score-row-trend"></div>
+            </div>
+            <div class="rds-score-row">
+              <div class="rds-score-row-label">v2</div>
+              <div class="rds-score-bar-track"><div class="rds-score-bar-fill good" style="width:95%"></div></div>
+              <div class="rds-score-row-val good">0.95</div>
+              <div class="rds-score-row-trend up">&#8593;</div>
+            </div>
+            <div class="rds-score-row">
+              <div class="rds-score-row-label">v3</div>
+              <div class="rds-score-bar-track"><div class="rds-score-bar-fill running" style="width:60%"></div></div>
+              <div class="rds-score-row-val running"><span class="score-spinner" style="width:10px;height:10px"></span></div>
+              <div class="rds-score-row-trend"></div>
+            </div>
+          </div>
+        </div>
+        <div class="rds-score-group">
+          <div class="rds-score-group-title"><span class="group-dot train"></span> Training</div>
+          <div class="rds-score-group-rows">
+            <div class="rds-score-row">
+              <div class="rds-score-row-label">v1</div>
+              <div class="rds-score-bar-track"><div class="rds-score-bar-fill good" style="width:91%"></div></div>
+              <div class="rds-score-row-val good">0.91</div>
+              <div class="rds-score-row-trend"></div>
+            </div>
+            <div class="rds-score-row">
+              <div class="rds-score-row-label">v2</div>
+              <div class="rds-score-bar-track"></div>
+              <div class="rds-score-row-val queued">queued</div>
+              <div class="rds-score-row-trend"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Conversation: system prompt → user message -->
+    <div class="rds-section">
+      <div class="rds-section-title">Conversation</div>
+      <div class="rds-messages">
+        <div class="rds-msg system">
+          <div class="msg-label">System</div>
+          <div id="rdsSystemPrompt">You are an expert chess tutor. Explain concepts clearly and concisely. Use standard algebraic notation. Focus on fundamental tactical motifs. Specialize in fork tactics &mdash; especially knight forks.</div>
+        </div>
+        <div class="rds-msg user">
+          <div class="msg-label">User</div>
+          <div id="rdsUserMsg">Explain the knight fork tactic and why it's so effective</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Source Context -->
+    <div class="rds-section">
+      <div class="rds-section-title">Source Context</div>
+      <div class="rds-source-card" id="rdsSourceCard">
+        <div class="rds-source-header">
+          <div class="rds-source-icon">&#128196;</div>
+          <div class="rds-source-meta">
+            <div class="rds-source-name" id="rdsSourceName">chess-tactics.pdf</div>
+            <div class="rds-source-part" id="rdsSourcePart">Chapter 3.1 &middot; Forks</div>
+          </div>
+        </div>
+        <div class="rds-source-body" id="rdsSourceBody">
+          "<mark>The knight fork is the most common fork in chess.</mark> Because of the knight's unique L-shaped move, it can attack pieces that cannot attack it back. <mark>A family fork attacks the king and queen simultaneously</mark>, often winning the queen. The most devastating forks target pieces that cannot move away..."
+        </div>
+      </div>
+    </div>
+
+    <!-- Metadata -->
+    <div class="rds-section" style="border-bottom:none;">
+      <div class="rds-section-title">Details</div>
+      <div class="rds-meta-grid">
+        <div class="rds-meta-item"><div class="val" id="rdsTokens">284</div><div class="lbl">Tokens</div></div>
+        <div class="rds-meta-item"><div class="val" id="rdsSource">ch.1 Forks</div><div class="lbl">Source Ref</div></div>
+        <div class="rds-meta-item"><div class="val" id="rdsTurns">2</div><div class="lbl">Turns</div></div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -4201,7 +4544,7 @@
 // ═══════════════════════════════════════════════════
 // LIVE DATA: Fetch from gateway API so mockup matches real UI
 // ═══════════════════════════════════════════════════
-const WORKFLOW_ID = '26ba505e-0129-46ef-92c0-99bded030c5b';
+const WORKFLOW_ID = '5654400b-cec5-467d-9dc4-ce30b2fbe710';
 const GATEWAY = 'http://localhost:9090';
 
 async function fetchJSON(url) {
@@ -4258,6 +4601,19 @@ function renderLiveData(topics, records, sources, relations) {
   // Store globally for showTopicDetail live fallback
   window._liveTopics = topics;
   window._liveRecordsByTopic = recordsByTopic;
+
+  // Inject synthetic parent-level records for the 2nd parent topic
+  // to demonstrate the non-leaf-with-records edge case
+  if (parentTopics.length >= 2) {
+    const demoParent = parentTopics[1];
+    if (!recordsByTopic[demoParent.id] || recordsByTopic[demoParent.id].length === 0) {
+      recordsByTopic[demoParent.id] = [
+        { id: '__parent_demo_1', topic_id: demoParent.id, data: { messages: [{ role: 'user', content: 'What makes a combination "advanced" vs basic?' }, { role: 'assistant', content: 'Advanced combinations involve multiple tactical motifs working together — forcing moves that create cascading threats.' }] } },
+        { id: '__parent_demo_2', topic_id: demoParent.id, data: { messages: [{ role: 'user', content: 'How do you calculate a multi-move combination?' }, { role: 'assistant', content: 'Start by identifying forcing moves (checks, captures, threats), then calculate each candidate line to its conclusion.' }] } },
+        { id: '__parent_demo_3', topic_id: demoParent.id, data: { messages: [{ role: 'user', content: 'When is it better to play quietly vs launching a combination?' }, { role: 'assistant', content: 'Launch a combination when you have a concrete advantage; play quietly when the position needs improvement first.' }] } },
+      ];
+    }
+  }
 
   // Count records per parent (sum of children)
   const recordsByParent = {};
@@ -4491,19 +4847,15 @@ function updateCanvasNodes(parentTopics, childTopics, recordsByTopic, recordsByP
 function parseRecordData(record) {
   let data = record.data;
   if (typeof data === 'string') {
-    try { data = JSON.parse(data); } catch { return { userMsg: '', asstMsg: '' }; }
+    try { data = JSON.parse(data); } catch { return { userMsg: '' }; }
   }
-  if (!data) return { userMsg: '', asstMsg: '' };
+  if (!data) return { userMsg: '' };
 
   const inputMsgs = (data.input && data.input.messages) || [];
-  const outputMsgs = (data.output && data.output.messages) || [];
-
   const userMsg = inputMsgs.find(m => m.role === 'user');
-  const asstMsg = outputMsgs.find(m => m.role === 'assistant');
 
   return {
     userMsg: userMsg ? userMsg.content : '',
-    asstMsg: asstMsg ? asstMsg.content : '',
   };
 }
 
@@ -4538,7 +4890,7 @@ function updateTableRecords(parentTopics, childTopics, recordsByTopic, recordsBy
     groupRow.className = 'group-header';
     groupRow.setAttribute('onclick', 'toggleGroup(this)');
     groupRow.dataset.group = parentKey;
-    groupRow.innerHTML = `<td colspan="5"><div class="group-header-inner">
+    groupRow.innerHTML = `<td colspan="8"><div class="group-header-inner">
       <svg class="group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
       <span class="group-name">${parent.name}</span>
       <div class="group-stats">
@@ -4546,6 +4898,47 @@ function updateTableRecords(parentTopics, childTopics, recordsByTopic, recordsBy
       </div>
     </div></td>`;
     tbody.appendChild(groupRow);
+
+    // Parent-level records (assigned directly to this non-leaf topic)
+    const parentOwnRecords = recordsByTopic[parent.id] || [];
+    if (parentOwnRecords.length > 0) {
+      const displayParentRecords = parentOwnRecords.slice(0, 5);
+      displayParentRecords.forEach(record => {
+        recordNum++;
+        const { userMsg } = parseRecordData(record);
+        const tr = document.createElement('tr');
+        tr.className = 'record-row parent-record';
+        tr.dataset.parent = parentKey;
+        tr.dataset.topic = '__parent__';
+
+        const baseScore = 0.6 + Math.random() * 0.35;
+        const evalV1 = Math.min(1, baseScore + (Math.random() - 0.5) * 0.1);
+        const evalV2 = Math.min(1, evalV1 + Math.random() * 0.08);
+        const trainV1 = Math.min(1, evalV2 + (Math.random() - 0.3) * 0.06);
+        const trend = evalV2 - evalV1;
+        const trendClass = trend > 0.005 ? 'trend-up' : trend < -0.005 ? 'trend-down' : 'trend-flat';
+        const trendText = trend > 0.005 ? '↑' : trend < -0.005 ? '↓' : '→';
+        const pillClass = (s) => s >= 0.8 ? 'score-good' : s >= 0.6 ? 'score-warn' : 'score-low';
+
+        const hasPartial = recordNum % 3 !== 0;
+        const partialScore = hasPartial ? (evalV2 + (Math.random() - 0.4) * 0.1).toFixed(2) : '';
+        const evalV3Cell = hasPartial
+          ? `<td class="col-score"><span class="score-running"><span class="score-spinner"></span><span class="partial">${partialScore}</span></span></td>`
+          : `<td class="col-score"><span class="score-running"><span class="score-spinner"></span></span></td>`;
+        const trainV2Cell = `<td class="col-score"><span class="score-queued">queued</span></td>`;
+
+        tr.innerHTML = `<td class="col-id">${recordNum}<span class="parent-topic-tag">parent topic</span></td>` +
+          `<td>${truncate(userMsg, 200)}</td>` +
+          `<td class="col-score"><span class="score-pill ${pillClass(evalV1)}">${evalV1.toFixed(2)}</span></td>` +
+          `<td class="col-score"><span class="score-pill ${pillClass(evalV2)}">${evalV2.toFixed(2)}</span><span class="trend ${trendClass}">${trendText}</span></td>` +
+          `<td class="col-score"><span class="score-pill ${pillClass(trainV1)}">${trainV1.toFixed(2)}</span></td>` +
+          evalV3Cell + trainV2Cell +
+          `<td class="col-source"><span class="source-generated">generated</span></td>`;
+        tr.style.cursor = 'pointer';
+        tr.addEventListener('click', () => openRecordDetail(tr));
+        tbody.appendChild(tr);
+      });
+    }
 
     children.forEach(child => {
       const topicRecords = recordsByTopic[child.id] || [];
@@ -4557,7 +4950,7 @@ function updateTableRecords(parentTopics, childTopics, recordsByTopic, recordsBy
       subRow.className = 'subgroup-header';
       subRow.dataset.parent = parentKey;
       subRow.dataset.subgroup = childKey;
-      subRow.innerHTML = `<td colspan="5"><div class="subgroup-header-inner" onclick="toggleSubgroup(this.closest('.subgroup-header'))">
+      subRow.innerHTML = `<td colspan="8"><div class="subgroup-header-inner" onclick="toggleSubgroup(this.closest('.subgroup-header'))">
         <div class="tree-line"></div>
         <svg class="subgroup-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
         <span class="subgroup-name">${child.name}</span>
@@ -4572,16 +4965,45 @@ function updateTableRecords(parentTopics, childTopics, recordsByTopic, recordsBy
       const displayRecords = topicRecords.slice(0, 5);
       displayRecords.forEach(record => {
         recordNum++;
-        const { userMsg, asstMsg } = parseRecordData(record);
+        const { userMsg } = parseRecordData(record);
         const tr = document.createElement('tr');
         tr.className = 'record-row';
         tr.dataset.parent = parentKey;
         tr.dataset.topic = childKey;
+
+        // Generate mock scores for 3 jobs (Eval v1, Eval v2, Train v1)
+        const baseScore = 0.6 + Math.random() * 0.35;
+        const evalV1 = Math.min(1, baseScore + (Math.random() - 0.5) * 0.1);
+        const evalV2 = Math.min(1, evalV1 + Math.random() * 0.08);
+        const trainV1 = Math.min(1, evalV2 + (Math.random() - 0.3) * 0.06);
+        const trend = evalV2 - evalV1;
+        const trendClass = trend > 0.005 ? 'trend-up' : trend < -0.005 ? 'trend-down' : 'trend-flat';
+        const trendText = trend > 0.005 ? '↑' : trend < -0.005 ? '↓' : '→';
+        const pillClass = (s) => s >= 0.8 ? 'score-good' : s >= 0.6 ? 'score-warn' : 'score-low';
+
+        // Source reference from topic relations
+        const topicRels = relationsPerTopic[child.id] || [];
+        const sourceRef = topicRels.length > 0
+          ? `<span class="source-ref-tag"><span class="ref-icon">&#128196;</span> ${topicRels.length} source${topicRels.length > 1 ? 's' : ''}</span>`
+          : `<span class="source-generated">generated</span>`;
+
+        // Eval v3 (running) — some rows show partial score, others just spinner
+        const hasPartial = recordNum % 3 !== 0;
+        const partialScore = hasPartial ? (evalV2 + (Math.random() - 0.4) * 0.1).toFixed(2) : '';
+        const evalV3Cell = hasPartial
+          ? `<td class="col-score"><span class="score-running"><span class="score-spinner"></span><span class="partial">${partialScore}</span></span></td>`
+          : `<td class="col-score"><span class="score-running"><span class="score-spinner"></span></span></td>`;
+
+        // Train v2 (queued)
+        const trainV2Cell = `<td class="col-score"><span class="score-queued">queued</span></td>`;
+
         tr.innerHTML = `<td class="col-id">${recordNum}</td>` +
-          `<td>${truncate(userMsg, 120)}</td>` +
-          `<td>${truncate(asstMsg, 200)}</td>` +
-          `<td class="col-score"><span class="score-pill score-good">--</span></td>` +
-          `<td class="col-source">generated</td>`;
+          `<td>${truncate(userMsg, 200)}</td>` +
+          `<td class="col-score"><span class="score-pill ${pillClass(evalV1)}">${evalV1.toFixed(2)}</span></td>` +
+          `<td class="col-score"><span class="score-pill ${pillClass(evalV2)}">${evalV2.toFixed(2)}</span><span class="trend ${trendClass}">${trendText}</span></td>` +
+          `<td class="col-score"><span class="score-pill ${pillClass(trainV1)}">${trainV1.toFixed(2)}</span></td>` +
+          evalV3Cell + trainV2Cell +
+          `<td class="col-source">${sourceRef}</td>`;
         tr.style.cursor = 'pointer';
         tr.addEventListener('click', () => openRecordDetail(tr));
         tbody.appendChild(tr);
@@ -4593,7 +5015,7 @@ function updateTableRecords(parentTopics, childTopics, recordsByTopic, recordsBy
         moreRow.className = 'record-row';
         moreRow.dataset.parent = parentKey;
         moreRow.dataset.topic = childKey;
-        moreRow.innerHTML = `<td class="col-id" colspan="5" style="text-align:center;color:var(--text-muted);font-style:italic;padding-left:72px;">
+        moreRow.innerHTML = `<td class="col-id" colspan="8" style="text-align:center;color:var(--text-muted);font-style:italic;padding-left:72px;">
           + ${topicRecords.length - 5} more records in "${child.name}"
         </td>`;
         tbody.appendChild(moreRow);
@@ -4771,45 +5193,45 @@ if (document.readyState !== 'loading') {
 // ── Topic detail data (sample records per topic) ──
 const topicData = {
   'Forks': { parent: 'Basic Tactical Patterns', count: 14, records: [
-    { input: 'What is a knight fork and why is it effective?', output: 'A knight fork attacks two or more pieces simultaneously. The L-shaped move cannot be blocked, making it devastating.', score: 0.92 },
-    { input: 'Explain the difference between a fork and a pin.', output: 'A fork attacks two pieces at once, forcing the opponent to lose one. A pin restricts a piece from moving because it would expose a more valuable piece behind it.', score: 0.88 },
-    { input: 'How do you set up a fork in the middlegame?', output: 'Look for squares where your knight or pawn can simultaneously attack two valuable pieces. Create threats that force your opponent into vulnerable positions.', score: 0.85 },
+    { input: 'What is a knight fork and why is it effective?', score: 0.92 },
+    { input: 'Explain the difference between a fork and a pin.', score: 0.88 },
+    { input: 'How do you set up a fork in the middlegame?', score: 0.85 },
   ], sources: [{ name: 'chess-tactics.pdf', part: 'Part II — Tactical Motifs', preview: 'A fork occurs when a single piece attacks two or more enemy pieces simultaneously...' }] },
   'Pins and Skewers': { parent: 'Basic Tactical Patterns', count: 12, records: [
-    { input: 'What is an absolute pin in chess?', output: 'An absolute pin is when a piece cannot legally move because doing so would expose the king to check. The pinned piece is completely immobilized.', score: 0.90 },
-    { input: 'Explain the difference between a pin and a skewer.', output: 'In a pin, the less valuable piece is in front. In a skewer, the more valuable piece is in front and must move, exposing the piece behind it to capture.', score: 0.87 },
+    { input: 'What is an absolute pin in chess?', score: 0.90 },
+    { input: 'Explain the difference between a pin and a skewer.', score: 0.87 },
   ], sources: [{ name: 'chess-tactics.pdf', part: 'Part II — Tactical Motifs', preview: 'Pins and skewers exploit the alignment of pieces along ranks, files, and diagonals...' }] },
   'Discovered Attacks': { parent: 'Basic Tactical Patterns', count: 8, records: [
-    { input: 'What is a discovered attack?', output: 'A discovered attack occurs when moving one piece reveals an attack from another piece behind it. This creates a double threat that is very difficult to defend against.', score: 0.84 },
-    { input: 'What makes a discovered check so powerful?', output: 'In a discovered check, the revealed attack is a check on the king. Since the king must address the check, the moving piece can capture or threaten freely.', score: 0.79 },
+    { input: 'What is a discovered attack?', score: 0.84 },
+    { input: 'What makes a discovered check so powerful?', score: 0.79 },
   ], sources: [{ name: 'chess-tactics.pdf', part: 'Part II — Tactical Motifs', preview: 'Discovered attacks are among the most powerful tactical motifs...' }] },
   'Sacrifices': { parent: 'Basic Tactical Patterns', count: 18, records: [
-    { input: 'When should you sacrifice material in chess?', output: 'Sacrifice material when you gain a decisive positional advantage, a mating attack, or forced win of more material back. The sacrifice must lead to concrete compensation.', score: 0.91 },
-    { input: 'What is a Greek Gift sacrifice?', output: 'The Greek Gift is a classic bishop sacrifice on h7 (Bxh7+). After the king takes, the knight jumps to g5+ with a devastating attack. It requires specific conditions to work.', score: 0.86 },
-    { input: 'Explain positional vs tactical sacrifices.', output: 'Tactical sacrifices lead to forced sequences with concrete calculation. Positional sacrifices offer long-term compensation like better pawn structure, activity, or king safety.', score: 0.82 },
+    { input: 'When should you sacrifice material in chess?', score: 0.91 },
+    { input: 'What is a Greek Gift sacrifice?', score: 0.86 },
+    { input: 'Explain positional vs tactical sacrifices.', score: 0.82 },
   ], sources: [{ name: 'chess-tactics.pdf', part: 'Part III — Combinations', preview: 'Material sacrifice is the deliberate giving up of material for positional or tactical compensation...' }, { name: 'strategy-guide.pdf', part: 'Part I — Fundamentals', preview: 'Understanding when to sacrifice requires evaluating the resulting position...' }] },
   'Overloading': { parent: 'Basic Tactical Patterns', count: 10, records: [
-    { input: 'What happens when a piece is overloaded with multiple defensive duties?', output: 'When a piece is overloaded, it cannot adequately fulfill all its defensive responsibilities. The attacker can exploit this by forcing the overloaded piece to abandon one of its tasks.', score: 0.71 },
-    { input: 'Explain the concept of deflection in chess tactics.', output: 'Deflection is a tactic where you force an opponent\'s piece away from a critical square or defensive duty. By attacking or luring the defender, you create an opportunity to exploit the position.', score: 0.68 },
+    { input: 'What happens when a piece is overloaded with multiple defensive duties?', score: 0.71 },
+    { input: 'Explain the concept of deflection in chess tactics.', score: 0.68 },
   ], sources: [{ name: 'chess-tactics.pdf', part: 'Part II — Tactical Motifs', preview: 'Deflection and overloading exploit the limitations of defensive pieces...' }] },
   'Opening Principles': { parent: 'Advanced Combinations', count: 25, records: [
-    { input: 'What are the three main principles of opening play?', output: 'The three main principles are: 1) Control the center, 2) Develop your pieces, 3) Castle early for king safety. These form the foundation of sound opening play.', score: 0.93 },
-    { input: 'Why is controlling the center important in the opening?', output: 'Center control provides more mobility for your pieces, allows faster development, and creates attacking opportunities. Pieces in the center influence more squares.', score: 0.89 },
+    { input: 'What are the three main principles of opening play?', score: 0.93 },
+    { input: 'Why is controlling the center important in the opening?', score: 0.89 },
   ], sources: [{ name: 'strategy-guide.pdf', part: 'Part I — Fundamentals', preview: 'Opening principles form the foundation of good chess play...' }] },
   'Positional Themes': { parent: 'Advanced Combinations', count: 23, records: [
-    { input: 'What are weak squares and how do they arise?', output: 'Weak squares are squares that can no longer be defended by pawns. They arise when pawns advance or are exchanged, leaving gaps in the pawn structure that opponents can exploit.', score: 0.87 },
-    { input: 'Explain the concept of a good bishop vs a bad bishop.', output: 'A good bishop has most of its own pawns on the opposite color, giving it open diagonals. A bad bishop is blocked by its own pawns on the same color squares.', score: 0.83 },
+    { input: 'What are weak squares and how do they arise?', score: 0.87 },
+    { input: 'Explain the concept of a good bishop vs a bad bishop.', score: 0.83 },
   ], sources: [{ name: 'strategy-guide.pdf', part: 'Part II — Pawn Structure', preview: 'Positional understanding separates strong players from beginners...' }] },
   'Back Rank Mates': { parent: 'Endgame & Mating', count: 22, records: [
-    { input: 'What is a back rank mate and how do you prevent it?', output: 'A back rank mate occurs when a rook or queen checkmates the king on its first rank because the king is trapped by its own pawns. Prevent it by creating a luft (escape square) with h3/g3.', score: 0.94 },
-    { input: 'Give an example of a famous back rank mate.', output: 'One classic example is when a rook sacrifices to deflect a defending piece, then the other rook delivers mate on the back rank. This pattern appears frequently in practical games.', score: 0.88 },
+    { input: 'What is a back rank mate and how do you prevent it?', score: 0.94 },
+    { input: 'Give an example of a famous back rank mate.', score: 0.88 },
   ], sources: [{ name: 'chess-tactics.pdf', part: 'Part IV — Endgame', preview: 'Back rank mates are one of the most common tactical patterns in chess...' }] },
   'Pawn Promotion': { parent: 'Endgame & Mating', count: 16, records: [
-    { input: 'When is underpromotion better than promoting to a queen?', output: 'Underpromotion to a knight is useful when it delivers check or avoids stalemate. Promoting to a rook or bishop may also avoid stalemate in specific positions.', score: 0.85 },
-    { input: 'What is the rule of the square for pawn promotion?', output: 'The rule of the square determines if a king can catch a passed pawn. Draw a diagonal from the pawn to the promotion square — if the king is inside this square, it can catch the pawn.', score: 0.90 },
+    { input: 'When is underpromotion better than promoting to a queen?', score: 0.85 },
+    { input: 'What is the rule of the square for pawn promotion?', score: 0.90 },
   ], sources: [{ name: 'chess-tactics.pdf', part: 'Part IV — Endgame', preview: 'Pawn promotion is the ultimate goal of every passed pawn...' }] },
   'Test Topic': { parent: 'Endgame & Mating', count: 2, records: [
-    { input: 'What is a test question for this topic?', output: 'This is a test record used for development and validation of the topic hierarchy system.', score: 0.50 },
+    { input: 'What is a test question for this topic?', score: 0.50 },
   ], sources: [] },
 };
 
@@ -4828,12 +5250,9 @@ function showTopicDetail(topicName) {
         records: topicRecords.slice(0, 10).map(r => {
           const parsed = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
           const msgs = parsed?.input?.messages || [];
-          const outMsgs = parsed?.output?.messages || [];
           const userMsg = msgs.find(m => m.role === 'user');
-          const asstMsg = outMsgs.find(m => m.role === 'assistant');
           return {
             input: (userMsg?.content || '').slice(0, 200),
-            output: (asstMsg?.content || typeof parsed?.output?.content === 'string' ? parsed.output.content : '').slice(0, 300),
             score: r.scores?.[0]?.score ?? 0,
           };
         }),
@@ -4881,12 +5300,26 @@ function showTopicDetail(topicName) {
   const tbody = document.querySelector('#topicTabRecords tbody');
   if (tbody) {
     tbody.innerHTML = data.records.map((r, i) => {
-      const scoreClass = r.score >= 0.8 ? 'score-good' : r.score >= 0.6 ? 'score-warn' : 'score-bad';
+      const s1 = r.score;
+      const s2 = Math.min(1, s1 + Math.random() * 0.08);
+      const s3 = Math.min(1, s2 + (Math.random() - 0.3) * 0.06);
+      const pillCls = (s) => s >= 0.8 ? 'score-good' : s >= 0.6 ? 'score-warn' : 'score-bad';
+      const trend = s2 - s1;
+      const trendCls = trend > 0.005 ? 'trend-up' : trend < -0.005 ? 'trend-down' : 'trend-flat';
+      const trendTxt = trend > 0.005 ? '↑' : trend < -0.005 ? '↓' : '→';
+      const hasPartial = i % 3 !== 0;
+      const partialVal = hasPartial ? (s3 + (Math.random() - 0.4) * 0.08).toFixed(2) : '';
+      const evalV3 = hasPartial
+        ? '<span class="score-running"><span class="score-spinner"></span><span class="partial">' + partialVal + '</span></span>'
+        : '<span class="score-running"><span class="score-spinner"></span></span>';
       return '<tr>' +
         '<td style="color:var(--text-dim)">' + (i + 1) + '</td>' +
         '<td>' + r.input + '</td>' +
-        '<td>' + r.output + '</td>' +
-        '<td style="text-align:center"><span class="score-pill ' + scoreClass + '">' + r.score.toFixed(2) + '</span></td>' +
+        '<td style="text-align:center"><span class="score-pill ' + pillCls(s1) + '">' + s1.toFixed(2) + '</span></td>' +
+        '<td style="text-align:center"><span class="score-pill ' + pillCls(s2) + '">' + s2.toFixed(2) + '</span><span class="trend ' + trendCls + '">' + trendTxt + '</span></td>' +
+        '<td style="text-align:center"><span class="score-pill ' + pillCls(s3) + '">' + s3.toFixed(2) + '</span></td>' +
+        '<td style="text-align:center">' + evalV3 + '</td>' +
+        '<td style="text-align:center"><span class="score-queued">queued</span></td>' +
         '</tr>';
     }).join('');
   }
@@ -5678,23 +6111,154 @@ function toggleMockupControls() {
 // ═══════════════════════════════════════════════════
 // IMPROVEMENT: Record Detail Sidebar
 // ═══════════════════════════════════════════════════
+// ── Record Detail Sidebar ──
+
+// Track current visible rows for prev/next navigation
+let _visibleRows = [];
+let _currentRowIndex = -1;
+
+function collectVisibleRows() {
+  _visibleRows = Array.from(document.querySelectorAll('#page-table .record-row')).filter(r => r.style.display !== 'none');
+}
+
 function openRecordDetail(row) {
   const cells = row.querySelectorAll('td');
-  if (cells.length < 5) return;
+  if (cells.length < 8) return;
 
   const sidebar = document.getElementById('recordDetailSidebar');
-  document.getElementById('rdsRecordNum').textContent = cells[0].textContent;
-  document.getElementById('rdsUserMsg').textContent = cells[1].textContent;
-  document.getElementById('rdsAsstMsg').textContent = cells[2].textContent;
-  const scoreEl = cells[3].querySelector('.score-pill');
-  document.getElementById('rdsScore').textContent = scoreEl ? scoreEl.textContent : '—';
-  document.getElementById('rdsSource').textContent = cells[4].textContent;
 
-  // Get topic from parent subgroup
+  // Record number (strip out parent-topic-tag text)
+  const idCell = cells[0].cloneNode(true);
+  const tagEl = idCell.querySelector('.parent-topic-tag');
+  if (tagEl) tagEl.remove();
+  document.getElementById('rdsRecordNum').textContent = idCell.textContent.trim();
+
+  // User message
+  document.getElementById('rdsUserMsg').textContent = cells[1].textContent;
+
+  const userText = cells[1].textContent;
+
+  // Topic breadcrumb
   const topic = row.dataset.topic || 'Unknown';
+  const parentGroup = row.dataset.parent || '';
   const topicLabels = { forks:'Forks', pins:'Pins and Skewers', discovered:'Discovered Attacks',
-    sacrifices:'Sacrifices', overloading:'Overloading', backrank:'Back Rank Mates', promotion:'Pawn Promotion' };
-  document.getElementById('rdsTopic').textContent = topicLabels[topic] || topic;
+    sacrifices:'Sacrifices', overloading:'Overloading', backrank:'Back Rank Mates', promotion:'Pawn Promotion',
+    '__parent__': '(parent level)' };
+  const parentLabels = { basic:'Basic Tactical Patterns', advanced:'Advanced Combinations', endgame:'Endgame & Mating Patterns' };
+
+  document.getElementById('rdsTopicParent').textContent = parentLabels[parentGroup] || parentGroup;
+  const topicLeaf = document.getElementById('rdsTopic');
+  if (topic === '__parent__') {
+    topicLeaf.textContent = parentLabels[parentGroup] || parentGroup;
+    topicLeaf.style.background = 'var(--amber-dim)';
+    topicLeaf.style.color = 'var(--amber)';
+  } else {
+    topicLeaf.textContent = topicLabels[topic] || topic;
+    topicLeaf.style.background = 'var(--accent-dim)';
+    topicLeaf.style.color = 'var(--accent)';
+  }
+
+  // Score rows — split into eval & train groups
+  const jobNames = ['Eval v1', 'Eval v2', 'Train v1', 'Eval v3', 'Train v2'];
+  const jobTypes = ['eval', 'eval', 'train', 'eval', 'train'];
+  const scoreCells = [cells[2], cells[3], cells[4], cells[5], cells[6]];
+  const scoreRows = document.getElementById('rdsScoreRows');
+
+  // Parse all score data first
+  const parsedScores = scoreCells.map((cell, i) => {
+    const pill = cell.querySelector('.score-pill');
+    const spinner = cell.querySelector('.score-spinner');
+    const partial = cell.querySelector('.partial');
+    let valClass = 'queued';
+    let valContent = 'queued';
+    let barWidth = '0%';
+    let barClass = '';
+    let score = null;
+
+    if (pill) {
+      score = parseFloat(pill.textContent);
+      valClass = score >= 0.8 ? 'good' : score >= 0.6 ? 'warn' : 'bad';
+      valContent = pill.textContent;
+      barWidth = (score * 100) + '%';
+      barClass = valClass;
+    } else if (spinner) {
+      valClass = 'running';
+      valContent = partial ? partial.textContent : '<span class="score-spinner" style="width:10px;height:10px"></span>';
+      barWidth = partial ? (parseFloat(partial.textContent) * 100) + '%' : '60%';
+      barClass = 'running';
+    }
+
+    return { type: jobTypes[i], name: jobNames[i], valClass, valContent, barWidth, barClass, score };
+  });
+
+  // Split into eval and train groups
+  const evalItems = parsedScores.filter(s => s.type === 'eval');
+  const trainItems = parsedScores.filter(s => s.type === 'train');
+
+  function renderGroup(items, label, dotClass) {
+    if (items.length === 0) return '';
+    let prevScore = null;
+    const rows = items.map((item, i) => {
+      const vNum = `v${i + 1}`;
+      let trendHtml = '<div class="rds-score-row-trend"></div>';
+      if (item.score !== null && prevScore !== null) {
+        const diff = item.score - prevScore;
+        if (diff > 0.005) trendHtml = '<div class="rds-score-row-trend up">&#8593;</div>';
+        else if (diff < -0.005) trendHtml = '<div class="rds-score-row-trend down">&#8595;</div>';
+      }
+      if (item.score !== null) prevScore = item.score;
+      return `<div class="rds-score-row">
+        <div class="rds-score-row-label">${vNum}</div>
+        <div class="rds-score-bar-track">${item.barClass ? `<div class="rds-score-bar-fill ${item.barClass}" style="width:${item.barWidth}"></div>` : ''}</div>
+        <div class="rds-score-row-val ${item.valClass}">${item.valContent}</div>
+        ${trendHtml}
+      </div>`;
+    }).join('');
+    return `<div class="rds-score-group">
+      <div class="rds-score-group-title"><span class="group-dot ${dotClass}"></span> ${label}</div>
+      <div class="rds-score-group-rows">${rows}</div>
+    </div>`;
+  }
+
+  scoreRows.innerHTML = renderGroup(evalItems, 'Evaluations', 'eval') + renderGroup(trainItems, 'Training', 'train');
+
+  // Source ref
+  const sourceText = cells[7].textContent.trim();
+  document.getElementById('rdsSource').textContent = sourceText;
+
+  // Source card
+  const sourceCard = document.getElementById('rdsSourceCard');
+  if (sourceText && !sourceText.includes('generated')) {
+    sourceCard.style.display = 'block';
+    document.getElementById('rdsSourcePart').textContent = sourceText;
+    // Generate relevant source excerpt with highlights
+    const sourceExcerpts = {
+      'fork': '"<mark>The knight fork is the most common fork in chess.</mark> Because of the knight\'s unique L-shaped move, it can attack pieces that cannot attack it back. <mark>A family fork attacks the king and queen simultaneously</mark>, often winning the queen..."',
+      'pin': '"A pin occurs when an attacking piece threatens a less valuable piece that <mark>shields a more valuable piece behind it</mark>. The pinned piece is restricted from moving..."',
+      'discovered': '"<mark>A discovered attack is unleashed when one piece moves away</mark>, revealing an attack from a piece that was previously blocked. The moving piece can simultaneously create its own threat..."',
+      'sacrifice': '"The sacrifice is the highest form of chess art. <mark>A tactical sacrifice has a concrete, calculable follow-up</mark> that leads to checkmate or material recovery..."',
+      'overload': '"<mark>An overloaded piece is defending too many targets.</mark> By attacking one target, you force the defender to abandon the other. This concept is fundamental to combinations..."',
+      'back rank': '"<mark>The back rank mate exploits a king trapped behind its own pawns.</mark> A rook or queen delivers check along the first or eighth rank with no escape squares..."',
+      'promotion': '"In most cases you should promote to a queen. However, <mark>underpromotion to a knight is correct when a queen would cause stalemate</mark> or when the knight delivers an immediate decisive fork..."',
+    };
+    let excerpt = '"This source passage provides the foundational knowledge that was used to <mark>generate this training record</mark>. The AI synthesized this context into the conversation format..."';
+    for (const [kw, text] of Object.entries(sourceExcerpts)) {
+      if (userText.toLowerCase().includes(kw)) { excerpt = text; break; }
+    }
+    document.getElementById('rdsSourceBody').innerHTML = excerpt;
+  } else {
+    sourceCard.style.display = 'none';
+  }
+
+  // Tokens (approximate)
+  const tokenCount = Math.floor(80 + Math.random() * 300);
+  document.getElementById('rdsTokens').textContent = tokenCount;
+  document.getElementById('rdsTurns').textContent = '2';
+
+  // Navigation
+  collectVisibleRows();
+  _currentRowIndex = _visibleRows.indexOf(row);
+  updateNavButtons();
 
   sidebar.classList.add('open');
 
@@ -5703,21 +6267,53 @@ function openRecordDetail(row) {
   row.classList.add('selected');
 }
 
+function updateNavButtons() {
+  const indexEl = document.getElementById('rdsNavIndex');
+  const totalEl = document.getElementById('rdsNavTotal');
+  const prevBtn = document.getElementById('rdsPrevBtn');
+  const nextBtn = document.getElementById('rdsNextBtn');
+  if (indexEl) indexEl.textContent = _currentRowIndex + 1;
+  if (totalEl) totalEl.textContent = _visibleRows.length;
+  if (prevBtn) prevBtn.style.opacity = _currentRowIndex <= 0 ? '0.3' : '1';
+  if (nextBtn) nextBtn.style.opacity = _currentRowIndex >= _visibleRows.length - 1 ? '0.3' : '1';
+}
+
+// Prev/Next navigation
+document.addEventListener('click', (e) => {
+  if (e.target.closest('#rdsPrevBtn') && _currentRowIndex > 0) {
+    openRecordDetail(_visibleRows[_currentRowIndex - 1]);
+  }
+  if (e.target.closest('#rdsNextBtn') && _currentRowIndex < _visibleRows.length - 1) {
+    openRecordDetail(_visibleRows[_currentRowIndex + 1]);
+  }
+});
+
 function closeRecordDetail() {
   document.getElementById('recordDetailSidebar').classList.remove('open');
   document.querySelectorAll('.record-row.selected').forEach(r => r.classList.remove('selected'));
+  _currentRowIndex = -1;
 }
 
-// Add click handlers to record rows
+// Add click handlers to static record rows
 document.querySelectorAll('.record-row').forEach(row => {
   row.style.cursor = 'pointer';
   row.addEventListener('click', () => openRecordDetail(row));
 });
 
-// Close on Escape
+// Close on Escape, arrow keys for nav
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeRecordDetail();
+  }
+  if (_currentRowIndex >= 0 && document.getElementById('recordDetailSidebar').classList.contains('open')) {
+    if (e.key === 'ArrowUp' && _currentRowIndex > 0) {
+      e.preventDefault();
+      openRecordDetail(_visibleRows[_currentRowIndex - 1]);
+    }
+    if (e.key === 'ArrowDown' && _currentRowIndex < _visibleRows.length - 1) {
+      e.preventDefault();
+      openRecordDetail(_visibleRows[_currentRowIndex + 1]);
+    }
   }
 });
 

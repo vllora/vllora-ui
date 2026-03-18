@@ -25,6 +25,12 @@ CLI Skill (Codex/Claude Code)
 |-----|---------------|
 | [knowledge-visualization.md](./knowledge-visualization.md) | Knowledge sources & parts: BE API, FE types, explorer tree, content viewers |
 | [migration-plan.md](./migration-plan.md) | Step-by-step migration: what to build, what to rewrite, what to keep |
+| [architecture-updates-2026-03.md](./architecture-updates-2026-03.md) | March 2026 refactoring: eval polling, ID mapping, cross-view navigation, training UI |
+| [entity-relationships.md](./entity-relationships.md) | Knowledge, topics, records: data model and traceability chain |
+| [topic-knowledge-visualization.md](./topic-knowledge-visualization.md) | Topic-source relationship visualization phases |
+| [evaluator-versioning-ux.md](./evaluator-versioning-ux.md) | Grader version tracking: badges, snapshots, diff indicators |
+| [ui-visualization-redesign.md](./ui-visualization-redesign.md) | 3-page Canvas/Sources/Table redesign with implementation plan |
+| [skill-e2e-test-notes.md](./skill-e2e-test-notes.md) | Skill E2E test results, API issues found, verification status |
 
 ## Feature Flag
 
