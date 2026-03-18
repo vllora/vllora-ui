@@ -177,6 +177,11 @@ src/
 └── ...
 docs/
 ├── state-management-pattern.md     # MANDATORY: read before writing state code
+├── workflow-skill-first-approach/  # UI redesign: mockups, design specs, implementation status
+│   ├── README.md                   # Index — START HERE for UI redesign work
+│   ├── implementation-status.md    # What's done, what's TODO, architecture decisions
+│   ├── ui-visualization-redesign.md # 3-page design spec (Canvas/Sources/Table)
+│   └── mockup-dataset-redesign.html # Interactive HTML mockup (serve at :8888)
 └── features/
     ├── lucy-finetune-dataset/      # 8 feature docs (see below)
     └── skill-package/              # 3 docs: README, architecture, data-flow
@@ -218,6 +223,9 @@ User ↔ React UI (this repo)
 
 | Doc | What it covers |
 |-----|---------------|
+| `docs/workflow-skill-first-approach/README.md` | **UI Redesign** — current active work, mockup, implementation status |
+| `docs/workflow-skill-first-approach/implementation-status.md` | What's done, architecture decisions, file map for UI redesign |
+| `docs/workflow-skill-first-approach/architecture-updates-2026-03.md` | March 2026 refactoring: eval polling, ID mapping, cross-view navigation, training UI |
 | `docs/features/lucy-finetune-dataset/README.md` | Overview and index |
 | `docs/features/lucy-finetune-dataset/architecture.md` | 3-tier system, tool definitions, state management |
 | `docs/features/lucy-finetune-dataset/state-machine.md` | Workflow steps, transitions, validation rules, `WorkflowState` type |

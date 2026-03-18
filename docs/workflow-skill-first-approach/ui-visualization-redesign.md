@@ -1,6 +1,6 @@
 # UI Visualization Redesign — Finalized Design
 
-## Date: 2026-03-16 (updated)
+## Date: 2026-03-18 (updated)
 
 ## Mockup Reference
 
@@ -171,11 +171,18 @@ Records organized by topic hierarchy:
 
 #### Record Detail Sidebar
 
-Slides in from right when clicking a record row:
-- Full user/assistant messages (expanded, not truncated)
-- System prompt (merged chain from root → parent → leaf)
-- Metadata grid: eval score, topic, source part, token count
-- Source context: snippet from the knowledge part this record was generated from
+Slides in from right (520px) when clicking a record row. Layout:
+
+1. **Header**: "Record #N" with prev/next nav group, edit/delete/close buttons
+2. **Topic breadcrumb**: Parent path > Leaf topic (green chip)
+3. **Scores**: Split into two groups:
+   - **Evaluations** (blue dot): v1, v2, v3... with gradient bars, scores, trend arrows
+   - **Training** (green dot): v1, v2... same format
+   - Running jobs show animated bar + spinner. Queued shows italic text.
+   - Trends calculated within each group (not across types)
+4. **Conversation**: System prompt (dashed border, dim text) → User message (solid border). No assistant message (training records only have system + user).
+5. **Source Context**: File icon, source name, ref count, excerpt with highlighted keywords
+6. **Details grid**: Tokens | Sources | Turns in 3-column card layout
 
 #### Sticky Prompt Inheritance Panel
 
@@ -246,75 +253,58 @@ Opens above the table when user clicks a prompt icon (💬) on any subgroup head
 
 ## Implementation Plan
 
-### Phase 1: Foundation (Layout + Banner + View Toggle)
+> **See [implementation-status.md](./implementation-status.md) for the latest status of each component.**
 
-**Goal:** 3-page navigation works, banner visible, sidebar updated.
+### Phase 1: Foundation (Layout + Banner + View Toggle) — ✅ DONE
 
-| Task | File(s) | Effort |
+| Task | File(s) | Status |
 |------|---------|--------|
-| 1.1 Add Canvas/Sources/Table page toggle | `DatasetMainContent.tsx`, `RecordsSectionHeader.tsx` | S |
-| 1.2 Create `DataFlowBanner.tsx` with 3 states (normal/empty/extracting) | New component | M |
-| 1.3 Rename sidebar sections + add "All Sources" item | `ExplorerSidebar.tsx` | S |
-| 1.4 Integrate banner into layout | `DatasetDetailContentV2.tsx` | S |
-| 1.5 Add `useKeyboardShortcuts.ts` (page switching, Esc) | New hook | S |
+| 1.1 Add Canvas/Sources/Table page toggle | `DatasetMainContent.tsx`, `ViewModeToggle.tsx` | ✅ |
+| 1.2 Create `DataFlowBanner.tsx` with 3 states | New component | ✅ |
+| 1.3 Rename sidebar sections + add "All Sources" item | `DatasetExplorer.tsx` | ✅ |
+| 1.4 Integrate banner into layout | `DatasetDetailContentV2.tsx` | ✅ |
+| 1.5 Add `useKeyboardShortcuts.ts` (page switching, Esc) | New hook | ✅ |
 
-### Phase 2: Canvas Improvements (Nodes + Zoom + Drawer)
+### Phase 2: Canvas Improvements (Nodes + Zoom + Drawer) — ✅ DONE
 
-**Goal:** Simplified nodes, zoom-to-inspect, bottom drawer, empty state.
-
-| Task | File(s) | Effort |
+| Task | File(s) | Status |
 |------|---------|--------|
-| 2.1 Simplify `CollapsedTopicNode` (3 signals only) | `CollapsedTopicNode.tsx` | S |
-| 2.2 Add coverage bar color coding (emerald/amber/red) | `CollapsedTopicNode.tsx` | XS |
-| 2.3 Remove "No description" empty state | `CollapsedTopicNode.tsx` | XS |
-| 2.4 Implement zoom-to-inspect (transform, fade, vignette) | `TopicHierarchyCanvas.tsx` | L |
-| 2.5 Create `SourceGhostNodes.tsx` (max 3 + overflow) | New component | M |
-| 2.6 Create `TopicInspectorDrawer.tsx` (3-column) | New component | L |
-| 2.7 Add drawer resize handle + full-view mode | `TopicInspectorDrawer.tsx` | M |
-| 2.8 Create `CanvasEmptyState.tsx` | New component | S |
+| 2.1 Simplify `CollapsedTopicNode` (3 signals only) | `CollapsedTopicNode.tsx` | ✅ |
+| 2.2 Add coverage bar color coding (emerald/amber/red) | `CollapsedTopicNode.tsx` | ✅ |
+| 2.3 Quality score dots on nodes | `CollapsedTopicNode.tsx` | ✅ |
+| 2.4 Implement zoom-to-inspect (transform, fade, vignette) | `TopicHierarchyCanvas.tsx` | ✅ |
+| 2.5 Create `SourceGhostNodes.tsx` (max 3 + overflow) | New component | ✅ |
+| 2.6 Create `TopicInspectorDrawer.tsx` (3-column) | New component | ✅ |
+| 2.7 Create `CanvasEmptyState.tsx` | New component | ✅ |
 
-### Phase 3: Sources Page Redesign
+### Phase 3: Sources Page Redesign — ✅ DONE
 
-**Goal:** Sidebar-driven doc selection, coverage matrix, single-doc view, markdown part viewer.
-
-| Task | File(s) | Effort |
+| Task | File(s) | Status |
 |------|---------|--------|
-| 3.1 Add sidebar doc selection → drives main content | `ExplorerSidebar.tsx`, `KnowledgeSourcesPanel.tsx` | M |
-| 3.2 Create "All Sources" view with `CoverageMatrix.tsx` + doc cards | New component | M |
-| 3.3 Create `SingleDocView.tsx` (header, topic bars, parts outline) | New component | M |
-| 3.4 Create `PartOutline.tsx` (extraction path groups, type icons) | New component | M |
-| 3.5 Redesign `KnowledgePartViewer.tsx` (type badge, nav, markdown, footer) | Modify | M |
+| 3.1 Add sidebar doc selection → drives main content | `DatasetExplorer.tsx`, `SourcesView.tsx` | ✅ |
+| 3.2 Create "All Sources" view with `CoverageMatrix.tsx` + doc cards | `SourcesView.tsx` | ✅ |
+| 3.3 Create `SingleDocView` (header, topic bars, parts outline) | `SourcesView.tsx` | ✅ |
+| 3.4 Topic link badges on parts | `SourcesView.tsx` (`TopicLinkBadge`) | ✅ |
+| 3.5 Part viewer with markdown + footer | `SourcesView.tsx` | ✅ |
 
-### Phase 4: Table Page (Hierarchy + Prompts + Record Detail)
+### Phase 4: Table Page (Hierarchy + Scores + Record Detail) — ✅ DONE
 
-**Goal:** Grouped table, prompt panel, scroll tracking, record detail sidebar.
-
-| Task | File(s) | Effort |
+| Task | File(s) | Status |
 |------|---------|--------|
-| 4.1 Create `GroupedRecordsTable.tsx` (parent/child grouping) | New component | L |
-| 4.2 Add group/subgroup headers with collapse | `GroupedRecordsTable.tsx` | M |
-| 4.3 Create `PromptInheritancePanel.tsx` (3-card chain) | New component | M |
-| 4.4 Create `usePromptScrollTracking.ts` hook | New hook | M |
-| 4.5 Create `RecordDetailSidebar.tsx` (slide-in on row click) | New component | M |
-| 4.6 Add toolbar (search, filter, count) + column resize handles | `GroupedRecordsTable.tsx` | S |
+| 4.1 Create `UnifiedRecordTable.tsx` (parent/child grouping) | New component | ✅ |
+| 4.2 Add dynamic job score columns (eval + finetune) | `job-score-columns.ts`, `useJobScoreColumns.ts` | ✅ |
+| 4.3 Create `PromptInheritancePanel.tsx` (3-card chain) | New component | ✅ |
+| 4.4 Create `usePromptScrollTracking.ts` hook | New hook | ✅ |
+| 4.5 Redesign `RecordDetailSidebar.tsx` (split scores, conversation, source context) | Rewritten | ✅ |
+| 4.6 Wire up score columns in `DatasetMainContent` → sidebar | Modified | ✅ |
 
-### Phase 5: Polish
+### Phase 5: Polish — Ongoing
 
-| Task | File(s) | Effort |
+| Task | File(s) | Status |
 |------|---------|--------|
-| 5.1 Animations (zoom easing, drawer slide, ghost fade-in, crossfade) | CSS/Framer Motion | M |
-| 5.2 Empty states (no documents, no records, no topics) | Various | S |
-| 5.3 Responsive adjustments (sidebar collapse on narrow screens) | CSS | S |
-
-### Execution Order
-
-```
-Phase 1 (Foundation) → Phase 2 (Canvas) ──→ Phase 5 (Polish)
-                     → Phase 3 (Sources) ─┘
-                     → Phase 4 (Table) ───┘
-```
-
-Phase 2, 3, and 4 can be parallelized since they affect different pages. All depend on Phase 1 (page toggle + banner).
+| 5.1 Animations (zoom easing, drawer slide) | CSS | Partial |
+| 5.2 Topic breadcrumb parent path in sidebar | `RecordDetailSidebar.tsx` | Minor bug |
+| 5.3 Responsive adjustments | CSS | TODO |
 
 ---
 

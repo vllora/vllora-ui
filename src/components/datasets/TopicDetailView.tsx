@@ -6,11 +6,14 @@
  */
 
 import { useState, useMemo } from "react";
-import { FileText, Sparkles, MessageSquare, ChevronRight } from "lucide-react";
+import { FileText, Sparkles, MessageSquare, ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { resolveAndGroupBySource } from "@/lib/distri-finetune-tools/steps/shared/resolve-part-ref";
 import type { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
+import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
+import { useJobScoreColumns } from "@/hooks/useJobScoreColumns";
+import type { JobColumn, RecordJobScore } from "./records-table/job-score-columns";
 
 type Tab = "records" | "linked-sources";
 
@@ -48,6 +51,10 @@ export function TopicDetailView({
   const [activeTab, setActiveTab] = useState<Tab>("records");
   const [isPromptOpen, setIsPromptOpen] = useState(false);
   const { sources } = KnowledgeSourcesConsumer();
+
+  // Job score columns (eval + finetune)
+  const finetuneCtx = FinetuneJobsConsumer();
+  const { columns: jobColumns, getScoresForRecord } = useJobScoreColumns(finetuneCtx);
 
   // Collect all source refs from this topic and descendants
   const allRefs = useMemo(() => collectAllRefs(topicNode), [topicNode]);
@@ -138,7 +145,13 @@ export function TopicDetailView({
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto">
         {activeTab === "records" ? (
-          <RecordsTabContent records={records} onSelectRecord={onSelectRecord} />
+          <RecordsTabContent
+            records={records}
+            onSelectRecord={onSelectRecord}
+            jobColumns={jobColumns}
+            getScoresForRecord={getScoresForRecord}
+            topicSourceCount={sourceCount}
+          />
         ) : (
           <LinkedSourcesTabContent groupedSources={groupedSources} />
         )}
@@ -179,10 +192,18 @@ function extractRecordMessages(data: unknown): { user: string; assistant: string
 function RecordsTabContent({
   records,
   onSelectRecord,
+  jobColumns = [],
+  getScoresForRecord,
+  topicSourceCount = 0,
 }: {
   readonly records: DatasetRecord[];
   readonly onSelectRecord?: (recordId: string) => void;
+  readonly jobColumns?: readonly JobColumn[];
+  readonly getScoresForRecord?: (recordId: string) => ReadonlyMap<string, RecordJobScore>;
+  readonly topicSourceCount?: number;
 }) {
+  const hasJobColumns = jobColumns.length > 0;
+
   if (records.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full py-20 text-muted-foreground">
@@ -198,13 +219,21 @@ function RecordsTabContent({
   }
 
   return (
-    <table className="w-full text-left">
+    <table className="w-full text-left border-collapse text-xs">
       <thead>
-        <tr className="border-b border-border/50 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">
-          <th className="px-4 py-2 w-10">#</th>
-          <th className="px-4 py-2 w-[35%]">Input</th>
-          <th className="px-4 py-2">Output</th>
-          <th className="px-4 py-2 w-16 text-right">Score</th>
+        <tr className="border-b border-border/50 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50 bg-muted/30 sticky top-0 z-[2]">
+          <th className="px-4 py-2.5 w-10">#</th>
+          <th className="px-4 py-2.5">Input</th>
+          {hasJobColumns ? (
+            jobColumns.map((col) => (
+              <th key={col.id} className="px-2 py-2.5 w-[72px] text-center">
+                <ScoreColumnHeader column={col} />
+              </th>
+            ))
+          ) : (
+            <th className="px-4 py-2.5 w-16 text-center">Score</th>
+          )}
+          <th className="px-4 py-2.5 w-28">Source</th>
         </tr>
       </thead>
       <tbody>
@@ -214,6 +243,9 @@ function RecordsTabContent({
             record={record}
             index={idx + 1}
             onClick={onSelectRecord}
+            jobColumns={jobColumns}
+            getScoresForRecord={getScoresForRecord}
+            topicSourceCount={topicSourceCount}
           />
         ))}
       </tbody>
@@ -221,20 +253,118 @@ function RecordsTabContent({
   );
 }
 
+function ScoreColumnHeader({ column }: { readonly column: JobColumn }) {
+  const isActive = column.status === "running";
+  const isQueued = column.status === "queued";
+
+  return (
+    <div className="flex flex-col items-center gap-px normal-case tracking-normal">
+      <span className="text-[10px] font-medium">{column.label}</span>
+      {isActive ? (
+        <JobStatusBadge status="running" />
+      ) : isQueued ? (
+        <JobStatusBadge status="queued" />
+      ) : (
+        <span className="text-[8px] text-muted-foreground/40">
+          {column.type === "eval" ? "evaluation" : "finetune"}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Shared job status badge — matches the sidebar StatusBadge style */
+function JobStatusBadge({ status }: { readonly status: "running" | "queued" | "completed" | "failed" }) {
+  const config = {
+    running: { label: "running", color: "bg-blue-500/15 text-blue-400" },
+    queued: { label: "queued", color: "bg-amber-500/15 text-amber-400" },
+    completed: { label: "done", color: "bg-emerald-500/15 text-emerald-400" },
+    failed: { label: "failed", color: "bg-red-500/15 text-red-400" },
+  }[status];
+
+  return (
+    <span className={cn("text-[10px] px-1.5 py-px rounded-full font-medium", config.color)}>
+      {config.label}
+    </span>
+  );
+}
+
+function ScorePill({ score }: { readonly score: number }) {
+  const colorClass = score >= 0.8
+    ? "bg-emerald-500/15 text-emerald-400"
+    : score >= 0.6
+      ? "bg-amber-500/15 text-amber-400"
+      : "bg-red-500/15 text-red-400";
+
+  return (
+    <span className={cn("inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-medium font-mono tabular-nums", colorClass)}>
+      {score.toFixed(2)}
+    </span>
+  );
+}
+
+function TrendArrow({ trend }: { readonly trend: number }) {
+  if (trend > 0.005) return <span className="text-[9px] text-emerald-400 font-mono">↑</span>;
+  if (trend < -0.005) return <span className="text-[9px] text-red-400 font-mono">↓</span>;
+  return null;
+}
+
+function ScoreCell({ jobScore }: { readonly jobScore?: RecordJobScore }) {
+  if (!jobScore) return <span className="text-muted-foreground/20">—</span>;
+  if (jobScore.status === "queued") return <span className="text-[10px] text-muted-foreground/30 italic">queued</span>;
+  if (jobScore.status === "running") {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <Loader2 className="w-3 h-3 text-primary animate-spin" />
+        {jobScore.score !== undefined && (
+          <span className="font-mono text-[10px] text-muted-foreground/50 tabular-nums">{jobScore.score.toFixed(2)}</span>
+        )}
+      </span>
+    );
+  }
+  if (jobScore.status === "failed") return <span className="text-[10px] text-red-400/60">failed</span>;
+  if (jobScore.score === undefined) return <span className="text-muted-foreground/20">—</span>;
+
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      <ScorePill score={jobScore.score} />
+      {jobScore.trend !== undefined && <TrendArrow trend={jobScore.trend} />}
+    </span>
+  );
+}
+
+function getSourceRef(record: DatasetRecord): string | null {
+  const meta = record.metadata as Record<string, unknown> | undefined;
+  const ref = meta?.sourceChunkRef;
+  return typeof ref === "string" ? ref : null;
+}
+
 function RecordTableRow({
   record,
   index,
   onClick,
+  jobColumns = [],
+  getScoresForRecord,
+  topicSourceCount = 0,
 }: {
   readonly record: DatasetRecord;
   readonly index: number;
   readonly onClick?: (id: string) => void;
+  readonly jobColumns?: readonly JobColumn[];
+  readonly getScoresForRecord?: (recordId: string) => ReadonlyMap<string, RecordJobScore>;
+  readonly topicSourceCount?: number;
 }) {
-  const { user, assistant } = useMemo(
+  const { user } = useMemo(
     () => extractRecordMessages(record.data),
     [record.data],
   );
-  const score = record.evaluation?.score ?? record.evaluation?.evalScore;
+  const hasJobColumns = jobColumns.length > 0;
+  const scores = useMemo(
+    () => getScoresForRecord?.(record.id),
+    [getScoresForRecord, record.id],
+  );
+  const sourceRef = getSourceRef(record);
+  const fallbackScore = record.evaluation?.score ?? record.evaluation?.evalScore;
 
   return (
     <tr
@@ -244,24 +374,42 @@ function RecordTableRow({
       <td className="px-4 py-2.5 text-[11px] text-muted-foreground/50 tabular-nums align-top">
         {index}
       </td>
-      <td className="px-4 py-2.5 text-xs text-foreground leading-relaxed align-top">
+      <td className="px-4 py-2.5 text-xs text-foreground/80 leading-relaxed align-top">
         <span className="line-clamp-2">
           {user || <span className="text-muted-foreground/50 italic">No user message</span>}
         </span>
       </td>
-      <td className="px-4 py-2.5 text-xs text-muted-foreground/70 leading-relaxed align-top">
-        <span className="line-clamp-2">{assistant}</span>
-      </td>
-      <td className="px-4 py-2.5 text-right align-top">
-        {score != null ? (
-          <span className={cn(
-            "text-xs font-semibold tabular-nums px-1.5 py-0.5 rounded",
-            score >= 0.8 ? "text-emerald-400" : score >= 0.6 ? "text-amber-400" : "text-red-400",
-          )}>
-            {score.toFixed(2)}
+      {hasJobColumns ? (
+        jobColumns.map((col) => (
+          <td key={col.id} className="px-1 py-2.5 text-center align-top">
+            <ScoreCell jobScore={scores?.get(col.id)} />
+          </td>
+        ))
+      ) : (
+        <td className="px-4 py-2.5 text-center align-top">
+          {fallbackScore != null ? (
+            <ScorePill score={fallbackScore} />
+          ) : (
+            <span className="text-muted-foreground/30">—</span>
+          )}
+        </td>
+      )}
+      <td className="px-4 py-2.5 align-top">
+        {sourceRef ? (
+          <span
+            className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60 bg-primary/5 border border-primary/10 rounded px-1.5 py-0.5 max-w-[130px] truncate"
+            title={sourceRef}
+          >
+            <FileText className="w-3 h-3 shrink-0 opacity-50" />
+            <span className="truncate">{sourceRef}</span>
+          </span>
+        ) : topicSourceCount > 0 ? (
+          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/50">
+            <FileText className="w-3 h-3 shrink-0 opacity-40" />
+            {topicSourceCount} source{topicSourceCount !== 1 ? "s" : ""}
           </span>
         ) : (
-          <span className="text-[11px] text-muted-foreground/30">—</span>
+          <span className="text-muted-foreground/20">—</span>
         )}
       </td>
     </tr>
