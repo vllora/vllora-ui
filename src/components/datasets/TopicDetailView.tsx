@@ -228,7 +228,7 @@ function RecordsTabContent({
           <th className="px-4 py-2.5">Input</th>
           {hasJobColumns ? (
             jobColumns.map((col) => (
-              <th key={col.id} className="px-2 py-2.5 w-[82px] text-center">
+              <th key={col.id} className="px-2 py-2.5 w-[100px] text-center">
                 <ScoreColumnHeader column={col} />
               </th>
             ))

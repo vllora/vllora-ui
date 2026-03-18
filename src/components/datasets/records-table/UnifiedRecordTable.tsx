@@ -312,7 +312,7 @@ export function UnifiedRecordTable({
           <th className="text-left px-3 py-2">Input</th>
           {hasJobColumns ? (
             jobColumns.map((col) => (
-              <th key={col.id} className="text-center px-2 py-2 w-[72px]">
+              <th key={col.id} className="text-center px-2 py-2 w-[100px]">
                 <JobColumnHeader column={col} />
               </th>
             ))

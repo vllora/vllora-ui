@@ -200,7 +200,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       return;
     }
 
-    openTab(nodeId);
+    openTab(nodeId, nodeId === "data" ? "All Topics" : undefined);
     // "All Topics" (nodeId === "data") → switch to canvas view
     if (nodeId === "data") {
       window.dispatchEvent(new CustomEvent("vllora_switch_view", {
