@@ -42,9 +42,9 @@ export function useJobScoreColumns(
     [evalJobs, finetuneJobs],
   );
 
-  // Build per-record score lookups for eval jobs (from polling snapshots)
+  // Build per-record score + reason lookups for eval jobs (from polling snapshots)
   const evalScoresByRecord = useMemo(() => {
-    const map = new Map<string, Map<string, number>>();
+    const map = new Map<string, Map<string, { score: number; reason?: string }>>();
 
     for (const job of evalJobs) {
       const results = job.pollingSnapshot?.results ?? [];
@@ -63,8 +63,8 @@ export function useJobScoreColumns(
         const entry = Array.isArray(epochEntries) ? epochEntries[0] : undefined;
         if (!entry || entry.score == null) continue;
 
-        const recordScores = map.get(rowId) ?? new Map<string, number>();
-        recordScores.set(job.id, entry.score);
+        const recordScores = map.get(rowId) ?? new Map<string, { score: number; reason?: string }>();
+        recordScores.set(job.id, { score: entry.score, reason: entry.reason ?? undefined });
         map.set(rowId, recordScores);
       }
     }
@@ -72,9 +72,9 @@ export function useJobScoreColumns(
     return map;
   }, [evalJobs]);
 
-  // Build per-record score lookups for finetune jobs
+  // Build per-record score + reason lookups for finetune jobs
   const finetuneScoresByRecord = useMemo(() => {
-    const map = new Map<string, Map<string, number>>();
+    const map = new Map<string, Map<string, { score: number; reason?: string }>>();
 
     if (!finetuneCtx) return map;
 
@@ -97,8 +97,8 @@ export function useJobScoreColumns(
         const entry = Array.isArray(epochEntries) ? epochEntries[0] : undefined;
         if (!entry || entry.score == null) continue;
 
-        const recordScores = map.get(rowId) ?? new Map<string, number>();
-        recordScores.set(job.id, entry.score);
+        const recordScores = map.get(rowId) ?? new Map<string, { score: number; reason?: string }>();
+        recordScores.set(job.id, { score: entry.score, reason: entry.reason ?? undefined });
         map.set(rowId, recordScores);
       }
     }
@@ -106,19 +106,26 @@ export function useJobScoreColumns(
     return map;
   }, [finetuneJobs, finetuneCtx]);
 
+  // Lookup helper: get score entry from either map
+  const getEntry = (
+    recordId: string,
+    colId: string,
+    type: "eval" | "finetune",
+  ) => {
+    return type === "eval"
+      ? evalScoresByRecord.get(recordId)?.get(colId)
+      : finetuneScoresByRecord.get(recordId)?.get(colId);
+  };
+
   // Also use record.evaluations (per-job map from IndexedDB) as fallback
   const getScoresForRecord = useMemo(() => {
     return (recordId: string): ReadonlyMap<string, RecordJobScore> => {
       const scores = new Map<string, RecordJobScore>();
 
       for (const col of columns) {
-        let score: number | undefined;
-
-        if (col.type === "eval") {
-          score = evalScoresByRecord.get(recordId)?.get(col.id);
-        } else {
-          score = finetuneScoresByRecord.get(recordId)?.get(col.id);
-        }
+        const entry = getEntry(recordId, col.id, col.type);
+        const score = entry?.score;
+        const reason = entry?.reason;
 
         // Compute trend: delta from previous column of same type
         let trend: number | undefined;
@@ -127,11 +134,9 @@ export function useJobScoreColumns(
             .filter((c) => c.type === col.type && c.createdAt < col.createdAt)
             .pop();
           if (prevCol) {
-            const prevScore = col.type === "eval"
-              ? evalScoresByRecord.get(recordId)?.get(prevCol.id)
-              : finetuneScoresByRecord.get(recordId)?.get(prevCol.id);
-            if (prevScore !== undefined) {
-              trend = score - prevScore;
+            const prevEntry = getEntry(recordId, prevCol.id, col.type);
+            if (prevEntry?.score !== undefined) {
+              trend = score - prevEntry.score;
             }
           }
         }
@@ -139,6 +144,7 @@ export function useJobScoreColumns(
         scores.set(col.id, {
           score,
           trend,
+          reason,
           status: col.status,
         });
       }

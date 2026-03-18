@@ -41,6 +41,8 @@ Other helper scripts:
 
 | Script | Step | What it does |
 |--------|------|-------------|
+| `docling_extract.py` | 2a | Submits PDF(s) to Docling Serve async API, polls until done, supports batch mode |
+| `pdftotext_extract.py` | 2a | Fallback PDF extraction via pdftotext (no Docker required), same output schema |
 | `consolidate_parts.py` | 2c | Merges adjacent text parts, drops short fragments, fixes Unicode, validates quality |
 | `validate_extraction.py` | 2e | Cross-document extraction quality gate (parts/page, title diversity, avg length) |
 | `generate_records.py` | 4 | Generates records per leaf topic via LLM (calls `chat_completion.py`) |
@@ -136,30 +138,42 @@ sqlite3 ~/.vllora/vllora.db "SELECT id, name FROM workflows ORDER BY created_at 
 
 This is the longest and most complex step. It has 4 sub-stages.
 
-### 2a. Submit documents to Docling (parallel)
+### 2a-2b. Extract documents via Docling (or pdftotext fallback)
 
-**What happens**: The agent checks if Docling Serve is running on `localhost:5001`. If not, it starts the Docker container. Then it submits ALL PDF documents to the Docling async API in a loop — each document gets its own task ID.
+**What happens**: The agent checks if Docling Serve is running on `localhost:5001`. If not, it starts the Docker container. Then it uses `scripts/docling_extract.py` with `--batch` mode to submit ALL PDFs at once, poll all tasks in parallel, and save results — the script handles the full async lifecycle.
 
-**Key detail**: Submissions happen sequentially (one curl per document), but Docling processes them **in parallel** on the server side. So 3 documents are all being processed at the same time.
+**Script call** (batch mode — submits all, polls all in parallel):
+```bash
+uv run scripts/docling_extract.py --batch \
+  doc1.pdf:finetune-project/knowledge/doc1/docling-result.json \
+  doc2.pdf:finetune-project/knowledge/doc2/docling-result.json \
+  doc3.pdf:finetune-project/knowledge/doc3/docling-result.json \
+  --max-tokens 1024
+```
 
-**API calls**: `POST http://127.0.0.1:5001/v1/chunk/hybrid/file/async` (one per document, with `chunking_max_tokens=1024` for larger coherent chunks suitable for fine-tuning)
+> **IMPORTANT**: Always use `docling_extract.py` — it uses the async API with polling. Do NOT use curl to hit Docling endpoints directly, as the sync endpoint times out on large documents (>100 pages).
+
+**Internally**, the script calls these Docling endpoints (agents should NOT call these directly):
+- `POST /v1/chunk/hybrid/file/async` — submits each document (with `chunking_max_tokens=1024`)
+- `GET /v1/status/poll/{task_id}` — polls until `success` or `failed`
+- `GET /v1/result/{task_id}` — fetches the processed result
 
 **What to watch for**:
 - Docker may need to pull the Docling image (~2GB) on first run
-- Each submission returns a `task_id` — the agent stores these for polling
-- If Docling is not available, the skill falls back to `pdftotext` (lower quality)
+- Batch mode means total time ≈ slowest PDF, not sum of all
+- For large PDFs (200+ pages), extraction can take 10-20 minutes
 
-**Files produced**: None yet — tasks are queued on Docling.
+**Fallback — pdftotext** (when Docker is not available):
 
-### 2b. Poll Docling tasks until complete
+Use `scripts/pdftotext_extract.py` — same CLI pattern, zero dependencies (just needs `pdftotext` installed). Outputs `knowledge_parts.json` directly (no `docling-result.json` step):
 
-**What happens**: The agent polls each task ID until Docling reports `success`. Then it fetches the result and saves it to a per-document directory.
+```bash
+uv run scripts/pdftotext_extract.py --batch \
+  doc1.pdf:finetune-project/knowledge/doc1/knowledge_parts.json \
+  doc2.pdf:finetune-project/knowledge/doc2/knowledge_parts.json
+```
 
-**API calls**:
-- `GET http://127.0.0.1:5001/v1/status/poll/{task_id}` (repeated until `success`)
-- `GET http://127.0.0.1:5001/v1/result/{task_id}` (once per document)
-
-**Time**: 1-10 minutes per document depending on size and complexity. Large PDFs with many tables/images take longer.
+Note: pdftotext loses tables, images, and complex layout. Then run `consolidate_parts.py` and `validate_extraction.py` on the output — same as the Docling path.
 
 **Files produced** (per document):
 ```
@@ -176,16 +190,13 @@ finetune-project/knowledge/
 ```bash
 # Check which documents have been extracted
 ls -lh finetune-project/knowledge/*/docling-result.json
-
-# Check if Docling is still processing
-curl -s http://127.0.0.1:5001/v1/status/poll/{task_id} | python3 -c "import sys,json; print(json.load(sys.stdin))"
 ```
 
 ### 2c. Process each document into knowledge parts
 
 **What happens**: For each document, the agent:
 1. **Reads the Docling result** — examines chunks 0-9, then samples from middle and end to understand the document structure
-2. **Writes a Python extraction script** — tailored to each document's structure (heading patterns, noise filters, table handling)
+2. **Writes a Python extraction script** at `knowledge/{doc-slug}/extract.py` — tailored to each document's structure (heading patterns, noise filters, table handling). The script lives inside the per-document directory, NOT in the project root.
 3. **Runs the script** — transforms raw Docling output into typed, structured `knowledge_parts.json`
 4. **Runs consolidation** — `scripts/consolidate_parts.py` merges adjacent text parts under the same heading, drops short fragments (<50 chars), fixes Unicode escape sequences, reassigns sequential IDs, and regenerates `parts-index.json`
 
@@ -201,6 +212,7 @@ This reduces part count (e.g., 1018 raw → 45 consolidated), improves title div
 **Files produced** (per document):
 ```
 finetune-project/knowledge/{doc-slug}/
+├── extract.py                # Custom extraction script for THIS document
 ├── docling-result.json        # From step 2b (already exists)
 ├── knowledge_parts.json       # Structured parts: text, table, image (consolidated)
 └── parts-index.json           # Lightweight index for topic design (regenerated)
@@ -353,6 +365,8 @@ finetune-project/
   {"topic_identifier": "pins", "part_identifier": "chess-tactics-chapter-4"}
 ]
 ```
+
+**ID format**: Use the **string reference_id** from `topics.json` and `knowledge_parts.json` — NOT gateway UUIDs. The gateway resolves both `topic_identifier` and `part_identifier` by matching against either the UUID `id` or the string `reference_id` automatically. Do NOT manually query the database to map reference_ids to UUIDs.
 
 **Upload** (immediately after creation):
 ```bash
@@ -571,19 +585,68 @@ uv run scripts/run_evaluation.py --dataset-id $WORKFLOW_ID --output evaluations/
 
 ## Step 9: Train & Iterate (optional)
 
-**What happens**: The agent starts a fine-tuning job, spawns the **training-monitor subagent** in the background to poll metrics every 15 seconds, and handles the result.
+**What happens**: The agent starts a fine-tuning job via direct API call (not `start_training.py`), spawns the **training-monitor subagent** in the background to poll metrics every 15 seconds, and handles the result. Max 5 iterations.
+
+### 9a. Start a training run
 
 ```bash
-uv run scripts/start_training.py \
-  --workflow-id $WORKFLOW_ID \
-  --dataset-id $WORKFLOW_ID \
-  --output-model "my-finetuned-model" \
-  --base-model "unsloth/Qwen3.5-4B"
+JOB=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "dataset": "'$WORKFLOW_ID'",
+    "base_model": "unsloth/Qwen3.5-4B",
+    "output_model": "my-finetuned-model",
+    "display_name": "Training run 1",
+    "training_config": {
+      "learning_rate": 0.00001,
+      "lora_rank": 8,
+      "gradient_accumulation_steps": 5,
+      "epochs": 2,
+      "batch_size": 5
+    },
+    "inference_parameters": {
+      "max_output_tokens": 1000,
+      "temperature": 1.0,
+      "top_p": 1.0,
+      "response_candidates_count": 2
+    }
+  }')
+JOB_ID=$(echo "$JOB" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 ```
 
-**Anomaly handling**: If the monitor detects issues (NaN loss, KL divergence, reward collapse), the main agent cancels the job, adjusts config (lower learning rate, increase lora rank, etc.), and starts a new iteration.
+### 9b. Spawn a monitor subagent
 
-**Iteration limits**: Max 5 iterations. After 2 failed iterations on the same base model, escalate to a larger model.
+The `training-monitor` subagent runs in the background, polling `GET /jobs/{job_id}/metrics` and `GET /jobs/{job_id}/status` every 15 seconds. It reports back when the job succeeds, fails, or an anomaly is detected (NaN loss, KL divergence, reward collapse, etc.).
+
+### 9c. Handle the monitor's report
+
+- **Succeeded** → fetch per-epoch scores via `GET /finetune/workflows/$WORKFLOW_ID/dataset/finetune-evaluations?finetune_job_id=$JOB_ID`, save to `training-jobs/job-v{N}.json`, test with prompts NOT in training set
+- **Failed** → log error, retry if infra issue, report to user if not retryable
+- **Anomaly detected** → diagnose and iterate (9d)
+
+### 9d. Diagnose and iterate on anomaly
+
+1. **Cancel the running job**: `curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs/$JOB_ID/cancel`
+2. **Fetch per-epoch reasons** to understand what's failing
+3. **Apply fix** based on anomaly type:
+
+| Anomaly | Config Fix |
+|---------|-----------|
+| NaN/Inf loss | Lower `learning_rate` by 2x |
+| KL divergence | Lower `learning_rate` by 2x |
+| High clipping | Increase `max_output_tokens` by 2x |
+| Weak signal | Rewrite grader for better differentiation |
+| Reward collapse | Increase `lora_rank` (4→8→16) |
+| No learning (flat epochs) | Try larger base model |
+| Overfitting (scores peak then decline) | Reduce `epochs` to peak epoch |
+
+4. **If data or grader changed**, sync to cloud: `curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/dataset/upload`
+5. **Start a new job** with adjusted config → back to 9a
+
+### 9e. Iteration limits
+
+- **Max 5 iterations.** After 5, stop and report full diagnosis.
+- **Base model escalation:** After 2 failed iterations on the same model: `Qwen3.5-4B` → `7B` → larger.
 
 **Files produced**:
 ```

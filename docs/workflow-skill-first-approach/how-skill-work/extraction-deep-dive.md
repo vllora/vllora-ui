@@ -9,39 +9,49 @@ The skill generates training data **grounded in source documents**. Without extr
 ## The Extraction Flow
 
 ```
-                        ┌──────────────┐
-    PDF documents       │ Docling Serve │  (Docker container on :5001)
-    ────────────────►   │  async API    │
-    (parallel submit)   └──────┬───────┘
-                               │
-                    ┌──────────┼──────────┐
-                    ▼          ▼          ▼
-              chess-       strategy-   endgame-
-              tactics/     guide/      manual/
-              docling-     docling-    docling-
-              result.json  result.json result.json
-                    │          │          │
-                    ▼          ▼          ▼
-              ┌─────────────────────────────────┐
-              │  Agent writes extraction script  │  (custom per document)
-              │  per document                    │
-              └─────────────────────────────────┘
-                    │          │          │
-                    ▼          ▼          ▼
-              knowledge_  knowledge_  knowledge_
-              parts.json  parts.json  parts.json
-              parts-      parts-      parts-
-              index.json  index.json  index.json
-                    │          │          │
-                    └──────────┼──────────┘
-                               ▼
+                     Docker available?
+                     ┌─── YES ──────────────────┐
+                     │                           │
+    PDF documents    │   ┌──────────────┐        │
+    ─────────────────┤   │ Docling Serve │        │
+                     │   │  async API    │        │
+                     │   └──────┬───────┘        │
+                     │          │                 │
+                     │   docling_extract.py       │
+                     │   (--batch mode)           │
+                     │          │                 │
+                     │   ┌──────┼──────┐          │
+                     │   ▼      ▼      ▼          │
+                     │   docling-result.json       │
+                     │   (per document)            │
+                     │          │                 │
+                     │          ▼                 │
+                     │   Agent writes extraction  │
+                     │   script per document      │
+                     │          │                 │
+                     └──── NO ──┤                 │
+                     │          │                 │
+                     │   pdftotext_extract.py     │
+                     │   (--batch mode)           │
+                     │   (text only, no tables/   │
+                     │    images)                 │
+                     │          │                 │
+                     └──────────┤                 │
+                                ▼                 │
+                    knowledge_parts.json          │
+                    + parts-index.json            │
+                    (per document)                │
+                                │                 │
+                    consolidate_parts.py          │
+                    validate_extraction.py         │
+                                │
                     all-parts-index.json  (merged)
-                               │
-                    ┌──────────┼──────────┐
-                    ▼          ▼          ▼
-              Step 3:      Step 4:      Upload
-              Topic        Data         (incremental,
-              Design       Generation    after Step 2)
+                                │
+                    ┌───────────┼───────────┐
+                    ▼           ▼           ▼
+              Step 3:       Step 4:      Upload
+              Topic         Data         (incremental,
+              Design        Generation    after Step 2)
 ```
 
 ## What Docling Does
@@ -53,12 +63,14 @@ Docling Serve is a local document processing service that:
 - Splits text into semantic chunks with heading hierarchy
 - Produces a structured JSON response combining chunks + full document tree
 
-### Docling API Endpoints Used
+### Docling API Endpoints (internal to `docling_extract.py`)
+
+The agent uses `scripts/docling_extract.py` — it must NOT call these endpoints directly via curl. The script handles the full async lifecycle (submit → poll → fetch). Internally it calls:
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/health` | GET | Check if Docling is running |
-| `/v1/chunk/hybrid/file/async` | POST | Submit a document for processing (returns `task_id`). Use `chunking_max_tokens=1024` for fine-tuning (default ~512 is optimized for RAG) |
+| `/health` | GET | Check if Docling is running (agent checks this before calling the script) |
+| `/v1/chunk/hybrid/file/async` | POST | Submit a document for processing (returns `task_id`). Uses `chunking_max_tokens=1024` for fine-tuning |
 | `/v1/status/poll/{task_id}` | GET | Check if processing is complete |
 | `/v1/result/{task_id}` | GET | Fetch the processed result |
 
@@ -229,6 +241,16 @@ In the UI:
 - **Record detail** — shows which source parts a record was generated from
 
 ## Debugging Extraction Issues
+
+### Docling not available (Docker not installed)
+
+Use the `pdftotext_extract.py` fallback — same CLI pattern as `docling_extract.py` but zero dependencies:
+```bash
+uv run scripts/pdftotext_extract.py --batch \
+  doc1.pdf:finetune-project/knowledge/doc1/knowledge_parts.json \
+  doc2.pdf:finetune-project/knowledge/doc2/knowledge_parts.json
+```
+This skips the Docling step entirely and outputs `knowledge_parts.json` directly (no `docling-result.json`). Note: you lose tables, images, and complex layout — text only. Then run `consolidate_parts.py` and `validate_extraction.py` as usual.
 
 ### Agent stuck after producing `docling-result.json`
 

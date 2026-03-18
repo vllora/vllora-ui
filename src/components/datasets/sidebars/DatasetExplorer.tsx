@@ -202,7 +202,16 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       return;
     }
 
-    openTab(nodeId, nodeId === "data" ? "All Topics" : undefined);
+    // Map nodeId to a friendly tab label for known paths
+    let tabLabel: string | undefined;
+    if (nodeId === "data") {
+      tabLabel = "All Topics";
+    } else if (nodeId.startsWith("evaluations/jobs/")) {
+      tabLabel = evalJobDisplayName(nodeId.slice("evaluations/jobs/".length));
+    } else if (nodeId.startsWith("finetune/")) {
+      tabLabel = finetuneJobDisplayName(nodeId.slice("finetune/".length));
+    }
+    openTab(nodeId, tabLabel);
     // "All Topics" (nodeId === "data") → switch to canvas view
     if (nodeId === "data") {
       window.dispatchEvent(new CustomEvent("vllora_switch_view", {
@@ -221,6 +230,30 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
     }
     onNavigate?.(nodeId);
   }, [openTab, onNavigate, topicHierarchy]);
+
+  // Allow external components (e.g. record detail sidebar, eval results) to navigate via sidebar
+  useEffect(() => {
+    const handleNavigateToJob = (e: Event) => {
+      const { jobId: navJobId, type: navType } = (e as CustomEvent).detail ?? {};
+      if (!navJobId) return;
+      let nodeId: string;
+      if (navType === "finetune") {
+        nodeId = `finetune/${navJobId}`;
+      } else if (navType === "topic") {
+        // Build the full nested path by searching the topic hierarchy
+        nodeId = `data/${navJobId}`;
+        if (topicHierarchy) {
+          const fullPath = findTopicPath(topicHierarchy, navJobId, "data");
+          if (fullPath) nodeId = fullPath;
+        }
+      } else {
+        nodeId = `evaluations/jobs/${navJobId}`;
+      }
+      handleSelect(nodeId);
+    };
+    window.addEventListener("vllora_navigate_to_job", handleNavigateToJob);
+    return () => window.removeEventListener("vllora_navigate_to_job", handleNavigateToJob);
+  }, [handleSelect, topicHierarchy]);
 
   const hasActiveJob = finetuneJobs.some(
     (j) => j.status === "running" || j.status === "pending"
@@ -592,6 +625,19 @@ function getTopicRecordCount(node: TopicHierarchyNode, topicCounts: Map<string, 
     }
   }
   return total;
+}
+
+/** Find the full nested path for a topic name (e.g., "data/Chess Fundamentals/Board Setup & Notation") */
+function findTopicPath(nodes: TopicHierarchyNode[], targetName: string, parentPath: string): string | null {
+  for (const node of nodes) {
+    const nodePath = `${parentPath}/${node.name}`;
+    if (node.name === targetName) return nodePath;
+    if (node.children) {
+      const found = findTopicPath(node.children, targetName, nodePath);
+      if (found) return found;
+    }
+  }
+  return null;
 }
 
 /** Check if a topic name corresponds to a parent node (has children) in the hierarchy */

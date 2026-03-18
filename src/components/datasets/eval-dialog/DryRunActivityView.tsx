@@ -26,6 +26,7 @@ import type { EvalJob } from "@/types/eval-job";
 import { getJobTotalRows, getJobCompletedRows } from "@/types/eval-job";
 import { EvaluatorVersionBadge } from "@/components/shared/EvaluatorVersionBadge";
 import { useEvaluatorVersions } from "@/hooks/useEvaluatorVersions";
+import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 
 interface EvalActivityViewProps {
   /** Dataset ID for navigation (click record ID → switch to Records tab) */
@@ -100,6 +101,7 @@ function EvalJobVersionBadge({ workflowId, jobCreatedAt }: { workflowId: string;
 
 /** Inline detail panel for a selected job (left side of split) */
 function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: EvalJob; workflowId: string; onCancel?: () => void; onRunAgain?: () => void; onRefresh?: (jobId: string) => void }) {
+  const { sortedRecords } = DatasetDetailConsumer();
   const result = job.result;
 
   const scores = useMemo(() => {
@@ -353,8 +355,19 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
               <ResultsTable
                 results={evaluationResults}
                 fillHeight
-                onRowClick={(result) => {
-                  emitter.emit('vllora_navigate_to_record', { workflowId, recordId: result.dataset_row_id });
+                onNavigateToRecord={(_cloudRowId, result) => {
+                  // Use the original gateway record ID to find the record's topic
+                  const gatewayId = (result?.row?.id ?? _cloudRowId) as string;
+                  const record = sortedRecords.find(r => r.id === gatewayId);
+                  if (record?.topic) {
+                    // Navigate via sidebar handleSelect — highlights the topic node
+                    window.dispatchEvent(new CustomEvent("vllora_navigate_to_job", {
+                      detail: { jobId: record.topic, type: "topic" },
+                    }));
+                  } else {
+                    // Fallback: open data tab
+                    emitter.emit('vllora_navigate_to_record', { workflowId, recordId: gatewayId });
+                  }
                 }}
               />
             </div>

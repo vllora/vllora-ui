@@ -52,6 +52,7 @@ finetune-project/
 ├── relations.json              # Topic → part mappings for data generation
 ├── knowledge/                  # Extracted domain knowledge
 │   ├── chess-tactics/           # Per-document subdirectory (slugified filename)
+│   │   ├── extract.py          # Custom extraction script FOR THIS document
 │   │   ├── docling-result.json # Raw Docling response for this document
 │   │   ├── knowledge_parts.json# Typed parts for this document
 │   │   └── parts-index.json   # Part index for this document
@@ -59,14 +60,19 @@ finetune-project/
 │   │   └── ...
 │   ├── all-parts-index.json    # Merged part index across ALL documents
 │   └── extraction-notes.md     # Extraction notes for all documents
-└── execution-log.md            # Running log of every step
+├── config.json                 # Workflow ID + gateway URL
+└── execution-log.md            # Running log of every step (created at Step 1)
 ```
 
 **Multi-document handling**: Each source document gets its own subdirectory under `knowledge/` named by slugifying the filename (e.g., `chess-tactics-dave-regis/`, `strategy-guide/`). Use the document name, not `doc-1/` — the folder name should identify which document it came from at a glance. Each subdirectory contains that document's `docling-result.json`, `knowledge_parts.json`, and `parts-index.json`. A merged `knowledge/all-parts-index.json` combines all per-document indexes for topic design and data generation.
 
 ### Execution Log
 
-Maintain `execution-log.md` as an **append-only** chronological record. After every action (not just step boundaries), delegate to the `execution-logger` subagent to append entries.
+Maintain `execution-log.md` as an **append-only** chronological record.
+
+> **CRITICAL:** Create `execution-log.md` at the START of Step 1, before any other work. Write to it IMMEDIATELY after each action — do NOT wait until the end to write the log retroactively. The log must reflect real-time progress so that if the pipeline fails mid-run, the log shows exactly where it stopped. Use `echo` or `cat >>` to append entries directly — do not buffer them.
+
+After every action (not just step boundaries), delegate to the `execution-logger` subagent to append entries.
 
 **Delegate logging after each action:**
 
@@ -193,55 +199,29 @@ docker info > /dev/null 2>&1 && echo "Docker OK" || echo "Docker NOT available"
 - **Docker available**: Start Docling: `docker run -p 5001:5001 ghcr.io/docling-project/docling-serve-cpu:latest` — wait for startup to complete, then verify with the health check.
 - **Docker NOT available**: Skip to the **pdftotext fallback** at the end of this step. You lose table structure and image extraction but can still produce text-based knowledge parts.
 
-**Submit ALL documents at once** — Docling processes them asynchronously, so fire all requests before polling:
-```bash
-# Create per-document directories using slugified filenames, submit all in parallel
-DOCS=(*.pdf)  # or list specific files
-TASK_IDS=()
-DOC_DIRS=()
+**Extract all documents in parallel** using the `docling_extract.py` helper script with `--batch` mode. This submits all PDFs at once, then polls all tasks in parallel — much faster than sequential extraction:
 
-for DOC in "${DOCS[@]}"; do
-  # Slugify: lowercase, replace spaces/special chars with hyphens, strip extension
+```bash
+# Build batch args: each is "pdf_path:output_path"
+BATCH_ARGS=""
+for DOC in *.pdf; do
   DOC_SLUG=$(echo "${DOC%.pdf}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
-  DOC_DIR="finetune-project/knowledge/$DOC_SLUG"
-  mkdir -p "$DOC_DIR"
-  DOC_DIRS+=("$DOC_DIR")
-
-  TASK_RESPONSE=$(curl -sS -X POST "http://127.0.0.1:5001/v1/chunk/hybrid/file/async" \
-    -F "files=@${DOC};type=application/pdf" \
-    -F "include_converted_doc=true" \
-    -F "convert_do_ocr=true" -F "convert_do_table_structure=true" \
-    -F "convert_include_images=true" -F "convert_image_export_mode=embedded" \
-    -F "chunking_merge_peers=true" -F "chunking_max_tokens=1024" \
-    -F "chunking_tokenizer=BAAI/bge-small-en-v1.5")
-  TASK_ID=$(echo "$TASK_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['task_id'])")
-  TASK_IDS+=("$TASK_ID")
-
-  echo "Submitted $DOC → task $TASK_ID → $DOC_DIR"
+  BATCH_ARGS="$BATCH_ARGS $DOC:finetune-project/knowledge/$DOC_SLUG/docling-result.json"
 done
 
-echo "Submitted ${#DOCS[@]} documents total. Now polling..."
+uv run scripts/docling_extract.py --batch $BATCH_ARGS --max-tokens 1024
 ```
 
-#### 2b. Poll all tasks until complete
-
+For a single document, use single mode:
 ```bash
-for i in "${!TASK_IDS[@]}"; do
-  TASK_ID="${TASK_IDS[$i]}"
-  DOC_DIR="${DOC_DIRS[$i]}"
-
-  # Poll until done
-  while true; do
-    STATUS=$(curl -sS "http://127.0.0.1:5001/v1/status/poll/$TASK_ID" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','pending'))")
-    [ "$STATUS" = "success" ] && break
-    sleep 5
-  done
-
-  # Fetch result
-  curl -sS "http://127.0.0.1:5001/v1/result/$TASK_ID" -o "$DOC_DIR/docling-result.json"
-  echo "Saved result for ${DOCS[$i]} → $DOC_DIR/docling-result.json"
-done
+uv run scripts/docling_extract.py document.pdf \
+  --output finetune-project/knowledge/doc-slug/docling-result.json \
+  --max-tokens 1024
 ```
+
+> **IMPORTANT**: Always use `docling_extract.py` — it uses the async API with polling. Do NOT use curl to hit Docling endpoints directly, as the sync endpoint times out on large documents (>100 pages).
+
+> **Note**: For large PDFs (200+ pages), extraction can take 10-20 minutes. Batch mode submits all PDFs simultaneously and polls in parallel, so total time ≈ slowest PDF rather than sum of all.
 
 #### 2c. Process each document into knowledge parts
 
@@ -249,7 +229,9 @@ For **each** document directory, produce `knowledge_parts.json` and `parts-index
 
 1. **Read the Docling result before writing any code.** Read chunks 0-9 to understand the document — title, structure, content type, heading patterns. Then read a few chunks from the middle and end. This context is critical for writing a good extraction script.
 
-2. **Write a script** to create `{doc-slug}/knowledge_parts.json` — the required deliverable per document. The script must produce typed source_parts (text, table, image) with titles, extraction paths, and provenance metadata matching the schema in `reference/extraction-guide.md` Section 3.
+2. **Write a script** inside the per-document directory: `knowledge/{doc-slug}/extract.py`. This keeps extraction scripts co-located with their document's data, not scattered in the project root. The script must produce `knowledge/{doc-slug}/knowledge_parts.json` — typed source_parts (text, table, image) with titles, extraction paths, and provenance metadata matching the schema in `reference/extraction-guide.md` Section 3.
+
+   **Script location**: `finetune-project/knowledge/{doc-slug}/extract.py` — NOT in `finetune-project/` root.
 
    **Important**: Prefix all part IDs with the document identifier (typically the slugified filename) to keep them unique across documents. For example: `chess-tactics-chapter-3`, `strategy-guide-section-5`.
 
@@ -292,19 +274,54 @@ print(f'Merged {len(all_parts)} parts from {doc_count} documents')
 This merged index is what you use for topic design (Step 3) and data generation (Step 4) — it's small enough to read in context and covers all documents.
 
 **Fallback — pdftotext** (when Docker is not available):
+
+Use the `pdftotext_extract.py` helper — same CLI pattern as `docling_extract.py` but zero dependencies (just needs `pdftotext` installed). Outputs `knowledge_parts.json` in the same schema.
+
+Single document:
 ```bash
-for DOC in *.pdf; do
-  DOC_SLUG=$(echo "${DOC%.pdf}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
-  DOC_DIR="finetune-project/knowledge/$DOC_SLUG"
-  mkdir -p "$DOC_DIR"
-  pdftotext "$DOC" "$DOC_DIR/converted.txt"
-done
+uv run scripts/pdftotext_extract.py document.pdf -o finetune-project/knowledge/doc-slug/knowledge_parts.json
 ```
-Then write extraction scripts per document as above.
+
+Batch mode (all PDFs at once):
+```bash
+uv run scripts/pdftotext_extract.py --batch \
+  doc1.pdf:finetune-project/knowledge/doc1/knowledge_parts.json \
+  doc2.pdf:finetune-project/knowledge/doc2/knowledge_parts.json
+```
+
+Then run `consolidate_parts.py` and `validate_extraction.py` on the output — same as the Docling path. Note: pdftotext loses tables, images, and complex layout.
 
 **Save your extraction notes** to `knowledge/extraction-notes.md` — for each document: name, page count, section headings, key concepts, number of parts extracted.
 
-#### 2e. Verify ALL documents were processed and pass quality gates
+#### 2e. Assess source content quality
+
+After extraction, assess whether each document's content is suitable for training data generation. Not all PDFs are equally useful — a document full of move notation or reference tables produces worse training data than one with explanatory prose.
+
+**Quick content quality check** (run per document after extraction):
+```bash
+python3 -c "
+import json, re
+d = json.load(open('$DOC_DIR/knowledge_parts.json'))
+parts = d.get('parts', [])
+# Count parts with teaching/explanatory content (2+ teaching keywords)
+teaching_kw = ['explain', 'because', 'reason', 'strategy', 'concept', 'important', 'principle', 'technique', 'understand', 'learn']
+good = sum(1 for p in parts if sum(1 for kw in teaching_kw if kw in p.get('content','').lower()) >= 2)
+total = len(parts)
+print(f'Teaching-quality parts: {good}/{total} ({good/max(total,1)*100:.0f}%)')
+if good / max(total, 1) < 0.10:
+    print('WARNING: <10% of parts have explanatory content. This document is mostly notation/data.')
+    print('  Training data quality will be limited — consider adding a more expository document.')
+else:
+    print('OK: Document has sufficient explanatory content for quality training data.')
+"
+```
+
+**What to do if a document scores <10%:**
+- It's still usable for demo/testing — the LLM can synthesize questions from game annotations
+- For production quality, add a more explanatory document (textbook, tutorial, manual)
+- Log the assessment in `extraction-notes.md` so downstream steps know what to expect
+
+#### 2f. Verify ALL documents were processed and pass structural quality gates
 
 **CRITICAL CHECK — do NOT proceed to Step 3 until this passes:**
 ```bash
@@ -369,6 +386,8 @@ Aim for 3-7 root topics, 2-3 levels deep, each leaf supporting 10-30 training ex
 **Topic-source linking**: After uploading knowledge source parts, link them to topics via the `POST /topics/relations` API. Only create links to parts you've actually extracted — never fabricate references. See `reference/api-reference.md` Section 13 for the relations API.
 
 **Build topic-part relations.** After designing topics, delegate to the `relation-builder` subagent — it reads `knowledge/all-parts-index.json` (the merged index across all documents) and `topics.json`, iteratively matches parts to topics using a retrieve-and-verify loop, and writes `relations.json`. This keeps the parts-index scanning out of main context.
+
+> **ID format note:** Use the **part reference_id** (the string ID from `knowledge_parts.json`, e.g., `chess-tactics-chapter-3`) as `part_identifier` in `relations.json` — NOT gateway UUIDs. The gateway resolves reference_ids to UUIDs automatically. Do NOT query the database to map IDs manually. Similarly, use the topic `id` from `topics.json` as `topic_identifier`.
 
 If there are no documents (objective-only pipeline), skip this step — no relations.json needed.
 
@@ -821,3 +840,7 @@ Run with `uv run` (PEP 723 — dependencies declared inline).
 | `scripts/start_training.py` | Start training job, poll until complete, save response |
 | `scripts/chat_completion.py` | Call LLM via gateway — validates JSON output when `response_format` is `json_object` |
 | `scripts/dry_run_grader.py` | Dry-run grader on a single row — instant syntax/logic check |
+| `scripts/consolidate_parts.py` | Merge adjacent text parts, drop short fragments, fix Unicode, regenerate parts-index |
+| `scripts/validate_extraction.py` | Cross-document extraction quality gate (parts/page, title diversity, avg length) |
+| `scripts/docling_extract.py` | Submit PDF(s) to Docling Serve async API, poll until done, supports batch mode |
+| `scripts/pdftotext_extract.py` | Fallback PDF extraction via pdftotext (no Docker required), same output schema |

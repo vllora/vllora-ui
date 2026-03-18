@@ -882,14 +882,7 @@ pdftotext input.pdf output.txt
 
 If `pdftotext` is not found, try `/opt/homebrew/bin/pdftotext` (macOS) or install: `brew install poppler` / `apt-get install poppler-utils`.
 
-Then run the section extraction template:
-
-```bash
-python3 .claude/skills/vllora-finetune/templates/extract-sections.py \
-  knowledge/converted.md knowledge/sections.json
-```
-
-This produces the flat `{document_title, sections: [{section_heading, section_text}]}` format. Note: pdftotext loses tables, images, and complex layout — use Docling Serve when possible.
+Then use `docling_extract.py` to extract structured parts (preferred), or manually parse the text output into `knowledge_parts.json` format. Note: pdftotext loses tables, images, and complex layout — use Docling Serve when possible.
 
 ---
 

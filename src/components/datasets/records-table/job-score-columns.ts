@@ -26,6 +26,7 @@ export interface RecordJobScore {
   readonly score?: number;
   readonly trend?: number;
   readonly status: JobColumnStatus;
+  readonly reason?: string;
 }
 
 // ─── Helpers ───

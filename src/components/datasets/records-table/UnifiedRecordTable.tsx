@@ -303,7 +303,7 @@ export function UnifiedRecordTable({
   return (
     <table ref={tableRef} className="w-full border-collapse">
       <thead>
-        <tr className="border-b border-border/50 text-[10px] text-muted-foreground/60 uppercase tracking-wider">
+        <tr className="border-b border-border/50 text-[10px] text-muted-foreground/60 tracking-wider">
           <th className="text-left px-3 py-2 w-8">#</th>
           <th className="text-left px-3 py-2">Input</th>
           {hasJobColumns ? (

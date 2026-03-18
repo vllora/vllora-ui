@@ -86,13 +86,14 @@ finetune-skill/
 │   ├── validate_dataset.py     # Validate JSONL (format, fields, cross-ref topics/parts)
 │   ├── upload_dataset.py       # Upload dataset + grader to gateway (standalone)
 │   ├── run_evaluation.py       # Create eval, poll until complete (~30 min timeout)
-│   └── start_training.py       # Start training, poll until complete
+│   ├── start_training.py       # Start training, poll until complete
+│   ├── consolidate_parts.py   # Merge adjacent parts, drop fragments, fix Unicode
+│   ├── validate_extraction.py # Cross-document extraction quality gate
+│   ├── docling_extract.py     # Docling Serve async extraction (Docker required)
+│   └── pdftotext_extract.py   # Fallback extraction via pdftotext (no Docker)
 │
 ├── templates/                  # Starter files
-│   ├── sample-conversation.jsonl  # 4 example prompts (system + user only)
-│   ├── grader-template.js         # Hybrid grader template
-│   ├── extract-sections.py        # Generic markdown → sections.json extractor
-│   └── project-config.json        # Configuration reference
+│   └── grader-template.js         # Hybrid grader template
 │
 └── README.md                   # This file
 ```
@@ -200,17 +201,18 @@ All scripts use inline dependency declarations — run with `uv run script.py` (
 | `scripts/upload_dataset.py` | Upload dataset + grader to gateway (standalone, not used in pipeline) |
 | `scripts/run_evaluation.py` | Create eval job, poll until complete (~30 min timeout), save response |
 | `scripts/start_training.py` | Start training job, poll until complete, save response |
+| `scripts/consolidate_parts.py` | Merge adjacent text parts, drop short fragments, fix Unicode, regenerate parts-index |
+| `scripts/validate_extraction.py` | Cross-document extraction quality gate (parts/page, title diversity, avg length) |
+| `scripts/docling_extract.py` | Submit PDF(s) to Docling Serve async API, poll until done, supports batch mode |
+| `scripts/pdftotext_extract.py` | Fallback PDF extraction via pdftotext (no Docker required), same output schema |
 
 These scripts solve the #1 testing issue (agents creating shell scripts instead of executing API calls) by providing ready-to-run commands.
 
 ### Templates
 
-- `sample-conversation.jsonl` — 4 example prompts (system + user only, no assistant)
 - `grader-template.js` — Hybrid grader with programmatic checks + LLM-as-judge
-- `extract-sections.py` — Generic markdown section extractor (splits on `##` headings, outputs `{document_title, sections}` JSON)
-- `project-config.json` — Configuration reference
 
-Total: ~4,500 lines across 16 files.
+Total: ~8,200 lines across 22 files.
 
 ---
 
@@ -511,7 +513,6 @@ Both write through the same gateway API → same SQLite database. Workflows, rec
 - [ ] Test Docling Serve extraction (Docker required)
 - [ ] Test with different document types (not just chess PDF)
 - [ ] Test without any document (objective-only, no PDF)
-- [ ] Test extract-sections.py on non-chess documents
 - [ ] Test fallback when Docling is not available
 
 ### Skill improvements

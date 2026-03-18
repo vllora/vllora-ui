@@ -15,6 +15,7 @@ import { useState, useRef, useEffect } from "react";
 import { Database, ChevronRight, Pencil } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { WorkspaceTabsConsumer } from "@/contexts/WorkspaceTabsContext";
+import { evalJobDisplayName, finetuneJobDisplayName } from "@/lib/job-display-name";
 
 /* ------------------------------------------------------------------ */
 /*  DatasetTitleBar — top-level name bar with inline rename            */
@@ -99,12 +100,25 @@ export function DatasetBreadcrumbBar() {
 
   const segments = activeTabPath.split("/");
 
+  // Map raw UUID segments to friendly display names for known paths
+  const displaySegments = segments.map((segment, i) => {
+    // evaluations/jobs/<jobId> → show eval-abc123 instead of UUID
+    if (i === 2 && segments[0] === "evaluations" && segments[1] === "jobs") {
+      return evalJobDisplayName(segment);
+    }
+    // finetune/<jobId> → show ft-abc123 instead of UUID
+    if (i === 1 && segments[0] === "finetune") {
+      return finetuneJobDisplayName(segment);
+    }
+    return segment;
+  });
+
   return (
     <div className="flex items-center gap-1 px-3 py-0.5 border-b border-border bg-background text-[11px] text-muted-foreground min-h-[22px] shrink-0">
-      {segments.map((segment, i) => (
+      {displaySegments.map((segment, i) => (
         <span key={i} className="flex items-center gap-1">
           {i > 0 && <ChevronRight className="w-2.5 h-2.5 text-muted-foreground/40 shrink-0" />}
-          <span className={i === segments.length - 1 ? "text-foreground/70" : "text-muted-foreground/60"}>
+          <span className={i === displaySegments.length - 1 ? "text-foreground/70" : "text-muted-foreground/60"}>
             {segment}
           </span>
         </span>

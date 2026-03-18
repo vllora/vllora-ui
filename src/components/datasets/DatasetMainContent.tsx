@@ -24,8 +24,12 @@ import { TopicDetailView, LinkedSourcesTabContent, collectAllRefs } from "./Topi
 import { filterRecords, type StatFilter, type RecordRole } from "./record-filters";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { useJobScoreColumns } from "@/hooks/useJobScoreColumns";
+import { TrainingMetricsSummary } from "./TrainingMetricsSummary";
+import { TopicEvalBreakdown } from "./TopicEvalBreakdown";
+import { KnowledgeCoverageBreakdown } from "./KnowledgeCoverageBreakdown";
+import type { EvalStats, KnowledgeCoverageStats } from "@/types/dataset-types";
 
-type AllTopicsTab = "canvas" | "records" | "linked-sources";
+type AllTopicsTab = "canvas" | "records" | "linked-sources" | "metrics";
 
 /** Recursively find a topic node by name anywhere in the hierarchy, returning it and its parent path */
 function findTopicByName(
@@ -105,6 +109,11 @@ export interface DatasetMainContentProps {
   documentCount?: number;
   /** Number of extracted parts across all sources */
   partCount?: number;
+
+  /** Evaluation statistics (for per-topic breakdown in Metrics tab) */
+  evalStats?: EvalStats;
+  /** Knowledge coverage stats (for coverage drilldown in Metrics tab) */
+  knowledgeCoverageStats?: KnowledgeCoverageStats;
 }
 
 export function DatasetMainContent({
@@ -141,6 +150,8 @@ export function DatasetMainContent({
   sourceDocumentFilterName,
   onClearSourceDocumentFilter,
   topicQualityScores,
+  evalStats,
+  knowledgeCoverageStats,
 }: DatasetMainContentProps) {
   // Job score columns for record detail sidebar
   const finetuneCtx = FinetuneJobsConsumer();
@@ -472,6 +483,11 @@ export function DatasetMainContent({
             label={`Linked Sources (${allGroupedSources.size})`}
             onClick={() => setAllTopicsTab("linked-sources")}
           />
+          <AllTopicsTabButton
+            active={allTopicsTab === "metrics"}
+            label="Metrics"
+            onClick={() => setAllTopicsTab("metrics")}
+          />
         </div>
       </div>
 
@@ -530,6 +546,31 @@ export function DatasetMainContent({
         {allTopicsTab === "linked-sources" && (
           <div className="flex-1 overflow-y-auto">
             <LinkedSourcesTabContent groupedSources={allGroupedSources} />
+          </div>
+        )}
+        {allTopicsTab === "metrics" && (
+          <div className="flex-1 overflow-y-auto">
+            {evalStats?.byTopic && Object.keys(evalStats.byTopic).length > 0 && (
+              <div className="p-4">
+                <h3 className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-[0.06em] mb-3">
+                  Per-Topic Evaluation Scores
+                </h3>
+                <div className="rounded-lg border border-border/50 bg-background/50 p-3">
+                  <TopicEvalBreakdown byTopic={evalStats.byTopic} />
+                </div>
+              </div>
+            )}
+            <TrainingMetricsSummary workflowId={workflowId} />
+            {knowledgeCoverageStats && knowledgeCoverageStats.totalChunks > 0 && (
+              <div className="p-4 pt-0">
+                <h3 className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-[0.06em] mb-3">
+                  Knowledge Coverage
+                </h3>
+                <div className="rounded-lg border border-border/50 bg-background/50 p-3">
+                  <KnowledgeCoverageBreakdown coverage={knowledgeCoverageStats} />
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

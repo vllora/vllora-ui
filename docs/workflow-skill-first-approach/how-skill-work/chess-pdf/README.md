@@ -8,7 +8,7 @@ These PDFs were evaluated for suitability as knowledge sources for the Chess Tut
 |---|------|-------|------|-------------|-------------------|
 | 1 | `Chess-Strategy-Lasker-Indian.pdf` | 282 | 1.2MB | Dense strategy prose — openings, middlegame, endgames, pawn structures, combinations | Best: single-column, clean text, great chapter headings. Public domain (1915). |
 | 2 | `chess-tactics-and-combinations-dave-regis-646.pdf` | 84 | 341K | Tactical patterns — forks, pins, skewers, discovered attacks, combinations | Good: prose sections extract well. Some OCR artifacts from ASCII chess diagrams. Tested: 0.987 avg eval score. |
-| 3 | `02.-Learn-and-Master-Progressive-Chess-author-Matej-Guid.pdf` | ~55 | 5.6MB | Progressive chess variant — rules, strategy, examples | OK: adds topic variety. Heavier on diagrams. |
+| 3 | `02.-Learn-and-Master-Progressive-Chess-author-Matej-Guid.pdf` | ~55 | 5.6MB | Progressive chess variant — rules, strategy, examples | **Caution:** teaches a chess *variant* with different rules (increasing moves per turn). Including it may confuse a standard chess tutor model. Use only if you want to explicitly cover Progressive Chess. |
 
 ## Evaluated but Not Included
 
@@ -34,6 +34,8 @@ These PDFs were evaluated for suitability as knowledge sources for the Chess Tut
 
 ## Recommended Combination for Demo
 
-**Option A (best quality, slower extraction):** Lasker book only — 282 pages covers the full chess curriculum.
+**Option A (quick test, ~5 min):** Dave Regis tactics only — 84 pages, fast extraction, tested at 0.987 avg eval.
 
-**Option B (fastest, already tested):** Dave Regis tactics + Progressive Chess — smaller files, faster Docling processing, already produced 70 records with 0.987 avg eval in v1 test.
+**Option B (full demo, ~15 min):** Dave Regis + Lasker — covers both tactics and strategy. Best topic diversity.
+
+**Not recommended:** Progressive Chess — teaches a different game variant, will confuse a standard chess tutor model.

@@ -88,27 +88,40 @@ cd vllora/gateway && cargo run
 
 ### Option A: Full pipeline via Claude Code
 
+**Recommended PDFs for demo:**
+- **Primary:** `chess-tactics-and-combinations-dave-regis-646.pdf` (84 pages) — tactical patterns: forks, pins, skewers, combinations, checkmates. Clean chapter structure, fast extraction, tested at 0.987 avg eval.
+- **Secondary:** `Chess-Strategy-Lasker-Indian.pdf` (282 pages) — comprehensive strategy: openings, middlegame, endgames, pawn structures. Public domain (1915). Dense prose, excellent headings.
+- **Skip:** `02.-Learn-and-Master-Progressive-Chess-author-Matej-Guid.pdf` — this teaches Progressive Chess (a variant with different rules), NOT standard chess. Including it would confuse the tutor model.
+
+**Quick test (1 PDF, ~5 min extraction):** Use Dave Regis only.
+**Full demo (2 PDFs, ~15 min extraction):** Use Dave Regis + Lasker.
+
 ```bash
 cd "$TEST_DIR"
-claude -p "I want to fine-tune a chess tutor AI model. I have PDF documents in this directory.
+claude -p "I want to fine-tune a chess tutor model using the PDF documents in this directory.
 
-Objective: A chess tutor that teaches strategy, tactics, and positional play. Covers openings, middlegame strategy, pawn structures, endgames, and combinations. Explains concepts clearly with examples and adapts to the student level.
+Objective: Train a chess tutor that teaches tactical patterns (forks, pins, skewers, discovered attacks, combinations, checkmates) and strategic concepts (openings, pawn structures, middlegame planning, endgame technique). The tutor should explain concepts clearly using concrete examples from real games, help students recognize patterns on the board, and guide them through the reasoning process — not just show moves but explain WHY a tactic works.
+
+System prompt: You are an expert chess tutor who teaches through explanation and guided discovery. When a student asks about a concept, you explain the underlying principle, show how to recognize the pattern, walk through a concrete example, and highlight common mistakes. You adapt your language to be clear and educational — not just listing moves, but explaining the logic behind each one.
 
 Execute the full vLLora finetune skill pipeline:
-1. Create a workflow on the gateway (http://localhost:9090)
-2. Extract the PDF documents for knowledge sources
-3. Build a topic hierarchy from the extracted content
-4. Generate training data (at least 80 records)
-5. Write a grader/evaluator script
-6. Upload everything to the gateway
+1. Create a workflow on the gateway (http://localhost:9090) — upload immediately
+2. Extract ALL PDF documents using docling_extract.py (with --batch mode). Then for EACH document, write a CUSTOM extraction script that reads the docling-result.json and produces knowledge_parts.json. Do NOT write a generic script — each document has different structure, OCR artifacts, and heading patterns. Read chunks first to understand the document before writing the script. After extraction, run consolidate_parts.py and validate_extraction.py on each document. Upload each knowledge source to gateway as extraction completes.
+3. Build a topic hierarchy from the extracted content — upload topics + relations to gateway immediately
+4. Generate training data (at least 100 records) — upload records to gateway immediately
+5. Write a grader/evaluator script — dry-run then upload grader to gateway immediately
+6. Verify all data landed in the gateway (counts > 0)
 
 Use the scripts in .claude/scripts/ and follow .claude/SKILL.md instructions exactly.
 IMPORTANT: Do NOT create shell scripts. Execute all commands directly via bash.
-NOTE: Use chunking_max_tokens=1024 when submitting to Docling.
-After extraction, run consolidate_parts.py and validate_extraction.py." \
+IMPORTANT: Upload to gateway after EACH step, not at the end. The UI shows progress in real time.
+IMPORTANT: Use docling_extract.py for Docling — do NOT use raw curl.
+IMPORTANT: Write a SEPARATE custom extraction script PER document. A generic script produces garbage — each PDF has different structure and OCR patterns.
+IMPORTANT: A healthy extraction produces 2-10 parts per page. If you get fewer than 50 parts from a 84-page PDF, your script is wrong.
+NOTE: Use chunking_max_tokens=1024 when submitting to Docling." \
   --dangerously-skip-permissions \
   --model sonnet \
-  --max-turns 100
+  --max-turns 200
 ```
 
 > **Tip**: For the 282-page Lasker book, Docling extraction takes 10-20 minutes. If Docling times out or restarts, the task is lost — the agent needs to re-submit. Use `--dangerously-skip-permissions` to avoid the agent getting stuck on permission prompts in headless mode.
@@ -460,6 +473,35 @@ sqlite3 $DB "
 **Cause**: `sourceChunkRefs` on records or `topic_sources` relations not set up correctly.
 
 **Fix**: Each topic needs relations linking it to knowledge source parts. Records need `source_chunk_ref` pointing to the part they were generated from. Check that `relations.json` was uploaded via `finetune.py upload-relations`.
+
+### Issue: Duplicate knowledge sources uploaded
+
+**Cause**: The agent uploaded a knowledge source, then re-ran extraction and uploaded again without checking if the source already exists. This creates duplicate entries with different UUIDs but the same document content.
+
+**How to detect**:
+```bash
+sqlite3 $DB "SELECT name, COUNT(*) as cnt FROM knowledge_sources WHERE workflow_id='$WF_ID' GROUP BY name HAVING cnt > 1;"
+```
+
+**Fix**: `finetune.py upload-knowledge` now includes dedup checking — it queries existing knowledge sources by name before uploading and skips if one already exists. If you need to replace a source, delete the existing one first via the API.
+
+### Issue: Agent creates relations-uuid.json (manual UUID mapping)
+
+**Cause**: The agent doesn't know that the gateway resolves `part_identifier` by matching against both UUID and `reference_id`. It queries the DB to map reference_ids to UUIDs and creates a separate `relations-uuid.json`.
+
+**Fix**: SKILL.md now explicitly states that `relations.json` should use reference_ids (string IDs from `knowledge_parts.json`), not UUIDs. The gateway's `create_relations` service queries `id OR reference_id` on both topics and parts tables.
+
+### Issue: Extraction script placed outside per-document directory
+
+**Cause**: The agent writes extraction scripts like `extract_chess_tactics.py` in `finetune-project/` root instead of inside `knowledge/{doc-slug}/`.
+
+**Fix**: SKILL.md now specifies the script location as `knowledge/{doc-slug}/extract.py`. This keeps extraction artifacts co-located with their document's data.
+
+### Issue: Execution log written retroactively instead of incrementally
+
+**Cause**: The agent batches all logging at the end of the pipeline run instead of appending entries after each action as instructed.
+
+**Fix**: SKILL.md now includes a CRITICAL note to create `execution-log.md` at Step 1 start and append after every action using `echo`/`cat >>`. The log should reflect real-time progress.
 
 ## Data Format Reference
 

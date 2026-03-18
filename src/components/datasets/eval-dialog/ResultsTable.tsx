@@ -1,12 +1,12 @@
 /**
  * ResultsTable
  *
- * Clean evaluation results table matching the mockup design.
- * Columns: # | Input | Score | Status | Logs
+ * Evaluation results table with expandable rows for reason/criteria.
+ * Columns: # | Input | Topic | Score | Reason/Status | Logs
  * Uses @tanstack/react-virtual for efficient rendering of large result sets.
  */
 
-import { useRef, useState, useMemo, useEffect } from "react";
+import { useRef, useState, useMemo, useEffect, useCallback } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { cn } from "@/lib/utils";
 import type { FlatEvaluationResult } from "@/services/finetune-api";
@@ -15,6 +15,7 @@ import { DryrunEvaluationResultRow } from "./DryrunEvaluationResultRow";
 type SortOption = "index" | "score-asc" | "score-desc" | "status";
 
 const ROW_HEIGHT = 38;
+const EXPANDED_ROW_HEIGHT = 38 + 100; // estimate, measured dynamically
 
 interface ResultsTableProps {
   readonly results: FlatEvaluationResult[];
@@ -24,12 +25,14 @@ interface ResultsTableProps {
   readonly fillHeight?: boolean;
   /** Maximum height when not filling (px) */
   readonly maxHeight?: number;
-  /** Callback when a row is clicked */
+  /** Callback when a row is clicked (external navigation) */
   readonly onRowClick?: (result: FlatEvaluationResult) => void;
-  /** ID of the currently expanded row (for expand/collapse support) */
+  /** ID of the currently expanded row (for external expand/collapse, e.g., PerRowDetailsSection) */
   readonly expandedRowId?: string | null;
-  /** Render function for expanded row content */
+  /** Render function for expanded row content (external expand content) */
   readonly renderExpandedContent?: (result: FlatEvaluationResult) => React.ReactNode;
+  /** Navigate to a record in the records table */
+  readonly onNavigateToRecord?: (recordId: string, result: FlatEvaluationResult) => void;
 }
 
 export function ResultsTable({
@@ -38,12 +41,19 @@ export function ResultsTable({
   fillHeight = false,
   maxHeight = 400,
   onRowClick,
-  expandedRowId,
+  expandedRowId: externalExpandedRowId,
   renderExpandedContent,
+  onNavigateToRecord,
 }: ResultsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [sortOption, setSortOption] = useState<SortOption>("index");
   const [highlightedRowId, setHighlightedRowId] = useState<string | null>(null);
+  // Internal expand state (for built-in reason expand)
+  const [internalExpandedId, setInternalExpandedId] = useState<string | null>(null);
+
+  // Use external expand if provided, otherwise internal
+  const hasExternalExpand = renderExpandedContent !== undefined;
+  const expandedRowId = hasExternalExpand ? externalExpandedRowId : internalExpandedId;
 
   const processedResults = useMemo(() => {
     const sorted = [...results];
@@ -70,14 +80,12 @@ export function ResultsTable({
     return sorted;
   }, [results, sortOption]);
 
-  const isExpandable = !!expandedRowId !== undefined && !!renderExpandedContent;
-
   const virtualizer = useVirtualizer({
     count: processedResults.length,
     getScrollElement: () => parentRef.current,
     estimateSize: (index) => {
       if (expandedRowId && processedResults[index]?.dataset_row_id === expandedRowId) {
-        return ROW_HEIGHT + 150;
+        return EXPANDED_ROW_HEIGHT;
       }
       return ROW_HEIGHT;
     },
@@ -86,8 +94,8 @@ export function ResultsTable({
 
   // Remeasure when expanded row changes
   useEffect(() => {
-    if (isExpandable) virtualizer.measure();
-  }, [expandedRowId, virtualizer, isExpandable]);
+    virtualizer.measure();
+  }, [expandedRowId, virtualizer]);
 
   // Listen for highlight events
   useEffect(() => {
@@ -109,8 +117,38 @@ export function ResultsTable({
     };
   }, [processedResults, virtualizer]);
 
-  const hasEpochData = results.some((r) => r.epoch != null);
+  // Show epoch column only when there are multiple distinct epochs
+  const hasEpochData = useMemo(() => {
+    const epochs = new Set(results.map((r) => r.epoch).filter((e) => e != null));
+    return epochs.size > 1;
+  }, [results]);
   const hasTrendData = results.some((r) => r.trend != null);
+
+  // Check if all rows have the same status (to replace Status column with Reason)
+  const allSameStatus = useMemo(() => {
+    if (results.length === 0) return false;
+    const firstStatus = results[0].status;
+    return results.every((r) => r.status === firstStatus);
+  }, [results]);
+
+  // Check if any row has topic data
+  const hasTopicData = useMemo(() => {
+    return results.some((r) => {
+      const row = r.row as Record<string, unknown> | undefined;
+      return row && (row.topic || row.topic_name || row.topicName);
+    });
+  }, [results]);
+
+  const handleRowClick = useCallback((result: FlatEvaluationResult) => {
+    if (onRowClick && hasExternalExpand) {
+      onRowClick(result);
+    } else {
+      // Toggle internal expand
+      setInternalExpandedId((prev) =>
+        prev === result.dataset_row_id ? null : result.dataset_row_id,
+      );
+    }
+  }, [onRowClick, hasExternalExpand]);
 
   if (results.length === 0) {
     return (
@@ -162,12 +200,16 @@ export function ResultsTable({
 
       {/* Table header */}
       <div className="flex items-center text-[10px] font-semibold uppercase tracking-wider text-zinc-500 border-b border-zinc-700/50 shrink-0">
-        <div className="w-10 shrink-0 px-3 py-2">#</div>
+        <div className="w-5 shrink-0" /> {/* expand chevron */}
+        <div className="w-8 shrink-0 py-2">#</div>
         {hasEpochData && <div className="w-[50px] shrink-0 text-center py-2">Epoch</div>}
         <div className="flex-1 min-w-0 py-2">Input</div>
+        {hasTopicData && <div className="w-[120px] shrink-0 py-2">Topic</div>}
         <div className="w-16 shrink-0 text-right pr-4 py-2">Score</div>
         {hasTrendData && <div className="w-[50px] shrink-0 text-center py-2">Trend</div>}
-        <div className="w-16 shrink-0 text-right pr-4 py-2">Status</div>
+        <div className="w-[140px] shrink-0 pr-2 py-2">
+          {allSameStatus ? "Reason" : "Status"}
+        </div>
         <div className="w-10 shrink-0 text-center py-2">Logs</div>
       </div>
 
@@ -187,10 +229,11 @@ export function ResultsTable({
           >
             {virtualizer.getVirtualItems().map((virtualRow) => {
               const result = processedResults[virtualRow.index];
+              const isExpanded = expandedRowId === result.dataset_row_id;
               return (
                 <div
                   key={result.dataset_row_id || `row-${virtualRow.index}`}
-                  ref={isExpandable ? virtualizer.measureElement : undefined}
+                  ref={virtualizer.measureElement}
                   data-index={virtualRow.index}
                   style={{
                     position: "absolute",
@@ -205,9 +248,14 @@ export function ResultsTable({
                     result={result}
                     index={result.row_index}
                     isHighlighted={highlightedRowId === result.dataset_row_id}
-                    onClick={onRowClick ? () => onRowClick(result) : undefined}
+                    onClick={() => handleRowClick(result)}
+                    onNavigateToRecord={onNavigateToRecord}
+                    showEpoch={hasEpochData}
+                    isExpanded={isExpanded}
+                    allSameStatus={allSameStatus}
                   />
-                  {expandedRowId === result.dataset_row_id && renderExpandedContent && (
+                  {/* External expand content (e.g., from PerRowDetailsSection) */}
+                  {isExpanded && hasExternalExpand && renderExpandedContent && (
                     <div className="border-t border-zinc-800/40 bg-zinc-900/30 px-6 py-2">
                       {renderExpandedContent(result)}
                     </div>

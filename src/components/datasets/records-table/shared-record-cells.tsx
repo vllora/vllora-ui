@@ -74,7 +74,7 @@ export function ScoreCell({ jobScore }: { readonly jobScore?: RecordJobScore }) 
   }
 
   if (jobScore.score === undefined) {
-    return <span className="text-muted-foreground/20">—</span>;
+    return <span className="text-muted-foreground/10">·</span>;
   }
 
   return (
@@ -88,18 +88,24 @@ export function ScoreCell({ jobScore }: { readonly jobScore?: RecordJobScore }) 
 // ─── Job Column Header ───
 
 export function JobColumnHeader({ column }: { readonly column: JobColumn }) {
-  const status = column.status as JobStatusType | undefined;
-  const isActiveStatus = status === "running" || status === "queued";
+  const isActive = column.status === "running" || column.status === "queued";
 
   return (
     <div className="flex flex-col items-center gap-0.5">
-      <span className="text-[10px] font-medium normal-case tracking-normal">{column.label}</span>
-      {isActiveStatus && status ? (
-        <JobStatusBadge status={status} />
-      ) : (
-        <span className="text-[8px] text-muted-foreground/40 normal-case tracking-normal">
-          {column.type === "eval" ? "evaluation" : "finetune"}
-        </span>
+      <button
+        type="button"
+        className="text-[10px] font-medium normal-case tracking-normal hover:underline hover:text-foreground transition-colors cursor-pointer"
+        onClick={(e) => {
+          e.stopPropagation();
+          window.dispatchEvent(new CustomEvent("vllora_navigate_to_job", {
+            detail: { jobId: column.id, type: column.type },
+          }));
+        }}
+      >
+        {column.label}
+      </button>
+      {isActive && (
+        <JobStatusBadge status={column.status as JobStatusType} className="normal-case" />
       )}
     </div>
   );

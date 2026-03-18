@@ -7,7 +7,7 @@
  */
 
 import { useMemo } from "react";
-import { Trash2, ChevronLeft, ChevronRight, Pencil, FileText, Coins, MessageSquare } from "lucide-react";
+import { Trash2, ChevronLeft, ChevronRight, Pencil, FileText, Coins, MessageSquare, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -305,33 +305,36 @@ function ScoresSection({
   readonly columns: readonly JobColumn[];
   readonly scores: ReadonlyMap<string, RecordJobScore>;
 }) {
-  const evalCols = columns.filter((c) => c.type === "eval");
-  const trainCols = columns.filter((c) => c.type === "finetune");
+  // Reverse so newest job is on top (matches user expectation)
+  const evalCols = [...columns.filter((c) => c.type === "eval")].reverse();
+  const trainCols = [...columns.filter((c) => c.type === "finetune")].reverse();
 
   if (evalCols.length === 0 && trainCols.length === 0) return null;
 
   return (
-    <div className="px-5 py-4 border-b border-border/50">
-      <SectionLabel title="Scores" />
-      <div className="mt-3 space-y-4">
-        {evalCols.length > 0 && (
-          <ScoreGroup
-            label="Evaluations"
-            dotClass="bg-blue-400"
-            columns={evalCols}
-            scores={scores}
-          />
-        )}
-        {trainCols.length > 0 && (
-          <ScoreGroup
-            label="Training"
-            dotClass="bg-emerald-400"
-            columns={trainCols}
-            scores={scores}
-          />
-        )}
+    <TooltipProvider delayDuration={300}>
+      <div className="px-5 py-4 border-b border-border/50">
+        <SectionLabel title="Scores" />
+        <div className="mt-3 space-y-4">
+          {evalCols.length > 0 && (
+            <ScoreGroup
+              label="Evaluations"
+              dotClass="bg-blue-400"
+              columns={evalCols}
+              scores={scores}
+            />
+          )}
+          {trainCols.length > 0 && (
+            <ScoreGroup
+              label="Training"
+              dotClass="bg-emerald-400"
+              columns={trainCols}
+              scores={scores}
+            />
+          )}
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }
 
@@ -358,6 +361,8 @@ function ScoreGroup({
           return (
             <ScoreBarRow
               key={col.id}
+              jobId={col.id}
+              type={col.type}
               label={col.label}
               scoreData={scoreData}
             />
@@ -369,15 +374,20 @@ function ScoreGroup({
 }
 
 function ScoreBarRow({
+  jobId,
+  type,
   label,
   scoreData,
 }: {
+  readonly jobId: string;
+  readonly type: "eval" | "finetune";
   readonly label: string;
   readonly scoreData?: RecordJobScore;
 }) {
   const score = scoreData?.score;
   const status = scoreData?.status ?? "queued";
   const trend = scoreData?.trend;
+  const reason = scoreData?.reason;
 
   const isRunning = status === "running";
   const isQueued = status === "queued" && score == null;
@@ -396,7 +406,18 @@ function ScoreBarRow({
 
   return (
     <div className="flex items-center gap-2.5 h-7">
-      <span className="w-6 text-[11px] text-muted-foreground/60 shrink-0">{label}</span>
+      <button
+        type="button"
+        className="w-20 text-[11px] text-muted-foreground/60 shrink-0 truncate text-left hover:text-foreground hover:underline transition-colors cursor-pointer"
+        title={label}
+        onClick={() => {
+          window.dispatchEvent(new CustomEvent("vllora_navigate_to_job", {
+            detail: { jobId, type },
+          }));
+        }}
+      >
+        {label}
+      </button>
       <div className="flex-1 h-5 bg-muted/30 rounded overflow-hidden relative">
         {barWidth !== "0%" && (
           <div
@@ -418,6 +439,20 @@ function ScoreBarRow({
         {trend != null && trend > 0.005 && <span className="text-emerald-400">&uarr;</span>}
         {trend != null && trend < -0.005 && <span className="text-red-400">&darr;</span>}
       </span>
+      {reason ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button type="button" className="w-4 shrink-0 flex items-center justify-center">
+              <Info className="h-3 w-3 text-muted-foreground/40 hover:text-muted-foreground transition-colors" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="max-w-[300px]">
+            <p className="text-xs whitespace-pre-wrap">{reason}</p>
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        <span className="w-4 shrink-0" />
+      )}
     </div>
   );
 }

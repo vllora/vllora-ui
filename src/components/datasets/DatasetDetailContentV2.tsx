@@ -855,6 +855,8 @@ export function DatasetDetailContentV2() {
               topicQualityScores={topicQualityScores}
               documentCount={knowledgeSourcesCount}
               partCount={knowledgeSources.flatMap(s => s.parts).length}
+              evalStats={dataset.evalStats}
+              knowledgeCoverageStats={dataset.knowledgeCoverageStats}
             />
           )}
           {contentSection === "evaluator-script" && (
