@@ -9,11 +9,13 @@ import { useState, useMemo } from "react";
 import { FileText, Sparkles, MessageSquare, ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
-import { resolveAndGroupBySource } from "@/lib/distri-finetune-tools/steps/shared/resolve-part-ref";
+import { resolveAndGroupBySource, resolvePartRef } from "@/lib/distri-finetune-tools/steps/shared/resolve-part-ref";
+import type { KnowledgeSource } from "@/types/knowledge-types";
 import type { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { useJobScoreColumns } from "@/hooks/useJobScoreColumns";
 import type { JobColumn, RecordJobScore } from "./records-table/job-score-columns";
+import { JobStatusBadge } from "./shared/JobStatusBadge";
 
 type Tab = "records" | "linked-sources";
 
@@ -150,7 +152,7 @@ export function TopicDetailView({
             onSelectRecord={onSelectRecord}
             jobColumns={jobColumns}
             getScoresForRecord={getScoresForRecord}
-            topicSourceCount={sourceCount}
+            sources={sources}
           />
         ) : (
           <LinkedSourcesTabContent groupedSources={groupedSources} />
@@ -194,13 +196,13 @@ function RecordsTabContent({
   onSelectRecord,
   jobColumns = [],
   getScoresForRecord,
-  topicSourceCount = 0,
+  sources = [],
 }: {
   readonly records: DatasetRecord[];
   readonly onSelectRecord?: (recordId: string) => void;
   readonly jobColumns?: readonly JobColumn[];
   readonly getScoresForRecord?: (recordId: string) => ReadonlyMap<string, RecordJobScore>;
-  readonly topicSourceCount?: number;
+  readonly sources?: readonly KnowledgeSource[];
 }) {
   const hasJobColumns = jobColumns.length > 0;
 
@@ -245,7 +247,7 @@ function RecordsTabContent({
             onClick={onSelectRecord}
             jobColumns={jobColumns}
             getScoresForRecord={getScoresForRecord}
-            topicSourceCount={topicSourceCount}
+            sources={sources}
           />
         ))}
       </tbody>
@@ -273,21 +275,6 @@ function ScoreColumnHeader({ column }: { readonly column: JobColumn }) {
   );
 }
 
-/** Shared job status badge — matches the sidebar StatusBadge style */
-function JobStatusBadge({ status }: { readonly status: "running" | "queued" | "completed" | "failed" }) {
-  const config = {
-    running: { label: "running", color: "bg-blue-500/15 text-blue-400" },
-    queued: { label: "queued", color: "bg-amber-500/15 text-amber-400" },
-    completed: { label: "done", color: "bg-emerald-500/15 text-emerald-400" },
-    failed: { label: "failed", color: "bg-red-500/15 text-red-400" },
-  }[status];
-
-  return (
-    <span className={cn("text-[10px] px-1.5 py-px rounded-full font-medium", config.color)}>
-      {config.label}
-    </span>
-  );
-}
 
 function ScorePill({ score }: { readonly score: number }) {
   const colorClass = score >= 0.8
@@ -333,10 +320,70 @@ function ScoreCell({ jobScore }: { readonly jobScore?: RecordJobScore }) {
   );
 }
 
-function getSourceRef(record: DatasetRecord): string | null {
+/** Format resolved source parts for the Source column */
+function SourcePartsCell({
+  resolvedParts,
+  unresolvedCount,
+}: {
+  readonly resolvedParts: readonly { source: { name: string }; part: { title?: string; extractionPath?: string } }[];
+  readonly unresolvedCount: number;
+}) {
+  if (resolvedParts.length === 0 && unresolvedCount === 0) {
+    return <span className="text-muted-foreground/20">—</span>;
+  }
+
+  if (resolvedParts.length === 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/50">
+        <FileText className="w-3 h-3 shrink-0 opacity-40" />
+        {unresolvedCount} part{unresolvedCount !== 1 ? "s" : ""}
+      </span>
+    );
+  }
+
+  // Group by source document to detect cross-document refs
+  const bySource = new Map<string, string[]>();
+  for (const r of resolvedParts) {
+    const partLabel = r.part.title ?? r.part.extractionPath ?? "untitled";
+    const existing = bySource.get(r.source.name);
+    if (existing) {
+      existing.push(partLabel);
+    } else {
+      bySource.set(r.source.name, [partLabel]);
+    }
+  }
+
+  const sourceCount = bySource.size;
+  const tooltip = [...bySource.entries()]
+    .map(([doc, parts]) => `${doc}: ${parts.join(", ")}`)
+    .join("\n");
+
+  // Single source → show part title
+  // Multiple sources → show "N docs" to indicate cross-doc refs
+  const label = sourceCount === 1
+    ? resolvedParts.length === 1
+      ? (resolvedParts[0].part.title ?? resolvedParts[0].source.name)
+      : `${resolvedParts[0].part.title ?? resolvedParts[0].source.name} +${resolvedParts.length - 1}`
+    : `${sourceCount} docs · ${resolvedParts.length} parts`;
+
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60 bg-primary/5 border border-primary/10 rounded px-1.5 py-0.5 max-w-[160px] truncate"
+      title={tooltip}
+    >
+      <FileText className="w-3 h-3 shrink-0 opacity-50" />
+      <span className="truncate">{label}</span>
+    </span>
+  );
+}
+
+/** Extract source_parts from record metadata */
+function getRecordSourceParts(record: DatasetRecord): string[] {
   const meta = record.metadata as Record<string, unknown> | undefined;
-  const ref = meta?.sourceChunkRef;
-  return typeof ref === "string" ? ref : null;
+  const parts = meta?.source_parts ?? meta?.sourceChunkRef;
+  if (Array.isArray(parts)) return parts.filter((p): p is string => typeof p === "string");
+  if (typeof parts === "string") return [parts];
+  return [];
 }
 
 function RecordTableRow({
@@ -345,14 +392,14 @@ function RecordTableRow({
   onClick,
   jobColumns = [],
   getScoresForRecord,
-  topicSourceCount = 0,
+  sources = [],
 }: {
   readonly record: DatasetRecord;
   readonly index: number;
   readonly onClick?: (id: string) => void;
   readonly jobColumns?: readonly JobColumn[];
   readonly getScoresForRecord?: (recordId: string) => ReadonlyMap<string, RecordJobScore>;
-  readonly topicSourceCount?: number;
+  readonly sources?: readonly KnowledgeSource[];
 }) {
   const { user } = useMemo(
     () => extractRecordMessages(record.data),
@@ -363,7 +410,13 @@ function RecordTableRow({
     () => getScoresForRecord?.(record.id),
     [getScoresForRecord, record.id],
   );
-  const sourceRef = getSourceRef(record);
+  const partRefs = useMemo(() => getRecordSourceParts(record), [record]);
+  const resolvedParts = useMemo(() => {
+    if (partRefs.length === 0 || sources.length === 0) return [];
+    return partRefs
+      .map(ref => resolvePartRef(ref, sources))
+      .filter((r): r is NonNullable<typeof r> => r !== null);
+  }, [partRefs, sources]);
   const fallbackScore = record.evaluation?.score ?? record.evaluation?.evalScore;
 
   return (
@@ -395,22 +448,7 @@ function RecordTableRow({
         </td>
       )}
       <td className="px-4 py-2.5 align-top">
-        {sourceRef ? (
-          <span
-            className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60 bg-primary/5 border border-primary/10 rounded px-1.5 py-0.5 max-w-[130px] truncate"
-            title={sourceRef}
-          >
-            <FileText className="w-3 h-3 shrink-0 opacity-50" />
-            <span className="truncate">{sourceRef}</span>
-          </span>
-        ) : topicSourceCount > 0 ? (
-          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/50">
-            <FileText className="w-3 h-3 shrink-0 opacity-40" />
-            {topicSourceCount} source{topicSourceCount !== 1 ? "s" : ""}
-          </span>
-        ) : (
-          <span className="text-muted-foreground/20">—</span>
-        )}
+        <SourcePartsCell resolvedParts={resolvedParts} unresolvedCount={partRefs.length} />
       </td>
     </tr>
   );

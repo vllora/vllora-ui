@@ -16,6 +16,8 @@ import type { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import { extractMessages, cleanText } from "./cells/ConversationThreadCell.utilities";
 import { emitter } from "@/utils/eventEmitter";
 import type { JobColumn, RecordJobScore } from "./job-score-columns";
+import { JobStatusBadge } from "../shared/JobStatusBadge";
+import type { JobStatusType } from "../shared/JobStatusBadge";
 
 // ─── Types ───
 
@@ -374,22 +376,14 @@ export function UnifiedRecordTable({
 // ─── Job Column Header ───
 
 function JobColumnHeader({ column }: { readonly column: JobColumn }) {
-  const isActive = column.status === "running";
-  const isQueued = column.status === "queued";
+  const status = column.status as JobStatusType | undefined;
+  const isActiveStatus = status === "running" || status === "queued";
 
   return (
     <div className="flex flex-col items-center gap-0.5">
       <span className="text-[10px] font-medium normal-case tracking-normal">{column.label}</span>
-      {isActive ? (
-        <span className="inline-flex items-center gap-1 text-[7px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-primary/15 text-primary">
-          <span className="w-1 h-1 rounded-full bg-primary animate-pulse" />
-          running
-        </span>
-      ) : isQueued ? (
-        <span className="inline-flex items-center gap-1 text-[7px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground/50">
-          <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
-          queued
-        </span>
+      {isActiveStatus && status ? (
+        <JobStatusBadge status={status} />
       ) : (
         <span className="text-[8px] text-muted-foreground/40 normal-case tracking-normal">
           {column.type === "eval" ? "evaluation" : "finetune"}

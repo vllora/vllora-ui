@@ -38,6 +38,7 @@ import type { GraderInfo, PreviousBestInfo, EvaluatorVersionInfo } from "@/compo
 import { useEvaluatorVersions } from "@/hooks/useEvaluatorVersions";
 import { getJobAverageScore } from "@/types/eval-job";
 import type { TopicHierarchyNode } from "@/types/dataset-types";
+import { JobStatusBadge, normalizeJobStatus } from "@/components/datasets/shared/JobStatusBadge";
 
 // ============================================================================
 // Types
@@ -306,13 +307,13 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         }}
       >
         {dryRunJobs.map((job) => {
-          const statusInfo = getEvalJobStatus(job.status);
+          const normalized = normalizeJobStatus(job.status);
           return (
             <SidebarItem
               key={job.id}
               icon={<BarChart3 className="w-3.5 h-3.5" />}
               label={`eval-${job.id.slice(0, 6)}`}
-              badge={<StatusBadge {...statusInfo} />}
+              badge={<JobStatusBadge status={normalized} className="ml-auto" />}
               isActive={selectedNodeId === `evaluations/jobs/${job.id}`}
               onClick={() => handleSelect(`evaluations/jobs/${job.id}`)}
             />
@@ -340,14 +341,14 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         }}
       >
         {finetuneJobs.map((job) => {
-          const statusInfo = getFinetuneJobStatus(job.status);
+          const normalized = normalizeJobStatus(job.status);
           const displayName = job.suffix || `ft-${job.id.slice(0, 6)}`;
           return (
             <SidebarItem
               key={job.id}
               icon={<Brain className="w-3.5 h-3.5" />}
               label={displayName}
-              badge={<StatusBadge {...statusInfo} />}
+              badge={<JobStatusBadge status={normalized} className="ml-auto" />}
               isActive={selectedNodeId === `finetune/${job.id}`}
               onClick={() => handleSelect(`finetune/${job.id}`)}
             />
@@ -480,16 +481,6 @@ function CountBadge({ count }: { readonly count: number }) {
   );
 }
 
-function StatusBadge({ label, color }: { readonly label: string; readonly color: string }) {
-  return (
-    <span className={cn(
-      "ml-auto text-[10px] px-1.5 py-px rounded-full shrink-0 font-medium",
-      color,
-    )}>
-      {label}
-    </span>
-  );
-}
 
 // ============================================================================
 // Topic Tree Items (recursive, nested under Training Data)
@@ -590,17 +581,3 @@ function getTopicRecordCount(node: TopicHierarchyNode, topicCounts: Map<string, 
 // Status helpers
 // ============================================================================
 
-function getEvalJobStatus(status: string): { label: string; color: string } {
-  if (status === "running") return { label: "running", color: "bg-blue-500/15 text-blue-400" };
-  if (status === "completed") return { label: "done", color: "bg-emerald-500/15 text-emerald-400" };
-  if (status === "failed") return { label: "failed", color: "bg-red-500/15 text-red-400" };
-  return { label: status, color: "bg-muted/50 text-muted-foreground" };
-}
-
-function getFinetuneJobStatus(status: string): { label: string; color: string } {
-  if (status === "running") return { label: "running", color: "bg-blue-500/15 text-blue-400" };
-  if (status === "succeeded") return { label: "done", color: "bg-emerald-500/15 text-emerald-400" };
-  if (status === "failed") return { label: "failed", color: "bg-red-500/15 text-red-400" };
-  if (status === "pending") return { label: "queued", color: "bg-amber-500/15 text-amber-400" };
-  return { label: status, color: "bg-muted/50 text-muted-foreground" };
-}
