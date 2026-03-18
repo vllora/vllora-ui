@@ -16,7 +16,7 @@ Training data uses JSONL format — one JSON object per line. Each line is a **p
 | `messages` | Yes | Array of conversation messages (system + user prompts) |
 | `id` | Yes | Unique identifier for tracking in evaluation results |
 | `topic` | No | Leaf topic ID this record belongs to (e.g., `"billing/refunds"`) |
-| `source_parts` | No | Array of knowledge part IDs used as grounding material for this record. Enables traceability from record → source document sections. Part IDs reference entries in `knowledge/doc-N/knowledge_parts.json` (per-document subdirectories). |
+| `source_parts` | No | Array of knowledge part IDs used as grounding material for this record. Enables traceability from record → source document sections. Part IDs reference entries in `knowledge/{doc-slug}/knowledge_parts.json` (per-document subdirectories, named by slugified filename). |
 
 ### Message Roles
 
