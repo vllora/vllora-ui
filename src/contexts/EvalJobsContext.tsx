@@ -44,15 +44,26 @@ function useEvalJobs(props: {
   const [isLoading, setIsLoading] = useState(true);
   const workflowId = dataset.id;
 
+  // Preserve per-record results (pollingSnapshot) across loadJobs re-fetches.
+  // pollingSnapshot is in-memory only — the API never returns it.
+  const snapshotsRef = useRef<Map<string, EvalJob['pollingSnapshot']>>(new Map());
+
   // SSE reconnect detection (re-fetch jobs after gateway restart)
   const { isConnected } = ProjectEventsConsumer();
   const wasConnectedRef = useRef(false);
 
-  // Load jobs from gateway SQLite
+  // Load jobs from gateway SQLite, merging back any cached pollingSnapshots
   const loadJobs = useCallback(async () => {
     try {
       const fetchedJobs = await evalJobService.getByDataset(workflowId);
-      setJobs(fetchedJobs);
+      const merged = fetchedJobs.map((job) => {
+        const cached = snapshotsRef.current.get(job.id);
+        if (cached && !job.pollingSnapshot) {
+          return { ...job, pollingSnapshot: cached };
+        }
+        return job;
+      });
+      setJobs(merged);
     } catch (error) {
       console.error('[EvalJobsContext] Failed to load jobs:', error);
     } finally {
@@ -84,14 +95,14 @@ function useEvalJobs(props: {
         evalPollingManager.stopPolling(job.id);
       }
 
-      // Catch-up: if job is terminal but has no analyzed results, fetch from cloud now.
-      // This handles the race where the BE state tracker set "completed"
-      // before the FE polling manager fetched results from the cloud API.
+      // Catch-up: fetch per-record results from cloud for completed jobs.
+      // pollingSnapshot is in-memory only, so after page reload it's gone.
+      // Also handles the race where BE set "completed" before FE fetched results.
       const isTerminal = job.status === 'completed' || job.status === 'failed';
-      const hasResults = !!job.result;
-      if (isTerminal && !hasResults && job.evaluationRunId && !refreshedJobIdsRef.current.has(job.id)) {
+      const needsSnapshot = isTerminal && !job.pollingSnapshot && job.evaluationRunId;
+      if (needsSnapshot && !refreshedJobIdsRef.current.has(job.id)) {
         refreshedJobIdsRef.current.add(job.id);
-        evalPollingManager.refreshJob(job.id).then(() => loadJobs());
+        evalPollingManager.refreshJob(job.id);
       }
     }
   }, [jobs, loadJobs]);
@@ -110,6 +121,11 @@ function useEvalJobs(props: {
   useEffect(() => {
     const handleJobUpdate = (event: { jobId: string; job: EvalJob }) => {
       if (event.job.workflowId !== workflowId) return;
+
+      // Cache pollingSnapshot so it survives loadJobs re-fetches
+      if (event.job.pollingSnapshot) {
+        snapshotsRef.current.set(event.jobId, event.job.pollingSnapshot);
+      }
 
       setJobs((prevJobs) => {
         const existingIndex = prevJobs.findIndex((j) => j.id === event.jobId);

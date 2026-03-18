@@ -53,9 +53,21 @@ cp -r "$SKILL_DIR/templates" "$TEST_DIR/.claude/"
 
 ### 3. Copy test PDF documents
 
+Use the curated chess tutor PDFs from the skill docs (see [chess-pdf/README.md](how-skill-work/chess-pdf/README.md) for the full evaluation):
+
 ```bash
-cp your-documents/*.pdf "$TEST_DIR/"
+# Recommended: top 3 chess PDFs for demo testing
+PDF_DIR="$(dirname "$SKILL_DIR")/docs/workflow-skill-first-approach/how-skill-work/chess-pdf"
+cp "$PDF_DIR"/*.pdf "$TEST_DIR/"
 ```
+
+| PDF | Pages | Best for |
+|-----|-------|---------|
+| `Chess-Strategy-Lasker-Indian.pdf` | 282 | Full strategy coverage — best quality, slower extraction |
+| `chess-tactics-and-combinations-dave-regis-646.pdf` | 84 | Tactical patterns — faster extraction, tested at 0.987 avg eval |
+| `02.-Learn-and-Master-Progressive-Chess-author-Matej-Guid.pdf` | ~55 | Supplementary content — adds topic variety |
+
+For a **quick test**, use just the tactics book (84 pages, fastest extraction). For a **full demo**, use all 3.
 
 ### 4. Restart the backend
 
@@ -78,23 +90,28 @@ cd vllora/gateway && cargo run
 
 ```bash
 cd "$TEST_DIR"
-claude -p "I want to fine-tune a [YOUR DOMAIN] AI model. I have PDF documents in this directory.
+claude -p "I want to fine-tune a chess tutor AI model. I have PDF documents in this directory.
 
-Objective: [DESCRIBE WHAT THE MODEL SHOULD DO]
+Objective: A chess tutor that teaches strategy, tactics, and positional play. Covers openings, middlegame strategy, pawn structures, endgames, and combinations. Explains concepts clearly with examples and adapts to the student level.
 
 Execute the full vLLora finetune skill pipeline:
 1. Create a workflow on the gateway (http://localhost:9090)
 2. Extract the PDF documents for knowledge sources
 3. Build a topic hierarchy from the extracted content
-4. Generate training data (at least 50 records)
+4. Generate training data (at least 80 records)
 5. Write a grader/evaluator script
 6. Upload everything to the gateway
 
 Use the scripts in .claude/scripts/ and follow .claude/SKILL.md instructions exactly.
-IMPORTANT: Do NOT create shell scripts. Execute all commands directly via bash." \
-  --allowedTools "Bash,Read,Write,Edit,Glob,Grep" \
+IMPORTANT: Do NOT create shell scripts. Execute all commands directly via bash.
+NOTE: Use chunking_max_tokens=1024 when submitting to Docling.
+After extraction, run consolidate_parts.py and validate_extraction.py." \
+  --dangerously-skip-permissions \
+  --model sonnet \
   --max-turns 100
 ```
+
+> **Tip**: For the 282-page Lasker book, Docling extraction takes 10-20 minutes. If Docling times out or restarts, the task is lost — the agent needs to re-submit. Use `--dangerously-skip-permissions` to avoid the agent getting stuck on permission prompts in headless mode.
 
 ### Option B: Step-by-step manual testing
 

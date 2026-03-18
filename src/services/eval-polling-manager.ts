@@ -385,7 +385,9 @@ class EvalJobManager {
         error: undefined,
       });
       if (completedJob) {
-        emitter.emit('vllora_eval_job_update', { jobId: job.id, job: completedJob });
+        // Attach cloud results so UI has per-record data immediately
+        const jobWithResults = { ...completedJob, pollingSnapshot: result };
+        emitter.emit('vllora_eval_job_update', { jobId: job.id, job: jobWithResults });
       }
 
       // Update workflow step data
