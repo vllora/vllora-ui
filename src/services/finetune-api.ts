@@ -301,26 +301,51 @@ export interface FlatEvaluationResult {
 
 
 /** Flatten epoch-based results into a flat array for UI consumption.
- *  Takes the first epoch entry per row (epoch "0" for dry runs). */
+ *  For each row, takes the latest epoch entry and computes trend vs previous epoch. */
 export function flattenEvaluationResults(
   results: RowEpochResult[],
 ): FlatEvaluationResult[] {
   const flat: FlatEvaluationResult[] = [];
   for (const row of results) {
     if (!row.epochs) continue;
-    for (const entries of Object.values(row.epochs)) {
-      for (const entry of entries) {
-        flat.push({
-          dataset_row_id: entry.dataset_row_id ?? entry.workflow_row_id ?? row.row?.id ?? "",
-          row_index: row.row_index,
-          row: row.row,
-          status: entry.status ?? "pending",
-          score: entry.score ?? undefined,
-          reason: entry.reason ?? undefined,
-          error_message: entry.error_message ?? undefined,
-          logs: entry.logs ?? undefined,
-        });
-      }
+
+    const epochKeys = Object.keys(row.epochs)
+      .map(Number)
+      .filter((n) => !isNaN(n))
+      .sort((a, b) => a - b);
+
+    if (epochKeys.length === 0) continue;
+
+    const latestEpochKey = epochKeys[epochKeys.length - 1];
+    const latestEntries = row.epochs[String(latestEpochKey)] ?? [];
+    const previousEntries =
+      epochKeys.length > 1
+        ? (row.epochs[String(epochKeys[epochKeys.length - 2])] ?? [])
+        : [];
+
+    for (const entry of latestEntries) {
+      const previousScore = previousEntries.length > 0
+        ? previousEntries[0].score
+        : undefined;
+      const currentScore = entry.score ?? undefined;
+      const trend =
+        currentScore != null && previousScore != null
+          ? currentScore - previousScore
+          : undefined;
+
+      flat.push({
+        dataset_row_id:
+          entry.dataset_row_id ?? entry.workflow_row_id ?? row.row?.id ?? "",
+        row_index: row.row_index,
+        row: row.row,
+        status: entry.status ?? "pending",
+        score: currentScore,
+        reason: entry.reason ?? undefined,
+        error_message: entry.error_message ?? undefined,
+        logs: entry.logs ?? undefined,
+        epoch: latestEpochKey + 1,
+        trend,
+      });
     }
   }
   return flat;

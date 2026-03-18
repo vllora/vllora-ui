@@ -1,0 +1,104 @@
+- generic [ref=e2]:
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - img "vLLora" [ref=e8] [cursor=pointer]
+      - navigation [ref=e9]:
+        - list [ref=e10]:
+          - listitem [ref=e11]:
+            - link [ref=e12] [cursor=pointer]:
+              - /url: /
+              - img [ref=e13]
+          - listitem [ref=e16]:
+            - link [ref=e17] [cursor=pointer]:
+              - /url: /chat
+              - img [ref=e18]
+          - listitem [ref=e20]:
+            - link [ref=e21] [cursor=pointer]:
+              - /url: /finetune
+              - img [ref=e22]
+      - list [ref=e25]:
+        - listitem [ref=e26]:
+          - link [ref=e27] [cursor=pointer]:
+            - /url: /settings
+            - img [ref=e28]
+    - main [ref=e32]:
+      - generic [ref=e37]:
+        - generic [ref=e38]:
+          - generic [ref=e39]:
+            - img [ref=e40]
+            - textbox "Search workflows..." [ref=e43]
+          - generic [ref=e44]:
+            - button "All" [ref=e45] [cursor=pointer]
+            - button "Draft" [ref=e46] [cursor=pointer]
+            - button "Running" [ref=e47] [cursor=pointer]
+            - button "Completed" [ref=e48] [cursor=pointer]
+          - button "Last updated" [ref=e49] [cursor=pointer]:
+            - img [ref=e50]
+            - text: Last updated
+          - generic [ref=e53]:
+            - generic [ref=e54]: 2 workflows
+            - link "New Workflow" [ref=e55] [cursor=pointer]:
+              - /url: /finetune/new
+              - img [ref=e56]
+              - text: New Workflow
+        - generic [ref=e57]:
+          - generic [ref=e59] [cursor=pointer]:
+            - generic [ref=e60]:
+              - generic [ref=e61]:
+                - generic [ref=e62]:
+                  - img [ref=e64]
+                  - generic [ref=e69]: Chess Tactics Tutor
+                - generic [ref=e70]: Draft
+              - paragraph [ref=e71]: Train a model to be an expert chess tactics tutor that can explain tactical patterns (forks, pins, skewers, discovered attacks, double checks), analyze positions for tactical opportunities, and teach students how to spot and execute combinations.
+              - generic [ref=e72]:
+                - generic [ref=e73]:
+                  - img [ref=e74]
+                  - generic [ref=e76]: 60 rows
+                - generic [ref=e77]:
+                  - img [ref=e78]
+                  - generic [ref=e81]: 1 docs
+            - generic [ref=e83]:
+              - generic [ref=e85]:
+                - img [ref=e86]
+                - text: Eval fn configured
+                - img [ref=e88]
+              - generic [ref=e91]:
+                - generic [ref=e92]: 17m ago
+                - button [ref=e93]:
+                  - img [ref=e94]
+          - generic [ref=e99] [cursor=pointer]:
+            - generic [ref=e100]:
+              - generic [ref=e101]:
+                - generic [ref=e102]:
+                  - img [ref=e104]
+                  - generic [ref=e107]: Chess Tutor (Mockup)
+                - generic [ref=e108]: Running
+              - paragraph [ref=e109]: Build a chess tutoring AI that teaches tactical patterns, combinations, and endgame techniques
+              - generic [ref=e110]:
+                - generic [ref=e111]:
+                  - img [ref=e112]
+                  - generic [ref=e114]: 150 rows
+                - generic [ref=e115]:
+                  - img [ref=e116]
+                  - generic [ref=e119]: 3 docs
+            - generic [ref=e120]:
+              - generic [ref=e123]:
+                - img [ref=e124]
+                - text: Evaluating
+              - generic [ref=e126]:
+                - generic [ref=e128]:
+                  - img [ref=e129]
+                  - text: Finetuning...
+                - generic [ref=e131]:
+                  - generic [ref=e132]: 23h ago
+                  - button [ref=e133]:
+                    - img [ref=e134]
+          - link "New Workflow AI-assisted setup" [ref=e138] [cursor=pointer]:
+            - /url: /finetune/new
+            - generic [ref=e140]:
+              - img [ref=e142]
+              - paragraph [ref=e143]: New Workflow
+              - paragraph [ref=e144]:
+                - img [ref=e145]
+                - text: AI-assisted setup
+  - region "Notifications alt+T"

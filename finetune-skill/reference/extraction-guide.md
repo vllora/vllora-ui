@@ -2,9 +2,9 @@
 
 Extract structured knowledge parts from PDFs using Docling Serve — a local Docker container that handles OCR, tables, images, and complex layouts.
 
-**Your deliverable is a `knowledge_parts.json` per document** (stored in `knowledge/doc-N/knowledge_parts.json`) — a typed, linked parts file matching the schema in Section 3. Every text passage, table, and image becomes a `source_part` with a title, extraction path, and provenance metadata. Normalized chunks or raw Docling output are intermediate steps, NOT the final output.
+**Your deliverable is a `knowledge_parts.json` per document** (stored in `knowledge/{doc-slug}/knowledge_parts.json`, where `{doc-slug}` is the slugified filename) — a typed, linked parts file matching the schema in Section 3. Every text passage, table, and image becomes a `source_part` with a title, extraction path, and provenance metadata. Normalized chunks or raw Docling output are intermediate steps, NOT the final output.
 
-**Multi-document note**: When processing multiple documents, each gets its own subdirectory (`knowledge/doc-1/`, `knowledge/doc-2/`, etc.). Submit all documents to Docling in parallel (async API), then process each result separately. Prefix part IDs with the document identifier (e.g., `doc-1-chapter-3`) to keep them unique across documents. See SKILL.md Step 2 for the full multi-document workflow.
+**Multi-document note**: When processing multiple documents, each gets its own subdirectory named by slugifying the filename (e.g., `knowledge/chess-tactics/`, `knowledge/strategy-guide/`). Submit all documents to Docling in parallel (async API), then process each result separately. Prefix part IDs with a document identifier (e.g., `chess-tactics-chapter-3`) to keep them unique across documents. See SKILL.md Step 2 for the full multi-document workflow.
 
 ---
 

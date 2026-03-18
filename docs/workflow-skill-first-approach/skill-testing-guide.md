@@ -154,7 +154,7 @@ cat finetune-project/execution-log.md
 - Record counts match expectations (50+ records)
 - Topic hierarchy was created
 - Grader script was written
-- All documents were extracted (one `doc-N/` directory per source document)
+- All documents were extracted (one subdirectory per source document, named by slugified filename)
 - `all-parts-index.json` was generated with parts from all documents
 
 ### 2. Verify data in gateway SQLite
@@ -265,13 +265,20 @@ curl -X POST http://localhost:9090/finetune/evaluations \
 
 **Cause**: Document extraction may have failed or produced empty results. Docling API may be unavailable.
 
-**Fix**: Check each per-document directory (`knowledge/doc-N/knowledge_parts.json`) to see which documents failed. If Docling fails, the skill should fall back to direct PDF text extraction.
+**Fix**: Check each per-document directory (`knowledge/{doc-slug}/knowledge_parts.json`) to see which documents failed. If Docling fails, the skill should fall back to direct PDF text extraction.
 
 ### Issue: Only one knowledge source when multiple documents provided
 
-**Cause**: The skill created a single merged knowledge source instead of one per document.
+**Cause**: The agent processed the first document, then moved to Step 3 without looping back for the remaining documents. This is a common agent behavior issue — the agent gets a successful result and advances prematurely.
 
-**Fix**: Each document should be uploaded separately via `finetune.py upload-knowledge`. Check that the agent loops over all documents in Step 2.
+**How to detect**: Compare PDF count vs knowledge source count:
+```bash
+DOC_COUNT=$(ls *.pdf 2>/dev/null | wc -l | tr -d ' ')
+EXTRACTED_COUNT=$(ls -d finetune-project/knowledge/doc-*/ 2>/dev/null | wc -l | tr -d ' ')
+echo "Source: $DOC_COUNT | Extracted: $EXTRACTED_COUNT"
+```
+
+**Fix**: SKILL.md now includes a hard validation check (Step 2e) that blocks progression to Step 3 unless all documents are extracted. Each document should be uploaded separately via `finetune.py upload-knowledge`. If the agent still skips documents, increase `--max-turns` or explicitly list all documents in the prompt.
 
 ### Issue: Canvas shows 0% coverage on all nodes
 
@@ -340,6 +347,156 @@ curl -X POST http://localhost:9090/finetune/evaluations \
 }
 ```
 
+## How the Skill Pipeline Runs
+
+Understanding the execution flow helps identify where things go wrong and what to optimize.
+
+### Execution Flow (9 Steps)
+
+```
+Step 1: Create workflow on gateway        (fast — single API call)
+Step 2: Extract documents via Docling     (SLOW — 30-120s per document)
+Step 3: Build topic hierarchy + relations  (medium — LLM calls for hierarchy design)
+Step 4: Generate training records          (SLOW — LLM call per record batch)
+Step 5: Write grader script               (fast — single LLM generation)
+Step 5.5: Validate dataset                (fast — local validation)
+Step 6: Upload everything to gateway      (fast — API calls)
+Step 7-9: Evaluation/Training/Deployment  (optional, external services)
+```
+
+### Bottlenecks & Improvement Opportunities
+
+| Bottleneck | Cause | Impact | Possible Improvement |
+|------------|-------|--------|---------------------|
+| **Document extraction (Step 2)** | Docling API is async; polling waits for server-side processing. Large PDFs with tables/images take longer. | 30-120s per document. Multiple documents = serial extraction. | Parallelize extraction across documents. Add progress feedback. Fall back to direct text extraction faster on timeout. |
+| **Record generation (Step 4)** | One LLM call per leaf topic batch (via `generate_records.py` → `chat_completion.py`). Each call generates ~5-15 records. | 50+ records = 5-10 LLM calls = 30-60s total. | Increase batch size per call. Parallelize across topics. Cache partial results for retry. |
+| **Agent turn overhead** | Claude Code uses one turn per bash command. Steps with many sequential commands consume turns quickly. | Can hit `--max-turns` limit before pipeline completes. | Combine related commands. Use `finetune.py` subcommands (fewer turns than raw curl). |
+| **Subagent spawning** | relation-builder and training-monitor subagents each need their own agent session. | 10-20s overhead per subagent spawn. | Could inline relation-building into main agent if subagent overhead is too high. |
+| **Validation round-trips** | `validate_dataset.py` runs after records are generated. If validation fails, agent must regenerate. | Wasted generation work if format is wrong. | Validate incrementally during generation, not after. |
+
+### What to Measure
+
+When testing, note these timing metrics in the execution log:
+
+- Total pipeline wall time (target: <10 minutes for 50 records + 1 document)
+- Per-step times (which step is the bottleneck?)
+- Number of agent turns consumed
+- Number of LLM API calls for record generation
+- Number of retry/error recovery attempts
+
+---
+
+## UI Display Validation
+
+After the skill pipeline completes and data is in the gateway, verify the UI correctly displays all data. This is critical — the whole point of the skill is to produce data the UI can visualize.
+
+### Data Flow: Skill → Gateway → UI
+
+```
+Skill produces files (JSONL, JSON, JS)
+  ↓ finetune.py uploads to gateway
+Gateway stores in SQLite (vllora.db)
+  ↓ UI fetches via REST API
+UI renders in React components
+```
+
+### 6. Verify Records Display
+
+Open `http://localhost:5173/finetune` → click into the workflow → **Data tab > Records**
+
+**What to check:**
+
+| Check | How to verify | Expected |
+|-------|--------------|----------|
+| Record count matches | Compare header count with `sqlite3` count | Must match exactly |
+| Input text renders | Click a record row → sidebar shows full conversation | System prompt + user message visible |
+| Topic labels show | Each record row shows its topic name | Not raw topic ID — should be human-readable name |
+| Topic grouping works | Toggle "Group by Topic" → records grouped under topic headers | Parent topics → child topics → records hierarchy |
+| Message extraction handles both formats | Check records have visible input text | `extractMessages()` handles both `data.messages[]` (skill format) and `data.input.messages[]` (gateway format) |
+| Source references show | Record rows with linked sources show "Chapter N +M" | Clicking opens source part detail |
+| Metadata preserved | Record sidebar shows metadata section | `source_parts`, `topic`, `id` from skill are accessible |
+
+**Key file**: `src/components/datasets/records-table/cells/ConversationThreadCell.utilities.ts` — `extractMessages()` function handles format detection.
+
+### 7. Verify Canvas Display
+
+**Data tab > Canvas**
+
+| Check | How to verify | Expected |
+|-------|--------------|----------|
+| Topic hierarchy renders | Canvas shows tree of topic nodes | Matches the topic hierarchy from `topics.json` |
+| Record counts per node | Each node shows a count badge | Leaf nodes show direct count; parent nodes show sum of children |
+| Coverage bars | Nodes with linked sources show coverage percentage | Based on `workflow_topic_sources` relations |
+| Quality scores | Nodes with evaluation results show score dot | Green ≥0.8, amber ≥0.6, red <0.6 |
+| Click interaction | Click a topic node → bottom drawer opens | Shows records filtered to that topic |
+| Expand/collapse | Parent nodes can expand to show children | Tree structure navigable |
+
+**Key file**: `src/components/datasets/dataset-canvas/TopicHierarchyCanvas.tsx`
+
+### 8. Verify Sources Display
+
+**Data tab > Linked Sources** (or click a source in the explorer sidebar)
+
+| Check | How to verify | Expected |
+|-------|--------------|----------|
+| All documents listed | Source count matches number of uploaded documents | One card per knowledge source |
+| Part counts correct | Each source shows part count | Matches `sqlite3` count of `knowledge_source_parts` |
+| Part content renders | Click into a source → parts listed with content preview | Text, title, extraction path visible |
+| Topic coverage shown | Single document view shows topic coverage bars | Shows which topics are linked to this document's parts |
+| Part types correct | Parts show type icons (text, table, image) | Based on `part_type` field |
+
+**Key file**: `src/components/datasets/sources-view/SourcesView.tsx`
+
+### 9. Verify Coverage Stats
+
+**Overview tab or Coverage dialog**
+
+| Check | How to verify | Expected |
+|-------|--------------|----------|
+| Balance score | Overview card shows balance score (0-1) | Computed from topic distribution evenness |
+| Topic distribution | Coverage dialog shows per-topic record counts | All leaf topics should have records (no orphan topics) |
+| Knowledge coverage | Percentage of knowledge parts linked to records | Higher is better; 0% means no source linking |
+| Uncategorized count | Header shows uncategorized record count | Should be 0 if all records have topic assignments |
+
+---
+
+## User Expectations vs What the UI Shows
+
+This section documents what users expect to see after running the skill pipeline, what the UI actually shows, and known gaps. Use this as a checklist for UI improvements.
+
+### What Works Well
+
+| User expectation | UI behavior | Status |
+|-----------------|-------------|--------|
+| See all my training records | Records table with topic grouping, search, filtering | Working |
+| Browse topic hierarchy visually | Canvas view with dagre auto-layout, interactive nodes | Working |
+| See which documents were extracted | Sources view lists all knowledge sources with parts | Working |
+| See how topics connect to source documents | Topic-source relations shown as coverage bars | Working |
+| See record count per topic | Shown on canvas nodes and in table group headers | Working |
+| Navigate between records, topics, and sources | Explorer sidebar + view tabs + click interactions | Working |
+| See system prompt composition | Record detail sidebar shows composed prompt from hierarchy | Working |
+
+### Known Gaps
+
+| User expectation | Current behavior | Gap | Priority |
+|-----------------|-----------------|-----|----------|
+| See eval score trends across training epochs | Epoch/trend columns always empty | `flattenEvaluationResults()` in `finetune-api.ts` doesn't populate `epoch` and `trend` fields | **Critical** |
+| See why each record scored the way it did | `reason` field stored but not rendered in result rows | Component exists but field not wired up | High |
+| See training loss curves | No training metrics visualization | No chart component for training metrics over time | High |
+| See which specific knowledge chunks are uncovered | Only aggregated coverage percentage shown | No drilldown to individual uncovered parts | Medium |
+| See which source parts generated which records | No generation provenance tracking | Skill doesn't store generation config in record metadata | Medium |
+| See extraction path for each record | `extraction_path` metadata stored but not displayed | Low priority — internal metadata | Low |
+
+### Format Compatibility Notes
+
+The skill produces records in **OpenAI format** locally (`{"messages": [...]}`), and `finetune.py upload-records` wraps them into **gateway format** (`{"input": {"messages": [...]}, "output": {}}`). The UI handles both:
+
+- `extractMessages()` checks for `data.input.messages` (gateway) first, then `data.messages` (OpenAI)
+- If records are uploaded without the `finetune.py` wrapper (e.g., raw curl), they'll display in the UI but may fail evaluation
+- Check the DB format with: `sqlite3 $DB "SELECT substr(data,1,100) FROM workflow_records WHERE workflow_id='$WF_ID' LIMIT 1;"`
+
+---
+
 ## Skill Improvement Checklist
 
 After running the test, evaluate:
@@ -354,3 +511,7 @@ After running the test, evaluate:
 - [ ] **Multi-document**: If multiple documents were provided, does each get its own knowledge source with parts?
 - [ ] **UI compatibility**: Does the UI correctly render all data produced by the skill?
 - [ ] **Script usage**: Did the agent use `finetune.py` subcommands (not raw curl)?
+- [ ] **Performance**: Total pipeline time <10 min? Which step was the bottleneck?
+- [ ] **Turn efficiency**: How many agent turns consumed vs `--max-turns` limit?
+- [ ] **Source linking accuracy**: Do `sourceChunkRefs` in records match actual knowledge source part IDs?
+- [ ] **Relations completeness**: Do all leaf topics have at least one topic-source relation?

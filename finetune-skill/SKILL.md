@@ -51,18 +51,18 @@ finetune-project/
 ├── topics.json                 # Topic hierarchy
 ├── relations.json              # Topic → part mappings for data generation
 ├── knowledge/                  # Extracted domain knowledge
-│   ├── doc-1/                  # Per-document subdirectory
+│   ├── chess-tactics/           # Per-document subdirectory (slugified filename)
 │   │   ├── docling-result.json # Raw Docling response for this document
 │   │   ├── knowledge_parts.json# Typed parts for this document
 │   │   └── parts-index.json   # Part index for this document
-│   ├── doc-2/                  # Second document
+│   ├── strategy-guide/          # Second document
 │   │   └── ...
 │   ├── all-parts-index.json    # Merged part index across ALL documents
 │   └── extraction-notes.md     # Extraction notes for all documents
 └── execution-log.md            # Running log of every step
 ```
 
-**Multi-document handling**: Each source document gets its own subdirectory under `knowledge/` named `doc-1/`, `doc-2/`, etc. (or a slugified document name like `chess-tactics/`). Each subdirectory contains that document's `docling-result.json`, `knowledge_parts.json`, and `parts-index.json`. A merged `knowledge/all-parts-index.json` combines all per-document indexes for topic design and data generation.
+**Multi-document handling**: Each source document gets its own subdirectory under `knowledge/` named by slugifying the filename (e.g., `chess-tactics-dave-regis/`, `strategy-guide/`). Use the document name, not `doc-1/` — the folder name should identify which document it came from at a glance. Each subdirectory contains that document's `docling-result.json`, `knowledge_parts.json`, and `parts-index.json`. A merged `knowledge/all-parts-index.json` combines all per-document indexes for topic design and data generation.
 
 ### Execution Log
 
@@ -162,6 +162,13 @@ echo "Workflow created: $WORKFLOW_ID"
 ```
 Save `$WORKFLOW_ID` — every subsequent step uses it to upload data incrementally.
 
+**Persist the workflow ID** to a config file so it's easy to find later:
+```bash
+cat > finetune-project/config.json << EOF
+{"workflow_id": "$WORKFLOW_ID", "gateway_url": "http://localhost:9090"}
+EOF
+```
+
 ### Step 2: Extract Documents
 
 Read the user's documents (PDFs, markdown, text). Extract typed, linked source_parts — text passages, tables (with cell structure), and images (with base64 data). Each document produces its own `knowledge_parts.json` in a per-document subdirectory.
@@ -183,14 +190,17 @@ docker info > /dev/null 2>&1 && echo "Docker OK" || echo "Docker NOT available"
 
 **Submit ALL documents at once** — Docling processes them asynchronously, so fire all requests before polling:
 ```bash
-# Create per-document directories and submit all in parallel
+# Create per-document directories using slugified filenames, submit all in parallel
 DOCS=(*.pdf)  # or list specific files
 TASK_IDS=()
+DOC_DIRS=()
 
-for i in "${!DOCS[@]}"; do
-  DOC="${DOCS[$i]}"
-  DOC_DIR="finetune-project/knowledge/doc-$((i+1))"
+for DOC in "${DOCS[@]}"; do
+  # Slugify: lowercase, replace spaces/special chars with hyphens, strip extension
+  DOC_SLUG=$(echo "${DOC%.pdf}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+  DOC_DIR="finetune-project/knowledge/$DOC_SLUG"
   mkdir -p "$DOC_DIR"
+  DOC_DIRS+=("$DOC_DIR")
 
   TASK_RESPONSE=$(curl -sS -X POST "http://127.0.0.1:5001/v1/chunk/hybrid/file/async" \
     -F "files=@${DOC};type=application/pdf" \
@@ -203,6 +213,8 @@ for i in "${!DOCS[@]}"; do
 
   echo "Submitted $DOC → task $TASK_ID → $DOC_DIR"
 done
+
+echo "Submitted ${#DOCS[@]} documents total. Now polling..."
 ```
 
 #### 2b. Poll all tasks until complete
@@ -210,7 +222,7 @@ done
 ```bash
 for i in "${!TASK_IDS[@]}"; do
   TASK_ID="${TASK_IDS[$i]}"
-  DOC_DIR="finetune-project/knowledge/doc-$((i+1))"
+  DOC_DIR="${DOC_DIRS[$i]}"
 
   # Poll until done
   while true; do
@@ -231,11 +243,11 @@ For **each** document directory, produce `knowledge_parts.json` and `parts-index
 
 1. **Read the Docling result before writing any code.** Read chunks 0-9 to understand the document — title, structure, content type, heading patterns. Then read a few chunks from the middle and end. This context is critical for writing a good extraction script.
 
-2. **Write a script** to create `doc-N/knowledge_parts.json` — the required deliverable per document. The script must produce typed source_parts (text, table, image) with titles, extraction paths, and provenance metadata matching the schema in `reference/extraction-guide.md` Section 3.
+2. **Write a script** to create `{doc-slug}/knowledge_parts.json` — the required deliverable per document. The script must produce typed source_parts (text, table, image) with titles, extraction paths, and provenance metadata matching the schema in `reference/extraction-guide.md` Section 3.
 
    **Important**: Prefix all part IDs with the document identifier to keep them unique across documents. For example: `doc-1-chapter-3`, `doc-2-section-5`.
 
-3. The extraction script must also produce `doc-N/parts-index.json` — a lightweight index with `{id, type, title, extraction_path, pages, content_preview, source_doc}` per part (first 200 chars of content, plus the source document filename).
+3. The extraction script must also produce `{doc-slug}/parts-index.json` — a lightweight index with `{id, type, title, extraction_path, pages, content_preview, source_doc}` per part (first 200 chars of content, plus the source document filename).
 
 See `reference/extraction-guide.md` for the full response structure, schema, and step-by-step guidance.
 
@@ -245,16 +257,18 @@ After processing all documents, merge the per-document indexes into a single `kn
 
 ```bash
 python3 -c "
-import json, glob
+import json, glob, os
 all_parts = []
-for idx_file in sorted(glob.glob('finetune-project/knowledge/doc-*/parts-index.json')):
+# Find all parts-index.json in subdirectories (skip all-parts-index.json at root)
+for idx_file in sorted(glob.glob('finetune-project/knowledge/*/parts-index.json')):
     parts = json.load(open(idx_file))
     if isinstance(parts, dict) and 'parts' in parts:
         all_parts.extend(parts['parts'])
     elif isinstance(parts, list):
         all_parts.extend(parts)
 json.dump({'parts': all_parts}, open('finetune-project/knowledge/all-parts-index.json', 'w'), indent=2)
-print(f'Merged {len(all_parts)} parts from {len(glob.glob(\"finetune-project/knowledge/doc-*/parts-index.json\"))} documents')
+doc_count = len(glob.glob('finetune-project/knowledge/*/parts-index.json'))
+print(f'Merged {len(all_parts)} parts from {doc_count} documents')
 "
 ```
 
@@ -272,11 +286,31 @@ Then write extraction scripts per document as above.
 
 **Save your extraction notes** to `knowledge/extraction-notes.md` — for each document: name, page count, section headings, key concepts, number of parts extracted.
 
+#### 2e. Verify ALL documents were processed
+
+**CRITICAL CHECK — do NOT proceed to Step 3 until this passes:**
+```bash
+# Count source documents vs extracted documents
+DOC_COUNT=$(ls *.pdf 2>/dev/null | wc -l | tr -d ' ')
+EXTRACTED_COUNT=$(find finetune-project/knowledge -mindepth 2 -name 'knowledge_parts.json' 2>/dev/null | wc -l | tr -d ' ')
+echo "Source documents: $DOC_COUNT | Extracted: $EXTRACTED_COUNT"
+
+if [ "$EXTRACTED_COUNT" -lt "$DOC_COUNT" ]; then
+  echo "ERROR: Only $EXTRACTED_COUNT of $DOC_COUNT documents extracted!"
+  echo "Missing documents — go back and process the remaining ones."
+  exit 1
+else
+  echo "OK: All $DOC_COUNT documents extracted."
+fi
+```
+
+If any documents are missing, go back to Step 2a-2c and process the missing ones before continuing. Each document MUST have its own subdirectory (slugified filename) with `knowledge_parts.json` and `parts-index.json`.
+
 **Upload immediately** — push each document's knowledge source + parts to the gateway so the UI shows sources as they're extracted:
 ```bash
 for i in "${!DOCS[@]}"; do
   DOC="${DOCS[$i]}"
-  DOC_DIR="finetune-project/knowledge/doc-$((i+1))"
+  DOC_DIR="${DOC_DIRS[$i]}"
   [ -f "$DOC_DIR/knowledge_parts.json" ] || continue
 
   uv run scripts/finetune.py upload-knowledge \
