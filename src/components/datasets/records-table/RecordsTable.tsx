@@ -118,7 +118,7 @@ export function RecordsTable({
   roleFilter,
   onRoleFilterChange,
   datasetObjective: _datasetObjective,
-  normalizedObjective: _normalizedObjective,
+  normalizedObjective,
   onUpdatePromptTemplate: _onUpdatePromptTemplate,
 }: RecordsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
@@ -135,11 +135,34 @@ export function RecordsTable({
   // Highlighted record state (for scrolling to variant source)
   const [highlightedRecordId, setHighlightedRecordId] = useState<string | null>(null);
 
-  // Prompt inheritance panel state
+  // Prompt inheritance panel state — default to first leaf topic so panel shows immediately
+  const firstLeafTopicId = useMemo(() => {
+    if (!topicHierarchy || topicHierarchy.length === 0) return null;
+    const findFirstLeaf = (nodes: TopicHierarchyNode[]): string | null => {
+      for (const n of nodes) {
+        if (n.children?.length) {
+          const leaf = findFirstLeaf(n.children);
+          if (leaf) return leaf;
+        } else {
+          return n.id || n.name;
+        }
+      }
+      return null;
+    };
+    return findFirstLeaf(topicHierarchy);
+  }, [topicHierarchy]);
+
   const [promptPanelTopicId, setPromptPanelTopicId] = useState<string | null>(null);
 
+  // Open prompt panel by default when hierarchy is available
+  useEffect(() => {
+    if (firstLeafTopicId && promptPanelTopicId === null) {
+      setPromptPanelTopicId(firstLeafTopicId);
+    }
+  }, [firstLeafTopicId, promptPanelTopicId]);
+
   // Scroll tracking for auto-updating prompt panel
-  const { visibleTopicId, isAutoTracking, enableTracking } = usePromptScrollTracking({
+  const { visibleTopicId, isAutoTracking } = usePromptScrollTracking({
     containerRef: parentRef,
     enabled: promptPanelTopicId !== null,
   });
@@ -338,6 +361,18 @@ export function RecordsTable({
   // Build prompt chain for the prompt inheritance panel
   const activePromptTopicId = isAutoTracking && visibleTopicId ? visibleTopicId : promptPanelTopicId;
 
+  // Extract system prompt from the first record as fallback when normalizedObjective is not set
+  const recordSystemPrompt = useMemo(() => {
+    for (const record of displayRecords) {
+      const data = record.data as { input?: { messages?: Array<{ role?: string; content?: string }> } } | undefined;
+      const msgs = data?.input?.messages;
+      if (!msgs) continue;
+      const sysMsg = msgs.find(m => m.role === "system");
+      if (sysMsg?.content) return sysMsg.content;
+    }
+    return null;
+  }, [displayRecords]);
+
   const promptChainData = useMemo(() => {
     if (!activePromptTopicId || !topicHierarchy) return null;
 
@@ -360,14 +395,29 @@ export function RecordsTable({
     if (!path || path.length === 0) return null;
 
     const breadcrumb = path.map(n => n.name);
-    const chain = path.map((node, i) => ({
-      label: i === 0 && path.length > 1 ? "Root" : i === path.length - 1 ? "Leaf" : "Parent",
-      level: (i === 0 && path.length > 1 ? "root" : i === path.length - 1 ? "leaf" : "parent") as "root" | "parent" | "leaf",
-      prompt: node.description || node.normalizedPromptSegment || `Topic: ${node.name}`,
-    }));
+
+    // Build chain: root system prompt → parent topics → leaf topic
+    const chain: { label: string; level: "root" | "parent" | "leaf"; prompt: string }[] = [];
+
+    // Root: use normalizedObjective, or fall back to system prompt from record data
+    const rootPrompt = normalizedObjective || recordSystemPrompt;
+    if (rootPrompt) {
+      chain.push({ label: "Root Prompt", level: "root", prompt: rootPrompt });
+    }
+
+    // Hierarchy nodes: parents → leaf
+    for (let i = 0; i < path.length; i++) {
+      const node = path[i];
+      const isLast = i === path.length - 1;
+      chain.push({
+        label: node.name,
+        level: isLast ? "leaf" : "parent",
+        prompt: node.description || node.normalizedPromptSegment || `Specialize in: ${node.name}`,
+      });
+    }
 
     return { breadcrumb, chain };
-  }, [activePromptTopicId, topicHierarchy]);
+  }, [activePromptTopicId, topicHierarchy, normalizedObjective, recordSystemPrompt]);
 
   // Listen for prompt panel toggle events from topic headers
   useEffect(() => {
@@ -375,12 +425,11 @@ export function RecordsTable({
       const detail = (e as CustomEvent).detail;
       if (detail?.topicId) {
         setPromptPanelTopicId(prev => prev === detail.topicId ? null : detail.topicId);
-        enableTracking();
       }
     };
     window.addEventListener("vllora_toggle_prompt_panel", handleTogglePrompt);
     return () => window.removeEventListener("vllora_toggle_prompt_panel", handleTogglePrompt);
-  }, [enableTracking]);
+  }, []);
 
   // Unified single-table rendering (when topic hierarchy is available)
   // Show topic structure even with 0 records so users can see their topics

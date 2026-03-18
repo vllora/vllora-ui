@@ -11,7 +11,7 @@
  */
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { ChevronDown, ChevronRight, MessageSquare } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import type { KnowledgeSource } from "@/types/knowledge-types";
@@ -299,12 +299,6 @@ export function UnifiedRecordTable({
     return () => { emitter.off("vllora_highlight_record", handleHighlight); };
   }, []);
 
-  // Handle prompt panel toggle
-  const handlePromptToggle = useCallback((topicId: string) => {
-    window.dispatchEvent(new CustomEvent("vllora_toggle_prompt_panel", {
-      detail: { topicId },
-    }));
-  }, []);
 
   return (
     <table ref={tableRef} className="w-full border-collapse">
@@ -352,7 +346,6 @@ export function UnifiedRecordTable({
                 sourceCount={row.sourceCount}
                 isCollapsed={collapsedIds.has(row.node.id || row.node.name)}
                 onToggle={() => toggleCollapsed(row.node.id || row.node.name)}
-                onPromptToggle={() => handlePromptToggle(row.node.id || row.node.name)}
                 colSpan={totalColumns}
               />
             );
@@ -443,7 +436,6 @@ function SubgroupHeaderRow({
   sourceCount,
   isCollapsed,
   onToggle,
-  onPromptToggle,
   colSpan,
 }: {
   readonly node: TopicHierarchyNode;
@@ -453,7 +445,6 @@ function SubgroupHeaderRow({
   readonly sourceCount: number;
   readonly isCollapsed: boolean;
   readonly onToggle: () => void;
-  readonly onPromptToggle: () => void;
   readonly colSpan: number;
 }) {
   const Chevron = isCollapsed ? ChevronRight : ChevronDown;
@@ -463,6 +454,7 @@ function SubgroupHeaderRow({
     <tr
       className="border-b border-border/20 bg-muted/20 hover:bg-muted/40 cursor-pointer transition-colors"
       onClick={onToggle}
+      data-topic-group={node.id || node.name}
     >
       <td colSpan={colSpan} className="py-2" style={{ paddingLeft }}>
         <div className="flex items-center gap-2">
@@ -483,14 +475,6 @@ function SubgroupHeaderRow({
             {sourceCount > 0 && (
               <span className="tabular-nums">{sourceCount} source{sourceCount !== 1 ? "s" : ""}</span>
             )}
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onPromptToggle(); }}
-              className="p-0.5 rounded hover:bg-muted text-muted-foreground/40 hover:text-foreground transition-colors"
-              title="View prompt chain"
-            >
-              <MessageSquare className="w-3 h-3" />
-            </button>
           </div>
         </div>
       </td>

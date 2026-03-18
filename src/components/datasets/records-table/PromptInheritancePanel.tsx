@@ -113,9 +113,11 @@ export function PromptInheritancePanel({
           const maxLines = isExpanded ? undefined : 3;
 
           return (
-            <div key={i} className="flex items-center gap-2">
+            <div key={i} className="flex items-stretch gap-2">
               {i > 0 && (
-                <ChevronRight className="w-4 h-4 text-muted-foreground/30 shrink-0" />
+                <div className="flex items-center">
+                  <ChevronRight className="w-4 h-4 text-muted-foreground/30 shrink-0" />
+                </div>
               )}
               <div
                 className={cn(

@@ -373,6 +373,8 @@ export function DatasetMainContent({
           onNavigate={onSelectRecordId}
           jobColumns={jobColumns}
           getScoresForRecord={getScoresForRecord}
+          topicHierarchy={topicHierarchy}
+          normalizedObjective={normalizedObjective}
         />
       </div>
     );
@@ -413,6 +415,8 @@ export function DatasetMainContent({
           onNavigate={onSelectRecordId}
           jobColumns={jobColumns}
           getScoresForRecord={getScoresForRecord}
+          topicHierarchy={topicHierarchy}
+          normalizedObjective={normalizedObjective}
         />
       </div>
     );
@@ -534,6 +538,8 @@ export function DatasetMainContent({
         onNavigate={onSelectRecordId}
         jobColumns={jobColumns}
         getScoresForRecord={getScoresForRecord}
+        topicHierarchy={topicHierarchy}
+        normalizedObjective={normalizedObjective}
       />
     </div>
   );

@@ -23,7 +23,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { DatasetRecord, DataInfo } from "@/types/dataset-types";
+import { DatasetRecord, DataInfo, TopicHierarchyNode } from "@/types/dataset-types";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import type { AvailableTopic } from "../record-utils";
 import type { JobColumn, RecordJobScore } from "./job-score-columns";
@@ -43,6 +43,10 @@ interface RecordDetailSidebarProps {
   readonly onNavigate?: (recordId: string) => void;
   readonly jobColumns?: readonly JobColumn[];
   readonly getScoresForRecord?: (recordId: string) => ReadonlyMap<string, RecordJobScore>;
+  /** Topic hierarchy for building prompt chain in conversation section */
+  readonly topicHierarchy?: TopicHierarchyNode[];
+  /** Root system prompt (dataset objective) */
+  readonly normalizedObjective?: string;
 }
 
 // ─── Main Component ───
@@ -56,6 +60,8 @@ export function RecordDetailSidebar({
   onNavigate,
   jobColumns,
   getScoresForRecord,
+  topicHierarchy,
+  normalizedObjective,
 }: RecordDetailSidebarProps) {
   const topicPath = useMemo(() => {
     if (!record?.topic) return null;
@@ -79,6 +85,39 @@ export function RecordDetailSidebar({
     if (!record) return [];
     return extractMessages(record.data);
   }, [record]);
+
+  // Build full system prompt by composing hierarchy chain into a single message
+  const composedMessages = useMemo(() => {
+    if (!record?.topic || !topicHierarchy || messages.length === 0) return messages;
+
+    const findPath = (nodes: TopicHierarchyNode[], trail: TopicHierarchyNode[]): TopicHierarchyNode[] | null => {
+      for (const node of nodes) {
+        const nodeId = node.id || node.name;
+        if (nodeId === record.topic || node.name === record.topic) {
+          return [...trail, node];
+        }
+        if (node.children?.length) {
+          const result = findPath(node.children, [...trail, node]);
+          if (result) return result;
+        }
+      }
+      return null;
+    };
+
+    const path = findPath(topicHierarchy, []);
+    if (!path || path.length === 0) return messages;
+
+    // Compose full system prompt from root + hierarchy nodes
+    const systemMsg = messages.find(m => m.role === "system");
+    const rootPrompt = normalizedObjective || systemMsg?.content || "";
+    const segments = path.map(n => n.description || n.normalizedPromptSegment || `Specialize in: ${n.name}`);
+    const fullSystemPrompt = [rootPrompt, ...segments].filter(Boolean).join(" ");
+
+    // Replace raw system message with composed one, keep other messages
+    return messages.map(m =>
+      m.role === "system" ? { ...m, content: fullSystemPrompt } : m,
+    );
+  }, [record?.topic, topicHierarchy, normalizedObjective, messages]);
 
   // Resolve source_parts refs (same logic as table rows)
   const { sources } = KnowledgeSourcesConsumer();
@@ -114,9 +153,9 @@ export function RecordDetailSidebar({
                 <ScoresSection columns={jobColumns} scores={scores} />
               )}
 
-              {/* Conversation Section */}
-              {messages.length > 0 && (
-                <ConversationSection messages={messages} />
+              {/* Conversation Section — uses composed system prompt when hierarchy available */}
+              {composedMessages.length > 0 && (
+                <ConversationSection messages={composedMessages} />
               )}
 
               {/* Source Context Section */}

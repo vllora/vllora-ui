@@ -33,7 +33,7 @@ export function usePromptScrollTracking({
   groupHeaderSelector = "[data-topic-group]",
 }: UsePromptScrollTrackingOptions): PromptScrollTrackingResult {
   const [visibleTopicId, setVisibleTopicId] = useState<string | null>(null);
-  const [isAutoTracking, setIsAutoTracking] = useState(false);
+  const [isAutoTracking, setIsAutoTracking] = useState(true);
   const rafRef = useRef<number | null>(null);
 
   const enableTracking = useCallback(() => setIsAutoTracking(true), []);
@@ -69,6 +69,9 @@ export function usePromptScrollTracking({
         }
       });
     };
+
+    // Run initial detection so the panel updates without waiting for scroll
+    handleScroll();
 
     container.addEventListener("scroll", handleScroll, { passive: true });
     return () => {
