@@ -245,3 +245,7 @@ else:
     print('All parts are linked to topics')
 "
 ```
+
+## Reference
+
+For detailed topic design guidelines (hierarchy depth, leaf count targets, balance scoring), see `finetune-skill/reference/topic-hierarchy.md`.

@@ -18,10 +18,9 @@ The skill generates training data **grounded in source documents**. Without extr
                      │   └──────┬───────┘        │
                      │          │                 │
                      │   docling_extract.py       │
-                     │   (--batch mode)           │
+                     │   (per document,            │
+                     │    process individually)    │
                      │          │                 │
-                     │   ┌──────┼──────┐          │
-                     │   ▼      ▼      ▼          │
                      │   docling-result.json       │
                      │   (per document)            │
                      │          │                 │
@@ -29,10 +28,14 @@ The skill generates training data **grounded in source documents**. Without extr
                      │   Agent writes extraction  │
                      │   script per document      │
                      │          │                 │
+                     │   consolidate_parts.py     │
+                     │   content quality check    │
+                     │          │                 │
                      └──── NO ──┤                 │
                      │          │                 │
                      │   pdftotext_extract.py     │
-                     │   (--batch mode)           │
+                     │   (per document, or        │
+                     │    --batch if similar size) │
                      │   (text only, no tables/   │
                      │    images)                 │
                      │          │                 │
@@ -42,7 +45,6 @@ The skill generates training data **grounded in source documents**. Without extr
                     + parts-index.json            │
                     (per document)                │
                                 │                 │
-                    consolidate_parts.py          │
                     validate_extraction.py         │
                                 │
                     all-parts-index.json  (merged)
@@ -53,6 +55,8 @@ The skill generates training data **grounded in source documents**. Without extr
               Topic         Data         (incremental,
               Design        Generation    after Step 2)
 ```
+
+> **Note on batch mode**: The default flow processes each PDF end-to-end individually (extract, process, upload) before moving to the next. This avoids blocking — a small PDF can be fully processed while Docling works on a larger one. Use `--batch` only if all documents are similar size.
 
 ## What Docling Does
 
@@ -168,6 +172,34 @@ uv run scripts/consolidate_parts.py knowledge/{doc-slug}/knowledge_parts.json
 
 **Encoding rule**: When writing `knowledge_parts.json`, always use `json.dump(..., ensure_ascii=False)` to preserve non-ASCII characters (Cyrillic, CJK, accented Latin). Without this, characters become `\u0xxx` escape sequences that pollute extraction paths and titles.
 
+### Content Quality Assessment (Step 2e)
+
+After extraction and consolidation, assess whether each document's content is suitable for training data generation. Not all PDFs are equally useful — a document full of move notation or reference tables produces worse training data than one with explanatory prose.
+
+**Quick content quality check** (run per document after extraction):
+```bash
+python3 -c "
+import json, re
+d = json.load(open('$DOC_DIR/knowledge_parts.json'))
+parts = d.get('parts', [])
+# Count parts with teaching/explanatory content (2+ teaching keywords)
+teaching_kw = ['explain', 'because', 'reason', 'strategy', 'concept', 'important', 'principle', 'technique', 'understand', 'learn']
+good = sum(1 for p in parts if sum(1 for kw in teaching_kw if kw in p.get('content','').lower()) >= 2)
+total = len(parts)
+print(f'Teaching-quality parts: {good}/{total} ({good/max(total,1)*100:.0f}%)')
+if good / max(total, 1) < 0.10:
+    print('WARNING: <10% of parts have explanatory content. This document is mostly notation/data.')
+    print('  Training data quality will be limited — consider adding a more expository document.')
+else:
+    print('OK: Document has sufficient explanatory content for quality training data.')
+"
+```
+
+**What to do if a document scores <10%:**
+- It's still usable for demo/testing — the LLM can synthesize questions from annotations
+- For production quality, add a more explanatory document (textbook, tutorial, manual)
+- Log the assessment in `extraction-notes.md` so downstream steps know what to expect
+
 ### Part Types
 
 | Type | Content | Use in pipeline |
@@ -222,8 +254,13 @@ uv run scripts/finetune.py upload-knowledge \
   --workflow-id $WORKFLOW_ID \
   --file "chess-tactics.pdf" \
   --parts-file "knowledge/chess-tactics/knowledge_parts.json" \
-  --name "chess-tactics.pdf"
+  --name "chess-tactics.pdf" \
+  --force \
+  --description "Source document: chess-tactics.pdf" \
+  --metadata '{"extraction_method":"docling_hybrid"}'
 ```
+
+The `--force` flag uses PUT upsert — it atomically replaces any existing source with the same name, making re-uploads safe after re-extraction. The `--description` and `--metadata` flags are optional but recommended for traceability.
 
 The script handles the transformation: `id` → `reference_id`, removes `source_id`, then calls:
 - `POST /workflows/{id}/knowledge` — creates the source (uploads the PDF file)
@@ -245,6 +282,14 @@ In the UI:
 ### Docling not available (Docker not installed)
 
 Use the `pdftotext_extract.py` fallback — same CLI pattern as `docling_extract.py` but zero dependencies:
+
+Single document (recommended — process each individually):
+```bash
+uv run scripts/pdftotext_extract.py document.pdf \
+  -o finetune-project/knowledge/doc-slug/knowledge_parts.json
+```
+
+Batch mode (alternative — all PDFs at once, use only if similar size):
 ```bash
 uv run scripts/pdftotext_extract.py --batch \
   doc1.pdf:finetune-project/knowledge/doc1/knowledge_parts.json \

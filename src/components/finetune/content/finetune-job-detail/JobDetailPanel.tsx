@@ -265,16 +265,34 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
 
         {/* ── Charts (Score Trend / Training Progress / Loss & Reward / Score Distribution) ── */}
         {job.workflow_id ? (
-          <FinetuneChartSelector
-            evalResults={evalResults}
-            isLoadingEvals={isLoadingEvals}
-            isRefreshing={isRefreshing}
-            evalsError={evalsError}
-            onRefresh={handleRefresh}
-            isLive={job.status === "running"}
-            jobId={job.provider_job_id}
-            workflowId={job.workflow_id}
-          />
+          canCancel && !evalResults?.results?.length ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-10 text-zinc-500">
+              <div className="relative">
+                <div className="w-10 h-10 rounded-full border-2 border-zinc-700 border-t-amber-400 animate-spin" />
+              </div>
+              <div className="text-center space-y-1">
+                <p className="text-sm font-medium text-zinc-300">
+                  {job.status === "pending" ? "Waiting for training to start" : "Training in progress"}
+                </p>
+                <p className="text-xs text-zinc-600">
+                  {job.status === "pending"
+                    ? "Your job is queued. Training will begin shortly and metrics will appear here."
+                    : "Evaluation scores will appear here as training progresses."}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <FinetuneChartSelector
+              evalResults={evalResults}
+              isLoadingEvals={isLoadingEvals}
+              isRefreshing={isRefreshing}
+              evalsError={evalsError}
+              onRefresh={handleRefresh}
+              isLive={canCancel}
+              jobId={job.provider_job_id}
+              workflowId={job.workflow_id}
+            />
+          )
         ) : (
           !(job.status === "failed") && (
             <div className="text-xs text-muted-foreground py-2">

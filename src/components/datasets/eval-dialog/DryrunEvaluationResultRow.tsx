@@ -10,6 +10,12 @@ import type { FlatEvaluationResult } from "@/services/finetune-api";
 import { getScoreColorClass, formatScore, parseScoreBreakdown } from "@/utils/parse-score-breakdown";
 import { LogsPopover } from "./LogsPopover";
 import { ChevronRight } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface DryrunEvaluationResultRowProps {
   readonly result: FlatEvaluationResult;
@@ -28,21 +34,105 @@ interface DryrunEvaluationResultRowProps {
   readonly showTrend?: boolean;
 }
 
-/** Render a trend value as a colored arrow + delta string with tooltip */
-function renderTrend(trend: number): React.ReactNode {
-  const tooltip = trend > 0
-    ? `Score improved by ${trend.toFixed(3)} compared to previous epoch`
-    : trend < 0
-    ? `Score decreased by ${Math.abs(trend).toFixed(3)} compared to previous epoch`
-    : "Score unchanged from previous epoch";
+/** Format a list of scores as "0.94, 0.83" */
+function formatScoreList(scores: number[]): string {
+  return scores.map(s => s.toFixed(2)).join(", ");
+}
 
-  if (trend > 0.005) {
-    return <span className="text-emerald-400 cursor-help" title={tooltip}>↑ +{trend.toFixed(2)}</span>;
-  }
-  if (trend < -0.005) {
-    return <span className="text-red-400 cursor-help" title={tooltip}>↓ {trend.toFixed(2)}</span>;
-  }
-  return <span className="text-zinc-500 cursor-help" title={tooltip}>→ 0.00</span>;
+/** Render a trend value with a rich tooltip showing the mean calculation with individual scores */
+function renderTrend(
+  trend: number,
+  currentScore?: number,
+  prevScores?: number[],
+  currentScores?: number[],
+): React.ReactNode {
+  const prevMean = currentScore != null ? currentScore - trend : undefined;
+  const isUp = trend > 0.005;
+  const isDown = trend < -0.005;
+
+  const arrow = isUp ? "↑" : isDown ? "↓" : "→";
+  const colorClass = isUp ? "text-emerald-400" : isDown ? "text-red-400" : "text-zinc-500";
+  const label = isUp ? `+${trend.toFixed(2)}` : isDown ? trend.toFixed(2) : "0.00";
+
+  const hasCandidateDetail = prevScores && prevScores.length > 0 && currentScores && currentScores.length > 0;
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className={cn(colorClass, "cursor-help")}>{arrow} {label}</span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-[320px] p-0">
+          <div className="px-3 py-2 space-y-1.5">
+            <div className="text-[10px] font-medium text-zinc-300">Score Change (Δ) Between Evals</div>
+            {hasCandidateDetail ? (
+              <div className="space-y-1.5 pt-0.5">
+                {/* Previous eval breakdown */}
+                <div className="space-y-0.5">
+                  <div className="flex items-center justify-between gap-4 text-[10px]">
+                    <span className="text-zinc-500">Previous eval</span>
+                    <span className="font-mono text-zinc-400 text-[9px]">
+                      {prevScores.length > 1 ? `candidates: ${formatScoreList(prevScores)}` : formatScoreList(prevScores)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 text-[10px]">
+                    <span className="text-zinc-600 text-[9px] pl-2">
+                      mean = ({formatScoreList(prevScores)}) / {prevScores.length}
+                    </span>
+                    <span className="font-mono text-zinc-300 font-semibold">= {prevMean?.toFixed(3)}</span>
+                  </div>
+                </div>
+                {/* Current eval breakdown */}
+                <div className="space-y-0.5">
+                  <div className="flex items-center justify-between gap-4 text-[10px]">
+                    <span className="text-zinc-500">Current eval</span>
+                    <span className="font-mono text-zinc-400 text-[9px]">
+                      {currentScores.length > 1 ? `candidates: ${formatScoreList(currentScores)}` : formatScoreList(currentScores)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 text-[10px]">
+                    <span className="text-zinc-600 text-[9px] pl-2">
+                      mean = ({formatScoreList(currentScores)}) / {currentScores.length}
+                    </span>
+                    <span className="font-mono text-zinc-200 font-semibold">= {currentScore?.toFixed(3)}</span>
+                  </div>
+                </div>
+                {/* Delta */}
+                <div className="border-t border-zinc-700/50 pt-1 flex items-center justify-between gap-4 text-[10px]">
+                  <span className="text-zinc-500">Δ = current − previous</span>
+                  <span className={cn("font-mono font-semibold", colorClass)}>
+                    {trend >= 0 ? "+" : ""}{trend.toFixed(3)}
+                  </span>
+                </div>
+              </div>
+            ) : prevMean != null && currentScore != null ? (
+              <div className="space-y-1 pt-0.5">
+                <div className="text-[9px] text-zinc-600">Mean score across all response candidates</div>
+                <div className="flex items-center justify-between gap-4 text-[10px]">
+                  <span className="text-zinc-500">Previous eval (mean)</span>
+                  <span className="font-mono text-zinc-300">{prevMean.toFixed(3)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-4 text-[10px]">
+                  <span className="text-zinc-500">Current eval (mean)</span>
+                  <span className="font-mono text-zinc-200 font-semibold">{currentScore.toFixed(3)}</span>
+                </div>
+                <div className="border-t border-zinc-700/50 pt-1 flex items-center justify-between gap-4 text-[10px]">
+                  <span className="text-zinc-500">Δ</span>
+                  <span className={cn("font-mono font-semibold", colorClass)}>
+                    {trend >= 0 ? "+" : ""}{trend.toFixed(3)}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="text-[10px] text-zinc-500">
+                Mean score {isUp ? "improved" : isDown ? "decreased" : "unchanged"} by {Math.abs(trend).toFixed(3)}
+              </div>
+            )}
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 /** Extract the first user message from the row data as the input text */
@@ -174,7 +264,7 @@ export function DryrunEvaluationResultRow({
         {/* Trend — always render cell when table has trend column to keep alignment */}
         {showTrend && (
           <div className="w-[60px] shrink-0 text-center font-mono text-[11px] tabular-nums">
-            {result.trend != null ? renderTrend(result.trend) : null}
+            {result.trend != null ? renderTrend(result.trend, result.score, result.trendPrevScores, result.trendCurrentScores) : null}
           </div>
         )}
 

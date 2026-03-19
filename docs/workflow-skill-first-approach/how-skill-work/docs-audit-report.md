@@ -259,3 +259,92 @@ No significant outdated issues found. The document is well aligned with SKILL.md
 3. **`generate_records.py` not documented** (generate-records-deep-dive.md): The deep-dive describes a manual process instead of the actual script.
 4. **`--no-wait` flag doesn't exist** (SKILL.md itself): The flag is referenced but not implemented in `run_evaluation.py`.
 5. **`--force` flag missing from upload examples** (pipeline-overview.md + extraction-deep-dive.md): The PUT upsert behavior is not shown.
+
+---
+
+## Re-Audit Results
+
+**Date**: 2026-03-19
+**Auditor**: Automated re-verification of all 29 issues against current file state.
+
+### 1. pipeline-overview.md
+
+| # | Issue | Status | Notes |
+|---|-------|--------|-------|
+| 1.1 | Steps 7-9 numbering and flow do not match SKILL.md | **FIXED** | Steps 7-9 now match SKILL.md: Step 7 = parallel eval+training, Step 8 = analyze & present, Step 9 = iterate. Pipeline glance table (lines 15-17) and full sections (lines 542-754) all align. |
+| 1.2 | Step 7 description omits training and `--no-wait` | **FIXED** | Step 7 now has 7a (eval), 7b (training with full curl example), 7c (poll both). `--no-wait` correctly omitted (flag removed from SKILL.md too). |
+| 1.3 | Step 9 describes training-monitor subagent | **FIXED** | Step 9 now describes the interactive analysis + iteration pattern. Subagents table (line 67) explicitly notes "there is no separate training-monitor subagent." |
+| 1.4 | Step 6 description says "upload everything" | **FIXED** | Line 509 now says "Step 6 just verifies everything landed correctly." Execution flow table (line 608) says "Verify all data in gateway". |
+| 1.5 | Helper scripts table lists `start_training.py` at Step 9 | **FIXED** | Line 53 now lists `start_training.py` at Step 7b with note "(alternative to direct curl used by SKILL.md)". |
+| 1.6 | Step 2f sub-step numbering skips 2b | **FIXED** | Sub-steps are now 2a-2b, 2c, 2d, 2e, 2f — the 2a-2b label groups extraction submission and processing together. Consistent with SKILL.md. |
+| 1.7 | Missing `analysis-strategy.md` reference | **FIXED** | Line 637 references `analysis-strategy.md` in the Step 8 section. |
+| 1.8 | Missing `knowledge-parts-schema.json` from reference list | **NOT FIXED** | Still not mentioned in the helper scripts/reference table. However, this was marked MINOR and SKILL.md itself also does not reference it, so this is by design. |
+| 1.9 | Missing `--force` flag on upload-knowledge example | **FIXED** | Line 327 shows `--force` flag. Line 330 explains the PUT upsert behavior. |
+| 1.10 | Missing `--description` and `--metadata` flags | **PARTIALLY FIXED** | The pipeline-overview.md upload-knowledge example (line 322-328) does not show `--description` or `--metadata`. However, extraction-deep-dive.md (line 258-261) does show both flags with full examples. The pipeline overview is intentionally brief. |
+
+### 2. extraction-deep-dive.md
+
+| # | Issue | Status | Notes |
+|---|-------|--------|-------|
+| 2.1 | Flow diagram shows `--batch mode` for Docling | **FIXED** | Flow diagram (lines 20-22) now shows "per document, process individually" for Docling path. Note on line 59 explains batch mode as alternative only when documents are similar size. |
+| 2.2 | Debugging section shows pdftotext with `--batch` as default | **FIXED** | Debugging section (lines 286-297) now shows single document mode first ("recommended"), batch as alternative. |
+| 2.3 | Missing content quality assessment step (Step 2e) | **FIXED** | New section "Content Quality Assessment (Step 2e)" at lines 175-201 with the teaching keyword check and <10% warning threshold. |
+| 2.4 | Missing `validate_extraction.py` with `--fix` flag details | **FIXED** | Lines 333-336 show `--fix` usage. Line 298 mentions running `consolidate_parts.py` and `validate_extraction.py` after pdftotext. The flow diagram (line 48) includes `validate_extraction.py`. |
+| 2.5 | Missing `--force` flag on upload-knowledge example | **FIXED** | Lines 258-263 show full upload example with `--force`, `--description`, and `--metadata` flags, with explanation of PUT upsert behavior. |
+
+### 3. generate-topics-deep-dive.md
+
+| # | Issue | Status | Notes |
+|---|-------|--------|-------|
+| 3.1 | Missing mention of `reference/topic-hierarchy.md` | **FIXED** | Line 251 references the file: "see `finetune-skill/reference/topic-hierarchy.md`." |
+
+### 4. generate-records-deep-dive.md
+
+| # | Issue | Status | Notes |
+|---|-------|--------|-------|
+| 4.1 | Missing `generate_records.py` script usage | **FIXED** | Lines 96-130 now show `generate_records.py` as the primary method with full CLI example, explanation of what the script does internally, and how it calls `chat_completion.py`. |
+| 4.2 | Missing `--append` flag documentation | **FIXED** | Lines 118-128 document the `--append` flag with a full CLI example for retrying failed topics. |
+
+### 5. chess-pdf/README.md
+
+No issues in original audit. No re-check needed.
+
+### 6. skill-testing-guide.md
+
+| # | Issue | Status | Notes |
+|---|-------|--------|-------|
+| 6.1 | Skill file copy paths reference `.claude/` destination | **N/A** | This was marked MINOR and intentional — test setup uses `.claude/` paths. No change needed. |
+| 6.2 | Option A prompt suggests `--batch mode` for Docling | **FIXED** | Line 109 now says "processing each individually" instead of "(with --batch mode)". |
+| 6.3 | Steps 7-9 not covered in execution flow table | **FIXED** | Execution flow table (lines 599-611) now includes Step 7 (parallel eval+training), Step 8 (interactive analysis), Step 9 (iterate with max 5 iterations). |
+| 6.4 | Missing `--no-wait` note on `run_evaluation.py` | **N/A** | The doc correctly does not propagate the SKILL.md error. The `--no-wait` flag has also been removed from SKILL.md, so this issue is fully resolved. |
+| 6.5 | Missing `generate_records.py` in manual testing section | **FIXED** | Lines 167-174 show `generate_records.py` usage in the manual testing section with full CLI example. |
+| 6.6 | Missing `--force` flag on `upload-knowledge` in manual testing | **FIXED** | Lines 146-157 show the manual testing upload loop with `--force` flag and a comment explaining "use --force for safe re-uploads via PUT upsert". |
+| 6.7 | Deleted templates not cleaned from copy command | **N/A** | The copy command still works (copies whatever exists). No broken references found. |
+
+### 7. Cross-Cutting Issues
+
+| # | Issue | Status | Notes |
+|---|-------|--------|-------|
+| 7.1 | `--no-wait` flag referenced in SKILL.md but doesn't exist | **FIXED** | The `--no-wait` flag has been removed from SKILL.md. No docs propagate it. |
+| 7.2 | Parallel eval+training pattern not reflected in any docs | **FIXED** | Both pipeline-overview.md (Steps 7-9 sections) and skill-testing-guide.md (execution flow table) now describe the parallel flow. |
+| 7.3 | No doc mentions `analysis-strategy.md` reference file | **FIXED** | pipeline-overview.md Step 8 section (line 637) now references it. |
+| 7.4 | `start_training.py` script not documented in any deep-dive | **PARTIALLY FIXED** | Listed in pipeline-overview.md helper table (line 53) with note that SKILL.md uses direct curl. No deep-dive doc exists, but this was MINOR severity. |
+
+### Summary
+
+| Status | Count |
+|--------|-------|
+| **FIXED** | 24 |
+| **PARTIALLY FIXED** | 2 |
+| **NOT FIXED** | 1 |
+| **N/A** (intentional/no-change-needed) | 2 |
+| **Total** | 29 |
+
+**Remaining items (all MINOR severity):**
+- **1.8** `knowledge-parts-schema.json` not in reference list — by design, SKILL.md also omits it
+- **1.10** `--description`/`--metadata` flags not in pipeline-overview.md upload example — covered in extraction-deep-dive.md instead
+- **7.4** `start_training.py` lacks a deep-dive — listed in helper table with note about SKILL.md using direct curl
+
+### New Issues Found
+
+No new issues were found. The fixes are clean — no merge conflicts, no broken formatting, no new inconsistencies introduced. All documents are internally consistent and aligned with the current SKILL.md.

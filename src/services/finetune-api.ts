@@ -297,6 +297,10 @@ export interface FlatEvaluationResult {
   epoch?: number;
   /** Score change from previous epoch — present when multiple epochs exist */
   trend?: number;
+  /** Individual candidate scores at the previous eval checkpoint (for tooltip) */
+  trendPrevScores?: number[];
+  /** Individual candidate scores at the current eval checkpoint (for tooltip) */
+  trendCurrentScores?: number[];
 }
 
 

@@ -12,14 +12,14 @@ Step 4: Generate Training Data    (~5-20 min) → training.jsonl (50-200+ record
 Step 5: Write Grader              (~2-3 min)  → grader.js                         ↑ uploaded
 Step 6: Verify & Hand Off         (~30 sec)   → confirm all data in gateway DB
 ─────────────────────────────────────────────────────────────────────────────────────────────
-Step 7: Run Evaluation            (~5-30 min) → eval results (scores per record)   (optional)
-Step 8: Analyze & Iterate         (~5-10 min) → grader/data fixes                  (optional)
-Step 9: Train & Iterate           (~30-60 min)→ fine-tuned model                   (optional)
+Step 7: Start Eval & Training     (~5-30 min) → eval + training jobs (parallel)    ↑ cloud
+Step 8: Analyze & Present         (~5-10 min) → interactive findings + user choice
+Step 9: Iterate (If Needed)       (~30-60 min)→ apply fixes, new jobs (max 5x)
 ```
 
 **Each step uploads to the gateway immediately** via `scripts/finetune.py` — the vLLora UI shows progress in real time. There is no final "push" step; Step 6 just verifies everything landed correctly.
 
-**Steps 1-6** are the core pipeline — they always run. **Steps 7-9** are optional — the agent can run evaluation and training, or the user can do it via the vLLora UI.
+**Steps 1-6** prepare the dataset. **Steps 7-9** evaluate and train the model. All 9 steps run by default — do NOT stop at Step 6. If the user only asks for data preparation, you may stop at Step 6, but by default run the full pipeline including evaluation and training.
 
 Total: ~20-45 minutes for Steps 1-6 with 3 documents and 100+ records.
 
@@ -49,23 +49,22 @@ Other helper scripts:
 | `chat_completion.py` | 4 | Calls LLM API — validates JSON when `response_format` is `json_object` |
 | `validate_dataset.py` | 5.5 | Validates JSONL format, fields, RFT compliance, cross-refs topics/parts |
 | `dry_run_grader.py` | 5 | Tests grader on one record via gateway sandbox |
-| `run_evaluation.py` | 7 | Creates eval job, polls until complete |
-| `start_training.py` | 9 | Starts training job, polls until complete |
+| `run_evaluation.py` | 7a | Creates eval job, polls until complete |
+| `start_training.py` | 7b | Starts training job, polls until complete (alternative to direct curl used by SKILL.md) |
 | `upload_dataset.py` | — | Cloud dataset upload (standalone, not used in pipeline) |
 
 All scripts use PEP 723 inline dependencies and run via `uv run scripts/<name>.py`.
 
 ## Subagents
 
-The skill uses 3 subagents to handle context-heavy or long-running work in isolated contexts:
+The skill uses 2 subagents to handle context-heavy or long-running work in isolated contexts:
 
 | Subagent | Invoked at | What it does | Input | Output |
 |----------|-----------|-------------|-------|--------|
 | `execution-logger` | After every action | Appends timestamped entries to `execution-log.md` | Step name, action, results | Updated log file |
 | `relation-builder` | Step 3b | Matches knowledge parts to leaf topics | `all-parts-index.json` + `topics.json` | `relations.json` |
-| `training-monitor` | Step 9b | Polls training job metrics every 15s, reports anomalies | Job ID, workflow ID | Status report (succeeded/failed/anomaly) |
 
-The main agent delegates to subagents explicitly. If a subagent fails, check `execution-log.md` for error entries.
+The main agent delegates to subagents explicitly. If a subagent fails, check `execution-log.md` for error entries. Note: Steps 7-9 (evaluation, training, analysis, iteration) are handled by the main agent directly with interactive user input — there is no separate training-monitor subagent.
 
 ## Local Files → Gateway Mapping
 
@@ -324,8 +323,11 @@ uv run scripts/finetune.py upload-knowledge \
   --workflow-id $WORKFLOW_ID \
   --file "$DOC" \
   --parts-file "$DOC_DIR/knowledge_parts.json" \
-  --name "$DOC"
+  --name "$DOC" \
+  --force
 ```
+
+The `--force` flag uses PUT upsert — it atomically replaces any existing source with the same name, making re-uploads safe.
 
 **How to verify**:
 ```bash
@@ -537,57 +539,28 @@ The UI at `http://localhost:5173/finetune` shows progress throughout the run —
 
 ---
 
-## Step 7: Run Evaluation (optional)
+## Step 7: Start Evaluation & Training (Parallel)
 
-**What happens**: The agent runs the grader against a rollout model (e.g., `gpt-4o-mini`) that generates responses for each training prompt. The grader scores each response. Results show per-record scores, pass/fail counts, and an average score.
+**What happens**: On the first run, the agent starts both an evaluation job and a training job simultaneously. They run on the cloud in parallel — there's no prior data to analyze, so there's no reason to wait for eval before training.
+
+**Time**: 5-30 minutes depending on record count and model speed. Both run concurrently.
+
+### 7a. Create evaluation job
 
 ```bash
 uv run scripts/run_evaluation.py --dataset-id $WORKFLOW_ID --output evaluations/eval-v1.json
 ```
 
-The script creates the eval job, polls every 3 seconds, prints summary stats, and saves full results.
-
-**Time**: 5-30 minutes depending on record count and model speed.
-
-**Files produced**:
-```
-finetune-project/evaluations/
-└── eval-v1.json               # Full evaluation results
-```
-
-**This step can also be done via the vLLora UI** — click "Run Evaluation" on the workflow page.
-
----
-
-## Step 8: Analyze & Iterate (optional)
-
-**What happens**: The agent reads eval results and decides whether to proceed to training or iterate.
-
-**Decision framework**:
-
-| Verdict | Criteria | Action |
-|---------|----------|--------|
-| **GO** | avg > 0.6 AND pass rate > 70% | Proceed to Step 9 |
-| **WARNING** | avg 0.5-0.6 OR pass rate 60-70% | Can train, but iteration may help |
-| **NO-GO** | avg < 0.5 OR pass rate < 60% | Must iterate before training |
-
-**Common fixes**:
-- **Grader too lenient/strict**: Update `grader.js`, re-upload via `finetune.py upload-grader`
-- **Weak topic**: Regenerate prompts for that topic, re-upload via `finetune.py upload-records`
-- **All scores ~0 or ~1**: Grader broken — check criteria and dry-run
-
-After each fix, re-evaluate:
+Or manually via the API:
 ```bash
-uv run scripts/run_evaluation.py --dataset-id $WORKFLOW_ID --output evaluations/eval-v2.json
+EVAL=$(curl -s -X POST http://localhost:9090/finetune/evaluations \
+  -H "Content-Type: application/json" \
+  -d "{\"dataset_id\": \"$WORKFLOW_ID\", \"rollout_model_params\": {\"model\": \"gpt-4o-mini\"}}")
+EVAL_ID=$(echo "$EVAL" | python3 -c "import sys,json; print(json.load(sys.stdin)['evaluation_run_id'])")
+echo "Eval started: $EVAL_ID"
 ```
 
----
-
-## Step 9: Train & Iterate (optional)
-
-**What happens**: The agent starts a fine-tuning job via direct API call (not `start_training.py`), spawns the **training-monitor subagent** in the background to poll metrics every 15 seconds, and handles the result. Max 5 iterations.
-
-### 9a. Start a training run
+### 7b. Create training job
 
 ```bash
 JOB=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs \
@@ -595,7 +568,7 @@ JOB=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs
   -d '{
     "dataset": "'$WORKFLOW_ID'",
     "base_model": "unsloth/Qwen3.5-4B",
-    "output_model": "my-finetuned-model",
+    "output_model": "chess-tutor-v1",
     "display_name": "Training run 1",
     "training_config": {
       "learning_rate": 0.00001,
@@ -612,41 +585,166 @@ JOB=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs
     }
   }')
 JOB_ID=$(echo "$JOB" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+echo "Training started: $JOB_ID"
 ```
 
-### 9b. Spawn a monitor subagent
+**Base model selection:**
+| Model | Best for |
+|-------|----------|
+| `unsloth/Qwen3.5-4B` | Fast experiments, narrow tasks |
+| Larger models (7B+) | Complex reasoning, broad domains |
 
-The `training-monitor` subagent runs in the background, polling `GET /jobs/{job_id}/metrics` and `GET /jobs/{job_id}/status` every 15 seconds. It reports back when the job succeeds, fails, or an anomaly is detected (NaN loss, KL divergence, reward collapse, etc.).
+**Config adjustments (initial):**
+| Situation | Adjustment |
+|-----------|------------|
+| < 50 records | `epochs: 1` (avoid overfitting) |
+| > 500 records | `epochs: 3-4` |
+| Complex task | `lora_rank: 16` |
+| Simple task | `lora_rank: 4` |
 
-### 9c. Handle the monitor's report
+### 7c. Poll both jobs
 
-- **Succeeded** → fetch per-epoch scores via `GET /finetune/workflows/$WORKFLOW_ID/dataset/finetune-evaluations?finetune_job_id=$JOB_ID`, save to `training-jobs/job-v{N}.json`, test with prompts NOT in training set
-- **Failed** → log error, retry if infra issue, report to user if not retryable
-- **Anomaly detected** → diagnose and iterate (9d)
+Poll both jobs until they complete. Report progress to the user as results arrive:
 
-### 9d. Diagnose and iterate on anomaly
+```bash
+# Poll eval
+EVAL_STATUS=$(curl -s "http://localhost:9090/finetune/evaluations/$EVAL_ID" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))")
 
-1. **Cancel the running job**: `curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs/$JOB_ID/cancel`
-2. **Fetch per-epoch reasons** to understand what's failing
-3. **Apply fix** based on anomaly type:
+# Poll training
+JOB_STATUS=$(curl -s "http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs/$JOB_ID" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))")
+```
 
-| Anomaly | Config Fix |
-|---------|-----------|
-| NaN/Inf loss | Lower `learning_rate` by 2x |
-| KL divergence | Lower `learning_rate` by 2x |
-| High clipping | Increase `max_output_tokens` by 2x |
-| Weak signal | Rewrite grader for better differentiation |
-| Reward collapse | Increase `lora_rank` (4→8→16) |
-| No learning (flat epochs) | Try larger base model |
-| Overfitting (scores peak then decline) | Reduce `epochs` to peak epoch |
+As each job completes, save results:
+- Eval results → `evaluations/eval-v1.json`
+- Training results → `training-jobs/job-v1.json` (fetch via `GET /finetune/workflows/$WORKFLOW_ID/dataset/finetune-evaluations?finetune_job_id=$JOB_ID`)
 
-4. **If data or grader changed**, sync to cloud: `curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/dataset/upload`
-5. **Start a new job** with adjusted config → back to 9a
+**Files produced**:
+```
+finetune-project/evaluations/
+└── eval-v1.json               # Full evaluation results
+finetune-project/training-jobs/
+└── job-v1.json                # Training job results
+```
 
-### 9e. Iteration limits
+**This step can also be done via the vLLora UI** — click "Run Evaluation" or "Start Training" on the workflow page.
 
-- **Max 5 iterations.** After 5, stop and report full diagnosis.
+---
+
+## Step 8: Analyze Results & Present Findings
+
+**What happens**: Once results arrive (eval, training, or both), the agent analyzes and presents findings to the user. The analysis is **interactive** — present what you found and let the user drive the next action.
+
+> **Read `reference/analysis-strategy.md`** before analyzing. It has decision trees, action templates, derived metrics to compute, and interactive presentation guidelines.
+
+### 8a. What to analyze
+
+**From eval results:**
+- Average score across all records
+- Per-topic score breakdown (which topics score lowest?)
+- Score distribution (all 0s? all 1s? smooth spread?)
+- Common `reason` patterns in low-scoring records
+- Pass rate (score > threshold)
+
+**From training results (per-epoch):**
+- Reward progression (improving? plateauing? declining?)
+- Loss curve (decreasing? NaN/Inf?)
+- KL divergence (stable? exploding?)
+- Per-record score trends across epochs
+- Lowest-scoring records and their `reason` fields
+
+**Cross-referencing (when both available):**
+- Do eval-weak topics also score low in training?
+- Did training improve on the topics that eval flagged?
+- Is the grader consistent between eval and training?
+
+### 8b. Present to user interactively
+
+**Show a clear summary:**
+```
+=== Evaluation Results ===
+Average score: 0.72 | Pass rate: 78% | Records: 209
+
+Per-topic breakdown:
+  strategic-endgame:     0.45 (lowest — 5 of 11 records below threshold)
+  tactical-forks:        0.91 (strong)
+  opening-principles:    0.68
+  ...
+
+=== Training Results ===
+Epochs: 2 | Final reward: 0.65 | Trend: 0.40 → 0.55 → 0.65 (improving)
+No anomalies detected.
+
+=== Suggested Actions ===
+1. [RECOMMENDED] Regenerate records for "strategic-endgame" — low eval scores suggest weak prompts
+2. [OPTIONAL] Tighten grader weight on "concrete_examples" — many mediocre scores cite lack of examples
+3. [OPTIONAL] Run 1 more training epoch — reward still improving at epoch 2
+
+What would you like to do?
+```
+
+**Let the user choose:**
+- "Regenerate endgame records" → agent regenerates, re-uploads, starts new eval+training
+- "Adjust the grader" → agent modifies grader.js, re-uploads, starts new eval
+- "Run another training epoch" → agent starts new job with `epochs: 3`
+- "Looks good, I'm satisfied" → done
+- User may also direct their own analysis: "I think the grader is too lenient on X"
+
+### 8c. Quick diagnosis patterns
+
+| Signal | Likely cause | Suggested action |
+|--------|-------------|-----------------|
+| All scores ~0 | Grader broken or too strict | Fix grader, dry-run, re-eval |
+| All scores ~1 | Grader too lenient | Add harder criteria, re-eval |
+| One topic consistently low | Weak prompts or poor source material for that topic | Regenerate records, add source material |
+| Good responses scoring low | Grader criteria misaligned with objective | Adjust criteria weights or LLM judge prompt |
+| NaN/Inf loss in training | Learning rate too high | Lower `learning_rate` by 2x |
+| KL divergence exploding | Model drifting too far | Lower `learning_rate` by 2x |
+| Reward plateau (flat after epoch 1) | Grader not differentiating well | Improve grader for smoother score spread |
+| Reward collapse (all same score) | Grader binary or reward hacking | Rewrite grader with partial credit |
+| No learning across epochs | Task too hard for base model | Try larger base model |
+| Overfitting (peak then decline) | Too many epochs | Reduce `epochs` to peak epoch |
+
+---
+
+## Step 9: Iterate (If Needed)
+
+**What happens**: Based on the user's choice from Step 8, the agent applies fixes and starts new jobs. **Max 5 iterations.**
+
+### 9a. Apply the chosen fix
+
+**Fixing the grader** (no data re-upload needed):
+```bash
+# Edit grader.js, then update:
+uv run scripts/finetune.py upload-grader \
+  --workflow-id $WORKFLOW_ID --file grader.js
+```
+
+**Fixing the data** (requires re-upload):
+```bash
+# Regenerate records for weak topics, re-validate, re-upload
+uv run scripts/finetune.py upload-records \
+  --workflow-id $WORKFLOW_ID --file training.jsonl
+
+# Sync to cloud
+curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/dataset/upload
+```
+
+**Adjusting training config**: Modify parameters in the next job creation (Step 7b).
+
+### 9b. Start new eval + training jobs
+
+After applying fixes, start new jobs — same as Step 7a + 7b but with incremented version numbers:
+```bash
+uv run scripts/run_evaluation.py --dataset-id $WORKFLOW_ID --output evaluations/eval-v2.json
+# New training job with adjusted config
+JOB=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs ...)
+```
+
+### 9c. Iteration limits and escalation
+
+- **Max 5 iterations.** After 5, stop and report full diagnosis to the user.
 - **Base model escalation:** After 2 failed iterations on the same model: `Qwen3.5-4B` → `7B` → larger.
+- **When to stop:** User says they're satisfied, OR avg score > 0.8 AND training reward > 0.7, OR 3+ iterations with no improvement.
 
 **Files produced**:
 ```

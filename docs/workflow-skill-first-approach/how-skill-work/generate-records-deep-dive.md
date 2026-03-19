@@ -93,18 +93,41 @@ Vary: difficulty, tone, type (explain-why, compare, what-if, analyze, teach-me).
 Return JSON: {"prompts": ["prompt1", "prompt2", ...]}
 ```
 
-### 4. Call the LLM
+### 4. Call the LLM via `generate_records.py`
 
-The agent uses `scripts/chat_completion.py` — a helper that calls the OpenAI API:
+The primary method is `scripts/generate_records.py`, which automates the full generation loop:
 
 ```bash
-uv run scripts/chat_completion.py
+uv run scripts/generate_records.py \
+  --topics finetune-project/topics.json \
+  --relations finetune-project/relations.json \
+  --knowledge-dir finetune-project/knowledge \
+  --system-prompt "You are an expert chess tutor..." \
+  --output finetune-project/training.jsonl \
+  --records-per-topic 10
 ```
 
-It reads a JSON request from stdin and writes the LLM response to stdout. The request includes:
-- `model`: typically `gpt-4o-mini` (fast and cheap for generation)
-- `temperature`: 0.8 (higher for diversity)
-- `response_format`: `{"type": "json_object"}` (forces structured output)
+The script:
+1. Loads topics, relations, and all knowledge parts from per-document `knowledge_parts.json` files
+2. Finds leaf topics (topics that aren't parents of any other topic)
+3. For each leaf topic: gathers linked source chunks via `relations.json`, calls `chat_completion.py` to generate grounded user prompts, writes records incrementally
+4. Reports progress per topic and summarizes failures at the end
+
+**Customizing generation**: Adapt `--records-per-topic`, `--model`, and `--temperature` to the project.
+
+If some topics fail, use `--append` to retry only the missing ones without overwriting existing records:
+```bash
+uv run scripts/generate_records.py \
+  --topics finetune-project/topics.json \
+  --relations finetune-project/relations.json \
+  --knowledge-dir finetune-project/knowledge \
+  --system-prompt "You are an expert chess tutor..." \
+  --output finetune-project/training.jsonl \
+  --records-per-topic 10 \
+  --append
+```
+
+**Under the hood**: `generate_records.py` calls `scripts/chat_completion.py` for each LLM request. `chat_completion.py` reads a JSON request from stdin, calls the OpenAI API, and writes the response to stdout. It validates JSON output when `response_format` is `json_object`.
 
 **Time per call**: 3-10 seconds depending on the model and prompt length.
 

@@ -106,7 +106,7 @@ System prompt: You are an expert chess tutor who teaches through explanation and
 
 Execute the full vLLora finetune skill pipeline:
 1. Create a workflow on the gateway (http://localhost:9090) — upload immediately
-2. Extract ALL PDF documents using docling_extract.py (with --batch mode). Then for EACH document, write a CUSTOM extraction script that reads the docling-result.json and produces knowledge_parts.json. Do NOT write a generic script — each document has different structure, OCR artifacts, and heading patterns. Read chunks first to understand the document before writing the script. After extraction, run consolidate_parts.py and validate_extraction.py on each document. Upload each knowledge source to gateway as extraction completes.
+2. Extract ALL PDF documents using docling_extract.py (processing each individually). Then for EACH document, write a CUSTOM extraction script that reads the docling-result.json and produces knowledge_parts.json. Do NOT write a generic script — each document has different structure, OCR artifacts, and heading patterns. Read chunks first to understand the document before writing the script. After extraction, run consolidate_parts.py and validate_extraction.py on each document. Upload each knowledge source to gateway as extraction completes.
 3. Build a topic hierarchy from the extracted content — upload topics + relations to gateway immediately
 4. Generate training data (at least 100 records) — upload records to gateway immediately
 5. Write a grader/evaluator script — dry-run then upload grader to gateway immediately
@@ -143,6 +143,19 @@ echo "Created workflow: $WORKFLOW_ID"
 # Step 2: Extract documents (requires Docling or manual extraction)
 # The skill uses Docling API or reads PDFs directly — see extraction-deep-dive.md
 
+# Step 2b: Upload knowledge sources (use --force for safe re-uploads via PUT upsert)
+for DOC in *.pdf; do
+  DOC_SLUG=$(echo "${DOC%.pdf}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+  DOC_DIR="finetune-project/knowledge/$DOC_SLUG"
+  [ -f "$DOC_DIR/knowledge_parts.json" ] || continue
+  uv run .claude/scripts/finetune.py upload-knowledge \
+    --workflow-id $WORKFLOW_ID \
+    --file "$DOC" \
+    --parts-file "$DOC_DIR/knowledge_parts.json" \
+    --name "$DOC" \
+    --force
+done
+
 # Step 3: Upload topics (after creating topics.json manually or via LLM)
 uv run .claude/scripts/finetune.py upload-topics \
   --workflow-id $WORKFLOW_ID --file finetune-project/topics.json
@@ -151,7 +164,16 @@ uv run .claude/scripts/finetune.py upload-topics \
 uv run .claude/scripts/finetune.py upload-relations \
   --workflow-id $WORKFLOW_ID --file finetune-project/relations.json
 
-# Step 4: Generate data (via chat_completion.py) then upload
+# Step 4: Generate training records via generate_records.py, then upload
+uv run .claude/scripts/generate_records.py \
+  --topics finetune-project/topics.json \
+  --relations finetune-project/relations.json \
+  --knowledge-dir finetune-project/knowledge \
+  --system-prompt "You are..." \
+  --output finetune-project/training.jsonl \
+  --records-per-topic 10
+
+# Upload records to gateway
 uv run .claude/scripts/finetune.py upload-records \
   --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl
 
@@ -583,8 +605,10 @@ Step 3: Build topic hierarchy + relations  (medium — LLM calls for hierarchy d
 Step 4: Generate training records          (SLOW — LLM call per record batch)
 Step 5: Write grader script               (fast — single LLM generation)
 Step 5.5: Validate dataset                (fast — local validation)
-Step 6: Upload everything to gateway      (fast — API calls)
-Step 7-9: Evaluation/Training/Deployment  (optional, external services)
+Step 6: Verify all data in gateway        (fast — single script call)
+Step 7: Start eval + training in parallel (cloud — both jobs run simultaneously)
+Step 8: Analyze results & present findings (interactive — user drives next action)
+Step 9: Iterate if needed                 (apply fixes, start new eval+training jobs, max 5 iterations)
 ```
 
 ### Bottlenecks & Improvement Opportunities

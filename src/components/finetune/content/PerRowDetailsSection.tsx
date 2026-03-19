@@ -29,25 +29,35 @@ interface RowEpochData {
   criteriaNames: string[];
 }
 
-/** Compute score difference between the latest and previous epoch.
- *  Returns undefined if fewer than 2 epochs have scores. */
+/** Compute score trend between latest and previous eval checkpoint.
+ *  Uses mean of all candidate scores per checkpoint (consistent with how training algorithms use rewards).
+ *  Returns trend, prevScore (mean), currentScore (mean), and candidate counts for tooltip. */
 function computeEpochTrend(
   epochs: Record<number, { score?: number }[]>,
   sortedEpochNumbers: readonly number[],
-): number | undefined {
+): { trend: number; prevScore: number; currentScore: number; prevCount: number; currentCount: number; prevScores: number[]; currentScores: number[] } | undefined {
   if (sortedEpochNumbers.length < 2) return undefined;
 
   const latestEpoch = sortedEpochNumbers[sortedEpochNumbers.length - 1];
   const prevEpoch = sortedEpochNumbers[sortedEpochNumbers.length - 2];
 
-  const latestScore = epochs[latestEpoch]?.[0]?.score;
-  const prevScore = epochs[prevEpoch]?.[0]?.score;
+  const latestScores = (epochs[latestEpoch] ?? []).map(e => e.score).filter((s): s is number => s != null);
+  const prevScores = (epochs[prevEpoch] ?? []).map(e => e.score).filter((s): s is number => s != null);
 
-  if (typeof latestScore !== "number" || typeof prevScore !== "number") {
-    return undefined;
-  }
+  if (latestScores.length === 0 || prevScores.length === 0) return undefined;
 
-  return latestScore - prevScore;
+  const latestMean = latestScores.reduce((a, b) => a + b, 0) / latestScores.length;
+  const prevMean = prevScores.reduce((a, b) => a + b, 0) / prevScores.length;
+
+  return {
+    trend: latestMean - prevMean,
+    prevScore: prevMean,
+    currentScore: latestMean,
+    prevCount: prevScores.length,
+    currentCount: latestScores.length,
+    prevScores,
+    currentScores: latestScores,
+  };
 }
 
 export function PerRowDetailsSection({ results, workflowId }: PerRowDetailsSectionProps) {
@@ -99,19 +109,21 @@ export function PerRowDetailsSection({ results, workflowId }: PerRowDetailsSecti
 
       const rowId = row.row?.id ?? `finetune-row-${row.row_index}`;
 
-      // Compute trend: score diff between latest and previous epoch
-      const trend = computeEpochTrend(row.epochs, epochNumbers);
+      // Compute trend: score diff between latest and previous epoch (best candidates)
+      const trendData = computeEpochTrend(row.epochs, epochNumbers);
 
       flat.push({
         dataset_row_id: rowId,
         row_index: row.row_index,
         row: row.row ?? undefined,
         status: latestResult?.status ?? "completed",
-        score: latestResult?.score ?? undefined,
+        score: trendData?.currentScore ?? latestResult?.score ?? undefined,
         reason: latestResult?.reason ?? undefined,
         logs: latestResult?.logs ?? undefined,
         epoch: latestEpoch,
-        trend,
+        trend: trendData?.trend,
+        trendPrevScores: trendData?.prevScores,
+        trendCurrentScores: trendData?.currentScores,
       });
 
       const criteriaNames = getAllCriteriaNames(rowEpochs.map(e => e.breakdown));

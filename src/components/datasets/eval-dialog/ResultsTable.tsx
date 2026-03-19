@@ -38,12 +38,13 @@ interface ResultsTableProps {
   readonly jobId?: string;
 }
 
-/** Escape a CSV field value (quote if it contains commas, quotes, or newlines) */
+/** Escape a CSV field value — replace newlines with spaces, quote if needed */
 function escapeCsvField(value: string): string {
-  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
-    return `"${value.replace(/"/g, '""')}"`;
+  const cleaned = value.replace(/[\r\n]+/g, " ").trim();
+  if (cleaned.includes(",") || cleaned.includes('"')) {
+    return `"${cleaned.replace(/"/g, '""')}"`;
   }
-  return value;
+  return cleaned;
 }
 
 /** Generate and download a CSV file from evaluation results */
@@ -260,7 +261,7 @@ export function ResultsTable({
         <div className="flex-1 min-w-0 py-2">Input</div>
         {hasTopicData && <div className="w-[120px] shrink-0 py-2">Topic</div>}
         <div className="w-16 shrink-0 text-right pr-4 py-2">Score</div>
-        {hasTrendData && <div className="w-[60px] shrink-0 text-center py-2">Trend</div>}
+        {hasTrendData && <div className="w-[60px] shrink-0 text-center py-2" title="Score change (Δ) between consecutive evaluation checkpoints">Δ</div>}
         <div className="w-[140px] shrink-0 pl-2 pr-2 py-2">
           {allSameStatus ? "Reason" : "Status"}
         </div>
