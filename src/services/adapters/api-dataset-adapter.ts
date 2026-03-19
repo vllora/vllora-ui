@@ -71,17 +71,9 @@ interface DbTopicResponse {
   readonly workflow_id: string;
   readonly name: string;
   readonly parent_id: string | null;
-  readonly selected: number;
-  readonly source_chunk_refs: string | null;
+  readonly reference_id: string | null;
+  readonly system_prompt: string | null;
   readonly created_at: string;
-}
-
-/** Extra FE-only fields stored as JSON in the BE source_chunk_refs column */
-interface TopicMetadata {
-  sourceChunkRefs?: string[];
-  description?: string;
-  promptTemplate?: string;
-  normalizedPromptSegment?: string;
 }
 
 /** Row from the workflow_topic_sources bridge table */
@@ -92,7 +84,7 @@ interface DbTopicRelation {
   readonly reference_id: string | null;
 }
 
-type FlatTopic = { id: string; name: string; parent_id: string | null; selected: boolean; source_chunk_refs: TopicMetadata | null };
+type FlatTopic = { id: string; name: string; parent_id: string | null; system_prompt: string | null };
 
 /** Flatten a FE hierarchy tree into flat rows with parent_id for the BE.
  *  Uses UUIDs for DB IDs to avoid cross-workflow collisions. */
@@ -102,19 +94,15 @@ function flattenHierarchy(
 ): FlatTopic[] {
   const result: FlatTopic[] = [];
   for (const node of nodes) {
-    const meta: TopicMetadata = {};
-    if (node.sourceChunkRefs?.length) meta.sourceChunkRefs = node.sourceChunkRefs;
-    if (node.description) meta.description = node.description;
-    if (node.promptTemplate) meta.promptTemplate = node.promptTemplate;
-    if (node.normalizedPromptSegment) meta.normalizedPromptSegment = node.normalizedPromptSegment;
+    // Compose system_prompt from description or normalizedPromptSegment
+    const systemPrompt = node.description || node.normalizedPromptSegment || null;
 
     const dbId = crypto.randomUUID();
     result.push({
       id: dbId,
       name: node.name,
       parent_id: parentId,
-      selected: node.selected ?? true,
-      source_chunk_refs: Object.keys(meta).length > 0 ? meta : null,
+      system_prompt: systemPrompt,
     });
 
     if (node.children?.length) {
@@ -131,19 +119,11 @@ function buildHierarchyTree(rows: readonly DbTopicResponse[]): TopicHierarchyNod
 
   // First pass: create all nodes
   for (const row of rows) {
-    let meta: TopicMetadata = {};
-    if (row.source_chunk_refs) {
-      try { meta = JSON.parse(row.source_chunk_refs); } catch { /* ignore */ }
-    }
-
     nodeMap.set(row.id, {
       id: row.id,
       name: row.name,
-      selected: row.selected === 1,
-      description: meta.description,
-      sourceChunkRefs: meta.sourceChunkRefs,
-      promptTemplate: meta.promptTemplate,
-      normalizedPromptSegment: meta.normalizedPromptSegment,
+      description: row.system_prompt ?? undefined,
+      normalizedPromptSegment: row.system_prompt ?? undefined,
       children: undefined,
     });
   }

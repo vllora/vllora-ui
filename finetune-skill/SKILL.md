@@ -375,14 +375,39 @@ Decide what topics to create based on:
 - **The objective** — what behaviors does the model need? Each distinct behavior cluster becomes a topic.
 - **The documents** (if available) — what content exists to generate examples from? Read `knowledge/all-parts-index.json` (the merged index across all documents) and use `extraction_path` values as a checklist to make sure your topics cover the available material, not as a template to copy directly.
 
-Save to `topics.json` as a **flat array** — every topic at the same level, hierarchy expressed via `parent_id`:
+Save to `topics.json` as a **flat array** — every topic at the same level, hierarchy expressed via `parent_id`. Each topic has a `system_prompt` that describes its specialization:
 
 ```json
-[{"id": "billing", "name": "Billing", "parent_id": null, "system_prompt": "Focus on payment and subscription questions"},
- {"id": "billing-refunds", "name": "Refunds", "parent_id": "billing", "system_prompt": "Focus on refund requests and policies"}]
+[
+  {"id": "billing", "name": "Billing", "parent_id": null, "system_prompt": "Specialize in: payment and subscription questions. Help users understand billing cycles, charges, and payment methods."},
+  {"id": "billing-refunds", "name": "Refunds", "parent_id": "billing", "system_prompt": "Focus on: refund requests and policies. Guide users through the refund process, explain eligibility, and handle edge cases."}
+]
 ```
 
 Aim for 3-7 root topics, 2-3 levels deep, each leaf supporting 10-30 training examples. See `reference/topic-hierarchy.md` for design guidelines.
+
+**System prompt composition**: The `system_prompt` field on each topic is a **segment** that gets composed with its ancestors during record generation. The final system prompt in a training record is:
+
+```
+[Root system prompt from --system-prompt]
+
+[Root topic system_prompt]
+
+[Parent topic system_prompt]
+
+[Leaf topic system_prompt]
+```
+
+Each level adds specificity without contradicting the parent. Keep each segment to 1-2 sentences. The composed prompt should be 50-150 words total.
+
+**Example composed prompt** (for a record under `billing > refunds`):
+```
+You are a helpful customer support agent for Acme Corp.
+
+Specialize in: payment and subscription questions. Help users understand billing cycles, charges, and payment methods.
+
+Focus on: refund requests and policies. Guide users through the refund process, explain eligibility, and handle edge cases.
+```
 
 **Topic-source linking**: After uploading knowledge source parts, link them to topics via the `POST /topics/relations` API. Only create links to parts you've actually extracted — never fabricate references. See `reference/api-reference.md` Section 13 for the relations API.
 

@@ -8,6 +8,12 @@
 
 import { useMemo, useState } from "react";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   LineChart,
   Line,
   XAxis,
@@ -29,6 +35,10 @@ interface FinetuneMetricsChartProps {
   metrics: FinetuneJobMetricPoint[];
   className?: string;
   isLive?: boolean;
+  /** Pre-select a specific tab */
+  defaultTab?: MetricTab;
+  /** Hide the tab bar (when parent controls tab selection) */
+  hideTabs?: boolean;
 }
 
 type MetricTab = "reward" | "stability" | "completions";
@@ -45,28 +55,28 @@ const TAB_CONFIG: Record<
     label: "Reward",
     icon: <TrendingUp className="h-3 w-3" />,
     metrics: [
-      { key: "reward", label: "Reward", color: "#10b981", primary: true },
-      { key: "reward_std", label: "Reward Std", color: "#6366f1", primary: false },
-      { key: "frac_reward_zero_std", label: "Zero Std Frac", color: "#f59e0b", primary: false },
+      { key: "reward", label: "Reward", color: "#10b981", primary: true, description: "Average reward score from the evaluator. Higher = model generates better responses. Should increase over training." },
+      { key: "reward_std", label: "Reward Std", color: "#6366f1", primary: false, description: "Standard deviation of reward scores across candidates. Some variance is healthy (provides learning signal). Too low = model outputs are too similar." },
+      { key: "frac_reward_zero_std", label: "Zero Std Frac", color: "#f59e0b", primary: false, description: "Fraction of prompts where all candidates received the same score (zero variance). High values (>0.6) mean the evaluator can't differentiate — consider improving the grader." },
     ],
   },
   stability: {
-    label: "Stability",
+    label: "Loss",
     icon: <Activity className="h-3 w-3" />,
     metrics: [
-      { key: "loss", label: "Loss", color: "#ef4444", primary: true },
-      { key: "kl", label: "KL Divergence", color: "#f59e0b", primary: false },
-      { key: "grad_norm", label: "Grad Norm", color: "#8b5cf6", primary: false },
-      { key: "learning_rate", label: "Learning Rate", color: "#06b6d4", primary: false },
+      { key: "loss", label: "Loss", color: "#ef4444", primary: true, description: "Policy loss — measures how much the model deviates from producing high-reward responses. Should generally decrease over training." },
+      { key: "kl", label: "KL Divergence", color: "#f59e0b", primary: false, description: "KL divergence from the reference model. Measures how far the model has drifted from its original behavior. Too high = model may be overfitting or becoming incoherent." },
+      { key: "grad_norm", label: "Grad Norm", color: "#8b5cf6", primary: false, description: "Gradient norm — magnitude of weight updates. Spikes indicate unstable training. Should be relatively stable." },
+      { key: "learning_rate", label: "Learning Rate", color: "#06b6d4", primary: false, description: "Current learning rate. May change over training if a schedule is used (e.g., cosine decay)." },
     ],
   },
   completions: {
     label: "Completions",
     icon: <Zap className="h-3 w-3" />,
     metrics: [
-      { key: "completions/clipped_ratio", label: "Clipped Ratio", color: "#ef4444", primary: true },
-      { key: "completions/mean_length", label: "Mean Length", color: "#10b981", primary: false },
-      { key: "completions/mean_terminated_length", label: "Terminated Length", color: "#6366f1", primary: false },
+      { key: "completions/clipped_ratio", label: "Clipped Ratio", color: "#ef4444", primary: true, description: "Fraction of responses that were truncated (hit max token limit). High values (>0.7) mean responses are too long — consider increasing max tokens or adjusting the prompt." },
+      { key: "completions/mean_length", label: "Mean Length", color: "#10b981", primary: false, description: "Average response length in tokens across all generated candidates." },
+      { key: "completions/mean_terminated_length", label: "Terminated Length", color: "#6366f1", primary: false, description: "Average length of responses that ended naturally (with an EOS token), excluding truncated ones." },
     ],
   },
 };
@@ -76,6 +86,7 @@ interface MetricDef {
   label: string;
   color: string;
   primary: boolean;
+  description: string;
 }
 
 // =============================================================================
@@ -149,10 +160,87 @@ function MetricsTooltip({
   );
 }
 
+/** Generate a plain-language insight about the current training metrics */
+function getMetricsInsight(
+  latest: Record<string, unknown> | null,
+  tab: MetricTab,
+): string {
+  if (!latest) return "Waiting for metrics data...";
+
+  if (tab === "reward") {
+    const reward = typeof latest.reward === "number" ? latest.reward : null;
+    const rewardStd = typeof latest.reward_std === "number" ? latest.reward_std : null;
+    const fracZero = typeof latest.frac_reward_zero_std === "number" ? latest.frac_reward_zero_std : null;
+
+    if (reward == null) return "Reward data not available yet.";
+
+    const parts: string[] = [];
+    if (reward >= 0.9) parts.push("Reward is high — the model is generating good responses.");
+    else if (reward >= 0.7) parts.push("Reward is moderate — the model is learning but has room to improve.");
+    else parts.push("Reward is low — the model may need more training or better data.");
+
+    if (rewardStd != null) {
+      if (rewardStd < 0.02) parts.push("Very low variance between candidates — the evaluator may not differentiate well.");
+      else if (rewardStd > 0.2) parts.push("High variance between candidates — good learning signal.");
+    }
+    if (fracZero != null && fracZero > 0.5) {
+      parts.push(`${(fracZero * 100).toFixed(0)}% of prompts have zero score variance — consider improving the evaluator.`);
+    }
+    return parts.join(" ");
+  }
+
+  if (tab === "stability") {
+    const loss = typeof latest.loss === "number" ? latest.loss : null;
+    const kl = typeof latest.kl === "number" ? latest.kl : null;
+    const gradNorm = typeof latest.grad_norm === "number" ? latest.grad_norm : null;
+
+    if (loss == null) return "Loss data not available yet.";
+
+    const parts: string[] = [];
+    if (loss < 0.01) parts.push("Loss is very low — training is converging well.");
+    else if (loss < 0.1) parts.push("Loss is healthy — model is learning steadily.");
+    else if (loss < 1.0) parts.push("Loss is moderate — training is in progress.");
+    else parts.push("Loss is high — model is still early in training or may be struggling.");
+
+    if (kl != null) {
+      if (kl > 100) parts.push("KL divergence is very high — the model is drifting significantly from the base model.");
+      else if (kl > 10) parts.push("KL divergence is elevated — watch for quality degradation.");
+      else parts.push("KL divergence is within normal range.");
+    }
+    if (gradNorm != null && gradNorm > 10) {
+      parts.push("Gradient norm is high — training may be unstable.");
+    }
+    return parts.join(" ");
+  }
+
+  if (tab === "completions") {
+    const clipped = typeof latest["completions/clipped_ratio"] === "number" ? latest["completions/clipped_ratio"] : null;
+    const meanLen = typeof latest["completions/mean_length"] === "number" ? latest["completions/mean_length"] : null;
+
+    if (clipped == null && meanLen == null) return "Completion data not available yet.";
+
+    const parts: string[] = [];
+    if (clipped != null) {
+      if (clipped > 0.7) parts.push(`${(clipped * 100).toFixed(0)}% of responses are being truncated — consider increasing max tokens.`);
+      else if (clipped > 0.3) parts.push(`${(clipped * 100).toFixed(0)}% of responses are truncated — moderate, but watch the trend.`);
+      else parts.push("Low truncation rate — response lengths are within limits.");
+    }
+    if (meanLen != null) {
+      parts.push(`Average response length: ${Math.round(meanLen)} tokens.`);
+    }
+    return parts.join(" ");
+  }
+
+  return "";
+}
+
 function formatMetricValue(value: number): string {
-  if (Math.abs(value) < 0.001) return value.toExponential(2);
-  if (Math.abs(value) >= 1000) return value.toFixed(0);
-  return value.toFixed(4);
+  if (Math.abs(value) < 0.001) return value.toExponential(1);
+  if (Math.abs(value) >= 1000000) return (value / 1000000).toFixed(1) + "M";
+  if (Math.abs(value) >= 1000) return (value / 1000).toFixed(1) + "K";
+  if (Math.abs(value) >= 100) return value.toFixed(0);
+  if (Math.abs(value) >= 1) return value.toFixed(2);
+  return value.toFixed(3);
 }
 
 // =============================================================================
@@ -163,8 +251,13 @@ export function FinetuneMetricsChart({
   metrics,
   className,
   isLive,
+  defaultTab,
+  hideTabs,
 }: FinetuneMetricsChartProps) {
-  const [activeTab, setActiveTab] = useState<MetricTab>("reward");
+  const [internalTab, setInternalTab] = useState<MetricTab>(defaultTab ?? "reward");
+  // When parent controls tabs (hideTabs=true), use defaultTab prop directly
+  const activeTab = hideTabs ? (defaultTab ?? "reward") : internalTab;
+  const setActiveTab = setInternalTab;
   const alertCount = useMemo(() => getAlertCount(metrics), [metrics]);
 
   const chartData = useMemo(() => {
@@ -243,7 +336,7 @@ export function FinetuneMetricsChart({
       <div className="px-5 py-4 border-b border-white/5 flex items-start justify-between">
         <div>
           <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1">
-            Training Metrics
+            {TAB_CONFIG[activeTab].label}
           </p>
           <div className="flex items-baseline gap-3">
             {latestReward != null && (
@@ -251,11 +344,24 @@ export function FinetuneMetricsChart({
                 {latestReward.toFixed(3)}
               </h2>
             )}
-            <span className="text-xs font-medium text-slate-400">
-              Step {latestStep}
-              {maxSteps ? ` / ${maxSteps}` : ""}
-              {progressPercent != null ? ` (${progressPercent}%)` : ""}
-            </span>
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-xs font-medium text-slate-400 cursor-help">
+                    Step {latestStep}
+                    {maxSteps ? ` / ${maxSteps}` : ""}
+                    {progressPercent != null ? ` (${progressPercent}%)` : ""}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[260px]">
+                  <p className="text-[11px]">
+                    A <span className="font-semibold">step</span> = one batch of records processed by the optimizer.
+                    Each step updates the model weights once.
+                    {maxSteps ? ` This job has ${maxSteps} total steps across all epochs.` : ""}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -274,26 +380,33 @@ export function FinetuneMetricsChart({
         </div>
       </div>
 
-      {/* Tab Bar */}
-      <div className="flex border-b border-white/5 px-4">
-        {(Object.entries(TAB_CONFIG) as [MetricTab, (typeof TAB_CONFIG)[MetricTab]][]).map(
-          ([key, config]) => (
-            <button
-              key={key}
-              onClick={() => setActiveTab(key)}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium transition-colors border-b-2",
-                activeTab === key
-                  ? "text-slate-200 border-[#10b981]"
-                  : "text-slate-500 border-transparent hover:text-slate-300"
-              )}
-            >
-              {config.icon}
-              {config.label}
-            </button>
-          )
-        )}
+      {/* Health insight — plain language interpretation of current metrics */}
+      <div className="px-5 pb-2 text-[11px] text-slate-400 leading-snug">
+        {getMetricsInsight(latestMetrics, activeTab)}
       </div>
+
+      {/* Tab Bar — hidden when parent controls tab selection */}
+      {!hideTabs && (
+        <div className="flex border-b border-white/5 px-4">
+          {(Object.entries(TAB_CONFIG) as [MetricTab, (typeof TAB_CONFIG)[MetricTab]][]).map(
+            ([key, config]) => (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium transition-colors border-b-2",
+                  activeTab === key
+                    ? "text-slate-200 border-[#10b981]"
+                    : "text-slate-500 border-transparent hover:text-slate-300"
+                )}
+              >
+                {config.icon}
+                {config.label}
+              </button>
+            )
+          )}
+        </div>
+      )}
 
       {/* Chart */}
       <div className="h-[220px] w-full p-4 pr-2">
@@ -361,34 +474,47 @@ export function FinetuneMetricsChart({
         </ResponsiveContainer>
       </div>
 
-      {/* Legend */}
-      <div className="px-5 py-3 bg-black/20 border-t border-white/5 flex flex-wrap items-center gap-4">
-        {availableMetrics.map((metric) => {
-          const latestVal =
-            chartData.length > 0
-              ? ((chartData[chartData.length - 1] as Record<string, unknown>)[metric.key] as
-                  | number
-                  | undefined)
-              : undefined;
-          return (
-            <div key={metric.key} className="flex items-center gap-2">
-              <span
-                className="block w-3 h-0.5"
-                style={{ backgroundColor: metric.color }}
-              />
-              <span className="text-xs text-slate-400">{metric.label}</span>
-              {latestVal != null && (
-                <span
-                  className="text-xs font-mono font-medium"
-                  style={{ color: metric.color }}
-                >
-                  {formatMetricValue(latestVal)}
-                </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      {/* Legend with latest values + tooltips */}
+      <TooltipProvider delayDuration={200}>
+        <div className="px-5 py-2.5 bg-black/20 border-t border-white/5 flex flex-wrap items-center gap-x-5 gap-y-1.5">
+          {availableMetrics.map((metric) => {
+            const latestVal =
+              chartData.length > 0
+                ? ((chartData[chartData.length - 1] as Record<string, unknown>)[metric.key] as
+                    | number
+                    | undefined)
+                : undefined;
+            return (
+              <Tooltip key={metric.key}>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1.5 cursor-help">
+                    <svg width="16" height="3" className="shrink-0">
+                      <line
+                        x1="0" y1="1.5" x2="16" y2="1.5"
+                        stroke={metric.color}
+                        strokeWidth={metric.primary ? 2 : 1.5}
+                        strokeDasharray={metric.primary ? undefined : "3 2"}
+                      />
+                    </svg>
+                    <span className="text-[10px] text-slate-400">{metric.label}</span>
+                    {latestVal != null && (
+                      <span
+                        className="text-[10px] font-mono font-semibold"
+                        style={{ color: metric.color }}
+                      >
+                        {formatMetricValue(latestVal)}
+                      </span>
+                    )}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[280px]">
+                  <p className="text-[11px]">{metric.description}</p>
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
+        </div>
+      </TooltipProvider>
     </div>
   );
 }

@@ -9,7 +9,7 @@ A training record is a **prompt** — a system message + user message that the m
 ```json
 {
   "messages": [
-    {"role": "system", "content": "You are an expert chess tutor..."},
+    {"role": "system", "content": "You are an expert chess tutor...\n\nSpecialize in: tactical chess patterns and combinations.\n\nFocus on: fork tactics — knight forks, pawn forks, queen forks."},
     {"role": "user", "content": "Explain the knight fork and when it's most effective"}
   ],
   "id": "forks-001",
@@ -19,6 +19,8 @@ A training record is a **prompt** — a system message + user message that the m
 ```
 
 **Key insight**: This is **RFT (Reinforcement Fine-Tuning)** — no assistant messages are included. The model learns by generating responses and getting scored by the grader, not by copying reference answers.
+
+**Note**: The system message is a **composed prompt** — it combines the root persona (`--system-prompt`), ancestor topic system_prompts, and the leaf topic's system_prompt. See [System Prompt Composition](#system-prompt-composition) below for details.
 
 ## The Generation Flow
 
@@ -109,9 +111,10 @@ uv run scripts/generate_records.py \
 
 The script:
 1. Loads topics, relations, and all knowledge parts from per-document `knowledge_parts.json` files
-2. Finds leaf topics (topics that aren't parents of any other topic)
-3. For each leaf topic: gathers linked source chunks via `relations.json`, calls `chat_completion.py` to generate grounded user prompts, writes records incrementally
-4. Reports progress per topic and summarizes failures at the end
+2. Finds leaf topics (topics that aren't parents of any other topic) and builds a topic index via `build_topic_index()`
+3. For each leaf topic: walks up the hierarchy via `get_ancestor_chain()` to collect ancestors, then calls `compose_system_prompt()` to build a hierarchical system prompt from the root persona + ancestor system_prompts + leaf system_prompt
+4. Gathers linked source chunks via `relations.json`, calls `chat_completion.py` to generate grounded user prompts, writes records incrementally with the composed system prompt
+5. Reports progress per topic and summarizes failures at the end
 
 **Customizing generation**: Adapt `--records-per-topic`, `--model`, and `--temperature` to the project.
 
@@ -136,10 +139,14 @@ uv run scripts/generate_records.py \
 The LLM returns a JSON object with a `prompts` array. The agent wraps each prompt into a full training record:
 
 ```python
+# Compose hierarchical system prompt for this leaf topic
+ancestors = get_ancestor_chain(topic, topic_index)
+composed_prompt = compose_system_prompt(root_system_prompt, ancestors, topic)
+
 for prompt_text in llm_response['prompts']:
     record = {
         'messages': [
-            {'role': 'system', 'content': system_prompt},
+            {'role': 'system', 'content': composed_prompt},  # root + ancestors + leaf
             {'role': 'user', 'content': prompt_text}
         ],
         'id': f'{topic_id}-{counter:03d}',
@@ -189,6 +196,31 @@ for t, n in c.most_common():
     print(f'  {t}: {n}{flag}')
 "
 ```
+
+## System Prompt Composition
+
+Each training record gets a **composed** system prompt, not just the root `--system-prompt`. The `compose_system_prompt()` function in `generate_records.py` builds it by walking the topic hierarchy:
+
+1. **`build_topic_index(topics)`** — creates a lookup dict from topic ID to topic dict
+2. **`get_ancestor_chain(topic, topic_index)`** — walks from leaf to root via `parent_id`, returns `[root, ..., parent]` (excludes the leaf)
+3. **`compose_system_prompt(root_prompt, ancestors, leaf)`** — joins segments with `\n\n`:
+   - `root_prompt` (the `--system-prompt` CLI argument — the model persona)
+   - Each ancestor's `system_prompt` (falls back to `"Specialize in: {name}"` if missing)
+   - The leaf's `system_prompt` (falls back to `"Focus on: {name}"` if missing)
+
+**Example**: For a 3-level topic hierarchy with leaf topic "Knight Forks":
+
+```
+Root persona:     "You are an expert chess tutor who teaches tactical and strategic concepts."
+Root topic:       "Specialize in: tactical chess patterns and combinations."
+Leaf topic:       "Focus on: knight fork tactics — attacking king and rook simultaneously."
+```
+
+The composed prompt in `messages[0].content` becomes all three segments joined by `\n\n` (target: 50-150 words total, 3 segments for a 3-level hierarchy).
+
+Records for different leaf topics get **different composed prompts**, even though they share the same root persona and may share intermediate ancestors. This gives each topic's training records a progressively narrower focus.
+
+---
 
 ## Record Format — What Each Field Means
 

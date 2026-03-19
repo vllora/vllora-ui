@@ -77,7 +77,7 @@ Without topics, training data is a flat list of prompts with no structure. Topic
 Key fields:
 - **`id`** — unique identifier, used in records (`"topic": "forks"`) and relations
 - **`parent_id`** — links to parent topic (null for roots), creates the tree
-- **`system_prompt`** — guides data generation for this topic, telling the LLM what to focus on
+- **`system_prompt`** — a segment in the hierarchical prompt composition chain. During record generation, this field is composed with ancestor system_prompts to form the full system message (see [System Prompt Composition](#system-prompt-composition) below)
 
 ### How Topics Map to Documents
 
@@ -106,8 +106,38 @@ Tactical Patterns (root)          ← from Chapter 3 heading
 | 3-7 root topics | Too few = topics too broad; too many = fragmented |
 | 2-3 levels deep | Deeper is more specific but harder to balance |
 | 10-30 records per leaf | Fewer = undertrained; more may overfit |
-| Descriptive system_prompt | Directly controls what the LLM generates for this topic |
+| Descriptive system_prompt | Each topic's segment composes into the final training prompt |
+| Root: "Specialize in: ..." | Root topics set the broad domain focus |
+| Leaf: "Focus on: ..." | Leaf topics narrow to specific scenarios |
 | No overlapping topics | A record should clearly belong to one leaf topic |
+
+### System Prompt Composition
+
+The `system_prompt` field on each topic is not used in isolation. During record generation (Step 4), `generate_records.py` walks up the topic hierarchy and **composes** a single system prompt from all levels:
+
+```
+[Root persona from --system-prompt]    "You are an expert chess tutor..."
+
+[Root topic system_prompt]             "Specialize in: tactical chess patterns and combinations."
+
+[Parent topic system_prompt]           "Specialize in: short-range tactical motifs."
+
+[Leaf topic system_prompt]             "Focus on: fork tactics — knight forks, pawn forks, queen forks."
+```
+
+Segments are joined with `\n\n`. For a 3-level hierarchy this produces 4 segments (root persona + 3 topic levels). Target: **50-150 words total**.
+
+**Writing guidelines for system_prompt fields:**
+
+| Level | Convention | Example |
+|-------|-----------|---------|
+| Root topic | `"Specialize in: ..."` | `"Specialize in: payment and subscription questions."` |
+| Mid-level | `"Specialize in: ..."` | `"Specialize in: refund workflows and policies."` |
+| Leaf topic | `"Focus on: ..."` | `"Focus on: partial refund edge cases and pro-rated calculations."` |
+
+Each level adds specificity without contradicting its parent. If a topic has no `system_prompt`, the script falls back to its `name` field (e.g., `"Specialize in: Billing"`).
+
+For research and design guidelines, see [prompt-composition-research.md](prompt-composition-research.md).
 
 ---
 

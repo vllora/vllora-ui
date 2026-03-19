@@ -58,8 +58,48 @@ def find_leaf_topics(topics: list[dict]) -> list[dict]:
     return [t for t in topics if t["id"] not in parent_ids]
 
 
+def build_topic_index(topics: list[dict]) -> dict[str, dict]:
+    """Build a lookup from topic ID to topic dict."""
+    return {t["id"]: t for t in topics}
+
+
+def get_ancestor_chain(topic: dict, topic_index: dict[str, dict]) -> list[dict]:
+    """Walk up the hierarchy from a leaf topic to root. Returns [root, ..., parent] (excludes the leaf itself)."""
+    chain: list[dict] = []
+    current = topic
+    while current.get("parent_id") and current["parent_id"] in topic_index:
+        parent = topic_index[current["parent_id"]]
+        chain.append(parent)
+        current = parent
+    chain.reverse()  # root first, immediate parent last
+    return chain
+
+
+def compose_system_prompt(root_prompt: str, ancestors: list[dict], leaf: dict) -> str:
+    """Compose a hierarchical system prompt: root persona + ancestor specializations + leaf focus.
+
+    Each level adds specificity without contradicting the parent.
+    Target: 50-150 words total.
+    """
+    segments = [root_prompt]
+
+    for ancestor in ancestors:
+        segment = ancestor.get("system_prompt")
+        if not segment:
+            segment = f"Specialize in: {ancestor['name']}"
+        segments.append(segment)
+
+    leaf_segment = leaf.get("system_prompt")
+    if not leaf_segment:
+        leaf_segment = f"Focus on: {leaf['name']}"
+    segments.append(leaf_segment)
+
+    return "\n\n".join(segments)
+
+
 def generate_for_topic(
     topic: dict,
+    ancestors: list[dict],
     relations: list[dict],
     parts: dict[str, dict],
     system_prompt: str,
@@ -84,7 +124,10 @@ def generate_for_topic(
         for c in chunks[:20]
     )
 
-    # Build LLM request
+    # Compose hierarchical system prompt for this topic
+    composed_prompt = compose_system_prompt(system_prompt, ancestors, topic)
+
+    # Build LLM request — use topic focus to guide generation
     focus = topic.get("system_prompt", topic.get("name", ""))
     prompt = f"""Generate {records_per_topic} diverse user prompts for fine-tuning.
 
@@ -135,14 +178,14 @@ Return JSON: {{"prompts": ["prompt1", "prompt2", ...]}}"""
         print(f"  Warning: LLM returned 0 prompts for topic '{topic['id']}'", file=sys.stderr)
         return []
 
-    # Build records
+    # Build records with composed system prompt
     records = []
     for i, prompt_text in enumerate(prompts):
         if not prompt_text or not prompt_text.strip():
             continue
         records.append({
             "messages": [
-                {"role": "system", "content": system_prompt},
+                {"role": "system", "content": composed_prompt},
                 {"role": "user", "content": prompt_text},
             ],
             "id": f"{topic['id']}-{i + 1:03d}",
@@ -189,6 +232,7 @@ def main() -> None:
     relations = load_relations(relations_path)
     parts = load_all_parts(knowledge_dir)
     leaves = find_leaf_topics(topics)
+    topic_index = build_topic_index(topics)
 
     print(f"Loaded: {len(topics)} topics ({len(leaves)} leaves), {len(relations)} relations, {len(parts)} parts")
 
@@ -200,10 +244,14 @@ def main() -> None:
 
     with output_path.open(mode) as out:
         for i, topic in enumerate(leaves):
-            print(f"[{i + 1}/{len(leaves)}] Generating for '{topic['name']}'...", end=" ", flush=True)
+            ancestors = get_ancestor_chain(topic, topic_index)
+            ancestor_path = " > ".join(a["name"] for a in ancestors)
+            path_display = f"{ancestor_path} > {topic['name']}" if ancestors else topic["name"]
+            print(f"[{i + 1}/{len(leaves)}] Generating for '{path_display}'...", end=" ", flush=True)
 
             records = generate_for_topic(
                 topic=topic,
+                ancestors=ancestors,
                 relations=relations,
                 parts=parts,
                 system_prompt=args.system_prompt,

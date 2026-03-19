@@ -19,6 +19,8 @@ interface FinetuneMetricsSectionProps {
   /** The workflow ID (same as dataset ID) — required for the API path */
   workflowId: string;
   isLive?: boolean;
+  /** Pre-select a specific tab (reward/stability/completions) */
+  defaultTab?: "reward" | "stability" | "completions";
 }
 
 const POLL_INTERVAL = 15_000;
@@ -27,6 +29,7 @@ export function FinetuneMetricsSection({
   jobId,
   workflowId,
   isLive,
+  defaultTab,
 }: FinetuneMetricsSectionProps) {
   const [metrics, setMetrics] = useState<FinetuneJobMetricPoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -130,6 +133,8 @@ export function FinetuneMetricsSection({
       <FinetuneMetricsChart
         metrics={metrics}
         isLive={isLive}
+        defaultTab={defaultTab}
+        hideTabs
       />
     );
   }

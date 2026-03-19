@@ -9,6 +9,7 @@
  */
 
 import { useMemo, useState } from "react";
+import { cn } from "@/lib/utils";
 import {
   BarChart,
   Bar,
@@ -25,12 +26,14 @@ import { TrainingMetricsSection } from "./TrainingMetricsSection";
 import { FinetuneMetricsSection } from "./FinetuneMetricsSection";
 import { ScoreStrip } from "@/components/datasets/eval-dialog/ScoreStrip";
 
-type ChartView = "scoreTrend" | "trainingProgress" | "lossReward" | "scoreDistribution";
+type ChartView = "scoreTrend" | "trainingProgress" | "reward" | "stability" | "completions" | "scoreDistribution";
 
 const CHART_LABELS: Record<ChartView, string> = {
   scoreTrend: "Score Trend",
   trainingProgress: "Training Progress",
-  lossReward: "Loss & Reward",
+  reward: "Reward",
+  stability: "Loss",
+  completions: "Completions",
   scoreDistribution: "Score Distribution",
 };
 
@@ -158,17 +161,24 @@ export function FinetuneChartSelector({
 
   return (
     <div className="w-full">
-      {/* Chart type selector */}
-      <div className="flex items-center justify-end mb-1">
-        <select
-          value={view}
-          onChange={(e) => setView(e.target.value as ChartView)}
-          className="text-[10px] bg-zinc-800/60 border border-zinc-700/50 rounded px-1.5 py-0.5 text-zinc-400 cursor-pointer hover:text-zinc-200 transition-colors outline-none focus:ring-1 focus:ring-zinc-600"
-        >
+      {/* Chart type selector — pill-style segmented control */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center bg-zinc-800/40 rounded-md p-0.5 gap-0.5">
           {(Object.keys(CHART_LABELS) as ChartView[]).map((key) => (
-            <option key={key} value={key}>{CHART_LABELS[key]}</option>
+            <button
+              key={key}
+              onClick={() => setView(key)}
+              className={cn(
+                "px-2.5 py-1 text-[10px] font-medium rounded transition-all",
+                view === key
+                  ? "bg-zinc-700/80 text-zinc-200 shadow-sm"
+                  : "text-zinc-500 hover:text-zinc-300",
+              )}
+            >
+              {CHART_LABELS[key]}
+            </button>
           ))}
-        </select>
+        </div>
       </div>
 
       {view === "scoreTrend" && (
@@ -186,11 +196,12 @@ export function FinetuneChartSelector({
         <TrainingProgressChart data={progressData} isLive={isLive} />
       )}
 
-      {view === "lossReward" && (
+      {(view === "reward" || view === "stability" || view === "completions") && (
         <FinetuneMetricsSection
           jobId={jobId}
           workflowId={workflowId}
           isLive={isLive}
+          defaultTab={view}
         />
       )}
 
