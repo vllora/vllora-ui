@@ -78,7 +78,7 @@ function ChartTooltip({
         {label}
       </p>
       <div className="space-y-1">
-        {payload.map((entry) => (
+        {payload.filter((entry) => typeof entry.value === "number" && entry.dataKey !== "stdDevBand").map((entry) => (
           <div
             key={entry.dataKey}
             className="flex items-center justify-between gap-3 text-[11px]"

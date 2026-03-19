@@ -160,20 +160,19 @@ function diagnoseResults(
       type: 'mean_low',
       severity: 'error',
       message: `Mean score too low (${(mean * 100).toFixed(1)}%)`,
-      suggestion: 'Dataset may be too hard, or grader may be too strict. Review sample outputs to determine which.',
+      suggestion: 'The dataset may be too hard for the base model, or the evaluator may be too strict. Review sample outputs to determine which.',
     });
     warnings.push(`Mean (${mean.toFixed(2)}) below healthy range (${THRESHOLDS.mean.low}-${THRESHOLDS.mean.high})`);
-    // Could be dataset or grader issue - need manual review
     datasetQuality = 'warning';
     graderQuality = 'warning';
   } else if (mean > THRESHOLDS.mean.high) {
     issues.push({
       type: 'mean_high',
       severity: 'warning',
-      message: `Mean score too high (${(mean * 100).toFixed(1)}%)`,
-      suggestion: 'Dataset may be too easy for RFT, or grader may be too lenient. RFT works best when there is room to improve.',
+      message: `Mean score is high (${(mean * 100).toFixed(1)}%) — limited room for improvement`,
+      suggestion: 'Most records already score well. RFT learns by comparing good and bad responses — when everything scores high, the training signal is weak. Consider making the evaluator more strict or adding harder examples.',
     });
-    warnings.push(`Mean (${mean.toFixed(2)}) above healthy range - RFT may have limited improvement signal`);
+    warnings.push(`Mean (${mean.toFixed(2)}) above healthy range — RFT may have limited improvement signal`);
     datasetQuality = 'warning';
   }
 
@@ -183,18 +182,18 @@ function diagnoseResults(
       type: 'std_low',
       severity: 'warning',
       message: `Score variance too low (std: ${std.toFixed(3)})`,
-      suggestion: 'Grader may not differentiate outputs well. Consider adding more dimensions to the grading rubric.',
+      suggestion: 'The evaluator gives similar scores to most responses. RFT needs score differences between candidates to learn. Consider adding more evaluation criteria or using a more granular scoring rubric.',
     });
-    warnings.push(`Std (${std.toFixed(3)}) too low - grader may not distinguish good from bad outputs`);
+    warnings.push(`Std (${std.toFixed(3)}) too low — evaluator may not distinguish good from bad outputs`);
     graderQuality = 'warning';
   } else if (std > THRESHOLDS.std.high) {
     issues.push({
       type: 'std_high',
       severity: 'warning',
-      message: `Score variance high (std: ${std.toFixed(3)})`,
-      suggestion: 'Scores may be bimodal (pass/fail). Consider using gradient scoring instead of binary.',
+      message: `Score variance is high (std: ${std.toFixed(3)})`,
+      suggestion: 'Scores appear to be mostly pass/fail (binary). A smoother scoring scale (e.g., 0.0 to 1.0 with partial credit) provides a better training signal for RFT.',
     });
-    warnings.push(`Std (${std.toFixed(3)}) high - may indicate binary scoring`);
+    warnings.push(`Std (${std.toFixed(3)}) high — may indicate binary pass/fail scoring`);
   }
 
   // Check percentage above zero
@@ -202,12 +201,12 @@ function diagnoseResults(
     issues.push({
       type: 'low_success',
       severity: 'error',
-      message: `Only ${(percentAboveZero * 100).toFixed(1)}% of samples scored above zero`,
-      suggestion: 'Base model struggles with these tasks. Consider using SFT first to bootstrap capability.',
+      message: `Only ${(percentAboveZero * 100).toFixed(1)}% of records scored above zero`,
+      suggestion: 'The base model struggles with these tasks. RFT needs at least some successful responses to learn from. Consider using supervised fine-tuning (SFT) first to teach the model the basics.',
     });
-    warnings.push(`Very few samples score above zero (${(percentAboveZero * 100).toFixed(1)}%)`);
+    warnings.push(`Very few records score above zero (${(percentAboveZero * 100).toFixed(1)}%)`);
     datasetQuality = 'problem';
-    recommendations.push('Consider using SFT first to bootstrap base model capability');
+    recommendations.push('Consider using supervised fine-tuning (SFT) first to teach the base model the basics before running RFT');
   }
 
   // Check percentage perfect
@@ -215,10 +214,10 @@ function diagnoseResults(
     issues.push({
       type: 'too_easy',
       severity: 'warning',
-      message: `${(percentPerfect * 100).toFixed(1)}% of samples score perfectly`,
-      suggestion: 'Dataset may be too easy or grader too lenient. RFT needs room for improvement.',
+      message: `${(percentPerfect * 100).toFixed(1)}% of records score perfectly (1.0)`,
+      suggestion: 'When most responses already score perfectly, the training algorithm has no way to distinguish better from worse — the gradient signal is zero for these records. Consider making the evaluator more strict or adding harder examples.',
     });
-    warnings.push(`Too many perfect scores (${(percentPerfect * 100).toFixed(1)}%) - limited improvement signal`);
+    warnings.push(`Too many perfect scores (${(percentPerfect * 100).toFixed(1)}%) — limited training signal`);
     if (datasetQuality === 'good') datasetQuality = 'warning';
   }
 
@@ -238,27 +237,27 @@ function diagnoseResults(
       type: 'topic_problem',
       severity: 'warning',
       message: `Topics with very low scores: ${problemTopics.join(', ')}`,
-      suggestion: 'These topics may need SFT first, or consider excluding them from RFT.',
+      suggestion: 'These topics may need supervised fine-tuning (SFT) first, or consider excluding them from RFT training.',
     });
     warnings.push(`Some topics perform very poorly: ${problemTopics.join(', ')}`);
-    recommendations.push(`Review topics: ${problemTopics.join(', ')} - may need SFT or exclusion`);
+    recommendations.push(`Review these topics: ${problemTopics.join(', ')} — they may need SFT first or should be excluded from training`);
   }
 
   // Generate recommendations
   if (mean < THRESHOLDS.mean.low && percentAboveZero < 0.2) {
-    recommendations.push('Review lowest-scoring samples to determine if issue is data or grader');
-    recommendations.push('If grader issue: relax thresholds or add partial credit');
-    recommendations.push('If data issue: use SFT to bootstrap capability first');
+    recommendations.push('Review the lowest-scoring records to determine if the issue is with the data or the evaluator');
+    recommendations.push('If the evaluator is too strict: adjust scoring criteria or add partial credit for partially correct responses');
+    recommendations.push('If the data is too hard: use supervised fine-tuning (SFT) first to teach the model the basics');
   }
 
   if (mean > THRESHOLDS.mean.high) {
-    recommendations.push('Review highest-scoring samples for reward hacking');
-    recommendations.push('Consider tightening grader criteria or adding harder examples');
+    recommendations.push('Most records already score well — the model has limited room to improve with RFT');
+    recommendations.push('Consider making the evaluator more strict, or adding more challenging examples to the dataset');
   }
 
   if (std < THRESHOLDS.std.low) {
-    recommendations.push('Add more grading dimensions to differentiate outputs');
-    recommendations.push('Use partial credit instead of binary pass/fail');
+    recommendations.push('Add more evaluation criteria to help differentiate good responses from great ones');
+    recommendations.push('Use a smoother scoring scale with partial credit instead of binary pass/fail');
   }
 
   // Determine verdict
@@ -431,11 +430,11 @@ export async function calculateAndSaveEvalStats(
 export function getVerdictDescription(verdict: DryRunVerdict): string {
   switch (verdict) {
     case 'GO':
-      return 'Ready for training. Dataset and grader quality are good.';
+      return 'Ready for training — dataset and evaluator quality are good.';
     case 'WARNING':
-      return 'Proceed with caution. Review warnings before starting training.';
+      return 'Proceed with caution — review the recommendations below before starting training.';
     case 'NO-GO':
-      return 'Not ready for training. Address the issues before proceeding.';
+      return 'Not ready for training — there are critical issues to address first.';
   }
 }
 

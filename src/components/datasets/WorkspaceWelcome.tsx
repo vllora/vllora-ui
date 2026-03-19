@@ -12,12 +12,10 @@
 
 import { useMemo } from "react";
 import {
-  ScrollText,
   Database,
   FolderOpen,
   ClipboardCheck,
   Brain,
-  BookOpen,
   ChevronRight,
   Target,
   Layers,
@@ -85,15 +83,6 @@ function getFinetuneStatusLabel(status: string | null): { text: string; color: s
   }
 }
 
-function getPlanStatusText(planStatus: string | null): string {
-  switch (planStatus) {
-    case "proposed": return "Awaiting approval";
-    case "approved": return "Approved";
-    case "executing": return "Executing";
-    case "completed": return "Completed";
-    default: return "Not started";
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -193,10 +182,8 @@ function PopulatedWorkflowWelcome({
   generatedCount,
   originalCount,
   leafTopicCount,
-  planStatus,
   knowledgeSourcesCount,
   hasEvalScript,
-  hasReadme,
 }: WorkspaceWelcomeProps) {
   const { lastCompletedJob } = EvalJobsConsumer();
   const { filteredJobs, latestJob } = FinetuneJobsConsumer();
@@ -215,12 +202,6 @@ function PopulatedWorkflowWelcome({
 
   const actions = [
     {
-      path: "plan.md", label: "Plan", icon: ScrollText,
-      iconColor: "text-[rgb(var(--theme-500))]",
-      status: getPlanStatusText(planStatus),
-      active: !!planStatus && planStatus !== "idle",
-    },
-    {
       path: "data", label: "Data", icon: Database,
       iconColor: "text-emerald-500",
       status: recordCount > 0 ? `${formatNumber(recordCount)} records` : "No records yet",
@@ -237,7 +218,7 @@ function PopulatedWorkflowWelcome({
     {
       path: "evaluations/jobs", label: "Evaluations", icon: ClipboardCheck,
       iconColor: "text-violet-500",
-      status: hasEvalScript ? "Evaluator configured" : "Not configured",
+      status: hasEvalScript ? "Grader configured" : "Not configured",
       active: hasEvalScript,
     },
     {
@@ -247,12 +228,6 @@ function PopulatedWorkflowWelcome({
         ? `${finetuneJobCount} job${finetuneJobCount !== 1 ? "s" : ""}`
         : "No jobs",
       active: finetuneJobCount > 0,
-    },
-    {
-      path: "readme.md", label: "README", icon: BookOpen,
-      iconColor: "text-blue-500",
-      status: hasReadme ? "Generated" : "Not generated",
-      active: hasReadme,
     },
   ];
 
@@ -331,7 +306,7 @@ function PopulatedWorkflowWelcome({
         {/* Quick actions */}
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600 mb-2 px-0.5">Open</p>
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-2 gap-1.5">
             {actions.map((action) => (
               <button
                 key={action.path}

@@ -40,7 +40,6 @@ import {
 import type { FinetuneJob } from "@/services/finetune-api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { formatScore } from "@/utils/parse-score-breakdown";
 import {
   Tooltip,
   TooltipContent,
@@ -130,115 +129,65 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* ── Header ── Stitch style: h-14, dark panel, pills + summary + actions */}
-      <header className="sticky top-0 z-10 flex py-1 items-center justify-between border-b border-[#262626] px-4 shrink-0 gap-3">
-        {/* Left: Status + Model pills */}
-        <div className="flex items-center gap-2 shrink-0">
+      {/* ── Header — single row: status + model + metadata + actions ── */}
+      <header className="sticky top-0 z-10 border-b border-[#262626] px-4 py-1.5 shrink-0">
+        <div className="flex items-center gap-2">
           <FinetuneJobStatusBadge
             status={job.status}
-            className="rounded-full bg-slate-800/50 px-3 py-1 text-xs font-medium"
+            className="rounded bg-slate-800/50 px-2 py-0.5 text-[10px] font-medium"
           />
-          <span className="inline-flex items-center rounded-full bg-[#10b981]/10 px-3 py-1 text-xs font-medium text-[#10b981]">
+          <span className="inline-flex items-center rounded bg-zinc-800/60 px-2 py-0.5 text-[10px] text-zinc-400 border border-zinc-700/40">
             {getModelDisplayName(job.base_model)}
           </span>
           {job.evaluator_version != null && latestVersion != null && (
-            <EvaluatorVersionBadge
-              jobVersion={job.evaluator_version}
-              latestVersion={latestVersion}
-            />
+            <EvaluatorVersionBadge jobVersion={job.evaluator_version} latestVersion={latestVersion} />
           )}
-        </div>
+          {summary && (
+            <span className="text-[10px] text-zinc-500">{summary.totalRows} rows</span>
+          )}
 
-        {/* Center: Summary text */}
-        {summary && (
-          <p className="font-mono text-xs font-medium tracking-tight text-slate-300 truncate min-w-0">
-            Epoch{" "}
-            {summary.latestEpoch != null ? Math.min(summary.latestEpoch, totalEpochs ?? summary.latestEpoch) : "-"}/
-            {totalEpochs ?? "?"} · Avg Score{" "}
-            <span className="text-[#10b981]">
-              {summary.latestAvgScore != null
-                ? formatScore(summary.latestAvgScore)
-                : "-"}
-            </span>{" "}
-            · {summary.totalRows} rows
-          </p>
-        )}
-
-        {/* Right: Time + Actions */}
-        <div className="flex items-center gap-3 shrink-0">
-          <span className="text-xs text-slate-500 font-medium hidden sm:block">
-            {formatFinetuneJobDate(job.created_at)}
-          </span>
-
-          <TooltipProvider delayDuration={200}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={handleRefresh}
-                  disabled={isLoadingEvals || isRefreshing}
-                  className="p-1.5 text-slate-500 hover:text-slate-300 transition-colors disabled:opacity-40 rounded hover:bg-white/5"
-                >
-                  <RefreshCw
-                    className={cn(
-                      "h-3.5 w-3.5",
-                      isRefreshing && "animate-spin"
-                    )}
-                  />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-[10px]">
-                Refresh metrics
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          <div className="flex gap-2">
+          {/* Right: time + actions */}
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="text-[10px] text-zinc-600">{formatFinetuneJobDate(job.created_at)}</span>
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={handleRefresh}
+                    disabled={isLoadingEvals || isRefreshing}
+                    className="p-1 text-slate-500 hover:text-slate-300 transition-colors disabled:opacity-40 rounded hover:bg-white/5"
+                  >
+                    <RefreshCw className={cn("h-3 w-3", isRefreshing && "animate-spin")} />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-[10px]">Refresh metrics</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             {canCancel && (
-              <button
-                onClick={handleCancel}
-                disabled={isActionLoading}
-                className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+              <button onClick={handleCancel} disabled={isActionLoading}
+                className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
               >
-                {isActionLoading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <StopCircle className="h-3.5 w-3.5" />
-                )}
+                {isActionLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <StopCircle className="h-3 w-3" />}
                 Cancel
               </button>
             )}
             {canResume && (
-              <button
-                onClick={handleResume}
-                disabled={isActionLoading}
-                className="flex items-center gap-1.5 rounded bg-[#10b981] px-3 py-1.5 text-xs font-bold text-[#0a0a0a] hover:bg-[#10b981]/90 transition-colors disabled:opacity-50"
+              <button onClick={handleResume} disabled={isActionLoading}
+                className="flex items-center gap-1 rounded bg-[#10b981] px-2.5 py-1 text-[10px] font-bold text-[#0a0a0a] hover:bg-[#10b981]/90 transition-colors disabled:opacity-50"
               >
-                {isActionLoading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Play className="h-3.5 w-3.5" />
-                )}
+                {isActionLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
                 Resume
               </button>
             )}
             {job.status === "succeeded" && (
               <>
-                <button
-                  onClick={handleDownloadWeights}
-                  disabled={isDownloading}
-                  className="flex items-center gap-1.5 rounded bg-[#10b981] px-3 py-1.5 text-xs font-bold text-[#0a0a0a] hover:bg-[#10b981]/90 transition-colors disabled:opacity-50"
+                <button onClick={handleDownloadWeights} disabled={isDownloading}
+                  className="flex items-center gap-1 rounded bg-[#10b981] px-2.5 py-1 text-[10px] font-bold text-[#0a0a0a] hover:bg-[#10b981]/90 transition-colors disabled:opacity-50"
                 >
-                  {isDownloading ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Download className="h-3.5 w-3.5" />
-                  )}
+                  {isDownloading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
                   Weights
                 </button>
-                <UsageGuideDialog
-                  jobId={job.provider_job_id}
-                  baseModel={job.base_model}
-                />
+                <UsageGuideDialog jobId={job.provider_job_id} baseModel={job.base_model} />
               </>
             )}
           </div>
@@ -250,7 +199,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
         {/* ── Epoch Progress (thin bar only) ── */}
         {totalEpochs != null && summary?.latestEpoch != null && (
           <EpochProgressBar
-            currentEpoch={Math.min(summary.latestEpoch, totalEpochs)}
+            currentEpoch={Math.min(summary.latestEpoch + 1, totalEpochs)}
             totalEpochs={totalEpochs}
           />
         )}

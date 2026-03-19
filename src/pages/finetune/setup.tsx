@@ -28,8 +28,8 @@ export function SetupGuidePage() {
   const isFirst = step === 0;
 
   return (
-    <section className="flex-1 flex flex-col overflow-hidden bg-background text-foreground">
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-8">
+    <section className="flex-1 flex flex-col overflow-auto bg-background text-foreground">
+      <div className="flex-1 flex flex-col items-center sm:justify-center px-4 sm:px-6 py-8">
         <div className="w-full max-w-[600px]">
           {/* Header */}
           <div className="text-center mb-8">
@@ -65,13 +65,13 @@ export function SetupGuidePage() {
                 )}>
                   {i < step ? <Check className="w-3 h-3" /> : s.num}
                 </span>
-                {s.label}
+                <span className="hidden sm:inline">{s.label}</span>
               </button>
             ))}
           </div>
 
           {/* Step content */}
-          <div className="min-h-[280px] mb-6">
+          <div className="sm:h-[380px] sm:overflow-y-auto mb-6">
             {step === 0 && <StepPrerequisites />}
             {step === 1 && <StepInstallSkill />}
             {step === 2 && <StepRunPipeline />}
@@ -91,14 +91,14 @@ export function SetupGuidePage() {
             {isLast ? (
               <button
                 onClick={() => navigate("/finetune")}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold bg-gradient-to-b from-[rgb(var(--theme-400))] to-[rgb(var(--theme-500))] text-emerald-950 shadow-[0_1px_2px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.15)] hover:from-[rgb(var(--theme-300))] hover:to-[rgb(var(--theme-400))] transition-all"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold bg-gradient-to-b from-[rgb(var(--theme-400))] to-[rgb(var(--theme-500))] text-white shadow-[0_1px_2px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.15)] hover:from-[rgb(var(--theme-300))] hover:to-[rgb(var(--theme-400))] transition-all"
               >
                 View My Workflows →
               </button>
             ) : (
               <button
                 onClick={() => setStep(step + 1)}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold bg-gradient-to-b from-[rgb(var(--theme-400))] to-[rgb(var(--theme-500))] text-emerald-950 shadow-[0_1px_2px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.15)] hover:from-[rgb(var(--theme-300))] hover:to-[rgb(var(--theme-400))] transition-all"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold bg-gradient-to-b from-[rgb(var(--theme-400))] to-[rgb(var(--theme-500))] text-white shadow-[0_1px_2px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.15)] hover:from-[rgb(var(--theme-300))] hover:to-[rgb(var(--theme-400))] transition-all"
               >
                 Next
                 <ArrowRight className="w-3.5 h-3.5" />

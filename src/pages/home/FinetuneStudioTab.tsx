@@ -2,9 +2,8 @@
  * FinetuneStudioTab
  *
  * Homepage tab for the Finetune Studio product.
- * Shows "How it works" stepper (Install → Run → Evaluate) and CTAs.
- * The pipeline is driven externally by the finetune skill — the UI is
- * a visualization layer for evaluation and training.
+ * Shows "How it works" stepper (Install → Run → Evaluate), reward preview,
+ * CTAs, and alternative pathway cards.
  */
 
 import { useNavigate } from "react-router";
@@ -17,15 +16,15 @@ export function FinetuneStudioTab() {
 
   return (
     <div className="w-full max-w-[56rem] mx-auto flex flex-col items-center">
-      <FinetuneHero className="mb-11" />
+      <FinetuneHero className="mb-10" />
 
       <HowItWorksCards />
 
       {/* CTA buttons */}
-      <div className="flex items-center gap-3 mt-10 mb-9">
+      <div className="flex items-center gap-3 mt-8 mb-8">
         <button
           onClick={() => navigate("/finetune/setup")}
-          className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg text-[13px] font-semibold bg-gradient-to-b from-[rgb(var(--theme-400))] to-[rgb(var(--theme-500))] text-emerald-950 shadow-[0_1px_2px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.15)] hover:from-[rgb(var(--theme-300))] hover:to-[rgb(var(--theme-400))] hover:shadow-[0_2px_8px_rgba(var(--theme-500),0.3)] hover:-translate-y-px transition-all"
+          className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg text-[13px] font-semibold bg-[rgb(var(--theme-500))] text-white shadow-[0_1px_3px_rgba(0,0,0,0.3)] hover:bg-[rgb(var(--theme-600))] hover:shadow-[0_2px_8px_rgba(var(--theme-500),0.25)] hover:-translate-y-px transition-all"
         >
           <Zap className="w-4 h-4" />
           Get Started
@@ -38,36 +37,27 @@ export function FinetuneStudioTab() {
         </button>
       </div>
 
-      {/* Divider */}
-      <div className="flex items-center gap-4 w-full max-w-[440px] mb-7">
-        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-border/60 to-transparent" />
-        <span className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground/30">or start differently</span>
-        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-border/60 to-transparent" />
-      </div>
-
-      {/* Alt pathways */}
-      <div className="flex gap-3 max-w-[560px] w-full">
-        <div
-          className="flex-1 flex items-center gap-3 px-4 py-3.5 rounded-xl border border-border/30 bg-card/30 opacity-40 cursor-not-allowed"
-        >
-          <div className="w-9 h-9 rounded-lg bg-orange-500/10 flex items-center justify-center shrink-0">
-            <RefreshCw className="w-[18px] h-[18px] text-orange-400" />
+      {/* Alt pathways — inline, no divider */}
+      <div className="flex gap-3 max-w-[520px] w-full mb-4">
+        <div className="flex-1 flex items-center gap-3 px-4 py-3 rounded-xl border border-border/20 bg-card/20 opacity-40 cursor-not-allowed">
+          <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center shrink-0">
+            <RefreshCw className="w-4 h-4 text-orange-400" />
           </div>
-          <div className="text-left">
-            <div className="text-[12.5px] font-semibold">Route existing API calls</div>
-            <div className="text-[11px] text-muted-foreground/60">Coming soon</div>
+          <div className="text-left min-w-0">
+            <div className="text-[12px] font-semibold">Route API calls</div>
+            <div className="text-[10px] text-muted-foreground/60">Coming soon</div>
           </div>
         </div>
         <button
           onClick={() => window.open("https://vllora.dev/docs", "_blank")}
-          className="flex-1 flex items-center gap-3 px-4 py-3.5 rounded-xl border border-border/30 bg-card/30 hover:border-border/60 hover:bg-card/60 transition-all"
+          className="flex-1 flex items-center gap-3 px-4 py-3 rounded-xl border border-border/20 bg-card/20 hover:border-border/40 hover:bg-card/40 transition-all"
         >
-          <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
-            <BookOpen className="w-[18px] h-[18px] text-blue-400" />
+          <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+            <BookOpen className="w-4 h-4 text-blue-400" />
           </div>
-          <div className="text-left">
-            <div className="text-[12.5px] font-semibold">View documentation</div>
-            <div className="text-[11px] text-muted-foreground/60">Learn more about finetuning</div>
+          <div className="text-left min-w-0">
+            <div className="text-[12px] font-semibold">Documentation</div>
+            <div className="text-[10px] text-muted-foreground/60">Guides & API reference</div>
           </div>
         </button>
       </div>

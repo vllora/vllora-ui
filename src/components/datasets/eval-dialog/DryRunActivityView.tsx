@@ -102,17 +102,21 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
   const [showTopicBreakdown, setShowTopicBreakdown] = useState(false);
   const result = job.result;
 
+  // Use ALL scores from evaluationResults (full dataset), fall back to sampled sampleResults
   const scores = useMemo(() => {
-    if (!result) return [];
-    const allScores: number[] = [];
-    if (result.sampleResults) {
-      const { highest, lowest, aroundMean } = result.sampleResults;
-      [...(highest || []), ...(lowest || []), ...(aroundMean || [])].forEach((s) => {
-        allScores.push(s.score);
-      });
+    // Prefer full evaluation results (all records)
+    if (job.pollingSnapshot?.results) {
+      const flat = flattenEvaluationResults(job.pollingSnapshot.results);
+      const allScores = flat
+        .filter((r) => typeof r.score === "number")
+        .map((r) => r.score as number);
+      if (allScores.length > 0) return allScores;
     }
-    return allScores;
-  }, [result]);
+    // Fall back to sampled sampleResults (subset of ~15)
+    if (!result?.sampleResults) return [];
+    const { highest, lowest, aroundMean } = result.sampleResults;
+    return [...(highest || []), ...(lowest || []), ...(aroundMean || [])].map((s) => s.score);
+  }, [job.pollingSnapshot?.results, result]);
 
   const evaluationResults = useMemo(() => {
     if (!job.pollingSnapshot?.results) return undefined;
@@ -198,80 +202,52 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
   return (
     <TooltipProvider delayDuration={200}>
       <div className="flex flex-col h-full min-h-0">
-        {/* Header — 3-column layout matching finetune job style */}
-        <header className="shrink-0 flex py-1 items-center justify-between border-b border-[#262626] px-4 gap-3">
-          {/* Left: Status + Model + Version pills */}
-          <div className="flex items-center gap-2 shrink-0">
+        {/* Header — single row: status + model + metadata + actions */}
+        <header className="shrink-0 border-b border-[#262626] px-4 py-1.5">
+          <div className="flex items-center gap-2">
             {isRunning ? (
-              <span className="inline-flex items-center rounded-full bg-blue-500/10 px-3 py-1 text-xs font-medium text-blue-400 animate-pulse">
+              <div className="flex items-center gap-1.5 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded text-[10px] text-blue-400 font-medium">
+                <span className="size-1.5 rounded-full bg-blue-400 animate-pulse" />
                 Running
-              </span>
+              </div>
             ) : job.status === "failed" && !result ? (
-              <span className="inline-flex items-center rounded-full bg-red-500/10 px-3 py-1 text-xs font-medium text-red-400">
+              <span className="inline-flex items-center rounded bg-red-500/10 border border-red-500/20 px-2 py-0.5 text-[10px] font-medium text-red-400">
                 Failed
               </span>
             ) : result ? (
               <VerdictBadge verdict={result.diagnosis.verdict} />
             ) : null}
             {job.rolloutModel && (
-              <span className="inline-flex items-center rounded-full bg-[#10b981]/10 px-3 py-1 text-xs font-medium text-[#10b981]">
+              <span className="inline-flex items-center rounded bg-zinc-800/60 px-2 py-0.5 text-[10px] text-zinc-400 border border-zinc-700/40">
                 {job.rolloutModel}
               </span>
             )}
+            <span className="text-[10px] text-zinc-500">
+              {(evaluationResults?.length || job.pollingSnapshot?.total_rows || job.sampleSize) ?? 0} records
+            </span>
             {job.workflowId && (
               <EvalJobVersionBadge workflowId={job.workflowId} jobCreatedAt={job.createdAt} />
             )}
-          </div>
 
-          {/* Center: Summary text */}
-          {stats ? (
-            <p className="font-mono text-xs font-medium tracking-tight text-slate-300 truncate min-w-0">
-              Avg Score{" "}
-              <span className="text-[#10b981]">{stats.mean.toFixed(2)}</span>
-              <span className="text-zinc-600 mx-0.5">±</span>
-              <span className="text-zinc-500">{stats.std.toFixed(2)}</span>
-              {" "}· {(evaluationResults?.length || job.pollingSnapshot?.total_rows || job.sampleSize) ?? 0} records
-            </p>
-          ) : (
-            <p className="font-mono text-xs font-medium text-slate-500 truncate min-w-0">
-              {(evaluationResults?.length || job.pollingSnapshot?.total_rows || job.sampleSize) ?? 0} records
-            </p>
-          )}
-
-          {/* Right: Time + Actions */}
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="text-xs text-slate-500 font-medium hidden sm:block">
-              {formatTime(job.createdAt)}
-            </span>
-            {isRunning && onCancel && (
-              <button
-                onClick={onCancel}
-                className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-              >
-                <StopCircle className="h-3.5 w-3.5" />
-                Cancel
-              </button>
-            )}
-            {onRefresh && !isRunning && (
-              <button
-                onClick={() => onRefresh(job.id)}
-                className="p-1.5 text-slate-500 hover:text-slate-300 transition-colors rounded hover:bg-white/5"
-                title="Refresh data"
-              >
-                <RotateCw className="h-3.5 w-3.5" />
-              </button>
-            )}
-            {onRunAgain && !isRunning && (
-              <Button
-                onClick={onRunAgain}
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2.5 text-[11px] gap-1 text-zinc-400 hover:text-zinc-200"
-              >
-                <RefreshCw className="h-3 w-3" />
-                Re-run
-              </Button>
-            )}
+            {/* Right: time + actions */}
+            <div className="flex items-center gap-2 ml-auto">
+              <span className="text-[10px] text-zinc-600">{formatTime(job.createdAt)}</span>
+              {isRunning && onCancel && (
+                <button onClick={onCancel} className="flex items-center gap-1 px-2 py-0.5 text-[10px] text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors">
+                  <StopCircle className="h-3 w-3" />Cancel
+                </button>
+              )}
+              {onRefresh && !isRunning && (
+                <button onClick={() => onRefresh(job.id)} className="p-1 text-slate-500 hover:text-slate-300 rounded hover:bg-white/5 transition-colors" title="Refresh">
+                  <RotateCw className="h-3 w-3" />
+                </button>
+              )}
+              {onRunAgain && !isRunning && (
+                <Button onClick={onRunAgain} variant="ghost" size="sm" className="h-6 px-2 text-[10px] gap-1 text-zinc-400 hover:text-zinc-200">
+                  <RefreshCw className="h-3 w-3" />Re-run
+                </Button>
+              )}
+            </div>
           </div>
         </header>
 
@@ -317,11 +293,11 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
           <div className="shrink-0 px-3 pt-2 space-y-2">
             {/* Score distribution card — matches finetune chart style */}
             <div className="rounded-lg bg-[#111] overflow-hidden">
-              {/* Card header */}
+              {/* Card header with score */}
               <div className="px-5 py-4 border-b border-white/5 flex items-start justify-between">
                 <div>
                   <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1">
-                    Score Distribution
+                    Avg Score
                   </p>
                   <div className="flex items-baseline gap-3">
                     {stats && (

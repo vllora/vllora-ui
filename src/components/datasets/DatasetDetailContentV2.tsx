@@ -31,6 +31,7 @@ import { IS_LUCY_ENABLED } from "@/lib/feature-flags";
 import { EvaluationConfigPanel } from "./evaluation-dialog/EvaluationConfigPanel";
 import { EvalRunsOverview } from "./eval-dialog/EvalRunsOverview";
 import { FinetuneConfigPanel } from "@/components/finetune/content/FinetuneConfigPanel";
+import { FinetuneJobsOverview } from "@/components/finetune/content/FinetuneJobsOverview";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { EvalJobsProvider } from "@/contexts/EvalJobsContext";
 import { PlanPreview } from "./PlanPreview";
@@ -873,6 +874,11 @@ export function DatasetDetailContentV2() {
           {contentSection === "evaluator-overview" && (
             <div className="flex-1 flex flex-col overflow-hidden">
               <EvalRunsOverview workflowId={workflowId} />
+            </div>
+          )}
+          {contentSection === "finetune-overview" && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <FinetuneJobsOverview />
             </div>
           )}
           {contentSection === "evaluator-jobs" && (

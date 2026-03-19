@@ -77,6 +77,7 @@ export function EvalRunsOverview(_props: EvalRunsOverviewProps) {
                 <tr className="border-b border-zinc-800/50 text-zinc-500">
                   <th className="text-left px-3 py-2 font-medium">Run</th>
                   <th className="text-left px-3 py-2 font-medium">Status</th>
+                  <th className="text-left px-3 py-2 font-medium">Model</th>
                   <th className="text-right px-3 py-2 font-medium">Samples</th>
                   <ThWithInfo align="right" label="Mean" tip="Mean = sum of all scores / number of records. Example: scores [0.9, 0.8, 1.0] → mean = 2.7/3 = 0.90. Target: ≥ 0.8" />
                   <ThWithInfo align="right" label="Std Dev" tip="Standard deviation = √(avg of squared differences from mean). Measures how spread out scores are. Example: scores [0.9, 0.8, 1.0] with mean 0.9 → std = √((0+0.01+0.01)/3) = 0.08. Low (< 0.1) = consistent. High (> 0.2) = some records much worse than others." />
@@ -158,6 +159,9 @@ function RunRow({ job }: { readonly job: EvalJob }) {
         <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium", statusBadge)}>
           {status}
         </span>
+      </td>
+      <td className="px-3 py-2 text-zinc-400">
+        {job.rolloutModel ?? "—"}
       </td>
       <td className="px-3 py-2 text-right font-mono text-zinc-400">
         {job.result?.samplesEvaluated ?? job.sampleSize ?? "—"}

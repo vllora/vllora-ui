@@ -438,8 +438,8 @@
     background: rgba(var(--theme-500), 0.1); color: var(--accent);
   }
 
-  /* Step content area */
-  .setup-content { min-height: 260px; margin-bottom: 24px; }
+  /* Step content area — fixed height prevents layout jump when switching tabs */
+  .setup-content { height: 380px; overflow-y: auto; margin-bottom: 24px; }
   .setup-content h3 {
     font-size: 14px; font-weight: 700; margin-bottom: 8px;
     letter-spacing: -0.01em;

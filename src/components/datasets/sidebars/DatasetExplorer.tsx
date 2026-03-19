@@ -210,6 +210,8 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       tabLabel = "Eval Runs";
     } else if (nodeId.startsWith("evaluations/jobs/")) {
       tabLabel = evalJobDisplayName(nodeId.slice("evaluations/jobs/".length));
+    } else if (nodeId === "finetune/overview") {
+      tabLabel = "Training Jobs";
     } else if (nodeId.startsWith("finetune/")) {
       tabLabel = finetuneJobDisplayName(nodeId.slice("finetune/".length));
     }
@@ -372,6 +374,8 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       <SidebarSection
         title="Training Jobs"
         count={finetuneJobs.length}
+        onTitleClick={() => handleSelect("finetune/overview")}
+        isTitleActive={selectedNodeId === "finetune/overview"}
         action={{
           icon: <Plus className="w-3 h-3" />,
           title: "New finetune job",
