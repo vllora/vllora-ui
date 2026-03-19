@@ -23,6 +23,9 @@ import {
   ChevronDown,
   ChevronRight,
   Code2,
+  BookOpen,
+  Database,
+  FlaskConical,
 } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
@@ -268,7 +271,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
     <div className="flex flex-col h-full min-h-0 overflow-y-auto py-4">
       {/* ── Source Documents ── */}
       {sources.length > 0 && (
-        <SidebarSection title="Source Documents" count={sources.length}>
+        <SidebarSection title="Source Documents" icon={<BookOpen className="w-3 h-3" />} count={sources.length}>
           <SidebarItem
             icon={<Library className="w-3.5 h-3.5" />}
             label="All Sources"
@@ -295,6 +298,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       {/* ── Training Data ── */}
       <SidebarSection
         title="Training Data"
+        icon={<Database className="w-3 h-3" />}
         count={records.length}
         isLoading={isGeneratingTraces}
       >
@@ -325,7 +329,9 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       <SidebarDivider />
 
       {/* ── Evaluator (Grader Script) ── */}
-      <SidebarSection title="Evaluator">
+      <SidebarDivider />
+
+      <SidebarSection title="Evaluator" icon={<Code2 className="w-3 h-3" />}>
         <SidebarItem
           icon={<Code2 className="w-3.5 h-3.5" />}
           label="grader-script.js"
@@ -334,9 +340,12 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         />
       </SidebarSection>
 
+      <SidebarDivider />
+
       {/* ── Eval Runs ── */}
       <SidebarSection
         title="Eval Runs"
+        icon={<FlaskConical className="w-3 h-3" />}
         count={dryRunJobs.length}
         onTitleClick={() => handleSelect("evaluations/overview")}
         isTitleActive={selectedNodeId === "evaluations/overview"}
@@ -370,9 +379,12 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         )}
       </SidebarSection>
 
+      <SidebarDivider />
+
       {/* ── Training Jobs ── */}
       <SidebarSection
         title="Training Jobs"
+        icon={<Brain className="w-3 h-3" />}
         count={finetuneJobs.length}
         onTitleClick={() => handleSelect("finetune/overview")}
         isTitleActive={selectedNodeId === "finetune/overview"}
@@ -453,6 +465,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
 function SidebarSection({
   title,
+  icon,
   count,
   isLoading,
   action,
@@ -461,6 +474,7 @@ function SidebarSection({
   isTitleActive,
 }: {
   readonly title: string;
+  readonly icon?: React.ReactNode;
   readonly count?: number;
   readonly isLoading?: boolean;
   readonly action?: { icon: React.ReactNode; title: string; onClick: () => void };
@@ -468,29 +482,33 @@ function SidebarSection({
   readonly onTitleClick?: () => void;
   readonly isTitleActive?: boolean;
 }) {
+  const titleContent = (
+    <>
+      {icon && <span className="opacity-50">{icon}</span>}
+      {title}
+      {count !== undefined && (
+        <span className="ml-1.5 text-muted-foreground/40 font-normal">{count}</span>
+      )}
+    </>
+  );
+
   return (
-    <div className="mb-2">
+    <div className="mb-1">
       <div className="flex items-center justify-between px-4 py-1.5">
         {onTitleClick ? (
           <button
             type="button"
             onClick={onTitleClick}
             className={cn(
-              "text-[10px] font-semibold uppercase tracking-[0.08em] hover:text-foreground transition-colors cursor-pointer",
+              "flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] hover:text-foreground transition-colors cursor-pointer",
               isTitleActive ? "text-[rgb(var(--theme-500))]" : "text-muted-foreground",
             )}
           >
-            {title}
-            {count !== undefined && (
-              <span className="ml-1.5 text-muted-foreground/40 font-normal">{count}</span>
-            )}
+            {titleContent}
           </button>
         ) : (
-          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-            {title}
-            {count !== undefined && (
-              <span className="ml-1.5 text-muted-foreground/40 font-normal">{count}</span>
-            )}
+          <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+            {titleContent}
           </span>
         )}
         <div className="flex items-center gap-1">
