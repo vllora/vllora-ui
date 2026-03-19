@@ -21,21 +21,28 @@ import {
   Cell,
   ReferenceLine,
 } from "recharts";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { FinetuneEvalResultsResponse } from "@/services/finetune-api";
 import { TrainingMetricsSection } from "./TrainingMetricsSection";
 import { FinetuneMetricsSection } from "./FinetuneMetricsSection";
 import { ScoreStrip } from "@/components/datasets/eval-dialog/ScoreStrip";
 
-type ChartView = "scoreTrend" | "trainingProgress" | "reward" | "stability" | "completions" | "scoreDistribution";
+type ChartView = "scoreTrend" | "stability" | "reward" | "trainingProgress" | "completions" | "scoreDistribution";
 
-const CHART_LABELS: Record<ChartView, string> = {
-  scoreTrend: "Score Trend",
-  trainingProgress: "Training Progress",
-  reward: "Reward",
-  stability: "Loss",
-  completions: "Completions",
-  scoreDistribution: "Score Distribution",
-};
+/** Ordered by importance for finetune monitoring */
+const CHART_VIEWS: { key: ChartView; label: string; description: string }[] = [
+  { key: "scoreTrend", label: "Score Trend", description: "Average evaluation score over time. The primary indicator of whether your model is improving." },
+  { key: "stability", label: "Loss", description: "Training loss, KL divergence, gradient norm, and learning rate. Shows whether training is converging and stable." },
+  { key: "reward", label: "Reward", description: "Reward signal from the evaluator. Shows how well the model generates high-scoring responses and whether the evaluator provides useful learning signal." },
+  { key: "trainingProgress", label: "Training Progress", description: "Derived metrics: score improvement per eval and score spread (std dev). Helps identify whether the model is plateauing." },
+  { key: "completions", label: "Completions", description: "Response length and truncation rate. High truncation means responses hit the token limit — consider increasing max tokens." },
+  { key: "scoreDistribution", label: "Score Distribution", description: "Per-record score histogram for the latest evaluation. Shows the spread of scores across your dataset." },
+];
 
 interface FinetuneChartSelectorProps {
   readonly evalResults: FinetuneEvalResultsResponse | null;
@@ -161,24 +168,32 @@ export function FinetuneChartSelector({
 
   return (
     <div className="w-full">
-      {/* Chart type selector — pill-style segmented control */}
+      {/* Chart type selector — pill-style segmented control with tooltips */}
       <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center bg-zinc-800/40 rounded-md p-0.5 gap-0.5">
-          {(Object.keys(CHART_LABELS) as ChartView[]).map((key) => (
-            <button
-              key={key}
-              onClick={() => setView(key)}
-              className={cn(
-                "px-2.5 py-1 text-[10px] font-medium rounded transition-all",
-                view === key
-                  ? "bg-zinc-700/80 text-zinc-200 shadow-sm"
-                  : "text-zinc-500 hover:text-zinc-300",
-              )}
-            >
-              {CHART_LABELS[key]}
-            </button>
-          ))}
-        </div>
+        <TooltipProvider delayDuration={300}>
+          <div className="flex items-center bg-zinc-800/40 rounded-md p-0.5 gap-0.5">
+            {CHART_VIEWS.map(({ key, label, description }) => (
+              <Tooltip key={key}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setView(key)}
+                    className={cn(
+                      "px-2.5 py-1 text-[10px] font-medium rounded transition-all",
+                      view === key
+                        ? "bg-zinc-700/80 text-zinc-200 shadow-sm"
+                        : "text-zinc-500 hover:text-zinc-300",
+                    )}
+                  >
+                    {label}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[260px]">
+                  <p className="text-[11px]">{description}</p>
+                </TooltipContent>
+              </Tooltip>
+            ))}
+          </div>
+        </TooltipProvider>
       </div>
 
       {view === "scoreTrend" && (
