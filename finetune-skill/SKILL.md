@@ -560,93 +560,25 @@ uv run scripts/finetune.py verify --workflow-id $WORKFLOW_ID
 
 Tell the user the data is visible at `http://localhost:5173/finetune`, then **proceed immediately to Step 7** (evaluation).
 
-### Step 7: Run Evaluation
+### Step 7: Start Evaluation & Training (Parallel)
 
-Run the grader against a rollout model (e.g., `gpt-4o-mini`) that generates responses for each prompt. The gateway auto-uploads your local records + evaluator to the cloud when you create an evaluation.
+On the first run, there's no prior data to analyze — start both evaluation and training simultaneously. They run on the cloud in parallel.
 
-**Using the helper script** (recommended):
+#### 7a. Create evaluation job
+
 ```bash
-uv run scripts/run_evaluation.py --dataset-id $WORKFLOW_ID --output evaluations/eval-v1.json
-```
+uv run scripts/run_evaluation.py --dataset-id $WORKFLOW_ID --output evaluations/eval-v1.json```
 
-This creates the eval run, polls every 3 seconds, prints summary (average score, pass/fail counts), and saves results.
-
-**Or manually:**
+Or manually:
 ```bash
-# Create evaluation (dataset_id = your workflow_id — gateway auto-uploads)
 EVAL=$(curl -s -X POST http://localhost:9090/finetune/evaluations \
   -H "Content-Type: application/json" \
   -d "{\"dataset_id\": \"$WORKFLOW_ID\", \"rollout_model_params\": {\"model\": \"gpt-4o-mini\"}}")
 EVAL_ID=$(echo "$EVAL" | python3 -c "import sys,json; print(json.load(sys.stdin)['evaluation_run_id'])")
-
-# Poll until status == "completed" (every 3 seconds)
-while true; do
-  RESULT=$(curl -s http://localhost:9090/finetune/evaluations/$EVAL_ID)
-  STATUS=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
-  echo "Status: $STATUS"
-  [ "$STATUS" = "completed" ] && break
-  [ "$STATUS" = "failed" ] && echo "FAILED" && exit 1
-  sleep 3
-done
-
-# Print summary
-echo "$RESULT" | python3 -c "
-import sys,json
-r=json.load(sys.stdin)
-s=r.get('summary',{})
-print(f'Average: {s.get(\"average_score\",\"N/A\")}')
-print(f'Passed: {s.get(\"passed_count\",\"N/A\")}, Failed: {s.get(\"failed_count\",\"N/A\")}')
-"
+echo "Eval started: $EVAL_ID"
 ```
 
-**Tip:** Use `--limit 10` for a quick test before running on the full dataset.
-
-Save results to `evaluations/eval-v1.json` — you'll compare against later iterations.
-
-### Step 8: Analyze & Iterate
-
-Read the eval results and decide whether to proceed to training or iterate.
-
-**Decision framework:**
-
-| Verdict | Criteria | Action |
-|---------|----------|--------|
-| **GO** | avg > 0.6 AND pass rate > 70% | Proceed to Step 9 (Training) |
-| **WARNING** | avg 0.5-0.6 OR pass rate 60-70% | Can train, but iteration may help |
-| **NO-GO** | avg < 0.5 OR pass rate < 60% | Must iterate before training |
-
-**Quick diagnosis:**
-1. **All scores ~0 or ~1** → Grader broken or too lenient — check criteria
-2. **One topic consistently low** → Data problem for that topic — regenerate prompts
-3. **Good responses scoring low** → Grader criteria misaligned with objective
-4. **Contradictory reasons** → LLM judge prompt too vague — make it more specific
-
-**Fixing the grader** (no data re-upload needed):
-```bash
-# Edit grader.js, then update:
-curl -X PATCH http://localhost:9090/finetune/workflows/$WORKFLOW_ID/evaluator \
-  -F "file=@grader.js"
-```
-
-**Fixing the data** (requires re-upload of records):
-- Regenerate weak topics, add edge cases, improve prompt variety
-- Re-validate: `uv run scripts/validate_dataset.py training.jsonl`
-- Re-upload records: `PUT /finetune/workflows/$WORKFLOW_ID/records`
-
-**After each change**, re-run evaluation:
-```bash
-uv run scripts/run_evaluation.py --dataset-id $WORKFLOW_ID --output evaluations/eval-v2.json
-```
-
-**Tracking progress:** Save each eval result to `evaluations/eval-v{N}.json`. Log what changed and scores before/after in `execution-log.md`. Stop iterating when avg > 0.6 AND pass rate > 70%, or after 3+ iterations with no improvement.
-
-See `reference/iteration-strategy.md` for the full 9-part diagnosis framework.
-
-### Step 9: Train & Iterate
-
-Start training and delegate monitoring to a background subagent. If anomalies are detected, diagnose the issue, adjust, and start a new iteration. **Max 5 iterations.**
-
-#### 9a. Start the first training run
+#### 7b. Create training job
 
 ```bash
 JOB=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs \
@@ -654,7 +586,7 @@ JOB=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs
   -d '{
     "dataset": "'$WORKFLOW_ID'",
     "base_model": "unsloth/Qwen3.5-4B",
-    "output_model": "my-finetuned-model",
+    "output_model": "chess-tutor-v1",
     "display_name": "Training run 1",
     "training_config": {
       "learning_rate": 0.00001,
@@ -671,7 +603,7 @@ JOB=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs
     }
   }')
 JOB_ID=$(echo "$JOB" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-echo "Started job: $JOB_ID"
+echo "Training started: $JOB_ID"
 ```
 
 **Base model selection:**
@@ -679,8 +611,6 @@ echo "Started job: $JOB_ID"
 |-------|----------|
 | `unsloth/Qwen3.5-4B` | Fast experiments, narrow tasks |
 | Larger models (7B+) | Complex reasoning, broad domains |
-
-Start with the smaller model. After 2 failed iterations on the same model, escalate: `Qwen3.5-4B` → `7B` → larger.
 
 **Config adjustments (initial):**
 | Situation | Adjustment |
@@ -690,113 +620,152 @@ Start with the smaller model. After 2 failed iterations on the same model, escal
 | Complex task | `lora_rank: 16` |
 | Simple task | `lora_rank: 4` |
 
-#### 9b. Spawn a monitor subagent
+#### 7c. Poll both jobs
 
-After starting each job, spawn the `training-monitor` subagent **in the background** with the job_id and workflow_id. Use the Agent tool:
+Poll both jobs until they complete. Report progress to the user as results arrive:
 
-```
-Agent(
-  subagent_type: "training-monitor",
-  run_in_background: true,
-  prompt: "Monitor training job {JOB_ID} on workflow {WORKFLOW_ID}.
-    GATEWAY_URL=http://localhost:9090
-    WORKFLOW_ID={workflow_id}
-    JOB_ID={job_id}
-    Poll metrics every 15s. Report anomalies immediately. Report when done."
-)
+```bash
+# Poll eval
+EVAL_STATUS=$(curl -s "http://localhost:9090/finetune/evaluations/$EVAL_ID" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))")
+
+# Poll training
+JOB_STATUS=$(curl -s "http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs/$JOB_ID" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))")
 ```
 
-The monitor polls `GET /jobs/{job_id}/metrics` and `GET /jobs/{job_id}/status` every 15 seconds and reports back when:
-- Job **succeeds** → report final metrics
-- Job **fails** → report error
-- **Anomaly detected** → report anomaly type + metrics (monitor does NOT cancel — that's the main agent's call)
+As each job completes, save results:
+- Eval results → `evaluations/eval-v1.json`
+- Training results → `training-jobs/job-v1.json` (fetch via `GET /finetune/workflows/$WORKFLOW_ID/dataset/finetune-evaluations?finetune_job_id=$JOB_ID`)
 
-#### 9c. Handle the monitor's report
+### Step 8: Analyze Results & Present Findings
 
-When the background monitor returns, act based on its **status** field:
+Once results arrive (eval, training, or both), analyze and present findings to the user. The analysis is **interactive** — present what you found and let the user drive the next action.
 
-**If `succeeded`:**
-1. Fetch per-epoch scores:
-   ```bash
-   curl -s "http://localhost:9090/finetune/workflows/$WORKFLOW_ID/dataset/finetune-evaluations?finetune_job_id=$JOB_ID"
-   ```
-2. Save results to `training-jobs/job-v{N}.json`
-3. Log to `execution-log.md`
-4. Test the model with prompts NOT in the training set
-5. Compare fine-tuned vs base model behavior
-6. Report to user — **done!**
+> **Read `reference/analysis-strategy.md`** before analyzing. It has decision trees, action templates, derived metrics to compute, and interactive presentation guidelines.
 
-**If `failed`:**
-1. Read the error from the monitor's report
-2. Log failure to `execution-log.md`
-3. If retryable (e.g. infra error), start a new job with same config → go to 9b
-4. If not retryable, report to user
+#### 8a. What to analyze
 
-**If `anomaly_detected`:**
-Diagnose and start the next iteration (see 9d).
+**From eval results:**
+- Average score across all records
+- Per-topic score breakdown (which topics score lowest?)
+- Score distribution (all 0s? all 1s? smooth spread?)
+- Common `reason` patterns in low-scoring records
+- Pass rate (score > threshold)
 
-#### 9d. Diagnose and iterate on anomaly
+**From training results (per-epoch):**
+- Reward progression (improving? plateauing? declining?)
+- Loss curve (decreasing? NaN/Inf?)
+- KL divergence (stable? exploding?)
+- Per-record score trends across epochs
+- Lowest-scoring records and their `reason` fields
 
-1. **Cancel the running job** (the monitor only reports — cancellation is the main agent's decision):
-   ```bash
-   curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs/$JOB_ID/cancel
-   ```
+**Cross-referencing (when both available):**
+- Do eval-weak topics also score low in training?
+- Did training improve on the topics that eval flagged?
+- Is the grader consistent between eval and training?
 
-2. **Fetch per-epoch reasons** to understand what's failing:
-   ```bash
-   curl -s "http://localhost:9090/finetune/workflows/$WORKFLOW_ID/dataset/finetune-evaluations?finetune_job_id=$JOB_ID"
-   ```
-3. Read `reason` fields from lowest-scoring records
+#### 8b. Present to user interactively
 
-4. **Apply fix** based on the anomaly type reported by the monitor + your diagnosis:
+**Show a clear summary:**
+```
+=== Evaluation Results ===
+Average score: 0.72 | Pass rate: 78% | Records: 209
 
-   | Anomaly | Config Fix |
-   |---------|-----------|
-   | NaN/Inf loss | Lower `learning_rate` by 2x |
-   | KL divergence | Lower `learning_rate` by 2x |
-   | High clipping | Increase `max_output_tokens` by 2x |
-   | Weak signal | Rewrite grader for better differentiation |
-   | Reward collapse | Increase `lora_rank` (4→8→16) |
-   | No learning (flat epochs) | Try larger base model |
-   | Overfitting (scores peak then decline) | Reduce `epochs` to peak epoch |
+Per-topic breakdown:
+  strategic-endgame:     0.45 ⚠️ (lowest — 5 of 11 records below threshold)
+  tactical-forks:        0.91 ✅ (strong)
+  opening-principles:    0.68 ✅
+  ...
 
-5. **If data or grader changed**, sync to cloud before next run:
-   ```bash
-   # If grader was updated:
-   curl -s -X PATCH http://localhost:9090/finetune/workflows/$WORKFLOW_ID/evaluator \
-     -F "file=@grader.js"
+=== Training Results ===
+Epochs: 2 | Final reward: 0.65 | Trend: 0.40 → 0.55 → 0.65 (improving)
+No anomalies detected.
 
-   # If records were updated:
-   uv run scripts/finetune.py upload-records \
-     --workflow-id $WORKFLOW_ID --file training.jsonl
+=== Suggested Actions ===
+1. [RECOMMENDED] Regenerate records for "strategic-endgame" — low eval scores suggest weak prompts
+2. [OPTIONAL] Tighten grader weight on "concrete_examples" — many mediocre scores cite lack of examples
+3. [OPTIONAL] Run 1 more training epoch — reward still improving at epoch 2
 
-   # Sync changes:
-   curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/dataset/upload
-   ```
+What would you like to do?
+```
 
-6. **Start a new training job** with the adjusted config (back to 9a with updated params)
-7. **Spawn a new `training-monitor`** for the new job (9b)
-8. **Log the iteration** to `execution-log.md`
+**Let the user choose:**
+- "Regenerate endgame records" → agent regenerates, re-uploads, starts new eval+training
+- "Adjust the grader" → agent modifies grader.js, re-uploads, starts new eval
+- "Run another training epoch" → agent starts new job with `epochs: 3`
+- "Looks good, I'm satisfied" → done
+- User may also direct their own analysis: "I think the grader is too lenient on X"
 
-#### 9e. Iteration limits and escalation
+#### 8c. Quick diagnosis patterns
 
-- **Max 5 iterations.** After 5 failed iterations, stop and report a full diagnosis to the user including all anomalies encountered, fixes attempted, and metric trends.
-- **Base model escalation:** After 2 failed iterations on the same base model, escalate to a larger model: `Qwen3.5-4B` → `7B` → larger.
+| Signal | Likely cause | Suggested action |
+|--------|-------------|-----------------|
+| All scores ~0 | Grader broken or too strict | Fix grader, dry-run, re-eval |
+| All scores ~1 | Grader too lenient | Add harder criteria, re-eval |
+| One topic consistently low | Weak prompts or poor source material for that topic | Regenerate records, add source material |
+| Good responses scoring low | Grader criteria misaligned with objective | Adjust criteria weights or LLM judge prompt |
+| NaN/Inf loss in training | Learning rate too high | Lower `learning_rate` by 2x |
+| KL divergence exploding | Model drifting too far | Lower `learning_rate` by 2x |
+| Reward plateau (flat after epoch 1) | Grader not differentiating well | Improve grader for smoother score spread |
+| Reward collapse (all same score) | Grader binary or reward hacking | Rewrite grader with partial credit |
+| No learning across epochs | Task too hard for base model | Try larger base model |
+| Overfitting (peak then decline) | Too many epochs | Reduce `epochs` to peak epoch |
 
-#### 9f. Iteration log format
+### Step 9: Iterate (If Needed)
+
+Based on the user's choice from Step 8, apply fixes and start new jobs. **Max 5 iterations.**
+
+#### 9a. Apply the chosen fix
+
+**Fixing the grader** (no data re-upload needed):
+```bash
+# Edit grader.js, then update:
+uv run scripts/finetune.py upload-grader \
+  --workflow-id $WORKFLOW_ID --file grader.js
+```
+
+**Fixing the data** (requires re-upload):
+```bash
+# Regenerate records for weak topics, re-validate, re-upload
+uv run scripts/finetune.py upload-records \
+  --workflow-id $WORKFLOW_ID --file training.jsonl
+
+# Sync to cloud
+curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/dataset/upload
+```
+
+**Adjusting training config**: Modify parameters in the next job creation (Step 7b).
+
+#### 9b. Start new eval + training jobs
+
+After applying fixes, start new jobs — same as Step 7a + 7b but with incremented version numbers:
+```bash
+uv run scripts/run_evaluation.py --dataset-id $WORKFLOW_ID --output evaluations/eval-v2.json
+# New training job with adjusted config
+JOB=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs ...)
+```
+
+#### 9c. Iteration limits and escalation
+
+- **Max 5 iterations.** After 5, stop and report full diagnosis to the user.
+- **Base model escalation:** After 2 failed iterations on the same model: `Qwen3.5-4B` → `7B` → larger.
+- **When to stop:** User says they're satisfied, OR avg score > 0.8 AND training reward > 0.7, OR 3+ iterations with no improvement.
+
+#### 9d. Iteration log format
 
 Track every iteration in `execution-log.md`:
 ```markdown
-## Training Iteration 1
-- [2026-03-17 14:30:00] Started job ft_job_001
+## Iteration 1
+- [2026-03-17 14:30:00] Started eval eval-v1 + training job ft_job_001
   - Base: Qwen3.5-4B, lr: 0.00001, lora_rank: 8, epochs: 2
-- [2026-03-17 14:45:00] Monitor: anomaly detected — KL divergence (0.3→0.8→1.2)
-- [2026-03-17 14:45:05] Cancelled job ft_job_001
-- [2026-03-17 14:46:00] Diagnosis: learning rate too high for this dataset size
-- [2026-03-17 14:46:00] Fix: lr 0.00001 → 0.000005
+- [2026-03-17 14:45:00] Eval completed: avg=0.72, pass_rate=78%
+  - Weak topics: strategic-endgame (0.45), pawn-endgames (0.52)
+- [2026-03-17 15:10:00] Training completed: final_reward=0.65, trend=improving
+- [2026-03-17 15:10:30] Presented findings to user
+  - User chose: "Regenerate endgame records"
 
-## Training Iteration 2
-- [2026-03-17 14:47:00] Started job ft_job_002
+## Iteration 2
+- [2026-03-17 15:15:00] Regenerated 22 records for endgame topics
+- [2026-03-17 15:16:00] Started eval eval-v2 + training job ft_job_002
   - Base: Qwen3.5-4B, lr: 0.000005, lora_rank: 8, epochs: 2
 - [2026-03-17 15:10:00] Monitor: job succeeded
   - Final reward: 0.72, epochs completed: 2
@@ -825,6 +794,7 @@ Read these when you need more detail on a specific step:
 | `reference/grader-writing.md` | When writing the grader — 3 patterns, design guidelines, common mistakes |
 | `reference/topic-hierarchy.md` | When designing topics — structure, coverage analysis, balance scoring |
 | `reference/iteration-strategy.md` | When analyzing results — diagnosis, stall patterns, escalation ladder |
+| `reference/analysis-strategy.md` | **Read at Step 8** — data fields, decision trees, action templates, interactive presentation |
 | `reference/workflow-guide.md` | For the full detailed walkthrough of every step |
 
 ## Helper Scripts
