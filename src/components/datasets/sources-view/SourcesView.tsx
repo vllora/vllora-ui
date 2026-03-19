@@ -861,34 +861,38 @@ function PartViewer({
         </div>
       </div>
 
-      {/* I5: Footer — separate sections for topics + records (matches mockup) */}
+      {/* I5: Footer — single row: topics + records count */}
       {(linkedTopics.length > 0 || linkedRecordsCount > 0) && (
-        <div className="border-t border-border/50 bg-muted/30 px-5 py-3 shrink-0 grid grid-cols-[auto_1fr] gap-x-8 gap-y-1.5 items-baseline">
+        <div className="border-t border-border/50 bg-muted/30 px-5 py-2.5 shrink-0 flex items-center gap-3 flex-wrap">
           {linkedTopics.length > 0 && (
-            <>
-              <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50">Referenced by Topics</div>
-              <div className="flex items-center gap-1 flex-wrap">
-                {linkedTopics.map(topic => (
-                  <span
-                    key={topic}
-                    className="inline-flex items-center px-2 py-0.5 rounded-[10px] bg-[rgba(var(--theme-500),0.1)] text-[10px] font-medium text-[rgb(var(--theme-500))]"
-                  >
-                    {topic}
-                  </span>
-                ))}
-              </div>
-            </>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50 shrink-0">Topics</span>
+              {linkedTopics.map(topic => (
+                <button
+                  key={topic}
+                  type="button"
+                  className="inline-flex items-center px-2 py-0.5 rounded-[10px] bg-[rgba(var(--theme-500),0.1)] text-[10px] font-medium text-[rgb(var(--theme-500))] hover:bg-[rgba(var(--theme-500),0.2)] hover:underline transition-colors cursor-pointer"
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent("vllora_navigate_to_job", {
+                      detail: { jobId: topic, type: "topic" },
+                    }));
+                  }}
+                >
+                  {topic}
+                </button>
+              ))}
+            </div>
+          )}
+          {linkedTopics.length > 0 && linkedRecordsCount > 0 && (
+            <span className="text-muted-foreground/20">·</span>
           )}
           {linkedRecordsCount > 0 && (
-            <>
-              <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50">Records Generated</div>
-              <span className="text-[10px] text-muted-foreground">
-                <span className="font-semibold text-[rgb(var(--theme-500))]">{linkedRecordsCount}</span> records from this part
-                {linkedAvgScore != null && (
-                  <> · avg score <span className="font-semibold text-foreground">{linkedAvgScore.toFixed(2)}</span></>
-                )}
-              </span>
-            </>
+            <span className="text-[10px] text-muted-foreground shrink-0">
+              <span className="font-semibold text-[rgb(var(--theme-500))]">{linkedRecordsCount}</span> records
+              {linkedAvgScore != null && (
+                <> · avg <span className="font-semibold text-foreground">{linkedAvgScore.toFixed(2)}</span></>
+              )}
+            </span>
           )}
         </div>
       )}
