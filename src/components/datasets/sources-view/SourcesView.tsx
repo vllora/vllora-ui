@@ -18,11 +18,17 @@ import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { FileText, Tags, ChevronRight, ChevronLeft, FolderOpen, ArrowLeft } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { CoverageMatrix } from "./CoverageMatrix";
 import type { KnowledgeSource, KnowledgeSourcePart } from "@/types/knowledge-types";
-import type { TopicHierarchyNode } from "@/types/dataset-types";
+import type { TopicHierarchyNode, DatasetRecord } from "@/types/dataset-types";
 
 interface SourcesViewProps {
   /** Currently selected source ID (null = all sources view) */
@@ -124,13 +130,14 @@ function AllSourcesView({
   );
 
   const linkedRecordsStats = useMemo(() => {
-    if (linkedTopics.length === 0) return { count: 0, avgScore: undefined as number | undefined };
+    if (linkedTopics.length === 0) return { count: 0, avgScore: undefined as number | undefined, records: [] as DatasetRecord[] };
     const topicSet = new Set(linkedTopics);
     const matched = records.filter(r => r.topic && topicSet.has(r.topic));
     const scores = matched.map(r => r.evaluation?.score ?? r.evaluation?.evalScore).filter((s): s is number => s != null);
     return {
       count: matched.length,
       avgScore: scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : undefined,
+      records: matched,
     };
   }, [linkedTopics, records]);
 
@@ -172,6 +179,7 @@ function AllSourcesView({
             linkedTopics={linkedTopics}
             linkedRecordsCount={linkedRecordsStats.count}
             linkedAvgScore={linkedRecordsStats.avgScore}
+            linkedRecords={linkedRecordsStats.records}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center p-8 text-muted-foreground text-xs">
@@ -538,13 +546,14 @@ function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSour
   );
 
   const linkedRecordsStats = useMemo(() => {
-    if (linkedTopics.length === 0) return { count: 0, avgScore: undefined as number | undefined };
+    if (linkedTopics.length === 0) return { count: 0, avgScore: undefined as number | undefined, records: [] as DatasetRecord[] };
     const topicSet = new Set(linkedTopics);
     const matched = records.filter(r => r.topic && topicSet.has(r.topic));
     const scores = matched.map(r => r.evaluation?.score ?? r.evaluation?.evalScore).filter((s): s is number => s != null);
     return {
       count: matched.length,
       avgScore: scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : undefined,
+      records: matched,
     };
   }, [linkedTopics, records]);
 
@@ -681,6 +690,7 @@ function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSour
               linkedTopics={linkedTopics}
               linkedRecordsCount={linkedRecordsStats.count}
               linkedAvgScore={linkedRecordsStats.avgScore}
+              linkedRecords={linkedRecordsStats.records}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center p-8 text-muted-foreground text-xs">
@@ -772,6 +782,7 @@ function PartViewer({
   linkedTopics,
   linkedRecordsCount,
   linkedAvgScore,
+  linkedRecords = [],
 }: {
   readonly part: KnowledgeSourcePart;
   readonly sourceName: string;
@@ -781,6 +792,7 @@ function PartViewer({
   readonly linkedTopics: string[];
   readonly linkedRecordsCount: number;
   readonly linkedAvgScore?: number;
+  readonly linkedRecords?: readonly DatasetRecord[];
 }) {
   const typeBadge = part.type === "table" ? "TABLE" : part.type === "image" ? "IMAGE" : "TEXT";
   const typeBadgeColor = part.type === "table"
@@ -887,12 +899,21 @@ function PartViewer({
             <span className="text-muted-foreground/20">·</span>
           )}
           {linkedRecordsCount > 0 && (
-            <span className="text-[10px] text-muted-foreground shrink-0">
-              <span className="font-semibold text-[rgb(var(--theme-500))]">{linkedRecordsCount}</span> records
-              {linkedAvgScore != null && (
-                <> · avg <span className="font-semibold text-foreground">{linkedAvgScore.toFixed(2)}</span></>
-              )}
-            </span>
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button type="button" className="text-[10px] text-muted-foreground shrink-0 hover:text-foreground transition-colors cursor-pointer">
+                    <span className="font-semibold text-[rgb(var(--theme-500))]">{linkedRecordsCount}</span> records
+                    {linkedAvgScore != null && (
+                      <> · avg <span className="font-semibold text-foreground">{linkedAvgScore.toFixed(2)}</span></>
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" align="start" className="max-w-[400px] p-0">
+                  <RecordsTooltipContent records={linkedRecords} avgScore={linkedAvgScore} />
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </div>
       )}
@@ -913,6 +934,76 @@ function BackToRecordBanner({ onClick }: { readonly onClick: () => void }) {
         <ArrowLeft className="w-3.5 h-3.5" />
         Back to record
       </button>
+    </div>
+  );
+}
+
+// ─── Records Tooltip ───
+
+/** Extract first user message as a short preview */
+function getRecordPreview(record: DatasetRecord): string {
+  const data = record.data as { input?: { messages?: Array<{ role?: string; content?: string }> }; messages?: Array<{ role?: string; content?: string }> } | undefined;
+  const messages = data?.input?.messages ?? data?.messages ?? [];
+  const userMsg = messages.find(m => m.role === "user");
+  const text = userMsg?.content ?? "";
+  return text.length > 80 ? text.slice(0, 80) + "…" : text;
+}
+
+function RecordsTooltipContent({
+  records,
+  avgScore,
+}: {
+  readonly records: readonly DatasetRecord[];
+  readonly avgScore?: number;
+}) {
+  const displayed = records.slice(0, 8);
+  const remaining = records.length - displayed.length;
+
+  return (
+    <div className="py-1.5">
+      {avgScore != null && (
+        <div className="px-3 py-1.5 border-b border-border/50 text-[10px] text-muted-foreground">
+          Avg eval score: <span className="font-semibold text-foreground">{avgScore.toFixed(3)}</span>
+          <span className="ml-1">across {records.length} record{records.length !== 1 ? "s" : ""}</span>
+        </div>
+      )}
+      <div className="max-h-[240px] overflow-y-auto">
+        {displayed.map((record) => {
+          const score = record.evaluation?.evalScore;
+          return (
+            <button
+              key={record.id}
+              type="button"
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-muted/40 transition-colors"
+              onClick={() => {
+                const topic = record.topic;
+                if (topic) {
+                  window.dispatchEvent(new CustomEvent("vllora_navigate_to_job", {
+                    detail: { jobId: topic, type: "topic" },
+                  }));
+                }
+              }}
+            >
+              <span className="flex-1 text-[10px] text-foreground/80 truncate min-w-0">
+                {getRecordPreview(record) || record.id}
+              </span>
+              {score != null && (
+                <span className={cn(
+                  "text-[10px] font-mono tabular-nums shrink-0",
+                  score >= 0.8 ? "text-emerald-400" : score >= 0.6 ? "text-amber-400" : "text-red-400",
+                )}>
+                  {score.toFixed(2)}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {remaining > 0 && (
+        <div className="px-3 py-1 text-[9px] text-muted-foreground/50 border-t border-border/50">
+          +{remaining} more
+        </div>
+      )}
     </div>
   );
 }

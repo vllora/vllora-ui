@@ -28,6 +28,17 @@ export function TrainingMetricsSection({
   onRefresh,
   isLive,
 }: TrainingMetricsSectionProps) {
+  // Show chart if data exists (even during refresh/reload — avoids UI flicker)
+  if (evalResults && evalResults.results.length > 0) {
+    return (
+      <TrainingMetricsChart
+        results={evalResults.results}
+        isLive={isLive}
+      />
+    );
+  }
+
+  // Only show loading spinner on initial load (no data yet)
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 py-8 text-zinc-500">
@@ -60,15 +71,6 @@ export function TrainingMetricsSection({
           Retry
         </button>
       </div>
-    );
-  }
-
-  if (evalResults && evalResults.results.length > 0) {
-    return (
-      <TrainingMetricsChart
-        results={evalResults.results}
-        isLive={isLive}
-      />
     );
   }
 
