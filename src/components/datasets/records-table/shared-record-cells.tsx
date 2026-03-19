@@ -7,14 +7,12 @@
  */
 
 import { useMemo } from "react";
-import { FileText, Loader2 } from "lucide-react";
+import { FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { resolvePartRef } from "@/lib/distri-finetune-tools/steps/shared/resolve-part-ref";
 import type { KnowledgeSource } from "@/types/knowledge-types";
 import type { DatasetRecord } from "@/types/dataset-types";
 import type { JobColumn, RecordJobScore } from "./job-score-columns";
-import { JobStatusBadge } from "../shared/JobStatusBadge";
-import type { JobStatusType } from "../shared/JobStatusBadge";
 
 // ─── Score Pill ───
 
@@ -55,18 +53,14 @@ export function ScoreCell({ jobScore }: { readonly jobScore?: RecordJobScore }) 
   }
 
   if (jobScore.status === "running") {
-    return (
-      <span className="inline-flex items-center gap-1">
-        <Loader2 className="w-3 h-3 text-primary animate-spin" />
-        {jobScore.score !== undefined ? (
-          <span className="font-mono text-[10px] text-muted-foreground/50 tabular-nums">
-            {jobScore.score.toFixed(2)}
-          </span>
-        ) : (
-          <span className="text-[10px] text-muted-foreground/40 italic">pending</span>
-        )}
-      </span>
-    );
+    if (jobScore.score !== undefined) {
+      return (
+        <span className="inline-flex items-center gap-0.5">
+          <ScorePill score={jobScore.score} />
+        </span>
+      );
+    }
+    return <span className="text-[10px] text-muted-foreground/25">···</span>;
   }
 
   if (jobScore.status === "failed") {
@@ -87,27 +81,63 @@ export function ScoreCell({ jobScore }: { readonly jobScore?: RecordJobScore }) 
 
 // ─── Job Column Header ───
 
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+const STATUS_LABELS: Record<string, { text: string; color: string }> = {
+  running: { text: "Running", color: "text-blue-400" },
+  queued: { text: "Queued", color: "text-amber-400" },
+  completed: { text: "Completed", color: "text-emerald-400" },
+  failed: { text: "Failed", color: "text-red-400" },
+};
+
 export function JobColumnHeader({ column }: { readonly column: JobColumn }) {
-  const isActive = column.status === "running" || column.status === "queued";
+  const isRunning = column.status === "running";
+  const isQueued = column.status === "queued";
+  const statusInfo = STATUS_LABELS[column.status] ?? { text: column.status, color: "text-muted-foreground" };
+  const typeLabel = column.type === "eval" ? "Evaluation" : "Training";
+  const timeLabel = new Date(column.createdAt).toLocaleString();
 
   return (
-    <div className="flex flex-col items-center gap-0.5">
-      <button
-        type="button"
-        className="text-[10px] font-medium normal-case tracking-normal hover:underline hover:text-foreground transition-colors cursor-pointer"
-        onClick={(e) => {
-          e.stopPropagation();
-          window.dispatchEvent(new CustomEvent("vllora_navigate_to_job", {
-            detail: { jobId: column.id, type: column.type },
-          }));
-        }}
-      >
-        {column.label}
-      </button>
-      {isActive && (
-        <JobStatusBadge status={column.status as JobStatusType} className="normal-case" />
-      )}
-    </div>
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-[10px] font-medium normal-case tracking-normal hover:underline hover:text-foreground transition-colors cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation();
+              window.dispatchEvent(new CustomEvent("vllora_navigate_to_job", {
+                detail: { jobId: column.id, type: column.type },
+              }));
+            }}
+          >
+            {(isRunning || isQueued) && (
+              <span className={cn(
+                "w-1.5 h-1.5 rounded-full shrink-0",
+                isRunning ? "bg-blue-400 animate-pulse" : "bg-amber-400",
+              )} />
+            )}
+            {column.label}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="text-xs">
+          <div className="flex flex-col gap-1">
+            <div className="font-semibold">{typeLabel} Job</div>
+            <div className="text-muted-foreground font-mono">{column.id}</div>
+            <div className="flex items-center gap-1.5">
+              <span className={cn("font-medium", statusInfo.color)}>{statusInfo.text}</span>
+              <span className="text-muted-foreground/50">·</span>
+              <span className="text-muted-foreground">{timeLabel}</span>
+            </div>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 

@@ -9,7 +9,9 @@
  */
 
 import { useState, useMemo } from "react";
-import { FileText, Sparkles, ChevronRight } from "lucide-react";
+import { FileText, Sparkles } from "lucide-react";
+import { SimplePromptChain } from "./records-table/PromptChainCard";
+import type { PromptChainLink } from "./records-table/PromptChainCard";
 import { cn } from "@/lib/utils";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { resolveAndGroupBySource } from "@/lib/distri-finetune-tools/steps/shared/resolve-part-ref";
@@ -364,42 +366,11 @@ export function LinkedSourcesTabContent({
 function PromptChainPanel({
   chain,
 }: {
-  readonly chain: readonly { label: string; level: "root" | "parent" | "leaf"; prompt: string }[];
+  readonly chain: readonly PromptChainLink[];
 }) {
   return (
     <div className="border-b border-border bg-background/95 backdrop-blur-sm shrink-0">
-      <div className="flex items-stretch gap-2 px-4 py-3 overflow-x-auto">
-        {chain.map((link, i) => {
-          const isLeaf = link.level === "leaf";
-          return (
-            <div key={i} className="flex items-stretch gap-2">
-              {i > 0 && (
-                <div className="flex items-center">
-                  <ChevronRight className="w-4 h-4 text-muted-foreground/30 shrink-0" />
-                </div>
-              )}
-              <div
-                className={cn(
-                  "flex flex-col min-w-[180px] max-w-[280px] rounded-lg border p-2.5",
-                  isLeaf
-                    ? "border-[rgba(var(--theme-500),0.3)] bg-[rgba(var(--theme-500),0.05)]"
-                    : "border-border/50 bg-muted/30",
-                )}
-              >
-                <span className={cn(
-                  "text-[9px] font-semibold uppercase tracking-wider mb-1",
-                  isLeaf ? "text-[rgb(var(--theme-500))]" : "text-muted-foreground/60",
-                )}>
-                  {link.label}
-                </span>
-                <p className="text-[11px] text-muted-foreground font-mono leading-relaxed whitespace-pre-wrap line-clamp-3">
-                  {link.prompt}
-                </p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      <SimplePromptChain chain={chain} className="px-4 py-3" />
     </div>
   );
 }

@@ -4,17 +4,15 @@
  * Sticky panel above the table showing the Root → Parent → Leaf system prompt
  * chain for the currently focused topic. Opens when user clicks a prompt icon
  * on a topic group header. Supports scroll-based auto-tracking.
+ *
+ * Uses shared SimplePromptChain for the card rendering.
  */
 
-import { useState, useEffect, useCallback } from "react";
-import { X, ChevronRight, ChevronDown, ChevronUp, MessageSquare } from "lucide-react";
+import { useState, useEffect } from "react";
+import { X, MessageSquare, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-interface PromptChainLink {
-  readonly label: string;
-  readonly level: "root" | "parent" | "leaf";
-  readonly prompt: string;
-}
+import { SimplePromptChain } from "./PromptChainCard";
+import type { PromptChainLink } from "./PromptChainCard";
 
 interface PromptInheritancePanelProps {
   /** Full breadcrumb path: ["Root", "Parent Topic", "Leaf Topic"] */
@@ -33,26 +31,11 @@ export function PromptInheritancePanel({
   onClose,
   isAutoTracking = false,
 }: PromptInheritancePanelProps) {
-  const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set());
   const [isFading, setIsFading] = useState(false);
 
-  const toggleCard = useCallback((index: number) => {
-    setExpandedCards(prev => {
-      const next = new Set(prev);
-      if (next.has(index)) {
-        next.delete(index);
-      } else {
-        next.add(index);
-      }
-      return next;
-    });
-  }, []);
-
-  // Reset expanded state when chain changes (new topic focused)
-  // Trigger crossfade animation during auto-tracking
+  // Trigger crossfade animation during auto-tracking topic change
   const breadcrumbKey = breadcrumb.join("/");
   useEffect(() => {
-    setExpandedCards(new Set());
     if (isAutoTracking) {
       setIsFading(true);
       const timer = setTimeout(() => setIsFading(false), 300);
@@ -102,67 +85,14 @@ export function PromptInheritancePanel({
         </button>
       </div>
 
-      {/* Prompt chain cards — crossfade on auto-tracking topic change */}
-      <div className={cn(
-        "flex items-stretch gap-2 px-4 py-3 overflow-x-auto transition-opacity duration-300",
-        isFading ? "opacity-0" : "opacity-100"
-      )}>
-        {chain.map((link, i) => {
-          const isExpanded = expandedCards.has(i);
-          const isLeaf = link.level === "leaf";
-          const maxLines = isExpanded ? undefined : 3;
-
-          return (
-            <div key={i} className="flex items-stretch gap-2">
-              {i > 0 && (
-                <div className="flex items-center">
-                  <ChevronRight className="w-4 h-4 text-muted-foreground/30 shrink-0" />
-                </div>
-              )}
-              <div
-                className={cn(
-                  "flex flex-col min-w-[200px] max-w-[280px] rounded-lg border p-2.5",
-                  isLeaf
-                    ? "border-[rgba(var(--theme-500),0.3)] bg-[rgba(var(--theme-500),0.05)]"
-                    : "border-border/50 bg-muted/30",
-                )}
-              >
-                {/* Card label */}
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className={cn(
-                    "text-[10px] font-semibold uppercase tracking-wider",
-                    isLeaf ? "text-[rgb(var(--theme-500))]" : "text-muted-foreground/60"
-                  )}>
-                    {link.label}
-                  </span>
-                  {link.prompt.length > 120 && (
-                    <button
-                      type="button"
-                      onClick={() => toggleCard(i)}
-                      className="p-0.5 rounded hover:bg-muted/50 text-muted-foreground/50"
-                    >
-                      {isExpanded
-                        ? <ChevronUp className="w-3 h-3" />
-                        : <ChevronDown className="w-3 h-3" />}
-                    </button>
-                  )}
-                </div>
-
-                {/* Prompt text */}
-                <p
-                  className={cn(
-                    "text-xs text-muted-foreground font-mono leading-relaxed whitespace-pre-wrap",
-                    !isExpanded && "line-clamp-3"
-                  )}
-                  style={maxLines ? { WebkitLineClamp: maxLines } : undefined}
-                >
-                  {link.prompt || "(empty)"}
-                </p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      {/* Prompt chain cards */}
+      <SimplePromptChain
+        chain={chain}
+        className={cn(
+          "px-4 py-3 transition-opacity duration-300",
+          isFading ? "opacity-0" : "opacity-100",
+        )}
+      />
     </div>
   );
 }

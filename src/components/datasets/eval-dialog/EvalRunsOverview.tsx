@@ -12,6 +12,8 @@ import { EvalJobsContext } from "@/contexts/EvalJobsContext";
 import { EvalComparisonChart } from "./EvalComparisonChart";
 import { evalJobDisplayName } from "@/lib/job-display-name";
 import type { EvalJob } from "@/types/eval-job";
+import { useEvaluatorVersions } from "@/hooks/useEvaluatorVersions";
+import { EvaluatorVersionBadge } from "@/components/shared/EvaluatorVersionBadge";
 import {
   Tooltip,
   TooltipContent,
@@ -30,9 +32,10 @@ function normalizeStatus(status: string): string {
   return status;
 }
 
-export function EvalRunsOverview(_props: EvalRunsOverviewProps) {
+export function EvalRunsOverview({ workflowId }: EvalRunsOverviewProps) {
   const evalCtx = useContext(EvalJobsContext);
   const jobs = evalCtx?.jobs ?? [];
+  const { latestVersion, inferVersionForTimestamp } = useEvaluatorVersions(workflowId);
 
   const sortedJobs = useMemo(
     () => [...jobs].sort((a, b) => b.createdAt - a.createdAt),
@@ -78,6 +81,7 @@ export function EvalRunsOverview(_props: EvalRunsOverviewProps) {
                   <th className="text-left px-3 py-2 font-medium">Run</th>
                   <th className="text-left px-3 py-2 font-medium">Status</th>
                   <th className="text-left px-3 py-2 font-medium">Model</th>
+                  <th className="text-left px-3 py-2 font-medium">Version</th>
                   <th className="text-right px-3 py-2 font-medium">Samples</th>
                   <ThWithInfo align="right" label="Mean" tip="Mean = sum of all scores / number of records. Example: scores [0.9, 0.8, 1.0] → mean = 2.7/3 = 0.90. Target: ≥ 0.8" />
                   <ThWithInfo align="right" label="Std Dev" tip="Standard deviation = √(avg of squared differences from mean). Measures how spread out scores are. Example: scores [0.9, 0.8, 1.0] with mean 0.9 → std = √((0+0.01+0.01)/3) = 0.08. Low (< 0.1) = consistent. High (> 0.2) = some records much worse than others." />
@@ -93,7 +97,7 @@ export function EvalRunsOverview(_props: EvalRunsOverviewProps) {
             </thead>
             <tbody>
               {sortedJobs.map((job) => (
-                <RunRow key={job.id} job={job} />
+                <RunRow key={job.id} job={job} latestVersion={latestVersion} inferVersion={inferVersionForTimestamp} />
               ))}
             </tbody>
           </table>
@@ -121,11 +125,16 @@ function ThWithInfo({ label, tip, align = "left" }: { readonly label: string; re
   );
 }
 
-function RunRow({ job }: { readonly job: EvalJob }) {
+function RunRow({ job, latestVersion, inferVersion }: {
+  readonly job: EvalJob;
+  readonly latestVersion: number | null;
+  readonly inferVersion: (createdAtMs: number) => number | null;
+}) {
   const status = normalizeStatus(job.status);
   const stats = job.result?.statistics;
   const verdict = job.result?.diagnosis?.verdict;
   const displayName = evalJobDisplayName(job.id);
+  const jobVersion = inferVersion(job.createdAt);
 
   const statusBadge = status === "done"
     ? "bg-emerald-500/15 text-emerald-400"
@@ -162,6 +171,13 @@ function RunRow({ job }: { readonly job: EvalJob }) {
       </td>
       <td className="px-3 py-2 text-zinc-400">
         {job.rolloutModel ?? "—"}
+      </td>
+      <td className="px-3 py-2">
+        {jobVersion != null && latestVersion != null ? (
+          <EvaluatorVersionBadge jobVersion={jobVersion} latestVersion={latestVersion} />
+        ) : (
+          <span className="text-zinc-600">—</span>
+        )}
       </td>
       <td className="px-3 py-2 text-right font-mono text-zinc-400">
         {job.result?.samplesEvaluated ?? job.sampleSize ?? "—"}

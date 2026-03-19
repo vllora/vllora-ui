@@ -23,10 +23,17 @@ import {
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { finetuneJobDisplayName } from "@/lib/job-display-name";
 import { getModelDisplayName, computeTrainingSummary } from "./utils";
+import { useEvaluatorVersions } from "@/hooks/useEvaluatorVersions";
+import { EvaluatorVersionBadge } from "@/components/shared/EvaluatorVersionBadge";
 import type { FinetuneJob } from "@/services/finetune-api";
 
-export function FinetuneJobsOverview() {
+interface FinetuneJobsOverviewProps {
+  readonly workflowId: string;
+}
+
+export function FinetuneJobsOverview({ workflowId }: FinetuneJobsOverviewProps) {
   const { jobs, getJobEvaluations } = FinetuneJobsConsumer();
+  const { latestVersion } = useEvaluatorVersions(workflowId);
 
   const sortedJobs = useMemo(
     () => [...jobs].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
@@ -138,12 +145,13 @@ export function FinetuneJobsOverview() {
                 <th className="text-right px-3 py-2 font-medium">Avg Score</th>
                 <th className="text-right px-3 py-2 font-medium">Rows</th>
                 <th className="text-left px-3 py-2 font-medium">Provider</th>
+                <th className="text-left px-3 py-2 font-medium">Version</th>
                 <th className="text-right px-3 py-2 font-medium">Date</th>
               </tr>
             </thead>
             <tbody>
               {sortedJobs.map((job) => (
-                <JobRow key={job.id} job={job} getJobEvaluations={getJobEvaluations} />
+                <JobRow key={job.id} job={job} getJobEvaluations={getJobEvaluations} latestVersion={latestVersion} />
               ))}
             </tbody>
           </table>
@@ -156,9 +164,11 @@ export function FinetuneJobsOverview() {
 function JobRow({
   job,
   getJobEvaluations,
+  latestVersion,
 }: {
   readonly job: FinetuneJob;
   readonly getJobEvaluations: (jobId: string) => { data: { results: Array<{ row_index: number; epochs: Record<string, Array<{ score?: number | null }>> }> } | null };
+  readonly latestVersion: number | null;
 }) {
   const displayName = finetuneJobDisplayName(job.id, job.suffix);
   const totalEpochs = job.training_config?.epochs ?? null;
@@ -215,6 +225,13 @@ function JobRow({
       </td>
       <td className="px-3 py-2 text-zinc-500">
         {job.provider}
+      </td>
+      <td className="px-3 py-2">
+        {job.evaluator_version != null && latestVersion != null ? (
+          <EvaluatorVersionBadge jobVersion={job.evaluator_version} latestVersion={latestVersion} />
+        ) : (
+          <span className="text-zinc-600">—</span>
+        )}
       </td>
       <td className="px-3 py-2 text-right text-zinc-600">
         {new Date(job.created_at).toLocaleDateString()}

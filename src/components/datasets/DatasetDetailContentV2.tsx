@@ -868,6 +868,7 @@ export function DatasetDetailContentV2() {
                 onSave={handleSaveEvaluationConfig}
                 recordCount={sortedRecords.length}
                 view="script"
+                workflowId={workflowId}
               />
             </div>
           )}
@@ -878,7 +879,7 @@ export function DatasetDetailContentV2() {
           )}
           {contentSection === "finetune-overview" && (
             <div className="flex-1 flex flex-col overflow-hidden">
-              <FinetuneJobsOverview />
+              <FinetuneJobsOverview workflowId={workflowId} />
             </div>
           )}
           {contentSection === "evaluator-jobs" && (

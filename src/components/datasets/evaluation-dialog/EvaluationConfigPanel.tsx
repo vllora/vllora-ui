@@ -37,6 +37,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EvaluationBottomPanel } from "./EvaluationBottomPanel";
+import { EvaluatorVersionHistory } from "@/components/finetune/content/EvaluatorVersionHistory";
 import { cn } from "@/lib/utils";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 
@@ -195,6 +196,8 @@ interface EvaluationConfigPanelProps {
   view?: "script" | "jobs";
   /** When provided in jobs view, preselect a specific dry-run job from explorer path. */
   selectedDryRunJobId?: string | null;
+  /** Workflow ID — used to fetch evaluator version history */
+  workflowId?: string;
 }
 
 export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, EvaluationConfigPanelProps>(
@@ -205,6 +208,7 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
     recordCount,
     view,
     selectedDryRunJobId,
+    workflowId,
   }, ref) {
   const [script, setScript] = useState(evalScript || PLACEHOLDER_SCRIPT);
   const [isSaving, setIsSaving] = useState(false);
@@ -450,6 +454,7 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
       <div className="flex flex-col h-full overflow-hidden">
         {editorHeaderBar}
         {codeEditor}
+        {workflowId && <EvaluatorVersionHistory workflowId={workflowId} />}
       </div>
     );
   }
