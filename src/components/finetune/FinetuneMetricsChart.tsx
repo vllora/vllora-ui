@@ -2,10 +2,12 @@
  * FinetuneMetricsChart
  *
  * Visualizes raw GRPO/GSPO training metrics (reward, KL, loss, completion stats).
- * All metrics share one chart with no Y-axis labels — each line is auto-scaled
- * to its own range. Legend items are clickable to toggle metrics on/off.
- * Only the primary metric is shown by default; toggling others on overlays them.
- * The tooltip shows actual values for all visible metrics.
+ *
+ * Single metric: full chart with Y-axis + tooltip.
+ * Multiple metrics: ONE chart with stacked lanes — each metric normalized to
+ *   its own vertical band (e.g., top third, middle third, bottom third).
+ *   Single tooltip shows all values. No sync issues.
+ * Legend toggles metrics on/off.
  */
 
 import { useMemo, useState, useCallback } from "react";
@@ -30,7 +32,7 @@ import { AlertTriangle, Activity, TrendingUp, Zap, Eye, EyeOff } from "lucide-re
 import type { FinetuneJobMetricPoint } from "@/services/finetune-api";
 
 // =============================================================================
-// Types
+// Types & Constants
 // =============================================================================
 
 interface FinetuneMetricsChartProps {
@@ -43,9 +45,13 @@ interface FinetuneMetricsChartProps {
 
 type MetricTab = "reward" | "stability" | "completions";
 
-// =============================================================================
-// Constants
-// =============================================================================
+interface MetricDef {
+  key: string;
+  label: string;
+  color: string;
+  primary: boolean;
+  description: string;
+}
 
 const TAB_CONFIG: Record<
   MetricTab,
@@ -55,65 +61,48 @@ const TAB_CONFIG: Record<
     label: "Reward",
     icon: <TrendingUp className="h-3 w-3" />,
     metrics: [
-      { key: "reward", label: "Reward", color: "#10b981", primary: true, description: "Average reward score from the evaluator. Higher = model generates better responses. Should increase over training." },
-      { key: "reward_std", label: "Reward Std", color: "#6366f1", primary: false, description: "Standard deviation of reward scores across candidates. Some variance is healthy (provides learning signal). Too low = model outputs are too similar." },
-      { key: "frac_reward_zero_std", label: "Zero Std Frac", color: "#f59e0b", primary: false, description: "Fraction of prompts where all candidates received the same score (zero variance). High values (>0.6) mean the evaluator can't differentiate — consider improving the grader." },
+      { key: "reward", label: "Reward", color: "#10b981", primary: true, description: "Average reward score from the evaluator. Higher = model generates better responses." },
+      { key: "reward_std", label: "Reward Std", color: "#6366f1", primary: false, description: "Standard deviation of reward scores across candidates. Some variance is healthy." },
+      { key: "frac_reward_zero_std", label: "Zero Std Frac", color: "#f59e0b", primary: false, description: "Fraction of prompts where all candidates received the same score. High (>0.6) = evaluator can't differentiate." },
     ],
   },
   stability: {
     label: "Loss",
     icon: <Activity className="h-3 w-3" />,
     metrics: [
-      { key: "loss", label: "Loss", color: "#ef4444", primary: true, description: "Policy loss — measures how much the model deviates from producing high-reward responses. Should generally decrease over training." },
-      { key: "kl", label: "KL Divergence", color: "#f59e0b", primary: false, description: "KL divergence from the reference model. Measures how far the model has drifted from its original behavior. Too high = model may be overfitting or becoming incoherent." },
-      { key: "grad_norm", label: "Grad Norm", color: "#8b5cf6", primary: false, description: "Gradient norm — magnitude of weight updates. Spikes indicate unstable training. Should be relatively stable." },
-      { key: "learning_rate", label: "Learning Rate", color: "#06b6d4", primary: false, description: "Current learning rate. May change over training if a schedule is used (e.g., cosine decay)." },
+      { key: "loss", label: "Loss", color: "#ef4444", primary: true, description: "Policy loss — should generally decrease over training." },
+      { key: "kl", label: "KL Divergence", color: "#f59e0b", primary: false, description: "How far the model has drifted from the base model. Too high = may be overfitting." },
+      { key: "grad_norm", label: "Grad Norm", color: "#8b5cf6", primary: false, description: "Gradient norm — spikes indicate unstable training." },
+      { key: "learning_rate", label: "Learning Rate", color: "#06b6d4", primary: false, description: "Current learning rate. May change if a schedule is used." },
     ],
   },
   completions: {
     label: "Completions",
     icon: <Zap className="h-3 w-3" />,
     metrics: [
-      { key: "completions/clipped_ratio", label: "Clipped Ratio", color: "#ef4444", primary: true, description: "Fraction of responses that were truncated (hit max token limit). High values (>0.7) mean responses are too long — consider increasing max tokens or adjusting the prompt." },
-      { key: "completions/mean_length", label: "Mean Length", color: "#10b981", primary: false, description: "Average response length in tokens across all generated candidates." },
-      { key: "completions/mean_terminated_length", label: "Terminated Length", color: "#6366f1", primary: false, description: "Average length of responses that ended naturally (with an EOS token), excluding truncated ones." },
+      { key: "completions/clipped_ratio", label: "Clipped Ratio", color: "#ef4444", primary: true, description: "Fraction of responses truncated. High (>0.7) = responses hit token limit." },
+      { key: "completions/mean_length", label: "Mean Length", color: "#10b981", primary: false, description: "Average response length in tokens." },
+      { key: "completions/mean_terminated_length", label: "Terminated Length", color: "#6366f1", primary: false, description: "Average length of naturally-ended responses." },
     ],
   },
 };
 
-interface MetricDef {
-  key: string;
-  label: string;
-  color: string;
-  primary: boolean;
-  description: string;
-}
-
 // =============================================================================
-// Alert Thresholds
+// Helpers
 // =============================================================================
-
-const CLIPPED_RATIO_THRESHOLD = 0.7;
-const FRAC_ZERO_STD_THRESHOLD = 0.6;
 
 function getAlertCount(metrics: FinetuneJobMetricPoint[]): number {
   if (metrics.length === 0) return 0;
   const latest = metrics[metrics.length - 1].metrics;
   let count = 0;
-  const clipped = latest["completions/clipped_ratio"];
-  if (typeof clipped === "number" && clipped > CLIPPED_RATIO_THRESHOLD) count++;
-  const fracZero = latest.frac_reward_zero_std;
-  if (typeof fracZero === "number" && fracZero > FRAC_ZERO_STD_THRESHOLD) count++;
+  if (typeof latest["completions/clipped_ratio"] === "number" && (latest["completions/clipped_ratio"] as number) > 0.7) count++;
+  if (typeof latest.frac_reward_zero_std === "number" && (latest.frac_reward_zero_std as number) > 0.6) count++;
   for (const key of ["loss", "reward", "kl", "grad_norm"] as const) {
     const val = latest[key];
     if (val != null && (!isFinite(val as number) || isNaN(val as number))) count++;
   }
   return count;
 }
-
-// =============================================================================
-// Format helpers
-// =============================================================================
 
 function formatMetricValue(value: number): string {
   if (Math.abs(value) < 0.001) return value.toExponential(1);
@@ -124,170 +113,169 @@ function formatMetricValue(value: number): string {
   return value.toFixed(3);
 }
 
-// =============================================================================
-// Custom Tooltip — shows all visible metrics
-// =============================================================================
+function getMetricsInsight(latest: Record<string, unknown> | null, tab: MetricTab): string {
+  if (!latest) return "";
+  if (tab === "reward") {
+    const reward = typeof latest.reward === "number" ? latest.reward : null;
+    if (reward == null) return "Reward data not available yet.";
+    if (reward >= 0.9) return "Reward is high — generating good responses.";
+    if (reward >= 0.7) return "Reward is moderate — learning but has room to improve.";
+    return "Reward is low — may need more training or better data.";
+  }
+  if (tab === "stability") {
+    const loss = typeof latest.loss === "number" ? latest.loss : null;
+    if (loss == null) return "Loss data not available yet.";
+    if (loss < 0.1) return "Loss is healthy — learning steadily.";
+    if (loss < 1.0) return "Loss is moderate — training in progress.";
+    return "Loss is high — model may be struggling.";
+  }
+  if (tab === "completions") {
+    const clipped = typeof latest["completions/clipped_ratio"] === "number" ? latest["completions/clipped_ratio"] : null;
+    if (clipped != null && clipped > 0.7) return `${(clipped * 100).toFixed(0)}% truncated — consider increasing max tokens.`;
+    return "Completion metrics within normal range.";
+  }
+  return "";
+}
 
 // =============================================================================
-// Normalize data — each metric gets 0-1 scaled so they share the chart
+// Stacked lanes: normalize each metric into its own vertical band
 // =============================================================================
 
-interface NormalizedPoint {
+const LANE_GAP = 0.06; // gap between lanes
+
+interface LanedPoint {
   name: string;
   [key: string]: unknown;
 }
 
-function normalizeChartData(
+function buildLanedData(
   chartData: Record<string, unknown>[],
-  visibleKeys: Set<string>,
-): NormalizedPoint[] {
-  // Compute min/max for each visible metric
+  visibleMetrics: MetricDef[],
+): { data: LanedPoint[]; lanes: { key: string; yCenter: number; yMin: number; yMax: number }[] } {
+  const n = visibleMetrics.length;
+  const laneHeight = (1 - LANE_GAP * (n - 1)) / n;
+
+  // Compute ranges
   const ranges: Record<string, { min: number; max: number }> = {};
-  for (const key of visibleKeys) {
-    const values = chartData
-      .map((d) => d[key])
-      .filter((v): v is number => typeof v === "number" && isFinite(v));
-    if (values.length > 0) {
-      ranges[key] = { min: Math.min(...values), max: Math.max(...values) };
+  for (const m of visibleMetrics) {
+    const vals = chartData.map((d) => d[m.key]).filter((v): v is number => typeof v === "number" && isFinite(v));
+    if (vals.length > 0) {
+      ranges[m.key] = { min: Math.min(...vals), max: Math.max(...vals) };
     }
   }
 
-  return chartData.map((d) => {
-    const normalized: NormalizedPoint = { name: d.name as string };
-    for (const key of visibleKeys) {
-      const raw = d[key];
-      const range = ranges[key];
-      if (typeof raw === "number" && range) {
+  // Each metric gets a lane: metric[0] at top, metric[n-1] at bottom
+  const lanes = visibleMetrics.map((m, i) => {
+    const yMax = 1 - i * (laneHeight + LANE_GAP);
+    const yMin = yMax - laneHeight;
+    return { key: m.key, yCenter: (yMin + yMax) / 2, yMin, yMax };
+  });
+
+  const data = chartData.map((d) => {
+    const point: LanedPoint = { name: d.name as string };
+    for (let i = 0; i < visibleMetrics.length; i++) {
+      const m = visibleMetrics[i];
+      const raw = d[m.key];
+      const range = ranges[m.key];
+      const lane = lanes[i];
+      if (typeof raw === "number" && range && lane) {
         const span = range.max - range.min;
-        // Normalize to 0-1, with padding. If all values are the same, center at 0.5
-        normalized[key] = span > 0 ? (raw - range.min) / span : 0.5;
+        const normalized = span > 0 ? (raw - range.min) / span : 0.5;
+        // Map normalized 0-1 into this metric's lane band
+        point[m.key] = lane.yMin + normalized * (lane.yMax - lane.yMin);
       }
     }
     // Store raw values for tooltip
-    normalized._raw = Object.fromEntries(
-      [...visibleKeys].map((key) => [key, d[key]])
-    );
-    return normalized;
+    point._raw = Object.fromEntries(visibleMetrics.map((m) => [m.key, d[m.key]]));
+    return point;
   });
+
+  return { data, lanes };
 }
 
-/** Custom tooltip that reads raw values from _raw field */
-function NormalizedTooltip({
+// =============================================================================
+// Stacked Tooltip — shows real values for all visible metrics
+// =============================================================================
+
+function StackedTooltip({
   active,
   payload,
   label,
-  metricDefs,
-  isSingleMetric,
+  visibleMetrics,
 }: {
   active?: boolean;
-  payload?: Array<{ dataKey: string; value: number; color: string; name: string; payload: NormalizedPoint }>;
+  payload?: Array<{ dataKey: string; payload: LanedPoint }>;
   label?: string;
-  metricDefs: readonly MetricDef[];
-  isSingleMetric?: boolean;
+  visibleMetrics: MetricDef[];
 }) {
   if (!active || !payload?.length) return null;
-  // In single metric mode, the raw value IS the chart value (no normalization)
-  // In multi mode, raw values are stored in _raw
-  const raw = isSingleMetric
-    ? null
-    : (payload[0]?.payload?._raw as Record<string, number> | undefined);
-  if (!isSingleMetric && !raw) return null;
+  const raw = payload[0]?.payload?._raw as Record<string, number> | undefined;
+  if (!raw) return null;
 
   return (
     <div className="rounded-lg border border-[#262626] bg-[#141414]/95 px-3 py-2 shadow-xl backdrop-blur-sm">
-      <p className="text-[10px] font-mono text-slate-500 mb-1.5 border-b border-[#262626] pb-1">
-        {label}
-      </p>
+      <p className="text-[10px] font-mono text-slate-500 mb-1.5 border-b border-[#262626] pb-1">{label}</p>
       <div className="space-y-1">
-        {payload
-          .filter((e) => e.value != null)
-          .map((entry) => {
-            const rawVal = isSingleMetric ? entry.value : raw?.[entry.dataKey];
-            const def = metricDefs.find((m) => m.key === entry.dataKey);
-            return (
-              <div key={entry.dataKey} className="flex items-center justify-between gap-4 text-[11px]">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
-                  <span className="text-slate-400">{def?.label ?? entry.name}</span>
-                </span>
-                <span className="font-mono font-bold" style={{ color: entry.color }}>
-                  {typeof rawVal === "number" ? formatMetricValue(rawVal) : "-"}
-                </span>
-              </div>
-            );
-          })}
+        {visibleMetrics.map((m) => {
+          const val = raw[m.key];
+          return (
+            <div key={m.key} className="flex items-center justify-between gap-4 text-[11px]">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: m.color }} />
+                <span className="text-slate-400">{m.label}</span>
+              </span>
+              <span className="font-mono font-bold" style={{ color: m.color }}>
+                {typeof val === "number" ? formatMetricValue(val) : "-"}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
 // =============================================================================
-// Insight generator
+// Lane label component — rendered as Y-axis tick-like labels
 // =============================================================================
 
-function getMetricsInsight(
-  latest: Record<string, unknown> | null,
-  tab: MetricTab,
-): string {
-  if (!latest) return "Waiting for metrics data...";
-
-  if (tab === "reward") {
-    const reward = typeof latest.reward === "number" ? latest.reward : null;
-    const rewardStd = typeof latest.reward_std === "number" ? latest.reward_std : null;
-    const fracZero = typeof latest.frac_reward_zero_std === "number" ? latest.frac_reward_zero_std : null;
-    if (reward == null) return "Reward data not available yet.";
-    const parts: string[] = [];
-    if (reward >= 0.9) parts.push("Reward is high — the model is generating good responses.");
-    else if (reward >= 0.7) parts.push("Reward is moderate — the model is learning but has room to improve.");
-    else parts.push("Reward is low — the model may need more training or better data.");
-    if (rewardStd != null) {
-      if (rewardStd < 0.02) parts.push("Very low variance between candidates — the evaluator may not differentiate well.");
-      else if (rewardStd > 0.2) parts.push("High variance between candidates — good learning signal.");
-    }
-    if (fracZero != null && fracZero > 0.5) {
-      parts.push(`${(fracZero * 100).toFixed(0)}% of prompts have zero score variance — consider improving the evaluator.`);
-    }
-    return parts.join(" ");
-  }
-
-  if (tab === "stability") {
-    const loss = typeof latest.loss === "number" ? latest.loss : null;
-    const kl = typeof latest.kl === "number" ? latest.kl : null;
-    const gradNorm = typeof latest.grad_norm === "number" ? latest.grad_norm : null;
-    if (loss == null) return "Loss data not available yet.";
-    const parts: string[] = [];
-    if (loss < 0.01) parts.push("Loss is very low — training is converging well.");
-    else if (loss < 0.1) parts.push("Loss is healthy — model is learning steadily.");
-    else if (loss < 1.0) parts.push("Loss is moderate — training is in progress.");
-    else parts.push("Loss is high — model is still early in training or may be struggling.");
-    if (kl != null) {
-      if (kl > 100) parts.push("KL divergence is very high — the model is drifting significantly from the base model.");
-      else if (kl > 10) parts.push("KL divergence is elevated — watch for quality degradation.");
-      else parts.push("KL divergence is within normal range.");
-    }
-    if (gradNorm != null && gradNorm > 10) {
-      parts.push("Gradient norm is high — training may be unstable.");
-    }
-    return parts.join(" ");
-  }
-
-  if (tab === "completions") {
-    const clipped = typeof latest["completions/clipped_ratio"] === "number" ? latest["completions/clipped_ratio"] : null;
-    const meanLen = typeof latest["completions/mean_length"] === "number" ? latest["completions/mean_length"] : null;
-    if (clipped == null && meanLen == null) return "Completion data not available yet.";
-    const parts: string[] = [];
-    if (clipped != null) {
-      if (clipped > 0.7) parts.push(`${(clipped * 100).toFixed(0)}% of responses are being truncated — consider increasing max tokens.`);
-      else if (clipped > 0.3) parts.push(`${(clipped * 100).toFixed(0)}% of responses are truncated — moderate, but watch the trend.`);
-      else parts.push("Low truncation rate — response lengths are within limits.");
-    }
-    if (meanLen != null) {
-      parts.push(`Average response length: ${Math.round(meanLen)} tokens.`);
-    }
-    return parts.join(" ");
-  }
-
-  return "";
+function LaneLabels({
+  lanes,
+  visibleMetrics,
+  chartData,
+}: {
+  lanes: { key: string; yCenter: number }[];
+  visibleMetrics: MetricDef[];
+  chartData: Record<string, unknown>[];
+}) {
+  const latestPoint = chartData.length > 0 ? chartData[chartData.length - 1] : null;
+  return (
+    <div className="absolute left-1 top-0 bottom-0 w-[70px] flex flex-col pointer-events-none" style={{ paddingTop: 8, paddingBottom: 28 }}>
+      {lanes.map((lane, i) => {
+        const m = visibleMetrics[i];
+        const latestVal = latestPoint ? (latestPoint[m.key] as number | undefined) : undefined;
+        return (
+          <div
+            key={lane.key}
+            className="absolute left-0 right-0 flex flex-col items-start justify-center"
+            style={{
+              top: `${(1 - lane.yCenter) * 100}%`,
+              transform: "translateY(-50%)",
+            }}
+          >
+            <span className="text-[8px] font-medium uppercase tracking-wider truncate" style={{ color: m.color }}>
+              {m.label}
+            </span>
+            {latestVal != null && (
+              <span className="text-[9px] font-mono font-semibold" style={{ color: m.color }}>
+                {formatMetricValue(latestVal)}
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 // =============================================================================
@@ -306,23 +294,18 @@ export function FinetuneMetricsChart({
   const setActiveTab = setInternalTab;
   const alertCount = useMemo(() => getAlertCount(metrics), [metrics]);
 
-  // Track which metrics are visible — primary on by default
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(() => {
-    const primary = TAB_CONFIG[defaultTab ?? "reward"].metrics.find((m) => m.primary);
-    return new Set(primary ? [primary.key] : []);
+    return new Set(TAB_CONFIG[defaultTab ?? "reward"].metrics.map((m) => m.key));
   });
 
   const handleTabChange = useCallback((tab: MetricTab) => {
     setActiveTab(tab);
-    const primary = TAB_CONFIG[tab].metrics.find((m) => m.primary);
-    setVisibleKeys(new Set(primary ? [primary.key] : []));
+    setVisibleKeys(new Set(TAB_CONFIG[tab].metrics.map((m) => m.key)));
   }, [setActiveTab]);
 
-  // Reset when defaultTab changes (parent-controlled)
   useMemo(() => {
     if (hideTabs && defaultTab) {
-      const primary = TAB_CONFIG[defaultTab].metrics.find((m) => m.primary);
-      setVisibleKeys(new Set(primary ? [primary.key] : []));
+      setVisibleKeys(new Set(TAB_CONFIG[defaultTab].metrics.map((m) => m.key)));
     }
   }, [hideTabs, defaultTab]);
 
@@ -330,7 +313,7 @@ export function FinetuneMetricsChart({
     setVisibleKeys((prev) => {
       const next = new Set(prev);
       if (next.has(key)) {
-        if (next.size <= 1) return prev; // Don't hide all
+        if (next.size <= 1) return prev;
         next.delete(key);
       } else {
         next.add(key);
@@ -344,7 +327,6 @@ export function FinetuneMetricsChart({
       const m = point.metrics;
       return {
         name: `Step ${typeof m.global_step === "number" ? m.global_step : idx + 1}`,
-        step: typeof m.global_step === "number" ? m.global_step : idx + 1,
         reward: typeof m.reward === "number" ? m.reward : undefined,
         reward_std: typeof m.reward_std === "number" ? m.reward_std : undefined,
         frac_reward_zero_std: typeof m.frac_reward_zero_std === "number" ? m.frac_reward_zero_std : undefined,
@@ -368,44 +350,49 @@ export function FinetuneMetricsChart({
   const availableMetrics = tabConfig.metrics.filter((m) =>
     chartData.some((d) => (d as Record<string, unknown>)[m.key] != null)
   );
+  const visibleMetrics = availableMetrics.filter((m) => visibleKeys.has(m.key));
+  const isSingleMetric = visibleMetrics.length <= 1;
 
-  // Normalize visible metrics to 0-1 so different scales overlay nicely
-  const normalizedData = useMemo(
-    () => normalizeChartData(chartData as Record<string, unknown>[], visibleKeys),
-    [chartData, visibleKeys],
+  // Build laned data for multi-metric stacked view
+  const { data: lanedData, lanes } = useMemo(
+    () => buildLanedData(chartData as Record<string, unknown>[], visibleMetrics),
+    [chartData, visibleMetrics],
   );
 
+  // Y domain for single metric
+  const singleYDomain = useMemo<[number, number]>(() => {
+    if (!isSingleMetric || !visibleMetrics[0]) return [0, 1];
+    const vals = chartData.map((d) => (d as Record<string, unknown>)[visibleMetrics[0].key])
+      .filter((v): v is number => typeof v === "number" && isFinite(v));
+    if (vals.length === 0) return [0, 1];
+    const min = Math.min(...vals);
+    const max = Math.max(...vals);
+    const pad = (max - min) * 0.1 || 0.1;
+    return [Math.max(0, min - pad), max + pad];
+  }, [isSingleMetric, visibleMetrics, chartData]);
+
   if (metrics.length === 0) {
-    return (
-      <div className="text-xs text-muted-foreground py-4 text-center">
-        No training metrics available yet
-      </div>
-    );
+    return <div className="text-xs text-muted-foreground py-4 text-center">No training metrics available yet</div>;
   }
+
+  // Chart height scales with number of visible metrics in stacked mode
+  const chartHeight = isSingleMetric ? 200 : Math.max(160, visibleMetrics.length * 60);
 
   return (
     <div className={cn("rounded-lg bg-[#111] overflow-hidden", className)}>
       {/* Header */}
       <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
-            {TAB_CONFIG[activeTab].label}
-          </p>
+          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">{TAB_CONFIG[activeTab].label}</p>
           <TooltipProvider delayDuration={200}>
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="text-[11px] font-mono font-medium text-slate-400 cursor-help">
-                  Step {latestStep}
-                  {maxSteps ? ` / ${maxSteps}` : ""}
-                  {progressPercent != null ? ` (${progressPercent}%)` : ""}
+                  Step {latestStep}{maxSteps ? ` / ${maxSteps}` : ""}{progressPercent != null ? ` (${progressPercent}%)` : ""}
                 </span>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-[260px]">
-                <p className="text-[11px]">
-                  A <span className="font-semibold">step</span> = one batch of records processed by the optimizer.
-                  Each step updates the model weights once.
-                  {maxSteps ? ` This job has ${maxSteps} total steps across all epochs.` : ""}
-                </p>
+                <p className="text-[11px]">A step = one batch processed.{maxSteps ? ` ${maxSteps} total steps.` : ""}</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -413,14 +400,12 @@ export function FinetuneMetricsChart({
         <div className="flex items-center gap-2">
           {alertCount > 0 && (
             <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded text-xs text-amber-400 font-medium">
-              <AlertTriangle className="h-3 w-3" />
-              {alertCount} alert{alertCount > 1 ? "s" : ""}
+              <AlertTriangle className="h-3 w-3" />{alertCount} alert{alertCount > 1 ? "s" : ""}
             </div>
           )}
           {isLive && (
             <div className="flex items-center gap-2 bg-[#10b981]/10 border border-[#10b981]/20 px-3 py-1 rounded text-xs text-[#10b981] font-medium">
-              <span className="size-1.5 rounded-full bg-[#10b981] animate-pulse" />
-              Live
+              <span className="size-1.5 rounded-full bg-[#10b981] animate-pulse" />Live
             </div>
           )}
         </div>
@@ -431,97 +416,90 @@ export function FinetuneMetricsChart({
         <div className="flex border-b border-white/5 px-4">
           {(Object.entries(TAB_CONFIG) as [MetricTab, (typeof TAB_CONFIG)[MetricTab]][]).map(
             ([key, config]) => (
-              <button
-                key={key}
-                onClick={() => handleTabChange(key)}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium transition-colors border-b-2",
-                  activeTab === key
-                    ? "text-slate-200 border-[#10b981]"
-                    : "text-slate-500 border-transparent hover:text-slate-300"
+              <button key={key} onClick={() => handleTabChange(key)}
+                className={cn("flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium transition-colors border-b-2",
+                  activeTab === key ? "text-slate-200 border-[#10b981]" : "text-slate-500 border-transparent hover:text-slate-300"
                 )}
-              >
-                {config.icon}
-                {config.label}
-              </button>
+              >{config.icon}{config.label}</button>
             )
           )}
         </div>
       )}
 
-      {/* Single chart — normalized when multiple metrics, raw when single */}
-      {(() => {
-        const isSingleMetric = visibleKeys.size === 1;
-        const useData = isSingleMetric ? chartData : normalizedData;
+      {/* Chart */}
+      <div className="relative" style={{ height: chartHeight }}>
+        {/* Lane labels (stacked mode only) */}
+        {!isSingleMetric && (
+          <LaneLabels lanes={lanes} visibleMetrics={visibleMetrics} chartData={chartData as Record<string, unknown>[]} />
+        )}
 
-        // Compute Y domain for single metric mode (raw values)
-        let yDomain: [number, number] = [-0.05, 1.05];
-        if (isSingleMetric) {
-          const singleKey = [...visibleKeys][0];
-          const vals = chartData
-            .map((d) => (d as Record<string, unknown>)[singleKey])
-            .filter((v): v is number => typeof v === "number" && isFinite(v));
-          if (vals.length > 0) {
-            const min = Math.min(...vals);
-            const max = Math.max(...vals);
-            const pad = (max - min) * 0.1 || 0.1;
-            yDomain = [Math.max(0, min - pad), max + pad];
-          }
-        }
-
-        return (
-      <div className="h-[200px] w-full p-4 pr-2">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={useData as Record<string, unknown>[]} margin={{ top: 8, right: 16, bottom: 4, left: isSingleMetric ? 0 : -20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#262626" strokeOpacity={0.4} vertical={false} />
-            <XAxis
-              dataKey="name"
-              axisLine={false}
-              tickLine={false}
-              tick={{ fontSize: 10, fill: "#64748b" }}
-              dy={8}
-              interval="preserveStartEnd"
-            />
-            <YAxis
-              domain={yDomain}
-              axisLine={false}
-              tickLine={false}
-              tick={isSingleMetric ? { fontSize: 10, fill: "#475569" } : false}
-              tickFormatter={(v: number) => formatMetricValue(v)}
-              width={isSingleMetric ? 50 : 1}
-            />
-            <RechartsTooltip
-              content={<NormalizedTooltip metricDefs={tabConfig.metrics} isSingleMetric={isSingleMetric} />}
-              cursor={{ stroke: "#334155", strokeDasharray: "4 4" }}
-            />
-
-            {activeTab === "completions" && visibleKeys.has("completions/clipped_ratio") && (
-              <ReferenceLine y={0.7} stroke="#ef4444" strokeOpacity={0.2} strokeDasharray="4 4" />
-            )}
-
-            {availableMetrics
-              .filter((m) => visibleKeys.has(m.key))
-              .map((metric) => (
-                <Line
-                  key={metric.key}
-                  type="monotone"
-                  dataKey={metric.key}
-                  name={metric.label}
-                  stroke={metric.color}
-                  strokeWidth={metric.primary ? 2 : 1.5}
-                  strokeDasharray={metric.primary ? undefined : "4 3"}
-                  dot={false}
-                  activeDot={{ r: 4, fill: metric.color }}
-                  connectNulls
+        <div className={cn("w-full h-full", !isSingleMetric ? "pl-[70px]" : "p-4 pr-2")}>
+          <ResponsiveContainer width="100%" height="100%">
+            {isSingleMetric ? (
+              /* Single metric: real Y-axis + full tooltip */
+              <LineChart data={chartData} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#262626" strokeOpacity={0.4} vertical={false} />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#64748b" }} dy={8} interval="preserveStartEnd" />
+                <YAxis domain={singleYDomain} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#475569" }} tickFormatter={(v: number) => formatMetricValue(v)} width={50} />
+                <RechartsTooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.[0]) return null;
+                    const m = visibleMetrics[0];
+                    return (
+                      <div className="rounded-lg border border-[#262626] bg-[#141414]/95 px-3 py-2 shadow-xl backdrop-blur-sm">
+                        <p className="text-[10px] font-mono text-slate-500 mb-1">{label}</p>
+                        <div className="flex items-center gap-2 text-[11px]">
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: m.color }} />
+                          <span className="text-slate-400">{m.label}</span>
+                          <span className="font-mono font-bold" style={{ color: m.color }}>
+                            {typeof payload[0].value === "number" ? formatMetricValue(payload[0].value as number) : "-"}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  }}
+                  cursor={{ stroke: "#334155", strokeDasharray: "4 4" }}
                 />
-              ))}
-          </LineChart>
-        </ResponsiveContainer>
+                {visibleMetrics[0]?.key === "completions/clipped_ratio" && (
+                  <ReferenceLine y={0.7} stroke="#ef4444" strokeOpacity={0.3} strokeDasharray="4 4" />
+                )}
+                <Line type="monotone" dataKey={visibleMetrics[0]?.key} stroke={visibleMetrics[0]?.color} strokeWidth={2} dot={false} activeDot={{ r: 4, fill: visibleMetrics[0]?.color }} connectNulls />
+              </LineChart>
+            ) : (
+              /* Stacked lanes: all metrics in one chart, each in its own band */
+              <LineChart data={lanedData} margin={{ top: 8, right: 16, bottom: 4, left: -20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#262626" strokeOpacity={0.15} vertical={false} />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#64748b" }} dy={8} interval="preserveStartEnd" />
+                <YAxis domain={[-0.02, 1.02]} axisLine={false} tickLine={false} tick={false} width={1} />
+                <RechartsTooltip
+                  content={<StackedTooltip visibleMetrics={visibleMetrics} />}
+                  cursor={{ stroke: "#334155", strokeDasharray: "4 4" }}
+                />
+                {/* Lane separator lines */}
+                {lanes.slice(0, -1).map((lane, i) => (
+                  <ReferenceLine key={`sep-${i}`} y={lane.yMin - LANE_GAP / 2} stroke="#262626" strokeOpacity={0.5} strokeDasharray="2 4" />
+                ))}
+                {/* One Line per metric */}
+                {visibleMetrics.map((m) => (
+                  <Line
+                    key={m.key}
+                    type="monotone"
+                    dataKey={m.key}
+                    name={m.label}
+                    stroke={m.color}
+                    strokeWidth={1.5}
+                    dot={false}
+                    activeDot={{ r: 3, fill: m.color, stroke: "#111", strokeWidth: 1.5 }}
+                    connectNulls
+                  />
+                ))}
+              </LineChart>
+            )}
+          </ResponsiveContainer>
+        </div>
       </div>
-        );
-      })()}
 
-      {/* Clickable legend — toggle metrics on/off */}
+      {/* Legend */}
       <TooltipProvider delayDuration={200}>
         <div className="px-4 py-2 bg-black/20 border-t border-white/5 flex flex-wrap items-center gap-x-4 gap-y-1.5">
           {availableMetrics.map((metric) => {
@@ -532,32 +510,19 @@ export function FinetuneMetricsChart({
             return (
               <Tooltip key={metric.key}>
                 <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => toggleMetric(metric.key)}
-                    className={cn(
-                      "flex items-center gap-1.5 transition-opacity cursor-pointer group/legend",
-                      !isVisible && "opacity-35",
-                    )}
+                  <button type="button" onClick={() => toggleMetric(metric.key)}
+                    className={cn("flex items-center gap-1.5 transition-opacity cursor-pointer group/legend", !isVisible && "opacity-35")}
                   >
-                    {isVisible ? (
-                      <Eye className="h-2.5 w-2.5 text-zinc-500 opacity-0 group-hover/legend:opacity-100 transition-opacity" />
-                    ) : (
-                      <EyeOff className="h-2.5 w-2.5 text-zinc-600" />
-                    )}
+                    {isVisible
+                      ? <Eye className="h-2.5 w-2.5 text-zinc-500 opacity-0 group-hover/legend:opacity-100 transition-opacity" />
+                      : <EyeOff className="h-2.5 w-2.5 text-zinc-600" />
+                    }
                     <svg width="16" height="3" className="shrink-0">
-                      <line
-                        x1="0" y1="1.5" x2="16" y2="1.5"
-                        stroke={metric.color}
-                        strokeWidth={metric.primary ? 2 : 1.5}
-                        strokeDasharray={metric.primary ? undefined : "3 2"}
-                      />
+                      <line x1="0" y1="1.5" x2="16" y2="1.5" stroke={metric.color} strokeWidth={2} />
                     </svg>
                     <span className="text-[10px] text-slate-400">{metric.label}</span>
                     {latestVal != null && (
-                      <span className="text-[10px] font-mono font-semibold" style={{ color: metric.color }}>
-                        {formatMetricValue(latestVal)}
-                      </span>
+                      <span className="text-[10px] font-mono font-semibold" style={{ color: metric.color }}>{formatMetricValue(latestVal)}</span>
                     )}
                   </button>
                 </TooltipTrigger>
@@ -571,12 +536,10 @@ export function FinetuneMetricsChart({
         </div>
       </TooltipProvider>
 
-      {/* Health insight */}
+      {/* Insight */}
       {latestMetrics && (
         <div className="px-4 py-2 border-t border-white/5">
-          <p className="text-[10px] text-slate-500 leading-relaxed">
-            {getMetricsInsight(latestMetrics, activeTab)}
-          </p>
+          <p className="text-[10px] text-slate-500 leading-relaxed">{getMetricsInsight(latestMetrics, activeTab)}</p>
         </div>
       )}
     </div>
