@@ -170,7 +170,7 @@ function StatsSection({
             <FlaskConical className="w-3.5 h-3.5 text-emerald-400" />
           </div>
           <div>
-            <div className="text-[9px] text-muted-foreground uppercase tracking-wider">Dry Run</div>
+            <div className="text-[9px] text-muted-foreground uppercase tracking-wider">Evaluation</div>
             <div className="text-sm font-semibold text-foreground">
               {totalSamples} <span className="text-xs font-normal text-muted-foreground">samples</span>
             </div>

@@ -402,7 +402,7 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
           </button>
         </TooltipTrigger>
         <TooltipContent side="bottom" className="text-xs">
-          {!hasGraderConfig ? "Save grader script first" : runningJob ? "Evaluation in progress" : `Run evaluation (${sampleSize} samples)`}
+          {!hasGraderConfig ? "Save evaluator script first" : runningJob ? "Evaluation in progress" : `Run evaluation (${sampleSize} samples)`}
         </TooltipContent>
       </Tooltip>
 

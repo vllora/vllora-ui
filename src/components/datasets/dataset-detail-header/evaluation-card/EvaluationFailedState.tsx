@@ -68,7 +68,7 @@ export function EvaluationFailedState({
         <div className="flex-1 text-left min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-red-400 group-hover:text-red-300 transition-colors">
-              Last dry run failed
+              Last evaluation failed
             </span>
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-950/50 text-red-400/80 border border-red-900/30">
               Error

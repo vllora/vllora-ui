@@ -84,7 +84,7 @@ export function ConfigView({
       <div className="flex items-center justify-center h-full">
         <div className="flex items-center gap-2 text-xs text-amber-400/80">
           <AlertTriangle className="h-3.5 w-3.5" />
-          <span>Save your grader script to enable dry run</span>
+          <span>Save your evaluator script to enable evaluation</span>
         </div>
       </div>
     );

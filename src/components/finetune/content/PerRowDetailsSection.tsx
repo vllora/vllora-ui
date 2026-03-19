@@ -140,6 +140,7 @@ export function PerRowDetailsSection({ results }: PerRowDetailsSectionProps) {
       expandedRowId={expandedRowId}
       onRowClick={handleRowClick}
       renderExpandedContent={renderExpandedContent}
+      fillHeight
     />
   );
 }

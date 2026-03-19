@@ -343,7 +343,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
           title: "New evaluation",
           onClick: () => {
             if (!hasGraderScript) {
-              toast.info("Configure and save a grader script first.");
+              toast.info("Configure and save an evaluator script first.");
             } else {
               setShowNewEvalDialog(true);
             }

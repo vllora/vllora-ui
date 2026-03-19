@@ -163,7 +163,7 @@ export function NewEvaluationDialog({
             Run Evaluation
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Test your grader against training records
+            Test your evaluator against training records
           </DialogDescription>
         </DialogHeader>
 
@@ -224,7 +224,7 @@ export function NewEvaluationDialog({
         {isGraderModified && hasVersions && (
           <div className="flex items-center gap-1.5 rounded-md border border-amber-500/12 bg-amber-500/[0.04] px-2.5 py-2 text-[11px] text-amber-600 dark:text-amber-400/80">
             <TriangleAlert className="h-3 w-3 shrink-0" />
-            Grader changed since last eval (v{versionInfo?.latestVersion}). This run will create v
+            Evaluator changed since last eval (v{versionInfo?.latestVersion}). This run will create v
             {(versionInfo?.latestVersion ?? 0) + 1}.
           </div>
         )}

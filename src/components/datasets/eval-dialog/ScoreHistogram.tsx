@@ -115,13 +115,13 @@ function getDiagnosis(stats: ReturnType<typeof calculateStats>): {
 
   // Check for problems
   if (stats.mean < 0.1) {
-    issues.push("Mean too low - examples may be too difficult or grader too strict");
+    issues.push("Mean too low - examples may be too difficult or evaluator too strict");
   }
   if (stats.mean > 0.9) {
-    issues.push("Mean too high - examples may be too easy or grader too lenient");
+    issues.push("Mean too high - examples may be too easy or evaluator too lenient");
   }
   if (stats.std < 0.1 && stats.mean > 0.1 && stats.mean < 0.9) {
-    issues.push("Low variance - grader may not differentiate well");
+    issues.push("Low variance - evaluator may not differentiate well");
   }
 
   if (issues.length === 0) {
@@ -207,7 +207,7 @@ export function ScoreHistogram({
       <div className="rounded-lg border bg-muted/30 p-4 text-center">
         <p className="text-sm text-muted-foreground">No score data available</p>
         <p className="text-xs text-muted-foreground mt-1">
-          Run dry run to generate scores
+          Run evaluation to generate scores
         </p>
       </div>
     );
@@ -352,7 +352,7 @@ export function ScoreHistogram({
             </span>
             <span className="text-sm font-medium">
               {diagnosis.verdict === "GO"
-                ? "Dataset and grader quality look good"
+                ? "Dataset and evaluator quality look good"
                 : diagnosis.issues[0]}
             </span>
           </div>

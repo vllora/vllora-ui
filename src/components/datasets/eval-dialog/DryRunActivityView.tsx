@@ -63,22 +63,22 @@ function getScoreInsight(stats: { mean: number; std: number; min: number; max: n
   const range = max - min;
 
   if (mean < 0.1) {
-    return "Nearly all scores are near zero — the dataset may be too hard or the grader too strict.";
+    return "Nearly all scores are near zero — the dataset may be too hard or the evaluator too strict.";
   }
   if (mean > 0.95) {
-    return "Almost perfect scores across the board — the grader may be too lenient or the task too easy.";
+    return "Almost perfect scores across the board — the evaluator may be too lenient or the task too easy.";
   }
   if (mean > 0.85 && std < 0.1) {
-    return `Scores are tightly clustered around ${mean.toFixed(2)} with little variance — quality is consistent but the grader may not differentiate well.`;
+    return `Scores are tightly clustered around ${mean.toFixed(2)} with little variance — quality is consistent but the evaluator may not differentiate well.`;
   }
   if (mean > 0.7 && std < 0.1) {
     return `Scores cluster around ${mean.toFixed(2)} with low spread — decent quality, but limited differentiation between samples.`;
   }
   if (std > 0.25) {
-    return `Wide spread of scores (${min.toFixed(2)}–${max.toFixed(2)}) — the grader is strongly differentiating between samples.`;
+    return `Wide spread of scores (${min.toFixed(2)}–${max.toFixed(2)}) — the evaluator is strongly differentiating between samples.`;
   }
   if (mean < 0.4) {
-    return `Low average score (${mean.toFixed(2)}) — most samples score poorly. Consider revising the dataset or adjusting grader criteria.`;
+    return `Low average score (${mean.toFixed(2)}) — most samples score poorly. Consider revising the dataset or adjusting evaluation criteria.`;
   }
   if (range > 0.5 && std > 0.15) {
     return `Scores range from ${min.toFixed(2)} to ${max.toFixed(2)} with moderate spread — good differentiation across sample quality.`;
@@ -246,7 +246,7 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
                   {job.rolloutModel && (
                     <p><span className="text-zinc-400">Model:</span> {job.rolloutModel} — used to generate responses for evaluation</p>
                   )}
-                  <p><span className="text-zinc-400">Samples:</span> {evaluationResults?.length || job.pollingSnapshot?.total_rows || job.sampleSize} records evaluated in this dry run</p>
+                  <p><span className="text-zinc-400">Samples:</span> {evaluationResults?.length || job.pollingSnapshot?.total_rows || job.sampleSize} records evaluated in this evaluation run</p>
                   {isRunning && (
                     <p><span className="text-zinc-400">Status:</span> Evaluation in progress</p>
                   )}

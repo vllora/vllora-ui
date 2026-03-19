@@ -245,61 +245,59 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
         </div>
       </header>
 
-      {/* ── Main scrollable content ── */}
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col">
-        <div className="space-y-4 flex-1 flex flex-col">
-          {/* ── Epoch Progress (thin bar only) ── */}
-          {totalEpochs != null && summary?.latestEpoch != null && (
-            <EpochProgressBar
-              currentEpoch={summary.latestEpoch + 1}
-              totalEpochs={totalEpochs}
-            />
-          )}
+      {/* ── Top section: config + chart (shrinks, scrollable if tall) ── */}
+      <div className="shrink-0 max-h-[50vh] overflow-y-auto p-4 space-y-4">
+        {/* ── Epoch Progress (thin bar only) ── */}
+        {totalEpochs != null && summary?.latestEpoch != null && (
+          <EpochProgressBar
+            currentEpoch={summary.latestEpoch + 1}
+            totalEpochs={totalEpochs}
+          />
+        )}
 
-          {/* ── Job Details ── */}
-          <FinetuneJobDetailsSection job={job} />
+        {/* ── Job Details ── */}
+        <FinetuneJobDetailsSection job={job} />
 
-          {/* ── Error ── */}
-          {job.error_message && (
-            <ErrorLogSection errorMessage={job.error_message} />
-          )}
+        {/* ── Error ── */}
+        {job.error_message && (
+          <ErrorLogSection errorMessage={job.error_message} />
+        )}
 
-          {/* ── Charts (Score Trend / Loss & Reward / Score Distribution) ── */}
-          {job.workflow_id ? (
-            <FinetuneChartSelector
-              evalResults={evalResults}
-              isLoadingEvals={isLoadingEvals}
-              isRefreshing={isRefreshing}
-              evalsError={evalsError}
-              onRefresh={handleRefresh}
-              isLive={job.status === "running"}
-              jobId={job.provider_job_id}
-              workflowId={job.workflow_id}
-            />
-          ) : (
-            !(job.status === "failed") && (
-              <div className="text-xs text-muted-foreground py-2">
-                No workflow linked to this job
-              </div>
-            )
-          )}
-
-          {/* ── Evaluator Version History ── */}
-          {job.workflow_id && (
-            <EvaluatorVersionHistory workflowId={job.workflow_id} />
-          )}
-
-          {/* ── Per-Row Details (themed to match panel) ── */}
-          {job.workflow_id && evalResults && evalResults.results.length > 0 && (
-            <div className="flex-1 min-h-0 [&_input]:!bg-[#141414] [&_input]:!border-[#262626] [&_button]:!border-[#262626] [&_button]:!text-slate-400 [&_button:hover]:!bg-white/5">
-              <PerRowDetailsSection
-                results={evalResults.results}
-                workflowId={job.workflow_id}
-              />
+        {/* ── Charts (Score Trend / Training Progress / Loss & Reward / Score Distribution) ── */}
+        {job.workflow_id ? (
+          <FinetuneChartSelector
+            evalResults={evalResults}
+            isLoadingEvals={isLoadingEvals}
+            isRefreshing={isRefreshing}
+            evalsError={evalsError}
+            onRefresh={handleRefresh}
+            isLive={job.status === "running"}
+            jobId={job.provider_job_id}
+            workflowId={job.workflow_id}
+          />
+        ) : (
+          !(job.status === "failed") && (
+            <div className="text-xs text-muted-foreground py-2">
+              No workflow linked to this job
             </div>
-          )}
-        </div>
+          )
+        )}
+
+        {/* ── Evaluator Version History ── */}
+        {job.workflow_id && (
+          <EvaluatorVersionHistory workflowId={job.workflow_id} />
+        )}
       </div>
+
+      {/* ── Results table: fills remaining space, scrolls independently ── */}
+      {job.workflow_id && evalResults && evalResults.results.length > 0 && (
+        <div className="flex-1 min-h-0 flex flex-col px-4 pb-2 [&_input]:!bg-[#141414] [&_input]:!border-[#262626] [&_button]:!border-[#262626] [&_button]:!text-slate-400 [&_button:hover]:!bg-white/5">
+          <PerRowDetailsSection
+            results={evalResults.results}
+            workflowId={job.workflow_id}
+          />
+        </div>
+      )}
     </div>
   );
 }

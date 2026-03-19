@@ -68,7 +68,7 @@ export function EvaluationEmptyState({
       {/* Glow effect on hover */}
       <div className="absolute -top-12 -right-12 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
-      <CardHeader label="Grader" />
+      <CardHeader label="Evaluator" />
 
       {/* Content */}
       <div className="relative flex items-center gap-4">
@@ -99,7 +99,7 @@ export function EvaluationEmptyState({
             <Sparkles className="w-3 h-3 text-amber-500/70 opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
           <p className="text-xs text-zinc-500 group-hover:text-zinc-400 transition-colors">
-            Configure a grader to validate your dataset
+            Configure an evaluator to validate your dataset
           </p>
         </div>
 
@@ -178,7 +178,7 @@ export function DryRunEmptyState({
             Run evaluation
           </span>
           <p className="text-xs text-zinc-500 group-hover:text-zinc-400 transition-colors">
-            Test your grader on sample data
+            Test your evaluator on sample data
           </p>
         </div>
 

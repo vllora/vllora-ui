@@ -156,7 +156,7 @@ export function WorkspaceWelcome({
       label: "Evaluations",
       icon: ClipboardCheck,
       iconColor: "text-violet-500",
-      status: hasEvalScript ? "Grader configured" : "Not configured",
+      status: hasEvalScript ? "Evaluator configured" : "Not configured",
       active: hasEvalScript,
     },
     {
