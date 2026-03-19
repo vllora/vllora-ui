@@ -251,7 +251,7 @@ export function ResultsTable({
                     onClick={() => handleRowClick(result)}
                     onNavigateToRecord={onNavigateToRecord}
                     showEpoch={hasEpochData}
-                    isExpanded={isExpanded}
+                    isExpanded={hasExternalExpand ? false : isExpanded}
                     allSameStatus={allSameStatus}
                   />
                   {/* External expand content (e.g., from PerRowDetailsSection) */}

@@ -140,14 +140,14 @@ This is the longest and most complex step. It has 4 sub-stages.
 
 ### 2a-2b. Extract documents via Docling (or pdftotext fallback)
 
-**What happens**: The agent checks if Docling Serve is running on `localhost:5001`. If not, it starts the Docker container. Then it uses `scripts/docling_extract.py` with `--batch` mode to submit ALL PDFs at once, poll all tasks in parallel, and save results — the script handles the full async lifecycle.
+**What happens**: The agent checks if Docling Serve is running on `localhost:5001`. If not, it starts the Docker container. Then it processes each PDF individually using `scripts/docling_extract.py` in single mode — extract, write custom script, consolidate, validate, and upload each document before moving to the next.
 
-**Script call** (batch mode — submits all, polls all in parallel):
+**Why individual mode, not batch?** Batch mode (`--batch`) submits all PDFs in parallel but blocks until ALL complete. If one PDF is 84 pages (4 min) and another is 282 pages (15 min), the agent idles for 11 minutes waiting. Individual mode lets the agent fully process small PDFs while Docling works on larger ones.
+
+**Script call** (per document):
 ```bash
-uv run scripts/docling_extract.py --batch \
-  doc1.pdf:finetune-project/knowledge/doc1/docling-result.json \
-  doc2.pdf:finetune-project/knowledge/doc2/docling-result.json \
-  doc3.pdf:finetune-project/knowledge/doc3/docling-result.json \
+uv run scripts/docling_extract.py document.pdf \
+  --output finetune-project/knowledge/doc-slug/docling-result.json \
   --max-tokens 1024
 ```
 

@@ -75,7 +75,8 @@ def cmd_upload_knowledge(args: argparse.Namespace) -> None:
     Or a bare array of part objects.
 
     Transforms: 'id' → 'reference_id', removes 'source_id' before upload.
-    Deduplicates: skips upload if a knowledge source with the same name already exists.
+    Uses PUT (upsert) when --force is set — atomically replaces existing source with same name.
+    Without --force, uses POST (create) — fails silently if name already exists.
     """
     doc_path = Path(args.file)
     if not doc_path.exists():
@@ -84,22 +85,8 @@ def cmd_upload_knowledge(args: argparse.Namespace) -> None:
 
     source_name = args.name or doc_path.name
 
-    # Step 0: Check for existing knowledge source with the same name (dedup)
-    try:
-        resp = requests.get(
-            f"{args.base_url}/finetune/workflows/{args.workflow_id}/knowledge"
-        )
-        if resp.ok:
-            existing_sources = resp.json().get("knowledge_sources", [])
-            for ks in existing_sources:
-                if ks.get("name") == source_name:
-                    ks_id = ks["id"]
-                    print(f"Knowledge source already exists: {ks_id} (name: {source_name})")
-                    print(f"  Skipping upload. Delete the existing source first to re-upload.")
-                    print(f"  Knowledge source ID: {ks_id}")
-                    return
-    except Exception:
-        pass  # If dedup check fails, proceed with upload
+    # Choose HTTP method: PUT (upsert) for --force, POST (create) for normal
+    method = "PUT" if args.force else "POST"
 
     # Step 1: Upload the document as a knowledge source
     files = {"file": (doc_path.name, doc_path.open("rb"), "application/pdf")}
@@ -111,13 +98,18 @@ def cmd_upload_knowledge(args: argparse.Namespace) -> None:
         form_data["metadata"] = args.metadata
 
     result = _api(
-        "POST",
+        method,
         f"{args.base_url}/finetune/workflows/{args.workflow_id}/knowledge",
         files=files,
         data=form_data,
     )
     ks_id = result.get("knowledge_source", {}).get("id", "unknown")
-    print(f"Knowledge source uploaded: {ks_id}")
+    replaced = result.get("replaced", False)
+    replaced_id = result.get("replaced_id")
+    if replaced:
+        print(f"Knowledge source replaced: {ks_id} (was: {replaced_id})")
+    else:
+        print(f"Knowledge source uploaded: {ks_id}")
 
     # Step 2: Upload parts if provided
     if args.parts_file:
@@ -374,6 +366,7 @@ def main() -> None:
     p.add_argument("--name", help="Knowledge source name (default: filename)")
     p.add_argument("--description", help="Knowledge source description")
     p.add_argument("--metadata", help="JSON metadata string")
+    p.add_argument("--force", action="store_true", help="Delete existing source with same name before uploading")
 
     # upload-topics
     p = subparsers.add_parser("upload-topics", help="Upload topic hierarchy")

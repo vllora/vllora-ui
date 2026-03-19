@@ -1,90 +1,331 @@
 /**
  * ScoreStrip
  *
- * Compact horizontal score distribution visualization.
- * Shows a mini bar chart where each segment's height reflects
- * the proportion of scores in that bin. Includes count labels
- * on populated bins and a mean marker with label.
+ * Multi-view score visualization for evaluation results.
+ * Dropdown lets user switch between: Distribution (histogram), Sorted Bars, Box Plot.
+ * All charts use Recharts.
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Cell,
+  ReferenceLine,
+  ReferenceArea,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  ScatterChart,
+  Scatter,
+  ZAxis,
+} from "recharts";
 import { cn } from "@/lib/utils";
 
 interface ScoreStripProps {
-  scores: number[];
-  mean?: number;
-  className?: string;
+  readonly scores: number[];
+  readonly mean?: number;
+  readonly className?: string;
 }
 
+type ChartView = "distribution" | "sorted" | "boxplot";
+
+const CHART_LABELS: Record<ChartView, string> = {
+  distribution: "Distribution",
+  sorted: "Sorted Scores",
+  boxplot: "Box Plot",
+};
+
+// ─── Color helpers ───
+
 const BIN_COLORS = [
-  "#ef4444", // red-500    0.0-0.1
-  "#f87171", // red-400    0.1-0.2
-  "#f97316", // orange-500 0.2-0.3
-  "#fb923c", // orange-400 0.3-0.4
-  "#eab308", // yellow-500 0.4-0.5
-  "#facc15", // yellow-400 0.5-0.6
-  "#84cc16", // lime-500   0.6-0.7
-  "#a3e635", // lime-400   0.7-0.8
-  "#10b981", // emerald-500 0.8-0.9
-  "#34d399", // emerald-400 0.9-1.0
+  "#ef4444", "#f87171", "#f97316", "#fb923c", "#eab308",
+  "#facc15", "#84cc16", "#a3e635", "#10b981", "#34d399",
 ];
 
+const BIN_LABELS = [
+  "0.0–0.1", "0.1–0.2", "0.2–0.3", "0.3–0.4", "0.4–0.5",
+  "0.5–0.6", "0.6–0.7", "0.7–0.8", "0.8–0.9", "0.9–1.0",
+];
+
+function scoreColor(s: number): string {
+  return BIN_COLORS[Math.min(Math.floor(s * 10), 9)];
+}
+
+// ─── Main component ───
+
 export function ScoreStrip({ scores, mean, className }: ScoreStripProps) {
-  const bins = useMemo(() => {
+  const [view, setView] = useState<ChartView>("distribution");
+
+  return (
+    <div className={cn("w-full", className)}>
+      {/* Chart type selector */}
+      <div className="flex items-center justify-end mb-1">
+        <select
+          value={view}
+          onChange={(e) => setView(e.target.value as ChartView)}
+          className="text-[10px] bg-zinc-800/60 border border-zinc-700/50 rounded px-1.5 py-0.5 text-zinc-400 cursor-pointer hover:text-zinc-200 transition-colors outline-none focus:ring-1 focus:ring-zinc-600"
+        >
+          {(Object.keys(CHART_LABELS) as ChartView[]).map((key) => (
+            <option key={key} value={key}>{CHART_LABELS[key]}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Chart content */}
+      {view === "distribution" && <DistributionChart scores={scores} mean={mean} />}
+      {view === "sorted" && <SortedBarsChart scores={scores} mean={mean} />}
+      {view === "boxplot" && <BoxPlotChart scores={scores} />}
+    </div>
+  );
+}
+
+// ─── Distribution Histogram ───
+
+interface BinData {
+  range: string;
+  count: number;
+  color: string;
+}
+
+function DistributionTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: BinData }> }) {
+  if (!active || !payload?.[0]) return null;
+  const { range, count } = payload[0].payload;
+  return (
+    <div className="bg-zinc-900 border border-zinc-700 rounded-md px-2.5 py-1.5 shadow-lg">
+      <div className="text-[11px] text-zinc-300 font-medium">{range}</div>
+      <div className="text-[11px] text-zinc-400">
+        <span className="font-semibold text-zinc-200">{count}</span> record{count !== 1 ? "s" : ""}
+      </div>
+    </div>
+  );
+}
+
+function BarCountLabel(props: Record<string, unknown>) {
+  const x = Number(props.x ?? 0);
+  const y = Number(props.y ?? 0);
+  const width = Number(props.width ?? 0);
+  const value = Number(props.value ?? 0);
+  if (value <= 0) return null;
+  return (
+    <text x={x + width / 2} y={y - 4} textAnchor="middle" fontSize={9} fill="rgba(255,255,255,0.6)" fontWeight={700}>
+      {value}
+    </text>
+  );
+}
+
+function DistributionChart({ scores, mean }: { scores: number[]; mean?: number }) {
+  const data = useMemo<BinData[]>(() => {
     const counts = Array(10).fill(0) as number[];
-    scores.forEach((s) => {
-      const idx = Math.min(Math.floor(s * 10), 9);
-      counts[idx]++;
-    });
-    const max = Math.max(...counts, 1);
+    for (const s of scores) {
+      counts[Math.min(Math.floor(s * 10), 9)]++;
+    }
     return counts.map((count, i) => ({
+      range: BIN_LABELS[i],
       count,
-      heightPct: count === 0 ? 0 : Math.max(15, (count / max) * 100),
       color: BIN_COLORS[i],
-      label: `${(i / 10).toFixed(1)}-${((i + 1) / 10).toFixed(1)}`,
     }));
   }, [scores]);
 
-  const meanPct = mean !== undefined ? mean * 100 : undefined;
+  const meanX = mean !== undefined ? BIN_LABELS[Math.min(Math.floor(mean * 10), 9)] : undefined;
 
   return (
-    <div className={cn("space-y-0", className)}>
-      {/* Mini bar chart */}
-      <div className="relative flex items-end h-8 gap-px rounded-md overflow-hidden bg-zinc-800/30">
-        {bins.map((bin, i) => (
-          <div key={i} className="flex-1 flex flex-col items-center justify-end h-full">
-            <div
-              className="w-full rounded-t-sm relative"
-              style={{
-                height: `${bin.heightPct}%`,
-                backgroundColor: bin.color,
-                opacity: bin.count === 0 ? 0.1 : 0.85,
-              }}
-            >
-              {bin.count > 0 && (
-                <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold text-white/90 drop-shadow-sm">
-                  {bin.count}
-                </span>
-              )}
-            </div>
-          </div>
-        ))}
-        {/* Mean marker */}
-        {meanPct !== undefined && (
-          <div
-            className="absolute top-0 bottom-0 w-px bg-white/70"
-            style={{ left: `${meanPct}%` }}
-          >
-            <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[3px] border-r-[3px] border-t-[4px] border-l-transparent border-r-transparent border-t-white/80" />
-          </div>
+    <ResponsiveContainer width="100%" height={140}>
+      <BarChart data={data} margin={{ top: 14, right: 4, bottom: 0, left: 4 }} barCategoryGap="8%">
+        <XAxis
+          dataKey="range"
+          tick={{ fontSize: 9, fill: "#52525b", fontFamily: "monospace" }}
+          axisLine={{ stroke: "#27272a" }}
+          tickLine={false}
+          interval={1}
+        />
+        <YAxis hide />
+        <RechartsTooltip
+          content={<DistributionTooltip />}
+          cursor={{ fill: "rgba(255,255,255,0.03)" }}
+        />
+        <Bar dataKey="count" radius={[3, 3, 0, 0]} label={<BarCountLabel />}>
+          {data.map((entry, i) => (
+            <Cell key={i} fill={entry.color} fillOpacity={entry.count === 0 ? 0.1 : 0.85} />
+          ))}
+        </Bar>
+        {meanX && (
+          <ReferenceLine
+            x={meanX}
+            stroke="rgba(255,255,255,0.5)"
+            strokeWidth={1.5}
+            strokeDasharray="3 2"
+            label={{ value: `μ ${mean!.toFixed(2)}`, position: "top", fontSize: 9, fill: "#a1a1aa", fontFamily: "monospace" }}
+          />
         )}
-      </div>
-      {/* Scale labels */}
-      <div className="flex justify-between text-[9px] text-zinc-600 font-mono px-0.5 mt-0.5">
-        <span>0.0</span>
-        <span>0.5</span>
-        <span>1.0</span>
-      </div>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+// ─── Sorted Bars Chart ───
+
+interface SortedBarData {
+  index: number;
+  score: number;
+  color: string;
+}
+
+function SortedTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: SortedBarData }> }) {
+  if (!active || !payload?.[0]) return null;
+  const { index, score } = payload[0].payload;
+  return (
+    <div className="bg-zinc-900 border border-zinc-700 rounded-md px-2.5 py-1.5 shadow-lg">
+      <div className="text-[11px] text-zinc-300">Record #{index + 1}</div>
+      <div className="text-[11px] font-mono font-semibold text-zinc-200">{score.toFixed(3)}</div>
     </div>
+  );
+}
+
+function SortedBarsChart({ scores, mean }: { scores: number[]; mean?: number }) {
+  const data = useMemo<SortedBarData[]>(() => {
+    return [...scores]
+      .sort((a, b) => a - b)
+      .map((score, i) => ({ index: i, score, color: scoreColor(score) }));
+  }, [scores]);
+
+  return (
+    <ResponsiveContainer width="100%" height={140}>
+      <BarChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 4 }} barCategoryGap={0} barGap={0}>
+        <XAxis
+          dataKey="index"
+          tick={false}
+          axisLine={{ stroke: "#27272a" }}
+          tickLine={false}
+        />
+        <YAxis
+          domain={[0, 1]}
+          tick={{ fontSize: 9, fill: "#52525b", fontFamily: "monospace" }}
+          axisLine={false}
+          tickLine={false}
+          width={28}
+          ticks={[0, 0.5, 1.0]}
+        />
+        <RechartsTooltip
+          content={<SortedTooltip />}
+          cursor={{ fill: "rgba(255,255,255,0.05)" }}
+        />
+        {/* Score zone backgrounds */}
+        <ReferenceArea y1={0.8} y2={1} fill="#10b981" fillOpacity={0.05} />
+        <ReferenceArea y1={0.6} y2={0.8} fill="#eab308" fillOpacity={0.03} />
+        <ReferenceArea y1={0} y2={0.6} fill="#ef4444" fillOpacity={0.03} />
+        <Bar dataKey="score" radius={[1, 1, 0, 0]} maxBarSize={8}>
+          {data.map((entry, i) => (
+            <Cell key={i} fill={entry.color} fillOpacity={0.8} />
+          ))}
+        </Bar>
+        {mean !== undefined && (
+          <ReferenceLine
+            y={mean}
+            stroke="rgba(255,255,255,0.4)"
+            strokeDasharray="3 2"
+            label={{ value: `μ ${mean.toFixed(2)}`, position: "right", fontSize: 9, fill: "#71717a", fontFamily: "monospace" }}
+          />
+        )}
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+// ─── Box Plot (via Scatter) ───
+
+function BoxPlotChart({ scores }: { scores: number[] }) {
+  const stats = useMemo(() => {
+    const sorted = [...scores].sort((a, b) => a - b);
+    const n = sorted.length;
+    if (n === 0) return null;
+    const q1 = sorted[Math.floor(n * 0.25)];
+    const median = sorted[Math.floor(n * 0.5)];
+    const q3 = sorted[Math.floor(n * 0.75)];
+    const min = sorted[0];
+    const max = sorted[n - 1];
+    const mean = sorted.reduce((a, b) => a + b, 0) / n;
+    // Outliers: below Q1 - 1.5*IQR or above Q3 + 1.5*IQR
+    const iqr = q3 - q1;
+    const lowerFence = q1 - 1.5 * iqr;
+    const upperFence = q3 + 1.5 * iqr;
+    const outliers = sorted.filter((s) => s < lowerFence || s > upperFence);
+    const whiskerLow = Math.max(min, lowerFence);
+    const whiskerHigh = Math.min(max, upperFence);
+    return { q1, median, q3, min, max, mean, whiskerLow, whiskerHigh, outliers };
+  }, [scores]);
+
+  if (!stats) return null;
+
+  // Render as a horizontal box plot using scatter + reference areas
+  const dotData = stats.outliers.map((s, i) => ({ x: s, y: 0.5, index: i }));
+
+  return (
+    <ResponsiveContainer width="100%" height={140}>
+      <ScatterChart margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
+        <XAxis
+          type="number"
+          dataKey="x"
+          domain={[0, 1]}
+          tick={{ fontSize: 9, fill: "#52525b", fontFamily: "monospace" }}
+          axisLine={{ stroke: "#27272a" }}
+          tickLine={false}
+          ticks={[0, 0.2, 0.4, 0.6, 0.8, 1.0]}
+        />
+        <YAxis type="number" dataKey="y" hide domain={[0, 1]} />
+        <ZAxis range={[30, 30]} />
+
+        {/* Score zone backgrounds */}
+        <ReferenceArea x1={0.8} x2={1} fill="#10b981" fillOpacity={0.06} />
+        <ReferenceArea x1={0.6} x2={0.8} fill="#eab308" fillOpacity={0.04} />
+        <ReferenceArea x1={0} x2={0.6} fill="#ef4444" fillOpacity={0.04} />
+
+        {/* IQR box */}
+        <ReferenceArea
+          x1={stats.q1} x2={stats.q3}
+          y1={0.2} y2={0.8}
+          fill="#3b82f6" fillOpacity={0.15}
+          stroke="#3b82f6" strokeOpacity={0.4}
+        />
+
+        {/* Median line */}
+        <ReferenceLine x={stats.median} stroke="#3b82f6" strokeWidth={2} />
+
+        {/* Mean marker */}
+        <ReferenceLine
+          x={stats.mean}
+          stroke="rgba(255,255,255,0.5)"
+          strokeDasharray="3 2"
+          label={{ value: `μ ${stats.mean.toFixed(2)}`, position: "top", fontSize: 9, fill: "#a1a1aa", fontFamily: "monospace" }}
+        />
+
+        {/* Whiskers */}
+        <ReferenceLine x={stats.whiskerLow} stroke="#52525b" strokeWidth={1} />
+        <ReferenceLine x={stats.whiskerHigh} stroke="#52525b" strokeWidth={1} />
+
+        {/* Whisker lines (horizontal) — simulated with thin reference areas */}
+        <ReferenceArea x1={stats.whiskerLow} x2={stats.q1} y1={0.45} y2={0.55} fill="#52525b" fillOpacity={0.3} />
+        <ReferenceArea x1={stats.q3} x2={stats.whiskerHigh} y1={0.45} y2={0.55} fill="#52525b" fillOpacity={0.3} />
+
+        {/* Outlier dots */}
+        {dotData.length > 0 && (
+          <Scatter data={dotData} fill="#ef4444" fillOpacity={0.7} />
+        )}
+
+        <RechartsTooltip
+          content={({ active, payload }) => {
+            if (!active || !payload?.[0]) return null;
+            const val = payload[0].payload as { x: number };
+            return (
+              <div className="bg-zinc-900 border border-zinc-700 rounded-md px-2.5 py-1.5 shadow-lg">
+                <div className="text-[11px] font-mono text-zinc-200">{val.x.toFixed(3)}</div>
+                <div className="text-[10px] text-red-400">Outlier</div>
+              </div>
+            );
+          }}
+        />
+      </ScatterChart>
+    </ResponsiveContainer>
   );
 }

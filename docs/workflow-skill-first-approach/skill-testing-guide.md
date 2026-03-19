@@ -483,7 +483,13 @@ sqlite3 $DB "
 sqlite3 $DB "SELECT name, COUNT(*) as cnt FROM knowledge_sources WHERE workflow_id='$WF_ID' GROUP BY name HAVING cnt > 1;"
 ```
 
-**Fix**: `finetune.py upload-knowledge` now includes dedup checking — it queries existing knowledge sources by name before uploading and skips if one already exists. If you need to replace a source, delete the existing one first via the API.
+**Fix**: `finetune.py upload-knowledge` supports safe re-uploads via `--force`:
+- Without `--force`: uses `POST` (create) — will create a duplicate if source exists
+- With `--force`: uses `PUT` (upsert) — the gateway atomically soft-deletes the existing source with the same name and creates the new one in one request. No data loss risk.
+
+The upsert endpoint is `PUT /finetune/workflows/{id}/knowledge`. Response includes `replaced: true` and `replaced_id` when a source was replaced.
+
+Use `--force` when re-uploading after fixing extraction scripts or part IDs.
 
 ### Issue: Agent creates relations-uuid.json (manual UUID mapping)
 

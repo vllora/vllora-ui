@@ -31,14 +31,14 @@ The training data defines the *prompts* the model practices on. The grader defin
 ## The Pipeline
 
 ```
-Define Objective → Extract Documents → Build Topics → Generate Data → Write Grader → Verify & Hand Off
-     ↓ upload          ↓ upload          ↓ upload        ↓ upload        ↓ upload
-   (workflow)      (knowledge)        (topics)        (records)       (grader)
+Define Objective → Extract Documents → Build Topics → Generate Data → Write Grader → Verify → Evaluate → Analyze → Train
+     ↓ upload          ↓ upload          ↓ upload        ↓ upload        ↓ upload                    ↓ iterate    ↓ iterate
+   (workflow)      (knowledge)        (topics)        (records)       (grader)                  (fix grader/data) (adjust config)
 ```
 
 **Each step uploads to the gateway immediately** — the vLLora UI shows progress in real time. You don't wait until the end to push data.
 
-You execute Steps 1-6. Then the vLLora UI + Lucy take over for the interactive loop (evaluation, grader tuning, iteration, training, deployment).
+**Execute ALL steps (1-9).** Steps 1-6 prepare the dataset. Steps 7-9 evaluate and train the model. Do NOT stop at Step 6 — always run evaluation at minimum. If the user only asks for data preparation, you may stop at Step 6, but by default run the full pipeline including evaluation and training.
 
 ### Working Directory
 
@@ -199,29 +199,29 @@ docker info > /dev/null 2>&1 && echo "Docker OK" || echo "Docker NOT available"
 - **Docker available**: Start Docling: `docker run -p 5001:5001 ghcr.io/docling-project/docling-serve-cpu:latest` — wait for startup to complete, then verify with the health check.
 - **Docker NOT available**: Skip to the **pdftotext fallback** at the end of this step. You lose table structure and image extraction but can still produce text-based knowledge parts.
 
-**Extract all documents in parallel** using the `docling_extract.py` helper script with `--batch` mode. This submits all PDFs at once, then polls all tasks in parallel — much faster than sequential extraction:
+**Extract each document individually** using the `docling_extract.py` helper script. Process each PDF end-to-end (extract → write custom script → consolidate → validate → upload) before moving to the next. This avoids blocking: a small PDF can be fully processed while a larger one is still being extracted by Docling.
 
 ```bash
-# Build batch args: each is "pdf_path:output_path"
-BATCH_ARGS=""
+# Process each PDF one at a time: extract → process → upload → next
 for DOC in *.pdf; do
   DOC_SLUG=$(echo "${DOC%.pdf}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
-  BATCH_ARGS="$BATCH_ARGS $DOC:finetune-project/knowledge/$DOC_SLUG/docling-result.json"
+  DOC_DIR="finetune-project/knowledge/$DOC_SLUG"
+
+  # Extract via Docling (blocks until this PDF is done)
+  uv run scripts/docling_extract.py "$DOC" \
+    --output "$DOC_DIR/docling-result.json" \
+    --max-tokens 1024
+
+  # Then immediately: read chunks, write extract.py, run it,
+  # consolidate, validate, upload — see steps 2c-2g below
 done
-
-uv run scripts/docling_extract.py --batch $BATCH_ARGS --max-tokens 1024
-```
-
-For a single document, use single mode:
-```bash
-uv run scripts/docling_extract.py document.pdf \
-  --output finetune-project/knowledge/doc-slug/docling-result.json \
-  --max-tokens 1024
 ```
 
 > **IMPORTANT**: Always use `docling_extract.py` — it uses the async API with polling. Do NOT use curl to hit Docling endpoints directly, as the sync endpoint times out on large documents (>100 pages).
 
-> **Note**: For large PDFs (200+ pages), extraction can take 10-20 minutes. Batch mode submits all PDFs simultaneously and polls in parallel, so total time ≈ slowest PDF rather than sum of all.
+> **Why not batch mode?** `--batch` mode submits all PDFs in parallel but blocks until ALL complete. A 282-page PDF takes 15 min while an 84-page one finishes in 4 min. Processing each individually lets you extract, process, and upload the smaller PDFs immediately while Docling works on the larger ones. Use `--batch` only if all documents are similar size.
+
+> **Note**: For large PDFs (200+ pages), Docling extraction can take 10-20 minutes.
 
 #### 2c. Process each document into knowledge parts
 
@@ -349,7 +349,7 @@ python3 scripts/validate_extraction.py finetune-project/knowledge/ --fix
 
 If consolidation alone doesn't fix the issues (e.g., broken heading detection), fix the extraction script and re-extract the failing documents.
 
-**Upload immediately** — push each document's knowledge source + parts to the gateway so the UI shows sources as they're extracted:
+**Upload immediately** — push each document's knowledge source + parts to the gateway so the UI shows sources as they're extracted. Use `--force` for safe re-uploads (uses PUT upsert — atomically replaces any existing source with the same name):
 ```bash
 for i in "${!DOCS[@]}"; do
   DOC="${DOCS[$i]}"
@@ -361,6 +361,7 @@ for i in "${!DOCS[@]}"; do
     --file "$DOC" \
     --parts-file "$DOC_DIR/knowledge_parts.json" \
     --name "$DOC" \
+    --force \
     --description "Source document: $DOC" \
     --metadata '{"extraction_method":"docling_hybrid"}'
 done
@@ -557,7 +558,7 @@ uv run scripts/finetune.py verify --workflow-id $WORKFLOW_ID
 
 **Expected**: All counts > 0 and evaluator = YES. If any are missing, re-run the upload for that step.
 
-Tell the user: **"Open http://localhost:5173/finetune to see your workflow. Everything is ready for evaluation."**
+Tell the user the data is visible at `http://localhost:5173/finetune`, then **proceed immediately to Step 7** (evaluation).
 
 ### Step 7: Run Evaluation
 

@@ -300,29 +300,18 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
         ) : !isRunning && result && scores.length > 0 ? (
           /* Score distribution + stats + recommendations */
           <div className="shrink-0 px-3 pt-2 space-y-2">
-            <div className="flex items-start gap-3">
-              {/* Score strip — wider */}
-              <div className="flex-1 min-w-0">
-                <ScoreStrip scores={scores} mean={stats?.mean} className="[&>div:first-child]:h-12" />
-              </div>
-              {/* Stats grid */}
-              {stats && (
-                <div className="shrink-0 grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px]">
-                  <div className="text-zinc-500">Mean</div>
-                  <div className="text-zinc-200 font-mono font-medium">{stats.mean.toFixed(3)}</div>
-                  <div className="text-zinc-500">Std Dev</div>
-                  <div className="text-zinc-200 font-mono">{stats.std.toFixed(3)}</div>
-                  <div className="text-zinc-500">Min / Max</div>
-                  <div className="text-zinc-200 font-mono">{stats.min.toFixed(2)} – {stats.max.toFixed(2)}</div>
-                  <div className="text-zinc-500">Median</div>
-                  <div className="text-zinc-200 font-mono">{stats.median.toFixed(3)}</div>
-                </div>
-              )}
-            </div>
+            {/* Score distribution histogram — full width */}
+            <ScoreStrip scores={scores} mean={stats?.mean} />
+
+            {/* Stats row + insight below chart */}
             {stats && (
-              <p className="text-[11px] text-zinc-400 leading-snug">
-                {getScoreInsight(stats)}
-              </p>
+              <div className="flex items-center gap-6 text-[11px] flex-wrap">
+                <span className="text-zinc-500">Mean <span className="text-zinc-200 font-mono font-medium">{stats.mean.toFixed(3)}</span></span>
+                <span className="text-zinc-500">Std Dev <span className="text-zinc-200 font-mono">{stats.std.toFixed(3)}</span></span>
+                <span className="text-zinc-500">Min / Max <span className="text-zinc-200 font-mono">{stats.min.toFixed(2)} – {stats.max.toFixed(2)}</span></span>
+                <span className="text-zinc-500">Median <span className="text-zinc-200 font-mono">{stats.median.toFixed(3)}</span></span>
+                <span className="text-zinc-400 text-[10px] ml-auto">{getScoreInsight(stats)}</span>
+              </div>
             )}
             {recommendations.length > 0 && (
               <div>

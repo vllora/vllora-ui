@@ -229,19 +229,10 @@ function ExpandedReasonPanel({ reason }: { readonly reason: string }) {
         </div>
       )}
 
-      {/* Full reasoning text */}
-      {breakdown.reasoning && (
-        <p className="text-[11px] leading-relaxed text-zinc-400 whitespace-pre-wrap">
-          {breakdown.reasoning}
-        </p>
-      )}
-
-      {/* Fallback: show raw reason if no breakdown parsed */}
-      {!breakdown.hasBreakdown && (
-        <p className="text-[11px] leading-relaxed text-zinc-400 whitespace-pre-wrap">
-          {reason}
-        </p>
-      )}
+      {/* Reasoning text — use parsed reasoning if breakdown exists, raw reason otherwise */}
+      <p className="text-[11px] leading-relaxed text-zinc-400 whitespace-pre-wrap">
+        {breakdown.hasBreakdown ? breakdown.reasoning : reason}
+      </p>
     </div>
   );
 }
