@@ -27,6 +27,8 @@ import { getJobTotalRows, getJobCompletedRows } from "@/types/eval-job";
 import { EvaluatorVersionBadge } from "@/components/shared/EvaluatorVersionBadge";
 import { useEvaluatorVersions } from "@/hooks/useEvaluatorVersions";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
+import { TopicEvalBreakdown } from "@/components/datasets/TopicEvalBreakdown";
+import type { TopicEvalStats } from "@/types/dataset-types";
 
 interface EvalActivityViewProps {
   /** Dataset ID for navigation (click record ID → switch to Records tab) */
@@ -102,6 +104,7 @@ function EvalJobVersionBadge({ workflowId, jobCreatedAt }: { workflowId: string;
 /** Inline detail panel for a selected job (left side of split) */
 function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: EvalJob; workflowId: string; onCancel?: () => void; onRunAgain?: () => void; onRefresh?: (jobId: string) => void }) {
   const { sortedRecords } = DatasetDetailConsumer();
+  const [showTopicBreakdown, setShowTopicBreakdown] = useState(false);
   const result = job.result;
 
   const scores = useMemo(() => {
@@ -128,6 +131,41 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
     ).length;
     return { errorCount: errors, totalCount: evaluationResults.length };
   }, [evaluationResults]);
+
+  // Build a quick lookup from record ID to topic name
+  const recordTopicMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of sortedRecords) {
+      if (r.topic) map.set(r.id, r.topic);
+    }
+    return map;
+  }, [sortedRecords]);
+
+  // Compute per-topic scores from evaluation results
+  const topicScores = useMemo<Record<string, TopicEvalStats>>(() => {
+    if (!evaluationResults) return {};
+    const byTopic: Record<string, number[]> = {};
+    for (const r of evaluationResults) {
+      if (r.score == null) continue;
+      // Look up topic from gateway records (eval row data doesn't include topic)
+      const gatewayId = r.row?.id;
+      const topic = gatewayId ? recordTopicMap.get(gatewayId) : undefined;
+      if (!topic) continue;
+      (byTopic[topic] ??= []).push(r.score);
+    }
+    const result2: Record<string, TopicEvalStats> = {};
+    for (const [topic, scores2] of Object.entries(byTopic)) {
+      const mean = scores2.reduce((a, b) => a + b, 0) / scores2.length;
+      const std = Math.sqrt(scores2.reduce((a, b) => a + (b - mean) ** 2, 0) / scores2.length);
+      result2[topic] = {
+        mean,
+        std,
+        count: scores2.length,
+        status: mean >= 0.8 ? "good" : mean >= 0.6 ? "warning" : "problem",
+      };
+    }
+    return result2;
+  }, [evaluationResults, recordTopicMap]);
 
   const recommendations = result?.diagnosis?.recommendations || [];
   const stats = result?.statistics;
@@ -177,7 +215,7 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
                     </span>
                   )}
                   <span className="text-xs font-medium text-zinc-300">
-                    {job.sampleSize} samples
+                    {(evaluationResults?.length || job.pollingSnapshot?.total_rows || job.sampleSize) ?? 0} samples
                   </span>
                   {isRunning && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-medium animate-pulse">
@@ -208,7 +246,7 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
                   {job.rolloutModel && (
                     <p><span className="text-zinc-400">Model:</span> {job.rolloutModel} — used to generate responses for evaluation</p>
                   )}
-                  <p><span className="text-zinc-400">Samples:</span> {job.sampleSize} records evaluated in this dry run</p>
+                  <p><span className="text-zinc-400">Samples:</span> {evaluationResults?.length || job.pollingSnapshot?.total_rows || job.sampleSize} records evaluated in this dry run</p>
                   {isRunning && (
                     <p><span className="text-zinc-400">Status:</span> Evaluation in progress</p>
                   )}
@@ -331,6 +369,24 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
                       </li>
                     ))}
                   </ul>
+                )}
+              </div>
+            )}
+
+            {/* Per-topic breakdown */}
+            {Object.keys(topicScores).length > 0 && (
+              <div>
+                <button
+                  onClick={() => setShowTopicBreakdown((v) => !v)}
+                  className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
+                >
+                  <ChevronRight className={cn("h-3 w-3 transition-transform", showTopicBreakdown && "rotate-90")} />
+                  <span>Per-Topic Breakdown ({Object.keys(topicScores).length} topics)</span>
+                </button>
+                {showTopicBreakdown && (
+                  <div className="mt-2">
+                    <TopicEvalBreakdown byTopic={topicScores} />
+                  </div>
                 )}
               </div>
             )}

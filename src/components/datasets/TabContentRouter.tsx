@@ -15,6 +15,7 @@ export type ContentSection =
   | "evaluator"
   | "evaluator-script"
   | "evaluator-jobs"
+  | "evaluator-overview"
   | "jobs"
   | "deploy"
   | "plan"
@@ -52,6 +53,7 @@ export function mapTabPathToSection(path: string | null): ContentSection {
   if (path === "data") return "records";
   if (path.startsWith("data/")) return "records";
   if (path === "evaluations/grader-script.ts") return "evaluator-script";
+  if (path === "evaluations/overview") return "evaluator-overview";
   if (path.startsWith("evaluations/jobs")) return "evaluator-jobs";
   if (path === "evaluations") return "evaluator";
   if (path.startsWith("evaluations/")) return "evaluator";

@@ -29,6 +29,7 @@ import { DatasetNotFound } from "./DatasetNotFound";
 import { ExplorerSidebar, LucySidebar, TasksViewer, LogsViewer } from "./sidebars";
 import { IS_LUCY_ENABLED } from "@/lib/feature-flags";
 import { EvaluationConfigPanel } from "./evaluation-dialog/EvaluationConfigPanel";
+import { EvalRunsOverview } from "./eval-dialog/EvalRunsOverview";
 import { FinetuneConfigPanel } from "@/components/finetune/content/FinetuneConfigPanel";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { EvalJobsProvider } from "@/contexts/EvalJobsContext";
@@ -867,6 +868,11 @@ export function DatasetDetailContentV2() {
                 recordCount={sortedRecords.length}
                 view="script"
               />
+            </div>
+          )}
+          {contentSection === "evaluator-overview" && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <EvalRunsOverview workflowId={workflowId} />
             </div>
           )}
           {contentSection === "evaluator-jobs" && (

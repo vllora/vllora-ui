@@ -8,6 +8,7 @@
 
 import { useRef, useState, useMemo, useEffect, useCallback } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FlatEvaluationResult } from "@/services/finetune-api";
 import { DryrunEvaluationResultRow } from "./DryrunEvaluationResultRow";
@@ -33,6 +34,51 @@ interface ResultsTableProps {
   readonly renderExpandedContent?: (result: FlatEvaluationResult) => React.ReactNode;
   /** Navigate to a record in the records table */
   readonly onNavigateToRecord?: (recordId: string, result: FlatEvaluationResult) => void;
+  /** Job ID for CSV export filename */
+  readonly jobId?: string;
+}
+
+/** Escape a CSV field value (quote if it contains commas, quotes, or newlines) */
+function escapeCsvField(value: string): string {
+  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+/** Generate and download a CSV file from evaluation results */
+function exportResultsToCsv(
+  results: readonly FlatEvaluationResult[],
+  jobId?: string,
+): void {
+  const header = ["#", "Input", "Score", "Status", "Reason"];
+  const rows = results.map((r) => {
+    const inputMessages = r.row?.messages as unknown[] | undefined;
+    const inputText = Array.isArray(inputMessages)
+      ? inputMessages
+          .filter((m) => (m as Record<string, unknown>).role === "user")
+          .map((m) => String((m as Record<string, unknown>).content ?? ""))
+          .join(" | ")
+      : "";
+    return [
+      String(r.row_index),
+      escapeCsvField(inputText),
+      r.score != null ? r.score.toFixed(3) : "",
+      r.status,
+      escapeCsvField(r.reason ?? r.error_message ?? ""),
+    ].join(",");
+  });
+
+  const csv = [header.join(","), ...rows].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const filename = jobId ? `eval-results-${jobId}.csv` : "eval-results.csv";
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 export function ResultsTable({
@@ -44,6 +90,7 @@ export function ResultsTable({
   expandedRowId: externalExpandedRowId,
   renderExpandedContent,
   onNavigateToRecord,
+  jobId,
 }: ResultsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [sortOption, setSortOption] = useState<SortOption>("index");
@@ -176,8 +223,8 @@ export function ResultsTable({
           {(["index", "score-desc", "score-asc", "status"] as const).map((opt) => {
             const labels: Record<SortOption, string> = {
               index: "#",
-              "score-desc": "Score ↓",
-              "score-asc": "Score ↑",
+              "score-desc": "Score \u2193",
+              "score-asc": "Score \u2191",
               status: "Status",
             };
             return (
@@ -195,6 +242,13 @@ export function ResultsTable({
               </button>
             );
           })}
+          <button
+            onClick={() => exportResultsToCsv(processedResults, jobId)}
+            className="px-1.5 py-0.5 text-zinc-600 hover:text-zinc-400 transition-colors"
+            title="Export results to CSV"
+          >
+            <Download className="h-3 w-3" />
+          </button>
         </div>
       </div>
 

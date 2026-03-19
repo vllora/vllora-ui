@@ -19,8 +19,7 @@ import { FinetuneJobStatusBadge } from "../../FinetuneJobStatusBadge";
 import { EpochProgressBar } from "./EpochProgressSection";
 import { FinetuneJobDetailsSection } from "./FinetuneJobDetailsSection";
 import { UsageGuideDialog } from "./UsageGuideSection";
-import { TrainingMetricsSection } from "../TrainingMetricsSection";
-import { FinetuneMetricsSection } from "../FinetuneMetricsSection";
+import { FinetuneChartSelector } from "../FinetuneChartSelector";
 import { PerRowDetailsSection } from "../PerRowDetailsSection";
 import { EvaluatorVersionHistory } from "../EvaluatorVersionHistory";
 import { EvaluatorVersionBadge } from "@/components/shared/EvaluatorVersionBadge";
@@ -265,15 +264,17 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
             <ErrorLogSection errorMessage={job.error_message} />
           )}
 
-          {/* ── Eval Score Chart (per-epoch grader scores) ── */}
+          {/* ── Charts (Score Trend / Loss & Reward / Score Distribution) ── */}
           {job.workflow_id ? (
-            <TrainingMetricsSection
+            <FinetuneChartSelector
               evalResults={evalResults}
-              isLoading={isLoadingEvals}
+              isLoadingEvals={isLoadingEvals}
               isRefreshing={isRefreshing}
-              error={evalsError}
+              evalsError={evalsError}
               onRefresh={handleRefresh}
               isLive={job.status === "running"}
+              jobId={job.provider_job_id}
+              workflowId={job.workflow_id}
             />
           ) : (
             !(job.status === "failed") && (
@@ -282,13 +283,6 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
               </div>
             )
           )}
-
-          {/* ── Finetune Training Metrics (reward, KL, loss, completions) ── */}
-          <FinetuneMetricsSection
-            jobId={job.provider_job_id}
-            workflowId={job.workflow_id}
-            isLive={job.status === "running"}
-          />
 
           {/* ── Evaluator Version History ── */}
           {job.workflow_id && (

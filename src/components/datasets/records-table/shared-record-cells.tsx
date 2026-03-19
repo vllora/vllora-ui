@@ -48,7 +48,7 @@ export function TrendArrow({ trend }: { readonly trend: number }) {
 // ─── Score Cell (per-job score with status) ───
 
 export function ScoreCell({ jobScore }: { readonly jobScore?: RecordJobScore }) {
-  if (!jobScore) return <span className="text-muted-foreground/20">—</span>;
+  if (!jobScore) return <span className="text-[9px] text-muted-foreground/25 italic" title="Not sampled in this eval run">n/s</span>;
 
   if (jobScore.status === "queued") {
     return <span className="text-[10px] text-muted-foreground/30 italic">queued</span>;
@@ -74,7 +74,7 @@ export function ScoreCell({ jobScore }: { readonly jobScore?: RecordJobScore }) 
   }
 
   if (jobScore.score === undefined) {
-    return <span className="text-muted-foreground/10">·</span>;
+    return <span className="text-[9px] text-muted-foreground/25 italic" title="Not sampled in this eval run">n/s</span>;
   }
 
   return (

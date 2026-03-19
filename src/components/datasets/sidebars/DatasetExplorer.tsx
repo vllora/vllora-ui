@@ -206,6 +206,8 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
     let tabLabel: string | undefined;
     if (nodeId === "data") {
       tabLabel = "All Topics";
+    } else if (nodeId === "evaluations/overview") {
+      tabLabel = "Eval Runs";
     } else if (nodeId.startsWith("evaluations/jobs/")) {
       tabLabel = evalJobDisplayName(nodeId.slice("evaluations/jobs/".length));
     } else if (nodeId.startsWith("finetune/")) {
@@ -334,6 +336,8 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       <SidebarSection
         title="Eval Runs"
         count={dryRunJobs.length}
+        onTitleClick={() => handleSelect("evaluations/overview")}
+        isTitleActive={selectedNodeId === "evaluations/overview"}
         action={{
           icon: <Plus className="w-3 h-3" />,
           title: "New evaluation",
@@ -449,22 +453,42 @@ function SidebarSection({
   isLoading,
   action,
   children,
+  onTitleClick,
+  isTitleActive,
 }: {
   readonly title: string;
   readonly count?: number;
   readonly isLoading?: boolean;
   readonly action?: { icon: React.ReactNode; title: string; onClick: () => void };
   readonly children: React.ReactNode;
+  readonly onTitleClick?: () => void;
+  readonly isTitleActive?: boolean;
 }) {
   return (
     <div className="mb-2">
       <div className="flex items-center justify-between px-4 py-1.5">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-          {title}
-          {count !== undefined && (
-            <span className="ml-1.5 text-muted-foreground/40 font-normal">{count}</span>
-          )}
-        </span>
+        {onTitleClick ? (
+          <button
+            type="button"
+            onClick={onTitleClick}
+            className={cn(
+              "text-[10px] font-semibold uppercase tracking-[0.08em] hover:text-foreground transition-colors cursor-pointer",
+              isTitleActive ? "text-[rgb(var(--theme-500))]" : "text-muted-foreground",
+            )}
+          >
+            {title}
+            {count !== undefined && (
+              <span className="ml-1.5 text-muted-foreground/40 font-normal">{count}</span>
+            )}
+          </button>
+        ) : (
+          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+            {title}
+            {count !== undefined && (
+              <span className="ml-1.5 text-muted-foreground/40 font-normal">{count}</span>
+            )}
+          </span>
+        )}
         <div className="flex items-center gap-1">
           {isLoading && <Loader2 className="w-3 h-3 animate-spin text-[rgb(var(--theme-500))]" />}
           {action && (

@@ -182,8 +182,19 @@ def cmd_upload_topics(args: argparse.Namespace) -> None:
     print(f"Topics uploaded: {created}")
 
 
+def _looks_like_uuid(s: str) -> bool:
+    """Check if a string looks like a UUID (8-4-4-4-12 hex pattern)."""
+    import re
+    return bool(re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', s, re.I))
+
+
 def cmd_upload_relations(args: argparse.Namespace) -> None:
-    """Upload topic-source relations to a workflow."""
+    """Upload topic-source relations to a workflow.
+
+    The gateway accepts both reference_ids (string IDs from topics.json/knowledge_parts.json)
+    and UUIDs for topic_identifier and part_identifier. Reference_ids are preferred — the
+    gateway resolves them automatically via 'id OR reference_id' queries.
+    """
     relations_path = Path(args.file)
     if not relations_path.exists():
         print(f"Error: Relations file not found: {relations_path}", file=sys.stderr)
@@ -191,16 +202,29 @@ def cmd_upload_relations(args: argparse.Namespace) -> None:
 
     relations = json.loads(relations_path.read_text())
     if isinstance(relations, list):
-        payload = {"relations": relations}
+        rel_list = relations
+    elif isinstance(relations, dict) and "relations" in relations:
+        rel_list = relations["relations"]
     else:
-        payload = relations if "relations" in relations else {"relations": [relations]}
+        rel_list = [relations]
 
+    # Warn if UUIDs are used instead of reference_ids (not an error, just suboptimal)
+    uuid_count = sum(
+        1 for r in rel_list
+        if _looks_like_uuid(r.get("part_identifier", "")) or _looks_like_uuid(r.get("topic_identifier", ""))
+    )
+    if uuid_count > 0:
+        print(f"Note: {uuid_count}/{len(rel_list)} relations use UUID identifiers.", file=sys.stderr)
+        print(f"  Tip: Use reference_ids from topics.json/knowledge_parts.json instead.", file=sys.stderr)
+        print(f"  The gateway resolves reference_ids automatically — no UUID mapping needed.", file=sys.stderr)
+
+    payload = {"relations": rel_list}
     result = _api(
         "POST",
         f"{args.base_url}/finetune/workflows/{args.workflow_id}/topics/relations",
         json=payload,
     )
-    created = result.get("created", len(payload["relations"]))
+    created = result.get("created", len(rel_list))
     print(f"Relations uploaded: {created}")
 
 

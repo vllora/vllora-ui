@@ -134,23 +134,24 @@ export function FinetuneMetricsSection({
     );
   }
 
-  // Hide empty state while job is still running
-  if (isLive) return null;
-
   return (
     <div className="flex flex-col items-center justify-center gap-2 py-8 text-zinc-500">
       <Activity className="h-5 w-5 opacity-40" />
       <span className="text-xs">
-        Training metrics will appear here as training progresses.
+        {isLive ? "Waiting for training metrics..." : "Training metrics will appear here as training progresses."}
       </span>
-      <button
-        onClick={handleRefresh}
-        disabled={isRefreshing}
-        className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors mt-1"
-      >
-        <RefreshCw className={cn("h-3 w-3", isRefreshing && "animate-spin")} />
-        Check for updates
-      </button>
+      {isLive ? (
+        <span className="text-[10px] text-zinc-600">Metrics are reported after the first training steps complete</span>
+      ) : (
+        <button
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors mt-1"
+        >
+          <RefreshCw className={cn("h-3 w-3", isRefreshing && "animate-spin")} />
+          Check for updates
+        </button>
+      )}
     </div>
   );
 }
