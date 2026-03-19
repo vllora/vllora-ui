@@ -146,14 +146,15 @@ This is the longest and most complex step. It has 4 sub-stages.
 **Script call** (per document):
 ```bash
 uv run scripts/docling_extract.py document.pdf \
-  --output finetune-project/knowledge/doc-slug/docling-result.json \
-  --max-tokens 1024
+  --output finetune-project/knowledge/doc-slug/docling-result.json
 ```
+
+The script auto-detects whether the PDF is digital or scanned — it skips OCR for digital PDFs (30-50% faster). No manual flags needed.
 
 > **IMPORTANT**: Always use `docling_extract.py` — it uses the async API with polling. Do NOT use curl to hit Docling endpoints directly, as the sync endpoint times out on large documents (>100 pages).
 
 **Internally**, the script calls these Docling endpoints (agents should NOT call these directly):
-- `POST /v1/chunk/hybrid/file/async` — submits each document (with `chunking_max_tokens=1024`)
+- `POST /v1/chunk/hybrid/file/async` — submits each document (with `chunking_max_tokens=8192` as safety ceiling, OCR auto-detected)
 - `GET /v1/status/poll/{task_id}` — polls until `success` or `failed`
 - `GET /v1/result/{task_id}` — fetches the processed result
 

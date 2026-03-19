@@ -19,7 +19,7 @@ import {
   type DeleteConfirmation,
 } from "../DeleteConfirmationDialog";
 import { DatasetCard } from "./DatasetCard";
-import { AddDatasetCard } from "./AddDatasetCard";
+
 import { DatasetsEmptyState } from "./DatasetsEmptyState";
 import { DatasetsListHeader, type DatasetFilter, type DatasetSort } from "./DatasetsListHeader";
 import { DatasetsNoResultsState } from "./DatasetsNoResultsState";
@@ -416,8 +416,6 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
                   );
                 })}
 
-                {/* Add new dataset card */}
-                <AddDatasetCard />
               </div>
             )}
           </div>

@@ -209,8 +209,7 @@ for DOC in *.pdf; do
 
   # Extract via Docling (blocks until this PDF is done)
   uv run scripts/docling_extract.py "$DOC" \
-    --output "$DOC_DIR/docling-result.json" \
-    --max-tokens 1024
+    --output "$DOC_DIR/docling-result.json"
 
   # Then immediately: read chunks, write extract.py, run it,
   # consolidate, validate, upload — see steps 2c-2g below
@@ -232,6 +231,12 @@ For **each** document directory, produce `knowledge_parts.json` and `parts-index
 2. **Write a script** inside the per-document directory: `knowledge/{doc-slug}/extract.py`. This keeps extraction scripts co-located with their document's data, not scattered in the project root. The script must produce `knowledge/{doc-slug}/knowledge_parts.json` — typed source_parts (text, table, image) with titles, extraction paths, and provenance metadata matching the schema in `reference/extraction-guide.md` Section 3.
 
    **Script location**: `finetune-project/knowledge/{doc-slug}/extract.py` — NOT in `finetune-project/` root.
+
+   **Chunking philosophy**: Docling's `max_tokens` is just a safety ceiling — it prevents runaway chunks but should NOT determine your part boundaries. **Your extraction script decides how to group content** based on the document's actual structure. Group content by semantic units:
+   - A section heading + all its content = one part
+   - A chapter intro + its examples = one part
+   - Don't split mid-paragraph or mid-example
+   - Target 200-2000 chars per part, but let the content dictate the boundaries — a 3000-char section is better as one part than split arbitrarily
 
    **Important**: Prefix all part IDs with the document identifier (typically the slugified filename) to keep them unique across documents. For example: `chess-tactics-chapter-3`, `strategy-guide-section-5`.
 

@@ -36,6 +36,7 @@ The **3-page UI redesign** (Canvas, Sources, Table) is the active workstream. An
 | Doc | What it covers |
 |-----|---------------|
 | **[implementation-status.md](./implementation-status.md)** | **START HERE** — Current implementation progress, what's done vs TODO, architecture decisions, file map |
+| **[onboarding-flow.md](./onboarding-flow.md)** | Onboarding UX: 6-screen user journey, component map, shared components, debugging guide |
 | [ui-visualization-redesign.md](./ui-visualization-redesign.md) | 3-page Canvas/Sources/Table design spec with component mapping and implementation phases |
 | [knowledge-visualization.md](./knowledge-visualization.md) | Knowledge sources & parts: BE API, FE types, explorer tree, content viewers |
 | [architecture-updates-2026-03.md](./architecture-updates-2026-03.md) | March 2026 refactoring: eval polling, ID mapping, cross-view navigation, training UI |
@@ -49,6 +50,7 @@ The **3-page UI redesign** (Canvas, Sources, Table) is the active workstream. An
 | File | What it shows |
 |------|--------------|
 | **[mockup-dataset-redesign.html](./mockup-dataset-redesign.html)** | Main mockup — all 3 views (Canvas, Sources, Table) + record detail sidebar. Loads live data from gateway. |
+| **[mockup-onboarding-flow.html](./mockup-onboarding-flow.html)** | Onboarding flow mockup — 6 screens from homepage to workflow detail. Click nav bar to browse. |
 | [mockup-eval-dialog.html](./mockup-eval-dialog.html) | Evaluation job dialog design |
 | [mockup-training-job.html](./mockup-training-job.html) | Training job view design |
 | [mockup-new-training-dialog.html](./mockup-new-training-dialog.html) | New training job creation dialog |

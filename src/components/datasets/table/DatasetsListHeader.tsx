@@ -2,16 +2,23 @@
  * DatasetsListHeader
  *
  * Header for the datasets grid view with search bar, segmented filter tabs, and sort.
+ * "New Workflow" button opens a dropdown: setup guide (default) or API trace capture.
  */
 
-import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
-import { Search, Plus } from "lucide-react";
+import { Search, Plus, Terminal, RefreshCw } from "lucide-react";
 import { DATASET_FILTER_CONFIG } from "@/types/dataset-types";
 import type { DatasetFilterGroup } from "@/types/dataset-types";
 import { DatasetSortDropdown } from "./DatasetSortDropdown";
 import type { DatasetSort } from "./DatasetSortDropdown";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useNavigate } from "react-router";
 
 export type DatasetFilter = "all" | DatasetFilterGroup;
 export type { DatasetSort };
@@ -44,6 +51,8 @@ export function DatasetsListHeader({
   onSortChange,
   totalCount,
 }: DatasetsListHeaderProps) {
+  const navigate = useNavigate();
+
   return (
     <div className="flex items-center gap-4 mb-6">
       {/* Search input */}
@@ -78,20 +87,37 @@ export function DatasetsListHeader({
       {/* Sort dropdown */}
       <DatasetSortDropdown activeSort={activeSort} onSortChange={onSortChange} />
 
-      {/* Count + New Workflow button */}
+      {/* Count + New Workflow dropdown */}
       <div className="flex items-center gap-3 ml-auto">
         {totalCount !== undefined && (
           <span className="text-xs text-muted-foreground/50 tabular-nums">
             {totalCount} workflow{totalCount !== 1 ? "s" : ""}
           </span>
         )}
-        <Link
-          to="/finetune/new"
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--theme-500))] text-white hover:bg-[rgb(var(--theme-600))] transition-colors shrink-0"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          New Workflow
-        </Link>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--theme-500))] text-white hover:bg-[rgb(var(--theme-600))] transition-colors shrink-0">
+              <Plus className="w-3.5 h-3.5" />
+              New Workflow
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuItem onClick={() => navigate("/finetune/setup")} className="gap-2.5 cursor-pointer">
+              <Terminal className="w-4 h-4 text-[rgb(var(--theme-500))]" />
+              <div>
+                <div className="text-sm font-medium">Run finetune skill</div>
+                <div className="text-[11px] text-muted-foreground">Setup guide for Claude Code / Codex</div>
+              </div>
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled className="gap-2.5 opacity-40">
+              <RefreshCw className="w-4 h-4 text-orange-400" />
+              <div>
+                <div className="text-sm font-medium">Route existing API calls</div>
+                <div className="text-[11px] text-muted-foreground">Coming soon</div>
+              </div>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   );

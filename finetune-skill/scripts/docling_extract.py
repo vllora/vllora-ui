@@ -20,6 +20,7 @@ Batch mode (submit all, poll all in parallel):
 
 import argparse
 import json
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -27,19 +28,53 @@ from pathlib import Path
 import requests
 
 
+def is_digital_pdf(pdf_path: Path) -> bool:
+    """Detect if a PDF has selectable text (digital) or needs OCR (scanned).
+
+    Samples a few content pages (skipping title/TOC) and checks word count.
+    Returns True if the PDF is digital (has extractable text).
+    """
+    try:
+        # Sample pages 3-6 (skip title/TOC pages which may be sparse)
+        result = subprocess.run(
+            ["pdftotext", "-f", "3", "-l", "6", str(pdf_path), "-"],
+            capture_output=True, text=True, timeout=10,
+        )
+        word_count = len(result.stdout.split())
+        return word_count > 50  # 50+ words from 4 pages = has selectable text
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False  # pdftotext not installed or timeout — assume scanned, use OCR
+
+
 def submit_async(
     docling_url: str,
     pdf_path: Path,
-    max_tokens: int = 1024,
+    max_tokens: int = 8192,
+    force_ocr: bool | None = None,
 ) -> str:
-    """Submit a PDF to Docling async endpoint, return task_id."""
+    """Submit a PDF to Docling async endpoint, return task_id.
+
+    OCR is auto-detected: disabled for digital PDFs (30-50% faster),
+    enabled for scanned PDFs. Use force_ocr to override.
+    """
+    # Auto-detect OCR need unless explicitly set
+    if force_ocr is None:
+        digital = is_digital_pdf(pdf_path)
+        do_ocr = not digital
+        if digital:
+            print(f"  Auto-detected digital PDF — skipping OCR (faster)")
+        else:
+            print(f"  Auto-detected scanned PDF — enabling OCR")
+    else:
+        do_ocr = force_ocr
+
     url = f"{docling_url}/v1/chunk/hybrid/file/async"
     data = {
         "chunking_max_tokens": str(max_tokens),
         "chunking_merge_peers": "true",
         "chunking_use_markdown_tables": "true",
         "chunking_tokenizer": "BAAI/bge-small-en-v1.5",
-        "convert_do_ocr": "true",
+        "convert_do_ocr": "true" if do_ocr else "false",
         "convert_do_table_structure": "true",
         "convert_include_images": "true",
         "convert_image_export_mode": "embedded",
@@ -218,7 +253,7 @@ def main():
     parser.add_argument("--output", "-o", help="Output path (single mode only)")
     parser.add_argument("--batch", action="store_true", help="Batch mode: args are pdf:output pairs")
     parser.add_argument("--docling-url", default="http://localhost:5001", help="Docling Serve URL")
-    parser.add_argument("--max-tokens", type=int, default=1024, help="Chunking max tokens (default: 1024)")
+    parser.add_argument("--max-tokens", type=int, default=8192, help="Max tokens per Docling chunk — safety ceiling, not target size (default: 8192)")
     parser.add_argument("--poll-interval", type=int, default=15, help="Poll interval in seconds (default: 15)")
     parser.add_argument("--max-wait", type=int, default=1800, help="Max wait time in seconds (default: 1800)")
     args = parser.parse_args()

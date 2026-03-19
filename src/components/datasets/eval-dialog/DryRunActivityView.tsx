@@ -7,12 +7,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Tooltip as UITooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { XCircle, AlertTriangle, RefreshCw, RotateCw, ChevronRight, StopCircle } from "lucide-react";
 import { VerdictBadge } from "./VerdictBadge";
 import { ScoreStrip } from "./ScoreStrip";
@@ -203,85 +198,67 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
   return (
     <TooltipProvider delayDuration={200}>
       <div className="flex flex-col h-full min-h-0">
-        {/* Header */}
-        <div className="shrink-0 border-b border-zinc-800/60">
-          <div className="flex items-center gap-2 px-3 py-1.5">
-            <UITooltip>
-              <TooltipTrigger asChild>
-                <div className="flex items-center gap-2 min-w-0">
-                  {job.rolloutModel && (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-zinc-700/50 text-[10px] font-medium text-zinc-300 border border-zinc-600/40">
-                      {job.rolloutModel}
-                    </span>
-                  )}
-                  <span className="text-xs font-medium text-zinc-300">
-                    {(evaluationResults?.length || job.pollingSnapshot?.total_rows || job.sampleSize) ?? 0} samples
-                  </span>
-                  {isRunning && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-medium animate-pulse">
-                      Running
-                    </span>
-                  )}
-                  {job.workflowId && (
-                    <EvalJobVersionBadge workflowId={job.workflowId} jobCreatedAt={job.createdAt} />
-                  )}
-                  {result && <VerdictBadge verdict={result.diagnosis.verdict} />}
-                  {job.status === "failed" && !result && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 font-medium">
-                      Failed
-                    </span>
-                  )}
-                  {stats && (
-                    <span className="text-xs font-mono text-zinc-400">
-                      Avg Score{" "}
-                      <span className="text-zinc-200 font-semibold">{stats.mean.toFixed(2)}</span>
-                      <span className="text-zinc-600 mx-0.5">&plusmn;</span>
-                      <span className="text-zinc-500">{stats.std.toFixed(2)}</span>
-                    </span>
-                  )}
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-xs">
-                <div className="space-y-0.5">
-                  {job.rolloutModel && (
-                    <p><span className="text-zinc-400">Model:</span> {job.rolloutModel} — used to generate responses for evaluation</p>
-                  )}
-                  <p><span className="text-zinc-400">Samples:</span> {evaluationResults?.length || job.pollingSnapshot?.total_rows || job.sampleSize} records evaluated in this evaluation run</p>
-                  {isRunning && (
-                    <p><span className="text-zinc-400">Status:</span> Evaluation in progress</p>
-                  )}
-                  {result && (
-                    <p><span className="text-zinc-400">Verdict:</span> {result.diagnosis.verdict} — overall quality assessment</p>
-                  )}
-                  {stats && (
-                    <>
-                      <p><span className="text-zinc-400">Avg Score:</span> {stats.mean.toFixed(2)} — mean score across all samples</p>
-                      <p><span className="text-zinc-400">Std Dev:</span> {stats.std.toFixed(2)} — score variation between samples</p>
-                      <p><span className="text-zinc-400">Range:</span> {stats.min.toFixed(2)} – {stats.max.toFixed(2)} (median {stats.median.toFixed(2)})</p>
-                    </>
-                  )}
-                </div>
-              </TooltipContent>
-            </UITooltip>
-            <span className="text-[10px] text-zinc-600 ml-auto">
+        {/* Header — 3-column layout matching finetune job style */}
+        <header className="shrink-0 flex py-1 items-center justify-between border-b border-[#262626] px-4 gap-3">
+          {/* Left: Status + Model + Version pills */}
+          <div className="flex items-center gap-2 shrink-0">
+            {isRunning ? (
+              <span className="inline-flex items-center rounded-full bg-blue-500/10 px-3 py-1 text-xs font-medium text-blue-400 animate-pulse">
+                Running
+              </span>
+            ) : job.status === "failed" && !result ? (
+              <span className="inline-flex items-center rounded-full bg-red-500/10 px-3 py-1 text-xs font-medium text-red-400">
+                Failed
+              </span>
+            ) : result ? (
+              <VerdictBadge verdict={result.diagnosis.verdict} />
+            ) : null}
+            {job.rolloutModel && (
+              <span className="inline-flex items-center rounded-full bg-[#10b981]/10 px-3 py-1 text-xs font-medium text-[#10b981]">
+                {job.rolloutModel}
+              </span>
+            )}
+            {job.workflowId && (
+              <EvalJobVersionBadge workflowId={job.workflowId} jobCreatedAt={job.createdAt} />
+            )}
+          </div>
+
+          {/* Center: Summary text */}
+          {stats ? (
+            <p className="font-mono text-xs font-medium tracking-tight text-slate-300 truncate min-w-0">
+              Avg Score{" "}
+              <span className="text-[#10b981]">{stats.mean.toFixed(2)}</span>
+              <span className="text-zinc-600 mx-0.5">±</span>
+              <span className="text-zinc-500">{stats.std.toFixed(2)}</span>
+              {" "}· {(evaluationResults?.length || job.pollingSnapshot?.total_rows || job.sampleSize) ?? 0} records
+            </p>
+          ) : (
+            <p className="font-mono text-xs font-medium text-slate-500 truncate min-w-0">
+              {(evaluationResults?.length || job.pollingSnapshot?.total_rows || job.sampleSize) ?? 0} records
+            </p>
+          )}
+
+          {/* Right: Time + Actions */}
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs text-slate-500 font-medium hidden sm:block">
               {formatTime(job.createdAt)}
             </span>
             {isRunning && onCancel && (
               <button
                 onClick={onCancel}
-                className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-zinc-500 hover:text-red-400 transition-colors"
+                className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
               >
-                <StopCircle className="h-3 w-3" />
+                <StopCircle className="h-3.5 w-3.5" />
                 Cancel
               </button>
             )}
             {onRefresh && !isRunning && (
               <button
                 onClick={() => onRefresh(job.id)}
-                className="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+                className="p-1.5 text-slate-500 hover:text-slate-300 transition-colors rounded hover:bg-white/5"
                 title="Refresh data"
               >
-                <RotateCw className="h-3 w-3" />
+                <RotateCw className="h-3.5 w-3.5" />
               </button>
             )}
             {onRunAgain && !isRunning && (
@@ -289,14 +266,14 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
                 onClick={onRunAgain}
                 variant="ghost"
                 size="sm"
-                className="h-6 px-2 text-[11px] gap-1 text-zinc-400 hover:text-zinc-200"
+                className="h-7 px-2.5 text-[11px] gap-1 text-zinc-400 hover:text-zinc-200"
               >
                 <RefreshCw className="h-3 w-3" />
                 Re-run
               </Button>
             )}
           </div>
-        </div>
+        </header>
 
         {/* Running: progress view */}
         {isRunning && (() => {
@@ -338,19 +315,51 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
         ) : !isRunning && result && scores.length > 0 ? (
           /* Score distribution + stats + recommendations */
           <div className="shrink-0 px-3 pt-2 space-y-2">
-            {/* Score distribution histogram — full width */}
-            <ScoreStrip scores={scores} mean={stats?.mean} />
-
-            {/* Stats row + insight below chart */}
-            {stats && (
-              <div className="flex items-center gap-6 text-[11px] flex-wrap">
-                <span className="text-zinc-500">Mean <span className="text-zinc-200 font-mono font-medium">{stats.mean.toFixed(3)}</span></span>
-                <span className="text-zinc-500">Std Dev <span className="text-zinc-200 font-mono">{stats.std.toFixed(3)}</span></span>
-                <span className="text-zinc-500">Min / Max <span className="text-zinc-200 font-mono">{stats.min.toFixed(2)} – {stats.max.toFixed(2)}</span></span>
-                <span className="text-zinc-500">Median <span className="text-zinc-200 font-mono">{stats.median.toFixed(3)}</span></span>
-                <span className="text-zinc-400 text-[10px] ml-auto">{getScoreInsight(stats)}</span>
+            {/* Score distribution card — matches finetune chart style */}
+            <div className="rounded-lg bg-[#111] overflow-hidden">
+              {/* Card header */}
+              <div className="px-5 py-4 border-b border-white/5 flex items-start justify-between">
+                <div>
+                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+                    Score Distribution
+                  </p>
+                  <div className="flex items-baseline gap-3">
+                    {stats && (
+                      <h2 className="text-3xl font-mono font-bold text-[#10b981]">
+                        {stats.mean.toFixed(2)}
+                      </h2>
+                    )}
+                    <span className="text-xs font-medium text-slate-400">
+                      {scores.length} records · ±{stats?.std.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
               </div>
-            )}
+
+              {/* Chart area */}
+              <div className="p-4">
+                <ScoreStrip scores={scores} mean={stats?.mean} />
+              </div>
+
+              {/* Stats footer */}
+              {stats && (
+                <div className="px-5 py-2.5 bg-black/20 border-t border-white/5 flex items-center gap-6 text-[11px] flex-wrap">
+                  <span className="text-zinc-500">Mean <span className="text-zinc-200 font-mono font-medium">{stats.mean.toFixed(3)}</span></span>
+                  <span className="text-zinc-500">Std Dev <span className="text-zinc-200 font-mono">{stats.std.toFixed(3)}</span></span>
+                  <span className="text-zinc-500">Min / Max <span className="text-zinc-200 font-mono">{stats.min.toFixed(2)} – {stats.max.toFixed(2)}</span></span>
+                  <span className="text-zinc-500">Median <span className="text-zinc-200 font-mono">{stats.median.toFixed(3)}</span></span>
+                </div>
+              )}
+
+              {/* Insight */}
+              {stats && (
+                <div className="px-5 py-2 border-t border-white/5">
+                  <p className="text-[10px] text-slate-500 leading-relaxed">{getScoreInsight(stats)}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Recommendations */}
             {recommendations.length > 0 && (
               <div>
                 <button

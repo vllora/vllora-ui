@@ -29,6 +29,7 @@ import { IS_LUCY_ENABLED } from "./lib/feature-flags"
 import { AgentPanelProvider } from "./contexts/AgentPanelContext"
 import { DatasetsProvider } from "./contexts/DatasetsContext"
 import { NewDatasetAdvancedPage } from "./pages/datasets/new-advanced"
+import { SetupGuidePage } from "./pages/finetune/setup"
 
 // Lazy load the models page
 const ModelsPage = lazy(() => import("./pages/models").then(module => ({ default: module.ModelsPage })))
@@ -96,6 +97,7 @@ function App() {
 
                 {/* Global routes */}
                 <Route path="projects" element={<ProjectsPage />} />
+                <Route path="finetune/setup" element={<SetupGuidePage />} />
                 <Route path="finetune/new" element={<NewDatasetPage />} />
                 <Route path="finetune/new-advanced" element={<NewDatasetAdvancedPage />} />
                 <Route path="finetune/:workflowId" element={<DatasetDetailPage />} />

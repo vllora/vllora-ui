@@ -118,7 +118,7 @@ IMPORTANT: Upload to gateway after EACH step, not at the end. The UI shows progr
 IMPORTANT: Use docling_extract.py for Docling — do NOT use raw curl.
 IMPORTANT: Write a SEPARATE custom extraction script PER document. A generic script produces garbage — each PDF has different structure and OCR patterns.
 IMPORTANT: A healthy extraction produces 2-10 parts per page. If you get fewer than 50 parts from a 84-page PDF, your script is wrong.
-NOTE: Use chunking_max_tokens=1024 when submitting to Docling." \
+NOTE: docling_extract.py auto-detects digital vs scanned PDFs and adjusts OCR accordingly." \
   --dangerously-skip-permissions \
   --model sonnet \
   --max-turns 200

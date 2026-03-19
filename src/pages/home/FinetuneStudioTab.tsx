@@ -2,147 +2,72 @@
  * FinetuneStudioTab
  *
  * Homepage tab for the Finetune Studio product.
- * Reuses the ObjectiveInputTab from /finetune/new for a consistent experience.
- *
- * When the user attaches files and clicks "Start Finetune", we create the
- * dataset directly and upload files as knowledge sources — files cannot be
- * serialized through URL params so we must handle them here.
+ * Shows "How it works" stepper (Install → Run → Evaluate) and CTAs.
+ * The pipeline is driven externally by the finetune skill — the UI is
+ * a visualization layer for evaluation and training.
  */
 
-import { useState, useCallback } from "react";
 import { useNavigate } from "react-router";
-import { BookOpen, Radio } from "lucide-react";
-import { toast } from "sonner";
-import { ObjectiveInputTab } from "@/components/datasets/empty-dataset-state/ObjectiveInputTab";
+import { Zap, RefreshCw, BookOpen } from "lucide-react";
 import { FinetuneHero } from "@/components/datasets/empty-dataset-state/FinetuneHero";
-import { CurrentAppConsumer } from "@/lib";
-import { DatasetsConsumer } from "@/contexts/DatasetsContext";
-import { emitter } from "@/utils/eventEmitter";
-import { uploadKnowledgeSourceHandler } from "@/lib/distri-finetune-tools/steps/knowledge-sources";
-import type { KnowledgeSourceType } from "@/types/dataset-types";
-
-/** Read a File as a base64-encoded string (strips the data-URL prefix). */
-function readFileAsBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      const base64 = result.split(",")[1] || result;
-      resolve(base64);
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
+import { HowItWorksCards } from "./HowItWorksCards";
 
 export function FinetuneStudioTab() {
   const navigate = useNavigate();
-  const { app_mode } = CurrentAppConsumer();
-  const { createDataset } = DatasetsConsumer();
-  const [objective, setObjective] = useState("");
-  const [isCreating, setIsCreating] = useState(false);
-
-  const handleStartFinetune = useCallback(async (files?: File[]) => {
-    // No objective and no files → just navigate to the new-dataset page
-    if (!objective.trim()) {
-      navigate("/finetune/new");
-      return;
-    }
-
-    // If there are files attached we MUST create the dataset here so
-    // we can upload them as knowledge sources — files can't survive
-    // a URL-based navigation.
-    if (files && files.length > 0) {
-      setIsCreating(true);
-      try {
-        const finalName = objective.trim().split(/\s+/).slice(0, 5).join(" ");
-        const dataset = await createDataset(finalName, objective.trim());
-
-        // Upload each file as a knowledge source
-        // Note: We do NOT emit vllora_plan_generating here — PlanContext isn't
-        // mounted yet (it lives on the dataset detail page). The dataset detail
-        // page handles auto-plan generation via the ?autoGeneratePlan=true param.
-        for (const file of files) {
-          const content = await readFileAsBase64(file);
-          const type: KnowledgeSourceType = file.type === "application/pdf" ? "pdf" : "text";
-          await uploadKnowledgeSourceHandler({
-            workflow_id: dataset.id,
-            name: file.name,
-            type,
-            content,
-            mime_type: file.type,
-          });
-        }
-
-        // Notify KnowledgeSourcesPanel to refresh
-        emitter.emit("vllora_knowledge_source_updated", { workflowId: dataset.id });
-
-        setIsCreating(false);
-        navigate(`/finetune/${dataset.id}?autoGeneratePlan=true`);
-      } catch (error) {
-        console.error("Failed to create dataset with files:", error);
-        toast.error("Failed to create workflow");
-        setIsCreating(false);
-      }
-    } else {
-      // No files — use the lightweight URL-param path (EmptyDatasetsState
-      // will create the dataset and auto-start).
-      navigate(`/finetune/new?objective=${encodeURIComponent(objective.trim())}&autoStart=true`);
-    }
-  }, [objective, navigate, createDataset]);
 
   return (
-    <div className="w-full max-w-[50vw] mx-auto flex flex-col items-center">
-      <FinetuneHero className="mb-10" />
+    <div className="w-full max-w-[56rem] mx-auto flex flex-col items-center">
+      <FinetuneHero className="mb-11" />
 
-      {/* Objective input */}
-      <ObjectiveInputTab
-        objective={objective}
-        onObjectiveChange={setObjective}
-        onStartFinetune={handleStartFinetune}
-        isLoading={isCreating}
-      />
+      <HowItWorksCards />
 
-      {/* Secondary actions */}
-      <div className="grid grid-cols-2 gap-3 mt-8 w-3/4">
+      {/* CTA buttons */}
+      <div className="flex items-center gap-3 mt-10 mb-9">
         <button
-          onClick={() => navigate("/finetune/new?tab=api")}
-          className="group flex items-center gap-3 px-4 py-3 rounded-xl border border-border/40 bg-card/50 hover:border-[rgba(var(--theme-500),0.3)] hover:bg-[rgba(var(--theme-500),0.04)] transition-all duration-200"
+          onClick={() => navigate("/finetune/setup")}
+          className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg text-[13px] font-semibold bg-gradient-to-b from-[rgb(var(--theme-400))] to-[rgb(var(--theme-500))] text-emerald-950 shadow-[0_1px_2px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.15)] hover:from-[rgb(var(--theme-300))] hover:to-[rgb(var(--theme-400))] hover:shadow-[0_2px_8px_rgba(var(--theme-500),0.3)] hover:-translate-y-px transition-all"
         >
-          <div className="w-8 h-8 rounded-lg bg-[rgba(var(--theme-500),0.1)] flex items-center justify-center shrink-0">
-            <Radio className="w-4 h-4 text-[rgb(var(--theme-500))]" />
-          </div>
-          <div className="flex-1 text-left min-w-0">
-            <span className="text-[13px] font-medium text-foreground/80 group-hover:text-foreground transition-colors duration-200 block truncate">
-              Real conversations
-            </span>
-            <span className="block text-[11px] text-muted-foreground/40 mt-0.5 truncate">
-              Build from live LLM calls
-            </span>
-          </div>
+          <Zap className="w-4 h-4" />
+          Get Started
         </button>
-
         <button
-          onClick={() =>
-            window.open(
-              app_mode === "vllora"
-                ? "https://vllora.dev/docs"
-                : "https://docs.langdb.ai/",
-              "_blank"
-            )
-          }
-          className="group flex items-center gap-3 px-4 py-3 rounded-xl border border-border/40 bg-card/50 hover:border-[rgba(var(--theme-500),0.3)] hover:bg-[rgba(var(--theme-500),0.04)] transition-all duration-200"
+          onClick={() => navigate("/finetune")}
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-medium bg-card/50 text-muted-foreground border border-border/50 hover:border-border hover:bg-card hover:text-foreground transition-all"
         >
-          <div className="w-8 h-8 rounded-lg bg-muted/50 flex items-center justify-center shrink-0">
-            <BookOpen className="w-4 h-4 text-muted-foreground/60" />
+          I already have workflows
+        </button>
+      </div>
+
+      {/* Divider */}
+      <div className="flex items-center gap-4 w-full max-w-[440px] mb-7">
+        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-border/60 to-transparent" />
+        <span className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground/30">or start differently</span>
+        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-border/60 to-transparent" />
+      </div>
+
+      {/* Alt pathways */}
+      <div className="flex gap-3 max-w-[560px] w-full">
+        <div
+          className="flex-1 flex items-center gap-3 px-4 py-3.5 rounded-xl border border-border/30 bg-card/30 opacity-40 cursor-not-allowed"
+        >
+          <div className="w-9 h-9 rounded-lg bg-orange-500/10 flex items-center justify-center shrink-0">
+            <RefreshCw className="w-[18px] h-[18px] text-orange-400" />
           </div>
-          <div className="flex-1 text-left min-w-0">
-            <span className="text-[13px] font-medium text-foreground/80 group-hover:text-foreground transition-colors duration-200 block truncate">
-              Documentation
-            </span>
-            <span className="block text-[11px] text-muted-foreground/40 mt-0.5 truncate">
-              Guides and API reference
-            </span>
+          <div className="text-left">
+            <div className="text-[12.5px] font-semibold">Route existing API calls</div>
+            <div className="text-[11px] text-muted-foreground/60">Coming soon</div>
+          </div>
+        </div>
+        <button
+          onClick={() => window.open("https://vllora.dev/docs", "_blank")}
+          className="flex-1 flex items-center gap-3 px-4 py-3.5 rounded-xl border border-border/30 bg-card/30 hover:border-border/60 hover:bg-card/60 transition-all"
+        >
+          <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+            <BookOpen className="w-[18px] h-[18px] text-blue-400" />
+          </div>
+          <div className="text-left">
+            <div className="text-[12.5px] font-semibold">View documentation</div>
+            <div className="text-[11px] text-muted-foreground/60">Learn more about finetuning</div>
           </div>
         </button>
       </div>

@@ -50,6 +50,12 @@ const CRITERIA_COLORS = [
 interface EpochData {
   epoch: number;
   avgScore: number;
+  stdDev: number;
+  /** Upper bound of ±1 std dev band */
+  scoreUpper: number;
+  /** Lower bound of ±1 std dev band */
+  scoreLower: number;
+  improvement: number;
   rowCount: number;
   criteriaAvg: Record<string, number>;
 }
@@ -163,10 +169,30 @@ export function TrainingMetricsChart({
         stats.scores.length > 0
           ? stats.scores.reduce((a, b) => a + b, 0) / stats.scores.length
           : 0;
+      const stdDev = stats.scores.length > 0
+        ? Math.sqrt(stats.scores.reduce((a, b) => a + (b - avgScore) ** 2, 0) / stats.scores.length)
+        : 0;
       const criteriaAvg = averageCriteriaScores(stats.breakdowns);
 
-      return { epoch, avgScore, rowCount: stats.uniqueRows.size, criteriaAvg };
+      return {
+        epoch,
+        avgScore,
+        stdDev,
+        scoreUpper: Math.min(1, avgScore + stdDev),
+        scoreLower: Math.max(0, avgScore - stdDev),
+        improvement: 0, // computed below
+        rowCount: stats.uniqueRows.size,
+        criteriaAvg,
+      };
     });
+
+    // Compute improvement (delta from previous epoch)
+    for (let i = 1; i < epochDataList.length; i++) {
+      epochDataList[i] = {
+        ...epochDataList[i],
+        improvement: epochDataList[i].avgScore - epochDataList[i - 1].avgScore,
+      };
+    }
 
     const criteriaNamesList = getAllCriteriaNames(
       Array.from(epochMap.values()).flatMap((s) => s.breakdowns)
@@ -197,6 +223,11 @@ export function TrainingMetricsChart({
     name: `Eval ${epoch.epoch + 1}`,
     epoch: epoch.epoch,
     "Avg Score": parseFloat(epoch.avgScore.toFixed(3)),
+    // Std dev band (upper and lower bounds as an array for Recharts Area)
+    stdDevBand: [
+      parseFloat(epoch.scoreLower.toFixed(3)),
+      parseFloat(epoch.scoreUpper.toFixed(3)),
+    ],
     ...Object.fromEntries(
       Object.entries(epoch.criteriaAvg).map(([key, val]) => [
         key,
@@ -252,6 +283,12 @@ export function TrainingMetricsChart({
             margin={{ top: 12, right: 16, bottom: 4, left: -12 }}
           >
             <defs>
+              {/* Std dev band gradient */}
+              <linearGradient id="stdDevGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#10b981" stopOpacity={0.12} />
+                <stop offset="50%" stopColor="#10b981" stopOpacity={0.08} />
+                <stop offset="100%" stopColor="#10b981" stopOpacity={0.12} />
+              </linearGradient>
               {/* Main score gradient fill */}
               <linearGradient id="scoreGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#10b981" stopOpacity={0.3} />
@@ -342,6 +379,16 @@ export function TrainingMetricsChart({
               cursor={{ stroke: "#334155", strokeDasharray: "4 4" }}
             />
 
+            {/* ±1 std dev confidence band */}
+            <Area
+              type="monotone"
+              dataKey="stdDevBand"
+              stroke="none"
+              fill="url(#stdDevGradient)"
+              activeDot={false}
+              isAnimationActive={!isSinglePoint}
+            />
+
             {/* Main score area + line */}
             <Area
               type="monotone"
@@ -395,6 +442,12 @@ export function TrainingMetricsChart({
             </span>
           </div>
 
+          {/* Std dev band legend */}
+          <div className="flex items-center gap-2 opacity-60">
+            <span className="block w-3 h-2 bg-[#10b981]/20 rounded-sm" />
+            <span className="text-xs text-slate-400">±1σ band</span>
+          </div>
+
           {/* Criteria legends */}
           {hasBreakdown &&
             criteriaNames.map((name, idx) => (
@@ -438,6 +491,37 @@ export function TrainingMetricsChart({
           </div>
         )}
       </div>
+
+      {/* ── Summary Stats ── Total improvement, final avg, spread */}
+      {epochData.length >= 2 && (
+        <div className="px-5 py-2 border-t border-white/5 flex items-center gap-6 text-[11px] text-zinc-500 flex-wrap">
+          <span>
+            Total Δ:{" "}
+            <span className={cn(
+              "font-mono font-semibold",
+              epochData[epochData.length - 1].avgScore - epochData[0].avgScore >= 0 ? "text-emerald-400" : "text-red-400",
+            )}>
+              {epochData[epochData.length - 1].avgScore - epochData[0].avgScore >= 0 ? "+" : ""}
+              {(epochData[epochData.length - 1].avgScore - epochData[0].avgScore).toFixed(3)}
+            </span>
+          </span>
+          <span>
+            Final avg:{" "}
+            <span className="font-mono font-semibold text-zinc-200">
+              {formatScore(epochData[epochData.length - 1].avgScore)}
+            </span>
+          </span>
+          <span>
+            Spread (σ):{" "}
+            <span className="font-mono font-semibold text-zinc-200">
+              {epochData[epochData.length - 1].stdDev.toFixed(3)}
+            </span>
+          </span>
+          <span>
+            {epochData[epochData.length - 1].rowCount} records
+          </span>
+        </div>
+      )}
     </div>
   );
 }

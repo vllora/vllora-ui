@@ -384,75 +384,75 @@
   .trust-logos span { font-size: 12px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.02em; }
 
   /* ══════════════════════════════════════════════
-     PAGE 2: SETUP GUIDE
+     PAGE 2: SETUP GUIDE (Tabbed)
      ══════════════════════════════════════════════ */
-  .setup-page { flex: 1; display: flex; justify-content: center; padding: 5vh 24px 80px; }
-  .setup-container { width: 100%; max-width: 680px; }
+  .setup-page {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .setup-container { width: 100%; max-width: 600px; }
 
   .setup-header {
-    text-align: center; margin-bottom: 48px;
+    text-align: center; margin-bottom: 28px;
   }
   .setup-header .badge {
     background: rgba(var(--theme-500), 0.08);
     border: 1px solid rgba(var(--theme-500), 0.15);
     color: var(--accent);
-    margin-bottom: 16px;
+    margin-bottom: 14px;
   }
   .setup-header h1 {
-    font-size: 1.75rem; font-weight: 800; letter-spacing: -0.03em;
-    margin-bottom: 10px;
+    font-size: 1.25rem; font-weight: 800; letter-spacing: -0.03em;
+    margin-bottom: 6px;
   }
-  .setup-header p { font-size: 14px; color: var(--text-muted); max-width: 400px; margin: 0 auto; }
+  .setup-header p { font-size: 13px; color: var(--text-muted); }
 
-  /* Progress indicator */
-  .setup-progress {
-    display: flex; align-items: center; justify-content: center; gap: 6px;
-    margin-bottom: 40px;
-  }
-  .setup-progress .dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--bg-muted); border: 1.5px solid var(--border);
-    transition: all var(--transition);
-  }
-  .setup-progress .dot.done { background: var(--accent-muted); border-color: var(--accent-muted); }
-  .setup-progress .dot.current { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--theme-500), 0.15); }
-  .setup-progress .line { width: 32px; height: 1.5px; background: var(--border-subtle); }
-  .setup-progress .line.done { background: rgba(var(--theme-500), 0.3); }
-
-  /* Steps */
-  .setup-step {
-    position: relative;
-    padding: 24px; padding-left: 72px;
-    margin-bottom: 16px;
-    border-radius: var(--radius-lg);
+  /* Step tabs */
+  .setup-tabs {
+    display: flex; gap: 4px; padding: 4px;
+    border-radius: var(--radius); background: var(--bg-muted);
     border: 1px solid var(--border-subtle);
-    background: var(--bg-card);
-    transition: all 0.3s ease;
+    margin-bottom: 24px;
   }
-  .setup-step:hover { border-color: var(--border); }
-  .setup-step.highlight {
-    border-color: rgba(var(--theme-500), 0.2);
-    box-shadow: var(--shadow-glow);
+  .setup-tab {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 8px; border-radius: var(--radius-sm);
+    font-size: 11.5px; font-weight: 500;
+    cursor: pointer; transition: all var(--transition);
+    border: none; background: transparent;
+    color: var(--text-dim);
+  }
+  .setup-tab:hover { color: var(--text-secondary); }
+  .setup-tab.active { background: var(--bg); color: var(--text); box-shadow: var(--shadow-sm); }
+  .setup-tab.done { color: var(--accent); }
+  .setup-tab .tab-num {
+    width: 20px; height: 20px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700;
+    background: var(--bg-muted); color: var(--text-dim);
+  }
+  .setup-tab.active .tab-num {
+    background: rgba(var(--theme-500), 0.15); color: var(--accent);
+  }
+  .setup-tab.done .tab-num {
+    background: rgba(var(--theme-500), 0.1); color: var(--accent);
   }
 
-  .setup-step-num {
-    position: absolute; left: 24px; top: 24px;
-    width: 32px; height: 32px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 13px; font-weight: 700;
-    background: rgba(var(--theme-500), 0.1);
-    color: var(--accent);
-    border: 1px solid rgba(var(--theme-500), 0.2);
-  }
-  .setup-step h3 {
+  /* Step content area */
+  .setup-content { min-height: 260px; margin-bottom: 24px; }
+  .setup-content h3 {
     font-size: 14px; font-weight: 700; margin-bottom: 8px;
     letter-spacing: -0.01em;
   }
-  .setup-step p {
+  .setup-content > p {
     font-size: 13px; color: var(--text-muted); line-height: 1.6;
     margin-bottom: 14px;
   }
-  .setup-step p:last-child { margin-bottom: 0; }
+
+  /* Step nav buttons */
+  .setup-nav {
+    display: flex; align-items: center; justify-content: space-between;
+  }
 
   .callout {
     display: flex; gap: 10px;
@@ -1005,7 +1005,7 @@
   </div>
 </div>
 
-<!-- ═══════════════════ PAGE 2: SETUP ═══════════════════ -->
+<!-- ═══════════════════ PAGE 2: SETUP (Tabbed) ═══════════════════ -->
 <div id="pg-setup" class="page">
   <div class="setup-page">
     <div class="setup-container">
@@ -1015,17 +1015,26 @@
         <p>Install the skill, run the pipeline, and come back here to evaluate.</p>
       </div>
 
-      <div class="setup-progress">
-        <div class="dot done"></div><div class="line done"></div>
-        <div class="dot current"></div><div class="line"></div>
-        <div class="dot"></div><div class="line"></div>
-        <div class="dot"></div>
+      <!-- Tab bar -->
+      <div class="setup-tabs">
+        <button class="setup-tab active" onclick="showSetupStep(0)" id="stab-0">
+          <span class="tab-num">1</span> Prerequisites
+        </button>
+        <button class="setup-tab" onclick="showSetupStep(1)" id="stab-1">
+          <span class="tab-num">2</span> Install Skill
+        </button>
+        <button class="setup-tab" onclick="showSetupStep(2)" id="stab-2">
+          <span class="tab-num">3</span> Run Pipeline
+        </button>
+        <button class="setup-tab" onclick="showSetupStep(3)" id="stab-3">
+          <span class="tab-num">4</span> Evaluate
+        </button>
       </div>
 
-      <div class="setup-step highlight">
-        <div class="setup-step-num">1</div>
-        <h3>Prerequisites</h3>
-        <p>Install an AI coding assistant that supports skills:</p>
+      <!-- Step 1 -->
+      <div class="setup-content" id="sstep-0">
+        <h3>Install an AI coding assistant</h3>
+        <p>You need Claude Code or Codex to run the finetune skill:</p>
         <div class="code-block">
           <button class="copy-btn">Copy</button>
           <span class="comment"># Claude Code (recommended)</span><br>
@@ -1040,15 +1049,15 @@
         </div>
       </div>
 
-      <div class="setup-step">
-        <div class="setup-step-num">2</div>
+      <!-- Step 2 -->
+      <div class="setup-content" id="sstep-1" style="display:none">
         <h3>Copy the skill to your project</h3>
         <p>The skill tells Claude Code how to run the full finetune pipeline. Copy it into any project where you have documents.</p>
         <div class="code-block">
           <button class="copy-btn">Copy</button>
           <span class="cmd">cp -r</span> <span class="str">vllora/ui/finetune-skill/</span> <span class="str">your-project/.claude/skills/finetune/</span><br>
           <br>
-          <span class="comment"># Your project:</span><br>
+          <span class="comment"># Your project structure:</span><br>
           <span class="comment"># your-project/</span><br>
           <span class="comment">#   ├── .claude/skills/finetune/  ← skill</span><br>
           <span class="comment">#   ├── chess-tactics.pdf         ← your document</span><br>
@@ -1056,19 +1065,18 @@
         </div>
       </div>
 
-      <div class="setup-step">
-        <div class="setup-step-num">3</div>
+      <!-- Step 3 -->
+      <div class="setup-content" id="sstep-2" style="display:none">
         <h3>Run the finetune pipeline</h3>
         <p>Open a terminal in your project and describe what you want to finetune:</p>
         <div class="code-block">
           <button class="copy-btn">Copy</button>
           <span class="cmd">claude</span> <span class="str">"finetune chess-tactics.pdf as a chess tutor"</span><br>
           <br>
-          <span class="output"># → Extracting chess-tactics.pdf... (2 min)</span><br>
+          <span class="output"># → Extracting chess-tactics.pdf...</span><br>
           <span class="output"># → Building 12 topics from document...</span><br>
           <span class="output"># → Generating 154 training records...</span><br>
-          <span class="output"># → Writing grader...</span><br>
-          <span class="output"># → ✓ Pipeline complete. View at http://localhost:5173/finetune/abc123</span>
+          <span class="output"># → ✓ View at http://localhost:5173/finetune/abc123</span>
         </div>
         <div class="pipeline-flow">
           <span class="pip-stage"><span class="sdot"></span> Extract</span>
@@ -1081,14 +1089,14 @@
         </div>
         <div class="callout tip">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-          <p><strong>Like Weights & Biases</strong> — the CLI prints a direct link to your workflow in the UI. Click it to see data streaming in real-time.</p>
+          <p><strong>Like Weights & Biases</strong> — the CLI prints a direct link to your workflow. Click it to see data in real-time.</p>
         </div>
       </div>
 
-      <div class="setup-step">
-        <div class="setup-step-num">4</div>
+      <!-- Step 4 -->
+      <div class="setup-content" id="sstep-3" style="display:none">
         <h3>Evaluate and train in the UI</h3>
-        <p>Once the skill finishes, your workflow is ready in the UI:</p>
+        <p>Once the skill finishes, your workflow is ready. You can:</p>
         <div class="checklist">
           <div class="checklist-item"><span class="ci">✓</span> Browse topics & training records on the canvas</div>
           <div class="checklist-item"><span class="ci">✓</span> Run evaluations to score data quality</div>
@@ -1098,9 +1106,10 @@
         </div>
       </div>
 
-      <div class="setup-footer">
-        <button class="btn btn-primary" onclick="go('empty')">View My Workflows →</button>
-        <button class="btn btn-ghost" onclick="go('homepage')">← Back to home</button>
+      <!-- Navigation -->
+      <div class="setup-nav">
+        <button class="btn btn-ghost" id="setup-back" onclick="setupNav(-1)">← Home</button>
+        <button class="btn btn-primary" id="setup-next" onclick="setupNav(1)">Next →</button>
       </div>
     </div>
   </div>
@@ -1397,6 +1406,34 @@ function go(id) {
     else if (i < idx) b.classList.add('visited');
   });
   window.scrollTo(0, 0);
+}
+
+// Setup page tabbed steps
+let currentSetupStep = 0;
+function showSetupStep(idx) {
+  currentSetupStep = idx;
+  for (let i = 0; i < 4; i++) {
+    const content = document.getElementById('sstep-' + i);
+    const tab = document.getElementById('stab-' + i);
+    if (content) content.style.display = i === idx ? 'block' : 'none';
+    if (tab) {
+      tab.classList.remove('active', 'done');
+      if (i === idx) tab.classList.add('active');
+      else if (i < idx) tab.classList.add('done');
+    }
+  }
+  // Update nav buttons
+  const backBtn = document.getElementById('setup-back');
+  const nextBtn = document.getElementById('setup-next');
+  if (backBtn) backBtn.textContent = idx === 0 ? '← Home' : '← Back';
+  if (nextBtn) {
+    nextBtn.textContent = idx === 3 ? 'View My Workflows →' : 'Next →';
+  }
+}
+function setupNav(dir) {
+  if (dir === -1 && currentSetupStep === 0) { go('homepage'); return; }
+  if (dir === 1 && currentSetupStep === 3) { go('empty'); return; }
+  showSetupStep(currentSetupStep + dir);
 }
 </script>
 

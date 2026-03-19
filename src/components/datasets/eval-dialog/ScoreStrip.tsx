@@ -22,6 +22,12 @@ import {
   ZAxis,
 } from "recharts";
 import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface ScoreStripProps {
   readonly scores: number[];
@@ -60,23 +66,50 @@ export function ScoreStrip({ scores, mean, className }: ScoreStripProps) {
 
   return (
     <div className={cn("w-full", className)}>
-      {/* Chart type selector */}
+      {/* Chart type selector — pill-style segmented control */}
       <div className="flex items-center justify-end mb-1">
-        <select
-          value={view}
-          onChange={(e) => setView(e.target.value as ChartView)}
-          className="text-[10px] bg-zinc-800/60 border border-zinc-700/50 rounded px-1.5 py-0.5 text-zinc-400 cursor-pointer hover:text-zinc-200 transition-colors outline-none focus:ring-1 focus:ring-zinc-600"
-        >
+        <div className="flex items-center bg-zinc-800/40 rounded-md p-0.5 gap-0.5">
           {(Object.keys(CHART_LABELS) as ChartView[]).map((key) => (
-            <option key={key} value={key}>{CHART_LABELS[key]}</option>
+            <button
+              key={key}
+              onClick={() => setView(key)}
+              className={cn(
+                "px-2.5 py-1 text-[10px] font-medium rounded transition-all",
+                view === key
+                  ? "bg-zinc-700/80 text-zinc-200 shadow-sm"
+                  : "text-zinc-500 hover:text-zinc-300",
+              )}
+            >
+              {CHART_LABELS[key]}
+            </button>
           ))}
-        </select>
+        </div>
       </div>
 
       {/* Chart content */}
       {view === "distribution" && <DistributionChart scores={scores} mean={mean} />}
       {view === "sorted" && <SortedBarsChart scores={scores} mean={mean} />}
       {view === "boxplot" && <BoxPlotChart scores={scores} />}
+
+      {/* Mean legend with tooltip */}
+      {mean != null && (
+        <TooltipProvider delayDuration={200}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-2 mt-1 cursor-help w-fit">
+                <span className="w-4 h-0 border-t border-dashed border-white/50" />
+                <span className="text-[10px] text-zinc-500 font-mono">Mean {mean.toFixed(2)}</span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-[260px]">
+              <p className="text-[11px]">
+                The <span className="font-semibold">mean score</span> ({mean.toFixed(3)}) is the average across all {scores.length} records
+                in this evaluation. The dashed line shows where this average falls on the distribution.
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
     </div>
   );
 }
@@ -156,7 +189,7 @@ function DistributionChart({ scores, mean }: { scores: number[]; mean?: number }
             stroke="rgba(255,255,255,0.5)"
             strokeWidth={1.5}
             strokeDasharray="3 2"
-            label={{ value: `μ ${mean!.toFixed(2)}`, position: "top", fontSize: 9, fill: "#a1a1aa", fontFamily: "monospace" }}
+            label={{ value: `Mean ${mean!.toFixed(2)}`, position: "top", fontSize: 9, fill: "#a1a1aa", fontFamily: "monospace" }}
           />
         )}
       </BarChart>
@@ -225,7 +258,7 @@ function SortedBarsChart({ scores, mean }: { scores: number[]; mean?: number }) 
             y={mean}
             stroke="rgba(255,255,255,0.4)"
             strokeDasharray="3 2"
-            label={{ value: `μ ${mean.toFixed(2)}`, position: "right", fontSize: 9, fill: "#71717a", fontFamily: "monospace" }}
+            label={{ value: `Mean ${mean.toFixed(2)}`, position: "right", fontSize: 9, fill: "#71717a", fontFamily: "monospace" }}
           />
         )}
       </BarChart>
@@ -297,7 +330,7 @@ function BoxPlotChart({ scores }: { scores: number[] }) {
           x={stats.mean}
           stroke="rgba(255,255,255,0.5)"
           strokeDasharray="3 2"
-          label={{ value: `μ ${stats.mean.toFixed(2)}`, position: "top", fontSize: 9, fill: "#a1a1aa", fontFamily: "monospace" }}
+          label={{ value: `Mean ${stats.mean.toFixed(2)}`, position: "top", fontSize: 9, fill: "#a1a1aa", fontFamily: "monospace" }}
         />
 
         {/* Whiskers */}

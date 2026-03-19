@@ -159,6 +159,10 @@ export default {
   				'100%': {
   					boxShadow: 'inset 0 0 0 0px rgba(139,92,246,0), 0 0 0px 0px rgba(139,92,246,0)',
   				},
+  			},
+  			'pulse-out': {
+  				'0%, 100%': { transform: 'scale(1)', opacity: '1' },
+  				'50%': { transform: 'scale(1.08)', opacity: '0.5' },
   			}
   		},
   		animation: {
@@ -170,7 +174,8 @@ export default {
   			'highlight-flash': 'highlight-flash 1s ease-out',
   			'audio-wave': 'audio-wave 0.6s ease-in-out infinite',
   			'loading-progress': 'loading-progress 2s ease-in-out infinite',
-  			'record-highlight': 'record-highlight 2s ease-out forwards'
+  			'record-highlight': 'record-highlight 2s ease-out forwards',
+  			'pulse-out': 'pulse-out 3s ease-in-out infinite'
   		}
   	}
   },

@@ -21,7 +21,9 @@ export function FinetuneHero({ className }: FinetuneHeroProps) {
         </span>
       </h1>
       <p className="text-[15px] text-muted-foreground/60">
-        Define the vision. We handle the pipeline.
+        Use the finetune skill with Claude Code or Codex to prepare training data.
+        <br />
+        Visualize, evaluate, and train — all from here.
       </p>
     </div>
   );
