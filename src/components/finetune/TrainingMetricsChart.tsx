@@ -194,7 +194,7 @@ export function TrainingMetricsChart({
 
   // Prepare chart data — display epochs as 1-based (backend is 0-based)
   const chartData = epochData.map((epoch) => ({
-    name: `Epoch ${epoch.epoch + 1}`,
+    name: `Eval ${epoch.epoch + 1}`,
     epoch: epoch.epoch,
     "Avg Score": parseFloat(epoch.avgScore.toFixed(3)),
     ...Object.fromEntries(
@@ -231,7 +231,7 @@ export function TrainingMetricsChart({
               {formatScore(latestScore)}
             </h2>
             <span className="text-xs font-medium text-slate-400">
-              Epoch {latestEpoch ? latestEpoch.epoch + 1 : "-"} ·{" "}
+              Eval {latestEpoch ? latestEpoch.epoch + 1 : "-"} ·{" "}
               {latestEpoch?.rowCount} rows
             </span>
           </div>

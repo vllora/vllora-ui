@@ -14,6 +14,8 @@ import {
 } from "@/utils/parse-score-breakdown";
 import { ResultsTable } from "@/components/datasets/eval-dialog/ResultsTable";
 import { EpochScoresTable, type EpochScore } from "./EpochScoresTable";
+import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
+import { emitter } from "@/utils/eventEmitter";
 
 
 interface PerRowDetailsSectionProps {
@@ -48,7 +50,8 @@ function computeEpochTrend(
   return latestScore - prevScore;
 }
 
-export function PerRowDetailsSection({ results }: PerRowDetailsSectionProps) {
+export function PerRowDetailsSection({ results, workflowId }: PerRowDetailsSectionProps) {
+  const { sortedRecords } = DatasetDetailConsumer();
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
 
   // Auto-expand row when navigating from QualityIndicator finetune score click
@@ -87,10 +90,12 @@ export function PerRowDetailsSection({ results }: PerRowDetailsSectionProps) {
         }
       }
 
-      // Latest epoch for the flat table row
+      // Latest epoch for the flat table row — use best score among candidates
       const latestEpoch = epochNumbers[epochNumbers.length - 1];
       const latestResults = row.epochs[latestEpoch];
-      const latestResult = latestResults?.[0];
+      const latestResult = latestResults && latestResults.length > 1
+        ? [...latestResults].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0]
+        : latestResults?.[0];
 
       const rowId = row.row?.id ?? `finetune-row-${row.row_index}`;
 
@@ -134,12 +139,25 @@ export function PerRowDetailsSection({ results }: PerRowDetailsSectionProps) {
     );
   }
 
+  const handleNavigateToRecord = useCallback((_cloudRowId: string, result: FlatEvaluationResult) => {
+    const gatewayId = (result?.row?.id ?? _cloudRowId) as string;
+    const record = sortedRecords.find(r => r.id === gatewayId);
+    if (record?.topic && workflowId) {
+      window.dispatchEvent(new CustomEvent("vllora_navigate_to_job", {
+        detail: { jobId: record.topic, type: "topic" },
+      }));
+    } else if (workflowId) {
+      emitter.emit('vllora_navigate_to_record', { workflowId, recordId: gatewayId });
+    }
+  }, [sortedRecords, workflowId]);
+
   return (
     <ResultsTable
       results={flatResults}
       expandedRowId={expandedRowId}
       onRowClick={handleRowClick}
       renderExpandedContent={renderExpandedContent}
+      onNavigateToRecord={handleNavigateToRecord}
       fillHeight
     />
   );

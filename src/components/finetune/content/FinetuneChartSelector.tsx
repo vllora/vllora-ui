@@ -122,7 +122,7 @@ function computeEpochProgress(
 
     data.push({
       epoch,
-      label: `Epoch ${epoch + 1}`,
+      label: `Eval ${epoch + 1}`,
       avgScore: avg,
       improvement,
       stdDev,
@@ -260,7 +260,7 @@ function TrainingProgressChart({ data, isLive }: { readonly data: EpochProgressD
       {/* Improvement per epoch */}
       <div>
         <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-500">
-          Score Improvement Per Epoch
+          Score Improvement Per Eval
         </span>
         <ResponsiveContainer width="100%" height={100}>
           <BarChart data={data} margin={{ top: 12, right: 8, bottom: 0, left: 8 }}>
@@ -296,7 +296,7 @@ function TrainingProgressChart({ data, isLive }: { readonly data: EpochProgressD
       {/* Score spread per epoch — higher spread = more learning signal for GRPO */}
       <div>
         <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-500">
-          Score Spread Per Epoch
+          Score Spread Per Eval
           <span className="font-normal text-zinc-600 ml-1">(std dev — higher = stronger reward signal for training)</span>
         </span>
         <ResponsiveContainer width="100%" height={80}>

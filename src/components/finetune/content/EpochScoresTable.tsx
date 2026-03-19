@@ -49,7 +49,7 @@ export function EpochScoresTable({
         <table className="w-full">
           <thead>
             <tr className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
-              <th className="text-left py-1.5 pr-3 w-16">Epoch</th>
+              <th className="text-left py-1.5 pr-3 w-20" title="Evaluation checkpoint. In RFT, the model generates multiple response candidates per prompt — each is scored separately (a, b, ...). The training algorithm uses score differences between candidates as learning signal.">Eval</th>
               <th className="text-left py-1.5 pr-3 w-16">Score</th>
               {criteriaNames.map((c) => (
                 <th key={c} className="text-left py-1.5 pr-3 w-16">
@@ -63,9 +63,17 @@ export function EpochScoresTable({
           <tbody>
             {epochs.map((e, idx) => {
               const hasRowLogs = e.logs && e.logs.length > 0;
-              // Compute score delta from previous epoch (within this row's epochs)
-              const prevEpoch = idx > 0 ? epochs[idx - 1] : null;
-              const delta = prevEpoch ? e.score - prevEpoch.score : null;
+              // Count how many entries share this epoch to label candidates
+              const sameEpochEntries = epochs.filter(x => x.epoch === e.epoch);
+              const candidateIdx = sameEpochEntries.indexOf(e);
+              const hasCandidates = sameEpochEntries.length > 1;
+              // Compute delta: compare best score of this epoch vs best of previous epoch
+              const prevEpochNum = [...new Set(epochs.map(x => x.epoch))].sort((a, b) => a - b);
+              const thisEpochIdx = prevEpochNum.indexOf(e.epoch);
+              const prevBest = thisEpochIdx > 0
+                ? Math.max(...epochs.filter(x => x.epoch === prevEpochNum[thisEpochIdx - 1]).map(x => x.score))
+                : null;
+              const delta = prevBest != null && candidateIdx === 0 ? e.score - prevBest : null;
 
               return (
                 <tr
@@ -74,6 +82,14 @@ export function EpochScoresTable({
                 >
                   <td className="py-1.5 pr-3 font-mono text-zinc-400 tabular-nums">
                     {e.epoch + 1}
+                    {hasCandidates && (
+                      <span
+                        className="text-zinc-600 text-[9px] ml-0.5 cursor-help"
+                        title={`Response candidate ${candidateIdx + 1} of ${sameEpochEntries.length}. In RFT, multiple responses are generated and scored — the model learns from score differences between them.`}
+                      >
+                        ({String.fromCharCode(97 + candidateIdx)})
+                      </span>
+                    )}
                   </td>
                   <td className="py-1.5 pr-3">
                     <span className="inline-flex items-center gap-1.5">

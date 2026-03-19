@@ -24,17 +24,25 @@ interface DryrunEvaluationResultRowProps {
   readonly isExpanded?: boolean;
   /** Whether all results have the same status (hides redundant status column) */
   readonly allSameStatus?: boolean;
+  /** Whether the table has any trend data (reserves column space for alignment) */
+  readonly showTrend?: boolean;
 }
 
-/** Render a trend value as a colored arrow + delta string */
+/** Render a trend value as a colored arrow + delta string with tooltip */
 function renderTrend(trend: number): React.ReactNode {
+  const tooltip = trend > 0
+    ? `Score improved by ${trend.toFixed(3)} compared to previous epoch`
+    : trend < 0
+    ? `Score decreased by ${Math.abs(trend).toFixed(3)} compared to previous epoch`
+    : "Score unchanged from previous epoch";
+
   if (trend > 0.005) {
-    return <span className="text-emerald-400">↑ +{trend.toFixed(2)}</span>;
+    return <span className="text-emerald-400 cursor-help" title={tooltip}>↑ +{trend.toFixed(2)}</span>;
   }
   if (trend < -0.005) {
-    return <span className="text-red-400">↓ {trend.toFixed(2)}</span>;
+    return <span className="text-red-400 cursor-help" title={tooltip}>↓ {trend.toFixed(2)}</span>;
   }
-  return <span className="text-zinc-500">→ 0.00</span>;
+  return <span className="text-zinc-500 cursor-help" title={tooltip}>→ 0.00</span>;
 }
 
 /** Extract the first user message from the row data as the input text */
@@ -66,6 +74,7 @@ export function DryrunEvaluationResultRow({
   showEpoch,
   isExpanded,
   allSameStatus,
+  showTrend,
 }: DryrunEvaluationResultRowProps) {
   const isSuccess = result.status === "completed" && !result.error_message;
   const isFailed = result.status === "failed" || !!result.error_message;
@@ -110,7 +119,7 @@ export function DryrunEvaluationResultRow({
         {/* Epoch (only when multiple epochs exist) */}
         {showEpoch && result.epoch != null && (
           <div className="w-[50px] shrink-0 text-center font-mono text-[11px] text-zinc-400 tabular-nums">
-            E{result.epoch}
+            E{(result.epoch ?? 0) + 1}
           </div>
         )}
 
@@ -162,10 +171,10 @@ export function DryrunEvaluationResultRow({
           )}
         </div>
 
-        {/* Trend (only for finetune per-row results) */}
-        {result.trend != null && (
-          <div className="w-[50px] shrink-0 text-center font-mono text-[11px] tabular-nums">
-            {renderTrend(result.trend)}
+        {/* Trend — always render cell when table has trend column to keep alignment */}
+        {showTrend && (
+          <div className="w-[60px] shrink-0 text-center font-mono text-[11px] tabular-nums">
+            {result.trend != null ? renderTrend(result.trend) : null}
           </div>
         )}
 

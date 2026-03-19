@@ -256,12 +256,12 @@ export function ResultsTable({
       <div className="flex items-center text-[10px] font-semibold uppercase tracking-wider text-zinc-500 border-b border-zinc-700/50 shrink-0">
         <div className="w-5 shrink-0" /> {/* expand chevron */}
         <div className="w-8 shrink-0 py-2">#</div>
-        {hasEpochData && <div className="w-[50px] shrink-0 text-center py-2">Epoch</div>}
+        {hasEpochData && <div className="w-[50px] shrink-0 text-center py-2">Eval</div>}
         <div className="flex-1 min-w-0 py-2">Input</div>
         {hasTopicData && <div className="w-[120px] shrink-0 py-2">Topic</div>}
         <div className="w-16 shrink-0 text-right pr-4 py-2">Score</div>
-        {hasTrendData && <div className="w-[50px] shrink-0 text-center py-2">Trend</div>}
-        <div className="w-[140px] shrink-0 pr-2 py-2">
+        {hasTrendData && <div className="w-[60px] shrink-0 text-center py-2">Trend</div>}
+        <div className="w-[140px] shrink-0 pl-2 pr-2 py-2">
           {allSameStatus ? "Reason" : "Status"}
         </div>
         <div className="w-10 shrink-0 text-center py-2">Logs</div>
@@ -307,6 +307,7 @@ export function ResultsTable({
                     showEpoch={hasEpochData}
                     isExpanded={hasExternalExpand ? false : isExpanded}
                     allSameStatus={allSameStatus}
+                    showTrend={hasTrendData}
                   />
                   {/* External expand content (e.g., from PerRowDetailsSection) */}
                   {isExpanded && hasExternalExpand && renderExpandedContent && (

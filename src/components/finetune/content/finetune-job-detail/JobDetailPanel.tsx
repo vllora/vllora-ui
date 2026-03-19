@@ -153,7 +153,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
         {summary && (
           <p className="font-mono text-xs font-medium tracking-tight text-slate-300 truncate min-w-0">
             Epoch{" "}
-            {summary.latestEpoch != null ? summary.latestEpoch + 1 : "-"}/
+            {summary.latestEpoch != null ? Math.min(summary.latestEpoch, totalEpochs ?? summary.latestEpoch) : "-"}/
             {totalEpochs ?? "?"} · Avg Score{" "}
             <span className="text-[#10b981]">
               {summary.latestAvgScore != null
@@ -250,7 +250,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
         {/* ── Epoch Progress (thin bar only) ── */}
         {totalEpochs != null && summary?.latestEpoch != null && (
           <EpochProgressBar
-            currentEpoch={summary.latestEpoch + 1}
+            currentEpoch={Math.min(summary.latestEpoch, totalEpochs)}
             totalEpochs={totalEpochs}
           />
         )}
