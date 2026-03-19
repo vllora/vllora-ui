@@ -246,8 +246,8 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
       </header>
 
       {/* ── Main scrollable content ── */}
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 flex flex-col">
+        <div className="space-y-4 flex-1 flex flex-col">
           {/* ── Epoch Progress (thin bar only) ── */}
           {totalEpochs != null && summary?.latestEpoch != null && (
             <EpochProgressBar
@@ -291,7 +291,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
 
           {/* ── Per-Row Details (themed to match panel) ── */}
           {job.workflow_id && evalResults && evalResults.results.length > 0 && (
-            <div className="[&_input]:!bg-[#141414] [&_input]:!border-[#262626] [&_button]:!border-[#262626] [&_button]:!text-slate-400 [&_button:hover]:!bg-white/5">
+            <div className="flex-1 min-h-0 [&_input]:!bg-[#141414] [&_input]:!border-[#262626] [&_button]:!border-[#262626] [&_button]:!text-slate-400 [&_button:hover]:!bg-white/5">
               <PerRowDetailsSection
                 results={evalResults.results}
                 workflowId={job.workflow_id}

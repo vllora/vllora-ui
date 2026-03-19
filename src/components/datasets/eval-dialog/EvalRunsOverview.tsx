@@ -78,11 +78,14 @@ export function EvalRunsOverview(_props: EvalRunsOverviewProps) {
                   <th className="text-left px-3 py-2 font-medium">Run</th>
                   <th className="text-left px-3 py-2 font-medium">Status</th>
                   <th className="text-right px-3 py-2 font-medium">Samples</th>
-                  <ThWithInfo align="right" label="Mean" tip="Average score across all evaluated records (0-1). Higher is better." />
-                  <ThWithInfo align="right" label="Std Dev" tip="Standard deviation — measures score spread. Low std dev means consistent quality; high means some records score much higher/lower than others." />
-                  <ThWithInfo align="right" label="Min" tip="Lowest score in this eval run. Low min values indicate problem records that need attention." />
-                  <ThWithInfo align="right" label="Max" tip="Highest score in this eval run." />
-                  <ThWithInfo align="left" label="Verdict" tip="GO = ready for training (mean ≥ 0.7, low variance). WARNING = review recommended. NO-GO = significant quality issues, fix before training." />
+                  <ThWithInfo align="right" label="Mean" tip="Mean = sum of all scores / number of records. Example: scores [0.9, 0.8, 1.0] → mean = 2.7/3 = 0.90. Target: ≥ 0.8" />
+                  <ThWithInfo align="right" label="Std Dev" tip="Standard deviation = √(avg of squared differences from mean). Measures how spread out scores are. Example: scores [0.9, 0.8, 1.0] with mean 0.9 → std = √((0+0.01+0.01)/3) = 0.08. Low (< 0.1) = consistent. High (> 0.2) = some records much worse than others." />
+                  <ThWithInfo align="right" label="Min" tip="The lowest score any single record received. If min is much lower than mean, investigate that record — it likely has a quality issue the grader caught." />
+                  <ThWithInfo align="right" label="Max" tip="The highest score any single record received. If max = 1.00 for all runs, the grader may be too lenient — consider tightening criteria." />
+                  <ThWithInfo align="left" label="Verdict" tip="Automated quality verdict based on score distribution:
+• GO — mean ≥ 0.7, std < 0.15, pass rate > 70%. Safe to start training.
+• WARNING — mean 0.5–0.7 or high variance. Review low-scoring records before training.
+• NO-GO — mean < 0.5 or pass rate < 50%. Fix data quality or grader before proceeding." />
                   <th className="text-right px-3 py-2 font-medium">Date</th>
                 </tr>
               </TooltipProvider>
