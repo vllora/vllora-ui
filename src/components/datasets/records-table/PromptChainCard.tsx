@@ -30,7 +30,7 @@ interface PromptChainCardProps {
 
 export function PromptChainCard({ link, isExpanded = false, onToggleExpand }: PromptChainCardProps) {
   const isLeaf = link.level === "leaf";
-  const isTruncated = !isExpanded && link.prompt.length > 120;
+  const showTooltip = !isExpanded && link.prompt.length > 0;
 
   return (
     <div className={cn(
@@ -60,8 +60,8 @@ export function PromptChainCard({ link, isExpanded = false, onToggleExpand }: Pr
         )}
       </div>
 
-      {/* Prompt text with tooltip when truncated */}
-      {isTruncated ? (
+      {/* Prompt text — always show tooltip when collapsed */}
+      {showTooltip ? (
         <TooltipProvider delayDuration={300}>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -77,10 +77,7 @@ export function PromptChainCard({ link, isExpanded = false, onToggleExpand }: Pr
           </Tooltip>
         </TooltipProvider>
       ) : (
-        <p className={cn(
-          "text-[11px] text-muted-foreground font-mono leading-relaxed whitespace-pre-wrap",
-          !isExpanded && "line-clamp-3",
-        )}>
+        <p className="text-[11px] text-muted-foreground font-mono leading-relaxed whitespace-pre-wrap">
           {link.prompt || "(empty)"}
         </p>
       )}

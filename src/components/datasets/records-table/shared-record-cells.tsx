@@ -72,10 +72,59 @@ export function ScoreCell({ jobScore }: { readonly jobScore?: RecordJobScore }) 
   }
 
   return (
-    <span className="inline-flex items-center gap-0.5">
-      <ScorePill score={jobScore.score} />
-      {jobScore.trend !== undefined && <TrendArrow trend={jobScore.trend} />}
-    </span>
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex items-center gap-0.5 cursor-help">
+            <ScorePill score={jobScore.score} />
+            {jobScore.trend !== undefined && <TrendArrow trend={jobScore.trend} />}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" align="center" className="max-w-[320px] p-3">
+          <ScoreTooltipContent score={jobScore.score} trend={jobScore.trend} reason={jobScore.reason} />
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+// ─── Score Tooltip ───
+
+function ScoreTooltipContent({ score, trend, reason }: {
+  readonly score: number;
+  readonly trend?: number;
+  readonly reason?: string;
+}) {
+  const trendAbs = trend !== undefined ? Math.abs(trend) : 0;
+  const trendLabel = trend !== undefined && trendAbs > 0.005
+    ? trend > 0 ? "improved" : "declined"
+    : undefined;
+
+  return (
+    <div className="flex flex-col gap-1.5 text-xs">
+      <div className="flex items-center gap-2">
+        <span className="font-semibold">Score: {score.toFixed(2)}</span>
+        {trend !== undefined && trendAbs > 0.005 && (
+          <span className={cn(
+            "font-mono text-[10px]",
+            trend > 0 ? "text-emerald-400" : "text-red-400",
+          )}>
+            {trend > 0 ? "+" : ""}{trend.toFixed(2)} {trendLabel}
+          </span>
+        )}
+      </div>
+      {trend !== undefined && trendAbs > 0.005 && (
+        <p className="text-muted-foreground text-[11px] leading-snug">
+          Previous score: <span className="font-mono font-medium text-foreground/70">{(score - trend).toFixed(2)}</span> → Current: <span className="font-mono font-medium text-foreground/70">{score.toFixed(2)}</span>
+        </p>
+      )}
+      {reason && (
+        <div className="pt-1 border-t border-border/30">
+          <div className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wider mb-0.5">Grader Feedback</div>
+          <p className="text-[11px] text-muted-foreground leading-snug whitespace-pre-wrap line-clamp-6">{reason}</p>
+        </div>
+      )}
+    </div>
   );
 }
 

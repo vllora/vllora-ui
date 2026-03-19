@@ -1252,11 +1252,12 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
     }
   }, [dataset, sortedRecords, handleApplyTopicHierarchy, handleMigrateRecordsToChildren]);
 
-  // Handle save evaluation script
+  // Handle save evaluation script — saves to local gateway SQLite.
+  // A versioned snapshot is automatically created in the cloud when a job starts
+  // (via ensure_dataset_and_evaluator_uploaded in the gateway).
   const handleSaveEvaluationConfig = useCallback(async (script: string) => {
     if (!dataset) return;
     try {
-      // Save eval script to gateway SQLite via PUT /workflows
       await datasetService.updateEvalScript(dataset.id, script);
       setDataset((prev) => (prev ? { ...prev, evalScript: script } : null));
     } catch (err) {

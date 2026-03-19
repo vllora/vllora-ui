@@ -46,42 +46,35 @@ function mapFinetuneStatus(status: FinetuneJobStatus): JobColumnStatus {
 }
 
 /**
- * Build a chronologically sorted list of job columns from eval + finetune jobs.
+ * Build job columns grouped by type: eval columns first, then finetune columns.
+ * Within each group, columns are sorted chronologically (oldest → newest, left → right).
  * Labels use actual job IDs (e.g., "eval-f05e2c", "ft-abc123") matching the sidebar.
  */
 export function buildJobColumns(
   evalJobs: readonly EvalJob[],
   finetuneJobs: readonly FinetuneJob[],
 ): JobColumn[] {
-  const combined: JobColumn[] = [];
-
-  const sortedEvals = [...evalJobs].sort((a, b) => a.createdAt - b.createdAt);
-  const sortedFinetunes = [...finetuneJobs].sort(
-    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-  );
-
-  sortedEvals.forEach((job) => {
-    combined.push({
+  const evalColumns: JobColumn[] = [...evalJobs]
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .map((job) => ({
       id: job.id,
-      type: "eval",
+      type: "eval" as const,
       label: evalJobDisplayName(job.id),
       status: mapEvalStatus(job.status),
       createdAt: job.createdAt,
-    });
-  });
+    }));
 
-  sortedFinetunes.forEach((job) => {
-    combined.push({
+  const finetuneColumns: JobColumn[] = [...finetuneJobs]
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    .map((job) => ({
       id: job.id,
-      type: "finetune",
+      type: "finetune" as const,
       label: finetuneJobDisplayName(job.id, job.suffix),
       status: mapFinetuneStatus(job.status),
       createdAt: new Date(job.created_at).getTime(),
-    });
-  });
+    }));
 
-  combined.sort((a, b) => a.createdAt - b.createdAt);
-  return combined;
+  return [...evalColumns, ...finetuneColumns];
 }
 
 /**

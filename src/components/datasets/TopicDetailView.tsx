@@ -211,11 +211,14 @@ export function RecordsTabContent({
           <th className="px-4 py-2.5 w-10">#</th>
           <th className="px-4 py-2.5">Input</th>
           {hasJobColumns ? (
-            jobColumns.map((col) => (
-              <th key={col.id} className="px-2 py-2.5 w-[100px] text-center">
-                <JobColumnHeader column={col} />
-              </th>
-            ))
+            jobColumns.map((col, i) => {
+              const needsSep = i > 0 && col.type === "finetune" && jobColumns[i - 1].type === "eval";
+              return (
+                <th key={col.id} className={cn("px-2 py-2.5 w-[100px] text-center", needsSep && "border-l-2 border-border pl-3")}>
+                  <JobColumnHeader column={col} />
+                </th>
+              );
+            })
           ) : (
             <th className="px-4 py-2.5 w-16 text-center">Score</th>
           )}
@@ -277,11 +280,14 @@ function RecordTableRow({
         </span>
       </td>
       {hasJobColumns ? (
-        jobColumns.map((col) => (
-          <td key={col.id} className="px-1 py-2.5 text-center align-top">
-            <ScoreCell jobScore={scores?.get(col.id)} />
-          </td>
-        ))
+        jobColumns.map((col, i) => {
+          const needsSep = i > 0 && col.type === "finetune" && jobColumns[i - 1].type === "eval";
+          return (
+            <td key={col.id} className={cn("px-1 py-2.5 text-center align-top", needsSep && "border-l-2 border-border pl-3")}>
+              <ScoreCell jobScore={scores?.get(col.id)} />
+            </td>
+          );
+        })
       ) : (
         <td className="px-4 py-2.5 text-center align-top">
           {fallbackScore != null ? (

@@ -83,8 +83,11 @@ export function UnifiedRecordTable({
   const tableRef = useRef<HTMLTableElement>(null);
 
   const hasJobColumns = jobColumns.length > 0;
-  // # + Input + (N job columns or 1 fallback score) + Source
-  const totalColumns = hasJobColumns ? 3 + jobColumns.length : 4;
+  const hasEvalCols = jobColumns.some((c) => c.type === "eval");
+  const hasFtCols = jobColumns.some((c) => c.type === "finetune");
+  const hasSeparator = hasEvalCols && hasFtCols;
+  // # + Input + (N job columns + optional separator or 1 fallback score) + Source
+  const totalColumns = hasJobColumns ? 3 + jobColumns.length + (hasSeparator ? 1 : 0) : 4;
 
   // Group records by topic
   const recordsByTopic = useMemo(() => {
@@ -307,11 +310,14 @@ export function UnifiedRecordTable({
           <th className="text-left px-3 py-2 w-8">#</th>
           <th className="text-left px-3 py-2">Input</th>
           {hasJobColumns ? (
-            jobColumns.map((col) => (
-              <th key={col.id} className="text-center px-2 py-2 w-[100px]">
-                <JobColumnHeader column={col} />
-              </th>
-            ))
+            jobColumns.map((col, i) => {
+              const needsSep = hasSeparator && i > 0 && col.type === "finetune" && jobColumns[i - 1].type === "eval";
+              return (
+                <th key={col.id} className={cn("text-center px-2 py-2 w-[100px]", needsSep && "border-l-2 border-border pl-3")}>
+                  <JobColumnHeader column={col} />
+                </th>
+              );
+            })
           ) : (
             <th className="text-left px-3 py-2 w-20">Score</th>
           )}
@@ -527,10 +533,11 @@ function RecordTableRow({
         <p className="text-foreground/80 line-clamp-2 leading-relaxed">{userText || "—"}</p>
       </td>
       {hasJobColumns ? (
-        jobColumns.map((col) => {
+        jobColumns.map((col, i) => {
           const jobScore = scores?.get(col.id);
+          const needsSep = i > 0 && col.type === "finetune" && jobColumns[i - 1].type === "eval";
           return (
-            <td key={col.id} className="px-1 py-2 text-center">
+            <td key={col.id} className={cn("px-1 py-2 text-center", needsSep && "border-l-2 border-border pl-3")}>
               <ScoreCell jobScore={jobScore} />
             </td>
           );
