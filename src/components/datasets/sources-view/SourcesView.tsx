@@ -391,6 +391,7 @@ function AllSourcesView({
               Documents
             </h3>
           </div>
+          <TooltipProvider delayDuration={200}>
           <div className="rounded-lg border border-border/50 overflow-hidden">
             <table className="w-full text-[11px] border-collapse">
               <thead>
@@ -427,23 +428,54 @@ function AllSourcesView({
                           </div>
                         </div>
                       </td>
-                      <td className="px-3 py-2.5 text-right font-mono text-muted-foreground/60">{src.parts.length}</td>
-                      <td className="px-3 py-2.5 text-right font-mono text-muted-foreground/60">{formatChars(chars)}</td>
-                      <td className="px-3 py-2.5 text-right font-mono text-muted-foreground/60">{coverage.length} / {totalTopics}</td>
+                      <td className="px-3 py-2.5 text-right font-mono text-muted-foreground/60">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help">{src.parts.length}</span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top"><p className="text-[11px]">{src.parts.length} extracted parts (chunks) from this document</p></TooltipContent>
+                        </Tooltip>
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono text-muted-foreground/60">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help">{formatChars(chars)}</span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top"><p className="text-[11px]">{chars.toLocaleString()} total characters across all parts</p></TooltipContent>
+                        </Tooltip>
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono text-muted-foreground/60">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help">{coverage.length} / {totalTopics}</span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top"><p className="text-[11px]">{coverage.length} out of {totalTopics} topics have at least one part linked from this document</p></TooltipContent>
+                        </Tooltip>
+                      </td>
                       <td className="px-3 py-2.5 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <div className="w-14 h-1 bg-muted/50 rounded-full overflow-hidden">
-                            <div
-                              className={cn("h-full rounded-full", covPct >= 60 ? "bg-emerald-500" : "bg-amber-500")}
-                              style={{ width: `${covPct}%` }}
-                            />
-                          </div>
-                          <span className={cn("font-mono text-[10px] font-medium w-8 text-right",
-                            covPct >= 60 ? "text-emerald-400" : "text-amber-400",
-                          )}>
-                            {covPct}%
-                          </span>
-                        </div>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center justify-end gap-2 cursor-help">
+                              <div className="w-14 h-1 bg-muted/50 rounded-full overflow-hidden">
+                                <div
+                                  className={cn("h-full rounded-full", covPct >= 60 ? "bg-emerald-500" : "bg-amber-500")}
+                                  style={{ width: `${covPct}%` }}
+                                />
+                              </div>
+                              <span className={cn("font-mono text-[10px] font-medium w-8 text-right",
+                                covPct >= 60 ? "text-emerald-400" : "text-amber-400",
+                              )}>
+                                {covPct}%
+                              </span>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[260px]">
+                            <p className="text-[11px]">
+                              {covPct}% topic coverage — {coverage.length} of {totalTopics} topics have linked parts from this document.
+                              {covPct < 60 ? " Consider adding more source material to improve coverage." : " Good coverage."}
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
                       </td>
                     </tr>
                   );
@@ -451,6 +483,7 @@ function AllSourcesView({
               </tbody>
             </table>
           </div>
+          </TooltipProvider>
         </div>
       </div>
     </div>

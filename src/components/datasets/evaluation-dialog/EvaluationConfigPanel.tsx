@@ -12,8 +12,6 @@ import {
   CheckCircle2,
   Copy,
   FileCode2,
-  Play,
-  Settings,
 } from "lucide-react";
 import Editor, { DiffEditor } from "@monaco-editor/react";
 import { EvalJobsConsumer } from "@/contexts/EvalJobsContext";
@@ -24,11 +22,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -182,12 +175,7 @@ function getSampleSizeOptions(recordCount: number): Array<{ value: number; label
   return opts;
 }
 
-const ROLLOUT_MODEL_OPTIONS = [
-  { value: "gpt-4o-mini", label: "GPT-4o Mini" },
-  { value: "gpt-4o", label: "GPT-4o" },
-  { value: "gpt-4.1", label: "GPT-4.1" },
-  { value: "gpt-4.1-mini", label: "GPT-4.1 Mini" },
-];
+// Rollout model options moved to EvaluationBottomPanel
 
 interface EvaluationConfigPanelProps {
   evalScript?: string;
@@ -218,7 +206,7 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
   const [isSaving, setIsSaving] = useState(false);
   const [isBottomCollapsed, setIsBottomCollapsed] = useState(false);
   const [sampleSize, setSampleSize] = useState(() => getDefaultSampleSize(recordCount));
-  const [rolloutModel, setRolloutModel] = useState("gpt-4o-mini");
+  const [rolloutModel] = useState("gpt-4o-mini");
 
   // Version browsing state
   const [versions, setVersions] = useState<EvaluatorVersionResponse[]>([]);
@@ -324,17 +312,19 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
     }
   }, []);
 
-  const handleRunDryRun = useCallback(async () => {
+  const _handleRunDryRun = useCallback(async () => {
     if (!hasGraderConfig) return;
     try {
       await startDryRun(sampleSize, rolloutModel);
-      // Bottom panel auto-expands via the useEffect above
     } catch (error) {
       console.error("Failed to start dry run:", error);
     }
   }, [hasGraderConfig, sampleSize, rolloutModel, startDryRun]);
 
-  const sampleOptions = getSampleSizeOptions(recordCount);
+  const _sampleOptions = getSampleSizeOptions(recordCount);
+  // Suppress unused warnings — these are used in commented-out JSX (run config popover)
+  void _handleRunDryRun;
+  void _sampleOptions;
 
   // ── Shared sub-components ──────────────────────────────────────────
 
