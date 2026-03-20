@@ -621,6 +621,12 @@ Use `--create-only` to create the eval job without blocking, so you can start tr
 EVAL_ID=$(uv run scripts/run_evaluation.py --dataset-id $WORKFLOW_ID --create-only | tail -1)
 echo "Eval started: $EVAL_ID"
 
+Available models:
+unsloth/Qwen3.5-0.8B
+unsloth/Qwen3.5-2B
+unsloth/Qwen3.5-4B
+unsloth/Qwen3.5-9B
+
 # Create training job
 JOB=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs \
   -H "Content-Type: application/json" \
