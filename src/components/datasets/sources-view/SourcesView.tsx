@@ -15,7 +15,7 @@
  */
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { FileText, Tags, ChevronRight, ChevronLeft, FolderOpen, ArrowLeft } from "lucide-react";
+import { FileText, Tags, ChevronRight, ChevronLeft, FolderOpen, ArrowLeft, Search } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 import {
@@ -476,6 +476,7 @@ function findTopicsForPart(
 
 function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSource; readonly focusPartId?: string | null }) {
   const [selectedPartId, setSelectedPartId] = useState<string | null>(focusPartId ?? null);
+  const [searchQuery, setSearchQuery] = useState("");
   const outlineRef = useRef<HTMLDivElement>(null);
   const { dataset, records } = DatasetDetailConsumer();
 
@@ -483,7 +484,6 @@ function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSour
   useEffect(() => {
     if (!focusPartId || !outlineRef.current) return;
     setSelectedPartId(focusPartId);
-    // Wait for render, then scroll the part into view
     const timer = setTimeout(() => {
       const el = outlineRef.current?.querySelector(`[data-part-id="${focusPartId}"]`);
       el?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -496,7 +496,6 @@ function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSour
     ? source.parts.find(p => p.id === selectedPartId)
     : source.parts[0] ?? null;
 
-  // Flat index for prev/next navigation (I3)
   const currentIndex = selectedPart
     ? source.parts.findIndex(p => p.id === selectedPart.id)
     : 0;
@@ -513,33 +512,41 @@ function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSour
     [source.parts],
   );
 
-  // I1: Topic coverage bars
+  // Topic coverage (for header chips)
   const topicCoverage = useMemo(
     () => computeTopicCoverage(source, hierarchy),
     [source, hierarchy],
   );
 
-  // I2: Group parts by extractionPath
+  // Per-part topic names for TOC chips
+  const partTopicNames = useMemo(() => {
+    if (!hierarchy) return new Map<string, string[]>();
+    const map = new Map<string, string[]>();
+    for (const part of source.parts) {
+      const topics = findTopicsForPart(part, hierarchy);
+      if (topics.length > 0) map.set(part.id, topics);
+    }
+    return map;
+  }, [source.parts, hierarchy]);
+
+  // Group parts by extractionPath
   const partGroups = useMemo(
     () => groupPartsByExtractionPath(source.parts),
     [source.parts],
   );
   const hasMultipleGroups = partGroups.length > 1 || (partGroups.length === 1 && partGroups[0].path !== "Ungrouped");
 
-  // Topic link counts per part (for dots in outline)
-  const partTopicCounts = useMemo(() => {
-    if (!hierarchy) return new Map<string, number>();
-    const counts = new Map<string, number>();
-    for (const part of source.parts) {
-      const topics = findTopicsForPart(part, hierarchy);
-      if (topics.length > 0) {
-        counts.set(part.id, topics.length);
-      }
-    }
-    return counts;
-  }, [source.parts, hierarchy]);
+  // Filter parts by search query
+  const queryLower = searchQuery.toLowerCase().trim();
+  const matchesPart = useCallback((part: KnowledgeSourcePart) => {
+    if (!queryLower) return true;
+    const title = (part.title || "").toLowerCase();
+    const content = (part.content || "").toLowerCase();
+    const topics = partTopicNames.get(part.id) ?? [];
+    return title.includes(queryLower) || content.includes(queryLower) || topics.some(t => t.toLowerCase().includes(queryLower));
+  }, [queryLower, partTopicNames]);
 
-  // I5: Topics linked to selected part + records count
+  // Topics linked to selected part + records count
   const linkedTopics = useMemo(
     () => selectedPart ? findTopicsForPart(selectedPart, hierarchy) : [],
     [selectedPart, hierarchy],
@@ -557,128 +564,109 @@ function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSour
     };
   }, [linkedTopics, records]);
 
+  /** Get a 2-line preview snippet from the part content */
+  const getPreview = (part: KnowledgeSourcePart): string => {
+    const text = (part.content || "").replace(/\n+/g, " ").trim();
+    return text.length > 120 ? text.slice(0, 120) + "..." : text;
+  };
+
+  const formatChars = (chars: number) =>
+    chars >= 1000 ? `${(chars / 1000).toFixed(1)}K` : `${chars}`;
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* 50/50 grid layout matching mockup */}
       <div className="flex-1 grid grid-cols-2 overflow-hidden">
-        {/* Left: Document info + topic coverage + parts outline */}
-        <div className="border-r border-border/50 overflow-y-auto p-4 space-y-4">
-          {/* Doc header card — icon + name/description left, stat columns right */}
-          <div className="flex items-center gap-3 p-4 bg-card border border-border rounded-xl">
-            <div className="w-11 h-11 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
-              <FileText className="w-5 h-5 text-red-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="text-[14px] font-bold text-foreground truncate">{source.name}</h3>
-              <p className="text-[11px] text-muted-foreground/60 mt-0.5 truncate">
-                {source.description || (
-                  [source.metadata?.pageCount && `${source.metadata.pageCount} pages`,
-                   source.metadata?.fileSize && `${(Number(source.metadata.fileSize) / (1024 * 1024)).toFixed(1)} MB`]
-                    .filter(Boolean).join(" · ") || "Knowledge source"
-                )}
-              </p>
-            </div>
-            <div className="flex items-center gap-5 shrink-0">
-              <div className="text-center">
-                <div className="text-[15px] font-bold text-foreground tabular-nums">{source.parts.length}</div>
-                <div className="text-[10px] text-muted-foreground/50">parts</div>
-              </div>
-              <div className="text-center">
-                <div className="text-[15px] font-bold text-foreground tabular-nums">{topicCoverage.length}</div>
-                <div className="text-[10px] text-muted-foreground/50">topics</div>
-              </div>
-              <div className="text-center">
-                <div className="text-[15px] font-bold text-foreground tabular-nums">
-                  {totalChars >= 1000 ? `${(totalChars / 1000).toFixed(1)}K` : totalChars}
+        {/* Left: Compact header + search + TOC with previews */}
+        <div className="border-r border-border/50 flex flex-col overflow-hidden">
+          {/* Compact doc header with topic chips */}
+          <div className="shrink-0 px-4 py-3 border-b border-border/50">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-muted-foreground/50 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <h3 className="text-[13px] font-semibold text-foreground truncate">
+                  {source.description || source.name}
+                </h3>
+                <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground/50">
+                  <span>{source.parts.length} parts</span>
+                  <span>{formatChars(totalChars)} chars</span>
                 </div>
-                <div className="text-[10px] text-muted-foreground/50">chars</div>
               </div>
+            </div>
+            {topicCoverage.length > 0 && (
+              <TopicCoverageChips topics={topicCoverage} />
+            )}
+          </div>
+
+          {/* Search bar */}
+          <div className="shrink-0 px-3 py-2 border-b border-border/50">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground/40" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search parts..."
+                className="w-full pl-7 pr-2 py-1.5 text-[11px] bg-background border border-border/50 rounded-md text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-[rgb(var(--theme-500))]"
+              />
             </div>
           </div>
 
-          {/* I1: Topic coverage bars */}
-          {topicCoverage.length > 0 && (
-            <div className="p-3 bg-card border border-border rounded-xl">
-              <div className="flex items-center gap-1.5 mb-2">
-                <Tags className="w-3 h-3 text-[rgb(var(--theme-500))]" />
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
-                  Topics covered by this document
-                </span>
-              </div>
-              <div className="space-y-1">
-                {topicCoverage.map(({ topicName, partCount, totalParts: total }) => {
-                  const pct = Math.round((partCount / total) * 100);
-                  return (
-                    <div key={topicName} className="flex items-center gap-2 py-1">
-                      <span className="text-[11px] text-foreground/80 w-[120px] truncate shrink-0">{topicName}</span>
-                      <div className="flex-1 h-1.5 bg-muted/50 rounded-full overflow-hidden">
-                        <div
-                          className={cn(
-                            "h-full rounded-full",
-                            pct >= 60 ? "bg-emerald-500" : pct >= 30 ? "bg-amber-500" : "bg-red-500"
-                          )}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <span className="text-[10px] text-muted-foreground/60 w-[50px] text-right shrink-0">
-                        {partCount} part{partCount !== 1 ? "s" : ""}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Parts list header */}
-          <div className="flex items-center gap-1.5">
-            <FileText className="w-3 h-3 text-[rgb(var(--theme-500))]" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
-              Extracted Parts ({source.parts.length})
-            </span>
-          </div>
-
-          {/* Parts outline — I2: grouped by extractionPath */}
-          <div className="overflow-hidden" ref={outlineRef}>
+          {/* TOC list with previews + topic chips */}
+          <div className="flex-1 overflow-y-auto" ref={outlineRef}>
             {hasMultipleGroups ? (
-              partGroups.map(group => (
-                <div key={group.path}>
-                  <div className="px-3 py-1.5 bg-muted/30 border-b border-border/30 flex items-center gap-1.5">
-                    <FolderOpen className="w-2.5 h-2.5 text-muted-foreground/50" />
-                    <span className="text-[10px] font-medium text-muted-foreground/70 truncate">
-                      {group.path}
-                    </span>
+              partGroups.map(group => {
+                const visibleParts = group.parts.filter(matchesPart);
+                if (visibleParts.length === 0) return null;
+                return (
+                  <div key={group.path}>
+                    <div className="px-4 py-1.5 mt-1 text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/25">
+                      {group.path.replace(/^\["|"\]$/g, "").replace(/^"|"$/g, "")}
+                    </div>
+                    {visibleParts.map((part) => {
+                      const globalIdx = source.parts.indexOf(part);
+                      const topics = partTopicNames.get(part.id);
+                      return (
+                        <TocItem
+                          key={part.id}
+                          part={part}
+                          index={globalIdx}
+                          isSelected={selectedPart?.id === part.id}
+                          onSelect={setSelectedPartId}
+                          preview={getPreview(part)}
+                          topics={topics}
+                          formatChars={formatChars}
+                        />
+                      );
+                    })}
                   </div>
-                  {group.parts.map((part, idx) => (
-                    <PartOutlineItem
-                      key={part.id}
-                      part={part}
-                      index={source.parts.indexOf(part)}
-                      fallbackIndex={idx}
-                      isSelected={selectedPart?.id === part.id}
-                      onSelect={setSelectedPartId}
-                      linkedTopicCount={partTopicCounts.get(part.id) ?? 0}
-                    />
-                  ))}
-                </div>
-              ))
+                );
+              })
             ) : (
-              source.parts.map((part, idx) => (
-                <PartOutlineItem
-                  key={part.id}
-                  part={part}
-                  index={idx}
-                  fallbackIndex={idx}
-                  isSelected={selectedPart?.id === part.id}
-                  onSelect={setSelectedPartId}
-                  linkedTopicCount={partTopicCounts.get(part.id) ?? 0}
-                />
-              ))
+              source.parts.filter(matchesPart).map((part, idx) => {
+                const topics = partTopicNames.get(part.id);
+                return (
+                  <TocItem
+                    key={part.id}
+                    part={part}
+                    index={idx}
+                    isSelected={selectedPart?.id === part.id}
+                    onSelect={setSelectedPartId}
+                    preview={getPreview(part)}
+                    topics={topics}
+                    formatChars={formatChars}
+                  />
+                );
+              })
+            )}
+            {queryLower && source.parts.filter(matchesPart).length === 0 && (
+              <div className="px-4 py-8 text-center text-[11px] text-muted-foreground/40">
+                No parts match "{searchQuery}"
+              </div>
             )}
           </div>
         </div>
 
-        {/* Right: Part viewer */}
+        {/* Right: Reader panel */}
         <div className="overflow-y-auto bg-muted/20 flex flex-col">
           {selectedPart ? (
             <PartViewer
@@ -703,51 +691,100 @@ function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSour
   );
 }
 
-// ─── Part Outline Item ───
+// ─── TOC Item (Option D style) ───
 
-function PartOutlineItem({
+function TocItem({
   part,
   index,
-  fallbackIndex,
   isSelected,
   onSelect,
-  linkedTopicCount = 0,
+  preview,
+  topics,
+  formatChars,
 }: {
   readonly part: KnowledgeSourcePart;
   readonly index: number;
-  readonly fallbackIndex: number;
   readonly isSelected: boolean;
   readonly onSelect: (id: string) => void;
-  readonly linkedTopicCount?: number;
+  readonly preview: string;
+  readonly topics?: string[];
+  readonly formatChars: (c: number) => string;
 }) {
-  const displayIndex = index >= 0 ? index : fallbackIndex;
-
   return (
     <button
       type="button"
       data-part-id={part.id}
       onClick={() => onSelect(part.id)}
       className={cn(
-        "w-full text-left py-[5px] px-2 flex items-center gap-2 rounded-md transition-colors",
+        "w-full text-left px-4 py-2 transition-colors border-l-2",
         isSelected
-          ? "bg-[rgba(var(--theme-500),0.08)] text-foreground"
-          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+          ? "border-l-[rgb(var(--theme-500))] bg-[rgba(var(--theme-500),0.05)]"
+          : "border-l-transparent hover:bg-muted/20",
       )}
     >
-      <PartTypeIcon type={part.type} className="shrink-0" />
-      <div className="flex-1 min-w-0">
-        <span className="block truncate text-[11px] font-medium text-foreground">
-          {part.title || `Part ${displayIndex + 1}`}
+      {/* Title row */}
+      <div className="flex items-center gap-2">
+        <span className="text-[9px] text-muted-foreground/30 w-5 shrink-0 font-medium tabular-nums text-right">{index + 1}</span>
+        <span className={cn("flex-1 text-[11px] font-medium truncate", isSelected ? "text-[rgb(var(--theme-500))]" : "text-foreground/80")}>
+          {part.title || `Part ${index + 1}`}
         </span>
-        <span className="text-[9px] text-muted-foreground/50 mt-px">
-          {(part.content?.length ?? 0) >= 1000
-            ? `${((part.content?.length ?? 0) / 1000).toFixed(1)}K chars`
-            : `${part.content?.length ?? 0} chars`}
-          {part.extractionPath && ` · ${part.extractionPath}`}
-        </span>
+        <span className="text-[9px] text-muted-foreground/25 shrink-0 tabular-nums">{formatChars(part.content?.length ?? 0)}</span>
       </div>
-      <TopicLinkBadge count={linkedTopicCount} />
+      {/* Preview snippet */}
+      <p className="text-[10px] text-muted-foreground/40 leading-snug mt-1 pl-7 line-clamp-2">
+        {preview}
+      </p>
+      {/* Topic chips */}
+      {topics && topics.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1.5 pl-7">
+          {topics.map(t => (
+            <span key={t} className="inline-flex items-center px-2 py-0.5 rounded-[10px] bg-[rgba(var(--theme-500),0.1)] text-[9px] font-medium text-[rgb(var(--theme-500))]">
+              {t}
+            </span>
+          ))}
+        </div>
+      )}
     </button>
+  );
+}
+
+
+// ─── Topic Coverage Chips ───
+
+function TopicCoverageChips({ topics }: { readonly topics: Array<{ topicName: string; partCount: number; totalParts: number }> }) {
+  return (
+    <TooltipProvider delayDuration={200}>
+      <div className="flex flex-wrap gap-1 mt-2">
+        {topics.map(({ topicName, partCount, totalParts }) => {
+          const pct = totalParts > 0 ? Math.round((partCount / totalParts) * 100) : 0;
+          return (
+            <Tooltip key={topicName}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent("vllora_navigate_to_job", {
+                      detail: { jobId: topicName, type: "topic" },
+                    }));
+                  }}
+                  className="inline-flex items-center px-2 py-0.5 rounded-[10px] bg-[rgba(var(--theme-500),0.1)] text-[9px] font-medium text-[rgb(var(--theme-500))] hover:bg-[rgba(var(--theme-500),0.2)] transition-colors cursor-pointer"
+                >
+                  {topicName}
+                  <span className="ml-1 opacity-50">({partCount})</span>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-[240px]">
+                <p className="text-[11px]">
+                  <span className="font-semibold">{topicName}</span> — {partCount} of {totalParts} parts
+                  in this document are linked to this topic ({pct}% coverage).
+                  Click to navigate to the topic.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          );
+        })}
+      </div>
+    </TooltipProvider>
   );
 }
 

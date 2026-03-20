@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Source Document Detail — Redesign Options</title>
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a0a; color: #d4d4d8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; }
+
+  .page-title { padding: 20px 24px 8px; font-size: 15px; font-weight: 600; color: #a1a1aa; }
+  .page-desc { padding: 0 24px 16px; font-size: 12px; color: #52525b; line-height: 1.6; }
+
+  .variant { margin: 0 24px 32px; border: 1px solid #27272a; border-radius: 12px; overflow: hidden; background: #111; }
+  .variant-label { background: #10b981; color: #0a0a0a; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; padding: 6px 16px; }
+  .variant-desc { padding: 8px 16px; font-size: 11px; color: #71717a; border-bottom: 1px solid #1e1e1e; line-height: 1.5; }
+
+  [data-lucide] { width: 14px; height: 14px; stroke-width: 1.8; }
+
+  /* Shared layout */
+  .split { display: grid; grid-template-columns: 1fr 1fr; height: 520px; }
+  .left { border-right: 1px solid #1e1e1e; overflow-y: auto; }
+  .right { overflow-y: auto; padding: 16px; }
+  .left::-webkit-scrollbar, .right::-webkit-scrollbar { width: 4px; }
+  .left::-webkit-scrollbar-thumb, .right::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+  /* ═══ CURRENT (A) ═══ */
+  .v-current .header-card { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #1e1e1e; }
+  .v-current .header-card .icon { width: 40px; height: 40px; background: #1e1e1e; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+  .v-current .header-card .info { flex: 1; min-width: 0; }
+  .v-current .header-card .title { font-size: 12px; font-weight: 600; color: #e4e4e7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .v-current .header-card .subtitle { font-size: 10px; color: #71717a; margin-top: 2px; }
+  .v-current .header-card .stats { display: flex; gap: 12px; }
+  .v-current .header-card .stat { text-align: center; }
+  .v-current .header-card .stat-val { font-size: 16px; font-weight: 700; color: #d4d4d8; }
+  .v-current .header-card .stat-label { font-size: 9px; color: #71717a; text-transform: uppercase; }
+
+  .section-title { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #71717a; padding: 12px 16px 6px; display: flex; align-items: center; gap: 6px; }
+  .coverage-row { display: flex; align-items: center; gap: 8px; padding: 4px 16px; font-size: 11px; }
+  .coverage-row .name { flex: 1; color: #a1a1aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .coverage-row .bar { width: 60px; height: 4px; background: #1e1e1e; border-radius: 2px; overflow: hidden; }
+  .coverage-row .bar-fill { height: 100%; border-radius: 2px; }
+  .coverage-row .count { font-size: 10px; color: #52525b; width: 40px; text-align: right; }
+
+  .part-item { display: flex; align-items: center; gap: 8px; padding: 6px 16px; cursor: pointer; transition: background 0.15s; font-size: 11px; }
+  .part-item:hover { background: rgba(255,255,255,0.03); }
+  .part-item.active { background: rgba(16,185,129,0.08); }
+  .part-item .part-icon { width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; }
+  .part-item .part-icon.text { background: #10b98120; color: #10b981; }
+  .part-item .part-info { flex: 1; min-width: 0; }
+  .part-item .part-name { color: #d4d4d8; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .part-item .part-meta { font-size: 10px; color: #52525b; margin-top: 1px; }
+  .group-header { padding: 8px 16px 2px; font-size: 10px; color: #52525b; display: flex; align-items: center; gap: 4px; }
+
+  .content-title { font-size: 14px; font-weight: 600; color: #e4e4e7; margin-bottom: 4px; }
+  .content-breadcrumb { font-size: 10px; color: #52525b; margin-bottom: 12px; display: flex; align-items: center; gap: 4px; }
+  .content-body { font-size: 12px; color: #a1a1aa; line-height: 1.7; }
+  .content-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .content-nav .badge { font-size: 9px; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+  .content-nav .badge.text { background: #10b98120; color: #10b981; }
+  .content-nav .counter { font-size: 10px; color: #52525b; }
+  .content-nav button { background: none; border: 1px solid #27272a; color: #71717a; border-radius: 4px; padding: 2px 8px; font-size: 10px; cursor: pointer; }
+  .content-nav button:hover { color: #d4d4d8; border-color: #3f3f46; }
+
+  /* ═══ OPTION B: Simplified ═══ */
+  .v-simple .header { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid #1e1e1e; }
+  .v-simple .header .title { font-size: 12px; font-weight: 600; color: #e4e4e7; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .v-simple .header .stat { font-size: 10px; color: #52525b; font-weight: 500; }
+
+  .v-simple .search { padding: 8px 12px; border-bottom: 1px solid #1e1e1e; }
+  .v-simple .search input { width: 100%; background: #0a0a0a; border: 1px solid #27272a; border-radius: 6px; padding: 5px 8px 5px 28px; font-size: 11px; color: #d4d4d8; outline: none; }
+  .v-simple .search { position: relative; }
+  .v-simple .search [data-lucide] { position: absolute; left: 20px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; color: #52525b; }
+
+  .v-simple .part-card { margin: 4px 8px; padding: 8px 10px; border-radius: 6px; border: 1px solid #1e1e1e; cursor: pointer; transition: all 0.15s; }
+  .v-simple .part-card:hover { border-color: #27272a; background: #161616; }
+  .v-simple .part-card.active { border-color: #10b98140; background: #10b98108; }
+  .v-simple .part-card .card-title { font-size: 11px; font-weight: 500; color: #d4d4d8; margin-bottom: 2px; }
+  .v-simple .part-card .card-preview { font-size: 10px; color: #52525b; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .v-simple .part-card .card-meta { display: flex; gap: 8px; margin-top: 4px; font-size: 9px; color: #3f3f46; }
+  .v-simple .part-card .card-meta .topic { color: #10b981; }
+
+  .v-simple .content-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #1e1e1e; }
+  .v-simple .content-header .ch-title { font-size: 13px; font-weight: 600; color: #e4e4e7; flex: 1; }
+  .v-simple .content-header .ch-badge { font-size: 9px; padding: 2px 8px; border-radius: 4px; background: #10b98120; color: #10b981; font-weight: 600; }
+  .v-simple .content-header .ch-nav { display: flex; gap: 4px; }
+  .v-simple .content-header .ch-nav button { background: none; border: 1px solid #27272a; color: #71717a; border-radius: 4px; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+  /* ═══ OPTION C: Outline + Reader ═══ */
+  .v-reader .toc { padding: 8px 0; }
+  .v-reader .toc-item { display: flex; align-items: center; gap: 6px; padding: 4px 16px; font-size: 11px; color: #a1a1aa; cursor: pointer; transition: all 0.15s; border-left: 2px solid transparent; }
+  .v-reader .toc-item:hover { color: #d4d4d8; background: rgba(255,255,255,0.02); }
+  .v-reader .toc-item.active { border-left-color: #10b981; color: #10b981; background: rgba(16,185,129,0.05); }
+  .v-reader .toc-item .toc-num { font-size: 9px; color: #3f3f46; width: 20px; font-weight: 500; }
+  .v-reader .toc-item .toc-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .v-reader .toc-item .toc-size { font-size: 9px; color: #3f3f46; }
+  .v-reader .toc-group { padding: 8px 16px 4px; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #3f3f46; }
+
+  .v-reader .reader-content { font-size: 13px; color: #bcbcbc; line-height: 1.8; }
+  .v-reader .reader-content h2 { font-size: 16px; font-weight: 600; color: #e4e4e7; margin: 20px 0 8px; padding-bottom: 6px; border-bottom: 1px solid #1e1e1e; }
+  .v-reader .reader-content p { margin-bottom: 12px; }
+  .v-reader .reader-content .chunk-marker { display: inline-flex; align-items: center; gap: 4px; font-size: 9px; color: #10b981; background: #10b98110; padding: 1px 6px; border-radius: 3px; margin-right: 4px; }
+
+  .v-reader .doc-header { padding: 12px 16px; border-bottom: 1px solid #1e1e1e; }
+  .v-reader .doc-header .doc-title { font-size: 13px; font-weight: 600; color: #e4e4e7; }
+  .v-reader .doc-header .doc-meta { font-size: 10px; color: #52525b; margin-top: 2px; display: flex; gap: 8px; }
+  .v-reader .doc-header .doc-topics { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+  .v-reader .doc-header .topic-chip { font-size: 9px; padding: 1px 6px; border-radius: 3px; background: #10b98110; color: #10b981; border: 1px solid #10b98120; }
+</style>
+</head>
+<body>
+
+<div class="page-title">Source Document Detail — Redesign Options</div>
+<div class="page-desc">
+  Three layout options for the single source document view. The goal: make it easier to browse extracted parts,
+  understand topic coverage, and read content without visual overload.
+</div>
+
+<!-- ═══ OPTION A: Current ═══ -->
+<div class="variant">
+  <div class="variant-label">A — Current Layout (Baseline)</div>
+  <div class="variant-desc">
+    Large header card with stats, topic coverage section, grouped parts list. Right panel shows raw content.
+    <strong>Issues:</strong> Header too tall. Parts list repetitive (all named "Progressive Chess Content"). No search. Coverage bars take space but aren't actionable.
+  </div>
+  <div class="split">
+    <div class="left">
+      <!-- Header card -->
+      <div class="v-current header-card">
+        <div class="icon"><i data-lucide="file-text" style="width:20px;height:20px;color:#52525b"></i></div>
+        <div class="info">
+          <div class="title">02.-Learn-and-Master-Progressive-Chess-author-Matej-Gui...</div>
+          <div class="subtitle">Learn and Master Progressive Chess by Matej Guid</div>
+        </div>
+        <div class="stats">
+          <div class="stat"><div class="stat-val">55</div><div class="stat-label">parts</div></div>
+          <div class="stat"><div class="stat-val">4</div><div class="stat-label">topics</div></div>
+          <div class="stat"><div class="stat-val">57.1K</div><div class="stat-label">chars</div></div>
+        </div>
+      </div>
+
+      <!-- Topic coverage -->
+      <div class="section-title"><i data-lucide="layers" style="width:12px;height:12px"></i> Topics Covered by This Document</div>
+      <div class="coverage-row"><span class="name">Positional Concepts</span><div class="bar"><div class="bar-fill" style="width:60%;background:#10b981"></div></div><span class="count">3 parts</span></div>
+      <div class="coverage-row"><span class="name">Game Analysis & Eva...</span><div class="bar"><div class="bar-fill" style="width:40%;background:#ef4444"></div></div><span class="count">2 parts</span></div>
+      <div class="coverage-row"><span class="name">Piece Movement & V...</span><div class="bar"><div class="bar-fill" style="width:20%;background:#ef4444"></div></div><span class="count">1 part</span></div>
+      <div class="coverage-row"><span class="name">Mating Patterns & N...</span><div class="bar"><div class="bar-fill" style="width:20%;background:#ef4444"></div></div><span class="count">1 part</span></div>
+
+      <!-- Parts list -->
+      <div class="section-title"><i data-lucide="list" style="width:12px;height:12px"></i> Extracted Parts (55)</div>
+      <div class="group-header"><i data-lucide="folder" style="width:10px;height:10px"></i> ["Learn and Master Progressive Chess"]</div>
+      <div class="part-item active"><div class="part-icon text">T</div><div class="part-info"><div class="part-name">Learn and Master Progressive Chess</div><div class="part-meta">682 chars</div></div></div>
+      <div class="part-item"><div class="part-icon text">T</div><div class="part-info"><div class="part-name">Learn and Master Progressive Chess</div><div class="part-meta">109 chars</div></div></div>
+      <div class="group-header"><i data-lucide="folder" style="width:10px;height:10px"></i> ["Preface"]</div>
+      <div class="part-item"><div class="part-icon text">T</div><div class="part-info"><div class="part-name">Preface</div><div class="part-meta">2.4K chars</div></div></div>
+      <div class="group-header"><i data-lucide="folder" style="width:10px;height:10px"></i> ["Foreword"]</div>
+      <div class="part-item"><div class="part-icon text">T</div><div class="part-info"><div class="part-name">Foreword</div><div class="part-meta">8.6K chars</div></div></div>
+      <div class="group-header"><i data-lucide="folder" style="width:10px;height:10px"></i> ["Progressive Chess Content"]</div>
+      <div class="part-item"><div class="part-icon text">T</div><div class="part-info"><div class="part-name">Progressive Chess Content</div><div class="part-meta">387 chars</div></div></div>
+      <div class="part-item"><div class="part-icon text">T</div><div class="part-info"><div class="part-name">Progressive Chess Content</div><div class="part-meta">333 chars</div></div></div>
+      <div class="part-item"><div class="part-icon text">T</div><div class="part-info"><div class="part-name">Progressive Chess Content</div><div class="part-meta">1.6K chars</div></div></div>
+      <div class="part-item"><div class="part-icon text">T</div><div class="part-info"><div class="part-name">Progressive Chess Content</div><div class="part-meta">3.3K chars</div></div></div>
+      <div class="part-item"><div class="part-icon text">T</div><div class="part-info"><div class="part-name">Progressive Chess Content</div><div class="part-meta">197 chars</div></div></div>
+    </div>
+    <div class="right">
+      <div class="content-nav">
+        <span class="badge text">TEXT</span>
+        <span class="counter">1 of 55</span>
+        <span><button>&lt;</button> <button>&gt;</button></span>
+      </div>
+      <div class="content-breadcrumb">
+        <i data-lucide="file-text" style="width:10px;height:10px"></i>
+        02.-Learn-and-Master... &gt; ["Learn and Master Progressive Chess"] &gt; 682 chars
+      </div>
+      <div class="content-body">
+        Learn and Master Progressive Chess Matej Guid The CIP record was created by the National and University Library Ljubljana. COBISS.SI-ID=293222144 ISBN 978-961-6209-96-0 (pdf) The electronic edition of this book is available at URL: http://zalozba.fri.uni-lj.si/guid2017.pdf. Copyright 2017 Zalozba UL FRI. All rights reserved. Reviewers: prof. dr. Ivan Bratko, prof. dr. H. Jaap van den Herik Proofreading: prof. dr. Walter A. Kosters Publisher...
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ OPTION B: Simplified Cards ═══ -->
+<div class="variant">
+  <div class="variant-label">B — Simplified with Search & Preview Cards</div>
+  <div class="variant-desc">
+    Compact header (one line). <strong>Searchable</strong> parts list with preview cards showing first 2 lines of content.
+    Topic chips shown inline on cards. No separate coverage section — coverage is visible per card.
+    Right panel has clean header with nav.
+  </div>
+  <div class="split">
+    <div class="left v-simple">
+      <!-- Compact header -->
+      <div class="header">
+        <i data-lucide="file-text"></i>
+        <span class="title">Learn and Master Progressive Chess</span>
+        <span class="stat">55 parts</span>
+        <span class="stat">4 topics</span>
+      </div>
+
+      <!-- Search -->
+      <div class="search">
+        <i data-lucide="search"></i>
+        <input type="text" placeholder="Search parts..." />
+      </div>
+
+      <!-- Part cards with preview -->
+      <div style="padding: 4px 0;">
+        <div class="part-card active">
+          <div class="card-title">Learn and Master Progressive Chess</div>
+          <div class="card-preview">The CIP record was created by the National and University Library Ljubljana. COBISS.SI-ID=293222144...</div>
+          <div class="card-meta"><span>682 chars</span></div>
+        </div>
+        <div class="part-card">
+          <div class="card-title">Preface</div>
+          <div class="card-preview">Progressive Chess is a chess variant in which the number of consecutive moves increases by one each turn...</div>
+          <div class="card-meta"><span>2.4K chars</span> <span class="topic">Positional Concepts</span></div>
+        </div>
+        <div class="part-card">
+          <div class="card-title">Foreword</div>
+          <div class="card-preview">The game of progressive chess has a long history going back to the 19th century. In this fascinating variant...</div>
+          <div class="card-meta"><span>8.6K chars</span></div>
+        </div>
+        <div class="part-card">
+          <div class="card-title">GAME 1</div>
+          <div class="card-preview">The first game illustrates the basic principles of progressive chess openings and the importance of...</div>
+          <div class="card-meta"><span>291 chars</span> <span class="topic">Game Analysis</span></div>
+        </div>
+        <div class="part-card">
+          <div class="card-title">Progressive Chess Content</div>
+          <div class="card-preview">The knight's unique movement pattern becomes even more powerful in progressive chess because...</div>
+          <div class="card-meta"><span>1.6K chars</span> <span class="topic">Piece Movement</span></div>
+        </div>
+        <div class="part-card">
+          <div class="card-title">Progressive Chess Content</div>
+          <div class="card-preview">Mating patterns differ significantly from standard chess. With multiple moves per turn, back rank...</div>
+          <div class="card-meta"><span>3.3K chars</span> <span class="topic">Mating Patterns</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="right v-simple">
+      <div class="content-header">
+        <span class="ch-badge">TEXT</span>
+        <span class="ch-title">Learn and Master Progressive Chess</span>
+        <div class="ch-nav">
+          <button><i data-lucide="chevron-left" style="width:12px;height:12px"></i></button>
+          <button><i data-lucide="chevron-right" style="width:12px;height:12px"></i></button>
+        </div>
+      </div>
+      <div class="content-body">
+        Learn and Master Progressive Chess Matej Guid The CIP record was created by the National and University Library Ljubljana. COBISS.SI-ID=293222144 ISBN 978-961-6209-96-0 (pdf) The electronic edition of this book is available at URL: http://zalozba.fri.uni-lj.si/guid2017.pdf. Copyright 2017 Zalozba UL FRI. All rights reserved. Reviewers: prof. dr. Ivan Bratko, prof. dr. H. Jaap van den Herik Proofreading: prof. dr. Walter A. Kosters Publisher: Zalozba UL FRI, Ljubljana University of Ljubljana, Faculty of Computer and Information Science First edition, 2017 Design of book cover: Bojana Fortuna Illustrations: prof. dr. Matej Guid with DeepArt.io Editor: prof. dr. Franc Solina
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ OPTION C: Reader Mode ═══ -->
+<div class="variant">
+  <div class="variant-label">C — Reader Mode (Table of Contents + Continuous Scroll)</div>
+  <div class="variant-desc">
+    Left panel is a clean table of contents (like a book's TOC). Numbered items, grouped by section.
+    Right panel renders content continuously — all parts flow as one document with section markers.
+    Topic chips shown in header. Clicking TOC item scrolls to that section.
+  </div>
+  <div class="split">
+    <div class="left v-reader">
+      <!-- Document header -->
+      <div class="doc-header">
+        <div class="doc-title">Learn and Master Progressive Chess</div>
+        <div class="doc-meta">
+          <span>55 parts</span>
+          <span>57.1K chars</span>
+          <span>Matej Guid, 2017</span>
+        </div>
+        <div class="doc-topics">
+          <span class="topic-chip">Positional Concepts</span>
+          <span class="topic-chip">Game Analysis</span>
+          <span class="topic-chip">Piece Movement</span>
+          <span class="topic-chip">Mating Patterns</span>
+        </div>
+      </div>
+
+      <!-- Table of Contents -->
+      <div class="toc">
+        <div class="toc-group">Front Matter</div>
+        <div class="toc-item active"><span class="toc-num">1</span><span class="toc-name">Title Page</span><span class="toc-size">682</span></div>
+        <div class="toc-item"><span class="toc-num">2</span><span class="toc-name">Copyright</span><span class="toc-size">109</span></div>
+        <div class="toc-item"><span class="toc-num">3</span><span class="toc-name">Preface</span><span class="toc-size">2.4K</span></div>
+        <div class="toc-item"><span class="toc-num">4</span><span class="toc-name">Foreword</span><span class="toc-size">8.6K</span></div>
+
+        <div class="toc-group">Games</div>
+        <div class="toc-item"><span class="toc-num">5</span><span class="toc-name">Game 1</span><span class="toc-size">291</span></div>
+        <div class="toc-item"><span class="toc-num">6</span><span class="toc-name">Game 2</span><span class="toc-size">387</span></div>
+        <div class="toc-item"><span class="toc-num">7</span><span class="toc-name">Game 3</span><span class="toc-size">333</span></div>
+
+        <div class="toc-group">Content</div>
+        <div class="toc-item"><span class="toc-num">8</span><span class="toc-name">Knight Movement in Progressive Chess</span><span class="toc-size">1.6K</span></div>
+        <div class="toc-item"><span class="toc-num">9</span><span class="toc-name">Mating Patterns</span><span class="toc-size">3.3K</span></div>
+        <div class="toc-item"><span class="toc-num">10</span><span class="toc-name">Positional Strategy</span><span class="toc-size">197</span></div>
+        <div class="toc-item"><span class="toc-num">11</span><span class="toc-name">Endgame Techniques</span><span class="toc-size">1.9K</span></div>
+        <div class="toc-item"><span class="toc-num">12</span><span class="toc-name">Opening Theory</span><span class="toc-size">2.1K</span></div>
+        <div class="toc-item"><span class="toc-num">13</span><span class="toc-name">Tactical Combinations</span><span class="toc-size">4.2K</span></div>
+        <div class="toc-item"><span class="toc-num">14</span><span class="toc-name">Advanced Patterns</span><span class="toc-size">1.8K</span></div>
+      </div>
+    </div>
+    <div class="right v-reader">
+      <div class="reader-content">
+        <h2><span class="chunk-marker">1</span> Learn and Master Progressive Chess</h2>
+        <p>Learn and Master Progressive Chess Matej Guid The CIP record was created by the National and University Library Ljubljana. COBISS.SI-ID=293222144 ISBN 978-961-6209-96-0 (pdf) The electronic edition of this book is available at URL: http://zalozba.fri.uni-lj.si/guid2017.pdf.</p>
+        <p>Copyright 2017 Zalozba UL FRI. All rights reserved. Reviewers: prof. dr. Ivan Bratko, prof. dr. H. Jaap van den Herik Proofreading: prof. dr. Walter A. Kosters Publisher: Zalozba UL FRI, Ljubljana University of Ljubljana.</p>
+
+        <h2><span class="chunk-marker">3</span> Preface</h2>
+        <p>Progressive Chess is a chess variant in which the number of consecutive moves increases by one each turn. White starts with one move, then Black makes two consecutive moves, White responds with three, and so on.</p>
+        <p>This unique mechanic fundamentally changes the strategic landscape of chess, creating exciting tactical opportunities that don't exist in standard chess...</p>
+
+        <h2><span class="chunk-marker">4</span> Foreword</h2>
+        <p>The game of progressive chess has a long history going back to the 19th century. In this fascinating variant of chess, each player makes an increasing number of moves per turn...</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ OPTION D: Hybrid (C's style + B's functionality) ═══ -->
+<div class="variant">
+  <div class="variant-label">D — Hybrid: TOC Style + Search + Preview</div>
+  <div class="variant-desc">
+    C's clean aesthetic with B's functionality. Compact header with topic chips, <strong>searchable</strong> TOC with <strong>2-line content preview</strong>
+    per item and <strong>topic chips inline</strong>. Right panel shows one part at a time with reader styling.
+    Active item has left border accent (like C). Grouped sections (like C).
+  </div>
+  <div class="split">
+    <div class="left v-reader">
+      <!-- Document header with topic chips -->
+      <div class="doc-header">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <i data-lucide="file-text" style="width:16px;height:16px;color:#52525b;flex-shrink:0"></i>
+          <div style="flex:1;min-width:0;">
+            <div class="doc-title">Learn and Master Progressive Chess</div>
+            <div class="doc-meta">
+              <span>55 parts</span>
+              <span>57.1K chars</span>
+            </div>
+          </div>
+        </div>
+        <div class="doc-topics">
+          <span class="topic-chip">Positional Concepts</span>
+          <span class="topic-chip">Game Analysis</span>
+          <span class="topic-chip">Piece Movement</span>
+          <span class="topic-chip">Mating Patterns</span>
+        </div>
+      </div>
+
+      <!-- Search -->
+      <div style="padding:8px 12px;border-bottom:1px solid #1e1e1e;position:relative;">
+        <i data-lucide="search" style="position:absolute;left:20px;top:50%;transform:translateY(-50%);width:12px;height:12px;color:#52525b"></i>
+        <input type="text" placeholder="Search parts..." style="width:100%;background:#0a0a0a;border:1px solid #27272a;border-radius:6px;padding:5px 8px 5px 28px;font-size:11px;color:#d4d4d8;outline:none;" />
+      </div>
+
+      <!-- TOC with preview snippets -->
+      <div class="toc">
+        <div class="toc-group">Front Matter</div>
+
+        <div class="toc-item active" style="flex-direction:column;align-items:stretch;gap:3px;padding:6px 16px;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="toc-num">1</span>
+            <span class="toc-name" style="font-weight:500;">Title Page</span>
+            <span class="toc-size">682</span>
+          </div>
+          <div style="font-size:10px;color:#52525b;line-height:1.4;padding-left:26px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+            Learn and Master Progressive Chess Matej Guid. The CIP record was created by the National and University Library...
+          </div>
+        </div>
+
+        <div class="toc-item" style="flex-direction:column;align-items:stretch;gap:3px;padding:6px 16px;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="toc-num">2</span>
+            <span class="toc-name">Copyright</span>
+            <span class="toc-size">109</span>
+          </div>
+          <div style="font-size:10px;color:#3f3f46;line-height:1.4;padding-left:26px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;">
+            ISBN 978-961-6209-96-0 Copyright 2017 Zalozba UL FRI...
+          </div>
+        </div>
+
+        <div class="toc-item" style="flex-direction:column;align-items:stretch;gap:3px;padding:6px 16px;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="toc-num">3</span>
+            <span class="toc-name">Preface</span>
+            <span class="toc-size">2.4K</span>
+          </div>
+          <div style="font-size:10px;color:#3f3f46;line-height:1.4;padding-left:26px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+            Progressive Chess is a chess variant in which the number of consecutive moves increases by one each turn...
+          </div>
+          <div style="padding-left:26px;"><span style="font-size:9px;padding:1px 6px;border-radius:3px;background:#10b98110;color:#10b981;border:1px solid #10b98120;">Positional Concepts</span></div>
+        </div>
+
+        <div class="toc-item" style="flex-direction:column;align-items:stretch;gap:3px;padding:6px 16px;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="toc-num">4</span>
+            <span class="toc-name">Foreword</span>
+            <span class="toc-size">8.6K</span>
+          </div>
+          <div style="font-size:10px;color:#3f3f46;line-height:1.4;padding-left:26px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+            The game of progressive chess has a long history going back to the 19th century. In this fascinating variant...
+          </div>
+        </div>
+
+        <div class="toc-group">Games</div>
+
+        <div class="toc-item" style="flex-direction:column;align-items:stretch;gap:3px;padding:6px 16px;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="toc-num">5</span>
+            <span class="toc-name">Game 1</span>
+            <span class="toc-size">291</span>
+          </div>
+          <div style="font-size:10px;color:#3f3f46;line-height:1.4;padding-left:26px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;">
+            The first game illustrates the basic principles of progressive chess openings...
+          </div>
+          <div style="padding-left:26px;"><span style="font-size:9px;padding:1px 6px;border-radius:3px;background:#f59e0b10;color:#f59e0b;border:1px solid #f59e0b20;">Game Analysis</span></div>
+        </div>
+
+        <div class="toc-group">Content</div>
+
+        <div class="toc-item" style="flex-direction:column;align-items:stretch;gap:3px;padding:6px 16px;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="toc-num">8</span>
+            <span class="toc-name">Progressive Chess Content</span>
+            <span class="toc-size">1.6K</span>
+          </div>
+          <div style="font-size:10px;color:#3f3f46;line-height:1.4;padding-left:26px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+            The knight's unique movement pattern becomes even more powerful in progressive chess because of multiple consecutive moves...
+          </div>
+          <div style="padding-left:26px;"><span style="font-size:9px;padding:1px 6px;border-radius:3px;background:#8b5cf610;color:#8b5cf6;border:1px solid #8b5cf620;">Piece Movement</span></div>
+        </div>
+
+        <div class="toc-item" style="flex-direction:column;align-items:stretch;gap:3px;padding:6px 16px;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="toc-num">9</span>
+            <span class="toc-name">Progressive Chess Content</span>
+            <span class="toc-size">3.3K</span>
+          </div>
+          <div style="font-size:10px;color:#3f3f46;line-height:1.4;padding-left:26px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+            Mating patterns differ significantly from standard chess. With multiple moves per turn, back rank mates and smothered mates...
+          </div>
+          <div style="padding-left:26px;"><span style="font-size:9px;padding:1px 6px;border-radius:3px;background:#ef444410;color:#ef4444;border:1px solid #ef444420;">Mating Patterns</span></div>
+        </div>
+
+        <div class="toc-item" style="flex-direction:column;align-items:stretch;gap:3px;padding:6px 16px;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="toc-num">10</span>
+            <span class="toc-name">Progressive Chess Content</span>
+            <span class="toc-size">197</span>
+          </div>
+          <div style="font-size:10px;color:#3f3f46;line-height:1.4;padding-left:26px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;">
+            Positional strategy in progressive chess requires a fundamentally different approach...
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="right v-reader">
+      <!-- Reader panel - one part at a time -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #1e1e1e;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:9px;padding:2px 8px;border-radius:4px;background:#10b98120;color:#10b981;font-weight:600;">TEXT</span>
+          <span style="font-size:13px;font-weight:600;color:#e4e4e7;">Title Page</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:10px;color:#52525b;">1 of 55</span>
+          <div style="display:flex;gap:4px;">
+            <button style="background:none;border:1px solid #27272a;color:#71717a;border-radius:4px;width:24px;height:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;"><i data-lucide="chevron-left" style="width:12px;height:12px"></i></button>
+            <button style="background:none;border:1px solid #27272a;color:#71717a;border-radius:4px;width:24px;height:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;"><i data-lucide="chevron-right" style="width:12px;height:12px"></i></button>
+          </div>
+        </div>
+      </div>
+      <div class="reader-content">
+        <p>Learn and Master Progressive Chess Matej Guid The CIP record was created by the National and University Library Ljubljana. COBISS.SI-ID=293222144 ISBN 978-961-6209-96-0 (pdf) The electronic edition of this book is available at URL: http://zalozba.fri.uni-lj.si/guid2017.pdf.</p>
+        <p>Copyright 2017 Zalozba UL FRI. All rights reserved. Reviewers: prof. dr. Ivan Bratko, prof. dr. H. Jaap van den Herik Proofreading: prof. dr. Walter A. Kosters Publisher: Zalozba UL FRI, Ljubljana University of Ljubljana, Faculty of Computer and Information Science First edition, 2017.</p>
+        <p>Design of book cover: Bojana Fortuna Illustrations: prof. dr. Matej Guid with DeepArt.io Editor: prof. dr. Franc Solina</p>
+      </div>
+
+      <!-- Footer: linked topics + records -->
+      <div style="margin-top:auto;padding-top:12px;border-top:1px solid #1e1e1e;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="font-size:10px;color:#52525b;">No linked topics</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="padding: 16px 24px 32px; color: #52525b; font-size: 11px; line-height: 1.8;">
+  <strong style="color:#a1a1aa">A — Current:</strong> Dense, header card too tall, parts list repetitive, no search, coverage bars not actionable.<br>
+  <strong style="color:#a1a1aa">B — Simplified Cards:</strong> Compact header, searchable parts, preview cards with 2-line snippets, topics inline per card.<br>
+  <strong style="color:#a1a1aa">C — Reader Mode:</strong> Book-like TOC on left, continuous reading on right with section markers. Topics shown as chips in header.<br>
+  <strong style="color:#a1a1aa">D — Hybrid (recommended):</strong> C's clean TOC aesthetic + B's search + content previews + topic chips per item. One part at a time in reader panel. Best of both worlds.<br>
+</div>
+
+<script>lucide.createIcons();</script>
+</body>
+</html>

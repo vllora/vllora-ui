@@ -15,7 +15,7 @@ import {
   Play,
   Settings,
 } from "lucide-react";
-import Editor from "@monaco-editor/react";
+import Editor, { DiffEditor } from "@monaco-editor/react";
 import { EvalJobsConsumer } from "@/contexts/EvalJobsContext";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import {
@@ -40,6 +40,10 @@ import { EvaluationBottomPanel } from "./EvaluationBottomPanel";
 import { EvaluatorVersionHistory } from "@/components/finetune/content/EvaluatorVersionHistory";
 import { cn } from "@/lib/utils";
 import type { ImperativePanelHandle } from "react-resizable-panels";
+import {
+  getEvaluatorVersions,
+  type EvaluatorVersionResponse,
+} from "@/services/finetune-api";
 
 /** Methods exposed via ref for external control */
 export interface EvaluationConfigPanelRef {
@@ -216,8 +220,49 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
   const [sampleSize, setSampleSize] = useState(() => getDefaultSampleSize(recordCount));
   const [rolloutModel, setRolloutModel] = useState("gpt-4o-mini");
 
+  // Version browsing state
+  const [versions, setVersions] = useState<EvaluatorVersionResponse[]>([]);
+  const [selectedVersionNum, setSelectedVersionNum] = useState<"latest" | number>("latest");
+  const isViewingOldVersion = selectedVersionNum !== "latest";
+
   const bottomPanelRef = useRef<ImperativePanelHandle>(null);
   const { runningJob, lastCompletedJob, startDryRun } = EvalJobsConsumer();
+
+  // Fetch versions when workflowId is available
+  useEffect(() => {
+    if (!workflowId) return;
+    getEvaluatorVersions(workflowId)
+      .then(setVersions)
+      .catch(() => setVersions([]));
+  }, [workflowId, evalScript]); // refetch when script is saved (evalScript changes)
+
+  // Extract script from a version's config
+  const extractScript = useCallback((ver: EvaluatorVersionResponse): string => {
+    const cfg = ver.config.config as Record<string, unknown>;
+    return (cfg.script ?? cfg.code ?? cfg.evaluator_script ?? "") as string;
+  }, []);
+
+  // Current selected version's script
+  const versionScript = useMemo(() => {
+    if (selectedVersionNum === "latest") return null;
+    const ver = versions.find((v) => v.version === selectedVersionNum);
+    return ver ? extractScript(ver) : null;
+  }, [selectedVersionNum, versions, extractScript]);
+
+  // Previous version's script (for diff comparison)
+  const previousVersionScript = useMemo(() => {
+    if (selectedVersionNum === "latest") return null;
+    const prevVer = versions.find((v) => v.version === (selectedVersionNum as number) - 1);
+    return prevVer ? extractScript(prevVer) : "";
+  }, [selectedVersionNum, versions, extractScript]);
+
+  const handleVersionChange = (value: string) => {
+    if (value === "latest") {
+      setSelectedVersionNum("latest");
+    } else {
+      setSelectedVersionNum(Number(value));
+    }
+  };
 
   useEffect(() => {
     setSampleSize(getDefaultSampleSize(recordCount));
@@ -297,6 +342,28 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
     <TooltipProvider delayDuration={300}>
     <div className="flex items-center gap-1 px-2 py-1 border-b border-border bg-muted/40 shrink-0">
       <span className="text-xs font-medium text-muted-foreground px-1">Grader Script</span>
+      {versions.length > 1 && (
+        <Select value={String(selectedVersionNum)} onValueChange={handleVersionChange}>
+          <SelectTrigger className="h-6 w-auto gap-1 px-2 bg-muted/50 border-border/50 text-[10px] font-mono text-muted-foreground focus:ring-0 focus:ring-offset-0">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="latest">
+              <span className="text-[10px] font-mono">v{versions[0]?.version} (latest)</span>
+            </SelectItem>
+            {versions.slice(1).map((v) => (
+              <SelectItem key={v.version} value={String(v.version)}>
+                <span className="text-[10px] font-mono">v{v.version}</span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+      {isViewingOldVersion && (
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-medium">
+          read-only
+        </span>
+      )}
       {!hideHeaderActions && (
         <>
           <div className="w-px h-3.5 bg-border mx-1" />
@@ -330,62 +397,9 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
       )}
       <div className="flex-1" />
 
-      {/* Dry run config popover */}
-      <Popover>
-        <PopoverTrigger asChild>
-          <button className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-            <Settings className="w-3.5 h-3.5" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent side="bottom" align="end" className="w-64 p-3">
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                Sample Size
-              </label>
-              <div className="flex gap-1">
-                {sampleOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => setSampleSize(option.value)}
-                    className={cn(
-                      "px-2.5 py-1 rounded text-xs font-medium transition-colors",
-                      sampleSize === option.value
-                        ? "bg-muted text-foreground"
-                        : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
-                    )}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-              <p className="text-[10px] text-muted-foreground/50">
-                {recordCount.toLocaleString()} records available
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                Rollout Model
-              </label>
-              <Select value={rolloutModel} onValueChange={setRolloutModel}>
-                <SelectTrigger className="h-8 bg-muted/50 border-border/50 text-xs text-foreground focus:ring-ring focus:ring-offset-0">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ROLLOUT_MODEL_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </PopoverContent>
-      </Popover>
 
       {/* Run dry run button */}
-      <Tooltip>
+      {/* <Tooltip>
         <TooltipTrigger asChild>
           <button
             onClick={handleRunDryRun}
@@ -408,9 +422,9 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
         <TooltipContent side="bottom" className="text-xs">
           {!hasGraderConfig ? "Save evaluator script first" : runningJob ? "Evaluation in progress" : `Run evaluation (${sampleSize} samples)`}
         </TooltipContent>
-      </Tooltip>
+      </Tooltip> */}
 
-      <div className="w-px h-3.5 bg-border mx-0.5" />
+      {/* <div className="w-px h-3.5 bg-border mx-0.5" /> */}
 
       {/* Save button */}
       <button
@@ -434,7 +448,24 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
     </TooltipProvider>
   );
 
-  const codeEditor = (
+  const codeEditor = isViewingOldVersion && versionScript !== null ? (
+    <div className="flex-1 min-h-0">
+      <DiffEditor
+        height="100%"
+        language="javascript"
+        original={previousVersionScript ?? ""}
+        modified={versionScript}
+        theme="vs-dark"
+        options={{
+          ...EDITOR_OPTIONS,
+          readOnly: true,
+          renderSideBySide: false,
+          renderIndicators: true,
+          originalEditable: false,
+        }}
+      />
+    </div>
+  ) : (
     <div className="flex-1 min-h-0">
       <Editor
         height="100%"

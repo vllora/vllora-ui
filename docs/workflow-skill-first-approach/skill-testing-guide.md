@@ -38,17 +38,19 @@ rm -rf "$TEST_DIR/.claude"
 rm -f "$TEST_DIR"/*.pdf "$TEST_DIR"/*.txt "$TEST_DIR"/*.jsonl "$TEST_DIR"/*.json "$TEST_DIR"/*.js "$TEST_DIR"/*.md
 ```
 
-### 2. Copy skill files (exclude README.md)
+### 2. Copy skill files
+
+The skill lives inside `.claude/skills/finetune-skill/` — this is how Claude Code discovers skills.
 
 ```bash
 # Set SKILL_DIR to wherever the skill source lives
 SKILL_DIR=/path/to/vllora/ui/finetune-skill
 
-mkdir -p "$TEST_DIR/.claude"
-cp "$SKILL_DIR/SKILL.md" "$TEST_DIR/.claude/"
-cp -r "$SKILL_DIR/reference" "$TEST_DIR/.claude/"
-cp -r "$SKILL_DIR/scripts" "$TEST_DIR/.claude/"
-cp -r "$SKILL_DIR/templates" "$TEST_DIR/.claude/"
+mkdir -p "$TEST_DIR/.claude/skills/finetune-skill"
+cp "$SKILL_DIR/SKILL.md" "$TEST_DIR/.claude/skills/finetune-skill/"
+cp -r "$SKILL_DIR/reference" "$TEST_DIR/.claude/skills/finetune-skill/"
+cp -r "$SKILL_DIR/scripts" "$TEST_DIR/.claude/skills/finetune-skill/"
+cp -r "$SKILL_DIR/templates" "$TEST_DIR/.claude/skills/finetune-skill/"
 ```
 
 ### 3. Copy test PDF documents
@@ -96,29 +98,11 @@ cd vllora/gateway && cargo run
 **Quick test (1 PDF, ~5 min extraction):** Use Dave Regis only.
 **Full demo (2 PDFs, ~15 min extraction):** Use Dave Regis + Lasker.
 
+The skill auto-invokes when the user mentions fine-tuning. The user only needs to describe what model they want — SKILL.md handles everything else (objective, system prompt, pipeline steps).
+
 ```bash
 cd "$TEST_DIR"
-claude -p "I want to fine-tune a chess tutor model using the PDF documents in this directory.
-
-Objective: Train a chess tutor that teaches tactical patterns (forks, pins, skewers, discovered attacks, combinations, checkmates) and strategic concepts (openings, pawn structures, middlegame planning, endgame technique). The tutor should explain concepts clearly using concrete examples from real games, help students recognize patterns on the board, and guide them through the reasoning process — not just show moves but explain WHY a tactic works.
-
-System prompt: You are an expert chess tutor who teaches through explanation and guided discovery. When a student asks about a concept, you explain the underlying principle, show how to recognize the pattern, walk through a concrete example, and highlight common mistakes. You adapt your language to be clear and educational — not just listing moves, but explaining the logic behind each one.
-
-Execute the full vLLora finetune skill pipeline:
-1. Create a workflow on the gateway (http://localhost:9090) — upload immediately
-2. Extract ALL PDF documents using docling_extract.py (processing each individually). Then for EACH document, write a CUSTOM extraction script that reads the docling-result.json and produces knowledge_parts.json. Do NOT write a generic script — each document has different structure, OCR artifacts, and heading patterns. Read chunks first to understand the document before writing the script. After extraction, run consolidate_parts.py and validate_extraction.py on each document. Upload each knowledge source to gateway as extraction completes.
-3. Build a topic hierarchy from the extracted content — upload topics + relations to gateway immediately
-4. Generate training data (at least 100 records) — upload records to gateway immediately
-5. Write a grader/evaluator script — dry-run then upload grader to gateway immediately
-6. Verify all data landed in the gateway (counts > 0)
-
-Use the scripts in .claude/scripts/ and follow .claude/SKILL.md instructions exactly.
-IMPORTANT: Do NOT create shell scripts. Execute all commands directly via bash.
-IMPORTANT: Upload to gateway after EACH step, not at the end. The UI shows progress in real time.
-IMPORTANT: Use docling_extract.py for Docling — do NOT use raw curl.
-IMPORTANT: Write a SEPARATE custom extraction script PER document. A generic script produces garbage — each PDF has different structure and OCR patterns.
-IMPORTANT: A healthy extraction produces 2-10 parts per page. If you get fewer than 50 parts from a 84-page PDF, your script is wrong.
-NOTE: docling_extract.py auto-detects digital vs scanned PDFs and adjusts OCR accordingly." \
+claude -p "I want to fine-tune a chess tutor model using the PDF documents in this directory. The model should teach tactical patterns and strategic concepts, explaining clearly with concrete examples from real games." \
   --dangerously-skip-permissions \
   --model sonnet \
   --max-turns 200

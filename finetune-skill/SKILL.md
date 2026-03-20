@@ -594,23 +594,34 @@ Tell the user the data is visible at `http://localhost:5173/finetune`, then **pr
 
 On the first run, there's no prior data to analyze — start both evaluation and training simultaneously. They run on the cloud in parallel.
 
-#### 7a. Create evaluation job
+#### 7a. Pre-training validation
+
+Before starting training, validate `max_output_tokens` by checking your grader dry-run response length:
 
 ```bash
-uv run scripts/run_evaluation.py --dataset-id $WORKFLOW_ID --output evaluations/eval-v1.json```
-
-Or manually:
-```bash
-EVAL=$(curl -s -X POST http://localhost:9090/finetune/evaluations \
-  -H "Content-Type: application/json" \
-  -d "{\"dataset_id\": \"$WORKFLOW_ID\", \"rollout_model_params\": {\"model\": \"gpt-4o-mini\"}}")
-EVAL_ID=$(echo "$EVAL" | python3 -c "import sys,json; print(json.load(sys.stdin)['evaluation_run_id'])")
-echo "Eval started: $EVAL_ID"
+# Check: how long are typical grader responses?
+# If dry-run response > 800 chars, set max_output_tokens to at least 2x that
+DRY_RUN_LENGTH=$(uv run scripts/dry_run_grader.py \
+  --workflow-id $WORKFLOW_ID --script grader.js \
+  --row '{"messages": [...]}' 2>/dev/null | python3 -c "
+import sys,json
+r = json.load(sys.stdin)
+print(len(r.get('reason', '')))" 2>/dev/null)
+echo "Dry-run response: $DRY_RUN_LENGTH chars"
 ```
 
-#### 7b. Create training job
+If the response is consistently long (>800 chars), set `max_output_tokens` to 2000+ to avoid 100% clipping during training.
+
+#### 7b. Create both jobs (non-blocking)
+
+Use `--create-only` to create the eval job without blocking, so you can start training immediately:
 
 ```bash
+# Create eval (non-blocking — just returns the ID)
+EVAL_ID=$(uv run scripts/run_evaluation.py --dataset-id $WORKFLOW_ID --create-only | tail -1)
+echo "Eval started: $EVAL_ID"
+
+# Create training job
 JOB=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs \
   -H "Content-Type: application/json" \
   -d '{
@@ -626,7 +637,7 @@ JOB=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs
       "batch_size": 5
     },
     "inference_parameters": {
-      "max_output_tokens": 1000,
+      "max_output_tokens": 2000,
       "temperature": 1.0,
       "top_p": 1.0,
       "response_candidates_count": 2
@@ -650,80 +661,115 @@ echo "Training started: $JOB_ID"
 | Complex task | `lora_rank: 16` |
 | Simple task | `lora_rank: 4` |
 
-#### 7c. Poll both jobs
+#### 7c. Poll both jobs — analyze incrementally
 
-Poll both jobs until they complete. Report progress to the user as results arrive:
+Poll both jobs in a loop. **Analyze each job as soon as it completes** — do NOT wait for both to finish:
 
 ```bash
-# Poll eval
-EVAL_STATUS=$(curl -s "http://localhost:9090/finetune/evaluations/$EVAL_ID" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))")
+while true; do
+  EVAL_STATUS=$(curl -s "http://localhost:9090/finetune/evaluations/$EVAL_ID" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))")
+  JOB_STATUS=$(curl -s "http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs/$JOB_ID" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))")
+  echo "Eval: $EVAL_STATUS | Training: $JOB_STATUS"
 
-# Poll training
-JOB_STATUS=$(curl -s "http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs/$JOB_ID" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))")
+  # If training finishes first → analyze training results immediately
+  # If eval finishes first → analyze eval results immediately
+  # When both done → cross-reference and present full analysis
+
+  [ "$EVAL_STATUS" = "completed" ] && [ "$JOB_STATUS" = "succeeded" ] && break
+  [ "$EVAL_STATUS" = "failed" ] || [ "$JOB_STATUS" = "failed" ] && break
+  sleep 15
+done
 ```
 
-As each job completes, save results:
+**Key rule**: When one job completes before the other, **immediately analyze its results and present findings** to the user. Don't wait idle. For example:
+- Training finishes first → analyze metrics (reward trend, KL, clipping), present diagnosis
+- Eval finishes first → analyze scores (per-topic breakdown, weak records), present findings
+- Both done → cross-reference and give the complete picture
+
+Save results as each job completes:
 - Eval results → `evaluations/eval-v1.json`
-- Training results → `training-jobs/job-v1.json` (fetch via `GET /finetune/workflows/$WORKFLOW_ID/dataset/finetune-evaluations?finetune_job_id=$JOB_ID`)
+- Training metrics → `training-jobs/job-v1.json` (fetch via `GET /finetune/workflows/$WORKFLOW_ID/jobs/$JOB_ID`)
 
 ### Step 8: Analyze Results & Present Findings
 
-Once results arrive (eval, training, or both), analyze and present findings to the user. The analysis is **interactive** — present what you found and let the user drive the next action.
+Analyze each job's results **as soon as they arrive** — don't wait for both to finish. The analysis is **interactive** — present what you found and let the user drive the next action.
 
-> **Read `reference/analysis-strategy.md`** before analyzing. It has decision trees, action templates, derived metrics to compute, and interactive presentation guidelines.
+> **Read `reference/analysis-strategy.md`** for decision trees, action templates, and derived metrics.
 
-#### 8a. What to analyze
+#### 8a. Analyze training results (when training completes)
 
-**From eval results:**
-- Average score across all records
-- Per-topic score breakdown (which topics score lowest?)
-- Score distribution (all 0s? all 1s? smooth spread?)
-- Common `reason` patterns in low-scoring records
-- Pass rate (score > threshold)
-
-**From training results (per-epoch):**
-- Reward progression (improving? plateauing? declining?)
-- Loss curve (decreasing? NaN/Inf?)
-- KL divergence (stable? exploding?)
-- Per-record score trends across epochs
-- Lowest-scoring records and their `reason` fields
-
-**Cross-referencing (when both available):**
-- Do eval-weak topics also score low in training?
-- Did training improve on the topics that eval flagged?
-- Is the grader consistent between eval and training?
-
-#### 8b. Present to user interactively
-
-**Show a clear summary:**
+Compute these metrics from the training job:
+```bash
+curl -s "http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs/$JOB_ID" > training-jobs/job-v1.json
 ```
-=== Evaluation Results ===
-Average score: 0.72 | Pass rate: 78% | Records: 209
 
-Per-topic breakdown:
-  strategic-endgame:     0.45 ⚠️ (lowest — 5 of 11 records below threshold)
-  tactical-forks:        0.91 ✅ (strong)
-  opening-principles:    0.68 ✅
+**Must check:**
+1. **Reward trend**: first reward vs last reward — improving, flat, or declining?
+2. **KL divergence**: any spikes >100? (>1000 = learning rate too high, critical)
+3. **Clipping ratio**: >0.5 means `max_output_tokens` too low — model outputs are being truncated
+4. **Loss stability**: any NaN/Inf or spikes >100x the normal value?
+5. **Grad norm**: spikes >1000 indicate instability
+
+Present immediately:
+```
+=== Training Results (eval still running) ===
+Status: succeeded | Epochs: 2 | Steps: 26/26
+Reward: 0.762 → 0.745 (declining ⚠️)
+
+Issues found:
+  [CRITICAL] KL divergence spiked to 1,146,633 at step 10 — learning rate too aggressive
+  [CRITICAL] 100% clipping — all outputs truncated at max_output_tokens
+  [HIGH] Reward declined slightly — model got worse, not better
+
+While we wait for eval results, I recommend:
+  A. Note these training issues — we'll combine with eval analysis for full picture
+  B. Cancel and restart training now with lr=0.000005 and max_output_tokens=2000
+```
+
+#### 8b. Analyze eval results (when eval completes)
+
+```bash
+curl -s "http://localhost:9090/finetune/evaluations/$EVAL_ID" > evaluations/eval-v1.json
+```
+
+**Must compute:**
+1. **Overall**: average score, pass rate (>0.7 threshold), score range
+2. **Per-topic breakdown**: group scores by topic, sort by average (weakest first)
+3. **Low-scoring records**: list records <0.7 with their `reason` fields
+4. **Score distribution**: are scores spread out (good) or clustered (grader issue)?
+
+#### 8c. Cross-reference (when both available)
+
+When both results are available, combine the analysis:
+
+```
+=== Combined Analysis ===
+
+Evaluation: GO ✅ (avg 0.917, 98% pass rate)
+Training:   WARNING ⚠️ (reward declined, KL explosions)
+
+Per-topic:
+  Topic                        Eval Score    Status
+  chess-early-checkmates          0.952       ✅
+  chess-combinations              0.952       ✅
+  chess-tactical-thinking         0.800       ⚠️ (weakest, min=0.57)
   ...
 
-=== Training Results ===
-Epochs: 2 | Final reward: 0.65 | Trend: 0.40 → 0.55 → 0.65 (improving)
-No anomalies detected.
+Training issues:
+  1. [CRITICAL] KL spikes (9 of 26 steps) — lr too high
+  2. [CRITICAL] 100% clipping — max_output_tokens=1000 too low
+  3. [HIGH] Reward declining — training made model worse
 
 === Suggested Actions ===
-1. [RECOMMENDED] Regenerate records for "strategic-endgame" — low eval scores suggest weak prompts
-2. [OPTIONAL] Tighten grader weight on "concrete_examples" — many mediocre scores cite lack of examples
-3. [OPTIONAL] Run 1 more training epoch — reward still improving at epoch 2
+  A. [RECOMMENDED] Lower lr 0.00001→0.000005 AND increase max_output_tokens 1000→2000, run new training
+  B. [OPTIONAL] Also regenerate "tactical-thinking" records (weakest eval topic)
+  C. [OPTIONAL] Keep eval as-is (0.917 is excellent), only fix training config
+  D. I'm satisfied — done
 
 What would you like to do?
 ```
 
-**Let the user choose:**
-- "Regenerate endgame records" → agent regenerates, re-uploads, starts new eval+training
-- "Adjust the grader" → agent modifies grader.js, re-uploads, starts new eval
-- "Run another training epoch" → agent starts new job with `epochs: 3`
-- "Looks good, I'm satisfied" → done
-- User may also direct their own analysis: "I think the grader is too lenient on X"
+**Let the user choose.** The user may also direct their own analysis: "I think the grader is too lenient on X" or "lower the learning rate more aggressively".
 
 #### 8c. Quick diagnosis patterns
 

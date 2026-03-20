@@ -5,9 +5,13 @@
 
 Usage:
   uv run scripts/run_evaluation.py --dataset-id ds_abc123 [--model gpt-4o-mini] [--output eval-v1.json]
+  uv run scripts/run_evaluation.py --dataset-id ds_abc123 --create-only  # Just create, return ID
 
 Creates an evaluation run, polls until complete, prints summary stats,
 and optionally saves the full response to a file.
+
+Use --create-only to create the eval job and print the ID without polling.
+This lets the agent poll manually alongside other jobs (e.g., training).
 """
 
 import argparse
@@ -84,6 +88,32 @@ def run_evaluation(
     sys.exit(1)
 
 
+def create_evaluation(
+    dataset_id: str,
+    model: str,
+    base_url: str,
+    limit: int | None = None,
+) -> str:
+    """Create an eval job and return its ID without polling."""
+    payload: dict = {
+        "dataset_id": dataset_id,
+        "rollout_model_params": {"model": model},
+    }
+    if limit:
+        payload["limit"] = limit
+
+    resp = requests.post(
+        f"{base_url}/finetune/evaluations",
+        json=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    resp.raise_for_status()
+    eval_data = resp.json()
+    eval_id = eval_data.get("evaluation_run_id", eval_data.get("id"))
+    print(f"Evaluation created: {eval_id}")
+    return eval_id
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run evaluation on vLLora gateway")
     parser.add_argument("--dataset-id", required=True, help="Backend dataset ID")
@@ -92,12 +122,18 @@ def main() -> None:
     parser.add_argument("--output", help="Path to save full response JSON")
     parser.add_argument("--limit", type=int, help="Max rows to evaluate")
     parser.add_argument("--timeout", type=int, default=1800, help="Max seconds to wait (default: 1800)")
+    parser.add_argument("--create-only", action="store_true", help="Create eval job and print ID without polling")
     args = parser.parse_args()
 
     output_path = Path(args.output) if args.output else None
 
     try:
-        run_evaluation(args.dataset_id, args.model, args.base_url, output_path, args.limit)
+        if args.create_only:
+            eval_id = create_evaluation(args.dataset_id, args.model, args.base_url, args.limit)
+            # Print just the ID for easy capture: EVAL_ID=$(uv run ... --create-only | tail -1)
+            print(eval_id)
+        else:
+            run_evaluation(args.dataset_id, args.model, args.base_url, output_path, args.limit)
     except requests.HTTPError as e:
         print(f"Error: Request failed with status {e.response.status_code}", file=sys.stderr)
         print(f"  Response: {e.response.text}", file=sys.stderr)

@@ -39,11 +39,13 @@ function formatDate(dateStr: string): string {
   });
 }
 
-function DiffView({ diff }: { diff: string }) {
+type ViewMode = "diff" | "full";
+
+function DiffView({ diff }: { readonly diff: string }) {
   const lines = diff.split("\n");
 
   return (
-    <div className="mt-2 rounded border border-[#262626] bg-[#0a0a0a] overflow-x-auto">
+    <div className="rounded border border-[#262626] bg-[#0a0a0a] overflow-x-auto">
       <pre className="text-[11px] font-mono leading-relaxed p-3">
         {lines.map((line, i) => {
           let lineClass = "text-slate-500";
@@ -68,6 +70,51 @@ function DiffView({ diff }: { diff: string }) {
   );
 }
 
+function FullScriptView({ config }: { readonly config: Record<string, unknown> }) {
+  const script = (config.script ?? config.code ?? config.evaluator_script ?? "") as string;
+
+  if (!script) {
+    return (
+      <div className="rounded border border-[#262626] bg-[#0a0a0a] p-3 text-xs text-slate-500 italic">
+        Full script not available in this version&apos;s config.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded border border-[#262626] bg-[#0a0a0a] overflow-x-auto max-h-[400px] overflow-y-auto">
+      <pre className="text-[11px] font-mono leading-relaxed p-3 text-slate-300">
+        {script}
+      </pre>
+    </div>
+  );
+}
+
+function ViewModeToggle({ mode, onChange }: { readonly mode: ViewMode; readonly onChange: (m: ViewMode) => void }) {
+  return (
+    <div className="flex items-center gap-0.5 p-0.5 rounded bg-[#1a1a1a] border border-white/5">
+      <button
+        onClick={() => onChange("diff")}
+        className={cn(
+          "px-2 py-0.5 rounded text-[10px] font-medium transition-colors",
+          mode === "diff" ? "bg-white/10 text-slate-200" : "text-slate-500 hover:text-slate-300",
+        )}
+      >
+        Diff
+      </button>
+      <button
+        onClick={() => onChange("full")}
+        className={cn(
+          "px-2 py-0.5 rounded text-[10px] font-medium transition-colors",
+          mode === "full" ? "bg-white/10 text-slate-200" : "text-slate-500 hover:text-slate-300",
+        )}
+      >
+        Full Script
+      </button>
+    </div>
+  );
+}
+
 export function EvaluatorVersionHistory({
   workflowId,
   className,
@@ -78,6 +125,7 @@ export function EvaluatorVersionHistory({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedVersion, setExpandedVersion] = useState<number | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("diff");
   const [isSectionExpanded, setIsSectionExpanded] = useState(false);
 
   const fetchVersions = useCallback(async () => {
@@ -165,9 +213,7 @@ export function EvaluatorVersionHistory({
             <div key={version.id} className="group">
               <button
                 onClick={() => {
-                  if (hasMeaningfulDiff) {
-                    setExpandedVersion(isExpanded ? null : version.version);
-                  }
+                  setExpandedVersion(isExpanded ? null : version.version);
                   onVersionSelect?.(version.version);
                 }}
                 className={cn(
@@ -175,14 +221,10 @@ export function EvaluatorVersionHistory({
                   isSelected && "bg-emerald-500/5 border-l-2 border-emerald-500"
                 )}
               >
-                {hasMeaningfulDiff ? (
-                  isExpanded ? (
-                    <ChevronDown className="h-3.5 w-3.5 text-slate-500 shrink-0" />
-                  ) : (
-                    <ChevronRight className="h-3.5 w-3.5 text-slate-500 shrink-0" />
-                  )
+                {isExpanded ? (
+                  <ChevronDown className="h-3.5 w-3.5 text-slate-500 shrink-0" />
                 ) : (
-                  <div className="w-3.5" />
+                  <ChevronRight className="h-3.5 w-3.5 text-slate-500 shrink-0" />
                 )}
 
                 <div className="flex-1 min-w-0">
@@ -207,9 +249,20 @@ export function EvaluatorVersionHistory({
                 </div>
               </button>
 
-              {isExpanded && hasMeaningfulDiff && (
-                <div className="px-4 pb-3">
-                  <DiffView diff={version.diff!} />
+              {isExpanded && (
+                <div className="px-4 pb-3 space-y-2">
+                  <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+                  {viewMode === "diff" && hasMeaningfulDiff && (
+                    <DiffView diff={version.diff!} />
+                  )}
+                  {viewMode === "diff" && !hasMeaningfulDiff && (
+                    <div className="text-[11px] text-slate-500 italic py-2">
+                      Initial version — no diff available.
+                    </div>
+                  )}
+                  {viewMode === "full" && (
+                    <FullScriptView config={version.config.config} />
+                  )}
                 </div>
               )}
             </div>
