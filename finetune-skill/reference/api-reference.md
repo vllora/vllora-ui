@@ -233,6 +233,24 @@ Poll for evaluation results. Call every 2-3 seconds until `status` is `completed
 curl http://localhost:9090/finetune/evaluations/eval_xyz789
 ```
 
+Optional query params let you sort and trim returned row results without changing the run itself:
+
+| Query param | Type | Description |
+|-------------|------|-------------|
+| `limit` | number | Maximum number of rows to return in `results` |
+| `sort` | string | Sort key. Currently supported: `score` |
+| `order` | string | Sort direction for `sort`: `asc` (lowest first) or `desc` (highest first) |
+
+Examples:
+
+```bash
+# Lowest-scoring 20 rows (best for failure analysis)
+curl "http://localhost:9090/finetune/evaluations/eval_xyz789?sort=score&order=asc&limit=20"
+
+# Highest-scoring 10 rows
+curl "http://localhost:9090/finetune/evaluations/eval_xyz789?sort=score&order=desc&limit=10"
+```
+
 **Response:**
 ```json
 {
