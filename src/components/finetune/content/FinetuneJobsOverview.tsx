@@ -146,6 +146,7 @@ export function FinetuneJobsOverview({ workflowId }: FinetuneJobsOverviewProps) 
                 <th className="text-right px-3 py-2 font-medium">Rows</th>
                 <th className="text-left px-3 py-2 font-medium">Provider</th>
                 <th className="text-left px-3 py-2 font-medium">Version</th>
+                <th className="text-right px-3 py-2 font-medium">Duration</th>
                 <th className="text-right px-3 py-2 font-medium">Date</th>
               </tr>
             </thead>
@@ -233,9 +234,25 @@ function JobRow({
           <span className="text-zinc-600">—</span>
         )}
       </td>
+      <td className="px-3 py-2 text-right font-mono text-zinc-500">
+        {formatDuration(job.created_at, job.completed_at)}
+      </td>
       <td className="px-3 py-2 text-right text-zinc-600">
         {new Date(job.created_at).toLocaleDateString()}
       </td>
     </tr>
   );
+}
+
+function formatDuration(startIso: string, endIso?: string): string {
+  if (!endIso) return "—";
+  const ms = new Date(endIso).getTime() - new Date(startIso).getTime();
+  if (ms < 0 || !isFinite(ms)) return "—";
+  const totalSec = Math.floor(ms / 1000);
+  if (totalSec < 60) return `${totalSec}s`;
+  const totalMin = Math.floor(totalSec / 60);
+  if (totalMin < 60) return `${totalMin}m`;
+  const hours = Math.floor(totalMin / 60);
+  const mins = totalMin % 60;
+  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
 }

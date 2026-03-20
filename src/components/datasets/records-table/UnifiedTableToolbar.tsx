@@ -2,7 +2,7 @@
  * UnifiedTableToolbar
  *
  * Search + filter toolbar for the unified single-table layout.
- * Provides text search, topic filter, score filter, and record count.
+ * Provides text search, topic filter, score filter (presets + custom range), and record count.
  */
 
 import { Search } from "lucide-react";
@@ -81,9 +81,12 @@ export function UnifiedTableToolbar({
         className="text-xs bg-background border border-border/50 rounded-md px-2 py-1.5 text-foreground focus:outline-none focus:border-[rgb(var(--theme-500))]"
       >
         <option value="all">All Scores</option>
-        <option value="high">0.8+</option>
-        <option value="mid">0.6–0.8</option>
-        <option value="low">&lt;0.6</option>
+        <option value="high">0.8 – 1.0 (high)</option>
+        <option value="mid">0.6 – 0.8 (medium)</option>
+        <option value="low">0.0 – 0.6 (low)</option>
+        <option value="perfect">Perfect (1.0)</option>
+        <option value="zero">Zero (0.0)</option>
+        <option value="unscored">Not scored</option>
       </select>
 
       {/* Record count */}

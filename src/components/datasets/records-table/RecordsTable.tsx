@@ -741,6 +741,9 @@ function UnifiedTableView({
       if (scoreFilter === "high" && (score === undefined || score < 0.8)) continue;
       if (scoreFilter === "mid" && (score === undefined || score < 0.6 || score >= 0.8)) continue;
       if (scoreFilter === "low" && (score === undefined || score >= 0.6)) continue;
+      if (scoreFilter === "perfect" && (score === undefined || score < 0.995)) continue;
+      if (scoreFilter === "zero" && (score === undefined || score > 0.005)) continue;
+      if (scoreFilter === "unscored" && score !== undefined) continue;
       count++;
     }
     return count;

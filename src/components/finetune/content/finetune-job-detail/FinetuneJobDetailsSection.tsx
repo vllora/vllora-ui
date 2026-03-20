@@ -9,6 +9,20 @@ import { useState, useCallback } from "react";
 import { Copy, Check } from "lucide-react";
 import type { FinetuneJob } from "@/services/finetune-api";
 
+/** Format duration between two ISO timestamps as "2h 15m" or "45m" or "12s" */
+function computeDuration(startIso: string, endIso?: string): string | null {
+  if (!endIso) return null;
+  const ms = new Date(endIso).getTime() - new Date(startIso).getTime();
+  if (ms < 0 || !isFinite(ms)) return null;
+  const totalSec = Math.floor(ms / 1000);
+  if (totalSec < 60) return `${totalSec}s`;
+  const totalMin = Math.floor(totalSec / 60);
+  if (totalMin < 60) return `${totalMin}m`;
+  const hours = Math.floor(totalMin / 60);
+  const mins = totalMin % 60;
+  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+}
+
 /** Truncate a long ID to first + last characters with ellipsis */
 function truncateId(id: string, headLen = 6, tailLen = 4): string {
   if (id.length <= headLen + tailLen + 3) return id;
@@ -101,6 +115,17 @@ export function FinetuneJobDetailsSection({ job }: FinetuneJobDetailsSectionProp
       <span key="lr" className="flex items-center gap-1.5">
         <span className="text-slate-500">LR</span>
         <span className="font-mono text-slate-300">{job.training_config.learning_rate}</span>
+      </span>
+    );
+  }
+
+  // Training duration
+  const duration = computeDuration(job.created_at, job.completed_at ?? (job.status === "running" ? new Date().toISOString() : undefined));
+  if (duration) {
+    items.push(
+      <span key="duration" className="flex items-center gap-1.5">
+        <span className="text-slate-500">{job.status === "running" ? "Elapsed" : "Duration"}</span>
+        <span className="text-slate-300">{duration}</span>
       </span>
     );
   }

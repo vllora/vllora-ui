@@ -165,6 +165,9 @@ export function UnifiedRecordTable({
           if (scoreFilter === "high") return s !== undefined && s >= 0.8;
           if (scoreFilter === "mid") return s !== undefined && s >= 0.6 && s < 0.8;
           if (scoreFilter === "low") return s !== undefined && s < 0.6;
+          if (scoreFilter === "perfect") return s !== undefined && s >= 0.995;
+          if (scoreFilter === "zero") return s !== undefined && s <= 0.005;
+          if (scoreFilter === "unscored") return s === undefined;
           return true;
         });
       }
