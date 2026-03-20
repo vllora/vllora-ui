@@ -198,6 +198,32 @@
 
 ## Sources
 
+---
+
+## Pending UI Tasks
+
+### All Sources View Redesign
+The "All Sources" tab needs similar treatment as the SingleDocView redesign (Option D). Issues:
+- **Coverage matrix** — "gap" labels in red cells aren't informative. Consider heatmap colors or icons instead of text.
+- **Document cards** — dense layout with inline parts list. Should match SingleDocView's TOC style.
+- **Matrix is hard to scan** — with many topics (25+) it becomes a wall. Consider collapsible topic groups or a summary row.
+
+Suggested approach:
+1. Replace "gap" text with colored dots (green = covered, red = missing, gray = n/a)
+2. Add topic count summary row at top of matrix
+3. Document cards: use compact header + search (same as SingleDocView Option D)
+4. Consider making matrix optional (toggle) since it takes significant vertical space
+
+### Source Document — Additional Improvements
+- Part content search (search within part text, not just titles)
+- Keyboard navigation (arrow keys to move between parts)
+- Part content copy button
+- Image/table part preview rendering
+
+---
+
+## Sources
+
 - [OpenAI Fine-Tuning Dashboard](https://platform.openai.com/finetune)
 - [OpenAI RFT Guide](https://platform.openai.com/docs/guides/reinforcement-fine-tuning)
 - [OpenAI Graders](https://platform.openai.com/docs/guides/graders)

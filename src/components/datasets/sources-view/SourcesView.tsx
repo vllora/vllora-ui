@@ -15,7 +15,7 @@
  */
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { FileText, Tags, ChevronRight, ChevronLeft, FolderOpen, ArrowLeft, Search } from "lucide-react";
+import { FileText, Tags, ChevronRight, ChevronLeft, ArrowLeft, Search } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 import {
@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/tooltip";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
-import { CoverageMatrix } from "./CoverageMatrix";
+// CoverageMatrix replaced by inline hierarchical matrix in AllSourcesView
 import type { KnowledgeSource, KnowledgeSourcePart } from "@/types/knowledge-types";
 import type { TopicHierarchyNode, DatasetRecord } from "@/types/dataset-types";
 
@@ -89,298 +89,384 @@ function AllSourcesView({
   readonly totalParts: number;
   readonly onSelectSource: (id: string) => void;
 }) {
-  const { dataset, records } = DatasetDetailConsumer();
-  const hierarchy = dataset?.topicHierarchy?.hierarchy;
-  const [selectedPartState, setSelectedPartState] = useState<{ source: KnowledgeSource; part: KnowledgeSourcePart } | null>(() => {
-    const firstSource = sources[0];
-    const firstPart = firstSource?.parts[0];
-    return firstSource && firstPart ? { source: firstSource, part: firstPart } : null;
-  });
-
-  // Find all parts across all sources for part viewer navigation
-  const allParts = useMemo(() => {
-    const result: { source: KnowledgeSource; part: KnowledgeSourcePart }[] = [];
-    for (const src of sources) {
-      for (const p of src.parts) {
-        result.push({ source: src, part: p });
-      }
-    }
-    return result;
-  }, [sources]);
-
-  const currentIndex = selectedPartState
-    ? allParts.findIndex(item => item.part.id === selectedPartState.part.id)
-    : -1;
-
-  const navigatePart = useCallback((direction: -1 | 1) => {
-    const nextIdx = currentIndex + direction;
-    if (nextIdx >= 0 && nextIdx < allParts.length) {
-      setSelectedPartState(allParts[nextIdx]);
-    }
-  }, [currentIndex, allParts]);
-
-  const handleSelectPart = useCallback((source: KnowledgeSource, part: KnowledgeSourcePart) => {
-    setSelectedPartState({ source, part });
-  }, []);
-
-  // Linked topics + record count for selected part
-  const linkedTopics = useMemo(
-    () => selectedPartState ? findTopicsForPart(selectedPartState.part, hierarchy) : [],
-    [selectedPartState, hierarchy],
-  );
-
-  const linkedRecordsStats = useMemo(() => {
-    if (linkedTopics.length === 0) return { count: 0, avgScore: undefined as number | undefined, records: [] as DatasetRecord[] };
-    const topicSet = new Set(linkedTopics);
-    const matched = records.filter(r => r.topic && topicSet.has(r.topic));
-    const scores = matched.map(r => r.evaluation?.score ?? r.evaluation?.evalScore).filter((s): s is number => s != null);
-    return {
-      count: matched.length,
-      avgScore: scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : undefined,
-      records: matched,
-    };
-  }, [linkedTopics, records]);
-
-  return (
-    <div className="flex-1 grid grid-cols-2 overflow-hidden h-full">
-      {/* Left: Coverage matrix + doc cards */}
-      <div className="border-r border-border/50 overflow-y-auto p-4 space-y-4">
-        {/* Stats summary */}
-        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-          <span>{sources.length} document{sources.length !== 1 ? "s" : ""}</span>
-          <span className="text-border">|</span>
-          <span>{totalParts} part{totalParts !== 1 ? "s" : ""} extracted</span>
-        </div>
-
-        {/* Coverage matrix — topics × documents */}
-        <CoverageMatrix onSelectSource={onSelectSource} />
-
-        {/* Rich doc cards matching mockup */}
-        {sources.map(source => (
-          <DocCard
-            key={source.id}
-            source={source}
-            onClick={() => onSelectSource(source.id)}
-            onSelectPart={(part) => handleSelectPart(source as KnowledgeSource, part)}
-            selectedPartId={selectedPartState?.part.id}
-          />
-        ))}
-      </div>
-
-      {/* Right: Part viewer */}
-      <div className="overflow-y-auto bg-muted/20 flex flex-col">
-        {selectedPartState ? (
-          <PartViewer
-            part={selectedPartState.part}
-            sourceName={selectedPartState.source.name}
-            currentIndex={currentIndex}
-            totalParts={allParts.length}
-            onNavigate={navigatePart}
-            linkedTopics={linkedTopics}
-            linkedRecordsCount={linkedRecordsStats.count}
-            linkedAvgScore={linkedRecordsStats.avgScore}
-            linkedRecords={linkedRecordsStats.records}
-          />
-        ) : (
-          <div className="flex-1 flex items-center justify-center p-8 text-muted-foreground text-xs">
-            Click a part from any document to preview
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Doc Card (matches mockup: header + inline parts + linked topics) ───
-
-function DocCard({
-  source,
-  onClick,
-  onSelectPart,
-  selectedPartId,
-}: {
-  readonly source: KnowledgeSource;
-  readonly onClick: () => void;
-  readonly onSelectPart?: (part: KnowledgeSourcePart) => void;
-  readonly selectedPartId?: string;
-}) {
   const { dataset } = DatasetDetailConsumer();
   const hierarchy = dataset?.topicHierarchy?.hierarchy;
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const totalChars = useMemo(
-    () => source.parts.reduce((sum, p) => sum + (p.content?.length ?? 0), 0),
-    [source.parts],
+    () => sources.reduce((sum, src) => sum + src.parts.reduce((s, p) => s + (p.content?.length ?? 0), 0), 0),
+    [sources],
   );
 
-  const topicCoverage = useMemo(
-    () => computeTopicCoverage(source, hierarchy),
-    [source, hierarchy],
-  );
+  // Build hierarchical coverage data: per topic × per source
+  const { flatTopics, coverageGaps, totalTopics } = useMemo(() => {
+    if (!hierarchy) return { flatTopics: [] as FlatTopicRow[], coverageGaps: 0, totalTopics: 0 };
 
-  const partGroups = useMemo(
-    () => groupPartsByExtractionPath(source.parts),
-    [source.parts],
-  );
-  const hasMultipleGroups = partGroups.length > 1 || (partGroups.length === 1 && partGroups[0].path !== "Ungrouped");
+    const rows: FlatTopicRow[] = [];
+    let gaps = 0;
+    let total = 0;
 
-  // Topic link counts per part
-  const partTopicCounts = useMemo(() => {
-    if (!hierarchy) return new Map<string, number>();
-    const counts = new Map<string, number>();
-    for (const part of source.parts) {
-      const topics = findTopicsForPart(part, hierarchy);
-      if (topics.length > 0) counts.set(part.id, topics.length);
+    const walkHierarchy = (nodes: TopicHierarchyNode[], depth: number, parentId?: string) => {
+      for (const node of nodes) {
+        const isParent = (node.children?.length ?? 0) > 0;
+        const perSource = new Map<string, number>();
+
+        // Count parts per source for this topic
+        const refs = node.sourceChunkRefs ?? [];
+        for (const src of sources) {
+          const srcPartIds = new Set(src.parts.map(p => p.id));
+          const srcPartIdsWithSource = new Set(src.parts.map(p => `${src.id}/${p.id}`));
+          let count = 0;
+          for (const ref of refs) {
+            if (srcPartIds.has(ref) || srcPartIdsWithSource.has(ref)) count++;
+          }
+          perSource.set(src.id, count);
+        }
+
+        const totalCount = Array.from(perSource.values()).reduce((a, b) => a + b, 0);
+
+        // If parent, also aggregate children counts
+        let aggregatePerSource = perSource;
+        if (isParent) {
+          aggregatePerSource = new Map(perSource);
+          const aggregateChildren = (children: TopicHierarchyNode[]) => {
+            for (const child of children) {
+              const childRefs = child.sourceChunkRefs ?? [];
+              for (const src of sources) {
+                const srcPartIds = new Set(src.parts.map(p => p.id));
+                const srcPartIdsWithSource = new Set(src.parts.map(p => `${src.id}/${p.id}`));
+                let count = 0;
+                for (const ref of childRefs) {
+                  if (srcPartIds.has(ref) || srcPartIdsWithSource.has(ref)) count++;
+                }
+                aggregatePerSource.set(src.id, (aggregatePerSource.get(src.id) ?? 0) + count);
+              }
+              if (child.children) aggregateChildren(child.children);
+            }
+          };
+          aggregateChildren(node.children!);
+        }
+
+        const displayPerSource = isParent ? aggregatePerSource : perSource;
+        const displayTotal = Array.from(displayPerSource.values()).reduce((a, b) => a + b, 0);
+
+        // Only count leaf topics for gap detection
+        if (!isParent) {
+          total++;
+          if (totalCount === 0) gaps++;
+        }
+
+        rows.push({
+          id: node.id ?? node.name,
+          name: node.name,
+          depth,
+          isParent,
+          parentId,
+          perSource: displayPerSource,
+          total: displayTotal,
+          isGap: !isParent && totalCount === 0,
+        });
+
+        if (node.children) {
+          walkHierarchy(node.children, depth + 1, node.id ?? node.name);
+        }
+      }
+    };
+
+    walkHierarchy(hierarchy, 0);
+    return { flatTopics: rows, coverageGaps: gaps, totalTopics: total };
+  }, [hierarchy, sources]);
+
+  const coveredTopics = totalTopics - coverageGaps;
+
+  const toggleGroup = useCallback((groupId: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  }, []);
+
+  // Per-source coverage percentage
+  const sourceCoveragePercent = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const src of sources) {
+      const coverage = computeTopicCoverage(src, hierarchy);
+      map.set(src.id, totalTopics > 0 ? Math.round((coverage.length / totalTopics) * 100) : 0);
     }
-    return counts;
-  }, [source.parts, hierarchy]);
+    return map;
+  }, [sources, hierarchy, totalTopics]);
 
-  // Linked topic names for footer
-  const linkedTopicNames = useMemo(
-    () => topicCoverage.map(tc => tc.topicName),
-    [topicCoverage],
-  );
-
-  const MAX_CHIPS = 6;
+  const formatChars = (chars: number) =>
+    chars >= 1000 ? `${(chars / 1000).toFixed(1)}K` : `${chars}`;
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="w-full text-left p-4 rounded-xl border border-border bg-card hover:border-muted-foreground/40 transition-all cursor-pointer"
-    >
-      {/* Header: icon + title/meta + stats */}
-      <div className="flex items-start gap-2.5 mb-3">
-        <div className="w-9 h-9 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
-          <FileText className="w-4 h-4 text-red-400" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <h4 className="text-[13px] font-semibold text-foreground truncate">{source.name}</h4>
-          <p className="text-[11px] text-muted-foreground/60 mt-0.5">
-            {source.metadata?.pageCount ? `${source.metadata.pageCount} pages · ` : ""}
-            {source.metadata?.fileSize ? `${(Number(source.metadata.fileSize) / (1024 * 1024)).toFixed(1)} MB · ` : ""}
-            Extracted via Docling
-          </p>
-        </div>
-        <div className="flex gap-3 shrink-0">
-          <div className="text-center">
-            <span className="block text-sm font-bold text-foreground">{source.parts.length}</span>
-            <span className="text-[10px] text-muted-foreground/60">parts</span>
+    <div className="flex-1 overflow-y-auto h-full">
+      <div className="p-5 max-w-[1200px] space-y-5">
+        {/* ── Summary Stats ── */}
+        <div className="grid grid-cols-5 gap-3">
+          <div className="px-4 py-3 rounded-lg border border-border/50 bg-card">
+            <div className="text-xl font-bold font-mono text-foreground">{sources.length}</div>
+            <div className="text-[10px] text-muted-foreground/50 uppercase tracking-wider mt-0.5">Documents</div>
           </div>
-          <div className="text-center">
-            <span className="block text-sm font-bold text-foreground">{topicCoverage.length}</span>
-            <span className="text-[10px] text-muted-foreground/60">topics</span>
+          <div className="px-4 py-3 rounded-lg border border-border/50 bg-card">
+            <div className="text-xl font-bold font-mono text-foreground">{totalParts}</div>
+            <div className="text-[10px] text-muted-foreground/50 uppercase tracking-wider mt-0.5">Parts Extracted</div>
           </div>
-          <div className="text-center">
-            <span className="block text-sm font-bold text-foreground">{totalChars >= 1000 ? `${(totalChars / 1000).toFixed(0)}K` : totalChars}</span>
-            <span className="text-[10px] text-muted-foreground/60">chars</span>
+          <div className="px-4 py-3 rounded-lg border border-border/50 bg-card">
+            <div className="text-xl font-bold font-mono text-foreground">{formatChars(totalChars)}</div>
+            <div className="text-[10px] text-muted-foreground/50 uppercase tracking-wider mt-0.5">Total Characters</div>
+          </div>
+          <div className="px-4 py-3 rounded-lg border border-border/50 bg-card">
+            <div className="text-xl font-bold font-mono text-emerald-400">{coveredTopics} / {totalTopics}</div>
+            <div className="text-[10px] text-muted-foreground/50 uppercase tracking-wider mt-0.5">Topics Covered</div>
+          </div>
+          <div className="px-4 py-3 rounded-lg border border-border/50 bg-card">
+            <div className={cn("text-xl font-bold font-mono", coverageGaps > 0 ? "text-amber-400" : "text-emerald-400")}>{coverageGaps}</div>
+            <div className="text-[10px] text-muted-foreground/50 uppercase tracking-wider mt-0.5">Coverage Gaps</div>
           </div>
         </div>
-      </div>
 
-      {/* Inline parts outline */}
-      <div className="mb-2">
-        {hasMultipleGroups ? (
-          partGroups.map(group => (
-            <div key={group.path}>
-              <div className="flex items-center gap-1 py-1">
-                <FolderOpen className="w-2.5 h-2.5 text-muted-foreground/50" />
-                <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50">
-                  {group.path}
-                </span>
-              </div>
-              {group.parts.map(part => (
-                <DocCardPartItem key={part.id} part={part} linkCount={partTopicCounts.get(part.id) ?? 0} isSelected={selectedPartId === part.id} onSelect={onSelectPart ? () => onSelectPart(part) : undefined} />
-              ))}
+        {/* ── Hierarchical Coverage Matrix ── */}
+        {flatTopics.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Tags className="w-3.5 h-3.5 text-muted-foreground/50" />
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/60">
+                Topic × Source Coverage
+              </h3>
             </div>
-          ))
-        ) : (
-          source.parts.map(part => (
-            <DocCardPartItem key={part.id} part={part} linkCount={partTopicCounts.get(part.id) ?? 0} isSelected={selectedPartId === part.id} onSelect={onSelectPart ? () => onSelectPart(part) : undefined} />
-          ))
+            <TooltipProvider delayDuration={200}>
+            <div className="rounded-lg border border-border/50 overflow-hidden">
+              <table className="w-full text-[11px] border-collapse">
+                <thead>
+                  <tr className="bg-muted/30">
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground/60" style={{ width: 200 }}>Topic</th>
+                    {sources.map(src => (
+                      <th key={src.id} className="text-center px-2 py-2 font-medium text-muted-foreground/60" style={{ minWidth: 80 }}>
+                        <div className="truncate max-w-[100px] mx-auto">{src.description || src.name}</div>
+                        <div className="text-[9px] text-muted-foreground/30 font-normal mt-0.5">{src.parts.length} parts</div>
+                      </th>
+                    ))}
+                    <th className="text-center px-2 py-2 font-medium text-muted-foreground/40" style={{ width: 60 }}>Total</th>
+                    <th className="text-center px-2 py-2 font-medium text-muted-foreground/40" style={{ width: 70 }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {flatTopics.map(topic => {
+                    // Hide children of collapsed parents
+                    if (topic.parentId && collapsedGroups.has(topic.parentId)) return null;
+
+                    const status = topic.isGap ? "missing" : topic.total >= 3 ? "covered" : "partial";
+
+                    return (
+                      <tr
+                        key={topic.id}
+                        className={cn(
+                          "border-t border-border/20 transition-colors",
+                          topic.isGap && "bg-red-500/[0.02]",
+                          !topic.isGap && "hover:bg-muted/20",
+                        )}
+                      >
+                        {/* Topic name with hierarchy indent */}
+                        <td className="px-3 py-1.5">
+                          <div className="flex items-center gap-1" style={{ paddingLeft: topic.depth * 16 }}>
+                            {topic.isParent ? (
+                              <button
+                                type="button"
+                                onClick={() => toggleGroup(topic.id)}
+                                className="text-muted-foreground/30 hover:text-muted-foreground/60 transition-colors"
+                              >
+                                {collapsedGroups.has(topic.id)
+                                  ? <ChevronRight className="w-3 h-3" />
+                                  : <ChevronLeft className="w-3 h-3 rotate-[-90deg]" />
+                                }
+                              </button>
+                            ) : (
+                              <span className="w-3" />
+                            )}
+                            <span className={cn(
+                              "truncate",
+                              topic.isParent ? "font-semibold text-foreground/80" : "text-muted-foreground/70",
+                              topic.isGap && "text-red-400/70",
+                            )}>
+                              {topic.name}
+                            </span>
+                          </div>
+                        </td>
+                        {/* Per-source counts */}
+                        {sources.map(src => {
+                          const count = topic.perSource.get(src.id) ?? 0;
+                          const srcName = src.description || src.name;
+                          return (
+                            <td key={src.id} className="text-center px-2 py-1.5">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  {count > 0 ? (
+                                    <span className={cn(
+                                      "inline-flex items-center justify-center min-w-[24px] px-1.5 py-0.5 rounded-[10px] text-[9px] font-mono font-medium cursor-help",
+                                      count >= 3 ? "bg-emerald-500/15 text-emerald-400" : "bg-amber-500/12 text-amber-400",
+                                    )}>
+                                      {count}
+                                    </span>
+                                  ) : topic.isGap ? (
+                                    <span className="text-[9px] text-muted-foreground/20 italic cursor-help">gap</span>
+                                  ) : (
+                                    <span className="text-muted-foreground/15 cursor-help">—</span>
+                                  )}
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-[260px]">
+                                  <p className="text-[11px]">
+                                    {count > 0
+                                      ? <><span className="font-semibold">{count} extracted part{count !== 1 ? "s" : ""}</span> from "{srcName}" are linked to the topic "{topic.name}". Parts are chunks of the source document matched to this topic.</>
+                                      : topic.isGap
+                                        ? <>No parts from any source document cover the topic "{topic.name}". Consider adding source material for this topic.</>
+                                        : <>No parts from "{srcName}" are linked to "{topic.name}".</>
+                                    }
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </td>
+                          );
+                        })}
+                        {/* Total */}
+                        <td className={cn("text-center px-2 py-1.5 font-mono text-[10px] font-medium",
+                          topic.isGap ? "text-red-400/50" : topic.total >= 3 ? "text-emerald-400/70" : "text-amber-400/70",
+                        )}>
+                          {topic.total}
+                        </td>
+                        {/* Status */}
+                        <td className="text-center px-2 py-1.5">
+                          <span className={cn(
+                            "text-[9px] px-2 py-0.5 rounded-[10px] font-medium",
+                            status === "covered" && "bg-emerald-500/12 text-emerald-400",
+                            status === "partial" && "bg-amber-500/12 text-amber-400",
+                            status === "missing" && "bg-red-500/12 text-red-400",
+                          )}>
+                            {status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                {/* Footer totals */}
+                <tfoot>
+                  <tr className="border-t border-border/50 bg-muted/30">
+                    <td className="px-3 py-1.5 font-semibold text-muted-foreground/50">Total</td>
+                    {sources.map(src => {
+                      const total = flatTopics
+                        .filter(t => !t.isParent)
+                        .reduce((sum, t) => sum + (t.perSource.get(src.id) ?? 0), 0);
+                      return (
+                        <td key={src.id} className="text-center px-2 py-1.5 font-mono font-bold text-muted-foreground/60">
+                          {total}
+                        </td>
+                      );
+                    })}
+                    <td className="text-center px-2 py-1.5 font-mono font-bold text-foreground/70">
+                      {flatTopics.filter(t => !t.isParent).reduce((sum, t) => sum + t.total, 0)}
+                    </td>
+                    <td />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            </TooltipProvider>
+            {/* Legend */}
+            <div className="flex items-center gap-4 mt-2 text-[10px] text-muted-foreground/40">
+              <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-emerald-500/50" /> 3+ parts</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-amber-500/50" /> 1-2 parts</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-red-500/30" /> Gap</span>
+            </div>
+          </div>
         )}
-      </div>
 
-      {/* Linked topics footer */}
-      <div className="pt-2.5 border-t border-border/50 flex flex-wrap items-center gap-1">
-        {linkedTopicNames.length > 0 ? (
-          <>
-            <span className="text-[10px] text-muted-foreground/50 mr-1">Linked to:</span>
-            {linkedTopicNames.slice(0, MAX_CHIPS).map(name => (
-              <span key={name} className="px-1.5 py-0.5 rounded-full bg-[rgba(var(--theme-500),0.1)] text-[10px] text-[rgb(var(--theme-500))]">
-                {name}
-              </span>
-            ))}
-            {linkedTopicNames.length > MAX_CHIPS && (
-              <span className="px-1.5 py-0.5 rounded-full bg-muted/50 text-[10px] text-muted-foreground/60">
-                +{linkedTopicNames.length - MAX_CHIPS}
-              </span>
-            )}
-          </>
-        ) : (
-          <>
-            <span className="text-[10px] text-muted-foreground/50 mr-1">Not linked to any topic</span>
-            <span className="px-1.5 py-0.5 rounded-full bg-red-500/10 text-[10px] text-red-400">unlinked</span>
-          </>
-        )}
+        {/* ── Documents Table ── */}
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <FileText className="w-3.5 h-3.5 text-muted-foreground/50" />
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/60">
+              Documents
+            </h3>
+          </div>
+          <div className="rounded-lg border border-border/50 overflow-hidden">
+            <table className="w-full text-[11px] border-collapse">
+              <thead>
+                <tr className="bg-muted/30">
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground/60">Document</th>
+                  <th className="text-right px-3 py-2 font-medium text-muted-foreground/60">Parts</th>
+                  <th className="text-right px-3 py-2 font-medium text-muted-foreground/60">Chars</th>
+                  <th className="text-right px-3 py-2 font-medium text-muted-foreground/60">Topics</th>
+                  <th className="text-right px-3 py-2 font-medium text-muted-foreground/60" style={{ width: 140 }}>Coverage</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sources.map(src => {
+                  const chars = src.parts.reduce((sum, p) => sum + (p.content?.length ?? 0), 0);
+                  const coverage = computeTopicCoverage(src, hierarchy);
+                  const covPct = sourceCoveragePercent.get(src.id) ?? 0;
+                  return (
+                    <tr
+                      key={src.id}
+                      className="border-t border-border/20 hover:bg-muted/20 cursor-pointer transition-colors"
+                      onClick={() => onSelectSource(src.id)}
+                    >
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-3.5 h-3.5 text-muted-foreground/30 shrink-0" />
+                          <div>
+                            <div className="font-medium text-foreground/80 hover:underline">{src.description || src.name}</div>
+                            <div className="text-[10px] text-muted-foreground/30 mt-0.5">
+                              {[
+                                src.metadata?.pageCount && `${src.metadata.pageCount} pages`,
+                                src.metadata?.fileSize && `${(Number(src.metadata.fileSize) / (1024 * 1024)).toFixed(1)} MB`,
+                              ].filter(Boolean).join(" · ") || src.name}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono text-muted-foreground/60">{src.parts.length}</td>
+                      <td className="px-3 py-2.5 text-right font-mono text-muted-foreground/60">{formatChars(chars)}</td>
+                      <td className="px-3 py-2.5 text-right font-mono text-muted-foreground/60">{coverage.length} / {totalTopics}</td>
+                      <td className="px-3 py-2.5 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="w-14 h-1 bg-muted/50 rounded-full overflow-hidden">
+                            <div
+                              className={cn("h-full rounded-full", covPct >= 60 ? "bg-emerald-500" : "bg-amber-500")}
+                              style={{ width: `${covPct}%` }}
+                            />
+                          </div>
+                          <span className={cn("font-mono text-[10px] font-medium w-8 text-right",
+                            covPct >= 60 ? "text-emerald-400" : "text-amber-400",
+                          )}>
+                            {covPct}%
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
-    </button>
-  );
-}
-
-/** Small badge showing how many topics link to a part */
-function TopicLinkBadge({ count }: { readonly count: number }) {
-  if (count === 0) return null;
-  return (
-    <span className={cn(
-      "shrink-0 px-1.5 py-px rounded-full text-[9px] font-medium tabular-nums",
-      count >= 3
-        ? "bg-emerald-500/15 text-emerald-400"
-        : count >= 2
-          ? "bg-[rgba(var(--theme-500),0.12)] text-[rgb(var(--theme-500))]"
-          : "bg-muted/60 text-muted-foreground/60",
-    )}>
-      {count} {count === 1 ? "topic" : "topics"}
-    </span>
-  );
-}
-
-/** Part item inside a doc card (compact, non-interactive) */
-function DocCardPartItem({
-  part,
-  linkCount,
-  isSelected,
-  onSelect,
-}: {
-  readonly part: KnowledgeSourcePart;
-  readonly linkCount: number;
-  readonly isSelected?: boolean;
-  readonly onSelect?: () => void;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex items-center gap-2 py-1 px-2 rounded-md transition-colors",
-        onSelect && "cursor-pointer hover:bg-muted/50",
-        isSelected && "bg-[rgba(var(--theme-500),0.08)]",
-      )}
-      onClick={(e) => { e.stopPropagation(); onSelect?.(); }}
-      role={onSelect ? "button" : undefined}
-    >
-      <PartTypeIcon type={part.type} className="shrink-0" />
-      <div className="flex-1 min-w-0">
-        <span className="block text-[11px] font-medium text-foreground truncate">
-          {part.title || "Untitled"}
-        </span>
-        <span className="text-[9px] text-muted-foreground/50">
-          {(part.content?.length ?? 0) >= 1000
-            ? `${((part.content?.length ?? 0) / 1000).toFixed(1)}K chars`
-            : `${part.content?.length ?? 0} chars`}
-          {part.extractionPath && ` · ${part.extractionPath}`}
-        </span>
-      </div>
-      <TopicLinkBadge count={linkCount} />
     </div>
   );
+}
+
+/** Flat topic row for the hierarchical coverage matrix */
+interface FlatTopicRow {
+  id: string;
+  name: string;
+  depth: number;
+  isParent: boolean;
+  parentId?: string;
+  perSource: Map<string, number>;
+  total: number;
+  isGap: boolean;
 }
 
 // ─── Single Document View ───
@@ -788,25 +874,7 @@ function TopicCoverageChips({ topics }: { readonly topics: Array<{ topicName: st
   );
 }
 
-// ─── Part Type Icon ───
 
-function PartTypeIcon({ type, className }: { readonly type: string; readonly className?: string }) {
-  const label = type === "table" ? "▦" : type === "image" ? "◻" : "T";
-  const colors = type === "table"
-    ? "bg-amber-500/15 text-amber-400"
-    : type === "image"
-      ? "bg-purple-500/15 text-purple-400"
-      : "bg-emerald-500/15 text-emerald-400";
-  return (
-    <span className={cn(
-      "w-[18px] h-[18px] rounded flex items-center justify-center text-[10px] font-semibold",
-      colors,
-      className,
-    )}>
-      {label}
-    </span>
-  );
-}
 
 // ─── Part Viewer ───
 
