@@ -848,6 +848,12 @@ function TocItem({
         <span className={cn("flex-1 text-[11px] font-medium truncate", isSelected ? "text-[rgb(var(--theme-500))]" : "text-foreground/80")}>
           {part.title || `Part ${index + 1}`}
         </span>
+        {part.type === "table" && (
+          <span className="text-[8px] px-1 py-px rounded bg-amber-500/10 text-amber-400 font-semibold uppercase tracking-wider shrink-0">table</span>
+        )}
+        {part.type === "image" && (
+          <span className="text-[8px] px-1 py-px rounded bg-purple-500/10 text-purple-400 font-semibold uppercase tracking-wider shrink-0">image</span>
+        )}
         <span className="text-[9px] text-muted-foreground/25 shrink-0 tabular-nums">{formatChars(part.content?.length ?? 0)}</span>
       </div>
       {/* Preview snippet */}

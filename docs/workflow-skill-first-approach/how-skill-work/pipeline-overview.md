@@ -43,6 +43,7 @@ Other helper scripts:
 |--------|------|-------------|
 | `docling_extract.py` | 2a | Submits PDF(s) to Docling Serve async API, polls until done, supports batch mode |
 | `pdftotext_extract.py` | 2a | Fallback PDF extraction via pdftotext (no Docker required), same output schema |
+| `extract_tables.py` | 2b | Upgrades text parts to table parts using structured Docling table data (headers, rows, metadata) |
 | `consolidate_parts.py` | 2c | Merges adjacent text parts, drops short fragments, fixes Unicode, validates quality |
 | `validate_extraction.py` | 2e | Cross-document extraction quality gate (parts/page, title diversity, avg length) |
 | `generate_records.py` | 4 | Generates records per leaf topic via LLM (calls `chat_completion.py`) |
@@ -51,20 +52,22 @@ Other helper scripts:
 | `dry_run_grader.py` | 5 | Tests grader on one record via gateway sandbox |
 | `run_evaluation.py` | 7a | Creates eval job, polls until complete |
 | `start_training.py` | 7b | Starts training job, polls until complete (alternative to direct curl used by SKILL.md) |
+| `analyze_training.py` | 8 | Fetches/analyzes training metrics — reward trend, KL health, clipping, loss stability, per-epoch evals, severity-tagged alerts |
 | `upload_dataset.py` | — | Cloud dataset upload (standalone, not used in pipeline) |
 
 All scripts use PEP 723 inline dependencies and run via `uv run scripts/<name>.py`.
 
 ## Subagents
 
-The skill uses 2 subagents to handle context-heavy or long-running work in isolated contexts:
+The skill uses 3 subagents to handle context-heavy, long-running, or repetitive work in isolated contexts:
 
 | Subagent | Invoked at | What it does | Input | Output |
 |----------|-----------|-------------|-------|--------|
 | `execution-logger` | After every action | Appends timestamped entries to `execution-log.md` | Step name, action, results | Updated log file |
 | `relation-builder` | Step 3b | Matches knowledge parts to leaf topics | `all-parts-index.json` + `topics.json` | `relations.json` |
+| `training-monitor` | Step 7b (background) | Polls training metrics, detects anomalies (NaN loss, KL divergence, overfitting), saves metrics data for post-training analysis | Gateway URL, workflow ID, job ID | `{JOB_ID}-metrics.json`, `{JOB_ID}-status.json`, `{JOB_ID}-epoch-evals.json` |
 
-The main agent delegates to subagents explicitly. If a subagent fails, check `execution-log.md` for error entries. Note: Steps 7-9 (evaluation, training, analysis, iteration) are handled by the main agent directly with interactive user input — there is no separate training-monitor subagent.
+The main agent delegates to subagents explicitly. If a subagent fails, check `execution-log.md` for error entries. The `training-monitor` runs in the background during Step 7b — it watches for anomalies and saves all metrics so `analyze_training.py` can run without re-fetching from the API.
 
 ## Local Files → Gateway Mapping
 

@@ -19,6 +19,32 @@ CLI Skill (Codex/Claude Code)
     UI (visualization only)
 ```
 
+## Installing the Skill
+
+Users must copy **2 folders** from this repo into their project's `.claude/` directory:
+
+```bash
+# From the vllora/ui repo root:
+REPO_DIR=/path/to/vllora/ui
+
+# 1. Skill (pipeline definition, scripts, reference docs, templates)
+mkdir -p .claude/skills/finetune-skill
+cp -r "$REPO_DIR/finetune-skill/"* .claude/skills/finetune-skill/
+
+# 2. Sub-agents (execution-logger, relation-builder, training-monitor)
+mkdir -p .claude/agents
+cp "$REPO_DIR/agents/"*.md .claude/agents/
+```
+
+| Folder | Destination | Contents |
+|--------|-------------|----------|
+| `finetune-skill/` | `.claude/skills/finetune-skill/` | SKILL.md, reference/, scripts/, templates/ |
+| `agents/` | `.claude/agents/` | 3 sub-agents: execution-logger (logging), relation-builder (topic↔part matching), training-monitor (background metric watchdog) |
+
+Without the agents, the skill still runs but loses auto-logging, automated relation building, and training anomaly detection.
+
+See [skill-testing-guide.md](./skill-testing-guide.md) for detailed setup and testing instructions.
+
 ## Current Status (2026-03-18)
 
 The **3-page UI redesign** (Canvas, Sources, Table) is the active workstream. An HTML mockup serves as the design source of truth, and the React UI is being updated to match it.

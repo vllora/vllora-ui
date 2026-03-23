@@ -87,6 +87,8 @@ finetune-skill/
 │   ├── upload_dataset.py       # Upload dataset + grader to gateway (standalone)
 │   ├── run_evaluation.py       # Create eval, poll until complete (~30 min timeout)
 │   ├── start_training.py       # Start training, poll until complete
+│   ├── analyze_training.py    # Fetch + analyze training metrics, per-epoch evals, alerts
+│   ├── extract_tables.py      # Upgrade text parts to table parts from Docling table data
 │   ├── consolidate_parts.py   # Merge adjacent parts, drop fragments, fix Unicode
 │   ├── validate_extraction.py # Cross-document extraction quality gate
 │   ├── docling_extract.py     # Docling Serve async extraction (Docker required)
