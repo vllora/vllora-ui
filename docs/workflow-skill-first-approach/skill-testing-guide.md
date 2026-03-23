@@ -38,20 +38,36 @@ rm -rf "$TEST_DIR/.claude"
 rm -f "$TEST_DIR"/*.pdf "$TEST_DIR"/*.txt "$TEST_DIR"/*.jsonl "$TEST_DIR"/*.json "$TEST_DIR"/*.js "$TEST_DIR"/*.md
 ```
 
-### 2. Copy skill files
+### 2. Copy skill files and sub-agents
 
-The skill lives inside `.claude/skills/finetune-skill/` — this is how Claude Code discovers skills.
+The skill lives inside `.claude/skills/finetune-skill/` — this is how Claude Code discovers skills. Sub-agents live in `.claude/agents/` — Claude Code discovers them automatically.
 
 ```bash
-# Set SKILL_DIR to wherever the skill source lives
-SKILL_DIR=/path/to/vllora/ui/finetune-skill
+# Set REPO_DIR to the vllora/ui repo root
+REPO_DIR=/path/to/vllora/ui
+SKILL_DIR="$REPO_DIR/finetune-skill"
 
+# Copy skill
 mkdir -p "$TEST_DIR/.claude/skills/finetune-skill"
 cp "$SKILL_DIR/SKILL.md" "$TEST_DIR/.claude/skills/finetune-skill/"
 cp -r "$SKILL_DIR/reference" "$TEST_DIR/.claude/skills/finetune-skill/"
 cp -r "$SKILL_DIR/scripts" "$TEST_DIR/.claude/skills/finetune-skill/"
 cp -r "$SKILL_DIR/templates" "$TEST_DIR/.claude/skills/finetune-skill/"
+
+# Copy sub-agents (training-monitor, execution-logger, relation-builder)
+mkdir -p "$TEST_DIR/.claude/agents"
+cp "$REPO_DIR/agents/"*.md "$TEST_DIR/.claude/agents/"
 ```
+
+The skill uses 3 sub-agents:
+
+| Agent | Purpose |
+|-------|---------|
+| `training-monitor` | Background watchdog — polls training metrics, detects anomalies, saves data for post-training analysis |
+| `execution-logger` | Appends timestamped entries to `execution-log.md` after each pipeline action |
+| `relation-builder` | Builds topic↔part relations from `parts-index.json` and `topics.json` |
+
+Without these agents, the skill still works but loses background monitoring, auto-logging, and automated relation building.
 
 ### 3. Copy test PDF documents
 

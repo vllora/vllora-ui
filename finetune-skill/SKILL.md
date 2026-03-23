@@ -667,34 +667,43 @@ echo "Training started: $JOB_ID"
 | Complex task | `lora_rank: 16` |
 | Simple task | `lora_rank: 4` |
 
-#### 7c. Poll both jobs — analyze incrementally
+#### 7c. Monitor training + poll eval
 
-Poll both jobs in a loop. **Analyze each job as soon as it completes** — do NOT wait for both to finish:
+Launch the **training-monitor** sub-agent in the background to watch training metrics and save data. Meanwhile, poll eval status in the foreground.
 
+```
+# Launch background monitor — it polls metrics every 15s, detects anomalies,
+# and saves all data to training-jobs/ so Step 8a doesn't need to re-fetch.
+Delegate to training-monitor agent:
+  GATEWAY_URL=http://localhost:9090
+  WORKFLOW_ID=$WORKFLOW_ID
+  JOB_ID=$JOB_ID
+  OUTPUT_DIR=training-jobs
+```
+
+While the monitor runs in the background, poll eval status:
 ```bash
 while true; do
   EVAL_STATUS=$(curl -s "http://localhost:9090/finetune/evaluations/$EVAL_ID" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))")
-  JOB_STATUS=$(curl -s "http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs/$JOB_ID" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))")
-  echo "Eval: $EVAL_STATUS | Training: $JOB_STATUS"
+  echo "Eval: $EVAL_STATUS"
 
-  # If training finishes first → analyze training results immediately
-  # If eval finishes first → analyze eval results immediately
-  # When both done → cross-reference and present full analysis
-
-  [ "$EVAL_STATUS" = "completed" ] && [ "$JOB_STATUS" = "succeeded" ] && break
-  [ "$EVAL_STATUS" = "failed" ] || [ "$JOB_STATUS" = "failed" ] && break
+  [ "$EVAL_STATUS" = "completed" ] || [ "$EVAL_STATUS" = "failed" ] && break
   sleep 15
 done
 ```
 
-**Key rule**: When one job completes before the other, **immediately analyze its results and present findings** to the user. Don't wait idle. For example:
-- Training finishes first → analyze metrics (reward trend, KL, clipping), present diagnosis
+**When the monitor reports back**: Check its JSON output for anomalies. If `status: "anomaly_detected"` with a CRITICAL severity, **alert the user immediately** and suggest cancelling the job via `POST /jobs/{job_id}/cancel` rather than wasting compute.
+
+**Key rule**: When one job completes before the other, **immediately analyze its results and present findings** to the user. Don't wait idle:
+- Training finishes first → the monitor saved data to `training-jobs/`, run analysis (Step 8a)
 - Eval finishes first → analyze scores (per-topic breakdown, weak records), present findings
 - Both done → cross-reference and give the complete picture
 
-Save results as each job completes:
-- Eval results → `evaluations/eval-v1.json`
-- Training metrics → `training-jobs/job-v1.json` (fetch via `GET /finetune/workflows/$WORKFLOW_ID/jobs/$JOB_ID`)
+**Data saved by the monitor** (no re-fetching needed in Step 8):
+- `training-jobs/{JOB_ID}-metrics.json` — full metrics timeseries
+- `training-jobs/{JOB_ID}-status.json` — final job status
+- `training-jobs/{JOB_ID}-epoch-evals.json` — per-epoch per-record evaluations (saved on completion)
+- Eval results → `evaluations/eval-v1.json` (fetched by the main agent)
 
 ### Step 8: Analyze Results & Present Findings
 
@@ -704,23 +713,34 @@ Analyze each job's results **as soon as they arrive** — don't wait for both to
 
 #### 8a. Analyze training results (when training completes)
 
-Compute these metrics from the training job:
+The training-monitor agent already saved all data to `training-jobs/`. Analyze the saved files — **no API calls needed**:
+
 ```bash
-curl -s "http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs/$JOB_ID" > training-jobs/job-v1.json
+uv run scripts/analyze_training.py \
+  --metrics-file training-jobs/$JOB_ID-metrics.json \
+  --epoch-evals-file training-jobs/$JOB_ID-epoch-evals.json
 ```
 
-**Must check:**
-1. **Reward trend**: first reward vs last reward — improving, flat, or declining?
-2. **KL divergence**: any spikes >100? (>1000 = learning rate too high, critical)
-3. **Clipping ratio**: >0.5 means `max_output_tokens` too low — model outputs are being truncated
-4. **Loss stability**: any NaN/Inf or spikes >100x the normal value?
-5. **Grad norm**: spikes >1000 indicate instability
+For JSON output (useful for cross-referencing with eval in Step 8c):
+```bash
+uv run scripts/analyze_training.py \
+  --metrics-file training-jobs/$JOB_ID-metrics.json \
+  --epoch-evals-file training-jobs/$JOB_ID-epoch-evals.json \
+  --json > training-jobs/job-v1-analysis.json
+```
+
+The script computes: reward trend, KL health, clipping ratio, loss stability, grad norm spikes, signal strength, and per-topic learning trajectories. It exits with code 1 if critical alerts are found.
 
 Present immediately:
 ```
 === Training Results (eval still running) ===
 Status: succeeded | Epochs: 2 | Steps: 26/26
 Reward: 0.762 → 0.745 (declining ⚠️)
+KL: final=0.05, max=1146633 (⚠️ exploded at step 10)
+Clipping: avg=100%, max=100% (⚠️ all outputs truncated)
+
+Record trajectories: 12 improved, 8 stagnant, 2 degraded
+Weakest topic: chess-tactical-thinking (avg delta=-0.05)
 
 Issues found:
   [CRITICAL] KL divergence spiked to 1,146,633 at step 10 — learning rate too aggressive
@@ -834,25 +854,36 @@ JOB=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs
 
 #### 9d. Iteration log format
 
-Track every iteration in `execution-log.md`:
+Track every iteration in `execution-log.md` with **actual metrics from the API**:
 ```markdown
 ## Iteration 1
 - [2026-03-17 14:30:00] Started eval eval-v1 + training job ft_job_001
-  - Base: Qwen3.5-4B, lr: 0.00001, lora_rank: 8, epochs: 2
+  - Base: Qwen3.5-4B, lr: 0.00001, lora_rank: 8, epochs: 2, max_output_tokens: 1000
+- [2026-03-17 14:35:00] Training metrics (in-flight): step 10/26, reward=0.65, kl=0.04, clip=12%
+- [2026-03-17 14:40:00] Training metrics (in-flight): step 20/26, reward=0.68, kl=0.06, clip=15%
+  - [WARNING] Clipping trending up — may need higher max_output_tokens next run
 - [2026-03-17 14:45:00] Eval completed: avg=0.72, pass_rate=78%
   - Weak topics: strategic-endgame (0.45), pawn-endgames (0.52)
-- [2026-03-17 15:10:00] Training completed: final_reward=0.65, trend=improving
+- [2026-03-17 15:10:00] Training completed
+  - Reward: 0.55 → 0.65 (improving, delta=+0.10)
+  - KL: final=0.08, max=0.12 (healthy)
+  - Clipping: avg=14%, max=18% (OK)
+  - Loss: 0.42 → 0.31 (decreasing, good)
+  - Per-epoch evals: 12 improved, 8 stagnant, 2 degraded
 - [2026-03-17 15:10:30] Presented findings to user
-  - User chose: "Regenerate endgame records"
+  - User chose: "Regenerate endgame records, increase max_output_tokens"
 
 ## Iteration 2
 - [2026-03-17 15:15:00] Regenerated 22 records for endgame topics
 - [2026-03-17 15:16:00] Started eval eval-v2 + training job ft_job_002
-  - Base: Qwen3.5-4B, lr: 0.000005, lora_rank: 8, epochs: 2
-- [2026-03-17 15:10:00] Monitor: job succeeded
-  - Final reward: 0.72, epochs completed: 2
-  - Per-epoch progression: 0→0.55, 1→0.68, 2→0.72
-- [2026-03-17 15:10:30] Saved to training-jobs/job-v2.json
+  - Base: Qwen3.5-4B, lr: 0.000005, lora_rank: 8, epochs: 2, max_output_tokens: 2000
+- [2026-03-17 15:30:00] Training completed
+  - Reward: 0.60 → 0.72 (improving, delta=+0.12)
+  - KL: final=0.05, max=0.07 (healthy)
+  - Clipping: avg=3%, max=5% (fixed!)
+  - Per-epoch evals: 18 improved, 3 stagnant, 1 degraded
+  - Per-topic learning: endgame topics avg delta=+0.15 (big improvement)
+- [2026-03-17 15:31:00] Saved to training-jobs/job-v2-metrics.json, job-v2-epoch-evals.json
 ```
 
 ### Using the vLLora UI
@@ -891,6 +922,7 @@ Run with `uv run` (PEP 723 — dependencies declared inline).
 | `scripts/upload_dataset.py` | Upload dataset + grader to gateway (standalone mode) |
 | `scripts/run_evaluation.py` | Create eval job, poll until complete (~30 min timeout), save results |
 | `scripts/start_training.py` | Start training job, poll until complete, save response |
+| `scripts/analyze_training.py` | Fetch + analyze training metrics — reward trend, KL, clipping, loss, per-epoch evals, alerts |
 | `scripts/chat_completion.py` | Call LLM via gateway — validates JSON output when `response_format` is `json_object` |
 | `scripts/dry_run_grader.py` | Dry-run grader on a single row — instant syntax/logic check |
 | `scripts/consolidate_parts.py` | Merge adjacent text parts, drop short fragments, fix Unicode, regenerate parts-index |

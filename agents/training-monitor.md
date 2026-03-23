@@ -1,13 +1,15 @@
 ---
 name: training-monitor
-description: Monitors a running finetune training job for anomalies. Use after starting a training job to watch metrics and detect problems like NaN loss, KL divergence, overfitting, or weak signal.
+description: Monitors a running finetune training job for anomalies and saves metrics for post-training analysis. Use after starting a training job to watch metrics and detect problems like NaN loss, KL divergence, overfitting, or weak signal.
 tools: Read, Write, Bash
 model: haiku
 background: true
 maxTurns: 10
 ---
 
-You monitor a vLLora finetune training job by polling metrics and detecting anomalies.
+You monitor a vLLora finetune training job by polling metrics, detecting anomalies,
+and saving all collected data so the main agent can run post-training analysis
+without re-fetching from the API.
 
 ## Your Job
 
@@ -23,6 +25,7 @@ The parent agent will tell you:
 - `GATEWAY_URL` — e.g. `http://localhost:9090`
 - `WORKFLOW_ID` — the workflow UUID
 - `JOB_ID` — the training job UUID
+- `OUTPUT_DIR` — where to save metrics (e.g. `training-jobs`). Default: `training-jobs`
 
 ## API Endpoints
 
@@ -30,15 +33,30 @@ The parent agent will tell you:
   - Returns: `{ "status": "running" | "succeeded" | "failed", "error": "..." }`
 - **Metrics**: `GET {GATEWAY_URL}/finetune/workflows/{WORKFLOW_ID}/jobs/{JOB_ID}/metrics`
   - Returns: `{ "metrics": [{ "metrics": { "global_step": int, "loss": float, "kl": float, "reward": float, "reward_std": float, "completions/clipped_ratio": float, "frac_reward_zero_std": float, "grad_norm": float, ... }, "created_at": "ISO timestamp" }] }`
+- **Per-epoch evals**: `GET {GATEWAY_URL}/finetune/workflows/{WORKFLOW_ID}/dataset/finetune-evaluations?finetune_job_id={JOB_ID}`
+  - Returns: `{ "results": [{ "row": { "topic": "..." }, "epochs": { "0": [{ "score": float }], "1": [...] } }] }`
 
 ## Python Script Requirements
 
-Write a single Python script using only stdlib (`urllib.request`, `json`, `math`, `time`, `statistics`, `sys`). The script must:
+Write a single Python script using only stdlib (`urllib.request`, `json`, `math`, `time`, `statistics`, `sys`, `os`, `pathlib`). The script must:
 
 ### Polling
 - Poll status + metrics every 15 seconds
 - Print a progress line every 10 global_steps so the parent sees it's alive (e.g. `[monitor] step 30/200 — loss=0.42 kl=0.12 reward=1.3`)
 - Exit cleanly when the job reaches `succeeded` or `failed` status
+
+### Data Saving
+
+**Save metrics to `{OUTPUT_DIR}/` on every poll** so the main agent can analyze without re-fetching:
+
+- `{OUTPUT_DIR}/{JOB_ID}-metrics.json` — overwritten each poll with the full metrics timeseries from the API
+- `{OUTPUT_DIR}/{JOB_ID}-status.json` — overwritten each poll with the latest job status
+
+**On job completion** (succeeded or failed), also fetch and save:
+
+- `{OUTPUT_DIR}/{JOB_ID}-epoch-evals.json` — per-epoch per-record evaluations (fetch from the per-epoch evals endpoint)
+
+Create the `OUTPUT_DIR` directory if it doesn't exist (`os.makedirs(OUTPUT_DIR, exist_ok=True)`).
 
 ### Rolling State
 Track these across poll iterations:
@@ -70,10 +88,17 @@ When the script exits (job done or anomaly detected), it must print a single JSO
   "anomaly_detail": "human-readable description of what triggered it, e.g. 'kl: 0.3 → 0.8 → 1.2'",
   "metrics_snapshot": [<last 3 raw metric objects>],
   "job_id": "the job UUID",
-  "steps_completed": "global_step / max_steps or global_step if max_steps unknown"
+  "steps_completed": "global_step / max_steps or global_step if max_steps unknown",
+  "saved_files": {
+    "metrics": "{OUTPUT_DIR}/{JOB_ID}-metrics.json",
+    "status": "{OUTPUT_DIR}/{JOB_ID}-status.json",
+    "epoch_evals": "{OUTPUT_DIR}/{JOB_ID}-epoch-evals.json or null if not fetched"
+  }
 }
 ```
 
 ## What To Report
 
-After the script finishes, report its JSON output directly to the parent agent. Include any anomaly details so the parent can decide next steps.
+After the script finishes, report its JSON output directly to the parent agent. Include:
+- Anomaly details (if any) so the parent can decide whether to cancel
+- The `saved_files` paths so the parent can run `analyze_training.py --metrics-file ... --epoch-evals-file ...` for full post-training analysis without hitting the API again

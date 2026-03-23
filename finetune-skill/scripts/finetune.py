@@ -169,16 +169,28 @@ def cmd_upload_topics(args: argparse.Namespace) -> None:
 
     topics = json.loads(topics_path.read_text())
     if isinstance(topics, list):
-        payload = {"topics": topics}
+        raw_topics = topics
+    elif isinstance(topics, dict) and "topics" in topics:
+        raw_topics = topics["topics"]
     else:
-        payload = topics if "topics" in topics else {"topics": [topics]}
+        raw_topics = [topics]
 
+    # Transform: copy 'id' to 'reference_id' so the gateway can resolve
+    # topics by reference_id in relations and other lookups.
+    transformed = []
+    for t in raw_topics:
+        topic = {**t}
+        if "id" in topic and "reference_id" not in topic:
+            topic["reference_id"] = topic["id"]
+        transformed.append(topic)
+
+    payload = {"topics": transformed}
     result = _api(
         "POST",
         f"{args.base_url}/finetune/workflows/{args.workflow_id}/topics",
         json=payload,
     )
-    created = result.get("created", len(payload["topics"]))
+    created = result.get("created", len(transformed))
     print(f"Topics uploaded: {created}")
 
 
@@ -188,12 +200,71 @@ def _looks_like_uuid(s: str) -> bool:
     return bool(re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', s, re.I))
 
 
+def _resolve_identifiers_to_uuids(
+    workflow_id: str, relations: list[dict], db_path: Path,
+) -> list[dict]:
+    """Resolve reference_id-based identifiers to UUIDs scoped to this workflow.
+
+    The gateway's create_relations endpoint looks up parts globally (not scoped to
+    the workflow). If the same reference_id exists in parts from old/deleted workflows,
+    the lookup can match the wrong part and fail validation. Resolving to UUIDs here
+    avoids the ambiguity.
+    """
+    conn = sqlite3.connect(str(db_path))
+    c = conn.cursor()
+
+    # Build topic ref→uuid map for this workflow
+    topic_rows = c.execute(
+        "SELECT id, reference_id FROM workflow_topics WHERE workflow_id = ?",
+        (workflow_id,),
+    ).fetchall()
+    topic_map: dict[str, str] = {}
+    for row_id, ref_id in topic_rows:
+        topic_map[row_id] = row_id
+        if ref_id:
+            topic_map[ref_id] = row_id
+
+    # Build part ref→uuid map scoped to this workflow's active knowledge sources
+    part_rows = c.execute(
+        "SELECT ksp.id, ksp.reference_id FROM knowledge_source_parts ksp "
+        "JOIN knowledge_sources ks ON ksp.source_id = ks.id "
+        "WHERE ks.workflow_id = ? AND ks.deleted_at IS NULL",
+        (workflow_id,),
+    ).fetchall()
+    part_map: dict[str, str] = {}
+    for row_id, ref_id in part_rows:
+        part_map[row_id] = row_id
+        if ref_id:
+            part_map[ref_id] = row_id
+
+    conn.close()
+
+    resolved = []
+    skipped = 0
+    for rel in relations:
+        topic_id = topic_map.get(rel["topic_identifier"])
+        part_id = part_map.get(rel["part_identifier"])
+        if not topic_id:
+            skipped += 1
+            print(f"  Warning: topic '{rel['topic_identifier']}' not found — skipping relation", file=sys.stderr)
+            continue
+        if not part_id:
+            skipped += 1
+            print(f"  Warning: part '{rel['part_identifier']}' not found — skipping relation", file=sys.stderr)
+            continue
+        resolved.append({**rel, "topic_identifier": topic_id, "part_identifier": part_id})
+
+    if skipped:
+        print(f"  {skipped} relations skipped (missing topics/parts)", file=sys.stderr)
+
+    return resolved
+
+
 def cmd_upload_relations(args: argparse.Namespace) -> None:
     """Upload topic-source relations to a workflow.
 
-    The gateway accepts both reference_ids (string IDs from topics.json/knowledge_parts.json)
-    and UUIDs for topic_identifier and part_identifier. Reference_ids are preferred — the
-    gateway resolves them automatically via 'id OR reference_id' queries.
+    Resolves reference_ids to UUIDs locally before uploading to avoid ambiguity
+    when the same reference_id exists in parts from multiple workflows.
     """
     relations_path = Path(args.file)
     if not relations_path.exists():
@@ -208,23 +279,21 @@ def cmd_upload_relations(args: argparse.Namespace) -> None:
     else:
         rel_list = [relations]
 
-    # Warn if UUIDs are used instead of reference_ids (not an error, just suboptimal)
-    uuid_count = sum(
-        1 for r in rel_list
-        if _looks_like_uuid(r.get("part_identifier", "")) or _looks_like_uuid(r.get("topic_identifier", ""))
-    )
-    if uuid_count > 0:
-        print(f"Note: {uuid_count}/{len(rel_list)} relations use UUID identifiers.", file=sys.stderr)
-        print(f"  Tip: Use reference_ids from topics.json/knowledge_parts.json instead.", file=sys.stderr)
-        print(f"  The gateway resolves reference_ids automatically — no UUID mapping needed.", file=sys.stderr)
+    # Resolve reference_ids to UUIDs scoped to this workflow
+    db_path = Path(args.db) if hasattr(args, "db") and args.db else DEFAULT_DB_PATH
+    resolved = _resolve_identifiers_to_uuids(args.workflow_id, rel_list, db_path)
 
-    payload = {"relations": rel_list}
+    if not resolved:
+        print("Error: No valid relations after resolving identifiers", file=sys.stderr)
+        sys.exit(1)
+
+    payload = {"relations": resolved}
     result = _api(
         "POST",
         f"{args.base_url}/finetune/workflows/{args.workflow_id}/topics/relations",
         json=payload,
     )
-    created = result.get("created", len(rel_list))
+    created = result.get("created", len(resolved))
     print(f"Relations uploaded: {created}")
 
 
@@ -288,24 +357,23 @@ def cmd_upload_records(args: argparse.Namespace) -> None:
 
 
 def cmd_upload_grader(args: argparse.Namespace) -> None:
-    """Upload a grader/evaluator script to a workflow."""
+    """Upload a grader/evaluator script to a workflow.
+
+    The gateway expects multipart form data with the script in a 'file' field.
+    It validates the script, wraps it as a JS evaluator config, and stores it
+    in the workflow's eval_script column.
+    """
     grader_path = Path(args.file)
     if not grader_path.exists():
         print(f"Error: Grader file not found: {grader_path}", file=sys.stderr)
         sys.exit(1)
 
-    script_content = grader_path.read_text()
-    payload = {
-        "evaluator": {
-            "type": "js",
-            "config": {"script": script_content},
-        }
-    }
+    files = {"file": (grader_path.name, grader_path.open("rb"), "application/javascript")}
 
     _api(
         "PATCH",
         f"{args.base_url}/finetune/workflows/{args.workflow_id}/evaluator",
-        json=payload,
+        files=files,
     )
     print(f"Grader uploaded: {grader_path.name}")
 
@@ -345,10 +413,10 @@ def cmd_verify(args: argparse.Namespace) -> None:
             all_ok = False
         print(f"  {label}: {count} [{status}]")
 
-    # Check evaluator
+    # Check evaluator (column is 'eval_script' in the workflows table)
     try:
         has_eval = c.execute(
-            "SELECT CASE WHEN evaluator IS NOT NULL THEN 'YES' ELSE 'NO' END FROM workflows WHERE id = ?",
+            "SELECT CASE WHEN eval_script IS NOT NULL THEN 'YES' ELSE 'NO' END FROM workflows WHERE id = ?",
             (wf_id,),
         ).fetchone()[0]
     except sqlite3.OperationalError:
@@ -401,6 +469,7 @@ def main() -> None:
     p = subparsers.add_parser("upload-relations", help="Upload topic-source relations")
     p.add_argument("--workflow-id", required=True, help="Workflow ID")
     p.add_argument("--file", required=True, help="Path to relations.json")
+    p.add_argument("--db", help=f"Database path for identifier resolution (default: {DEFAULT_DB_PATH})")
 
     # upload-records
     p = subparsers.add_parser("upload-records", help="Upload training records from JSONL")
