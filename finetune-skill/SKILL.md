@@ -240,7 +240,17 @@ For **each** document directory, produce `knowledge_parts.json` and `parts-index
 
    **Important**: Prefix all part IDs with the document identifier (typically the slugified filename) to keep them unique across documents. For example: `chess-tactics-chapter-3`, `strategy-guide-section-5`.
 
-3. **Consolidate parts** — after producing `knowledge_parts.json`, run the consolidation script to merge small fragments, fix Unicode encoding, and validate quality:
+3. **Upgrade table parts** — after producing `knowledge_parts.json`, run the table extraction script to upgrade any text parts that reference Docling tables to proper `type: "table"` with structured metadata:
+
+   ```bash
+   uv run scripts/extract_tables.py \
+     --docling-result "$DOC_DIR/docling-result.json" \
+     --parts-file "$DOC_DIR/knowledge_parts.json"
+   ```
+
+   This inspects the original Docling result for structured table data (headers, rows, cell grid) and adds it as `content_metadata` on the corresponding parts. Table parts keep their markdown rendering in `content` (for display) but gain structured `content_metadata.headers` and `content_metadata.rows` (for programmatic grader lookups). Skip this step only if the document has no tables.
+
+4. **Consolidate parts** — after table upgrade, run the consolidation script to merge small fragments, fix Unicode encoding, and validate quality:
 
    ```bash
    python3 scripts/consolidate_parts.py "$DOC_DIR/knowledge_parts.json"

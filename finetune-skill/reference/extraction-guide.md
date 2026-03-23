@@ -447,6 +447,8 @@ The formal JSON Schema is at `reference/knowledge-parts-schema.json` — use it 
 
 **Important**: Prefix all part IDs with the document identifier — typically the slugified filename (e.g., `chess-tactics-chapter-3`) to keep them unique when parts from multiple documents are merged into `all-parts-index.json`.
 
+> ⚠️ **Common mistake: flattening tables to text.** If a chunk references `#/tables/N` in its `doc_items`, you MUST create a table-typed part, not a text part. The structured cell data in `json_content.tables[N].data` is critical for programmatic graders that need to look up values (e.g., "chicken breast = 31g protein"). After writing your extraction script, run `scripts/extract_tables.py` to ensure all table parts have proper `type: "table"` and `content_metadata` with headers and rows.
+
 Write your own extraction script tailored to the document. There is no template — each document is different and may require domain-specific filtering or restructuring. Here's the general approach:
 
 ### Step 1: Load the response

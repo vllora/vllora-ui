@@ -17,6 +17,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { FileText, Tags, ChevronRight, ChevronLeft, ArrowLeft, Search } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -1007,7 +1008,7 @@ function PartViewer({
       {/* Content area — rendered markdown (matches mockup part-viewer-content) */}
       <div className="flex-1 overflow-y-auto px-5 py-5">
         <div className="prose prose-invert prose-sm max-w-none text-[13px] text-foreground/80 leading-[1.7]">
-          <ReactMarkdown>{part.content || "No content available"}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{part.content || "No content available"}</ReactMarkdown>
         </div>
       </div>
 

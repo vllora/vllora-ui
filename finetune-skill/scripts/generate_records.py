@@ -119,10 +119,29 @@ def generate_for_topic(
     chunks = [parts[pid] for pid in part_ids if pid in parts]
 
     # Build source material text (limit to 20 chunks to avoid context overflow)
-    chunk_text = "\n---\n".join(
-        f"[{c['id']}] {c.get('title', '')}\n{c.get('content', '')}"
-        for c in chunks[:20]
-    )
+    # For table parts, include structured context alongside markdown rendering
+    chunk_segments = []
+    for c in chunks[:20]:
+        part_id = c["id"]
+        title = c.get("title", "")
+        content = c.get("content", "")
+        meta = c.get("content_metadata", {})
+
+        if c.get("type") == "table" and meta:
+            headers = meta.get("headers", [])
+            num_rows = meta.get("num_rows", 0)
+            num_cols = meta.get("num_cols", 0)
+            caption = meta.get("caption", "Data table")
+            header_str = f" — columns: {', '.join(headers)}" if headers else ""
+            chunk_segments.append(
+                f"[{part_id}] {title}\n"
+                f"[TABLE: {caption} — {num_rows} rows × {num_cols} cols{header_str}]\n"
+                f"{content}"
+            )
+        else:
+            chunk_segments.append(f"[{part_id}] {title}\n{content}")
+
+    chunk_text = "\n---\n".join(chunk_segments)
 
     # Compose hierarchical system prompt for this topic
     composed_prompt = compose_system_prompt(system_prompt, ancestors, topic)

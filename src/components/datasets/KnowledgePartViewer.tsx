@@ -36,11 +36,9 @@ function TextContent({ content }: { readonly content: string }) {
 }
 
 function TableContent({ content }: { readonly content: string }) {
-  // Try to render markdown-style tables as HTML
-  const lines = content.trim().split("\n").filter(Boolean);
-  const isMarkdownTable = lines.length >= 2 && lines[0].includes("|");
+  const parsed = useMemo(() => parseTableContent(content), [content]);
 
-  if (!isMarkdownTable) {
+  if (!parsed) {
     return (
       <pre className="text-[11px] text-foreground/80 leading-relaxed whitespace-pre-wrap font-mono bg-muted/30 rounded-md p-3 overflow-x-auto">
         {content}
@@ -48,40 +46,31 @@ function TableContent({ content }: { readonly content: string }) {
     );
   }
 
-  // Parse markdown table
-  const rows = lines
-    .filter(line => !line.match(/^\s*\|?\s*[-:]+/)) // skip separator rows
-    .map(line =>
-      line.split("|").map(cell => cell.trim()).filter(Boolean)
-    );
-
-  if (rows.length === 0) {
-    return (
-      <pre className="text-[11px] text-foreground/80 leading-relaxed whitespace-pre-wrap font-mono bg-muted/30 rounded-md p-3">
-        {content}
-      </pre>
-    );
-  }
-
-  const [header, ...body] = rows;
+  const { header, body, preamble } = parsed;
 
   return (
-    <div className="overflow-x-auto rounded-md border border-border/30">
+    <div>
+      {preamble && (
+        <p className="text-[12px] text-foreground/85 leading-relaxed mb-3">{preamble}</p>
+      )}
+      <div className="overflow-x-auto rounded-md border border-border/30">
       <table className="w-full text-[11px]">
-        <thead>
-          <tr className="bg-muted/40">
-            {header.map((cell, i) => (
-              <th key={i} className="px-3 py-2 text-left font-medium text-foreground/90 border-b border-border/30">
-                {cell}
-              </th>
-            ))}
-          </tr>
-        </thead>
+        {header.length > 0 && (
+          <thead>
+            <tr className="bg-muted/40">
+              {header.map((cell, i) => (
+                <th key={i} className="px-3 py-2 text-left font-medium text-foreground/90 border-b border-border/30 whitespace-nowrap">
+                  {cell}
+                </th>
+              ))}
+            </tr>
+          </thead>
+        )}
         <tbody>
           {body.map((row, ri) => (
             <tr key={ri} className="border-b border-border/10 hover:bg-muted/20 transition-colors">
               {row.map((cell, ci) => (
-                <td key={ci} className="px-3 py-1.5 text-foreground/70">
+                <td key={ci} className="px-3 py-1.5 text-foreground/70 max-w-[300px] truncate" title={cell}>
                   {cell}
                 </td>
               ))}
@@ -89,8 +78,70 @@ function TableContent({ content }: { readonly content: string }) {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
+}
+
+/** Parse table content from various formats: markdown tables, pipe-separated single-line, CSV-like */
+function parseTableContent(content: string): { header: string[]; body: string[][]; preamble?: string } | null {
+  const trimmed = content.trim();
+
+  // Try multiline markdown table — find the first line with `|` as table start
+  const allLines = trimmed.split("\n");
+  const tableStartIdx = allLines.findIndex(line => line.includes("|"));
+
+  if (tableStartIdx >= 0) {
+    const tableLines = allLines.slice(tableStartIdx).filter(Boolean);
+    if (tableLines.length >= 2) {
+      const dataRows = tableLines
+        .filter(line => !line.match(/^\s*\|?\s*[-:]+[-|:\s]*$/))
+        .map(line => line.split("|").map(cell => cell.trim()).filter(Boolean));
+
+      if (dataRows.length >= 1) {
+        const preamble = allLines.slice(0, tableStartIdx).join("\n").trim() || undefined;
+        return { header: dataRows[0], body: dataRows.slice(1), preamble };
+      }
+    }
+  }
+
+  // Single-line pipe-separated: split on `||` as row separator, `|` as cell separator
+  if (allLines.length <= 2 && trimmed.includes("||")) {
+    const rawRows = trimmed.split("||").map(r => r.trim()).filter(Boolean);
+    const dataRows = rawRows
+      .filter(row => !row.match(/^\s*[-:]+(\s*\|\s*[-:]+)*\s*$/))
+      .map(row => row.split("|").map(cell => cell.trim()).filter(Boolean));
+
+    if (dataRows.length >= 1) {
+      return { header: dataRows[0], body: dataRows.slice(1) };
+    }
+  }
+
+  // Single-line with `|` separators but no `||` — try splitting into rows by detecting repeating column count
+  if (trimmed.includes("|") && !trimmed.includes("\n")) {
+    const allCells = trimmed.split("|").map(c => c.trim()).filter(Boolean);
+    // Skip separator-only cells (e.g., "---")
+    const cells = allCells.filter(c => !c.match(/^[-:]+$/));
+
+    if (cells.length >= 4) {
+      // Try to detect column count from first few cells that look like headers
+      // Heuristic: first N short cells are headers, rest repeat in groups of N
+      for (const colCount of [3, 4, 5, 6, 7, 8]) {
+        if (cells.length > colCount && (cells.length - colCount) % colCount === 0) {
+          const header = cells.slice(0, colCount);
+          const body: string[][] = [];
+          for (let i = colCount; i < cells.length; i += colCount) {
+            body.push(cells.slice(i, i + colCount));
+          }
+          if (body.length >= 1) {
+            return { header, body };
+          }
+        }
+      }
+    }
+  }
+
+  return null;
 }
 
 function ImageContent({ content }: { readonly content: string }) {

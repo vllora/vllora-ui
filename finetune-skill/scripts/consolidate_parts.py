@@ -33,6 +33,71 @@ def fix_unicode_escapes(text: str) -> str:
     return text
 
 
+def _looks_like_false_heading(title: str) -> bool:
+    """Detect titles that are sentence fragments, not real section headings.
+
+    Real headings: "Body composition", "Key points", "Protein timing"
+    False headings: "The message is simple: eat real food.", "This changes today."
+    """
+    if not title:
+        return False
+    # Sentences end with periods (headings rarely do)
+    if title.endswith(".") and len(title) > 15:
+        return True
+    # Sentences start with articles/pronouns/conjunctions followed by lowercase
+    sentence_starters = (
+        "the ", "a ", "an ", "this ", "that ", "these ", "those ",
+        "it ", "we ", "they ", "our ", "for ", "in ", "on ", "to ",
+        "america", "together",
+    )
+    lower = title.lower()
+    if any(lower.startswith(s) for s in sentence_starters) and len(title) > 20:
+        return True
+    return False
+
+
+def _fix_false_headings(parts: list[dict]) -> list[dict]:
+    """Re-parent parts with false heading titles to the previous real heading.
+
+    When Docling marks bold/italic text as section headers, the extraction
+    script creates separate parts for them. This merges them back by
+    changing their extraction_path to match the previous real-headed part.
+    """
+    if not parts:
+        return parts
+
+    fixed = []
+    last_real_path = None
+    last_real_title = None
+
+    for part in parts:
+        new_part = {**part}  # immutable copy
+        title = part.get("title", "")
+        part_type = part.get("type", "text")
+
+        # Only fix text parts
+        if part_type != "text":
+            fixed.append(new_part)
+            continue
+
+        if _looks_like_false_heading(title):
+            if last_real_path is not None:
+                # Re-parent this part under the last real heading
+                new_part = {
+                    **new_part,
+                    "extraction_path": last_real_path,
+                    "title": last_real_title or title,
+                }
+            # Don't update last_real_path — this was a false heading
+        else:
+            last_real_path = part.get("extraction_path", "")
+            last_real_title = title
+
+        fixed.append(new_part)
+
+    return fixed
+
+
 def consolidate_parts(
     parts: list[dict],
     min_chars: int = 50,
@@ -40,6 +105,9 @@ def consolidate_parts(
     """Merge adjacent text parts sharing the same extraction_path, drop short fragments."""
     if not parts:
         return parts
+
+    # Phase 0: Fix false headings before merging
+    parts = _fix_false_headings(parts)
 
     merged: list[dict] = []
     buffer: dict | None = None
