@@ -918,6 +918,50 @@ function TopicCoverageChips({ topics }: { readonly topics: Array<{ topicName: st
 
 // ─── Part Viewer ───
 
+/**
+ * For table-typed parts without a markdown header row, synthesize one
+ * so ReactMarkdown + remarkGfm renders a proper <table>.
+ */
+function preparePartContent(part: KnowledgeSourcePart): string {
+  const content = part.content || "No content available";
+  if (part.type !== "table") return content;
+
+  const lines = content.split("\n").filter(Boolean);
+  // Already has a header + separator → valid GFM table
+  const hasSeparator = lines.some(line => /^\s*\|?\s*[-:]+[-|:\s]*$/.test(line));
+  if (hasSeparator) return content;
+
+  // Pipe-separated rows without header — detect column count from most common pattern
+  const pipedLines = lines.filter(line => line.includes("|"));
+  if (pipedLines.length === 0) return content;
+
+  // Count columns: split by `|`, trim leading/trailing empties (from `| ... |` format)
+  const colCounts = pipedLines.map(line => {
+    const cells = line.split("|");
+    // Remove first and last if empty (standard `| cell | cell |` format)
+    if (cells.length > 0 && !cells[0].trim()) cells.shift();
+    if (cells.length > 0 && !cells[cells.length - 1].trim()) cells.pop();
+    return cells.length;
+  });
+  // Use the most common column count
+  const countFreq = new Map<number, number>();
+  for (const c of colCounts) countFreq.set(c, (countFreq.get(c) ?? 0) + 1);
+  const colCount = [...countFreq.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0;
+  if (colCount < 2) return content;
+
+  // Build generic header: Col 1 | Col 2 | Col 3 ...
+  const headerCells = Array.from({ length: colCount }, (_, i) => `Col ${i + 1}`);
+  const header = `| ${headerCells.join(" | ")} |`;
+  const separator = `| ${headerCells.map(() => "---").join(" | ")} |`;
+
+  // Find where table rows start (skip non-table preamble lines)
+  const tableStartIdx = lines.findIndex(line => line.trim().startsWith("|"));
+  const preamble = lines.slice(0, tableStartIdx).join("\n");
+  const tableRows = lines.slice(tableStartIdx).join("\n");
+
+  return [preamble, header, separator, tableRows].filter(Boolean).join("\n");
+}
+
 function PartViewer({
   part,
   sourceName,
@@ -1014,7 +1058,7 @@ function PartViewer({
       {/* Content area — rendered markdown (matches mockup part-viewer-content) */}
       <div className="flex-1 overflow-y-auto px-5 py-5">
         <div className="prose prose-invert prose-sm max-w-none text-[13px] text-foreground/80 leading-[1.7]">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{part.content || "No content available"}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{preparePartContent(part)}</ReactMarkdown>
         </div>
       </div>
 
