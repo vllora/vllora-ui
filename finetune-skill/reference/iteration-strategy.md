@@ -115,7 +115,7 @@ If any check fails, do not continue training from that source job. Fix/re-run th
 
 ## Part 2: Analyzing Training Progress (Per-Epoch Results)
 
-During training, use `GET /finetune/datasets/{id}/finetune-evaluations?finetune_job_id=JOB_ID` to see how the model improves across epochs.
+During training, use `GET /finetune/workflows/{id}/finetune-evaluations?finetune_job_id=JOB_ID` to see how the model improves across epochs.
 
 ```json
 {
@@ -417,7 +417,7 @@ Key fields to use for analysis:
 
 Key fields: `status` (succeeded/failed), `fine_tuned_model` (model name for testing), `error_message` (if failed).
 
-**Per-epoch training scores** — Save `GET /finetune/datasets/{id}/finetune-evaluations?finetune_job_id=JOB_ID` to `training-jobs/job-{N}-epochs.json`:
+**Per-epoch training scores** — Save `GET /finetune/workflows/{id}/finetune-evaluations?finetune_job_id=JOB_ID` to `training-jobs/job-{N}-epochs.json`:
 ```json
 {
   "results": [{

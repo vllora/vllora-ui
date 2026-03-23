@@ -84,7 +84,6 @@ finetune-skill/
 │   ├── chat_completion.py      # LLM chat completions (validates JSON output)
 │   ├── dry_run_grader.py       # Test grader on one record via gateway sandbox
 │   ├── validate_dataset.py     # Validate JSONL (format, fields, cross-ref topics/parts)
-│   ├── upload_dataset.py       # Upload dataset + grader to gateway (standalone)
 │   ├── run_evaluation.py       # Create eval, poll until complete (~30 min timeout)
 │   ├── start_training.py       # Start training, poll until complete
 │   ├── analyze_training.py    # Fetch + analyze training metrics, per-epoch evals, alerts
@@ -200,7 +199,6 @@ All scripts use inline dependency declarations — run with `uv run script.py` (
 | `scripts/chat_completion.py` | Call LLM via gateway — validates JSON output when `response_format` is `json_object` |
 | `scripts/dry_run_grader.py` | Dry-run grader on a single row — instant syntax/logic check via gateway sandbox |
 | `scripts/validate_dataset.py` | Validate JSONL: format, fields, RFT compliance, cross-reference topics/parts |
-| `scripts/upload_dataset.py` | Upload dataset + grader to gateway (standalone, not used in pipeline) |
 | `scripts/run_evaluation.py` | Create eval job, poll until complete (~30 min timeout), save response |
 | `scripts/start_training.py` | Start training job, poll until complete, save response |
 | `scripts/consolidate_parts.py` | Merge adjacent text parts, drop short fragments, fix Unicode, regenerate parts-index |
@@ -422,7 +420,7 @@ Start now." \
 | Enough records | `wc -l */training.jsonl` | 100+ lines |
 | No .sh files | `find . -name "*.sh"` | No results |
 | Full timestamps | `grep -E "\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]" */execution-log.md` | All log entries match |
-| Dataset uploaded | grep "POST /finetune/datasets" in log | 200 OK with backend_dataset_id |
+| Records uploaded | grep "upload-records" in log | Records uploaded successfully |
 | Eval created | grep "POST /finetune/evaluations" in log | 200 OK with evaluation_run_id |
 | Grader is hybrid | `head -50 */grader.js` | Both programmatic checks AND `__langdb_call_llm_as_judge_obj` |
 
@@ -439,10 +437,10 @@ Start now." \
 
 ### API calls fail with 400
 
-1. Check dataset_id format — must be UUID
-2. Check file paths in curl — must use `@` prefix for file uploads
-3. Check evaluator JSON — must include `completion_params` with `model`
-4. Test manually: `curl -s http://localhost:9090/finetune/datasets | head`
+1. Check workflow_id format — must be UUID
+2. Check records exist: `curl -s http://localhost:9090/finetune/workflows/$WF_ID/records/count`
+3. Check evaluator exists: `curl -s http://localhost:9090/finetune/workflows/$WF_ID/evaluator/versions`
+4. Check grader includes `completion_params` with `model`
 
 ### Evaluation never completes
 

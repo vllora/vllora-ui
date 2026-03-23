@@ -161,14 +161,15 @@ The subagent will:
 
 Ask the user what behaviors the model should learn. Produce two things:
 - An **objective statement** describing desired behaviors and constraints
-- A **system prompt** ("You are...") that will prefix every training conversation
+- A **system prompt** ("You are...") that will be used in Step 4 (record generation) to prefix every training conversation
+
+> **Note:** The system prompt is NOT stored on the workflow. It's composed at record generation time (Step 4) from a root persona + per-topic segments, and embedded in each record's `messages[0]`. Save it locally for use in Step 4.
 
 **Upload immediately** — create the workflow on the gateway so the UI shows progress from the start:
 ```bash
 WORKFLOW_ID=$(uv run scripts/finetune.py create-workflow \
   --name "My Project" \
-  --objective "Train a model to..." \
-  --system-prompt "You are..." | tail -1)
+  --objective "Train a model to..." | tail -1)
 echo "Workflow created: $WORKFLOW_ID"
 ```
 Save `$WORKFLOW_ID` — every subsequent step uses it to upload data incrementally.
@@ -257,6 +258,8 @@ For **each** document directory, produce `knowledge_parts.json` and `parts-index
    ```
 
    This merges adjacent text parts under the same heading, drops parts under 50 chars, fixes Unicode escapes, reassigns IDs, and regenerates `parts-index.json`. **A healthy extraction produces 2-10 parts per page.** If the script reports FAIL, fix the extraction script and re-run.
+
+   > ⚠️ **ID rewrite warning:** `consolidate_parts.py` reassigns ALL part IDs to sequential `{doc-slug}-p-001`, `{doc-slug}-p-002`, etc. Your original semantic IDs from the extraction script are replaced. Build `relations.json` AFTER consolidation using the rewritten IDs from `parts-index.json`, not the original IDs.
 
    You can also dry-run to check quality without modifying:
    ```bash
@@ -428,7 +431,7 @@ Focus on: refund requests and policies. Guide users through the refund process, 
 
 **Build topic-part relations.** After designing topics, delegate to the `relation-builder` subagent — it reads `knowledge/all-parts-index.json` (the merged index across all documents) and `topics.json`, iteratively matches parts to topics using a retrieve-and-verify loop, and writes `relations.json`. This keeps the parts-index scanning out of main context.
 
-> **ID format note:** Use the **part reference_id** (the string ID from `knowledge_parts.json`, e.g., `chess-tactics-chapter-3`) as `part_identifier` in `relations.json` — NOT gateway UUIDs. The gateway resolves reference_ids to UUIDs automatically. Do NOT query the database to map IDs manually. Similarly, use the topic `id` from `topics.json` as `topic_identifier`.
+> **ID format note:** Use **human-readable slugs** for topic `id` values in `topics.json` (e.g., `"billing-refunds"`, `"protein-timing"`). The `finetune.py upload-topics` command automatically converts these to UUIDs for the gateway (to avoid cross-workflow collisions) while preserving the slug as `reference_id` for lookups. Use the same slug as `topic_identifier` in `relations.json`, and use the part's string ID (e.g., `chess-tactics-chapter-3`) as `part_identifier`. Do NOT query the database to map IDs manually — `finetune.py upload-relations` resolves everything locally.
 
 If there are no documents (objective-only pipeline), skip this step — no relations.json needed.
 
@@ -627,40 +630,19 @@ If the response is consistently long (>800 chars), set `max_output_tokens` to 20
 Use `--create-only` to create the eval job without blocking, so you can start training immediately:
 
 ```bash
-# Create eval (non-blocking — just returns the ID)
-EVAL_ID=$(uv run scripts/run_evaluation.py --dataset-id $WORKFLOW_ID --create-only | tail -1)
-echo "Eval started: $EVAL_ID"
+# Create eval (saves metadata to evaluations/eval-001.json)
+uv run scripts/finetune.py create-eval \
+  --workflow-id $WORKFLOW_ID --output-dir evaluations
 
-Available models:
-unsloth/Qwen3.5-0.8B
-unsloth/Qwen3.5-2B
-unsloth/Qwen3.5-4B
-unsloth/Qwen3.5-9B
+# Available base models:
+# unsloth/Qwen3.5-0.8B, unsloth/Qwen3.5-2B, unsloth/Qwen3.5-4B, unsloth/Qwen3.5-9B
 
-# Create training job
-JOB=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs \
-  -H "Content-Type: application/json" \
-  -d '{
-    "dataset": "'$WORKFLOW_ID'",
-    "base_model": "unsloth/Qwen3.5-4B",
-    "output_model": "chess-tutor-v1",
-    "display_name": "Training run 1",
-    "training_config": {
-      "learning_rate": 0.00001,
-      "lora_rank": 8,
-      "gradient_accumulation_steps": 5,
-      "epochs": 2,
-      "batch_size": 5
-    },
-    "inference_parameters": {
-      "max_output_tokens": 2000,
-      "temperature": 1.0,
-      "top_p": 1.0,
-      "response_candidates_count": 2
-    }
-  }')
-JOB_ID=$(echo "$JOB" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-echo "Training started: $JOB_ID"
+# Create training job (saves metadata to training-jobs/train-001.json)
+uv run scripts/finetune.py create-training \
+  --workflow-id $WORKFLOW_ID \
+  --base-model "unsloth/Qwen3.5-4B" \
+  --output-model "chess-tutor-v1" \
+  --output-dir training-jobs
 ```
 
 **Base model selection:**
@@ -841,8 +823,8 @@ uv run scripts/finetune.py upload-grader \
 uv run scripts/finetune.py upload-records \
   --workflow-id $WORKFLOW_ID --file training.jsonl
 
-# Sync to cloud
-curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/dataset/upload
+# No manual sync needed — the gateway auto-uploads workflow data to the cloud
+# when creating eval or training jobs (via ensure_dataset_uploaded()).
 ```
 
 **Adjusting training config**: Modify parameters in the next job creation (Step 7b).
@@ -929,7 +911,6 @@ Run with `uv run` (PEP 723 — dependencies declared inline).
 | `scripts/finetune.py` | Gateway API wrapper — create workflow, upload knowledge/topics/records/grader, verify |
 | `scripts/generate_records.py` | Generate training records from topics + knowledge — calls LLM per leaf topic |
 | `scripts/validate_dataset.py` | Validate JSONL before upload — format, fields, RFT compliance, cross-reference topics/parts |
-| `scripts/upload_dataset.py` | Upload dataset + grader to gateway (standalone mode) |
 | `scripts/run_evaluation.py` | Create eval job, poll until complete (~30 min timeout), save results |
 | `scripts/start_training.py` | Start training job, poll until complete, save response |
 | `scripts/analyze_training.py` | Fetch + analyze training metrics — reward trend, KL, clipping, loss, per-epoch evals, alerts |

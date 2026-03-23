@@ -4,149 +4,361 @@ Base URL: `http://localhost:9090` (configurable)
 
 All endpoints use JSON unless noted. Auth via `Authorization: Bearer <token>` header when configured.
 
-**Note:** These are the platform APIs for dataset management, evaluation, and training. Data generation uses `scripts/generate_records.py` which calls the LLM via `scripts/chat_completion.py` (through the `/v1/chat/completions` endpoint). Topic design and grader writing are handled by the agent directly.
+> **Auto-uploads:** The gateway auto-uploads workflow data to the cloud when creating evaluations or training jobs via `ensure_dataset_uploaded()`. No manual dataset upload step is needed. The old `POST /finetune/datasets` endpoint has been removed.
+
+**Note:** These are the platform APIs for workflow management, evaluation, and training. Data generation uses `scripts/generate_records.py` which calls the LLM via `scripts/chat_completion.py` (through the `/v1/chat/completions` endpoint). Topic design and grader writing are handled by the agent directly.
 
 ---
 
-## Quick Reference
+## Quick Reference (76 endpoints)
 
 | # | Method | Endpoint | Purpose |
 |---|--------|----------|---------|
-| **Cloud Endpoints** | | | |
-| 1 | POST | `/finetune/datasets` | Upload dataset (multipart) |
-| 2 | POST | `/finetune/evaluations` | Create evaluation run |
-| 3 | GET | `/finetune/evaluations/{id}` | Poll evaluation results |
-| 4 | POST | `/finetune/deployments` | Deploy model |
-| 5 | DELETE | `/finetune/deployments/{id}` | Delete deployment |
-| 6 | GET | `/finetune/datasets/{id}/finetune-evaluations` | Per-epoch training evaluations |
-| 7 | POST | `/finetune/datasets/analytics/dry-run` | Dataset analytics |
-| 8 | GET | `/finetune/datasets/{id}/analytics` | Get dataset analytics |
 | **Workflow CRUD** | | | |
-| 9 | GET | `/finetune/workflows` | List all workflows |
-| 10 | POST | `/finetune/workflows` | Create workflow |
-| 11 | GET | `/finetune/workflows/{id}` | Get workflow |
-| 12 | PUT | `/finetune/workflows/{id}` | Update workflow |
-| 13 | DELETE | `/finetune/workflows/{id}` | Soft delete workflow |
-| **Training Jobs** (scoped to workflow) | | | |
-| 14 | POST | `/finetune/workflows/{id}/jobs` | Create training job |
-| 15 | GET | `/finetune/workflows/{id}/jobs` | List training jobs |
-| 16 | GET | `/finetune/workflows/{id}/jobs/{job_id}/status` | Get job status |
-| 17 | GET | `/finetune/workflows/{id}/jobs/{job_id}/metrics` | Get training metrics |
-| 18 | POST | `/finetune/workflows/{id}/jobs/{job_id}/cancel` | Cancel job |
-| 19 | POST | `/finetune/workflows/{id}/jobs/{job_id}/resume` | Resume job |
-| 20 | GET | `/finetune/workflows/{id}/jobs/{job_id}/weights/url` | Download weights URL |
-| **Evaluator** (scoped to workflow) | | | |
-| 21 | PATCH | `/finetune/workflows/{id}/evaluator` | Update evaluator script |
-| 22 | GET | `/finetune/workflows/{id}/evaluator/versions` | Evaluator version history |
-| 23 | POST | `/finetune/workflows/{id}/evaluator/dry-run` | Test grader on single row |
-| **Dataset Package** (workflow → cloud) | | | |
-| 23 | POST | `/finetune/workflows/{id}/dataset/upload` | Package records+topics+evaluator → cloud JSONL |
-| 24 | POST | `/finetune/workflows/{id}/dataset/analytics/dry-run` | Dataset analytics (workflow-scoped) |
-| 25 | GET | `/finetune/workflows/{id}/dataset/analytics` | Get dataset analytics (workflow-scoped) |
-| 26 | GET | `/finetune/workflows/{id}/dataset/finetune-evaluations` | Per-epoch evals (workflow-scoped) |
-| **Eval Jobs** (local tracking, scoped to workflow) | | | |
-| 27 | POST | `/finetune/workflows/{id}/eval-jobs` | Create eval job record |
-| 28 | GET | `/finetune/workflows/{id}/eval-jobs` | List eval jobs |
-| 29 | GET | `/finetune/workflows/{id}/eval-jobs/{job_id}` | Get eval job |
-| 30 | PATCH | `/finetune/workflows/{id}/eval-jobs/{job_id}` | Update eval job status |
-| 31 | DELETE | `/finetune/workflows/{id}/eval-jobs/{job_id}` | Delete eval job |
-| 32 | DELETE | `/finetune/workflows/{id}/eval-jobs` | Delete all eval jobs |
-| 33 | GET | `/finetune/eval-jobs?status=X` | Cross-workflow eval job query |
-| **Records** (scoped to workflow) | | | |
-| 34 | GET | `/finetune/workflows/{id}/records` | List records |
-| 35 | POST | `/finetune/workflows/{id}/records` | Add records |
-| 36 | PUT | `/finetune/workflows/{id}/records` | Replace all records |
-| 37 | DELETE | `/finetune/workflows/{id}/records` | Delete all records |
-| 38 | DELETE | `/finetune/workflows/{id}/records/{record_id}` | Delete single record |
-| 39 | PATCH | `/finetune/workflows/{id}/records/{record_id}` | Update record topic |
-| 40 | PATCH | `/finetune/workflows/{id}/records/{record_id}/data` | Update record data |
-| 41 | PATCH | `/finetune/workflows/{id}/records/{record_id}/scores` | Write-back eval scores |
-| 42 | PATCH | `/finetune/workflows/{id}/records/topics` | Batch update topics |
-| 43 | PATCH | `/finetune/workflows/{id}/records/rename-topic` | Rename topic across records |
-| 44 | DELETE | `/finetune/workflows/{id}/records/topics/{name}` | Clear topic from records |
-| 45 | DELETE | `/finetune/workflows/{id}/records/topics` | Clear all topics |
-| **Topics** (scoped to workflow) | | | |
-| 46 | GET | `/finetune/workflows/{id}/topics` | List topics |
-| 47 | POST | `/finetune/workflows/{id}/topics` | Create topics |
-| 48 | PUT | `/finetune/workflows/{id}/topics` | Update topics |
-| 49 | DELETE | `/finetune/workflows/{id}/topics` | Delete topics |
-| 50 | GET | `/finetune/workflows/{id}/topics/relations` | List topic-source relations |
-| 51 | POST | `/finetune/workflows/{id}/topics/relations` | Create topic-source relations |
-| 52 | PUT | `/finetune/workflows/{id}/topics/relations` | Update topic-source relations |
-| 53 | DELETE | `/finetune/workflows/{id}/topics/relations` | Delete topic-source relations |
+| 1 | GET | `/finetune/workflows` | List all workflows |
+| 2 | POST | `/finetune/workflows` | Create workflow |
+| 3 | GET | `/finetune/workflows/{id}` | Get workflow |
+| 4 | PUT | `/finetune/workflows/{id}` | Update workflow |
+| 5 | DELETE | `/finetune/workflows/{id}` | Soft delete workflow |
+| **Records** (workflow-scoped) | | | |
+| 6 | GET | `/finetune/workflows/{id}/records` | List records |
+| 7 | GET | `/finetune/workflows/{id}/records/count` | Count records |
+| 8 | POST | `/finetune/workflows/{id}/records` | Add records |
+| 9 | PUT | `/finetune/workflows/{id}/records` | Replace all records |
+| 10 | DELETE | `/finetune/workflows/{id}/records` | Delete all records |
+| 11 | PATCH | `/finetune/workflows/{id}/records/topics` | Batch update topics |
+| 12 | DELETE | `/finetune/workflows/{id}/records/topics` | Clear all topics |
+| 13 | PATCH | `/finetune/workflows/{id}/records/rename-topic` | Rename topic across records |
+| 14 | DELETE | `/finetune/workflows/{id}/records/topics/{topic_id}` | Clear topic from records |
+| 15 | PATCH | `/finetune/workflows/{id}/records/{record_id}` | Update record topic |
+| 16 | DELETE | `/finetune/workflows/{id}/records/{record_id}` | Delete single record |
+| 17 | PATCH | `/finetune/workflows/{id}/records/{record_id}/data` | Update record data |
+| 18 | GET | `/finetune/workflows/{id}/records/scores` | List record scores |
+| **Logs** (workflow-scoped) | | | |
+| 19 | GET | `/finetune/workflows/{id}/logs` | List workflow logs |
+| 20 | POST | `/finetune/workflows/{id}/logs/bulk` | Create workflow logs (bulk) |
+| **Topics** (workflow-scoped) | | | |
+| 21 | GET | `/finetune/workflows/{id}/topics` | List topics |
+| 22 | POST | `/finetune/workflows/{id}/topics` | Create topics |
+| 23 | PUT | `/finetune/workflows/{id}/topics` | Update topics |
+| 24 | DELETE | `/finetune/workflows/{id}/topics` | Delete topics |
+| 25 | GET | `/finetune/workflows/{id}/topics/relations` | List topic-source relations |
+| 26 | POST | `/finetune/workflows/{id}/topics/relations` | Create topic-source relations |
+| 27 | PUT | `/finetune/workflows/{id}/topics/relations` | Update topic-source relations |
+| 28 | DELETE | `/finetune/workflows/{id}/topics/relations` | Delete topic-source relations |
+| 29 | POST | `/finetune/workflows/{id}/topics/generate` | Generate topics for workflow |
+| **Knowledge Sources** (workflow-scoped) | | | |
+| 30 | GET | `/finetune/workflows/{id}/knowledge` | List knowledge sources |
+| 31 | POST | `/finetune/workflows/{id}/knowledge` | Create knowledge source |
+| 32 | PUT | `/finetune/workflows/{id}/knowledge` | Upsert knowledge source |
+| 33 | DELETE | `/finetune/workflows/{id}/knowledge` | Soft delete all knowledge sources |
+| 34 | GET | `/finetune/workflows/{id}/knowledge/count` | Count knowledge sources |
+| 35 | POST | `/finetune/workflows/{id}/knowledge/chunk` | Chunk knowledge for extraction |
+| 36 | POST | `/finetune/workflows/{id}/knowledge/trace` | Create knowledge trace |
+| 37 | DELETE | `/finetune/workflows/{id}/knowledge/trace/{trace_id}` | Delete knowledge trace |
+| 38 | GET | `/finetune/workflows/{id}/knowledge/{ks_id}` | Get single knowledge source |
+| 39 | DELETE | `/finetune/workflows/{id}/knowledge/{ks_id}` | Soft delete single knowledge source |
+| 40 | GET | `/finetune/workflows/{id}/knowledge/{ks_id}/file` | Download knowledge source file |
+| 41 | POST | `/finetune/workflows/{id}/knowledge/{ks_id}/parts` | Add parts to knowledge source |
+| 42 | GET | `/finetune/workflows/{id}/knowledge/{ks_id}/parts` | List knowledge source parts |
+| 43 | DELETE | `/finetune/workflows/{id}/knowledge/{ks_id}/parts/{part_id}` | Delete single part |
+| **Eval Jobs** (workflow-scoped) | | | |
+| 44 | GET | `/finetune/workflows/{id}/eval-jobs` | List eval jobs |
+| 45 | POST | `/finetune/workflows/{id}/eval-jobs` | Create eval job record |
+| 46 | DELETE | `/finetune/workflows/{id}/eval-jobs` | Delete all eval jobs for workflow |
+| 47 | GET | `/finetune/workflows/{id}/eval-jobs/{job_id}` | Get eval job |
+| 48 | PATCH | `/finetune/workflows/{id}/eval-jobs/{job_id}` | Update eval job status |
+| 49 | DELETE | `/finetune/workflows/{id}/eval-jobs/{job_id}` | Delete eval job |
+| **Dataset** (workflow-scoped, cloud sync) | | | |
+| 50 | POST | `/finetune/workflows/{id}/dataset/generate` | Generate dataset JSONL from workflow |
+| 51 | POST | `/finetune/workflows/{id}/dataset/generate/status` | Check dataset generation status |
+| **Evaluator** (workflow-scoped) | | | |
+| 52 | POST | `/finetune/workflows/{id}/evaluator/run` | Run evaluator on workflow data |
+| 53 | GET | `/finetune/workflows/{id}/evaluator/run/status` | Check evaluator run status |
+| 54 | PATCH | `/finetune/workflows/{id}/evaluator` | Update evaluator script |
+| 55 | POST | `/finetune/workflows/{id}/evaluator/dry-run` | Test grader on single row |
+| 56 | GET | `/finetune/workflows/{id}/evaluator/versions` | Evaluator version history |
+| **Training Jobs** (workflow-scoped) | | | |
+| 57 | POST | `/finetune/workflows/{id}/jobs` | Create training job |
+| 58 | GET | `/finetune/workflows/{id}/jobs` | List training jobs |
+| 59 | GET | `/finetune/workflows/{id}/jobs/{job_id}/status` | Get job status |
+| 60 | GET | `/finetune/workflows/{id}/jobs/{job_id}/metrics` | Get training metrics |
+| 61 | POST | `/finetune/workflows/{id}/jobs/{job_id}/cancel` | Cancel job |
+| 62 | POST | `/finetune/workflows/{id}/jobs/{job_id}/resume` | Resume cancelled job |
+| 63 | GET | `/finetune/workflows/{id}/jobs/{job_id}/weights/url` | Download weights URL |
+| **Analytics & Evaluations** (workflow-scoped, read-only) | | | |
+| 64 | GET | `/finetune/workflows/{id}/analytics` | Get dataset analytics |
+| 65 | GET | `/finetune/workflows/{id}/finetune-evaluations` | Per-epoch training evaluations |
+| **Cross-Workflow Eval Jobs** | | | |
+| 66 | GET | `/finetune/eval-jobs` | List eval jobs by status (cross-workflow) |
+| 67 | GET | `/finetune/eval-jobs/{job_id}` | Get eval job by ID (cross-workflow) |
+| 68 | PATCH | `/finetune/eval-jobs/{job_id}` | Update eval job by ID (cross-workflow) |
+| 69 | DELETE | `/finetune/eval-jobs/{job_id}` | Delete eval job by ID (cross-workflow) |
+| **Analytics** (non-workflow-scoped) | | | |
+| 70 | POST | `/finetune/analytics/dry-run` | Dataset analytics dry run |
+| **Evaluations** (non-workflow-scoped, cloud) | | | |
+| 71 | POST | `/finetune/evaluations` | Create evaluation run |
+| 72 | GET | `/finetune/evaluations/{evaluation_run_id}` | Poll evaluation results |
+| **Deployments** | | | |
+| 73 | POST | `/finetune/deployments` | Deploy model |
+| 74 | DELETE | `/finetune/deployments/{deployment_id}` | Delete deployment |
 | **Topic Hierarchy AI** | | | |
-| 54 | POST | `/finetune/topic-hierarchy/generate` | Generate topic hierarchy |
-| 55 | POST | `/finetune/topic-hierarchy/adjust` | Adjust topic hierarchy |
-| **Knowledge Sources** (scoped to workflow) | | | |
-| 56 | GET | `/finetune/workflows/{id}/knowledge` | List knowledge sources |
-| 57 | GET | `/finetune/workflows/{id}/knowledge/{ks_id}` | Get single knowledge source |
-| 58 | GET | `/finetune/workflows/{id}/knowledge/count` | Count knowledge sources |
-| 59 | POST | `/finetune/workflows/{id}/knowledge` | Create knowledge source (multipart) |
-| 60 | POST | `/finetune/workflows/{id}/knowledge/{ks_id}/parts` | Add parts |
-| 61 | GET | `/finetune/workflows/{id}/knowledge/{ks_id}/parts` | List parts |
-| 62 | DELETE | `/finetune/workflows/{id}/knowledge/{ks_id}/parts/{part_id}` | Delete single part |
-| 63 | DELETE | `/finetune/workflows/{id}/knowledge/{ks_id}` | Soft delete single |
-| 64 | DELETE | `/finetune/workflows/{id}/knowledge` | Soft delete all |
+| 75 | POST | `/finetune/topic-hierarchy/generate` | Generate topic hierarchy |
+| 76 | POST | `/finetune/topic-hierarchy/adjust` | Adjust topic hierarchy |
 
 ---
 
-## 1. Dataset Upload
+## 1. Workflow CRUD
 
-### POST `/finetune/datasets`
+### GET `/finetune/workflows`
 
-Upload a training dataset (JSONL format) with optional topic hierarchy and evaluation script. Uses `multipart/form-data`.
+List all workflows.
+
+### POST `/finetune/workflows`
+
+Create a new workflow.
+
+### GET `/finetune/workflows/{workflow_id}`
+
+Get a single workflow by ID.
+
+### PUT `/finetune/workflows/{workflow_id}`
+
+Update a workflow.
+
+### DELETE `/finetune/workflows/{workflow_id}`
+
+Soft delete a workflow.
+
+---
+
+## 2. Records (workflow-scoped)
+
+### GET `/finetune/workflows/{workflow_id}/records`
+
+List records for a workflow.
+
+### GET `/finetune/workflows/{workflow_id}/records/count`
+
+Get the total count of records in a workflow.
+
+### POST `/finetune/workflows/{workflow_id}/records`
+
+Add records to a workflow.
+
+### PUT `/finetune/workflows/{workflow_id}/records`
+
+Replace all records in a workflow (full overwrite).
+
+### DELETE `/finetune/workflows/{workflow_id}/records`
+
+Delete all records in a workflow.
+
+### PATCH `/finetune/workflows/{workflow_id}/records/{record_id}`
+
+Update a single record's topic assignment.
+
+### DELETE `/finetune/workflows/{workflow_id}/records/{record_id}`
+
+Delete a single record.
+
+### PATCH `/finetune/workflows/{workflow_id}/records/{record_id}/data`
+
+Update a record's data (messages, metadata).
+
+### GET `/finetune/workflows/{workflow_id}/records/scores`
+
+List evaluation scores for all records in a workflow. Use after an eval run to see per-record scores.
+
+### PATCH `/finetune/workflows/{workflow_id}/records/topics`
+
+Batch update topic assignments across multiple records.
 
 ```bash
-curl -X POST http://localhost:9090/finetune/datasets \
-  -F "file=@training.jsonl;type=application/x-ndjson" \
-  -F "dataset_id=$(uuidgen | tr '[:upper:]' '[:lower:]')" \
-  -F "topic_hierarchy={...}" \
-  -F "eval_script=function evaluate(input) { ... }" \
-  -F 'evaluator={"type":"js","config":{"script":"","completion_params":{"model":"gpt-4o-mini","temperature":0.0,"max_tokens":300}}}'
+curl -X PATCH http://localhost:9090/finetune/workflows/WORKFLOW_ID/records/topics \
+  -H "Content-Type: application/json" \
+  -d '{"updates": [...]}'
 ```
 
-**Form fields:**
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `file` | file | Yes | JSONL training data file |
-| `dataset_id` | string | Yes | Unique dataset identifier — **must be a valid UUID** (e.g., `a1b2c3d4-e5f6-7890-abcd-ef1234567890`). Generate one with `uuidgen | tr '[:upper:]' '[:lower:]'` |
-| `topic_hierarchy` | string | No | JSON string of topic hierarchy |
-| `eval_script` | string | No | JavaScript evaluator script |
-| `evaluator` | string | No | JSON evaluator config (required if eval_script is provided) |
+### PATCH `/finetune/workflows/{workflow_id}/records/rename-topic`
 
-**Evaluator config format** (required when uploading eval_script):
-```json
-{
-  "type": "js",
-  "config": {
-    "script": "",
-    "completion_params": {
-      "model": "gpt-4o-mini",
-      "temperature": 0.0,
-      "max_tokens": 300
-    }
-  }
-}
+Rename a topic across all records and the topic tree.
+
+```bash
+curl -X PATCH http://localhost:9090/finetune/workflows/WORKFLOW_ID/records/rename-topic \
+  -H "Content-Type: application/json" \
+  -d '{"old_topic": "Tactics/Pins", "new_topic": "Tactics/Pin Attacks"}'
 ```
 
-The backend merges the `eval_script` content into `evaluator.config.script`.
+### DELETE `/finetune/workflows/{workflow_id}/records/topics/{topic_id}`
 
-**Response:**
-```json
-{
-  "dataset_id": "ds_abc123"
-}
-```
+Clear a specific topic from all records (records remain, topic field set to null).
 
-The returned `dataset_id` is the **cloud/backend dataset ID** — different from the local workflow ID. This ID is used for evaluations, training jobs, and per-epoch evaluations.
+### DELETE `/finetune/workflows/{workflow_id}/records/topics`
+
+Clear all topic assignments from all records.
 
 ---
 
-## 2. Update Evaluator Script
+## 3. Logs (workflow-scoped)
+
+### GET `/finetune/workflows/{workflow_id}/logs`
+
+List logs for a workflow. Returns execution history and status messages.
+
+### POST `/finetune/workflows/{workflow_id}/logs/bulk`
+
+Create multiple log entries at once.
+
+```bash
+curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/logs/bulk \
+  -H "Content-Type: application/json" \
+  -d '{"logs": [{"message": "Started evaluation", "level": "info"}]}'
+```
+
+---
+
+## 4. Topics (workflow-scoped)
+
+### GET `/finetune/workflows/{workflow_id}/topics`
+
+List all topics for a workflow.
+
+### POST `/finetune/workflows/{workflow_id}/topics`
+
+Create topics.
+
+```bash
+curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/topics \
+  -H "Content-Type: application/json" \
+  -d '{"topics": [
+    {"name": "Topic A", "parent_id": null},
+    {"name": "Subtopic A1", "parent_id": "topic-a-id"}
+  ]}'
+```
+
+### PUT `/finetune/workflows/{workflow_id}/topics`
+
+Update existing topics.
+
+### DELETE `/finetune/workflows/{workflow_id}/topics`
+
+Delete all topics for a workflow.
+
+### GET `/finetune/workflows/{workflow_id}/topics/relations`
+
+List topic-to-source relations.
+
+### POST `/finetune/workflows/{workflow_id}/topics/relations`
+
+Create topic-source relations (link topics to knowledge sources).
+
+### PUT `/finetune/workflows/{workflow_id}/topics/relations`
+
+Update topic-source relations.
+
+### DELETE `/finetune/workflows/{workflow_id}/topics/relations`
+
+Delete topic-source relations.
+
+### POST `/finetune/workflows/{workflow_id}/topics/generate`
+
+Generate topics for a workflow using AI. The gateway calls the cloud to produce topics based on the workflow's knowledge sources and configuration.
+
+### Topic Regeneration Flow
+
+When you need to restructure topics entirely:
+
+```bash
+# 1. Delete old topic tree
+curl -X DELETE http://localhost:9090/finetune/workflows/WORKFLOW_ID/topics
+
+# 2. Generate new hierarchy (via LLM)
+curl -X POST http://localhost:9090/finetune/topic-hierarchy/generate \
+  -H "Content-Type: application/json" \
+  -d '{"goals": "...", "depth": 3, "degree": 4}'
+
+# 3. Save new topics (flat format with parent_id)
+curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/topics \
+  -H "Content-Type: application/json" \
+  -d '{"topics": [
+    {"name": "Topic A", "parent_id": null},
+    {"name": "Subtopic A1", "parent_id": "topic-a-id"}
+  ]}'
+
+# 4. Re-categorize records
+curl -X PATCH http://localhost:9090/finetune/workflows/WORKFLOW_ID/records/topics \
+  -H "Content-Type: application/json" \
+  -d '{"updates": [...]}'
+```
+
+---
+
+## 5. Knowledge Sources (workflow-scoped)
+
+### GET `/finetune/workflows/{workflow_id}/knowledge`
+
+List all knowledge sources for a workflow.
+
+### POST `/finetune/workflows/{workflow_id}/knowledge`
+
+Create a new knowledge source (multipart upload).
+
+### PUT `/finetune/workflows/{workflow_id}/knowledge`
+
+Upsert a knowledge source. Creates if it doesn't exist, updates if it does.
+
+### DELETE `/finetune/workflows/{workflow_id}/knowledge`
+
+Soft delete all knowledge sources for a workflow.
+
+### GET `/finetune/workflows/{workflow_id}/knowledge/count`
+
+Get the count of knowledge sources in a workflow.
+
+### POST `/finetune/workflows/{workflow_id}/knowledge/chunk`
+
+Chunk knowledge source content for extraction. Splits large documents into processable chunks.
+
+### POST `/finetune/workflows/{workflow_id}/knowledge/trace`
+
+Create a knowledge trace record linking extracted data back to its source.
+
+### DELETE `/finetune/workflows/{workflow_id}/knowledge/trace/{trace_id}`
+
+Delete a specific knowledge trace.
+
+### GET `/finetune/workflows/{workflow_id}/knowledge/{ks_id}`
+
+Get a single knowledge source by ID.
+
+### DELETE `/finetune/workflows/{workflow_id}/knowledge/{ks_id}`
+
+Soft delete a single knowledge source.
+
+### GET `/finetune/workflows/{workflow_id}/knowledge/{ks_id}/file`
+
+Download the original file for a knowledge source.
+
+### POST `/finetune/workflows/{workflow_id}/knowledge/{ks_id}/parts`
+
+Add parts (pages, sections) to a knowledge source.
+
+### GET `/finetune/workflows/{workflow_id}/knowledge/{ks_id}/parts`
+
+List all parts of a knowledge source.
+
+### DELETE `/finetune/workflows/{workflow_id}/knowledge/{ks_id}/parts/{part_id}`
+
+Delete a single part from a knowledge source.
+
+---
+
+## 6. Evaluator (workflow-scoped)
 
 ### PATCH `/finetune/workflows/{workflow_id}/evaluator`
 
-Update the evaluation script for a workflow without re-uploading data. Also syncs to the cloud dataset's evaluator. Use this when iterating on the grader.
+Update the evaluation script for a workflow. Also syncs to the cloud dataset's evaluator. Use this when iterating on the grader.
 
 > **Request format:** This endpoint expects `multipart/form-data` with a `file` field containing the grader JavaScript source.
 >
@@ -183,111 +395,89 @@ curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/evaluator/dry
 {"score": 0.8, "reason": "Good response", "logs": [], "is_success": true}
 ```
 
-**Notes:** The QuickJS sandbox does NOT support `console.log` — use the `reason` field for debug output.
+**Notes:** The QuickJS sandbox does NOT support `console.log` -- use the `reason` field for debug output.
+
+### POST `/finetune/workflows/{workflow_id}/evaluator/run`
+
+Run the evaluator against the full workflow dataset. This triggers a cloud-side evaluation using the current evaluator script and records.
+
+### GET `/finetune/workflows/{workflow_id}/evaluator/run/status`
+
+Check the status of a running evaluator. Poll until complete.
 
 ---
 
-## 3. Evaluation (Dry Run)
+## 7. Eval Jobs (workflow-scoped + cross-workflow)
 
-### POST `/finetune/evaluations`
+Track evaluation runs locally per workflow. These complement the cloud evaluation endpoints -- the cloud runs the eval, and these endpoints store the job metadata locally for history and comparison.
 
-Create an evaluation run. The backend generates model responses for each row and scores them using the configured grader.
+### POST `/finetune/workflows/{workflow_id}/eval-jobs`
+
+Create a local eval job record to track a cloud evaluation run.
 
 ```bash
-curl -X POST http://localhost:9090/finetune/evaluations \
+curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/eval-jobs \
   -H "Content-Type: application/json" \
   -d '{
-    "dataset_id": "ds_abc123",
-    "rollout_model_params": {
-      "model": "gpt-4o-mini",
-      "temperature": 0.7
-    },
-    "offset": 0,
-    "limit": 50
+    "cloud_run_id": "eval_xyz789",
+    "sample_size": 50,
+    "rollout_model": "gpt-4o-mini"
   }'
 ```
 
-**Parameters:**
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `dataset_id` | string | Yes | Backend dataset ID (from upload response) |
-| `rollout_model_params` | object | Yes | Model config for generating responses to evaluate |
-| `rollout_model_params.model` | string | Yes | Which model generates the responses being evaluated |
-| `offset` | number | No | Start row index (for partial evaluation) |
-| `limit` | number | No | Max rows to evaluate |
+### GET `/finetune/workflows/{workflow_id}/eval-jobs`
 
-**Response:**
-```json
-{
-  "evaluation_run_id": "eval_xyz789",
-  "status": "running",
-  "total_rows": 50
-}
-```
+List all eval jobs for a workflow. Shows history of evaluation runs with their statuses.
 
-### GET `/finetune/evaluations/{evaluation_run_id}`
+### DELETE `/finetune/workflows/{workflow_id}/eval-jobs`
 
-Poll for evaluation results. Call every 2-3 seconds until `status` is `completed` or `failed`.
+Delete all eval jobs for a workflow.
+
+### GET `/finetune/workflows/{workflow_id}/eval-jobs/{job_id}`
+
+Get a single eval job by ID.
+
+### PATCH `/finetune/workflows/{workflow_id}/eval-jobs/{job_id}`
+
+Update eval job status (e.g., `running` -> `completed`) and store results.
 
 ```bash
-curl http://localhost:9090/finetune/evaluations/eval_xyz789
+curl -X PATCH http://localhost:9090/finetune/workflows/WORKFLOW_ID/eval-jobs/JOB_ID \
+  -H "Content-Type: application/json" \
+  -d '{"status": "completed", "results": {...}}'
 ```
 
-Optional query params let you sort and trim returned row results without changing the run itself:
+### DELETE `/finetune/workflows/{workflow_id}/eval-jobs/{job_id}`
 
-| Query param | Type | Description |
-|-------------|------|-------------|
-| `limit` | number | Maximum number of rows to return in `results` |
-| `sort` | string | Sort key. Currently supported: `score` |
-| `order` | string | Sort direction for `sort`: `asc` (lowest first) or `desc` (highest first) |
+Delete a single eval job.
 
-Examples:
+### Cross-Workflow Eval Job Endpoints
+
+These endpoints operate outside workflow scope, useful for dashboards and status checks.
+
+#### GET `/finetune/eval-jobs`
+
+List eval jobs by status across all workflows.
 
 ```bash
-# Lowest-scoring 20 rows (best for failure analysis)
-curl "http://localhost:9090/finetune/evaluations/eval_xyz789?sort=score&order=asc&limit=20"
-
-# Highest-scoring 10 rows
-curl "http://localhost:9090/finetune/evaluations/eval_xyz789?sort=score&order=desc&limit=10"
+curl "http://localhost:9090/finetune/eval-jobs?status=running"
 ```
 
-**Response:**
-```json
-{
-  "evaluation_run_id": "eval_xyz789",
-  "status": "completed",
-  "total_rows": 50,
-  "completed_rows": 48,
-  "failed_rows": 2,
-  "results": [
-    {
-      "row_index": 0,
-      "row": {
-        "id": "record-1",
-        "messages": [...]
-      },
-      "epochs": {
-        "0": [{
-          "dataset_row_id": "record-1",
-          "status": "completed",
-          "score": 0.85,
-          "reason": "Response accurately addresses the query with good detail",
-          "logs": []
-        }]
-      }
-    }
-  ],
-  "summary": {
-    "average_score": 0.72,
-    "passed_count": 40,
-    "failed_count": 10
-  }
-}
-```
+#### GET `/finetune/eval-jobs/{job_id}`
+
+Get an eval job by ID regardless of workflow.
+
+#### PATCH `/finetune/eval-jobs/{job_id}`
+
+Update an eval job by ID regardless of workflow.
+
+#### DELETE `/finetune/eval-jobs/{job_id}`
+
+Delete an eval job by ID regardless of workflow.
 
 ---
 
-## 4. Training Jobs
+## 8. Training Jobs (workflow-scoped)
 
 All training job endpoints are scoped under a workflow.
 
@@ -297,7 +487,7 @@ Create a fine-tuning job.
 
 > **Required field:** `job_type` is mandatory.
 >
-> For training jobs, set `"job_type": "provider_finetune"`.  
+> For training jobs, set `"job_type": "provider_finetune"`.
 > Valid enum values are:
 > - `provider_finetune`
 > - `evaluation_run`
@@ -416,7 +606,7 @@ List training jobs for a workflow. Optional query params: `limit`, `after` (pagi
 
 Check training job status.
 
-**Status values:** `pending` → `running` → `succeeded` | `failed` | `cancelled`
+**Status values:** `pending` -> `running` -> `succeeded` | `failed` | `cancelled`
 
 **Response:**
 ```json
@@ -426,7 +616,7 @@ Check training job status.
   "status": "running",
   "base_model": "unsloth/Qwen3.5-4B",
   "fine_tuned_model": null,
-  "training_config": {...},
+  "training_config": {},
   "created_at": "...",
   "updated_at": "...",
   "completed_at": null,
@@ -473,18 +663,18 @@ curl -s "http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs/JOB_ID/metric
 |----------|---------|-------------------|
 | Progress | `global_step`, `max_steps`, `epoch` | How far training has progressed |
 | Reward quality | `reward`, `reward_std`, `frac_reward_zero_std` | Whether the model is learning (reward up) with good signal diversity |
-| Optimization | `loss`, `grad_norm`, `kl` | Training stability — watch for NaN, spikes, or KL divergence rising |
+| Optimization | `loss`, `grad_norm`, `kl` | Training stability -- watch for NaN, spikes, or KL divergence rising |
 | Completions | `completions/clipped_ratio`, `completions/mean_length` | Whether outputs are being truncated (clipped_ratio > 0.7 = critical) |
 
 **Alert thresholds:**
 | Condition | Severity | Action |
 |-----------|----------|--------|
-| NaN/Inf in loss, reward, KL, grad_norm | Critical | Training numerically unstable — cancel and investigate |
+| NaN/Inf in loss, reward, KL, grad_norm | Critical | Training numerically unstable -- cancel and investigate |
 | `completions/clipped_ratio` > 0.70 | Critical | Increase `max_output_tokens` in inference parameters |
-| KL rising > 1.5x over last steps | Warning | Policy drifting — lower learning rate |
-| `grad_norm` spikes > 3x median | Warning | Instability — may need gradient clipping |
-| `frac_reward_zero_std` > 0.60 | Warning | Weak training signal — grader not differentiating |
-| `reward_std` < 0.05 | Info | Collapsed diversity — model converging on single pattern |
+| KL rising > 1.5x over last steps | Warning | Policy drifting -- lower learning rate |
+| `grad_norm` spikes > 3x median | Warning | Instability -- may need gradient clipping |
+| `frac_reward_zero_std` > 0.60 | Warning | Weak training signal -- grader not differentiating |
+| `reward_std` < 0.05 | Info | Collapsed diversity -- model converging on single pattern |
 
 ### POST `/finetune/workflows/{workflow_id}/jobs/{job_id}/cancel`
 
@@ -507,14 +697,124 @@ Get a signed download URL for trained model weights (only after `succeeded`).
 
 ---
 
-## 5. Finetune Evaluation Results (per-epoch, during training)
+## 9. Evaluations (non-workflow-scoped, cloud)
 
-### GET `/finetune/datasets/{dataset_id}/finetune-evaluations`
+These endpoints create and poll cloud evaluation runs. The gateway auto-uploads the workflow dataset before running.
+
+### POST `/finetune/evaluations`
+
+Create an evaluation run. The backend generates model responses for each row and scores them using the configured grader.
+
+```bash
+curl -X POST http://localhost:9090/finetune/evaluations \
+  -H "Content-Type: application/json" \
+  -d '{
+    "dataset_id": "ds_abc123",
+    "rollout_model_params": {
+      "model": "gpt-4o-mini",
+      "temperature": 0.7
+    },
+    "offset": 0,
+    "limit": 50
+  }'
+```
+
+**Parameters:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `dataset_id` | string | Yes | Backend dataset ID |
+| `rollout_model_params` | object | Yes | Model config for generating responses to evaluate |
+| `rollout_model_params.model` | string | Yes | Which model generates the responses being evaluated |
+| `offset` | number | No | Start row index (for partial evaluation) |
+| `limit` | number | No | Max rows to evaluate |
+
+**Response:**
+```json
+{
+  "evaluation_run_id": "eval_xyz789",
+  "status": "running",
+  "total_rows": 50
+}
+```
+
+### GET `/finetune/evaluations/{evaluation_run_id}`
+
+Poll for evaluation results. Call every 2-3 seconds until `status` is `completed` or `failed`.
+
+```bash
+curl http://localhost:9090/finetune/evaluations/eval_xyz789
+```
+
+Optional query params let you sort and trim returned row results without changing the run itself:
+
+| Query param | Type | Description |
+|-------------|------|-------------|
+| `limit` | number | Maximum number of rows to return in `results` |
+| `sort` | string | Sort key. Currently supported: `score` |
+| `order` | string | Sort direction for `sort`: `asc` (lowest first) or `desc` (highest first) |
+
+Examples:
+
+```bash
+# Lowest-scoring 20 rows (best for failure analysis)
+curl "http://localhost:9090/finetune/evaluations/eval_xyz789?sort=score&order=asc&limit=20"
+
+# Highest-scoring 10 rows
+curl "http://localhost:9090/finetune/evaluations/eval_xyz789?sort=score&order=desc&limit=10"
+```
+
+**Response:**
+```json
+{
+  "evaluation_run_id": "eval_xyz789",
+  "status": "completed",
+  "total_rows": 50,
+  "completed_rows": 48,
+  "failed_rows": 2,
+  "results": [
+    {
+      "row_index": 0,
+      "row": {
+        "id": "record-1",
+        "messages": []
+      },
+      "epochs": {
+        "0": [{
+          "dataset_row_id": "record-1",
+          "status": "completed",
+          "score": 0.85,
+          "reason": "Response accurately addresses the query with good detail",
+          "logs": []
+        }]
+      }
+    }
+  ],
+  "summary": {
+    "average_score": 0.72,
+    "passed_count": 40,
+    "failed_count": 10
+  }
+}
+```
+
+---
+
+## 10. Analytics
+
+### GET `/finetune/workflows/{workflow_id}/analytics`
+
+Get dataset analytics for a workflow (record count, token stats, quality metrics).
+
+### POST `/finetune/analytics/dry-run`
+
+Run quality analytics on a dataset without persisting results.
+
+### GET `/finetune/workflows/{workflow_id}/finetune-evaluations`
 
 Get per-epoch evaluation results showing how the model improves during training.
 
 ```bash
-curl "http://localhost:9090/finetune/datasets/ds_abc123/finetune-evaluations?finetune_job_id=ftjob-abc123&epoch=1"
+curl "http://localhost:9090/finetune/workflows/WORKFLOW_ID/finetune-evaluations?finetune_job_id=ftjob-abc123&epoch=1"
 ```
 
 **Query params:** `finetune_job_id`, `row_index`, `epoch` (all optional filters)
@@ -524,7 +824,7 @@ curl "http://localhost:9090/finetune/datasets/ds_abc123/finetune-evaluations?fin
 {
   "results": [{
     "row_index": 0,
-    "row": {"id": "record-1", "messages": [...]},
+    "row": {"id": "record-1", "messages": []},
     "epochs": {
       "0": [{"score": 0.5, "reason": "...", "status": "completed"}],
       "1": [{"score": 0.7, "reason": "...", "status": "completed"}],
@@ -536,734 +836,51 @@ curl "http://localhost:9090/finetune/datasets/ds_abc123/finetune-evaluations?fin
 
 ---
 
-## 6. Dataset Package (Workflow → Cloud)
+## 11. Dataset Generation (workflow-scoped)
 
-These endpoints package local workflow data (records, topics, evaluator) into a JSONL snapshot and push it to the cloud. **This is the bridge between local CRUD and cloud operations (eval, training).**
+### POST `/finetune/workflows/{workflow_id}/dataset/generate`
 
-### POST `/finetune/workflows/{workflow_id}/dataset/upload`
+Generate a JSONL dataset from the workflow's records, topics, and evaluator. Packages local data and syncs to the cloud.
 
-Package the workflow's records + topics + evaluator from local SQLite into JSONL and upload to the cloud. **Must be called before every evaluation or training run** if local data has changed.
+### POST `/finetune/workflows/{workflow_id}/dataset/generate/status`
 
-```bash
-curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/dataset/upload
-```
-
-This replaces the standalone `POST /finetune/datasets` when you use local CRUD. The gateway reads from `workflow_records`, `workflow_topics`, and `workflows.eval_script`, packages them into JSONL, and uploads to `api.langdb.cloud`.
-
-**When to use which upload:**
-| Scenario | Endpoint | Why |
-|----------|----------|-----|
-| Using local CRUD (records/topics/evaluator via API) | `POST /workflows/{id}/dataset/upload` | Packages from SQLite automatically |
-| Direct file upload (no local CRUD) | `POST /finetune/datasets` (multipart) | Uploads JSONL file directly |
-
-> **Important:** After ANY record, topic, or evaluator change, you must call `dataset/upload` again before the next eval or training run. The cloud snapshot is immutable — it doesn't auto-sync.
-
-### POST `/finetune/workflows/{workflow_id}/dataset/analytics/dry-run`
-
-Run quality analytics on the workflow's dataset. Workflow-scoped version of `POST /finetune/datasets/analytics/dry-run`.
-
-### GET `/finetune/workflows/{workflow_id}/dataset/analytics`
-
-Get analytics for the workflow's uploaded dataset (record count, token stats).
-
-### GET `/finetune/workflows/{workflow_id}/dataset/finetune-evaluations`
-
-Get per-epoch evaluation results during training. Workflow-scoped version of `GET /finetune/datasets/{id}/finetune-evaluations`.
-
-```bash
-curl "http://localhost:9090/finetune/workflows/WORKFLOW_ID/dataset/finetune-evaluations?finetune_job_id=JOB_ID"
-```
+Check the status of a dataset generation operation.
 
 ---
 
-## 7. Eval Jobs (Local Tracking)
+## 12. Deployments
 
-Track evaluation runs locally per workflow. These complement the cloud evaluation endpoints — the cloud runs the eval, and these endpoints store the job metadata locally for history and comparison.
+### POST `/finetune/deployments`
 
-### POST `/finetune/workflows/{workflow_id}/eval-jobs`
-
-Create a local eval job record to track a cloud evaluation run.
+Deploy a fine-tuned model.
 
 ```bash
-curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/eval-jobs \
+curl -X POST http://localhost:9090/finetune/deployments \
   -H "Content-Type: application/json" \
   -d '{
-    "cloud_run_id": "eval_xyz789",
-    "sample_size": 50,
-    "rollout_model": "gpt-4o-mini"
+    "model_id": "my-custom-model-1234567890",
+    "display_name": "Production Model v1"
   }'
 ```
 
-### GET `/finetune/workflows/{workflow_id}/eval-jobs`
+### DELETE `/finetune/deployments/{deployment_id}`
 
-List all eval jobs for a workflow. Shows history of evaluation runs with their statuses.
-
-### PATCH `/finetune/workflows/{workflow_id}/eval-jobs/{job_id}`
-
-Update eval job status (e.g., `running` → `completed`) and store results.
-
-```bash
-curl -X PATCH http://localhost:9090/finetune/workflows/WORKFLOW_ID/eval-jobs/JOB_ID \
-  -H "Content-Type: application/json" \
-  -d '{"status": "completed", "results": {...}}'
-```
-
-### GET `/finetune/eval-jobs?status=running`
-
-Cross-workflow query — find eval jobs by status across all workflows. Useful for checking if any evaluations are still running.
+Delete a deployment.
 
 ---
 
-## 8. Record Score Write-back
-
-### PATCH `/finetune/workflows/{workflow_id}/records/{record_id}/scores`
-
-Write evaluation scores back to individual records after an eval run completes. This enables per-record analysis — sort records by score to find weak spots.
-
-```bash
-curl -X PATCH http://localhost:9090/finetune/workflows/WORKFLOW_ID/records/RECORD_ID/scores \
-  -H "Content-Type: application/json" \
-  -d '{"dry_run_score": 0.85}'
-```
-
-**Full eval → score write-back flow:**
-```bash
-# 1. Upload dataset
-curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/dataset/upload
-
-# 2. Create eval job (cloud)
-EVAL=$(curl -s -X POST http://localhost:9090/finetune/evaluations \
-  -H "Content-Type: application/json" \
-  -d '{"dataset_id": "...", "rollout_model_params": {"model": "gpt-4o-mini"}}')
-
-# 3. Track locally
-curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/eval-jobs \
-  -H "Content-Type: application/json" \
-  -d "{\"cloud_run_id\": \"$(echo $EVAL | python3 -c 'import sys,json;print(json.load(sys.stdin)[\"evaluation_run_id\"])')\"}"
-
-# 4. Poll until complete, then write scores back to each record
-# (parse results, loop over records, PATCH scores)
-```
-
----
-
-## 9. Topic Management (Extended)
-
-### PATCH `/finetune/workflows/{workflow_id}/records/rename-topic`
-
-Rename a topic across all records and the topic tree.
-
-```bash
-curl -X PATCH http://localhost:9090/finetune/workflows/WORKFLOW_ID/records/rename-topic \
-  -H "Content-Type: application/json" \
-  -d '{"old_topic": "Tactics/Pins", "new_topic": "Tactics/Pin Attacks"}'
-```
-
-### DELETE `/finetune/workflows/{workflow_id}/records/topics/{topicName}`
-
-Clear a specific topic from all records (records remain, topic field set to null).
-
-### DELETE `/finetune/workflows/{workflow_id}/records/topics`
-
-Clear all topic assignments from all records.
-
-### Topic Regeneration Flow
-
-When you need to restructure topics entirely:
-
-```bash
-# 1. Delete old topic tree
-curl -X DELETE http://localhost:9090/finetune/workflows/WORKFLOW_ID/topics
-
-# 2. Generate new hierarchy (via LLM)
-curl -X POST http://localhost:9090/finetune/topic-hierarchy/generate \
-  -H "Content-Type: application/json" \
-  -d '{"goals": "...", "depth": 3, "degree": 4}'
-
-# 3. Save new topics (flat format with parent_id)
-curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/topics \
-  -H "Content-Type: application/json" \
-  -d '{"topics": [
-    {"name": "Topic A", "parent_id": null},
-    {"name": "Subtopic A1", "parent_id": "topic-a-id"}
-  ]}'
-
-# 4. Re-categorize records
-curl -X PATCH http://localhost:9090/finetune/workflows/WORKFLOW_ID/records/topics \
-  -H "Content-Type: application/json" \
-  -d '{"updates": [...]}'
-```
-
----
-
-## 10. Knowledge Sources (Extended)
-
-### POST `/finetune/workflows/{workflow_id}/knowledge`
-
-Create a knowledge source. Uses `multipart/form-data` — the file is required.
-
-```bash
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge \
-  -F "file=@document.pdf" \
-  -F "name=document.pdf" \
-  -F "reference_id=doc-001" \
-  -F "description=Product manual v2" \
-  -F 'metadata={"total_pages":84,"extraction_method":"docling_hybrid"}' \
-  -F 'parts=[{"type":"text","content":"Chapter 1...","title":"Introduction","extraction_path":"[\"Introduction\"]"}]'
-```
-
-**Form fields:**
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `file` | file | Yes | The source document (PDF, etc.) |
-| `name` | string | Yes | Display name for the knowledge source |
-| `reference_id` | string | No | External reference ID (unique per workflow) |
-| `description` | string | No | Description of the document |
-| `metadata` | JSON string | No | Extraction metadata (total_pages, extraction_method, etc.) |
-| `parts` | JSON string | No | Array of parts to create inline (same format as POST /parts) |
-
-**Response:**
-```json
-{
-  "knowledge_source": {
-    "id": "a1b2c3d4-...",
-    "reference_id": "doc-001",
-    "workflow_id": "wf_abc123",
-    "name": "document.pdf",
-    "description": "Product manual v2",
-    "metadata": {"total_pages": 84, "extraction_method": "docling_hybrid"},
-    "parts": [...]
-  },
-  "document_path": ".knowledge_store/wf_abc123/a1b2c3d4-.../document.pdf"
-}
-```
-
-### POST `/finetune/workflows/{workflow_id}/knowledge/{ks_id}/parts`
-
-Add extracted parts to a knowledge source. Body is a JSON array of parts.
-
-```bash
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge/$KS_ID/parts \
-  -H "Content-Type: application/json" \
-  -d '[
-    {
-      "type": "text",
-      "content": "The dominant sequence transduction models...",
-      "title": "Abstract",
-      "extraction_path": "[\"Abstract\"]",
-      "reference_id": "p-001",
-      "content_metadata": null,
-      "extraction_metadata": {"pages": [1], "source_chunks": [2]}
-    },
-    {
-      "type": "table",
-      "content": "| Layer Type | Complexity |\n|---|---|\n| Self-Attention | O(n²·d) |",
-      "title": "3.4 Embeddings",
-      "extraction_path": "[\"3 Model Architecture\", \"3.4 Embeddings\"]",
-      "content_metadata": {"num_rows": 5, "num_cols": 4, "headers": ["Layer Type", "Complexity"]},
-      "extraction_metadata": {"pages": [6], "doc_item": "#/tables/0"}
-    }
-  ]'
-```
-
-**Part fields:**
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `type` | string | Yes | `text`, `table`, or `image` |
-| `content` | string | Yes | Text content, markdown table, or base64 data URI |
-| `id` | string | No | Custom ID (auto-generated UUID if omitted) |
-| `reference_id` | string | No | External reference (used for topic-source linking) |
-| `title` | string | No | Section title |
-| `extraction_path` | string | No | JSON-encoded heading hierarchy |
-| `content_metadata` | object | No | Type-specific metadata (table headers/rows, image dimensions) |
-| `extraction_metadata` | object | No | Provenance (pages, source_chunks, doc_item) |
-
-**Response:**
-```json
-{
-  "parts": [
-    {"id": "uuid-1", "reference_id": "p-001", "source_id": "ks-id", "type": "text", ...},
-    {"id": "uuid-2", "source_id": "ks-id", "type": "table", ...}
-  ]
-}
-```
-
-### GET `/finetune/workflows/{workflow_id}/knowledge/{ks_id}/parts`
-
-List all parts for a knowledge source.
-
-```bash
-curl http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge/$KS_ID/parts
-```
-
-### DELETE `/finetune/workflows/{workflow_id}/knowledge/{ks_id}/parts/{part_id}`
-
-Delete a single part.
-
-```bash
-curl -X DELETE http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge/$KS_ID/parts/$PART_ID
-```
-
-### GET `/finetune/workflows/{workflow_id}/knowledge/{ks_id}`
-
-Get a single knowledge source with its parts.
-
-### GET `/finetune/workflows/{workflow_id}/knowledge/count`
-
-Get count of active (non-deleted) knowledge sources.
-
-### DELETE `/finetune/workflows/{workflow_id}/knowledge/{ks_id}`
-
-Soft delete a single knowledge source.
-
-### Adding Knowledge Mid-Workflow
-
-```bash
-# 1. Upload the document (multipart)
-KS=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge \
-  -F "file=@new-doc.pdf" \
-  -F "name=new-doc.pdf" \
-  -F "description=Additional reference document")
-KS_ID=$(echo "$KS" | python3 -c "import sys,json; print(json.load(sys.stdin)['knowledge_source']['id'])")
-
-# 2. Add extracted parts
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge/$KS_ID/parts \
-  -H "Content-Type: application/json" \
-  -d '[{"type": "text", "content": "...", "title": "...", "reference_id": "p-001"}]'
-
-# 3. Link parts to topics via relations (optional)
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics/relations \
-  -H "Content-Type: application/json" \
-  -d '{"relations": [{"topic_identifier": "billing", "part_identifier": "p-001"}]}'
-
-# 4. Re-upload dataset before next eval
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/dataset/upload
-```
-
----
-
-## 11. Workflow CRUD (Local)
-
-> Sections 11-17 cover the original endpoint details. For the extended endpoints added above (sections 6-10), curl examples and response formats follow the same patterns.
-
----
-
-Workflows are the local representation of a finetune dataset project. Each workflow stores records, topics, knowledge sources, evaluator, and state.
-
-### POST `/finetune/workflows`
-
-Create a new workflow.
-
-```bash
-curl -X POST http://localhost:9090/finetune/workflows \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Chess Tutor", "objective": "Expert chess tutor helping students improve"}'
-```
-
-**Response:** Full workflow object with `id`, `name`, `objective`, `state`, timestamps.
-
-### GET `/finetune/workflows`
-
-List all workflows.
-
-### GET `/finetune/workflows/{workflow_id}`
-
-Get a single workflow.
-
-### PUT `/finetune/workflows/{workflow_id}`
-
-Update workflow fields (name, objective, eval_script, state). All fields optional.
-
-### DELETE `/finetune/workflows/{workflow_id}`
-
-Soft delete.
-
----
-
-## 12. Workflow Records (Local)
-
-### POST `/finetune/workflows/{workflow_id}/records`
-
-Add records to a workflow.
-
-> **Prerequisite:** Create/upload topics first. Records have a foreign key on `topic`, so you should do topics first, then records.
->
-> Topics need to be uploaded first — the records have a foreign key on topic. Let me do topics first, then records.
-
-```bash
-curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/records \
-  -H "Content-Type: application/json" \
-  -d '{
-    "records": [
-      {
-        "id": "record-uuid",
-        "data": {"input": {"messages": [...]}, "output": {}},
-        "topic": "billing/refunds",
-        "is_generated": false
-      }
-    ]
-  }'
-```
-
-### GET `/finetune/workflows/{workflow_id}/records`
-
-List all records for a workflow.
-
-### PUT `/finetune/workflows/{workflow_id}/records`
-
-Replace all records atomically.
-
-### DELETE `/finetune/workflows/{workflow_id}/records`
-
-Delete all records.
-
-### DELETE `/finetune/workflows/{workflow_id}/records/{record_id}`
-
-Delete a single record.
-
-### PATCH `/finetune/workflows/{workflow_id}/records/topics`
-
-Batch update record topics.
-
-```bash
-curl -X PATCH http://localhost:9090/finetune/workflows/WORKFLOW_ID/records/topics \
-  -H "Content-Type: application/json" \
-  -d '{"updates": [{"record_id": "uuid1", "topic": "Tactics/Pins"}]}'
-```
-
----
-
-## 13. Workflow Topics (Local)
-
-### POST `/finetune/workflows/{workflow_id}/topics`
-
-Create topics. Topics use a flat structure with `parent_id` for hierarchy (no nested `children[]`).
-
-```bash
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics \
-  -H "Content-Type: application/json" \
-  -d '{"topics": [
-    {"id": "billing", "name": "Billing", "parent_id": null, "system_prompt": "Focus on payment and subscription questions"},
-    {"id": "billing-refunds", "name": "Refunds", "parent_id": "billing", "system_prompt": "Focus on refund policies and processing"},
-    {"id": "technical", "name": "Technical Support", "parent_id": null}
-  ]}'
-```
-
-**Topic fields:**
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `id` | string | No | Custom ID (auto-generated UUID if omitted) |
-| `reference_id` | string | No | External reference ID |
-| `name` | string | Yes | Display name |
-| `parent_id` | string | No | Parent topic ID (null for root topics) |
-| `system_prompt` | string | No | System prompt context for this topic |
-
-### GET `/finetune/workflows/{workflow_id}/topics`
-
-List all topics for a workflow.
-
-### PUT `/finetune/workflows/{workflow_id}/topics`
-
-Update existing topics.
-
-```bash
-curl -X PUT http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics \
-  -H "Content-Type: application/json" \
-  -d '{"topics": [
-    {"identifier": "billing-refunds", "name": "Refund Policies", "system_prompt": "Updated prompt"}
-  ]}'
-```
-
-**Update fields:**
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `identifier` | string | Yes | Topic ID or reference_id to update |
-| `name` | string | No | New display name |
-| `reference_id` | string | No | New reference ID |
-| `parent_id` | string | No | New parent topic ID |
-| `system_prompt` | string | No | New system prompt |
-
-### DELETE `/finetune/workflows/{workflow_id}/topics`
-
-Delete specific topics by identifier.
-
-```bash
-curl -X DELETE http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics \
-  -H "Content-Type: application/json" \
-  -d '{"identifiers": ["billing-refunds", "technical"]}'
-```
-
-### Topic-Source Relations
-
-Link topics to knowledge source parts. This replaces the old `sourceChunkRefs` approach — instead of embedding references in the topic node, use a separate relations API.
-
-#### GET `/finetune/workflows/{workflow_id}/topics/relations`
-
-List all topic-source relations.
-
-```bash
-curl http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics/relations
-```
-
-#### POST `/finetune/workflows/{workflow_id}/topics/relations`
-
-Create topic-source relations. Links topics to knowledge source parts.
-
-```bash
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics/relations \
-  -H "Content-Type: application/json" \
-  -d '{"relations": [
-    {"topic_identifier": "billing", "part_identifier": "p-001", "reference_id": "rel-001"},
-    {"topic_identifier": "billing-refunds", "part_identifier": "p-002"}
-  ]}'
-```
-
-**Relation fields:**
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `topic_identifier` | string | Yes | Topic ID or reference_id |
-| `part_identifier` | string | Yes | Knowledge source part ID or reference_id (alias: `source_identifier`) |
-| `id` | string | No | Custom relation ID |
-| `reference_id` | string | No | External reference for this relation |
-
-#### PUT `/finetune/workflows/{workflow_id}/topics/relations`
-
-Update existing relations.
-
-```bash
-curl -X PUT http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics/relations \
-  -H "Content-Type: application/json" \
-  -d '{"relations": [
-    {"identifier": "rel-001", "topic_identifier": "billing-updated", "part_identifier": "p-003"}
-  ]}'
-```
-
-#### DELETE `/finetune/workflows/{workflow_id}/topics/relations`
-
-Delete specific relations by identifier.
-
-```bash
-curl -X DELETE http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics/relations \
-  -H "Content-Type: application/json" \
-  -d '{"identifiers": ["rel-001"]}'
-```
-
----
-
-## 14. Topic Hierarchy Generation (AI)
+## 13. Topic Hierarchy AI
 
 ### POST `/finetune/topic-hierarchy/generate`
 
-Backend endpoint to generate a topic hierarchy. Alternatively, the agent can design the hierarchy directly from document content.
+Generate a topic hierarchy using AI based on goals, depth, and degree constraints.
 
 ```bash
 curl -X POST http://localhost:9090/finetune/topic-hierarchy/generate \
   -H "Content-Type: application/json" \
-  -d '{
-    "goals": "Customer support agent for SaaS platform",
-    "depth": 3,
-    "degree": 4,
-    "records": [],
-    "max_topics": 5,
-    "seed_topics": ["Account Management", "Billing", "Technical Support"]
-  }'
+  -d '{"goals": "...", "depth": 3, "degree": 4}'
 ```
 
 ### POST `/finetune/topic-hierarchy/adjust`
 
-Adjust an existing topic hierarchy.
-
----
-
-## 15. Deployments
-
-### POST `/finetune/deployments`
-
-Deploy a fine-tuned model for inference.
-
-### DELETE `/finetune/deployments/{deployment_id}`
-
-Delete deployment.
-
----
-
-## 16. Testing Deployed Models
-
-### POST `/v1/chat/completions`
-
-Standard OpenAI-compatible endpoint for testing the fine-tuned model after deployment.
-
-```bash
-curl -X POST http://localhost:9090/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "my-finetuned-model",
-    "messages": [
-      {"role": "system", "content": "You are a customer support agent..."},
-      {"role": "user", "content": "I need help with my billing"}
-    ]
-  }'
-```
-
----
-
-## 17. Dataset Analytics (Standalone)
-
-### POST `/finetune/datasets/analytics/dry-run`
-
-Run quality analytics on dataset rows without uploading. Quick sanity check.
-
-```bash
-curl -X POST http://localhost:9090/finetune/datasets/analytics/dry-run \
-  -H "Content-Type: application/json" \
-  -d '{"rows": [{"messages": [...]}]}'
-```
-
----
-
-## Mode A Pipeline (CLI → UI Handoff)
-
-When handing off to the vLLora UI, create a workflow and populate it with data so Lucy can pick it up:
-
-```bash
-# 1. Create workflow
-WORKFLOW=$(curl -s -X POST http://localhost:9090/finetune/workflows \
-  -H "Content-Type: application/json" \
-  -d '{"name": "My Project", "objective": "..."}')
-WORKFLOW_ID=$(echo "$WORKFLOW" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-
-# 2. Upload knowledge sources (if documents were extracted)
-KS=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge \
-  -F "file=@document.pdf" \
-  -F "name=document.pdf" \
-  -F "description=Source document")
-KS_ID=$(echo "$KS" | python3 -c "import sys,json; print(json.load(sys.stdin)['knowledge_source']['id'])")
-
-# 2b. Add extracted parts (if knowledge_parts.json exists)
-PARTS=$(python3 -c "import json; d=json.load(open('knowledge/knowledge_parts.json')); print(json.dumps(d['parts']))")
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge/$KS_ID/parts \
-  -H "Content-Type: application/json" -d "$PARTS"
-
-# 3. Upload records
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/records \
-  -H "Content-Type: application/json" \
-  -d '{"records": [...]}'
-
-# 4. Save topics
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics \
-  -H "Content-Type: application/json" \
-  -d '{"topics": [...]}'
-
-# 5. Save evaluator
-curl -X PATCH http://localhost:9090/finetune/workflows/$WORKFLOW_ID/evaluator \
-  -F "file=@grader.js"
-
-# 6. Tell user to open the UI
-echo "Open vLLora UI → select '$WORKFLOW_NAME' → Lucy will take over from evaluation step"
-```
-
-## Mode B Pipeline (Full CLI) — Workflow-Integrated
-
-**Recommended approach.** Uses local CRUD + `dataset/upload` for the full pipeline. All data is tracked in the gateway, visible in the UI, and supports iteration history.
-
-```bash
-# 1. Create workflow
-WORKFLOW=$(curl -s -X POST http://localhost:9090/finetune/workflows \
-  -H "Content-Type: application/json" \
-  -d '{"name": "My Project", "objective": "..."}')
-WORKFLOW_ID=$(echo "$WORKFLOW" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-
-# 2. Upload knowledge sources (if documents were extracted)
-KS=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge \
-  -F "file=@document.pdf" \
-  -F "name=document.pdf" \
-  -F "description=Source document")
-KS_ID=$(echo "$KS" | python3 -c "import sys,json; print(json.load(sys.stdin)['knowledge_source']['id'])")
-
-# 2b. Add extracted parts (if knowledge_parts.json exists)
-PARTS=$(python3 -c "import json; d=json.load(open('knowledge/knowledge_parts.json')); print(json.dumps(d['parts']))")
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/knowledge/$KS_ID/parts \
-  -H "Content-Type: application/json" -d "$PARTS"
-
-# 3. Upload records
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/records \
-  -H "Content-Type: application/json" \
-  -d '{"records": [...]}'
-
-# 4. Save topics
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics \
-  -H "Content-Type: application/json" \
-  -d '{"topics": [...]}'
-
-# 5. Save evaluator
-curl -X PATCH http://localhost:9090/finetune/workflows/$WORKFLOW_ID/evaluator \
-  -F "file=@grader.js"
-
-# 6. Package and upload to cloud
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/dataset/upload
-
-# 7. Run evaluation
-curl -s -X POST http://localhost:9090/finetune/evaluations \
-  -H "Content-Type: application/json" \
-  -d '{"dataset_id": "'$WORKFLOW_ID'", "rollout_model_params": {"model": "gpt-4o-mini"}}'
-# Track eval job locally
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/eval-jobs \
-  -H "Content-Type: application/json" \
-  -d '{"cloud_run_id": "EVAL_RUN_ID", "rollout_model": "gpt-4o-mini"}'
-
-# 8. Poll, analyze, write scores back to records
-# (for each record in results:)
-curl -X PATCH http://localhost:9090/finetune/workflows/$WORKFLOW_ID/records/RECORD_ID/scores \
-  -H "Content-Type: application/json" \
-  -d '{"dry_run_score": 0.85}'
-
-# 9. Iterate: fix grader or data, then re-upload and re-eval
-curl -X PATCH http://localhost:9090/finetune/workflows/$WORKFLOW_ID/evaluator \
-  -F "file=@grader.js"
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/dataset/upload
-# Run eval again...
-
-# 10. Start training
-curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs \
-  -H "Content-Type: application/json" \
-  -d '{"job_type": "provider_finetune", "dataset": "'$WORKFLOW_ID'", "base_model": "unsloth/Qwen3.5-4B", "output_model": "my-model"}'
-
-# 11. Monitor metrics
-curl -s "http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs/JOB_ID/metrics"
-
-# 12. Check per-epoch scores
-curl "http://localhost:9090/finetune/workflows/$WORKFLOW_ID/dataset/finetune-evaluations?finetune_job_id=JOB_ID"
-
-# 13. Test the model
-curl -X POST http://localhost:9090/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model": "my-model", "messages": [{"role": "user", "content": "Test query"}]}'
-```
-
-## Mode B Pipeline (Full CLI) — Standalone Upload
-
-**Simpler approach.** Uploads JSONL directly without using local CRUD. Data lives only in local files and on the cloud — not tracked in the gateway. Use this if you don't need UI visibility or iteration history.
-
-```bash
-# 1. Upload dataset to cloud (standalone — no local CRUD)
-uv run scripts/upload_dataset.py --file training.jsonl --grader grader.js
-# → Returns backend dataset ID (ds_abc123)
-
-# 2. Run evaluation
-uv run scripts/run_evaluation.py --dataset-id ds_abc123 --output evaluations/eval-v1.json
-
-# 3. Create workflow (needed for training job scoping)
-WORKFLOW=$(curl -s -X POST http://localhost:9090/finetune/workflows \
-  -H "Content-Type: application/json" \
-  -d '{"name": "My Project", "objective": "..."}')
-WORKFLOW_ID=$(echo "$WORKFLOW" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-
-# 4. Start training
-uv run scripts/start_training.py --workflow-id $WORKFLOW_ID --dataset-id ds_abc123 \
-  --output-model my-model --output training-jobs/job-001.json
-
-# 5. Test the model
-curl -X POST http://localhost:9090/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model": "my-model", "messages": [{"role": "user", "content": "Test query"}]}'
-```
+Adjust an existing topic hierarchy (merge, split, rename, rebalance).

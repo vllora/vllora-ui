@@ -309,11 +309,11 @@ See `api-reference.md` for full endpoint documentation. Key workflow details:
 2. Package and upload: `POST /finetune/workflows/{id}/dataset/upload`
 3. This reads from SQLite and pushes to cloud automatically
 
-**Path B: Standalone file upload**
+**Path B: Direct workflow upload**
 1. Write JSONL data to a file (e.g., `training.jsonl`)
 2. Write grader to a file (e.g., `grader.js`)
-3. Upload both via `POST /finetune/datasets` (multipart)
-4. Save the returned `dataset_id`
+3. Upload records: `uv run scripts/finetune.py upload-records --workflow-id $WF_ID --file training.jsonl`
+4. Upload grader: `uv run scripts/finetune.py upload-grader --workflow-id $WF_ID --file grader.js`
 
 ### Evaluation Flow
 
@@ -329,9 +329,7 @@ The backend takes each training prompt, feeds it to a rollout model (typically `
 
 ### Re-uploading After Data Changes
 
-After changing records, topics, or the evaluator, call `POST /workflows/{id}/dataset/upload` again before the next eval or training run. The cloud snapshot is immutable — it doesn't auto-sync with local changes.
-
-If using standalone upload (Path B), you must re-upload via `POST /finetune/datasets` with a new `dataset_id`.
+After changing records, topics, or the evaluator, just re-upload the changed data via `finetune.py` commands. The gateway auto-uploads to the cloud when creating the next eval or training job (via `ensure_dataset_uploaded()`). No manual sync step needed.
 
 ---
 
@@ -431,7 +429,7 @@ Poll `GET /finetune/workflows/{workflow_id}/jobs/{job_id}/status`. Watch for:
 - `status: "succeeded"` → Model is ready to use
 - `status: "failed"` → Check `error_message` field
 
-You can also check per-epoch scores via `GET /finetune/datasets/{dataset_id}/finetune-evaluations` to see if the model is improving across training epochs.
+You can also check per-epoch scores via `GET /finetune/workflows/{workflow_id}/finetune-evaluations` to see if the model is improving across training epochs.
 
 ### Monitoring Training Metrics
 
