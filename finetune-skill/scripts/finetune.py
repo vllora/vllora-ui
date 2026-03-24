@@ -65,6 +65,82 @@ def cmd_create_workflow(args: argparse.Namespace) -> None:
     print(workflow_id)
 
 
+def _delete_existing_knowledge_by_name(
+    base_url: str, workflow_id: str, source_name: str,
+) -> int:
+    """Delete existing knowledge sources matching a name. Returns count deleted."""
+    existing = _api("GET", f"{base_url}/finetune/workflows/{workflow_id}/knowledge")
+    sources = existing if isinstance(existing, list) else existing.get("sources", [])
+
+    deleted = 0
+    for src in sources:
+        if src.get("name") != source_name:
+            continue
+        ks_id = src.get("id")
+        if not ks_id:
+            continue
+        _api("DELETE", f"{base_url}/finetune/workflows/{workflow_id}/knowledge/{ks_id}")
+        print(f"  Deleted existing source: {ks_id} ({source_name})")
+        deleted += 1
+    return deleted
+
+
+def _upload_knowledge_parts(
+    base_url: str, workflow_id: str, ks_id: str, parts_file_path: str,
+) -> None:
+    """Parse and upload knowledge source parts from a JSON file."""
+    parts_path = Path(parts_file_path)
+    if not parts_path.exists():
+        print(f"Error: Parts file not found: {parts_path}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        data = json.loads(parts_path.read_text())
+    except json.JSONDecodeError as e:
+        print(f"Error: Invalid JSON in parts file: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    raw_parts = _extract_parts_array(data)
+    if not raw_parts:
+        print("Warning: Parts file contains 0 parts — nothing to upload.", file=sys.stderr)
+        return
+
+    # Transform: move 'id' to 'reference_id', remove 'source_id'
+    parts = [_transform_part(p) for p in raw_parts]
+
+    result = _api(
+        "POST",
+        f"{base_url}/finetune/workflows/{workflow_id}/knowledge/{ks_id}/parts",
+        json=parts,
+    )
+    added = result.get("added", len(parts))
+    print(f"  Parts uploaded: {added}")
+
+
+def _extract_parts_array(data) -> list:
+    """Extract parts array from various JSON formats."""
+    if isinstance(data, dict) and "parts" in data:
+        return data["parts"]
+    if isinstance(data, list):
+        return data
+    print(
+        "Error: Parts file must contain a JSON array or an object with a 'parts' key.",
+        file=sys.stderr,
+    )
+    keys = list(data.keys()) if isinstance(data, dict) else "N/A"
+    print(f"  Got: {type(data).__name__} with keys: {keys}", file=sys.stderr)
+    sys.exit(1)
+
+
+def _transform_part(p: dict) -> dict:
+    """Transform a part: move 'id' to 'reference_id', remove 'source_id'."""
+    part = {**p}
+    if "id" in part:
+        part["reference_id"] = part.pop("id")
+    part.pop("source_id", None)
+    return part
+
+
 def cmd_upload_knowledge(args: argparse.Namespace) -> None:
     """Upload a knowledge source (document + extracted parts) to a workflow.
 
@@ -73,8 +149,7 @@ def cmd_upload_knowledge(args: argparse.Namespace) -> None:
     Or a bare array of part objects.
 
     Transforms: 'id' → 'reference_id', removes 'source_id' before upload.
-    Uses PUT (upsert) when --force is set — atomically replaces existing source with same name.
-    Without --force, uses POST (create) — fails silently if name already exists.
+    When --force is set, deletes existing sources with the same name before uploading.
     """
     doc_path = Path(args.file)
     if not doc_path.exists():
@@ -83,10 +158,15 @@ def cmd_upload_knowledge(args: argparse.Namespace) -> None:
 
     source_name = args.name or doc_path.name
 
-    # Choose HTTP method: PUT (upsert) for --force, POST (create) for normal
-    method = "PUT" if args.force else "POST"
+    # When --force, delete existing sources with same name first to avoid duplicates
+    if args.force:
+        deleted = _delete_existing_knowledge_by_name(
+            args.base_url, args.workflow_id, source_name,
+        )
+        if deleted:
+            print(f"  Force mode: removed {deleted} existing source(s)")
 
-    # Step 1: Upload the document as a knowledge source
+    # Upload the document as a knowledge source (always POST after cleanup)
     files = {"file": (doc_path.name, doc_path.open("rb"), "application/pdf")}
     form_data = {
         "name": source_name,
@@ -96,64 +176,17 @@ def cmd_upload_knowledge(args: argparse.Namespace) -> None:
         form_data["metadata"] = args.metadata
 
     result = _api(
-        method,
+        "POST",
         f"{args.base_url}/finetune/workflows/{args.workflow_id}/knowledge",
         files=files,
         data=form_data,
     )
     ks_id = result.get("knowledge_source", {}).get("id", "unknown")
-    replaced = result.get("replaced", False)
-    replaced_id = result.get("replaced_id")
-    if replaced:
-        print(f"Knowledge source replaced: {ks_id} (was: {replaced_id})")
-    else:
-        print(f"Knowledge source uploaded: {ks_id}")
+    print(f"Knowledge source uploaded: {ks_id}")
 
-    # Step 2: Upload parts if provided
+    # Upload parts if provided
     if args.parts_file:
-        parts_path = Path(args.parts_file)
-        if not parts_path.exists():
-            print(f"Error: Parts file not found: {parts_path}", file=sys.stderr)
-            sys.exit(1)
-
-        try:
-            data = json.loads(parts_path.read_text())
-        except json.JSONDecodeError as e:
-            print(f"Error: Invalid JSON in parts file: {e}", file=sys.stderr)
-            sys.exit(1)
-
-        # Extract parts array from various formats
-        if isinstance(data, dict) and "parts" in data:
-            raw_parts = data["parts"]
-        elif isinstance(data, list):
-            raw_parts = data
-        else:
-            print(
-                f"Error: Parts file must contain a JSON array or an object with a 'parts' key.",
-                file=sys.stderr,
-            )
-            print(f"  Got: {type(data).__name__} with keys: {list(data.keys()) if isinstance(data, dict) else 'N/A'}", file=sys.stderr)
-            sys.exit(1)
-
-        if not raw_parts:
-            print(f"Warning: Parts file contains 0 parts — nothing to upload.", file=sys.stderr)
-        else:
-            # Transform: move 'id' to 'reference_id', remove 'source_id'
-            parts = []
-            for p in raw_parts:
-                part = {**p}
-                if "id" in part:
-                    part["reference_id"] = part.pop("id")
-                part.pop("source_id", None)
-                parts.append(part)
-
-            result = _api(
-                "POST",
-                f"{args.base_url}/finetune/workflows/{args.workflow_id}/knowledge/{ks_id}/parts",
-                json=parts,
-            )
-            added = result.get("added", len(parts))
-            print(f"  Parts uploaded: {added}")
+        _upload_knowledge_parts(args.base_url, args.workflow_id, ks_id, args.parts_file)
 
     print(f"  Knowledge source ID: {ks_id}")
 
@@ -516,9 +549,14 @@ def cmd_create_eval(args: argparse.Namespace) -> None:
     """
     from datetime import datetime, timezone
 
-    payload = {"dataset_id": args.workflow_id}
-    if args.model:
-        payload["model"] = args.model
+    model = args.model or "gpt-4o-mini"
+    payload = {
+        "dataset_id": args.workflow_id,
+        "rollout_model_params": {
+            "model": model,
+            "temperature": 0.7,
+        },
+    }
 
     result = _api(
         "POST",
@@ -543,18 +581,30 @@ def cmd_create_eval(args: argparse.Namespace) -> None:
         "workflow_id": args.workflow_id,
         "status": "running",
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "model": args.model or "default",
+        "model": model,
         "results": None,
     }
     out_file.write_text(json.dumps(metadata, indent=2))
     print(f"Saved: {out_file}")
 
 
+def _update_eval_metadata(metadata: dict, result: dict) -> dict:
+    """Update eval metadata dict from an API poll response. Returns new dict."""
+    return {
+        **metadata,
+        "status": result.get("status", metadata.get("status")),
+        "completed_rows": result.get("completed_rows"),
+        "total_rows": result.get("total_rows"),
+        "results": result.get("results"),
+        "summary": result.get("summary"),
+    }
+
+
 def cmd_poll_eval(args: argparse.Namespace) -> None:
     """Poll an evaluation job until complete and save results locally.
 
     Reads the eval metadata from the local file, polls the gateway,
-    and updates the file with results when done.
+    updates the file with progress on every poll, and stops on completion.
     """
     import time
 
@@ -570,12 +620,10 @@ def cmd_poll_eval(args: argparse.Namespace) -> None:
 
     print(f"Polling eval {eval_id} every {poll_interval}s (max {max_wait}s)...")
     elapsed = 0
+    status = "unknown"
     while elapsed < max_wait:
         try:
-            result = _api(
-                "GET",
-                f"{args.base_url}/finetune/evaluations/{eval_id}",
-            )
+            result = _api("GET", f"{args.base_url}/finetune/evaluations/{eval_id}")
         except SystemExit:
             print(f"  [{elapsed}s] API error — retrying...", file=sys.stderr)
             time.sleep(poll_interval)
@@ -583,12 +631,15 @@ def cmd_poll_eval(args: argparse.Namespace) -> None:
             continue
 
         status = result.get("status", "unknown")
-        progress = result.get("progress", "")
-        print(f"  [{elapsed}s] {status} {progress}", flush=True)
+        completed = result.get("completed_rows", "?")
+        total = result.get("total_rows", "?")
+        print(f"  [{elapsed}s] {status} ({completed}/{total} rows)", flush=True)
+
+        # Update local JSON on every poll for progress tracking
+        metadata = _update_eval_metadata(metadata, result)
+        eval_file.write_text(json.dumps(metadata, indent=2))
 
         if status in ("completed", "failed", "error"):
-            metadata["status"] = status
-            metadata["results"] = result.get("results", result)
             metadata["completed_at"] = result.get("completed_at")
             eval_file.write_text(json.dumps(metadata, indent=2))
             print(f"Done: {status}. Saved to {eval_file}")
@@ -696,6 +747,133 @@ def cmd_create_training(args: argparse.Namespace) -> None:
     print(f"Saved: {out_file}")
 
 
+def _poll_training_once(base_url: str, wf_id: str, job_id: str) -> dict:
+    """Fetch training job status from the jobs list (single-job endpoint is broken)."""
+    jobs = _api("GET", f"{base_url}/finetune/workflows/{wf_id}/jobs")
+    job_list = jobs if isinstance(jobs, list) else jobs.get("jobs", [])
+    for job in job_list:
+        if job.get("id") == job_id:
+            return job
+    raise SystemExit(f"Error: Job {job_id} not found in workflow {wf_id}")
+
+
+def _save_training_side_files(
+    base_url: str, wf_id: str, job_id: str, output_dir: Path,
+) -> None:
+    """Fetch and save metrics + epoch evals to side files."""
+    metrics_file = output_dir / f"{job_id}-metrics.json"
+    try:
+        metrics = _api("GET", f"{base_url}/finetune/workflows/{wf_id}/jobs/{job_id}/metrics")
+        metrics_file.write_text(json.dumps(metrics, indent=2))
+    except SystemExit:
+        print(f"  Warning: Could not fetch metrics", file=sys.stderr)
+
+    evals_file = output_dir / f"{job_id}-epoch-evals.json"
+    try:
+        evals = _api(
+            "GET",
+            f"{base_url}/finetune/workflows/{wf_id}/finetune-evaluations",
+            params={"finetune_job_id": job_id},
+        )
+        evals_file.write_text(json.dumps(evals, indent=2))
+    except SystemExit:
+        print(f"  Warning: Could not fetch epoch evals", file=sys.stderr)
+
+
+def cmd_poll_training(args: argparse.Namespace) -> None:
+    """Poll a training job until complete, saving status and metrics locally."""
+    import time
+
+    job_file = Path(args.file)
+    if not job_file.exists():
+        print(f"Error: Job file not found: {job_file}", file=sys.stderr)
+        sys.exit(1)
+
+    metadata = json.loads(job_file.read_text())
+    job_id = metadata["job_id"]
+    wf_id = args.workflow_id or metadata.get("workflow_id")
+    if not wf_id:
+        print("Error: --workflow-id not provided and not found in job file", file=sys.stderr)
+        sys.exit(1)
+    poll_interval = args.poll_interval
+    max_wait = args.max_wait
+    output_dir = job_file.parent
+
+    print(f"Polling training job {job_id} every {poll_interval}s (max {max_wait}s)...")
+    elapsed = 0
+    status = "unknown"
+    while elapsed < max_wait:
+        try:
+            result = _poll_training_once(args.base_url, wf_id, job_id)
+        except SystemExit:
+            print(f"  [{elapsed}s] API error — retrying...", file=sys.stderr)
+            time.sleep(poll_interval)
+            elapsed += poll_interval
+            continue
+
+        status = result.get("status", "unknown")
+        print(f"  [{elapsed}s] {status}", flush=True)
+
+        metadata["status"] = status
+        job_file.write_text(json.dumps(metadata, indent=2))
+
+        _save_training_side_files(args.base_url, wf_id, job_id, output_dir)
+
+        if status in ("succeeded", "completed", "failed", "cancelled"):
+            metadata["completed_at"] = result.get("completed_at")
+            metadata["fine_tuned_model"] = result.get("fine_tuned_model")
+            metadata["error_message"] = result.get("error_message")
+            job_file.write_text(json.dumps(metadata, indent=2))
+            print(f"Done: {status}. Saved to {job_file}")
+            if status == "failed":
+                sys.exit(1)
+            return
+
+        time.sleep(poll_interval)
+        elapsed += poll_interval
+
+    print(f"Timeout after {max_wait}s. Training still {status}.", file=sys.stderr)
+    metadata["status"] = f"timeout ({status})"
+    job_file.write_text(json.dumps(metadata, indent=2))
+    sys.exit(1)
+
+
+def cmd_delete_knowledge(args: argparse.Namespace) -> None:
+    """Delete knowledge sources from a workflow.
+
+    With --source-id: delete a specific source.
+    With --all: delete all sources for the workflow.
+    """
+    wf_url = f"{args.base_url}/finetune/workflows/{args.workflow_id}/knowledge"
+
+    if args.source_id:
+        _api("DELETE", f"{wf_url}/{args.source_id}")
+        print(f"Deleted knowledge source: {args.source_id}")
+        return
+
+    if not args.all:
+        print("Error: Specify --source-id or --all", file=sys.stderr)
+        sys.exit(1)
+
+    existing = _api("GET", wf_url)
+    sources = existing if isinstance(existing, list) else existing.get("sources", [])
+
+    if not sources:
+        print("No knowledge sources to delete.")
+        return
+
+    deleted = 0
+    for src in sources:
+        ks_id = src.get("id")
+        if not ks_id:
+            continue
+        _api("DELETE", f"{wf_url}/{ks_id}")
+        print(f"  Deleted: {ks_id} ({src.get('name', 'unnamed')})")
+        deleted += 1
+
+    print(f"Deleted {deleted} knowledge source(s).")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="vLLora gateway API wrapper for the finetune skill pipeline",
@@ -760,7 +938,7 @@ def main() -> None:
     # poll-eval
     p = subparsers.add_parser("poll-eval", help="Poll eval job until complete, save results")
     p.add_argument("--file", required=True, help="Path to eval metadata JSON (from create-eval)")
-    p.add_argument("--poll-interval", type=int, default=15, help="Poll interval in seconds (default: 15)")
+    p.add_argument("--poll-interval", type=int, default=30, help="Poll interval in seconds (default: 30)")
     p.add_argument("--max-wait", type=int, default=3600, help="Max wait in seconds (default: 3600)")
 
     # create-training
@@ -771,6 +949,19 @@ def main() -> None:
     p.add_argument("--config", default=None, help="Training config JSON string")
     p.add_argument("--inference-params", default=None, help="Inference parameters JSON string")
     p.add_argument("--output-dir", default="training-jobs", help="Local directory for job metadata (default: training-jobs/)")
+
+    # poll-training
+    p = subparsers.add_parser("poll-training", help="Poll training job until complete, save status and metrics")
+    p.add_argument("--workflow-id", required=False, default=None, help="Workflow ID (read from job file if omitted)")
+    p.add_argument("--file", required=True, help="Path to train-NNN.json (from create-training)")
+    p.add_argument("--poll-interval", type=int, default=60, help="Poll interval in seconds (default: 60)")
+    p.add_argument("--max-wait", type=int, default=14400, help="Max wait in seconds (default: 14400)")
+
+    # delete-knowledge
+    p = subparsers.add_parser("delete-knowledge", help="Delete knowledge source(s) from a workflow")
+    p.add_argument("--workflow-id", required=True, help="Workflow ID")
+    p.add_argument("--source-id", default=None, help="Specific knowledge source ID to delete")
+    p.add_argument("--all", action="store_true", help="Delete all knowledge sources")
 
     args = parser.parse_args()
 
@@ -785,6 +976,8 @@ def main() -> None:
         "create-eval": cmd_create_eval,
         "poll-eval": cmd_poll_eval,
         "create-training": cmd_create_training,
+        "poll-training": cmd_poll_training,
+        "delete-knowledge": cmd_delete_knowledge,
     }
     commands[args.command](args)
 

@@ -169,7 +169,7 @@ Return JSON: {{"prompts": ["prompt1", "prompt2", ...]}}"""
 
     chat_script = scripts_dir / "chat_completion.py"
     result = subprocess.run(
-        ["uv", "run", str(chat_script), "--base-url", base_url],
+        [sys.executable, str(chat_script), "--base-url", base_url],
         input=request_data,
         capture_output=True,
         text=True,

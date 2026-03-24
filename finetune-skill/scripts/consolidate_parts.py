@@ -337,11 +337,9 @@ def main():
     # Reassign IDs
     prefix = args.id_prefix
     if not prefix:
-        name = source.get("name", "doc")
-        # Slugify
-        import re
-        prefix = re.sub(r"[^a-z0-9]", "-", name.lower().rsplit(".", 1)[0])
-        prefix = re.sub(r"-+", "-", prefix).strip("-")
+        # Derive prefix from the parent directory name of the input file,
+        # which is the document slug (e.g., "usda-protein-foods-reference")
+        prefix = input_path.parent.name or "doc"
     reassign_ids(consolidated, prefix)
 
     # Validate after consolidation

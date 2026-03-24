@@ -61,7 +61,12 @@ finetune-project/
 │   ├── all-parts-index.json    # Merged part index across ALL documents
 │   └── extraction-notes.md     # Extraction notes for all documents
 ├── config.json                 # Workflow ID + gateway URL
-└── execution-log.md            # Running log of every step (created at Step 1)
+├── execution-log.md            # Running log of every step (created at Step 1)
+├── iterations.md               # Iteration-over-iteration progress tracker
+├── evaluations/                # Eval results per iteration
+│   └── eval-001.json           # Full eval results (scores per record)
+└── training-jobs/              # Training job metadata per iteration
+    └── train-001.json          # Training config + status
 ```
 
 **Multi-document handling**: Each source document gets its own subdirectory under `knowledge/` named by slugifying the filename (e.g., `chess-tactics-dave-regis/`, `strategy-guide/`). Use the document name, not `doc-1/` — the folder name should identify which document it came from at a glance. Each subdirectory contains that document's `docling-result.json`, `knowledge_parts.json`, and `parts-index.json`. A merged `knowledge/all-parts-index.json` combines all per-document indexes for topic design and data generation.
@@ -72,9 +77,9 @@ Maintain `execution-log.md` as an **append-only** chronological record.
 
 > **CRITICAL:** Create `execution-log.md` at the START of Step 1, before any other work. Write to it IMMEDIATELY after each action — do NOT wait until the end to write the log retroactively. The log must reflect real-time progress so that if the pipeline fails mid-run, the log shows exactly where it stopped. Use `echo` or `cat >>` to append entries directly — do not buffer them.
 
-After every action (not just step boundaries), delegate to the `execution-logger` subagent to append entries.
+After every action (not just step boundaries), append entries to `execution-log.md` immediately.
 
-**Delegate logging after each action:**
+**Log after each action** using `echo` or `cat >>`:
 
 ```
 Log to execution-log.md:
@@ -85,7 +90,7 @@ Log to execution-log.md:
 - Issues: None
 ```
 
-The subagent will:
+Logging steps:
 1. Read the current `execution-log.md` (or create it if it doesn't exist)
 2. Get the current timestamp via `date '+%Y-%m-%d %H:%M:%S'`
 3. Append new entries — **never overwrite or delete previous entries**
@@ -167,7 +172,7 @@ Ask the user what behaviors the model should learn. Produce two things:
 
 **Upload immediately** — create the workflow on the gateway so the UI shows progress from the start:
 ```bash
-WORKFLOW_ID=$(uv run scripts/finetune.py create-workflow \
+WORKFLOW_ID=$(python3 scripts/finetune.py create-workflow \
   --name "My Project" \
   --objective "Train a model to..." | tail -1)
 echo "Workflow created: $WORKFLOW_ID"
@@ -209,7 +214,7 @@ for DOC in *.pdf; do
   DOC_DIR="finetune-project/knowledge/$DOC_SLUG"
 
   # Extract via Docling (blocks until this PDF is done)
-  uv run scripts/docling_extract.py "$DOC" \
+  python3 scripts/docling_extract.py "$DOC" \
     --output "$DOC_DIR/docling-result.json"
 
   # Then immediately: read chunks, write extract.py, run it,
@@ -244,7 +249,7 @@ For **each** document directory, produce `knowledge_parts.json` and `parts-index
 3. **Upgrade table parts** — after producing `knowledge_parts.json`, run the table extraction script to upgrade any text parts that reference Docling tables to proper `type: "table"` with structured metadata:
 
    ```bash
-   uv run scripts/extract_tables.py \
+   python3 scripts/extract_tables.py \
      --docling-result "$DOC_DIR/docling-result.json" \
      --parts-file "$DOC_DIR/knowledge_parts.json"
    ```
@@ -297,12 +302,12 @@ Use the `pdftotext_extract.py` helper — same CLI pattern as `docling_extract.p
 
 Single document:
 ```bash
-uv run scripts/pdftotext_extract.py document.pdf -o finetune-project/knowledge/doc-slug/knowledge_parts.json
+python3 scripts/pdftotext_extract.py document.pdf -o finetune-project/knowledge/doc-slug/knowledge_parts.json
 ```
 
 Batch mode (all PDFs at once):
 ```bash
-uv run scripts/pdftotext_extract.py --batch \
+python3 scripts/pdftotext_extract.py --batch \
   doc1.pdf:finetune-project/knowledge/doc1/knowledge_parts.json \
   doc2.pdf:finetune-project/knowledge/doc2/knowledge_parts.json
 ```
@@ -374,7 +379,7 @@ for i in "${!DOCS[@]}"; do
   DOC_DIR="${DOC_DIRS[$i]}"
   [ -f "$DOC_DIR/knowledge_parts.json" ] || continue
 
-  uv run scripts/finetune.py upload-knowledge \
+  python3 scripts/finetune.py upload-knowledge \
     --workflow-id $WORKFLOW_ID \
     --file "$DOC" \
     --parts-file "$DOC_DIR/knowledge_parts.json" \
@@ -437,12 +442,12 @@ If there are no documents (objective-only pipeline), skip this step — no relat
 
 **Upload immediately** — push topics and relations to the gateway so the UI shows the topic hierarchy and coverage:
 ```bash
-uv run scripts/finetune.py upload-topics \
+python3 scripts/finetune.py upload-topics \
   --workflow-id $WORKFLOW_ID --file topics.json
 
 # Upload relations (if they exist)
 if [ -f relations.json ]; then
-  uv run scripts/finetune.py upload-relations \
+  python3 scripts/finetune.py upload-relations \
     --workflow-id $WORKFLOW_ID --file relations.json
 fi
 ```
@@ -470,7 +475,7 @@ Each record includes `source_parts` — the IDs of the knowledge parts used as g
 Use `scripts/generate_records.py` to generate user prompts via LLM, grounded in the knowledge chunks linked to each topic:
 
 ```bash
-uv run scripts/generate_records.py \
+python3 scripts/generate_records.py \
   --topics finetune-project/topics.json \
   --relations finetune-project/relations.json \
   --knowledge-dir finetune-project/knowledge \
@@ -497,7 +502,7 @@ If some topics fail, use `--append` to retry only the missing ones without overw
 
 **Upload immediately** — push records to the gateway so the UI shows training data as it's generated:
 ```bash
-uv run scripts/finetune.py upload-records \
+python3 scripts/finetune.py upload-records \
   --workflow-id $WORKFLOW_ID --file training.jsonl
 ```
 
@@ -543,7 +548,7 @@ function evaluate(input) {
           { role: "system", content: "You are an expert evaluator." },
           { role: "user", content: "History:\n{{history}}\n\nResponse:\n{{response}}\n\nRate 0-5 on criteria..." }
       ],
-      output_schema: { type: "object", properties: { reasoning: { type: "string" }, score: { type: "number" } }, required: ["reasoning", "score"] },
+      output_schema: { type: "object", properties: { reasoning: { type: "string" }, score: { type: "number" } }, required: ["reasoning", "score"], additionalProperties: false },
       completion_params: { model_name: "gpt-4.1", temperature: 0.0, max_tokens: 1000 }
   };
   input.history = history;
@@ -560,7 +565,7 @@ The grader can use `__langdb_call_llm_as_judge_obj(config, input)` for subjectiv
 **You MUST dry-run the grader before uploading.** This catches syntax errors, runtime crashes, and scoring logic bugs before they waste an entire evaluation run:
 
 ```bash
-uv run scripts/dry_run_grader.py \
+python3 scripts/dry_run_grader.py \
   --workflow-id $WORKFLOW_ID \
   --script grader.js \
   --row '{"messages": [{"role": "system", "content": "You are..."}, {"role": "user", "content": "What is X?"}, {"role": "assistant", "content": "X is..."}]}'
@@ -577,14 +582,14 @@ If the dry-run fails, fix the grader and re-run. Do NOT proceed to upload until 
 
 **Upload immediately** — push the grader to the gateway so the UI shows it's ready for evaluation:
 ```bash
-uv run scripts/finetune.py upload-grader \
+python3 scripts/finetune.py upload-grader \
   --workflow-id $WORKFLOW_ID --file grader.js
 ```
 
 ### Step 5.5: Validate Before Upload
 
 ```bash
-uv run scripts/validate_dataset.py finetune-project/training.jsonl \
+python3 scripts/validate_dataset.py finetune-project/training.jsonl \
   --topics finetune-project/topics.json \
   --parts finetune-project/knowledge/all-parts-index.json
 ```
@@ -596,7 +601,7 @@ Checks: valid JSON, required fields, message structure, no assistant messages (R
 Since each step uploaded data immediately, the gateway already has the full workflow. Verify everything landed correctly before handing off to the UI.
 
 ```bash
-uv run scripts/finetune.py verify --workflow-id $WORKFLOW_ID
+python3 scripts/finetune.py verify --workflow-id $WORKFLOW_ID
 ```
 
 **Expected**: All counts > 0 and evaluator = YES. If any are missing, re-run the upload for that step.
@@ -614,7 +619,7 @@ Before starting training, validate `max_output_tokens` by checking your grader d
 ```bash
 # Check: how long are typical grader responses?
 # If dry-run response > 800 chars, set max_output_tokens to at least 2x that
-DRY_RUN_LENGTH=$(uv run scripts/dry_run_grader.py \
+DRY_RUN_LENGTH=$(python3 scripts/dry_run_grader.py \
   --workflow-id $WORKFLOW_ID --script grader.js \
   --row '{"messages": [...]}' 2>/dev/null | python3 -c "
 import sys,json
@@ -631,14 +636,15 @@ Use `--create-only` to create the eval job without blocking, so you can start tr
 
 ```bash
 # Create eval (saves metadata to evaluations/eval-001.json)
-uv run scripts/finetune.py create-eval \
+# Use --limit N for quick iteration checks (e.g., --limit 50 to eval a subset)
+python3 scripts/finetune.py create-eval \
   --workflow-id $WORKFLOW_ID --output-dir evaluations
 
 # Available base models:
 # unsloth/Qwen3.5-0.8B, unsloth/Qwen3.5-2B, unsloth/Qwen3.5-4B, unsloth/Qwen3.5-9B
 
 # Create training job (saves metadata to training-jobs/train-001.json)
-uv run scripts/finetune.py create-training \
+python3 scripts/finetune.py create-training \
   --workflow-id $WORKFLOW_ID \
   --base-model "unsloth/Qwen3.5-4B" \
   --output-model "chess-tutor-v1" \
@@ -659,43 +665,34 @@ uv run scripts/finetune.py create-training \
 | Complex task | `lora_rank: 16` |
 | Simple task | `lora_rank: 4` |
 
+> **Note on eval IDs**: The `POST /finetune/evaluations` response returns `evaluation_run_id` — use this for polling. The workflow's `eval_job_ids` field may show a different internal ID that returns 404. Always use the ID from the create response.
+
 #### 7c. Monitor training + poll eval
 
-Launch the **training-monitor** sub-agent in the background to watch training metrics and save data. Meanwhile, poll eval status in the foreground.
+Poll both eval and training jobs in parallel using `finetune.py` commands. These commands poll the gateway API and save results locally.
 
-```
-# Launch background monitor — it polls metrics every 15s, detects anomalies,
-# and saves all data to training-jobs/ so Step 8a doesn't need to re-fetch.
-Delegate to training-monitor agent:
-  GATEWAY_URL=http://localhost:9090
-  WORKFLOW_ID=$WORKFLOW_ID
-  JOB_ID=$JOB_ID
-  OUTPUT_DIR=training-jobs
-```
-
-While the monitor runs in the background, poll eval status:
 ```bash
-while true; do
-  EVAL_STATUS=$(curl -s "http://localhost:9090/finetune/evaluations/$EVAL_ID" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))")
-  echo "Eval: $EVAL_STATUS"
+# Poll eval in foreground (updates evaluations/eval-001.json with progress + results)
+python3 scripts/finetune.py poll-eval \
+  --workflow-id $WORKFLOW_ID \
+  --file evaluations/eval-001.json
 
-  [ "$EVAL_STATUS" = "completed" ] || [ "$EVAL_STATUS" = "failed" ] && break
-  sleep 15
-done
+# Poll training in background (updates training-jobs/train-001.json + saves metrics)
+python3 scripts/finetune.py poll-training \
+  --workflow-id $WORKFLOW_ID \
+  --file training-jobs/train-001.json &
 ```
-
-**When the monitor reports back**: Check its JSON output for anomalies. If `status: "anomaly_detected"` with a CRITICAL severity, **alert the user immediately** and suggest cancelling the job via `POST /jobs/{job_id}/cancel` rather than wasting compute.
 
 **Key rule**: When one job completes before the other, **immediately analyze its results and present findings** to the user. Don't wait idle:
-- Training finishes first → the monitor saved data to `training-jobs/`, run analysis (Step 8a)
+- Training finishes first → run analysis on saved metrics (Step 8a)
 - Eval finishes first → analyze scores (per-topic breakdown, weak records), present findings
 - Both done → cross-reference and give the complete picture
 
-**Data saved by the monitor** (no re-fetching needed in Step 8):
+**Data saved by polling** (no re-fetching needed in Step 8):
+- `training-jobs/train-001.json` — job status (updated live)
 - `training-jobs/{JOB_ID}-metrics.json` — full metrics timeseries
-- `training-jobs/{JOB_ID}-status.json` — final job status
-- `training-jobs/{JOB_ID}-epoch-evals.json` — per-epoch per-record evaluations (saved on completion)
-- Eval results → `evaluations/eval-v1.json` (fetched by the main agent)
+- `training-jobs/{JOB_ID}-epoch-evals.json` — per-epoch per-record evaluations
+- `evaluations/eval-001.json` — eval status + full results (updated live)
 
 ### Step 8: Analyze Results & Present Findings
 
@@ -705,17 +702,17 @@ Analyze each job's results **as soon as they arrive** — don't wait for both to
 
 #### 8a. Analyze training results (when training completes)
 
-The training-monitor agent already saved all data to `training-jobs/`. Analyze the saved files — **no API calls needed**:
+The `poll-training` command saved all data to `training-jobs/`. Analyze the saved files — **no API calls needed**:
 
 ```bash
-uv run scripts/analyze_training.py \
+python3 scripts/analyze_training.py \
   --metrics-file training-jobs/$JOB_ID-metrics.json \
   --epoch-evals-file training-jobs/$JOB_ID-epoch-evals.json
 ```
 
 For JSON output (useful for cross-referencing with eval in Step 8c):
 ```bash
-uv run scripts/analyze_training.py \
+python3 scripts/analyze_training.py \
   --metrics-file training-jobs/$JOB_ID-metrics.json \
   --epoch-evals-file training-jobs/$JOB_ID-epoch-evals.json \
   --json > training-jobs/job-v1-analysis.json
@@ -804,6 +801,75 @@ What would you like to do?
 | No learning across epochs | Task too hard for base model | Try larger base model |
 | Overfitting (peak then decline) | Too many epochs | Reduce `epochs` to peak epoch |
 
+#### 8d. Update Iteration Tracker
+
+**After every eval/training cycle**, append a summary to `iterations.md`. This is the **single source of truth** for tracking progress across iterations. Create it on the first iteration if it doesn't exist.
+
+```markdown
+# Iteration Tracker — {Project Name}
+
+## Iteration 1 — {date}
+
+### Config
+| Setting | Value |
+|---------|-------|
+| Base model | unsloth/Qwen3.5-4B |
+| Learning rate | 1e-5 |
+| LoRA rank | 8 |
+| Epochs | 2 |
+| Records | 180 |
+| Topics | 15 leaf |
+
+### Eval Results
+| Metric | Value |
+|--------|-------|
+| Average score | 0.921 |
+| Pass rate (>0.7) | 89.4% |
+| Score range | 0.51 — 1.0 |
+
+### Per-Topic Breakdown (sorted weakest first)
+| Topic | Avg Score | Pass Rate | Records Below 0.7 |
+|-------|-----------|-----------|-------------------|
+| food-supplements | 0.771 | 75% | 5/12 |
+| protein-safety | 0.813 | 83% | 2/12 |
+| ... | ... | ... | ... |
+
+### Training Results
+| Metric | Value |
+|--------|-------|
+| Status | failed / succeeded |
+| Final reward | 0.745 |
+| KL divergence | healthy / exploded at step N |
+| Clipping | avg X%, max Y% |
+
+### What Changed (from previous iteration)
+- (First iteration — baseline)
+
+### Recommendations for Next Iteration
+1. [CRITICAL] Retry training — cloud infra failure
+2. [RECOMMENDED] Regenerate food-supplements records (5/12 below threshold)
+3. [OPTIONAL] Improve protein-safety records (too academic)
+4. [GOOD] Grader works well — no changes needed
+
+---
+
+## Iteration 2 — {date}
+
+### What Changed (from Iteration 1)
+- Regenerated food-supplements records with richer source material
+- Lowered learning rate to 5e-6
+- Increased max_output_tokens to 2000
+
+### Eval Results
+...
+```
+
+**Rules for the iteration tracker:**
+- **Append only** — never overwrite or delete previous iterations
+- **Include actual numbers** — no vague "improved" or "got better", always cite the metric
+- **Compare to previous** — "avg score 0.921 → 0.945 (+0.024)" when there's a prior iteration
+- **Actionable recommendations** — each recommendation should be a specific action (regenerate X, adjust Y), not generic advice
+
 ### Step 9: Iterate (If Needed)
 
 Based on the user's choice from Step 8, apply fixes and start new jobs. **Max 5 iterations.**
@@ -813,14 +879,14 @@ Based on the user's choice from Step 8, apply fixes and start new jobs. **Max 5 
 **Fixing the grader** (no data re-upload needed):
 ```bash
 # Edit grader.js, then update:
-uv run scripts/finetune.py upload-grader \
+python3 scripts/finetune.py upload-grader \
   --workflow-id $WORKFLOW_ID --file grader.js
 ```
 
 **Fixing the data** (requires re-upload):
 ```bash
 # Regenerate records for weak topics, re-validate, re-upload
-uv run scripts/finetune.py upload-records \
+python3 scripts/finetune.py upload-records \
   --workflow-id $WORKFLOW_ID --file training.jsonl
 
 # No manual sync needed — the gateway auto-uploads workflow data to the cloud
@@ -829,11 +895,13 @@ uv run scripts/finetune.py upload-records \
 
 **Adjusting training config**: Modify parameters in the next job creation (Step 7b).
 
+**If training failed with an opaque error** (e.g., "worker exited with status 1"): This is usually a transient cloud infrastructure failure. Retry with the same config first. If it fails again, try a smaller model or reduce batch size.
+
 #### 9b. Start new eval + training jobs
 
 After applying fixes, start new jobs — same as Step 7a + 7b but with incremented version numbers:
 ```bash
-uv run scripts/run_evaluation.py --dataset-id $WORKFLOW_ID --output evaluations/eval-v2.json
+python3 scripts/run_evaluation.py --dataset-id $WORKFLOW_ID --output evaluations/eval-v2.json
 # New training job with adjusted config
 JOB=$(curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs ...)
 ```
