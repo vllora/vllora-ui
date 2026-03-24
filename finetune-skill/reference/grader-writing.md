@@ -13,6 +13,7 @@ function evaluate(input) {
   // input.messages = the full conversation (system + user + assistant messages)
   // input.response = the model's generated response (string, set by runtime)
   // input.history = conversation history (string, set by runtime)
+  // input.ground_truth = source reference excerpt (string, optional — from training record)
   // Must return: { score: <number 0-1>, reason: <string> }
 }
 ```
@@ -105,6 +106,47 @@ if (typeof __langdb_call_stockfish === "function") {
 ```
 
 Always guard with `typeof __langdb_call_stockfish === "function"` — this helper is only injected for chess workflows.
+
+---
+
+## Using Source Reference Data (`ground_truth`)
+
+When training records include a `ground_truth` field (a concise excerpt from the source material), the grader can use it to verify factual accuracy of model responses.
+
+### How it works
+
+- `input.ground_truth` contains the relevant source excerpt (string, may be empty/absent)
+- `{{ground_truth}}` is a template variable that auto-resolves in `__langdb_call_llm_as_judge_obj` prompts
+- The generated grader templates already include conditional `ground_truth` support
+
+### Example: Conditional inclusion in judge prompt
+
+```javascript
+// Extract ground truth if available
+var groundTruth = (input.ground_truth && typeof input.ground_truth === "string")
+    ? input.ground_truth : "";
+input.ground_truth = groundTruth;
+
+// In your prompt_template, conditionally include it:
+content: `Conversation History:
+{{history}}
+
+Model Response to Evaluate:
+{{response}}
+` + (groundTruth ? `
+Source Reference (use to verify factual accuracy):
+{{ground_truth}}
+` : "") + `
+Evaluate the response on these criteria:
+...`
+```
+
+### Best practices
+
+- Use `ground_truth` for **accuracy verification**, not exact match — the model should convey the same information, not quote the source verbatim
+- The field is **optional** — graders must work with or without it (use conditional inclusion as shown above)
+- Keep excerpts focused: just the passage(s) relevant to the question, not the entire source document
+- `generate_records.py` produces `ground_truth` by default; disable with `--no-ground-truth`
 
 ---
 

@@ -25,7 +25,11 @@ function evaluate(input) {
         history = JSON.stringify(input.messages.slice(0, input.messages.length - 1));
     }
 
-    // 2. Guard clause for empty response
+    // 2. Extract ground truth reference if available
+    var groundTruth = (input.ground_truth && typeof input.ground_truth === "string") ? input.ground_truth : "";
+    input.ground_truth = groundTruth;
+
+    // 3. Guard clause for empty response
     if (!response || response.trim().length < 10) {
         return {
             score: 0,
@@ -58,14 +62,19 @@ function evaluate(input) {
 
 Model Response to Evaluate:
 {{response}}
-
+` + (groundTruth ? `
+Source Reference (use to verify factual accuracy):
+{{ground_truth}}
+` : "") + `
 Rate the response on these criteria (0-5 scale):
 1. ACCURACY: Is the information correct and relevant?
 2. HELPFULNESS: Does it address the user's needs?
 3. CLARITY: Is it well-structured and easy to understand?
 4. COMPLETENESS: Are all aspects of the question covered?
 5. TONE: Is the tone appropriate for the context?
-
+` + (groundTruth ? `
+When a Source Reference is provided, use it to verify the model's response is factually accurate and covers the correct information. The model does not need to quote the source verbatim.
+` : "") + `
 Provide a DETAILED explanation for your evaluation, then assign scores (0-5) for each criterion.
 
 Answer in JSON format:

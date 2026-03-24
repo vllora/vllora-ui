@@ -108,6 +108,7 @@ def generate_for_topic(
     temperature: float,
     base_url: str,
     scripts_dir: Path,
+    include_ground_truth: bool = True,
 ) -> list[dict]:
     """Generate records for a single leaf topic via LLM."""
     # Find parts linked to this topic
@@ -158,13 +159,41 @@ Source material:
 
 Each prompt should be a realistic question/request grounded in the source material.
 Vary: difficulty, tone, type (explain-why, compare, what-if, analyze, teach-me).
-Return JSON: {{"prompts": ["prompt1", "prompt2", ...]}}"""
+
+For each prompt, also provide a "ground_truth" field: a concise excerpt from the source material above that contains the information needed to accurately answer the question. Keep it focused on the relevant passage(s) — complete enough to verify a correct answer, but not the entire source.
+
+Return JSON: {{"items": [{{"prompt": "the question", "ground_truth": "relevant source excerpt"}}, ...]}}"""
 
     request_data = json.dumps({
         "messages": [{"role": "user", "content": prompt}],
         "model": model,
         "temperature": temperature,
-        "response_format": {"type": "json_object"},
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "training_prompts",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "items": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "prompt": {"type": "string"},
+                                    "ground_truth": {"type": "string"},
+                                },
+                                "required": ["prompt", "ground_truth"],
+                                "additionalProperties": False,
+                            },
+                        },
+                    },
+                    "required": ["items"],
+                    "additionalProperties": False,
+                },
+            },
+        },
     })
 
     chat_script = scripts_dir / "chat_completion.py"
@@ -192,17 +221,27 @@ Return JSON: {{"prompts": ["prompt1", "prompt2", ...]}}"""
         print(f"  Error: LLM returned error for topic '{topic['id']}': {response['error']}", file=sys.stderr)
         return []
 
-    prompts = response.get("prompts", [])
-    if not prompts:
+    # Support both new {"items": [...]} and legacy {"prompts": [...]} format
+    items = response.get("items", [])
+    if not items:
+        # Fallback: legacy format or LLM returned old structure
+        prompts = response.get("prompts", [])
+        items = [{"prompt": p, "ground_truth": ""} for p in prompts]
+
+    if not items:
         print(f"  Warning: LLM returned 0 prompts for topic '{topic['id']}'", file=sys.stderr)
         return []
 
     # Build records with composed system prompt
     records = []
-    for i, prompt_text in enumerate(prompts):
+    for i, item in enumerate(items):
+        if isinstance(item, str):
+            # Handle case where LLM returns plain strings in items array
+            item = {"prompt": item, "ground_truth": ""}
+        prompt_text = item.get("prompt", "")
         if not prompt_text or not prompt_text.strip():
             continue
-        records.append({
+        record = {
             "messages": [
                 {"role": "system", "content": composed_prompt},
                 {"role": "user", "content": prompt_text},
@@ -210,7 +249,11 @@ Return JSON: {{"prompts": ["prompt1", "prompt2", ...]}}"""
             "id": f"{topic['id']}-{i + 1:03d}",
             "topic": topic["id"],
             "source_parts": part_ids,
-        })
+        }
+        ground_truth = item.get("ground_truth", "")
+        if include_ground_truth and ground_truth and ground_truth.strip():
+            record["ground_truth"] = ground_truth.strip()
+        records.append(record)
 
     return records
 
@@ -229,6 +272,7 @@ def main() -> None:
     parser.add_argument("--temperature", type=float, default=0.8, help="LLM temperature (default: 0.8)")
     parser.add_argument("--base-url", default="http://localhost:9090", help="Gateway base URL")
     parser.add_argument("--append", action="store_true", help="Append to existing file instead of overwriting")
+    parser.add_argument("--no-ground-truth", action="store_true", help="Skip generating ground_truth excerpts for each record")
     args = parser.parse_args()
 
     topics_path = Path(args.topics)
@@ -279,6 +323,7 @@ def main() -> None:
                 temperature=args.temperature,
                 base_url=args.base_url,
                 scripts_dir=scripts_dir,
+                include_ground_truth=not args.no_ground_truth,
             )
 
             if not records:

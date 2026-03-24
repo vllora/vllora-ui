@@ -70,6 +70,14 @@ def validate_record(line_num: int, line: str) -> list[str]:
     if "id" not in record:
         errors.append(f"Line {line_num}: Missing recommended field 'id'")
 
+    # Soft validation for ground_truth (optional field)
+    gt = record.get("ground_truth")
+    if gt is not None:
+        if not isinstance(gt, str):
+            errors.append(f"Line {line_num}: 'ground_truth' must be a string")
+        elif len(gt.strip()) < 10:
+            errors.append(f"Line {line_num}: 'ground_truth' is too short ({len(gt.strip())} chars) — should contain a meaningful source excerpt")
+
     return errors
 
 
@@ -137,6 +145,7 @@ def main() -> None:
     all_errors: list[str] = []
     warnings: list[str] = []
     record_count = 0
+    gt_count = 0
     topic_counts: Counter[str] = Counter()
     ids_seen: set[str] = set()
     duplicate_ids: list[str] = []
@@ -165,6 +174,9 @@ def main() -> None:
                     if valid_topics is not None and topic not in valid_topics:
                         warnings.append(f"Line {line_num}: Topic '{topic}' not found in topics.json")
 
+                if record.get("ground_truth"):
+                    gt_count += 1
+
                 source_parts = record.get("source_parts", [])
                 if valid_parts is not None:
                     for sp in source_parts:
@@ -180,6 +192,8 @@ def main() -> None:
     print(f"{'='*50}")
     print(f"Total records: {record_count}")
     print(f"Unique IDs:    {len(ids_seen)}")
+    if gt_count:
+        print(f"With ground_truth: {gt_count}/{record_count}")
 
     if topic_counts:
         print(f"Topics found:  {len(topic_counts)}")

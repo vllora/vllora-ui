@@ -54,7 +54,7 @@ def main() -> None:
     # Check if caller expects structured JSON output
     expects_json = False
     response_format = data.get("response_format")
-    if isinstance(response_format, dict) and response_format.get("type") == "json_object":
+    if isinstance(response_format, dict) and response_format.get("type") in ("json_object", "json_schema"):
         expects_json = True
 
     # Remaining keys (temperature, response_format, etc.) pass through

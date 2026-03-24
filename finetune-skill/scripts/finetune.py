@@ -435,9 +435,12 @@ def cmd_upload_records(args: argparse.Namespace) -> None:
             print(f"Warning: Skipping invalid JSON on line {line_num}", file=sys.stderr)
             continue
 
+        data_obj = {"input": {"messages": r["messages"]}, "output": {}}
+        if r.get("ground_truth"):
+            data_obj["ground_truth"] = r["ground_truth"]
         record = {
             "id": r["id"],
-            "data": {"input": {"messages": r["messages"]}, "output": {}},
+            "data": data_obj,
             "is_generated": True,
         }
         if r.get("topic"):

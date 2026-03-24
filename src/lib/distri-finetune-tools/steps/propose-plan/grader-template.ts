@@ -103,7 +103,11 @@ function evaluate(input) {
         history = JSON.stringify(input.messages.slice(0, input.messages.length - 1));
     }
 
-    // 2. Guard clause for empty response
+    // 2. Extract ground truth reference if available
+    var groundTruth = (input.ground_truth && typeof input.ground_truth === "string") ? input.ground_truth : "";
+    input.ground_truth = groundTruth;
+
+    // 3. Guard clause for empty response
     if (!response || response.trim() === "") {
         return {
             score: 0,
@@ -111,7 +115,7 @@ function evaluate(input) {
         };
     }
 
-    // 3. Define LLM-as-judge configuration
+    // 4. Define LLM-as-judge configuration
     const config = {
         prompt_template: [
             {
@@ -125,11 +129,16 @@ function evaluate(input) {
 
 Model Response to Evaluate:
 {{response}}
-
+\` + (groundTruth ? \`
+Source Reference (use to verify factual accuracy):
+{{ground_truth}}
+\` : "") + \`
 Evaluate the response on these criteria:
 
 ${criteriaList}
-
+\` + (groundTruth ? \`
+When a Source Reference is provided, use it to verify the model's response is factually accurate and covers the correct information. The model does not need to quote the source verbatim.
+\` : "") + \`
 Provide a DETAILED explanation for your evaluation, then assign scores (0-5) for each criterion.
 
 Answer in JSON format:
@@ -155,7 +164,7 @@ ${outputSchemaProperties}
         }
     };
 
-    // 4. Call LLM-as-judge
+    // 5. Call LLM-as-judge
     try {
         input.history = history;
         input.response = response;
@@ -252,7 +261,11 @@ function evaluate(input) {
         history = JSON.stringify(input.messages.slice(0, input.messages.length - 1));
     }
 
-    // 2. Guard clause for empty response
+    // 2. Extract ground truth reference if available
+    var groundTruth = (input.ground_truth && typeof input.ground_truth === "string") ? input.ground_truth : "";
+    input.ground_truth = groundTruth;
+
+    // 3. Guard clause for empty response
     if (!response || response.trim() === "") {
         return {
             score: 0,
@@ -260,7 +273,7 @@ function evaluate(input) {
         };
     }
 
-    // 3. Programmatic JSON validation
+    // 4. Programmatic JSON validation
     var parsedResponse;
     try {
         parsedResponse = JSON.parse(response);
@@ -271,7 +284,7 @@ function evaluate(input) {
         };
     }
 
-    // 4. Schema key check - penalize missing keys
+    // 5. Schema key check - penalize missing keys
     var expectedKeys = ${schemaKeysStr};
     var responseKeys = Object.keys(parsedResponse);
     var missingKeys = [];
@@ -285,7 +298,7 @@ function evaluate(input) {
         ? "Missing keys: " + missingKeys.join(", ") + " (penalty: " + keyPenalty.toFixed(2) + ")"
         : "All expected keys present";
 
-    // 5. LLM-as-judge for field accuracy
+    // 6. LLM-as-judge for field accuracy
     var config = {
         prompt_template: [
             {
@@ -302,7 +315,10 @@ Model's Extracted JSON:
 
 Expected Output Schema:
 ${schemaStr.split('\n').join('\n')}
-
+\` + (groundTruth ? \`
+Source Reference (use to verify factual accuracy):
+{{ground_truth}}
+\` : "") + \`
 Evaluate the extraction on these criteria:
 
 ${criteriaList}
@@ -312,7 +328,9 @@ Consider:
 - Are data types correct (numbers vs strings)?
 - Are arrays properly populated?
 - Are there hallucinated values not present in the source?
-
+\` + (groundTruth ? \`
+When a Source Reference is provided, use it to verify the extracted data is factually accurate. The extraction does not need to quote the source verbatim.
+\` : "") + \`
 Provide a DETAILED explanation for your evaluation, then assign scores (0-5) for each criterion.
 
 Answer in JSON format:
@@ -338,7 +356,7 @@ ${outputSchemaProperties}
         }
     };
 
-    // 6. Call LLM-as-judge
+    // 7. Call LLM-as-judge
     try {
         input.history = history;
         input.response = response;
