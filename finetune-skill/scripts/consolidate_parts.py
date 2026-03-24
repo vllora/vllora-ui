@@ -307,6 +307,8 @@ def main():
                         help="Validate only — don't modify the file")
     parser.add_argument("--id-prefix", type=str, default=None,
                         help="Part ID prefix (default: derived from source name)")
+    parser.add_argument("--preserve-ids", action="store_true",
+                        help="Keep original part IDs instead of reassigning sequential ones")
     args = parser.parse_args()
 
     input_path = Path(args.input)
@@ -334,13 +336,16 @@ def main():
     print(f"Consolidated: {original_count} → {len(consolidated)} parts "
           f"(merged adjacent, dropped {dropped} short fragments)")
 
-    # Reassign IDs
-    prefix = args.id_prefix
-    if not prefix:
-        # Derive prefix from the parent directory name of the input file,
-        # which is the document slug (e.g., "usda-protein-foods-reference")
-        prefix = input_path.parent.name or "doc"
-    reassign_ids(consolidated, prefix)
+    # Reassign IDs (unless --preserve-ids)
+    if not args.preserve_ids:
+        prefix = args.id_prefix
+        if not prefix:
+            # Derive prefix from the parent directory name of the input file,
+            # which is the document slug (e.g., "usda-protein-foods-reference")
+            prefix = input_path.parent.name or "doc"
+        reassign_ids(consolidated, prefix)
+    else:
+        print("  Preserving original part IDs")
 
     # Validate after consolidation
     results = validate_quality(consolidated, total_pages)

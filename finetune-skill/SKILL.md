@@ -71,6 +71,10 @@ finetune-project/
 
 **Multi-document handling**: Each source document gets its own subdirectory under `knowledge/` named by slugifying the filename (e.g., `chess-tactics-dave-regis/`, `strategy-guide/`). Use the document name, not `doc-1/` — the folder name should identify which document it came from at a glance. Each subdirectory contains that document's `docling-result.json`, `knowledge_parts.json`, and `parts-index.json`. A merged `knowledge/all-parts-index.json` combines all per-document indexes for topic design and data generation.
 
+**Table-heavy documents** (e.g., USDA reference tables, lookup databases): Documents that are mostly tabular data produce many table parts but limited conversational training data. For these documents, write a "synthesis part" — a prose summary of the key facts from the tables — and include it as a text part alongside the tables. This gives the model facts to reference in conversational answers rather than trying to recite table rows.
+
+**Workflow reuse**: Each test run should create a fresh workflow via `finetune.py create-workflow` or the gateway API. Do not reuse a workflow from a previous run — leftover topics, records, or grader state will interfere. If you need to re-run, create a new workflow and update `config.json`. You can list existing workflows with `GET /finetune/workflows` to see what's already there.
+
 ### Execution Log
 
 Maintain `execution-log.md` as an **append-only** chronological record.
@@ -610,25 +614,27 @@ Tell the user the data is visible at `http://localhost:5173/finetune`, then **pr
 
 ### Step 7: Start Evaluation & Training (Parallel)
 
-On the first run, there's no prior data to analyze — start both evaluation and training simultaneously. They run on the cloud in parallel.
+**Always start both eval AND training together.** They run on the cloud in parallel and answer different questions:
+
+| | Eval Job (~45 min) | Training Job (hours) |
+|---|---------|-------------|
+| **Tests** | Base model + your data + your grader | Whether finetuning improves the model |
+| **Tells you** | Is my data good? Is my grader fair? | Is the model learning? Are hyperparams right? |
+| **Iterate on** | Prompts, topics, grader criteria | Learning rate, epochs, lora_rank |
+
+**Two iteration loops** (run in parallel, don't block each other):
+
+1. **Fast loop (data quality)** — Eval finishes first (~45 min). Analyze per-topic scores, identify weak topics, fix data/grader, re-upload, re-eval. Repeat until avg score > 0.85. **Don't wait for training to iterate on data.**
+
+2. **Slow loop (training quality)** — Training runs for hours with per-epoch evaluations built in. When it finishes, check metrics (reward trend, KL divergence, loss). Adjust hyperparams if needed, retrain with the latest (improved) data.
+
+The fast loop ensures your data is good. The slow loop ensures the model learns from that good data. **Start both on every iteration** — even if training takes longer, you get the eval feedback quickly to keep improving data.
 
 #### 7a. Pre-training validation
 
-Before starting training, validate `max_output_tokens` by checking your grader dry-run response length:
+Before starting training, validate `max_output_tokens`. The default is **512** — higher values (e.g., 2000) can cause training jobs to fail on the cloud infrastructure. Only increase if you see 100% clipping in training metrics.
 
-```bash
-# Check: how long are typical grader responses?
-# If dry-run response > 800 chars, set max_output_tokens to at least 2x that
-DRY_RUN_LENGTH=$(python3 scripts/dry_run_grader.py \
-  --workflow-id $WORKFLOW_ID --script grader.js \
-  --row '{"messages": [...]}' 2>/dev/null | python3 -c "
-import sys,json
-r = json.load(sys.stdin)
-print(len(r.get('reason', '')))" 2>/dev/null)
-echo "Dry-run response: $DRY_RUN_LENGTH chars"
-```
-
-If the response is consistently long (>800 chars), set `max_output_tokens` to 2000+ to avoid 100% clipping during training.
+> **WARNING**: Setting `max_output_tokens` above 512 may cause training failures. Start with 512 and only increase if clipping is a problem.
 
 #### 7b. Create both jobs (non-blocking)
 
@@ -674,19 +680,18 @@ Poll both eval and training jobs in parallel using `finetune.py` commands. These
 ```bash
 # Poll eval in foreground (updates evaluations/eval-001.json with progress + results)
 python3 scripts/finetune.py poll-eval \
-  --workflow-id $WORKFLOW_ID \
   --file evaluations/eval-001.json
 
 # Poll training in background (updates training-jobs/train-001.json + saves metrics)
+# --workflow-id is optional — reads from the job file if omitted
 python3 scripts/finetune.py poll-training \
-  --workflow-id $WORKFLOW_ID \
   --file training-jobs/train-001.json &
 ```
 
-**Key rule**: When one job completes before the other, **immediately analyze its results and present findings** to the user. Don't wait idle:
-- Training finishes first → run analysis on saved metrics (Step 8a)
-- Eval finishes first → analyze scores (per-topic breakdown, weak records), present findings
-- Both done → cross-reference and give the complete picture
+**Key rule**: When one job completes before the other, **immediately analyze its results and start iterating**. Don't wait for the slower job:
+- Eval finishes first (usual case) → analyze scores, fix weak topics, re-upload data, start new eval + new training. The old training job keeps running — its results will inform hyperparameter tuning later.
+- Training finishes first → analyze metrics (reward, KL, loss), present findings. If training succeeded, check per-epoch evals via `GET /finetune/workflows/{id}/finetune-evaluations?finetune_job_id={job_id}`.
+- Both done → cross-reference eval scores with training metrics for the complete picture.
 
 **Data saved by polling** (no re-fetching needed in Step 8):
 - `training-jobs/train-001.json` — job status (updated live)
@@ -738,7 +743,7 @@ Issues found:
 
 While we wait for eval results, I recommend:
   A. Note these training issues — we'll combine with eval analysis for full picture
-  B. Cancel and restart training now with lr=0.000005 and max_output_tokens=2000
+  B. Cancel and restart training now with lr=0.000005
 ```
 
 #### 8b. Analyze eval results (when eval completes)
@@ -886,11 +891,25 @@ python3 scripts/finetune.py upload-grader \
 **Fixing the data** (requires re-upload):
 ```bash
 # Regenerate records for weak topics, re-validate, re-upload
-python3 scripts/finetune.py upload-records \
+python3 scripts/finetune.py upload-records --force \
   --workflow-id $WORKFLOW_ID --file training.jsonl
 
 # No manual sync needed — the gateway auto-uploads workflow data to the cloud
 # when creating eval or training jobs (via ensure_dataset_uploaded()).
+```
+
+**After any fix, always start BOTH new eval AND new training:**
+```bash
+# New eval with improved data
+python3 scripts/finetune.py create-eval \
+  --workflow-id $WORKFLOW_ID --output-dir evaluations
+
+# New training with improved data (adjust config if needed)
+python3 scripts/finetune.py create-training \
+  --workflow-id $WORKFLOW_ID \
+  --base-model "unsloth/Qwen3.5-4B" \
+  --output-model "project-v2" \
+  --output-dir training-jobs
 ```
 
 **Adjusting training config**: Modify parameters in the next job creation (Step 7b).
@@ -936,7 +955,7 @@ Track every iteration in `execution-log.md` with **actual metrics from the API**
 ## Iteration 2
 - [2026-03-17 15:15:00] Regenerated 22 records for endgame topics
 - [2026-03-17 15:16:00] Started eval eval-v2 + training job ft_job_002
-  - Base: Qwen3.5-4B, lr: 0.000005, lora_rank: 8, epochs: 2, max_output_tokens: 2000
+  - Base: Qwen3.5-4B, lr: 0.000005, lora_rank: 8, epochs: 2, max_output_tokens: 512
 - [2026-03-17 15:30:00] Training completed
   - Reward: 0.60 → 0.72 (improving, delta=+0.12)
   - KL: final=0.05, max=0.07 (healthy)

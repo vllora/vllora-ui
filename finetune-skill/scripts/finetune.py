@@ -206,6 +206,17 @@ def cmd_upload_topics(args: argparse.Namespace) -> None:
     else:
         raw_topics = [topics]
 
+    # If --force, delete existing topics first
+    if getattr(args, "force", False):
+        existing = _api("GET", f"{args.base_url}/finetune/workflows/{args.workflow_id}/topics")
+        existing_topics = existing if isinstance(existing, list) else existing.get("topics", [])
+        if existing_topics:
+            ids = [t["id"] for t in existing_topics if t.get("id")]
+            if ids:
+                _api("DELETE", f"{args.base_url}/finetune/workflows/{args.workflow_id}/topics",
+                     json={"identifiers": ids})
+                print(f"  Deleted {len(ids)} existing topics")
+
     # Transform: move user's human-readable 'id' → 'reference_id' and assign
     # fresh UUIDs as the real 'id'. User-supplied IDs like "protein-science"
     # are globally unique in the DB (PRIMARY KEY), causing collisions when
@@ -387,6 +398,11 @@ def cmd_upload_records(args: argparse.Namespace) -> None:
     if not records_path.exists():
         print(f"Error: Records file not found: {records_path}", file=sys.stderr)
         sys.exit(1)
+
+    # If --force, delete existing records first
+    if getattr(args, "force", False):
+        _api("DELETE", f"{args.base_url}/finetune/workflows/{args.workflow_id}/records")
+        print("  Deleted all existing records")
 
     # Build topic reference_id → UUID map (same pattern as upload-relations)
     db_path = Path(args.db) if hasattr(args, "db") and args.db else DEFAULT_DB_PATH
@@ -695,7 +711,7 @@ def cmd_create_training(args: argparse.Namespace) -> None:
             sys.exit(1)
     else:
         payload["inference_parameters"] = {
-            "max_output_tokens": 2000,
+            "max_output_tokens": 512,
             "temperature": 1.0,
             "top_p": 1.0,
             "response_candidates_count": 2,
@@ -905,6 +921,7 @@ def main() -> None:
     p = subparsers.add_parser("upload-topics", help="Upload topic hierarchy")
     p.add_argument("--workflow-id", required=True, help="Workflow ID")
     p.add_argument("--file", required=True, help="Path to topics.json")
+    p.add_argument("--force", action="store_true", help="Delete all existing topics before uploading")
 
     # upload-relations
     p = subparsers.add_parser("upload-relations", help="Upload topic-source relations")
@@ -917,6 +934,7 @@ def main() -> None:
     p.add_argument("--workflow-id", required=True, help="Workflow ID")
     p.add_argument("--file", required=True, help="Path to training.jsonl")
     p.add_argument("--batch-size", type=int, default=200, help="Records per API call (default: 200)")
+    p.add_argument("--force", action="store_true", help="Delete all existing records before uploading")
     p.add_argument("--db", default=None, help="Path to vLLora SQLite database (default: ~/.vllora/vllora.db)")
 
     # upload-grader
