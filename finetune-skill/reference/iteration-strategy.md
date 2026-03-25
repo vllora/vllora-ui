@@ -565,6 +565,34 @@ A common pattern: the grader has a check early on that returns `score: 0` for mo
 2. If the gate exists for a valid reason (e.g., safety check), keep it but make sure the threshold is reasonable for what the rollout model actually produces
 3. Test your grader manually against a few real model responses before deploying
 
+### Symptom 3b: Some records score 0 while others score normally (dead-weight records)
+
+**Root cause: Individual records that the model cannot answer — not a grader-wide issue.**
+
+Unlike Symptom 3 (where MOST records score 0 due to a broken grader), here a subset of records consistently produce all-zero rewards while the rest of the dataset works fine. These are "dead-weight" records.
+
+**Why this matters (research-backed):** GRPO/RFT research demonstrates that **LLMs cannot learn from negative-only rewards**. When every sampled response to a prompt scores 0, the model gets zero gradient — it learns nothing from that record. Worse, these records can actively destabilize training by contributing noise to the policy gradient. The model needs at least SOME responses that score > 0 to have something to reinforce — partial credit (0.3, 0.5) is fine, but pure zero is dead weight.
+
+**Common causes of dead-weight records:**
+- **Wrong question premise** — the LLM that generated the training data misread the source material (e.g., confused a pin with a skewer in chess), making the question unanswerable
+- **Question too hard for the base model** — the question is valid but the model can't produce any reasonable response at its current capability level
+- **Ambiguous question** — multiple interpretations exist, the model picks one the grader doesn't expect, scores 0 every time
+- **Mismatched ground_truth** — the ground_truth excerpt doesn't match the question, so the grader's factual accuracy check always fails
+
+**How to verify:** After eval, extract records with max score < 0.1. If this is a small subset (< 20%) while the rest scores normally, it's dead-weight records, not a grader issue.
+
+**Fix — remove and regenerate:**
+1. **Remove** the zero-scoring records from `training.jsonl`
+2. **Regenerate replacements** for the same topics using `generate_records.py --append` with different parameters (higher temperature, different prompt types) to get different questions
+3. **Re-validate and re-upload** the updated dataset
+4. **Re-eval** to confirm the replacements score > 0
+
+See SKILL.md Step 8b+ for the full procedure with code.
+
+**When to skip regeneration:** If dead-weight records are < 5% of total and not concentrated in a single topic, removing without replacement is fine.
+
+**Key insight:** This is fundamentally different from Symptom 3. Symptom 3 is a grader problem (fix the grader). Symptom 3b is a data quality problem (fix the records). The fix for 3b is always remove + replace — never just "fix the grader to give partial credit" because the records themselves are the issue.
+
 ### Symptom 4: High scores on eval but model performs badly after training
 
 **Root cause: Grader rewards the wrong thing.**

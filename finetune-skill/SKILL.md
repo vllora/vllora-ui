@@ -783,6 +783,85 @@ curl -s "http://localhost:9090/finetune/evaluations/$EVAL_ID" > evaluations/eval
 3. **Low-scoring records**: list records <0.7 with their `reason` fields
 4. **Score distribution**: are scores spread out (good) or clustered (grader issue)?
 
+#### 8b+. Filter Dead-Weight Records & Regenerate Replacements
+
+**Why this matters:** Research on GRPO/RFT shows that models **cannot learn from negative-only rewards**. When every sampled response to a question scores 0, the gradient is zero — the model learns nothing. Worse, these dead-weight records can actively destabilize training. New information inside a negatively-rewarded sequence is completely lost — the model only learns "don't do this" but never discovers what TO do.
+
+**After eval completes, identify and replace zero-scoring records:**
+
+1. **Find dead-weight records** — records where the model scored 0 (or near-0) across all sampled responses:
+```bash
+python3 -c "
+import json
+eval_data = json.load(open('evaluations/eval-v1.json'))
+dead = []
+for r in eval_data.get('results', []):
+    epochs = r.get('epochs', {})
+    scores = [e[0]['score'] for e in epochs.values() if e and 'score' in e[0]]
+    if scores and max(scores) < 0.1:
+        dead.append({'id': r['row'].get('id','?'), 'topic': r['row'].get('topic','?'), 'score': max(scores), 'reason': epochs.get('0',[{}])[0].get('reason','')})
+print(f'Dead-weight records (score < 0.1): {len(dead)}/{len(eval_data.get(\"results\",[]))}')
+for d in dead:
+    print(f'  {d[\"id\"]} [{d[\"topic\"]}] score={d[\"score\"]} — {d[\"reason\"][:80]}')
+"
+```
+
+2. **Diagnose WHY they scored 0** — read the `reason` field for each:
+   - **Grader hard gate?** → Fix the grader (see Symptom 3 in `iteration-strategy.md`)
+   - **Wrong question premise?** → The LLM-generated question is factually incorrect or unanswerable — remove and regenerate
+   - **Model too weak on this topic?** → The question is valid but the base model can't produce ANY reasonable response — remove for now, re-introduce in later iterations after the model improves
+   - **Ambiguous question?** → Multiple valid interpretations confuse the model — remove and regenerate with more specificity
+
+3. **Remove dead-weight records from `training.jsonl`:**
+```bash
+# Read dead-weight IDs from the analysis above, then filter them out
+python3 -c "
+import json, sys
+dead_ids = set()  # Fill from step 1 above
+with open('finetune-project/training.jsonl') as f:
+    records = [json.loads(line) for line in f]
+kept = [r for r in records if r['id'] not in dead_ids]
+removed = len(records) - len(kept)
+with open('finetune-project/training.jsonl', 'w') as f:
+    for r in kept:
+        f.write(json.dumps(r) + '\n')
+print(f'Removed {removed} dead-weight records, {len(kept)} remaining')
+"
+```
+
+4. **Regenerate replacement records** for the same topics — don't just shrink the dataset:
+```bash
+# For each affected topic, generate replacement records grounded in the same source material
+# Use --append to add to the existing file without overwriting
+python3 scripts/generate_records.py \
+  --topics finetune-project/topics.json \
+  --relations finetune-project/relations.json \
+  --knowledge-dir finetune-project/knowledge \
+  --system-prompt "You are..." \
+  --output finetune-project/training.jsonl \
+  --records-per-topic 5 \
+  --append
+```
+
+   When regenerating, use different generation parameters to get different questions:
+   - **Higher temperature** (0.9-1.0) for more diverse outputs
+   - **Different prompt types** — if the dead records were "explain-why" questions, try "compare", "what-if", or "analyze" instead
+   - **More specific grounding** — if the original question was too broad, constrain the generation to specific subsections of the source material
+
+5. **Re-validate and re-upload:**
+```bash
+python3 scripts/validate_dataset.py finetune-project/training.jsonl \
+  --topics finetune-project/topics.json \
+  --parts finetune-project/knowledge/all-parts-index.json
+
+python3 scripts/finetune.py upload-records --force \
+  --workflow-id $WORKFLOW_ID --file training.jsonl
+```
+
+**When to skip regeneration:** If only 1-2 records out of 200+ scored 0, removing without replacement is fine — the coverage impact is negligible. Regenerate when dead-weight records are >5% of total or concentrated in a single topic (which would leave that topic under-represented).
+
+**Key insight from RFT research:** The model needs at least SOME responses that score > 0 to learn from a record. Partial credit (0.3, 0.5) is fine — the model can learn from "somewhat good" responses. Only pure-zero records are dead weight. This is why smooth grading (0.0 to 1.0 with partial credit) is critical — it converts what would be dead-weight records into usable training signal.
+
 #### 8c. Cross-reference (when both available)
 
 When both results are available, combine the analysis:
@@ -821,6 +900,7 @@ What would you like to do?
 | Signal | Likely cause | Suggested action |
 |--------|-------------|-----------------|
 | All scores ~0 | Grader broken or too strict | Fix grader, dry-run, re-eval |
+| Some records score 0, rest normal | Dead-weight records (wrong premise, too hard, ambiguous) | Remove + regenerate replacements (Step 8b+) |
 | All scores ~1 | Grader too lenient | Add harder criteria, re-eval |
 | One topic consistently low | Weak prompts or poor source material for that topic | Regenerate records, add source material |
 | Good responses scoring low | Grader criteria misaligned with objective | Adjust criteria weights or LLM judge prompt |

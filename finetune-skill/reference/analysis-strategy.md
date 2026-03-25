@@ -123,7 +123,7 @@ score_std = std_dev(all individual scores)
 | Bucket | Criteria | Count | Interpretation |
 |--------|----------|-------|----------------|
 | Failed (errors) | `status === "failed"` | N | Grader bugs — fix before anything else |
-| Zero (score = 0) | `score === 0` | N | Hard gate hit or truly unusable response |
+| Zero (score = 0) | `score === 0` | N | **Dead-weight for RFT** — model cannot learn from these. Diagnose cause, then remove + regenerate replacements (see SKILL.md Step 8b+) |
 | Low (0 < score < 0.4) | ... | N | Primary improvement targets |
 | Medium (0.4-0.7) | ... | N | Acceptable, could improve |
 | High (0.7-1.0) | ... | N | Working well |
@@ -180,7 +180,7 @@ clipping_max = max clipped_ratio during training
 | Clipping overload | `clipped_ratio` > 0.7 at any point | Critical |
 | KL explosion | KL > 2.0 or KL increased > 3x from start | Warning |
 | Reward collapse | `reward_std` < 0.05 for > 50% of steps | Warning |
-| Weak signal | `frac_reward_zero_std` > 0.6 for > 50% of steps | Warning |
+| Weak signal | `frac_reward_zero_std` > 0.6 for > 50% of steps | **Critical** — most records produce identical rewards, model gets zero gradient. Remove dead-weight records (score=0) and regenerate replacements before retraining. See SKILL.md Step 8b+ |
 | Gradient instability | `grad_norm` spikes > 5x median | Warning |
 | No learning | `reward_delta` < 0.05 after full training | Info |
 
