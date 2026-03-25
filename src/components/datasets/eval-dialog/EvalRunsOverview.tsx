@@ -170,7 +170,7 @@ function RunRow({ job, latestVersion, inferVersion }: {
         </span>
       </td>
       <td className="px-3 py-2 text-zinc-400">
-        {job.rolloutModel ?? "—"}
+        {job.rolloutModel || "gpt-4o-mini"}
       </td>
       <td className="px-3 py-2">
         {jobVersion != null && latestVersion != null ? (

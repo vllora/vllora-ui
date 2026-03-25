@@ -65,6 +65,7 @@ interface PollingJobInfo {
   readonly evaluationRunId: string;
   readonly workflowId: string;
   readonly sampleSize: number;
+  readonly rolloutModel?: string;
 }
 
 // =============================================================================
@@ -231,6 +232,7 @@ class EvalJobManager {
       evaluationRunId: job.evaluationRunId,
       workflowId: job.workflowId,
       sampleSize: job.sampleSize,
+      rolloutModel: job.rolloutModel,
     };
 
     this.pollingJobs.set(job.id, jobInfo);
@@ -270,6 +272,7 @@ class EvalJobManager {
         evaluationRunId,
         workflowId,
         sampleSize: jobInfo.sampleSize,
+        rolloutModel: jobInfo.rolloutModel,
         status: 'running',
         createdAt: 0,
         pollingSnapshot: result,

@@ -217,11 +217,9 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
             ) : result ? (
               <VerdictBadge verdict={result.diagnosis.verdict} />
             ) : null}
-            {job.rolloutModel && (
-              <span className="inline-flex items-center rounded bg-zinc-800/60 px-2 py-0.5 text-[10px] text-zinc-400 border border-zinc-700/40">
-                {job.rolloutModel}
-              </span>
-            )}
+            <span className="inline-flex items-center rounded bg-zinc-800/60 px-2 py-0.5 text-[10px] text-zinc-400 border border-zinc-700/40">
+              {job.rolloutModel || "gpt-4o-mini"}
+            </span>
             <span className="text-[10px] text-zinc-500">
               {(evaluationResults?.length || job.pollingSnapshot?.total_rows || job.sampleSize) ?? 0} records
             </span>

@@ -60,7 +60,7 @@ export function RunsSidebar({ jobs, selectedId, onSelectJob }: RunsSidebarProps)
               <StatusIcon status={job.status} />
               <div className="flex-1 min-w-0">
                 <div className="font-medium truncate">
-                  {job.rolloutModel || `${job.sampleSize} samples`}
+                  {job.rolloutModel || "gpt-4o-mini"}
                 </div>
                 <div className="text-[10px] text-zinc-500 truncate">
                   <span>{job.sampleSize}s</span>
