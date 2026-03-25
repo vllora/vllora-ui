@@ -217,12 +217,21 @@ for DOC in *.pdf; do
   DOC_SLUG=$(echo "${DOC%.pdf}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
   DOC_DIR="finetune-project/knowledge/$DOC_SLUG"
 
-  # Extract via Docling (blocks until this PDF is done)
+  # 1. Extract via Docling (blocks until this PDF is done)
   python3 scripts/docling_extract.py "$DOC" \
     --output "$DOC_DIR/docling-result.json"
 
-  # Then immediately: read chunks, write extract.py, run it,
-  # consolidate, validate, upload — see steps 2c-2g below
+  # 2. Read chunks, write extract.py, run it, consolidate, validate — see steps 2c-2e below
+
+  # 3. Upload raw PDF + extracted parts to gateway immediately
+  python3 scripts/finetune.py upload-knowledge \
+    --workflow-id $WORKFLOW_ID \
+    --file "$DOC" \
+    --parts-file "$DOC_DIR/knowledge_parts.json" \
+    --name "$DOC" \
+    --force \
+    --description "Source document: $DOC" \
+    --metadata '{"extraction_method":"docling_hybrid"}'
 done
 ```
 
@@ -318,6 +327,24 @@ python3 scripts/pdftotext_extract.py --batch \
 
 Then run `consolidate_parts.py` and `validate_extraction.py` on the output — same as the Docling path. Note: pdftotext loses tables, images, and complex layout.
 
+**Upload each document after processing** — same as the Docling path, upload the raw PDF + extracted parts:
+```bash
+for DOC in *.pdf; do
+  DOC_SLUG=$(echo "${DOC%.pdf}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+  DOC_DIR="finetune-project/knowledge/$DOC_SLUG"
+  [ -f "$DOC_DIR/knowledge_parts.json" ] || continue
+
+  python3 scripts/finetune.py upload-knowledge \
+    --workflow-id $WORKFLOW_ID \
+    --file "$DOC" \
+    --parts-file "$DOC_DIR/knowledge_parts.json" \
+    --name "$DOC" \
+    --force \
+    --description "Source document: $DOC" \
+    --metadata '{"extraction_method":"pdftotext"}'
+done
+```
+
 **Save your extraction notes** to `knowledge/extraction-notes.md` — for each document: name, page count, section headings, key concepts, number of parts extracted.
 
 #### 2e. Assess source content quality
@@ -376,22 +403,20 @@ python3 scripts/validate_extraction.py finetune-project/knowledge/ --fix
 
 If consolidation alone doesn't fix the issues (e.g., broken heading detection), fix the extraction script and re-extract the failing documents.
 
-**Upload immediately** — push each document's knowledge source + parts to the gateway so the UI shows sources as they're extracted. Use `--force` for safe re-uploads (uses PUT upsert — atomically replaces any existing source with the same name):
+**Upload already happened** — if you followed the per-document loop in Step 2a, each document's raw PDF + extracted parts were uploaded immediately after processing. If you need to re-upload a specific document (e.g., after fixing extraction), run:
 ```bash
-for i in "${!DOCS[@]}"; do
-  DOC="${DOCS[$i]}"
-  DOC_DIR="${DOC_DIRS[$i]}"
-  [ -f "$DOC_DIR/knowledge_parts.json" ] || continue
+DOC="document.pdf"
+DOC_SLUG=$(echo "${DOC%.pdf}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+DOC_DIR="finetune-project/knowledge/$DOC_SLUG"
 
-  python3 scripts/finetune.py upload-knowledge \
-    --workflow-id $WORKFLOW_ID \
-    --file "$DOC" \
-    --parts-file "$DOC_DIR/knowledge_parts.json" \
-    --name "$DOC" \
-    --force \
-    --description "Source document: $DOC" \
-    --metadata '{"extraction_method":"docling_hybrid"}'
-done
+python3 scripts/finetune.py upload-knowledge \
+  --workflow-id $WORKFLOW_ID \
+  --file "$DOC" \
+  --parts-file "$DOC_DIR/knowledge_parts.json" \
+  --name "$DOC" \
+  --force \
+  --description "Source document: $DOC" \
+  --metadata '{"extraction_method":"docling_hybrid"}'
 ```
 
 ### Step 3: Build Topic Hierarchy
@@ -819,7 +844,7 @@ What would you like to do?
 | Setting | Value |
 |---------|-------|
 | Base model | unsloth/Qwen3.5-4B |
-| Learning rate | 1e-5 |
+| Learning rate | 5e-6 |
 | LoRA rank | 8 |
 | Epochs | 2 |
 | Records | 180 |
@@ -937,7 +962,7 @@ Track every iteration in `execution-log.md` with **actual metrics from the API**
 ```markdown
 ## Iteration 1
 - [2026-03-17 14:30:00] Started eval eval-v1 + training job ft_job_001
-  - Base: Qwen3.5-4B, lr: 0.00001, lora_rank: 8, epochs: 2, max_output_tokens: 1000
+  - Base: Qwen3.5-4B, lr: 0.000005, lora_rank: 8, epochs: 2, max_output_tokens: 512
 - [2026-03-17 14:35:00] Training metrics (in-flight): step 10/26, reward=0.65, kl=0.04, clip=12%
 - [2026-03-17 14:40:00] Training metrics (in-flight): step 20/26, reward=0.68, kl=0.06, clip=15%
   - [WARNING] Clipping trending up — may need higher max_output_tokens next run
