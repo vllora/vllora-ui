@@ -131,6 +131,24 @@ During training, use `GET /finetune/workflows/{id}/finetune-evaluations?finetune
 }
 ```
 
+For gateway training metrics (`reward`, `loss`, `kl`, `grad_norm`, `learning_rate`), use the helper script:
+
+```bash
+# Per-epoch aggregate view
+python3 scripts/print_metrics_table.py \
+  --workflow-id "$WORKFLOW_ID" \
+  --job-id "$JOB_ID" \
+  --mode epoch
+
+# Per-step detailed view (includes fractional epoch + step)
+python3 scripts/print_metrics_table.py \
+  --workflow-id "$WORKFLOW_ID" \
+  --job-id "$JOB_ID" \
+  --mode step
+```
+
+Use `--mode epoch` when deciding if the run trend is improving or degrading overall. Use `--mode step` when diagnosing instability (KL spikes, loss jumps, grad explosions, or learning-rate schedule issues at specific steps).
+
 ### What to Look For
 
 | Pattern | Meaning | Action |
