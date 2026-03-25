@@ -1026,6 +1026,7 @@ Run with `uv run` (PEP 723 — dependencies declared inline).
 | `scripts/run_evaluation.py` | Create eval job, poll until complete (~30 min timeout), save results |
 | `scripts/start_training.py` | Start training job, poll until complete, save response |
 | `scripts/analyze_training.py` | Fetch + analyze training metrics — reward trend, KL, clipping, loss, per-epoch evals, alerts |
+| `scripts/print_metrics_table.py` | Print training metrics table (per-epoch or per-step: reward/loss/kl/grad/lr) |
 | `scripts/chat_completion.py` | Call LLM via gateway — validates JSON output when `response_format` is `json_object` |
 | `scripts/dry_run_grader.py` | Dry-run grader on a single row — instant syntax/logic check |
 | `scripts/consolidate_parts.py` | Merge adjacent text parts, drop short fragments, fix Unicode, regenerate parts-index |
