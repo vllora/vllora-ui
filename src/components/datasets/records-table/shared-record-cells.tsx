@@ -178,6 +178,11 @@ export function JobColumnHeader({ column }: { readonly column: JobColumn }) {
           <div className="flex flex-col gap-1">
             <div className="font-semibold">{typeLabel} Job</div>
             <div className="text-muted-foreground font-mono">{column.id}</div>
+            {column.model && (
+              <div className="text-muted-foreground">
+                Model: <span className="text-foreground/80 font-medium">{column.model}</span>
+              </div>
+            )}
             <div className="flex items-center gap-1.5">
               <span className={cn("font-medium", statusInfo.color)}>{statusInfo.text}</span>
               <span className="text-muted-foreground/50">·</span>

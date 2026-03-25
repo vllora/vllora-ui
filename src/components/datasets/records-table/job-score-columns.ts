@@ -20,6 +20,7 @@ export interface JobColumn {
   readonly label: string;
   readonly status: JobColumnStatus;
   readonly createdAt: number;
+  readonly model?: string;
 }
 
 export interface RecordJobScore {
@@ -62,6 +63,7 @@ export function buildJobColumns(
       label: evalJobDisplayName(job.id),
       status: mapEvalStatus(job.status),
       createdAt: job.createdAt,
+      model: job.rolloutModel,
     }));
 
   const finetuneColumns: JobColumn[] = [...finetuneJobs]
@@ -72,6 +74,7 @@ export function buildJobColumns(
       label: finetuneJobDisplayName(job.id, job.suffix),
       status: mapFinetuneStatus(job.status),
       createdAt: new Date(job.created_at).getTime(),
+      model: job.base_model,
     }));
 
   return [...evalColumns, ...finetuneColumns];
