@@ -689,6 +689,7 @@ def cmd_create_training(args: argparse.Namespace) -> None:
         "dataset": args.workflow_id,
         "base_model": args.base_model,
         "output_model": args.output_model or f"finetune-v1",
+        "display_name": args.display_name or f"Fine-tune {args.output_model}",
     }
 
     if args.config:
