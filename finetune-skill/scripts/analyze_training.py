@@ -119,6 +119,8 @@ def analyze_metrics(data: dict) -> dict:
         })
 
     # Loss stability
+    # Ref: training-metrics-guide.md §Loss; DeepSeekMath — GRPO loss starts near 0, rises slightly
+    # Stuck at 0 = zero advantages; NaN = catastrophic failure (Unsloth docs)
     loss_values = [s.get("loss", 0) for s in steps]
     has_nan = any(math.isnan(v) or math.isinf(v) for v in loss_values)
     if has_nan:
@@ -129,6 +131,8 @@ def analyze_metrics(data: dict) -> dict:
         })
 
     # Grad norm spikes
+    # Ref: training-metrics-guide.md §Grad Norm; healthy 0.5-2.0 with default clipping of 1.0
+    # NaN = catastrophic (Unsloth: often from zero-length truncated completions)
     grad_values = [s.get("grad_norm", 0) for s in steps]
     grad_median = sorted(grad_values)[len(grad_values) // 2] if grad_values else 0
     grad_max = max(grad_values) if grad_values else 0
