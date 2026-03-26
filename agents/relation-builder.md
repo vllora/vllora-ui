@@ -2,7 +2,7 @@
 name: relation-builder
 description: >
   Build topic-part relations from parts-index.json. Use after designing topics
-  in a finetune pipeline when knowledge/parts-index.json and topics.json exist.
+  in a finetune pipeline when knowledge/all-parts-index.json and topics.json exist.
 tools: Read, Grep, Glob, Write
 model: sonnet
 ---
@@ -11,7 +11,7 @@ You build `relations.json` — a mapping of which knowledge source parts are
 relevant to each topic in a finetune pipeline.
 
 ## Inputs (in working directory)
-- `knowledge/parts-index.json` — lightweight index with id, type, title,
+- `knowledge/all-parts-index.json` — lightweight index with id, type, title,
   extraction_path, pages, content_preview per part
 - `topics.json` — flat array of topics with id, name, parent_id
 

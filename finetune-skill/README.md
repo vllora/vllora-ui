@@ -10,6 +10,7 @@ This README is the full context for anyone (human or AI) working on this skill: 
 
 - [Why This Skill Exists](#why-this-skill-exists)
 - [Architecture](#architecture)
+  - [Agent Delegation Flow](#agent-delegation-flow)
 - [Operating Mode](#operating-mode-data-prep--handoff)
 - [What We've Built](#what-weve-built)
 - [Key Design Decisions](#key-design-decisions)
@@ -135,6 +136,164 @@ finetune-project/               # Agent creates this working directory
 │   └── job-v1.json
 └── execution-log.md            # Timestamped log of every step (append-only)
 ```
+
+### Agent Delegation Flow
+
+The main agent (Sonnet/Opus) acts as an **orchestrator** — it makes decisions and delegates heavy work to three specialist Haiku subagents. Each subagent starts with a fresh context, reads only the files it needs, and returns a structured summary. This keeps the main agent's context clean and costs low.
+
+```
+User: "finetune my tax deduction PDF"
+                │
+                ▼
+┌─────────────────────────────────────────────────────────┐
+│          ORCHESTRATOR (Sonnet/Opus)                      │
+│                                                         │
+│  Claude Code loads .claude/skills/finetune-skill/       │
+│  SKILL.md becomes part of the agent's context           │
+│                                                         │
+│  Step 1: Create workflow ──────► Bash: finetune.py      │
+│                                                         │
+│  Step 2: Extract documents                              │
+│           │                                             │
+│           ▼                                             │
+│    ┌──────────────────────────────────────┐             │
+│    │  SUBAGENT: knowledge-extractor       │             │
+│    │  Model: Haiku | maxTurns: 30         │             │
+│    │                                      │             │
+│    │  Extracts ALL documents broadly      │             │
+│    │  Writes: knowledge_parts.json (each) │             │
+│    │  Writes: all-parts-index.json        │             │
+│    │  Returns: per-doc summary            │             │
+│    └──────────────────────────────────────┘             │
+│           │                                             │
+│           ▼  🗣️ REVIEW WITH USER                        │
+│    "Extracted 6 docs, 596 parts:                        │
+│     Ch1: 45 parts (tax basics)                          │
+│     Ch2: 92 parts (deductions) ...                      │
+│     Which areas should we focus training on?"           │
+│           │                                             │
+│    User: "Focus on chapters 2, 4, 5"                    │
+│           │                                             │
+│           ▼                                             │
+│  Step 3: Design topics (guided by user's focus)         │
+│    Main agent creates topics covering Ch 2, 4, 5        │
+│           │                                             │
+│           ▼                                             │
+│    ┌──────────────────────────────────────┐             │
+│    │  SUBAGENT: relation-builder          │             │
+│    │  Model: Haiku                        │             │
+│    │                                      │             │
+│    │  Matches parts → leaf topics         │             │
+│    │  Writes: relations.json              │             │
+│    └──────────────────────────────────────┘             │
+│           │                                             │
+│           ▼  🗣️ REVIEW WITH USER                        │
+│    "23 topics across 3 areas. Here's the hierarchy:     │
+│     Deductions (8 topics, 64 records planned)           │
+│     Credits (6 topics, 48 records planned) ...          │
+│     Any topics to add/remove/rebalance?"                │
+│           │                                             │
+│    User: "Looks good, but add more on SALT deductions"  │
+│           │                                             │
+│           ▼                                             │
+│  Step 4: Generate training data ► scripts/generate_*.py │
+│           │                                             │
+│           ▼  🗣️ REVIEW WITH USER                        │
+│    "184 records generated. Per-topic breakdown:          │
+│     Filing Status: 16 records (samples: ...)            │
+│     Deductions: 32 records (samples: ...) ...           │
+│     Do these look like realistic questions?"            │
+│           │                                             │
+│           ▼                                             │
+│  Step 5: Write grader ──────────► Main agent (creative) │
+│  Step 6: Upload everything ─────► scripts/finetune.py   │
+│                                                         │
+│  Step 7: Start eval + training                          │
+│    7a-b: Create both jobs ──────► scripts/finetune.py   │
+│    7c: Poll eval (foreground) ──► scripts/finetune.py   │
+│    7c: Monitor training (background)                    │
+│           │                                             │
+│           ▼                                             │
+│    ┌──────────────────────────────────────┐             │
+│    │  SUBAGENT: training-monitor          │             │
+│    │  Model: Haiku | background: true     │             │
+│    │                                      │             │
+│    │  Polls metrics every 15s             │             │
+│    │  Checks 6 anomaly rules              │             │
+│    │  Saves: {JOB_ID}-metrics.json        │             │
+│    │  Returns: JSON report on exit        │             │
+│    └──────────┬───────────────────────────┘             │
+│               │                                         │
+│    Meanwhile, main agent is FREE to:                    │
+│      - Analyze eval results (arrives first)             │
+│      - Present findings to user                         │
+│               │                                         │
+│               ▼  (training-monitor returns)             │
+│                                                         │
+│  Step 8: Analyze results ───────► scripts/analyze_*.py  │
+│           │                                             │
+│           ▼  🗣️ REVIEW WITH USER                        │
+│    "Eval avg: 0.68. Training loss: 0.42.                │
+│     Weak topics: Filing Status (0.35 avg)               │
+│     Strong topics: Deductions (0.82 avg)                │
+│     Options: A) Fix grader B) Regenerate weak topics    │
+│              C) Add more data D) Ship it"               │
+│           │                                             │
+│           ▼                                             │
+│  Step 9: Iterate (if needed) ──► Re-run Steps 4-8      │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Why subagents?**
+
+| Subagent | Step | Why delegate? | Benefit |
+|----------|------|--------------|---------|
+| `knowledge-extractor` | 2 | Document content fills context — 100-page PDFs consume most of the window | Main agent never sees raw document content, only a summary |
+| `relation-builder` | 3b | Parts-index scanning is mechanical and fills context | Fresh context for index matching, main stays clean |
+| `training-monitor` | 7c | Training runs 30-120 min — polling wastes Sonnet tokens | Haiku is ~10x cheaper, `background: true` frees the main agent |
+
+**User review checkpoints (🗣️):**
+
+| After step | Orchestrator asks user | User's input shapes... |
+|-----------|----------------------|----------------------|
+| Step 2 (extraction) | "Which chapters/areas to focus on?" | Step 3 — topic design covers only those areas |
+| Step 3 (topics) | "Any topics to add/remove/rebalance?" | Step 4 — records generated only for approved topics |
+| Step 4 (data gen) | "Do these prompts look realistic?" | Step 5 — grader criteria reflect what matters |
+| Step 8 (analysis) | "Here are results. What to fix?" | Step 9 — user drives iteration decisions |
+
+Subagents do broad work → orchestrator presents summary → user filters at the next step. No re-running subagents when the user narrows focus.
+
+**Design principles:**
+
+1. **Handoff files, not conversations.** Each subagent writes output to files on disk. The next step reads only the files it needs. This keeps context clean across the pipeline.
+
+2. **Extract everything, filter at the topic level.** Subagents do broad mechanical work (extract all chapters, generate all records). The orchestrator then reviews the output with the user and filters via topic design — not by re-running the subagent. This avoids wasted re-extraction when the user changes their mind.
+
+3. **Subagents never interact with the user.** Claude Code subagents cannot ask clarifying questions (background agents fail silently on `AskUserQuestion`). All user interaction happens in the orchestrator. The flow is:
+
+```
+Subagent does broad work → returns summary
+       │
+       ▼
+Orchestrator presents summary to user:
+  "Here's what was extracted per chapter:
+   Ch1: 45 parts (tax basics)
+   Ch2: 92 parts (deductions)
+   Ch3: 30 parts (credits)
+   ...
+   Which chapters should we focus training on?"
+       │
+       ▼
+User: "Focus on chapters 2, 4, 5"
+       │
+       ▼
+Orchestrator designs topics covering only those chapters
+(no re-extraction needed — data is already on disk)
+```
+
+This pattern repeats at every decision point: extract → review with user → filter via next step.
+
+**Bundling:** All agent files ship in `.claude/agents/` alongside the skill in `.claude/skills/finetune-skill/`. SKILL.md references them by name and Claude Code discovers them automatically from the `.claude/agents/` directory.
 
 ---
 

@@ -154,66 +154,26 @@ EOF
 
 ### Step 2: Extract Documents
 
-Read the user's documents (PDFs, markdown, text). Extract typed, linked source_parts — text passages, tables (with cell structure), and images (with base64 data). Each document produces its own `knowledge_parts.json` in a per-document subdirectory.
+**Delegate to the `knowledge-extractor` subagent** (installed at `.claude/agents/knowledge-extractor.md`) — it processes all documents through the extraction pipeline (Docling or pdftotext fallback), produces structured knowledge parts, uploads to the gateway, and validates the output. Provide `SKILL_DIR=${CLAUDE_SKILL_DIR}`, `WORKFLOW_ID`, `GATEWAY_URL=http://localhost:9090`, `PROJECT_DIR=finetune-project`, and the list of document paths.
 
-> **For full extraction workflow details**, read [reference/extraction-guide.md](reference/extraction-guide.md).
+The subagent handles the full extraction workflow: Docling extraction, per-document extract.py scripts, table upgrades, consolidation, gateway upload, index merging, and validation. It returns a summary of parts extracted per document.
 
-**Process each document through these stages:**
+> **For full extraction workflow details** (if you need to understand or debug), read [reference/extraction-guide.md](reference/extraction-guide.md).
 
-1. **Check Docling availability** — `curl -sS http://127.0.0.1:5001/health`. If Docling is not running and Docker is available, start it. If no Docker, use the pdftotext fallback.
+After the subagent returns, verify the output exists before proceeding:
+- `knowledge/all-parts-index.json` must exist with parts from all documents
+- Each document should have its own subdirectory under `knowledge/` with `knowledge_parts.json`
 
-2. **Extract each document** using `docling_extract.py` (async API with polling — do NOT use curl directly):
-```bash
-for DOC in *.pdf; do
-  DOC_SLUG=$(echo "${DOC%.pdf}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
-  DOC_DIR="finetune-project/knowledge/$DOC_SLUG"
+If there are no documents (objective-only pipeline), skip this step.
 
-  # 1. Extract via Docling
-  python3 ${CLAUDE_SKILL_DIR}/scripts/docling_extract.py "$DOC" \
-    --output "$DOC_DIR/docling-result.json"
-
-  # 2. Read chunks, write extract.py, run it to produce knowledge_parts.json
-
-  # 3. Upgrade tables, consolidate, validate
-  python3 ${CLAUDE_SKILL_DIR}/scripts/extract_tables.py \
-    --docling-result "$DOC_DIR/docling-result.json" \
-    --parts-file "$DOC_DIR/knowledge_parts.json"
-
-  python3 ${CLAUDE_SKILL_DIR}/scripts/consolidate_parts.py "$DOC_DIR/knowledge_parts.json"
-
-  # 4. Upload raw PDF + extracted parts to gateway
-  python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-knowledge \
-    --workflow-id $WORKFLOW_ID \
-    --file "$DOC" \
-    --parts-file "$DOC_DIR/knowledge_parts.json" \
-    --name "$DOC" \
-    --force \
-    --description "Source document: $DOC" \
-    --metadata '{"extraction_method":"docling_hybrid"}'
-done
-```
-
-3. **Write a per-document extraction script** at `knowledge/{doc-slug}/extract.py`. Read chunks 0-9 first to understand document structure, then sample middle/end. Group content by semantic units (section heading + content = one part), target 200-2000 chars per part. Prefix part IDs with the document slug.
-
-4. **Merge part indexes** after all documents are processed — combine all `knowledge/*/parts-index.json` into `knowledge/all-parts-index.json` (a simple Python script that loads each file and merges the `parts` arrays).
-
-5. **Verify ALL documents were processed** before proceeding to Step 3:
-```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/knowledge/
-```
-
-**Fallback — pdftotext** (when Docker is not available):
-```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/pdftotext_extract.py document.pdf \
-  -o finetune-project/knowledge/doc-slug/knowledge_parts.json
-```
-Then run `consolidate_parts.py` and `validate_extraction.py` on the output — same as the Docling path.
+**Review extraction with the user.** Present a per-document summary of what was extracted (document name, chapter/section count, parts count). Ask the user which areas they want the training to focus on. Use their answer to guide topic design in Step 3 — do NOT re-run extraction. All content is already on disk; topics control what gets used for training.
 
 ### Step 3: Build Topic Hierarchy
 
 **A topic = a type of training example you want to generate.** Each leaf topic answers the question: "what scenario should the model practice handling?" The hierarchy groups related scenarios together so you can balance coverage and spot gaps.
 
 Decide what topics to create based on:
+- **The user's focus areas** — which documents/chapters/sections did the user say are most important? Prioritize these as top-level topics.
 - **The objective** — what behaviors does the model need? Each distinct behavior cluster becomes a topic.
 - **The documents** (if available) — what content exists to generate examples from? Read `knowledge/all-parts-index.json` (the merged index across all documents) and use `extraction_path` values as a checklist to make sure your topics cover the available material, not as a template to copy directly.
 
@@ -249,6 +209,13 @@ if [ -f relations.json ]; then
     --workflow-id $WORKFLOW_ID --file relations.json
 fi
 ```
+
+**Review topics with the user.** Present the topic hierarchy (name, parent, linked source material count, planned records-per-topic). Ask:
+- Are these the right focus areas?
+- Any topics to add, remove, or rebalance?
+- How many records per topic? (default: 8 per leaf)
+
+Adjust topics based on feedback before proceeding to data generation. This is the **primary filtering step** — topics determine what training data gets generated. Getting this right avoids regenerating data later.
 
 ### Step 3.5: Categorize Existing Records
 
@@ -289,6 +256,13 @@ The script loads topics + relations, finds leaf topics, gathers linked source ch
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
   --workflow-id $WORKFLOW_ID --file training.jsonl
 ```
+
+**Review generated data with the user.** Present a per-topic breakdown (topic name, record count, 2-3 sample prompts per topic). Ask:
+- Do these prompts look like realistic user questions?
+- Any topics with weak/repetitive prompts that need regeneration?
+- Any gaps — scenarios the user expected but didn't see?
+
+The UI at `http://localhost:5173/finetune` also shows all records grouped by topic — point the user there for a visual review.
 
 ### Step 4.5: Generate Variants for Augmentation
 
@@ -423,19 +397,17 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 
 #### 7c. Monitor training + poll eval
 
-Poll both eval and training jobs in parallel using `finetune.py` commands. These commands poll the gateway API and save results locally.
+Poll eval in foreground. Delegate training monitoring to the `training-monitor` subagent — it runs in the background on a cheaper model, polls every 15s, detects anomalies (NaN loss, KL divergence, clipping, weak signal), and saves metrics locally for post-training analysis.
 
 ```bash
 # Poll eval in foreground (updates evaluations/eval-001.json with progress + results)
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval \
   --file evaluations/eval-001.json
-
-# Poll training in background (updates training-jobs/train-001.json + saves metrics)
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
-  --file training-jobs/train-001.json &
 ```
 
-**Key rule**: When one job completes, **immediately analyze its results** — don't wait for the slower job. Polling saves all data locally (`training-jobs/` and `evaluations/`) so Step 8 needs no API calls.
+**Monitor training.** Delegate to the `training-monitor` subagent (installed at `.claude/agents/training-monitor.md`) — provide `GATEWAY_URL=http://localhost:9090`, `WORKFLOW_ID`, `JOB_ID` (from the training job file), and `OUTPUT_DIR=training-jobs`. It writes `{JOB_ID}-metrics.json`, `{JOB_ID}-status.json`, and `{JOB_ID}-epoch-evals.json` to the output directory. When it returns, check the JSON report for anomalies before proceeding to analysis.
+
+**Key rule**: When one job completes, **immediately analyze its results** — don't wait for the slower job. Both save data locally (`training-jobs/` and `evaluations/`) so Step 8 needs no API calls.
 
 ### Step 8: Analyze Results & Present Findings
 

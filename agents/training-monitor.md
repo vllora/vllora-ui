@@ -4,7 +4,7 @@ description: Monitors a running finetune training job for anomalies and saves me
 tools: Read, Write, Bash
 model: haiku
 background: true
-maxTurns: 10
+maxTurns: 15
 ---
 
 You monitor a vLLora finetune training job by polling metrics, detecting anomalies,
@@ -29,11 +29,12 @@ The parent agent will tell you:
 
 ## API Endpoints
 
-- **Status**: `GET {GATEWAY_URL}/finetune/workflows/{WORKFLOW_ID}/jobs/{JOB_ID}/status`
-  - Returns: `{ "status": "running" | "succeeded" | "failed", "error": "..." }`
+- **Status**: `GET {GATEWAY_URL}/finetune/workflows/{WORKFLOW_ID}/jobs` (list all jobs, then filter by `JOB_ID` in the response)
+  - Returns: `{ "jobs": [{ "id": "...", "status": "running" | "succeeded" | "failed", "error": "...", ... }] }`
+  - **Important**: Do NOT use the per-job status endpoint (`/jobs/{JOB_ID}/status`) — use the list endpoint and filter. This is more reliable.
 - **Metrics**: `GET {GATEWAY_URL}/finetune/workflows/{WORKFLOW_ID}/jobs/{JOB_ID}/metrics`
-  - Returns: `{ "metrics": [{ "metrics": { "global_step": int, "loss": float, "kl": float, "reward": float, "reward_std": float, "completions/clipped_ratio": float, "frac_reward_zero_std": float, "grad_norm": float, ... }, "created_at": "ISO timestamp" }] }`
-- **Per-epoch evals**: `GET {GATEWAY_URL}/finetune/workflows/{WORKFLOW_ID}/dataset/finetune-evaluations?finetune_job_id={JOB_ID}`
+  - Returns: `{ "metrics": [{ "metrics": { "global_step": int, "loss": float, "kl": float, "reward": float, "reward_std": float, "completions/clipped_ratio": float, "frac_reward_zero_std": float, "grad_norm": float, "epoch": float, "max_steps": int, ... }, "created_at": "ISO timestamp" }] }`
+- **Per-epoch evals**: `GET {GATEWAY_URL}/finetune/workflows/{WORKFLOW_ID}/finetune-evaluations?finetune_job_id={JOB_ID}`
   - Returns: `{ "results": [{ "row": { "topic": "..." }, "epochs": { "0": [{ "score": float }], "1": [...] } }] }`
 
 ## Python Script Requirements
@@ -68,11 +69,13 @@ Track these across poll iterations:
 
 ### Anomaly Checks (run on every poll)
 
+Check NaN/Inf across all key metrics, not just loss.
+
 | Anomaly | Logic | Severity |
 |---------|-------|----------|
-| NaN/Inf loss | `math.isnan(loss) or math.isinf(loss)` | CRITICAL — exit immediately |
-| KL divergence | last 3 KL values all rising AND latest > 1.0 | CRITICAL — exit immediately |
+| NaN/Inf in metrics | `math.isnan(v) or math.isinf(v)` for loss, reward, kl, grad_norm | CRITICAL — exit immediately |
 | High clipping | `completions/clipped_ratio > 0.70` | CRITICAL — exit immediately |
+| KL divergence | last 5 KL values all rising AND latest > 2.0 | WARNING — exit |
 | Weak signal | `frac_reward_zero_std > 0.60` for 5+ consecutive snapshots | WARNING — exit |
 | Reward collapse | `reward_std < 0.05` for 5+ consecutive snapshots | WARNING — exit |
 | Grad norm spike | `grad_norm > 3x statistics.median(grad_norms)` for 10+ consecutive snapshots (only check when >= 5 norms collected) | WARNING — exit |
@@ -84,8 +87,8 @@ When the script exits (job done or anomaly detected), it must print a single JSO
 ```json
 {
   "status": "succeeded | failed | anomaly_detected",
-  "anomaly_type": "nan_loss | kl_divergence | high_clipping | weak_signal | reward_collapse | grad_norm_spike | null",
-  "anomaly_detail": "human-readable description of what triggered it, e.g. 'kl: 0.3 → 0.8 → 1.2'",
+  "anomaly_type": "nan_metrics | kl_divergence | high_clipping | weak_signal | reward_collapse | grad_norm_spike | null",
+  "anomaly_detail": "human-readable description of what triggered it, e.g. 'kl rising over last 5 polls: 0.8 → 1.2 → 1.5 → 1.9 → 2.1'",
   "metrics_snapshot": [<last 3 raw metric objects>],
   "job_id": "the job UUID",
   "steps_completed": "global_step / max_steps or global_step if max_steps unknown",
