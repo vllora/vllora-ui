@@ -72,7 +72,7 @@ your-project/
         └── finetune-skill/            # The skill itself
             ├── SKILL.md
             ├── reference/             # 8 reference docs
-            ├── scripts/               # 14 Python helpers
+            ├── scripts/               # 17 Python helpers
             └── templates/             # Starter files
 ```
 
@@ -137,22 +137,28 @@ finetune-skill/
 │
 ├── scripts/                    # Helper scripts (run with `python3`, requires `requests`)
 │   ├── finetune.py             # Gateway API wrapper (create workflow, upload, verify)
-│   ├── generate_records.py     # LLM-based training record generation per leaf topic
+│   ├── generate_records.py     # LLM-based training record generation (--parallel, --upload-incremental)
 │   ├── chat_completion.py      # LLM chat completions (validates JSON output)
 │   ├── dry_run_grader.py       # Test grader on one record via gateway sandbox
 │   ├── validate_dataset.py     # Validate JSONL (format, fields, cross-ref topics/parts)
 │   ├── run_evaluation.py       # Create eval, poll until complete (~30 min timeout)
 │   ├── start_training.py       # Start training, poll until complete
-│   ├── analyze_training.py    # Fetch + analyze training metrics, per-epoch evals, alerts
-│   ├── print_metrics_table.py # Print training metrics table (per-epoch or per-step)
-│   ├── extract_tables.py      # Upgrade text parts to table parts from Docling table data
-│   ├── consolidate_parts.py   # Merge adjacent parts, drop fragments, fix Unicode
-│   ├── validate_extraction.py # Cross-document extraction quality gate
-│   ├── docling_extract.py     # Docling Serve async extraction (Docker required)
-│   └── pdftotext_extract.py   # Fallback extraction via pdftotext (no Docker)
+│   ├── analyze_training.py     # Fetch + analyze training metrics, per-epoch evals, alerts
+│   ├── print_metrics_table.py  # Print training metrics table (per-epoch or per-step)
+│   ├── build_knowledge_parts.py # Generic Docling→knowledge_parts.json (no LLM needed)
+│   ├── checkpoint.py           # Pipeline checkpointing (save/check/reset step progress)
+│   ├── deduplicate_records.py  # Remove near-duplicate prompts (trigram similarity)
+│   ├── extract_tables.py       # Upgrade text parts to table parts from Docling table data
+│   ├── consolidate_parts.py    # Merge adjacent parts, drop fragments, fix Unicode
+│   ├── validate_extraction.py  # Cross-document extraction quality gate
+│   ├── docling_extract.py      # Docling async extraction (--batch, --submit-only, --poll-one)
+│   └── pdftotext_extract.py    # Fallback extraction via pdftotext (no Docker)
 │
-├── templates/                  # Starter files
-│   └── grader-template.js         # Hybrid grader template
+├── templates/                  # Grader templates (pick closest, then customize)
+│   ├── grader-template.js      # General-purpose rubric (accuracy, helpfulness, clarity)
+│   ├── grader-extraction.js    # Structured data extraction (field accuracy, hallucination)
+│   ├── grader-compliance.js    # Rule application (rule recall, false positives, citations)
+│   └── grader-readability.js   # Simplification (readability + Flesch-Kincaid, jargon-free)
 │
 └── README.md                   # This file
 ```
@@ -361,6 +367,10 @@ Orchestrator designs topics covering only those chapters
 
 This pattern repeats at every decision point: extract → review with user → filter via next step.
 
+4. **Auto-iterate in non-interactive mode.** When running via `claude -p` (no user input), the orchestrator doesn't ask "what would you like to do?" and stop. Instead, it auto-applies the highest-priority fix from the eval analysis and starts a new iteration. Max 3 auto-iterations. The pipeline waits for training to complete before analyzing and iterating — it does not exit after launching training.
+
+5. **Checkpoint for crash recovery.** Each step writes to `.checkpoint.json` via `checkpoint.py`. On restart, the orchestrator reads checkpoints to skip completed steps. This is more reliable than inferring state from local file existence.
+
 **Bundling:** All agent files ship in `.claude/agents/` alongside the skill in `.claude/skills/finetune-skill/`. SKILL.md references them by name and Claude Code discovers them automatically from the `.claude/agents/` directory.
 
 ---
@@ -438,9 +448,10 @@ These scripts solve the #1 testing issue (agents creating shell scripts instead 
 
 ### Templates
 
-- `grader-template.js` — Hybrid grader with programmatic checks + LLM-as-judge
-
-Total: ~8,200 lines across 22 files.
+- `grader-template.js` — General-purpose rubric (accuracy, helpfulness, clarity, completeness, tone)
+- `grader-extraction.js` — Structured data extraction (field accuracy, hallucination rate, format)
+- `grader-compliance.js` — Rule/regulation application (rule recall, false positives, citations)
+- `grader-readability.js` — Simplification/plain-language (readability + Flesch-Kincaid, jargon-free)
 
 ---
 
