@@ -684,12 +684,15 @@ def cmd_create_training(args: argparse.Namespace) -> None:
     """
     from datetime import datetime, timezone
 
+    output_model = args.output_model or "finetune-v1"
+    display_name = args.display_name or f"Fine-tune {output_model}"
+
     payload = {
         "job_type": "provider_finetune",
         "dataset": args.workflow_id,
         "base_model": args.base_model,
-        "output_model": args.output_model or f"finetune-v1",
-        "display_name": args.display_name or f"Fine-tune {args.output_model}",
+        "output_model": output_model,
+        "display_name": display_name,
     }
 
     if args.config:
@@ -968,6 +971,7 @@ def main() -> None:
     p.add_argument("--workflow-id", required=True, help="Workflow ID")
     p.add_argument("--base-model", required=True, help="Base model (e.g., unsloth/Qwen3.5-4B)")
     p.add_argument("--output-model", default=None, help="Output model name")
+    p.add_argument("--display-name", default=None, help="Human-readable training job name")
     p.add_argument("--config", default=None, help="Training config JSON string")
     p.add_argument("--inference-params", default=None, help="Inference parameters JSON string")
     p.add_argument("--output-dir", default="training-jobs", help="Local directory for job metadata (default: training-jobs/)")
