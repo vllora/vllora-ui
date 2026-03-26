@@ -22,6 +22,7 @@ import {
 } from "recharts";
 import { cn } from "@/lib/utils";
 import type { FinetuneEvalResultsResponse } from "@/services/finetune-api";
+import { getScoreTrendInsights } from "./training-metrics-insights";
 import {
   parseScoreBreakdown,
   getAllCriteriaNames,
@@ -59,6 +60,8 @@ interface EpochData {
   rowCount: number;
   criteriaAvg: Record<string, number>;
 }
+
+// Score Trend & Distribution insights imported from ./training-metrics-insights
 
 // Custom tooltip with dark styling
 function ChartTooltip({
@@ -522,6 +525,23 @@ export function TrainingMetricsChart({
           </span>
         </div>
       )}
+
+      {/* ── Insights ── */}
+      {(() => {
+        const insights = getScoreTrendInsights(epochData);
+        if (insights.length === 0) return null;
+        const levelIcon = { ok: "✅", warn: "⚠️", critical: "🔴" } as const;
+        const levelColor = { ok: "text-emerald-400/70", warn: "text-amber-400/80", critical: "text-red-400/80" } as const;
+        return (
+          <div className="px-4 py-2 border-t border-white/5 flex flex-col gap-1">
+            {insights.map((ins, i) => (
+              <p key={i} className={cn("text-[10px] leading-relaxed", levelColor[ins.level])}>
+                {levelIcon[ins.level]} {ins.text}
+              </p>
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 }

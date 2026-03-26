@@ -20,6 +20,7 @@ import type { FinetuneEvalResultsResponse } from "@/services/finetune-api";
 import { TrainingMetricsSection } from "./TrainingMetricsSection";
 import { FinetuneMetricsSection } from "./FinetuneMetricsSection";
 import { ScoreStrip } from "@/components/datasets/eval-dialog/ScoreStrip";
+import { getScoreDistributionInsights } from "../training-metrics-insights";
 
 type ChartView = "scoreTrend" | "stability" | "reward" | "completions" | "throughput" | "scoreDistribution";
 
@@ -157,6 +158,21 @@ export function FinetuneChartSelector({
               </div>
             )}
           </div>
+          {scores.length > 0 && (() => {
+            const insights = getScoreDistributionInsights(scores, mean);
+            if (insights.length === 0) return null;
+            const levelIcon = { ok: "✅", warn: "⚠️", critical: "🔴" } as const;
+            const levelColor = { ok: "text-emerald-400/70", warn: "text-amber-400/80", critical: "text-red-400/80" } as const;
+            return (
+              <div className="px-4 py-2 border-t border-white/5 flex flex-col gap-1">
+                {insights.map((ins, i) => (
+                  <p key={i} className={cn("text-[10px] leading-relaxed", levelColor[ins.level])}>
+                    {levelIcon[ins.level]} {ins.text}
+                  </p>
+                ))}
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
