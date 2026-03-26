@@ -28,7 +28,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, Activity, TrendingUp, Zap, Eye, EyeOff } from "lucide-react";
+import { AlertTriangle, Activity, TrendingUp, Zap, Eye, EyeOff, BarChart3 } from "lucide-react";
 import type { FinetuneJobMetricPoint } from "@/services/finetune-api";
 
 // =============================================================================
@@ -43,7 +43,7 @@ interface FinetuneMetricsChartProps {
   hideTabs?: boolean;
 }
 
-type MetricTab = "reward" | "stability" | "completions";
+type MetricTab = "reward" | "stability" | "completions" | "throughput";
 
 interface MetricDef {
   key: string;
@@ -82,7 +82,18 @@ const TAB_CONFIG: Record<
     metrics: [
       { key: "completions/clipped_ratio", label: "Clipped Ratio", color: "#ef4444", primary: true, description: "Fraction of responses truncated. High (>0.7) = responses hit token limit." },
       { key: "completions/mean_length", label: "Mean Length", color: "#10b981", primary: false, description: "Average response length in tokens." },
-      { key: "completions/mean_terminated_length", label: "Terminated Length", color: "#6366f1", primary: false, description: "Average length of naturally-ended responses." },
+      { key: "completions/max_length", label: "Max Length", color: "#f59e0b", primary: false, description: "Longest response in tokens. If stuck at max_output_tokens, model is hitting the ceiling." },
+      { key: "completions/min_length", label: "Min Length", color: "#06b6d4", primary: false, description: "Shortest response. Decreasing min suggests some prompts get trivial answers." },
+      { key: "completions/mean_terminated_length", label: "Terminated Length", color: "#6366f1", primary: false, description: "Average length of naturally-ended (non-truncated) responses." },
+    ],
+  },
+  throughput: {
+    label: "Throughput",
+    icon: <BarChart3 className="h-3 w-3" />,
+    metrics: [
+      { key: "num_tokens", label: "Tokens/Step", color: "#10b981", primary: true, description: "Total tokens processed per training step. Drops may indicate shorter completions." },
+      { key: "row_indices_count", label: "Batch Size", color: "#6366f1", primary: false, description: "Number of record samples per step. Should be consistent." },
+      { key: "completion_length", label: "Avg Completion", color: "#f59e0b", primary: false, description: "Average completion length across all candidates in the batch." },
     ],
   },
 };
@@ -336,7 +347,12 @@ export function FinetuneMetricsChart({
         learning_rate: typeof m.learning_rate === "number" ? m.learning_rate : undefined,
         "completions/clipped_ratio": typeof m["completions/clipped_ratio"] === "number" ? m["completions/clipped_ratio"] : undefined,
         "completions/mean_length": typeof m["completions/mean_length"] === "number" ? m["completions/mean_length"] : undefined,
+        "completions/max_length": typeof m["completions/max_length"] === "number" ? m["completions/max_length"] : undefined,
+        "completions/min_length": typeof m["completions/min_length"] === "number" ? m["completions/min_length"] : undefined,
         "completions/mean_terminated_length": typeof m["completions/mean_terminated_length"] === "number" ? m["completions/mean_terminated_length"] : undefined,
+        num_tokens: typeof m.num_tokens === "number" ? m.num_tokens : undefined,
+        row_indices_count: typeof m.row_indices_count === "number" ? m.row_indices_count : undefined,
+        completion_length: typeof m.completion_length === "number" ? m.completion_length : undefined,
       };
     });
   }, [metrics]);

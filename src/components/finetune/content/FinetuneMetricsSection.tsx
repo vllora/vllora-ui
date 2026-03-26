@@ -20,7 +20,7 @@ interface FinetuneMetricsSectionProps {
   workflowId: string;
   isLive?: boolean;
   /** Pre-select a specific tab (reward/stability/completions) */
-  defaultTab?: "reward" | "stability" | "completions";
+  defaultTab?: "reward" | "stability" | "completions" | "throughput";
 }
 
 const POLL_INTERVAL = 15_000;

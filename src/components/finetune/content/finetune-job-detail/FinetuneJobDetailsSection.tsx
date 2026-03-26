@@ -8,11 +8,12 @@
 import { useState, useCallback } from "react";
 import { Copy, Check } from "lucide-react";
 import type { FinetuneJob } from "@/services/finetune-api";
+import { parseFinetuneJobDate } from "../utils";
 
 /** Format duration between two ISO timestamps as "2h 15m" or "45m" or "12s" */
 function computeDuration(startIso: string, endIso?: string): string | null {
   if (!endIso) return null;
-  const ms = new Date(endIso).getTime() - new Date(startIso).getTime();
+  const ms = parseFinetuneJobDate(endIso).getTime() - parseFinetuneJobDate(startIso).getTime();
   if (ms < 0 || !isFinite(ms)) return null;
   const totalSec = Math.floor(ms / 1000);
   if (totalSec < 60) return `${totalSec}s`;

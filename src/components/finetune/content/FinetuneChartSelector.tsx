@@ -21,7 +21,7 @@ import { TrainingMetricsSection } from "./TrainingMetricsSection";
 import { FinetuneMetricsSection } from "./FinetuneMetricsSection";
 import { ScoreStrip } from "@/components/datasets/eval-dialog/ScoreStrip";
 
-type ChartView = "scoreTrend" | "stability" | "reward" | "completions" | "scoreDistribution";
+type ChartView = "scoreTrend" | "stability" | "reward" | "completions" | "throughput" | "scoreDistribution";
 
 /** Ordered by importance for finetune monitoring */
 const CHART_VIEWS: { key: ChartView; label: string; description: string }[] = [
@@ -29,6 +29,7 @@ const CHART_VIEWS: { key: ChartView; label: string; description: string }[] = [
   { key: "stability", label: "Loss", description: "Training loss, KL divergence, gradient norm, and learning rate. Shows whether training is converging and stable." },
   { key: "reward", label: "Reward", description: "Reward signal from the evaluator. Shows how well the model generates high-scoring responses and whether the evaluator provides useful learning signal." },
   { key: "completions", label: "Completions", description: "Response length and truncation rate. High truncation means responses hit the token limit — consider increasing max tokens." },
+  { key: "throughput", label: "Throughput", description: "Token throughput, batch size, and completion length per step. Drops may indicate shorter or degenerate completions." },
   { key: "scoreDistribution", label: "Score Distribution", description: "Per-record score histogram for the latest evaluation. Shows the spread of scores across your dataset." },
 ];
 
@@ -128,7 +129,7 @@ export function FinetuneChartSelector({
         />
       )}
 
-      {(view === "reward" || view === "stability" || view === "completions") && (
+      {(view === "reward" || view === "stability" || view === "completions" || view === "throughput") && (
         <FinetuneMetricsSection
           jobId={jobId}
           workflowId={workflowId}
