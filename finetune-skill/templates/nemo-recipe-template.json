@@ -1,0 +1,116 @@
+{
+  "_comment": "NeMo Data Designer recipe template for RFT prompt generation from document chunks. Copy this file, replace <PLACEHOLDERS>, and customize the prompts for your domain.",
+  "recipe": {
+    "seed_config": {
+      "source": {
+        "seed_type": "unstructured",
+        "paths": ["<REPLACE: copy resolved_paths from nemo-seed.json>"],
+        "chunk_size": 1200,
+        "chunk_overlap": 200
+      }
+    },
+    "columns": [
+      {
+        "name": "difficulty",
+        "column_type": "sampler",
+        "sampler_type": "category",
+        "params": {
+          "values": ["beginner", "intermediate", "advanced"]
+        }
+      },
+      {
+        "name": "system_prompt",
+        "column_type": "llm-text",
+        "model_alias": "openai-text",
+        "prompt": "Write a concise system prompt (2-3 sentences) for an assistant that will be trained with reinforcement fine-tuning. Define the assistant's role, boundaries, and response style using only the ideas supported by the source chunk. Adapt the tone for a {{difficulty}} user.
+
+Source chunk:
+{{chunk_text}}
+
+Return only the system prompt."
+      },
+      {
+        "name": "user_message",
+        "column_type": "llm-text",
+        "model_alias": "openai-text",
+        "prompt": "Generate one realistic user message for a reinforcement fine-tuning prompt. The message must be answerable from the source chunk and should ask for explanation, comparison, application, or analysis rather than trivial definition lookup. Keep it natural and specific for a {{difficulty}} user.
+
+Source chunk:
+{{chunk_text}}
+
+Return only the user message."
+      },
+      {
+        "name": "grading_rubric",
+        "column_type": "llm-text",
+        "model_alias": "openai-text",
+        "prompt": "Write 3-5 short bullet points describing what a strong answer to the user message must include. Focus on factual grounding in the source chunk, correctness, clarity, and usefulness.
+
+Source chunk:
+{{chunk_text}}
+
+User message:
+{{user_message}}
+
+Return only the rubric bullets."
+      },
+      {
+        "name": "supporting_passage",
+        "column_type": "llm-text",
+        "model_alias": "openai-text",
+        "prompt": "Extract the most relevant supporting quote from the source chunk for answering the user message. Quote directly and keep it concise.
+
+Source chunk:
+{{chunk_text}}
+
+User message:
+{{user_message}}
+
+Return only the quote."
+      },
+      {
+        "name": "judge_prompt_quality",
+        "column_type": "llm-judge",
+        "model_alias": "openai-text",
+        "prompt": "Judge whether this synthetic training row is high quality for reinforcement fine-tuning. Consider whether the system prompt and user message are grounded in the source chunk, realistic, specific, and useful for training.
+
+Source chunk:
+{{chunk_text}}
+
+System prompt:
+{{system_prompt}}
+
+User message:
+{{user_message}}
+
+Grading rubric:
+{{grading_rubric}}",
+        "scores": [
+          {
+            "name": "groundedness",
+            "description": "Whether the prompt is answerable from the source chunk.",
+            "options": {
+              "high": "Tightly grounded in the chunk.",
+              "medium": "Mostly grounded with some loose inference.",
+              "low": "Not well grounded or requires missing information."
+            }
+          },
+          {
+            "name": "prompt_quality",
+            "description": "Whether the row is useful as an RFT prompt.",
+            "options": {
+              "high": "Specific, realistic, and instructive.",
+              "medium": "Usable but somewhat generic or vague.",
+              "low": "Weak, trivial, or poorly scoped."
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "run": {
+    "rows": 10,
+    "execution_type": "preview",
+    "run_name": "<REPLACE: descriptive name for this run>"
+  }
+}

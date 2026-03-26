@@ -47,6 +47,11 @@ Create a local directory for all artifacts:
 ```
 finetune-project/
 ├── training.jsonl              # Training prompts (JSONL format)
+├── nemo-seed.json              # NeMo seed inspect response (when using NeMo path)
+├── nemo-recipe.json            # NeMo Data Designer recipe payload (when using NeMo path)
+├── nemo-preview.json           # NeMo preview job output (when using NeMo path)
+├── nemo-job.json               # NeMo full job status + dataset metadata
+├── nemo-metadata.jsonl          # NeMo metadata sidecar (reference_answer, judge scores, citations)
 ├── grader.js                   # Evaluation/grader function
 ├── topics.json                 # Topic hierarchy
 ├── relations.json              # Topic → part mappings for data generation
@@ -194,9 +199,14 @@ EOF
 
 Read the user's documents (PDFs, markdown, text). Extract typed, linked source_parts — text passages, tables (with cell structure), and images (with base64 data). Each document produces its own `knowledge_parts.json` in a per-document subdirectory.
 
+There are **two supported document paths**:
+
+1. **Docling path (default)** — use when you want vLLora knowledge upload, topic-part linking, source part traceability, and the existing `knowledge_parts.json` workflow.
+2. **NeMo Data Designer path (testing / synthetic data)** — use when you want to quickly turn documents into chunked seed rows and generate synthetic training records through the NeMo API. This path does **not** produce `knowledge_parts.json` and does **not** upload document sources to the vLLora gateway in Step 2.
+
 **Process each document through these stages:**
 
-#### 2a. Submit all documents to Docling in parallel
+#### 2a. Default path: Submit all documents to Docling in parallel
 
 Check if Docling Serve is running:
 ```bash
@@ -231,6 +241,91 @@ done
 > **Why not batch mode?** `--batch` mode submits all PDFs in parallel but blocks until ALL complete. A 282-page PDF takes 15 min while an 84-page one finishes in 4 min. Processing each individually lets you extract, process, and upload the smaller PDFs immediately while Docling works on the larger ones. Use `--batch` only if all documents are similar size.
 
 > **Note**: For large PDFs (200+ pages), Docling extraction can take 10-20 minutes.
+
+#### 2b. Alternate path: Use NeMo Data Designer document seeds
+
+> **Reference:** See `reference/nemo-guide.md` for detailed NeMo API documentation, seed types, recipe structure, and column types.
+
+Use this path when the user explicitly wants to use NeMo Data Designer for document-grounded synthetic data generation.
+
+**What NeMo uses for document ingestion**:
+- `.pdf` → `pymupdf4llm` converts the PDF to markdown-like text
+- `.docx` → `mammoth` converts DOCX to markdown-like text
+- `.txt` / `.md` → read directly as text
+- Then NeMo chunks the extracted text into seed rows
+
+**Do NOT run Docling first** for this path. NeMo uses its own extraction path. Docling remains the default only for the vLLora knowledge-source workflow.
+
+**Chunking defaults**:
+- `unstructured_chunk_size = 1200`
+- `unstructured_chunk_overlap = 200`
+
+These are the baseline defaults. Only change them if the preview rows are obviously too short or too fragmented.
+
+**Supported file types**:
+- `.pdf`
+- `.docx`
+- `.txt`
+- `.md`
+
+**Multi-file support**:
+- Multiple documents can be uploaded into the same NeMo seed block
+- Preview rows preserve `source_file` so generated records can keep provenance
+
+**Base URL**:
+```bash
+NEMO_BASE_URL=http://localhost:8000/api/data-recipe
+```
+
+**Upload each document** to the NeMo seed API. Save each response so you can collect file IDs:
+```bash
+BLOCK_ID=$(date +%s)
+mkdir -p finetune-project/nemo-uploads
+
+for FILE in *.pdf *.docx *.txt *.md; do
+  [ -f "$FILE" ] || continue
+  SAFE_NAME=$(basename "$FILE")
+  curl -sS -X POST "$NEMO_BASE_URL/seed/upload-unstructured-file" \
+    -F "file=@$FILE" \
+    -F "block_id=$BLOCK_ID" \
+    > "finetune-project/nemo-uploads/$SAFE_NAME.upload.json"
+done
+```
+
+**Build the inspect payload** from the uploaded file IDs and run seed inspection:
+```bash
+FILE_IDS=$(jq -r '.file_id' finetune-project/nemo-uploads/*.upload.json | jq -R . | jq -s .)
+FILE_NAMES=$(jq -r '.filename' finetune-project/nemo-uploads/*.upload.json | jq -R . | jq -s .)
+
+cat > finetune-project/nemo-seed-request.json <<EOF
+{
+  "block_id": "$BLOCK_ID",
+  "file_ids": $FILE_IDS,
+  "file_names": $FILE_NAMES,
+  "preview_size": 10,
+  "seed_source_type": "unstructured",
+  "unstructured_chunk_size": 1200,
+  "unstructured_chunk_overlap": 200
+}
+EOF
+
+curl -sS -X POST "$NEMO_BASE_URL/seed/inspect-upload" \
+  -H "Content-Type: application/json" \
+  -d @finetune-project/nemo-seed-request.json \
+  > finetune-project/nemo-seed.json
+```
+
+**Read `finetune-project/nemo-seed.json` before proceeding.** Confirm:
+- `columns` contains `chunk_text` and, for multiple files, `source_file`
+- preview rows are coherent chunks, not broken sentence fragments
+- the chunk size is reasonable for the target task
+
+If the chunks are too small or too large, adjust `unstructured_chunk_size` / `unstructured_chunk_overlap` and re-run the inspect step before Step 4.
+
+**Important**:
+- Seed rows are **not** training rows
+- They are only the source material for a later NeMo recipe with LLM columns
+- This path is for synthetic data generation testing, not for Step 2 gateway knowledge upload
 
 #### 2c. Process each document into knowledge parts
 
@@ -444,6 +539,8 @@ Focus on: refund requests and policies. Guide users through the refund process, 
 
 If there are no documents (objective-only pipeline), skip this step — no relations.json needed.
 
+If you are using the **NeMo testing path without Docling knowledge extraction**, skip this step — NeMo-generated records do not require a vLLora topic hierarchy to train.
+
 **Upload immediately** — push topics and relations to the gateway so the UI shows the topic hierarchy and coverage:
 ```bash
 python3 scripts/finetune.py upload-topics \
@@ -476,6 +573,11 @@ Write prompts to `training.jsonl` — one JSON object per line. Each line is a *
 
 Each record includes `source_parts` — the IDs of the knowledge parts used as grounding material. This enables traceability from any record back to the specific document sections it was derived from.
 
+There are **two supported generation paths**:
+
+1. **vLLora native generation** — use `scripts/generate_records.py` with topics, relations, and Docling-extracted knowledge parts
+2. **NeMo Data Designer generation** — use the NeMo API to turn chunked seed rows into final synthetic dataset rows, then convert those rows into `training.jsonl`
+
 Use `scripts/generate_records.py` to generate user prompts via LLM, grounded in the knowledge chunks linked to each topic:
 
 ```bash
@@ -504,7 +606,124 @@ If some topics fail, use `--append` to retry only the missing ones without overw
 
 **Generate enough data.** At least **100-200 total records** across all topics.
 
+#### Step 4A: Default path — vLLora native generation
+
 **Upload immediately** — push records to the gateway so the UI shows training data as it's generated:
+```bash
+python3 scripts/finetune.py upload-records \
+  --workflow-id $WORKFLOW_ID --file training.jsonl
+```
+
+#### Step 4B: Alternate path — NeMo Data Designer generation
+
+Use this path when Step 2 used NeMo document seeds. The goal is:
+1. turn `chunk_text` seed rows into final synthetic dataset rows
+2. convert the final rows into `training.jsonl`
+3. upload those normalized records to the vLLora workflow
+
+**Topics are optional in this path.** If you have not created `topics.json`, omit the `topic` field from the final JSONL or use a single placeholder topic only for local bookkeeping. vLLora training requires records + grader, not a topic hierarchy.
+
+**Important distinction**:
+- `chunk_text` seed rows are not training records
+- the NeMo recipe must include at least one **LLM generation column**
+- optional **judge** columns are for upstream data QA / filtering only
+- the vLLora `grader.js` remains the rollout-time training objective
+
+**Recommended minimal final NeMo row shape**:
+- `system_prompt`
+- `user_message`
+- `reference_answer`
+- `supporting_passage` (optional but recommended for document-grounded QA)
+- `citation` (optional)
+- `source_file` (optional)
+- `judge_*` fields (optional metadata for filtering)
+
+**Start from the recipe template:**
+```bash
+cp scripts/../templates/nemo-recipe-template.json finetune-project/nemo-recipe.json
+```
+
+Edit `finetune-project/nemo-recipe.json`:
+- Replace `seed_config.paths` with `resolved_paths` from `nemo-seed.json`
+- Adjust column prompts for your domain
+- Replace `run.run_name` with a descriptive name
+- See `reference/nemo-guide.md` for column types and customization options
+
+**Preview first**:
+```bash
+curl -sS -X POST "$NEMO_BASE_URL/jobs" \
+  -H "Content-Type: application/json" \
+  -d @finetune-project/nemo-recipe.json \
+  > finetune-project/nemo-preview.json
+```
+
+Poll the preview job until it completes:
+```bash
+PREVIEW_JOB_ID=$(jq -r '.job_id' finetune-project/nemo-preview.json)
+
+curl -sS "$NEMO_BASE_URL/jobs/$PREVIEW_JOB_ID/status" > finetune-project/nemo-preview-status.json
+curl -sS "$NEMO_BASE_URL/jobs/$PREVIEW_JOB_ID/dataset?limit=20&offset=0" > finetune-project/nemo-preview-dataset.json
+curl -sS "$NEMO_BASE_URL/jobs/$PREVIEW_JOB_ID/analysis" > finetune-project/nemo-preview-analysis.json
+```
+
+**Read both the preview dataset and the preview analysis before continuing.** Use them for different checks:
+- `nemo-preview-dataset.json` is the semantic check: are rows final QA/chat rows, not just raw `chunk_text`, and are they actually useful?
+- `nemo-preview-analysis.json` is the structural check: row counts, null/unique counts, sampler distribution, and token usage by column
+- judge columns are the quality signal: confirm the scores match the rows you see, rather than trusting a single score blindly
+
+Treat preview as a gate before the full run. Confirm:
+- fields needed for JSONL conversion exist
+- row quality is acceptable
+- optional judge columns make sense if you added them
+- analysis shows the expected number of rows and no obviously broken columns
+- there is not obvious front matter / table-of-contents pollution in the sampled rows
+
+If preview rows are weak, or analysis shows a skewed or broken run, fix `nemo-recipe.json` and re-run preview. Do **not** start the full job until preview looks healthy on both `/dataset` and `/analysis`.
+
+**Run the full NeMo job** after preview passes:
+```bash
+curl -sS -X POST "$NEMO_BASE_URL/jobs" \
+  -H "Content-Type: application/json" \
+  -d @finetune-project/nemo-recipe.json \
+  > finetune-project/nemo-job.json
+```
+
+Poll the full job status until it completes:
+```bash
+JOB_ID=$(jq -r '.job_id' finetune-project/nemo-job.json)
+curl -sS "$NEMO_BASE_URL/jobs/$JOB_ID/status" > finetune-project/nemo-job-status.json
+```
+
+**Fetch the generated dataset rows** from the completed job dataset API. Page through until all rows are collected:
+```bash
+curl -sS "$NEMO_BASE_URL/jobs/$JOB_ID/dataset?limit=200&offset=0" > finetune-project/nemo-job-dataset-page-1.json
+```
+
+Treat the **dataset rows API** as the stable source of truth. Do not depend on NeMo internal artifact layout when converting to `training.jsonl`.
+
+**Convert final NeMo rows into `training.jsonl`** using the conversion script:
+```bash
+python3 scripts/convert_nemo_rows.py \
+  --input finetune-project/nemo-job-dataset-page-1.json \
+  --output finetune-project/training.jsonl \
+  --min-accuracy 0.8 \
+  --include-ground-truth
+```
+
+This converts NeMo rows (system_prompt → system message, user_message → user message), filters by judge scores, and writes a `nemo-metadata.jsonl` sidecar containing reference_answer, supporting_passage, citation, and judge fields for eval/grading use. See `convert_nemo_rows.py --help` for all options.
+
+**Validate the converted data:**
+```bash
+python3 scripts/validate_dataset.py finetune-project/training.jsonl --nemo
+```
+
+The `--nemo` flag checks for accidentally included NeMo metadata in training messages.
+
+**Judge vs grader**:
+- NeMo judges are for row filtering, scoring, and dataset QA before training
+- vLLora `grader.js` is still the rollout-time judge during evaluation and training
+
+After conversion and validation, upload the normalized records:
 ```bash
 python3 scripts/finetune.py upload-records \
   --workflow-id $WORKFLOW_ID --file training.jsonl
@@ -592,6 +811,7 @@ python3 scripts/finetune.py upload-grader \
 
 ### Step 5.5: Validate Before Upload
 
+If you are using the Docling / topics / source-parts path:
 ```bash
 python3 scripts/validate_dataset.py finetune-project/training.jsonl \
   --topics finetune-project/topics.json \
@@ -599,6 +819,13 @@ python3 scripts/validate_dataset.py finetune-project/training.jsonl \
 ```
 
 Checks: valid JSON, required fields, message structure, no assistant messages (RFT), duplicate IDs, record count (minimum 50, recommend 100-200+), and short user messages (< 10 chars). The `--topics` and `--parts` flags cross-reference `topic` and `source_parts` fields against the actual topic hierarchy and parts index — flagging any orphaned references. Fix errors before proceeding.
+
+If you are using the NeMo path without topics or Docling parts:
+```bash
+python3 scripts/validate_dataset.py finetune-project/training.jsonl --nemo
+```
+
+The `--nemo` flag checks for accidentally included NeMo metadata (reference_answer, judge_*, supporting_passage, citation) in training messages. In this path, validate the message structure and record quality only. Do not require `topic` or `source_parts`.
 
 ### Step 6: Verify & Hand Off
 
@@ -608,7 +835,12 @@ Since each step uploaded data immediately, the gateway already has the full work
 python3 scripts/finetune.py verify --workflow-id $WORKFLOW_ID
 ```
 
-**Expected**: All counts > 0 and evaluator = YES. If any are missing, re-run the upload for that step.
+**Expected**:
+- Docling path: sources, topics, records, and evaluator should all be present
+- NeMo testing path: records and evaluator must be present; topics and knowledge sources may legitimately be zero
+
+If any required pieces are missing for the chosen path, re-run the upload for that step.
+
 
 Tell the user the data is visible at `http://localhost:5173/finetune`, then **proceed immediately to Step 7** (evaluation).
 
