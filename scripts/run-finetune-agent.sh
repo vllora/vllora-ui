@@ -184,13 +184,107 @@ fi
 
 cd "$PROJECT_DIR"
 
+# ─── Finalize function (called on both normal exit and interrupt) ─────────────
+
+FINALIZED=false
+
+finalize() {
+  # Guard against double-finalize
+  [[ "$FINALIZED" == "true" ]] && return
+  FINALIZED=true
+
+  local exit_code="${1:-999}"
+
+  # Remove PID file
+  rm -f "$PID_FILE"
+
+  # Append footer to markdown
+  {
+    echo ""
+    echo "---"
+    echo ""
+    echo "## Run Summary"
+    echo ""
+    echo "- **Finished:** $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "- **Exit code:** $exit_code"
+  } >> "$MD_FILE" 2>/dev/null || true
+
+  # Count stats from JSONL
+  local turns=0 tool_calls=0 errors=0
+  if [[ -f "$JSONL_FILE" ]]; then
+    turns=$(grep -c '"type":"assistant"' "$JSONL_FILE" 2>/dev/null || echo "0")
+    tool_calls=$(grep -c '"tool_use"' "$JSONL_FILE" 2>/dev/null || echo "0")
+    errors=$(grep -c '"type":"error"' "$JSONL_FILE" 2>/dev/null || echo "0")
+    {
+      echo "- **Agent turns:** $turns"
+      echo "- **Tool calls:** $tool_calls"
+      echo "- **Errors:** $errors"
+    } >> "$MD_FILE" 2>/dev/null || true
+  fi
+
+  # Collect subagent transcripts
+  local session_id subagent_count=0
+  session_id=$(grep -o '"session_id":"[^"]*"' "$JSONL_FILE" 2>/dev/null | head -1 | cut -d'"' -f4 || echo "")
+
+  if [[ -n "$session_id" ]]; then
+    local claude_projects="$HOME/.claude/projects"
+    local subagent_dir="$RUN_DIR/subagents"
+
+    while IFS= read -r subagent_file; do
+      [[ -f "$subagent_file" ]] || continue
+      mkdir -p "$subagent_dir"
+      local agent_name
+      agent_name=$(basename "$subagent_file" .jsonl)
+      cp "$subagent_file" "$subagent_dir/$agent_name.jsonl"
+
+      # Also copy meta.json if it exists
+      local meta_file="${subagent_file%.jsonl}.meta.json"
+      [[ -f "$meta_file" ]] && cp "$meta_file" "$subagent_dir/$agent_name.meta.json"
+
+      # Convert to markdown
+      PYTHONUNBUFFERED=1 python3 -u "$SCRIPT_DIR/format-finetune-log.py" "$subagent_dir/$agent_name.md" < "$subagent_file" 2>/dev/null || true
+
+      subagent_count=$((subagent_count + 1))
+    done < <(find "$claude_projects" -path "*/$session_id/subagents/*.jsonl" 2>/dev/null)
+  fi
+
+  if [[ $subagent_count -gt 0 ]]; then
+    echo "  📋 Collected $subagent_count subagent transcript(s)"
+    {
+      echo "- **Subagents:** $subagent_count transcripts collected"
+      echo ""
+      echo "### Subagent Transcripts"
+      echo ""
+      for f in "$RUN_DIR/subagents"/*.md; do
+        [[ -f "$f" ]] && echo "- [$(basename "$f")](subagents/$(basename "$f"))"
+      done
+    } >> "$MD_FILE" 2>/dev/null || true
+  else
+    echo "  ℹ️  No subagent transcripts found (session: ${session_id:-unknown})"
+  fi
+
+  # Update meta.json
+  python3 -c "
+import json
+with open('$META_FILE') as f:
+    meta = json.load(f)
+meta['finished_at'] = '$(date -u +%Y-%m-%dT%H:%M:%SZ)'
+meta['session_id'] = '$session_id'
+meta['exit_code'] = $exit_code
+meta['turns'] = $turns
+meta['tool_calls'] = $tool_calls
+meta['errors'] = $errors
+meta['subagent_count'] = $subagent_count
+with open('$META_FILE', 'w') as f:
+    json.dump(meta, f, indent=2)
+" 2>/dev/null || true
+}
+
 # ─── Signal handling ─────────────────────────────────────────────────────────
 
 CLAUDE_PID=""
-INTERRUPTED=false
 
 cleanup() {
-  INTERRUPTED=true
   echo ""
   echo "⏹  Stopping finetune agent..."
 
@@ -200,16 +294,18 @@ cleanup() {
     wait "$CLAUDE_PID" 2>/dev/null || true
   fi
 
-  # Remove PID file
-  rm -f "$PID_FILE"
+  # Run finalize (collects subagents, writes summary)
+  finalize "130"
 
-  # Mark in transcript
-  {
-    echo ""
-    echo "---"
-    echo ""
-    echo "**⏹ Run interrupted at $(date '+%Y-%m-%d %H:%M:%S')**"
-  } >> "$MD_FILE" 2>/dev/null || true
+  echo ""
+  echo "═══════════════════════════════════════════════════════"
+  echo "  ⏹ Run interrupted: $(basename "$RUN_DIR")"
+  echo "  📄 Transcript:  $MD_FILE"
+  echo "  📊 Raw stream:  $JSONL_FILE"
+  [[ -d "$RUN_DIR/subagents" ]] && echo "  🤖 Subagents:   $RUN_DIR/subagents/"
+  echo "═══════════════════════════════════════════════════════"
+
+  exit 130
 }
 
 trap cleanup INT TERM
@@ -219,10 +315,11 @@ trap cleanup INT TERM
 echo "🚀 Starting finetune agent..."
 echo ""
 
-# Run claude in background so we can capture its PID.
-# Pipe through tee (raw JSONL) and formatter (markdown).
+# Run claude and pipe directly to the formatter (which also saves raw JSONL).
+# No tee — the formatter handles both writing the raw stream and the markdown.
+# This avoids pipe buffering issues (tee + python3 in a pipeline buffers on macOS).
 set +e
-"${CLAUDE_CMD[@]}" 2>&1 | tee "$JSONL_FILE" | python3 "$SCRIPT_DIR/format-finetune-log.py" "$MD_FILE" &
+"${CLAUDE_CMD[@]}" 2>&1 | PYTHONUNBUFFERED=1 python3 -u "$SCRIPT_DIR/format-finetune-log.py" "$MD_FILE" "$JSONL_FILE" &
 PIPE_PID=$!
 
 # The pipeline runs as a single process group. Save the group PID.
@@ -234,91 +331,9 @@ wait "$PIPE_PID" 2>/dev/null
 CLAUDE_EXIT=$?
 set -e
 
-# Clean up PID file
-rm -f "$PID_FILE"
+# ─── Finalize (collect subagents, write summary, update meta) ────────────────
 
-# ─── Finalize ────────────────────────────────────────────────────────────────
-
-# Append footer to markdown
-{
-  echo ""
-  echo "---"
-  echo ""
-  echo "## Run Summary"
-  echo ""
-  echo "- **Finished:** $(date '+%Y-%m-%d %H:%M:%S')"
-  echo "- **Exit code:** $CLAUDE_EXIT"
-} >> "$MD_FILE"
-
-# Count stats from JSONL
-if [[ -f "$JSONL_FILE" ]]; then
-  TURNS=$(grep -c '"type":"assistant"' "$JSONL_FILE" 2>/dev/null || echo "0")
-  TOOL_CALLS=$(grep -c '"tool_use"' "$JSONL_FILE" 2>/dev/null || echo "0")
-  ERRORS=$(grep -c '"type":"error"' "$JSONL_FILE" 2>/dev/null || echo "0")
-  {
-    echo "- **Agent turns:** $TURNS"
-    echo "- **Tool calls:** $TOOL_CALLS"
-    echo "- **Errors:** $ERRORS"
-  } >> "$MD_FILE"
-fi
-
-# ─── Collect subagent transcripts ────────────────────────────────────────────
-
-# Extract session_id from the stream to locate subagent logs
-SESSION_ID=$(grep -o '"session_id":"[^"]*"' "$JSONL_FILE" 2>/dev/null | head -1 | cut -d'"' -f4 || echo "")
-
-SUBAGENT_COUNT=0
-if [[ -n "$SESSION_ID" ]]; then
-  # Claude Code stores subagent transcripts at:
-  # ~/.claude/projects/{project-hash}/{session-id}/subagents/agent-{id}.jsonl
-  CLAUDE_PROJECTS_DIR="$HOME/.claude/projects"
-
-  # Find subagent files for this session across all project hashes
-  SUBAGENT_DIR="$RUN_DIR/subagents"
-  while IFS= read -r subagent_file; do
-    [[ -f "$subagent_file" ]] || continue
-    mkdir -p "$SUBAGENT_DIR"
-    agent_name=$(basename "$subagent_file" .jsonl)
-    cp "$subagent_file" "$SUBAGENT_DIR/$agent_name.jsonl"
-
-    # Convert subagent JSONL to markdown too
-    python3 "$SCRIPT_DIR/format-finetune-log.py" "$SUBAGENT_DIR/$agent_name.md" < "$subagent_file" 2>/dev/null || true
-
-    SUBAGENT_COUNT=$((SUBAGENT_COUNT + 1))
-  done < <(find "$CLAUDE_PROJECTS_DIR" -path "*/$SESSION_ID/subagents/*.jsonl" 2>/dev/null)
-fi
-
-if [[ $SUBAGENT_COUNT -gt 0 ]]; then
-  echo "  📋 Collected $SUBAGENT_COUNT subagent transcript(s)"
-  {
-    echo "- **Subagents:** $SUBAGENT_COUNT transcripts collected"
-    echo ""
-    echo "### Subagent Transcripts"
-    echo ""
-    for f in "$SUBAGENT_DIR"/*.md; do
-      [[ -f "$f" ]] && echo "- [$(basename "$f")](subagents/$(basename "$f"))"
-    done
-  } >> "$MD_FILE"
-else
-  echo "  ℹ️  No subagent transcripts found (session: ${SESSION_ID:-unknown})"
-fi
-
-# ─── Update meta.json with results ──────────────────────────────────────────
-
-python3 -c "
-import json
-with open('$META_FILE') as f:
-    meta = json.load(f)
-meta['finished_at'] = '$(date -u +%Y-%m-%dT%H:%M:%SZ)'
-meta['session_id'] = '$SESSION_ID'
-meta['exit_code'] = $CLAUDE_EXIT
-meta['turns'] = ${TURNS:-0}
-meta['tool_calls'] = ${TOOL_CALLS:-0}
-meta['errors'] = ${ERRORS:-0}
-meta['subagent_count'] = $SUBAGENT_COUNT
-with open('$META_FILE', 'w') as f:
-    json.dump(meta, f, indent=2)
-" 2>/dev/null || true
+finalize "$CLAUDE_EXIT"
 
 echo ""
 echo "═══════════════════════════════════════════════════════"
@@ -331,9 +346,7 @@ echo ""
 echo "  📄 Transcript:  $MD_FILE"
 echo "  📊 Raw stream:  $JSONL_FILE"
 echo "  📋 Metadata:    $META_FILE"
-if [[ $SUBAGENT_COUNT -gt 0 ]]; then
-  echo "  🤖 Subagents:   $SUBAGENT_DIR/ ($SUBAGENT_COUNT transcripts)"
-fi
+[[ -d "$RUN_DIR/subagents" ]] && echo "  🤖 Subagents:   $RUN_DIR/subagents/"
 echo "═══════════════════════════════════════════════════════"
 
 exit $CLAUDE_EXIT
