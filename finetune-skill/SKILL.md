@@ -154,15 +154,58 @@ EOF
 
 ### Step 2: Extract Documents
 
-**Delegate to the `knowledge-extractor` subagent** (installed at `.claude/agents/knowledge-extractor.md`) — it processes all documents through the extraction pipeline (Docling or pdftotext fallback), produces structured knowledge parts, uploads to the gateway, and validates the output. Provide `SKILL_DIR=${CLAUDE_SKILL_DIR}`, `WORKFLOW_ID`, `GATEWAY_URL=http://localhost:9090`, `PROJECT_DIR=finetune-project`, and the list of document paths.
+Extract all documents in parallel — **spawn one `knowledge-extractor` subagent per document**. Each agent handles its own PDF independently (Docling extraction, custom extract.py, post-processing, gateway upload).
 
-The subagent handles the full extraction workflow: Docling extraction, per-document extract.py scripts, table upgrades, consolidation, gateway upload, index merging, and validation. It returns a summary of parts extracted per document.
+**2a. Check Docling availability and submit all PDFs:**
+
+```bash
+curl -sS http://127.0.0.1:5001/health 2>/dev/null && echo "DOCLING_OK" || echo "DOCLING_UNAVAILABLE"
+```
+
+If Docling is available, submit all PDFs at once (non-blocking):
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/docling_extract.py --submit-only \
+  "pdfs/doc1.pdf:finetune-project/knowledge/doc1-slug/docling-result.json" \
+  "pdfs/doc2.pdf:finetune-project/knowledge/doc2-slug/docling-result.json" \
+  ...
+```
+
+This returns a JSON manifest with `task_id` per document. Docling processes them in parallel.
+
+**2b. Spawn one `knowledge-extractor` per document (parallel):**
+
+For each document, spawn a subagent with:
+- `SKILL_DIR=${CLAUDE_SKILL_DIR}`
+- `WORKFLOW_ID`, `GATEWAY_URL=http://localhost:9090`
+- `DOC_PATH` — the PDF path
+- `DOC_SLUG` — the slug (lowercase, hyphens)
+- `DOC_DIR` — e.g., `finetune-project/knowledge/<slug>`
+- `TASK_ID` — from the manifest (so the agent polls its own result)
+
+Spawn up to 4-5 agents at once. If there are more documents, spawn in batches.
+
+**2c. After ALL agents return — merge indexes:**
+
+```bash
+python3 -c "
+import json, glob
+parts = []
+for f in sorted(glob.glob('finetune-project/knowledge/*/parts-index.json')):
+    with open(f) as fh:
+        data = json.load(fh)
+        parts.extend(data.get('parts', data) if isinstance(data, dict) else data)
+with open('finetune-project/knowledge/all-parts-index.json', 'w') as fh:
+    json.dump({'parts': parts}, fh, indent=2)
+print(f'Merged {len(parts)} parts from {len(glob.glob(\"finetune-project/knowledge/*/parts-index.json\"))} documents')
+"
+```
+
+**2d. Validate:**
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/knowledge/
+```
 
 > **For full extraction workflow details** (if you need to understand or debug), read [reference/extraction-guide.md](reference/extraction-guide.md).
-
-After the subagent returns, verify the output exists before proceeding:
-- `knowledge/all-parts-index.json` must exist with parts from all documents
-- Each document should have its own subdirectory under `knowledge/` with `knowledge_parts.json`
 
 If there are no documents (objective-only pipeline), skip this step.
 
@@ -246,7 +289,8 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --knowledge-dir finetune-project/knowledge \
   --system-prompt "You are an expert chess tutor..." \
   --output finetune-project/training.jsonl \
-  --records-per-topic 10
+  --records-per-topic 10 \
+  --parallel 4
 ```
 
 The script loads topics + relations, finds leaf topics, gathers linked source chunks, and calls the LLM to generate grounded user prompts per topic. If some topics fail, use `--append` to retry without overwriting. Adapt `--records-per-topic`, `--model`, and `--temperature` to the project. Run multiple passes if needed (basic questions, then edge cases, then multi-turn). **Generate at least 100-200 total records.**

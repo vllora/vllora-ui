@@ -260,6 +260,7 @@ Return JSON: {{"items": [{{"prompt": "the question", "ground_truth": "relevant s
 
 def main() -> None:
     import argparse
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
     parser = argparse.ArgumentParser(description="Generate training records from topics + knowledge")
     parser.add_argument("--topics", required=True, help="Path to topics.json")
@@ -273,6 +274,7 @@ def main() -> None:
     parser.add_argument("--base-url", default="http://localhost:9090", help="Gateway base URL")
     parser.add_argument("--append", action="store_true", help="Append to existing file instead of overwriting")
     parser.add_argument("--no-ground-truth", action="store_true", help="Skip generating ground_truth excerpts for each record")
+    parser.add_argument("--parallel", type=int, default=1, help="Number of topics to generate concurrently (default: 1, max: 8)")
     args = parser.parse_args()
 
     topics_path = Path(args.topics)
@@ -280,6 +282,7 @@ def main() -> None:
     knowledge_dir = Path(args.knowledge_dir)
     output_path = Path(args.output)
     scripts_dir = Path(__file__).parent
+    parallel = min(max(args.parallel, 1), 8)
 
     # Validate inputs
     for p, label in [(topics_path, "Topics"), (relations_path, "Relations")]:
@@ -298,43 +301,75 @@ def main() -> None:
     topic_index = build_topic_index(topics)
 
     print(f"Loaded: {len(topics)} topics ({len(leaves)} leaves), {len(relations)} relations, {len(parts)} parts")
+    if parallel > 1:
+        print(f"Generating with {parallel} parallel workers")
 
-    # Generate records for each leaf topic
     output_path.parent.mkdir(parents=True, exist_ok=True)
     mode = "a" if args.append else "w"
-    total_records = 0
+
+    # Prepare tasks: (index, topic, ancestors)
+    tasks = []
+    for i, topic in enumerate(leaves):
+        ancestors = get_ancestor_chain(topic, topic_index)
+        tasks.append((i, topic, ancestors))
+
+    common_kwargs = dict(
+        relations=relations,
+        parts=parts,
+        system_prompt=args.system_prompt,
+        records_per_topic=args.records_per_topic,
+        model=args.model,
+        temperature=args.temperature,
+        base_url=args.base_url,
+        scripts_dir=scripts_dir,
+        include_ground_truth=not args.no_ground_truth,
+    )
+
+    all_results: list[tuple[int, str, list[dict]]] = []
     failed_topics: list[str] = []
 
-    with output_path.open(mode) as out:
-        for i, topic in enumerate(leaves):
-            ancestors = get_ancestor_chain(topic, topic_index)
+    if parallel <= 1:
+        # Sequential mode (original behavior)
+        for i, topic, ancestors in tasks:
             ancestor_path = " > ".join(a["name"] for a in ancestors)
             path_display = f"{ancestor_path} > {topic['name']}" if ancestors else topic["name"]
             print(f"[{i + 1}/{len(leaves)}] Generating for '{path_display}'...", end=" ", flush=True)
 
-            records = generate_for_topic(
-                topic=topic,
-                ancestors=ancestors,
-                relations=relations,
-                parts=parts,
-                system_prompt=args.system_prompt,
-                records_per_topic=args.records_per_topic,
-                model=args.model,
-                temperature=args.temperature,
-                base_url=args.base_url,
-                scripts_dir=scripts_dir,
-                include_ground_truth=not args.no_ground_truth,
-            )
-
+            records = generate_for_topic(topic=topic, ancestors=ancestors, **common_kwargs)
             if not records:
                 failed_topics.append(topic["id"])
                 print("FAILED (0 records)")
-                continue
+            else:
+                all_results.append((i, topic["id"], records))
+                print(f"{len(records)} records")
+    else:
+        # Parallel mode
+        def _generate(task_tuple: tuple) -> tuple[int, str, str, list[dict]]:
+            idx, topic, ancestors = task_tuple
+            ancestor_path = " > ".join(a["name"] for a in ancestors)
+            path_display = f"{ancestor_path} > {topic['name']}" if ancestors else topic["name"]
+            records = generate_for_topic(topic=topic, ancestors=ancestors, **common_kwargs)
+            return (idx, topic["id"], path_display, records)
 
+        with ThreadPoolExecutor(max_workers=parallel) as executor:
+            futures = {executor.submit(_generate, t): t for t in tasks}
+            for future in as_completed(futures):
+                idx, topic_id, path_display, records = future.result()
+                if not records:
+                    failed_topics.append(topic_id)
+                    print(f"[{idx + 1}/{len(leaves)}] '{path_display}' FAILED (0 records)")
+                else:
+                    all_results.append((idx, topic_id, records))
+                    print(f"[{idx + 1}/{len(leaves)}] '{path_display}' → {len(records)} records")
+
+    # Write results sorted by original index (stable output order)
+    all_results.sort(key=lambda x: x[0])
+    total_records = 0
+    with output_path.open(mode) as out:
+        for _, _, records in all_results:
             for r in records:
                 out.write(json.dumps(r) + "\n")
             total_records += len(records)
-            print(f"{len(records)} records")
 
     # Summary
     print(f"\n{'='*50}")

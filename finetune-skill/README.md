@@ -209,18 +209,23 @@ User: "finetune my tax deduction PDF"
 │                                                         │
 │  Step 1: Create workflow ──────► Bash: finetune.py      │
 │                                                         │
-│  Step 2: Extract documents                              │
+│  Step 2: Extract documents (PARALLEL)                   │
+│    2a: Submit all PDFs to Docling (non-blocking)        │
+│    2b: Spawn 1 agent per document:                      │
 │           │                                             │
-│           ▼                                             │
-│    ┌──────────────────────────────────────┐             │
-│    │  SUBAGENT: knowledge-extractor       │             │
-│    │  Model: Sonnet | maxTurns: 50        │             │
-│    │                                      │             │
-│    │  Extracts ALL documents broadly      │             │
-│    │  Writes: knowledge_parts.json (each) │             │
-│    │  Writes: all-parts-index.json        │             │
-│    │  Returns: per-doc summary            │             │
-│    └──────────────────────────────────────┘             │
+│    ┌──────┼──────┬──────┬──────┬── ... ──┐             │
+│    ▼      ▼      ▼      ▼      ▼         ▼             │
+│  ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐  ┌────┐          │
+│  │doc1│ │doc2│ │doc3│ │doc4│ │doc5│  │docN│          │
+│  │Haiku│ │Haiku│ │Haiku│ │Haiku│ │Haiku│  │Haiku│          │
+│  └──┬─┘ └──┬─┘ └──┬─┘ └──┬─┘ └──┬─┘  └──┬─┘          │
+│     │      │      │      │      │       │              │
+│     ▼      ▼      ▼      ▼      ▼       ▼              │
+│   Each: poll Docling → extract.py → consolidate → upload│
+│     │      │      │      │      │       │              │
+│     └──────┴──────┴──────┴──────┴───────┘              │
+│           │                                             │
+│    2c: Merge all-parts-index.json + validate            │
 │           │                                             │
 │           ▼  🗣️ REVIEW WITH USER                        │
 │    "Extracted 6 docs, 596 parts:                        │
@@ -309,11 +314,11 @@ User: "finetune my tax deduction PDF"
 
 **Why subagents?**
 
-| Subagent | Step | Model | Why delegate? | Benefit |
-|----------|------|-------|--------------|---------|
-| `knowledge-extractor` | 2 | Sonnet | Document content fills context — 100-page PDFs consume most of the window | Main agent never sees raw document content, only a summary |
-| `relation-builder` | 3b | Sonnet | Parts-index scanning needs semantic matching quality | Fresh context for index matching, main stays clean |
-| `training-monitor` | 7c | Haiku | Training runs 30-120 min — polling is mechanical | Writes script, launches `nohup`, returns instantly. Script monitors autonomously |
+| Subagent | Step | Model | Instances | Why delegate? | Benefit |
+|----------|------|-------|-----------|--------------|---------|
+| `knowledge-extractor` | 2 | Haiku | 1 per PDF | Each PDF needs a custom extract.py — that's N sequential LLM calls if done by 1 agent | N agents process N PDFs in parallel. Total time = slowest PDF, not sum of all |
+| `relation-builder` | 3b | Haiku | 1 | Parts-index scanning is mechanical — keyword match + verify | Fresh context for index matching, main stays clean. Haiku handles this fine |
+| `training-monitor` | 7c | Haiku | 1 | Training runs 30-120 min — polling is mechanical | Writes script, launches `nohup`, returns instantly. Script monitors autonomously |
 
 **User review checkpoints (🗣️):**
 

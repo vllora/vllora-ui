@@ -4,7 +4,7 @@ description: >
   Build topic-part relations from parts-index.json. Use after designing topics
   in a finetune pipeline when knowledge/all-parts-index.json and topics.json exist.
 tools: Read, Grep, Glob, Write, Bash
-model: sonnet
+model: haiku
 maxTurns: 40
 ---
 

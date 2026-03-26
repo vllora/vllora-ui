@@ -247,11 +247,68 @@ def extract_batch(
     return True
 
 
+def submit_batch_only(
+    docling_url: str,
+    pairs: list[tuple[Path, Path]],
+    max_tokens: int,
+) -> list[dict]:
+    """Submit all PDFs without waiting. Returns a manifest of task entries."""
+    manifest = []
+    for pdf_path, output_path in pairs:
+        if not pdf_path.exists():
+            print(f"ERROR: PDF not found: {pdf_path}", file=sys.stderr)
+            sys.exit(1)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        print(f"Submitting {pdf_path.name}...")
+        task_id = submit_async(docling_url, pdf_path, max_tokens)
+        entry = {
+            "task_id": task_id,
+            "pdf": str(pdf_path),
+            "output": str(output_path),
+            "status": "submitted",
+        }
+        manifest.append(entry)
+        print(f"  Task ID: {task_id}")
+    return manifest
+
+
+def poll_one_task(
+    docling_url: str,
+    task_id: str,
+    output_path: Path,
+) -> dict:
+    """Poll a single task. Returns status dict with 'status' field.
+    If completed, fetches result and saves to output_path."""
+    try:
+        resp = requests.get(f"{docling_url}/v1/status/poll/{task_id}", timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        status = data.get("task_status", data.get("status", "unknown"))
+
+        if status in ("success", "completed"):
+            result = fetch_result(docling_url, task_id)
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(result, f, ensure_ascii=False)
+            chunks = len(result.get("chunks", []))
+            size_mb = output_path.stat().st_size / (1024 * 1024)
+            return {"status": "completed", "chunks": chunks, "size_mb": round(size_mb, 1)}
+        elif status in ("failed", "error"):
+            error = data.get("error", data.get("detail", "unknown"))
+            return {"status": "failed", "error": error}
+        else:
+            pos = data.get("task_position", "")
+            return {"status": status, "queue_position": pos}
+    except requests.RequestException as e:
+        return {"status": "error", "error": str(e)}
+
+
 def main():
     parser = argparse.ArgumentParser(description="Extract PDF(s) via Docling async API")
     parser.add_argument("pdf", nargs="*", help="PDF path (single mode) or pdf:output pairs (batch mode)")
     parser.add_argument("--output", "-o", help="Output path (single mode only)")
     parser.add_argument("--batch", action="store_true", help="Batch mode: args are pdf:output pairs")
+    parser.add_argument("--submit-only", action="store_true", help="Submit all PDFs and return manifest JSON (don't wait)")
+    parser.add_argument("--poll-one", help="Poll a single task_id and fetch result if done. Requires --output.")
     parser.add_argument("--docling-url", default="http://localhost:5001", help="Docling Serve URL")
     parser.add_argument("--max-tokens", type=int, default=8192, help="Max tokens per Docling chunk — safety ceiling, not target size (default: 8192)")
     parser.add_argument("--poll-interval", type=int, default=15, help="Poll interval in seconds (default: 15)")
@@ -266,9 +323,34 @@ def main():
         print(f"ERROR: Docling not reachable at {args.docling_url}", file=sys.stderr)
         sys.exit(1)
 
+    # --poll-one: check status of a single task
+    if args.poll_one:
+        if not args.output:
+            print("ERROR: --output required with --poll-one", file=sys.stderr)
+            sys.exit(1)
+        result = poll_one_task(args.docling_url, args.poll_one, Path(args.output))
+        print(json.dumps(result))
+        sys.exit(0 if result["status"] != "failed" else 1)
+
+    # --submit-only: submit all and return manifest
+    if args.submit_only:
+        pairs: list[tuple[Path, Path]] = []
+        for arg in args.pdf:
+            if ":" not in arg:
+                print(f"ERROR: Args must be 'pdf:output', got: {arg}", file=sys.stderr)
+                sys.exit(1)
+            pdf_str, out_str = arg.split(":", 1)
+            pairs.append((Path(pdf_str), Path(out_str)))
+        if not pairs:
+            print("ERROR: No pdf:output pairs provided", file=sys.stderr)
+            sys.exit(1)
+        manifest = submit_batch_only(args.docling_url, pairs, args.max_tokens)
+        print(json.dumps(manifest, indent=2))
+        sys.exit(0)
+
     if args.batch:
         # Batch mode: each arg is "pdf_path:output_path"
-        pairs: list[tuple[Path, Path]] = []
+        pairs = []
         for arg in args.pdf:
             if ":" not in arg:
                 print(f"ERROR: Batch args must be 'pdf:output', got: {arg}", file=sys.stderr)
