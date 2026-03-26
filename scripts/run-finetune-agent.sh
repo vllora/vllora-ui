@@ -216,16 +216,60 @@ if [[ -f "$JSONL_FILE" ]]; then
   } >> "$MD_FILE"
 fi
 
-# Update meta.json with results
+# ─── Collect subagent transcripts ────────────────────────────────────────────
+
+# Extract session_id from the stream to locate subagent logs
+SESSION_ID=$(grep -o '"session_id":"[^"]*"' "$JSONL_FILE" 2>/dev/null | head -1 | cut -d'"' -f4 || echo "")
+
+SUBAGENT_COUNT=0
+if [[ -n "$SESSION_ID" ]]; then
+  # Claude Code stores subagent transcripts at:
+  # ~/.claude/projects/{project-hash}/{session-id}/subagents/agent-{id}.jsonl
+  CLAUDE_PROJECTS_DIR="$HOME/.claude/projects"
+
+  # Find subagent files for this session across all project hashes
+  SUBAGENT_DIR="$RUN_DIR/subagents"
+  while IFS= read -r subagent_file; do
+    [[ -f "$subagent_file" ]] || continue
+    mkdir -p "$SUBAGENT_DIR"
+    agent_name=$(basename "$subagent_file" .jsonl)
+    cp "$subagent_file" "$SUBAGENT_DIR/$agent_name.jsonl"
+
+    # Convert subagent JSONL to markdown too
+    python3 "$SCRIPT_DIR/format-finetune-log.py" "$SUBAGENT_DIR/$agent_name.md" < "$subagent_file" 2>/dev/null || true
+
+    SUBAGENT_COUNT=$((SUBAGENT_COUNT + 1))
+  done < <(find "$CLAUDE_PROJECTS_DIR" -path "*/$SESSION_ID/subagents/*.jsonl" 2>/dev/null)
+fi
+
+if [[ $SUBAGENT_COUNT -gt 0 ]]; then
+  echo "  📋 Collected $SUBAGENT_COUNT subagent transcript(s)"
+  {
+    echo "- **Subagents:** $SUBAGENT_COUNT transcripts collected"
+    echo ""
+    echo "### Subagent Transcripts"
+    echo ""
+    for f in "$SUBAGENT_DIR"/*.md; do
+      [[ -f "$f" ]] && echo "- [$(basename "$f")](subagents/$(basename "$f"))"
+    done
+  } >> "$MD_FILE"
+else
+  echo "  ℹ️  No subagent transcripts found (session: ${SESSION_ID:-unknown})"
+fi
+
+# ─── Update meta.json with results ──────────────────────────────────────────
+
 python3 -c "
 import json
 with open('$META_FILE') as f:
     meta = json.load(f)
 meta['finished_at'] = '$(date -u +%Y-%m-%dT%H:%M:%SZ)'
+meta['session_id'] = '$SESSION_ID'
 meta['exit_code'] = $CLAUDE_EXIT
 meta['turns'] = ${TURNS:-0}
 meta['tool_calls'] = ${TOOL_CALLS:-0}
 meta['errors'] = ${ERRORS:-0}
+meta['subagent_count'] = $SUBAGENT_COUNT
 with open('$META_FILE', 'w') as f:
     json.dump(meta, f, indent=2)
 " 2>/dev/null || true
@@ -237,9 +281,13 @@ if [[ $CLAUDE_EXIT -eq 0 ]]; then
 else
   echo "  ❌ Run failed (exit $CLAUDE_EXIT): $RUN_ID"
 fi
-echo "  Transcript: $MD_FILE"
-echo "  Raw stream: $JSONL_FILE"
-echo "  Metadata:   $META_FILE"
+echo ""
+echo "  📄 Transcript:  $MD_FILE"
+echo "  📊 Raw stream:  $JSONL_FILE"
+echo "  📋 Metadata:    $META_FILE"
+if [[ $SUBAGENT_COUNT -gt 0 ]]; then
+  echo "  🤖 Subagents:   $SUBAGENT_DIR/ ($SUBAGENT_COUNT transcripts)"
+fi
 echo "═══════════════════════════════════════════════════════"
 
 exit $CLAUDE_EXIT
