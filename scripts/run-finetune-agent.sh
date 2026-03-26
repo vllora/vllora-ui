@@ -127,6 +127,9 @@ with open('$META_FILE', 'w') as f:
     json.dump(meta, f, indent=2)
 "
 
+# Save PID file so the run can be stopped externally
+PID_FILE="$RUN_DIR/pid"
+
 echo ""
 echo "═══════════════════════════════════════════════════════"
 echo "  Run:        $RUN_ID"
@@ -136,6 +139,9 @@ echo "  Max turns:  $MAX_TURNS"
 echo "  Gateway:    $GATEWAY_URL"
 echo "  Transcript: $MD_FILE"
 echo "  Raw JSONL:  $JSONL_FILE"
+echo ""
+echo "  To stop:    kill \$(cat $PID_FILE)"
+echo "       or:    ./scripts/stop-finetune-agent.sh $PROJECT_DIR"
 echo "═══════════════════════════════════════════════════════"
 echo ""
 
@@ -178,18 +184,58 @@ fi
 
 cd "$PROJECT_DIR"
 
+# ─── Signal handling ─────────────────────────────────────────────────────────
+
+CLAUDE_PID=""
+INTERRUPTED=false
+
+cleanup() {
+  INTERRUPTED=true
+  echo ""
+  echo "⏹  Stopping finetune agent..."
+
+  # Kill the claude process if still running
+  if [[ -n "$CLAUDE_PID" ]] && kill -0 "$CLAUDE_PID" 2>/dev/null; then
+    kill "$CLAUDE_PID" 2>/dev/null
+    wait "$CLAUDE_PID" 2>/dev/null || true
+  fi
+
+  # Remove PID file
+  rm -f "$PID_FILE"
+
+  # Mark in transcript
+  {
+    echo ""
+    echo "---"
+    echo ""
+    echo "**⏹ Run interrupted at $(date '+%Y-%m-%d %H:%M:%S')**"
+  } >> "$MD_FILE" 2>/dev/null || true
+}
+
+trap cleanup INT TERM
+
+# ─── Launch ──────────────────────────────────────────────────────────────────
+
 echo "🚀 Starting finetune agent..."
 echo ""
 
-# Run claude, tee raw JSONL, pipe to formatter for live markdown.
-# Disable errexit for the pipe — we capture exit codes manually.
+# Run claude in background so we can capture its PID.
+# Pipe through tee (raw JSONL) and formatter (markdown).
 set +e
-"${CLAUDE_CMD[@]}" 2>&1 | tee "$JSONL_FILE" | python3 "$SCRIPT_DIR/format-finetune-log.py" "$MD_FILE"
-PIPE_STATUS=("${PIPESTATUS[@]}")
+"${CLAUDE_CMD[@]}" 2>&1 | tee "$JSONL_FILE" | python3 "$SCRIPT_DIR/format-finetune-log.py" "$MD_FILE" &
+PIPE_PID=$!
+
+# The pipeline runs as a single process group. Save the group PID.
+echo "$PIPE_PID" > "$PID_FILE"
+# Also try to find the actual claude PID (first process in pipe)
+CLAUDE_PID=$(jobs -p 2>/dev/null | head -1 || echo "$PIPE_PID")
+
+wait "$PIPE_PID" 2>/dev/null
+CLAUDE_EXIT=$?
 set -e
 
-CLAUDE_EXIT=${PIPE_STATUS[0]}
-FORMATTER_EXIT=${PIPE_STATUS[2]:-0}
+# Clean up PID file
+rm -f "$PID_FILE"
 
 # ─── Finalize ────────────────────────────────────────────────────────────────
 
