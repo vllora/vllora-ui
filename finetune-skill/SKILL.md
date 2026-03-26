@@ -40,6 +40,10 @@ Define Objective → Extract Documents → Build Topics → Generate Data → Wr
 
 **Execute ALL steps (1-9).** Steps 1-6 prepare the dataset. Steps 7-9 evaluate and train the model. Do NOT stop at Step 6 — always run evaluation at minimum. If the user only asks for data preparation, you may stop at Step 6, but by default run the full pipeline including evaluation and training.
 
+**Wait for training to complete.** Do NOT exit after launching training. Poll `training-jobs/{JOB_ID}-monitor-report.json` (or use `finetune.py poll-training`) until training finishes. Then analyze results (Step 8) and iterate (Step 9) if the eval pass rate is below 80% or training shows anomalies. **The pipeline is not done until you've analyzed results and either iterated or confirmed the model meets the objective.**
+
+**Auto-iterate when running non-interactively.** If the user is not responding (e.g., running via `claude -p`), do NOT ask "what would you like to do?" and stop. Instead, make your own judgment: if eval pass rate < 80%, apply the top-priority fix from the analysis and start a new iteration automatically. Max 3 auto-iterations.
+
 **Checkpoint after each step** — so the pipeline can resume after crashes:
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step <STEP_NAME> --project-dir finetune-project --workflow-id $WORKFLOW_ID
@@ -492,7 +496,7 @@ If training is still running, periodically check `tail -5 /tmp/training_monitor_
 
 ### Step 8: Analyze Results & Present Findings
 
-Analyze each job's results **as soon as they arrive** — don't wait for both to finish. The analysis is **interactive** — present what you found and let the user drive the next action.
+Analyze each job's results **as soon as they arrive** — don't wait for both to finish. Present findings to the user. If the user is interactive, let them choose the next action. If running non-interactively (no user response), auto-apply the highest-priority fix and iterate.
 
 > **Read [reference/analysis-strategy.md](reference/analysis-strategy.md)** for decision trees, action templates, derived metrics, and presentation format.
 
