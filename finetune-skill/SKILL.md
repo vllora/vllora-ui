@@ -501,6 +501,7 @@ If training is still running, periodically check `tail -5 /tmp/training_monitor_
 Analyze each job's results **as soon as they arrive** — don't wait for both to finish. Present findings to the user. If the user is interactive, let them choose the next action. If running non-interactively (no user response), auto-apply the highest-priority fix and iterate.
 
 > **Read [reference/analysis-strategy.md](reference/analysis-strategy.md)** for decision trees, action templates, derived metrics, and presentation format.
+> **Read [reference/training-metrics-guide.md](reference/training-metrics-guide.md)** for GRPO metric interpretation — healthy ranges, red flags, and what to change. Use the Quick Decision Table to determine iteration actions.
 
 #### 8a. Analyze training results (when training completes)
 

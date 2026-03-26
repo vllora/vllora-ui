@@ -4,6 +4,8 @@ How the agent should analyze evaluation and training results, diagnose issues, a
 
 This document complements `iteration-strategy.md` (which covers the diagnosis framework) by defining **what the agent should compute, present, and offer** at each stage.
 
+> **Metric thresholds**: For all GRPO metric healthy ranges, red flags, and paper-backed threshold values, see [`training-metrics-guide.md`](training-metrics-guide.md). This document references those thresholds but does not redefine them — `training-metrics-guide.md` is the single source of truth for what metric values mean.
+
 ---
 
 ## Part 1: Available Data & How to Collect It
@@ -50,10 +52,10 @@ Each metric point in `metrics[]` contains:
 | Learning rate | `metrics.learning_rate` | Current LR (may decay) |
 | Reward | `metrics.reward` | Average grader score the model is achieving |
 | Reward std | `metrics.reward_std` | Diversity of scores across batch — should be > 0.05 |
-| Loss | `metrics.loss` | Policy gradient loss — should decrease |
-| Gradient norm | `metrics.grad_norm` | Training stability — spikes indicate instability |
-| KL divergence | `metrics.kl` | Drift from base model — too high = forgetting |
-| Clipping ratio | `metrics.completions/clipped_ratio` | Output truncation — > 0.7 is critical |
+| Loss | `metrics.loss` | GRPO policy loss — starts near 0, rises slightly as learning progresses (NOT like SFT loss). See `training-metrics-guide.md` §Loss |
+| Gradient norm | `metrics.grad_norm` | Training stability — spikes indicate instability. NaN = catastrophic failure |
+| KL divergence | `metrics.kl` | Drift from base model — healthy <1.0, warning >5.0. See `training-metrics-guide.md` §KL |
+| Clipping ratio | `metrics.completions/clipped_ratio` | Output truncation — healthy <0.1, critical >0.5. See `training-metrics-guide.md` §Completions |
 | Mean completion length | `metrics.completions/mean_length` | Whether responses are reasonable length |
 | Zero-std fraction | `metrics.frac_reward_zero_std` | Records where all candidates scored same — wasted training |
 
@@ -63,7 +65,7 @@ Each metric point in `metrics[]` contains:
 |--------|---------|-----------------|
 | Reward trend | Slope of `reward` over last N steps | Positive = learning, flat = stuck, negative = degrading |
 | KL trend | Slope of `kl` over last N steps | Rising = policy diverging, may need lower LR |
-| Loss trend | Slope of `loss` over last N steps | Should decrease; flat = not learning |
+| Loss trend | Slope of `loss` over last N steps | GRPO loss rises slightly as policy diverges — stuck at 0 = zero advantages (no learning) |
 | Reward plateau detection | Reward change < 0.01 over 20% of max_steps | Model has converged or stalled |
 | Clipping trend | `clipped_ratio` increasing? | Model generating longer outputs than `max_output_tokens` allows |
 
@@ -176,11 +178,11 @@ clipping_max = max clipped_ratio during training
 
 | Check | Condition | Severity | Source/Rationale |
 |-------|-----------|----------|-----------------|
-| NaN/Inf in any metric | Any NaN or Inf in loss, reward, KL, grad_norm | Critical | — |
-| Clipping overload | `clipped_ratio` > 0.7 at any point | Critical | — |
-| KL explosion | KL > 2.0 or KL increased > 3x from start | Warning (for LLM-judge graders). Note: DAPO and Dr. GRPO disable KL entirely (beta=0) for rule-based rewards — if using pure programmatic graders, KL drift is less concerning. | DAPO (2503.14476), Dr. GRPO (2503.20783) |
-| Reward collapse | `reward_std` < 0.05 for > 50% of steps | Warning | — |
-| Weak signal | `frac_reward_zero_std` > 0.6 for > 50% of steps | **Critical** — most records produce identical rewards, model gets zero gradient. **First check**: is `response_candidates_count` ≥ 8? With G=2, this metric will be inherently high. **Then**: remove dead-weight records (score=0) and regenerate replacements. See SKILL.md Step 8b+. | All GRPO papers use G≥8 (see Part 6, Section 6g) |
+| NaN/Inf in any metric | Any NaN or Inf in loss, reward, KL, grad_norm | Critical | Unsloth docs: often from zero-length truncated completions |
+| Clipping overload | `clipped_ratio` > 0.5 at any point | Critical | DAPO, TRL — majority of completions incomplete, training signal degraded. See `training-metrics-guide.md` §Completions |
+| KL explosion | KL > 5.0 or KL increased > 3x from start | Warning (for LLM-judge graders). Note: DAPO and Dr. GRPO disable KL entirely (beta=0) for rule-based rewards — if using pure programmatic graders, KL drift is less concerning. KL > 10.0 = critical (reward hacking risk). | DeepSeekMath (β=0.04), DAPO (2503.14476, β=0), Dr. GRPO (2503.20783). See `training-metrics-guide.md` §KL |
+| Reward collapse | `reward_std` < 0.05 for > 50% of steps | Warning. `reward_std` < 0.01 = Critical (zero learning signal). | Dr. GRPO (2503.20783): std normalization bias. See `training-metrics-guide.md` §Reward Std |
+| Weak signal | `frac_reward_zero_std` > 0.5 for > 50% of steps | **Warning** (>0.8 = **Critical**) — most records produce identical rewards, model gets zero gradient. **First check**: is `response_candidates_count` ≥ 8? With G=2, this metric will be inherently high. **Then**: remove dead-weight records (score=0) and regenerate replacements. See SKILL.md Step 8b+. | Dr. GRPO (2503.20783) G=8; TRL: "fraction of samples with reward std of zero". See `training-metrics-guide.md` §frac_reward_zero_std |
 | Entropy collapse | `entropy` dropping rapidly (>50% decline from start) | **Warning** — model losing exploration ability, becoming deterministic. Precursor to reward hacking. | DAPO (2503.14476, Section 4.3): *"Entropy... key metrics that we closely monitor."* TRL docs: *"A collapse in entropy means the policy is becoming overconfident."* |
 | Response length growing | `completions/mean_length` increasing >50% while `reward` flat or declining | **Warning** — possible length exploitation. Incorrect responses growing longer without quality improvement. | Dr. GRPO (2503.20783, Section 3.1): GRPO's `1/|o_i|` normalization causes *"incorrect responses to grow progressively longer."* |
 | Length-reward correlation | Correlation between response length and score > 0.7 | **Warning** — grader has exploitable length bias. Model will learn to pad responses. | MO-GRPO (2509.22047), GR3 (2603.10535): *"vacuous elongation can inflate the gradient norm"* |

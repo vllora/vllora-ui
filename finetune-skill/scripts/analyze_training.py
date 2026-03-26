@@ -68,6 +68,7 @@ def analyze_metrics(data: dict) -> dict:
     alerts: list[dict] = []
 
     # Reward trend
+    # Ref: training-metrics-guide.md §Reward; DeepSeekMath §3.2 — "steady upward trend"
     r_start = first.get("reward", 0)
     r_end = last.get("reward", 0)
     r_delta = r_end - r_start
@@ -86,25 +87,35 @@ def analyze_metrics(data: dict) -> dict:
         })
 
     # KL divergence
+    # Thresholds: healthy <1.0, warn >5.0, critical >10.0
+    # Ref: training-metrics-guide.md §KL; DeepSeekMath (β=0.04); DAPO/Dr.GRPO use β=0
     kl_values = [s.get("kl", 0) for s in steps]
     kl_max = max(kl_values)
     kl_final = last.get("kl", 0)
-    if kl_max > 2.0:
+    if kl_max > 10.0:
+        alerts.append({
+            "severity": "CRITICAL",
+            "metric": "kl",
+            "message": f"KL divergence peaked at {kl_max:.2f} — significant drift, risk of reward hacking or mode collapse",
+        })
+    elif kl_max > 5.0:
         alerts.append({
             "severity": "WARNING",
             "metric": "kl",
-            "message": f"KL divergence peaked at {kl_max:.2f} — policy drifting far from base model",
+            "message": f"KL divergence peaked at {kl_max:.2f} — policy drifting from base model, monitor output quality",
         })
 
     # Clipping ratio
+    # Thresholds: healthy <0.1, warn >0.1, critical >0.5
+    # Ref: training-metrics-guide.md §Completions; DAPO overlong filtering; TRL docs
     clip_values = [s.get("completions/clipped_ratio", 0) for s in steps]
     clip_max = max(clip_values)
     clip_avg = sum(clip_values) / len(clip_values) if clip_values else 0
-    if clip_max > 0.70:
+    if clip_max > 0.50:
         alerts.append({
             "severity": "CRITICAL",
             "metric": "clipping",
-            "message": f"Clipping ratio {clip_max:.0%} — increase max_output_tokens",
+            "message": f"Clipping ratio {clip_max:.0%} — majority of completions truncated, increase max_output_tokens",
         })
 
     # Loss stability
@@ -129,22 +140,38 @@ def analyze_metrics(data: dict) -> dict:
         })
 
     # Weak training signal
+    # Thresholds: healthy 0.05-0.3, warn <0.05, critical <0.01
+    # Ref: training-metrics-guide.md §Reward Std; Dr. GRPO (arXiv:2503.20783)
     reward_std_values = [s.get("reward_std", 0) for s in steps]
     reward_std_final = last.get("reward_std", 0)
-    if reward_std_final < 0.05 and len(steps) > 5:
+    if reward_std_final < 0.01 and len(steps) > 5:
+        alerts.append({
+            "severity": "CRITICAL",
+            "metric": "reward_std",
+            "message": f"Reward std near zero ({reward_std_final:.3f}) — all completions score identically, zero learning signal",
+        })
+    elif reward_std_final < 0.05 and len(steps) > 5:
         alerts.append({
             "severity": "WARNING",
             "metric": "reward_std",
-            "message": f"Reward std collapsed to {reward_std_final:.3f} — model converging on single pattern",
+            "message": f"Reward std low ({reward_std_final:.3f}) — limited diversity between completions (healthy: 0.05-0.3)",
         })
 
+    # frac_reward_zero_std: healthy <0.2, warn >0.5, critical >0.8
+    # Ref: training-metrics-guide.md §frac_reward_zero_std; Dr. GRPO (arXiv:2503.20783)
     zero_std_values = [s.get("frac_reward_zero_std", 0) for s in steps]
     zero_std_avg = sum(zero_std_values) / len(zero_std_values) if zero_std_values else 0
-    if zero_std_avg > 0.60:
+    if zero_std_avg > 0.80:
+        alerts.append({
+            "severity": "CRITICAL",
+            "metric": "zero_std",
+            "message": f"{zero_std_avg:.0%} avg zero-std fraction — training gets no useful gradient from most examples",
+        })
+    elif zero_std_avg > 0.50:
         alerts.append({
             "severity": "WARNING",
             "metric": "zero_std",
-            "message": f"{zero_std_avg:.0%} avg zero-std fraction — weak training signal",
+            "message": f"{zero_std_avg:.0%} avg zero-std fraction — over half the batch provides no learning signal",
         })
 
     return {
