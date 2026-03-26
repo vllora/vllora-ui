@@ -192,7 +192,7 @@ Aim for 3-7 root topics, 2-3 levels deep, each leaf supporting 10-30 training ex
 
 **Topic-source linking**: After uploading knowledge source parts, link them to topics via the `POST /topics/relations` API. Only create links to parts you've actually extracted — never fabricate references.
 
-**Build topic-part relations.** Delegate to the `relation-builder` subagent (installed at `.claude/agents/relation-builder.md`) — it reads `knowledge/all-parts-index.json` and `topics.json`, matches parts to topics, and writes `relations.json`.
+**Build topic-part relations.** Delegate to the `relation-builder` subagent (installed at `.claude/agents/relation-builder.md`) — provide `PROJECT_DIR` (the absolute path to the finetune-project directory). It reads `knowledge/all-parts-index.json` and `topics.json`, matches parts to topics, and writes `relations.json`.
 
 > **ID format note:** Use human-readable slugs for topic `id` values (e.g., `"billing-refunds"`). `finetune.py upload-topics` auto-converts to UUIDs. Use the same slug as `topic_identifier` in `relations.json` and part string IDs as `part_identifier`. `finetune.py upload-relations` resolves everything locally — no manual ID mapping.
 
@@ -397,7 +397,9 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 
 #### 7c. Monitor training + poll eval
 
-Poll eval in foreground. Delegate training monitoring to the `training-monitor` subagent — it runs in the background on a cheaper model, polls every 15s, detects anomalies (NaN loss, KL divergence, clipping, weak signal), and saves metrics locally for post-training analysis.
+**Monitor training.** Delegate to the `training-monitor` subagent (installed at `.claude/agents/training-monitor.md`) — provide `GATEWAY_URL=http://localhost:9090`, `WORKFLOW_ID`, `JOB_ID` (from the training job file), and `OUTPUT_DIR=training-jobs`. The subagent writes a Python monitoring script, launches it via `nohup`, and **returns immediately** with the report file path. The script runs autonomously for the duration of training (30-120+ min), saving metrics and checking for anomalies.
+
+**Poll eval in foreground** (while the training monitor runs autonomously):
 
 ```bash
 # Poll eval in foreground (updates evaluations/eval-001.json with progress + results)
@@ -405,9 +407,14 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval \
   --file evaluations/eval-001.json
 ```
 
-**Monitor training.** Delegate to the `training-monitor` subagent (installed at `.claude/agents/training-monitor.md`) — provide `GATEWAY_URL=http://localhost:9090`, `WORKFLOW_ID`, `JOB_ID` (from the training job file), and `OUTPUT_DIR=training-jobs`. It writes `{JOB_ID}-metrics.json`, `{JOB_ID}-status.json`, and `{JOB_ID}-epoch-evals.json` to the output directory. When it returns, check the JSON report for anomalies before proceeding to analysis.
+**After eval completes**, check if the training monitor report exists:
+```bash
+test -f training-jobs/{JOB_ID}-monitor-report.json && echo "Training done" || echo "Training still running"
+```
 
-**Key rule**: When one job completes, **immediately analyze its results** — don't wait for the slower job. Both save data locally (`training-jobs/` and `evaluations/`) so Step 8 needs no API calls.
+If training is still running, periodically check `tail -5 /tmp/training_monitor_{JOB_ID}.log` for progress. Once the report file appears, read it for anomalies before proceeding to analysis.
+
+**Key rule**: When eval completes, **immediately analyze eval results** — don't wait for training. Both save data locally (`training-jobs/` and `evaluations/`) so Step 8 needs no API calls.
 
 ### Step 8: Analyze Results & Present Findings
 

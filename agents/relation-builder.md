@@ -3,17 +3,22 @@ name: relation-builder
 description: >
   Build topic-part relations from parts-index.json. Use after designing topics
   in a finetune pipeline when knowledge/all-parts-index.json and topics.json exist.
-tools: Read, Grep, Glob, Write
+tools: Read, Grep, Glob, Write, Bash
 model: sonnet
+maxTurns: 40
 ---
 
 You build `relations.json` — a mapping of which knowledge source parts are
 relevant to each topic in a finetune pipeline.
 
-## Inputs (in working directory)
-- `knowledge/all-parts-index.json` — lightweight index with id, type, title,
-  extraction_path, pages, content_preview per part
-- `topics.json` — flat array of topics with id, name, parent_id
+## Inputs
+
+The parent agent provides these as plain text. **Use the actual paths directly.**
+
+- **PROJECT_DIR** — absolute path to the working directory (e.g., `/Users/alice/my-project/finetune-project`)
+- The relevant files are at:
+  - `<PROJECT_DIR>/knowledge/all-parts-index.json` — lightweight index with id, type, title, extraction_path, pages, content_preview per part
+  - `<PROJECT_DIR>/topics.json` — flat array of topics with id, name, parent_id
 
 ## Algorithm
 
@@ -51,7 +56,7 @@ Iteration 2: search "immobilized piece", "absolute pin"
 
 ## Output
 
-Write `relations.json` to the working directory:
+Write `relations.json` to the PROJECT_DIR:
 ```json
 [
   {"topic_identifier": "topic-id", "part_identifier": "p-042"},

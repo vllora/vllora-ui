@@ -9,6 +9,7 @@ This README is the full context for anyone (human or AI) working on this skill: 
 ## Table of Contents
 
 - [Why This Skill Exists](#why-this-skill-exists)
+- [Installation](#installation)
 - [Architecture](#architecture)
   - [Agent Delegation Flow](#agent-delegation-flow)
 - [Operating Mode](#operating-mode-data-prep--handoff)
@@ -53,6 +54,61 @@ The vLLora UI at `localhost:5173` visualizes the workflow data in real time (top
 4. How to write effective graders (hybrid, partial credit, reward hacking prevention)
 5. How to extract documents via Docling Serve into structured knowledge parts
 6. How to push everything to the gateway for UI handoff
+
+---
+
+## Installation
+
+The skill requires two things in your project's `.claude/` directory:
+
+```bash
+your-project/
+└── .claude/
+    ├── agents/                        # Companion agents (3 files)
+    │   ├── knowledge-extractor.md     # Document extraction (Step 2)
+    │   ├── relation-builder.md        # Topic-part matching (Step 3)
+    │   └── training-monitor.md        # Training anomaly detection (Step 7)
+    └── skills/
+        └── finetune-skill/            # The skill itself
+            ├── SKILL.md
+            ├── reference/             # 8 reference docs
+            ├── scripts/               # 14 Python helpers
+            └── templates/             # Starter files
+```
+
+### Quick setup
+
+```bash
+# From the vllora/ui repo — one command does everything:
+./scripts/sync-finetune-skill.sh /path/to/your-project
+```
+
+The sync script copies the skill + all 3 agents, verifies the installation, and prints next steps. Safe to run multiple times — it overwrites with the latest versions.
+
+**Manual setup** (if you prefer):
+```bash
+DEST="path/to/your-project"
+mkdir -p "$DEST/.claude/skills" "$DEST/.claude/agents"
+cp -r finetune-skill "$DEST/.claude/skills/"
+cp agents/*.md "$DEST/.claude/agents/"
+```
+
+### Prerequisites
+
+- **Gateway** running at `localhost:9090` (`npm run start:backend` from the gateway repo)
+- **Python 3** with `requests` library (`pip install requests`)
+- **Docling Serve** (optional, for PDF extraction — falls back to `pdftotext` if unavailable)
+- **Claude Code** with Bash permissions — the skill and agents run shell commands extensively
+
+### Verify installation
+
+```bash
+cd your-project
+claude  # start Claude Code
+
+# Claude should auto-detect the skill. Test with:
+# "I want to finetune a model on my tax documents"
+```
 
 ---
 
@@ -139,7 +195,7 @@ finetune-project/               # Agent creates this working directory
 
 ### Agent Delegation Flow
 
-The main agent (Sonnet/Opus) acts as an **orchestrator** — it makes decisions and delegates heavy work to three specialist Haiku subagents. Each subagent starts with a fresh context, reads only the files it needs, and returns a structured summary. This keeps the main agent's context clean and costs low.
+The main agent (Sonnet/Opus) acts as an **orchestrator** — it makes decisions and delegates heavy work to three specialist subagents. Each subagent starts with a fresh context, reads only the files it needs, and returns a structured summary. This keeps the main agent's context clean and costs low.
 
 ```
 User: "finetune my tax deduction PDF"
@@ -158,7 +214,7 @@ User: "finetune my tax deduction PDF"
 │           ▼                                             │
 │    ┌──────────────────────────────────────┐             │
 │    │  SUBAGENT: knowledge-extractor       │             │
-│    │  Model: Haiku | maxTurns: 30         │             │
+│    │  Model: Sonnet | maxTurns: 50        │             │
 │    │                                      │             │
 │    │  Extracts ALL documents broadly      │             │
 │    │  Writes: knowledge_parts.json (each) │             │
@@ -216,17 +272,24 @@ User: "finetune my tax deduction PDF"
 │           ▼                                             │
 │    ┌──────────────────────────────────────┐             │
 │    │  SUBAGENT: training-monitor          │             │
-│    │  Model: Haiku | background: true     │             │
+│    │  Model: Haiku | maxTurns: 10         │             │
 │    │                                      │             │
-│    │  Polls metrics every 15s             │             │
-│    │  Checks 6 anomaly rules              │             │
-│    │  Saves: {JOB_ID}-metrics.json        │             │
-│    │  Returns: JSON report on exit        │             │
-│    └──────────┬───────────────────────────┘             │
-│               │                                         │
-│    Meanwhile, main agent is FREE to:                    │
-│      - Analyze eval results (arrives first)             │
+│    │  Writes Python monitoring script     │             │
+│    │  Launches via nohup (detached)       │             │
+│    │  Returns IMMEDIATELY with:           │             │
+│    │    report path + log path + PID      │             │
+│    └──────────────────────────────────────┘             │
+│           │                                             │
+│    Script runs autonomously for 30-120 min:             │
+│      Polls metrics every 30s                            │
+│      Checks 6 anomaly rules                             │
+│      Saves: {JOB_ID}-metrics.json                       │
+│      Writes: {JOB_ID}-monitor-report.json on exit       │
+│                                                         │
+│    Meanwhile, main agent polls eval (foreground):       │
+│      - Analyze eval results when ready                  │
 │      - Present findings to user                         │
+│      - Check training report file when eval done        │
 │               │                                         │
 │               ▼  (training-monitor returns)             │
 │                                                         │
@@ -246,11 +309,11 @@ User: "finetune my tax deduction PDF"
 
 **Why subagents?**
 
-| Subagent | Step | Why delegate? | Benefit |
-|----------|------|--------------|---------|
-| `knowledge-extractor` | 2 | Document content fills context — 100-page PDFs consume most of the window | Main agent never sees raw document content, only a summary |
-| `relation-builder` | 3b | Parts-index scanning is mechanical and fills context | Fresh context for index matching, main stays clean |
-| `training-monitor` | 7c | Training runs 30-120 min — polling wastes Sonnet tokens | Haiku is ~10x cheaper, `background: true` frees the main agent |
+| Subagent | Step | Model | Why delegate? | Benefit |
+|----------|------|-------|--------------|---------|
+| `knowledge-extractor` | 2 | Sonnet | Document content fills context — 100-page PDFs consume most of the window | Main agent never sees raw document content, only a summary |
+| `relation-builder` | 3b | Sonnet | Parts-index scanning needs semantic matching quality | Fresh context for index matching, main stays clean |
+| `training-monitor` | 7c | Haiku | Training runs 30-120 min — polling is mechanical | Writes script, launches `nohup`, returns instantly. Script monitors autonomously |
 
 **User review checkpoints (🗣️):**
 
