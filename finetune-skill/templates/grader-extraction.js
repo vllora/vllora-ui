@@ -1,0 +1,123 @@
+/**
+ * Structured Extraction Grader
+ *
+ * For models that extract specific data from documents (metrics, fields, entities).
+ * Scores on: field accuracy, hallucination rate, completeness, format compliance.
+ *
+ * Customize: REQUIRED_FIELDS, FORMAT_PATTERN, HALLUCINATION_KEYWORDS
+ */
+function evaluate(input) {
+    let response = "";
+    let history = "";
+
+    if (input.response && typeof input.response === "string") {
+        response = input.response;
+        history = input.history || (input.messages ? JSON.stringify(input.messages) : "");
+    } else if (input.messages && Array.isArray(input.messages) && input.messages.length > 0) {
+        const lastMessage = input.messages[input.messages.length - 1];
+        if (lastMessage.content) response = lastMessage.content;
+        history = JSON.stringify(input.messages.slice(0, input.messages.length - 1));
+    }
+
+    var groundTruth = (input.ground_truth && typeof input.ground_truth === "string") ? input.ground_truth : "";
+    input.ground_truth = groundTruth;
+
+    if (!response || response.trim().length < 10) {
+        return { score: 0, reason: "Response is empty or too short" };
+    }
+
+    // ─── Programmatic Checks ───
+
+    // TODO: Define required fields for your extraction task
+    // const REQUIRED_FIELDS = ["revenue", "net_income", "total_assets"];
+    // let missingFields = REQUIRED_FIELDS.filter(f => !response.toLowerCase().includes(f.toLowerCase()));
+    // if (missingFields.length > 0) {
+    //     return { score: 0.1, reason: "Missing required fields: " + missingFields.join(", ") };
+    // }
+
+    // TODO: Check format compliance (e.g., JSON, table, bullet list)
+    // const hasStructuredFormat = response.includes("|") || response.includes("{");
+    // if (!hasStructuredFormat) {
+    //     // Penalize but don't zero — content might still be correct
+    // }
+
+    // ─── LLM-as-Judge: Extraction Quality ───
+
+    const systemMsg = (input.messages || []).find(function(m) { return m.role === "system"; });
+
+    const config = {
+        prompt_template: [
+            {
+                role: "system",
+                content: "You are an expert evaluator assessing structured data extraction quality."
+            },
+            {
+                role: "user",
+                content: `${systemMsg ? "System context: " + systemMsg.content + "\n\n" : ""}Conversation History:
+{{history}}
+
+Model Response to Evaluate:
+{{response}}
+` + (groundTruth ? `
+Source Reference (ground truth data):
+{{ground_truth}}
+` : "") + `
+Rate the extraction on these criteria (0-5 scale):
+1. FIELD_ACCURACY: Are extracted values correct? Compare against source reference if available.
+2. HALLUCINATION: Does the response contain any numbers, dates, or facts NOT in the source? (5=no hallucination, 0=heavily hallucinated)
+3. COMPLETENESS: Were all relevant data points extracted? Nothing important missed?
+4. FORMAT: Is the output in the expected structured format? Easy to parse?
+
+Answer in JSON format:
+{
+  "reasoning": string,
+  "field_accuracy": number (0-5),
+  "hallucination": number (0-5, higher=better),
+  "completeness": number (0-5),
+  "format": number (0-5)
+}`
+            }
+        ],
+        output_schema: {
+            type: "object",
+            properties: {
+                reasoning: { type: "string" },
+                field_accuracy: { type: "number", minimum: 0, maximum: 5 },
+                hallucination: { type: "number", minimum: 0, maximum: 5 },
+                completeness: { type: "number", minimum: 0, maximum: 5 },
+                format: { type: "number", minimum: 0, maximum: 5 }
+            },
+            required: ["reasoning", "field_accuracy", "hallucination", "completeness", "format"],
+            additionalProperties: false
+        },
+        completion_params: { model_name: "gpt-4.1", temperature: 0.0, max_tokens: 1000 }
+    };
+
+    input.history = history;
+    input.response = response;
+
+    try {
+        const result = __langdb_call_llm_as_judge_obj(config, input);
+        if (result.error) {
+            return { score: 0, reason: "LLM-as-judge error: " + (result.error || "Unknown") };
+        }
+
+        const fa = typeof result.field_accuracy === 'number' ? result.field_accuracy : 0;
+        const hal = typeof result.hallucination === 'number' ? result.hallucination : 0;
+        const comp = typeof result.completeness === 'number' ? result.completeness : 0;
+        const fmt = typeof result.format === 'number' ? result.format : 0;
+
+        // Weight: accuracy and hallucination matter most for extraction
+        const weighted = (fa * 0.35) + (hal * 0.30) + (comp * 0.25) + (fmt * 0.10);
+        let finalScore = Math.max(0, Math.min(1, weighted / 5.0));
+        if (isNaN(finalScore)) finalScore = 0;
+
+        return {
+            score: finalScore,
+            reason: result.reasoning || "No reasoning",
+            field_accuracy: fa, hallucination: hal, completeness: comp, format: fmt
+        };
+    } catch (error) {
+        return { score: 0, reason: "Error: " + (error.message || "Unknown") };
+    }
+}

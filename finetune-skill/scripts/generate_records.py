@@ -25,6 +25,8 @@ import glob
 import json
 import subprocess
 import sys
+import tempfile
+import threading
 from pathlib import Path
 
 
@@ -258,6 +260,42 @@ Return JSON: {{"items": [{{"prompt": "the question", "ground_truth": "relevant s
     return records
 
 
+def upload_records_batch(
+    records: list[dict],
+    workflow_id: str,
+    gateway_url: str,
+    scripts_dir: Path,
+) -> bool:
+    """Upload a batch of records to the gateway. Returns True on success."""
+    if not records:
+        return True
+
+    # Write records to a temp JSONL file
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as tmp:
+        for r in records:
+            tmp.write(json.dumps(r) + "\n")
+        tmp_path = tmp.name
+
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(scripts_dir / "finetune.py"),
+                "upload-records",
+                "--workflow-id", workflow_id,
+                "--file", tmp_path,
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            print(f"  Upload failed: {result.stderr[:200]}", file=sys.stderr)
+            return False
+        return True
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+
+
 def main() -> None:
     import argparse
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -275,7 +313,15 @@ def main() -> None:
     parser.add_argument("--append", action="store_true", help="Append to existing file instead of overwriting")
     parser.add_argument("--no-ground-truth", action="store_true", help="Skip generating ground_truth excerpts for each record")
     parser.add_argument("--parallel", type=int, default=1, help="Number of topics to generate concurrently (default: 1, max: 8)")
+    parser.add_argument("--upload-incremental", action="store_true",
+                        help="Upload each topic's records to gateway immediately after generation")
+    parser.add_argument("--workflow-id", help="Workflow ID (required with --upload-incremental)")
+    parser.add_argument("--gateway-url", default="http://localhost:9090", help="Gateway URL for incremental upload")
     args = parser.parse_args()
+
+    if args.upload_incremental and not args.workflow_id:
+        print("Error: --workflow-id required with --upload-incremental", file=sys.stderr)
+        sys.exit(1)
 
     topics_path = Path(args.topics)
     relations_path = Path(args.relations)
@@ -327,9 +373,36 @@ def main() -> None:
 
     all_results: list[tuple[int, str, list[dict]]] = []
     failed_topics: list[str] = []
+    upload_failures: list[str] = []
+
+    # Thread-safe file writer + uploader for parallel mode
+    write_lock = threading.Lock()
+    total_records = 0
+    uploaded_records = 0
+
+    def _flush_records(records: list[dict], topic_id: str) -> None:
+        """Write records to file and optionally upload to gateway."""
+        nonlocal total_records, uploaded_records
+        with write_lock:
+            with output_path.open("a") as out:
+                for r in records:
+                    out.write(json.dumps(r) + "\n")
+            total_records += len(records)
+
+        if args.upload_incremental:
+            ok = upload_records_batch(records, args.workflow_id, args.gateway_url, scripts_dir)
+            if ok:
+                with write_lock:
+                    uploaded_records += len(records)
+            else:
+                upload_failures.append(topic_id)
+
+    # Initialize output file (clear if not appending)
+    if not args.append:
+        output_path.open("w").close()
 
     if parallel <= 1:
-        # Sequential mode (original behavior)
+        # Sequential mode
         for i, topic, ancestors in tasks:
             ancestor_path = " > ".join(a["name"] for a in ancestors)
             path_display = f"{ancestor_path} > {topic['name']}" if ancestors else topic["name"]
@@ -341,7 +414,9 @@ def main() -> None:
                 print("FAILED (0 records)")
             else:
                 all_results.append((i, topic["id"], records))
-                print(f"{len(records)} records")
+                _flush_records(records, topic["id"])
+                upload_status = f" (uploaded)" if args.upload_incremental else ""
+                print(f"{len(records)} records{upload_status}")
     else:
         # Parallel mode
         def _generate(task_tuple: tuple) -> tuple[int, str, str, list[dict]]:
@@ -360,21 +435,18 @@ def main() -> None:
                     print(f"[{idx + 1}/{len(leaves)}] '{path_display}' FAILED (0 records)")
                 else:
                     all_results.append((idx, topic_id, records))
-                    print(f"[{idx + 1}/{len(leaves)}] '{path_display}' → {len(records)} records")
-
-    # Write results sorted by original index (stable output order)
-    all_results.sort(key=lambda x: x[0])
-    total_records = 0
-    with output_path.open(mode) as out:
-        for _, _, records in all_results:
-            for r in records:
-                out.write(json.dumps(r) + "\n")
-            total_records += len(records)
+                    _flush_records(records, topic_id)
+                    upload_status = f" (uploaded)" if args.upload_incremental else ""
+                    print(f"[{idx + 1}/{len(leaves)}] '{path_display}' → {len(records)} records{upload_status}")
 
     # Summary
     print(f"\n{'='*50}")
     print(f"Generation complete: {total_records} records across {len(leaves) - len(failed_topics)} topics")
     print(f"Output: {output_path}")
+    if args.upload_incremental:
+        print(f"Uploaded: {uploaded_records} records to workflow {args.workflow_id}")
+        if upload_failures:
+            print(f"⚠️  Upload failed for {len(upload_failures)} topic(s): {upload_failures}")
 
     if failed_topics:
         print(f"\n⚠️  {len(failed_topics)} topic(s) failed:")

@@ -40,6 +40,12 @@ Define Objective → Extract Documents → Build Topics → Generate Data → Wr
 
 **Execute ALL steps (1-9).** Steps 1-6 prepare the dataset. Steps 7-9 evaluate and train the model. Do NOT stop at Step 6 — always run evaluation at minimum. If the user only asks for data preparation, you may stop at Step 6, but by default run the full pipeline including evaluation and training.
 
+**Checkpoint after each step** — so the pipeline can resume after crashes:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step <STEP_NAME> --project-dir finetune-project --workflow-id $WORKFLOW_ID
+```
+Step names: `create-workflow`, `extract`, `topics`, `relations`, `generate-data`, `grader`, `validate`, `upload-records`, `upload-grader`, `eval`, `training`, `analyze`.
+
 ### Working Directory
 
 Create a local directory for all artifacts:
@@ -99,17 +105,19 @@ fi
 
 **If an existing project is found:**
 1. Read `finetune-project/config.json` to get the `workflow_id`
-2. Read `finetune-project/execution-log.md` to understand what was already completed
-3. Verify gateway state — run `python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py verify --workflow-id $WORKFLOW_ID` to see what's uploaded
-4. Check for local artifacts:
-   - `knowledge/` exists + has parts → Step 2 (extraction) is done
-   - `topics.json` exists → Step 3 (topics) is done
-   - `relations.json` exists → Step 3 (relations) is done
-   - `training.jsonl` exists → Step 4 (data generation) is done
-   - `grader.js` exists → Step 5 (grader) is done
-   - `evaluations/` has eval results → Step 7-8 (eval) is done
-   - `training-jobs/` has job files → Step 7 (training) was started
-   - `iterations.md` exists → Previous iterations were run
+2. Check checkpoint state — this is the most reliable way to know what's done:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py status --project-dir finetune-project
+```
+3. If no checkpoint file exists, fall back to local artifact detection:
+   - `knowledge/` exists + has parts → extraction is done
+   - `topics.json` exists → topics is done
+   - `relations.json` exists → relations is done
+   - `training.jsonl` exists → data generation is done
+   - `grader.js` exists → grader is done
+   - `evaluations/` has eval results → eval is done
+   - `training-jobs/` has job files → training was started
+4. Verify gateway state — `python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py verify --workflow-id $WORKFLOW_ID`
 5. **Pick up from the first incomplete step** — do NOT re-run completed steps
 6. Append to `execution-log.md` (never overwrite) with a "Resumed" entry:
    ```
@@ -209,7 +217,14 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/know
 
 If there are no documents (objective-only pipeline), skip this step.
 
-**Review extraction with the user.** Present a per-document summary of what was extracted (document name, chapter/section count, parts count). Ask the user which areas they want the training to focus on. Use their answer to guide topic design in Step 3 — do NOT re-run extraction. All content is already on disk; topics control what gets used for training.
+**Review extraction with the user.** Present a per-document summary of what was extracted (document name, section count, parts count, sample section titles). Ask:
+- Do these look like the right sections from each document?
+- Any documents where the extraction missed important content or grouped things incorrectly?
+- Which areas should we focus training on?
+
+**If the user wants to re-extract a specific document** (e.g., "the fee schedule in Contract-A got merged into one big part — split those into individual items"), spawn a new `knowledge-extractor` for just that document with `CUSTOM_INSTRUCTIONS` set to the user's request. Then re-merge indexes and re-validate. Only re-extract the specific documents the user flagged — not all of them.
+
+Use the user's focus areas to guide topic design in Step 3. All content is already on disk; topics control what gets used for training.
 
 ### Step 3: Build Topic Hierarchy
 
@@ -290,12 +305,18 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --system-prompt "You are an expert chess tutor..." \
   --output finetune-project/training.jsonl \
   --records-per-topic 10 \
-  --parallel 4
+  --parallel 4 \
+  --upload-incremental --workflow-id $WORKFLOW_ID
 ```
 
 The script loads topics + relations, finds leaf topics, gathers linked source chunks, and calls the LLM to generate grounded user prompts per topic. If some topics fail, use `--append` to retry without overwriting. Adapt `--records-per-topic`, `--model`, and `--temperature` to the project. Run multiple passes if needed (basic questions, then edge cases, then multi-turn). **Generate at least 100-200 total records.**
 
-**Upload immediately** — push records to the gateway so the UI shows training data as it's generated:
+**Deduplicate** — parallel generation can produce near-duplicate prompts across overlapping topics:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/deduplicate_records.py finetune-project/training.jsonl --threshold 0.85
+```
+
+With `--upload-incremental`, records appear in the UI as each topic completes — no separate upload step needed. If you ran without `--upload-incremental`, upload manually:
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
   --workflow-id $WORKFLOW_ID --file training.jsonl
@@ -331,7 +352,16 @@ Write a JavaScript grader function to `grader.js`. Scores model responses 0-1, r
 
 The grader function signature: `function evaluate(input) { ... return { score, reason }; }` where score is 0.0-1.0. The function can use `__langdb_call_llm_as_judge_obj(config, input)` for subjective quality assessment — `config` has `prompt_template` (message array with `{{history}}`/`{{response}}` template vars), `output_schema` (JSON Schema), and `completion_params` (`{model_name, temperature, max_tokens}`). Set `input.history` and `input.response` before calling. **Synchronous only** — no async/await.
 
-See [reference/grader-writing.md](reference/grader-writing.md) for 3 patterns (pure programmatic, LLM-as-judge, hybrid), design guidelines, and common mistakes. Use `${CLAUDE_SKILL_DIR}/templates/grader-template.js` as a starter.
+See [reference/grader-writing.md](reference/grader-writing.md) for 3 patterns (pure programmatic, LLM-as-judge, hybrid), design guidelines, and common mistakes. Pick the template that best matches the task:
+
+| Template | Best for | Key criteria |
+|----------|----------|-------------|
+| `templates/grader-template.js` | General-purpose (default) | accuracy, helpfulness, clarity, completeness, tone |
+| `templates/grader-extraction.js` | Structured data extraction (10-K metrics, medical coding) | field accuracy, hallucination rate, format compliance |
+| `templates/grader-compliance.js` | Rule application (FDA, tax, legal) | rule recall, false positives, citation accuracy |
+| `templates/grader-readability.js` | Simplification (contract→English, ELI5) | readability + Flesch-Kincaid, jargon elimination, accuracy preservation |
+
+Copy the closest template, then customize the criteria weights and programmatic checks for your domain.
 
 #### Step 5.1: Mandatory Dry-Run
 

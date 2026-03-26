@@ -27,8 +27,13 @@ def validate_file(path: Path) -> dict:
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
 
-    parts = data.get("parts", [])
-    source = data.get("source", {})
+    # Handle both {"parts": [...]} and bare array formats
+    if isinstance(data, list):
+        parts = data
+        source = {}
+    else:
+        parts = data.get("parts", [])
+        source = data.get("source", {})
     name = source.get("name", path.parent.name)
     total_pages = source.get("metadata", {}).get("total_pages")
     text_parts = [p for p in parts if p["type"] == "text"]

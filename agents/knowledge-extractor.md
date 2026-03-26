@@ -29,6 +29,7 @@ The parent agent provides these as plain text in the prompt. **Use the actual va
 - **DOC_SLUG** — the slug for this document (e.g., `irs-publication-525`)
 - **DOC_DIR** — absolute path to the output directory (e.g., `.../knowledge/irs-publication-525`)
 - **TASK_ID** — the Docling async task ID (already submitted by orchestrator). If empty, you must submit yourself.
+- **CUSTOM_INSTRUCTIONS** — (optional) user-specified extraction preferences for this document. If provided, skip the generic script and write a custom extract.py that follows these instructions.
 
 ## Algorithm
 
@@ -54,26 +55,40 @@ python3 <SKILL_DIR>/scripts/docling_extract.py "<DOC_PATH>" \
   --output "<DOC_DIR>/docling-result.json"
 ```
 
-### 3. Write a custom extraction script
+### 3. Build knowledge parts
 
-Create `<DOC_DIR>/extract.py` tailored to THIS document's structure:
+**Path A — No custom instructions (default):**
 
-1. Read chunks 0-9 from `docling-result.json` to understand structure
-2. Sample middle and end sections too (check total chunk count)
-3. Design grouping logic for this specific document:
-   - Group content by semantic units (section heading + content = one part)
-   - Target 200-2000 chars per part
-   - Prefix all part IDs with the document slug (e.g., `irs-pub-525-section-1`)
-   - Produce `knowledge_parts.json` with typed parts (text, table, image)
-
-Run it:
+Use the generic script. It handles most documents correctly:
 ```bash
-cd "<DOC_DIR>" && python3 extract.py
+python3 <SKILL_DIR>/scripts/build_knowledge_parts.py \
+  "<DOC_DIR>/docling-result.json" \
+  -o "<DOC_DIR>/knowledge_parts.json" \
+  --slug "<DOC_SLUG>"
 ```
 
 Verify output:
 ```bash
 python3 -c "import json; d=json.load(open('<DOC_DIR>/knowledge_parts.json')); print(f'{len(d)} parts')"
+```
+
+If the script fails or produces 0 parts, fall through to Path B.
+
+**Path B — Custom instructions OR generic script failed:**
+
+Write a custom `<DOC_DIR>/extract.py` tailored to this document:
+
+1. Read chunks 0-9 from `docling-result.json` to understand structure
+2. Sample middle and end sections too (check total chunk count)
+3. Follow CUSTOM_INSTRUCTIONS if provided (e.g., "split appendix fee schedules into individual items", "skip signature pages", "merge short sections")
+4. Group content by semantic units (section heading + content = one part)
+5. Target 200-2000 chars per part
+6. Prefix all part IDs with the document slug
+7. Produce `knowledge_parts.json` with typed parts (text, table, image)
+
+Run it:
+```bash
+cd "<DOC_DIR>" && python3 extract.py
 ```
 
 ### 4. Post-process
