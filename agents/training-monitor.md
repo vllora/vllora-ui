@@ -49,23 +49,73 @@ The script must use **only Python stdlib** (`urllib.request`, `json`, `math`, `t
    - `<OUTPUT_DIR>/<JOB_ID>-metrics.json` — full metrics timeseries (overwritten)
    - `<OUTPUT_DIR>/<JOB_ID>-status.json` — latest job status (overwritten)
 
-3. **Track rolling state:**
-   - `kl_history: list[float]` — all KL values seen
-   - `zero_std_streak: int` — consecutive polls where `frac_reward_zero_std > 0.60`
-   - `reward_std_low_streak: int` — consecutive polls where `reward_std < 0.05`
-   - `grad_norms: list[float]` — all grad_norm values
-   - `grad_norm_spike_streak: int` — consecutive polls where grad_norm > 3x running median
+3. **Rolling state and anomaly checks:**
 
-4. **Check anomalies on every poll:**
+   Use a single `state` dict to track everything. ALL anomaly check functions receive
+   BOTH the current metrics AND the state dict — never just one. Here is the required
+   Python structure (copy this pattern exactly):
 
-   | Anomaly | Logic | Severity |
-   |---------|-------|----------|
-   | NaN/Inf in metrics | `math.isnan(v) or math.isinf(v)` for loss, reward, kl, grad_norm | CRITICAL — exit |
-   | High clipping | `completions/clipped_ratio > 0.70` | CRITICAL — exit |
-   | KL divergence | last 5 KL values all rising AND latest > 2.0 | WARNING — exit |
-   | Weak signal | `frac_reward_zero_std > 0.60` for 5+ consecutive polls | WARNING — exit |
-   | Reward collapse | `reward_std < 0.05` for 5+ consecutive polls | WARNING — exit |
-   | Grad norm spike | `grad_norm > 3x median(grad_norms)` for 10+ consecutive (min 5 norms) | WARNING — exit |
+   ```python
+   state = {
+       "kl_history": [],
+       "grad_norms": [],
+       "zero_std_streak": 0,
+       "reward_std_low_streak": 0,
+       "grad_norm_spike_streak": 0,
+   }
+
+   def check_anomalies(m, state):
+       """Check all anomaly rules. Returns (anomaly_type, detail) or (None, None)."""
+       # CRITICAL: NaN/Inf in any key metric
+       for key in ["loss", "reward", "kl", "grad_norm"]:
+           v = m.get(key)
+           if v is not None and (math.isnan(v) or math.isinf(v)):
+               return "nan_metrics", f"{key} is {v}"
+
+       # CRITICAL: High clipping
+       clip = m.get("completions/clipped_ratio", 0)
+       if clip > 0.70:
+           return "high_clipping", f"clipped_ratio={clip:.2f}"
+
+       # WARNING: KL divergence (last 5 all rising AND latest > 2.0)
+       kl = m.get("kl")
+       if kl is not None:
+           state["kl_history"].append(kl)
+           h = state["kl_history"]
+           if len(h) >= 5 and all(h[i] < h[i+1] for i in range(-5, -1)) and h[-1] > 2.0:
+               return "kl_divergence", f"rising over last 5: {[round(x,2) for x in h[-5:]]}"
+
+       # WARNING: Weak signal (frac_reward_zero_std > 0.60 for 5+ consecutive)
+       frzs = m.get("frac_reward_zero_std", 0)
+       state["zero_std_streak"] = state["zero_std_streak"] + 1 if frzs > 0.60 else 0
+       if state["zero_std_streak"] >= 5:
+           return "weak_signal", f"frac_reward_zero_std > 0.60 for {state['zero_std_streak']} polls"
+
+       # WARNING: Reward collapse (reward_std < 0.05 for 5+ consecutive)
+       rstd = m.get("reward_std", 1.0)
+       state["reward_std_low_streak"] = state["reward_std_low_streak"] + 1 if rstd < 0.05 else 0
+       if state["reward_std_low_streak"] >= 5:
+           return "reward_collapse", f"reward_std < 0.05 for {state['reward_std_low_streak']} polls"
+
+       # WARNING: Grad norm spike (> 3x median for 10+ consecutive, min 5 norms)
+       gn = m.get("grad_norm")
+       if gn is not None:
+           state["grad_norms"].append(gn)
+           if len(state["grad_norms"]) >= 5:
+               med = statistics.median(state["grad_norms"])
+               state["grad_norm_spike_streak"] = state["grad_norm_spike_streak"] + 1 if gn > 3 * med else 0
+               if state["grad_norm_spike_streak"] >= 10:
+                   return "grad_norm_spike", f"grad_norm {gn:.2f} > 3x median {med:.2f} for {state['grad_norm_spike_streak']} polls"
+
+       return None, None
+   ```
+
+   In the main polling loop, call it as:
+   ```python
+   anomaly_type, anomaly_detail = check_anomalies(latest_metrics, state)
+   if anomaly_type:
+       # save report and exit
+   ```
 
 5. **On exit** (job done or anomaly), fetch and save epoch evals:
    - `<OUTPUT_DIR>/<JOB_ID>-epoch-evals.json` from `GET <GATEWAY_URL>/finetune/workflows/<WORKFLOW_ID>/finetune-evaluations?finetune_job_id=<JOB_ID>`
