@@ -164,8 +164,8 @@ function useFinetuneJobsLogic() {
     const jobId = job.id;
     if (evalPollIntervalsRef.current[jobId]) return;
 
-    // Initial fetch
-    fetchJobEvaluations(job, true);
+    // Skip initial fetch — the mount effect (line ~310) already handles it.
+    // Starting the interval directly avoids the duplicate request.
 
     // Poll cloud-proxy every 20s for progress (with stop condition)
     evalPollIntervalsRef.current[jobId] = setInterval(() => {

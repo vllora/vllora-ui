@@ -5,10 +5,10 @@
  * Also supports a compact list-only mode for the DryRunDialog.
  */
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { XCircle, AlertTriangle, RefreshCw, RotateCw, ChevronRight, StopCircle } from "lucide-react";
+import { XCircle, AlertTriangle, RefreshCw, RotateCw, ChevronRight, StopCircle, Loader2 } from "lucide-react";
 import { VerdictBadge } from "./VerdictBadge";
 import { ScoreStrip } from "./ScoreStrip";
 import { ResultsTable } from "./ResultsTable";
@@ -172,6 +172,23 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
   // All hooks must be called before any early returns
   const [showRecs, setShowRecs] = useState(verdict !== "GO" && recommendations.length > 0);
 
+  // Auto-fetch results once when viewing a completed job that lacks results.
+  // Uses a Set to track which job IDs have been attempted (prevents re-fire on re-render).
+  const attemptedJobIds = useRef(new Set<string>());
+  useEffect(() => {
+    if (
+      job.status === "completed" &&
+      !result &&
+      !evaluationResults &&
+      job.evaluationRunId &&
+      onRefresh &&
+      !attemptedJobIds.current.has(job.id)
+    ) {
+      attemptedJobIds.current.add(job.id);
+      onRefresh(job.id);
+    }
+  }, [job.id, job.status, job.evaluationRunId, result, evaluationResults, onRefresh]);
+
   // For non-running jobs without results or evaluation data
   if (job.status !== "running" && !result && !evaluationResults) {
     if (job.status === "failed") {
@@ -191,20 +208,15 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
     }
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 px-4">
-        <span className="text-xs text-zinc-500">
-          {job.status === "completed"
-            ? "Evaluation completed but per-record results are not available. This can happen when the eval was run externally (e.g., via the finetune skill) or the cloud didn't return row-level scores."
-            : "No results available"}
-        </span>
-        {job.status === "completed" && (
-          <button
-            type="button"
-            className="text-[10px] text-blue-400 hover:text-blue-300 hover:underline"
-            onClick={() => onRefresh?.(job.id)}
-          >
-            Retry fetching results
-          </button>
-        )}
+        <Loader2 className="h-5 w-5 animate-spin text-zinc-500" />
+        <span className="text-xs text-zinc-500">Loading evaluation results...</span>
+        <button
+          type="button"
+          className="text-[10px] text-blue-400 hover:text-blue-300 hover:underline"
+          onClick={() => onRefresh?.(job.id)}
+        >
+          Retry
+        </button>
       </div>
     );
   }
