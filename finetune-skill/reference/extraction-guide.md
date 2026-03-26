@@ -447,7 +447,7 @@ The formal JSON Schema is at `reference/knowledge-parts-schema.json` — use it 
 
 **Important**: Prefix all part IDs with the document identifier — typically the slugified filename (e.g., `chess-tactics-chapter-3`) to keep them unique when parts from multiple documents are merged into `all-parts-index.json`.
 
-> ⚠️ **Common mistake: flattening tables to text.** If a chunk references `#/tables/N` in its `doc_items`, you MUST create a table-typed part, not a text part. The structured cell data in `json_content.tables[N].data` is critical for programmatic graders that need to look up values (e.g., "chicken breast = 31g protein"). After writing your extraction script, run `scripts/extract_tables.py` to ensure all table parts have proper `type: "table"` and `content_metadata` with headers and rows.
+> ⚠️ **Common mistake: flattening tables to text.** If a chunk references `#/tables/N` in its `doc_items`, you MUST create a table-typed part, not a text part. The structured cell data in `json_content.tables[N].data` is critical for programmatic graders that need to look up values (e.g., "chicken breast = 31g protein"). After writing your extraction script, run `python3 ${CLAUDE_SKILL_DIR}/scripts/extract_tables.py` to ensure all table parts have proper `type: "table"` and `content_metadata` with headers and rows.
 
 Write your own extraction script tailored to the document. There is no template — each document is different and may require domain-specific filtering or restructuring. Here's the general approach:
 
@@ -522,7 +522,7 @@ Process chunks by `chunk_index` to maintain reading order. For each chunk:
 
 > **Shortcut**: Instead of implementing the logic below manually, use the provided script:
 > ```bash
-> python3 scripts/consolidate_parts.py knowledge/{doc-slug}/knowledge_parts.json
+> python3 ${CLAUDE_SKILL_DIR}/scripts/consolidate_parts.py knowledge/{doc-slug}/knowledge_parts.json
 > ```
 > This handles merging, min-length filtering, Unicode fixes, ID reassignment, and quality validation in one step. The logic below explains what the script does.
 

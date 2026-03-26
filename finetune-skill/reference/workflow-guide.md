@@ -162,13 +162,6 @@ curl -X PATCH http://localhost:9090/finetune/workflows/WORKFLOW_ID/records/topic
   ]}'
 ```
 
-### Local JSONL Approach
-
-If working locally (Mode B), add the topic directly in the JSONL:
-```json
-{"id": "rec-001", "topic": "billing/refunds", "messages": [...]}
-```
-
 Categorize all uncategorized records before running coverage analysis — uncategorized records create blind spots in the balance check.
 
 ---
@@ -197,18 +190,16 @@ To avoid repetitive prompts within a topic:
 
 ### Multi-turn Design
 
-For multi-turn prompts, include prior conversation context so the model knows what follow-up it's responding to:
+For multi-turn prompts, embed prior conversation context **inside the user message** — do NOT use `assistant` role messages. RFT uses prompts only (system + user), and `validate_dataset.py` will flag assistant messages as errors.
 
 ```
 {"messages": [
   {"role": "system", "content": "You are..."},
-  {"role": "user", "content": "Broad question"},
-  {"role": "assistant", "content": "Brief context from prior turn"},
-  {"role": "user", "content": "Follow-up drilling into one detail"}
+  {"role": "user", "content": "I previously asked about handling file operations safely in Python, and you suggested using context managers. Now I want to know: what about writing to files?"}
 ], "id": "..."}
 ```
 
-The prior assistant messages are **conversation context**, not training targets. The model generates a fresh response to the final user message and the grader scores it. Keep multi-turn prompts to 2-4 user turns.
+The prior conversation context is embedded in the user message itself. The model generates a fresh response and the grader scores it. See `reference/data-format.md` for more examples.
 
 ---
 
@@ -281,7 +272,8 @@ Run a mini evaluation on 3-5 records before committing to a full run. This catch
 
 ```bash
 # Upload dataset, then run eval with limit=5
-uv run scripts/run_evaluation.py --dataset-id BACKEND_DATASET_ID --limit 5 --output evaluations/grader-test.json
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
+  --workflow-id $WORKFLOW_ID --output-dir evaluations --limit 5
 ```
 
 ### Diagnostic Checklist
@@ -306,21 +298,21 @@ See `api-reference.md` for full endpoint documentation. Key workflow details:
 
 **Path A: Workflow-integrated (recommended)**
 1. Save records, topics, and evaluator via gateway local CRUD (Steps 3-5)
-2. Package and upload: `POST /finetune/workflows/{id}/dataset/upload`
-3. This reads from SQLite and pushes to cloud automatically
+2. Gateway auto-uploads workflow data to the cloud when creating eval or training jobs (via `ensure_dataset_uploaded()`)
+3. No manual upload step needed — the gateway handles sync automatically
 
 **Path B: Direct workflow upload**
 1. Write JSONL data to a file (e.g., `training.jsonl`)
 2. Write grader to a file (e.g., `grader.js`)
-3. Upload records: `uv run scripts/finetune.py upload-records --workflow-id $WF_ID --file training.jsonl`
-4. Upload grader: `uv run scripts/finetune.py upload-grader --workflow-id $WF_ID --file grader.js`
+3. Upload records: `python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --workflow-id $WF_ID --file training.jsonl`
+4. Upload grader: `python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader --workflow-id $WF_ID --file grader.js`
 
 ### Evaluation Flow
 
 1. Create an evaluation run: `POST /finetune/evaluations`
 2. Track locally: `POST /finetune/workflows/{id}/eval-jobs` (for history)
 3. Poll for results every 2-3 seconds: `GET /finetune/evaluations/{id}`
-4. When `status` is `"completed"`, write scores back to records: `PATCH /workflows/{id}/records/{record_id}/scores`
+4. When `status` is `"completed"`, read per-record scores: `GET /finetune/workflows/{id}/records/scores`
 5. Analyze the results
 
 ### What Happens During Evaluation
@@ -394,6 +386,7 @@ Example requests:
 curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs \
   -H "Content-Type: application/json" \
   -d '{
+    "job_type": "provider_finetune",
     "base_model": "finetuned/2b08db0e-6a5e-4d62-b89f-8d2e8b246d44",
     "output_model": "my-model-v2"
   }'
@@ -404,6 +397,7 @@ curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs \
 curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/jobs \
   -H "Content-Type: application/json" \
   -d '{
+    "job_type": "provider_finetune",
     "base_model": "checkpointed/2b08db0e-6a5e-4d62-b89f-8d2e8b246d44",
     "resume_mode": "full-state",
     "output_model": "my-model-v3"

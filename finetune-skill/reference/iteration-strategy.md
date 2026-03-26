@@ -135,13 +135,13 @@ For gateway training metrics (`reward`, `loss`, `kl`, `grad_norm`, `learning_rat
 
 ```bash
 # Per-epoch aggregate view
-python3 scripts/print_metrics_table.py \
+python3 ${CLAUDE_SKILL_DIR}/scripts/print_metrics_table.py \
   --workflow-id "$WORKFLOW_ID" \
   --job-id "$JOB_ID" \
   --mode epoch
 
 # Per-step detailed view (includes fractional epoch + step)
-python3 scripts/print_metrics_table.py \
+python3 ${CLAUDE_SKILL_DIR}/scripts/print_metrics_table.py \
   --workflow-id "$WORKFLOW_ID" \
   --job-id "$JOB_ID" \
   --mode step
@@ -371,15 +371,15 @@ Pick 5 low-scoring records and manually review:
 
 **After changing the grader** — update without re-uploading data:
 ```bash
-uv run scripts/finetune.py upload-grader --workflow-id $WORKFLOW_ID --file grader.js
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader --workflow-id $WORKFLOW_ID --file grader.js
 ```
 
 **After changing the data** — re-upload records and sync to cloud:
 ```bash
-uv run scripts/finetune.py upload-records --workflow-id $WORKFLOW_ID --file training.jsonl
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --workflow-id $WORKFLOW_ID --file training.jsonl
 
-# Sync changes to cloud:
-curl -s -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/dataset/upload
+# No manual sync needed — gateway auto-uploads workflow data to the cloud
+# when creating eval or training jobs (via ensure_dataset_uploaded())
 ```
 
 ---

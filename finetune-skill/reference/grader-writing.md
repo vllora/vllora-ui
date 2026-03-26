@@ -598,11 +598,11 @@ Reward hacking happens when the model finds shortcuts that score well without ge
 
 ```bash
 # Test with a good response — should score high
-uv run scripts/dry_run_grader.py --workflow-id $WORKFLOW_ID --script grader.js \
+python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py --workflow-id $WORKFLOW_ID --script grader.js \
   --row '{"messages": [{"role": "user", "content": "..."}, {"role": "assistant", "content": "<good response>"}]}'
 
 # Test with a bad response — should score low
-uv run scripts/dry_run_grader.py --workflow-id $WORKFLOW_ID --script grader.js \
+python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py --workflow-id $WORKFLOW_ID --script grader.js \
   --row '{"messages": [{"role": "user", "content": "..."}, {"role": "assistant", "content": "<bad response>"}]}'
 ```
 

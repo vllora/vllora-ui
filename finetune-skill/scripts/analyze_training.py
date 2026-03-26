@@ -49,7 +49,7 @@ def fetch_job_status(base_url: str, workflow_id: str, job_id: str) -> dict:
 
 def fetch_epoch_evals(base_url: str, workflow_id: str, job_id: str) -> dict:
     """Fetch per-epoch per-record evaluations from the gateway API."""
-    url = f"{base_url}/finetune/workflows/{workflow_id}/dataset/finetune-evaluations"
+    url = f"{base_url}/finetune/workflows/{workflow_id}/finetune-evaluations"
     resp = requests.get(url, params={"finetune_job_id": job_id}, timeout=30)
     resp.raise_for_status()
     return resp.json()

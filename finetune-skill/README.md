@@ -24,19 +24,19 @@ This README is the full context for anyone (human or AI) working on this skill: 
 
 ## Why This Skill Exists
 
-The intelligence-heavy part of fine-tuning — reading documents, designing topics, generating diverse training prompts, writing graders — is exactly what AI agents excel at. The interactive part — evaluation, iteration, training monitoring — is better in a visual UI.
+Fine-tuning involves reading documents, designing topics, generating diverse training prompts, writing graders, running evaluations, analyzing results, and iterating — all things AI agents excel at.
 
 ```
-Agent (with this skill)                    vLLora UI (Lucy)
-─────────────────────                      ─────────────────
-Read docs, extract knowledge               Evaluate with visual score breakdown
-Design topic hierarchy                     Iterate: tune grader, fix records
-Generate 100-200+ training prompts         Monitor training metrics in real-time
-Write hybrid grader function               Deploy and test the model
-Push to gateway via API ──────────────────→ Lucy picks up where agent left off
+Agent (with this skill) — runs the full 9-step pipeline:
+─────────────────────────────────────────────────────────
+1. Read docs, extract knowledge        6. Verify & hand off
+2. Design topic hierarchy              7. Start eval + training (parallel)
+3. Generate 100-200+ training prompts  8. Analyze results, filter dead-weight
+4. Write hybrid grader function        9. Iterate (fix data/grader, retrain)
+5. Validate dataset
 ```
 
-The skill gives the agent **knowledge of the APIs and fine-tuning concepts**. The agent prepares everything, pushes to the gateway, and hands off to the UI for the interactive loop.
+The vLLora UI at `localhost:5173` visualizes the workflow data in real time (topics, records, eval scores, training metrics). The agent drives the pipeline; the UI displays the results.
 
 ### Who uses this skill
 
@@ -78,7 +78,7 @@ finetune-skill/
 │   ├── iteration-strategy.md   # ~710 lines — analysis, diagnosis, escalation
 │   └── workflow-guide.md       # ~305 lines — per-step deep dive
 │
-├── scripts/                    # PEP 723 helper scripts (run with `uv run`)
+├── scripts/                    # Helper scripts (run with `python3`, requires `requests`)
 │   ├── finetune.py             # Gateway API wrapper (create workflow, upload, verify)
 │   ├── generate_records.py     # LLM-based training record generation per leaf topic
 │   ├── chat_completion.py      # LLM chat completions (validates JSON output)
@@ -87,6 +87,7 @@ finetune-skill/
 │   ├── run_evaluation.py       # Create eval, poll until complete (~30 min timeout)
 │   ├── start_training.py       # Start training, poll until complete
 │   ├── analyze_training.py    # Fetch + analyze training metrics, per-epoch evals, alerts
+│   ├── print_metrics_table.py # Print training metrics table (per-epoch or per-step)
 │   ├── extract_tables.py      # Upgrade text parts to table parts from Docling table data
 │   ├── consolidate_parts.py   # Merge adjacent parts, drop fragments, fix Unicode
 │   ├── validate_extraction.py # Cross-document extraction quality gate
@@ -155,12 +156,12 @@ Agent (CLI)                                      UI (Lucy)
    POST /finetune/workflows/{id}/records
    POST /finetune/workflows/{id}/topics
    PATCH /finetune/workflows/{id}/evaluator
-   → "Open vLLora UI → Lucy takes over"
+   → Agent continues with eval + training (Steps 7-9)
 ```
 
 **Requires**: Gateway running at localhost:9090.
 
-The `reference/api-reference.md` documents all 64 gateway endpoints for completeness (including evaluation, training, and deployment). These are available if an advanced user wants to do everything from CLI, but SKILL.md focuses on the data prep pipeline only.
+The `reference/api-reference.md` documents all 76 gateway endpoints for completeness (including evaluation, training, and deployment). These are available if an advanced user wants to do everything from CLI, but SKILL.md focuses on the data prep pipeline only.
 
 ---
 
@@ -180,13 +181,13 @@ The `reference/api-reference.md` documents all 64 gateway endpoints for complete
 
 | File | Lines | What it covers |
 |------|-------|---------------|
-| `api-reference.md` | ~950 | All 64 vLLora REST endpoints: cloud (datasets, eval, training, deployments) + local CRUD (workflows, records, topics, knowledge, eval-jobs) + dataset/upload + record scores + topic management + training metrics + Mode A/B pipeline examples |
+| `api-reference.md` | ~950 | All 76 vLLora REST endpoints: cloud (datasets, eval, training, deployments) + local CRUD (workflows, records, topics, knowledge, eval-jobs) + record scores + topic management + training metrics + pipeline examples |
 | `data-format.md` | ~100 | JSONL format — prompts only (no assistant messages, since RFT) |
 | `extraction-guide.md` | ~670 | Docling Serve setup, hybrid chunk API, knowledge_parts.json schema, image extraction, troubleshooting |
 | `grader-writing.md` | ~290 | 3 grader patterns, smooth scoring, reward hacking prevention |
 | `topic-hierarchy.md` | ~290 | Topic structure, source tracing, coverage analysis, per-topic scores |
 | `iteration-strategy.md` | ~710 | 9 parts: eval analysis, training, topics, variety, diagnosis, fixes, tracking, stalls, escalation |
-| `workflow-guide.md` | ~416 | Deep dive on each pipeline step (including categorization, variants, grader testing, evaluator versioning, training metrics, dataset/upload, eval-job tracking) |
+| `workflow-guide.md` | ~416 | Deep dive on each pipeline step (including categorization, variants, grader testing, evaluator versioning, training metrics, continuation runs, eval-job tracking) |
 
 ### Helper Scripts (PEP 723)
 
@@ -496,7 +497,7 @@ Both write through the same gateway API → same SQLite database. Workflows, rec
 
 | Component | Status |
 |-----------|--------|
-| Gateway local CRUD (58 endpoints) | ✅ Done |
+| Gateway API (76 endpoints) | ✅ Done |
 | Skill → gateway push (create workflow + populate) | ✅ Done |
 | UI reads from gateway | ✅ Done |
 
@@ -518,7 +519,7 @@ Both write through the same gateway API → same SQLite database. Workflows, rec
 ### Skill improvements
 
 - [x] Add Mode A pipeline (handoff to Lucy) via gateway workflow API
-- [x] Update api-reference.md with all 64 gateway endpoints
+- [x] Update api-reference.md with all 76 gateway endpoints
 - [x] Fix training job endpoints (now scoped under workflows)
 - [x] Simplify SKILL.md to focus on data prep + handoff (removed Mode B complexity)
 - [ ] Add guidance for multi-turn conversation training data

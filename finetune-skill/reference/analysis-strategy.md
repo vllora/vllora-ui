@@ -69,7 +69,7 @@ Each metric point in `metrics[]` contains:
 
 ### 1c. Per-Epoch Training Evaluations
 
-**Source:** `GET /finetune/workflows/{id}/dataset/finetune-evaluations?finetune_job_id={job_id}`
+**Source:** `GET /finetune/workflows/{id}/finetune-evaluations?finetune_job_id={job_id}`
 
 Same structure as eval results but with multiple epochs:
 
@@ -174,15 +174,18 @@ clipping_max = max clipped_ratio during training
 
 **Step 2: Anomaly detection**
 
-| Check | Condition | Severity |
-|-------|-----------|----------|
-| NaN/Inf in any metric | Any NaN or Inf in loss, reward, KL, grad_norm | Critical |
-| Clipping overload | `clipped_ratio` > 0.7 at any point | Critical |
-| KL explosion | KL > 2.0 or KL increased > 3x from start | Warning |
-| Reward collapse | `reward_std` < 0.05 for > 50% of steps | Warning |
-| Weak signal | `frac_reward_zero_std` > 0.6 for > 50% of steps | **Critical** — most records produce identical rewards, model gets zero gradient. Remove dead-weight records (score=0) and regenerate replacements before retraining. See SKILL.md Step 8b+ |
-| Gradient instability | `grad_norm` spikes > 5x median | Warning |
-| No learning | `reward_delta` < 0.05 after full training | Info |
+| Check | Condition | Severity | Source/Rationale |
+|-------|-----------|----------|-----------------|
+| NaN/Inf in any metric | Any NaN or Inf in loss, reward, KL, grad_norm | Critical | — |
+| Clipping overload | `clipped_ratio` > 0.7 at any point | Critical | — |
+| KL explosion | KL > 2.0 or KL increased > 3x from start | Warning (for LLM-judge graders). Note: DAPO and Dr. GRPO disable KL entirely (beta=0) for rule-based rewards — if using pure programmatic graders, KL drift is less concerning. | DAPO (2503.14476), Dr. GRPO (2503.20783) |
+| Reward collapse | `reward_std` < 0.05 for > 50% of steps | Warning | — |
+| Weak signal | `frac_reward_zero_std` > 0.6 for > 50% of steps | **Critical** — most records produce identical rewards, model gets zero gradient. **First check**: is `response_candidates_count` ≥ 8? With G=2, this metric will be inherently high. **Then**: remove dead-weight records (score=0) and regenerate replacements. See SKILL.md Step 8b+. | All GRPO papers use G≥8 (see Part 6, Section 6g) |
+| Entropy collapse | `entropy` dropping rapidly (>50% decline from start) | **Warning** — model losing exploration ability, becoming deterministic. Precursor to reward hacking. | DAPO (2503.14476, Section 4.3): *"Entropy... key metrics that we closely monitor."* TRL docs: *"A collapse in entropy means the policy is becoming overconfident."* |
+| Response length growing | `completions/mean_length` increasing >50% while `reward` flat or declining | **Warning** — possible length exploitation. Incorrect responses growing longer without quality improvement. | Dr. GRPO (2503.20783, Section 3.1): GRPO's `1/|o_i|` normalization causes *"incorrect responses to grow progressively longer."* |
+| Length-reward correlation | Correlation between response length and score > 0.7 | **Warning** — grader has exploitable length bias. Model will learn to pad responses. | MO-GRPO (2509.22047), GR3 (2603.10535): *"vacuous elongation can inflate the gradient norm"* |
+| Gradient instability | `grad_norm` spikes > 5x median | Warning | — |
+| No learning | `reward_delta` < 0.05 after full training | Info | — |
 
 **Step 3: Per-epoch record trajectories** (from finetune-evaluations)
 
@@ -640,18 +643,20 @@ Which approach do you want to try?
 In reinforcement fine-tuning (RFT/GRPO), the training loop differs from supervised fine-tuning:
 
 1. **No teacher forcing**: The model generates its own responses during training. There are no "gold" answers to copy. The model explores the response space.
-2. **Multiple candidates**: For each prompt, the model generates `response_candidates_count` responses (default: 2). The grader scores each. Higher-scoring candidates are reinforced.
-3. **Relative reward**: What matters is the *difference* between candidate scores, not absolute scores. If all candidates score 0.5, the model learns nothing from that prompt.
-4. **KL regularization**: A KL penalty prevents the model from drifting too far from the base model, preserving general capabilities.
+2. **Multiple candidates**: For each prompt, the model generates `response_candidates_count` responses. The grader scores each. Higher-scoring candidates are reinforced. **Use at least 8 candidates** — see 6g below.
+3. **Relative reward**: What matters is the *difference* between candidate scores, not absolute scores. If all candidates score the same, the advantage is zero and the model learns nothing from that prompt.
+4. **KL regularization**: A KL penalty prevents the model from drifting too far from the base model, preserving general capabilities. For pure programmatic graders (rule-based, not LLM-judge), KL can be safely reduced or disabled (beta=0) — DAPO removes KL entirely when using verifiable rewards (DAPO, arxiv 2503.14476), and Dr. GRPO uses KL coefficient 0.0 (arxiv 2503.20783, Table 6). Keep KL enabled when using LLM-as-judge graders, which are more vulnerable to reward hacking.
 
 ### 6b. RFT-Specific Diagnostics
 
 | Signal | What it means in RFT context | Fix |
 |--------|------------------------------|-----|
-| `frac_reward_zero_std` > 0.6 | More than 60% of prompts produce candidates that all score the same — no learning signal | Make grader more granular (partial credit), or make prompts harder so candidates differ in quality |
+| `frac_reward_zero_std` > 0.6 | More than 60% of prompts produce candidates that all score the same — no learning signal. With G=2, this will be very common because only 2 samples are easily identical. | **First**: increase `response_candidates_count` to 8 (see 6g). **Then**: make grader more granular (partial credit), or make prompts harder so candidates differ in quality |
 | `reward_std` < 0.05 | Model has converged to a single response pattern — all responses nearly identical | Increase temperature during training inference, or add more diverse prompts |
+| `entropy` dropping rapidly | **Entropy collapse** — model is becoming deterministic and losing exploration ability. DAPO (arxiv 2503.14476, Section 4.3) identifies this as a key metric: *"Entropy of the Actor Model and Generation Probability are related to the model's exploration capability and are key metrics that we closely monitor."* TRL docs confirm: *"A collapse in entropy means the policy is becoming overconfident and deterministic, often too early. This can stall learning."* | Lower learning rate. If available, use asymmetric clipping (DAPO's Clip-Higher: epsilon_low=0.2, epsilon_high=0.28) to allow more exploration |
+| `completions/mean_length` increasing without reward increase | **Response length bias** — model is generating progressively longer responses without improving quality. Dr. GRPO (arxiv 2503.20783, Section 3.1) found that GRPO's `1/|o_i|` normalization causes this: *"For positive advantages, this bias results in greater gradient updates for shorter responses"* while for negative advantages *"longer responses are penalized less"* — so incorrect responses grow longer over training. | Track length-reward correlation. If longer responses score higher without being better quality, the grader has an exploitable length bias. Add explicit length penalty to the grader, or increase `max_output_tokens` if responses are being truncated |
 | `reward` increasing but `kl` increasing fast | Model is "cheating" — diverging from base model to find reward shortcuts | Lower learning rate, or fix grader to not reward shortcuts |
-| `clipped_ratio` > 0.3 | Model generating responses longer than `max_output_tokens` — responses are truncated before grading | Increase `max_output_tokens` or add a length penalty to the grader |
+| `clipped_ratio` > 0.3 | Model generating responses longer than `max_output_tokens` — responses are truncated before grading | Increase `max_output_tokens` or use overlong reward shaping (graduated penalty for responses approaching max length, as introduced by DAPO) |
 | `reward` plateaued early | Either the task is solved or the model is stuck in a local optimum | If scores are high (> 0.8), the model may be done. If low, increase `lora_rank` or try a larger model |
 
 ### 6c. Reward Shaping Strategies
@@ -676,6 +681,16 @@ The grader IS the reward function. Shape it carefully:
 - Without penalties for bad patterns, the model may find shortcuts that score well
 - Add checks for: hallucination, off-topic content, repetition, keyword stuffing
 
+**Overlong reward shaping** (from DAPO, arxiv 2503.14476)
+- Instead of hard truncation at `max_output_tokens`, apply a graduated penalty for responses approaching the limit
+- Responses that hit the max length without an EOS token get score -1. Responses nearing the limit get proportionally penalized
+- This *"reduces reward noise and stabilizes training"* — better than just increasing `max_output_tokens`
+
+**Length-reward correlation check**
+- After eval, compute correlation between response length and score. If longer responses systematically score higher, the grader has a length bias the model will exploit
+- MO-GRPO (arxiv 2509.22047) found that GRPO's advantage function is *"more strongly correlated with reward components that exhibit higher variance"* — length being a common high-variance dimension
+- GR3 (arxiv 2603.10535) warns that *"innocuous paraphrases or vacuous elongation can inflate the gradient norm"*
+
 ### 6d. Curriculum Learning (Progressive Difficulty)
 
 If the base model struggles (avg score < 0.3 on eval):
@@ -694,11 +709,89 @@ Signs that the model is losing general capability:
 - Scores on easy/basic topics decrease while hard topics improve
 - `kl` > 2.0 and rising — model has drifted far from base
 - Responses become formulaic — model has over-optimized for grader patterns
+- `entropy` dropping rapidly — model losing exploration ability (see 6b)
 
 Prevention:
 - Keep `kl` in check (lower LR if it rises above 1.5)
 - Use fewer epochs (2-3 max for small datasets)
-- Verify on held-out prompts after training
+- Verify on held-out prompts after training (see 6h)
+
+### 6f. GRPO Default Hyperparameters
+
+**Learning rate: 1e-6** — This is the universal consensus across all published GRPO work:
+
+| Source | LR Used | Reference |
+|--------|---------|-----------|
+| DeepSeekMath (original GRPO) | 1e-6 | arxiv 2402.03300, Section 4.2: *"we set the learning rate of the policy model as 1e-6"* |
+| DAPO | 1e-6 | arxiv 2503.14476: *"we utilize the AdamW optimizer with a constant learning rate of 1×10⁻⁶"* |
+| Dr. GRPO | 1e-6 | arxiv 2503.20783, Table 6: *"Learning rate: 1×10⁻⁶, constant scheduler"* |
+| "Tricks or Traps" | 1e-6 | arxiv 2508.08221: *"The learning rate is set to 1e-6"* |
+| TRL GRPOTrainer | 1e-6 | `grpo_config.py`: `learning_rate = field(default=1e-6)` — explicitly overrides Transformers default of 5e-5 |
+
+Do NOT use SFT learning rates (2e-5 to 5e-5) for GRPO — they are 20-50x too high and will cause KL explosions and training instability.
+
+**Warmup**: No strong consensus — ranges from 0 to 50 steps across implementations:
+- DAPO uses *"linear warm-up over 20 rollout steps"* (arxiv 2503.14476)
+- "Tricks or Traps" uses `warmup_steps: 50` (arxiv 2508.08221, Section A.1)
+- TRL defaults to 0 warmup
+
+Recommendation: use 20-50 steps of linear warmup, then constant LR. This is not critical — all three approaches (0, 20, 50 warmup steps) produce good results in published work.
+
+**Epochs**: Prefer 1 epoch of policy updates per generation round. Multiple epochs risk overoptimization on the same batch of generated responses. DeepSeekMath uses *"a single update following each exploration stage"* (arxiv 2402.03300). For dataset passes (how many times training iterates through all prompts), 2-3 is fine but monitor per-epoch score deltas — stop if degradation appears.
+
+### 6g. Response Candidates Count (Group Size G)
+
+**Use at least 8 candidates per prompt.** This is the single most impactful hyperparameter for GRPO training quality.
+
+**Why**: GRPO computes advantages by comparing candidates within each group. With G=2, the advantage estimate is extremely noisy — you're computing mean and std from just 2 samples. Any prompt where both candidates happen to score similarly (very common) produces zero gradient. With G=8+, it's much more likely that at least some candidates differ in score, giving the model actual signal to learn from.
+
+**No published GRPO work uses G < 8:**
+
+| Source | Group Size G | Reference |
+|--------|-------------|-----------|
+| DeepSeekMath (original GRPO) | **64** | arxiv 2402.03300, Section 4.2: *"For each question, we sample 64 outputs"* |
+| DAPO | **16** | arxiv 2503.14476, Section 4.1: *"the prompt batch size is 512 and we sample 16 responses for each prompt"* |
+| Dr. GRPO | **8** | arxiv 2503.20783, Table 6: *"Number of responses per question: 8"* |
+| "Tricks or Traps" | **8** | arxiv 2508.08221, Section 3.1: *"sampling 8 responses per prompt"* |
+| TRL GRPOTrainer default | **8** | `grpo_config.py`: `num_generations = field(default=8)` |
+
+**Tradeoff**: More candidates = better signal quality but higher compute cost per step. G=8 is the practical minimum; G=16 is better if compute allows; G=64 (DeepSeekMath) is ideal but expensive.
+
+**Effective batch size**: The total number of generated responses per training step is `batch_size × G`. Larger effective batches produce more stable advantage estimates. "Tricks or Traps" (arxiv 2508.08221) found that *"Batch-level normalization exhibits high sensitivity to reward distribution skew, often leading to performance collapse under an imbalanced batch situation."* With small G, you need larger batch sizes to compensate.
+
+**Impact on `frac_reward_zero_std`**: With G=2, expect this metric to be very high (many prompts where both candidates score identically). With G=8, it drops significantly because more candidates means more chance of score variance within each group.
+
+### 6h. Post-Training Validation with Held-Out Prompts
+
+**After every training run, test the model with prompts NOT in the training set.** This catches reward hacking and overfitting that in-distribution metrics miss.
+
+OpenAI's RFT cookbook recommends creating non-overlapping splits: *"Randomly select 100 training samples... Remove training samples... Randomly select 100 test samples from the remaining samples (no overlap)"* and evaluating the final model on the test set.
+
+**How to do it:**
+1. Before training, set aside 10-20% of records as a held-out validation set (or generate new prompts for the same topics that weren't used in training)
+2. After training completes, run the trained model on these held-out prompts
+3. Compare scores to the base model on the same prompts
+4. If the trained model is worse or no better on held-out prompts while in-distribution scores improved, reward hacking occurred (see iteration-strategy.md Symptom 4 and Symptom 8)
+
+### 6i. GRPO Variants Reference
+
+For advanced users or when standard GRPO isn't working, these variants address specific failure modes:
+
+**DAPO** (arxiv 2503.14476) — 4 techniques for training at scale:
+1. **Clip-Higher**: Asymmetric clipping (epsilon_low=0.2, epsilon_high=0.28) — *"promotes the diversity of the system and avoids entropy collapse"*
+2. **Dynamic Sampling**: Filters batches to only include prompts where 0 < accuracy < 1 — *"improves training efficiency and stability"* by excluding prompts where all candidates score identically (our dead-weight record problem)
+3. **Token-Level Policy Gradient Loss**: Normalizes by total tokens across all sequences — *"critical in long-CoT RL scenarios"*
+4. **Overlong Reward Shaping**: Soft penalty for truncated responses — *"reduces reward noise and stabilizes training"*
+
+**Dr. GRPO** (arxiv 2503.20783) — Fixes 2 biases in standard GRPO:
+1. **Response-level length bias**: Removes `1/|o_i|` normalization that causes incorrect responses to grow longer
+2. **Question-level difficulty bias**: Removes `std()` normalization — *"treating all questions equally"* instead of weighting easy questions disproportionately
+
+**SAPO** (arxiv 2511.20347) — Smooth alternative to hard clipping:
+- *"Replaces hard clipping with a smooth, temperature-controlled gate that adaptively attenuates off-policy updates"*
+- Uses asymmetric temperatures for positive vs negative token updates
+
+These are reference implementations. If your training shows specific failure modes (entropy collapse → try DAPO's Clip-Higher; length bias → try Dr. GRPO's normalization fix; clipping issues → try SAPO), consult the relevant paper for implementation details.
 
 ---
 
@@ -760,7 +853,7 @@ EVAL_RESULT=$(curl -s http://localhost:9090/finetune/evaluations/$EVAL_ID)
 METRICS=$(curl -s "http://localhost:9090/finetune/workflows/$WF_ID/jobs/$JOB_ID/metrics")
 
 # 3. Fetch per-epoch training evaluations
-EPOCH_EVALS=$(curl -s "http://localhost:9090/finetune/workflows/$WF_ID/dataset/finetune-evaluations?finetune_job_id=$JOB_ID")
+EPOCH_EVALS=$(curl -s "http://localhost:9090/finetune/workflows/$WF_ID/finetune-evaluations?finetune_job_id=$JOB_ID")
 
 # 4. Fetch training job status
 JOB_STATUS=$(curl -s "http://localhost:9090/finetune/workflows/$WF_ID/jobs/$JOB_ID/status")
@@ -769,23 +862,21 @@ JOB_STATUS=$(curl -s "http://localhost:9090/finetune/workflows/$WF_ID/jobs/$JOB_
 ALL_JOBS=$(curl -s "http://localhost:9090/finetune/workflows/$WF_ID/jobs")
 
 # 6. Fetch dataset analytics
-ANALYTICS=$(curl -s "http://localhost:9090/finetune/workflows/$WF_ID/dataset/analytics")
+ANALYTICS=$(curl -s "http://localhost:9090/finetune/workflows/$WF_ID/analytics")
 
-# 7. Write eval scores back to records (for UI display)
-curl -s -X PATCH "http://localhost:9090/finetune/workflows/$WF_ID/records/$RECORD_ID/scores" \
-  -H "Content-Type: application/json" \
-  -d "{\"dry_run_score\": $SCORE}"
+# 7. Read per-record eval scores (read-only — scores live on eval results, not on records)
+SCORES=$(curl -s "http://localhost:9090/finetune/workflows/$WF_ID/records/scores")
 
 # 8. Update grader (after fixing)
 curl -s -X PATCH "http://localhost:9090/finetune/workflows/$WF_ID/evaluator" \
   -F "file=@grader.js"
 
 # 9. Re-upload records (after regenerating)
-uv run scripts/finetune.py upload-records \
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
   --workflow-id $WF_ID --file training.jsonl
 
-# 10. Sync to cloud before next eval/training
-curl -s -X POST "http://localhost:9090/finetune/workflows/$WF_ID/dataset/upload"
+# 10. Sync to cloud — no manual sync needed, gateway auto-uploads
+# via ensure_dataset_uploaded() when creating eval or training jobs
 ```
 
 ---

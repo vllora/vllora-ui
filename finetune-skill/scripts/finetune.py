@@ -699,7 +699,7 @@ def cmd_create_training(args: argparse.Namespace) -> None:
             sys.exit(1)
     else:
         payload["training_config"] = {
-            "learning_rate": 0.00001,
+            "learning_rate": 0.000001,  # 1e-6: universal GRPO consensus (DeepSeekMath, DAPO, Dr. GRPO, TRL default)
             "lora_rank": 8,
             "gradient_accumulation_steps": 5,
             "epochs": 2,
@@ -717,7 +717,7 @@ def cmd_create_training(args: argparse.Namespace) -> None:
             "max_output_tokens": 512,
             "temperature": 1.0,
             "top_p": 1.0,
-            "response_candidates_count": 2,
+            "response_candidates_count": 8,  # GRPO minimum: all published work uses G>=8 (DeepSeekMath G=64, DAPO G=16, TRL default G=8)
         }
 
     result = _api(

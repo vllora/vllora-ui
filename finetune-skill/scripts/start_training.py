@@ -33,22 +33,23 @@ def start_training(
     output_path: Path | None = None,
 ) -> dict:
     payload = {
+        "job_type": "provider_finetune",  # Required by gateway API
         "dataset": dataset_id,
         "base_model": base_model,
         "output_model": output_model,
         "display_name": display_name or f"Fine-tune {output_model}",
         "training_config": {
-            "learning_rate": 0.00001,
+            "learning_rate": 0.000001,  # 1e-6: universal GRPO consensus (DeepSeekMath, DAPO, Dr. GRPO, TRL default)
             "lora_rank": 8,
             "gradient_accumulation_steps": 5,
             "epochs": 2.0,
             "batch_size": 5,
         },
         "inference_parameters": {
-            "max_output_tokens": 1000,
+            "max_output_tokens": 512,
             "temperature": 1.0,
             "top_p": 1.0,
-            "response_candidates_count": 2,
+            "response_candidates_count": 8,  # GRPO minimum: all published work uses G>=8
         },
     }
 
