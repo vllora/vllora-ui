@@ -3,6 +3,9 @@
  *
  * Fetches evaluator version history for a workflow and provides helpers
  * for determining which version a job used (staleness detection).
+ *
+ * Uses a module-level cache so multiple components mounting with the same
+ * workflowId share a single fetch instead of each firing their own request.
  */
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -20,11 +23,60 @@ interface UseEvaluatorVersionsResult {
   readonly inferVersionForTimestamp: (createdAtMs: number) => number | null;
 }
 
+// Module-level shared cache: workflowId → { data, promise, timestamp }
+const versionCache = new Map<
+  string,
+  {
+    data: readonly EvaluatorVersionResponse[];
+    promise: Promise<readonly EvaluatorVersionResponse[]> | null;
+    fetchedAt: number;
+  }
+>();
+
+const CACHE_TTL_MS = 30_000; // 30s — versions rarely change
+
+function fetchVersionsCached(
+  workflowId: string,
+): Promise<readonly EvaluatorVersionResponse[]> {
+  const cached = versionCache.get(workflowId);
+
+  // Return cached data if fresh
+  if (cached && cached.data.length > 0 && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+    return Promise.resolve(cached.data);
+  }
+
+  // Return in-flight promise if one exists
+  if (cached?.promise) {
+    return cached.promise;
+  }
+
+  // Start new fetch
+  const promise = getEvaluatorVersions(workflowId)
+    .then((result) => {
+      versionCache.set(workflowId, { data: result, promise: null, fetchedAt: Date.now() });
+      return result;
+    })
+    .catch((err) => {
+      // Clear failed promise so next caller retries
+      const entry = versionCache.get(workflowId);
+      if (entry) entry.promise = null;
+      throw err;
+    });
+
+  versionCache.set(workflowId, {
+    data: cached?.data ?? [],
+    promise,
+    fetchedAt: cached?.fetchedAt ?? 0,
+  });
+
+  return promise;
+}
+
 export function useEvaluatorVersions(
   workflowId: string | undefined,
 ): UseEvaluatorVersionsResult {
   const [versions, setVersions] = useState<readonly EvaluatorVersionResponse[]>(
-    [],
+    () => (workflowId ? versionCache.get(workflowId)?.data ?? [] : []),
   );
   const [isLoading, setIsLoading] = useState(false);
 
@@ -33,7 +85,7 @@ export function useEvaluatorVersions(
     let cancelled = false;
     setIsLoading(true);
 
-    getEvaluatorVersions(workflowId)
+    fetchVersionsCached(workflowId)
       .then((result) => {
         if (!cancelled) setVersions(result);
       })

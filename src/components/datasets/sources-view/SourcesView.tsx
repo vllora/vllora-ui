@@ -15,7 +15,7 @@
  */
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { FileText, Tags, ChevronRight, ChevronLeft, ArrowLeft, Search } from "lucide-react";
+import { FileText, Tags, ChevronRight, ChevronLeft, ArrowLeft, Search, Eye } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/tooltip";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
+import { knowledgeSourceService } from "@/services/service-registry";
 // CoverageMatrix replaced by inline hierarchical matrix in AllSourcesView
 import type { KnowledgeSource, KnowledgeSourcePart } from "@/types/knowledge-types";
 import type { TopicHierarchyNode, DatasetRecord } from "@/types/dataset-types";
@@ -711,6 +712,16 @@ function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSour
                   <span>{formatChars(totalChars)} chars</span>
                 </div>
               </div>
+              <a
+                href={knowledgeSourceService.getFileUrl(source.workflowId, source.id)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/30 transition-colors shrink-0"
+                title="View original PDF"
+              >
+                <Eye className="w-3 h-3" />
+                View PDF
+              </a>
             </div>
             {topicCoverage.length > 0 && (
               <TopicCoverageChips topics={topicCoverage} />

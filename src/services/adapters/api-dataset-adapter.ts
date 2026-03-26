@@ -44,6 +44,23 @@ interface DbWorkflowDetailResponse extends DbWorkflowResponse {
   readonly finetune_job_ids: string[];
 }
 
+/** Job summary included in the enriched list response */
+interface DbJobSummary {
+  readonly id: string;
+  readonly status: string;
+  readonly model: string | null;
+  readonly created_at: string;
+}
+
+/** Enriched response from GET /finetune/workflows (list) */
+interface DbWorkflowListItemResponse extends DbWorkflowResponse {
+  readonly record_count: number;
+  readonly knowledge_source_count: number;
+  readonly topic_count: number;
+  readonly eval_jobs: readonly DbJobSummary[];
+  readonly training_jobs: readonly DbJobSummary[];
+}
+
 function mapToFe(db: DbWorkflowResponse): Dataset {
   return {
     id: db.id,
@@ -229,8 +246,25 @@ export const apiDatasetAdapter: DatasetService = {
 
   async getAll(): Promise<Dataset[]> {
     const response = await api.get(BASE);
-    const workflows = await handleApiResponse<DbWorkflowResponse[]>(response);
-    return workflows.map(mapToFe);
+    const workflows = await handleApiResponse<DbWorkflowListItemResponse[]>(response);
+    return workflows.map((db) => ({
+      ...mapToFe(db),
+      recordsCount: db.record_count,
+      knowledgeSourceCount: db.knowledge_source_count,
+      topicCount: db.topic_count,
+      evalJobs: db.eval_jobs.map((j) => ({
+        id: j.id,
+        status: j.status,
+        model: j.model ?? undefined,
+        createdAt: parseUtcTimestamp(j.created_at),
+      })),
+      trainingJobs: db.training_jobs.map((j) => ({
+        id: j.id,
+        status: j.status,
+        model: j.model ?? undefined,
+        createdAt: parseUtcTimestamp(j.created_at),
+      })),
+    }));
   },
 
   async create(name: string, objective?: string): Promise<Dataset> {

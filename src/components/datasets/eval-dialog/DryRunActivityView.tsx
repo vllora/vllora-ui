@@ -190,8 +190,21 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
       );
     }
     return (
-      <div className="flex items-center justify-center h-full text-xs text-zinc-600">
-        No results available
+      <div className="flex flex-col items-center justify-center h-full gap-3 px-4">
+        <span className="text-xs text-zinc-500">
+          {job.status === "completed"
+            ? "Evaluation completed but per-record results are not available. This can happen when the eval was run externally (e.g., via the finetune skill) or the cloud didn't return row-level scores."
+            : "No results available"}
+        </span>
+        {job.status === "completed" && (
+          <button
+            type="button"
+            className="text-[10px] text-blue-400 hover:text-blue-300 hover:underline"
+            onClick={() => onRefresh?.(job.id)}
+          >
+            Retry fetching results
+          </button>
+        )}
       </div>
     );
   }

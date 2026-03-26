@@ -13,6 +13,7 @@ import {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
   type ReactNode,
 } from "react";
 import { useSearchParams } from "react-router";
@@ -229,6 +230,7 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
       if (result) {
         setDataset(result);
         setRecords(result.records);
+        lastFetchAtRef.current = Date.now();
       }
     } catch (err) {
       console.error("Failed to load dataset:", err);
@@ -245,11 +247,34 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
       if (result) {
         setDataset(result);
         setRecords(result.records);
+        lastFetchAtRef.current = Date.now();
       }
     } catch (err) {
       console.error("Failed to refresh dataset:", err);
     }
   }, [workflowId, getDatasetWithRecords]);
+
+  // Track when the last full fetch completed (to suppress redundant refreshes)
+  const lastFetchAtRef = useRef<number>(0);
+
+  // Debounced version for event-driven refreshes (coalesces rapid-fire events
+  // like polling emits into a single refresh within a 10s window).
+  // Skips if data was fetched recently (e.g., initial load just completed).
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const debouncedRefresh = useCallback(() => {
+    // Skip if data was fetched within the last 10s (covers initial load + previous refresh)
+    if (Date.now() - lastFetchAtRef.current < 10_000) return;
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    refreshTimerRef.current = setTimeout(() => {
+      lastFetchAtRef.current = Date.now();
+      refreshDataset();
+    }, 2000);
+  }, [refreshDataset]);
+
+  // Cleanup debounce timer
+  useEffect(() => () => {
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+  }, []);
 
   // Initial load
   useEffect(() => {
@@ -332,19 +357,20 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
     };
   }, [workflowId, selectedRecordIds, setSelectedRecordIds]);
 
-  // Subscribe to internal record_scores_updated events → refresh records
-  // (emitted by evalPollingManager when BE snapshot has new scores)
+  // Subscribe to internal record_scores_updated events → debounced refresh
+  // (emitted by evalPollingManager every 10s poll cycle — debounce avoids re-fetching
+  // the full dataset on every single poll when scores haven't meaningfully changed)
   useEffect(() => {
     const handleScoresUpdated = (event: { workflowId: string; scoreType: string }) => {
       if (event.workflowId === workflowId) {
-        refreshDataset();
+        debouncedRefresh();
       }
     };
     emitter.on("vllora_record_scores_updated", handleScoresUpdated);
     return () => {
       emitter.off("vllora_record_scores_updated", handleScoresUpdated);
     };
-  }, [workflowId, refreshDataset]);
+  }, [workflowId, debouncedRefresh]);
 
   // Listen for source document filter events (from KnowledgeSourceCard clicks)
   useEffect(() => {

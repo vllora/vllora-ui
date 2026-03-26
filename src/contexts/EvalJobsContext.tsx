@@ -50,7 +50,7 @@ function useEvalJobs(props: {
 
   // SSE reconnect detection (re-fetch jobs after gateway restart)
   const { isConnected } = ProjectEventsConsumer();
-  const wasConnectedRef = useRef(false);
+  const wasConnectedRef = useRef(isConnected);
 
   // Load jobs from gateway SQLite, merging back any cached pollingSnapshots
   const loadJobs = useCallback(async () => {
@@ -98,11 +98,19 @@ function useEvalJobs(props: {
       // Catch-up: fetch per-record results from cloud for completed jobs.
       // pollingSnapshot is in-memory only, so after page reload it's gone.
       // Also handles the race where BE set "completed" before FE fetched results.
+      // Retries up to 3 times on failure (cloud can return transient 500s).
       const isTerminal = job.status === 'completed' || job.status === 'failed';
       const needsSnapshot = isTerminal && !job.pollingSnapshot && job.evaluationRunId;
       if (needsSnapshot && !refreshedJobIdsRef.current.has(job.id)) {
         refreshedJobIdsRef.current.add(job.id);
-        evalPollingManager.refreshJob(job.id);
+        const attemptRefresh = (retries: number) => {
+          evalPollingManager.refreshJob(job.id).catch(() => {
+            if (retries > 0) {
+              setTimeout(() => attemptRefresh(retries - 1), 5000);
+            }
+          });
+        };
+        attemptRefresh(2);
       }
     }
   }, [jobs, loadJobs]);

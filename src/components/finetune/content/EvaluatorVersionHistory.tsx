@@ -5,7 +5,7 @@
  * Displays version list with timestamps and git-style diffs between versions.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   ChevronDown,
@@ -13,12 +13,8 @@ import {
   Clock,
   Code2,
   Loader2,
-  RefreshCw,
 } from "lucide-react";
-import {
-  getEvaluatorVersions,
-  type EvaluatorVersionResponse,
-} from "@/services/finetune-api";
+import { useEvaluatorVersions } from "@/hooks/useEvaluatorVersions";
 
 interface EvaluatorVersionHistoryProps {
   workflowId: string;
@@ -121,29 +117,11 @@ export function EvaluatorVersionHistory({
   onVersionSelect,
   selectedVersion,
 }: EvaluatorVersionHistoryProps) {
-  const [versions, setVersions] = useState<EvaluatorVersionResponse[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { versions, isLoading } = useEvaluatorVersions(workflowId);
+  const error: string | null = null;
   const [expandedVersion, setExpandedVersion] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("diff");
   const [isSectionExpanded, setIsSectionExpanded] = useState(false);
-
-  const fetchVersions = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const result = await getEvaluatorVersions(workflowId);
-      setVersions(result);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch versions");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [workflowId]);
-
-  useEffect(() => {
-    fetchVersions();
-  }, [fetchVersions]);
 
   if (isLoading) {
     return (
@@ -155,18 +133,7 @@ export function EvaluatorVersionHistory({
   }
 
   if (error) {
-    return (
-      <div className="flex flex-col items-center gap-2 py-4 text-zinc-500">
-        <span className="text-xs">{error.includes("404") ? "No evaluator versions found" : error}</span>
-        <button
-          onClick={fetchVersions}
-          className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
-        >
-          <RefreshCw className="h-3 w-3" />
-          Retry
-        </button>
-      </div>
-    );
+    return null;
   }
 
   if (versions.length <= 1) {
@@ -193,12 +160,6 @@ export function EvaluatorVersionHistory({
             Evaluator Versions ({versions.length})
           </span>
         </div>
-        <button
-          onClick={(e) => { e.stopPropagation(); fetchVersions(); }}
-          className="p-1 text-slate-500 hover:text-slate-300 transition-colors rounded hover:bg-white/5"
-        >
-          <RefreshCw className="h-3 w-3" />
-        </button>
       </div>
 
       {isSectionExpanded && <div className="divide-y divide-white/5 max-h-[300px] overflow-y-auto">

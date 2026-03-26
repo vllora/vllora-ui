@@ -363,10 +363,15 @@ export interface Dataset {
   readmeUpdatedAt?: number;
   // Whether the README was written by the agent or auto-generated from template
   readmeSource?: 'template' | 'agent';
-  // Enriched fields from GET /workflows/:id (not present in list response)
+  // Enriched fields from GET /workflows/:id (single workflow detail)
   recordsCount?: number;
   evalJobIds?: string[];
   finetuneJobIds?: string[];
+  // Enriched fields from GET /workflows (list response — summary counts + job info)
+  knowledgeSourceCount?: number;
+  topicCount?: number;
+  evalJobs?: readonly { id: string; status: string; model?: string; createdAt: number }[];
+  trainingJobs?: readonly { id: string; status: string; model?: string; createdAt: number }[];
 }
 
 // Combined view for UI (dataset + its records)

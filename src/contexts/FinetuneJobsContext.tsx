@@ -66,7 +66,7 @@ function useFinetuneJobsLogic() {
 
   // SSE reconnect detection (re-fetch jobs after gateway restart)
   const { isConnected } = ProjectEventsConsumer();
-  const wasConnectedRef = useRef(false);
+  const wasConnectedRef = useRef(isConnected);
 
   // Use useRequest for jobs fetching with automatic refresh on dependency change
   const {

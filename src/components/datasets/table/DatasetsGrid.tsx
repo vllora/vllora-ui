@@ -8,9 +8,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { DatasetsConsumer } from "@/contexts/DatasetsContext";
 import { LoadingIndicator } from "@/components/ui/LoadingIndicator";
 import { toast } from "sonner";
-import { knowledgeSourceService, workflowService, evalJobService } from "@/services/service-registry";
 import type { FinetuneWorkflowState } from "@/types/workflow-types";
-import { getJobCompletedRows, getJobTotalRows, getJobAverageScore } from "@/types/eval-job";
 import { emitter } from "@/utils/eventEmitter";
 import { computeFilterGroup } from "@/types/dataset-types";
 import type { DatasetFilterGroup } from "@/types/dataset-types";
@@ -34,15 +32,19 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
     datasets,
     isLoading,
     error,
+    loadDatasets,
     getDatasetWithRecords,
-    getRecordCount,
-    getTopicCoverageStats,
     createDataset,
     deleteDataset,
     renameDataset,
     importRecords,
     clearDatasetRecords,
   } = DatasetsConsumer();
+
+  // Refresh dataset list on mount (catches workflows created externally by the skill)
+  useEffect(() => {
+    loadDatasets();
+  }, [loadDatasets]);
 
   // State
   const [recordCounts, setRecordCounts] = useState<Record<string, number>>({});
@@ -52,18 +54,6 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
   >({});
   const [workflows, setWorkflows] = useState<Record<string, FinetuneWorkflowState>>({});
   const [activeDryRunCounts, setActiveDryRunCounts] = useState<Record<string, number>>({});
-  const [completedDryRunCounts, setCompletedDryRunCounts] = useState<Record<string, number>>({});
-  const [activeEvalData, setActiveEvalData] = useState<Record<string, {
-    completedRows: number;
-    totalRows: number;
-    avgScore?: number;
-  }>>({});
-  const [lastCompletedEval, setLastCompletedEval] = useState<Record<string, {
-    avgScore?: number;
-    sampleSize: number;
-    rolloutModel?: string;
-    completedAt?: number;
-  }>>({});
   const [editingDatasetId, setEditingDatasetId] = useState<string | null>(null);
   const [editingDatasetName, setEditingDatasetName] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmation | null>(null);
@@ -130,19 +120,8 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
     return sorted;
   }, [datasets, searchQuery, activeFilter, activeSort, recordCounts, workflows, activeDryRunCounts]);
 
-  // Count topics in hierarchy
-  function countTopics(nodes: { children?: unknown[] }[]): number {
-    let count = 0;
-    for (const node of nodes) {
-      count += 1;
-      if (node.children && Array.isArray(node.children)) {
-        count += countTopics(node.children as { children?: unknown[] }[]);
-      }
-    }
-    return count;
-  }
-
-  // Load record counts, docs counts, topic stats, and workflow/job states for all datasets.
+  // Derive card data directly from enriched dataset fields (from GET /finetune/workflows).
+  // No extra API calls needed — the list endpoint returns counts + job summaries.
   const loadStats = useCallback(async () => {
     if (datasets.length === 0) return;
     const counts: Record<string, number> = {};
@@ -150,58 +129,36 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
     const stats: Record<string, { total: number; withTopic: number; topicCount: number }> = {};
     const wfs: Record<string, FinetuneWorkflowState> = {};
     const dryRuns: Record<string, number> = {};
-    const completedRuns: Record<string, number> = {};
-    const activeEvalProgressData: Record<string, { completedRows: number; totalRows: number; avgScore?: number }> = {};
-    const lastCompletedEvalData: Record<string, { avgScore?: number; sampleSize: number; rolloutModel?: string; completedAt?: number }> = {};
-    await Promise.all(
-      datasets.map(async (ds) => {
-        counts[ds.id] = await getRecordCount(ds.id);
-        docs[ds.id] = await knowledgeSourceService.getCount(ds.id);
-        const coverage = await getTopicCoverageStats(ds.id);
-        const topicCount = ds.topicHierarchy?.hierarchy
-          ? countTopics(ds.topicHierarchy.hierarchy)
-          : 0;
-        stats[ds.id] = { ...coverage, topicCount };
-        const wf = await workflowService.getByDataset(ds.id);
-        if (wf) wfs[ds.id] = wf;
-        const jobs = await evalJobService.getByDataset(ds.id);
-        dryRuns[ds.id] = jobs.filter(j => j.status === 'running' || j.status === 'pending').length;
-        completedRuns[ds.id] = jobs.filter(j => j.status === 'completed').length;
 
-        // Active job progress
-        const activeJob = jobs.find(j => j.status === 'running' || j.status === 'pending');
-        if (activeJob) {
-          activeEvalProgressData[ds.id] = {
-            completedRows: getJobCompletedRows(activeJob),
-            totalRows: getJobTotalRows(activeJob),
-            avgScore: getJobAverageScore(activeJob),
-          };
-        }
+    for (const ds of datasets) {
+      // Use enriched fields from the list response (no extra API calls)
+      counts[ds.id] = ds.recordsCount ?? 0;
+      docs[ds.id] = ds.knowledgeSourceCount ?? 0;
+      stats[ds.id] = { total: 0, withTopic: 0, topicCount: ds.topicCount ?? 0 };
 
-        // Most recent completed job
-        const completedJobs = jobs
-          .filter(j => j.status === 'completed')
-          .sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0));
-        if (completedJobs.length > 0) {
-          const last = completedJobs[0];
-          lastCompletedEvalData[ds.id] = {
-            avgScore: last.result?.statistics?.mean ?? getJobAverageScore(last),
-            sampleSize: last.sampleSize,
-            rolloutModel: last.rolloutModel,
-            completedAt: last.completedAt,
-          };
-        }
-      })
-    );
+      // Eval jobs — used for filter group computation
+      const evalJobs = ds.evalJobs ?? [];
+      dryRuns[ds.id] = evalJobs.filter(j => j.status === 'running' || j.status === 'pending').length;
+
+      // Minimal workflow state for filter group computation
+      const trainingJobs = ds.trainingJobs ?? [];
+      const activeTraining = trainingJobs.find(j => ['pending', 'queued', 'running'].includes(j.status));
+      const completedTraining = trainingJobs.find(j => j.status === 'completed');
+      if (activeTraining || completedTraining) {
+        wfs[ds.id] = {
+          workflowId: ds.id,
+          currentStep: completedTraining ? 'completed' : 'training',
+          training: { status: (activeTraining ?? completedTraining)!.status },
+        } as FinetuneWorkflowState;
+      }
+    }
+
     setRecordCounts(counts);
     setDocsCounts(docs);
     setTopicStats(stats);
     setWorkflows(wfs);
     setActiveDryRunCounts(dryRuns);
-    setCompletedDryRunCounts(completedRuns);
-    setActiveEvalData(activeEvalProgressData);
-    setLastCompletedEval(lastCompletedEvalData);
-  }, [datasets, getRecordCount, getTopicCoverageStats]);
+  }, [datasets]);
 
   // Re-runs when `datasets` changes — DatasetsContext already listens for
   // vllora_dataset_refresh events and reloads datasets, which triggers this effect.
@@ -381,14 +338,8 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
                       key={dataset.id}
                       name={dataset.name}
                       filterGroup={getFilterGroup(dataset)}
-                      activeEvalJobs={activeDryRunCounts[dataset.id] ?? 0}
-                      completedEvalJobs={completedDryRunCounts[dataset.id] ?? 0}
-                      activeEvalData={activeEvalData[dataset.id]}
-                      lastCompletedEval={lastCompletedEval[dataset.id]}
-                      activeFinetuneJob={
-                        !!workflows[dataset.id]?.training &&
-                        ['pending', 'queued', 'running'].includes(workflows[dataset.id].training!.status)
-                      }
+                      evalJobs={dataset.evalJobs}
+                      trainingJobs={dataset.trainingJobs}
                       recordCount={recordCounts[dataset.id] ?? "..."}
                       topicCount={stats?.topicCount ?? 0}
                       docsCount={docsCounts[dataset.id] ?? 0}
