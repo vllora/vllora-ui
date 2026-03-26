@@ -62,6 +62,7 @@ All endpoints use JSON unless noted. Auth via `Authorization: Bearer <token>` he
 | 41 | POST | `/finetune/workflows/{id}/knowledge/{ks_id}/parts` | Add parts to knowledge source |
 | 42 | GET | `/finetune/workflows/{id}/knowledge/{ks_id}/parts` | List knowledge source parts |
 | 43 | DELETE | `/finetune/workflows/{id}/knowledge/{ks_id}/parts/{part_id}` | Delete single part |
+| 43a | POST | `/finetune/workflows/{id}/knowledge/search` | Semantic search top-k knowledge parts |
 | **Eval Jobs** (workflow-scoped) | | | |
 | 44 | GET | `/finetune/workflows/{id}/eval-jobs` | List eval jobs |
 | 45 | POST | `/finetune/workflows/{id}/eval-jobs` | Create eval job record |
@@ -351,6 +352,50 @@ List all parts of a knowledge source.
 ### DELETE `/finetune/workflows/{workflow_id}/knowledge/{ks_id}/parts/{part_id}`
 
 Delete a single part from a knowledge source.
+
+### POST `/finetune/workflows/{workflow_id}/knowledge/search`
+
+Semantic search over knowledge source parts for a workflow. The gateway embeds the input phrase and returns top-k parts ranked by cosine similarity.
+
+Request body:
+
+```json
+{
+  "phrase": "how does startup embedding resume work?",
+  "top_k": 5
+}
+```
+
+- `phrase` (required): text query to embed and search.
+- `top_k` (optional): max number of matches. Defaults to `5`, capped at `100`.
+
+Response shape:
+
+```json
+{
+  "matches": [
+    {
+      "part": {
+        "id": "part_123",
+        "reference_id": null,
+        "source_id": "source_abc",
+        "type": "text",
+        "content": "Knowledge part content...",
+        "content_metadata": null,
+        "title": "Section title",
+        "extraction_path": null,
+        "extraction_metadata": null,
+        "embeddings": null
+      },
+      "score": 0.8123
+    }
+  ]
+}
+```
+
+Notes:
+- Only parts that already have stored embeddings are searchable.
+- Search response intentionally omits embedding vectors (`embeddings` is `null`).
 
 ---
 
