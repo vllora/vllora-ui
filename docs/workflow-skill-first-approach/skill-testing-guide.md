@@ -12,6 +12,7 @@ Before testing, read these guides to understand how the skill works internally:
 | [Extraction Deep Dive](how-skill-work/extraction-deep-dive.md) | Docling API, multi-document flow, knowledge_parts.json schema, debugging |
 | [Topic Generation Deep Dive](how-skill-work/generate-topics-deep-dive.md) | Topic hierarchy design, relation-builder subagent, topic-part linking |
 | [Record Generation Deep Dive](how-skill-work/generate-records-deep-dive.md) | LLM-powered data generation, record format, validation, grounding |
+| [RFT/GRPO Training Explained](how-skill-work/rft-grpo-training-explained.md) | How GRPO works step-by-step, G vs epochs, grader as training objective, failure modes, parameter reference |
 
 ## Prerequisites
 

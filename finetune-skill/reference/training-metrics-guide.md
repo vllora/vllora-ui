@@ -20,7 +20,7 @@ vLLora uses **GRPO (Group Relative Policy Optimization)** for reinforcement fine
 |---|---|---|
 | Reward trending up, KL < 1.0, clipped_ratio < 0.1 | Healthy training | Continue or deploy |
 | Reward flat, frac_reward_zero_std > 0.5 | No learning signal | Fix grader (avoid binary 0/1), increase G, adjust difficulty |
-| Reward up but KL > 5.0 | Over-optimization / reward hacking | Increase beta (KL penalty), reduce LR, add quality grader |
+| Reward up but KL rising + outputs degenerate | Reward hacking (KL alone is not diagnostic — check output quality) | Enable/increase beta, add quality grader criteria, inspect outputs |
 | Loss stuck at 0.0 | Zero advantages | Check data pipeline, reward function, chat template |
 | clipped_ratio > 0.5 | Truncation dominating | Increase max_output_tokens |
 | grad_norm NaN | Numerical failure | Fix truncation, check for zero masks |
@@ -59,11 +59,14 @@ vLLora uses **GRPO (Group Relative Policy Optimization)** for reinforcement fine
 - Note: This is NOT like cross-entropy loss — lower is not always better. Moderate loss = active learning.
 
 **`kl`** — KL divergence from the reference (base) model.
-- **What it is**: How different has the model become from where it started? Imagine the base model as a "home" — KL measures how far the model has wandered. Some wandering is necessary (that's learning), but too far means the model may have forgotten general language ability and found a narrow trick that scores well but produces garbage. (Reference: DeepSeekMath §3.2, TRL docs on `beta` parameter)
-- Healthy: Below 1.0 for most of training. Below 0.1 in early steps.
-- Warning: 1.0-5.0 — monitor output quality.
-- Critical: Above 5.0 — significant drift. Above 10.0 — likely reward hacking or collapse.
-- Fix: Increase beta (KL coefficient), reduce LR, inspect outputs for degenerate patterns.
+- **What it is**: How different has the model become from where it started? KL measures the policy divergence from the base model. In GRPO, some divergence is **expected and necessary** — the model must change to learn new behaviors.
+- **⚠️ IMPORTANT: KL is NOT the primary constraint in GRPO.** DAPO and TRL both default to `beta=0` (no KL penalty). The **clipping mechanism** (epsilon) serves as the trust region constraint instead. High KL alone does NOT mean training is failing — check reward trend, clipping ratio, and output quality instead.
+- **When KL matters**: Only when `beta > 0` (KL penalty is active). With beta=0, KL is informational only.
+- Healthy: Varies by setup. With beta>0: below 1.0. With beta=0: much higher values are normal.
+- Warning: KL **rising while reward stagnates** → possible reward hacking. KL rising with reward improving → normal learning.
+- Critical: KL divergence + degenerate outputs (repetitive, verbose padding, format exploitation) → reward hacking.
+- Fix: If reward hacking suspected → enable/increase beta, add quality-focused grader criteria, inspect outputs manually. Do NOT reduce LR just because KL is high — that slows learning without fixing the root cause.
+- (Reference: DeepSeekMath §3.2 uses beta=0.04; DAPO removes KL entirely (beta=0); TRL defaults to beta=0.0; Dr. GRPO does not use KL penalty)
 
 **`grad_norm`** — L2 norm of all gradients before clipping.
 - **What it is**: How aggressively is the model trying to update its weights this step? Think of gradients as the "force" pushing the model in a direction. Large forces = big changes = potential instability. Gradient clipping caps this force, but if the pre-clip norm is huge, the model is being pushed hard. NaN means the math broke (division by zero, often from empty batches).
@@ -131,7 +134,8 @@ vLLora uses **GRPO (Group Relative Policy Optimization)** for reinforcement fine
 ### Progress Metrics
 
 **`epoch`** — Current training epoch as a fraction (0.0 to num_epochs).
-- **What it is**: How many times has the model seen the full dataset? `epoch=0.5` means halfway through the first pass. Most GRPO training uses 1-3 epochs. More epochs risk overfitting on small datasets.
+- **What it is**: How many times has the model seen the full dataset? `epoch=0.5` means halfway through the first pass. Unlike SFT (where 1-3 epochs is typical because the same responses are reused), GRPO generates **fresh responses each epoch** — the model never sees the same output twice. This means more epochs don't cause memorization the way SFT does. Typical GRPO training uses 5-15 epochs for datasets under 200 records.
+- (Reference: DeepSeekMath uses multiple passes over the same prompts. DAPO trains for extended periods. Our default is 8 epochs — see `rft-grpo-training-explained.md` §Epochs)
 
 **`global_step`** — Current training step number.
 - **What it is**: How many gradient updates have been applied. Combined with `max_steps`, tells you how far along training is. Each step processes one batch of prompts × G completions.
@@ -166,7 +170,7 @@ vLLora uses **GRPO (Group Relative Policy Optimization)** for reinforcement fine
 ### Batch Composition
 
 **`row_indices`** — Array of training record indices sampled in this batch.
-- **What it is**: Which records from your dataset were used this step. Repeated indices within a batch mean the same record was sampled multiple times (normal with replacement). Across steps, tracks whether all records get fair coverage or some are over/under-sampled. Useful for detecting dead-weight records that never appear.
+- **What it is**: Which records from your dataset were used this step. Each record index appears G times (once per generated completion) — e.g., `[52,52,52,52,52,52,52,52,69,69,69,69,69,69,69,69]` means records #52 and #69 were used with G=8 completions each (batch_size=2). This is normal GRPO behavior, NOT duplicate sampling. Across steps, tracks whether all records get fair coverage.
 
 ## Common Failure Modes
 
@@ -180,11 +184,18 @@ All completions are exactly max_output_tokens long. The model never produces EOS
 **Fix**: Increase max_output_tokens to 1024-2048. Verify chat template. Consider SFT warm-up before GRPO.
 
 ### Reward Hacking
-Reward increases while output quality degrades.
+Reward increases while output quality degrades. The model exploits grader weaknesses instead of genuinely improving.
 
-**Signs**: Reward explosion + KL > 5.0 + entropy collapse + outputs become repetitive/degenerate.
+**Signs**: `train_reward_mean` climbing while `valid_reward_mean` stagnates or diverges + outputs become repetitive, verbose, or format-exploiting. KL may be high but KL alone is NOT diagnostic.
 
-**Fix**: Bounded rewards (0-1), multiple reward signals, increase KL penalty, manual output inspection, early stopping on validation reward.
+**Concrete examples** (from OpenAI RFT and research):
+- Synonym/verbosity padding: model adds extra correct-sounding terms to boost similarity scores
+- Format exploitation: model learns output formatting tricks that score well without substance
+- Length exploitation: model produces increasingly verbose outputs to game length-correlated rewards
+
+**Detection**: Compare train vs validation reward trends (requires a validation set — see Step 7a-iii). If `train_reward` rises 20%+ above `valid_reward`, reward hacking is likely.
+
+**Fix**: Bounded rewards (0-1), add quality-focused grader criteria (penalize verbosity, repetition), enable/increase KL penalty (beta), manual output inspection, select checkpoint by `valid_reward_mean`.
 
 ### No Learning Signal
 Reward is flat, loss is near zero.
@@ -198,12 +209,13 @@ Reward is flat, loss is near zero.
 After each eval + training cycle, check:
 
 1. **Pass rate < 80%?** → Iterate on grader criteria or data quality
-2. **KL > 5.0?** → Increase beta, reduce LR in next run
-3. **clipped_ratio > 0.3?** → Increase max_output_tokens
-4. **frac_reward_zero_std > 0.5?** → Adjust grader or difficulty
+2. **train_reward rising but valid_reward flat?** → Reward hacking — improve grader quality, add stricter criteria
+3. **clipped_ratio > 0.3?** → Increase max_output_tokens (but watch cost: 8 completions × more tokens)
+4. **frac_reward_zero_std > 0.5?** → Grader not discriminating — add partial credit, increase G
 5. **Reward plateaued for >50% of steps?** → Change approach (different model, more data, different grader)
+6. **High KL with healthy reward trend?** → Normal for GRPO (beta=0 default). Only act if outputs degenerate
 
-Max 3 iterations before escalating (change base model or rethink approach).
+Max 5 iterations before escalating (change base model or rethink approach).
 
 ## Sources & References
 

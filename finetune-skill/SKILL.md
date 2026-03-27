@@ -443,11 +443,60 @@ Tell the user the data is visible at `http://localhost:5173/finetune`, then **pr
 
 **Two iteration loops** (run in parallel): **Fast loop** — eval finishes in ~45 min, iterate on data/grader immediately. **Slow loop** — training runs for hours, check metrics when done. Start both on every iteration — the fast loop improves data while the slow loop validates training.
 
-#### 7a. Pre-training validation
+#### 7a. Pre-training validation (RFT-specific — do NOT skip)
 
-Before starting training, validate `max_output_tokens`. The default is **512** — higher values (e.g., 2000) can cause training jobs to fail on the cloud infrastructure. Only increase if you see 100% clipping in training metrics.
+**⚠️ These checks are specific to RFT/GRPO training.** GRPO learns by comparing multiple completions per prompt — if all completions score the same, the gradient is zero and the model learns nothing. Validate BEFORE committing to an expensive training run.
 
-> **WARNING**: Setting `max_output_tokens` above 512 may cause training failures. Start with 512 and only increase if clipping is a problem.
+**7a-i. Validate max_output_tokens.**
+The default is **512** — higher values increase cost per step (8 completions × N tokens each). Only increase if you see >50% clipping in training metrics.
+
+**7a-ii. Validate grader score distribution (CRITICAL for GRPO).**
+GRPO computes advantages as `(reward - mean) / std`. If all completions score identically → std=0 → advantage=0 → **zero gradient**. Run the grader on diverse sample responses and check the distribution:
+
+```bash
+# Dry-run grader on 3-5 records with varying quality responses
+# Check that scores SPREAD across 0-1, not cluster at extremes
+python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
+  --workflow-id $WORKFLOW_ID --script grader.js \
+  --row '{"messages": [{"role":"system","content":"..."}, {"role":"user","content":"..."}, {"role":"assistant","content":"Good detailed response..."}]}'
+
+python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
+  --workflow-id $WORKFLOW_ID --script grader.js \
+  --row '{"messages": [{"role":"system","content":"..."}, {"role":"user","content":"..."}, {"role":"assistant","content":"Short bad answer"}]}'
+```
+
+**Red flags that predict training failure:**
+| Score Distribution | Problem | Fix |
+|---|---|---|
+| All scores 0.8-1.0 | Grader too lenient — GRPO gets no gradient | Add stricter criteria, penalize more flaws |
+| All scores 0.0-0.2 | Grader too strict OR base model too weak | Relax criteria, or try larger base model |
+| Only 0 or 1 (binary) | No partial credit → weak gradient signal | Add granular scoring (0.0, 0.3, 0.5, 0.7, 1.0) |
+| Same score for good and bad responses | Grader not discriminating | Rewrite grader criteria to differentiate quality |
+
+**The ideal distribution**: Scores spread across 0.2-0.9 with meaningful differentiation between good, mediocre, and bad responses.
+
+**7a-iii. Create a validation set for reward hacking detection.**
+RFT can suffer from **reward hacking** — the model learns to exploit grader weaknesses instead of genuinely improving. A held-out validation set detects this:
+
+```bash
+# Split training.jsonl into train (80%) and validation (20%)
+python3 -c "
+import json, random
+random.seed(42)
+with open('finetune-project/training.jsonl') as f:
+    records = [json.loads(l) for l in f]
+random.shuffle(records)
+split = int(len(records) * 0.8)
+train, val = records[:split], records[split:]
+with open('finetune-project/training.jsonl', 'w') as f:
+    for r in train: f.write(json.dumps(r) + '\n')
+with open('finetune-project/validation.jsonl', 'w') as f:
+    for r in val: f.write(json.dumps(r) + '\n')
+print(f'Split: {len(train)} train, {len(val)} validation')
+"
+```
+
+Upload both to the gateway — the training API uses the validation set for periodic evaluation during training. Compare `train_reward_mean` vs `valid_reward_mean` at each checkpoint. If they diverge significantly → reward hacking.
 
 #### 7b. Pre-submission validation + create both jobs
 
@@ -496,14 +545,19 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 | `warmup_steps` | **20-50** | DAPO uses 20, "Tricks or Traps" uses 50. Linear warmup then constant LR. |
 
 **Config adjustments (initial):**
+
+> **⚠️ RFT epochs ≠ SFT epochs.** In SFT, 1-3 epochs avoids memorization. In RFT/GRPO, the model generates **fresh responses each epoch** — there's no repetition risk. RFT needs many more epochs for the model to explore the response space and learn reward-maximizing strategies. OpenAI's RFT uses hundreds of passes over the same prompts.
+
 | Situation | Adjustment |
 |-----------|------------|
-| < 50 records | `epochs: 1` (avoid overfitting) |
-| > 500 records | `epochs: 3-4` |
+| < 50 records | `epochs: 10-15` — fewer prompts need more passes to build signal |
+| 50-200 records | `epochs: 5-10` — default range for typical datasets |
+| > 500 records | `epochs: 3-5` — more data provides richer signal per epoch |
 | Complex task | `lora_rank: 16` |
 | Simple task | `lora_rank: 4` |
 | Compute-constrained | `response_candidates_count: 4` (minimum viable, but signal quality degrades) |
-| Unstable training (KL spikes) | Lower `learning_rate` to 5e-7. If using LLM-judge grader, keep KL penalty enabled |
+| High KL but training otherwise healthy | **Do NOT lower LR just for KL.** In GRPO, KL is often not penalized (beta=0 is the DAPO/TRL default). High KL is expected as the model diverges from base. Check clipping ratio and reward trend instead |
+| Unstable training (NaN loss, reward collapse) | Lower `learning_rate` to 5e-7. Check for 100% completion truncation first |
 
 > **Note on eval IDs**: The `POST /finetune/evaluations` response returns `evaluation_run_id` — use this for polling. The workflow's `eval_job_ids` field may show a different internal ID that returns 404. Always use the ID from the create response.
 
@@ -598,8 +652,9 @@ Combine eval scores with training metrics. Present a summary showing per-topic e
 | All scores ~1 | Grader too lenient | Add harder criteria, re-eval |
 | One topic consistently low | Weak prompts or poor source material | Regenerate records, add source material |
 | Good responses scoring low | Grader criteria misaligned | Adjust criteria weights or LLM judge prompt |
-| NaN/Inf loss in training | Learning rate too high | Lower `learning_rate` by 2x |
-| KL divergence exploding | Model drifting too far | Lower `learning_rate` by 2x |
+| NaN/Inf loss in training | Numerical failure (empty batches, truncation) | Check completion clipping first, then lower LR |
+| train_reward up, valid_reward flat | **Reward hacking** (model exploiting grader) | Improve grader criteria, enable/increase KL penalty, inspect outputs |
+| KL very high but reward improving | **Normal for GRPO** (beta=0 default) | No action needed — KL divergence is expected in RFT |
 | Reward plateau | Grader not differentiating well | Improve grader for smoother score spread |
 | Reward collapse | Grader binary or reward hacking | Rewrite grader with partial credit |
 | No learning across epochs | Task too hard for base model | Try larger base model |
@@ -686,11 +741,12 @@ If training keeps failing, STOP retrying blindly and diagnose:
 
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
-| KL > 1M consistently | Learning rate too high for GRPO | Lower `learning_rate` from 1e-6 → 5e-7 → 1e-7 |
-| NaN loss on first step | `max_output_tokens` too high or empty batches | Lower `max_output_tokens` to 256 or 512 |
-| Fails at step 1-5 then stops | Cloud infra issue or OOM | Try smaller model (4B → 2B → 0.8B) or reduce `response_candidates_count` to 4 |
-| Fails mid-training (step 50+) | Gradient instability | Add `warmup_steps: 50`, lower LR by 2x |
-| Multiple NaN jobs in a row | Data or grader issue (empty/trivial responses get score 0) | Check for dead-weight records (Step 8b+), re-run eval first |
+| KL > 1M consistently | **May be normal** — GRPO with beta=0 allows large KL. Only a problem if outputs degenerate | Check output quality, not just KL number. If outputs are good, continue |
+| NaN loss on first step | Empty batches or 100% completion truncation | Check `completions/clipped_ratio` — lower `max_output_tokens` to 256-512 |
+| Fails at step 1-5 then stops | Cloud infra issue or OOM from long completions | Try smaller model (4B → 2B → 0.8B) or reduce `response_candidates_count` to 4 |
+| Fails mid-training (step 50+) | Gradient instability or numerical overflow | Add `warmup_steps: 50`, check for NaN in grad_norm |
+| Multiple NaN jobs in a row | Grader returning 0 for all completions → zero gradient → NaN | Run eval first — check if base model can score >0 on any records |
+| Reward flat after many epochs | No learning signal — all completions scoring identically | Check `frac_reward_zero_std` — improve grader granularity (partial credit) |
 
 **Escalation ladder:**
 1. **Retry once** with same config (transient failure)

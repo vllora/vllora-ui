@@ -793,9 +793,14 @@ Both write through the same gateway API → same SQLite database. Workflows, rec
 
 ### Known weaknesses
 
-- **Training KL explosion** on contract data — LR=1e-6 may still be too high for some tasks. Escalation ladder added but not fully validated.
-- **Training monitor false NaN** when job not in list yet — fixed in agent definition but the generated script quality depends on the LLM following instructions
-- **Over-linking** in relation-builder — was 501 relations for 22 topics (23 avg). Now capped at 15, but cap relies on the subagent following the instruction.
-- Agent sometimes writes output to unexpected directories (ignores specified output path)
-- Agent may not create iterations.md despite instruction (needs verification in next run)
+**RFT/GRPO-specific (most impactful):**
+- **No validation set** — pipeline trained on ALL records with no held-out set. Added train/validation split (80/20) in Step 7a-iii but not yet verified in a run. Without this, reward hacking is undetectable.
+- **Grader score distribution not validated before training** — if the grader clusters scores at extremes (all 0.8-1.0 or all binary 0/1), GRPO gets zero gradient. Added distribution check in Step 7a-ii.
+- **Epoch defaults were SFT-contaminated** — previously recommended 1-4 epochs (SFT thinking). RFT needs 5-15+ epochs because the model generates fresh responses each pass. Fixed in SKILL.md.
+- **KL thresholds were SFT-derived** — high KL was flagged as "critical" but in GRPO with beta=0 (default), high KL is expected and normal. Fixed in training-metrics-guide.md — KL alone is no longer diagnostic, must check output quality.
+
+**Infrastructure:**
+- **Training monitor false NaN** when job not in list yet — fixed in agent definition but depends on LLM following instructions
+- **Over-linking** in relation-builder — was 501 relations for 22 topics. Now capped at 15.
+- Agent sometimes writes output to unexpected directories
 - Checkpoint usage is inconsistent — some runs don't call checkpoint.py at all
