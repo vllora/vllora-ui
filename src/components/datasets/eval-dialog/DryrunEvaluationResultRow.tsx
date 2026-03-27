@@ -32,6 +32,10 @@ interface DryrunEvaluationResultRowProps {
   readonly allSameStatus?: boolean;
   /** Whether the table has any trend data (reserves column space for alignment) */
   readonly showTrend?: boolean;
+  /** Whether to show the rollout content (model response) column */
+  readonly showRolloutContent?: boolean;
+  /** Whether to hide the status/reason column (hidden when external expand provides details) */
+  readonly hideStatusColumn?: boolean;
 }
 
 /** Format a list of scores as "0.94, 0.83" */
@@ -165,6 +169,8 @@ export function DryrunEvaluationResultRow({
   isExpanded,
   allSameStatus,
   showTrend,
+  showRolloutContent,
+  hideStatusColumn,
 }: DryrunEvaluationResultRowProps) {
   const isSuccess = result.status === "completed" && !result.error_message;
   const isFailed = result.status === "failed" || !!result.error_message;
@@ -193,7 +199,7 @@ export function DryrunEvaluationResultRow({
       >
         {/* Expand indicator */}
         <div className="w-5 shrink-0 flex items-center justify-center">
-          {reason && (
+          {(reason || hideStatusColumn) && (
             <ChevronRight className={cn(
               "w-3 h-3 text-zinc-600 transition-transform",
               isExpanded && "rotate-90 text-zinc-400",
@@ -241,19 +247,59 @@ export function DryrunEvaluationResultRow({
           </div>
         )}
 
+        {/* Rollout content (model response) */}
+        {showRolloutContent && (
+          <div className="w-[200px] shrink-0 pr-2">
+            {result.rollout_content ? (
+              <span
+                className="text-[11px] text-zinc-400 truncate block"
+                title={result.rollout_content}
+              >
+                {result.rollout_content.slice(0, 80)}
+              </span>
+            ) : (
+              <span className="text-[11px] text-zinc-600">—</span>
+            )}
+          </div>
+        )}
+
         {/* Score */}
         <div className="w-16 shrink-0 text-right pr-4">
           {result.score != null && !isPending ? (
-            <span
-              className={cn(
-                "font-mono text-[13px] font-semibold tabular-nums",
-                isSuccess
-                  ? getScoreColorClass(result.score)
-                  : "text-zinc-500",
-              )}
-            >
-              {formatScore(result.score)}
-            </span>
+            hideStatusColumn ? (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className={cn(
+                        "font-mono text-[13px] font-semibold tabular-nums cursor-help",
+                        isSuccess
+                          ? getScoreColorClass(result.score)
+                          : "text-zinc-500",
+                      )}
+                    >
+                      {formatScore(result.score)}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-[10px] bg-zinc-900 border-zinc-700/60">
+                    {result.candidateScores
+                      ? `Best score among [${result.candidateScores.map(s => s.toFixed(2)).join(", ")}]`
+                      : "Best score among response candidates"}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <span
+                className={cn(
+                  "font-mono text-[13px] font-semibold tabular-nums",
+                  isSuccess
+                    ? getScoreColorClass(result.score)
+                    : "text-zinc-500",
+                )}
+              >
+                {formatScore(result.score)}
+              </span>
+            )
           ) : isPending ? (
             <div className="inline-block h-3 w-3 rounded-full border-2 border-zinc-600 border-t-zinc-400 animate-spin" />
           ) : (
@@ -268,20 +314,22 @@ export function DryrunEvaluationResultRow({
           </div>
         )}
 
-        {/* Status or Reason snippet */}
-        <div className="w-[140px] shrink-0 pr-2">
-          {allSameStatus && reasonSnippet ? (
-            <span className="text-[10px] text-zinc-500 truncate block" title={reason}>
-              {reasonSnippet}…
-            </span>
-          ) : isSuccess ? (
-            <span className="text-[12px] text-emerald-400">✓ Pass</span>
-          ) : isFailed ? (
-            <span className="text-[12px] text-red-400">✗ Fail</span>
-          ) : isPending ? (
-            <span className="text-[12px] text-zinc-600">…</span>
-          ) : null}
-        </div>
+        {/* Status or Reason snippet (hidden when expanded content provides details) */}
+        {!hideStatusColumn && (
+          <div className="w-[140px] shrink-0 pr-2">
+            {allSameStatus && reasonSnippet ? (
+              <span className="text-[10px] text-zinc-500 truncate block" title={reason}>
+                {reasonSnippet}…
+              </span>
+            ) : isSuccess ? (
+              <span className="text-[12px] text-emerald-400">✓ Pass</span>
+            ) : isFailed ? (
+              <span className="text-[12px] text-red-400">✗ Fail</span>
+            ) : isPending ? (
+              <span className="text-[12px] text-zinc-600">…</span>
+            ) : null}
+          </div>
+        )}
 
         {/* Logs */}
         <div className="w-10 shrink-0 flex items-center justify-center">
@@ -289,8 +337,8 @@ export function DryrunEvaluationResultRow({
         </div>
       </div>
 
-      {/* Expanded content: reason + criteria breakdown */}
-      {isExpanded && reason && (
+      {/* Expanded content: reason + criteria breakdown (only for non-finetune rows) */}
+      {isExpanded && reason && !hideStatusColumn && (
         <ExpandedReasonPanel reason={reason} />
       )}
     </div>

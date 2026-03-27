@@ -52,7 +52,8 @@ function exportResultsToCsv(
   results: readonly FlatEvaluationResult[],
   jobId?: string,
 ): void {
-  const header = ["#", "Input", "Score", "Status", "Reason"];
+  const hasRollout = results.some((r) => r.rollout_content != null && r.rollout_content !== "");
+  const header = ["#", "Input", ...(hasRollout ? ["Response"] : []), "Score", "Status", "Reason"];
   const rows = results.map((r) => {
     const inputMessages = r.row?.messages as unknown[] | undefined;
     const inputText = Array.isArray(inputMessages)
@@ -64,6 +65,7 @@ function exportResultsToCsv(
     return [
       String(r.row_index),
       escapeCsvField(inputText),
+      ...(hasRollout ? [escapeCsvField(r.rollout_content ?? "")] : []),
       r.score != null ? r.score.toFixed(3) : "",
       r.status,
       escapeCsvField(r.reason ?? r.error_message ?? ""),
@@ -187,6 +189,8 @@ export function ResultsTable({
     });
   }, [results]);
 
+
+
   const handleRowClick = useCallback((result: FlatEvaluationResult) => {
     if (onRowClick && hasExternalExpand) {
       onRowClick(result);
@@ -262,9 +266,11 @@ export function ResultsTable({
         {hasTopicData && <div className="w-[120px] shrink-0 py-2">Topic</div>}
         <div className="w-16 shrink-0 text-right pr-4 py-2">Score</div>
         {hasTrendData && <div className="w-[60px] shrink-0 text-center py-2" title="Score change (Δ) between consecutive evaluation checkpoints">Δ</div>}
-        <div className="w-[140px] shrink-0 pl-2 pr-2 py-2">
-          {allSameStatus ? "Reason" : "Status"}
-        </div>
+        {!hasExternalExpand && (
+          <div className="w-[140px] shrink-0 pl-2 pr-2 py-2">
+            {allSameStatus ? "Reason" : "Status"}
+          </div>
+        )}
         <div className="w-10 shrink-0 text-center py-2">Logs</div>
       </div>
 
@@ -306,9 +312,11 @@ export function ResultsTable({
                     onClick={() => handleRowClick(result)}
                     onNavigateToRecord={onNavigateToRecord}
                     showEpoch={hasEpochData}
-                    isExpanded={hasExternalExpand ? false : isExpanded}
+                    isExpanded={isExpanded}
                     allSameStatus={allSameStatus}
                     showTrend={hasTrendData}
+                    showRolloutContent={false}
+                    hideStatusColumn={hasExternalExpand}
                   />
                   {/* External expand content (e.g., from PerRowDetailsSection) */}
                   {isExpanded && hasExternalExpand && renderExpandedContent && (

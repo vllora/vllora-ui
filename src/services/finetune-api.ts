@@ -248,6 +248,8 @@ export interface EpochEntry {
   status?: string;
   score?: number | null;
   reason?: string | null;
+  is_success?: boolean;
+  rollout_content?: string | null;
   error_message?: string | null;
   logs?: string[] | null;
 }
@@ -295,12 +297,16 @@ export interface FlatEvaluationResult {
   logs?: string[];
   /** Latest epoch number (1-based) — present for finetune per-row results */
   epoch?: number;
+  /** Model rollout content (response text) for this evaluation entry */
+  rollout_content?: string;
   /** Score change from previous epoch — present when multiple epochs exist */
   trend?: number;
   /** Individual candidate scores at the previous eval checkpoint (for tooltip) */
   trendPrevScores?: number[];
   /** Individual candidate scores at the current eval checkpoint (for tooltip) */
   trendCurrentScores?: number[];
+  /** All candidate scores at the latest epoch (for "best of" tooltip) */
+  candidateScores?: number[];
 }
 
 
@@ -336,6 +342,7 @@ export function flattenEvaluationResults(
         currentScore != null && previousScore != null
           ? currentScore - previousScore
           : undefined;
+        console.log('==== entry', entry.rollout_content)
 
       flat.push({
         dataset_row_id:
@@ -346,6 +353,7 @@ export function flattenEvaluationResults(
         score: currentScore,
         reason: entry.reason ?? undefined,
         error_message: entry.error_message ?? undefined,
+        rollout_content: entry.rollout_content ?? undefined,
         logs: entry.logs ?? undefined,
         epoch: latestEpochKey + 1,
         trend,

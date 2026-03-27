@@ -80,6 +80,7 @@ export function PerRowDetailsSection({ results, workflowId }: PerRowDetailsSecti
     const epochMap = new Map<string, RowEpochData>();
 
     for (const row of results) {
+      if (!row.epochs) continue;
       const epochNumbers = Object.keys(row.epochs).map(Number).sort((a, b) => a - b);
       if (epochNumbers.length === 0) continue;
 
@@ -95,6 +96,7 @@ export function PerRowDetailsSection({ results, workflowId }: PerRowDetailsSecti
               score: result.score,
               breakdown,
               logs: result.logs,
+              rolloutContent: result.rollout_content as string | null | undefined,
             });
           }
         }
@@ -112,6 +114,10 @@ export function PerRowDetailsSection({ results, workflowId }: PerRowDetailsSecti
       // Compute trend: score diff between latest and previous epoch (best candidates)
       const trendData = computeEpochTrend(row.epochs, epochNumbers);
 
+      const candidateScores = (latestResults ?? [])
+        .map((r) => r.score)
+        .filter((s): s is number => s != null);
+
       flat.push({
         dataset_row_id: rowId,
         row_index: row.row_index,
@@ -124,6 +130,7 @@ export function PerRowDetailsSection({ results, workflowId }: PerRowDetailsSecti
         trend: trendData?.trend,
         trendPrevScores: trendData?.prevScores,
         trendCurrentScores: trendData?.currentScores,
+        candidateScores: candidateScores.length > 1 ? candidateScores : undefined,
       });
 
       const criteriaNames = getAllCriteriaNames(rowEpochs.map(e => e.breakdown));
