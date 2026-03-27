@@ -158,6 +158,47 @@ Use `--mode epoch` when deciding if the run trend is improving or degrading over
 | Scores decrease (0.7 → 0.5 → 0.3) | Overfitting or grader instability | Reduce epochs, check grader consistency |
 | Some records improve, others don't | Mixed prompt quality | The non-improving records likely have issues — examine their prompts |
 
+### Reward Drop Drill-Down (Mandatory)
+
+If aggregate `reward` drops between epochs or across recent steps, do not only look at summary metrics. Drill into row-level behavior:
+
+1. Pull per-epoch row results (`/finetune-evaluations?finetune_job_id=...`).
+2. Identify rows with the largest score drops (for example: epoch 0/1 score > 0.7 but latest epoch < 0.4).
+3. For each dropped row, compare outputs across epochs (not just scores):
+   - Did the model become shorter, vague, or generic?
+   - Did it start missing required constraints it previously satisfied?
+   - Did the grader `reason` change consistently with output quality, or look inconsistent/noisy?
+4. Separate causes:
+   - Output quality clearly worsened -> training/data issue (overfitting drift, weak data balance, too many epochs).
+   - Output looks similar but score drops a lot -> grader instability or criteria mismatch.
+5. Apply fixes only after this row-level check. Do not change learning rate/epochs blindly from aggregate reward alone.
+
+This check is required whenever you detect a reward decrease, because aggregate reward can hide whether the problem is model behavior or grader behavior.
+
+#### Helper command: print one row across epochs
+
+Use `scripts/finetune.py print-row-outputs` to print a compact epoch-sorted table for one row:
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py print-row-outputs \
+  --workflow-id "$WORKFLOW_ID" \
+  --finetune-job-id "$JOB_ID" \
+  --row-index 12
+```
+
+Output format:
+
+```
+epoch | rollout_output | score | reason
+0 | ... | 0.82 | ...
+1 | ... | 0.67 | ...
+2 | ... | 0.39 | ...
+```
+
+Tips:
+- Start with rows that show the biggest score drop from early epochs to the latest epoch.
+- Increase `--max-chars` if output/reason text is truncated (default is 160 chars per text cell).
+
 ### Per-Record Epoch Comparison
 
 For each record, compare epoch 0 (before training) to the last epoch:

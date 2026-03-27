@@ -871,9 +871,9 @@ curl "http://localhost:9090/finetune/workflows/WORKFLOW_ID/finetune-evaluations?
     "row_index": 0,
     "row": {"id": "record-1", "messages": []},
     "epochs": {
-      "0": [{"score": 0.5, "reason": "...", "status": "completed"}],
-      "1": [{"score": 0.7, "reason": "...", "status": "completed"}],
-      "2": [{"score": 0.85, "reason": "...", "status": "completed"}]
+      "0": [{"score": 0.5, "reason": "...", "status": "completed", "rollout_content": "Answer A"}],
+      "1": [{"score": 0.7, "reason": "...", "status": "completed", "rollout_content": "Answer B"}],
+      "2": [{"score": 0.85, "reason": "...", "status": "completed", "rollout_content": "Answer C"}]
     }
   }]
 }

@@ -897,6 +897,73 @@ def cmd_delete_knowledge(args: argparse.Namespace) -> None:
     print(f"Deleted {deleted} knowledge source(s).")
 
 
+def _compact_cell(value, max_chars: int = 160) -> str:
+    """Render cell-safe text for table output."""
+    if value is None:
+        return ""
+    text = str(value).replace("\n", "\\n").replace("\r", "")
+    if len(text) > max_chars:
+        return text[: max_chars - 3] + "..."
+    return text
+
+
+def cmd_print_row_outputs(args: argparse.Namespace) -> None:
+    """Print per-epoch rollout output + score + reason for one row."""
+    result = _api(
+        "GET",
+        f"{args.base_url}/finetune/workflows/{args.workflow_id}/finetune-evaluations",
+        params={
+            "finetune_job_id": args.finetune_job_id,
+            "row_index": args.row_index,
+        },
+    )
+
+    raw_results = result.get("results", [])
+    if not raw_results:
+        print(
+            f"No results found for row_index={args.row_index} in finetune_job_id={args.finetune_job_id}.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    row = raw_results[0]
+    epochs = row.get("epochs", {})
+    if not epochs:
+        print(
+            f"No epoch entries found for row_index={args.row_index}.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    def _epoch_sort_key(k: str):
+        try:
+            return (0, float(k))
+        except (TypeError, ValueError):
+            return (1, str(k))
+
+    print("epoch | rollout_output | score | reason")
+    for epoch_key in sorted(epochs.keys(), key=_epoch_sort_key):
+        epoch_items = epochs.get(epoch_key) or []
+        if not isinstance(epoch_items, list):
+            epoch_items = [epoch_items]
+        if not epoch_items:
+            print(f"{epoch_key} |  |  | ")
+            continue
+
+        for item in epoch_items:
+            rollout_output = item.get("rollout_output")
+            if rollout_output is None:
+                rollout_output = item.get("rollout_content")
+            score = item.get("score", "")
+            reason = item.get("reason", "")
+            print(
+                f"{_compact_cell(epoch_key, 32)} | "
+                f"{_compact_cell(rollout_output, args.max_chars)} | "
+                f"{_compact_cell(score, 32)} | "
+                f"{_compact_cell(reason, args.max_chars)}"
+            )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="vLLora gateway API wrapper for the finetune skill pipeline",
@@ -989,6 +1056,21 @@ def main() -> None:
     p.add_argument("--source-id", default=None, help="Specific knowledge source ID to delete")
     p.add_argument("--all", action="store_true", help="Delete all knowledge sources")
 
+    # print-row-outputs
+    p = subparsers.add_parser(
+        "print-row-outputs",
+        help="Print epoch table for one row: rollout output, score, reason",
+    )
+    p.add_argument("--workflow-id", required=True, help="Workflow ID")
+    p.add_argument("--finetune-job-id", required=True, help="Finetune job ID")
+    p.add_argument("--row-index", required=True, type=int, help="Row index in eval results")
+    p.add_argument(
+        "--max-chars",
+        type=int,
+        default=160,
+        help="Max characters per text cell before truncation (default: 160)",
+    )
+
     args = parser.parse_args()
 
     commands = {
@@ -1004,6 +1086,7 @@ def main() -> None:
         "create-training": cmd_create_training,
         "poll-training": cmd_poll_training,
         "delete-knowledge": cmd_delete_knowledge,
+        "print-row-outputs": cmd_print_row_outputs,
     }
     commands[args.command](args)
 
