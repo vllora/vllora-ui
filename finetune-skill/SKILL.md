@@ -262,6 +262,12 @@ Aim for 3-7 root topics, 2-3 levels deep, each leaf supporting 10-30 training ex
 
 If there are no documents (objective-only pipeline), skip this step.
 
+**Checkpoint** after topics and relations are complete:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step topics --project-dir finetune-project --workflow-id $WORKFLOW_ID
+python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step relations --project-dir finetune-project --workflow-id $WORKFLOW_ID
+```
+
 **Upload immediately** — push topics and relations to the gateway so the UI shows the topic hierarchy and coverage:
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-topics \
@@ -335,6 +341,11 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
 
 The UI at `http://localhost:5173/finetune` also shows all records grouped by topic — point the user there for a visual review.
 
+**Checkpoint** after data generation:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step generate-data --project-dir finetune-project --workflow-id $WORKFLOW_ID
+```
+
 ### Step 4.5: Generate Variants for Augmentation
 
 If some topics are under-represented, use `chat_completion.py` to create variants:
@@ -388,6 +399,11 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader \
   --workflow-id $WORKFLOW_ID --file grader.js
 ```
 
+**Checkpoint** after grader upload:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step grader --project-dir finetune-project --workflow-id $WORKFLOW_ID
+```
+
 ### Step 5.5: Validate Before Upload
 
 ```bash
@@ -407,6 +423,11 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py verify --workflow-id $WORKFLOW_I
 ```
 
 **Expected**: All counts > 0 and evaluator = YES. If any are missing, re-run the upload for that step.
+
+**Checkpoint** after verify:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step validate --project-dir finetune-project --workflow-id $WORKFLOW_ID
+```
 
 Tell the user the data is visible at `http://localhost:5173/finetune`, then **proceed immediately to Step 7** (evaluation).
 
@@ -428,7 +449,18 @@ Before starting training, validate `max_output_tokens`. The default is **512** �
 
 > **WARNING**: Setting `max_output_tokens` above 512 may cause training failures. Start with 512 and only increase if clipping is a problem.
 
-#### 7b. Create both jobs (non-blocking)
+#### 7b. Pre-submission validation + create both jobs
+
+**⚠️ Before creating eval or training, verify records exist on the gateway:**
+```bash
+RECORD_COUNT=$(curl -s "http://localhost:9090/finetune/workflows/$WORKFLOW_ID/records" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d))")
+echo "Records on gateway: $RECORD_COUNT"
+if [ "$RECORD_COUNT" -lt 1 ]; then
+  echo "ERROR: No records on gateway — upload records first (Step 4)"
+  exit 1
+fi
+```
+This prevents the eval-001 "0 results" bug — creating an eval with no records succeeds but returns empty results.
 
 Use `--create-only` to create the eval job without blocking, so you can start training immediately:
 
@@ -487,12 +519,31 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval \
   --file evaluations/eval-001.json
 ```
 
-**After eval completes**, check if the training monitor report exists:
+**After eval completes**, check if training is done:
 ```bash
-test -f training-jobs/{JOB_ID}-monitor-report.json && echo "Training done" || echo "Training still running"
+test -f training-jobs/{JOB_ID}-monitor-report.json && echo "Training done — read report" || echo "Training still running"
 ```
 
-If training is still running, periodically check `tail -5 /tmp/training_monitor_{JOB_ID}.log` for progress. Once the report file appears, read it for anomalies before proceeding to analysis.
+If training is still running, **poll it in the foreground** (do NOT use `sleep` in Bash):
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
+  --file training-jobs/train-001.json \
+  --poll-interval 60 --max-wait 7200
+```
+This polls every 60s for up to 2 hours, printing step progress. When it returns, read the monitor report for anomalies.
+
+> **⚠️ NEVER use `sleep 300` or `sleep 600` in a Bash tool call to wait for training.** This blocks a turn for minutes with zero feedback. Always use `poll-training` or check the monitor report file.
+
+**After training completes, update the local train JSON** with final status so files aren't stale:
+```bash
+python3 -c "
+import json
+f = 'training-jobs/train-001.json'  # adjust filename
+d = json.load(open(f))
+d['status'] = 'succeeded'  # or 'failed' — match the actual outcome
+json.dump(d, open(f, 'w'), indent=2)
+"
+```
 
 **Key rule**: When eval completes, **immediately analyze eval results** — don't wait for training. Both save data locally (`training-jobs/` and `evaluations/`) so Step 8 needs no API calls.
 
@@ -556,7 +607,37 @@ Combine eval scores with training metrics. Present a summary showing per-topic e
 
 #### 8d. Update Iteration Tracker
 
-**After every eval/training cycle**, append a summary to `iterations.md`. Create it on the first iteration if it doesn't exist. Include: config, eval results (per-topic breakdown), training results (reward/KL/clipping), what changed from previous iteration, and actionable recommendations. See [reference/analysis-strategy.md](reference/analysis-strategy.md) for the full template.
+**After every eval/training cycle**, append a summary to `iterations.md`. **Create it now if it doesn't exist:**
+
+```bash
+if [ ! -f finetune-project/iterations.md ]; then
+  cat > finetune-project/iterations.md << 'EOF'
+# Iteration History
+
+Track each eval/training cycle: what was tried, what happened, what to change next.
+
+EOF
+  echo "Created iterations.md"
+fi
+```
+
+Then append the current iteration's results:
+```markdown
+## Iteration N — [date]
+
+**Config:** model=Qwen3.5-4B, LR=1e-6, epochs=2, lora_rank=8
+**Eval:** avg_score=0.65, pass_rate=67%, weakest_topic=X (avg 0.3)
+**Training:** reward 0.2→0.7, KL stable at 0.8, no anomalies
+**Changed from previous:** [what was fixed]
+**Next action:** [what to try next]
+```
+
+Include: config, eval results (per-topic breakdown), training results (reward/KL/clipping), what changed from previous iteration, and actionable recommendations. See [reference/analysis-strategy.md](reference/analysis-strategy.md) for the full template.
+
+**Checkpoint** after analysis:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step analyze --project-dir finetune-project --workflow-id $WORKFLOW_ID
+```
 
 ### Step 9: Iterate (If Needed)
 
@@ -598,6 +679,25 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 **Adjusting training config**: Modify parameters in the next job creation (Step 7b).
 
 **If training failed with an opaque error** (e.g., "worker exited with status 1"): This is usually a transient cloud infrastructure failure. Retry with the same config first. If it fails again, try a smaller model or reduce batch size.
+
+**Persistent training failures (3+ attempts fail):**
+
+If training keeps failing, STOP retrying blindly and diagnose:
+
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| KL > 1M consistently | Learning rate too high for GRPO | Lower `learning_rate` from 1e-6 → 5e-7 → 1e-7 |
+| NaN loss on first step | `max_output_tokens` too high or empty batches | Lower `max_output_tokens` to 256 or 512 |
+| Fails at step 1-5 then stops | Cloud infra issue or OOM | Try smaller model (4B → 2B → 0.8B) or reduce `response_candidates_count` to 4 |
+| Fails mid-training (step 50+) | Gradient instability | Add `warmup_steps: 50`, lower LR by 2x |
+| Multiple NaN jobs in a row | Data or grader issue (empty/trivial responses get score 0) | Check for dead-weight records (Step 8b+), re-run eval first |
+
+**Escalation ladder:**
+1. **Retry once** with same config (transient failure)
+2. **Lower LR** to 5e-7 (KL/gradient issues)
+3. **Lower max_output_tokens** to 256 (OOM/truncation issues)
+4. **Smaller model** (4B → 2B)
+5. **Stop and report** — present diagnosis to user with what was tried
 
 #### 9c. Iteration limits and escalation
 

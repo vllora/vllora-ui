@@ -71,7 +71,7 @@ your-project/
     └── skills/
         └── finetune-skill/            # The skill itself
             ├── SKILL.md
-            ├── reference/             # 8 reference docs
+            ├── reference/             # 10 reference docs (incl. analysis-strategy + training-metrics-guide)
             ├── scripts/               # 17 Python helpers
             └── templates/             # Starter files
 ```
@@ -223,7 +223,7 @@ User: "finetune my tax deduction PDF"
 │    ▼      ▼      ▼      ▼      ▼         ▼             │
 │  ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐  ┌────┐          │
 │  │doc1│ │doc2│ │doc3│ │doc4│ │doc5│  │docN│          │
-│  │Haiku│ │Haiku│ │Haiku│ │Haiku│ │Haiku│  │Haiku│          │
+│  │Sonnet│ │Sonnet│ │Sonnet│ │Sonnet│ │Sonnet│  │Sonnet│          │
 │  └──┬─┘ └──┬─┘ └──┬─┘ └──┬─┘ └──┬─┘  └──┬─┘          │
 │     │      │      │      │      │       │              │
 │     ▼      ▼      ▼      ▼      ▼       ▼              │
@@ -248,7 +248,7 @@ User: "finetune my tax deduction PDF"
 │           ▼                                             │
 │    ┌──────────────────────────────────────┐             │
 │    │  SUBAGENT: relation-builder          │             │
-│    │  Model: Haiku                        │             │
+│    │  Model: Sonnet | Max 15 per topic   │             │
 │    │                                      │             │
 │    │  Matches parts → leaf topics         │             │
 │    │  Writes: relations.json              │             │
@@ -283,7 +283,7 @@ User: "finetune my tax deduction PDF"
 │           ▼                                             │
 │    ┌──────────────────────────────────────┐             │
 │    │  SUBAGENT: training-monitor          │             │
-│    │  Model: Haiku | maxTurns: 10         │             │
+│    │  Model: Sonnet | maxTurns: 15        │             │
 │    │                                      │             │
 │    │  Writes Python monitoring script     │             │
 │    │  Launches via nohup (detached)       │             │
@@ -322,9 +322,9 @@ User: "finetune my tax deduction PDF"
 
 | Subagent | Step | Model | Instances | Why delegate? | Benefit |
 |----------|------|-------|-----------|--------------|---------|
-| `knowledge-extractor` | 2 | Haiku | 1 per PDF | Each PDF needs a custom extract.py — that's N sequential LLM calls if done by 1 agent | N agents process N PDFs in parallel. Total time = slowest PDF, not sum of all |
-| `relation-builder` | 3b | Haiku | 1 | Parts-index scanning is mechanical — keyword match + verify | Fresh context for index matching, main stays clean. Haiku handles this fine |
-| `training-monitor` | 7c | Haiku | 1 | Training runs 30-120 min — polling is mechanical | Writes script, launches `nohup`, returns instantly. Script monitors autonomously |
+| `knowledge-extractor` | 2 | Sonnet | 1 per PDF | Each PDF needs Docling polling + custom extract.py — Sonnet handles complex document structure better than Haiku | N agents process N PDFs in parallel. Total time = slowest PDF, not sum of all |
+| `relation-builder` | 3b | Sonnet | 1 | Parts-index scanning needs understanding of topic-part semantic relevance, not just keyword matching. Max 15 relations per leaf topic | Fresh context for index matching, main stays clean |
+| `training-monitor` | 7c | Sonnet | 1 | Training runs 30-120 min — writes monitoring script with paper-backed thresholds from training-metrics-guide.md | Writes script, launches `nohup`, returns instantly. Distinguishes "no data yet" from actual NaN anomalies |
 
 **User review checkpoints (🗣️):**
 
@@ -398,19 +398,22 @@ Agent (CLI)                                      UI (Lucy)
 
 **Requires**: Gateway running at localhost:9090.
 
-The `reference/api-reference.md` documents all 76 gateway endpoints for completeness (including evaluation, training, and deployment). These are available if an advanced user wants to do everything from CLI, but SKILL.md focuses on the data prep pipeline only.
+The skill runs the **full pipeline end-to-end** including eval and training (Steps 7-9). The `reference/api-reference.md` documents all 76 gateway endpoints. The UI provides visual feedback (score distributions, training metrics charts) while the skill drives the pipeline.
 
 ---
 
 ## What We've Built
 
-### SKILL.md (~760 lines)
+### SKILL.md (~740 lines)
 
 - YAML frontmatter with pushy description for auto-triggering
 - Prerequisites check (base model capability, task clarity, smooth scoring)
-- 9-step pipeline: objective → extraction → topics → data generation → grader → verify → evaluation → iterate → training
+- 9-step pipeline: objective → extraction → topics → data generation → grader → verify → evaluation → analyze → iterate
 - Working directory structure with multi-document knowledge layout
 - Execution log specification with full timestamps (`YYYY-MM-DD HH:MM:SS`)
+- Checkpoint calls after every major step (crash recovery via `checkpoint.py`)
+- Pre-submission validation before eval/training (prevents empty eval results)
+- Persistent training failure escalation ladder (retry → lower LR → smaller model → stop)
 - Explicit directives: "execute commands directly, never create .sh files"
 - All gateway API calls via `scripts/finetune.py` wrapper
 
@@ -419,6 +422,8 @@ The `reference/api-reference.md` documents all 76 gateway endpoints for complete
 | File | Lines | What it covers |
 |------|-------|---------------|
 | `api-reference.md` | ~950 | All 76 vLLora REST endpoints: cloud (datasets, eval, training, deployments) + local CRUD (workflows, records, topics, knowledge, eval-jobs) + record scores + topic management + training metrics + pipeline examples |
+| `analysis-strategy.md` | ~1500 | Decision trees, action templates, derived metrics, presentation format for Step 8 analysis |
+| `training-metrics-guide.md` | ~500 | GRPO metric interpretation — healthy ranges, red flags, paper-backed thresholds (DeepSeekMath, DAPO, Dr. GRPO), quick decision table |
 | `data-format.md` | ~100 | JSONL format — prompts only (no assistant messages, since RFT) |
 | `extraction-guide.md` | ~670 | Docling Serve setup, hybrid chunk API, knowledge_parts.json schema, image extraction, troubleshooting |
 | `grader-writing.md` | ~290 | 3 grader patterns, smooth scoring, reward hacking prevention |
@@ -432,16 +437,22 @@ All scripts use inline dependency declarations — run with `uv run script.py` (
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/finetune.py` | Gateway API wrapper — create workflow, upload knowledge/topics/records/grader, verify |
+| `scripts/finetune.py` | Gateway API wrapper — create workflow, upload knowledge/topics/records/grader, verify, create-eval, create-training, poll-eval, poll-training |
 | `scripts/generate_records.py` | Generate training records from topics + knowledge — calls LLM per leaf topic |
+| `scripts/analyze_training.py` | Post-training analysis: reward trend, KL health, clipping, loss stability, grad norm, per-topic learning. Paper-backed thresholds with `# Ref:` comments |
+| `scripts/print_metrics_table.py` | Print training metrics table (per-epoch or per-step) — human-readable format |
 | `scripts/chat_completion.py` | Call LLM via gateway — validates JSON output when `response_format` is `json_object` |
 | `scripts/dry_run_grader.py` | Dry-run grader on a single row — instant syntax/logic check via gateway sandbox |
 | `scripts/validate_dataset.py` | Validate JSONL: format, fields, RFT compliance, cross-reference topics/parts |
-| `scripts/run_evaluation.py` | Create eval job, poll until complete (~30 min timeout), save response |
-| `scripts/start_training.py` | Start training job, poll until complete, save response |
+| `scripts/checkpoint.py` | Pipeline checkpoint — save/check/reset step progress for crash recovery |
+| `scripts/deduplicate_records.py` | Remove near-duplicate prompts via trigram similarity (threshold-based) |
+| `scripts/build_knowledge_parts.py` | Generic Docling→knowledge_parts.json converter (no LLM needed) |
+| `scripts/run_evaluation.py` | Create eval job, poll until complete (~30 min timeout) — legacy, prefer `finetune.py create-eval` |
+| `scripts/start_training.py` | Start training job, poll until complete — legacy, prefer `finetune.py create-training` |
 | `scripts/consolidate_parts.py` | Merge adjacent text parts, drop short fragments, fix Unicode, regenerate parts-index |
+| `scripts/extract_tables.py` | Upgrade text parts to table parts using Docling table data |
 | `scripts/validate_extraction.py` | Cross-document extraction quality gate (parts/page, title diversity, avg length) |
-| `scripts/docling_extract.py` | Submit PDF(s) to Docling Serve async API, poll until done, supports batch mode |
+| `scripts/docling_extract.py` | Submit PDF(s) to Docling Serve async API, poll until done, supports batch + submit-only mode |
 | `scripts/pdftotext_extract.py` | Fallback PDF extraction via pdftotext (no Docker required), same output schema |
 
 These scripts solve the #1 testing issue (agents creating shell scripts instead of executing API calls) by providing ready-to-run commands.
@@ -531,22 +542,37 @@ Tested with real chess PDF and live backend at localhost:9090.
 | v8 | Strengthened "no .sh files" language | Still created `run-pipeline.sh` |
 | v9 | Added UUID requirement + stronger language | All steps working: PDF extracted, 131 records, grader written, dataset uploaded, eval job created and polling |
 
-### Current Test Status (v9)
+### Current Test Status
 
-- PDF extraction via pdftotext: **working**
-- Knowledge extraction to `reference/document-extraction.md`: **working**
-- Topic hierarchy with real topic-source relations: **working**
-- 131 training records across 20 topics: **working**
-- Hybrid grader (programmatic + LLM-as-judge): **working**
-- Full timestamps `[YYYY-MM-DD HH:MM:SS]`: **working**
-- No .sh files created: **working**
-- UUID for dataset_id: **working**
-- Dataset uploaded via curl: **working**
-- Evaluation job created and polling: **working**
-- Evaluation results analysis: **pending** (eval still running on backend)
-- Training job submission: **pending** (depends on eval results)
-- Iteration loop (re-evaluate after fixes): **not yet tested**
-- Mode A (handoff to UI): **not yet tested** (gateway API is ready, needs end-to-end test)
+**Test infrastructure**: `scripts/run-finetune-agent.sh` runs Claude Code in non-interactive mode, captures JSONL stream + formatted markdown transcript. See `docs/workflow-skill-first-approach/run-infrastructure.md` for details.
+
+**Test projects** (in `/Users/anhthuduong/Documents/GitHub/test-samples/`):
+
+| Project | PDFs | Status | Notes |
+|---------|------|--------|-------|
+| `contract-translator` | 9 legal PDFs | Eval 84%, training KL explosion | 4 training attempts, persistent KL >1M — needs LR reduction |
+| `tax-deduction-analyzer` | 6 IRS publications | Extraction in progress | First multi-doc Docling test |
+| `chess-tactics` (original) | 1 chess PDF | v9 complete | Original test — eval + training working |
+| `financial-doc-analyzer` | TBD | Not started | Planned: 10-K extraction test |
+| `medical-icd-coder` | TBD | Not started | Planned: structured output test |
+| `food-label-compliance` | TBD | Not started | Planned: compliance grader test |
+
+**Pipeline steps verified end-to-end:**
+
+| Step | Status | Notes |
+|------|--------|-------|
+| PDF extraction (Docling) | ✅ Working | Parallel per-document via knowledge-extractor subagents |
+| PDF extraction (pdftotext fallback) | ✅ Working | Automatic fallback when Docling unavailable |
+| Topic hierarchy + relations | ✅ Working | relation-builder subagent, now capped at 15 per topic |
+| Data generation (100-200+ records) | ✅ Working | generate_records.py with --upload-incremental |
+| Grader writing + dry-run | ✅ Working | 4 templates: general, extraction, compliance, readability |
+| Evaluation creation + polling | ✅ Working | avg 0.65-0.84 across tests |
+| Training creation + monitoring | ⚠️ Partial | Monitor launches OK, but false NaN on empty metrics (fixed) |
+| Training completion | ⚠️ Issues | KL explosion with contract data — persistent failure guidance added |
+| Post-training analysis | ✅ Working | analyze_training.py with paper-backed thresholds |
+| Iteration loop | ✅ Working | Auto-iterates in non-interactive mode (tested 4 iterations) |
+| Checkpoint + resume | ⚠️ Partial | Checkpoints now at every step, but not all runs use them yet |
+| iterations.md tracking | 🔴 Missing | Added explicit creation instruction — not yet verified in a run |
 
 ---
 
@@ -600,68 +626,60 @@ those values in the next API call.
 
 ### Prerequisites
 
-1. vLLora backend running at `localhost:9090`
-2. A test PDF or document
-3. Claude Code CLI installed
-4. `poppler` installed for pdftotext fallback (`brew install poppler` on macOS, `apt-get install poppler-utils` on Linux)
-5. Docker installed for Docling Serve extraction (optional but recommended — `docker run -p 5001:5001 ghcr.io/docling-project/docling-serve-cpu:latest`)
+1. vLLora gateway running at `localhost:9090` (`npm run start:backend` from the gateway repo)
+2. A test project with PDFs in a `pdfs/` directory
+3. Claude Code CLI (`claude`) installed
+4. `uv` installed (Python script runner — all scripts use inline deps)
+5. Docling Serve for PDF extraction (recommended — `docker run -p 5001:5001 ghcr.io/docling-project/docling-serve-cpu:latest`). Falls back to `pdftotext` if unavailable.
 
-### Setup test repo
+### Setup test project
 
 ```bash
-mkdir -p /path/to/test-repo/.claude/skills/vllora-finetune
-cp -r /path/to/finetune-skill/* /path/to/test-repo/.claude/skills/vllora-finetune/
+# Create a test project
+mkdir -p ~/test-samples/my-test/pdfs
+cp your-document.pdf ~/test-samples/my-test/pdfs/
 
-cat > /path/to/test-repo/.claude/settings.json << 'EOF'
-{
-  "permissions": {
-    "allow": ["Bash(*)"]
-  }
-}
+# Write a prompt
+cat > ~/test-samples/my-test/finetune-prompt.md << 'EOF'
+Fine-tune a model on my document. Use the vLLora backend at localhost:9090.
+Generate at least 100 training records, write a hybrid grader, run evaluation
+and training. Iterate if eval pass rate < 80%.
 EOF
-
-cp chess-tactics.pdf /path/to/test-repo/
 ```
 
-### Run the test
+### Run with the test harness
 
 ```bash
-cd /path/to/test-repo
-CLAUDECODE= claude -p "You are testing a finetune skill. Read the skill file at \
-.claude/skills/vllora-finetune/SKILL.md FIRST, then read the knowledge files it \
-references. Follow the skill instructions exactly.
+# One command — syncs skill + agents, launches claude, captures logs
+./scripts/run-finetune-agent.sh ~/test-samples/my-test
 
-TASK: I have a chess tactics PDF at ./chess-tactics.pdf. Fine-tune a model to be \
-a chess tactics tutor. Use the vLLora backend at http://localhost:9090.
-
-REQUIREMENTS:
-1. Read the PDF using pdftotext via Bash
-2. Save extracted content to reference/document-extraction.md
-3. Build topics and link to source parts via relations API
-4. Generate at least 100 training records
-5. Write a hybrid grader
-6. Execute ALL API calls directly via Bash curl — NEVER create .sh files
-7. Use full YYYY-MM-DD HH:MM:SS timestamps in execution-log.md
-8. Update execution-log.md after EVERY step
-
-Start now." \
---allowedTools "Bash(*)" "Read(*)" "Write(*)" "Edit(*)" "Glob(*)" "Grep(*)" \
---max-turns 150 2>&1 | tee /tmp/test-output.log
+# With custom model or turn limit
+MAX_TURNS=100 CLAUDE_MODEL=sonnet ./scripts/run-finetune-agent.sh ~/test-samples/my-test
 ```
+
+Output goes to `~/test-samples/my-test/finetune-runs/run-YYYYMMDD-HHMMSS/`:
+- `transcript.md` — human-readable formatted log
+- `stream.jsonl` — raw JSONL events for programmatic analysis
+- `meta.json` — run metadata (timing, turn count, exit code)
+- `subagents/` — collected subagent transcripts
+
+See `docs/workflow-skill-first-approach/run-infrastructure.md` for full details on the run harness, log format, and debugging.
 
 ### What to verify after the test
 
 | Check | How | Pass Criteria |
 |-------|-----|---------------|
-| PDF extracted | `ls /tmp/*extracted*.txt` | File exists with text content |
-| Knowledge saved | `cat */reference/document-extraction.md` | Structured sections with page numbers |
-| Topics valid | `cat */topics.json \| python3 -m json.tool` | Flat format with parent_id, valid JSON |
-| Enough records | `wc -l */training.jsonl` | 100+ lines |
-| No .sh files | `find . -name "*.sh"` | No results |
-| Full timestamps | `grep -E "\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]" */execution-log.md` | All log entries match |
-| Records uploaded | grep "upload-records" in log | Records uploaded successfully |
-| Eval created | grep "POST /finetune/evaluations" in log | 200 OK with evaluation_run_id |
-| Grader is hybrid | `head -50 */grader.js` | Both programmatic checks AND `__langdb_call_llm_as_judge_obj` |
+| Docling extraction | `ls finetune-project/knowledge/*/docling-result.json` | One per document |
+| Knowledge parts | `python3 -c "import json,glob; [print(f) for f in glob.glob('finetune-project/knowledge/*/knowledge_parts.json')]"` | One per document |
+| Topics valid | `cat finetune-project/topics.json \| python3 -m json.tool` | Flat format with parent_id |
+| Relations capped | `python3 -c "import json; r=json.load(open('finetune-project/relations.json')); print(len(r))"` | ≤15 per leaf topic |
+| Enough records | `wc -l finetune-project/training.jsonl` | 100+ lines |
+| Grader dry-run passes | grep "Score:" in transcript.md | Non-zero score |
+| Eval results | `cat finetune-project/evaluations/eval-001.json \| python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('summary',{}))"` | avg_score > 0, passed_count > 0 |
+| Training started | `ls finetune-project/training-jobs/train-*.json` | At least one job file |
+| Checkpoints saved | `python3 finetune-project/.claude/skills/finetune-skill/scripts/checkpoint.py status --project-dir finetune-project` | Shows completed steps |
+| iterations.md exists | `cat finetune-project/iterations.md` | Created after first eval |
+| No .sh files | `find finetune-project -name "*.sh"` | No results |
 
 ---
 
@@ -746,26 +764,38 @@ Both write through the same gateway API → same SQLite database. Workflows, rec
 ### Testing
 
 - [x] Test PDF extraction via pdftotext
+- [x] Test PDF extraction via Docling Serve (knowledge-extractor subagent)
 - [x] Test dataset upload with UUID
 - [x] Test evaluation job creation and polling
-- [ ] **Test full Mode A handoff** (create workflow → push data → open UI → verify Lucy sees it)
-- [ ] Test Docling Serve extraction (Docker required)
-- [ ] Test with different document types (not just chess PDF)
+- [x] Test training job creation and monitoring
+- [x] Test multi-document extraction (9 PDFs, contract-translator)
+- [x] Test iteration loop (auto-iterate in non-interactive mode)
+- [x] Test resume from previous run (checkpoint-based)
+- [ ] Test with very large documents (500+ pages)
 - [ ] Test without any document (objective-only, no PDF)
-- [ ] Test fallback when Docling is not available
+- [ ] Test on Cowork (no local filesystem — may need adaptations)
+- [ ] Test `food-label-compliance` (compliance grader template)
+- [ ] Test `medical-icd-coder` (structured extraction grader template)
 
 ### Skill improvements
 
-- [x] Add Mode A pipeline (handoff to Lucy) via gateway workflow API
-- [x] Update api-reference.md with all 76 gateway endpoints
-- [x] Fix training job endpoints (now scoped under workflows)
-- [x] Simplify SKILL.md to focus on data prep + handoff (removed Mode B complexity)
+- [x] Full 9-step pipeline with eval + training + iteration
+- [x] Parallel document extraction via knowledge-extractor subagents
+- [x] Training monitor with paper-backed thresholds (training-metrics-guide.md)
+- [x] Post-training analysis script (analyze_training.py)
+- [x] Checkpoint per step for crash recovery
+- [x] Pre-submission validation before eval
+- [x] Persistent training failure escalation ladder
 - [ ] Add guidance for multi-turn conversation training data
 - [ ] Add guidance for structured output fine-tuning (JSON schema enforcement)
-- [ ] Test on Cowork (no local filesystem — may need adaptations)
+- [ ] Improve `finetune.py poll-training` to also save metrics incrementally
+- [ ] Add `finetune.py analyze` command to wrap analyze_training.py
 
 ### Known weaknesses
 
+- **Training KL explosion** on contract data — LR=1e-6 may still be too high for some tasks. Escalation ladder added but not fully validated.
+- **Training monitor false NaN** when job not in list yet — fixed in agent definition but the generated script quality depends on the LLM following instructions
+- **Over-linking** in relation-builder — was 501 relations for 22 topics (23 avg). Now capped at 15, but cap relies on the subagent following the instruction.
 - Agent sometimes writes output to unexpected directories (ignores specified output path)
-- Agent may not update execution-log.md after every single step (sometimes batches)
-- No guidance on what to do if backend is down or returns unexpected errors
+- Agent may not create iterations.md despite instruction (needs verification in next run)
+- Checkpoint usage is inconsistent — some runs don't call checkpoint.py at all
