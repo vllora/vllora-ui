@@ -133,6 +133,12 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py status --project-dir finetune-
    - Picking up from Step M
    ```
 
+**Before resuming, sync with the gateway** to pick up jobs created by the UI or other agents:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py sync-jobs --workflow-id $WORKFLOW_ID --output-dir finetune-project
+```
+This creates local tracking files for any jobs you don't already have. It also updates status for existing jobs (e.g., a job you created that was later cancelled from the UI).
+
 **Common resume scenarios:**
 | State found | What happened | Action |
 |-------------|---------------|--------|
@@ -140,6 +146,8 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py status --project-dir finetune-
 | Everything through `grader.js` + no `evaluations/` | Crashed before eval | Resume from Step 7 (eval + training) |
 | `evaluations/` has results + no `training-jobs/` | Eval completed but training never started | Analyze eval (Step 8), then start training |
 | `training-jobs/` has a job file with status `running` | Training was in progress | Poll the existing job, don't create a new one |
+| `training-jobs/` has a job file with status `cancelled` | Job was cancelled (from UI or another agent) | Skip it. Analyze eval results only. Start a new training job if needed (Step 9) |
+| `training-jobs/` has a job with `source: synced_from_gateway` | Job was created from the UI, not by this agent | Treat it like your own — poll it, analyze results when done |
 | `iterations.md` exists with iteration 1 results | First iteration completed | Read findings, apply fixes (Step 9), start iteration 2 |
 
 ### Step 1: Define the Objective
@@ -620,6 +628,13 @@ json.dump(d, open(f, 'w'), indent=2)
 ### Step 8: Analyze Results & Present Findings
 
 Analyze each job's results **as soon as they arrive** — don't wait for both to finish. Present findings to the user. If the user is interactive, let them choose the next action. If running non-interactively (no user response), auto-apply the highest-priority fix and iterate.
+
+**Before analyzing, sync jobs** to catch any status changes made from the UI (e.g., user cancelled a job while you were waiting):
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py sync-jobs --workflow-id $WORKFLOW_ID --output-dir finetune-project
+```
+
+**Handle cancelled jobs**: If a training or eval job has `status: cancelled`, **skip its analysis**. Log "Job {ID} was cancelled — skipping training analysis" in execution-log.md. Analyze only the jobs that completed. If ALL jobs were cancelled, proceed to Step 9 and start fresh jobs.
 
 > **Read [reference/analysis-strategy.md](reference/analysis-strategy.md)** for decision trees, action templates, derived metrics, and presentation format.
 > **Read [reference/training-metrics-guide.md](reference/training-metrics-guide.md)** for GRPO metric interpretation — healthy ranges, red flags, and what to change. Use the Quick Decision Table to determine iteration actions.

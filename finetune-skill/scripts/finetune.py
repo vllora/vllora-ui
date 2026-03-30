@@ -658,10 +658,13 @@ def cmd_poll_eval(args: argparse.Namespace) -> None:
         metadata = _update_eval_metadata(metadata, result)
         eval_file.write_text(json.dumps(metadata, indent=2))
 
-        if status in ("completed", "failed", "error"):
+        if status in ("completed", "failed", "error", "cancelled"):
             metadata["completed_at"] = result.get("completed_at")
             eval_file.write_text(json.dumps(metadata, indent=2))
             print(f"Done: {status}. Saved to {eval_file}")
+            if status == "cancelled":
+                print("Eval was cancelled. Partial results (if any) have been saved.", file=sys.stderr)
+                sys.exit(2)
             if status != "completed":
                 sys.exit(1)
             return
@@ -850,6 +853,9 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
             print(f"Done: {status}. Saved to {job_file}")
             if status == "failed":
                 sys.exit(1)
+            if status == "cancelled":
+                print("Job was cancelled. Partial metrics (if any) have been saved.", file=sys.stderr)
+                sys.exit(2)
             return
 
         time.sleep(poll_interval)
@@ -859,6 +865,144 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
     metadata["status"] = f"timeout ({status})"
     job_file.write_text(json.dumps(metadata, indent=2))
     sys.exit(1)
+
+
+def cmd_sync_jobs(args: argparse.Namespace) -> None:
+    """Sync training + eval jobs from gateway to local tracking files.
+
+    Fetches all jobs for the workflow from the gateway API and creates/updates
+    local tracking files. This allows the agent to pick up jobs created by
+    the UI or other agents.
+
+    Creates:
+      - training-jobs/train-NNN.json for each finetune job
+      - evaluations/eval-NNN.json for each eval job
+    Skips jobs that already have a local file with matching job_id.
+    """
+    wf_id = args.workflow_id
+    output_dir = Path(args.output_dir)
+
+    # ── Sync finetune jobs ──
+    training_dir = output_dir / "training-jobs"
+    training_dir.mkdir(parents=True, exist_ok=True)
+
+    jobs = _api("GET", f"{args.base_url}/finetune/workflows/{wf_id}/jobs")
+    job_list = jobs if isinstance(jobs, list) else jobs.get("jobs", [])
+
+    # Index existing local files by job_id
+    existing_job_ids = set()
+    for f in training_dir.glob("train-*.json"):
+        try:
+            data = json.loads(f.read_text())
+            existing_job_ids.add(data.get("job_id"))
+        except (json.JSONDecodeError, KeyError):
+            pass
+
+    # Find next train-NNN number
+    existing_nums = []
+    for f in training_dir.glob("train-*.json"):
+        try:
+            num = int(f.stem.split("-")[1])
+            existing_nums.append(num)
+        except (ValueError, IndexError):
+            pass
+    next_num = max(existing_nums, default=0) + 1
+
+    synced_training = 0
+    skipped_training = 0
+    for job in job_list:
+        job_id = job.get("id", "")
+        if job_id in existing_job_ids:
+            # Update status in existing file
+            for f in training_dir.glob("train-*.json"):
+                try:
+                    data = json.loads(f.read_text())
+                    if data.get("job_id") == job_id:
+                        data["status"] = job.get("status", data.get("status"))
+                        if job.get("fine_tuned_model"):
+                            data["fine_tuned_model"] = job["fine_tuned_model"]
+                        if job.get("error_message"):
+                            data["error_message"] = job["error_message"]
+                        if job.get("completed_at"):
+                            data["completed_at"] = job["completed_at"]
+                        f.write_text(json.dumps(data, indent=2))
+                        break
+                except (json.JSONDecodeError, KeyError):
+                    pass
+            skipped_training += 1
+            continue
+
+        # New job — create local tracking file
+        local_data = {
+            "job_id": job_id,
+            "provider_job_id": job.get("provider_job_id", job_id),
+            "workflow_id": wf_id,
+            "base_model": job.get("base_model", ""),
+            "output_model": job.get("fine_tuned_model", ""),
+            "training_config": job.get("training_config", {}),
+            "status": job.get("status", "unknown"),
+            "created_at": job.get("created_at", ""),
+            "source": "synced_from_gateway",
+        }
+        out_file = training_dir / f"train-{next_num:03d}.json"
+        out_file.write_text(json.dumps(local_data, indent=2))
+        next_num += 1
+        synced_training += 1
+        print(f"  Synced training job: {job_id[:8]}... → {out_file.name} (status={local_data['status']})")
+
+    # ── Sync eval jobs ──
+    eval_dir = output_dir / "evaluations"
+    eval_dir.mkdir(parents=True, exist_ok=True)
+
+    existing_eval_ids = set()
+    for f in eval_dir.glob("eval-*.json"):
+        try:
+            data = json.loads(f.read_text())
+            existing_eval_ids.add(data.get("evaluation_run_id"))
+        except (json.JSONDecodeError, KeyError):
+            pass
+
+    existing_eval_nums = []
+    for f in eval_dir.glob("eval-*.json"):
+        try:
+            num = int(f.stem.split("-")[1])
+            existing_eval_nums.append(num)
+        except (ValueError, IndexError):
+            pass
+    next_eval_num = max(existing_eval_nums, default=0) + 1
+
+    # Fetch eval runs from gateway (use the evaluations list endpoint)
+    synced_eval = 0
+    try:
+        eval_resp = _api("GET", f"{args.base_url}/finetune/workflows/{wf_id}/evaluations")
+        eval_list = eval_resp if isinstance(eval_resp, list) else eval_resp.get("evaluations", [])
+        for ev in eval_list:
+            eval_id = ev.get("evaluation_run_id", ev.get("id", ""))
+            if eval_id in existing_eval_ids:
+                continue
+            local_eval = {
+                "evaluation_run_id": eval_id,
+                "workflow_id": wf_id,
+                "status": ev.get("status", "unknown"),
+                "model": ev.get("model", ""),
+                "total_rows": ev.get("total_rows", 0),
+                "completed_rows": ev.get("completed_rows", 0),
+                "source": "synced_from_gateway",
+            }
+            out_file = eval_dir / f"eval-{next_eval_num:03d}.json"
+            out_file.write_text(json.dumps(local_eval, indent=2))
+            next_eval_num += 1
+            synced_eval += 1
+            print(f"  Synced eval job: {eval_id[:8]}... → {out_file.name} (status={local_eval['status']})")
+    except SystemExit:
+        print("  Warning: Could not fetch eval jobs from gateway", file=sys.stderr)
+
+    # Summary
+    total = synced_training + synced_eval
+    print(f"\nSync complete: {synced_training} new training jobs, {synced_eval} new eval jobs "
+          f"({skipped_training} training jobs already tracked)")
+    if total == 0:
+        print("All jobs already tracked locally — nothing to sync.")
 
 
 def cmd_delete_knowledge(args: argparse.Namespace) -> None:
@@ -1050,6 +1194,11 @@ def main() -> None:
     p.add_argument("--poll-interval", type=int, default=60, help="Poll interval in seconds (default: 60)")
     p.add_argument("--max-wait", type=int, default=14400, help="Max wait in seconds (default: 14400)")
 
+    # sync-jobs
+    p = subparsers.add_parser("sync-jobs", help="Sync training + eval jobs from gateway to local tracking files")
+    p.add_argument("--workflow-id", required=True, help="Workflow ID")
+    p.add_argument("--output-dir", default="finetune-project", help="Project directory (default: finetune-project/)")
+
     # delete-knowledge
     p = subparsers.add_parser("delete-knowledge", help="Delete knowledge source(s) from a workflow")
     p.add_argument("--workflow-id", required=True, help="Workflow ID")
@@ -1085,6 +1234,7 @@ def main() -> None:
         "poll-eval": cmd_poll_eval,
         "create-training": cmd_create_training,
         "poll-training": cmd_poll_training,
+        "sync-jobs": cmd_sync_jobs,
         "delete-knowledge": cmd_delete_knowledge,
         "print-row-outputs": cmd_print_row_outputs,
     }
