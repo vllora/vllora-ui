@@ -864,7 +864,7 @@ Get per-epoch evaluation results showing how the model improves during training.
 curl "http://localhost:9090/finetune/workflows/WORKFLOW_ID/finetune-evaluations?finetune_job_id=ftjob-abc123&epoch=1"
 ```
 
-**Query params:** `finetune_job_id`, `row_index`, `epoch` (all optional filters)
+**Query params:** `finetune_job_id`, `row_index`, `epoch`, `include_rollout_content` (all optional filters)
 
 **Response:**
 ```json
