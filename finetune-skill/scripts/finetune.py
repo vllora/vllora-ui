@@ -1181,9 +1181,9 @@ def cmd_diagnose_grader(args: argparse.Namespace) -> None:
                     "messages? Run: curl localhost:9090/finetune/workflows/$WORKFLOW_ID/records | head "
                     "— if system+user messages are under 2000 chars, source text is missing.",
                     "**If source text missing (most likely)**: Regenerate records with "
-                    "`generate_records.py --embed-source-context` which embeds per-question source "
-                    "excerpts into the user message as a natural 'here is the document, answer this' "
-                    "pattern. System prompt (topic hierarchy) stays unchanged.",
+                    "`generate_records.py --embed-source-context` which switches to per-chunk mode: "
+                    "generates questions per source chunk with the chunk's full content in the user "
+                    "message. System prompt (topic hierarchy) stays unchanged.",
                     "**Also fix grader**: Add early-exit for non-responses (score 0 instead of partial credit). "
                     "Remove score snapping (Math.round * 10 / 10). Weight accuracy/completeness higher "
                     "than hallucination-avoidance.",
@@ -1254,24 +1254,23 @@ def cmd_diagnose_grader(args: argparse.Namespace) -> None:
                     }
                     if long_context == 0 and is_extraction_task:
                         output["diagnosis"].insert(0, {
-                            "issue": "EXTRACTION TASK BUT RECORDS MISSING SOURCE DOCUMENT TEXT",
+                            "issue": "GRADER-PROMPT MISMATCH: grader expects document extraction but prompts are short questions",
                             "likely_cause": (
-                                f"All {len(msg_lengths)} sampled records have messages under 2000 chars "
-                                f"(avg {avg_len:.0f} chars). The system prompt references document extraction "
-                                f"(filings, citations, pages) but records don't include the actual document content. "
-                                f"The model has nothing to extract from."
+                                f"All {len(msg_lengths)} sampled records have short messages (avg {avg_len:.0f} chars). "
+                                f"The system prompt references document extraction (filings, citations, pages) "
+                                f"but the grader criteria require information (exact citations, page references) "
+                                f"that the model can't produce from the prompt format alone."
                             ),
                             "fix": [
-                                "Regenerate records with `generate_records.py --embed-source-context` which embeds "
-                                "per-question source excerpts (from ground_truth) into the user message as a natural "
-                                "'here is the document section, now answer this' pattern. System prompt (topic "
-                                "hierarchy) stays unchanged.",
-                                "Example: python3 $SKILL_DIR/scripts/generate_records.py --topics topics.json "
-                                "--relations relations.json --knowledge-dir knowledge --system-prompt '...' "
-                                "--output training.jsonl --embed-source-context",
-                                "After regenerating: re-upload with `finetune.py upload-records --force`, then re-eval.",
+                                "ADJUST THE GRADER to match what the prompts can produce. Remove criteria "
+                                "the model can't satisfy (e.g., page/section citations if no document is "
+                                "provided in the prompt). Score based on what the model CAN do.",
+                                "If the model can answer from parametric knowledge (e.g., public company "
+                                "financials), keep accuracy checks but remove citation requirements.",
+                                "If the task genuinely requires document-in-context analysis, that's a "
+                                "different prompt architecture — consult the team before restructuring.",
                             ],
-                            "root_cause": "DATA — this is the primary issue, fix this first",
+                            "root_cause": "GRADER-PROMPT MISMATCH — grader too strict for the prompt format",
                             "priority": "HIGH",
                         })
                     elif long_context == 0 and not is_extraction_task:

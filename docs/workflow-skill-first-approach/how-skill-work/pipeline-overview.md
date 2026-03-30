@@ -56,7 +56,7 @@ Other helper scripts:
 | `extract_tables.py` | 2b | Upgrades text parts to table parts using structured Docling table data (headers, rows, metadata) |
 | `consolidate_parts.py` | 2c | Merges adjacent text parts, drops short fragments, fixes Unicode, validates quality |
 | `validate_extraction.py` | 2e | Cross-document extraction quality gate (parts/page, title diversity, avg length) |
-| `generate_records.py` | 4 | Generates records per leaf topic via LLM (calls `chat_completion.py`). Use `--embed-source-context` for extraction tasks — embeds per-question source excerpts (from ground_truth) into user message as natural "here's the doc, answer this" pattern. System prompt stays unchanged (topic hierarchy). |
+| `generate_records.py` | 4 | Generates records per leaf topic via LLM (calls `chat_completion.py`) |
 | `chat_completion.py` | 4 | Calls LLM API — validates JSON when `response_format` is `json_object` |
 | `validate_dataset.py` | 5.5 | Validates JSONL format, fields, RFT compliance, cross-refs topics/parts |
 | `dry_run_grader.py` | 5 | Tests grader on one record via gateway sandbox |
@@ -746,7 +746,7 @@ After every eval/training cycle, append a summary to `iterations.md`.
 |--------|-------------|-----------------|
 | All scores ~0 | Grader broken or too strict | Fix grader, dry-run, re-eval |
 | All scores ~1 | Grader too lenient | Add harder criteria, re-eval |
-| **>50% scores at one value** | **Grader too coarse OR data missing source text** | Run `diagnose-grader` to identify root cause. For extraction tasks: check if records include source document text (`--embed-source-context`). For all tasks: check grader for score snapping, refusal partial credit. |
+| **>50% scores at one value** | **Grader-prompt mismatch OR grader too coarse** | Run `diagnose-grader` to identify root cause. Most common: grader expects behavior the prompts can't produce (e.g., page citations without documents). Fix: adjust grader to match prompt format. |
 | One topic consistently low | Weak prompts or poor source material | Regenerate records, add source material |
 | Good responses scoring low | Grader criteria misaligned | Adjust criteria weights or LLM judge prompt |
 | NaN/Inf loss in training | Numerical failure (check completion clipping first) | Check truncation, then lower LR |
@@ -774,26 +774,15 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py diagnose-grader \
 ```
 This shows score distribution, reason patterns per bucket, auto-diagnosis (DATA vs GRADER root cause), the grader source code, and whether records include source document text.
 
-**Step 2: Fix based on diagnosis.** The root cause is often DATA, not just the grader:
+**Step 2: Fix based on diagnosis.** The most common root cause is a grader-prompt mismatch:
 
 | diagnose-grader says | Root cause | Fix |
 |---|---|---|
-| "EXTRACTION TASK BUT RECORDS MISSING SOURCE TEXT" | **DATA** | Regenerate with `generate_records.py --embed-source-context`, re-upload |
-| "Model refuses to answer" + short records | **DATA** | Same — records need source document text (for extraction tasks only) |
-| "Grader gives same score" + records have source text | **GRADER** | Edit grader.js, remove score snapping, add early-exit for refusals |
-| Both issues | **BOTH** | Fix data first, then grader |
+| "Model refuses to answer" + grader gives partial credit | **GRADER-PROMPT MISMATCH** — grader expects behavior the prompts can't produce | Adjust grader to match prompt format (remove unreachable criteria) |
+| "Grader gives same score to different failures" | **GRADER too coarse** — scoring doesn't differentiate quality levels | Add early-exit for refusals, remove score snapping, reweight criteria |
+| "Score snapping" (Math.round) | **GRADER** — continuous range collapsed to 11 values | Remove the rounding line |
 
-**Fixing the data** (extraction task — records missing source text):
-```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
-  --topics topics.json --relations relations.json --knowledge-dir knowledge \
-  --system-prompt "You are..." --output training.jsonl \
-  --embed-source-context --records-per-topic 10
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force \
-  --workflow-id $WORKFLOW_ID --file training.jsonl
-```
-
-**Fixing the grader** (no data re-upload needed):
+**Fixing the grader** (most common fix — no data re-upload needed):
 ```bash
 # Edit grader.js based on diagnose-grader output, then:
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader \

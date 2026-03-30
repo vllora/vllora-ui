@@ -325,11 +325,11 @@ User: "finetune my tax deduction PDF"
 │  Step 9: Iterate (if needed)                            │
 │    9a: Eval-only iteration (readiness gate failed):     │
 │        diagnose-grader → identify root cause            │
-│        ├─ DATA issue → regenerate with                  │
-│        │   --embed-source-context, re-upload, re-eval   │
-│        ├─ GRADER issue → edit grader.js, re-upload,     │
-│        │   re-eval                                      │
-│        └─ BOTH → fix data first, then grader            │
+│        ├─ GRADER-PROMPT MISMATCH → adjust grader to     │
+│        │   match what prompts can produce, re-eval      │
+│        ├─ GRADER too coarse → remove snapping, add      │
+│        │   early-exit for refusals, re-eval             │
+│        └─ DATA issue → regenerate records, re-eval      │
 │    9b: Post-training iter ───► fix → re-eval or retrain │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -453,7 +453,7 @@ All scripts use inline dependency declarations — run with `uv run script.py` (
 | Script | Purpose |
 |--------|---------|
 | `scripts/finetune.py` | Gateway API wrapper — 17 subcommands: create-workflow, upload-knowledge/topics/relations/records/grader, verify, status, readiness-check, diagnose-grader, create-eval, poll-eval, create-training, poll-training, sync-jobs, delete-knowledge, print-row-outputs |
-| `scripts/generate_records.py` | Generate training records from topics + knowledge — calls LLM per leaf topic. `--embed-source-context` embeds per-question source excerpts (from ground_truth) into the user message as natural "here's the doc, answer this" pattern. Required for extraction tasks. |
+| `scripts/generate_records.py` | Generate training records from topics + knowledge — calls LLM per leaf topic |
 | `scripts/analyze_training.py` | Post-training analysis: reward trend, KL health, clipping, loss stability, grad norm, per-topic learning. Paper-backed thresholds with `# Ref:` comments |
 | `scripts/print_metrics_table.py` | Print training metrics table (per-epoch or per-step) — human-readable format |
 | `scripts/chat_completion.py` | Call LLM via gateway — validates JSON output when `response_format` is `json_object` |

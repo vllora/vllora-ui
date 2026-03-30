@@ -797,45 +797,13 @@ This shows: score distribution by bucket, sample `reason` fields per bucket, aut
 
 | diagnose-grader says | Root cause | Fix |
 |---|---|---|
-| "EXTRACTION TASK BUT RECORDS MISSING SOURCE TEXT" | **DATA** — prompts reference documents/filings/citations but don't include source material. Model can't extract from documents it can't see. | Regenerate records with `generate_records.py` (embeds knowledge parts), re-upload, re-eval |
-| "Model refuses to answer" + records are short | **DATA** — same as above (only for extraction tasks — knowledge/reasoning tasks don't need source text) | Fix data first, then grader |
-| "Grader gives same score to different failures" + records have source text | **GRADER** — scoring formula too coarse | Edit grader.js (remove snapping, add early-exit for refusals, reweight criteria) |
+| "Model refuses to answer" + grader gives partial credit for refusal | **GRADER-PROMPT MISMATCH** — grader expects behavior the prompts can't produce (e.g., grader wants page citations but prompts don't include documents) | Adjust grader to match what the prompts actually ask for. Remove criteria the model can't satisfy from the prompt format. |
+| "Grader gives same score to different failures" | **GRADER** — scoring formula too coarse, or gives partial credit for non-responses | Edit grader.js: add early-exit for refusals (score 0), remove score snapping, reweight criteria |
 | "Score snapping" (Math.round) | **GRADER** — collapsing continuous scores into 11 values | Remove the rounding line from grader.js |
 
-**⚠️ Fix the data FIRST if the diagnosis says records are missing source text** (for extraction tasks). Fixing the grader alone won't help — the model will still refuse because it has nothing to extract from. Note: not all tasks need source text — knowledge, reasoning, and style tasks work fine with short prompts.
+**The most common cause of score clustering is a grader-prompt mismatch** — the grader expects something the model can't do given the prompt format. For example: grader checks for page citations, but prompts don't include documents. The fix is to adjust the grader to match the prompts, NOT to restructure the training data.
 
-**Step 2: Fix.** Based on diagnosis — fix data, grader, or both:
-
-**If DATA issue (extraction task but records missing source text):**
-```bash
-# Regenerate records WITH source material embedded in each record's user message
-python3 ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
-  --topics finetune-project/topics.json \
-  --relations finetune-project/relations.json \
-  --knowledge-dir finetune-project/knowledge \
-  --system-prompt "You are..." \
-  --output finetune-project/training.jsonl \
-  --records-per-topic 10 --parallel 4 \
-  --embed-source-context
-
-# Re-upload (--force replaces existing records)
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force \
-  --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl
-```
-
-The `--embed-source-context` flag embeds the per-question `ground_truth` excerpt (generated alongside each question) into the user message as a natural "here's the document, now answer" pattern:
-
-```
-User: "Here is the relevant section from the source document:
-
-[per-question excerpt from ground_truth]
-
-What was Apple's total revenue for FY2024?"
-```
-
-This is a natural user interaction pattern (users paste document sections and ask questions — RAG-style). The system prompt stays unchanged (composed from the topic hierarchy). Each record gets its own relevant excerpt, not the entire source. **Only use this for extraction tasks** (document analysis, filing extraction, report parsing). For knowledge/reasoning/style tasks, omit this flag.
-
-**If GRADER issue:** Edit `grader.js` based on the diagnosis, then upload:
+**Step 2: Fix.** Edit `grader.js` based on the diagnosis, then upload:
 ```bash
 # Edit grader.js, then update:
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader \
