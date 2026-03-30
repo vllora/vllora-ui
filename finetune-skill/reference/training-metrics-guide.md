@@ -62,7 +62,8 @@ vLLora uses **GRPO (Group Relative Policy Optimization)** for reinforcement fine
 - **What it is**: How different has the model become from where it started? KL measures the policy divergence from the base model. In GRPO, some divergence is **expected and necessary** — the model must change to learn new behaviors.
 - **⚠️ IMPORTANT: KL is NOT the primary constraint in GRPO.** DAPO and TRL both default to `beta=0` (no KL penalty). The **clipping mechanism** (epsilon) serves as the trust region constraint instead. High KL alone does NOT mean training is failing — check reward trend, clipping ratio, and output quality instead.
 - **When KL matters**: Only when `beta > 0` (KL penalty is active). With beta=0, KL is informational only.
-- Healthy: Varies by setup. With beta>0: below 1.0. With beta=0: much higher values are normal.
+- Healthy: Varies by setup. With beta>0: below 1.0. **With beta=0: values in billions or trillions are normal** — do NOT treat high absolute KL as an anomaly.
+- **Monitor thresholds**: beta>0: warn >5.0, critical >10.0. **beta=0: skip absolute thresholds entirely.** Only monitor the KL *trend* relative to reward trend.
 - Warning: KL **rising while reward stagnates** → possible reward hacking. KL rising with reward improving → normal learning.
 - Critical: KL divergence + degenerate outputs (repetitive, verbose padding, format exploitation) → reward hacking.
 - Fix: If reward hacking suspected → enable/increase beta, add quality-focused grader criteria, inspect outputs manually. Do NOT reduce LR just because KL is high — that slows learning without fixing the root cause.

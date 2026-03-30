@@ -54,12 +54,14 @@ Extract the threshold values from the guide's metric sections. The key threshold
 | Loss | §Loss | NaN/stuck-at-zero detection |
 
 Use these values in the monitoring script (Step 1). If the guide is unavailable, fall back to these defaults:
-- KL: warn >5.0, critical >10.0
+- KL: **Only check if beta > 0.** With beta=0 (default for GRPO/DAPO/TRL), KL is unpenalized and values in billions/trillions are normal — do NOT flag as anomaly. With beta>0: warn >5.0, critical >10.0.
 - Clipped ratio: warn >0.50, critical >0.70
 - Reward std: warn <0.05, critical <0.01
 - frac_reward_zero_std: warn >0.50, critical >0.80
 - Grad norm spike: >3x rolling median for 10+ consecutive polls
 - Loss: NaN/Inf = critical
+
+**⚠️ To determine beta**: Check the training config. If `beta` is not set or is 0, skip absolute KL thresholds entirely. Only monitor KL *trend* (rising + reward stagnant = possible reward hacking).
 
 ### Step 1: Write the monitoring script
 
@@ -74,9 +76,36 @@ The script must use **only Python stdlib** (`urllib.request`, `json`, `math`, `t
      - **Important:** Use the list endpoint `/jobs`, NOT `/jobs/<JOB_ID>/status`
    - Metrics: `GET <GATEWAY_URL>/finetune/workflows/<WORKFLOW_ID>/jobs/<JOB_ID>/metrics`
 
+   **⚠️ CRITICAL: Metrics response format.** The metrics endpoint returns a WRAPPED response:
+   ```json
+   {
+     "provider_job_id": "...",
+     "metrics": [
+       { "metrics": { "epoch": 0.04, "reward": 0.5, "loss": 1234, "kl": 0.8, "grad_norm": 99, "global_step": 3, "max_steps": 680, ... }, "created_at": "..." },
+       { "metrics": { "epoch": 0.07, ... }, "created_at": "..." }
+     ]
+   }
+   ```
+   You MUST unwrap this. The parsing logic:
+   ```python
+   raw = fetch_json(metrics_url)  # returns the outer dict
+   points = raw.get("metrics", [])  # list of {metrics: {...}, created_at: ...}
+   flat_metrics = [p["metrics"] for p in points if isinstance(p, dict) and "metrics" in p and isinstance(p["metrics"], dict)]
+   # flat_metrics is now a list of dicts with keys: epoch, reward, loss, kl, grad_norm, global_step, max_steps, etc.
+   latest_metrics = flat_metrics[-1] if flat_metrics else None
+   ```
+   Do NOT use `raw` directly as the metrics dict — it has `provider_job_id` and `metrics` keys, not `epoch`/`reward`/etc.
+
+   **Job status response format.** The jobs list endpoint returns:
+   ```json
+   [{ "id": "...", "status": "running", "base_model": "...", ... }]
+   ```
+   Filter by matching `job["id"] == JOB_ID`.
+   Terminal statuses: `succeeded`, `completed`, `failed`, `cancelled`.
+
 2. **Save on every poll:**
-   - `<OUTPUT_DIR>/<JOB_ID>-metrics.json` — full metrics timeseries (overwritten)
-   - `<OUTPUT_DIR>/<JOB_ID>-status.json` — latest job status (overwritten)
+   - `<OUTPUT_DIR>/<JOB_ID>-metrics.json` — the **unwrapped flat_metrics list** (overwritten)
+   - `<OUTPUT_DIR>/<JOB_ID>-status.json` — latest job status object (overwritten)
 
 3. **Rolling state and anomaly checks:**
 
@@ -118,9 +147,9 @@ The script must use **only Python stdlib** (`urllib.request`, `json`, `math`, `t
 
    **Only after confirming real data exists**, check anomalies:
 
-   - **CRITICAL: NaN/Inf** in loss, reward, kl, or grad_norm → immediate exit
+   - **CRITICAL: NaN/Inf** in loss, reward, or grad_norm → immediate exit. Note: NaN in `kl` with beta=0 is also critical.
    - **CRITICAL: High clipping** — `completions/clipped_ratio` above critical threshold → exit
-   - **WARNING: KL divergence** — last 5 polls all rising AND latest above warn threshold
+   - **WARNING: KL divergence** — **ONLY if beta > 0**: last 5 polls all rising AND latest above warn threshold. **If beta=0: skip absolute KL checks entirely.** Instead, only flag if KL is rising AND reward is stagnating simultaneously (possible reward hacking).
    - **WARNING: Weak signal** — `frac_reward_zero_std` above warn threshold for 5+ consecutive polls
    - **WARNING: Reward collapse** — `reward_std` below warn threshold for 5+ consecutive polls
    - **WARNING: Grad norm spike** — above 3x rolling median for 10+ consecutive polls (min 5 samples)
@@ -154,6 +183,15 @@ The script must use **only Python stdlib** (`urllib.request`, `json`, `math`, `t
        # save report and exit
    ```
 
+   **Terminal status handling**: In the main loop, BEFORE checking anomalies, check if the job status is terminal:
+   ```python
+   if job_status in ("succeeded", "completed", "failed", "cancelled"):
+       # Save final metrics, fetch epoch evals, write report, exit
+       write_report(job_status, None, None, metrics_history, job_status_obj)
+       sys.exit(0 if job_status in ("succeeded", "completed") else 1)
+   ```
+   This ensures the monitor stops promptly when a job is cancelled from the UI, instead of polling until timeout.
+
    **Important**: Add a comment at the top of the generated script citing the threshold source:
    ```python
    # Thresholds from: <SKILL_DIR>/reference/training-metrics-guide.md
@@ -166,12 +204,13 @@ The script must use **only Python stdlib** (`urllib.request`, `json`, `math`, `t
 5. **Write final report** to `<OUTPUT_DIR>/<JOB_ID>-monitor-report.json`:
    ```json
    {
-     "status": "succeeded | failed | anomaly_detected",
+     "status": "succeeded | failed | cancelled | anomaly_detected",
      "anomaly_type": "nan_metrics | kl_divergence | high_clipping | weak_signal | reward_collapse | grad_norm_spike | null",
      "anomaly_detail": "human-readable description",
-     "metrics_snapshot": ["last 3 raw metric objects"],
+     "metrics_snapshot": ["last 3 flat metric dicts"],
      "job_id": "<JOB_ID>",
      "steps_completed": "global_step / max_steps",
+     "epoch_progress": "current_epoch / total_epochs",
      "saved_files": {
        "metrics": "<OUTPUT_DIR>/<JOB_ID>-metrics.json",
        "status": "<OUTPUT_DIR>/<JOB_ID>-status.json",
@@ -180,7 +219,9 @@ The script must use **only Python stdlib** (`urllib.request`, `json`, `math`, `t
    }
    ```
 
-6. **Print a progress line** to stdout every 10 global_steps: `[monitor] step 30/200 — loss=0.42 kl=0.12 reward=1.3`
+6. **Print a progress line** to stdout every 10 global_steps:
+   `[monitor] step 30/680 (epoch 0.35/8.0) — reward=0.42 loss=1234 kl=0.12 grad_norm=5.2`
+   Include epoch progress (`epoch` and `max_steps` fields are in the metrics). On every poll, even without a 10-step delta, print a brief heartbeat: `[monitor] Poll #N: step X/Y (epoch E/8)`
 
 **Remember:** Replace ALL `<GATEWAY_URL>`, `<WORKFLOW_ID>`, `<JOB_ID>`, and `<OUTPUT_DIR>` placeholders with the actual values when writing the script.
 
