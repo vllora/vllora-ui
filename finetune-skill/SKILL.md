@@ -111,33 +111,26 @@ fi
 
 **If an existing project is found:**
 1. Read `finetune-project/config.json` to get the `workflow_id`
-2. Check checkpoint state — this is the most reliable way to know what's done:
+2. **Run `status` to see the full picture** — this is the single source of truth:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py status --project-dir finetune-project
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py status --workflow-id $WORKFLOW_ID
 ```
-3. If no checkpoint file exists, fall back to local artifact detection:
-   - `knowledge/` exists + has parts → extraction is done
-   - `topics.json` exists → topics is done
-   - `relations.json` exists → relations is done
-   - `training.jsonl` exists → data generation is done
-   - `grader.js` exists → grader is done
-   - `evaluations/` has eval results → eval is done
-   - `training-jobs/` has job files → training was started
-4. Verify gateway state — `python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py verify --workflow-id $WORKFLOW_ID`
-5. **Pick up from the first incomplete step** — do NOT re-run completed steps
-6. Append to `execution-log.md` (never overwrite) with a "Resumed" entry:
-   ```
-   ## Resumed — [timestamp]
-   - Previous run completed through Step N
-   - Gateway state: records=X, topics=Y, sources=Z, evaluator=YES/NO
-   - Picking up from Step M
-   ```
+This shows gateway data (records, topics, sources, grader), all job statuses, local checkpoint state, and recommends the next step. **Follow its recommendation.**
 
-**Before resuming, sync with the gateway** to pick up jobs created by the UI or other agents:
+3. **Sync jobs from gateway** to pick up jobs created by the UI or other agents:
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py sync-jobs --workflow-id $WORKFLOW_ID --output-dir finetune-project
 ```
-This creates local tracking files for any jobs you don't already have. It also updates status for existing jobs (e.g., a job you created that was later cancelled from the UI).
+This creates local tracking files for any jobs you don't already have and updates statuses for existing jobs (e.g., a job you created that was later cancelled from the UI).
+
+4. **Pick up from the recommended step** — do NOT re-run completed steps
+5. Append to `execution-log.md` (never overwrite) with a "Resumed" entry:
+   ```
+   ## Resumed — [timestamp]
+   - Status output: records=X, topics=Y, sources=Z, grader=YES/NO
+   - Jobs: [list active/cancelled/done]
+   - Picking up from Step M (per status recommendation)
+   ```
 
 **Common resume scenarios:**
 | State found | What happened | Action |

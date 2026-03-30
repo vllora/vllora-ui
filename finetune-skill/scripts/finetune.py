@@ -560,6 +560,121 @@ def cmd_verify(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def cmd_status(args: argparse.Namespace) -> None:
+    """Show full workflow status: gateway API data + local checkpoint + jobs.
+
+    Single command to understand where a workflow stands — what's been
+    uploaded, what jobs have run, and what the next step should be.
+    Uses only the gateway REST API (no direct DB access).
+    """
+    wf_id = args.workflow_id
+    project_dir = Path(args.project_dir)
+    base_url = args.base_url
+
+    print(f"=== Workflow Status: {wf_id[:12]}... ===\n")
+
+    # ── Gateway data (via API) ──
+    print("── Gateway Data ──")
+    try:
+        wf = _api("GET", f"{base_url}/finetune/workflows/{wf_id}")
+    except SystemExit:
+        print("  Workflow not found or gateway unreachable!")
+        sys.exit(1)
+
+    print(f"  Name: {wf.get('name', '?')}")
+    obj = wf.get("objective", "")
+    print(f"  Objective: {obj[:120]}{'...' if len(obj) > 120 else ''}")
+
+    records_count = wf.get("records_count", wf.get("record_count", 0))
+    has_grader = "YES" if wf.get("eval_script") else "NO"
+
+    # Fetch topics and knowledge sources via API
+    topics_count = "?"
+    sources_count = "?"
+    parts_count = "?"
+    try:
+        topics_resp = _api("GET", f"{base_url}/finetune/workflows/{wf_id}/topics")
+        topics_list = topics_resp if isinstance(topics_resp, list) else topics_resp.get("topics", [])
+        topics_count = len(topics_list)
+    except SystemExit:
+        pass
+    try:
+        sources_resp = _api("GET", f"{base_url}/finetune/workflows/{wf_id}/knowledge")
+        sources_list = sources_resp if isinstance(sources_resp, list) else sources_resp.get("sources", [])
+        sources_count = len(sources_list)
+        parts_count = sum(s.get("part_count", s.get("parts_count", 0)) for s in sources_list)
+    except SystemExit:
+        pass
+
+    print(f"  Records: {records_count}")
+    print(f"  Topics: {topics_count}")
+    print(f"  Sources: {sources_count} ({parts_count} parts)")
+    print(f"  Grader: {has_grader}")
+
+    # ── Finetune jobs (from gateway API) ──
+    print("\n── Finetune Jobs ──")
+    job_list = []
+    try:
+        jobs = _api("GET", f"{base_url}/finetune/workflows/{wf_id}/jobs")
+        job_list = jobs if isinstance(jobs, list) else jobs.get("jobs", [])
+        if not job_list:
+            print("  No finetune jobs")
+        for j in job_list:
+            model = j.get("base_model", "?")
+            status = j.get("status", "?")
+            jid = j.get("id", "?")[:12]
+            print(f"  {jid}...  {status}  ({model})")
+    except SystemExit:
+        print("  Could not fetch jobs from gateway")
+
+    # ── Local checkpoint ──
+    print("\n── Local Checkpoint ──")
+    checkpoint_file = project_dir / ".checkpoint.json"
+    cp_steps: dict = {}
+    if checkpoint_file.exists():
+        cp = json.loads(checkpoint_file.read_text())
+        cp_steps = cp.get("steps", {})
+        for step_name, step_data in cp_steps.items():
+            status = step_data.get("status", "?")
+            completed = step_data.get("completed_at", "")[:19]
+            print(f"  {step_name}: {status} ({completed})")
+    else:
+        print("  No checkpoint file found")
+
+    # ── Recommended next step ──
+    print("\n── Recommended Next Step ──")
+    def step_done(name: str) -> bool:
+        return cp_steps.get(name, {}).get("status") == "completed"
+
+    if not step_done("create-workflow"):
+        print("  → Start from Step 1: Create workflow")
+    elif not step_done("extract"):
+        print("  → Resume from Step 2: Extract documents")
+    elif not step_done("topics"):
+        print("  → Resume from Step 3: Build topics")
+    elif not step_done("generate-data"):
+        print("  → Resume from Step 4: Generate records")
+    elif not step_done("grader"):
+        print("  → Resume from Step 5: Write grader")
+    elif not step_done("validate"):
+        print("  → Resume from Step 5.5: Validate")
+    elif records_count == 0 or records_count == "?":
+        print("  → Data was generated but may not be uploaded. Run verify.")
+    else:
+        active_jobs = [j for j in job_list if j.get("status") in ("running", "pending", "queued")]
+        cancelled_jobs = [j for j in job_list if j.get("status") == "cancelled"]
+        done_jobs = [j for j in job_list if j.get("status") in ("completed", "succeeded")]
+
+        if active_jobs:
+            print(f"  → Jobs running — poll them (Step 7)")
+        elif done_jobs:
+            print(f"  → Analyze results (Step 8) and iterate if needed (Step 9)")
+        elif cancelled_jobs and not done_jobs:
+            print(f"  → All jobs cancelled. Start new eval + training (Step 7)")
+        else:
+            print(f"  → Ready for eval + training (Step 7)")
+
+
 def cmd_create_eval(args: argparse.Namespace) -> None:
     """Create an evaluation job and save metadata locally.
 
@@ -1165,6 +1280,11 @@ def main() -> None:
     p.add_argument("--workflow-id", required=True, help="Workflow ID")
     p.add_argument("--db", help=f"Database path (default: {DEFAULT_DB_PATH})")
 
+    # status
+    p = subparsers.add_parser("status", help="Show full workflow status: gateway data + checkpoint + jobs + next step")
+    p.add_argument("--workflow-id", required=True, help="Workflow ID")
+    p.add_argument("--project-dir", default="finetune-project", help="Project directory (default: finetune-project/)")
+
     # create-eval
     p = subparsers.add_parser("create-eval", help="Create evaluation job and save metadata locally")
     p.add_argument("--workflow-id", required=True, help="Workflow ID (used as dataset_id)")
@@ -1230,6 +1350,7 @@ def main() -> None:
         "upload-records": cmd_upload_records,
         "upload-grader": cmd_upload_grader,
         "verify": cmd_verify,
+        "status": cmd_status,
         "create-eval": cmd_create_eval,
         "poll-eval": cmd_poll_eval,
         "create-training": cmd_create_training,
