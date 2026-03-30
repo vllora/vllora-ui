@@ -334,12 +334,14 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --knowledge-dir finetune-project/knowledge \
   --system-prompt "You are an expert chess tutor..." \
   --output finetune-project/training.jsonl \
-  --records-per-topic 10 \
+  --records-per-topic 25 \
   --parallel 4 \
   --upload-incremental --workflow-id $WORKFLOW_ID
 ```
 
-The script loads topics + relations, finds leaf topics, gathers linked source chunks, and calls the LLM to generate grounded user prompts per topic. If some topics fail, use `--append` to retry without overwriting. Adapt `--records-per-topic`, `--model`, and `--temperature` to the project. Run multiple passes if needed (basic questions, then edge cases, then multi-turn). **Generate at least 100-200 total records.**
+The script makes **multiple LLM calls per topic** (one per prompt type: explain, scenario, compare/analyze, edge-case, application) for better diversity. Topics with more linked source parts automatically get more records (weighted distribution, clamped to `--min-per-topic` / `--max-per-topic`). Inner parallelism runs all prompt-type calls concurrently within each topic.
+
+If some topics fail, use `--append` to retry without overwriting. Adapt `--records-per-topic` (default 25), `--min-per-topic` (default 10), `--max-per-topic` (default 50) to the project. **Generate at least 200+ total records.**
 
 **Deduplicate** — parallel generation can produce near-duplicate prompts across overlapping topics:
 ```bash

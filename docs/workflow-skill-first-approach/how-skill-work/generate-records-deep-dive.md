@@ -14,7 +14,9 @@ A training record is a **prompt** — a system message + user message that the m
   ],
   "id": "forks-001",
   "topic": "forks",
-  "source_parts": ["chess-tactics-chapter-3-forks", "strategy-guide-section-5"]
+  "source_parts": ["chess-tactics-chapter-3-forks", "strategy-guide-section-5"],
+  "prompt_type": "explain",
+  "ground_truth": "A knight fork occurs when a knight attacks two or more pieces simultaneously..."
 }
 ```
 
@@ -22,180 +24,397 @@ A training record is a **prompt** — a system message + user message that the m
 
 **Note**: The system message is a **composed prompt** — it combines the root persona (`--system-prompt`), ancestor topic system_prompts, and the leaf topic's system_prompt. See [System Prompt Composition](#system-prompt-composition) below for details.
 
-## The Generation Flow
-
-```
-  topics.json ──────────────────────┐
-                                    │
-  relations.json ───────────────────┤
-                                    ▼
-  {doc-slug}/knowledge_parts.json   ┌─────────────────────────┐
-  (full content per doc)  ────►│  For each leaf topic:    │
-                               │  1. Find linked parts    │
-                               │  2. Read part content    │
-                               │  3. Build LLM prompt     │
-                               │  4. Call chat_completion  │──► LLM API
-                               │  5. Parse response       │    (gpt-4o-mini)
-                               │  6. Write records        │
-                               └────────────┬────────────┘
-                                            │
-                                            ▼
-                                    training.jsonl
-                                    (grows incrementally,
-                                     one topic at a time)
-```
-
-## Step-by-Step Process
-
-### 1. Load structured data
-
-The agent reads:
-- **`topics.json`** — to identify leaf topics (topics that aren't parents of any other topic)
-- **`relations.json`** — to find which parts are linked to each topic
-- **`{doc-slug}/knowledge_parts.json`** — to read the full content of linked parts
-
-```python
-# Identify leaf topics
-parent_ids = {t['parent_id'] for t in topics if t['parent_id']}
-leaves = [t for t in topics if t['id'] not in parent_ids]
-```
-
-### 2. For each leaf topic: gather source material
-
-```python
-# Find parts linked to this topic
-part_ids = [r['part_identifier'] for r in relations
-            if r['topic_identifier'] == topic['id']]
-
-# Read full content from the relevant {doc-slug}/knowledge_parts.json
-chunks = [parts[pid] for pid in part_ids if pid in parts]
-```
-
-The source material gives the LLM concrete content to generate grounded prompts from — not generic questions, but questions that reference specific concepts, examples, and details from the documents.
-
-### 3. Build the LLM prompt
-
-The agent constructs a meta-prompt that asks the LLM to generate training prompts:
-
-```
-Generate 10 diverse user prompts for fine-tuning.
-
-Topic: Forks
-Focus: Focus on fork tactics — knight forks, pawn forks, queen forks
-
-Source material:
-[chess-tactics-chapter-3-forks] Chapter 3: Fork Tactics
-The fork is a tactic where a single piece attacks two or more pieces...
 ---
-[strategy-guide-section-5] Common Fork Patterns
-Knight forks are the most common. The knight's unique movement...
 
-Each prompt should be a realistic question/request grounded in the source material.
-Vary: difficulty, tone, type (explain-why, compare, what-if, analyze, teach-me).
-Return JSON: {"prompts": ["prompt1", "prompt2", ...]}
+## Design Decisions (Research-Backed)
+
+Three design principles drive the generation strategy, each backed by research:
+
+### 1. Multi-Call Generation (5 prompt types per topic)
+
+**Why not one big call?** When you ask an LLM to generate N items in a single call, you get repetitive patterns, positional bias, and source material skew. Research confirms this:
+
+- **"Synthetic Eggs in Many Baskets"** (arXiv:2511.01490): Fine-tuning on synthetic data from diverse sources mitigates distribution collapse. Multi-source generation significantly outperforms single-source on distribution breadth.
+- **"Balancing Cost and Effectiveness"** (NeurIPS 2024, arXiv:2409.19759): Generating new questions (vs rephrasing) is the superior strategy at scale.
+- **"What Matters in LLM-generated Data"** (arXiv:2506.19262): Low-diversity synthetic data leads to model collapse over iterations.
+
+Each prompt type uses different instructions and temperatures:
+
+| Type | Weight | Temp | What it generates |
+|------|--------|------|-------------------|
+| `explain` | 25% | 0.7 | "What is...", "How does... work", "Describe..." |
+| `scenario` | 25% | 0.9 | "I'm dealing with...", "My situation is..." |
+| `compare_analyze` | 20% | 0.8 | "Compare X vs Y", "What are the pros and cons..." |
+| `edge_case` | 15% | 1.0 | "What happens if...", "What's the exception when..." |
+| `application` | 15% | 0.85 | "Walk me through...", "Help me figure out..." |
+
+**Key insight from "Hard Examples Are All You Need"** (arXiv:2508.14094): Hard examples yield **47% gains** vs 3-15% for easy ones. The `edge_case` (temp 1.0) and `compare_analyze` types are most likely to produce these high-value hard prompts.
+
+### 2. Source-Weighted Topic Distribution
+
+Not all topics have equal source material. A topic with 12 linked knowledge parts can support more diverse, harder questions than one with 2 parts.
+
+- **"No Prompt Left Behind"** (arXiv:2509.21880, ICLR 2026): Prompts where all K sampled responses score the same contribute nothing to GRPO training. Generating redundant prompts from thin source material increases zero-variance frequency.
+- **"Hard Examples"** (arXiv:2508.14094): Topics with more source material can support more diverse questions, creating more outcome variance — the signal GRPO needs to learn.
+
+Formula: `adjusted_count = round(records_per_topic * (parts_for_topic / avg_parts))`, clamped to `[min_per_topic, max_per_topic]`.
+
+### 3. Two-Level Parallelism
+
+- **Outer**: Multiple topics generated concurrently (`--parallel N`, up to 8)
+- **Inner**: All 5 prompt-type calls within a topic run concurrently (always on)
+
+This means a topic with 5 prompt types completes in ~1 LLM call time, not 5x.
+
+---
+
+## End-to-End Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        GENERATE RECORDS PIPELINE                            │
+│                     (generate_records.py — Step 4)                          │
+│                                                                             │
+│  3 key features:                                                            │
+│    1. Multi-call: 5 prompt types per topic (not 1 big call)                 │
+│    2. Source-weighted: topics with more parts get more records               │
+│    3. Two-level parallelism: topics concurrent + calls-per-topic concurrent  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+ PHASE 1: LOAD & PREPARE
+═══════════════════════════════════════════════════════════════════════════════
+
+  ┌──────────────┐   ┌──────────────────┐   ┌─────────────────────────────┐
+  │ topics.json  │   │ relations.json   │   │ knowledge/{slug}/           │
+  │              │   │                  │   │   knowledge_parts.json      │
+  │ [{id, name,  │   │ [{topic_id,      │   │                             │
+  │   parent_id, │   │   part_id}, ...] │   │ [{id, type, title, content, │
+  │   system_    │   │                  │   │   content_metadata}, ...]   │
+  │   prompt}]   │   │                  │   │                             │
+  └──────┬───────┘   └────────┬─────────┘   └──────────────┬──────────────┘
+         │                    │                             │
+         ▼                    │                             ▼
+  ┌──────────────────┐        │               ┌──────────────────────────┐
+  │ find_leaf_topics │        │               │ load_all_parts()         │
+  │                  │        │               │                          │
+  │ Filter: topics   │        │               │ Glob: */knowledge_parts  │
+  │ whose ID is NOT  │        │               │ Key by part ID           │
+  │ any topic's      │        │               │ → dict[str, dict]        │
+  │ parent_id        │        │               └─────────────┬────────────┘
+  └────────┬─────────┘        │                             │
+           │                  │                             │
+           ▼                  ▼                             ▼
+  ┌──────────────────────────────────────────────────────────────────────┐
+  │                   PREPARED DATA (in memory)                          │
+  │                                                                      │
+  │  leaves: [topic, ...]     (only leaf topics — no children)           │
+  │  topic_index: {id → topic}  (all topics for hierarchy lookup)        │
+  │  relations: [{topic_id, part_id}, ...]                               │
+  │  parts: {part_id → {id, type, title, content, content_metadata}}     │
+  └──────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+  ┌──────────────────────────────────────────────────────────────────────┐
+  │              SOURCE-WEIGHTED RECORD DISTRIBUTION                     │
+  │                                                                      │
+  │  compute_topic_record_counts():                                      │
+  │    For each leaf, count linked parts via relations.json               │
+  │    weight = parts_for_topic / avg_parts_across_topics                 │
+  │    adjusted = round(records_per_topic * weight)                       │
+  │    clamped to [--min-per-topic, --max-per-topic]                      │
+  │                                                                      │
+  │  Example (--records-per-topic 25, avg 6 parts):                      │
+  │    Topic A: 12 parts → weight 2.0 → 50 records (capped at max)       │
+  │    Topic B:  3 parts → weight 0.5 → 13 records                       │
+  │    Topic C:  6 parts → weight 1.0 → 25 records                       │
+  │    Topic D:  2 parts → weight 0.3 → 10 records (floored at min)      │
+  └──────────────────────────────────────────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════
+ PHASE 2: PER-TOPIC GENERATION (outer parallel: up to 8 topics concurrently)
+═══════════════════════════════════════════════════════════════════════════════
+
+  For EACH leaf topic (with its weighted record count):
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │                                                                         │
+  │  ┌─ Step A: Gather Source Material ──────────────────────────────────┐  │
+  │  │                                                                   │  │
+  │  │  relations.json ──filter by topic_id──► part_ids: [p-01, p-03]   │  │
+  │  │                                                                   │  │
+  │  │  parts[p-01] ──► {id, type, title, content, content_metadata}    │  │
+  │  │  parts[p-03] ──► {id, type, title, content, content_metadata}    │  │
+  │  │                                                                   │  │
+  │  │  Build chunk_text (max 20 chunks, separated by ---):              │  │
+  │  │                                                                   │  │
+  │  │    Text part:   "[p-01] Section Title\nContent text here..."      │  │
+  │  │    Table part:  "[p-03] Table Title\n[TABLE: caption — N rows     │  │
+  │  │                  × M cols — columns: col1, col2]\nMarkdown table" │  │
+  │  │                                                                   │  │
+  │  └───────────────────────────────────────────────────────────────────┘  │
+  │                              │                                          │
+  │                              ▼                                          │
+  │  ┌─ Step B: Compose Hierarchical System Prompt ─────────────────────┐  │
+  │  │                                                                   │  │
+  │  │  get_ancestor_chain(leaf, topic_index):                           │  │
+  │  │    Walk parent_id up to root → [root, ..., parent]                │  │
+  │  │                                                                   │  │
+  │  │  compose_system_prompt(root_prompt, ancestors, leaf):             │  │
+  │  │    ┌─────────────────────────────────────────────┐                │  │
+  │  │    │  Segment 1: --system-prompt CLI arg          │ ← root        │  │
+  │  │    │  "You are an expert chess tutor..."           │   persona     │  │
+  │  │    │                                               │               │  │
+  │  │    │  Segment 2: ancestor[0].system_prompt         │ ← mid-level  │  │
+  │  │    │  "Specialize in: tactical patterns"           │   focus       │  │
+  │  │    │                                               │               │  │
+  │  │    │  Segment 3: leaf.system_prompt                │ ← leaf        │  │
+  │  │    │  "Focus on: knight fork tactics"              │   focus       │  │
+  │  │    └─────────────────────────────────────────────┘                │  │
+  │  │    Joined with \n\n → composed_prompt                             │  │
+  │  │                                                                   │  │
+  │  │  NOTE: This is PER-TOPIC (same for all records of this topic).    │  │
+  │  │  Different leaf topics get different composed prompts.             │  │
+  │  └───────────────────────────────────────────────────────────────────┘  │
+  │                              │                                          │
+  │                              ▼                                          │
+  │  ┌─ Step C: Distribute Across Prompt Types ─────────────────────────┐  │
+  │  │                                                                   │  │
+  │  │  distribute_across_prompt_types(total=25):                        │  │
+  │  │                                                                   │  │
+  │  │    ┌──────────────┬────────┬──────┬───────────────────────────┐   │  │
+  │  │    │ Type         │ Weight │ Temp │ Count (for 25 total)      │   │  │
+  │  │    ├──────────────┼────────┼──────┼───────────────────────────┤   │  │
+  │  │    │ explain      │  25%   │ 0.7  │ 7  (What is..., How...)  │   │  │
+  │  │    │ scenario     │  25%   │ 0.9  │ 6  (I'm dealing with...) │   │  │
+  │  │    │ compare      │  20%   │ 0.8  │ 5  (Compare X vs Y...)   │   │  │
+  │  │    │ edge_case    │  15%   │ 1.0  │ 4  (What happens if...)  │   │  │
+  │  │    │ application  │  15%   │ 0.85 │ 3  (Walk me through...)  │   │  │
+  │  │    └──────────────┴────────┴──────┴───────────────────────────┘   │  │
+  │  │                                                      Total: 25   │  │
+  │  │                                                                   │  │
+  │  │  For small totals (<5): collapses to fewer types                  │  │
+  │  └───────────────────────────────────────────────────────────────────┘  │
+  │                              │                                          │
+  │                              ▼                                          │
+  │  ┌─ Step D: Parallel LLM Calls (inner parallelism) ────────────────┐  │
+  │  │                                                                   │  │
+  │  │  ThreadPoolExecutor(max_workers=5) — all types run concurrently:  │  │
+  │  │                                                                   │  │
+  │  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐                 │  │
+  │  │  │ Call 1:      │ │ Call 2:      │ │ Call 3:      │ ...           │  │
+  │  │  │ explain (7)  │ │ scenario (6) │ │ compare (5)  │               │  │
+  │  │  │ temp=0.7     │ │ temp=0.9     │ │ temp=0.8     │               │  │
+  │  │  └──────┬───────┘ └──────┬───────┘ └──────┬───────┘               │  │
+  │  │         │                │                │                        │  │
+  │  │         ▼                ▼                ▼                        │  │
+  │  │  ┌──────────┐    ┌──────────┐    ┌──────────┐                     │  │
+  │  │  │ 7 items  │    │ 6 items  │    │ 5 items  │   ...               │  │
+  │  │  └──────────┘    └──────────┘    └──────────┘                     │  │
+  │  │         │                │                │                        │  │
+  │  │         └────────────────┼────────────────┘                        │  │
+  │  │                          ▼                                         │  │
+  │  │                   Merge all items                                  │  │
+  │  │                                                                   │  │
+  │  │  Each call gets the SAME source material and topic context,        │  │
+  │  │  but different instructions and temperatures → diverse prompts.    │  │
+  │  └───────────────────────────────────────────────────────────────────┘  │
+  │                              │                                          │
+  │                              ▼                                          │
+  │  ┌─ Step E: Build Training Records ─────────────────────────────────┐  │
+  │  │                                                                   │  │
+  │  │  For each item across all prompt-type responses:                   │  │
+  │  │                                                                   │  │
+  │  │  ┌─────────────────────────────────────────────────────────────┐  │  │
+  │  │  │  record = {                                                  │  │  │
+  │  │  │    "messages": [                                             │  │  │
+  │  │  │      {"role": "system", "content": composed_prompt},         │  │  │
+  │  │  │      {"role": "user",   "content": item["prompt"]}           │  │  │
+  │  │  │    ],                                                        │  │  │
+  │  │  │    "id": "{topic_id}-{index:03d}",                           │  │  │
+  │  │  │    "topic": topic_id,                                        │  │  │
+  │  │  │    "source_parts": [part_ids from relations],                │  │  │
+  │  │  │    "prompt_type": "explain" | "scenario" | ... ,             │  │  │
+  │  │  │    "ground_truth": item["ground_truth"]                      │  │  │
+  │  │  │  }                                                           │  │  │
+  │  │  └─────────────────────────────────────────────────────────────┘  │  │
+  │  │                                                                   │  │
+  │  └───────────────────────────────────────────────────────────────────┘  │
+  │                              │                                          │
+  │                              ▼                                          │
+  │  ┌─ Step F: Flush (write to file + optional incremental upload) ────┐  │
+  │  │                                                                   │  │
+  │  │  Append records to training.jsonl (thread-safe via write_lock)    │  │
+  │  │                                                                   │  │
+  │  │  If --upload-incremental:                                         │  │
+  │  │    Write batch to temp .jsonl → call finetune.py upload-records   │  │
+  │  │    → records appear in UI immediately                             │  │
+  │  │                                                                   │  │
+  │  └───────────────────────────────────────────────────────────────────┘  │
+  │                                                                         │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  Repeat for ALL leaf topics (outer ThreadPoolExecutor with --parallel N workers)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+ PHASE 3: POST-GENERATION
+═══════════════════════════════════════════════════════════════════════════════
+
+  ┌──────────────────┐     ┌──────────────────────┐     ┌─────────────────┐
+  │ training.jsonl   │────►│ deduplicate_records.py│────►│ training.jsonl  │
+  │ (raw output)     │     │ --threshold 0.85      │     │ (deduplicated)  │
+  └──────────────────┘     └──────────────────────┘     └────────┬────────┘
+                                                                  │
+                           ┌──────────────────────┐               │
+                           │ validate_dataset.py   │◄──────────────┘
+                           │                       │
+                           │ Checks:               │
+                           │ - Valid JSON           │
+                           │ - Has messages + id    │
+                           │ - Has user message     │
+                           │ - No assistant msgs    │
+                           │ - No duplicate IDs     │
+                           │ - >= 50 records total  │
+                           └───────────┬───────────┘
+                                       │
+                                       ▼
+                           ┌──────────────────────┐
+                           │ finetune.py           │
+                           │ upload-records        │
+                           │ (if not already       │
+                           │  uploaded incremental) │
+                           └───────────┬───────────┘
+                                       │
+                                       ▼
+                           ┌──────────────────────┐
+                           │ Gateway API           │
+                           │ POST /finetune/       │
+                           │   workflows/{id}/     │
+                           │   records             │
+                           │                       │
+                           │ Transforms:           │
+                           │ messages → data.input │
+                           │ source_parts → metadata│
+                           │ output → {} (empty)   │
+                           └──────────────────────┘
 ```
 
-### 4. Call the LLM via `generate_records.py`
+---
 
-The primary method is `scripts/generate_records.py`, which automates the full generation loop:
+## Data Flow: What Goes Where
 
-```bash
-uv run scripts/generate_records.py \
-  --topics finetune-project/topics.json \
-  --relations finetune-project/relations.json \
-  --knowledge-dir finetune-project/knowledge \
-  --system-prompt "You are an expert chess tutor..." \
-  --output finetune-project/training.jsonl \
-  --records-per-topic 10
+```
+                     ┌─────────────────────────────────────────────┐
+                     │           PER-TOPIC (shared)                │
+                     │                                             │
+                     │  composed_prompt = root + ancestors + leaf  │
+                     │  part_ids = [from relations.json]           │
+                     │  chunk_text = [content from parts]          │
+                     │                                             │
+                     │  These are the SAME for all records         │
+                     │  within a single leaf topic.                │
+                     └─────────────────┬───────────────────────────┘
+                                       │
+                     ┌─────────────────┴───────────────────────────┐
+                     │           PER-RECORD (unique)               │
+                     │                                             │
+                     │  prompt_text = LLM-generated user question  │
+                     │  prompt_type = which call generated it      │
+                     │  ground_truth = LLM-generated source excerpt│
+                     │  id = "{topic_id}-{index:03d}"              │
+                     │                                             │
+                     │  Each record gets a unique prompt and       │
+                     │  ground_truth from the LLM response.        │
+                     └─────────────────────────────────────────────┘
 ```
 
-The script:
-1. Loads topics, relations, and all knowledge parts from per-document `knowledge_parts.json` files
-2. Finds leaf topics (topics that aren't parents of any other topic) and builds a topic index via `build_topic_index()`
-3. For each leaf topic: walks up the hierarchy via `get_ancestor_chain()` to collect ancestors, then calls `compose_system_prompt()` to build a hierarchical system prompt from the root persona + ancestor system_prompts + leaf system_prompt
-4. Gathers linked source chunks via `relations.json`, calls `chat_completion.py` to generate grounded user prompts, writes records incrementally with the composed system prompt
-5. Reports progress per topic and summarizes failures at the end
+### What feeds the LLM vs what goes into the record
 
-**Customizing generation**: Adapt `--records-per-topic`, `--model`, and `--temperature` to the project.
-
-If some topics fail, use `--append` to retry only the missing ones without overwriting existing records:
-```bash
-uv run scripts/generate_records.py \
-  --topics finetune-project/topics.json \
-  --relations finetune-project/relations.json \
-  --knowledge-dir finetune-project/knowledge \
-  --system-prompt "You are an expert chess tutor..." \
-  --output finetune-project/training.jsonl \
-  --records-per-topic 10 \
-  --append
+```
+  ┌─────────────────────────────────────────────────────────────┐
+  │                    LLM INPUT (meta-prompt)                   │
+  │                                                              │
+  │  - Prompt-type instruction ─┐                                │
+  │    (explain / scenario /    │                                │
+  │     compare / edge / apply) │                                │
+  │  - topic.name               │ Context for generating         │
+  │  - topic.system_prompt      │ diverse, grounded prompts      │
+  │  - chunk_text (source       │                                │
+  │    material from parts)    ─┘                                │
+  │                                                              │
+  │  NOT included in LLM input:                                  │
+  │  - The composed_prompt (that goes into the record directly)  │
+  │  - The --system-prompt CLI arg (composed separately)         │
+  └──────────────────────────────────────────────────────────────┘
+                              │
+                              ▼ LLM generates
+  ┌──────────────────────────────────────────────────────────────┐
+  │                    LLM OUTPUT                                 │
+  │                                                               │
+  │  {"items": [                                                  │
+  │    {"prompt": "...", "ground_truth": "..."},                  │
+  │    {"prompt": "...", "ground_truth": "..."},                  │
+  │    ...                                                        │
+  │  ]}                                                           │
+  └──────────────────────────────────────────────────────────────┘
+                              │
+                              ▼ Script assembles
+  ┌──────────────────────────────────────────────────────────────┐
+  │                    TRAINING RECORD                             │
+  │                                                               │
+  │  {                                                            │
+  │    "messages": [                                              │
+  │      {"role": "system", "content": composed_prompt},          │
+  │             ↑ from compose_system_prompt() — NOT from LLM     │
+  │      {"role": "user", "content": item["prompt"]}              │
+  │             ↑ from LLM output                                 │
+  │    ],                                                         │
+  │    "id": "{topic_id}-{index:03d}",                            │
+  │    "topic": topic_id,                                         │
+  │    "source_parts": part_ids,  ← from relations (per-topic)   │
+  │    "prompt_type": "explain",  ← which call generated it      │
+  │    "ground_truth": item["ground_truth"]  ← from LLM output   │
+  │  }                                                            │
+  └──────────────────────────────────────────────────────────────┘
 ```
 
-**Under the hood**: `generate_records.py` calls `scripts/chat_completion.py` for each LLM request. `chat_completion.py` reads a JSON request from stdin, calls the OpenAI API, and writes the response to stdout. It validates JSON output when `response_format` is `json_object`.
+### Separation of concerns: system prompt vs source context
 
-**Time per call**: 3-10 seconds depending on the model and prompt length.
+```
+  ┌─────────────────────────────────────────────────────────┐
+  │  System Prompt (messages[0])                             │
+  │  ──────────────────────────                              │
+  │  PURPOSE: Define the model's ROLE/PERSONA                │
+  │  SCOPE:   Per-topic (hierarchical composition)           │
+  │  SOURCE:  --system-prompt CLI arg + topic hierarchy      │
+  │                                                          │
+  │  "You are an expert chess tutor...\n\n                   │
+  │   Specialize in: tactical patterns...\n\n                │
+  │   Focus on: knight fork tactics..."                      │
+  │                                                          │
+  │  Does NOT contain source material / knowledge parts.     │
+  │  The system prompt is about WHO the model is.            │
+  └─────────────────────────────────────────────────────────┘
 
-### 5. Parse and write records
-
-The LLM returns a JSON object with a `prompts` array. The agent wraps each prompt into a full training record:
-
-```python
-# Compose hierarchical system prompt for this leaf topic
-ancestors = get_ancestor_chain(topic, topic_index)
-composed_prompt = compose_system_prompt(root_system_prompt, ancestors, topic)
-
-for prompt_text in llm_response['prompts']:
-    record = {
-        'messages': [
-            {'role': 'system', 'content': composed_prompt},  # root + ancestors + leaf
-            {'role': 'user', 'content': prompt_text}
-        ],
-        'id': f'{topic_id}-{counter:03d}',
-        'topic': topic_id,
-        'source_parts': part_ids  # traceability
-    }
-    # Append to training.jsonl
+  ┌─────────────────────────────────────────────────────────┐
+  │  Source Context (in the LLM meta-prompt, NOT in record)  │
+  │  ──────────────────────────────────────────              │
+  │  PURPOSE: Give LLM grounding material to write prompts   │
+  │  SCOPE:   Per-topic (same chunks for all records)        │
+  │  SOURCE:  knowledge_parts.json via relations.json        │
+  │                                                          │
+  │  The LLM reads the source material and generates         │
+  │  questions ABOUT it. The source content itself does       │
+  │  NOT appear in the final training record.                 │
+  │                                                          │
+  │  Instead, traceability is via:                            │
+  │  - source_parts: [part IDs] — which parts were used      │
+  │  - ground_truth: concise excerpt — what the answer is     │
+  └─────────────────────────────────────────────────────────┘
 ```
 
-Records are written incrementally — `training.jsonl` grows as each topic is processed.
-
-## Generation Strategies
-
-### Single pass (basic)
-
-One LLM call per leaf topic, generating 10 prompts each.
-- **Pros**: Fast, simple
-- **Cons**: May miss edge cases, limited diversity
-
-### Multi-pass
-
-Multiple rounds with different prompt styles:
-1. **Pass 1**: Basic questions (explain, describe, define)
-2. **Pass 2**: Edge cases (what-if, unusual scenarios, error conditions)
-3. **Pass 3**: Multi-turn (follow-up questions building on prior context)
-
-### Variant generation (Step 4.5)
-
-If some topics are under-represented after the initial pass:
-1. Identify under-represented topics (< 50% of average record count per topic)
-2. Select seed records from those topics
-3. Call `chat_completion.py` asking the LLM to create 3-5 variants per seed — same scenario, different specifics/difficulty/tone
-4. Each variant gets `source_record_id` pointing to the original seed record for lineage tracking
-5. Keep system prompt and prior turns unchanged — vary only the final user message
-6. Append variants to `training.jsonl`
-
-**Checking for under-representation**:
-```bash
-python3 -c "
-import json, collections
-c = collections.Counter()
-for line in open('finetune-project/training.jsonl'):
-    c[json.loads(line).get('topic','?')] += 1
-avg = sum(c.values()) / len(c)
-for t, n in c.most_common():
-    flag = ' ← needs variants' if n < avg * 0.5 else ''
-    print(f'  {t}: {n}{flag}')
-"
-```
+---
 
 ## System Prompt Composition
 
@@ -230,6 +449,8 @@ Records for different leaf topics get **different composed prompts**, even thoug
 | `id` | Yes | `"forks-001"` | Unique ID, appears in eval results |
 | `topic` | No | `"forks"` | Links record to topic for coverage analysis |
 | `source_parts` | No | `["chess-tactics-ch3"]` | Links record to source material for traceability |
+| `prompt_type` | No | `"explain"` | Which prompt type generated this record |
+| `ground_truth` | No | `"A knight fork occurs..."` | Source excerpt for grader verification |
 
 ### Message roles in training records
 
@@ -239,6 +460,95 @@ Records for different leaf topics get **different composed prompts**, even thoug
 | `user` | Always (the prompt to practice on) | At least 1 |
 
 **Important**: RFT records contain only `system` + `user` messages — no `assistant` messages. `validate_dataset.py` will flag assistant messages as errors. For multi-turn context, embed prior conversation turns directly in the user message.
+
+---
+
+## CLI Usage
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
+  --topics finetune-project/topics.json \
+  --relations finetune-project/relations.json \
+  --knowledge-dir finetune-project/knowledge \
+  --system-prompt "You are an expert chess tutor..." \
+  --output finetune-project/training.jsonl \
+  --records-per-topic 25 \
+  --min-per-topic 10 \
+  --max-per-topic 50 \
+  --parallel 4 \
+  --upload-incremental --workflow-id $WORKFLOW_ID
+```
+
+| Arg | Default | Purpose |
+|-----|---------|---------|
+| `--records-per-topic` | 25 | Target records per leaf topic (actual varies by source weighting) |
+| `--min-per-topic` | 10 | Floor — even sparse topics get at least this many |
+| `--max-per-topic` | 50 | Cap — prevents one topic from dominating |
+| `--parallel` | 1 | Outer parallelism: topics concurrently (max 8). Inner parallelism always on. |
+| `--model` | gpt-4o-mini | LLM model for generation |
+| `--append` | false | Append to existing file instead of overwriting |
+| `--no-ground-truth` | false | Skip generating ground_truth excerpts |
+| `--upload-incremental` | false | Upload each topic's records to gateway immediately |
+
+---
+
+## Gateway Upload: Skill Format → API Format
+
+Records are uploaded via `finetune.py upload-records`, which transforms:
+
+```
+ SKILL FORMAT (training.jsonl)              GATEWAY API FORMAT (POST body)
+ ─────────────────────────────              ────────────────────────────────
+ {                                          {
+   "messages": [                              "records": [{
+     {"role": "system", ...},                   "id": "forks-001",
+     {"role": "user", ...}                      "data": {
+   ],                                             "input": {
+   "id": "forks-001",           ──────►             "messages": [
+   "topic": "forks",                                  {"role": "system", ...},
+   "source_parts": ["ch3"],                           {"role": "user", ...}
+   "prompt_type": "explain",                        ]
+   "ground_truth": "..."                          },
+ }                                                "output": {}        ← empty (RFT)
+                                                },
+                                                "topic": "forks",
+                                                "metadata": "{\"source_parts\":[\"ch3\"],
+                                                              \"prompt_type\":\"explain\",
+                                                              \"ground_truth\":\"...\"}",
+                                                "is_generated": true
+                                              }]
+                                            }
+```
+
+Key transformations:
+- `messages` moves into `data.input.messages`
+- `source_parts`, `prompt_type`, and `ground_truth` move into stringified `metadata`
+- `output` is set to empty object (RFT — model generates its own output)
+- Records are batched 200 per API call to avoid large payloads
+
+---
+
+## Generation Strategies
+
+### Default: Multi-call with prompt types
+
+The script makes 5 parallel LLM calls per topic, each with different instructions and temperature. This is the default behavior — no flags needed.
+
+### Variant generation (Step 4.5)
+
+If some topics are under-represented after the initial pass:
+1. Identify under-represented topics (< 50% of average record count per topic)
+2. Select seed records from those topics
+3. Call `chat_completion.py` asking the LLM to create 3-5 variants per seed — same scenario, different specifics/difficulty/tone
+4. Each variant gets `source_record_id` pointing to the original seed record for lineage tracking
+5. Keep system prompt and prior turns unchanged — vary only the final user message
+6. Append variants to `training.jsonl`
+
+### Post-eval reweighting (future improvement)
+
+After an eval iteration, measure per-prompt-type scores. Shift weight toward types where the base model scores lowest — these "hard examples" yield 47% gains vs 3-15% for easy ones (arXiv:2508.14094).
+
+---
 
 ## Validation (Step 5.5)
 
@@ -250,46 +560,12 @@ Before upload, `validate_dataset.py` checks every record:
 | Has `messages` array | Missing required field |
 | Has `id` | Missing required field |
 | Has at least one `user` message | System-only records |
-| User message ≥ 10 chars | Empty or trivially short prompts |
+| User message >= 10 chars | Empty or trivially short prompts |
 | No assistant-only messages | Records that don't follow RFT format |
 | No duplicate IDs | Collision from multiple generation passes |
-| Record count ≥ 50 | Too few records for meaningful training |
+| Record count >= 50 | Too few records for meaningful training |
 
-## How Records Flow to the Gateway
-
-Records are uploaded **immediately after generation** (not at the end) via `finetune.py`:
-
-```bash
-uv run scripts/finetune.py upload-records --workflow-id $WORKFLOW_ID --file training.jsonl
-```
-
-The script transforms each record from skill format to gateway format automatically:
-
-```python
-# training.jsonl (skill format — what the agent writes)
-{"messages": [...], "id": "forks-001", "topic": "forks", "source_parts": ["chess-tactics-ch3"]}
-
-# ↓ finetune.py transforms to gateway format ↓
-
-# POST /finetune/workflows/{id}/records body
-{
-  "records": [{
-    "id": "forks-001",
-    "data": {"input": {"messages": [...]}, "output": {}},
-    "topic": "forks",
-    "metadata": "{\"source_parts\": [\"chess-tactics-ch3\"]}",
-    "is_generated": true
-  }]
-}
-```
-
-Key transformations:
-- `messages` moves into `data.input.messages`
-- `source_parts` moves into stringified `metadata`
-- `output` is set to empty object (RFT — model generates its own output)
-- Records are batched 200 per API call to avoid large payloads
-
-The gateway DB stores the **wrapped format** (`data.input.messages`). The UI handles both formats via `extractMessages()` — checking for `data.input.messages` (gateway) and `data.messages` (OpenAI).
+---
 
 ## How to Monitor Progress
 
@@ -309,6 +585,16 @@ for t, n in c.most_common():
     print(f'  {t}: {n}')
 print(f'Total: {sum(c.values())}')
 " 2>/dev/null
+
+# Records per prompt type
+python3 -c "
+import json, collections
+c = collections.Counter()
+for line in open('finetune-project/training.jsonl'):
+    c[json.loads(line).get('prompt_type','unknown')] += 1
+for t, n in c.most_common():
+    print(f'  {t}: {n}')
+" 2>/dev/null
 ```
 
 ### After upload (gateway DB)
@@ -322,10 +608,9 @@ sqlite3 $DB "SELECT COUNT(*) FROM workflow_records WHERE workflow_id='$WF_ID';"
 
 # Records per topic
 sqlite3 $DB "SELECT topic, COUNT(*) FROM workflow_records WHERE workflow_id='$WF_ID' GROUP BY topic;"
-
-# Sample record format
-sqlite3 $DB "SELECT substr(data,1,200) FROM workflow_records WHERE workflow_id='$WF_ID' LIMIT 1;"
 ```
+
+---
 
 ## Common Issues
 
@@ -334,8 +619,8 @@ sqlite3 $DB "SELECT substr(data,1,200) FROM workflow_records WHERE workflow_id='
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | 0 records | LLM API key missing or invalid | Check if `OPENAI_API_KEY` is set |
-| 0 records | `chat_completion.py` not found | Check `scripts/chat_completion.py` exists (or `.claude/skills/vllora-finetune/scripts/` if installed) |
-| <10 records per topic | LLM returned fewer prompts than requested | Re-run with explicit count in prompt |
+| 0 records | `chat_completion.py` not found | Check `scripts/chat_completion.py` exists |
+| <10 records per topic | Some prompt-type calls failed | Check stderr for per-type error messages |
 | All records in one topic | Agent only processed one leaf topic | Check if it looped over all leaves |
 
 ### Records not grounded in source material
@@ -346,29 +631,25 @@ sqlite3 $DB "SELECT substr(data,1,200) FROM workflow_records WHERE workflow_id='
 
 ### Duplicate or repetitive prompts
 
-- **Cause**: Low temperature, or same prompt template reused without variation
-- **Fix**: Use temperature ≥ 0.7, vary prompt types (explain-why, compare, what-if, analyze, teach-me)
-
-### Records have assistant messages (wrong format)
-
-- **Cause**: The LLM generated full conversations instead of prompts only
-- **Check**: `python3 -c "import json; [print(l.strip()[:100]) for l in open('training.jsonl') if '\"assistant\"' in l]"`
-- **Fix**: Validation script catches this — remove assistant messages, keep only system + user
+- **Cause**: Even with multi-call, overlapping prompt types can produce similar prompts
+- **Fix**: Run `deduplicate_records.py --threshold 0.85` after generation
 
 ### Topic distribution is heavily skewed
 
 - **Symptom**: One topic has 50 records, another has 3
-- **Fix**: Run Step 4.5 (variant generation) for under-represented topics, or add another generation pass targeting the weak topics
-- **Check**:
-```bash
-python3 -c "
-import json, collections
-c = collections.Counter()
-for line in open('finetune-project/training.jsonl'):
-    c[json.loads(line).get('topic','?')] += 1
-avg = sum(c.values()) / len(c)
-for t, n in c.most_common():
-    flag = ' ⚠️' if n < avg * 0.5 else ''
-    print(f'  {t}: {n}{flag}')
-"
-```
+- **Check**: The script prints per-topic planned counts at startup. If weighting looks wrong, adjust `--min-per-topic` / `--max-per-topic`
+
+---
+
+## Research References
+
+| Paper | arXiv | Relevance |
+|-------|-------|-----------|
+| Hard Examples Are All You Need | 2508.14094 | Hard prompts yield 47% gains; edge_case type targets these |
+| No Prompt Left Behind | 2509.21880 | Zero-variance prompts waste training; sparse topics need fewer records |
+| Synthetic Eggs in Many Baskets | 2511.01490 | Multi-source generation prevents distribution collapse |
+| Balancing Cost and Effectiveness | 2409.19759 | New question generation beats rephrasing at scale |
+| What Matters in LLM-generated Data | 2506.19262 | Low-diversity synthetic data causes model collapse |
+| DeepSeek-R1 | 2501.12948 | GRPO from scratch, K=16 sampling benefits from prompt diversity |
+| DAPO | 2503.14476 | Dynamic sampling skips zero-variance; type diversity helps |
+| Tricks or Traps | 2508.08221 | Dataset composition bias causes conflicting GRPO results |

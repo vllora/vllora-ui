@@ -448,12 +448,12 @@ Skills extend Claude's capabilities. Auto-invoked when relevant, or invoke manua
 
 | Skill | Auto-invoke | When to use |
 |-------|-------------|------------|
-| `/finetune-context` | Yes | Load all feature docs — use when asked about the finetune feature |
-| `/finetune-fix <bug>` | Manual | Fix a bug (loads docs + cross-repo sources + state management pattern) |
-| `/finetune-develop <feature>` | Manual | Implement a feature (loads docs + cross-repo sources) |
-| `/finetune-arch` | Yes | Load full-stack architecture from all 6 layers across 3 repos |
-| `/finetune-ui <task>` | Manual | Design or enhance UI (loads UI components, @distri/react renderers, UX docs) |
-| `/finetune-e2e <test>` | Manual | E2E test with Playwright MCP (browser automation, screenshots, verification) |
+| `/finetune-skill-context` | Yes | Load finetune skill pipeline context (SKILL.md, reference docs, scripts) |
+| `/finetune-fix <bug>` | Manual | Fix a bug (loads skill + UI readiness gate + state management) |
+| `/finetune-develop <feature>` | Manual | Implement a feature (loads skill + agents + UI + API reference) |
+| `/finetune-arch` | Yes | Load architecture across skill, agents, UI, and gateway |
+| `/finetune-ui <task>` | Manual | Design or enhance UI (loads redesign docs, readiness gate, components) |
+| `/finetune-e2e <test>` | Manual | E2E test with browser automation (screenshots, verification) |
 | `/skill-package-context` | Yes | Load skill package docs — use when asked about skill packaging, SKILL.md, JSONL format |
 
 ## Sub-Agents
