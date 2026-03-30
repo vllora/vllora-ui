@@ -55,13 +55,20 @@ def fetch_epoch_evals(base_url: str, workflow_id: str, job_id: str) -> dict:
     return resp.json()
 
 
-def analyze_metrics(data: dict) -> dict:
+def _parse_metrics_list(data) -> list[dict]:
+    """Handle both API formats: {"metrics": [...]} or bare list."""
+    if isinstance(data, list):
+        return data
+    return data.get("metrics", [])
+
+
+def analyze_metrics(data) -> dict:
     """Analyze metrics timeseries and return structured diagnostics."""
-    metrics_list = data.get("metrics", [])
+    metrics_list = _parse_metrics_list(data)
     if not metrics_list:
         return {"error": "No metrics data available"}
 
-    steps = [m["metrics"] for m in metrics_list]
+    steps = [m["metrics"] if "metrics" in m else m for m in metrics_list]
     first = steps[0]
     last = steps[-1]
 
@@ -86,26 +93,33 @@ def analyze_metrics(data: dict) -> dict:
             "message": f"Reward declined {r_start:.3f} → {r_end:.3f} (delta={r_delta:+.3f})",
         })
 
-    # KL divergence
-    # Thresholds: healthy <1.0, warn >5.0, critical >10.0
-    # Ref: training-metrics-guide.md §KL; DeepSeekMath (β=0.04); DAPO/Dr.GRPO use β=0
+    # KL divergence — GRPO-aware: KL alone is NOT diagnostic with beta=0
+    # Ref: training-metrics-guide.md §KL; DAPO/TRL default beta=0 (no KL penalty)
+    # High KL + improving reward = NORMAL for GRPO. Only alert if KL is high AND reward isn't improving.
     kl_values = [s.get("kl", 0) for s in steps]
     kl_max = max(kl_values)
     kl_final = last.get("kl", 0)
-    if kl_max > 10.0:
+    if kl_max > 100.0 and reward_trend != "improving":
         alerts.append({
             "severity": "CRITICAL",
             "metric": "kl",
-            "message": f"KL divergence peaked at {kl_max:.2f} — significant drift, risk of reward hacking or mode collapse",
+            "message": f"KL divergence peaked at {kl_max:.2f} with {reward_trend} reward — catastrophic drift without improvement",
         })
-    elif kl_max > 5.0:
+    elif kl_max > 10.0 and reward_trend != "improving":
         alerts.append({
             "severity": "WARNING",
             "metric": "kl",
-            "message": f"KL divergence peaked at {kl_max:.2f} — policy drifting from base model, monitor output quality",
+            "message": f"KL divergence peaked at {kl_max:.2f} with {reward_trend} reward — monitor output quality",
+        })
+    elif kl_max > 100.0:
+        # KL very high but reward is improving — informational only
+        alerts.append({
+            "severity": "INFO",
+            "metric": "kl",
+            "message": f"KL divergence {kl_max:.2f} (high but reward is improving — expected with beta=0)",
         })
 
-    # Clipping ratio
+    # Clipping ratio (completions truncated at max_output_tokens)
     # Thresholds: healthy <0.1, warn >0.1, critical >0.5
     # Ref: training-metrics-guide.md §Completions; DAPO overlong filtering; TRL docs
     clip_values = [s.get("completions/clipped_ratio", 0) for s in steps]
@@ -117,30 +131,64 @@ def analyze_metrics(data: dict) -> dict:
             "metric": "clipping",
             "message": f"Clipping ratio {clip_max:.0%} — majority of completions truncated, increase max_output_tokens",
         })
+    elif len(clip_values) >= 3:
+        # Check for increasing trend — model getting longer each step
+        first_third = clip_values[:len(clip_values) // 3]
+        last_third = clip_values[-(len(clip_values) // 3):]
+        if first_third and last_third:
+            first_avg = sum(first_third) / len(first_third)
+            last_avg = sum(last_third) / len(last_third)
+            if last_avg > first_avg + 0.15 and last_avg > 0.2:
+                alerts.append({
+                    "severity": "WARNING",
+                    "metric": "clipping",
+                    "message": f"Clipping ratio rising ({first_avg:.0%} → {last_avg:.0%}) — model generating longer responses, may need higher max_output_tokens",
+                })
 
     # Loss stability
     # Ref: training-metrics-guide.md §Loss; DeepSeekMath — GRPO loss starts near 0, rises slightly
     # Stuck at 0 = zero advantages; NaN = catastrophic failure (Unsloth docs)
     loss_values = [s.get("loss", 0) for s in steps]
-    has_nan = any(math.isnan(v) or math.isinf(v) for v in loss_values)
+    has_nan = any(math.isnan(v) or math.isinf(v) for v in loss_values if isinstance(v, (int, float)))
     if has_nan:
         alerts.append({
             "severity": "CRITICAL",
             "metric": "loss",
             "message": "NaN/Inf detected in loss — training numerically unstable",
         })
+    elif len(loss_values) > 3 and all(v == 0.0 for v in loss_values):
+        # Ref: arXiv:2503.06639 — GRPO loss = 0 when all advantages are zero
+        alerts.append({
+            "severity": "CRITICAL",
+            "metric": "loss",
+            "message": "Loss stuck at exactly 0.0 — zero advantages, model learning nothing. Check grader signal (reward_std, frac_reward_zero_std)",
+        })
 
     # Grad norm spikes
-    # Ref: training-metrics-guide.md §Grad Norm; healthy 0.5-2.0 with default clipping of 1.0
+    # Ref: training-metrics-guide.md §Grad Norm; healthy 0.5-2.0 with default max_grad_norm=1.0
     # NaN = catastrophic (Unsloth: often from zero-length truncated completions)
     grad_values = [s.get("grad_norm", 0) for s in steps]
-    grad_median = sorted(grad_values)[len(grad_values) // 2] if grad_values else 0
-    grad_max = max(grad_values) if grad_values else 0
-    if grad_max > 100:
+    grad_finite = [v for v in grad_values if isinstance(v, (int, float)) and math.isfinite(v)]
+    grad_median = sorted(grad_finite)[len(grad_finite) // 2] if grad_finite else 0
+    grad_max = max(grad_finite) if grad_finite else 0
+    has_nan_grad = any(not math.isfinite(v) for v in grad_values if isinstance(v, (int, float)))
+    if has_nan_grad:
+        alerts.append({
+            "severity": "CRITICAL",
+            "metric": "grad_norm",
+            "message": "NaN/Inf grad_norm — numerical overflow, likely from zero-length completions or bad chat template",
+        })
+    elif grad_max > 1000:
+        alerts.append({
+            "severity": "CRITICAL",
+            "metric": "grad_norm",
+            "message": f"Grad norm {grad_max:.1f} (median={grad_median:.1f}) — catastrophic instability, halve learning rate",
+        })
+    elif grad_max > 100:
         alerts.append({
             "severity": "WARNING",
             "metric": "grad_norm",
-            "message": f"Grad norm spike {grad_max:.1f} (median={grad_median:.1f}) — training instability",
+            "message": f"Grad norm spike {grad_max:.1f} (median={grad_median:.1f}) — training instability, consider reducing LR",
         })
 
     # Weak training signal
@@ -176,6 +224,33 @@ def analyze_metrics(data: dict) -> dict:
             "severity": "WARNING",
             "metric": "zero_std",
             "message": f"{zero_std_avg:.0%} avg zero-std fraction — over half the batch provides no learning signal",
+        })
+
+    # Reward hacking detection
+    # Ref: training-metrics-guide.md §Reward Hacking; GRPO++ (Wolfe) — reward up + KL rising + reward_std dropping
+    # Signature: model converges on a single high-scoring response pattern
+    if len(steps) >= 6:
+        mid = len(steps) // 2
+        first_half_std = sum(s.get("reward_std", 0) for s in steps[:mid]) / mid
+        last_half_std = sum(s.get("reward_std", 0) for s in steps[mid:]) / (len(steps) - mid)
+        first_half_kl = sum(s.get("kl", 0) for s in steps[:mid]) / mid
+        last_half_kl = sum(s.get("kl", 0) for s in steps[mid:]) / (len(steps) - mid)
+        if (reward_trend == "improving"
+                and last_half_std < first_half_std * 0.5  # reward_std dropped by 50%+
+                and last_half_kl > first_half_kl * 2.0):  # KL doubled
+            alerts.append({
+                "severity": "WARNING",
+                "metric": "reward_hacking",
+                "message": f"Possible reward hacking: reward improving but reward_std dropped ({first_half_std:.3f} → {last_half_std:.3f}) while KL rose — inspect outputs manually",
+            })
+
+    # High reward + low std = base model already good, grader too lenient
+    # Ref: rft-grpo-training-explained.md §Why The Grader is EVERYTHING
+    if r_end > 0.9 and reward_std_final < 0.10 and reward_trend == "flat":
+        alerts.append({
+            "severity": "HIGH",
+            "metric": "grader_signal",
+            "message": f"Reward {r_end:.3f} with std {reward_std_final:.3f} — base model already scores 90%+, GRPO has minimal learning signal. Make grader harder.",
         })
 
     return {
@@ -352,16 +427,16 @@ def main() -> None:
     elif has_api_args:
         try:
             epoch_data = fetch_epoch_evals(args.base_url, args.workflow_id, args.job_id)
-        except requests.RequestException:
-            pass  # Per-epoch evals may not be available yet
+        except requests.RequestException as e:
+            print(f"Warning: Could not fetch epoch evals: {e}", file=sys.stderr)
 
     # Fetch job status
     job_status = None
     if has_api_args:
         try:
             job_status = fetch_job_status(args.base_url, args.workflow_id, args.job_id)
-        except requests.RequestException:
-            pass
+        except requests.RequestException as e:
+            print(f"Warning: Could not fetch job status: {e}", file=sys.stderr)
 
     # Save fetched data
     if args.save and has_api_args:

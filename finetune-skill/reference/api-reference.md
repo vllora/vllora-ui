@@ -606,22 +606,24 @@ curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
 - `finetuned/{cloud_job_id}` requires source job success (`succeeded`) and provider success.
 - `checkpointed/{cloud_job_id}` allows any terminal source state (`succeeded`, `failed`, `cancelled`) as long as provider status is also terminal.
 
-**Training Config Defaults:**
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `learning_rate` | 0.00001 | Learning rate for LoRA fine-tuning |
-| `lora_rank` | 8 | LoRA rank (higher = more parameters, slower) |
-| `gradient_accumulation_steps` | 5 | Steps before weight update |
-| `epochs` | 2.0 | Number of training epochs |
-| `batch_size` | 5 | Training batch size |
+**Training Config Defaults (gateway fallbacks if omitted):**
+| Parameter | Gateway Default | GRPO-Optimized (used by `finetune.py`) | Description |
+|-----------|----------------|----------------------------------------|-------------|
+| `learning_rate` | 0.00001 (1e-5) | **0.000001 (1e-6)** | Learning rate. 1e-6 is consensus across DeepSeekMath, DAPO, Dr. GRPO, TRL |
+| `lora_rank` | 8 | 8 | LoRA rank (higher = more parameters, slower) |
+| `gradient_accumulation_steps` | 5 | 5 | Steps before weight update |
+| `epochs` | 2.0 | **8** | Training epochs. RFT needs many more than SFT (5-15 typical) |
+| `batch_size` | 5 | 5 | Training batch size |
 
-**Inference Parameters (used during training evaluation):**
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `max_output_tokens` | 1000 | Max tokens in generated response |
-| `temperature` | 1.0 | Sampling temperature |
-| `top_p` | 1.0 | Top-p nucleus sampling |
-| `response_candidates_count` | 2 | Candidates per response |
+**Inference Parameters (used during training rollouts):**
+| Parameter | Gateway Default | GRPO-Optimized (used by `finetune.py`) | Description |
+|-----------|----------------|----------------------------------------|-------------|
+| `max_output_tokens` | 1000 | **512** | Max tokens. Start low, increase only if >50% clipping |
+| `temperature` | 1.0 | 1.0 | Sampling temperature |
+| `top_p` | 1.0 | 1.0 | Top-p nucleus sampling |
+| `response_candidates_count` | 2 | **8** | Candidates per prompt. GRPO needs G≥8 for meaningful gradients |
+
+> **Note:** `finetune.py create-training` sends GRPO-optimized values by default. If you call the API directly (raw curl), you must set these explicitly or you'll get the gateway fallbacks, which are SFT-oriented and produce weak GRPO training signal.
 
 **Optional fields:**
 | Field | Description |

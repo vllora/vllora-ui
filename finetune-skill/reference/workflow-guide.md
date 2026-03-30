@@ -408,11 +408,14 @@ Continuation validation is mode-specific:
 - `finetuned/{cloud_job_id}`: source job must be successful (`succeeded`).
 - `checkpointed/{cloud_job_id}`: source job may be any terminal state (`succeeded`, `failed`, `cancelled`), which allows resuming from failed runs.
 
-### Training Config Guidance
+### Training Config Guidance (RFT/GRPO)
 
-The defaults work well for most cases. Adjust if:
-- **Low data (<50 records)**: Reduce `epochs` to 1 to avoid overfitting
-- **Large data (>500 records)**: Can increase `epochs` to 3-4
+> **Note:** RFT needs significantly more epochs than SFT. The model must see each prompt multiple times, generating diverse responses each time, to learn from the reward signal. "Overfitting" in the SFT sense (memorization) is less of a concern because the model generates its own responses.
+
+Adjust from the defaults (`finetune.py` uses lr=1e-6, epochs=8, candidates=8):
+- **Low data (<100 records)**: epochs 10-15 (more passes needed for the model to explore)
+- **Medium data (100-500 records)**: epochs 5-10 (default 8 is good)
+- **Large data (>500 records)**: epochs 3-5 (enough variety per epoch)
 - **Complex tasks**: Try `lora_rank: 16` for more model capacity
 - **Simple tasks**: `lora_rank: 4` is sufficient and faster
 

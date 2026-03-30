@@ -706,7 +706,7 @@ def cmd_create_training(args: argparse.Namespace) -> None:
             "learning_rate": 0.000001,  # 1e-6: universal GRPO consensus (DeepSeekMath, DAPO, Dr. GRPO, TRL default)
             "lora_rank": 8,
             "gradient_accumulation_steps": 5,
-            "epochs": 2,
+            "epochs": 8,  # RFT/GRPO needs more epochs than SFT — model generates fresh responses each epoch (no memorization risk). Ref: Interconnects.ai analysis of OpenAI RFT
             "batch_size": 5,
         }
 
