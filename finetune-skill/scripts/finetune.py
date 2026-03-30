@@ -1170,25 +1170,20 @@ def cmd_diagnose_grader(args: argparse.Namespace) -> None:
             output["diagnosis"].append({
                 "issue": f"{max_bucket_pct:.0f}% of scores are {max_bucket_score} — model refuses to answer most prompts",
                 "likely_cause": (
-                    "The model says it can't provide specific figures — this usually means the prompts "
-                    "ask for document extraction but DON'T include the source document text in the messages. "
-                    "The model has no material to extract from, so it correctly declines. "
-                    "The grader then gives partial credit for 'not hallucinating' even though the model "
-                    "produced nothing useful."
+                    "The model says it can't provide specific figures. This is a GRADER-PROMPT MISMATCH: "
+                    "the grader expects behavior (exact citations, page references) that the model can't "
+                    "produce from the prompt format. The model correctly declines instead of hallucinating, "
+                    "but the grader gives partial credit for 'not hallucinating' instead of scoring 0."
                 ),
                 "fix": [
-                    "**CHECK DATA FIRST**: Do your training records include source document text in the "
-                    "messages? Run: curl localhost:9090/finetune/workflows/$WORKFLOW_ID/records | head "
-                    "— if system+user messages are under 2000 chars, source text is missing.",
-                    "**If source text missing (most likely)**: Regenerate records with "
-                    "`generate_records.py --embed-source-context` which switches to per-chunk mode: "
-                    "generates questions per source chunk with the chunk's full content in the user "
-                    "message. System prompt (topic hierarchy) stays unchanged.",
-                    "**Also fix grader**: Add early-exit for non-responses (score 0 instead of partial credit). "
-                    "Remove score snapping (Math.round * 10 / 10). Weight accuracy/completeness higher "
-                    "than hallucination-avoidance.",
+                    "**FIX THE GRADER** to match what the prompts can produce. Remove criteria the model "
+                    "can't satisfy from the current prompt format (e.g., page/section citations).",
+                    "Add early-exit for non-responses: if model doesn't extract any content → score 0.",
+                    "Remove score snapping (Math.round * 10 / 10) — let continuous scores through.",
+                    "If the model CAN answer from parametric knowledge, keep accuracy checks but "
+                    "remove citation requirements.",
                 ],
-                "root_cause": "DATA — prompts likely missing source document context",
+                "root_cause": "GRADER-PROMPT MISMATCH — grader too strict for prompt format",
             })
         else:
             output["diagnosis"].append({
