@@ -49,7 +49,7 @@ import {
 
 export function JobDetailPanel({ job }: { job: FinetuneJob }) {
   const { latestVersion } = useEvaluatorVersions(job.workflow_id);
-  const { getJobEvaluations, refreshJobEvaluations } = FinetuneJobsConsumer();
+  const { getJobEvaluations, refreshJobEvaluations, loadJobs } = FinetuneJobsConsumer();
   const {
     data: evalResults,
     isLoading: isLoadingEvals,
@@ -74,8 +74,13 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
     if (isActionLoading) return;
     setIsActionLoading(true);
     try {
-      await cancelFinetuneJob(job.workflow_id, job.provider_job_id);
-      toast.success("Job cancelled");
+      const result = await cancelFinetuneJob(job.workflow_id, job.provider_job_id);
+      loadJobs(job.workflow_id);
+      if (result.cloudCancelFailed) {
+        toast.warning("Job marked as cancelled locally, but the cloud training may still be running. Check the provider dashboard to confirm.");
+      } else {
+        toast.success("Job cancelled");
+      }
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to cancel"

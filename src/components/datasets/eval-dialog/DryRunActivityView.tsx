@@ -42,7 +42,11 @@ interface EvalActivityViewProps {
 }
 
 function formatTime(ts: number): string {
-  const d = new Date(ts);
+  if (!ts || ts < 1_000_000_000) return "";
+  // Detect seconds-precision timestamps and convert to ms
+  const ms = ts < 1e12 ? ts * 1000 : ts;
+  const d = new Date(ms);
+  if (isNaN(d.getTime())) return "";
   const now = new Date();
   const isToday = d.toDateString() === now.toDateString();
   if (isToday) {

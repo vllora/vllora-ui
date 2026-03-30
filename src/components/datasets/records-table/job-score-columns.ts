@@ -12,7 +12,7 @@ import { evalJobDisplayName, finetuneJobDisplayName } from "@/lib/job-display-na
 // ─── Types ───
 
 export type JobColumnType = "eval" | "finetune";
-export type JobColumnStatus = "completed" | "running" | "queued" | "failed";
+export type JobColumnStatus = "completed" | "running" | "queued" | "failed" | "cancelled";
 
 export interface JobColumn {
   readonly id: string;
@@ -35,7 +35,8 @@ export interface RecordJobScore {
 function mapEvalStatus(status: string): JobColumnStatus {
   if (status === "completed") return "completed";
   if (status === "running" || status === "pending") return "running";
-  if (status === "failed" || status === "cancelled") return "failed";
+  if (status === "failed") return "failed";
+  if (status === "cancelled") return "cancelled";
   return "queued";
 }
 
@@ -43,6 +44,7 @@ function mapFinetuneStatus(status: FinetuneJobStatus): JobColumnStatus {
   if (status === "succeeded") return "completed";
   if (status === "running") return "running";
   if (status === "pending") return "queued";
+  if (status === "cancelled") return "cancelled";
   return "failed";
 }
 

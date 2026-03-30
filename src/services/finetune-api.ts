@@ -494,19 +494,24 @@ export async function getFinetuneJobStatus(
  * @param workflowId - The workflow ID (same as dataset ID)
  * @param jobId - The provider job ID to cancel
  */
-export async function cancelFinetuneJob(workflowId: string, jobId: string): Promise<void> {
+export async function cancelFinetuneJob(workflowId: string, jobId: string): Promise<{ cloudCancelFailed?: boolean }> {
   const response = await apiClient(
     `/finetune/workflows/${workflowId}/jobs/${jobId}/cancel`,
     {
       method: "POST",
     },
   );
+  if (response.status === 207) {
+    // Local cancel succeeded but cloud cancel failed — training may still be running
+    return { cloudCancelFailed: true };
+  }
   if (!response.ok) {
     const error = await response
       .json()
       .catch(() => ({ message: "Failed to cancel job" }));
     throw new Error(error.message || "Failed to cancel job");
   }
+  return {};
 }
 
 /**
