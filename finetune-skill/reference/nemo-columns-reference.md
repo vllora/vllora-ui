@@ -266,18 +266,19 @@ Derive a new column from existing ones using Jinja2 templates. Free, instant, no
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `expr` | string | required | Jinja2 expression. Supports filters, conditionals, arithmetic |
+| `expr` | string | required | Jinja2 expression. Supports conditionals, arithmetic, and a restricted allow-list of filters |
 | `dtype` | string | `"str"` | Cast output to `"int"`, `"float"`, `"str"`, or `"bool"` |
 
 **Jinja2 capabilities:**
 ```
 {{col}}                          — plain substitution
-{{col | upper}}                  — string filters (upper, lower, strip, replace, …)
+{{col | lower}}                  — supported string filters (lower, trim, replace, …)
 {{col | truncate(200)}}          — truncate long text
 {% if difficulty == "advanced" %}...{% endif %}  — conditionals
 {{val | int + 1}}                — arithmetic
-{{col | default("fallback")}}    — default if empty
 ```
+
+NeMo/Data Designer only permits a sandboxed filter allow-list. Avoid filters like `default`, `upper`, and `strip` unless you have verified they are explicitly supported by the running server.
 
 ---
 

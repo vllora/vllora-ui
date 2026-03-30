@@ -359,14 +359,13 @@ The UI at `http://localhost:5173/finetune` also shows all records grouped by top
 
 **Step-by-step:**
 
-**1. Materialize the curated seed parquet:**
+**1. Materialize the curated seed parquet** — relations not needed, `rag-retrieval` fetches from vLLora at generation time:
 ```bash
 uv run nemo/materialize_seed.py \
   --topics finetune-project/topics.json \
-  --relations finetune-project/relations.json \
-  --knowledge finetune-project/knowledge/all-parts-index.json \
   --output finetune-project/curated-seed.parquet
 ```
+Produces one row per leaf topic. `rag-retrieval` uses `topic_path` (and `raw_question` for the second retrieval) as search queries against vLLora's embeddings.
 
 **2. Upload and inspect:**
 ```bash
@@ -386,7 +385,7 @@ curl -sS -X POST "http://localhost:8000/api/data-recipe/seed/inspect-curated" \
 
 - **Topic-based Q&A** (policies, knowledge bases, tutorials): Copy `templates/nemo-recipe-template.json`. Replace `path` with `resolved_path` from `nemo-seed-inspect.json`, set `workflow_id` to `$WORKFLOW_ID`, adapt llm-text prompts for your domain. The default template generates `user_message` directly from retrieved text.
 - **Structured documents** (invoices, contracts, forms, specs): Copy `templates/nemo-recipe-structured-template.json`. This adds a subcategory `sampler` for document sections, `llm-structured` (drop:true) to extract typed fields, and an `expression` (drop:true) to compose a focused context before generating `user_message`. Adapt `output_format` schema to your document's actual fields.
-- **Custom**: Design columns from scratch using `reference/nemo-columns-reference.md`. Output contract: `system_prompt` + `user_message` are required. `reference_answer` strongly recommended. All other columns are design choices — use `"drop": true` for intermediates that feed downstream columns but shouldn't appear in the final dataset.
+- **Custom**: Design columns from scratch using `reference/nemo-columns-reference.md`. Output contract: `system_prompt` + `user_message` are required for export into `training.jsonl`, even if the paper-inspired generation method uses extra intermediates like `raw_question`, `question_chunks`, and judge columns. `reference_answer` is strongly recommended. All other columns are design choices — use `"drop": true` for intermediates that feed downstream columns but shouldn't appear in the final dataset.
 
 **4. Preview first** (set `execution_type: "preview"`, `rows: 10`):
 ```bash

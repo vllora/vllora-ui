@@ -1,5 +1,5 @@
 {
-  "_comment": "NeMo Data Designer recipe template for STRUCTURED DOCUMENT extraction (invoices, contracts, forms, specs). Pattern: rag-retrieval → subcategory sampler → llm-structured (drop:true) → expression (drop:true) → llm-text outputs. Copy, replace <PLACEHOLDERS>, adapt output_format schema and section values to your document type.",
+  "_comment": "NeMo Data Designer recipe template for STRUCTURED DOCUMENT extraction (invoices, contracts, forms, specs). Pattern: rag-retrieval → topic_context expression (seed passthrough) → subcategory sampler → llm-structured (drop:true) → expression (drop:true) → two-stage question generation (raw_question + question_chunks) → llm-text outputs. Copy, replace <PLACEHOLDERS>, adapt output_format schema and section values to your document type. NOTE: _comment fields are NOT allowed inside column objects — NeMo rejects them. Only this top-level _comment is safe. topic_context expression re-materializes the seed topic_path so it is guaranteed available in all downstream llm-text Jinja2 contexts.",
   "recipe": {
     "seed_config": {
       "source": {
@@ -10,7 +10,6 @@
     },
     "columns": [
       {
-        "_comment": "rag-retrieval: fetches fresh knowledge chunks from the gateway per row at generation time",
         "name": "retrieved_chunks",
         "column_type": "rag-retrieval",
         "workflow_id": "<REPLACE: workflow ID>",
@@ -19,7 +18,11 @@
         "query_field": "topic_path"
       },
       {
-        "_comment": "doc_section sampler: picks which part of the document to focus on for this row. REPLACE the values list with sections relevant to your document type. Uses 'subcategory' to vary by topic — map each topic ID to its relevant sections. Or use 'category' for flat random sampling across all sections.",
+        "name": "topic_context",
+        "column_type": "expression",
+        "expr": "{{ topic_path }}"
+      },
+      {
         "name": "doc_section",
         "column_type": "sampler",
         "sampler_type": "subcategory",
@@ -33,14 +36,12 @@
         }
       },
       {
-        "_comment": "extracted_fields: llm-structured extracts typed fields from the retrieved chunk matching your document's structure. REPLACE output_format with the actual JSON schema for your document (e.g., invoice fields: vendor, amount, line_items). drop:true means this column feeds {{extracted_fields}} downstream but is excluded from the final dataset.",
         "name": "extracted_fields",
         "column_type": "llm-structured",
         "model_alias": "openai-text",
         "drop": true,
-        "prompt": "Extract the key structured fields from this document section. Focus on the '{{doc_section}}' aspects.\n\nDocument section: {{topic_path}}\nContent:\n{{retrieved_chunks}}\n\nExtract the fields defined in the output schema. Use null for fields not present in the content.",
+        "prompt": "Extract the key structured fields from this document section. Focus on the '{{doc_section}}' aspects.\n\nDocument section: {{topic_context}}\nContent:\n{{retrieved_chunks}}\n\nExtract the fields defined in the output schema. Use null for fields not present in the content.",
         "output_format": {
-          "_comment": "REPLACE this schema with your document's actual fields. Example for a policy document:",
           "type": "object",
           "properties": {
             "title": {
@@ -61,14 +62,12 @@
         }
       },
       {
-        "_comment": "composed_context: expression column (no LLM, instant) combines extracted_fields + retrieved_chunks into a focused context string. Jinja2 template — adjust to highlight the fields most relevant to your domain. drop:true excludes from final dataset.",
         "name": "composed_context",
         "column_type": "expression",
         "drop": true,
-        "expr": "Section: {{ doc_section }}\nTopic: {{ topic_path }}\n\n{% set fields = extracted_fields | tojson | fromjson %}Title: {{ fields.get('title', '') }}\nKey points:\n{% for kv in fields.get('key_values', []) %}- {{ kv }}\n{% endfor %}\nSummary: {{ fields.get('summary', '') }}\n\n---\nSource material:\n{{ retrieved_chunks }}"
+        "expr": "Section: {{ doc_section }}\nTopic: {{ topic_context }}\n\n{% set fields = extracted_fields | tojson | fromjson %}Title: {{ fields.get('title', '') }}\nKey points:\n{% for kv in fields.get('key_values', []) %}- {{ kv }}\n{% endfor %}\nSummary: {{ fields.get('summary', '') }}\n\n---\nSource material:\n{{ retrieved_chunks }}"
       },
       {
-        "_comment": "difficulty sampler: adds variation across rows",
         "name": "difficulty",
         "column_type": "sampler",
         "sampler_type": "category",
@@ -77,32 +76,44 @@
         }
       },
       {
-        "_comment": "system_prompt: uses doc_section and topic_path to anchor the assistant's role. Adapt role description for your domain.",
+        "name": "raw_question",
+        "column_type": "llm-text",
+        "model_alias": "openai-text",
+        "drop": true,
+        "prompt": "Generate one question a {{difficulty}} audience might ask about the '{{doc_section}}' aspects of this topic. Be creative and think about practical application — don't constrain yourself to specific facts.\n\nTopic: {{topic_context}}\nSection focus: {{doc_section}}\n\nReturn only the question."
+      },
+      {
+        "name": "question_chunks",
+        "column_type": "rag-retrieval",
+        "workflow_id": "<REPLACE: workflow ID>",
+        "gateway_url": "http://localhost:9090",
+        "top_k": 10,
+        "query_field": "raw_question",
+        "drop": true
+      },
+      {
         "name": "system_prompt",
         "column_type": "llm-text",
         "model_alias": "openai-text",
-        "prompt": "Write a concise system prompt (2-3 sentences) for an AI assistant trained on this document type. Define the assistant's role using only the '{{doc_section}}' aspects of the material. Adapt the tone for a {{difficulty}} audience.\n\nDocument context: {{topic_path}}\n\nReturn only the system prompt."
+        "prompt": "Write a concise system prompt (2-3 sentences) for an AI assistant trained on this document type. Define the assistant's role using only the '{{doc_section}}' aspects of the material. Adapt the tone for a {{difficulty}} audience.\n\nDocument context: {{topic_context}}\n\nReturn only the system prompt."
       },
       {
-        "_comment": "user_message: generated from composed_context (which combines extracted structured fields + raw chunks). This produces more specific, grounded questions than generating directly from raw text.",
         "name": "user_message",
         "column_type": "llm-text",
         "model_alias": "openai-text",
-        "prompt": "Generate one realistic user question for reinforcement fine-tuning based on this structured document content. The question must be specific to the '{{doc_section}}' section, answerable from the provided content, and non-trivial (ask for explanation, application, or analysis rather than simple lookup). Natural for a {{difficulty}} audience.\n\nDocument content:\n{{composed_context}}\n\nReturn only the question."
+        "prompt": "Refine this question to make it specific to the '{{doc_section}}' section, answerable from the document content, and natural for a {{difficulty}} audience. Keep the intent of the original question but anchor it to concrete details and terminology from the source. Ask for explanation, application, or analysis — not simple lookup.\n\nTopic: {{topic_context}}\nSection: {{doc_section}}\nOriginal question: {{raw_question}}\n\nDocument content:\n{{composed_context}}\n\nAdditional context:\n{{question_chunks}}\n\nReturn only the refined question."
       },
       {
-        "_comment": "reference_answer: grounded in the composed context for consistency. Goes to metadata sidecar (not training records) — used for grader writing and offline review.",
         "name": "reference_answer",
         "column_type": "llm-text",
         "model_alias": "openai-text",
-        "prompt": "Write a concise, accurate reference answer grounded in the document content. Focus on the '{{doc_section}}' aspects. Be factually precise.\n\nDocument content:\n{{composed_context}}\n\nQuestion: {{user_message}}\n\nReturn only the answer."
+        "prompt": "Write a concise, accurate reference answer grounded in the document content. Focus on the '{{doc_section}}' aspects. Be factually precise.\n\nDocument content:\n{{composed_context}}\n\nAdditional context:\n{{question_chunks}}\n\nQuestion: {{user_message}}\n\nReturn only the answer."
       },
       {
-        "_comment": "judge_answerable: AspectCritic (paper threshold = 1). Does the composed context contain enough info to answer?",
         "name": "judge_answerable",
         "column_type": "llm-judge",
         "model_alias": "openai-text",
-        "prompt": "Does the document content contain sufficient information to answer this question, without needing outside knowledge?\n\nQuestion: {{user_message}}\nContent: {{composed_context}}",
+        "prompt": "Does the document content contain sufficient information to answer this question, without needing outside knowledge?\n\nQuestion: {{user_message}}\nContent: {{composed_context}}\n\nAdditional context: {{question_chunks}}",
         "scores": [
           {
             "name": "answerable",
@@ -115,11 +126,10 @@
         ]
       },
       {
-        "_comment": "judge_groundedness: ResponseGroundedness (paper threshold >= 0.5). Is the answer grounded in the content?",
         "name": "judge_groundedness",
         "column_type": "llm-judge",
         "model_alias": "openai-text",
-        "prompt": "How well is the reference answer supported by the document content?\n\nQuestion: {{user_message}}\nAnswer: {{reference_answer}}\nContent: {{composed_context}}",
+        "prompt": "How well is the reference answer supported by the document content?\n\nQuestion: {{user_message}}\nAnswer: {{reference_answer}}\nContent: {{composed_context}}\n\nAdditional context: {{question_chunks}}",
         "scores": [
           {
             "name": "groundedness",
@@ -133,11 +143,10 @@
         ]
       },
       {
-        "_comment": "judge_specificity: Tele-Specificity (paper threshold = 1). Does the question use domain terms from the content?",
         "name": "judge_specificity",
         "column_type": "llm-judge",
         "model_alias": "openai-text",
-        "prompt": "Does the question use domain-specific terminology that appears in the document content, rather than generic language?\n\nQuestion: {{user_message}}\nContent: {{composed_context}}",
+        "prompt": "Does the question use domain-specific terminology that appears in the document content, rather than generic language?\n\nQuestion: {{user_message}}\nContent: {{composed_context}}\n\nAdditional context: {{question_chunks}}",
         "scores": [
           {
             "name": "specificity",
@@ -150,7 +159,6 @@
         ]
       },
       {
-        "_comment": "score_relevancy: ResponseRelevancy proxy (paper threshold > 0.5). Jaccard overlap of part IDs retrieved by question vs answer.",
         "name": "score_relevancy",
         "column_type": "rag-relevancy",
         "workflow_id": "<REPLACE: workflow ID>",

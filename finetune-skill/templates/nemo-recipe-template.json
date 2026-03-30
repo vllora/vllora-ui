@@ -1,5 +1,5 @@
 {
-  "_comment": "NeMo Data Designer recipe template for RFT prompt generation. Uses a curated parquet seed (from materialize_seed.py) + rag-retrieval column to fetch fresh knowledge chunks per row. Copy, replace <PLACEHOLDERS>, and adapt prompts for your domain.",
+  "_comment": "NeMo Data Designer recipe template for RFT prompt generation. Two-stage question generation (arxiv 2509.25736): raw_question from topic context alone → question_chunks retrieval → user_message grounds raw_question in question-specific chunks. Copy, replace <PLACEHOLDERS>, and adapt prompts for your domain. NOTE: _comment fields are NOT allowed inside column objects — NeMo rejects them. Only this top-level _comment is safe. topic_context expression column re-materializes the seed topic_path so it is guaranteed available in all downstream llm-text Jinja2 contexts (seed columns can disappear from context after drop:true columns process).",
   "recipe": {
     "seed_config": {
       "source": {
@@ -10,7 +10,6 @@
     },
     "columns": [
       {
-        "_comment": "rag-retrieval: fetches fresh knowledge chunks from the gateway per row at generation time",
         "name": "retrieved_chunks",
         "column_type": "rag-retrieval",
         "workflow_id": "<REPLACE: workflow ID>",
@@ -19,7 +18,11 @@
         "query_field": "topic_path"
       },
       {
-        "_comment": "sampler: adds variation across rows",
+        "name": "topic_context",
+        "column_type": "expression",
+        "expr": "{{ topic_path }}"
+      },
+      {
         "name": "difficulty",
         "column_type": "sampler",
         "sampler_type": "category",
@@ -28,29 +31,44 @@
         }
       },
       {
+        "name": "raw_question",
+        "column_type": "llm-text",
+        "model_alias": "openai-text",
+        "drop": true,
+        "prompt": "Generate one question a {{difficulty}} learner might genuinely ask about this topic. Be creative and think about what would actually be useful to know — don't constrain yourself to specific facts from any document.\n\nTopic: {{topic_context}}\n\nReturn only the question."
+      },
+      {
+        "name": "question_chunks",
+        "column_type": "rag-retrieval",
+        "workflow_id": "<REPLACE: workflow ID>",
+        "gateway_url": "http://localhost:9090",
+        "top_k": 10,
+        "query_field": "raw_question",
+        "drop": true
+      },
+      {
         "name": "system_prompt",
         "column_type": "llm-text",
         "model_alias": "openai-text",
-        "prompt": "Write a concise system prompt (2-3 sentences) for an AI assistant being trained on this topic. Define the assistant's role and boundaries using only ideas supported by the source material. Adapt the tone for a {{difficulty}} learner.\n\nTopic: {{topic_path}}\n\nSource material:\n{{retrieved_chunks}}\n\nReturn only the system prompt."
+        "prompt": "Write a concise system prompt (2-3 sentences) for an AI assistant being trained on this topic. Define the assistant's role and boundaries using only ideas supported by the source material. Adapt the tone for a {{difficulty}} learner.\n\nTopic: {{topic_context}}\n\nSource material:\n{{retrieved_chunks}}\n\nReturn only the system prompt."
       },
       {
         "name": "user_message",
         "column_type": "llm-text",
         "model_alias": "openai-text",
-        "prompt": "Generate one realistic user question for reinforcement fine-tuning. The question must be specific, answerable from the source material, and non-trivial (ask for explanation, application, or analysis rather than simple definition lookup). Keep it natural for a {{difficulty}} learner.\n\nTopic: {{topic_path}}\n\nSource material:\n{{retrieved_chunks}}\n\nReturn only the question."
+        "prompt": "Refine this question to make it specific, answerable from the source material, and natural for a {{difficulty}} learner. Keep the intent of the original question but anchor it to concepts and terminology present in the source. The question should be non-trivial — ask for explanation, application, or analysis rather than simple lookup.\n\nTopic: {{topic_context}}\nOriginal question: {{raw_question}}\n\nSource material:\n{{question_chunks}}\n\nReturn only the refined question."
       },
       {
         "name": "reference_answer",
         "column_type": "llm-text",
         "model_alias": "openai-text",
-        "prompt": "Write a concise, accurate reference answer grounded in the source material. Focus on factual correctness and clarity.\n\nTopic: {{topic_path}}\n\nSource material:\n{{retrieved_chunks}}\n\nQuestion: {{user_message}}\n\nReturn only the answer."
+        "prompt": "Write a concise, accurate reference answer grounded in the source material. Focus on factual correctness and clarity.\n\nTopic: {{topic_context}}\n\nSource material:\n{{question_chunks}}\n\nQuestion: {{user_message}}\n\nReturn only the answer."
       },
       {
-        "_comment": "judge_answerable: AspectCritic (paper threshold = 1). Does context contain enough info to answer?",
         "name": "judge_answerable",
         "column_type": "llm-judge",
         "model_alias": "openai-text",
-        "prompt": "Does the retrieved context contain sufficient information to answer this question, without needing outside knowledge?\n\nQuestion: {{user_message}}\nContext: {{retrieved_chunks}}",
+        "prompt": "Does the retrieved context contain sufficient information to answer this question, without needing outside knowledge?\n\nQuestion: {{user_message}}\nContext: {{question_chunks}}",
         "scores": [
           {
             "name": "answerable",
@@ -63,11 +81,10 @@
         ]
       },
       {
-        "_comment": "judge_groundedness: ResponseGroundedness (paper threshold > 0.75, use >= 0.5). Is answer grounded in context?",
         "name": "judge_groundedness",
         "column_type": "llm-judge",
         "model_alias": "openai-text",
-        "prompt": "How well is the reference answer supported by the retrieved context? Score each claim in the answer.\n\nQuestion: {{user_message}}\nAnswer: {{reference_answer}}\nContext: {{retrieved_chunks}}",
+        "prompt": "How well is the reference answer supported by the retrieved context? Score each claim in the answer.\n\nQuestion: {{user_message}}\nAnswer: {{reference_answer}}\nContext: {{question_chunks}}",
         "scores": [
           {
             "name": "groundedness",
@@ -81,11 +98,10 @@
         ]
       },
       {
-        "_comment": "judge_specificity: Tele-Specificity (paper threshold > 0.75, use = 1). Does question use domain terms from context?",
         "name": "judge_specificity",
         "column_type": "llm-judge",
         "model_alias": "openai-text",
-        "prompt": "Does the question use domain-specific terminology that appears in the retrieved context, rather than generic language?\n\nQuestion: {{user_message}}\nContext: {{retrieved_chunks}}",
+        "prompt": "Does the question use domain-specific terminology that appears in the retrieved context, rather than generic language?\n\nQuestion: {{user_message}}\nContext: {{question_chunks}}",
         "scores": [
           {
             "name": "specificity",
@@ -98,7 +114,6 @@
         ]
       },
       {
-        "_comment": "score_relevancy: ResponseRelevancy proxy (paper threshold > 0.5). Jaccard overlap of part IDs retrieved by question vs answer.",
         "name": "score_relevancy",
         "column_type": "rag-relevancy",
         "workflow_id": "<REPLACE: workflow ID>",

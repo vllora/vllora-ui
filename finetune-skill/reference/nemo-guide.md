@@ -46,7 +46,17 @@ Requires `OPENAI_API_KEY` in `nemo/.env`. All LLM columns use `openai-text` by d
 
 ### Materialize the parquet
 
-Run `materialize_seed.py` (in `nemo/`) to join topics + relations + knowledge_parts into a parquet:
+The seed parquet tells NeMo which rows to generate. All knowledge retrieval happens at generation time via `rag-retrieval` querying vLLora — the parquet just needs topic context.
+
+**Topics-only mode (recommended for NeMo):** one row per leaf topic, no relations needed:
+
+```bash
+uv run nemo/materialize_seed.py \
+  --topics finetune-project/topics.json \
+  --output finetune-project/curated-seed.parquet
+```
+
+**Relations mode (legacy):** one row per (topic × part) pair — only needed if you want `chunk_text` pre-linked in the seed:
 
 ```bash
 uv run nemo/materialize_seed.py \
@@ -56,7 +66,7 @@ uv run nemo/materialize_seed.py \
   --output finetune-project/curated-seed.parquet
 ```
 
-Or per-topic (one parquet per leaf topic) with `--per-topic`.
+Or per-topic (one parquet per leaf topic) with `--per-topic` (relations mode only).
 
 **Parquet schema:**
 
@@ -205,8 +215,8 @@ Use `{{variable}}` to reference seed columns and earlier columns in prompts. Set
 
 | Column | Goes to | Notes |
 |--------|---------|-------|
-| `system_prompt` | `messages[0]` in training.jsonl | Required |
-| `user_message` | `messages[1]` in training.jsonl | Required |
+| `system_prompt` | `messages[0]` in training.jsonl | Required by our export format; not a paper-specific stage |
+| `user_message` | `messages[1]` in training.jsonl | Required; this is the final refined question |
 | `reference_answer` | metadata sidecar | Strongly recommended for grader writing + review |
 | Everything else | metadata sidecar or dropped | Design choice |
 
@@ -219,6 +229,23 @@ Any intermediate column that feeds downstream columns but shouldn't appear in th
 | Topic-based Q&A (policies, tutorials, knowledge bases) | Direct generation — `rag-retrieval` → `llm-text` for each output | `templates/nemo-recipe-template.json` |
 | Structured documents (invoices, contracts, forms, specs) | Programmatic composition — extract fields first, compose context, then generate | `templates/nemo-recipe-structured-template.json` |
 
+**Two-stage question generation pattern (recommended — both templates use this):**
+
+Based on arxiv 2509.25736: generate a diverse question from topic context first, then retrieve chunks specific to that question and ground it.
+
+The paper defines the generation and filtering method. Our exported `training.jsonl` rows still require final `system_prompt` and `user_message` fields because that is the fixed message contract used by the rest of the finetune pipeline.
+
+```
+topic_path ──→ rag-retrieval   → retrieved_chunks  (broad topic context, for system_prompt)
+                     ↓
+               raw_question    (drop: true — diverse question, no retrieved text to avoid bias)
+                     ↓
+raw_question ──→ rag-retrieval → question_chunks   (drop: true — question-specific retrieval)
+                     ↓
+               user_message    (refines raw_question using question_chunks)
+                reference_answer, judges (all use question_chunks)
+```
+
 **Programmatic composition pattern (structured documents):**
 
 ```
@@ -226,13 +253,13 @@ rag-retrieval      → retrieved_chunks
 sampler            → doc_section        (which section to focus on — subcategory per topic)
 llm-structured     → extracted_fields   (drop: true — JSON fields extracted from chunk)
 expression         → composed_context   (drop: true — Jinja2 combine fields + text)
-llm-text           → system_prompt      (uses {{doc_section}}, {{topic_path}})
-llm-text           → user_message       (uses {{composed_context}}, {{doc_section}})
-llm-text           → reference_answer
+raw_question       → (drop: true — Stage 1 question, topic + section only)
+rag-retrieval      → question_chunks    (drop: true — question-specific retrieval)
+llm-text           → system_prompt, user_message, reference_answer
 judge/score cols   → filtering metadata
 ```
 
-Use `"drop": true` on any intermediate column (e.g., `extracted_fields`, `composed_context`) that exists only to feed later `{{variable}}` references. Dropped columns are computed but excluded from the final dataset and metadata sidecar.
+Use `"drop": true` on any intermediate column that exists only to feed later `{{variable}}` references. Dropped columns are computed but excluded from the final dataset and metadata sidecar.
 
 See `reference/nemo-columns-reference.md` for complete column type documentation.
 
@@ -264,6 +291,14 @@ Set `execution_type: "preview"` and `rows: 10` first, then switch to `"full"` af
 
 **Simple domain (topic Q&A):** Copy `templates/nemo-recipe-template.json`, replace placeholders, adapt prompts.
 **Structured docs:** Copy `templates/nemo-recipe-structured-template.json`, adapt `output_format` schema and section sampler values.
+
+> **Important:** `_comment` fields are **not allowed inside column objects** — NeMo's pydantic schema uses `extra="forbid"` and will reject the job with "Extra inputs are not permitted". The templates only use `_comment` at the top level of the JSON (outside `"recipe"`/`"run"`), which is safe. Never add `_comment` inside a column definition.
+
+> **Important:** Seed columns (e.g., `topic_path`) can become unavailable in Jinja2 template contexts for `llm-text` and `llm-structured` columns that run after `drop:true` columns. The templates work around this by including a `topic_context` expression column immediately after the first `rag-retrieval`:
+> ```json
+> {"name": "topic_context", "column_type": "expression", "expr": "{{ topic_path }}"}
+> ```
+> This re-materializes `topic_path` as a regular generated column guaranteed to stay in the row context. All llm-text prompts use `{{topic_context}}` instead of `{{topic_path}}`. The `rag-retrieval` `query_field` still references `"topic_path"` directly (that's a field lookup, not Jinja2, so seed data is always accessible there).
 
 ---
 
@@ -376,6 +411,48 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
 ```
 
 No assistant message — vLLora uses reinforcement fine-tuning where the model generates its own response and `grader.js` scores it.
+
+---
+
+## Troubleshooting
+
+### `topic_path` columns are missing (PromptTemplateRenderError)
+
+**Symptom**: NeMo logs `"The following ['topic_path'] columns are missing!"` for `system_prompt`, `user_message`, or `reference_answer`. All rows fail for those columns.
+
+**Cause**: NeMo DataDesigner drops seed columns from the Jinja2 context after any `drop:true` column processes. In a two-stage recipe, `raw_question` and `question_chunks` are both `drop:true`, so by the time `system_prompt` runs, `topic_path` is gone from the row context.
+
+**Fix**: Never reference `{{topic_path}}` directly in `llm-text` or `llm-structured` prompts. The provided templates include a `topic_context` expression column (column #2, right after `retrieved_chunks`) that re-materializes `topic_path` as a non-dropped generated column. Use `{{topic_context}}` in all prompts. This column survives the post-drop:true context reset.
+
+If you wrote a custom recipe by hand and see this error, add the passthrough column:
+```json
+{"name": "topic_context", "column_type": "expression", "expr": "{{ topic_path }}"}
+```
+Place it early in the column list (before any `drop:true` column), then replace all `{{topic_path}}` in prompts with `{{topic_context}}`.
+
+---
+
+### `retrieved_chunks` not found in dataset
+
+**Symptom**: `"Error profiling preview dataset: Column 'retrieved_chunks' not found in dataset"`. The rag-retrieval column simply doesn't appear.
+
+**Cause**: The rag-retrieval plugin threw an HTTP exception (4xx/5xx from the gateway or a connection error). NeMo previously silenced this completely. The plugin now prints a `[rag-retrieval] ERROR ...` line to NeMo server stdout with the actual HTTP status and response body — check there first.
+
+**Common causes:**
+- Wrong `workflow_id` → gateway returns 404
+- Knowledge not indexed for this workflow (embeddings not generated yet) → gateway returns 404 or empty matches
+- Gateway not running at the configured `gateway_url`
+
+**Use `gateway-ping` to diagnose before running a job:**
+```bash
+curl -sS -X POST "http://localhost:8000/api/data-recipe/gateway-ping" \
+  -H "Content-Type: application/json" \
+  -d '{"workflow_id": "YOUR_WORKFLOW_ID", "query": "test"}'
+```
+
+Returns `{"ok": true, "status": 200, "body": {"matches": [...]}}` if working, or `{"ok": false, "status": 404, ...}` / `{"ok": false, "error": "Connection refused"}` if not.
+
+**If `retrieved_chunks` exists but is empty**: the HTTP call succeeded but the search returned no matches. The workflow's knowledge base is empty or embeddings haven't been generated yet. Ensure knowledge sources for this workflow have been processed by the gateway.
 
 ---
 
