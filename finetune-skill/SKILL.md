@@ -31,24 +31,33 @@ The training data defines the *prompts* the model practices on. The grader defin
 ## The Pipeline
 
 ```
-Define Objective → Extract Documents → Build Topics → Generate Data → Write Grader → Verify → Evaluate → Analyze → Train
-     ↓ upload          ↓ upload          ↓ upload        ↓ upload        ↓ upload                    ↓ iterate    ↓ iterate
-   (workflow)      (knowledge)        (topics)        (records)       (grader)                  (fix grader/data) (adjust config)
+Define Objective → Extract Docs → Build Topics → Generate Data → Write Grader → Verify
+     ↓ upload         ↓ upload        ↓ upload       ↓ upload       ↓ upload
+   (workflow)      (knowledge)      (topics)       (records)      (grader)
+
+                          ┌──────────────────────────────┐
+                          │   Eval-First Loop (fast)      │
+Verify → Evaluate ───────→│ Analyze → Readiness Gate ────→│──── PASS ──→ Train → Analyze → Done
+                          │      ↑         ↓ FAIL         │                ↓ bad
+                          │      └── Fix data/grader ─────┘            Iterate (back to Eval)
+                          └──────────────────────────────┘
 ```
 
-**Each step uploads to the gateway immediately** — the vLLora UI shows progress in real time. You don't wait until the end to push data.
+**Each step uploads to the gateway immediately** — the vLLora UI shows progress in real time.
 
-**Execute ALL steps (1-9).** Steps 1-6 prepare the dataset. Steps 7-9 evaluate and train the model. Do NOT stop at Step 6 — always run evaluation at minimum. If the user only asks for data preparation, you may stop at Step 6, but by default run the full pipeline including evaluation and training.
+**Execute ALL steps (1-9).** Steps 1-6 prepare the dataset. Step 7 runs eval iterations until data/grader are validated. Only then does training start. Do NOT stop at Step 6 — always run evaluation at minimum.
 
-**Wait for training to complete.** Do NOT exit after launching training. Poll `training-jobs/{JOB_ID}-monitor-report.json` (or use `finetune.py poll-training`) until training finishes. Then analyze results (Step 8) and iterate (Step 9) if the eval pass rate is below 80% or training shows anomalies. **The pipeline is not done until you've analyzed results and either iterated or confirmed the model meets the objective.**
+**Eval first, train later.** Do NOT start training on the first iteration. Run eval, check the readiness gate, fix issues, re-eval. Only start training after the readiness gate passes (Step 7c→7d). This avoids wasting hours of GPU time on bad data or a broken grader.
 
-**Auto-iterate when running non-interactively.** If the user is not responding (e.g., running via `claude -p`), do NOT ask "what would you like to do?" and stop. Instead, make your own judgment: if eval pass rate < 80%, apply the top-priority fix from the analysis and start a new iteration automatically. Max 3 auto-iterations.
+**Wait for training to complete.** Once training starts (Step 7d), poll until it finishes. Analyze results (Step 8b) and iterate (Step 9b) if needed.
+
+**Auto-iterate when running non-interactively.** If the user is not responding (e.g., running via `claude -p`), make your own judgment: if readiness gate fails, apply the top-priority fix and re-eval automatically. Max 5 eval-only auto-iterations, max 3 training auto-iterations.
 
 **Checkpoint after each step** — so the pipeline can resume after crashes:
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step <STEP_NAME> --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
-Step names: `create-workflow`, `extract`, `topics`, `relations`, `generate-data`, `grader`, `validate`, `upload-records`, `upload-grader`, `eval`, `training`, `analyze`.
+Step names: `create-workflow`, `extract`, `topics`, `relations`, `generate-data`, `grader`, `validate`, `upload-records`, `upload-grader`, `eval-N` (e.g. `eval-1`, `eval-2`), `readiness-pass`, `training`, `analyze`.
 
 ### Working Directory
 
@@ -136,12 +145,14 @@ This creates local tracking files for any jobs you don't already have and update
 | State found | What happened | Action |
 |-------------|---------------|--------|
 | `config.json` + `knowledge/` + no `topics.json` | Crashed during or after extraction | Resume from Step 3 (topics) |
-| Everything through `grader.js` + no `evaluations/` | Crashed before eval | Resume from Step 7 (eval + training) |
-| `evaluations/` has results + no `training-jobs/` | Eval completed but training never started | Analyze eval (Step 8), then start training |
+| Everything through `grader.js` + no `evaluations/` | Crashed before eval | Resume from Step 7b (create eval) |
+| `evaluations/` has results + no readiness-pass checkpoint | Eval completed, no readiness gate run | Run `readiness-check` on latest eval (Step 7c) |
+| Readiness gate FAIL + no fixes applied | Crashed during fix step | Read readiness output, apply fixes (Step 9a), re-eval |
+| Readiness gate PASS + no `training-jobs/` | Crashed before training start | Create training job (Step 7d) |
 | `training-jobs/` has a job file with status `running` | Training was in progress | Poll the existing job, don't create a new one |
-| `training-jobs/` has a job file with status `cancelled` | Job was cancelled (from UI or another agent) | Skip it. Analyze eval results only. Start a new training job if needed (Step 9) |
+| `training-jobs/` has a job file with status `cancelled` | Job was cancelled (from UI or another agent) | Skip it. Analyze eval results. Start new job if needed (Step 9) |
 | `training-jobs/` has a job with `source: synced_from_gateway` | Job was created from the UI, not by this agent | Treat it like your own — poll it, analyze results when done |
-| `iterations.md` exists with iteration 1 results | First iteration completed | Read findings, apply fixes (Step 9), start iteration 2 |
+| `iterations.md` exists with iteration results | Previous iteration completed | Read findings, apply fixes (Step 9), continue iterating |
 
 ### Step 1: Define the Objective
 
@@ -438,17 +449,20 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step validate --project
 
 Tell the user the data is visible at `http://localhost:5173/finetune`, then **proceed immediately to Step 7** (evaluation).
 
-### Step 7: Start Evaluation & Training (Parallel)
+### Step 7: Evaluate & Validate Before Training
 
-**Always start both eval AND training together.** They run on the cloud in parallel and answer different questions:
+**Eval first, train later.** Eval is fast (~45 min) and cheap. Training is slow (hours) and expensive. Run eval iterations to validate data quality, grader correctness, and score distribution BEFORE committing to training.
 
-| | Eval Job (~45 min) | Training Job (hours) |
-|---|---------|-------------|
-| **Tests** | Base model + your data + your grader | Whether finetuning improves the model |
-| **Tells you** | Is my data good? Is my grader fair? | Is the model learning? Are hyperparams right? |
-| **Iterate on** | Prompts, topics, grader criteria | Learning rate, epochs, lora_rank |
+| Phase | What runs | What it answers | Duration | Cost |
+|-------|-----------|----------------|----------|------|
+| **Eval iterations** | Base model + your data + your grader | Is my data good? Grader fair? Score spread? | ~45 min/iter | Low |
+| **Training** | Finetuned model with GRPO | Is the model learning? Hyperparams right? | Hours | High |
 
-**Two iteration loops** (run in parallel): **Fast loop** — eval finishes in ~45 min, iterate on data/grader immediately. **Slow loop** — training runs for hours, check metrics when done. Start both on every iteration — the fast loop improves data while the slow loop validates training.
+**The flow:**
+```
+Eval → Readiness Gate → [FAIL] → Fix data/grader → Re-eval → ... → [PASS] → Train
+```
+**Max 5 eval-only iterations** before training. If readiness gate never passes, escalate to user.
 
 #### 7a. Pre-training validation (RFT-specific — do NOT skip)
 
@@ -505,9 +519,9 @@ print(f'Split: {len(train)} train, {len(val)} validation')
 
 **Note:** The gateway does not support a separate validation upload. The split is local — `training.jsonl` (80%) is what gets uploaded and trained on. Keep `validation.jsonl` locally. After training completes, manually evaluate the finetuned model on the held-out validation prompts to check for reward hacking. If `train_reward_mean` is high but the model performs poorly on validation prompts → reward hacking.
 
-#### 7b. Pre-submission validation + create both jobs
+#### 7b. Create eval job (eval-only — NO training yet)
 
-**⚠️ Before creating eval or training, verify records exist on the gateway:**
+**⚠️ Before creating eval, verify records exist on the gateway:**
 ```bash
 RECORD_COUNT=$(curl -s "http://localhost:9090/finetune/workflows/$WORKFLOW_ID/records" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d))")
 echo "Records on gateway: $RECORD_COUNT"
@@ -516,36 +530,67 @@ if [ "$RECORD_COUNT" -lt 1 ]; then
   exit 1
 fi
 ```
-This prevents the eval-001 "0 results" bug — creating an eval with no records succeeds but returns empty results.
 
-Create both jobs — `create-eval` and `create-training` are non-blocking (they submit to the cloud and return immediately):
-
+Create eval job only — do NOT create a training job yet:
 ```bash
-# Create eval (saves metadata to evaluations/eval-001.json)
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
   --workflow-id $WORKFLOW_ID --output-dir evaluations
-
-# Available base models:
-# unsloth/Qwen3.5-0.8B, unsloth/Qwen3.5-2B, unsloth/Qwen3.5-4B, unsloth/Qwen3.5-9B
-
-# Create training job (saves metadata to training-jobs/train-001.json)
-# Default GRPO params (lr=1e-6, candidates=8, epochs=8) are set in the script.
-# Override with --config and/or --inference-params JSON:
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
-  --workflow-id $WORKFLOW_ID \
-  --base-model "unsloth/Qwen3.5-4B" \
-  --output-model "chess-tutor-v1" \
-  --output-dir training-jobs
-
-# To override defaults (e.g., after diagnosing KL explosions or low signal):
-# python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
-#   --workflow-id $WORKFLOW_ID \
-#   --base-model "unsloth/Qwen3.5-4B" \
-#   --output-model "chess-tutor-v2" \
-#   --config '{"learning_rate": 0.0000005, "epochs": 5, "lora_rank": 16}' \
-#   --inference-params '{"response_candidates_count": 16, "max_output_tokens": 1024}' \
-#   --output-dir training-jobs
 ```
+
+> **Note on eval IDs**: The `POST /finetune/evaluations` response returns `evaluation_run_id` — use this for polling. The workflow's `eval_job_ids` field may show a different internal ID that returns 404. Always use the ID from the create response.
+
+**Poll eval in foreground:**
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval \
+  --file evaluations/eval-001.json
+```
+
+When eval completes, proceed to **Step 7c (Readiness Gate)** — do NOT start training.
+
+#### 7c. Pre-Training Readiness Gate
+
+After eval completes, check if data and grader are ready for training:
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
+  --file evaluations/eval-001.json
+```
+
+The readiness gate runs **7 hard checks** (gate training) and **3 soft checks** (warnings):
+
+**Hard checks** (must ALL pass to proceed):
+| Check | Pass | Fail → Action |
+|-------|------|---------------|
+| Sample count >= 50 | ✅ | Too few prompts — GRPO needs >= 50 for stable advantage estimates |
+| Score std > 0.15 | ✅ | Grader not differentiating — add criteria, re-eval |
+| Fraction scores > 0.9 < 50% | ✅ | Grader too lenient — tighten criteria, re-eval |
+| Fraction exact 0/1 < 30% | ✅ | Too binary — add partial credit bands, re-eval |
+| Dead-weight records (score < 0.1) < 5% | ✅ | Remove + regenerate dead-weight, re-eval |
+| Average score > 0.5 | ✅ | Data too hard or grader too strict — adjust, re-eval |
+| Pass rate (>0.7) > 60% | ✅ | Data/grader quality insufficient — iterate |
+
+**Soft checks** (warnings — training can proceed, but fixing improves outcomes):
+| Check | Pass | Fail → Action |
+|-------|------|---------------|
+| Prompt learnability > 60% | ✅ | Too many prompts with zero score variance across completions — GRPO gets zero gradient on those prompts. Rewrite or remove them. (DAPO insight) |
+| Score-length correlation < 0.3 | ✅ | Grader may reward/punish response length instead of quality — reward hacking risk. Rewrite grader to be length-independent. (Dr. GRPO) |
+| Topic balance: no topic > 40% | ✅ | One topic dominates — training will over-optimize for it. Add data for under-represented topics. |
+
+**Decision:**
+- **Exit code 0 (PASS)** → All hard checks passed, no soft warnings → proceed to **Step 7d (Start Training)**
+- **Exit code 1 (FAIL)** → Hard check(s) failed → fix issues → return to **Step 7b (Re-eval)**. Apply fixes from Step 9a first.
+- **Exit code 2 (WARN)** → Only soft checks failed, or 1 hard check marginally failed → present findings to user. If non-interactive, proceed to training.
+
+**Max 5 eval-only iterations.** If readiness gate never passes after 5 evals, escalate to user with diagnosis.
+
+**⚠️ IMPORTANT: First eval with base model will often FAIL readiness** — the base model hasn't been trained yet, so avg scores will be low. This is expected for the first iteration. Focus on the grader quality checks (std, binary fraction, high score fraction) rather than absolute score. If the grader checks pass but avg/pass_rate fail, that means the grader is working correctly — the model just needs training. In this case:
+- Remove dead-weight records (score=0)
+- If grader checks all pass → proceed to training even if avg_score/pass_rate fail
+- The purpose of eval-first is to catch **grader problems**, not to wait for the base model to score well
+
+#### 7d. Start Training (only after readiness gate passes)
+
+Training starts here — only reached when the readiness gate indicates data and grader are solid.
 
 **Base model selection:**
 | Model | Best for |
@@ -553,86 +598,101 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 | `unsloth/Qwen3.5-4B` | Fast experiments, narrow tasks |
 | `unsloth/Qwen3.5-9B` | Complex reasoning, broad domains |
 
-**GRPO training defaults** (research-validated — see `reference/analysis-strategy.md` Part 6 for full rationale and sources):
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
+  --workflow-id $WORKFLOW_ID \
+  --base-model "unsloth/Qwen3.5-4B" \
+  --output-model "project-v1" \
+  --output-dir training-jobs
+
+# To override defaults (e.g., after diagnosing issues from previous iterations):
+# python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
+#   --workflow-id $WORKFLOW_ID \
+#   --base-model "unsloth/Qwen3.5-4B" \
+#   --output-model "project-v2" \
+#   --config '{"learning_rate": 0.0000005, "epochs": 5, "lora_rank": 16}' \
+#   --inference-params '{"response_candidates_count": 16, "max_output_tokens": 1024}' \
+#   --output-dir training-jobs
+```
+
+**GRPO training defaults** (research-validated — see `reference/analysis-strategy.md` Part 6):
 
 | Parameter | Default | Rationale |
 |-----------|---------|-----------|
-| `learning_rate` | **1e-6** | Universal consensus: DeepSeekMath, DAPO, Dr. GRPO, TRL all use 1e-6. Do NOT use SFT rates (2e-5 to 5e-5) — they are 20-50x too high for GRPO and cause KL explosions. |
-| `response_candidates_count` | **8** (minimum) | GRPO needs multiple candidates to compute advantages. With G=2, advantage estimates are too noisy. All published work uses G≥8: DeepSeekMath (G=64), DAPO (G=16), Dr. GRPO (G=8), TRL default (G=8). |
+| `learning_rate` | **1e-6** | Universal consensus: DeepSeekMath, DAPO, Dr. GRPO, TRL all use 1e-6. Do NOT use SFT rates (2e-5 to 5e-5). |
+| `response_candidates_count` | **8** (minimum) | GRPO needs multiple candidates. All published work uses G≥8. |
 | `warmup_steps` | **20-50** | DAPO uses 20, "Tricks or Traps" uses 50. Linear warmup then constant LR. |
 
-**Config adjustments (initial):**
-
-> **⚠️ RFT epochs ≠ SFT epochs.** In SFT, 1-3 epochs avoids memorization. In RFT/GRPO, the model generates **fresh responses each epoch** — there's no repetition risk. RFT needs many more epochs for the model to explore the response space and learn reward-maximizing strategies. OpenAI's RFT uses hundreds of passes over the same prompts.
+> **⚠️ RFT epochs ≠ SFT epochs.** In RFT/GRPO, the model generates **fresh responses each epoch** — there's no repetition risk. More epochs = more exploration.
 
 | Situation | Adjustment |
 |-----------|------------|
-| < 50 records | `epochs: 10-15` — fewer prompts need more passes to build signal |
-| 50-200 records | `epochs: 5-10` — default range for typical datasets |
-| > 500 records | `epochs: 3-5` — more data provides richer signal per epoch |
+| < 50 records | `epochs: 10-15` |
+| 50-200 records | `epochs: 5-10` |
+| > 500 records | `epochs: 3-5` |
 | Complex task | `lora_rank: 16` |
-| Simple task | `lora_rank: 4` |
-| Compute-constrained | `response_candidates_count: 4` (minimum viable, but signal quality degrades) |
-| High KL but training otherwise healthy | **Do NOT lower LR just for KL.** In GRPO, KL is often not penalized (beta=0 is the DAPO/TRL default). High KL is expected as the model diverges from base. Check clipping ratio and reward trend instead |
-| Unstable training (NaN loss, reward collapse) | Lower `learning_rate` to 5e-7. Check for 100% completion truncation first |
+| High KL but training otherwise healthy | **Do NOT lower LR just for KL.** Beta=0 is the GRPO default — high KL is expected. |
+| Unstable training (NaN loss, reward collapse) | Lower `learning_rate` to 5e-7. Check for 100% completion truncation first. |
 
-> **Note on eval IDs**: The `POST /finetune/evaluations` response returns `evaluation_run_id` — use this for polling. The workflow's `eval_job_ids` field may show a different internal ID that returns 404. Always use the ID from the create response.
+#### 7e. Monitor training
 
-#### 7c. Monitor training + poll eval
+**Spawn training monitor.** Delegate to the `training-monitor` subagent (`.claude/agents/training-monitor.md`) — provide `GATEWAY_URL=http://localhost:9090`, `WORKFLOW_ID`, `JOB_ID` (from the training job file), and `OUTPUT_DIR=training-jobs`. The subagent launches a detached Python script that runs autonomously.
 
-**Monitor training.** Delegate to the `training-monitor` subagent (installed at `.claude/agents/training-monitor.md`) — provide `GATEWAY_URL=http://localhost:9090`, `WORKFLOW_ID`, `JOB_ID` (from the training job file), and `OUTPUT_DIR=training-jobs`. The subagent writes a Python monitoring script, launches it via `nohup`, and **returns immediately** with the report file path. The script runs autonomously for the duration of training (30-120+ min), saving metrics and checking for anomalies.
-
-**Poll eval in foreground** (while the training monitor runs autonomously):
-
-```bash
-# Poll eval in foreground (updates evaluations/eval-001.json with progress + results)
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval \
-  --file evaluations/eval-001.json
-```
-
-**After eval completes**, check if training is done:
-```bash
-test -f training-jobs/{JOB_ID}-monitor-report.json && echo "Training done — read report" || echo "Training still running"
-```
-
-If training is still running, **poll it in the foreground** (do NOT use `sleep` in Bash):
+**Poll training in foreground:**
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
   --file training-jobs/train-001.json \
   --poll-interval 60 --max-wait 7200
 ```
-This polls every 60s for up to 2 hours, printing step progress. When it returns, read the monitor report for anomalies.
 
-> **⚠️ NEVER use `sleep 300` or `sleep 600` in a Bash tool call to wait for training.** This blocks a turn for minutes with zero feedback. Always use `poll-training` or check the monitor report file.
+> **⚠️ NEVER use `sleep 300` or `sleep 600` in a Bash tool call to wait for training.** Always use `poll-training`.
 
-**After training completes, update the local train JSON** with final status so files aren't stale:
-```bash
-python3 -c "
-import json
-f = 'training-jobs/train-001.json'  # adjust filename
-d = json.load(open(f))
-d['status'] = 'succeeded'  # or 'failed' — match the actual outcome
-json.dump(d, open(f, 'w'), indent=2)
-"
-```
+When training completes, proceed to **Step 8b (Post-Training Analysis)**.
 
-**Key rule**: When eval completes, **immediately analyze eval results** — don't wait for training. Both save data locally (`training-jobs/` and `evaluations/`) so Step 8 needs no API calls.
+### Step 8: Analyze Results
 
-### Step 8: Analyze Results & Present Findings
-
-Analyze each job's results **as soon as they arrive** — don't wait for both to finish. Present findings to the user. If the user is interactive, let them choose the next action. If running non-interactively (no user response), auto-apply the highest-priority fix and iterate.
-
-**Before analyzing, sync jobs** to catch any status changes made from the UI (e.g., user cancelled a job while you were waiting):
+**Before analyzing, sync jobs** to catch status changes from the UI:
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py sync-jobs --workflow-id $WORKFLOW_ID --output-dir finetune-project
 ```
 
-**Handle cancelled jobs**: If a training or eval job has `status: cancelled`, **skip its analysis**. Log "Job {ID} was cancelled — skipping training analysis" in execution-log.md. Analyze only the jobs that completed. If ALL jobs were cancelled, proceed to Step 9 and start fresh jobs.
+**Handle cancelled jobs**: Skip analysis for cancelled jobs. Log it in execution-log.md. If ALL jobs were cancelled, proceed to Step 9.
 
-> **Read [reference/analysis-strategy.md](reference/analysis-strategy.md)** for decision trees, action templates, derived metrics, and presentation format.
-> **Read [reference/training-metrics-guide.md](reference/training-metrics-guide.md)** for GRPO metric interpretation — healthy ranges, red flags, and what to change. Use the Quick Decision Table to determine iteration actions.
+> **Read [reference/analysis-strategy.md](reference/analysis-strategy.md)** for decision trees and presentation format.
+> **Read [reference/training-metrics-guide.md](reference/training-metrics-guide.md)** for GRPO metric interpretation.
 
-#### 8a. Analyze training results (when training completes)
+#### 8a. Analyze eval results (after each eval — before training)
+
+This runs during the eval-first loop (Step 7b→7c). Compute:
+
+1. **Overall**: average score, pass rate (>0.7 threshold), score range
+2. **Per-topic breakdown**: group scores by topic, sort by average (weakest first)
+3. **Low-scoring records**: list records <0.7 with their `reason` fields
+4. **Score distribution**: are scores spread out (good) or clustered (grader issue)?
+5. **Readiness gate output**: from `readiness-check` command — which criteria passed/failed
+
+**Then run the readiness gate** (Step 7c) to decide: fix + re-eval, or proceed to training.
+
+#### 8a+. Filter Dead-Weight Records & Regenerate Replacements
+
+**Why this matters:** GRPO **cannot learn from negative-only rewards**. When every sampled response scores 0, the gradient is zero. Dead-weight records destabilize training.
+
+**After eval completes:**
+1. Find records where max score < 0.1 — these are dead weight
+2. Diagnose WHY (grader hard gate? wrong premise? model too weak?)
+3. Remove dead-weight records from `training.jsonl`
+4. Regenerate replacements if needed (`generate_records.py --append`)
+5. Re-validate and re-upload with `--force`:
+   ```bash
+   python3 ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py finetune-project/training.jsonl --topics finetune-project/topics.json
+   python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl
+   ```
+
+**When to skip regeneration:** If only 1-2 records out of 200+ scored 0, removing without replacement is fine.
+
+#### 8b. Analyze training results (after training completes)
+
+This runs after Step 7e. Training is expensive — analyze thoroughly:
 
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/analyze_training.py \
@@ -640,36 +700,11 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/analyze_training.py \
   --epoch-evals-file training-jobs/$JOB_ID-epoch-evals.json
 ```
 
-For JSON output: add `--json > training-jobs/job-v1-analysis.json`. The script computes reward trend, KL health, clipping ratio, loss stability, grad norm spikes, signal strength, and per-topic learning trajectories. Exits with code 1 if critical alerts found. Present findings immediately — don't wait for eval.
+The script computes reward trend, KL health, clipping ratio, loss stability, grad norm spikes, signal strength, and per-topic trajectories. Exits with code 1 if critical alerts found.
 
-#### 8b. Analyze eval results (when eval completes)
+#### 8c. Cross-reference eval + training (when both available)
 
-**Must compute:**
-1. **Overall**: average score, pass rate (>0.7 threshold), score range
-2. **Per-topic breakdown**: group scores by topic, sort by average (weakest first)
-3. **Low-scoring records**: list records <0.7 with their `reason` fields
-4. **Score distribution**: are scores spread out (good) or clustered (grader issue)?
-
-#### 8b+. Filter Dead-Weight Records & Regenerate Replacements
-
-**Why this matters:** Research on GRPO/RFT shows that models **cannot learn from negative-only rewards**. When every sampled response to a question scores 0, the gradient is zero — the model learns nothing. Worse, these dead-weight records can actively destabilize training.
-
-**After eval completes:**
-1. Find records where max score < 0.1 — these are dead weight
-2. Diagnose WHY (grader hard gate? wrong premise? model too weak? ambiguous question?)
-3. Remove dead-weight records from `training.jsonl`
-4. Regenerate replacements for the same topics using `generate_records.py --append` with different parameters (higher temperature, different prompt types)
-5. Re-validate and re-upload with `--force` (overwrites existing records on the gateway):
-   ```bash
-   python3 ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py finetune-project/training.jsonl --topics finetune-project/topics.json
-   python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl
-   ```
-
-**When to skip regeneration:** If only 1-2 records out of 200+ scored 0, removing without replacement is fine. Regenerate when dead-weight records are >5% of total or concentrated in a single topic.
-
-#### 8c. Cross-reference (when both available)
-
-Combine eval scores with training metrics. Present a summary showing per-topic eval scores alongside training health indicators, then suggest prioritized actions. **Let the user choose** — they may direct their own analysis.
+Combine eval scores with training metrics. Present per-topic eval scores alongside training health. Suggest prioritized actions.
 
 #### 8d. Quick diagnosis patterns
 
@@ -724,11 +759,13 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step analyze --project-
 
 ### Step 9: Iterate (If Needed)
 
-Based on the user's choice from Step 8, apply fixes and start new jobs. **Max 5 iterations.**
+Two iteration loops with different speeds and costs:
 
 > **For full iteration diagnosis and escalation strategy**, read [reference/iteration-strategy.md](reference/iteration-strategy.md).
 
-#### 9a. Apply the chosen fix
+#### 9a. Eval-only iteration (readiness gate failed — fast, cheap)
+
+Apply fixes and re-eval. Do NOT create a training job.
 
 **Fixing the grader** (no data re-upload needed):
 ```bash
@@ -743,15 +780,22 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force \
   --workflow-id $WORKFLOW_ID --file training.jsonl
 ```
 
-#### 9b. Start new eval + training jobs
+**Return to Step 7b** — create a new eval and re-run the readiness gate. This is the fast loop (~45 min per iteration).
 
-After applying fixes, start new jobs — same as Step 7b but with incremented version numbers:
+#### 9b. Post-training iteration (training completed but results unsatisfactory)
+
+After training analysis (Step 8b), if results are unsatisfactory:
+
+1. **If only hyperparams need adjusting** (reward flat, clipping too high, etc.) — skip eval, go directly to **Step 7d** with new training config
+2. **If data or grader needs fixing** — apply fixes, return to **Step 7b** (re-eval first, then training)
+3. **If model is too weak** — try a larger base model (4B → 9B)
+
 ```bash
-# New eval
+# New eval after fixes
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
   --workflow-id $WORKFLOW_ID --output-dir evaluations
 
-# New training job with adjusted config
+# Only after readiness gate passes:
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
   --workflow-id $WORKFLOW_ID \
   --base-model "unsloth/Qwen3.5-4B" \
@@ -759,7 +803,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
   --output-dir training-jobs
 ```
 
-**Adjusting training config**: Modify parameters in the next job creation (Step 7b).
+**Max iterations:** 5 eval-only (Step 9a) + 3 training (Step 9b) before escalating to user.
 
 **If training failed with an opaque error** (e.g., "worker exited with status 1"): This is usually a transient cloud infrastructure failure. Retry with the same config first. If it fails again, try a smaller model or reduce batch size.
 

@@ -4,15 +4,24 @@ How to analyze evaluation results, diagnose issues, assess data quality, and ite
 
 ---
 
-## The Iteration Loop
+## The Eval-First Iteration Loop
+
+The pipeline runs in two phases:
 
 ```
-Run Evaluation → Analyze Results → Diagnose Issues → Apply Fixes → Re-evaluate
-                                 ↘ Check Distribution
-                                 ↘ Check Variety
+Phase 1 — Eval Iterations (fast, ~45 min each, cheap):
+  Eval → Readiness Gate → [FAIL] → Fix data/grader → Re-eval → ... → [PASS] →
+
+Phase 2 — Training (slow, hours, expensive):
+  Train → Analyze → [good] → Deploy
+                   → [bad]  → Fix → Back to Phase 1
 ```
 
-Typically 2-5 iterations are needed to reach a GO verdict.
+**Max 5 eval-only iterations** (Phase 1) before training. **Max 3 training iterations** (Phase 2) before escalating.
+
+Use `finetune.py readiness-check --file evaluations/eval-NNN.json` to run the readiness gate programmatically. See §5 for the criteria.
+
+Typically 2-3 eval iterations are needed to reach readiness, then 1-2 training iterations to converge.
 
 ---
 
@@ -88,17 +97,45 @@ Read the `reason` field from 5-10 low-scoring records. Look for:
 - **Irrelevant reasons** → Grader criteria misaligned with your objective
 - **"No assistant response found"** → The model didn't generate a response — check if the prompt is malformed
 
-### Step 5: GO / NO-GO Decision
+### Step 5: Pre-Training Readiness Gate
+
+Run the readiness gate to decide whether to proceed to training:
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check --file evaluations/eval-NNN.json
+```
 
 | Verdict | Criteria | Action |
 |---------|----------|--------|
-| **GO** | avg > 0.6, pass rate > 70%, std 0.15-0.30 | Proceed to training |
-| **WARNING** | avg 0.5-0.6 or pass rate 60-70% | Can train, but improvements likely help |
-| **NO-GO** | avg < 0.5 or pass rate < 60% or std < 0.1 | Must fix before training |
+| **PASS** (exit 0) | All 6 checks pass | Proceed to training (Step 7d) |
+| **WARN** (exit 2) | 1 check marginally fails | Can train, but improvements likely help |
+| **FAIL** (exit 1) | Any check fails | Must fix before training — return to Step 7b |
+
+**Hard checks** (must ALL pass — gate training):
+
+| Check | Threshold | Why | Source |
+|-------|-----------|-----|--------|
+| Sample count | >= 50 prompts | GRPO advantage estimates are noisy below 50 | OpenAI RFT, general practice |
+| Score std | > 0.15 | GRPO needs score spread for gradient signal | DAPO, GRPO |
+| High-score fraction | < 50% scoring > 0.9 | Grader too lenient = no learning | DAPO clip-higher |
+| Binary fraction | < 30% scoring 0 or 1 | No partial credit = weak signal | General practice |
+| Dead-weight fraction | < 5% scoring < 0.1 | Zero-reward records = zero gradient | GRPO |
+| Average score | > 0.5 | Data too hard or grader too strict | "Tricks or Traps" |
+| Pass rate (>0.7) | > 60% | Minimum viable data quality | OpenAI RFT |
+
+**Soft checks** (warnings — don't gate training, but fixing improves outcomes):
+
+| Check | Threshold | Why | Source |
+|-------|-----------|-----|--------|
+| Prompt learnability | > 60% of prompts have score variance | Per-prompt variance drives GRPO learning — zero-variance prompts waste compute | DAPO dynamic sampling |
+| Score-length correlation | \|r\| < 0.3 | High correlation means grader rewards/punishes length, not quality — primary reward hacking vector | Dr. GRPO |
+| Topic balance | No topic > 40% of data | Imbalanced topics cause over-optimization for common topics | OpenAI RFT |
+
+**⚠️ On first eval with base model:** avg_score and pass_rate will likely fail — the base model hasn't been trained yet. Focus on the grader quality checks (std, binary, high-score). If grader checks pass and only avg/pass_rate fail, proceed to training — the grader is working, the model just needs training.
 
 ### Step 5b: Grader Score Distribution Pre-Flight (Before Training)
 
-Even if the GO/NO-GO verdict passes, check whether the grader's score distribution will produce a **useful GRPO training signal**. GRPO learns by comparing G=8 completions per prompt — if all completions score similarly, the gradient is near-zero and the model learns nothing.
+Even if the readiness gate passes, check whether the grader's score distribution will produce a **useful GRPO training signal**. GRPO learns by comparing G=8 completions per prompt — if all completions score similarly, the gradient is near-zero and the model learns nothing.
 
 **Check the score distribution from eval results:**
 

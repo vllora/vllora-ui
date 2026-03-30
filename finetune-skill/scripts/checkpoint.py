@@ -31,7 +31,8 @@ from pathlib import Path
 
 CHECKPOINT_FILE = ".checkpoint.json"
 
-PIPELINE_STEPS = [
+# Fixed steps in the pipeline (always the same name)
+FIXED_STEPS = [
     "create-workflow",
     "extract",
     "topics",
@@ -41,10 +42,21 @@ PIPELINE_STEPS = [
     "validate",
     "upload-records",
     "upload-grader",
-    "eval",
+    "readiness-pass",
     "training",
     "analyze",
 ]
+
+# Dynamic steps use a pattern: eval-1, eval-2, etc.
+# They are accepted by prefix match, not listed in FIXED_STEPS.
+DYNAMIC_STEP_PREFIXES = ["eval-"]
+
+
+def is_valid_step(name: str) -> bool:
+    """Check if a step name is valid (fixed or dynamic pattern)."""
+    if name in FIXED_STEPS:
+        return True
+    return any(name.startswith(prefix) for prefix in DYNAMIC_STEP_PREFIXES)
 
 
 def load_checkpoint(project_dir: Path) -> dict:
@@ -63,6 +75,10 @@ def save_checkpoint(project_dir: Path, state: dict) -> None:
 
 def cmd_done(args: argparse.Namespace) -> None:
     """Mark a step as completed."""
+    if not is_valid_step(args.step):
+        print(f"Error: Unknown step '{args.step}'. Valid: {FIXED_STEPS} or dynamic: {DYNAMIC_STEP_PREFIXES}", file=sys.stderr)
+        sys.exit(1)
+
     project_dir = Path(args.project_dir)
     state = load_checkpoint(project_dir)
 
@@ -84,6 +100,10 @@ def cmd_done(args: argparse.Namespace) -> None:
 
 def cmd_check(args: argparse.Namespace) -> None:
     """Check if a step is done. Exit 0 = done, Exit 1 = not done."""
+    if not is_valid_step(args.step):
+        print(f"Error: Unknown step '{args.step}'", file=sys.stderr)
+        sys.exit(1)
+
     project_dir = Path(args.project_dir)
     state = load_checkpoint(project_dir)
     step_state = state.get("steps", {}).get(args.step, {})
@@ -108,7 +128,20 @@ def cmd_status(args: argparse.Namespace) -> None:
     print()
 
     steps = state.get("steps", {})
-    for step in PIPELINE_STEPS:
+
+    # Build display order: fixed steps + any dynamic steps (eval-N) in sorted order
+    # Insert dynamic eval steps before "readiness-pass"
+    display_steps: list[str] = []
+    dynamic_steps = sorted(k for k in steps if any(k.startswith(p) for p in DYNAMIC_STEP_PREFIXES))
+
+    for fixed in FIXED_STEPS:
+        if fixed == "readiness-pass":
+            # Insert all eval-N steps before readiness-pass
+            display_steps.extend(dynamic_steps)
+        display_steps.append(fixed)
+
+    total = len(display_steps)
+    for step in display_steps:
         info = steps.get(step, {})
         status = info.get("status", "pending")
         completed = info.get("completed_at", "")
@@ -122,11 +155,15 @@ def cmd_status(args: argparse.Namespace) -> None:
         print(line)
 
     done_count = sum(1 for s in steps.values() if s.get("status") == "completed")
-    print(f"\n{done_count}/{len(PIPELINE_STEPS)} steps completed")
+    print(f"\n{done_count}/{total} steps completed")
 
 
 def cmd_reset(args: argparse.Namespace) -> None:
     """Reset a single step."""
+    if not is_valid_step(args.step):
+        print(f"Error: Unknown step '{args.step}'", file=sys.stderr)
+        sys.exit(1)
+
     project_dir = Path(args.project_dir)
     state = load_checkpoint(project_dir)
     if args.step in state.get("steps", {}):
@@ -153,20 +190,20 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("done", help="Mark a step as completed")
-    p.add_argument("--step", required=True, choices=PIPELINE_STEPS, help="Step name")
+    p.add_argument("--step", required=True, help="Step name (fixed or dynamic like eval-1, eval-2)")
     p.add_argument("--project-dir", required=True, help="Path to finetune-project/")
     p.add_argument("--workflow-id", help="Workflow ID (stored in checkpoint)")
     p.add_argument("--note", help="Optional note about the step result")
 
     p = sub.add_parser("check", help="Check if a step is done")
-    p.add_argument("--step", required=True, choices=PIPELINE_STEPS, help="Step name")
+    p.add_argument("--step", required=True, help="Step name (fixed or dynamic like eval-1)")
     p.add_argument("--project-dir", required=True, help="Path to finetune-project/")
 
     p = sub.add_parser("status", help="Show all checkpoint state")
     p.add_argument("--project-dir", required=True, help="Path to finetune-project/")
 
     p = sub.add_parser("reset", help="Reset a single step")
-    p.add_argument("--step", required=True, choices=PIPELINE_STEPS, help="Step name")
+    p.add_argument("--step", required=True, help="Step name (fixed or dynamic like eval-1)")
     p.add_argument("--project-dir", required=True, help="Path to finetune-project/")
 
     p = sub.add_parser("reset-all", help="Reset all checkpoints")

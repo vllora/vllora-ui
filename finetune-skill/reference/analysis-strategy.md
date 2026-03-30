@@ -250,24 +250,21 @@ For records that scored low on eval (< 0.4), how many improved during training?
                               │       │       │
                           avg < 0.5  0.5-0.6  avg > 0.6
                               │       │       │
-                          NO-GO    WARNING    │
+                          FAIL     WARN       │
                               │       │    Check pass_rate
                               │       │       │
                          Diagnose  Optional  ┌──┴──┐
                          (see 3b) improve   <70%  >70%
                                             │      │
-                                         WARNING   GO
+                                         WARN    Run readiness-check
                                             │      │
-                                         Optional  │
-                                         improve  Check score_std
-                                                    │
-                                               ┌────┴────┐
-                                            < 0.1      0.1-0.3
-                                               │         │
-                                          Grader not    READY
-                                          differentiating  │
-                                               │      Proceed to
-                                          Fix grader   training
+                                         Optional  ┌────┴────┐
+                                         improve  FAIL     PASS
+                                                    │         │
+                                               Fix failing  READY
+                                               criteria      │
+                                                    │      Proceed to
+                                               Re-eval    training
 ```
 
 ### 3b. Diagnosing Low Eval Scores
@@ -339,6 +336,48 @@ For records that scored low on eval (< 0.4), how many improved during training?
                               _tokens     spread
                               by 2x
 ```
+
+---
+
+## Part 3e: Pre-Training Readiness Gate
+
+After each eval completes, run the readiness gate before starting training. This prevents wasting GPU hours on bad data or a broken grader.
+
+**Run programmatically:**
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check --file evaluations/eval-NNN.json
+```
+
+**Hard checks** (must ALL pass — gate training):
+
+| Check | Threshold | Why it matters | Fix if failing | Source |
+|-------|-----------|---------------|----------------|--------|
+| Sample count | >= 50 prompts | GRPO advantage estimates are noisy below 50 | Add more training data | OpenAI RFT |
+| Score std | > 0.15 | Grader must differentiate good from bad | Add criteria or partial credit bands (0.2, 0.4, 0.6, 0.8) | DAPO |
+| High-score fraction (> 0.9) | < 50% | Grader must not be too lenient | Raise the bar — tighten criteria | DAPO clip-higher |
+| Binary fraction (0 or 1) | < 30% | Grader should use the full score range | Add intermediate scoring tiers | General practice |
+| Dead-weight fraction (< 0.1) | < 5% | GRPO can't learn from all-zero rewards | Remove and regenerate dead-weight records | GRPO |
+| Average score | > 0.5 | Data must not be too hard for base model | Simplify prompts, adjust grader, or try larger base model | "Tricks or Traps" |
+| Pass rate (score >= 0.7) | > 60% | Sufficient good examples for learning | Improve data quality or relax grader slightly | OpenAI RFT |
+
+**Soft checks** (warnings — don't gate training, but fixing improves outcomes):
+
+| Check | Threshold | Why it matters | Fix if failing | Source |
+|-------|-----------|---------------|----------------|--------|
+| Prompt learnability | > 60% of prompts have score variance | Prompts with zero variance across K completions give zero GRPO gradient — wasted compute | Rewrite or remove zero-variance prompts | DAPO dynamic sampling |
+| Score-length correlation | \|r\| < 0.3 | High correlation means grader rewards/punishes response length, not quality — primary reward hacking vector | Rewrite grader to evaluate content independently of length | Dr. GRPO |
+| Topic balance | No single topic > 40% | Imbalanced topics cause over-optimization for common topics, neglecting rare ones | Add data for under-represented topics or reduce dominant topic | OpenAI RFT |
+
+**Verdicts:**
+| Exit code | Verdict | Meaning | Action |
+|-----------|---------|---------|--------|
+| 0 | PASS | All hard checks pass, no soft warnings | Proceed to training (Step 7d) |
+| 2 | WARN | Only soft checks failed, or 1 hard check marginally fails | Can train, but fixing the issue first is recommended |
+| 1 | FAIL | Any hard check fails | Must fix before training — return to Step 7b |
+
+**Max iterations:** 5 eval-only iterations before training. If readiness gate never passes after 5 iterations, escalate to user with a summary of all attempts.
+
+The `readiness-check` command outputs structured JSON with per-criterion values, thresholds, pass/fail status, and fix suggestions. The output distinguishes `hard_failed` (must fix) from `soft_failed` (should fix). The agent reads this output and either applies fixes (Step 9a) or proceeds to training (Step 7d).
 
 ---
 
@@ -486,7 +525,7 @@ Current → Proposed:
 
 Rationale: {overall_rationale}
 
-This is iteration {n}/5. After {remaining} more failed iterations, I'll suggest trying a larger base model.
+This is training iteration {n}/3. After {remaining} more failed iterations, I'll suggest trying a larger base model.
 
 Start a new training job with these settings?
 ```
@@ -577,7 +616,7 @@ Which approach do you want to try?
 
 1. **Lead with numbers, then explain.** Always show the scores/counts first, then interpret.
 
-2. **Use the GO/WARNING/NO-GO framework** for every evaluation. Users need a clear "should I proceed?" signal.
+2. **Use the readiness gate** (PASS/WARN/FAIL) for every evaluation. Users need a clear "should I proceed?" signal. Run `readiness-check` programmatically — see Part 3e.
 
 3. **Rank suggestions by impact.** If there are 5 things to fix, start with the one that affects the most records.
 
@@ -593,7 +632,7 @@ Which approach do you want to try?
 
 **After evaluation, always present in this order:**
 
-1. **Verdict**: GO / WARNING / NO-GO (one line)
+1. **Verdict**: PASS / WARN / FAIL from readiness gate (one line)
 2. **Key numbers**: avg score, pass rate, score std, error rate (2-3 lines)
 3. **Score distribution**: 5-bucket histogram (text-based)
 4. **Topic breakdown**: table of per-topic scores (sorted by score ascending)
@@ -623,7 +662,7 @@ Which approach do you want to try?
 - Iteration tracking (save results, update log)
 
 **Agent suggests, user decides:**
-- Whether to proceed to training (GO/WARNING/NO-GO is a suggestion)
+- Whether to proceed to training (readiness gate PASS/WARN/FAIL is a suggestion)
 - Which grader criteria to change (agent proposes, user approves)
 - Whether to regenerate data for a topic (agent identifies, user confirms)
 - When to stop iterating (agent tracks progress, user makes the call)

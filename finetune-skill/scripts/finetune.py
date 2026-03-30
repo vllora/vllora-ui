@@ -641,10 +641,61 @@ def cmd_status(args: argparse.Namespace) -> None:
     else:
         print("  No checkpoint file found")
 
-    # ── Recommended next step ──
-    print("\n── Recommended Next Step ──")
     def step_done(name: str) -> bool:
         return cp_steps.get(name, {}).get("status") == "completed"
+
+    # ── Readiness gate (check latest eval if exists) ──
+    eval_dir = project_dir / "evaluations"
+    latest_eval_file = None
+    if eval_dir.exists():
+        eval_files = sorted(eval_dir.glob("eval-*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
+        for ef in eval_files:
+            try:
+                ed = json.loads(ef.read_text())
+                if ed.get("results") and len(ed["results"]) > 0:
+                    latest_eval_file = ef
+                    break
+            except (json.JSONDecodeError, KeyError):
+                pass
+
+    readiness_passed = step_done("readiness-pass")
+
+    if latest_eval_file and not readiness_passed:
+        print("\n── Readiness Gate ──")
+        # Quick inline check (same logic as readiness-check command)
+        try:
+            ed = json.loads(latest_eval_file.read_text())
+            scores = []
+            for r in ed.get("results", []):
+                epochs = r.get("epochs", {})
+                if isinstance(epochs, dict):
+                    for _ek, cands in epochs.items():
+                        if isinstance(cands, list):
+                            for c in cands:
+                                if isinstance(c, dict) and c.get("score") is not None:
+                                    scores.append(float(c["score"]))
+            if scores:
+                import statistics
+                n = len(scores)
+                avg_s = sum(scores) / n
+                std_s = statistics.stdev(scores) if n > 1 else 0
+                dead_w = sum(1 for s in scores if s < 0.1) / n
+                pass_r = sum(1 for s in scores if s >= 0.7) / n
+                print(f"  Latest eval: {latest_eval_file.name} ({n} scores)")
+                print(f"  avg={avg_s:.3f}, std={std_s:.3f}, dead_weight={dead_w:.1%}, pass_rate={pass_r:.1%}")
+                grader_ok = std_s > 0.15 and dead_w < 0.05
+                model_ok = avg_s > 0.5 and pass_r > 0.6
+                if grader_ok and model_ok:
+                    print(f"  Verdict: PASS — ready for training")
+                elif grader_ok:
+                    print(f"  Verdict: GRADER OK, model needs training — can proceed to training")
+                else:
+                    print(f"  Verdict: FAIL — fix grader/data before training")
+        except Exception:
+            print(f"  Could not analyze {latest_eval_file.name}")
+
+    # ── Recommended next step ──
+    print("\n── Recommended Next Step ──")
 
     if not step_done("create-workflow"):
         print("  → Start from Step 1: Create workflow")
@@ -661,18 +712,333 @@ def cmd_status(args: argparse.Namespace) -> None:
     elif records_count == 0 or records_count == "?":
         print("  → Data was generated but may not be uploaded. Run verify.")
     else:
-        active_jobs = [j for j in job_list if j.get("status") in ("running", "pending", "queued")]
+        active_training = [j for j in job_list if j.get("status") in ("running", "pending", "queued")]
         cancelled_jobs = [j for j in job_list if j.get("status") == "cancelled"]
-        done_jobs = [j for j in job_list if j.get("status") in ("completed", "succeeded")]
+        done_training = [j for j in job_list if j.get("status") in ("completed", "succeeded")]
 
-        if active_jobs:
-            print(f"  → Jobs running — poll them (Step 7)")
-        elif done_jobs:
-            print(f"  → Analyze results (Step 8) and iterate if needed (Step 9)")
-        elif cancelled_jobs and not done_jobs:
-            print(f"  → All jobs cancelled. Start new eval + training (Step 7)")
+        if active_training:
+            print(f"  → Training running — poll it (Step 7e)")
+        elif done_training:
+            print(f"  → Analyze training results (Step 8b) and iterate if needed (Step 9)")
+        elif readiness_passed:
+            print(f"  → Readiness gate passed. Start training (Step 7d)")
         else:
-            print(f"  → Ready for eval + training (Step 7)")
+            print(f"  → Run eval (Step 7b) then readiness gate (Step 7c) before training")
+
+
+def _extract_eval_data(results: list[dict]) -> dict:
+    """Extract structured data from eval results for readiness analysis.
+
+    Returns dict with:
+      - scores: flat list of all scores
+      - per_prompt: list of {scores, lengths, topic} per prompt
+      - has_lengths: whether completion lengths were available
+      - has_topics: whether topic labels were available
+    """
+    all_scores: list[float] = []
+    per_prompt: list[dict] = []
+
+    for r in results:
+        prompt_scores: list[float] = []
+        prompt_lengths: list[int] = []
+        topic = None
+
+        # Extract topic from row metadata
+        row = r.get("row", {})
+        if isinstance(row, dict):
+            topic = row.get("topic")
+
+        epochs = r.get("epochs", {})
+        if isinstance(epochs, dict):
+            for _epoch_key, candidates in epochs.items():
+                if not isinstance(candidates, list):
+                    continue
+                for c in candidates:
+                    if not isinstance(c, dict) or c.get("score") is None:
+                        continue
+                    score = float(c["score"])
+                    prompt_scores.append(score)
+                    all_scores.append(score)
+                    # Try to get completion length from candidate
+                    completion = c.get("completion", c.get("response", c.get("output", "")))
+                    if completion and isinstance(completion, str):
+                        prompt_lengths.append(len(completion))
+        elif r.get("score") is not None:
+            score = float(r["score"])
+            prompt_scores.append(score)
+            all_scores.append(score)
+
+        if prompt_scores:
+            entry: dict = {"scores": prompt_scores, "topic": topic}
+            if prompt_lengths:
+                entry["lengths"] = prompt_lengths
+            per_prompt.append(entry)
+
+    has_lengths = any("lengths" in p for p in per_prompt)
+    has_topics = any(p.get("topic") for p in per_prompt)
+
+    return {
+        "scores": all_scores,
+        "per_prompt": per_prompt,
+        "has_lengths": has_lengths,
+        "has_topics": has_topics,
+    }
+
+
+def cmd_readiness_check(args: argparse.Namespace) -> None:
+    """Check if eval results pass the pre-training readiness gate.
+
+    Computes readiness criteria from eval results. Training should only
+    start after ALL hard criteria pass. Returns structured JSON with
+    per-criterion details, verdict, and fix suggestions.
+
+    Hard checks (gate training):
+      1. sample_count    — minimum dataset size
+      2. score_std       — grader differentiation
+      3. high_score_frac — grader not too lenient
+      4. binary_frac     — grader uses full range
+      5. dead_weight_frac — no wasted compute
+      6. avg_score       — data not too hard
+      7. pass_rate       — minimum viable quality
+
+    Soft checks (warnings, don't gate):
+      8. prompt_learnability — per-prompt variance for GRPO signal
+      9. score_length_corr  — reward hacking risk (Dr. GRPO)
+     10. topic_balance      — no single topic dominates
+
+    Exit codes: 0 = PASS, 1 = FAIL, 2 = WARN
+    """
+    eval_file = Path(args.file)
+    if not eval_file.exists():
+        print(f"Error: Eval file not found: {eval_file}", file=sys.stderr)
+        sys.exit(1)
+
+    data = json.loads(eval_file.read_text())
+    results = data.get("results", [])
+    if not results:
+        print(json.dumps({"verdict": "FAIL", "error": "No results in eval file", "checks": {}}))
+        sys.exit(1)
+
+    eval_data = _extract_eval_data(results)
+    scores = eval_data["scores"]
+    per_prompt = eval_data["per_prompt"]
+
+    if not scores:
+        print(json.dumps({"verdict": "FAIL", "error": "No scores found in eval results", "checks": {}}))
+        sys.exit(1)
+
+    # Parse thresholds (defaults match iteration-strategy.md §5b)
+    defaults = {
+        "min_sample_count": 50,
+        "warn_sample_count": 200,
+        "min_score_std": 0.15,
+        "max_high_score_frac": 0.50,
+        "max_binary_frac": 0.30,
+        "max_dead_weight_frac": 0.05,
+        "min_avg_score": 0.50,
+        "min_pass_rate": 0.60,
+        "pass_threshold": 0.70,
+        "min_prompt_learnability": 0.60,
+        "max_score_length_corr": 0.30,
+        "max_topic_dominance": 0.40,
+    }
+    thresholds = defaults.copy()
+    if args.thresholds:
+        try:
+            thresholds.update(json.loads(args.thresholds))
+        except json.JSONDecodeError:
+            print(f"Warning: Could not parse --thresholds, using defaults", file=sys.stderr)
+
+    import statistics
+
+    n = len(scores)
+    num_prompts = len(per_prompt)
+    avg = sum(scores) / n
+    std = statistics.stdev(scores) if n > 1 else 0.0
+    high_frac = sum(1 for s in scores if s > 0.9) / n
+    binary_frac = sum(1 for s in scores if s <= 0.01 or s >= 0.99) / n
+    dead_weight_frac = sum(1 for s in scores if s < 0.1) / n
+    pass_rate = sum(1 for s in scores if s >= thresholds["pass_threshold"]) / n
+
+    # ── Hard checks (gate training) ──
+    checks: dict[str, dict] = {
+        "sample_count": {
+            "value": num_prompts,
+            "threshold": f">= {int(thresholds['min_sample_count'])}",
+            "pass": num_prompts >= thresholds["min_sample_count"],
+            "fix": f"Too few samples ({num_prompts}) — GRPO needs >= {int(thresholds['min_sample_count'])} prompts for stable advantage estimates. Add more training data.",
+            "hard": True,
+        },
+        "score_std": {
+            "value": round(std, 4),
+            "threshold": f"> {thresholds['min_score_std']}",
+            "pass": std > thresholds["min_score_std"],
+            "fix": "Grader not differentiating — add more criteria or partial credit bands (0.2, 0.4, 0.6, 0.8)",
+            "hard": True,
+        },
+        "high_score_frac": {
+            "value": round(high_frac, 4),
+            "threshold": f"< {thresholds['max_high_score_frac']}",
+            "pass": high_frac < thresholds["max_high_score_frac"],
+            "fix": "Grader too lenient — raise the bar on what scores > 0.9",
+            "hard": True,
+        },
+        "binary_frac": {
+            "value": round(binary_frac, 4),
+            "threshold": f"< {thresholds['max_binary_frac']}",
+            "pass": binary_frac < thresholds["max_binary_frac"],
+            "fix": "Too many binary (0/1) scores — add partial credit to grader",
+            "hard": True,
+        },
+        "dead_weight_frac": {
+            "value": round(dead_weight_frac, 4),
+            "threshold": f"< {thresholds['max_dead_weight_frac']}",
+            "pass": dead_weight_frac < thresholds["max_dead_weight_frac"],
+            "fix": "Too many dead-weight records (score < 0.1) — remove and regenerate, or simplify the task",
+            "hard": True,
+        },
+        "avg_score": {
+            "value": round(avg, 4),
+            "threshold": f"> {thresholds['min_avg_score']}",
+            "pass": avg > thresholds["min_avg_score"],
+            "fix": "Average score too low — data may be too hard, or grader too strict",
+            "hard": True,
+        },
+        "pass_rate": {
+            "value": round(pass_rate, 4),
+            "threshold": f"> {thresholds['min_pass_rate']}",
+            "pass": pass_rate > thresholds["min_pass_rate"],
+            "fix": f"Pass rate too low (threshold {thresholds['pass_threshold']}) — improve data quality or adjust grader",
+            "hard": True,
+        },
+    }
+
+    # ── Soft checks (warnings — don't gate training) ──
+
+    # Per-prompt learnability: fraction of prompts with score variance > 0
+    # DAPO insight: prompts where all K completions score identically = zero gradient
+    prompts_with_variance = sum(
+        1 for p in per_prompt
+        if len(p["scores"]) > 1 and statistics.stdev(p["scores"]) > 0.01
+    )
+    multi_score_prompts = sum(1 for p in per_prompt if len(p["scores"]) > 1)
+    if multi_score_prompts > 0:
+        learnability = prompts_with_variance / multi_score_prompts
+        checks["prompt_learnability"] = {
+            "value": round(learnability, 4),
+            "threshold": f"> {thresholds['min_prompt_learnability']}",
+            "pass": learnability > thresholds["min_prompt_learnability"],
+            "fix": f"Only {prompts_with_variance}/{multi_score_prompts} prompts have score variance — {multi_score_prompts - prompts_with_variance} prompts produce identical scores across completions (zero GRPO gradient). Remove or rewrite zero-variance prompts.",
+            "hard": False,
+            "detail": f"{prompts_with_variance}/{multi_score_prompts} prompts have variance",
+        }
+
+    # Score-length correlation: per Dr. GRPO, high correlation means grader
+    # rewards/punishes length rather than quality → reward hacking risk
+    if eval_data["has_lengths"]:
+        all_scored_lengths: list[tuple[float, int]] = []
+        for p in per_prompt:
+            if "lengths" not in p:
+                continue
+            for s_val, l_val in zip(p["scores"], p["lengths"]):
+                all_scored_lengths.append((s_val, l_val))
+
+        if len(all_scored_lengths) >= 10:
+            s_vals = [x[0] for x in all_scored_lengths]
+            l_vals = [x[1] for x in all_scored_lengths]
+            # Pearson correlation
+            s_mean = sum(s_vals) / len(s_vals)
+            l_mean = sum(l_vals) / len(l_vals)
+            cov = sum((s - s_mean) * (l - l_mean) for s, l in zip(s_vals, l_vals))
+            s_var = sum((s - s_mean) ** 2 for s in s_vals)
+            l_var = sum((l - l_mean) ** 2 for l in l_vals)
+            denom = (s_var * l_var) ** 0.5
+            corr = cov / denom if denom > 0 else 0.0
+
+            checks["score_length_corr"] = {
+                "value": round(abs(corr), 4),
+                "threshold": f"< {thresholds['max_score_length_corr']}",
+                "pass": abs(corr) < thresholds["max_score_length_corr"],
+                "fix": f"Score-length correlation is {corr:+.3f} — grader may be {'rewarding' if corr > 0 else 'punishing'} longer responses rather than judging quality. Rewrite grader to evaluate content independently of length.",
+                "hard": False,
+                "detail": f"r={corr:+.4f} across {len(all_scored_lengths)} scored completions",
+            }
+
+    # Topic balance: no single topic should dominate the dataset
+    if eval_data["has_topics"]:
+        topic_counts: dict[str, int] = {}
+        for p in per_prompt:
+            t = p.get("topic")
+            if t:
+                topic_counts[t] = topic_counts.get(t, 0) + 1
+        topics_with_labels = sum(topic_counts.values())
+        if topics_with_labels > 0 and len(topic_counts) > 1:
+            max_topic = max(topic_counts, key=lambda k: topic_counts[k])
+            max_topic_frac = topic_counts[max_topic] / topics_with_labels
+            checks["topic_balance"] = {
+                "value": round(max_topic_frac, 4),
+                "threshold": f"< {thresholds['max_topic_dominance']}",
+                "pass": max_topic_frac < thresholds["max_topic_dominance"],
+                "fix": f"Topic '{max_topic}' dominates at {max_topic_frac:.0%} of data — training will over-optimize for it. Add more data for under-represented topics or reduce '{max_topic}' records.",
+                "hard": False,
+                "detail": f"largest: '{max_topic}' ({topic_counts[max_topic]}/{topics_with_labels}), {len(topic_counts)} topics total",
+            }
+
+    # ── Compute verdict ──
+    hard_failed = [k for k, v in checks.items() if v.get("hard") and not v["pass"]]
+    soft_failed = [k for k, v in checks.items() if not v.get("hard") and not v["pass"]]
+    all_failed = hard_failed + soft_failed
+
+    # WARN if only 1 hard check fails marginally, or only soft checks fail
+    marginal_hard = len(hard_failed) == 1 and all(
+        (checks[k]["value"] > thresholds.get(f"min_{k}", 0) * 0.8 if "min_" in checks[k]["threshold"] else True)
+        for k in hard_failed
+    )
+
+    if not hard_failed and not soft_failed:
+        verdict = "PASS"
+    elif not hard_failed and soft_failed:
+        verdict = "WARN"
+    elif marginal_hard and not soft_failed:
+        verdict = "WARN"
+    else:
+        verdict = "FAIL"
+
+    result = {
+        "verdict": verdict,
+        "total_scores": n,
+        "total_prompts": num_prompts,
+        "checks": checks,
+        "failed_checks": all_failed,
+        "hard_failed": hard_failed,
+        "soft_failed": soft_failed,
+        "summary": {
+            "avg": round(avg, 4),
+            "std": round(std, 4),
+            "min": round(min(scores), 4),
+            "max": round(max(scores), 4),
+            "pass_rate": round(pass_rate, 4),
+            "dead_weight_count": sum(1 for s in scores if s < 0.1),
+        },
+    }
+
+    if hard_failed:
+        fixes = [checks[k]["fix"] for k in hard_failed]
+        result["recommendation"] = "Fix before training: " + "; ".join(fixes)
+    elif soft_failed:
+        fixes = [checks[k]["fix"] for k in soft_failed]
+        result["recommendation"] = "Can proceed to training, but consider: " + "; ".join(fixes)
+    else:
+        result["recommendation"] = "All checks passed. Ready for training."
+
+    print(json.dumps(result, indent=2))
+
+    if verdict == "FAIL":
+        sys.exit(1)
+    elif verdict == "WARN":
+        sys.exit(2)
+    else:
+        sys.exit(0)
 
 
 def cmd_create_eval(args: argparse.Namespace) -> None:
@@ -1285,6 +1651,11 @@ def main() -> None:
     p.add_argument("--workflow-id", required=True, help="Workflow ID")
     p.add_argument("--project-dir", default="finetune-project", help="Project directory (default: finetune-project/)")
 
+    # readiness-check
+    p = subparsers.add_parser("readiness-check", help="Check if eval results pass pre-training readiness gate")
+    p.add_argument("--file", required=True, help="Path to eval result JSON (from poll-eval)")
+    p.add_argument("--thresholds", default=None, help="JSON string with custom thresholds (optional)")
+
     # create-eval
     p = subparsers.add_parser("create-eval", help="Create evaluation job and save metadata locally")
     p.add_argument("--workflow-id", required=True, help="Workflow ID (used as dataset_id)")
@@ -1351,6 +1722,7 @@ def main() -> None:
         "upload-grader": cmd_upload_grader,
         "verify": cmd_verify,
         "status": cmd_status,
+        "readiness-check": cmd_readiness_check,
         "create-eval": cmd_create_eval,
         "poll-eval": cmd_poll_eval,
         "create-training": cmd_create_training,
