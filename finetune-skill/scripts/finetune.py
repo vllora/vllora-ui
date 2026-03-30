@@ -683,14 +683,24 @@ def cmd_status(args: argparse.Namespace) -> None:
                 pass_r = sum(1 for s in scores if s >= 0.7) / n
                 print(f"  Latest eval: {latest_eval_file.name} ({n} scores)")
                 print(f"  avg={avg_s:.3f}, std={std_s:.3f}, dead_weight={dead_w:.1%}, pass_rate={pass_r:.1%}")
-                grader_ok = std_s > 0.15 and dead_w < 0.05
-                model_ok = avg_s > 0.5 and pass_r > 0.6
-                if grader_ok and model_ok:
-                    print(f"  Verdict: PASS — ready for training")
-                elif grader_ok:
-                    print(f"  Verdict: GRADER OK, model needs training — can proceed to training")
+                high_frac = sum(1 for s in scores if s > 0.9) / n
+                binary_frac = sum(1 for s in scores if s <= 0.01 or s >= 0.99) / n
+                # Score concentration: most common value (rounded to 0.01)
+                from collections import Counter
+                rounded = [round(s, 2) for s in scores]
+                mode_ct = Counter(rounded).most_common(1)[0][1]
+                mode_val = Counter(rounded).most_common(1)[0][0]
+                mode_frac = mode_ct / n
+                grader_ok = (std_s > 0.10 and mode_frac < 0.50)
+                signal_ok = avg_s > 0.05  # Only 0% is fatal (OpenAI RFT)
+                if grader_ok and signal_ok:
+                    print(f"  Verdict: PASS — grader quality OK, ready for training")
+                elif not signal_ok:
+                    print(f"  Verdict: FAIL — avg near zero, no training signal at all")
+                elif mode_frac >= 0.50:
+                    print(f"  Verdict: FAIL — {mode_frac:.0%} of scores are {mode_val}, grader too coarse")
                 else:
-                    print(f"  Verdict: FAIL — fix grader/data before training")
+                    print(f"  Verdict: FAIL — fix grader before training (std/binary/leniency)")
         except Exception:
             print(f"  Could not analyze {latest_eval_file.name}")
 
@@ -827,20 +837,23 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
         print(json.dumps({"verdict": "FAIL", "error": "No scores found in eval results", "checks": {}}))
         sys.exit(1)
 
-    # Parse thresholds (defaults match iteration-strategy.md §5b)
+    # Parse thresholds — research-backed defaults, see iteration-strategy.md §5b
+    # Hard gates focus on GRADER QUALITY (is the grader working?) not model performance.
+    # GRPO can learn from low base model scores (DeepSeek R1-Zero: 15.6% → 71%, arXiv:2501.12948).
+    # Only 0% success is truly fatal (OpenAI RFT Guide).
     defaults = {
-        "min_sample_count": 50,
-        "warn_sample_count": 200,
-        "min_score_std": 0.15,
-        "max_high_score_frac": 0.50,
-        "max_binary_frac": 0.30,
-        "max_dead_weight_frac": 0.05,
-        "min_avg_score": 0.50,
-        "min_pass_rate": 0.60,
-        "pass_threshold": 0.70,
-        "min_prompt_learnability": 0.60,
-        "max_score_length_corr": 0.30,
-        "max_topic_dominance": 0.40,
+        "min_sample_count": 50,         # GRPO needs enough prompts for stable batches
+        "min_score_std": 0.10,          # Grader must differentiate — zero-variance → zero gradient (DAPO §2.2). Threshold is a heuristic.
+        "max_high_score_frac": 0.50,    # Grader leniency check. Heuristic — OpenAI recommends smooth scores.
+        "max_binary_frac": 0.60,        # Binary works (DeepSeek-R1, DAPO) but less sample-efficient. Raised from 0.40 per research review.
+        "min_avg_score": 0.05,          # Just needs nonzero signal (OpenAI: "0% success rate means cannot bootstrap")
+        "max_mode_frac": 0.50,          # Score concentration — if >50% are one value, grader too coarse for GRPO (DAPO arXiv:2503.14476)
+        "max_dead_weight_frac": 0.50,   # Real GRPO has 30-99% zero-var prompts ("No Prompt Left Behind" ICLR 2026)
+        "min_pass_rate": 0.20,          # Nice to have — hard examples are most valuable (arXiv:2508.14094)
+        "pass_threshold": 0.70,         # Score threshold for "passing" a record
+        "min_prompt_learnability": 0.30, # DAPO dynamic sampling (arXiv:2503.14476)
+        "max_score_length_corr": 0.30,  # Reward hacking risk (Dr. GRPO arXiv:2503.20783)
+        "max_topic_dominance": 0.40,    # No single topic should dominate training
     }
     thresholds = defaults.copy()
     if args.thresholds:
@@ -860,57 +873,82 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
     dead_weight_frac = sum(1 for s in scores if s < 0.1) / n
     pass_rate = sum(1 for s in scores if s >= thresholds["pass_threshold"]) / n
 
-    # ── Hard checks (gate training) ──
+    # Score concentration: fraction of scores at the most common value (rounded to 0.01)
+    # GRPO computes advantage = (reward - mean) / std within each K-group.
+    # If most scores are the same value, std→0 within groups → zero gradient.
+    # DAPO (arXiv:2503.14476) filters zero-variance groups for exactly this reason.
+    from collections import Counter
+    rounded_scores = [round(s, 2) for s in scores]
+    mode_count = Counter(rounded_scores).most_common(1)[0][1] if n > 0 else 0
+    mode_value = Counter(rounded_scores).most_common(1)[0][0] if n > 0 else 0
+    mode_frac = mode_count / n if n > 0 else 0
+
+    # ── Hard checks: grader quality + training viability ──
+    # These gate training. Focus on "is the grader working?" not "is the base model good?"
+    # GRPO can learn from low base model scores — DeepSeek R1-Zero started at 15.6% (arXiv:2501.12948).
     checks: dict[str, dict] = {
         "sample_count": {
             "value": num_prompts,
             "threshold": f">= {int(thresholds['min_sample_count'])}",
             "pass": num_prompts >= thresholds["min_sample_count"],
-            "fix": f"Too few samples ({num_prompts}) — GRPO needs >= {int(thresholds['min_sample_count'])} prompts for stable advantage estimates. Add more training data.",
+            "fix": f"Too few samples ({num_prompts}) — GRPO needs >= {int(thresholds['min_sample_count'])} prompts for stable advantage estimates.",
             "hard": True,
         },
         "score_std": {
             "value": round(std, 4),
             "threshold": f"> {thresholds['min_score_std']}",
             "pass": std > thresholds["min_score_std"],
-            "fix": "Grader not differentiating — add more criteria or partial credit bands (0.2, 0.4, 0.6, 0.8)",
-            "hard": True,
-        },
-        "high_score_frac": {
-            "value": round(high_frac, 4),
-            "threshold": f"< {thresholds['max_high_score_frac']}",
-            "pass": high_frac < thresholds["max_high_score_frac"],
-            "fix": "Grader too lenient — raise the bar on what scores > 0.9",
-            "hard": True,
-        },
-        "binary_frac": {
-            "value": round(binary_frac, 4),
-            "threshold": f"< {thresholds['max_binary_frac']}",
-            "pass": binary_frac < thresholds["max_binary_frac"],
-            "fix": "Too many binary (0/1) scores — add partial credit to grader",
-            "hard": True,
-        },
-        "dead_weight_frac": {
-            "value": round(dead_weight_frac, 4),
-            "threshold": f"< {thresholds['max_dead_weight_frac']}",
-            "pass": dead_weight_frac < thresholds["max_dead_weight_frac"],
-            "fix": "Too many dead-weight records (score < 0.1) — remove and regenerate, or simplify the task",
+            "fix": "Grader not differentiating — zero-variance groups produce zero gradient (GRPO advantage = (r-mean)/std). Add more criteria or partial credit bands (0.2, 0.4, 0.6, 0.8). [DAPO §2.2; threshold is a heuristic]",
             "hard": True,
         },
         "avg_score": {
             "value": round(avg, 4),
             "threshold": f"> {thresholds['min_avg_score']}",
             "pass": avg > thresholds["min_avg_score"],
-            "fix": "Average score too low — data may be too hard, or grader too strict",
+            "fix": "Average score near zero — the base model produces no useful responses at all. GRPO needs at least some nonzero rewards. [OpenAI RFT: '0% success rate means RFT cannot bootstrap']",
             "hard": True,
         },
-        "pass_rate": {
-            "value": round(pass_rate, 4),
-            "threshold": f"> {thresholds['min_pass_rate']}",
-            "pass": pass_rate > thresholds["min_pass_rate"],
-            "fix": f"Pass rate too low (threshold {thresholds['pass_threshold']}) — improve data quality or adjust grader",
-            "hard": True,
+        # Soft checks demoted from hard — research shows binary rewards work
+        # (DeepSeek-R1 arXiv:2501.12948, DAPO arXiv:2503.14476 both use 100% binary rewards).
+        "high_score_frac": {
+            "value": round(high_frac, 4),
+            "threshold": f"< {thresholds['max_high_score_frac']}",
+            "pass": high_frac < thresholds["max_high_score_frac"],
+            "fix": "Grader may be too lenient — if most completions score near-identical, within-group variance is small → weak gradients. Tighten grader criteria. [Heuristic; OpenAI recommends 'smooth scores, not pass/fail stamps']",
+            "hard": False,
         },
+        "binary_frac": {
+            "value": round(binary_frac, 4),
+            "threshold": f"< {thresholds['max_binary_frac']}",
+            "pass": binary_frac < thresholds["max_binary_frac"],
+            "fix": "Many binary (0/1) scores — continuous scoring is more sample-efficient. Note: binary rewards DO work (DeepSeek-R1, DAPO both used 100% binary successfully). [arXiv:2501.12948, arXiv:2503.14476]",
+            "hard": False,
+        },
+        "score_concentration": {
+            "value": round(mode_frac, 4),
+            "threshold": f"< {thresholds['max_mode_frac']}",
+            "pass": mode_frac < thresholds["max_mode_frac"],
+            "fix": f"{mode_frac:.0%} of scores are exactly {mode_value} — within-group variance will be small → weak gradients. Add more granular criteria. [DAPO arXiv:2503.14476 filters uniform groups; threshold is a heuristic]",
+            "hard": False,
+        },
+    }
+
+    # ── Soft checks: quality signals (warnings, don't gate training) ──
+    # Low base model scores are EXPECTED and even desirable — "Hard Examples Are All You Need"
+    # (arXiv:2508.14094) shows hard prompts yield 30-40% gains vs 3-15% for easy prompts on GSM8K.
+    checks["dead_weight_frac"] = {
+        "value": round(dead_weight_frac, 4),
+        "threshold": f"< {thresholds['max_dead_weight_frac']}",
+        "pass": dead_weight_frac < thresholds["max_dead_weight_frac"],
+        "fix": "Many dead-weight records (score<0.1) waste compute. DAPO handles this via dynamic sampling, but consider removing the worst offenders.",
+        "hard": False,
+    }
+    checks["pass_rate"] = {
+        "value": round(pass_rate, 4),
+        "threshold": f"> {thresholds['min_pass_rate']}",
+        "pass": pass_rate > thresholds["min_pass_rate"],
+        "fix": f"Low pass rate — but hard prompts are most valuable for GRPO. With K=8, pass@8 >> pass@1. [arXiv:2508.14094]",
+        "hard": False,
     }
 
     # ── Soft checks (warnings — don't gate training) ──
@@ -1022,9 +1060,24 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
         },
     }
 
+    # Not all soft warnings are safe to train through.
+    # score_concentration > 70% means the grader is broken (most K=8 groups score
+    # identically → zero gradient). Fix grader before wasting GPU hours.
+    concentration_val = checks.get("score_concentration", {}).get("value", 0)
+    concentration_blocks_training = (
+        "score_concentration" in soft_failed and concentration_val > 0.70
+    )
+
     if hard_failed:
         fixes = [checks[k]["fix"] for k in hard_failed]
         result["recommendation"] = "Fix before training: " + "; ".join(fixes)
+    elif concentration_blocks_training:
+        result["recommendation"] = (
+            f"FIX GRADER BEFORE TRAINING: {concentration_val:.0%} of scores are the same value. "
+            f"At K=8, most prompt groups will have all completions scoring identically → zero gradient → "
+            f"wasted compute. Run `diagnose-grader --file <this-eval-file> --workflow-id <wf-id>` "
+            f"to see WHY scores cluster and get specific fix suggestions, then edit grader.js and re-eval."
+        )
     elif soft_failed:
         fixes = [checks[k]["fix"] for k in soft_failed]
         result["recommendation"] = "Can proceed to training, but consider: " + "; ".join(fixes)
@@ -1039,6 +1092,280 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
         sys.exit(2)
     else:
         sys.exit(0)
+
+
+def cmd_diagnose_grader(args: argparse.Namespace) -> None:
+    """Diagnose grader issues from eval results.
+
+    Analyzes score distribution, groups records by score bucket, and shows
+    sample reason fields per bucket so the agent can understand WHY scores
+    cluster and WHAT to fix in the grader. Also fetches the current grader
+    source code from the gateway.
+
+    This is the bridge between "readiness-check says fix grader" and
+    "agent knows how to fix the grader."
+    """
+    eval_file = Path(args.file)
+    if not eval_file.exists():
+        print(f"Error: Eval file not found: {eval_file}", file=sys.stderr)
+        sys.exit(1)
+
+    data = json.loads(eval_file.read_text())
+    results = data.get("results", [])
+    if not results:
+        print("Error: No results in eval file", file=sys.stderr)
+        sys.exit(1)
+
+    # ── Score bucket analysis with reason patterns ──
+    from collections import defaultdict
+    buckets: dict[float, list[dict]] = defaultdict(list)
+    for r in results:
+        topic = r.get("row", {}).get("topic", "unknown")
+        for _epoch_key, candidates in r.get("epochs", {}).items():
+            if not isinstance(candidates, list):
+                continue
+            for c in candidates:
+                score = c.get("score")
+                if score is None:
+                    continue
+                buckets[round(float(score), 1)].append({
+                    "score": float(score),
+                    "reason": (c.get("reason") or "")[:300],
+                    "topic": topic,
+                    "row_index": r.get("row_index"),
+                })
+
+    total = sum(len(v) for v in buckets.values())
+
+    output: dict = {"total_scores": total, "buckets": {}, "diagnosis": [], "grader_source": None}
+
+    # Build bucket summary with sample reasons
+    for score_val in sorted(buckets.keys()):
+        items = buckets[score_val]
+        pct = len(items) / total * 100
+        sample_reasons = [it["reason"] for it in items[:3]]
+        output["buckets"][str(score_val)] = {
+            "count": len(items),
+            "percent": round(pct, 1),
+            "sample_reasons": sample_reasons,
+        }
+
+    # ── Auto-diagnosis based on distribution patterns ──
+    max_bucket_score = max(buckets.keys(), key=lambda k: len(buckets[k]))
+    max_bucket_pct = len(buckets[max_bucket_score]) / total * 100
+
+    if max_bucket_pct > 50:
+        dominant_reasons = [it["reason"] for it in buckets[max_bucket_score][:5]]
+        # Check if reasons mention "no figures", "did not provide", "non-responsive"
+        refusal_keywords = ["did not provide", "does not provide", "no specific", "non-responsive",
+                           "no figures", "no actual", "no metrics", "not provide any",
+                           "fails to", "failed to", "unable to", "need the", "without the",
+                           "cannot extract", "can't extract", "require", "need access"]
+        refusal_count = sum(
+            1 for reason in dominant_reasons
+            if any(kw in reason.lower() for kw in refusal_keywords)
+        )
+
+        if refusal_count >= 2:
+            output["diagnosis"].append({
+                "issue": f"{max_bucket_pct:.0f}% of scores are {max_bucket_score} — model refuses to answer most prompts",
+                "likely_cause": (
+                    "The model says it can't provide specific figures — this usually means the prompts "
+                    "ask for document extraction but DON'T include the source document text in the messages. "
+                    "The model has no material to extract from, so it correctly declines. "
+                    "The grader then gives partial credit for 'not hallucinating' even though the model "
+                    "produced nothing useful."
+                ),
+                "fix": [
+                    "**CHECK DATA FIRST**: Do your training records include source document text in the "
+                    "messages? Run: curl localhost:9090/finetune/workflows/$WORKFLOW_ID/records | head "
+                    "— if system+user messages are under 2000 chars, source text is missing.",
+                    "**If source text missing (most likely)**: Regenerate records with "
+                    "`generate_records.py --embed-source-context` which embeds per-question source "
+                    "excerpts into the user message as a natural 'here is the document, answer this' "
+                    "pattern. System prompt (topic hierarchy) stays unchanged.",
+                    "**Also fix grader**: Add early-exit for non-responses (score 0 instead of partial credit). "
+                    "Remove score snapping (Math.round * 10 / 10). Weight accuracy/completeness higher "
+                    "than hallucination-avoidance.",
+                ],
+                "root_cause": "DATA — prompts likely missing source document context",
+            })
+        else:
+            output["diagnosis"].append({
+                "issue": f"{max_bucket_pct:.0f}% of scores are {max_bucket_score} — grader gives the same score to most responses",
+                "likely_cause": (
+                    "Grader criteria don't differentiate between different quality levels. "
+                    "Multiple failure modes produce the same score."
+                ),
+                "fix": [
+                    "Add early-exit: if no substantive content extracted → return {score: 0, reason: 'No content extracted'}",
+                    "Remove score snapping (Math.round * 10 / 10) — let continuous scores through for GRPO gradient",
+                    "Separate 'model refused' (score 0) from 'model tried but got wrong' (score 0.2-0.4)",
+                    "Weight accuracy/completeness higher than hallucination-avoidance for extraction tasks",
+                ],
+            })
+
+    # ── Check if prompts are missing source document context ──
+    if args.workflow_id:
+        try:
+            resp = requests.get(
+                f"{args.base_url}/finetune/workflows/{args.workflow_id}/records",
+                timeout=15,
+            )
+            if resp.status_code == 200:
+                records_data = resp.json()
+                recs = records_data.get("records", records_data) if isinstance(records_data, dict) else records_data
+                if isinstance(recs, list) and recs:
+                    msg_lengths = []
+                    for rec in recs[:50]:  # sample first 50
+                        rd = rec.get("data", {})
+                        if isinstance(rd, str):
+                            rd = json.loads(rd)
+                        msgs = rd.get("input", {}).get("messages", rd.get("messages", []))
+                        total = sum(len(m.get("content", "")) for m in msgs)
+                        msg_lengths.append(total)
+                    avg_len = sum(msg_lengths) / len(msg_lengths) if msg_lengths else 0
+                    long_context = sum(1 for l in msg_lengths if l > 2000)
+                    # Check if this task likely REQUIRES source document context.
+                    # Look for extraction-related keywords in system prompts.
+                    extraction_keywords = ["extract", "filing", "document", "report",
+                                          "10-k", "10k", "sec ", "cite", "section",
+                                          "page", "source", "reference"]
+                    sample_sys = []
+                    for rec in recs[:10]:
+                        rd2 = rec.get("data", {})
+                        if isinstance(rd2, str):
+                            rd2 = json.loads(rd2)
+                        msgs2 = rd2.get("input", {}).get("messages", rd2.get("messages", []))
+                        for m2 in msgs2:
+                            if m2.get("role") == "system":
+                                sample_sys.append(m2.get("content", "").lower())
+                    is_extraction_task = any(
+                        any(kw in sys_text for kw in extraction_keywords)
+                        for sys_text in sample_sys
+                    )
+
+                    output["record_context_check"] = {
+                        "avg_message_length": round(avg_len),
+                        "records_with_source_text": long_context,
+                        "records_sampled": len(msg_lengths),
+                        "has_source_context": long_context > len(msg_lengths) * 0.3,
+                        "is_extraction_task": is_extraction_task,
+                    }
+                    if long_context == 0 and is_extraction_task:
+                        output["diagnosis"].insert(0, {
+                            "issue": "EXTRACTION TASK BUT RECORDS MISSING SOURCE DOCUMENT TEXT",
+                            "likely_cause": (
+                                f"All {len(msg_lengths)} sampled records have messages under 2000 chars "
+                                f"(avg {avg_len:.0f} chars). The system prompt references document extraction "
+                                f"(filings, citations, pages) but records don't include the actual document content. "
+                                f"The model has nothing to extract from."
+                            ),
+                            "fix": [
+                                "Regenerate records with `generate_records.py --embed-source-context` which embeds "
+                                "per-question source excerpts (from ground_truth) into the user message as a natural "
+                                "'here is the document section, now answer this' pattern. System prompt (topic "
+                                "hierarchy) stays unchanged.",
+                                "Example: python3 $SKILL_DIR/scripts/generate_records.py --topics topics.json "
+                                "--relations relations.json --knowledge-dir knowledge --system-prompt '...' "
+                                "--output training.jsonl --embed-source-context",
+                                "After regenerating: re-upload with `finetune.py upload-records --force`, then re-eval.",
+                            ],
+                            "root_cause": "DATA — this is the primary issue, fix this first",
+                            "priority": "HIGH",
+                        })
+                    elif long_context == 0 and not is_extraction_task:
+                        output["record_context_check"]["note"] = (
+                            "Records don't include long source text, but the task doesn't appear to require "
+                            "document extraction. This is normal for knowledge/reasoning/style tasks."
+                        )
+        except Exception:
+            pass  # Gateway not available
+
+    if len(buckets.get(0.0, [])) > 0:
+        zero_reasons = [it["reason"] for it in buckets[0.0][:3]]
+        output["diagnosis"].append({
+            "issue": f"{len(buckets[0.0])} records scored 0.0 (dead weight)",
+            "sample_reasons": zero_reasons,
+            "fix": "Check if these are grader bugs (harsh early-exit) or genuinely empty responses. "
+                   "If grader bug → fix the early-exit condition. If model failure → remove these records.",
+        })
+
+    # ── Fetch current grader source from gateway ──
+    if args.workflow_id:
+        try:
+            resp = requests.get(
+                f"{args.base_url}/finetune/workflows/{args.workflow_id}/evaluator/versions",
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                versions = resp.json()
+                if isinstance(versions, list) and versions:
+                    latest = versions[-1]
+                    config = latest.get("config", {})
+                    script = config.get("script") or config.get("config", {}).get("script", "")
+                    if script:
+                        output["grader_source"] = script
+                        # Find scoring formula lines
+                        scoring_lines = []
+                        for i, line in enumerate(script.split("\n")):
+                            stripped = line.strip()
+                            if any(kw in stripped.lower() for kw in [
+                                "return {", "return{", "score =", "score=",
+                                "weighted", "finalscore", "basescore",
+                                "math.round", "math.min", "math.max",
+                            ]):
+                                scoring_lines.append(f"L{i}: {line.rstrip()[:120]}")
+                        if scoring_lines:
+                            output["scoring_formula_lines"] = scoring_lines
+        except Exception:
+            pass  # Gateway not available — agent can still use local grader.js
+
+    # ── Print human-readable diagnosis ──
+    print("=== Grader Diagnosis ===")
+    print(f"Total scores: {total}")
+    print()
+    print("Score distribution:")
+    for score_val in sorted(buckets.keys()):
+        items = buckets[score_val]
+        pct = len(items) / total * 100
+        bar = "█" * max(1, int(pct / 2))
+        print(f"  {score_val:.1f}: {len(items):4d} ({pct:5.1f}%) {bar}")
+    print()
+
+    if output["diagnosis"]:
+        print("Diagnosis:")
+        for d in output["diagnosis"]:
+            print(f"  ISSUE: {d['issue']}")
+            if "likely_cause" in d:
+                print(f"  CAUSE: {d['likely_cause']}")
+            if isinstance(d.get("fix"), list):
+                print("  FIX:")
+                for f in d["fix"]:
+                    print(f"    → {f}")
+            elif "fix" in d:
+                print(f"  FIX: {d['fix']}")
+            if "sample_reasons" in d:
+                print("  Sample reasons:")
+                for r in d["sample_reasons"]:
+                    print(f"    → {r[:150]}...")
+            print()
+
+    if output.get("scoring_formula_lines"):
+        print("Grader scoring formula (key lines):")
+        for line in output["scoring_formula_lines"]:
+            print(f"  {line}")
+        print()
+
+    print("Sample reasons per score bucket:")
+    for score_val in sorted(buckets.keys()):
+        items = buckets[score_val]
+        print(f"\n  Score {score_val} ({len(items)} records):")
+        for reason in [it["reason"] for it in items[:2]]:
+            print(f"    → {reason[:150]}...")
+
+    # Also output as JSON on stderr for programmatic use
+    print(json.dumps(output), file=sys.stderr)
 
 
 def cmd_create_eval(args: argparse.Namespace) -> None:
@@ -1656,6 +1983,11 @@ def main() -> None:
     p.add_argument("--file", required=True, help="Path to eval result JSON (from poll-eval)")
     p.add_argument("--thresholds", default=None, help="JSON string with custom thresholds (optional)")
 
+    # diagnose-grader
+    p = subparsers.add_parser("diagnose-grader", help="Diagnose grader issues from eval results — shows score buckets, reason patterns, and grader source")
+    p.add_argument("--file", required=True, help="Path to eval result JSON (from poll-eval)")
+    p.add_argument("--workflow-id", default=None, help="Workflow ID (to fetch grader source from gateway)")
+
     # create-eval
     p = subparsers.add_parser("create-eval", help="Create evaluation job and save metadata locally")
     p.add_argument("--workflow-id", required=True, help="Workflow ID (used as dataset_id)")
@@ -1723,6 +2055,7 @@ def main() -> None:
         "verify": cmd_verify,
         "status": cmd_status,
         "readiness-check": cmd_readiness_check,
+        "diagnose-grader": cmd_diagnose_grader,
         "create-eval": cmd_create_eval,
         "poll-eval": cmd_poll_eval,
         "create-training": cmd_create_training,

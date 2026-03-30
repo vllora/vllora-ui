@@ -22,6 +22,7 @@ import {
   Percentiles,
   TopicEvalStats,
 } from '@/types/dataset-types';
+import { computeReadinessGate } from './compute-readiness-gate';
 import { datasetService } from '@/services/service-registry';
 import type { EvaluationResultResponse, FlatEvaluationResult } from '@/services/finetune-api';
 import { flattenEvaluationResults } from '@/services/finetune-api';
@@ -154,17 +155,28 @@ function diagnoseResults(
   let datasetQuality: QualityRating = 'good';
   let graderQuality: QualityRating = 'good';
 
-  // Check mean
-  if (mean < THRESHOLDS.mean.low) {
+  // Check mean — reframed for GRPO: low base model scores are expected.
+  // Only near-zero is a real problem (OpenAI RFT: "only 0% success is fatal").
+  // DeepSeek R1-Zero started at 15.6% and reached 71% via GRPO (arXiv:2501.12948).
+  if (mean < 0.05) {
     issues.push({
       type: 'mean_low',
       severity: 'error',
-      message: `Mean score too low (${(mean * 100).toFixed(1)}%)`,
-      suggestion: 'The dataset may be too hard for the base model, or the evaluator may be too strict. Review sample outputs to determine which.',
+      message: `Mean score near zero (${(mean * 100).toFixed(1)}%) — no training signal`,
+      suggestion: 'The base model produces almost no useful responses. GRPO needs at least some nonzero rewards to learn from. Try a larger base model, or check if the grader is rejecting valid responses.',
     });
-    warnings.push(`Mean (${mean.toFixed(2)}) below healthy range (${THRESHOLDS.mean.low}-${THRESHOLDS.mean.high})`);
-    datasetQuality = 'warning';
+    warnings.push(`Mean (${mean.toFixed(2)}) near zero — GRPO has no positive signal to reinforce`);
+    datasetQuality = 'problem';
     graderQuality = 'warning';
+  } else if (mean < THRESHOLDS.mean.low) {
+    issues.push({
+      type: 'mean_low',
+      severity: 'warning',
+      message: `Low average score (${(mean * 100).toFixed(1)}%) — most samples score poorly`,
+      suggestion: 'Low base model scores are expected before training. GRPO learns from comparing K=8 completions — hard examples yield the largest gains. Check that the grader differentiates quality correctly.',
+    });
+    warnings.push(`Mean (${mean.toFixed(2)}) below healthy range — expected for base model, verify grader quality`);
+    datasetQuality = 'warning';
   } else if (mean > THRESHOLDS.mean.high) {
     issues.push({
       type: 'mean_high',
@@ -196,17 +208,17 @@ function diagnoseResults(
     warnings.push(`Std (${std.toFixed(3)}) high — may indicate binary pass/fail scoring`);
   }
 
-  // Check percentage above zero
+  // Check percentage above zero — only critical if literally near-zero
   if (percentAboveZero < THRESHOLDS.percentAboveZero.min) {
     issues.push({
       type: 'low_success',
       severity: 'error',
       message: `Only ${(percentAboveZero * 100).toFixed(1)}% of records scored above zero`,
-      suggestion: 'The base model struggles with these tasks. RFT needs at least some successful responses to learn from. Consider using supervised fine-tuning (SFT) first to teach the model the basics.',
+      suggestion: 'Very few responses have any signal. Check if the grader is misconfigured (rejecting valid outputs), or try a larger base model.',
     });
     warnings.push(`Very few records score above zero (${(percentAboveZero * 100).toFixed(1)}%)`);
     datasetQuality = 'problem';
-    recommendations.push('Consider using supervised fine-tuning (SFT) first to teach the base model the basics before running RFT');
+    recommendations.push('Verify the grader is not rejecting valid responses — review reasons for zero-scoring records');
   }
 
   // Check percentage perfect
@@ -221,33 +233,41 @@ function diagnoseResults(
     if (datasetQuality === 'good') datasetQuality = 'warning';
   }
 
-  // Check per-topic breakdown
-  const problemTopics: string[] = [];
+  // Check per-topic breakdown — relative to dataset mean, not absolute thresholds.
+  // Low topic scores are EXPECTED for base model evals (GRPO learns from hard examples).
+  // "problem" means significantly below dataset average, not "bad" in absolute terms.
+  const weakTopics: string[] = [];
+  const topicMeans = Object.values(byTopic).map(s => s.mean);
+  const datasetMean = topicMeans.length > 0 ? topicMeans.reduce((a, b) => a + b, 0) / topicMeans.length : 0;
+
   for (const [topic, stats] of Object.entries(byTopic)) {
-    if (stats.mean < THRESHOLDS.topicMeanMin) {
-      problemTopics.push(topic);
+    if (stats.mean < datasetMean * 0.6) {
+      weakTopics.push(topic);
       stats.status = 'problem';
-    } else if (stats.mean < THRESHOLDS.mean.low) {
+    } else if (stats.mean < datasetMean * 0.85) {
       stats.status = 'warning';
     }
+    // else: stays 'good' (default from caller)
   }
 
-  if (problemTopics.length > 0) {
+  if (weakTopics.length > 0) {
     issues.push({
       type: 'topic_problem',
       severity: 'warning',
-      message: `Topics with very low scores: ${problemTopics.join(', ')}`,
-      suggestion: 'These topics may need supervised fine-tuning (SFT) first, or consider excluding them from RFT training.',
+      message: `Topics scoring well below average: ${weakTopics.join(', ')}`,
+      suggestion: 'Review grader reasons for these topics — verify the grader criteria are appropriate. Low scores are expected for base models, but check the grader is differentiating quality correctly.',
     });
-    warnings.push(`Some topics perform very poorly: ${problemTopics.join(', ')}`);
-    recommendations.push(`Review these topics: ${problemTopics.join(', ')} — they may need SFT first or should be excluded from training`);
+    warnings.push(`Some topics score well below the dataset average: ${weakTopics.join(', ')}`);
+    recommendations.push(`Review grader output for weak topics: ${weakTopics.join(', ')} — check if grader criteria need topic-specific adjustments`);
   }
 
-  // Generate recommendations
-  if (mean < THRESHOLDS.mean.low && percentAboveZero < 0.2) {
-    recommendations.push('Review the lowest-scoring records to determine if the issue is with the data or the evaluator');
-    recommendations.push('If the evaluator is too strict: adjust scoring criteria or add partial credit for partially correct responses');
-    recommendations.push('If the data is too hard: use supervised fine-tuning (SFT) first to teach the model the basics');
+  // Generate recommendations — focus on grader quality, not model performance
+  if (mean < 0.05 && percentAboveZero < 0.1) {
+    recommendations.push('Nearly zero success rate — verify the grader is not rejecting valid responses');
+    recommendations.push('Try a larger base model if the task is genuinely beyond the current model\'s capability');
+  } else if (mean < THRESHOLDS.mean.low) {
+    recommendations.push('Low scores are expected for base models — verify the grader produces varied scores (check Score Spread in Readiness tab)');
+    recommendations.push('Review lowest-scoring records: are the grader reasons correct? If not, adjust grader criteria');
   }
 
   if (mean > THRESHOLDS.mean.high) {
@@ -343,13 +363,16 @@ export function analyzeEvalResults(
         mean: topicMean,
         std: topicStd,
         count: topicScoreList.length,
-        status: topicMean >= THRESHOLDS.mean.low ? 'good' : topicMean >= THRESHOLDS.topicMeanMin ? 'warning' : 'problem',
+        status: 'good' as const,  // Default; diagnoseResults() will override based on relative comparison
       };
     }
   }
 
   // Run diagnosis
   const diagnosis = diagnoseResults(mean, std, percentAboveZero, percentPerfect, byTopic);
+
+  // Compute pre-training readiness gate (mirrors finetune.py readiness-check)
+  const readinessGate = computeReadinessGate(scoredResults, byTopic);
 
   // Extract sample results for manual review (only scored results)
   const sortedScoredResults = [...scoredResults].sort((a, b) => b.score! - a.score!);
@@ -392,6 +415,7 @@ export function analyzeEvalResults(
     distribution,
     byTopic,
     diagnosis,
+    readinessGate,
     sampleResults: {
       highest,
       lowest,

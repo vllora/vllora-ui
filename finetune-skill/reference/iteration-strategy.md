@@ -113,25 +113,30 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check --file evaluatio
 
 **Hard checks** (must ALL pass — gate training):
 
+These focus on **grader quality** ("is the grader working?"), not model performance. GRPO can learn from low base model scores — DeepSeek R1-Zero started at 15.6% accuracy and reached 71% via GRPO alone (arXiv:2501.12948).
+
 | Check | Threshold | Why | Source |
 |-------|-----------|-----|--------|
-| Sample count | >= 50 prompts | GRPO advantage estimates are noisy below 50 | OpenAI RFT, general practice |
-| Score std | > 0.15 | GRPO needs score spread for gradient signal | DAPO, GRPO |
-| High-score fraction | < 50% scoring > 0.9 | Grader too lenient = no learning | DAPO clip-higher |
-| Binary fraction | < 30% scoring 0 or 1 | No partial credit = weak signal | General practice |
-| Dead-weight fraction | < 5% scoring < 0.1 | Zero-reward records = zero gradient | GRPO |
-| Average score | > 0.5 | Data too hard or grader too strict | "Tricks or Traps" |
-| Pass rate (>0.7) | > 60% | Minimum viable data quality | OpenAI RFT |
+| Sample count | >= 50 prompts | GRPO advantage estimates are noisy below 50 | OpenAI RFT: "several dozen to a few hundred" |
+| Score std | > 0.10 | Grader must differentiate — zero-std groups produce zero gradient (GRPO advantage = (r-mean)/std; std=0 → advantage=0) | Zero-variance → zero gradient is fundamental to GRPO (DAPO §2.2). Threshold is a heuristic. |
+| Average score | > 0.05 | Just needs nonzero signal — only 0% success rate is truly fatal | OpenAI RFT: "0% success rate means RFT cannot bootstrap" |
 
 **Soft checks** (warnings — don't gate training, but fixing improves outcomes):
 
+Low base model scores are **expected and even desirable**. "Hard Examples Are All You Need" (arXiv:2508.14094) shows training on the hardest 10% yields 30-40% gains vs 3-15% for easy examples on GSM8K. Note: binary rewards work — DeepSeek-R1 (arXiv:2501.12948) and DAPO (arXiv:2503.14476) achieved state-of-the-art with 100% binary (0/1) rewards.
+
 | Check | Threshold | Why | Source |
 |-------|-----------|-----|--------|
-| Prompt learnability | > 60% of prompts have score variance | Per-prompt variance drives GRPO learning — zero-variance prompts waste compute | DAPO dynamic sampling |
-| Score-length correlation | \|r\| < 0.3 | High correlation means grader rewards/punishes length, not quality — primary reward hacking vector | Dr. GRPO |
-| Topic balance | No topic > 40% of data | Imbalanced topics cause over-optimization for common topics | OpenAI RFT |
+| Score concentration | < 50% at any single value | If >50% of scores cluster at one value, within-group variance is small → weak gradients | DAPO (arXiv:2503.14476): filters all-correct/all-incorrect groups. Threshold is a heuristic. |
+| High-score fraction | < 50% scoring > 0.9 | Lenient grader → small within-group variance → weak gradients | Heuristic. OpenAI recommends "smooth scores, not pass/fail stamps." |
+| Binary fraction | < 60% scoring 0 or 1 | Continuous scoring is more sample-efficient — binary produces signal only when a group has mixed outcomes. But binary works: DeepSeek-R1 used 100% binary successfully. | DeepSeek-R1 (arXiv:2501.12948), DAPO (arXiv:2503.14476) both use binary rewards. |
+| Dead-weight fraction | < 50% scoring < 0.1 | Reduces sample efficiency. "No Prompt Left Behind" (arXiv:2509.21880) shows 30-99% zero-var is normal AND argues signal can be extracted via entropy-guided shaping. DAPO skips these via dynamic sampling instead. | "No Prompt Left Behind" (ICLR 2026, arXiv:2509.21880) |
+| Pass rate (>0.7) | > 20% | Nice to have — but hard prompts are the most valuable. With K=8, pass@8 >> pass@1 | "Hard Examples Are All You Need" (arXiv:2508.14094) |
+| Prompt learnability | > 30% of prompts have score variance | Per-prompt variance drives GRPO learning — zero-variance prompts waste compute | DAPO dynamic sampling (arXiv:2503.14476) |
+| Score-length correlation | \|r\| < 0.3 | High correlation means grader rewards/punishes length — reward hacking risk. Dr. GRPO identifies length bias from per-token loss normalization. | Dr. GRPO (arXiv:2503.20783) identifies the problem; threshold is a heuristic. |
+| Topic balance | No topic > 40% of data | Imbalanced topics cause over-optimization for common topics | Heuristic — balanced training data is standard ML practice |
 
-**⚠️ On first eval with base model:** avg_score and pass_rate will likely fail — the base model hasn't been trained yet. Focus on the grader quality checks (std, binary, high-score). If grader checks pass and only avg/pass_rate fail, proceed to training — the grader is working, the model just needs training.
+**⚠️ Why eval scores don't predict training performance:** Eval generates 1 completion per prompt. GRPO training generates K=8. A model with 6.5% pass@1 has ~41% chance of at least one good completion per prompt (1-0.935^8). The eval distribution is a lower bound on training signal, not a prediction of it.
 
 ### Step 5b: Grader Score Distribution Pre-Flight (Before Training)
 
@@ -147,7 +152,7 @@ From your eval results, compute:
   - Fraction of scores that are exactly 0 or exactly 1
 
 HEALTHY distribution (good GRPO signal):
-  Scores spread across 0.2-0.9, std > 0.15
+  Scores spread across 0.2-0.9, std > 0.10
   Example: [0.2, 0.3, 0.5, 0.6, 0.7, 0.8, 0.9, 0.4]
 
 PROBLEMATIC distributions (weak GRPO signal):
@@ -165,18 +170,18 @@ PROBLEMATIC distributions (weak GRPO signal):
      → FIX: Lower grader bar or try larger base model (see Part 8, Symptom 7).
 ```
 
-**Pre-flight checklist before committing to training:**
+**Pre-flight checklist before committing to training** (quick check — see `finetune.py readiness-check` for the full gate with all 11 checks):
 
 | Check | Pass | Fail → Action |
 |---|---|---|
-| Score std > 0.15 | ✅ | Grader not differentiating — add more criteria |
-| Fraction of scores > 0.9 is < 50% | ✅ | Grader too lenient — raise the bar |
-| Fraction of exact 0 or 1 is < 30% | ✅ | Too binary — add partial credit |
-| At least 80% of records score > 0 | ✅ | Dead-weight records — remove and regenerate (Part 8, Symptom 3b) |
+| Score std > 0.10 | ✅ | Grader not differentiating — add more criteria (HARD gate) |
+| Average score > 0.05 | ✅ | No signal — base model may be incapable (HARD gate) |
+| Fraction of scores > 0.9 is < 50% | ✅ | Grader too lenient — raise the bar (soft warning) |
+| Fraction of exact 0 or 1 is < 60% | ✅ | Binary works (DeepSeek-R1, DAPO) but less sample-efficient (soft warning) |
 
 > **Why this matters**: The most common GRPO training failure is "everything scores 0.9" — the base model is already good enough that the grader gives high marks to all G completions. The advantage formula divides by std: if std ≈ 0, advantages ≈ 0, gradients ≈ 0. The model trains for hours and learns nothing. This pre-flight check catches this BEFORE you waste compute.
 >
-> Reference: Dr. GRPO (arXiv:2503.20783) — identifies zero-std groups as the primary cause of GRPO inefficiency. See also `rft-grpo-training-explained.md` §What is Standard Deviation.
+> Reference: DAPO (arXiv:2503.14476) — identifies zero-variance groups as producing zero gradients and introduces dynamic sampling to filter them. Dr. GRPO (arXiv:2503.20783) — proposes removing std normalization entirely to avoid difficulty-dependent bias. See also `rft-grpo-training-explained.md` §What is Standard Deviation.
 
 ### Step 6: Continuation Readiness (for `finetuned/{cloud_job_id}` or `checkpointed/{cloud_job_id}`)
 

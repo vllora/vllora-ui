@@ -556,37 +556,53 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
   --file evaluations/eval-001.json
 ```
 
-The readiness gate runs **7 hard checks** (gate training) and **3 soft checks** (warnings):
+The readiness gate runs **3 hard checks** (grader quality) and **8 soft checks** (quality signals):
 
-**Hard checks** (must ALL pass to proceed):
-| Check | Pass | Fail → Action |
-|-------|------|---------------|
-| Sample count >= 50 | ✅ | Too few prompts — GRPO needs >= 50 for stable advantage estimates |
-| Score std > 0.15 | ✅ | Grader not differentiating — add criteria, re-eval |
-| Fraction scores > 0.9 < 50% | ✅ | Grader too lenient — tighten criteria, re-eval |
-| Fraction exact 0/1 < 30% | ✅ | Too binary — add partial credit bands, re-eval |
-| Dead-weight records (score < 0.1) < 5% | ✅ | Remove + regenerate dead-weight, re-eval |
-| Average score > 0.5 | ✅ | Data too hard or grader too strict — adjust, re-eval |
-| Pass rate (>0.7) > 60% | ✅ | Data/grader quality insufficient — iterate |
+**Hard checks** — grader quality gates (must ALL pass). These ask "is the grader working?", NOT "is the base model good?" GRPO can learn from low base model scores — DeepSeek R1-Zero started at 15.6% and reached 71% (arXiv:2501.12948).
 
-**Soft checks** (warnings — training can proceed, but fixing improves outcomes):
-| Check | Pass | Fail → Action |
-|-------|------|---------------|
-| Prompt learnability > 60% | ✅ | Too many prompts with zero score variance across completions — GRPO gets zero gradient on those prompts. Rewrite or remove them. (DAPO insight) |
-| Score-length correlation < 0.3 | ✅ | Grader may reward/punish response length instead of quality — reward hacking risk. Rewrite grader to be length-independent. (Dr. GRPO) |
-| Topic balance: no topic > 40% | ✅ | One topic dominates — training will over-optimize for it. Add data for under-represented topics. |
+| Check | Pass | Fail → Action | Research basis |
+|-------|------|---------------|----------------|
+| Sample count >= 50 | ✅ | Too few prompts — GRPO needs sufficient samples for stable advantage estimates | OpenAI RFT: "several dozen to a few hundred" |
+| Score std > 0.10 | ✅ | Grader not differentiating — when all completions score identically, advantages=0, zero gradient. Add criteria or partial credit | Zero-variance → zero gradient is fundamental to GRPO (DAPO §2.2). Threshold is a heuristic. |
+| Average score > 0.05 | ✅ | Near-zero means no signal at all — 0% success rate means RFT cannot bootstrap | OpenAI RFT: "If a model has a 0% success rate, you cannot bootstrap to higher performance" |
+
+**Soft checks** — quality signals (warnings, training can proceed). Low base model scores are expected — hard prompts are most valuable for GRPO learning (arXiv:2508.14094).
+
+| Check | Pass | Fail → Action | Research basis |
+|-------|------|---------------|----------------|
+| Score concentration < 50% at single value | ✅ | If >50% of scores are one value, within-group variance is small → weak gradients. Std check can miss this when outliers inflate overall std | DAPO (arXiv:2503.14476): filters uniform groups. Threshold is a heuristic. |
+| Fraction scores > 0.9 < 50% | ✅ | Grader may be too lenient — if most completions score near-identical, within-group variance is small → weak gradients | Heuristic. OpenAI recommends "smooth scores, not pass/fail stamps." |
+| Fraction exact 0/1 < 60% | ✅ | Continuous scoring is more sample-efficient — binary rewards only produce signal when a group has mixed outcomes (some correct, some incorrect). DeepSeek-R1 and DAPO used binary rewards successfully, so this is a warning, not a blocker. | DAPO §2.2: filters all-correct/all-incorrect groups. "No Prompt Left Behind" (arXiv:2509.21880): 30-99% of prompts have zero variance with binary rewards. |
+| Dead-weight (score < 0.1) < 50% | ✅ | Many zero-score records reduce sample efficiency. However, "No Prompt Left Behind" (arXiv:2509.21880) shows signal CAN be extracted from zero-variance prompts via entropy-guided shaping. DAPO uses dynamic sampling to skip them instead. | "No Prompt Left Behind": 30-99% zero-var is normal; argues for extracting signal, not filtering. |
+| Pass rate (>0.7) > 20% | ✅ | Low pass rate — but with K=8, pass@8 >> pass@1. Hard prompts are most valuable for learning. | arXiv:2508.14094: training on hardest 10% yields 30-40% gains vs 3-15% for easy examples. |
+| Prompt learnability > 30% | ✅ | Zero-variance prompts produce zero GRPO gradients. With dynamic sampling (DAPO), they're skipped. Without it, they waste compute. | DAPO §2.2: dynamic sampling filters groups where accuracy=0 or 1. |
+| Score-length correlation < 0.3 | ✅ | Grader may reward/punish length instead of quality — reward hacking risk. Dr. GRPO identifies length bias from per-token loss normalization. | Dr. GRPO (arXiv:2503.20783): identifies length bias problem; recommends removing length normalization. Threshold is a heuristic. |
+| Topic balance: no topic > 40% | ✅ | One topic dominates — training will over-optimize for it | Heuristic — balanced training data is standard ML practice. |
 
 **Decision:**
-- **Exit code 0 (PASS)** → All hard checks passed, no soft warnings → proceed to **Step 7d (Start Training)**
+- **Exit code 0 (PASS)** → All checks passed → proceed to **Step 7d (Start Training)**
 - **Exit code 1 (FAIL)** → Hard check(s) failed → fix issues → return to **Step 7b (Re-eval)**. Apply fixes from Step 9a first.
-- **Exit code 2 (WARN)** → Only soft checks failed, or 1 hard check marginally failed → present findings to user. If non-interactive, proceed to training.
+- **Exit code 2 (WARN)** → Only soft checks failed, or 1 hard check marginally failed → **read the specific warnings before deciding**:
+
+**⚠️ Not all WARN verdicts are safe to train through.** Check which soft checks failed:
+
+| Failed soft check | Safe to train? | What to do |
+|---|---|---|
+| `score_concentration` > 70% | **NO — fix grader first.** At K=8, most groups will score identically → zero gradient → wasted GPU hours. The grader is broken. | Fix grader (add granularity, remove score snapping), re-eval |
+| `score_concentration` 50-70% | **Caution.** Proceed if other checks are healthy, but expect some wasted compute. | Consider fixing grader if time allows |
+| `pass_rate` low | **YES.** Expected for base model. With K=8, pass@8 >> pass@1. Hard prompts yield the largest GRPO gains. | Proceed to training |
+| `binary_frac` high | **YES.** DeepSeek-R1 and DAPO trained with 100% binary rewards successfully. | Proceed — DAPO dynamic sampling handles uniform groups |
+| `dead_weight` high | **YES.** 30-99% zero-variance is normal per "No Prompt Left Behind" (arXiv:2509.21880). | Proceed — optionally remove worst offenders |
+| `topic_balance` off | **YES.** Suboptimal but won't break training. | Proceed — add data for weak topics later |
+| `score_length_corr` high | **Caution.** Reward hacking risk — monitor during training. | Proceed but watch for length exploitation |
+
+**If non-interactive** (running via `claude -p`): auto-fix if `score_concentration` > 70%, otherwise proceed to training.
 
 **Max 5 eval-only iterations.** If readiness gate never passes after 5 evals, escalate to user with diagnosis.
 
-**⚠️ IMPORTANT: First eval with base model will often FAIL readiness** — the base model hasn't been trained yet, so avg scores will be low. This is expected for the first iteration. Focus on the grader quality checks (std, binary fraction, high score fraction) rather than absolute score. If the grader checks pass but avg/pass_rate fail, that means the grader is working correctly — the model just needs training. In this case:
-- Remove dead-weight records (score=0)
-- If grader checks all pass → proceed to training even if avg_score/pass_rate fail
-- The purpose of eval-first is to catch **grader problems**, not to wait for the base model to score well
+**⚠️ IMPORTANT: First eval with base model will often show low scores** — the base model hasn't been trained yet. This is expected. Focus on the hard checks (sample count, score spread, nonzero signal) rather than absolute score. Most soft warnings (pass_rate, binary_frac, dead_weight) are safe to train through. The exception is `score_concentration` > 70% — that indicates a grader problem, not a model problem.
+
+**Note on binary rewards:** DeepSeek-R1 (arXiv:2501.12948) and DAPO (arXiv:2503.14476) achieved state-of-the-art results using 100% binary rewards (0 or 1). Binary rewards work — they just produce learning signal only when a group has mixed outcomes (some correct, some incorrect), wasting compute on uniform groups. Continuous scoring is more sample-efficient but not strictly required.
 
 #### 7d. Start Training (only after readiness gate passes)
 
@@ -619,19 +635,19 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 
 | Parameter | Default | Rationale |
 |-----------|---------|-----------|
-| `learning_rate` | **1e-6** | Universal consensus: DeepSeekMath, DAPO, Dr. GRPO, TRL all use 1e-6. Do NOT use SFT rates (2e-5 to 5e-5). |
-| `response_candidates_count` | **8** (minimum) | GRPO needs multiple candidates. All published work uses G≥8. |
-| `warmup_steps` | **20-50** | DAPO uses 20, "Tricks or Traps" uses 50. Linear warmup then constant LR. |
+| `learning_rate` | **1e-6** | DeepSeekMath, DAPO, Dr. GRPO, "Tricks or Traps", TRL all use 1e-6. Exception: DeepSeek-R1 uses 3e-6. Do NOT use SFT rates (2e-5 to 5e-5). |
+| `response_candidates_count` | **8** (minimum) | GRPO needs multiple candidates for advantage estimation. Published work uses G=8 (Dr. GRPO, TRL) to G=64 (DeepSeekMath). |
+| `warmup_steps` | **20-50** | DAPO (arXiv:2503.14476) uses 20, "Tricks or Traps" (arXiv:2508.08221) uses 50. Linear warmup then constant LR. |
 
-> **⚠️ RFT epochs ≠ SFT epochs.** In RFT/GRPO, the model generates **fresh responses each epoch** — there's no repetition risk. More epochs = more exploration.
+> **⚠️ RFT epochs ≠ SFT epochs.** In RFT/GRPO, the model generates **fresh responses each epoch** — there's no repetition risk. More epochs = more exploration. Published work uses high epoch counts: "Tricks or Traps" uses 50 epochs; OpenAI says RFT does "hundreds or thousands of epochs." Start conservatively and increase if reward is still improving.
 
 | Situation | Adjustment |
 |-----------|------------|
-| < 50 records | `epochs: 10-15` |
-| 50-200 records | `epochs: 5-10` |
-| > 500 records | `epochs: 3-5` |
+| < 50 records | `epochs: 15-30` (small dataset needs more passes — OpenAI: "hundreds of epochs over the same few data points") |
+| 50-200 records | `epochs: 10-20` |
+| > 500 records | `epochs: 5-10` |
 | Complex task | `lora_rank: 16` |
-| High KL but training otherwise healthy | **Do NOT lower LR just for KL.** Beta=0 is the GRPO default — high KL is expected. |
+| High KL but training otherwise healthy | **Do NOT lower LR just for KL.** With beta=0 (modern GRPO default per DAPO/TRL), KL divergence is unpenalized and not even tracked in most frameworks. |
 | Unstable training (NaN loss, reward collapse) | Lower `learning_rate` to 5e-7. Check for 100% completion truncation first. |
 
 #### 7e. Monitor training
@@ -666,10 +682,10 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py sync-jobs --workflow-id $WORKFLO
 This runs during the eval-first loop (Step 7b→7c). Compute:
 
 1. **Overall**: average score, pass rate (>0.7 threshold), score range
-2. **Per-topic breakdown**: group scores by topic, sort by average (weakest first)
+2. **Per-topic breakdown**: group scores by topic, sort by average (weakest first). Low topic scores are expected for base models — focus on whether the grader differentiates quality within each topic, not absolute scores.
 3. **Low-scoring records**: list records <0.7 with their `reason` fields
-4. **Score distribution**: are scores spread out (good) or clustered (grader issue)?
-5. **Readiness gate output**: from `readiness-check` command — which criteria passed/failed
+4. **Score concentration**: are scores spread out (good) or clustered at one value (grader too coarse)? If >50% are the same value, the grader needs more granular criteria — GRPO gets zero gradient when K=8 completions all score identically (DAPO arXiv:2503.14476).
+5. **Readiness gate output**: from `readiness-check` command — which criteria passed/failed. Pay special attention to `score_concentration` — it catches grader issues that `score_std` misses when outliers inflate the overall std.
 
 **Then run the readiness gate** (Step 7c) to decide: fix + re-eval, or proceed to training.
 
@@ -713,6 +729,7 @@ Combine eval scores with training metrics. Present per-topic eval scores alongsi
 | All scores ~0 | Grader broken or too strict | Fix grader, dry-run, re-eval |
 | Some records score 0, rest normal | Dead-weight records | Remove + regenerate (Step 8b+) |
 | All scores ~1 | Grader too lenient | Add harder criteria, re-eval |
+| **>50% scores at one value** (e.g., 79% at 0.3) | **Grader too coarse** — different failure modes produce the same score. Common cause: grader gives partial credit for "not hallucinating" even when model refuses to answer | Fix grader: add early-exit for non-responses (score 0), remove score snapping/rounding, add more granular criteria so different quality levels get different scores. Re-eval. |
 | One topic consistently low | Weak prompts or poor source material | Regenerate records, add source material |
 | Good responses scoring low | Grader criteria misaligned | Adjust criteria weights or LLM judge prompt |
 | NaN/Inf loss in training | Numerical failure (empty batches, truncation) | Check completion clipping first, then lower LR |
@@ -767,12 +784,71 @@ Two iteration loops with different speeds and costs:
 
 Apply fixes and re-eval. Do NOT create a training job.
 
-**Fixing the grader** (no data re-upload needed):
+**Fixing the grader** — first diagnose, then fix:
+
+**Step 1: Diagnose.** Run `diagnose-grader` to understand WHY scores cluster and WHAT to change:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py diagnose-grader \
+  --file evaluations/eval-001.json --workflow-id $WORKFLOW_ID
+```
+This shows: score distribution by bucket, sample `reason` fields per bucket, auto-diagnosis of the likely cause, specific fix suggestions, the current grader source code, and a **record context check** (whether prompts include source document text). **Read this output carefully — the root cause might be the DATA, not the grader.**
+
+**Common root causes and correct fixes:**
+
+| diagnose-grader says | Root cause | Fix |
+|---|---|---|
+| "EXTRACTION TASK BUT RECORDS MISSING SOURCE TEXT" | **DATA** — prompts reference documents/filings/citations but don't include source material. Model can't extract from documents it can't see. | Regenerate records with `generate_records.py` (embeds knowledge parts), re-upload, re-eval |
+| "Model refuses to answer" + records are short | **DATA** — same as above (only for extraction tasks — knowledge/reasoning tasks don't need source text) | Fix data first, then grader |
+| "Grader gives same score to different failures" + records have source text | **GRADER** — scoring formula too coarse | Edit grader.js (remove snapping, add early-exit for refusals, reweight criteria) |
+| "Score snapping" (Math.round) | **GRADER** — collapsing continuous scores into 11 values | Remove the rounding line from grader.js |
+
+**⚠️ Fix the data FIRST if the diagnosis says records are missing source text** (for extraction tasks). Fixing the grader alone won't help — the model will still refuse because it has nothing to extract from. Note: not all tasks need source text — knowledge, reasoning, and style tasks work fine with short prompts.
+
+**Step 2: Fix.** Based on diagnosis — fix data, grader, or both:
+
+**If DATA issue (extraction task but records missing source text):**
+```bash
+# Regenerate records WITH source material embedded in each record's user message
+python3 ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
+  --topics finetune-project/topics.json \
+  --relations finetune-project/relations.json \
+  --knowledge-dir finetune-project/knowledge \
+  --system-prompt "You are..." \
+  --output finetune-project/training.jsonl \
+  --records-per-topic 10 --parallel 4 \
+  --embed-source-context
+
+# Re-upload (--force replaces existing records)
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force \
+  --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl
+```
+
+The `--embed-source-context` flag embeds the per-question `ground_truth` excerpt (generated alongside each question) into the user message as a natural "here's the document, now answer" pattern:
+
+```
+User: "Here is the relevant section from the source document:
+
+[per-question excerpt from ground_truth]
+
+What was Apple's total revenue for FY2024?"
+```
+
+This is a natural user interaction pattern (users paste document sections and ask questions — RAG-style). The system prompt stays unchanged (composed from the topic hierarchy). Each record gets its own relevant excerpt, not the entire source. **Only use this for extraction tasks** (document analysis, filing extraction, report parsing). For knowledge/reasoning/style tasks, omit this flag.
+
+**If GRADER issue:** Edit `grader.js` based on the diagnosis, then upload:
 ```bash
 # Edit grader.js, then update:
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader \
   --workflow-id $WORKFLOW_ID --file grader.js
 ```
+
+**Step 3: Dry-run.** Verify the fix before re-eval:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
+  --workflow-id $WORKFLOW_ID --script grader.js \
+  --row '{"messages": [{"role":"system","content":"..."}, {"role":"user","content":"..."}, {"role":"assistant","content":"I cannot provide specific figures without the filing."}]}'
+```
+Check that a "model refused" response now scores 0 (not 0.3).
 
 **Fixing the data** (requires re-upload):
 ```bash

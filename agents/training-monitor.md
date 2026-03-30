@@ -54,11 +54,11 @@ Extract the threshold values from the guide's metric sections. The key threshold
 | Loss | §Loss | NaN/stuck-at-zero detection |
 
 Use these values in the monitoring script (Step 1). If the guide is unavailable, fall back to these defaults:
-- KL: **Only check if beta > 0.** With beta=0 (default for GRPO/DAPO/TRL), KL is unpenalized and values in billions/trillions are normal — do NOT flag as anomaly. With beta>0: warn >5.0, critical >10.0.
-- Clipped ratio: warn >0.50, critical >0.70
+- KL: **Only check if beta > 0.** With beta=0 (modern GRPO default per DAPO/TRL), KL is not meaningful — TRL does not even load the reference model or log KL when beta=0. If your provider reports KL with beta=0, ignore absolute values; only monitor KL *trend* relative to reward. With beta>0: warn >5.0, critical >10.0.
+- Clipped ratio: warn >0.10, critical >0.50 (majority of completions truncated → training signal is noise)
 - Reward std: warn <0.05, critical <0.01
-- frac_reward_zero_std: warn >0.50, critical >0.80
-- Grad norm spike: >3x rolling median for 10+ consecutive polls
+- frac_reward_zero_std: warn >0.50, critical >0.80 ("No Prompt Left Behind" arXiv:2509.21880: 30-99% is normal range)
+- Grad norm spike: >3x rolling median for 10+ consecutive polls (heuristic — no GRPO-specific paper threshold)
 - Loss: NaN/Inf = critical
 
 **⚠️ To determine beta**: Check the training config. If `beta` is not set or is 0, skip absolute KL thresholds entirely. Only monitor KL *trend* (rising + reward stagnant = possible reward hacking).

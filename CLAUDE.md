@@ -350,6 +350,32 @@ To investigate cloud endpoints (eval, training), start here:
 
 ---
 
+## Finetune Skill: Research-First Rule
+
+**Before modifying or suggesting changes to `finetune-skill/` thresholds, criteria, workflow steps, or training/eval logic**, you MUST:
+
+1. **Research first.** Search for what other platforms (OpenAI RFT, Together AI, HuggingFace TRL, Predibase) and papers (GRPO, DAPO, Dr. GRPO, DeepSeek-R1, "Tricks or Traps", "Hard Examples Are All You Need", "No Prompt Left Behind") actually do. Use web search or Agent tool for deep research.
+2. **Cite sources.** Every threshold, criterion, or workflow decision must reference a specific paper (arXiv ID), platform doc, or empirical finding. No "general best practice" without a source.
+3. **Explain the why.** When writing thresholds or criteria in code/docs, include inline comments with the research justification (paper name + arXiv ID). Anyone reading the code should understand why that specific number was chosen.
+4. **Challenge assumptions.** If a proposed change seems reasonable but you haven't verified it against GRPO/RFT literature, say so and research it before implementing. The cost of a wrong threshold (wasting GPU hours or blocking valid training) is high.
+
+This rule exists because GRPO/RFT has counterintuitive properties:
+- Low base model scores are expected and even desirable (DeepSeek R1-Zero: 15.6% → 71%)
+- Dead-weight prompts (30-99% per batch) are normal (ICLR 2026)
+- Hard examples yield 47% gains vs 3-15% for easy ones (arXiv:2508.14094)
+- Eval K=1 ≠ Training K=8, so eval metrics are lower bounds, not predictions
+
+**Key reference papers** (check these before any threshold change):
+- DeepSeek-R1 (arXiv:2501.12948) — GRPO from scratch, base model capabilities
+- DAPO (arXiv:2503.14476) — Dynamic sampling, clip-higher, zero-variance handling
+- Dr. GRPO (arXiv:2503.20783) — Length bias, score-length correlation
+- "Hard Examples Are All You Need" (arXiv:2508.14094) — Difficulty distribution
+- "No Prompt Left Behind" (arXiv:2509.21880, ICLR 2026) — Zero-variance prompt frequency
+- OpenAI RFT Guide — Platform requirements, grader quality
+- "Tricks or Traps" (arXiv:2508.08221) — Practical GRPO failure modes
+
+---
+
 ## Mandatory Conventions
 
 ### State Management (read `docs/state-management-pattern.md` first)

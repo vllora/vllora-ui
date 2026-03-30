@@ -22,8 +22,29 @@ import { getJobTotalRows, getJobCompletedRows } from "@/types/eval-job";
 import { EvaluatorVersionBadge } from "@/components/shared/EvaluatorVersionBadge";
 import { useEvaluatorVersions } from "@/hooks/useEvaluatorVersions";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
-import { TopicEvalBreakdown } from "@/components/datasets/TopicEvalBreakdown";
-import type { TopicEvalStats } from "@/types/dataset-types";
+import { computeReadinessGate } from "@/lib/distri-dataset-tools/analysis/compute-readiness-gate";
+import type { TopicEvalStats, ReadinessGate } from "@/types/dataset-types";
+
+/**
+ * Map the readiness gate verdict to the cloud verdict format (GO/WARNING/NO-GO).
+ * When we have a readiness gate result, it takes priority over the cloud's simpler
+ * diagnosis — e.g., the cloud says "GO" but our gate detects 79% score concentration
+ * and says "FIX GRADER". This prevents contradictory signals in the UI.
+ */
+function mapReadinessToVerdict(gate: ReadinessGate | undefined, cloudVerdict: string): string {
+  if (!gate) return cloudVerdict;
+
+  // Check if score_concentration is extreme (>70%) — grader is broken
+  const concentrationCheck = gate.checks.find(c => c.id === "score_concentration");
+  const concentrationBlocksTraining = concentrationCheck != null
+    && !concentrationCheck.passed
+    && concentrationCheck.value > 0.70;
+
+  if (gate.verdict === "FAIL") return "NO-GO";
+  if (gate.verdict === "WARN" && concentrationBlocksTraining) return "NO-GO";
+  if (gate.verdict === "WARN") return "WARNING";
+  return "GO";
+}
 
 interface EvalActivityViewProps {
   /** Dataset ID for navigation (click record ID → switch to Records tab) */
@@ -103,7 +124,6 @@ function EvalJobVersionBadge({ workflowId, jobCreatedAt }: { workflowId: string;
 /** Inline detail panel for a selected job (left side of split) */
 function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: EvalJob; workflowId: string; onCancel?: () => void; onRunAgain?: () => void; onRefresh?: (jobId: string) => void }) {
   const { sortedRecords } = DatasetDetailConsumer();
-  const [showTopicBreakdown, setShowTopicBreakdown] = useState(false);
   const result = job.result;
 
   // Use ALL scores from evaluationResults (full dataset), fall back to sampled sampleResults
@@ -156,19 +176,31 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
       if (!topic) continue;
       (byTopic[topic] ??= []).push(r.score);
     }
+    // First pass: compute stats
     const result2: Record<string, TopicEvalStats> = {};
     for (const [topic, scores2] of Object.entries(byTopic)) {
-      const mean = scores2.reduce((a, b) => a + b, 0) / scores2.length;
-      const std = Math.sqrt(scores2.reduce((a, b) => a + (b - mean) ** 2, 0) / scores2.length);
-      result2[topic] = {
-        mean,
-        std,
-        count: scores2.length,
-        status: mean >= 0.8 ? "good" : mean >= 0.6 ? "warning" : "problem",
-      };
+      const topicMean = scores2.reduce((a, b) => a + b, 0) / scores2.length;
+      const std = Math.sqrt(scores2.reduce((a, b) => a + (b - topicMean) ** 2, 0) / scores2.length);
+      result2[topic] = { mean: topicMean, std, count: scores2.length, status: "good" };
+    }
+    // Second pass: relative status (compared to dataset average, not absolute thresholds)
+    const allMeans = Object.values(result2).map(s => s.mean);
+    const datasetAvg = allMeans.length > 0 ? allMeans.reduce((a, b) => a + b, 0) / allMeans.length : 0;
+    for (const stats of Object.values(result2)) {
+      if (stats.mean < datasetAvg * 0.6) stats.status = "problem";
+      else if (stats.mean < datasetAvg * 0.85) stats.status = "warning";
     }
     return result2;
   }, [evaluationResults, recordTopicMap]);
+
+  // Readiness gate: prefer persisted value, fallback to live computation from snapshot
+  const readinessGate = useMemo<ReadinessGate | undefined>(() => {
+    if (result?.readinessGate) return result.readinessGate;
+    if (!evaluationResults || evaluationResults.length === 0) return undefined;
+    const scored = evaluationResults.filter(r => r.score != null);
+    if (scored.length === 0) return undefined;
+    return computeReadinessGate(scored, topicScores);
+  }, [result?.readinessGate, evaluationResults, topicScores]);
 
   const recommendations = result?.diagnosis?.recommendations || [];
   const stats = result?.statistics;
@@ -244,7 +276,7 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
                 Failed
               </span>
             ) : result ? (
-              <VerdictBadge verdict={result.diagnosis.verdict} />
+              <VerdictBadge verdict={mapReadinessToVerdict(readinessGate, result.diagnosis.verdict)} />
             ) : null}
             <span className="inline-flex items-center rounded bg-zinc-800/60 px-2 py-0.5 text-[10px] text-zinc-400 border border-zinc-700/40">
               {job.rolloutModel || "gpt-4o-mini"}
@@ -341,7 +373,7 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
 
               {/* Chart area */}
               <div className="p-4">
-                <ScoreStrip scores={scores} mean={stats?.mean} />
+                <ScoreStrip scores={scores} mean={stats?.mean} byTopic={Object.keys(topicScores).length > 0 ? topicScores : undefined} readinessGate={readinessGate} />
               </div>
 
               {/* Stats footer */}
@@ -361,6 +393,8 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
                 </div>
               )}
             </div>
+
+            {/* Readiness gate is now a tab in ScoreStrip ("Readiness") */}
 
             {/* Recommendations */}
             {recommendations.length > 0 && (
@@ -385,23 +419,7 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
               </div>
             )}
 
-            {/* Per-topic breakdown */}
-            {Object.keys(topicScores).length > 0 && (
-              <div>
-                <button
-                  onClick={() => setShowTopicBreakdown((v) => !v)}
-                  className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
-                >
-                  <ChevronRight className={cn("h-3 w-3 transition-transform", showTopicBreakdown && "rotate-90")} />
-                  <span>Per-Topic Breakdown ({Object.keys(topicScores).length} topics)</span>
-                </button>
-                {showTopicBreakdown && (
-                  <div className="mt-2">
-                    <TopicEvalBreakdown byTopic={topicScores} />
-                  </div>
-                )}
-              </div>
-            )}
+            {/* Per-topic breakdown is now a tab in ScoreStrip ("By Topic") */}
           </div>
         ) : null}
 

@@ -62,12 +62,12 @@ vLLora uses **GRPO (Group Relative Policy Optimization)** for reinforcement fine
 - **What it is**: How different has the model become from where it started? KL measures the policy divergence from the base model. In GRPO, some divergence is **expected and necessary** — the model must change to learn new behaviors.
 - **⚠️ IMPORTANT: KL is NOT the primary constraint in GRPO.** DAPO and TRL both default to `beta=0` (no KL penalty). The **clipping mechanism** (epsilon) serves as the trust region constraint instead. High KL alone does NOT mean training is failing — check reward trend, clipping ratio, and output quality instead.
 - **When KL matters**: Only when `beta > 0` (KL penalty is active). With beta=0, KL is informational only.
-- Healthy: Varies by setup. With beta>0: below 1.0. **With beta=0: values in billions or trillions are normal** — do NOT treat high absolute KL as an anomaly.
+- Healthy: Varies by setup. With beta>0: below 1.0. **With beta=0: KL is not meaningful** — TRL does not even load the reference model or log KL when beta=0. If your provider reports KL with beta=0, the values are informational only and should not trigger alerts regardless of magnitude.
 - **Monitor thresholds**: beta>0: warn >5.0, critical >10.0. **beta=0: skip absolute thresholds entirely.** Only monitor the KL *trend* relative to reward trend.
 - Warning: KL **rising while reward stagnates** → possible reward hacking. KL rising with reward improving → normal learning.
 - Critical: KL divergence + degenerate outputs (repetitive, verbose padding, format exploitation) → reward hacking.
 - Fix: If reward hacking suspected → enable/increase beta, add quality-focused grader criteria, inspect outputs manually. Do NOT reduce LR just because KL is high — that slows learning without fixing the root cause.
-- (Reference: DeepSeekMath §3.2 uses beta=0.04; DAPO removes KL entirely (beta=0); TRL defaults to beta=0.0; Dr. GRPO does not use KL penalty)
+- (Reference: Original GRPO in DeepSeekMath (arXiv:2402.03300) uses beta=0.04; DeepSeek-R1 (arXiv:2501.12948) uses beta=0.001; DAPO (arXiv:2503.14476) removes KL entirely (beta=0); TRL defaults to beta=0.0; Dr. GRPO (arXiv:2503.20783) does not use KL penalty. Beta=0 is the modern standard, not the original GRPO default.)
 
 **`grad_norm`** — L2 norm of all gradients before clipping.
 - **What it is**: How aggressively is the model trying to update its weights this step? Think of gradients as the "force" pushing the model in a direction. Large forces = big changes = potential instability. Gradient clipping caps this force, but if the pre-clip norm is huge, the model is being pushed hard. NaN means the math broke (division by zero, often from empty batches).
@@ -76,7 +76,7 @@ vLLora uses **GRPO (Group Relative Policy Optimization)** for reinforcement fine
 - Fix: Reduce LR, tighten gradient clipping. If NaN, fix truncation issue first.
 
 **`learning_rate`** — Current learning rate from the schedule.
-- **What it is**: How big of a step does the optimizer take each update? Higher = faster but riskier. GRPO needs much smaller learning rates than SFT because the reward signal is noisier. Our default (1e-6) follows DeepSeekMath, DAPO, and Dr. GRPO consensus.
+- **What it is**: How big of a step does the optimizer take each update? Higher = faster but riskier. GRPO needs much smaller learning rates than SFT because the reward signal is noisier. Our default (1e-6) follows DeepSeekMath (arXiv:2402.03300), DAPO (arXiv:2503.14476), Dr. GRPO (arXiv:2503.20783), "Tricks or Traps" (arXiv:2508.08221), and TRL. Exception: DeepSeek-R1 (arXiv:2501.12948) uses 3e-6.
 - Typical: 1e-6 to 5e-6 for large models, up to 1e-5 for small models.
 - If training is unstable → halve LR. If too slow → increase 2-3x.
 
@@ -135,8 +135,8 @@ vLLora uses **GRPO (Group Relative Policy Optimization)** for reinforcement fine
 ### Progress Metrics
 
 **`epoch`** — Current training epoch as a fraction (0.0 to num_epochs).
-- **What it is**: How many times has the model seen the full dataset? `epoch=0.5` means halfway through the first pass. Unlike SFT (where 1-3 epochs is typical because the same responses are reused), GRPO generates **fresh responses each epoch** — the model never sees the same output twice. This means more epochs don't cause memorization the way SFT does. Typical GRPO training uses 5-15 epochs for datasets under 200 records.
-- (Reference: DeepSeekMath uses multiple passes over the same prompts. DAPO trains for extended periods. Our default is 8 epochs — see `rft-grpo-training-explained.md` §Epochs)
+- **What it is**: How many times has the model seen the full dataset? `epoch=0.5` means halfway through the first pass. Unlike SFT (where 1-3 epochs is typical because the same responses are reused), GRPO generates **fresh responses each epoch** — the model never sees the same output twice. This means more epochs don't cause memorization the way SFT does. Published work uses high epoch counts: "Tricks or Traps" (arXiv:2508.08221) uses 50 epochs; OpenAI says RFT does "hundreds or thousands of epochs." SKILL.md recommends 10-30 epochs for small datasets (<200 records), 5-10 for large datasets (>500).
+- (Reference: DeepSeekMath uses multiple passes. DAPO trains for extended periods. The gateway default is 8 epochs, but SKILL.md recommends higher counts based on dataset size — see SKILL.md §Step 7d.)
 
 **`global_step`** — Current training step number.
 - **What it is**: How many gradient updates have been applied. Combined with `max_steps`, tells you how far along training is. Each step processes one batch of prompts × G completions.
@@ -214,7 +214,7 @@ After each eval + training cycle, check:
 3. **clipped_ratio > 0.3?** → Increase max_output_tokens (but watch cost: 8 completions × more tokens)
 4. **frac_reward_zero_std > 0.5?** → Grader not discriminating — add partial credit, increase G
 5. **Reward plateaued for >50% of steps?** → Change approach (different model, more data, different grader)
-6. **High KL with healthy reward trend?** → Normal for GRPO (beta=0 default). Only act if outputs degenerate
+6. **High KL with healthy reward trend?** → Normal with beta=0 (modern GRPO default per DAPO/TRL — KL is unpenalized and not tracked in most frameworks). Only act if outputs degenerate
 
 Max 5 iterations before escalating (change base model or rethink approach).
 

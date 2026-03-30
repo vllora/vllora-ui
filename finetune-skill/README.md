@@ -29,12 +29,12 @@ This README is the full context for anyone (human or AI) working on this skill: 
 Fine-tuning involves reading documents, designing topics, generating diverse training prompts, writing graders, running evaluations, analyzing results, and iterating — all things AI agents excel at.
 
 ```
-Agent (with this skill) — runs the full 9-step pipeline:
-─────────────────────────────────────────────────────────
+Agent (with this skill) — runs the full pipeline (eval-first):
+───────────────────────────────────────────────────────────
 1. Read docs, extract knowledge        6. Verify & hand off
-2. Design topic hierarchy              7. Start eval + training (parallel)
-3. Generate 100-200+ training prompts  8. Analyze results, filter dead-weight
-4. Write hybrid grader function        9. Iterate (fix data/grader, retrain)
+2. Design topic hierarchy              7. Eval → Readiness Gate → [PASS] → Train
+3. Generate 100-200+ training prompts  8. Analyze results (eval + training)
+4. Write hybrid grader function        9. Iterate (fix data/grader, re-eval/retrain)
 5. Validate dataset
 ```
 
@@ -71,8 +71,8 @@ your-project/
     └── skills/
         └── finetune-skill/            # The skill itself
             ├── SKILL.md
-            ├── reference/             # 10 reference docs (incl. analysis-strategy + training-metrics-guide)
-            ├── scripts/               # 17 Python helpers
+            ├── reference/             # 10 reference docs (analysis-strategy, training-metrics-guide, iteration-strategy, etc.)
+            ├── scripts/               # 17 Python helpers (finetune.py has 16 subcommands)
             └── templates/             # Starter files
 ```
 
@@ -118,22 +118,24 @@ claude  # start Claude Code
 
 ```
 finetune-skill/
-├── SKILL.md                    # Main entry point (~760 lines)
+├── SKILL.md                    # Main entry point (~870 lines)
 │   ├── YAML frontmatter        # name + description (auto-triggering)
 │   ├── Core concepts           # How RFT works, prerequisites
 │   ├── Working directory spec  # What files the agent creates
 │   ├── Execution log spec      # Timestamped log requirements
-│   └── Pipeline steps          # 9-step pipeline with finetune.py commands
+│   └── Pipeline steps          # Eval-first pipeline with finetune.py commands
 │
 ├── reference/                  # Deep-dive reference files (read on demand)
-│   ├── api-reference.md        # All REST endpoints (cloud + local CRUD) with curl examples
-│   ├── data-format.md          # ~100 lines — JSONL format spec
-│   ├── extraction-guide.md     # ~670 lines — Docling Serve setup, API calls, knowledge_parts.json schema
+│   ├── api-reference.md        # ~930 lines — All REST endpoints (cloud + local CRUD) with curl examples
+│   ├── analysis-strategy.md    # ~1050 lines — Decision trees, action templates, derived metrics, presentation format
+│   ├── training-metrics-guide.md # ~240 lines — GRPO metric interpretation, paper-backed thresholds
+│   ├── iteration-strategy.md   # ~1090 lines — Eval analysis, training analysis, diagnosis, fixes, escalation
+│   ├── data-format.md          # ~110 lines — JSONL format spec
+│   ├── extraction-guide.md     # ~985 lines — Docling Serve setup, API calls, knowledge_parts.json schema
 │   ├── knowledge-parts-schema.json  # JSON schema for knowledge_parts.json
-│   ├── grader-writing.md       # ~290 lines — grader patterns + anti-patterns
+│   ├── grader-writing.md       # ~620 lines — grader patterns + anti-patterns
 │   ├── topic-hierarchy.md      # ~290 lines — topic design + coverage analysis
-│   ├── iteration-strategy.md   # ~710 lines — analysis, diagnosis, escalation
-│   └── workflow-guide.md       # ~305 lines — per-step deep dive
+│   └── workflow-guide.md       # ~470 lines — per-step deep dive
 │
 ├── scripts/                    # Helper scripts (run with `python3`, requires `requests`)
 │   ├── finetune.py             # Gateway API wrapper (create workflow, upload, verify)
@@ -275,10 +277,17 @@ User: "finetune my tax deduction PDF"
 │  Step 5: Write grader ──────────► Main agent (creative) │
 │  Step 6: Upload everything ─────► scripts/finetune.py   │
 │                                                         │
-│  Step 7: Start eval + training                          │
-│    7a-b: Create both jobs ──────► scripts/finetune.py   │
-│    7c: Poll eval (foreground) ──► scripts/finetune.py   │
-│    7c: Monitor training (background)                    │
+│  Step 7: Eval-First Loop (eval before training)         │
+│    7a: Pre-training validation ─► grader distribution   │
+│    7b: Create eval-only ────────► finetune.py create-eval│
+│    7c: Readiness gate ──────────► finetune.py readiness-check│
+│           │                                             │
+│           ├─ FAIL → fix data/grader → back to 7b        │
+│           │   (max 5 eval-only iterations)              │
+│           │                                             │
+│           └─ PASS → 7d: Start training ─► create-training│
+│           │                                             │
+│    7e: Monitor training (background)                    │
 │           │                                             │
 │           ▼                                             │
 │    ┌──────────────────────────────────────┐             │
@@ -297,24 +306,31 @@ User: "finetune my tax deduction PDF"
 │      Saves: {JOB_ID}-metrics.json                       │
 │      Writes: {JOB_ID}-monitor-report.json on exit       │
 │                                                         │
-│    Meanwhile, main agent polls eval (foreground):       │
-│      - Analyze eval results when ready                  │
+│    Meanwhile, main agent polls training (foreground):   │
+│      - Analyze training results when done               │
 │      - Present findings to user                         │
-│      - Check training report file when eval done        │
 │               │                                         │
-│               ▼  (training-monitor returns)             │
+│               ▼                                         │
 │                                                         │
 │  Step 8: Analyze results ───────► scripts/analyze_*.py  │
 │           │                                             │
 │           ▼  🗣️ REVIEW WITH USER                        │
-│    "Eval avg: 0.68. Training loss: 0.42.                │
+│    "Eval avg: 0.68. Training reward: 0.2→0.7.           │
 │     Weak topics: Filing Status (0.35 avg)               │
 │     Strong topics: Deductions (0.82 avg)                │
 │     Options: A) Fix grader B) Regenerate weak topics    │
-│              C) Add more data D) Ship it"               │
+│              C) Adjust hyperparams D) Ship it"          │
 │           │                                             │
 │           ▼                                             │
-│  Step 9: Iterate (if needed) ──► Re-run Steps 4-8      │
+│  Step 9: Iterate (if needed)                            │
+│    9a: Eval-only iteration (readiness gate failed):     │
+│        diagnose-grader → identify root cause            │
+│        ├─ DATA issue → regenerate with                  │
+│        │   --embed-source-context, re-upload, re-eval   │
+│        ├─ GRADER issue → edit grader.js, re-upload,     │
+│        │   re-eval                                      │
+│        └─ BOTH → fix data first, then grader            │
+│    9b: Post-training iter ───► fix → re-eval or retrain │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -375,37 +391,39 @@ This pattern repeats at every decision point: extract → review with user → f
 
 ---
 
-## Operating Mode: Full Pipeline
+## Operating Mode: Eval-First Pipeline
 
-The skill runs the **entire finetune pipeline end-to-end** — from document extraction through evaluation, iteration, and training. The UI provides visual feedback (score distributions, training metrics charts) while the skill drives the pipeline.
+The skill runs the **entire finetune pipeline end-to-end** using an **eval-first flow**: eval iterations validate data quality and grader correctness before committing to expensive training. The UI provides visual feedback (score distributions, training metrics charts) while the skill drives the pipeline.
 
 ```
-Agent (CLI) — Full Pipeline
-───────────────────────────
+Agent (CLI) — Eval-First Pipeline
+──────────────────────────────────
 1. Define objective
 2. Extract documents (parallel via knowledge-extractor subagents)
 3. Build topic hierarchy + relations (via relation-builder subagent)
 4. Generate JSONL training data
 5. Write grader
 6. Verify gateway state
-7. Start eval + training (parallel, cloud)
-8. Analyze results (per-topic, dead-weight filtering)
-9. Iterate (fix data/grader, re-eval, retrain)
+7. Eval → Readiness Gate → [FAIL → fix → re-eval] → [PASS → Train]
+8. Analyze results (eval + training metrics)
+9. Iterate (fix data/grader, re-eval or retrain)
 ```
+
+**Key insight:** Eval is fast (~45 min) and cheap. Training is slow (hours) and expensive. The readiness gate checks grader quality (score spread, binary fraction, leniency) before allowing training to start. Max 5 eval-only iterations before training, max 3 training iterations.
 
 **Requires**: Gateway running at localhost:9090.
 
-The `reference/api-reference.md` documents all 76 gateway endpoints. Each step uploads to the gateway immediately — the UI shows progress in real time.
+The `reference/api-reference.md` documents all gateway endpoints. Each step uploads to the gateway immediately — the UI shows progress in real time.
 
 ---
 
 ## What We've Built
 
-### SKILL.md (~740 lines)
+### SKILL.md (~870 lines)
 
 - YAML frontmatter with pushy description for auto-triggering
 - Prerequisites check (base model capability, task clarity, smooth scoring)
-- 9-step pipeline: objective → extraction → topics → data generation → grader → verify → evaluation → analyze → iterate
+- Eval-first pipeline: objective → extraction → topics → data generation → grader → verify → eval → readiness gate → train → analyze → iterate
 - Working directory structure with multi-document knowledge layout
 - Execution log specification with full timestamps (`YYYY-MM-DD HH:MM:SS`)
 - Checkpoint calls after every major step (crash recovery via `checkpoint.py`)
@@ -418,15 +436,15 @@ The `reference/api-reference.md` documents all 76 gateway endpoints. Each step u
 
 | File | Lines | What it covers |
 |------|-------|---------------|
-| `api-reference.md` | ~950 | All 76 vLLora REST endpoints: cloud (datasets, eval, training, deployments) + local CRUD (workflows, records, topics, knowledge, eval-jobs) + record scores + topic management + training metrics + pipeline examples |
-| `analysis-strategy.md` | ~1500 | Decision trees, action templates, derived metrics, presentation format for Step 8 analysis |
-| `training-metrics-guide.md` | ~500 | GRPO metric interpretation — healthy ranges, red flags, paper-backed thresholds (DeepSeekMath, DAPO, Dr. GRPO), quick decision table |
-| `data-format.md` | ~100 | JSONL format — prompts only (no assistant messages, since RFT) |
-| `extraction-guide.md` | ~670 | Docling Serve setup, hybrid chunk API, knowledge_parts.json schema, image extraction, troubleshooting |
-| `grader-writing.md` | ~290 | 3 grader patterns, smooth scoring, reward hacking prevention |
+| `api-reference.md` | ~930 | vLLora REST endpoints: cloud (datasets, eval, training, deployments) + local CRUD (workflows, records, topics, knowledge, eval-jobs) + record scores + topic management + training metrics + pipeline examples |
+| `analysis-strategy.md` | ~1050 | Decision trees, action templates, derived metrics, presentation format for Step 8 analysis |
+| `training-metrics-guide.md` | ~240 | GRPO metric interpretation — healthy ranges, red flags, paper-backed thresholds (DeepSeekMath, DAPO, Dr. GRPO), quick decision table |
+| `iteration-strategy.md` | ~1090 | Eval analysis, training analysis, diagnosis, fixes, tracking, stalls, escalation — the authoritative iteration guide |
+| `data-format.md` | ~110 | JSONL format — prompts only (no assistant messages, since RFT) |
+| `extraction-guide.md` | ~985 | Docling Serve setup, hybrid chunk API, knowledge_parts.json schema, image extraction, troubleshooting |
+| `grader-writing.md` | ~620 | 3 grader patterns, smooth scoring, reward hacking prevention, LLM-as-judge API |
 | `topic-hierarchy.md` | ~290 | Topic structure, source tracing, coverage analysis, per-topic scores |
-| `iteration-strategy.md` | ~710 | 9 parts: eval analysis, training, topics, variety, diagnosis, fixes, tracking, stalls, escalation |
-| `workflow-guide.md` | ~416 | Deep dive on each pipeline step (including categorization, variants, grader testing, evaluator versioning, training metrics, continuation runs, eval-job tracking) |
+| `workflow-guide.md` | ~470 | Deep dive on each pipeline step (including categorization, variants, grader testing, evaluator versioning, training metrics, eval-job tracking) |
 
 ### Helper Scripts (PEP 723)
 
@@ -434,8 +452,8 @@ All scripts use inline dependency declarations — run with `uv run script.py` (
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/finetune.py` | Gateway API wrapper — create workflow, upload knowledge/topics/records/grader, verify, create-eval, create-training, poll-eval, poll-training |
-| `scripts/generate_records.py` | Generate training records from topics + knowledge — calls LLM per leaf topic |
+| `scripts/finetune.py` | Gateway API wrapper — 17 subcommands: create-workflow, upload-knowledge/topics/relations/records/grader, verify, status, readiness-check, diagnose-grader, create-eval, poll-eval, create-training, poll-training, sync-jobs, delete-knowledge, print-row-outputs |
+| `scripts/generate_records.py` | Generate training records from topics + knowledge — calls LLM per leaf topic. `--embed-source-context` embeds per-question source excerpts (from ground_truth) into the user message as natural "here's the doc, answer this" pattern. Required for extraction tasks. |
 | `scripts/analyze_training.py` | Post-training analysis: reward trend, KL health, clipping, loss stability, grad norm, per-topic learning. Paper-backed thresholds with `# Ref:` comments |
 | `scripts/print_metrics_table.py` | Print training metrics table (per-epoch or per-step) — human-readable format |
 | `scripts/chat_completion.py` | Call LLM via gateway — validates JSON output when `response_format` is `json_object` |
@@ -563,13 +581,15 @@ Tested with real chess PDF and live backend at localhost:9090.
 | Topic hierarchy + relations | ✅ Working | relation-builder subagent, now capped at 15 per topic |
 | Data generation (100-200+ records) | ✅ Working | generate_records.py with --upload-incremental |
 | Grader writing + dry-run | ✅ Working | 4 templates: general, extraction, compliance, readability |
-| Evaluation creation + polling | ✅ Working | avg 0.65-0.84 across tests |
-| Training creation + monitoring | ⚠️ Partial | Monitor launches OK, but false NaN on empty metrics (fixed) |
+| Evaluation creation + polling | ✅ Working | finetune.py create-eval + poll-eval, avg 0.65-0.84 across tests |
+| Readiness gate | ✅ Working | finetune.py readiness-check, 3 hard + 8 soft checks |
+| Training creation + monitoring | ✅ Working | Monitor launches OK, false NaN fixed (10-poll grace period) |
 | Training completion | ⚠️ Issues | KL explosion with contract data — persistent failure guidance added |
 | Post-training analysis | ✅ Working | analyze_training.py with paper-backed thresholds |
-| Iteration loop | ✅ Working | Auto-iterates in non-interactive mode (tested 4 iterations) |
+| Iteration loop (eval-first) | ✅ Working | Eval-only iterations + post-training iterations tested |
+| Job sync from gateway | ✅ Working | finetune.py sync-jobs picks up UI-created jobs |
 | Checkpoint + resume | ⚠️ Partial | Checkpoints now at every step, but not all runs use them yet |
-| iterations.md tracking | 🔴 Missing | Added explicit creation instruction — not yet verified in a run |
+| iterations.md tracking | ⚠️ Added | Explicit creation instruction added — not yet verified in a run |
 
 ---
 
@@ -750,7 +770,7 @@ Both write through the same gateway API → same SQLite database. Workflows, rec
 
 | Component | Status |
 |-----------|--------|
-| Gateway API (76 endpoints) | ✅ Done |
+| Gateway API (all endpoints) | ✅ Done |
 | Skill → gateway push (create workflow + populate) | ✅ Done |
 | UI reads from gateway | ✅ Done |
 
@@ -790,14 +810,15 @@ Both write through the same gateway API → same SQLite database. Workflows, rec
 
 ### Known weaknesses
 
-**RFT/GRPO-specific (most impactful):**
-- **No validation set** — pipeline trained on ALL records with no held-out set. Added train/validation split (80/20) in Step 7a-iii but not yet verified in a run. Without this, reward hacking is undetectable.
-- **Grader score distribution not validated before training** — if the grader clusters scores at extremes (all 0.8-1.0 or all binary 0/1), GRPO gets zero gradient. Added distribution check in Step 7a-ii.
-- **Epoch defaults were SFT-contaminated** — previously recommended 1-4 epochs (SFT thinking). RFT needs 5-15+ epochs because the model generates fresh responses each pass. Fixed in SKILL.md.
-- **KL thresholds were SFT-derived** — high KL was flagged as "critical" but in GRPO with beta=0 (default), high KL is expected and normal. Fixed in training-metrics-guide.md — KL alone is no longer diagnostic, must check output quality.
+**RFT/GRPO-specific (addressed but verify in practice):**
+- **Validation set** — train/validation split (80/20) added in Step 7a-iii. Gateway doesn't support separate validation upload, so the split is local only. Verify finetuned model against held-out prompts manually.
+- **Grader score distribution** — pre-training distribution check added in Step 7a-ii + readiness gate enforces spread. Verified working in eval-first flow.
+- **Epoch defaults** — fixed: RFT uses 10-30 epochs for small datasets, 5-10 for large (not SFT-style 1-4). Published work uses even higher: "Tricks or Traps" uses 50; OpenAI says "hundreds or thousands." Fresh responses each pass, no repetition risk.
+- **KL thresholds** — fixed: high KL is normal with beta=0 (GRPO default). KL alone is no longer diagnostic in training-metrics-guide.md.
 
 **Infrastructure:**
-- **Training monitor false NaN** when job not in list yet — fixed in agent definition but depends on LLM following instructions
-- **Over-linking** in relation-builder — was 501 relations for 22 topics. Now capped at 15.
+- **Training monitor false NaN** when job not in list yet — fixed (10-poll grace period) but depends on LLM following instructions
+- **Over-linking** in relation-builder — fixed (capped at 15 per topic)
 - Agent sometimes writes output to unexpected directories
 - Checkpoint usage is inconsistent — some runs don't call checkpoint.py at all
+- `iterations.md` creation instruction added but not yet verified in a full run

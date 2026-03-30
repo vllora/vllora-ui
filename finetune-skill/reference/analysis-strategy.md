@@ -125,7 +125,7 @@ score_std = std_dev(all individual scores)
 | Bucket | Criteria | Count | Interpretation |
 |--------|----------|-------|----------------|
 | Failed (errors) | `status === "failed"` | N | Grader bugs — fix before anything else |
-| Zero (score = 0) | `score === 0` | N | **Dead-weight for RFT** — model cannot learn from these. Diagnose cause, then remove + regenerate replacements (see SKILL.md Step 8b+) |
+| Zero (score = 0) | `score === 0` | N | **Low signal for standard GRPO** — zero-score completions produce zero-variance groups. DAPO skips these via dynamic sampling. "No Prompt Left Behind" (arXiv:2509.21880) shows signal can be extracted via entropy-guided shaping. Diagnose cause; optionally remove + regenerate replacements (see SKILL.md Step 8b+). |
 | Low (0 < score < 0.4) | ... | N | Primary improvement targets |
 | Medium (0.4-0.7) | ... | N | Acceptable, could improve |
 | High (0.7-1.0) | ... | N | Working well |
@@ -180,7 +180,7 @@ clipping_max = max clipped_ratio during training
 |-------|-----------|----------|-----------------|
 | NaN/Inf in any metric | Any NaN or Inf in loss, reward, KL, grad_norm | Critical | Unsloth docs: often from zero-length truncated completions |
 | Clipping overload | `clipped_ratio` > 0.5 at any point | Critical | DAPO, TRL — majority of completions incomplete, training signal degraded. See `training-metrics-guide.md` §Completions |
-| KL explosion | KL > 5.0 or KL increased > 3x from start | Warning (for LLM-judge graders). Note: DAPO and Dr. GRPO disable KL entirely (beta=0) for rule-based rewards — if using pure programmatic graders, KL drift is less concerning. KL > 10.0 = critical (reward hacking risk). | DeepSeekMath (β=0.04), DAPO (2503.14476, β=0), Dr. GRPO (2503.20783). See `training-metrics-guide.md` §KL |
+| KL explosion | KL > 5.0 or KL increased > 3x from start | Warning only when beta > 0. **With beta=0 (modern GRPO default per DAPO/TRL): KL is unpenalized and not even tracked in most frameworks.** Only monitor KL trend relative to reward when beta=0. KL > 10.0 with beta > 0 = critical. | Original GRPO (DeepSeekMath, arXiv:2402.03300) used β=0.04; DeepSeek-R1 (arXiv:2501.12948) used β=0.001; DAPO/Dr. GRPO/TRL default to β=0. See `training-metrics-guide.md` §KL |
 | Reward collapse | `reward_std` < 0.05 for > 50% of steps | Warning. `reward_std` < 0.01 = Critical (zero learning signal). | Dr. GRPO (2503.20783): std normalization bias. See `training-metrics-guide.md` §Reward Std |
 | Weak signal | `frac_reward_zero_std` > 0.5 for > 50% of steps | **Warning** (>0.8 = **Critical**) — most records produce identical rewards, model gets zero gradient. **First check**: is `response_candidates_count` ≥ 8? With G=2, this metric will be inherently high. **Then**: remove dead-weight records (score=0) and regenerate replacements. See SKILL.md Step 8b+. | Dr. GRPO (2503.20783) G=8; TRL: "fraction of samples with reward std of zero". See `training-metrics-guide.md` §frac_reward_zero_std |
 | Entropy collapse | `entropy` dropping rapidly (>50% decline from start) | **Warning** — model losing exploration ability, becoming deterministic. Precursor to reward hacking. | DAPO (2503.14476, Section 4.3): *"Entropy... key metrics that we closely monitor."* TRL docs: *"A collapse in entropy means the policy is becoming overconfident."* |
@@ -348,25 +348,32 @@ After each eval completes, run the readiness gate before starting training. This
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check --file evaluations/eval-NNN.json
 ```
 
-**Hard checks** (must ALL pass — gate training):
+**Hard checks** — grader quality gates (must ALL pass):
+
+These ask "is the grader working?", NOT "is the base model good?" GRPO can learn from low base model scores — DeepSeek R1-Zero started at 15.6% and reached 71% via GRPO alone (arXiv:2501.12948). OpenAI RFT Guide confirms only 0% success rate is truly fatal.
 
 | Check | Threshold | Why it matters | Fix if failing | Source |
 |-------|-----------|---------------|----------------|--------|
-| Sample count | >= 50 prompts | GRPO advantage estimates are noisy below 50 | Add more training data | OpenAI RFT |
-| Score std | > 0.15 | Grader must differentiate good from bad | Add criteria or partial credit bands (0.2, 0.4, 0.6, 0.8) | DAPO |
-| High-score fraction (> 0.9) | < 50% | Grader must not be too lenient | Raise the bar — tighten criteria | DAPO clip-higher |
-| Binary fraction (0 or 1) | < 30% | Grader should use the full score range | Add intermediate scoring tiers | General practice |
-| Dead-weight fraction (< 0.1) | < 5% | GRPO can't learn from all-zero rewards | Remove and regenerate dead-weight records | GRPO |
-| Average score | > 0.5 | Data must not be too hard for base model | Simplify prompts, adjust grader, or try larger base model | "Tricks or Traps" |
-| Pass rate (score >= 0.7) | > 60% | Sufficient good examples for learning | Improve data quality or relax grader slightly | OpenAI RFT |
+| Sample count | >= 50 prompts | GRPO advantage estimates are noisy below 50 | Add more training data | OpenAI RFT: "several dozen to a few hundred" |
+| Score std | > 0.10 | Grader must differentiate — zero-std groups produce zero gradient (GRPO advantage = (r - mean)/std; std=0 → advantage=0) | Add criteria or partial credit bands (0.2, 0.4, 0.6, 0.8) | Zero-variance → zero gradient is fundamental to GRPO (DAPO §2.2). Threshold is a heuristic. |
+| Average score | > 0.05 | Just needs nonzero signal — only 0% success is fatal | If truly zero, base model may be incapable — try larger model | OpenAI RFT: "0% success rate means RFT cannot bootstrap" |
 
-**Soft checks** (warnings — don't gate training, but fixing improves outcomes):
+**Soft checks** — quality signals (warnings, don't gate training):
+
+Low base model scores are **expected and even desirable**. "Hard Examples Are All You Need" (arXiv:2508.14094) shows training on the hardest 10% of examples yields 30-40% performance gains vs 3-15% for easy examples on GSM8K. Note: binary rewards work — DeepSeek-R1 (arXiv:2501.12948) and DAPO (arXiv:2503.14476) achieved state-of-the-art with 100% binary (0/1) rewards.
 
 | Check | Threshold | Why it matters | Fix if failing | Source |
 |-------|-----------|---------------|----------------|--------|
-| Prompt learnability | > 60% of prompts have score variance | Prompts with zero variance across K completions give zero GRPO gradient — wasted compute | Rewrite or remove zero-variance prompts | DAPO dynamic sampling |
-| Score-length correlation | \|r\| < 0.3 | High correlation means grader rewards/punishes response length, not quality — primary reward hacking vector | Rewrite grader to evaluate content independently of length | Dr. GRPO |
-| Topic balance | No single topic > 40% | Imbalanced topics cause over-optimization for common topics, neglecting rare ones | Add data for under-represented topics or reduce dominant topic | OpenAI RFT |
+| Score concentration | < 50% at single value | If >50% of scores cluster at one value, within-group variance is small → weak gradients | Add more granular scoring criteria | DAPO (arXiv:2503.14476): filters all-correct/all-incorrect groups. Threshold is a heuristic. |
+| High-score fraction (> 0.9) | < 50% | Lenient grader → small within-group variance → weak gradients | Tighten grader criteria | Heuristic. OpenAI recommends "smooth scores, not pass/fail stamps." |
+| Binary fraction (0 or 1) | < 60% | Continuous scoring is more sample-efficient — binary rewards produce signal only when a group has mixed outcomes, wasting compute on uniform groups. But binary works: DeepSeek-R1 used 100% binary. | Add intermediate scoring tiers if desired | DeepSeek-R1 (arXiv:2501.12948) uses binary; DAPO (arXiv:2503.14476) uses binary with dynamic sampling. |
+| Dead-weight fraction (< 0.1) | < 50% | Dead-weight prompts reduce sample efficiency. Real GRPO training has 30-99% zero-variance prompts per batch. "No Prompt Left Behind" (arXiv:2509.21880) argues signal CAN be extracted from these via entropy-guided shaping. | DAPO handles via dynamic sampling (skips uniform groups). Optionally remove worst offenders, but the cited paper argues against blanket filtering. | "No Prompt Left Behind" (ICLR 2026, arXiv:2509.21880) |
+| Pass rate (>= 0.7) | > 20% | Nice to have, but hard prompts are most valuable. Eval uses K=1; training uses K=8, so pass@8 >> pass@1 | Not a problem — hard examples produce the largest gains | "Hard Examples Are All You Need" (arXiv:2508.14094) |
+| Prompt learnability | > 30% of prompts have score variance | Zero-variance prompts give zero GRPO gradient — wasted compute | DAPO dynamic sampling skips these; or rewrite prompts for more variance | DAPO dynamic sampling (arXiv:2503.14476) |
+| Score-length correlation | \|r\| < 0.3 | High correlation means grader rewards/punishes length, not quality — reward hacking risk. Dr. GRPO identifies length bias from per-token loss normalization. | Rewrite grader to judge content, not length | Dr. GRPO (arXiv:2503.20783) identifies the problem; threshold is a heuristic. |
+| Topic balance | No single topic > 40% | Imbalanced topics cause over-optimization for common topics | Add data for under-represented topics | Heuristic — balanced training data is standard ML practice |
+
+**Why eval scores don't predict training performance:** Eval generates 1 completion per prompt (K=1). GRPO training generates K=8. A base model with 6.5% pass@1 has ~41% chance of at least 1 good completion per prompt (1-0.935^8). The eval distribution is a **lower bound** on training signal.
 
 **Verdicts:**
 | Exit code | Verdict | Meaning | Action |

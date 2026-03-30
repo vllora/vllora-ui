@@ -342,7 +342,6 @@ export function flattenEvaluationResults(
         currentScore != null && previousScore != null
           ? currentScore - previousScore
           : undefined;
-        console.log('==== entry', entry.rollout_content)
 
       flat.push({
         dataset_row_id:
