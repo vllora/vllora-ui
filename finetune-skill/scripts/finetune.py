@@ -861,6 +861,28 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
     sys.exit(1)
 
 
+def cmd_search_knowledge(args: argparse.Namespace) -> None:
+    """Semantic search over knowledge source parts for a workflow.
+
+    Embeds the query phrase and returns top-k parts ranked by cosine similarity.
+    Useful for verifying embeddings are ready and testing search quality.
+    """
+    resp = _api(
+        "POST",
+        f"{args.base_url}/finetune/workflows/{args.workflow_id}/knowledge/search",
+        json={"phrase": args.phrase, "top_k": args.top_k},
+    )
+    matches = resp.get("matches", [])
+    print(f"Found {len(matches)} matches:")
+    for i, m in enumerate(matches):
+        part = m.get("part", {})
+        score = m.get("score", 0)
+        title = part.get("title", "untitled")
+        content_preview = part.get("content", "")[:120].replace("\n", " ")
+        print(f"  [{i + 1}] score={score:.4f}  id={part.get('id', '')}  title={title}")
+        print(f"       {content_preview}...")
+
+
 def cmd_delete_knowledge(args: argparse.Namespace) -> None:
     """Delete knowledge sources from a workflow.
 
@@ -983,6 +1005,12 @@ def main() -> None:
     p.add_argument("--poll-interval", type=int, default=60, help="Poll interval in seconds (default: 60)")
     p.add_argument("--max-wait", type=int, default=14400, help="Max wait in seconds (default: 14400)")
 
+    # search-knowledge
+    p = subparsers.add_parser("search-knowledge", help="Semantic search over knowledge parts")
+    p.add_argument("--workflow-id", required=True, help="Workflow ID")
+    p.add_argument("--phrase", required=True, help="Search query text")
+    p.add_argument("--top-k", type=int, default=10, help="Max results (default: 10)")
+
     # delete-knowledge
     p = subparsers.add_parser("delete-knowledge", help="Delete knowledge source(s) from a workflow")
     p.add_argument("--workflow-id", required=True, help="Workflow ID")
@@ -1003,6 +1031,7 @@ def main() -> None:
         "poll-eval": cmd_poll_eval,
         "create-training": cmd_create_training,
         "poll-training": cmd_poll_training,
+        "search-knowledge": cmd_search_knowledge,
         "delete-knowledge": cmd_delete_knowledge,
     }
     commands[args.command](args)

@@ -178,6 +178,30 @@ Training data is **prompts only** — the model generates its own responses duri
 4. **Self-review**: Would this prompt elicit the behaviors from the objective?
 5. **Add to JSONL file**: One JSON object per line
 
+### RAG-Augmented Generation
+
+This pipeline is inspired by the "Think Less, Label Better" approach (arXiv 2509.25736), which uses RAG at *data-generation time* (not inference time) to ground synthetic training examples in real domain knowledge. The key insight: retrieve relevant knowledge chunks before asking the LLM to generate questions — the LLM produces better, more specific prompts when it sees the actual source material.
+
+Our two-retrieval pipeline:
+1. **First retrieval** (`--use-rag`, per topic): query = topic name + system_prompt → retrieves the most relevant chunks for the topic as a whole. All questions for that topic are generated from this shared context.
+2. **Second retrieval** (`--rag-second-retrieval`, per question): query = the generated question itself → retrieves sharper, question-specific chunks. Each record gets its own `source_parts` tailored to what that specific question is asking.
+
+> **Note on answer refinement:** The paper also has a refinement stage that rewrites LLM-generated answers using a second model. This does not apply to our pipeline — we generate **prompts only** for GRPO training. The fine-tuned model generates its own answers during training and the grader scores them. There is no answer to refine.
+
+By default, `generate_records.py` gathers source material from pre-computed `relations.json`. With `--use-rag`, the script also queries the gateway's semantic search API dynamically:
+
+1. **Query construction**: For each leaf topic, builds a search query from ancestor names + topic name + system_prompt (hierarchical context)
+2. **Retrieval**: Calls `POST /finetune/workflows/{id}/knowledge/search` with the query and `top_k` (default 15)
+3. **Deduplication**: Filters out parts already linked via relations.json (by part ID)
+4. **Merge**: Appends RAG-retrieved parts after relation-linked parts. The existing 20-chunk cap applies to the combined list (curated relations get priority)
+
+**When to use:**
+- `--use-rag` — When relations exist but may be incomplete. RAG fills gaps without replacing curated mappings
+- `--rag-only` — When skipping the relation-building step entirely. Useful for rapid prototyping or when the knowledge base is small enough that semantic search alone provides sufficient coverage
+- `--rag-second-retrieval` — When you want question-specific `source_parts`. Makes N additional search calls (one per generated question). Pairs with `--use-rag`
+
+**Embedding readiness**: Parts need embeddings before search works. The gateway's background job processes parts in batches of 32 every 30 seconds. After uploading knowledge, wait ~30s then verify: `finetune.py search-knowledge --workflow-id WF --phrase "test query"`
+
 ### Scenario Variation Techniques
 
 To avoid repetitive prompts within a topic:

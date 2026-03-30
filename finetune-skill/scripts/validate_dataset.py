@@ -6,11 +6,16 @@
 Usage:
   uv run scripts/validate_dataset.py training.jsonl
   uv run scripts/validate_dataset.py training.jsonl --topics topics.json --parts knowledge/all-parts-index.json
+  uv run scripts/validate_dataset.py training.jsonl --nemo
 
 Checks: valid JSON per line, required fields (messages, id), message structure
 (role + content), system + user messages present, no assistant messages (RFT),
 duplicate IDs, minimum record count, and optionally cross-references topic and
 source_parts IDs against topics.json and all-parts-index.json.
+
+With --nemo: also checks for accidentally included NeMo metadata fields
+(reference_answer, retrieved_chunks, chunk_text, judge_* etc.) that should
+live in nemo-metadata.jsonl, not in training records.
 
 Exit codes:
   0 - all records valid
@@ -21,6 +26,53 @@ import json
 import sys
 from collections import Counter
 from pathlib import Path
+
+
+_NEMO_METADATA_FIELDS = {
+    "reference_answer",
+    "retrieved_chunks",
+    "chunk_text",
+    "source_file",
+    "topic_path",
+    "judge_accuracy",
+    "judge_completeness",
+    "judge_groundedness",
+    "judge_quality",
+    "judge_reason",
+}
+
+
+def check_nemo_metadata(line_num: int, record: dict) -> list[str]:
+    """Warn if NeMo metadata fields leaked into training records."""
+    warnings: list[str] = []
+
+    # Check for NeMo metadata at the record top level
+    for field in _NEMO_METADATA_FIELDS:
+        val = record.get(field)
+        if val is None:
+            continue
+        if isinstance(val, (str, int, float, dict)) and val:
+            warnings.append(
+                f"Line {line_num}: NeMo metadata field '{field}' found at record level "
+                f"— use convert_nemo_rows.py to separate metadata from training data"
+            )
+
+    # Check for NeMo field names accidentally embedded inside message content
+    messages = record.get("messages", [])
+    for i, msg in enumerate(messages):
+        if not isinstance(msg, dict):
+            continue
+        content = msg.get("content", "")
+        if not isinstance(content, str):
+            continue
+        for field in _NEMO_METADATA_FIELDS:
+            if f'"{field}"' in content or f"'{field}'" in content:
+                warnings.append(
+                    f"Line {line_num}, message {i}: Content contains NeMo metadata pattern '{field}' "
+                    f"— this should be in the metadata sidecar, not in training messages"
+                )
+
+    return warnings
 
 
 def validate_record(line_num: int, line: str) -> list[str]:
@@ -102,13 +154,14 @@ def load_valid_parts(parts_path: Path) -> set[str]:
 
 def main() -> None:
     if len(sys.argv) < 2:
-        print("Usage: validate_dataset.py <file.jsonl> [--topics topics.json] [--parts all-parts-index.json]", file=sys.stderr)
+        print("Usage: validate_dataset.py <file.jsonl> [--topics topics.json] [--parts all-parts-index.json] [--nemo]", file=sys.stderr)
         sys.exit(1)
 
     # Simple arg parsing (positional + optional flags)
     file_path = Path(sys.argv[1])
     topics_path = None
     parts_path = None
+    nemo_mode = False
     i = 2
     while i < len(sys.argv):
         if sys.argv[i] == "--topics" and i + 1 < len(sys.argv):
@@ -117,6 +170,9 @@ def main() -> None:
         elif sys.argv[i] == "--parts" and i + 1 < len(sys.argv):
             parts_path = Path(sys.argv[i + 1])
             i += 2
+        elif sys.argv[i] == "--nemo":
+            nemo_mode = True
+            i += 1
         else:
             i += 1
 
@@ -162,6 +218,9 @@ def main() -> None:
 
             try:
                 record = json.loads(line)
+
+                if nemo_mode:
+                    warnings.extend(check_nemo_metadata(line_num, record))
                 record_id = record.get("id", "")
                 if record_id:
                     if record_id in ids_seen:

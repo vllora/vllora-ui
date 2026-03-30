@@ -99,6 +99,112 @@ def compose_system_prompt(root_prompt: str, ancestors: list[dict], leaf: dict) -
     return "\n\n".join(segments)
 
 
+def build_search_query(topic: dict, ancestors: list[dict]) -> str:
+    """Construct a search query from topic metadata for RAG retrieval.
+
+    Combines ancestor names, topic name, and system_prompt to give
+    hierarchical context to the semantic search.
+    """
+    parts = [a["name"] for a in ancestors]
+    parts.append(topic["name"])
+    if topic.get("system_prompt"):
+        parts.append(topic["system_prompt"])
+    return " ".join(parts)
+
+
+def retrieve_rag_parts(
+    topic: dict,
+    ancestors: list[dict],
+    workflow_id: str,
+    base_url: str,
+    top_k: int = 15,
+    existing_part_ids: set[str] | None = None,
+) -> list[dict]:
+    """Retrieve relevant knowledge parts via the gateway semantic search API.
+
+    Returns parts in the same format as load_all_parts() values.
+    Deduplicates against existing_part_ids (from relations.json).
+    On failure, prints a warning and returns an empty list.
+    """
+    import requests  # PEP 723 dependency, available via `uv run`
+
+    query = build_search_query(topic, ancestors)
+
+    try:
+        resp = requests.post(
+            f"{base_url}/finetune/workflows/{workflow_id}/knowledge/search",
+            json={"phrase": query, "top_k": top_k},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        matches = resp.json().get("matches", [])
+    except (requests.RequestException, ValueError) as e:
+        print(f"  Warning: RAG search failed for topic '{topic['id']}': {e}", file=sys.stderr)
+        return []
+
+    existing = existing_part_ids or set()
+    rag_parts = []
+    for m in matches:
+        part = m.get("part", {})
+        part_id = part.get("id", "")
+        if part_id in existing:
+            continue
+        rag_parts.append({
+            "id": part_id,
+            "title": part.get("title", ""),
+            "content": part.get("content", ""),
+            "type": part.get("type", "text"),
+            "content_metadata": part.get("content_metadata"),
+        })
+
+    return rag_parts
+
+
+def retrieve_parts_by_phrase(
+    phrase: str,
+    workflow_id: str,
+    base_url: str,
+    top_k: int = 5,
+    existing_part_ids: set[str] | None = None,
+) -> list[dict]:
+    """Retrieve knowledge parts by a raw search phrase (e.g. a generated question).
+
+    Used for the second retrieval pass: after the LLM generates a question,
+    re-query the index with that question text to get sharper, question-specific
+    context. Returns parts in the same format as load_all_parts() values.
+    """
+    import requests  # PEP 723 dependency, available via `uv run`
+
+    try:
+        resp = requests.post(
+            f"{base_url}/finetune/workflows/{workflow_id}/knowledge/search",
+            json={"phrase": phrase, "top_k": top_k},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        matches = resp.json().get("matches", [])
+    except (requests.RequestException, ValueError) as e:
+        print(f"  Warning: second RAG search failed: {e}", file=sys.stderr)
+        return []
+
+    existing = existing_part_ids or set()
+    parts = []
+    for m in matches:
+        part = m.get("part", {})
+        part_id = part.get("id", "")
+        if part_id in existing:
+            continue
+        parts.append({
+            "id": part_id,
+            "title": part.get("title", ""),
+            "content": part.get("content", ""),
+            "type": part.get("type", "text"),
+            "content_metadata": part.get("content_metadata"),
+        })
+
+    return parts
+
+
 def generate_for_topic(
     topic: dict,
     ancestors: list[dict],
@@ -111,15 +217,24 @@ def generate_for_topic(
     base_url: str,
     scripts_dir: Path,
     include_ground_truth: bool = True,
+    rag_parts: list[dict] | None = None,
+    workflow_id: str | None = None,
+    second_retrieval: bool = False,
 ) -> list[dict]:
     """Generate records for a single leaf topic via LLM."""
-    # Find parts linked to this topic
+    # Find parts linked to this topic via relations.json
     part_ids = [
         r["part_identifier"]
         for r in relations
         if r["topic_identifier"] == topic["id"]
     ]
     chunks = [parts[pid] for pid in part_ids if pid in parts]
+
+    # Append RAG-retrieved parts (already deduplicated by caller)
+    rag_part_ids = []
+    if rag_parts:
+        rag_part_ids = [p["id"] for p in rag_parts]
+        chunks.extend(rag_parts)
 
     # Build source material text (limit to 20 chunks to avoid context overflow)
     # For table parts, include structured context alongside markdown rendering
@@ -243,6 +358,22 @@ Return JSON: {{"items": [{{"prompt": "the question", "ground_truth": "relevant s
         prompt_text = item.get("prompt", "")
         if not prompt_text or not prompt_text.strip():
             continue
+        all_source_parts = part_ids + rag_part_ids
+
+        # Second retrieval: re-query with the generated question for sharper context.
+        # Unlike the first retrieval (topic-level), this is question-specific —
+        # each record gets source_parts and ground_truth tailored to its own question.
+        if second_retrieval and workflow_id:
+            q_parts = retrieve_parts_by_phrase(
+                phrase=prompt_text,
+                workflow_id=workflow_id,
+                base_url=base_url,
+                top_k=5,
+                existing_part_ids=set(all_source_parts),
+            )
+            if q_parts:
+                all_source_parts = all_source_parts + [p["id"] for p in q_parts]
+
         record = {
             "messages": [
                 {"role": "system", "content": composed_prompt},
@@ -250,7 +381,7 @@ Return JSON: {{"items": [{{"prompt": "the question", "ground_truth": "relevant s
             ],
             "id": f"{topic['id']}-{i + 1:03d}",
             "topic": topic["id"],
-            "source_parts": part_ids,
+            "source_parts": all_source_parts,
         }
         ground_truth = item.get("ground_truth", "")
         if include_ground_truth and ground_truth and ground_truth.strip():
@@ -302,8 +433,8 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Generate training records from topics + knowledge")
     parser.add_argument("--topics", required=True, help="Path to topics.json")
-    parser.add_argument("--relations", required=True, help="Path to relations.json")
-    parser.add_argument("--knowledge-dir", required=True, help="Path to knowledge/ directory")
+    parser.add_argument("--relations", default=None, help="Path to relations.json (optional with --rag-only)")
+    parser.add_argument("--knowledge-dir", default=None, help="Path to knowledge/ directory (optional with --rag-only)")
     parser.add_argument("--system-prompt", required=True, help="System prompt for all records")
     parser.add_argument("--output", required=True, help="Path to output training.jsonl")
     parser.add_argument("--records-per-topic", type=int, default=10, help="Prompts to generate per leaf topic (default: 10)")
@@ -315,38 +446,64 @@ def main() -> None:
     parser.add_argument("--parallel", type=int, default=1, help="Number of topics to generate concurrently (default: 1, max: 8)")
     parser.add_argument("--upload-incremental", action="store_true",
                         help="Upload each topic's records to gateway immediately after generation")
-    parser.add_argument("--workflow-id", help="Workflow ID (required with --upload-incremental)")
+    parser.add_argument("--workflow-id", help="Workflow ID (required with --upload-incremental and --use-rag)")
     parser.add_argument("--gateway-url", default="http://localhost:9090", help="Gateway URL for incremental upload")
+    parser.add_argument("--use-rag", action="store_true",
+                        help="Augment relations with RAG-retrieved knowledge parts via semantic search")
+    parser.add_argument("--rag-top-k", type=int, default=15,
+                        help="Number of RAG results to retrieve per topic (default: 15)")
+    parser.add_argument("--rag-only", action="store_true",
+                        help="Use only RAG retrieval, skip relations.json entirely (requires --use-rag)")
+    parser.add_argument("--rag-second-retrieval", action="store_true",
+                        help="After generating each question, re-query the knowledge index with the question "
+                             "text to get sharper, question-specific source_parts (requires --use-rag)")
     args = parser.parse_args()
 
     if args.upload_incremental and not args.workflow_id:
         print("Error: --workflow-id required with --upload-incremental", file=sys.stderr)
         sys.exit(1)
+    if args.use_rag and not args.workflow_id:
+        print("Error: --workflow-id required with --use-rag", file=sys.stderr)
+        sys.exit(1)
+    if args.rag_only and not args.use_rag:
+        print("Error: --rag-only requires --use-rag", file=sys.stderr)
+        sys.exit(1)
+    if not args.rag_only and not args.relations:
+        print("Error: --relations is required (unless using --rag-only)", file=sys.stderr)
+        sys.exit(1)
+    if not args.rag_only and not args.knowledge_dir:
+        print("Error: --knowledge-dir is required (unless using --rag-only)", file=sys.stderr)
+        sys.exit(1)
 
     topics_path = Path(args.topics)
-    relations_path = Path(args.relations)
-    knowledge_dir = Path(args.knowledge_dir)
+    relations_path = Path(args.relations) if args.relations else None
+    knowledge_dir = Path(args.knowledge_dir) if args.knowledge_dir else None
     output_path = Path(args.output)
     scripts_dir = Path(__file__).parent
     parallel = min(max(args.parallel, 1), 8)
 
     # Validate inputs
-    for p, label in [(topics_path, "Topics"), (relations_path, "Relations")]:
-        if not p.exists():
-            print(f"Error: {label} file not found: {p}", file=sys.stderr)
-            sys.exit(1)
-    if not knowledge_dir.is_dir():
+    if not topics_path.exists():
+        print(f"Error: Topics file not found: {topics_path}", file=sys.stderr)
+        sys.exit(1)
+    if relations_path and not relations_path.exists():
+        print(f"Error: Relations file not found: {relations_path}", file=sys.stderr)
+        sys.exit(1)
+    if knowledge_dir and not knowledge_dir.is_dir():
         print(f"Error: Knowledge directory not found: {knowledge_dir}", file=sys.stderr)
         sys.exit(1)
 
     # Load data
     topics = load_topics(topics_path)
-    relations = load_relations(relations_path)
-    parts = load_all_parts(knowledge_dir)
+    relations = load_relations(relations_path) if relations_path else []
+    parts = load_all_parts(knowledge_dir) if knowledge_dir else {}
     leaves = find_leaf_topics(topics)
     topic_index = build_topic_index(topics)
 
     print(f"Loaded: {len(topics)} topics ({len(leaves)} leaves), {len(relations)} relations, {len(parts)} parts")
+    if args.use_rag:
+        mode_label = "RAG-only" if args.rag_only else "relations + RAG"
+        print(f"RAG enabled ({mode_label}, top_k={args.rag_top_k})")
     if parallel > 1:
         print(f"Generating with {parallel} parallel workers")
 
@@ -369,6 +526,8 @@ def main() -> None:
         base_url=args.base_url,
         scripts_dir=scripts_dir,
         include_ground_truth=not args.no_ground_truth,
+        workflow_id=args.workflow_id if getattr(args, "rag_second_retrieval", False) else None,
+        second_retrieval=getattr(args, "rag_second_retrieval", False),
     )
 
     all_results: list[tuple[int, str, list[dict]]] = []
@@ -401,6 +560,24 @@ def main() -> None:
     if not args.append:
         output_path.open("w").close()
 
+    def _get_rag_parts(topic: dict, ancestors: list[dict]) -> list[dict] | None:
+        """Retrieve RAG parts for a topic if --use-rag is enabled."""
+        if not args.use_rag:
+            return None
+        relation_part_ids = {
+            r["part_identifier"]
+            for r in relations
+            if r["topic_identifier"] == topic["id"]
+        } if not args.rag_only else None
+        return retrieve_rag_parts(
+            topic=topic,
+            ancestors=ancestors,
+            workflow_id=args.workflow_id,
+            base_url=args.base_url,
+            top_k=args.rag_top_k,
+            existing_part_ids=relation_part_ids,
+        )
+
     if parallel <= 1:
         # Sequential mode
         for i, topic, ancestors in tasks:
@@ -408,7 +585,11 @@ def main() -> None:
             path_display = f"{ancestor_path} > {topic['name']}" if ancestors else topic["name"]
             print(f"[{i + 1}/{len(leaves)}] Generating for '{path_display}'...", end=" ", flush=True)
 
-            records = generate_for_topic(topic=topic, ancestors=ancestors, **common_kwargs)
+            topic_rag_parts = _get_rag_parts(topic, ancestors)
+            if topic_rag_parts:
+                print(f"(RAG: +{len(topic_rag_parts)} parts) ", end="", flush=True)
+
+            records = generate_for_topic(topic=topic, ancestors=ancestors, rag_parts=topic_rag_parts, **common_kwargs)
             if not records:
                 failed_topics.append(topic["id"])
                 print("FAILED (0 records)")
@@ -423,7 +604,8 @@ def main() -> None:
             idx, topic, ancestors = task_tuple
             ancestor_path = " > ".join(a["name"] for a in ancestors)
             path_display = f"{ancestor_path} > {topic['name']}" if ancestors else topic["name"]
-            records = generate_for_topic(topic=topic, ancestors=ancestors, **common_kwargs)
+            topic_rag_parts = _get_rag_parts(topic, ancestors)
+            records = generate_for_topic(topic=topic, ancestors=ancestors, rag_parts=topic_rag_parts, **common_kwargs)
             return (idx, topic["id"], path_display, records)
 
         with ThreadPoolExecutor(max_workers=parallel) as executor:
