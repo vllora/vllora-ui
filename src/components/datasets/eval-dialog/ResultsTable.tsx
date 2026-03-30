@@ -267,7 +267,7 @@ export function ResultsTable({
         <div className="w-16 shrink-0 text-right pr-4 py-2">Score</div>
         {hasTrendData && <div className="w-[60px] shrink-0 text-center py-2" title="Score change (Δ) between consecutive evaluation checkpoints">Δ</div>}
         {!hasExternalExpand && (
-          <div className="w-[140px] shrink-0 pl-2 pr-2 py-2">
+          <div className={cn("w-[140px] shrink-0 pr-2 py-2", allSameStatus ? "pl-2" : "text-center")}>
             {allSameStatus ? "Reason" : "Status"}
           </div>
         )}

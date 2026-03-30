@@ -181,8 +181,8 @@ function DistributionChart({ scores, mean }: { scores: number[]; mean?: number }
   const meanX = mean !== undefined ? BIN_LABELS[Math.min(Math.floor(mean * 10), 9)] : undefined;
 
   return (
-    <ResponsiveContainer width="100%" height={140}>
-      <BarChart data={data} margin={{ top: 14, right: 4, bottom: 0, left: 4 }} barCategoryGap="8%">
+    <ResponsiveContainer width="100%" height={150}>
+      <BarChart data={data} margin={{ top: 24, right: 4, bottom: 0, left: 4 }} barCategoryGap="8%">
         <XAxis
           dataKey="range"
           tick={{ fontSize: 9, fill: "#52525b", fontFamily: "monospace" }}
@@ -206,7 +206,7 @@ function DistributionChart({ scores, mean }: { scores: number[]; mean?: number }
             stroke="rgba(255,255,255,0.5)"
             strokeWidth={1.5}
             strokeDasharray="3 2"
-            label={{ value: `Mean ${mean!.toFixed(2)}`, position: "top", fontSize: 9, fill: "#a1a1aa", fontFamily: "monospace" }}
+            label={{ value: `Mean ${mean!.toFixed(2)}`, position: "top", fontSize: 9, fill: "#a1a1aa", fontFamily: "monospace", offset: 14 }}
           />
         )}
       </BarChart>

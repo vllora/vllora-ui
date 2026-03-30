@@ -230,7 +230,7 @@ export function ScoreHistogram({
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={histogramData}
-            margin={{ top: 20, right: 10, left: 0, bottom: 60 }}
+            margin={{ top: 30, right: 10, left: 0, bottom: 60 }}
           >
             <XAxis
               dataKey="range"
@@ -264,6 +264,7 @@ export function ScoreHistogram({
                   fontSize: 11,
                   fill: "#10b981",
                   fontWeight: 600,
+                  offset: 12,
                 }}
               />
             )}

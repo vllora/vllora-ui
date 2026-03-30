@@ -16,6 +16,12 @@ import {
 } from "@/types/eval-job";
 import { flattenEvaluationResults } from "@/services/finetune-api";
 import { ResultsTable } from "./ResultsTable";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface RunningViewProps {
   job: EvalJob;
@@ -75,9 +81,18 @@ export function RunningView({ job, progress, onRecordIdClick }: RunningViewProps
               {passedCount > 0 && (
                 <>
                   <span className="text-zinc-700 shrink-0">&middot;</span>
-                  <span className="text-[11px] text-[rgb(var(--theme-500))] shrink-0">
-                    {passedCount} passed
-                  </span>
+                  <TooltipProvider delayDuration={200}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="text-[11px] text-[rgb(var(--theme-500))] shrink-0 cursor-help">
+                          {passedCount} passed
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        <p className="text-[11px]">{passedCount} records scored above 0.5</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </>
               )}
               {failedRows > 0 && (

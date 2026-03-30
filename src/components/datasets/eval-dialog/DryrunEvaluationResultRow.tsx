@@ -5,17 +5,69 @@
  * Columns: # | Input | Topic | Score | Reason/Status | Logs
  */
 
+import { useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import type { FlatEvaluationResult } from "@/services/finetune-api";
 import { getScoreColorClass, formatScore, parseScoreBreakdown } from "@/utils/parse-score-breakdown";
 import { LogsPopover } from "./LogsPopover";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Copy, Check } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+
+function CopyButton({ text }: { readonly text: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }, [text]);
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="p-0.5 rounded text-zinc-600 hover:text-zinc-400 transition-colors"
+      title="Copy to clipboard"
+    >
+      {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+    </button>
+  );
+}
+
+const TRUNCATE_LINES = 5;
+
+function TruncatedText({ text, className }: { readonly text: string; readonly className?: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const lineCount = text.split("\n").length;
+  const needsTruncation = lineCount > TRUNCATE_LINES;
+
+  return (
+    <div>
+      <p
+        className={cn("text-[11px] leading-relaxed whitespace-pre-wrap", className)}
+        style={!expanded && needsTruncation ? {
+          display: "-webkit-box",
+          WebkitLineClamp: TRUNCATE_LINES,
+          WebkitBoxOrient: "vertical",
+          overflow: "hidden",
+        } : undefined}
+      >
+        {text}
+      </p>
+      {needsTruncation && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="text-[10px] text-blue-400 hover:text-blue-300 mt-0.5"
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      )}
+    </div>
+  );
+}
 
 interface DryrunEvaluationResultRowProps {
   readonly result: FlatEvaluationResult;
@@ -152,6 +204,22 @@ function getInputText(row?: { messages?: unknown[]; [key: string]: unknown }): s
   return userMsg.content.trim();
 }
 
+/** Extract the assistant (output) message from the row data */
+function getOutputText(row?: { messages?: unknown[]; [key: string]: unknown }): string | null {
+  if (!row?.messages || !Array.isArray(row.messages)) return null;
+  // Find the last assistant message
+  const assistantMsgs = row.messages.filter(
+    (m: unknown) => {
+      const msg = m as Record<string, unknown>;
+      return msg?.role === "assistant";
+    },
+  ) as Array<{ content?: unknown }>;
+  if (assistantMsgs.length === 0) return null;
+  const last = assistantMsgs[assistantMsgs.length - 1];
+  if (typeof last.content === "string") return last.content.trim();
+  return null;
+}
+
 /** Extract topic from row metadata */
 function getTopicName(row?: Record<string, unknown>): string | null {
   if (!row) return null;
@@ -177,6 +245,7 @@ export function DryrunEvaluationResultRow({
   const isPending = result.status === "pending" || result.status === "running";
   const hasLogs = result.logs && result.logs.length > 0;
   const inputText = getInputText(result.row);
+  const outputText = getOutputText(result.row) ?? result.rollout_content ?? null;
   const topicName = getTopicName(result.row as Record<string, unknown> | undefined);
   const reason = result.reason;
 
@@ -316,15 +385,15 @@ export function DryrunEvaluationResultRow({
 
         {/* Status or Reason snippet (hidden when expanded content provides details) */}
         {!hideStatusColumn && (
-          <div className="w-[140px] shrink-0 pr-2">
+          <div className={cn("w-[140px] shrink-0 pr-2", allSameStatus ? "" : "text-center")}>
             {allSameStatus && reasonSnippet ? (
               <span className="text-[10px] text-zinc-500 truncate block" title={reason}>
                 {reasonSnippet}…
               </span>
             ) : isSuccess ? (
-              <span className="text-[12px] text-emerald-400">✓ Pass</span>
+              <span className="text-[12px] text-emerald-400">✓</span>
             ) : isFailed ? (
-              <span className="text-[12px] text-red-400">✗ Fail</span>
+              <span className="text-[12px] text-red-400">✗ Error</span>
             ) : isPending ? (
               <span className="text-[12px] text-zinc-600">…</span>
             ) : null}
@@ -337,22 +406,23 @@ export function DryrunEvaluationResultRow({
         </div>
       </div>
 
-      {/* Expanded content: reason + criteria breakdown (only for non-finetune rows) */}
-      {isExpanded && reason && !hideStatusColumn && (
-        <ExpandedReasonPanel reason={reason} />
+      {/* Expanded content: output + reason + criteria breakdown (only for non-finetune rows) */}
+      {isExpanded && (reason || outputText) && !hideStatusColumn && (
+        <ExpandedReasonPanel reason={reason} outputText={outputText} />
       )}
     </div>
   );
 }
 
-/** Expanded panel showing criteria breakdown + full reason text */
-function ExpandedReasonPanel({ reason }: { readonly reason: string }) {
-  const breakdown = parseScoreBreakdown(reason);
+/** Expanded panel showing output + criteria breakdown + full reason text */
+function ExpandedReasonPanel({ reason, outputText }: { readonly reason?: string | null; readonly outputText?: string | null }) {
+  const breakdown = reason ? parseScoreBreakdown(reason) : null;
+  const hasBoth = !!outputText && !!reason;
 
   return (
     <div className="bg-zinc-900/40 border-b border-zinc-800/40 px-8 py-3 space-y-2">
-      {/* Criteria breakdown bars */}
-      {breakdown.hasBreakdown && Object.keys(breakdown.criteria).length > 0 && (
+      {/* Criteria breakdown bars (full width, above the two-column layout) */}
+      {breakdown?.hasBreakdown && Object.keys(breakdown.criteria).length > 0 && (
         <div className="flex flex-wrap gap-x-6 gap-y-1.5">
           {Object.entries(breakdown.criteria).map(([name, score]) => (
             <div key={name} className="flex items-center gap-2 min-w-[140px]">
@@ -376,10 +446,27 @@ function ExpandedReasonPanel({ reason }: { readonly reason: string }) {
         </div>
       )}
 
-      {/* Reasoning text — use parsed reasoning if breakdown exists, raw reason otherwise */}
-      <p className="text-[11px] leading-relaxed text-zinc-400 whitespace-pre-wrap">
-        {breakdown.hasBreakdown ? breakdown.reasoning : reason}
-      </p>
+      {/* Output + Reason: side-by-side when both exist, full-width otherwise */}
+      <div className={hasBoth ? "grid grid-cols-2 gap-4" : ""}>
+        {outputText && (
+          <div className={hasBoth ? "border-r border-zinc-800/40 pr-4" : ""}>
+            <div className="flex items-center gap-1.5 mb-1">
+              <p className="text-[9px] font-semibold uppercase tracking-wider text-zinc-600">Output</p>
+              <CopyButton text={outputText} />
+            </div>
+            <TruncatedText text={outputText} className="text-zinc-300" />
+          </div>
+        )}
+        {reason && (
+          <div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <p className="text-[9px] font-semibold uppercase tracking-wider text-zinc-600">Grader Reason</p>
+              <CopyButton text={breakdown?.hasBreakdown ? breakdown.reasoning : reason} />
+            </div>
+            <TruncatedText text={breakdown?.hasBreakdown ? breakdown.reasoning : reason} className="text-zinc-400" />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

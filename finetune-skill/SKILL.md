@@ -339,7 +339,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --upload-incremental --workflow-id $WORKFLOW_ID
 ```
 
-The script makes **multiple LLM calls per topic** (one per prompt type: explain, scenario, compare/analyze, edge-case, application) for better diversity. Topics with more linked source parts automatically get more records (weighted distribution, clamped to `--min-per-topic` / `--max-per-topic`). Inner parallelism runs all prompt-type calls concurrently within each topic.
+The script makes **multiple LLM calls per topic** (one per prompt type: explain, scenario, compare/analyze, edge-case, application) for better diversity. By default, every leaf topic gets an **equal number of records** (`--records-per-topic`, default 25). This matches expected inference distribution — users query all topics, so training data should be balanced (OpenAI RFT Guide; arXiv:2508.14094: difficulty matters more than source volume). Use `--weight-by-source` to distribute proportionally to linked source parts instead (max 3:1 imbalance ratio). Inner parallelism runs all prompt-type calls concurrently within each topic.
 
 If some topics fail, use `--append` to retry without overwriting. Adapt `--records-per-topic` (default 25), `--min-per-topic` (default 10), `--max-per-topic` (default 50) to the project. **Generate at least 200+ total records.**
 

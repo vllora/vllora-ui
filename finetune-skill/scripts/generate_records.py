@@ -9,7 +9,7 @@ grounded user prompts, and writes records to training.jsonl incrementally.
 
 Features:
   - Multi-call generation: 5 prompt types per topic for better diversity
-  - Source-weighted distribution: topics with more source parts get more records
+  - Equal distribution by default; --weight-by-source for source-proportional
   - Inner parallelism: prompt-type calls within a topic run concurrently
   - Outer parallelism: multiple topics generated concurrently
 
@@ -175,7 +175,7 @@ def compose_system_prompt(root_prompt: str, ancestors: list[dict], leaf: dict) -
 
 
 # ---------------------------------------------------------------------------
-# Topic weighting: distribute records proportionally to source material volume
+# Topic record allocation
 # ---------------------------------------------------------------------------
 
 def compute_topic_record_counts(
@@ -184,14 +184,27 @@ def compute_topic_record_counts(
     records_per_topic: int,
     min_per_topic: int,
     max_per_topic: int,
+    weight_by_source: bool = False,
 ) -> dict[str, int]:
-    """Compute per-topic record counts weighted by number of linked source parts.
+    """Compute per-topic record counts.
 
-    Topics with more source material get proportionally more records.
-    The --records-per-topic value is used as the baseline (average target).
-    Results are clamped to [min_per_topic, max_per_topic].
+    Default: equal distribution — every leaf topic gets ``records_per_topic``.
+    This matches expected inference distribution (users query all topics)
+    and avoids over-investing in topics with verbose source material.
+    See OpenAI RFT Guide: training distribution should approximate
+    inference distribution; arXiv:2508.14094: difficulty >> volume.
+
+    With ``weight_by_source=True``: proportional to linked source parts
+    (legacy behaviour). Max imbalance ratio is clamped to 3:1 to prevent
+    majority-topic overfitting (OpenAI SFT best practices).
+
+    Results are always clamped to [min_per_topic, max_per_topic].
     """
-    # Count parts per leaf topic
+    if not weight_by_source:
+        clamped = max(min_per_topic, min(records_per_topic, max_per_topic))
+        return {leaf["id"]: clamped for leaf in leaves}
+
+    # Source-weighted: proportional to linked source parts
     parts_per_topic: dict[str, int] = {}
     for leaf in leaves:
         count = sum(1 for r in relations if r["topic_identifier"] == leaf["id"])
@@ -199,9 +212,14 @@ def compute_topic_record_counts(
 
     avg_parts = sum(parts_per_topic.values()) / len(parts_per_topic) if parts_per_topic else 1
 
+    # Clamp weight ratio to 3:1 max imbalance (OpenAI SFT best practices:
+    # severe imbalance at 10:1, keep tighter for small datasets)
+    MAX_WEIGHT_RATIO = 3.0
+
     result: dict[str, int] = {}
     for leaf in leaves:
-        weight = parts_per_topic[leaf["id"]] / avg_parts
+        raw_weight = parts_per_topic[leaf["id"]] / avg_parts
+        weight = min(raw_weight, MAX_WEIGHT_RATIO)
         raw = round(records_per_topic * weight)
         result[leaf["id"]] = max(min_per_topic, min(raw, max_per_topic))
 
@@ -521,7 +539,7 @@ def main() -> None:
     parser.add_argument("--output", required=True, help="Path to output training.jsonl")
     parser.add_argument(
         "--records-per-topic", type=int, default=25,
-        help="Target records per leaf topic — actual count varies by source material volume (default: 25)",
+        help="Target records per leaf topic (default: 25). Equal across all topics unless --weight-by-source is set.",
     )
     parser.add_argument(
         "--min-per-topic", type=int, default=10,
@@ -530,6 +548,11 @@ def main() -> None:
     parser.add_argument(
         "--max-per-topic", type=int, default=50,
         help="Maximum records per topic regardless of weighting (default: 50)",
+    )
+    parser.add_argument(
+        "--weight-by-source", action="store_true",
+        help="Weight record counts by number of linked source parts instead of equal distribution. "
+             "Max imbalance ratio clamped to 3:1.",
     )
     parser.add_argument("--model", default="gpt-4o-mini", help="LLM model for generation (default: gpt-4o-mini)")
     parser.add_argument("--base-url", default="http://localhost:9090", help="Gateway base URL")
@@ -573,15 +596,17 @@ def main() -> None:
     leaves = find_leaf_topics(topics)
     topic_index = build_topic_index(topics)
 
-    # Compute source-weighted record counts per topic
+    # Compute record counts per topic (equal by default, source-weighted with --weight-by-source)
     topic_counts = compute_topic_record_counts(
         leaves, relations, args.records_per_topic, args.min_per_topic, args.max_per_topic,
+        weight_by_source=args.weight_by_source,
     )
 
+    strategy = "weighted by source parts (max 3:1 ratio)" if args.weight_by_source else "equal"
     total_planned = sum(topic_counts.values())
     print(f"Loaded: {len(topics)} topics ({len(leaves)} leaves), {len(relations)} relations, {len(parts)} parts")
     print(f"Planned: {total_planned} records (target {args.records_per_topic}/topic, "
-          f"range [{args.min_per_topic}, {args.max_per_topic}], weighted by source parts)")
+          f"range [{args.min_per_topic}, {args.max_per_topic}], distribution: {strategy})")
     for leaf in leaves:
         part_count = sum(1 for r in relations if r["topic_identifier"] == leaf["id"])
         print(f"  {leaf['name']}: {topic_counts[leaf['id']]} records ({part_count} source parts)")

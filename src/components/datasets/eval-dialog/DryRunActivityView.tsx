@@ -203,8 +203,20 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
   }, [result?.readinessGate, evaluationResults, topicScores]);
 
   const recommendations = result?.diagnosis?.recommendations || [];
-  const stats = result?.statistics;
   const verdict = result?.diagnosis?.verdict;
+
+  // Use persisted statistics when available (completed job), otherwise compute live from scores
+  const stats = useMemo(() => {
+    if (result?.statistics) return result.statistics;
+    if (scores.length === 0) return undefined;
+    const sorted = [...scores].sort((a, b) => a - b);
+    const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
+    const std = Math.sqrt(scores.reduce((a, b) => a + (b - mean) ** 2, 0) / scores.length);
+    const median = sorted.length % 2 === 0
+      ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+      : sorted[Math.floor(sorted.length / 2)];
+    return { mean, std, median, min: sorted[0], max: sorted[sorted.length - 1] };
+  }, [result?.statistics, scores]);
   // All hooks must be called before any early returns
   const [showRecs, setShowRecs] = useState(verdict !== "GO" && recommendations.length > 0);
 
@@ -310,24 +322,6 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
           </div>
         </header>
 
-        {/* Running: progress view */}
-        {isRunning && (() => {
-          const total = getJobTotalRows(job);
-          const completed = getJobCompletedRows(job);
-          const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-          return (
-            <div className="flex-1 min-h-0 p-3">
-              <RunningView
-                job={job}
-                progress={pct}
-                onRecordIdClick={(recordId) => {
-                  emitter.emit('vllora_navigate_to_record', { workflowId, recordId });
-                }}
-              />
-            </div>
-          );
-        })()}
-
         {/* Error banner for failed jobs */}
         {!isRunning && job.status === "failed" && job.error && (
           <div className="shrink-0 mx-3 mt-2 rounded-md border border-red-500/30 bg-red-500/10 px-2.5 py-1.5">
@@ -347,8 +341,8 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
               </p>
             </div>
           </div>
-        ) : !isRunning && result && scores.length > 0 ? (
-          /* Score distribution + stats + recommendations */
+        ) : scores.length > 0 ? (
+          /* Score distribution + stats — shown during running AND after completion */
           <div className="shrink-0 px-3 pt-2 space-y-2">
             {/* Score distribution card — matches finetune chart style */}
             <div className="rounded-lg bg-[#111] overflow-hidden">
@@ -356,7 +350,7 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
               <div className="px-5 py-4 border-b border-white/5 flex items-start justify-between">
                 <div>
                   <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1">
-                    Avg Score
+                    Avg Score{isRunning ? " (live)" : ""}
                   </p>
                   <div className="flex items-baseline gap-3">
                     {stats && (
@@ -365,7 +359,7 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
                       </h2>
                     )}
                     <span className="text-xs font-medium text-slate-400">
-                      {scores.length} records · ±{stats?.std.toFixed(2)}
+                      {scores.length} scored · ±{stats?.std.toFixed(2)}
                     </span>
                   </div>
                 </div>
@@ -386,8 +380,8 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
                 </div>
               )}
 
-              {/* Insight */}
-              {stats && (
+              {/* Insight — only show for completed jobs (live stats are still in flux) */}
+              {!isRunning && stats && (
                 <div className="px-5 py-2 border-t border-white/5">
                   <p className="text-[10px] text-slate-500 leading-relaxed">{getScoreInsight(stats)}</p>
                 </div>
@@ -396,8 +390,8 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
 
             {/* Readiness gate is now a tab in ScoreStrip ("Readiness") */}
 
-            {/* Recommendations */}
-            {recommendations.length > 0 && (
+            {/* Recommendations — only for completed jobs */}
+            {!isRunning && recommendations.length > 0 && (
               <div>
                 <button
                   onClick={() => setShowRecs((v) => !v)}
@@ -422,6 +416,24 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
             {/* Per-topic breakdown is now a tab in ScoreStrip ("By Topic") */}
           </div>
         ) : null}
+
+        {/* Running: progress view + results table (below chart if chart is shown) */}
+        {isRunning && (() => {
+          const total = getJobTotalRows(job);
+          const completed = getJobCompletedRows(job);
+          const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+          return (
+            <div className="flex-1 min-h-0 p-3">
+              <RunningView
+                job={job}
+                progress={pct}
+                onRecordIdClick={(recordId) => {
+                  emitter.emit('vllora_navigate_to_record', { workflowId, recordId });
+                }}
+              />
+            </div>
+          );
+        })()}
 
         {/* Results table fills remaining space */}
         {!isRunning && evaluationResults && evaluationResults.length > 0 && (

@@ -486,7 +486,7 @@ export function getEvaluationDetails(
   metrics.push({ label: "Samples", value: `${job.sampleSize}` });
   if (passed != null || failed != null) {
     metrics.push({
-      label: "Pass / Fail",
+      label: "Score >0.5 / Errors",
       value: `${passed ?? 0}/${failed ?? 0}`,
       tone: failed && failed > 0 ? "warning" : "default",
     });
