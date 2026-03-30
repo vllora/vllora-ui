@@ -765,6 +765,9 @@ export async function getFinetuneEvaluations(
   epoch?: number,
 ): Promise<FinetuneEvalResultsResponse> {
   const params = new URLSearchParams();
+
+  params.set("include_rollout_content", "true");
+  
   if (finetuneJobId) params.set("finetune_job_id", finetuneJobId);
   if (rowIndex !== undefined) params.set("row_index", String(rowIndex));
   if (epoch !== undefined) params.set("epoch", String(epoch));
