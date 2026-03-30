@@ -252,23 +252,28 @@ Use the user's focus areas to guide topic design in Step 3. All content is alrea
 
 ### Step 3: Build Topic Hierarchy
 
-**A topic = a type of training example you want to generate.** Each leaf topic answers the question: "what scenario should the model practice handling?" The hierarchy groups related scenarios together so you can balance coverage and spot gaps.
+**A topic = a skill the model needs to learn.** Each leaf topic answers the question: "what specific capability should the model practice?" The hierarchy groups related skills together so you can balance coverage, control difficulty distribution, and spot gaps.
+
+**Organize by SKILL, not by document structure.** Do NOT mirror chapter headings or section titles. Instead, analyze what skills the source material teaches and group by capability domain (arXiv:2601.03676: skill taxonomies outperform content-based organization).
 
 Decide what topics to create based on:
-- **The user's focus areas** — which documents/chapters/sections did the user say are most important? Prioritize these as top-level topics.
-- **The objective** — what behaviors does the model need? Each distinct behavior cluster becomes a topic.
-- **The documents** (if available) — what content exists to generate examples from? Read `knowledge/all-parts-index.json` (the merged index across all documents) and use `extraction_path` values as a checklist to make sure your topics cover the available material, not as a template to copy directly.
+- **The objective** — what behaviors/skills does the model need? Each distinct skill becomes a topic.
+- **The documents** (if available) — what skills does the content teach? Read `knowledge/all-parts-index.json` and identify the capabilities it covers. A single chapter may feed multiple skill topics; a single skill topic may draw from multiple chapters.
+- **Difficulty dimension** — for each skill, consider splitting into difficulty tiers (basic vs complex). GRPO requires outcome variance — the model must get some right and some wrong for learning to happen (arXiv:2508.14094: hard examples yield 47% gains vs 3-15% for easy ones).
+
+**Three-level hierarchy**: Domain (broad capability area) → Skill (specific competency) → Difficulty tier (based on base model performance).
 
 Save to `topics.json` as a **flat array** — every topic at the same level, hierarchy expressed via `parent_id`. Each topic has a `system_prompt` that describes its specialization:
 
 ```json
 [
-  {"id": "billing", "name": "Billing", "parent_id": null, "system_prompt": "Specialize in: payment and subscription questions. Help users understand billing cycles, charges, and payment methods."},
-  {"id": "billing-refunds", "name": "Refunds", "parent_id": "billing", "system_prompt": "Focus on: refund requests and policies. Guide users through the refund process, explain eligibility, and handle edge cases."}
+  {"id": "billing", "name": "Billing & Payments", "parent_id": null, "system_prompt": "Specialize in: payment processing, subscription management, and billing troubleshooting."},
+  {"id": "refund-processing", "name": "Refund Processing", "parent_id": "billing", "system_prompt": "Specialize in: handling refund requests, explaining eligibility, and processing different refund types."},
+  {"id": "refund-edge-cases", "name": "Refund Edge Cases", "parent_id": "refund-processing", "system_prompt": "Focus on: partial refunds, pro-rated calculations, exceptions to standard policy, and dispute resolution."}
 ]
 ```
 
-Aim for 3-7 root topics, 2-3 levels deep, each leaf supporting 10-30 training examples. See `reference/topic-hierarchy.md` for design guidelines.
+**Topic count**: Scale with dataset size — 5-10 leaf topics for 100-200 records, 20-40 for 500-1,000, 40-80 for 1,000-3,000. Target ~20 records per leaf topic (arXiv:2410.15226: more topics with fewer examples outperforms fewer topics with more examples). See `reference/topic-hierarchy.md` for full guidelines and research citations.
 
 **System prompt composition**: The `system_prompt` field on each topic is a **segment** that gets composed with its ancestors during record generation: `[Root --system-prompt] + [Root topic] + [Parent topic] + [Leaf topic]`. Each level adds specificity without contradicting the parent. Keep each segment to 1-2 sentences, 50-150 words total when composed.
 
@@ -299,9 +304,9 @@ fi
 ```
 
 **Review topics with the user.** Present the topic hierarchy (name, parent, linked source material count, planned records-per-topic). Ask:
-- Are these the right focus areas?
-- Any topics to add, remove, or rebalance?
-- How many records per topic? (default: 10 per leaf)
+- Are these the right **skills** for the model to learn?
+- Any skills missing, or topics to split by difficulty?
+- How many records per topic? (default: 25 per leaf, target ~20 for optimal diversity)
 
 Adjust topics based on feedback before proceeding to data generation. This is the **primary filtering step** — topics determine what training data gets generated. Getting this right avoids regenerating data later.
 
@@ -339,7 +344,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --upload-incremental --workflow-id $WORKFLOW_ID
 ```
 
-The script makes **multiple LLM calls per topic** (one per prompt type: explain, scenario, compare/analyze, edge-case, application) for better diversity. By default, every leaf topic gets an **equal number of records** (`--records-per-topic`, default 25). This matches expected inference distribution — users query all topics, so training data should be balanced (OpenAI RFT Guide; arXiv:2508.14094: difficulty matters more than source volume). Use `--weight-by-source` to distribute proportionally to linked source parts instead (max 3:1 imbalance ratio). Inner parallelism runs all prompt-type calls concurrently within each topic.
+The script makes **multiple LLM calls per topic** (one per prompt type: explain, scenario, compare/analyze, edge-case, application) for better diversity. By default, every leaf topic gets an equal number of records. Use `--weight-by-difficulty` to distribute based on base model eval scores — hard topics (0-30% success) get 40-50% of records, medium (30-70%) get 30-40%, easy (70-100%) get 10-20%. This is the recommended mode after the first evaluation, because GRPO learning signal is strongest on hard topics (arXiv:2508.14094: 47% gains from hard examples vs 3-15% from easy). Use `--weight-by-source` to distribute proportionally to linked source parts instead (max 3:1 imbalance ratio). Inner parallelism runs all prompt-type calls concurrently within each topic.
 
 If some topics fail, use `--append` to retry without overwriting. Adapt `--records-per-topic` (default 25), `--min-per-topic` (default 10), `--max-per-topic` (default 50) to the project. **Generate at least 200+ total records.**
 

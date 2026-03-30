@@ -107,35 +107,64 @@ export function getMetricsInsights(latest: Record<string, unknown> | null, tab: 
     const kl = num(latest.kl);
     const gradNorm = num(latest.grad_norm);
 
-    // Loss: GRPO loss ≠ SFT loss. Starts near 0, rises slightly as policy diverges.
-    // Ref: DeepSeekMath — clipped surrogate objective; our guide — "0.01-0.1 healthy"
+    // =========================================================================
+    // Loss, KL, and grad_norm scale context:
+    //
+    // Our backend (Unsloth + TRL GRPOTrainer) may report these on different scales
+    // depending on loss_type and whether unsloth_train() is used:
+    //   - TRL DAPO default: loss 0.0-0.002, KL 0.0004-5.0, grad_norm 0.33-1.66
+    //   - Non-DAPO or accumulation bug: values can be 1000x+ higher
+    // Ref: open-r1#239 (actual TRL GRPO logs), Unsloth gradient accumulation blog,
+    //       TRL#2995 (normalization), AMD Unsloth tutorial (actual training output)
+    //
+    // We flag: NaN/Inf, loss stuck at 0, and provide context for interpretation.
+    // Reward metrics (reward, reward_std, frac_reward_zero_std) are confirmed on
+    // standard TRL scale (0-1) and use absolute thresholds.
+    // =========================================================================
+
+    // Loss: GRPO loss starts at 0.0 (expected — ratio=1.0, zero-mean advantages).
+    // With DAPO loss_type, healthy range is 0.0001-0.002 after hundreds of steps.
+    // Ref: open-r1#239 — "loss starts at 0, rises to 0.0001-0.0019"
+    // Ref: Unsloth — "loss=0 + grad_norm=NaN = missing LoRA adapters or GA>1 bug"
     if (loss != null) {
-      if (loss < 0.001) insights.push({ level: "warn", text: "Loss is near zero — likely zero advantages (all completions scored identically). GRPO cannot learn without reward variance. Check grader sensitivity." });
-      else if (loss < 0.1) insights.push({ level: "ok", text: "Loss is in the healthy range (0.01-0.1) — model is making controlled policy updates." });
-      else if (loss < 1.0) insights.push({ level: "ok", text: "Loss is moderate — training is actively updating the policy. GRPO loss rises slightly as the policy diverges from generation distribution." });
-      else insights.push({ level: "warn", text: "Loss is high — training may be unstable. Consider reducing learning rate." });
+      if (!isFinite(loss) || isNaN(loss)) {
+        insights.push({ level: "critical", text: "Loss is NaN/Inf — catastrophic numerical failure. Check for zero-length completions or degenerate batches. (Unsloth: verify LoRA adapters applied, try gradient_accumulation_steps=1)" });
+      } else if (loss === 0 && gradNorm != null && (!isFinite(gradNorm) || isNaN(gradNorm))) {
+        // Unsloth-specific: loss=0 + grad_norm=NaN = known bug
+        // Ref: Unsloth issues #3006, #2824
+        insights.push({ level: "critical", text: "Loss is 0 with NaN gradients — known Unsloth issue. Verify LoRA adapters are applied (FastLanguageModel.get_peft_model) and try gradient_accumulation_steps=1." });
+      }
     }
-    // KL: Healthy <1.0, warning 1.0-5.0, critical >5.0, severe >10.0
-    // Ref: DeepSeekMath (β=0.04); DAPO/Dr.GRPO use β=0 (no KL penalty); TRL defaults β=0
-    // Ref: our guide — ">5.0 significant drift, >10.0 likely reward hacking or collapse"
+
+    // KL: With β=0 (TRL/DAPO default), KL is purely informational — not a training constraint.
+    // TRL doesn't even log KL when β=0. If reported, values are informational only.
+    // Healthy TRL range: 0.0004 → 0.01-0.04, spike to ~5.0.
+    // Ref: DAPO (arXiv:2503.14476) — removes KL entirely (β=0)
+    // Ref: open-r1#239 — KL 0.0004 initially, gradual rise, can spike to 5.33
     if (kl != null) {
-      if (kl > 10) insights.push({ level: "critical", text: `KL divergence is ${kl.toFixed(1)} — the model has diverged significantly from the base model. Risk of reward hacking or mode collapse. Increase KL penalty (beta), reduce learning rate, or inspect outputs for degenerate patterns.` });
-      else if (kl > 5) insights.push({ level: "warn", text: `KL divergence is ${kl.toFixed(1)} — significant policy drift from the base model. Monitor output quality closely. Consider increasing beta.` });
-      else if (kl > 1) insights.push({ level: "ok", text: `KL divergence is ${kl.toFixed(1)} — moderate policy drift, within acceptable range for active learning.` });
-      else insights.push({ level: "ok", text: "KL divergence is low — model stays close to the base model." });
+      if (!isFinite(kl) || isNaN(kl)) {
+        insights.push({ level: "critical", text: "KL divergence is NaN — numerical failure. If using Unsloth with mask_truncated_completions=true, this can happen when all completions are truncated." });
+      }
+      // KL absolute value depends on β setting and backend aggregation.
+      // With β=0: informational only, no threshold needed.
     }
-    // Grad norm: Healthy 0.5-2.0 with default clipping of 1.0.
-    // Ref: DeepSeekMath; Unsloth — "NaN often from zero-length truncated completions"
+
+    // Grad norm: TRL reports pre-clipping L2 norm (default max_grad_norm=1.0).
+    // Healthy TRL range: 0.33-1.66. NaN = catastrophic (Unsloth: zero-length completions).
+    // Ref: AMD Unsloth tutorial — grad_norm in 0.3-1.7 range
+    // Ref: Unsloth docs — "NaN often from zero-length truncated completions"
     if (gradNorm != null) {
-      if (!isFinite(gradNorm) || isNaN(gradNorm)) insights.push({ level: "critical", text: "Gradient norm is NaN — catastrophic numerical failure. Often caused by zero-length completions or all-truncated batches." });
-      else if (gradNorm > 100) insights.push({ level: "warn", text: `Gradient norm is ${gradNorm.toFixed(0)} — gradient spike detected. May cause training instability.` });
+      if (!isFinite(gradNorm) || isNaN(gradNorm)) {
+        insights.push({ level: "critical", text: "Gradient norm is NaN — catastrophic numerical failure. Often caused by zero-length completions, missing LoRA adapters, or gradient_accumulation_steps > 1 bug in Unsloth." });
+      }
     }
-    // Clip ratio: Healthy 0.1-0.3, high >0.5, near 0 = barely changing
+
+    // Clip ratio: 0-1 range (fraction of clipped tokens), scale-independent.
     // Ref: DAPO (arXiv:2503.14476) — ε_low=0.2, ε_high=0.28; TRL: trust region clipping
+    // clip_ratio=0 is normal when num_iterations=1 (generation policy = current policy)
     const clipRegion = num(latest["clip_ratio/region_mean"]);
     if (clipRegion != null) {
-      if (clipRegion > 0.5) insights.push({ level: "warn", text: `Clip ratio is ${(clipRegion * 100).toFixed(0)}% — policy updates are being heavily constrained. Reduce learning rate or increase epsilon.` });
-      else if (clipRegion < 0.01) insights.push({ level: "warn", text: "Clip ratio is near zero — policy is barely changing. Learning rate may be too low." });
+      if (clipRegion > 0.5) insights.push({ level: "warn", text: `Clip ratio is ${(clipRegion * 100).toFixed(0)}% — policy updates are heavily constrained by the trust region. This limits learning speed.` });
     }
   }
 
@@ -208,8 +237,16 @@ interface EpochSummary {
 
 /**
  * Insights for the Score Trend chart (eval scores over epochs).
- * Score zones: target ≥0.8, acceptable 0.6-0.8, critical <0.6.
- * Ref: our guide — "Pass rate < 80%? → Iterate on grader criteria or data quality"
+ *
+ * GRPO-aware: There is NO universal score target. What matters is:
+ * 1. The TREND (is the score improving across epochs?)
+ * 2. Whether the grader differentiates quality (score spread > 0)
+ *
+ * Absolute scores are task/grader-dependent. DeepSeek-R1-Zero went from 15.6% to 71%
+ * on AIME — a huge success well below 0.8. (arXiv:2501.12948)
+ *
+ * Eval K=1 scores are a lower bound on training K=G performance. A 6.5% pass@1
+ * ≈ 41% pass@8. (arXiv:2508.14094)
  */
 export function getScoreTrendInsights(epochData: readonly EpochSummary[]): readonly MetricInsight[] {
   if (epochData.length === 0) return [];
@@ -217,37 +254,44 @@ export function getScoreTrendInsights(epochData: readonly EpochSummary[]): reado
   const latest = epochData[epochData.length - 1];
   const score = latest.avgScore;
   const stdDev = latest.stdDev;
+  const isEarlyTraining = epochData.length <= 2;
 
-  // Score level assessment — zones match TrainingMetricsChart reference areas
-  if (score >= 0.9) {
-    insights.push({ level: "ok", text: `Avg score is ${score.toFixed(2)} — excellent. Model is performing very well.` });
-  } else if (score >= 0.8) {
-    insights.push({ level: "ok", text: `Avg score is ${score.toFixed(2)} — in the target zone (≥0.8). Model quality is good.` });
-  } else if (score >= 0.6) {
-    insights.push({ level: "warn", text: `Avg score is ${score.toFixed(2)} — acceptable but below target (0.8). More training epochs or grader tuning may help.` });
+  // Score level — focus on extreme cases, not arbitrary thresholds
+  if (score >= 0.95) {
+    // Near-perfect scores may indicate a lenient grader — GRPO needs differentiation
+    // Ref: DAPO (arXiv:2503.14476) — if all K completions score high, advantage ≈ 0
+    insights.push({ level: "warn", text: `Avg score is ${score.toFixed(2)} — very high. Verify the grader is differentiating quality; if all completions score similarly, GRPO gets no gradient signal.` });
+  } else if (score < 0.05) {
+    // Near-zero means grader or data is broken — no training signal possible
+    insights.push({ level: "critical", text: `Avg score is ${score.toFixed(2)} — near zero. The grader may be too strict or misaligned with the task. Check grader criteria and sample outputs.` });
+  } else if (isEarlyTraining) {
+    // Early in training — score is just a starting point, trend matters more
+    insights.push({ level: "ok", text: `Avg score is ${score.toFixed(2)} at eval ${epochData.length}. Score will evolve as training progresses — watch the trend across epochs.` });
   } else {
-    insights.push({ level: "critical", text: `Avg score is ${score.toFixed(2)} — below acceptable threshold (0.6). Check grader, data quality, or training hyperparameters.` });
+    insights.push({ level: "ok", text: `Avg score is ${score.toFixed(2)} at eval ${epochData.length}.` });
   }
 
-  // Improvement trend (need ≥2 epochs)
+  // Improvement trend (need ≥2 epochs) — this is the most important signal in GRPO
   if (epochData.length >= 2) {
     const first = epochData[0];
     const delta = score - first.avgScore;
     if (delta > 0.05) {
-      insights.push({ level: "ok", text: `Score improved by +${delta.toFixed(3)} across ${epochData.length} evaluations — training is learning effectively.` });
+      insights.push({ level: "ok", text: `Score improved by +${delta.toFixed(3)} across ${epochData.length} evals — model is learning. GRPO is working.` });
     } else if (delta > -0.02) {
-      insights.push({ level: "warn", text: `Score change is flat (${delta >= 0 ? "+" : ""}${delta.toFixed(3)}) — model may have plateaued. Consider adjusting learning rate or adding more diverse data.` });
+      insights.push({ level: "warn", text: `Score change is flat (${delta >= 0 ? "+" : ""}${delta.toFixed(3)}) across ${epochData.length} evals — model may have plateaued. Consider adjusting learning rate or increasing data diversity.` });
     } else {
-      // Ref: our guide — "Reward Hacking" failure mode: "Reward increases while output quality degrades"
-      insights.push({ level: "critical", text: `Score dropped by ${delta.toFixed(3)} — model is getting worse. This may indicate overfitting, reward hacking, or a grader issue.` });
+      // Ref: "Tricks or Traps" (arXiv:2508.08221) — reward hacking failure mode
+      insights.push({ level: "critical", text: `Score dropped by ${Math.abs(delta).toFixed(3)} — model is regressing. Possible causes: reward hacking, overfitting, or learning rate too high.` });
     }
   }
 
-  // Score spread — high σ means inconsistent performance across records
-  if (stdDev > 0.3) {
-    insights.push({ level: "warn", text: `High score spread (σ=${stdDev.toFixed(3)}) — model performs very inconsistently across records. Some topics may need more training data.` });
-  } else if (stdDev > 0.2) {
-    insights.push({ level: "warn", text: `Moderate score spread (σ=${stdDev.toFixed(3)}) — some records score much lower than others.` });
+  // Score spread — in GRPO, some spread is GOOD (means the grader differentiates)
+  // Zero spread is bad (no gradient signal). Very high spread may indicate inconsistency.
+  if (stdDev < 0.05 && score > 0.05 && score < 0.95) {
+    // Ref: "No Prompt Left Behind" (arXiv:2509.21880) — zero-variance = no gradient
+    insights.push({ level: "warn", text: `Very low score spread (σ=${stdDev.toFixed(3)}) — grader may not differentiate between completions. GRPO needs score variance to learn.` });
+  } else if (stdDev > 0.3) {
+    insights.push({ level: "warn", text: `High score spread (σ=${stdDev.toFixed(3)}) — performance varies widely across records. Some topics may need more data or grader refinement.` });
   }
 
   return insights;

@@ -1,16 +1,66 @@
 # Topic Hierarchy Guide
 
-Topics organize training data into structured categories, ensuring balanced coverage across all areas the model should learn.
+Topics organize training data into structured categories that reflect what the model needs to **learn to do** (skills), not how source documents are organized.
+
+> **Research-first rule**: Every design decision below cites specific papers. See [Research Sources](#research-sources) at the bottom.
 
 ---
 
 ## Why Topics Matter
 
 Without topics, training data tends to cluster around easy/common scenarios, leaving gaps in harder areas. Topics ensure:
-- **Balanced coverage**: Every important area gets enough training examples
+- **Balanced skill coverage**: Every important capability gets enough training examples
+- **Difficulty-aware distribution**: Hard topics (where the model struggles) get more records, because that's where GRPO learning signal is strongest (arXiv:2508.14094)
 - **Targeted generation**: Generate data specifically for weak areas
-- **Quality analysis**: Identify which areas score well vs. poorly in evaluation
+- **Quality analysis**: Identify which skills score well vs. poorly in evaluation
 - **Systematic improvement**: Fix specific areas without affecting others
+
+---
+
+## Core Design Principles
+
+### 1. Organize by Skill, Not by Document Structure
+
+**Topics should reflect what the model learns to DO, not how source documents are organized.**
+
+Skill-based hierarchies outperform content-based ones (STEPS taxonomy, arXiv:2601.03676: 33.09 vs 31.48 WB-Score). DeepSeek-R1 (arXiv:2501.12948) organized training by capability domain (math, coding, science, logic), not by textbook chapters.
+
+| DON'T (document-mirroring) | DO (skill-based) |
+|---------------------------|-------------------|
+| "Chapter 3: Tactical Motifs" | "Fork Detection" (skill) |
+| "Section 3.1: Forks" | "Pin Recognition" (skill) |
+| "Section 3.2: Pins" | "Combination Calculation" (skill) |
+| "Chapter 5: Endgames" | "Pawn Structure Evaluation" (skill) |
+
+A single chapter may feed multiple skill topics. A single skill topic may draw from multiple chapters.
+
+### 2. Breadth Over Depth
+
+**More unique topics outperform fewer topics with more examples each.**
+
+The synthetic data diversity study (arXiv:2410.15226) tested 100K vs 300K topics with 10/20/30 examples per topic. 300K topics consistently outperformed 100K. Performance saturates or deteriorates as examples per topic increase — **~20 examples per topic** is the sweet spot.
+
+**When in doubt, split a broad topic into narrower ones rather than adding more examples.**
+
+### 3. Include a Difficulty Dimension
+
+**GRPO requires outcome variance — the model must get some right and some wrong for learning to happen.**
+
+The "Hard Examples" paper (arXiv:2508.14094) found training on the hardest 10% yields **47% gains** vs 3-15% for easy examples. "No Prompt Left Behind" (arXiv:2509.21880) showed 30-99% of prompts become zero-variance (zero gradient) during GRPO — easy prompts go zero-variance first.
+
+Each leaf topic should target a specific difficulty tier so you can control the distribution during training.
+
+### 4. Weight Toward Hard Topics
+
+**Uniform distribution wastes compute on easy topics that quickly produce zero gradient.**
+
+| Difficulty Tier | Base Model Success Rate | Target Record Share | Why |
+|----------------|------------------------|-------------------|-----|
+| Hard | 0-30% | 40-50% | Maximum learning signal (arXiv:2508.14094) |
+| Medium | 30-70% | 30-40% | Good variance, stable gradient |
+| Easy | 70-100% | 10-20% | Quickly becomes zero-variance |
+
+Measure difficulty *after* running the base model evaluation (eval-first approach), not guessed beforehand.
 
 ---
 
@@ -29,10 +79,134 @@ Without topics, training data tends to cluster around easy/common scenarios, lea
 | Field | Required | Description |
 |-------|----------|-------------|
 | `id` | No | Topic identifier (auto-generated UUID if omitted) |
-| `name` | Yes | Display name |
+| `name` | Yes | Display name — should describe the **skill**, not the source section |
 | `parent_id` | No | Parent topic ID (null for root topics) |
-| `system_prompt` | No | System prompt context for this topic — guides the model during training |
+| `system_prompt` | No | System prompt segment — guides the model during training |
 | `reference_id` | No | External reference ID for topic-source linking |
+
+---
+
+## Three-Level Hierarchy: Domain → Skill → Difficulty
+
+Based on research (STEPS arXiv:2601.03676, TAGS arXiv:2601.13995), a well-designed hierarchy has three conceptual levels:
+
+```
+Level 1: Capability Domain (broad area — what the model helps with)
+  Level 2: Skill (specific capability — what the model learns to do)
+    Level 3: Difficulty Tier (how hard — based on base model eval scores)
+```
+
+### Example: Chess Tutor
+
+```
+Tactical Pattern Recognition (domain)
+├── Fork Detection (skill)
+│   ├── fork-detection-basic         → obvious forks (1-2 candidate moves)
+│   └── fork-detection-complex       → hidden forks (2-3 move calculation)
+├── Pin Recognition (skill)
+│   ├── pin-recognition-absolute     → absolute pins against king
+│   └── pin-recognition-relative     → relative pins requiring evaluation
+└── Combination Calculation (skill)
+    ├── combination-2-move           → 2-move forced sequences
+    └── combination-3-plus           → 3+ moves with branching
+
+Strategic Thinking (domain)
+├── Pawn Structure Evaluation (skill)
+│   ├── pawn-structure-static        → evaluate given position
+│   └── pawn-structure-dynamic       → evaluate after pawn break
+└── Plan Formation (skill)
+    ├── plan-single-idea             → positions with one clear plan
+    └── plan-competing-ideas         → positions requiring plan comparison
+
+Endgame Technique (domain)
+├── King & Pawn (skill)
+│   ├── kp-basic-opposition          → simple opposition and key squares
+│   └── kp-breakthrough              → pawn breakthroughs and triangulation
+└── Rook Endgames (skill)
+    ├── rook-endgame-lucena          → Lucena/Philidor pattern recognition
+    └── rook-endgame-complex         → rook + multiple pawns calculation
+```
+
+### Example: Customer Support
+
+```
+Billing & Payments (domain)
+├── Refund Processing (skill)
+│   ├── refund-standard              → standard refund flow, clear policy
+│   └── refund-edge-cases            → partial refunds, pro-rated, exceptions
+├── Plan Management (skill)
+│   ├── plan-upgrade-downgrade       → standard plan changes
+│   └── plan-complex-migration       → mid-cycle changes, grandfathered plans
+└── Payment Troubleshooting (skill)
+    ├── payment-common-failures      → expired card, insufficient funds
+    └── payment-rare-failures        → international, 3DS, fraud blocks
+
+Technical Support (domain)
+├── API Integration (skill)
+│   ├── api-auth-setup               → initial auth, token generation
+│   └── api-advanced-debugging       → rate limits, edge cases, race conditions
+└── Performance Diagnosis (skill)
+    ├── perf-common-bottlenecks      → slow queries, missing indexes
+    └── perf-complex-investigation   → distributed tracing, cascading failures
+```
+
+---
+
+## Topic Count Guidelines
+
+Derived from research (arXiv:2410.15226 for breadth, arXiv:2508.14094 for per-topic minimum):
+
+| Total Records | Leaf Topics | Records/Leaf | Root Domains |
+|--------------|-------------|-------------|--------------|
+| 100-200 | 5-10 | 15-25 | 2-4 |
+| 200-500 | 10-20 | 15-30 | 3-5 |
+| 500-1,000 | 20-40 | 20-30 | 4-7 |
+| 1,000-3,000 | 40-80 | 25-40 | 5-10 |
+| 3,000-10,000 | 80-200 | 30-50 | 7-15 |
+
+**Key constraints**:
+- **Minimum 15 records per leaf topic** — below this, zero-variance collapse happens too early (arXiv:2509.21880)
+- **Sweet spot ~20 records per topic** — diminishing returns beyond this (arXiv:2410.15226)
+- **More leaf topics is almost always better** — split before you deepen
+- **Difficulty tiers double effective topic count** — 10 skills × 2 difficulty tiers = 20 leaf topics
+
+---
+
+## How to Design Topics from Source Documents
+
+The agent should NOT copy the document structure. Instead:
+
+### Step 1: Identify Skills
+
+Read the objective and source material. Ask: **"What skills does this material teach? What should the model learn to DO?"**
+
+### Step 2: Group by Capability Domain
+
+Cluster related skills under domain roots. A domain is a broad area of competence.
+
+### Step 3: Add Difficulty Tiers
+
+For each skill, consider splitting into difficulty tiers based on:
+- **Complexity**: Single-step vs multi-step reasoning
+- **Ambiguity**: Clear-cut vs judgment-required
+- **Prerequisites**: Standalone vs requires combining multiple concepts
+
+### Step 4: Cross-Reference Sources
+
+Map each leaf topic back to the source document parts that teach that skill. **A skill topic can (and should) draw from multiple chapters/sections.**
+
+```
+Chapter 3: Tactical Motifs (source)
+  ├──► Fork Detection (skill) — fork examples
+  ├──► Pin Recognition (skill) — pin examples
+  ├──► Combination Calculation (skill) — multi-move sequences
+  └──► Material Evaluation (skill) — exchange sacrifice decisions
+
+Chapter 5: Endgames (source)
+  ├──► King & Pawn Technique (skill) — K+P theory
+  ├──► Combination Calculation (skill) — endgame combinations  ← same skill, different source
+  └──► Plan Formation (skill) — endgame plans
+```
 
 ---
 
@@ -51,9 +225,10 @@ After all documents are processed, a merged `knowledge/all-parts-index.json` com
 ### Phase 2: Relation Building (Step 3)
 
 After designing topics, the `relation-builder` subagent reads `knowledge/all-parts-index.json` and `topics.json`, then runs an iterative retrieve-and-verify loop per leaf topic:
-1. Search the index for parts matching the topic's subject (title, extraction_path, content_preview)
-2. Verify each candidate is actually relevant
-3. If fewer than 3 relations found, broaden the search (synonyms, parent topic context)
+1. Search the index for parts that **teach the skill** described by the topic (not just keyword matching)
+2. Verify each candidate actually provides knowledge relevant to that skill
+3. **Cross-reference**: A skill topic should draw from multiple document sections — don't limit to one chapter
+4. If fewer than 3 relations found, broaden the search (synonyms, parent topic context, related skills)
 
 The subagent writes `relations.json` — a flat array of `{topic_identifier, part_identifier}` pairs. This keeps the heavy index scanning out of the main context window.
 
@@ -83,53 +258,7 @@ fi
 
 **Only create relations to parts you've actually extracted** — never fabricate references. If you haven't extracted the document yet, skip linking and add relations later.
 
-For records, encode the topic in the ID (e.g., `billing-refunds-001`) so you can always map a record back to its topic and from there to the source parts.
-
----
-
-## Designing a Good Hierarchy
-
-### From Documents
-
-1. **Read the document structure** — chapters, sections, headings map naturally to topics
-2. **Group related sections** under parent topics using `parent_id`
-3. **Link topics to source parts** — after uploading, use the topic-source relations API to trace back later
-4. **Create leaf topics** specific enough to generate ~10 unique training examples each
-
-**Example: From a product manual**
-```
-Product Manual
-├── Chapter 1: Getting Started     → topic: "getting-started"
-│   ├── Installation               → topic: "getting-started/installation"
-│   ├── First Steps                → topic: "getting-started/first-steps"
-│   └── Configuration              → topic: "getting-started/configuration"
-├── Chapter 2: Core Features       → topic: "core-features"
-│   ├── Dashboard                  → topic: "core-features/dashboard"
-│   └── Reporting                  → topic: "core-features/reporting"
-```
-
-### From an Objective (no documents)
-
-1. **Break the objective into domains** → root topics
-2. **Split each domain into scenarios** → child topics
-3. **Add edge cases and error handling** → leaf topics
-
-**Example: Customer support objective**
-```json
-[
-  {"id": "billing", "name": "Billing", "parent_id": null, "system_prompt": "Focus on payment, subscription, and invoicing questions"},
-  {"id": "billing-refunds", "name": "Refunds", "parent_id": "billing", "system_prompt": "Focus on refund requests, policies, and processing"},
-  {"id": "billing-upgrades", "name": "Plan Changes", "parent_id": "billing", "system_prompt": "Focus on upgrading, downgrading, and switching plans"},
-  {"id": "billing-payment-issues", "name": "Payment Issues", "parent_id": "billing", "system_prompt": "Focus on failed payments, card updates, billing errors"},
-  {"id": "technical", "name": "Technical Support", "parent_id": null, "system_prompt": "Focus on technical issues and troubleshooting"},
-  {"id": "technical-api", "name": "API Issues", "parent_id": "technical", "system_prompt": "Focus on authentication, rate limits, endpoint errors"},
-  {"id": "technical-integration", "name": "Integrations", "parent_id": "technical", "system_prompt": "Focus on third-party integrations and webhooks"},
-  {"id": "technical-performance", "name": "Performance", "parent_id": "technical", "system_prompt": "Focus on slow queries, timeouts, optimization"},
-  {"id": "account", "name": "Account Management", "parent_id": null, "system_prompt": "Focus on user accounts, access, and settings"},
-  {"id": "account-login", "name": "Login Issues", "parent_id": "account", "system_prompt": "Focus on password reset, 2FA, locked accounts"},
-  {"id": "account-permissions", "name": "Permissions", "parent_id": "account", "system_prompt": "Focus on roles, access control, team management"}
-]
-```
+For records, encode the topic in the ID (e.g., `fork-detection-basic-001`) so you can always map a record back to its topic and from there to the source parts.
 
 ---
 
@@ -137,69 +266,87 @@ Product Manual
 
 ### Structure
 
-| Guideline | Why |
-|-----------|-----|
-| 3-7 root topics | Too few = too broad; too many = fragmented |
-| 2-3 levels deep | Deeper = more specific but harder to balance |
-| ~10 examples per leaf (default) | Fewer = undertrained; scale with `--records-per-topic` |
-| Descriptive names | Helps the agent generate relevant data |
-| Add descriptions | Guides data generation with specific scope |
+| Guideline | Why | Source |
+|-----------|-----|--------|
+| Organize by skill, not by chapter | Skill taxonomies outperform content-based | arXiv:2601.03676 |
+| Scale root domains with dataset (2-15) | More breadth = better coverage | arXiv:2410.15226 |
+| 2-3 levels deep | Deeper = more specific but harder to balance | — |
+| ~20 records per leaf (target) | Redundancy hurts beyond this | arXiv:2410.15226 |
+| Include difficulty tiers at leaf level | GRPO needs outcome variance | arXiv:2508.14094 |
+| Descriptive skill-based names | Helps agent generate relevant data | — |
+| Add descriptions with scope | Guides data generation | — |
 
 ### ID Format
 
 Use slash-separated paths matching the hierarchy:
 ```
-root-topic
-root-topic/child-topic
-root-topic/child-topic/grandchild-topic
+domain-topic
+domain-topic/skill-topic
+domain-topic/skill-topic/difficulty-tier
 ```
 
 Keep IDs lowercase, use hyphens for spaces:
-- Good: `"technical/api-auth"`
-- Bad: `"Technical/API Authentication"`
+- Good: `"tactics/fork-detection/fork-detection-complex"`
+- Bad: `"Chapter 3/Section 3.1/Forks"`
 
 ### Common Mistakes
 
 | Mistake | Problem | Fix |
 |---------|---------|-----|
-| Too many leaf topics (50+) | Can't generate enough data per topic | Merge related topics |
-| Overlapping topics | Records could fit in multiple places | Make boundaries clearer |
-| Topics too broad ("General") | Catch-all dilutes training signal | Split into specific subtopics |
-| Topics too narrow ("Refund for plan X in Q3") | Only 1-2 possible examples | Generalize |
-| Missing error/edge case topics | Model fails on unusual inputs | Add explicit error handling topics |
+| Topics mirror document chapters | Model learns document structure, not skills | Analyze skills in the material instead |
+| No difficulty dimension | Can't control GRPO difficulty distribution | Split leaf topics by difficulty tier |
+| Uniform record distribution | Wastes compute on easy topics (go zero-variance fast) | Weight 40-50% toward hard topics |
+| Topics too broad ("General") | Catch-all dilutes training signal | Split into specific skill subtopics |
+| Topics too narrow ("Refund for plan X in Q3") | Only 1-2 possible examples | Generalize to the skill |
+| Too few leaf topics (<5 for 500 records) | 100 records/topic = redundancy, poor breadth | Split topics; add difficulty dimension |
+| All topics same difficulty | No control over GRPO learning signal | Add explicit difficulty tiers |
+| Overlapping topics | Records could fit in multiple places | Make skill boundaries clearer |
+| Missing error/edge case topics | Model fails on unusual inputs | Add explicit edge case difficulty tiers |
 
 ---
 
 ## Coverage Analysis
 
-After generating data, check topic distribution:
+After generating data, check topic distribution. The goal is NOT uniform distribution — it's adequate coverage with difficulty-appropriate weighting.
 
-### Computing Balance Score
+### Coverage Score (replaces old "Balance Score")
+
+The old balance score targeted uniform distribution. The new approach measures two things:
+
+**1. Coverage completeness** (0-1): What fraction of leaf topics have ≥15 records?
 
 ```
-For each leaf topic:
-  actual_percentage = records_in_topic / total_records
-  target_percentage = 1 / number_of_leaf_topics
-  gap = |actual_percentage - target_percentage|
-
-balance_score = 1 - (sum_of_gaps / 2)  // 0 to 1
+coverage_completeness = topics_with_15_plus_records / total_leaf_topics
 ```
+
+**2. Difficulty alignment** (0-1): After base model eval, how close is the actual distribution to the target difficulty weighting (hard: 40-50%, medium: 30-40%, easy: 10-20%)?
+
+```
+For each difficulty tier:
+  actual_share = records_in_tier / total_records
+  target_share = target for that tier
+  gap = |actual_share - target_share|
+
+difficulty_alignment = 1 - sum_of_gaps
+```
+
+**3. Overall readiness** = min(coverage_completeness, difficulty_alignment)
 
 ### Rating Scale
 
-| Score | Rating | Meaning |
-|-------|--------|---------|
-| 0.8-1.0 | Excellent | Even distribution |
-| 0.6-0.8 | Good | Minor imbalances |
-| 0.4-0.6 | Fair | Some topics need more data |
-| < 0.4 | Poor | Significant gaps |
+| Score | Rating | Action |
+|-------|--------|--------|
+| 0.8-1.0 | Ready | Proceed to training |
+| 0.6-0.8 | Almost ready | Generate more records for under-covered topics |
+| 0.4-0.6 | Needs work | Significant gaps in coverage or difficulty alignment |
+| < 0.4 | Not ready | Major rework needed — review topic design |
 
-### Fixing Imbalances
+### Fixing Issues
 
-1. Identify under-represented topics (count < average * 0.5)
-2. Generate more data specifically for those topics
-3. Re-check coverage
-4. Avoid over-generating for already-strong topics
+1. **Empty or near-empty topics** → Generate more records for those skills
+2. **Too many easy records** → Generate harder variants, split easy topics
+3. **All topics similar eval scores** → Check if grader differentiates by skill; may need topic-specific grading criteria
+4. **One topic much worse** → Check: enough records? Appropriate difficulty? Grader fits this skill?
 
 ---
 
@@ -209,65 +356,57 @@ After running an evaluation, group scores by topic to understand where the model
 
 ### How to Build the Breakdown
 
-Map each record's evaluation score back to its topic (using the record ID convention, e.g., `billing-refunds-001` → `billing/refunds`). Then compute per-topic stats:
+Map each record's evaluation score back to its topic (using the record ID convention, e.g., `fork-detection-basic-001` → `tactics/fork-detection/fork-detection-basic`). Then compute per-topic stats:
 
 ```
-Topic                    Records   Avg Score   Std Dev   Min    Max
-billing/refunds              18      0.82       0.12     0.55   1.00
-billing/upgrades             15      0.75       0.18     0.30   0.95
-billing/payment-issues       12      0.70       0.15     0.40   0.90
-technical/api                 8      0.35       0.25     0.00   0.70
-technical/integration         6      0.40       0.20     0.10   0.75
-technical/performance         5      0.28       0.15     0.05   0.50
-account/login                20      0.42       0.30     0.00   0.85
-account/permissions          16      0.78       0.10     0.55   0.95
+Topic                              Records   Avg Score   Std Dev   Min    Max
+tactics/fork-detection-basic           20      0.82       0.12     0.55   1.00
+tactics/fork-detection-complex         20      0.35       0.25     0.00   0.70
+tactics/pin-recognition-absolute       18      0.75       0.18     0.30   0.95
+strategy/plan-single-idea              15      0.70       0.15     0.40   0.90
+strategy/plan-competing-ideas          15      0.28       0.15     0.05   0.50
+endgame/kp-basic-opposition            12      0.78       0.10     0.55   0.95
+endgame/kp-breakthrough                12      0.42       0.30     0.00   0.85
 ```
 
 ### What the Distribution Tells You
 
 | Pattern | What it means | Action |
 |---------|--------------|--------|
-| High avg, low std (e.g., billing/refunds) | Consistently good — model handles this well | Leave as-is |
-| High avg, high std (e.g., account/login) | Good on average but inconsistent — some prompts work, others don't | Review the low-scoring records — they likely have different characteristics (complexity, tone) than the high-scoring ones |
-| Low avg, low std (e.g., technical/performance) | Consistently bad — model struggles across the board | Fundamental issue: check system prompt for domain knowledge, check grader criteria fit, or add more varied prompts |
-| Low avg, high std (e.g., technical/api) | Mixed results — some prompts work, most don't | The working prompts show the model CAN do it. Study what's different about them and generate more like those |
-| All topics similar scores | Grader doesn't differentiate by topic | Scores are driven by generic criteria, not topic-specific quality. May be fine, or may mean the grader isn't checking domain accuracy |
-| One topic much lower than others | Topic-specific weakness | Check: (1) enough records? (2) prompts specific enough? (3) grader criteria fit this topic type? (4) source knowledge sufficient? |
+| High avg, low std (e.g., fork-detection-basic) | Consistently good — model handles this well. **This is an easy topic.** | Reduce records here; it will go zero-variance in training |
+| High avg, high std (e.g., kp-breakthrough) | Good on average but inconsistent | Review the low-scoring records — they likely have different characteristics |
+| Low avg, low std (e.g., plan-competing-ideas) | Consistently bad — **this is a hard topic** | Check system prompt, grader fit. This is where GRPO learning signal is strongest — prioritize more records here |
+| Low avg, high std (e.g., fork-detection-complex) | Mixed results — some prompts work, most don't | Study what's different about the working prompts. Generate more like those |
+| All topics similar scores | Grader doesn't differentiate by skill | May need skill-specific grading criteria |
+| Easy topics >> hard topics in score | Expected for GRPO | Don't worry — the hard topics are where learning happens |
 
-### Cross-Referencing Scores with Record Count
+### Using Eval Scores to Set Difficulty Weights
 
-The most useful view combines score quality with data quantity:
+After the first eval, use per-topic scores to classify difficulty and set record distribution:
 
 ```
-                        Few records (<10)          Many records (10+)
-                    ┌─────────────────────────┬─────────────────────────┐
-  High scores       │ Lucky but risky —        │ Working well —          │
-  (avg > 0.6)       │ add more to be safe      │ don't touch             │
-                    ├─────────────────────────┼─────────────────────────┤
-  Low scores        │ Under-covered AND weak — │ Enough data but wrong   │
-  (avg < 0.6)       │ needs more AND better    │ kind — improve quality, │
-                    │ prompts                  │ check grader fit        │
-                    └─────────────────────────┴─────────────────────────┘
+Topic                         Avg Score → Difficulty → Target Share
+fork-detection-basic            0.82    → Easy       → 10-20% of records
+fork-detection-complex          0.35    → Hard       → 40-50% of records
+pin-recognition-absolute        0.75    → Easy       → 10-20% of records
+plan-competing-ideas            0.28    → Hard       → 40-50% of records
 ```
 
-**Priority order for fixes:**
-1. Low scores + few records (worst case — both quantity and quality problems)
-2. Low scores + many records (quality problem — prompts or grader need rework)
-3. High scores + few records (risky — add more prompts to solidify)
-4. High scores + many records (no action needed)
+Then regenerate records with the weighted distribution before training.
 
 ### Tracking Score Distribution Across Iterations
 
 Save per-topic scores each iteration so you can see which topics are improving:
 
 ```
-                  Iter 1    Iter 2    Iter 3
-billing/refunds:   0.65  →   0.78  →   0.82   ↑ improving
-technical/api:     0.20  →   0.22  →   0.35   ↑ slow improvement
-account/login:     0.45  →   0.42  →   0.40   ↓ getting worse — investigate
+                              Iter 1    Iter 2    Iter 3
+fork-detection-complex:        0.20  →   0.35  →   0.48   ↑ improving (hard topic, good signal)
+plan-competing-ideas:          0.22  →   0.25  →   0.28   ↑ slow (may need better source material)
+fork-detection-basic:          0.78  →   0.82  →   0.85   → plateau (expected — easy topic)
+kp-breakthrough:               0.45  →   0.42  →   0.40   ↓ investigate (may need grader fix)
 ```
 
-If a topic's score drops between iterations, your changes may have negatively affected it (e.g., grader changes that help one topic but hurt another). Check the grader reasons for that topic in both iterations.
+If a topic's score drops between iterations, your changes may have negatively affected it.
 
 ---
 
@@ -288,4 +427,24 @@ curl -X POST http://localhost:9090/finetune/topic-hierarchy/generate \
   }'
 ```
 
-The `seed_topics` parameter is particularly useful — extract section headings from documents and pass them as seeds for a more grounded hierarchy.
+The `seed_topics` parameter is useful — but pass **skill descriptions** not document headings. Instead of `["Chapter 3: Tactical Motifs"]`, pass `["Fork Detection", "Pin Recognition", "Combination Calculation"]`.
+
+---
+
+## Research Sources
+
+| Paper / Source | arXiv / URL | Key Finding for Topic Design |
+|---------------|-------------|------------------------------|
+| "On Diversity of Synthetic Data" | arXiv:2410.15226 | More topics > more examples/topic. ~20 examples/topic sweet spot |
+| STEPS — Skill Taxonomy | arXiv:2601.03676 | Skill-based hierarchies outperform content-based |
+| TAGS — From Tags to Trees | arXiv:2601.13995 | Hierarchical tree; 5% of data outperformed full dataset |
+| DeepSeek-R1 | arXiv:2501.12948 | Organized by capability domain, not content structure |
+| DAPO | arXiv:2503.14476 | Dynamic sampling filters zero-variance prompts |
+| "Hard Examples Are All You Need" | arXiv:2508.14094 | Hardest 10% yields 47% gains; easy yields 3-15% |
+| "No Prompt Left Behind" | arXiv:2509.21880 | 30-99% of prompts per batch are zero-variance |
+| F-GRPO | arXiv:2602.06717 | Down-weight high-success prompts → 4x fewer rollouts |
+| GRPO-LEAD | arXiv:2504.09696 | Difficulty-weighted advantage scaling |
+| AceGRPO | arXiv:2602.07906 | Adaptive curriculum: allocate to "learning frontier" |
+| Reinforce-Ada | arXiv:2510.04996 | Dynamic budget allocation → 2x convergence speedup |
+| DRA-GRPO | arXiv:2505.09655 | Diversity-aware rewards; 7K samples sufficient |
+| OpenAI RFT Guide | platform.openai.com | Works with ~100 examples; quality > quantity |

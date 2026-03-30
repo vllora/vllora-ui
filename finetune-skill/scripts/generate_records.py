@@ -178,6 +178,45 @@ def compose_system_prompt(root_prompt: str, ancestors: list[dict], leaf: dict) -
 # Topic record allocation
 # ---------------------------------------------------------------------------
 
+def load_eval_scores(eval_scores_path: Path) -> dict[str, float]:
+    """Load per-topic average eval scores from a JSON file.
+
+    Expected format: {"topic_id": avg_score, ...} where scores are 0.0-1.0.
+    Can also accept a list of {topic, avg_score} objects.
+    """
+    data = json.loads(eval_scores_path.read_text())
+    if isinstance(data, list):
+        return {item["topic"]: item["avg_score"] for item in data}
+    return data
+
+
+def classify_difficulty(avg_score: float) -> str:
+    """Classify a topic's difficulty based on base model eval score.
+
+    Hard = model gets 0-30% (most learning signal for GRPO).
+    Medium = model gets 30-70% (good variance).
+    Easy = model gets 70-100% (quickly becomes zero-variance).
+
+    Based on arXiv:2508.14094 ("Hard Examples Are All You Need"):
+    training on hardest 10% yields 47% gains vs 3-15% for easy.
+    """
+    if avg_score <= 0.3:
+        return "hard"
+    if avg_score <= 0.7:
+        return "medium"
+    return "easy"
+
+
+# Default difficulty weights (arXiv:2508.14094, arXiv:2509.21880)
+# Hard topics get the most records because GRPO learning signal is strongest there.
+# Easy topics get fewer because they quickly become zero-variance (zero gradient).
+DIFFICULTY_WEIGHTS = {
+    "hard": 0.45,    # 40-50% of total records
+    "medium": 0.35,  # 30-40% of total records
+    "easy": 0.20,    # 10-20% of total records
+}
+
+
 def compute_topic_record_counts(
     leaves: list[dict],
     relations: list[dict],
@@ -185,21 +224,63 @@ def compute_topic_record_counts(
     min_per_topic: int,
     max_per_topic: int,
     weight_by_source: bool = False,
+    weight_by_difficulty: bool = False,
+    eval_scores: dict[str, float] | None = None,
 ) -> dict[str, int]:
     """Compute per-topic record counts.
 
     Default: equal distribution — every leaf topic gets ``records_per_topic``.
-    This matches expected inference distribution (users query all topics)
-    and avoids over-investing in topics with verbose source material.
-    See OpenAI RFT Guide: training distribution should approximate
-    inference distribution; arXiv:2508.14094: difficulty >> volume.
+
+    With ``weight_by_difficulty=True`` + ``eval_scores``: distributes based on
+    base model performance. Hard topics (0-30% success) get 40-50% of records,
+    medium (30-70%) get 30-40%, easy (70-100%) get 10-20%. This maximizes GRPO
+    learning signal (arXiv:2508.14094: hard examples yield 47% gains;
+    arXiv:2509.21880: 30-99% of easy prompts become zero-variance).
+    Topics without eval scores default to "medium" difficulty.
 
     With ``weight_by_source=True``: proportional to linked source parts
-    (legacy behaviour). Max imbalance ratio is clamped to 3:1 to prevent
-    majority-topic overfitting (OpenAI SFT best practices).
+    (legacy behaviour). Max imbalance ratio is clamped to 3:1.
 
     Results are always clamped to [min_per_topic, max_per_topic].
     """
+    if weight_by_difficulty:
+        # Classify each topic by difficulty
+        topic_difficulty: dict[str, str] = {}
+        for leaf in leaves:
+            score = (eval_scores or {}).get(leaf["id"])
+            if score is not None:
+                topic_difficulty[leaf["id"]] = classify_difficulty(score)
+            else:
+                topic_difficulty[leaf["id"]] = "medium"  # default if no eval data
+
+        # Group topics by difficulty tier
+        tiers: dict[str, list[str]] = {"hard": [], "medium": [], "easy": []}
+        for leaf in leaves:
+            tiers[topic_difficulty[leaf["id"]]].append(leaf["id"])
+
+        # Calculate total records budget
+        total_budget = records_per_topic * len(leaves)
+
+        # Allocate budget per tier, then distribute within tier
+        result: dict[str, int] = {}
+        for tier, weight in DIFFICULTY_WEIGHTS.items():
+            tier_topics = tiers[tier]
+            if not tier_topics:
+                continue
+
+            tier_budget = round(total_budget * weight)
+            per_topic = max(1, round(tier_budget / len(tier_topics)))
+
+            for topic_id in tier_topics:
+                result[topic_id] = max(min_per_topic, min(per_topic, max_per_topic))
+
+        # Ensure all leaves have an entry (edge case: empty tier reassignment)
+        for leaf in leaves:
+            if leaf["id"] not in result:
+                result[leaf["id"]] = max(min_per_topic, min(records_per_topic, max_per_topic))
+
+        return result
+
     if not weight_by_source:
         clamped = max(min_per_topic, min(records_per_topic, max_per_topic))
         return {leaf["id"]: clamped for leaf in leaves}
@@ -216,7 +297,7 @@ def compute_topic_record_counts(
     # severe imbalance at 10:1, keep tighter for small datasets)
     MAX_WEIGHT_RATIO = 3.0
 
-    result: dict[str, int] = {}
+    result = {}
     for leaf in leaves:
         raw_weight = parts_per_topic[leaf["id"]] / avg_parts
         weight = min(raw_weight, MAX_WEIGHT_RATIO)
@@ -550,6 +631,17 @@ def main() -> None:
         help="Maximum records per topic regardless of weighting (default: 50)",
     )
     parser.add_argument(
+        "--weight-by-difficulty", action="store_true",
+        help="Weight record counts by base model difficulty. Hard topics (0-30%% success) get 40-50%% "
+             "of records, medium (30-70%%) get 30-40%%, easy (70-100%%) get 10-20%%. "
+             "Requires --eval-scores. Based on arXiv:2508.14094.",
+    )
+    parser.add_argument(
+        "--eval-scores",
+        help="Path to per-topic eval scores JSON (required with --weight-by-difficulty). "
+             'Format: {"topic_id": avg_score, ...} where scores are 0.0-1.0.',
+    )
+    parser.add_argument(
         "--weight-by-source", action="store_true",
         help="Weight record counts by number of linked source parts instead of equal distribution. "
              "Max imbalance ratio clamped to 3:1.",
@@ -571,6 +663,10 @@ def main() -> None:
 
     if args.upload_incremental and not args.workflow_id:
         print("Error: --workflow-id required with --upload-incremental", file=sys.stderr)
+        sys.exit(1)
+
+    if args.weight_by_difficulty and not args.eval_scores:
+        print("Error: --eval-scores required with --weight-by-difficulty", file=sys.stderr)
         sys.exit(1)
 
     topics_path = Path(args.topics)
@@ -596,20 +692,44 @@ def main() -> None:
     leaves = find_leaf_topics(topics)
     topic_index = build_topic_index(topics)
 
-    # Compute record counts per topic (equal by default, source-weighted with --weight-by-source)
+    # Load eval scores if difficulty-weighted distribution requested
+    eval_scores: dict[str, float] | None = None
+    if args.eval_scores:
+        eval_scores_path = Path(args.eval_scores)
+        if not eval_scores_path.exists():
+            print(f"Error: Eval scores file not found: {eval_scores_path}", file=sys.stderr)
+            sys.exit(1)
+        eval_scores = load_eval_scores(eval_scores_path)
+
+    # Compute record counts per topic
     topic_counts = compute_topic_record_counts(
         leaves, relations, args.records_per_topic, args.min_per_topic, args.max_per_topic,
         weight_by_source=args.weight_by_source,
+        weight_by_difficulty=args.weight_by_difficulty,
+        eval_scores=eval_scores,
     )
 
-    strategy = "weighted by source parts (max 3:1 ratio)" if args.weight_by_source else "equal"
+    if args.weight_by_difficulty:
+        strategy = "weighted by difficulty (hard: 45%, medium: 35%, easy: 20%)"
+    elif args.weight_by_source:
+        strategy = "weighted by source parts (max 3:1 ratio)"
+    else:
+        strategy = "equal"
     total_planned = sum(topic_counts.values())
     print(f"Loaded: {len(topics)} topics ({len(leaves)} leaves), {len(relations)} relations, {len(parts)} parts")
     print(f"Planned: {total_planned} records (target {args.records_per_topic}/topic, "
           f"range [{args.min_per_topic}, {args.max_per_topic}], distribution: {strategy})")
     for leaf in leaves:
         part_count = sum(1 for r in relations if r["topic_identifier"] == leaf["id"])
-        print(f"  {leaf['name']}: {topic_counts[leaf['id']]} records ({part_count} source parts)")
+        difficulty_info = ""
+        if args.weight_by_difficulty and eval_scores:
+            score = eval_scores.get(leaf["id"])
+            if score is not None:
+                tier = classify_difficulty(score)
+                difficulty_info = f", {tier} (score: {score:.2f})"
+            else:
+                difficulty_info = ", medium (no eval data)"
+        print(f"  {leaf['name']}: {topic_counts[leaf['id']]} records ({part_count} source parts{difficulty_info})")
     if parallel > 1:
         print(f"Outer parallelism: {parallel} topics | Inner parallelism: up to {len(PROMPT_TYPES)} calls/topic")
 

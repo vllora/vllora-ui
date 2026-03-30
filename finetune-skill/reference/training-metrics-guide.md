@@ -10,9 +10,43 @@ vLLora uses **GRPO (Group Relative Policy Optimization)** for reinforcement fine
 
 - **Reward source**: Your grader script (`grader.js`) — NOT a learned reward model. The grader runs on each candidate completion and returns a score (0-1). This means reward quality depends entirely on grader quality.
 - **Training provider**: vLLora cloud (LangDB) running GRPO on the base model (e.g., Qwen3.5-4B).
+- **Training stack**: Unsloth + HuggingFace TRL `GRPOTrainer`. Unsloth is an optimization wrapper (90% VRAM reduction) around TRL — the core training loop, loss computation, and metric logging are all TRL's code. (Ref: [unsloth.ai/blog/grpo](https://unsloth.ai/blog/grpo))
 - **Data format**: RFT — system + user messages only (no assistant messages). The model generates its own completions during training.
 - **Defaults**: `learning_rate=1e-6`, `response_candidates_count=8` (G=8), `max_output_tokens=512`.
 - **Metrics**: Reported per training step via the cloud API. The UI displays them in real-time charts with auto-generated insights.
+
+### Metric Scale Warning
+
+⚠️ **Absolute metric values (loss, KL, grad_norm) vary by 1000x+ depending on TRL's `loss_type` setting.** TRL supports four normalization modes:
+
+| loss_type | Normalization | Typical loss range |
+|-----------|--------------|-------------------|
+| `"dapo"` (TRL default) | Total active tokens in global batch | 0.01–1.0 |
+| `"grpo"` (original) | Per-sequence length, then average over group | 0.1–10 |
+| `"dr_grpo"` | Global constant (max_length × G) | varies |
+| `"bnpo"` | Active tokens in local batch | varies |
+
+Our GCP training instance may not explicitly set `loss_type`, so it uses whatever TRL default is installed. Additionally, Unsloth's `unsloth_train()` fixes a [universal gradient accumulation bug](https://unsloth.ai/blog/gradient) where naive averaging inflates loss by a factor of `gradient_accumulation_steps`. If vanilla TRL `train()` is used, loss and gradients will be proportionally inflated.
+
+### Actual TRL/Unsloth Metric Ranges (from real training runs)
+
+These are confirmed values from actual Unsloth+TRL GRPO training (Ref: [open-r1#239](https://github.com/huggingface/open-r1/issues/239), [AMD Unsloth tutorial](https://rocm.docs.amd.com/projects/ai-developer-hub/en/latest/notebooks/fine_tune/unsloth_Llama3_1_8B_GRPO.html)):
+
+| Metric | TRL DAPO range | Notes |
+|--------|---------------|-------|
+| loss | 0.0 → 0.0001-0.002 | Starts at 0 (expected), rises slowly. Can spike to ~0.2 |
+| grad_norm | 0.33-1.66 | With default max_grad_norm=1.0 |
+| KL | 0.0004 → 0.01-0.04 | Can spike to ~5.0. Only logged when β>0 |
+| reward | -0.08 to 0.92 | Depends on grader scale |
+| reward_std | 0.0 to 0.87 | Batch-level statistic |
+| clip_ratio | 0.0 to 1.0 | 0.0 is normal at start |
+
+**If your values are 1000x+ higher** (e.g., loss=485, KL=488K, grad_norm=16K), the backend is likely using non-DAPO loss_type or has the gradient accumulation bug. Reward metrics are unaffected (always on 0-1 grader scale).
+
+**Unsloth-specific known issues** (Ref: [Unsloth#3006](https://github.com/unslothai/unsloth/issues/3006), [Unsloth#2824](https://github.com/unslothai/unsloth/issues/2824)):
+- `loss=0 + grad_norm=NaN`: Missing LoRA adapters or `gradient_accumulation_steps > 1` bug. Fix: verify `FastLanguageModel.get_peft_model()` called, try `gradient_accumulation_steps=1`.
+- `KL=NaN`: `mask_truncated_completions=True` with all completions truncated. Fix: increase `max_output_tokens`.
+- Reward doesn't increase for first 100-300 steps — this is normal. (Ref: [Unsloth RL guide](https://unsloth.ai/docs/get-started/reinforcement-learning-rl-guide), [HuggingFace GRPO exercise](https://huggingface.co/learn/llm-course/en/chapter12/6))
 
 ## Quick Decision Table
 
@@ -54,8 +88,9 @@ vLLora uses **GRPO (Group Relative Policy Optimization)** for reinforcement fine
 
 **`loss`** — Clipped surrogate policy loss (the GRPO objective).
 - **What it is**: The mathematical objective being minimized. Unlike SFT loss (where lower = better), GRPO loss starts near 0 and rises slightly as the model starts learning. It measures how much the current policy disagrees with the generation policy, weighted by advantages. A small positive loss means the model is making controlled updates.
-- Healthy: 0.01-0.1. Loss starts near 0 (on-policy) and rises slightly as policy diverges from generation distribution.
-- Red flag: Stuck at 0 (zero advantages), spikes sharply (instability), goes negative (numerical issues).
+- **⚠️ SCALE WARNING**: Absolute loss values vary by 1000x+ across backends depending on aggregation method. TRL uses per-token averaging (typical 0.0-0.2). verl supports `token-mean`, `seq-mean-token-sum`, and `seq-mean-token-mean`. Some backends report summed loss (~500 for the same training run). **Do NOT use absolute thresholds** — use trend analysis and NaN/stuck-at-zero detection only. (Ref: TRL#2995 normalization bug, verl docs)
+- Healthy (TRL-scale per-token avg): 0.01-0.1. Loss starts near 0 (on-policy) and rises slightly as policy diverges from generation distribution.
+- Red flag: Stuck at 0 (zero advantages), NaN/Inf (catastrophic numerical failure), sharp spikes relative to recent values.
 - Note: This is NOT like cross-entropy loss — lower is not always better. Moderate loss = active learning.
 
 **`kl`** — KL divergence from the reference (base) model.
@@ -71,8 +106,9 @@ vLLora uses **GRPO (Group Relative Policy Optimization)** for reinforcement fine
 
 **`grad_norm`** — L2 norm of all gradients before clipping.
 - **What it is**: How aggressively is the model trying to update its weights this step? Think of gradients as the "force" pushing the model in a direction. Large forces = big changes = potential instability. Gradient clipping caps this force, but if the pre-clip norm is huge, the model is being pushed hard. NaN means the math broke (division by zero, often from empty batches).
-- Healthy: 0.5-2.0 with default clipping of 1.0.
-- Red flag: NaN (catastrophic — often from zero-length truncated completions), 10x spikes (bad batch).
+- **⚠️ SCALE WARNING**: Like loss and KL, absolute grad_norm varies by backend. TRL with `max_grad_norm=1.0` reports post-clip values (0.5-2.0). Backends without clipping or reporting pre-clip values can show 10K+. **Use z-score spike detection** (ZClip, arXiv:2504.02507): spike if `(value - mean) / std > 2.5`. This is scale-independent and the only paper-backed spike detection method.
+- Healthy (TRL-scale with clipping): 0.5-2.0.
+- Red flag: NaN (catastrophic — often from zero-length truncated completions), z-score > 2.5 relative to the run's own distribution (ZClip, arXiv:2504.02507).
 - Fix: Reduce LR, tighten gradient clipping. If NaN, fix truncation issue first.
 
 **`learning_rate`** — Current learning rate from the schedule.

@@ -94,29 +94,32 @@ def analyze_metrics(data) -> dict:
         })
 
     # KL divergence — GRPO-aware: KL alone is NOT diagnostic with beta=0
-    # Ref: training-metrics-guide.md §KL; DAPO/TRL default beta=0 (no KL penalty)
-    # High KL + improving reward = NORMAL for GRPO. Only alert if KL is high AND reward isn't improving.
+    # Ref: training-metrics-guide.md §KL; DAPO (arXiv:2503.14476) removes KL entirely;
+    # TRL defaults beta=0; GRPO++ survey confirms KL monitoring abandoned for reasoning models.
+    #
+    # No paper specifies absolute KL thresholds for GRPO. KL scale varies 1000x+ across
+    # backends (TRL per-token avg vs summed). We only flag the combination of:
+    # KL rising + reward NOT improving = potential reward hacking (DAPO §4, "Tricks or Traps")
     kl_values = [s.get("kl", 0) for s in steps]
     kl_max = max(kl_values)
     kl_final = last.get("kl", 0)
-    if kl_max > 100.0 and reward_trend != "improving":
-        alerts.append({
-            "severity": "CRITICAL",
-            "metric": "kl",
-            "message": f"KL divergence peaked at {kl_max:.2f} with {reward_trend} reward — catastrophic drift without improvement",
-        })
-    elif kl_max > 10.0 and reward_trend != "improving":
+    kl_start = first.get("kl", 0)
+    # Monotonic rise check: is KL consistently increasing?
+    kl_monotonic = len(kl_values) >= 4 and all(
+        kl_values[i] <= kl_values[i + 1] for i in range(len(kl_values) - 3, len(kl_values) - 1)
+    )
+    if kl_monotonic and reward_trend != "improving":
         alerts.append({
             "severity": "WARNING",
             "metric": "kl",
-            "message": f"KL divergence peaked at {kl_max:.2f} with {reward_trend} reward — monitor output quality",
+            "message": f"KL divergence rising steadily ({kl_start:.2f} → {kl_final:.2f}) with {reward_trend} reward — model drifting without improvement, inspect output quality",
         })
-    elif kl_max > 100.0:
-        # KL very high but reward is improving — informational only
+    elif kl_monotonic and kl_start > 0 and kl_final > kl_start * 10:
+        # Very large KL increase even with improving reward — informational
         alerts.append({
             "severity": "INFO",
             "metric": "kl",
-            "message": f"KL divergence {kl_max:.2f} (high but reward is improving — expected with beta=0)",
+            "message": f"KL divergence rose significantly ({kl_start:.2f} → {kl_final:.2f}) — expected with beta=0, but monitor output quality",
         })
 
     # Clipping ratio (completions truncated at max_output_tokens)
@@ -145,32 +148,46 @@ def analyze_metrics(data) -> dict:
                     "message": f"Clipping ratio rising ({first_avg:.0%} → {last_avg:.0%}) — model generating longer responses, may need higher max_output_tokens",
                 })
 
+    # Pre-compute grad values (needed by both loss and grad_norm checks)
+    grad_values = [s.get("grad_norm", 0) for s in steps]
+
     # Loss stability
-    # Ref: training-metrics-guide.md §Loss; DeepSeekMath — GRPO loss starts near 0, rises slightly
-    # Stuck at 0 = zero advantages; NaN = catastrophic failure (Unsloth docs)
+    # GRPO loss starts at 0.0 (expected: ratio=1.0, zero-mean advantages). Healthy DAPO
+    # range: 0.0001-0.002 after hundreds of steps. (Ref: open-r1#239, AMD Unsloth tutorial)
+    # NaN = catastrophic. Stuck at 0 + NaN grad = Unsloth bug (issues #3006, #2824).
     loss_values = [s.get("loss", 0) for s in steps]
     has_nan = any(math.isnan(v) or math.isinf(v) for v in loss_values if isinstance(v, (int, float)))
+    grad_has_nan = any(
+        not math.isfinite(v) for v in grad_values if isinstance(v, (int, float))
+    ) if grad_values else False
     if has_nan:
         alerts.append({
             "severity": "CRITICAL",
             "metric": "loss",
-            "message": "NaN/Inf detected in loss — training numerically unstable",
+            "message": "NaN/Inf detected in loss — training numerically unstable. Check for zero-length completions or degenerate batches.",
+        })
+    elif len(loss_values) > 3 and all(v == 0.0 for v in loss_values) and grad_has_nan:
+        # Unsloth-specific: loss=0 + grad_norm=NaN = known bug
+        # Ref: Unsloth issues #3006, #2824
+        alerts.append({
+            "severity": "CRITICAL",
+            "metric": "loss",
+            "message": "Loss stuck at 0 with NaN gradients — known Unsloth issue. Verify LoRA adapters applied (FastLanguageModel.get_peft_model) and try gradient_accumulation_steps=1.",
         })
     elif len(loss_values) > 3 and all(v == 0.0 for v in loss_values):
-        # Ref: arXiv:2503.06639 — GRPO loss = 0 when all advantages are zero
         alerts.append({
             "severity": "CRITICAL",
             "metric": "loss",
             "message": "Loss stuck at exactly 0.0 — zero advantages, model learning nothing. Check grader signal (reward_std, frac_reward_zero_std)",
         })
 
-    # Grad norm spikes
-    # Ref: training-metrics-guide.md §Grad Norm; healthy 0.5-2.0 with default max_grad_norm=1.0
-    # NaN = catastrophic (Unsloth: often from zero-length truncated completions)
-    grad_values = [s.get("grad_norm", 0) for s in steps]
+    # Grad norm spikes — z-score based detection (scale-independent).
+    # Ref: ZClip (arXiv:2504.02507) — z-score spike detection with z_thres=2.5 on EMA-smoothed
+    # gradient norms. This is the only paper-backed spike detection method found.
+    # Also: Unsloth — NaN often from zero-length truncated completions.
+    # TRL healthy range: 0.33-1.66 with default max_grad_norm=1.0.
+    # (Ref: open-r1#239, AMD Unsloth tutorial)
     grad_finite = [v for v in grad_values if isinstance(v, (int, float)) and math.isfinite(v)]
-    grad_median = sorted(grad_finite)[len(grad_finite) // 2] if grad_finite else 0
-    grad_max = max(grad_finite) if grad_finite else 0
     has_nan_grad = any(not math.isfinite(v) for v in grad_values if isinstance(v, (int, float)))
     if has_nan_grad:
         alerts.append({
@@ -178,18 +195,20 @@ def analyze_metrics(data) -> dict:
             "metric": "grad_norm",
             "message": "NaN/Inf grad_norm — numerical overflow, likely from zero-length completions or bad chat template",
         })
-    elif grad_max > 1000:
-        alerts.append({
-            "severity": "CRITICAL",
-            "metric": "grad_norm",
-            "message": f"Grad norm {grad_max:.1f} (median={grad_median:.1f}) — catastrophic instability, halve learning rate",
-        })
-    elif grad_max > 100:
-        alerts.append({
-            "severity": "WARNING",
-            "metric": "grad_norm",
-            "message": f"Grad norm spike {grad_max:.1f} (median={grad_median:.1f}) — training instability, consider reducing LR",
-        })
+    elif len(grad_finite) >= 5:
+        # ZClip-style z-score detection: spike if z > 2.5 (recommended range 2.0-3.0)
+        # Ref: arXiv:2504.02507 §3 — "z_thres = 2.5"
+        mean_g = sum(grad_finite) / len(grad_finite)
+        std_g = math.sqrt(sum((v - mean_g) ** 2 for v in grad_finite) / len(grad_finite))
+        grad_max = max(grad_finite)
+        if std_g > 0:
+            z_score = (grad_max - mean_g) / std_g
+            if z_score > 2.5:
+                alerts.append({
+                    "severity": "WARNING",
+                    "metric": "grad_norm",
+                    "message": f"Grad norm spike detected (z-score={z_score:.1f}, max={grad_max:.1f}, mean={mean_g:.1f}) — may cause training instability",
+                })
 
     # Weak training signal
     # Thresholds: healthy 0.05-0.3, warn <0.05, critical <0.01
