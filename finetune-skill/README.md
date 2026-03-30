@@ -375,30 +375,27 @@ This pattern repeats at every decision point: extract → review with user → f
 
 ---
 
-## Operating Mode: Data Prep + Handoff
+## Operating Mode: Full Pipeline
 
-The skill focuses on one mode: **prepare data in the CLI, hand off to the UI**.
+The skill runs the **entire finetune pipeline end-to-end** — from document extraction through evaluation, iteration, and training. The UI provides visual feedback (score distributions, training metrics charts) while the skill drives the pipeline.
 
 ```
-Agent (CLI)                                      UI (Lucy)
-───────────                                      ─────────
-1. Define objective                              7. Evaluate (visual scores)
-2. Read documents, extract knowledge             8. Iterate (tune grader, fix records)
-3. Build topic hierarchy                         9. Train (monitor metrics)
-4. Generate JSONL training data                  10. Deploy & test
+Agent (CLI) — Full Pipeline
+───────────────────────────
+1. Define objective
+2. Extract documents (parallel via knowledge-extractor subagents)
+3. Build topic hierarchy + relations (via relation-builder subagent)
+4. Generate JSONL training data
 5. Write grader
-6. Push to gateway via API:
-   POST /finetune/workflows
-   POST /finetune/workflows/{id}/knowledge
-   POST /finetune/workflows/{id}/records
-   POST /finetune/workflows/{id}/topics
-   PATCH /finetune/workflows/{id}/evaluator
-   → Agent continues with eval + training (Steps 7-9)
+6. Verify gateway state
+7. Start eval + training (parallel, cloud)
+8. Analyze results (per-topic, dead-weight filtering)
+9. Iterate (fix data/grader, re-eval, retrain)
 ```
 
 **Requires**: Gateway running at localhost:9090.
 
-The skill runs the **full pipeline end-to-end** including eval and training (Steps 7-9). The `reference/api-reference.md` documents all 76 gateway endpoints. The UI provides visual feedback (score distributions, training metrics charts) while the skill drives the pipeline.
+The `reference/api-reference.md` documents all 76 gateway endpoints. Each step uploads to the gateway immediately — the UI shows progress in real time.
 
 ---
 

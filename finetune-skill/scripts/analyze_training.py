@@ -427,16 +427,16 @@ def main() -> None:
     elif has_api_args:
         try:
             epoch_data = fetch_epoch_evals(args.base_url, args.workflow_id, args.job_id)
-        except requests.RequestException:
-            pass  # Per-epoch evals may not be available yet
+        except requests.RequestException as e:
+            print(f"Warning: Could not fetch epoch evals: {e}", file=sys.stderr)
 
     # Fetch job status
     job_status = None
     if has_api_args:
         try:
             job_status = fetch_job_status(args.base_url, args.workflow_id, args.job_id)
-        except requests.RequestException:
-            pass
+        except requests.RequestException as e:
+            print(f"Warning: Could not fetch job status: {e}", file=sys.stderr)
 
     # Save fetched data
     if args.save and has_api_args:

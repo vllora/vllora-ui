@@ -94,7 +94,7 @@ For records, encode the topic in the ID (e.g., `billing-refunds-001`) so you can
 1. **Read the document structure** — chapters, sections, headings map naturally to topics
 2. **Group related sections** under parent topics using `parent_id`
 3. **Link topics to source parts** — after uploading, use the topic-source relations API to trace back later
-4. **Create leaf topics** specific enough to generate 5-20 unique training examples
+4. **Create leaf topics** specific enough to generate ~10 unique training examples each
 
 **Example: From a product manual**
 ```
@@ -141,7 +141,7 @@ Product Manual
 |-----------|-----|
 | 3-7 root topics | Too few = too broad; too many = fragmented |
 | 2-3 levels deep | Deeper = more specific but harder to balance |
-| 5-20 examples per leaf | Fewer = undertrained; more may overfit |
+| ~10 examples per leaf (default) | Fewer = undertrained; scale with `--records-per-topic` |
 | Descriptive names | Helps the agent generate relevant data |
 | Add descriptions | Guides data generation with specific scope |
 
