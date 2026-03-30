@@ -52,12 +52,13 @@ Each prompt type uses different instructions and temperatures:
 
 ### 2. Source-Weighted Topic Distribution
 
-Not all topics have equal source material. A topic with 12 linked knowledge parts can support more diverse, harder questions than one with 2 parts.
+By default, every leaf topic gets an **equal number of records** (`--records-per-topic`). This is the recommended approach:
 
-- **"No Prompt Left Behind"** (arXiv:2509.21880, ICLR 2026): Prompts where all K sampled responses score the same contribute nothing to GRPO training. Generating redundant prompts from thin source material increases zero-variance frequency.
-- **"Hard Examples"** (arXiv:2508.14094): Topics with more source material can support more diverse questions, creating more outcome variance — the signal GRPO needs to learn.
+- **OpenAI RFT Guide**: Training distribution should approximate inference distribution. If users query all topics, training data should be balanced.
+- **"Hard Examples"** (arXiv:2508.14094): Difficulty matters far more than volume — 10 hard records yield 47% gains vs 3-15% for easy ones. Source material volume is not a proxy for difficulty.
+- **OpenAI SFT best practices**: "If 60% of training data has a certain behavior but only 5% should at inference time, you will get overabundance of that behavior."
 
-Formula: `adjusted_count = round(records_per_topic * (parts_for_topic / avg_parts))`, clamped to `[min_per_topic, max_per_topic]`.
+With `--weight-by-source`, records are distributed proportionally to linked source parts instead, with a **3:1 max imbalance ratio** to prevent majority-topic overfitting. Formula: `adjusted_count = round(records_per_topic * min(parts_for_topic / avg_parts, 3.0))`, clamped to `[min_per_topic, max_per_topic]`.
 
 ### 3. Two-Level Parallelism
 
@@ -77,7 +78,7 @@ This means a topic with 5 prompt types completes in ~1 LLM call time, not 5x.
 │                                                                             │
 │  3 key features:                                                            │
 │    1. Multi-call: 5 prompt types per topic (not 1 big call)                 │
-│    2. Source-weighted: topics with more parts get more records               │
+│    2. Equal distribution by default (--weight-by-source for proportional)    │
 │    3. Two-level parallelism: topics concurrent + calls-per-topic concurrent  │
 └─────────────────────────────────────────────────────────────────────────────┘
 
@@ -116,19 +117,25 @@ This means a topic with 5 prompt types completes in ~1 LLM call time, not 5x.
                               │
                               ▼
   ┌──────────────────────────────────────────────────────────────────────┐
-  │              SOURCE-WEIGHTED RECORD DISTRIBUTION                     │
+  │                    RECORD DISTRIBUTION                                │
   │                                                                      │
   │  compute_topic_record_counts():                                      │
-  │    For each leaf, count linked parts via relations.json               │
-  │    weight = parts_for_topic / avg_parts_across_topics                 │
+  │                                                                      │
+  │  DEFAULT (equal):                                                    │
+  │    Every leaf topic gets records_per_topic (clamped to min/max)       │
+  │    Example (--records-per-topic 25, 4 topics):                       │
+  │      Topic A: 25 records    Topic C: 25 records                      │
+  │      Topic B: 25 records    Topic D: 25 records                      │
+  │                                                                      │
+  │  WITH --weight-by-source:                                            │
+  │    weight = min(parts_for_topic / avg_parts, 3.0)  ← 3:1 cap        │
   │    adjusted = round(records_per_topic * weight)                       │
   │    clamped to [--min-per-topic, --max-per-topic]                      │
-  │                                                                      │
-  │  Example (--records-per-topic 25, avg 6 parts):                      │
-  │    Topic A: 12 parts → weight 2.0 → 50 records (capped at max)       │
-  │    Topic B:  3 parts → weight 0.5 → 13 records                       │
-  │    Topic C:  6 parts → weight 1.0 → 25 records                       │
-  │    Topic D:  2 parts → weight 0.3 → 10 records (floored at min)      │
+  │    Example (--records-per-topic 25, avg 6 parts):                    │
+  │      Topic A: 12 parts → weight 2.0 → 50 records (capped at max)    │
+  │      Topic B:  3 parts → weight 0.5 → 13 records                    │
+  │      Topic C:  6 parts → weight 1.0 → 25 records                    │
+  │      Topic D:  2 parts → weight 0.3 → 10 records (floored at min)   │
   └──────────────────────────────────────────────────────────────────────┘
 
 
@@ -136,7 +143,7 @@ This means a topic with 5 prompt types completes in ~1 LLM call time, not 5x.
  PHASE 2: PER-TOPIC GENERATION (outer parallel: up to 8 topics concurrently)
 ═══════════════════════════════════════════════════════════════════════════════
 
-  For EACH leaf topic (with its weighted record count):
+  For EACH leaf topic (with its allocated record count):
   ┌─────────────────────────────────────────────────────────────────────────┐
   │                                                                         │
   │  ┌─ Step A: Gather Source Material ──────────────────────────────────┐  │
@@ -481,9 +488,10 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
 
 | Arg | Default | Purpose |
 |-----|---------|---------|
-| `--records-per-topic` | 25 | Target records per leaf topic (actual varies by source weighting) |
+| `--records-per-topic` | 25 | Target records per leaf topic (equal for all topics by default) |
 | `--min-per-topic` | 10 | Floor — even sparse topics get at least this many |
 | `--max-per-topic` | 50 | Cap — prevents one topic from dominating |
+| `--weight-by-source` | false | Distribute proportionally to linked source parts (max 3:1 ratio) |
 | `--parallel` | 1 | Outer parallelism: topics concurrently (max 8). Inner parallelism always on. |
 | `--model` | gpt-4o-mini | LLM model for generation |
 | `--append` | false | Append to existing file instead of overwriting |
@@ -637,7 +645,7 @@ sqlite3 $DB "SELECT topic, COUNT(*) FROM workflow_records WHERE workflow_id='$WF
 ### Topic distribution is heavily skewed
 
 - **Symptom**: One topic has 50 records, another has 3
-- **Check**: The script prints per-topic planned counts at startup. If weighting looks wrong, adjust `--min-per-topic` / `--max-per-topic`
+- **Check**: The script prints per-topic planned counts at startup. Default is equal distribution. If using `--weight-by-source` and weighting looks wrong, adjust `--min-per-topic` / `--max-per-topic` or switch back to equal (drop the flag)
 
 ---
 
