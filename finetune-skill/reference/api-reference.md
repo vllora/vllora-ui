@@ -559,7 +559,9 @@ curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
       "max_output_tokens": 1000,
       "temperature": 1.0,
       "top_p": 1.0,
-      "response_candidates_count": 2
+      "response_candidates_count": 2,
+      "enable_thinking": false,
+      "reasoning_effort": "medium"
     },
     "chunk_size": 100,
     "node_count": 1,
@@ -622,6 +624,8 @@ curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
 | `temperature` | 1.0 | 1.0 | Sampling temperature |
 | `top_p` | 1.0 | 1.0 | Top-p nucleus sampling |
 | `response_candidates_count` | 2 | **8** | Candidates per prompt. GRPO needs G≥8 for meaningful gradients |
+| `enable_thinking` | provider/model default | model-dependent | Enables/disables explicit reasoning mode for models that support it (e.g. Qwen thinking mode) |
+| `reasoning_effort` | provider/model default | model-dependent | Optional effort hint (for example `low`, `medium`, `high`) used only by models/providers that support it |
 
 > **Note:** `finetune.py create-training` sends GRPO-optimized values by default. If you call the API directly (raw curl), you must set these explicitly or you'll get the gateway fallbacks, which are SFT-oriented and produce weak GRPO training signal.
 
@@ -632,6 +636,11 @@ curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
 | `node_count` | Nodes for distributed training |
 | `evaluator_version` | Which evaluator version to use |
 | `resume_mode` | Only for `checkpointed/{cloud_job_id}`. `weights-only` (default) or `full-state` |
+
+**Thinking/reasoning notes:**
+- `enable_thinking` and `reasoning_effort` are optional pass-through inference parameters.
+- If `reasoning_effort` is provided, it must be a non-empty string.
+- Unsupported providers/models ignore these fields safely.
 
 **Response:**
 ```json
