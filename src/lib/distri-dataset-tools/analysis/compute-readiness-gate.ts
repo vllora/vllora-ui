@@ -188,10 +188,15 @@ function computeGraderQualitySoftChecks(scores: readonly number[]): ReadinessChe
 
   return [
     {
-      id: 'score_concentration', label: 'Score Diversity', kind: 'soft',
+      // Hard fail at >70%: at K=8, most groups will score identically → zero gradient
+      // → wasted GPU hours. The grader is broken, not the data.
+      // Soft warn at 50-70%: some signal loss but training may still work.
+      // Research: RGR-GRPO (arXiv:2511.12344): rubric grading >> binary verification
+      id: 'score_concentration', label: 'Score Diversity',
+      kind: modeFrac > 0.70 ? 'hard' : 'soft',
       value: round4(modeFrac), threshold: `< ${THRESHOLDS.maxModeFrac}`,
       passed: modeFrac < THRESHOLDS.maxModeFrac,
-      suggestion: `${(modeFrac * 100).toFixed(0)}% of scores are exactly ${modeValue.toFixed(2)} — within-group variance will be small → weak gradients. Add granular criteria. [DAPO arXiv:2503.14476; threshold is a heuristic]`,
+      suggestion: `${(modeFrac * 100).toFixed(0)}% of scores are exactly ${modeValue.toFixed(2)} — within-group variance will be small → weak gradients. Redesign grader with multi-point rubric (0-7 scale). [DAPO arXiv:2503.14476; RGR-GRPO arXiv:2511.12344]`,
     },
     {
       id: 'high_score_frac', label: 'High Score Fraction', kind: 'soft',

@@ -31,16 +31,20 @@ The training data defines the *prompts* the model practices on. The grader defin
 ## The Pipeline
 
 ```
-Define Objective → Extract Docs → Build Topics → Generate Data → Write Grader → Verify
+Define Objective → Extract Docs → Build Topics → Generate Data → Write Grader → Validate
      ↓ upload         ↓ upload        ↓ upload       ↓ upload       ↓ upload
    (workflow)      (knowledge)      (topics)       (records)      (grader)
 
-                          ┌──────────────────────────────┐
-                          │   Eval-First Loop (fast)      │
-Verify → Evaluate ───────→│ Analyze → Readiness Gate ────→│──── PASS ──→ Train → Analyze → Done
-                          │      ↑         ↓ FAIL         │                ↓ bad
-                          │      └── Fix data/grader ─────┘            Iterate (back to Eval)
-                          └──────────────────────────────┘
+                   ┌─────────────────────────────────────────────────────────┐
+                   │                                                         │
+Validate → Data Quality Gate → Verify → Evaluate                             │
+               ↓ FAIL                      ↓                                 │
+          Fix data (cheap)          ┌──────────────────────────────┐         │
+               ↓                    │   Eval-First Loop (fast)      │         │
+          Re-validate               │ Analyze → Readiness Gate ────→│── PASS ─→ Train → Analyze → Done
+                                    │      ↑         ↓ FAIL         │            ↓ bad
+                                    │      └── Fix data/grader ─────┘        Iterate (back to Eval)
+                                    └──────────────────────────────┘
 ```
 
 **Each step uploads to the gateway immediately** — the vLLora UI shows progress in real time.
@@ -57,7 +61,7 @@ Verify → Evaluate ───────→│ Analyze → Readiness Gate ─�
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step <STEP_NAME> --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
-Step names: `create-workflow`, `extract`, `topics`, `relations`, `generate-data`, `grader`, `validate`, `upload-records`, `upload-grader`, `eval-N` (e.g. `eval-1`, `eval-2`), `readiness-pass`, `training`, `analyze`.
+Step names: `create-workflow`, `extract`, `topics`, `relations`, `generate-data`, `grader`, `validate`, `data-quality-gate`, `upload-records`, `upload-grader`, `eval-N` (e.g. `eval-1`, `eval-2`), `readiness-pass`, `difficulty-probe`, `training`, `analyze`.
 
 ### Working Directory
 
@@ -439,6 +443,48 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py finetune-project/trainin
 
 Checks: valid JSON, required fields, message structure, no assistant messages (RFT), duplicate IDs, record count (minimum 50, recommend 100-200+), and short user messages (< 10 chars). The `--topics` and `--parts` flags cross-reference `topic` and `source_parts` fields against the actual topic hierarchy and parts index — flagging any orphaned references. Fix errors before proceeding.
 
+### Step 5.5b: Data Quality Gate (pre-eval — do NOT skip)
+
+**⚠️ Run this BEFORE evaluation.** Eval costs ~45 min and LLM calls. Training costs hours of GPU time. This gate catches data issues that waste those resources — vague ground truths, prompt-answer misalignment, near-duplicate prompts, and low diversity. Fixing data here is 10-100x cheaper than discovering the problem after training.
+
+**Quick gate (free — always run):**
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py finetune-project/training.jsonl \
+  --topics finetune-project/topics.json
+```
+
+This runs Gate 1 (structural) and Gate 2 (diversity) — no API calls, instant results. Checks: duplicate IDs, prompt length, ground truth presence/quality, topic balance, near-duplicate detection, and semantic diversity.
+
+**Full gate (with LLM scoring — run on first pipeline pass or after regeneration):**
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py finetune-project/training.jsonl \
+  --topics finetune-project/topics.json \
+  --all-gates \
+  --sample 30 \
+  --save finetune-project/data-quality-report.json
+```
+
+This adds Gate 3 (ground truth quality — LLM scores each GT for specificity) and Gate 4 (alignment — LLM checks if GT answers the prompt). Samples 30 records by default to keep cost low.
+
+**Or via `finetune.py`:**
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py data-quality-gate \
+  --file finetune-project/training.jsonl \
+  --topics finetune-project/topics.json \
+  --all-gates --save finetune-project/data-quality-report.json
+```
+
+**Decision:** Exit 0 = PASS (proceed), exit 1 = FAIL (must fix), exit 2 = WARN (review priorities).
+
+**5 gates**: Structural (free), Diversity (free), Completion Length (free), GT Quality ($), Alignment ($). See [reference/data-quality-gate.md](reference/data-quality-gate.md) for gate details, thresholds, common failure patterns, and research citations.
+
+**Checkpoint** after data quality gate passes:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step data-quality-gate --project-dir finetune-project --workflow-id $WORKFLOW_ID
+```
+
+> See [reference/data-quality-gate.md](reference/data-quality-gate.md) for threshold details and research citations.
+
 ### Step 6: Verify & Hand Off
 
 Since each step uploaded data immediately, the gateway already has the full workflow. Verify everything landed correctly before handing off to the UI.
@@ -479,52 +525,16 @@ Eval → Readiness Gate → [FAIL] → Fix data/grader → Re-eval → ... → [
 The default is **512** — higher values increase cost per step (8 completions × N tokens each). Only increase if you see >50% clipping in training metrics.
 
 **7a-ii. Validate grader score distribution (CRITICAL for GRPO).**
-GRPO computes advantages as `(reward - mean) / std`. If all completions score identically → std=0 → advantage=0 → **zero gradient**. Run the grader on diverse sample responses and check the distribution:
+Dry-run the grader on 3-5 sample records with varying quality responses. Scores should spread across 0.2-0.9 — if all cluster at one value, GRPO gets zero gradient. See [reference/grader-writing.md](reference/grader-writing.md) for scoring patterns and red flags.
 
 ```bash
-# Dry-run grader on 3-5 records with varying quality responses
-# Check that scores SPREAD across 0-1, not cluster at extremes
 python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
   --workflow-id $WORKFLOW_ID --script grader.js \
   --row '{"messages": [{"role":"system","content":"..."}, {"role":"user","content":"..."}, {"role":"assistant","content":"Good detailed response..."}]}'
-
-python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
-  --workflow-id $WORKFLOW_ID --script grader.js \
-  --row '{"messages": [{"role":"system","content":"..."}, {"role":"user","content":"..."}, {"role":"assistant","content":"Short bad answer"}]}'
 ```
 
-**Red flags that predict training failure:**
-| Score Distribution | Problem | Fix |
-|---|---|---|
-| All scores 0.8-1.0 | Grader too lenient — GRPO gets no gradient | Add stricter criteria, penalize more flaws |
-| All scores 0.0-0.2 | Grader too strict OR base model too weak | Relax criteria, or try larger base model |
-| Only 0 or 1 (binary) | No partial credit → weak gradient signal | Add granular scoring (0.0, 0.3, 0.5, 0.7, 1.0) |
-| Same score for good and bad responses | Grader not discriminating | Rewrite grader criteria to differentiate quality |
-
-**The ideal distribution**: Scores spread across 0.2-0.9 with meaningful differentiation between good, mediocre, and bad responses.
-
-**7a-iii. Create a validation set for reward hacking detection.**
-RFT can suffer from **reward hacking** — the model learns to exploit grader weaknesses instead of genuinely improving. A held-out validation set detects this:
-
-```bash
-# Split training.jsonl into train (80%) and validation (20%)
-python3 -c "
-import json, random
-random.seed(42)
-with open('finetune-project/training.jsonl') as f:
-    records = [json.loads(l) for l in f]
-random.shuffle(records)
-split = int(len(records) * 0.8)
-train, val = records[:split], records[split:]
-with open('finetune-project/training.jsonl', 'w') as f:
-    for r in train: f.write(json.dumps(r) + '\n')
-with open('finetune-project/validation.jsonl', 'w') as f:
-    for r in val: f.write(json.dumps(r) + '\n')
-print(f'Split: {len(train)} train, {len(val)} validation')
-"
-```
-
-**Note:** The gateway does not support a separate validation upload. The split is local — `training.jsonl` (80%) is what gets uploaded and trained on. Keep `validation.jsonl` locally. After training completes, manually evaluate the finetuned model on the held-out validation prompts to check for reward hacking. If `train_reward_mean` is high but the model performs poorly on validation prompts → reward hacking.
+**7a-iii. Create a validation set (80/20 split) for reward hacking detection.**
+Split `training.jsonl` locally — train on 80%, keep 20% for post-training validation. After training, if `train_reward_mean` is high but validation performance is poor → reward hacking.
 
 #### 7b. Create eval job (eval-only — NO training yet)
 
@@ -563,53 +573,41 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
   --file evaluations/eval-001.json
 ```
 
-The readiness gate runs **3 hard checks** (grader quality) and **8 soft checks** (quality signals):
+The readiness gate runs **3 hard checks** (grader quality) and **8 soft checks** (quality signals). Hard checks ask "is the grader working?", NOT "is the base model good?" — GRPO can learn from low base model scores (DeepSeek R1-Zero: 15.6% → 71%).
 
-**Hard checks** — grader quality gates (must ALL pass). These ask "is the grader working?", NOT "is the base model good?" GRPO can learn from low base model scores — DeepSeek R1-Zero started at 15.6% and reached 71% (arXiv:2501.12948).
-
-| Check | Pass | Fail → Action | Research basis |
-|-------|------|---------------|----------------|
-| Sample count >= 50 | ✅ | Too few prompts — GRPO needs sufficient samples for stable advantage estimates | OpenAI RFT: "several dozen to a few hundred" |
-| Score std > 0.10 | ✅ | Grader not differentiating — when all completions score identically, advantages=0, zero gradient. Add criteria or partial credit | Zero-variance → zero gradient is fundamental to GRPO (DAPO §2.2). Threshold is a heuristic. |
-| Average score > 0.05 | ✅ | Near-zero means no signal at all — 0% success rate means RFT cannot bootstrap | OpenAI RFT: "If a model has a 0% success rate, you cannot bootstrap to higher performance" |
-
-**Soft checks** — quality signals (warnings, training can proceed). Low base model scores are expected — hard prompts are most valuable for GRPO learning (arXiv:2508.14094).
-
-| Check | Pass | Fail → Action | Research basis |
-|-------|------|---------------|----------------|
-| Score concentration < 50% at single value | ✅ | If >50% of scores are one value, within-group variance is small → weak gradients. Std check can miss this when outliers inflate overall std | DAPO (arXiv:2503.14476): filters uniform groups. Threshold is a heuristic. |
-| Fraction scores > 0.9 < 50% | ✅ | Grader may be too lenient — if most completions score near-identical, within-group variance is small → weak gradients | Heuristic. OpenAI recommends "smooth scores, not pass/fail stamps." |
-| Fraction exact 0/1 < 60% | ✅ | Continuous scoring is more sample-efficient — binary rewards only produce signal when a group has mixed outcomes (some correct, some incorrect). DeepSeek-R1 and DAPO used binary rewards successfully, so this is a warning, not a blocker. | DAPO §2.2: filters all-correct/all-incorrect groups. "No Prompt Left Behind" (arXiv:2509.21880): 30-99% of prompts have zero variance with binary rewards. |
-| Dead-weight (score < 0.1) < 50% | ✅ | Many zero-score records reduce sample efficiency. However, "No Prompt Left Behind" (arXiv:2509.21880) shows signal CAN be extracted from zero-variance prompts via entropy-guided shaping. DAPO uses dynamic sampling to skip them instead. | "No Prompt Left Behind": 30-99% zero-var is normal; argues for extracting signal, not filtering. |
-| Pass rate (>0.7) > 20% | ✅ | Low pass rate — but with K=8, pass@8 >> pass@1. Hard prompts are most valuable for learning. | arXiv:2508.14094: training on hardest 10% yields 30-40% gains vs 3-15% for easy examples. |
-| Prompt learnability > 30% | ✅ | Zero-variance prompts produce zero GRPO gradients. With dynamic sampling (DAPO), they're skipped. Without it, they waste compute. | DAPO §2.2: dynamic sampling filters groups where accuracy=0 or 1. |
-| Score-length correlation < 0.3 | ✅ | Grader may reward/punish length instead of quality — reward hacking risk. Dr. GRPO identifies length bias from per-token loss normalization. | Dr. GRPO (arXiv:2503.20783): identifies length bias problem; recommends removing length normalization. Threshold is a heuristic. |
-| Topic balance: no topic > 40% | ✅ | One topic dominates — training will over-optimize for it | Heuristic — balanced training data is standard ML practice. |
+**Hard checks** (must ALL pass): sample count >= 50, score std > 0.10, average score > 0.05.
 
 **Decision:**
-- **Exit code 0 (PASS)** → All checks passed → proceed to **Step 7d (Start Training)**
-- **Exit code 1 (FAIL)** → Hard check(s) failed → fix issues → return to **Step 7b (Re-eval)**. Apply fixes from Step 9a first.
-- **Exit code 2 (WARN)** → Only soft checks failed, or 1 hard check marginally failed → **read the specific warnings before deciding**:
+- **Exit code 0 (PASS)** → proceed to **Step 7d (Start Training)**
+- **Exit code 1 (FAIL)** → fix issues → return to **Step 7b (Re-eval)**
+- **Exit code 2 (WARN)** → check which soft checks failed before deciding
 
-**⚠️ Not all WARN verdicts are safe to train through.** Check which soft checks failed:
-
-| Failed soft check | Safe to train? | What to do |
-|---|---|---|
-| `score_concentration` > 70% | **NO — fix grader first.** At K=8, most groups will score identically → zero gradient → wasted GPU hours. The grader is broken. | Fix grader (add granularity, remove score snapping), re-eval |
-| `score_concentration` 50-70% | **Caution.** Proceed if other checks are healthy, but expect some wasted compute. | Consider fixing grader if time allows |
-| `pass_rate` low | **YES.** Expected for base model. With K=8, pass@8 >> pass@1. Hard prompts yield the largest GRPO gains. | Proceed to training |
-| `binary_frac` high | **YES.** DeepSeek-R1 and DAPO trained with 100% binary rewards successfully. | Proceed — DAPO dynamic sampling handles uniform groups |
-| `dead_weight` high | **YES.** 30-99% zero-variance is normal per "No Prompt Left Behind" (arXiv:2509.21880). | Proceed — optionally remove worst offenders |
-| `topic_balance` off | **YES.** Suboptimal but won't break training. | Proceed — add data for weak topics later |
-| `score_length_corr` high | **Caution.** Reward hacking risk — monitor during training. | Proceed but watch for length exploitation |
+**⚠️ Critical WARN distinction:** `score_concentration` > 70% means the grader is broken — **fix before training**. Other soft warnings (`pass_rate`, `binary_frac`, `dead_weight`, `topic_balance`) are safe to train through.
 
 **If non-interactive** (running via `claude -p`): auto-fix if `score_concentration` > 70%, otherwise proceed to training.
 
 **Max 5 eval-only iterations.** If readiness gate never passes after 5 evals, escalate to user with diagnosis.
 
-**⚠️ IMPORTANT: First eval with base model will often show low scores** — the base model hasn't been trained yet. This is expected. Focus on the hard checks (sample count, score spread, nonzero signal) rather than absolute score. Most soft warnings (pass_rate, binary_frac, dead_weight) are safe to train through. The exception is `score_concentration` > 70% — that indicates a grader problem, not a model problem.
+> See [reference/readiness-gate.md](reference/readiness-gate.md) for the full check tables, WARN safety guide, and research citations.
 
-**Note on binary rewards:** DeepSeek-R1 (arXiv:2501.12948) and DAPO (arXiv:2503.14476) achieved state-of-the-art results using 100% binary rewards (0 or 1). Binary rewards work — they just produce learning signal only when a group has mixed outcomes (some correct, some incorrect), wasting compute on uniform groups. Continuous scoring is more sample-efficient but not strictly required.
+#### 7c+. Difficulty Probe (after readiness gate passes, before training)
+
+**⚠️ Run this after the readiness gate passes and before starting training.** Checks **per-prompt signal strength** — catches data that looks good in aggregate but produces zero gradient at the prompt level.
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py difficulty-probe \
+  --file evaluations/eval-001.json \
+  --save finetune-project/difficulty-report.json
+```
+
+**Decision:** Exit 0 = PASS (>= 30% learnable, proceed to training), exit 1 = FAIL (< 15% learnable, fix first), exit 2 = WARN (15-30%, review recommendations).
+
+> See [reference/readiness-gate.md](reference/readiness-gate.md) for difficulty probe details, fix recommendations, and research citations.
+
+**Checkpoint** after difficulty probe passes:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step difficulty-probe --project-dir finetune-project --workflow-id $WORKFLOW_ID
+```
 
 #### 7d. Start Training (only after readiness gate passes)
 
@@ -618,10 +616,12 @@ Training starts here — only reached when the readiness gate indicates data and
 **Base model selection** (choose based on task complexity AND dataset size):
 | Model | Best for | Max records (K=8) | OOM risk |
 |-------|----------|-------------------|----------|
-| `unsloth/Qwen3.5-4B` | **Default choice.** Fast, works with most datasets | ~500 | Low |
+| `unsloth/Qwen3.5-0.8B` | Quick iteration, prototyping, very narrow tasks | ~1000 | Very low |
+| `unsloth/Qwen3.5-2B` | Simple tasks, fast experiments | ~800 | Low |
+| `unsloth/Qwen3.5-4B` | **Default choice.** Good balance of quality and speed | ~500 | Low |
 | `unsloth/Qwen3.5-9B` | Complex reasoning, broad domains | ~100 | High with >100 records |
 
-> **⚠️ Start with 4B.** The 9B model OOMs with >100 records and K=8 on standard GPU allocations. Use 9B only for small, complex datasets (<100 records). The `create-training` script warns if the model/dataset combination risks OOM.
+> **⚠️ Start with 4B.** The 9B model OOMs with >100 records and K=8 on standard GPU allocations. Use 9B only for small, complex datasets (<100 records). Use 0.8B/2B for quick prototyping or when training keeps failing on larger models. The `create-training` script warns if the model/dataset combination risks OOM.
 
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
@@ -738,50 +738,14 @@ Combine eval scores with training metrics. Present per-topic eval scores alongsi
 
 #### 8d. Quick diagnosis patterns
 
-| Signal | Likely cause | Suggested action |
-|--------|-------------|-----------------|
-| All scores ~0 | Grader broken or too strict | Fix grader, dry-run, re-eval |
-| Some records score 0, rest normal | Dead-weight records | Remove + regenerate (Step 8b+) |
-| All scores ~1 | Grader too lenient | Add harder criteria, re-eval |
-| **>50% scores at one value** (e.g., 79% at 0.3) | **Grader too coarse** — different failure modes produce the same score. Common cause: grader gives partial credit for "not hallucinating" even when model refuses to answer | Fix grader: add early-exit for non-responses (score 0), remove score snapping/rounding, add more granular criteria so different quality levels get different scores. Re-eval. |
-| One topic consistently low | Weak prompts or poor source material | Regenerate records, add source material |
-| Good responses scoring low | Grader criteria misaligned | Adjust criteria weights or LLM judge prompt |
-| NaN/Inf loss in training | Numerical failure (empty batches, truncation) | Check completion clipping first, then lower LR |
-| train_reward up, valid_reward flat | **Reward hacking** (model exploiting grader) | Improve grader criteria, enable/increase KL penalty, inspect outputs |
-| KL very high but reward improving | **Normal for GRPO** (beta=0 default) | No action needed — KL divergence is expected in RFT |
-| Reward plateau | Grader not differentiating well | Improve grader for smoother score spread |
-| Reward collapse | Grader binary or reward hacking | Rewrite grader with partial credit |
-| No learning across epochs | Task too hard for base model | Try larger base model |
-| Overfitting (peak then decline) | Too many epochs | Reduce `epochs` to peak epoch |
+> See [reference/analysis-strategy.md](reference/analysis-strategy.md) for the full diagnosis table and decision trees. Key patterns:
+> - All scores ~0 → grader broken. All scores ~1 → grader too lenient. >50% at one value → grader too coarse (most common: add early-exit for non-responses, remove score snapping).
+> - KL very high but reward improving → **normal for GRPO** (beta=0 default), no action needed.
+> - train_reward up, valid_reward flat → reward hacking, improve grader.
 
 #### 8e. Update Iteration Tracker
 
-**After every eval/training cycle**, append a summary to `iterations.md`. **Create it now if it doesn't exist:**
-
-```bash
-if [ ! -f finetune-project/iterations.md ]; then
-  cat > finetune-project/iterations.md << 'EOF'
-# Iteration History
-
-Track each eval/training cycle: what was tried, what happened, what to change next.
-
-EOF
-  echo "Created iterations.md"
-fi
-```
-
-Then append the current iteration's results:
-```markdown
-## Iteration N — [date]
-
-**Config:** model=Qwen3.5-4B, LR=1e-6, epochs=2, lora_rank=8
-**Eval:** avg_score=0.65, pass_rate=67%, weakest_topic=X (avg 0.3)
-**Training:** reward 0.2→0.7, KL stable at 0.8, no anomalies
-**Changed from previous:** [what was fixed]
-**Next action:** [what to try next]
-```
-
-Include: config, eval results (per-topic breakdown), training results (reward/KL/clipping), what changed from previous iteration, and actionable recommendations. See [reference/analysis-strategy.md](reference/analysis-strategy.md) for the full template.
+**After every eval/training cycle**, append a summary to `iterations.md` (create if it doesn't exist). Include: config, eval results (per-topic breakdown), training results (reward/KL/clipping), what changed, and next action. See [reference/analysis-strategy.md](reference/analysis-strategy.md) for the full template.
 
 **Checkpoint** after analysis:
 ```bash
@@ -805,17 +769,11 @@ Apply fixes and re-eval. Do NOT create a training job.
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py diagnose-grader \
   --file evaluations/eval-001.json --workflow-id $WORKFLOW_ID
 ```
-This shows: score distribution by bucket, sample `reason` fields per bucket, auto-diagnosis of the likely cause, specific fix suggestions, the current grader source code, and a **record context check** (whether prompts include source document text). **Read this output carefully — the root cause might be the DATA, not the grader.**
+This shows: score distribution by bucket, sample `reason` fields, auto-diagnosis, fix suggestions, and grader source code. **Read this output carefully — the root cause might be DATA, not grader.**
 
-**Common root causes and correct fixes:**
+**The most common cause of score clustering is a grader-prompt mismatch** — the grader expects something the model can't do given the prompt format (e.g., page citations without documents). Fix the grader to match the prompts, NOT the data.
 
-| diagnose-grader says | Root cause | Fix |
-|---|---|---|
-| "Model refuses to answer" + grader gives partial credit for refusal | **GRADER-PROMPT MISMATCH** — grader expects behavior the prompts can't produce (e.g., grader wants page citations but prompts don't include documents) | Adjust grader to match what the prompts actually ask for. Remove criteria the model can't satisfy from the prompt format. |
-| "Grader gives same score to different failures" | **GRADER** — scoring formula too coarse, or gives partial credit for non-responses | Edit grader.js: add early-exit for refusals (score 0), remove score snapping, reweight criteria |
-| "Score snapping" (Math.round) | **GRADER** — collapsing continuous scores into 11 values | Remove the rounding line from grader.js |
-
-**The most common cause of score clustering is a grader-prompt mismatch** — the grader expects something the model can't do given the prompt format. For example: grader checks for page citations, but prompts don't include documents. The fix is to adjust the grader to match the prompts, NOT to restructure the training data.
+> See [reference/iteration-strategy.md](reference/iteration-strategy.md) for the full diagnosis table (grader-prompt mismatch, score snapping, coarse scoring).
 
 **Step 2: Fix.** Edit `grader.js` based on the diagnosis, then upload:
 ```bash
@@ -846,7 +804,7 @@ After training analysis (Step 8b), if results are unsatisfactory:
 
 1. **If only hyperparams need adjusting** (reward flat, clipping too high, etc.) — skip eval, go directly to **Step 7d** with new training config
 2. **If data or grader needs fixing** — apply fixes, return to **Step 7b** (re-eval first, then training)
-3. **If model is too weak** — try a larger base model (4B → 9B)
+3. **If model is too weak** — try a larger base model (2B → 4B → 9B)
 
 ```bash
 # New eval after fixes
@@ -863,34 +821,14 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 
 **Max iterations:** 5 eval-only (Step 9a) + 3 training (Step 9b) before escalating to user.
 
-**If training failed with an opaque error** (e.g., "worker exited with status 1"): This is usually a transient cloud infrastructure failure. Retry with the same config first. If it fails again, try a smaller model or reduce batch size.
+**If training failed**: Retry once (transient failure). If it fails again, see [reference/iteration-strategy.md](reference/iteration-strategy.md) for the full diagnosis table and escalation ladder (lower LR → lower max_output_tokens → smaller model → stop and report).
 
-**Persistent training failures (3+ attempts fail):**
-
-If training keeps failing, STOP retrying blindly and diagnose:
-
-| Symptom | Likely cause | Fix |
-|---------|-------------|-----|
-| KL > 1M consistently | **May be normal** — GRPO with beta=0 allows large KL. Only a problem if outputs degenerate | Check output quality, not just KL number. If outputs are good, continue |
-| NaN loss on first step | Empty batches or 100% completion truncation | Check `completions/clipped_ratio` — lower `max_output_tokens` to 256-512 |
-| Fails at step 1-5 then stops | Cloud infra issue or OOM from long completions | Try smaller model (4B → 2B → 0.8B) or reduce `response_candidates_count` to 4 |
-| Fails mid-training (step 50+) | Gradient instability or numerical overflow | Add `warmup_steps: 50`, check for NaN in grad_norm |
-| Multiple NaN jobs in a row | Grader returning 0 for all completions → zero gradient → NaN | Run eval first — check if base model can score >0 on any records |
-| Reward flat after many epochs | No learning signal — all completions scoring identically | Check `frac_reward_zero_std` — improve grader granularity (partial credit) |
-
-**"cancelled" is a TERMINAL state — do NOT retry cancelled jobs.** Only retry on "failed" states (OOM, timeout, gradient issues). If a training job is cancelled by the user, respect the cancellation. Do NOT automatically create a new training job. Ask the user what they want to do instead. To cancel a running job: `uv run scripts/finetune.py cancel-training --workflow-id WF_ID --job-id JOB_ID`.
-
-**Escalation ladder (for "failed" jobs only — never for "cancelled"):**
-1. **Retry once** with same config (transient failure)
-2. **Lower LR** to 5e-7 (KL/gradient issues)
-3. **Lower max_output_tokens** to 256 (OOM/truncation issues)
-4. **Smaller model** (4B → 2B)
-5. **Stop and report** — present diagnosis to user with what was tried
+**"cancelled" is a TERMINAL state — do NOT retry cancelled jobs.** Only retry on "failed" states. To cancel a running job: `uv run scripts/finetune.py cancel-training --workflow-id WF_ID --job-id JOB_ID`.
 
 #### 9c. Iteration limits and escalation
 
 - **Max 5 iterations.** After 5, stop and report full diagnosis.
-- **Base model escalation:** After 2 failed iterations: `Qwen3.5-4B` → `Qwen3.5-9B` → larger.
+- **Base model escalation:** After 2 failed iterations: `Qwen3.5-4B` → `Qwen3.5-9B`. If training keeps failing (OOM/NaN), try smaller: `4B` → `2B` → `0.8B`.
 - **When to stop:** User satisfied, OR avg score > 0.8 AND training reward > 0.7, OR 3+ iterations with no improvement.
 
 ### Using the vLLora UI
@@ -908,6 +846,7 @@ Read these when you need more detail on a specific step:
 | `reference/extraction-guide.md` | When extracting documents — Docling API, response structure, knowledge_parts.json schema |
 | `reference/grader-writing.md` | When writing the grader — 3 patterns, design guidelines, common mistakes |
 | `reference/topic-hierarchy.md` | When designing topics — structure, coverage analysis, balance scoring |
+| `reference/readiness-gate.md` | When interpreting readiness gate or difficulty probe results — full check tables, WARN safety guide |
 | `reference/iteration-strategy.md` | When analyzing results — diagnosis, stall patterns, escalation ladder |
 | `reference/analysis-strategy.md` | **Read at Step 8** — data fields, decision trees, action templates, interactive presentation |
 | `reference/workflow-guide.md` | For the full detailed walkthrough of every step |

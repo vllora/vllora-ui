@@ -930,8 +930,13 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
             "value": round(mode_frac, 4),
             "threshold": f"< {thresholds['max_mode_frac']}",
             "pass": mode_frac < thresholds["max_mode_frac"],
-            "fix": f"{mode_frac:.0%} of scores are exactly {mode_value} — within-group variance will be small → weak gradients. Add more granular criteria. [DAPO arXiv:2503.14476 filters uniform groups; threshold is a heuristic]",
-            "hard": False,
+            "fix": f"{mode_frac:.0%} of scores are exactly {mode_value} — within-group variance will be small → weak gradients. "
+                   f"Redesign grader with multi-point rubric (0-7 scale). "
+                   f"[DAPO arXiv:2503.14476 filters uniform groups; RGR-GRPO arXiv:2511.12344: rubric >> binary]",
+            # Hard fail at >70%: at K=8, most groups will score identically → zero gradient
+            # → wasted GPU hours. The grader is broken, not the data.
+            # Soft warn at 50-70%: some signal loss but training may still work.
+            "hard": mode_frac > 0.70,
         },
     }
 
@@ -2061,6 +2066,90 @@ def _compact_cell(value, max_chars: int = 160) -> str:
     return text
 
 
+def cmd_difficulty_probe(args: argparse.Namespace) -> None:
+    """Run difficulty distribution probe on eval results.
+
+    Analyzes K=1 eval scores to predict K=8 zero-variance rates,
+    classify prompts by difficulty, and assess grader granularity.
+    Tells you whether GRPO training will produce learning signal.
+
+    Research: DOTS+RR (arXiv:2506.05316), Hard Examples (arXiv:2508.14094),
+    No Prompt Left Behind (arXiv:2509.21880), RGR-GRPO (arXiv:2511.12344).
+
+    Exit codes: 0 = PASS, 1 = FAIL, 2 = WARN
+    """
+    import subprocess
+
+    script_dir = Path(__file__).parent
+    script = script_dir / "probe_difficulty.py"
+    if not script.exists():
+        print(f"Error: probe_difficulty.py not found at {script}", file=sys.stderr)
+        sys.exit(1)
+
+    cmd = [sys.executable, str(script), args.file]
+    if args.k:
+        cmd.extend(["--k", str(args.k)])
+    if args.output_json:
+        cmd.append("--json")
+    if args.save:
+        cmd.extend(["--save", args.save])
+    if args.compact:
+        cmd.append("--compact")
+
+    result = subprocess.run(cmd)
+    sys.exit(result.returncode)
+
+
+def cmd_data_quality_gate(args: argparse.Namespace) -> None:
+    """Run pre-eval data quality gate on training data.
+
+    Validates data quality BEFORE spending on evaluation or training.
+    Delegates to data_quality_gate.py for the actual checks.
+
+    Gates (ordered by cost):
+      1. structural           (free)  — dedup, length, format, topic balance
+      2. diversity            (free)  — trigram-based diversity & redundancy
+      3. completion_length    (free)  — estimates if max_output_tokens is sufficient
+      4. ground_truth_quality ($$)    — LLM scores GT specificity
+      5. alignment            ($$)    — LLM checks prompt-GT alignment
+
+    Exit codes: 0 = PASS, 1 = FAIL, 2 = WARN
+    """
+    import subprocess
+
+    script_dir = Path(__file__).parent
+    script = script_dir / "data_quality_gate.py"
+    if not script.exists():
+        print(f"Error: data_quality_gate.py not found at {script}", file=sys.stderr)
+        sys.exit(1)
+
+    cmd = [sys.executable, str(script), args.file]
+
+    if args.topics:
+        cmd.extend(["--topics", args.topics])
+    if args.parts:
+        cmd.extend(["--parts", args.parts])
+    if args.gate:
+        cmd.extend(["--gate", args.gate])
+    if args.llm_gates:
+        cmd.append("--llm-gates")
+    if args.all_gates:
+        cmd.append("--all-gates")
+    if args.sample:
+        cmd.extend(["--sample", str(args.sample)])
+    if args.gateway_url:
+        cmd.extend(["--gateway-url", args.gateway_url])
+    if args.max_output_tokens:
+        cmd.extend(["--max-output-tokens", str(args.max_output_tokens)])
+    if args.output_json:
+        cmd.append("--json")
+    if args.save:
+        cmd.extend(["--save", args.save])
+
+    result = subprocess.run(cmd)
+    sys.exit(result.returncode)
+
+
 def cmd_print_row_outputs(args: argparse.Namespace) -> None:
     """Print per-epoch rollout output + score + reason for one row."""
     result = _api(
@@ -2237,6 +2326,34 @@ def main() -> None:
     p.add_argument("--source-id", default=None, help="Specific knowledge source ID to delete")
     p.add_argument("--all", action="store_true", help="Delete all knowledge sources")
 
+    # difficulty-probe
+    p = subparsers.add_parser(
+        "difficulty-probe",
+        help="Analyze eval results for difficulty distribution and training signal prediction",
+    )
+    p.add_argument("--file", required=True, help="Path to eval results JSON")
+    p.add_argument("--k", type=int, default=8, help="Group size K for prediction (default: 8)")
+    p.add_argument("--output-json", action="store_true", help="Output JSON only")
+    p.add_argument("--save", help="Save full report to file")
+    p.add_argument("--compact", action="store_true", help="Omit per-prompt details")
+
+    # data-quality-gate
+    p = subparsers.add_parser(
+        "data-quality-gate",
+        help="Run pre-eval data quality gate on training data",
+    )
+    p.add_argument("--file", required=True, help="Path to training.jsonl")
+    p.add_argument("--topics", help="Path to topics.json for cross-referencing")
+    p.add_argument("--parts", help="Path to all-parts-index.json")
+    p.add_argument("--gate", help="Comma-separated gates: structural,diversity,completion_length,ground_truth_quality,alignment")
+    p.add_argument("--llm-gates", action="store_true", help="Include LLM-scored gates")
+    p.add_argument("--all-gates", action="store_true", help="Run all gates")
+    p.add_argument("--sample", type=int, default=30, help="Records to sample for LLM gates")
+    p.add_argument("--max-output-tokens", type=int, default=512, help="Planned max_output_tokens for training (for completion_length gate)")
+    p.add_argument("--gateway-url", default=DEFAULT_BASE_URL, help="Gateway URL for LLM calls")
+    p.add_argument("--output-json", action="store_true", help="Output JSON only")
+    p.add_argument("--save", help="Save full report to file")
+
     # print-row-outputs
     p = subparsers.add_parser(
         "print-row-outputs",
@@ -2272,6 +2389,8 @@ def main() -> None:
         "cancel-training": cmd_cancel_training,
         "sync-jobs": cmd_sync_jobs,
         "delete-knowledge": cmd_delete_knowledge,
+        "difficulty-probe": cmd_difficulty_probe,
+        "data-quality-gate": cmd_data_quality_gate,
         "print-row-outputs": cmd_print_row_outputs,
     }
     commands[args.command](args)

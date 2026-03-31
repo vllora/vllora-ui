@@ -31,11 +31,11 @@ Fine-tuning involves reading documents, designing topics, generating diverse tra
 ```
 Agent (with this skill) — runs the full pipeline (eval-first):
 ───────────────────────────────────────────────────────────
-1. Read docs, extract knowledge        6. Verify & hand off
-2. Design topic hierarchy              7. Eval → Readiness Gate → [PASS] → Train
-3. Generate 100-200+ training prompts  8. Analyze results (eval + training)
-4. Write hybrid grader function        9. Iterate (fix data/grader, re-eval/retrain)
-5. Validate dataset
+1. Read docs, extract knowledge        6. Data Quality Gate (pre-eval)
+2. Design topic hierarchy              7. Verify & hand off
+3. Generate 100-200+ training prompts  8. Eval → Readiness Gate → [PASS] → Train
+4. Write hybrid grader function        9. Analyze results (eval + training)
+5. Validate dataset                   10. Iterate (fix data/grader, re-eval/retrain)
 ```
 
 The vLLora UI at `localhost:5173` visualizes the workflow data in real time (topics, records, eval scores, training metrics). The agent drives the pipeline; the UI displays the results.
@@ -71,8 +71,8 @@ your-project/
     └── skills/
         └── finetune-skill/            # The skill itself
             ├── SKILL.md
-            ├── reference/             # 10 reference docs (analysis-strategy, training-metrics-guide, iteration-strategy, etc.)
-            ├── scripts/               # 17 Python helpers (finetune.py has 16 subcommands)
+            ├── reference/             # 11 reference docs (analysis-strategy, training-metrics-guide, data-quality-gate, etc.)
+            ├── scripts/               # 19 Python helpers (finetune.py has 18 subcommands)
             └── templates/             # Starter files
 ```
 
@@ -130,6 +130,7 @@ finetune-skill/
 │   ├── analysis-strategy.md    # ~1050 lines — Decision trees, action templates, derived metrics, presentation format
 │   ├── training-metrics-guide.md # ~240 lines — GRPO metric interpretation, paper-backed thresholds
 │   ├── iteration-strategy.md   # ~1090 lines — Eval analysis, training analysis, diagnosis, fixes, escalation
+│   ├── data-quality-gate.md    # ~170 lines — Pre-eval data quality gate: 4 gates, thresholds, research citations
 │   ├── data-format.md          # ~110 lines — JSONL format spec
 │   ├── extraction-guide.md     # ~985 lines — Docling Serve setup, API calls, knowledge_parts.json schema
 │   ├── knowledge-parts-schema.json  # JSON schema for knowledge_parts.json
@@ -149,6 +150,8 @@ finetune-skill/
 │   ├── print_metrics_table.py  # Print training metrics table (per-epoch or per-step)
 │   ├── build_knowledge_parts.py # Generic Docling→knowledge_parts.json (no LLM needed)
 │   ├── checkpoint.py           # Pipeline checkpointing (save/check/reset step progress)
+│   ├── data_quality_gate.py    # Pre-eval data quality gate (structural, diversity, GT quality, alignment)
+│   ├── probe_difficulty.py     # Post-eval difficulty probe (signal prediction, grader granularity)
 │   ├── deduplicate_records.py  # Remove near-duplicate prompts (trigram similarity)
 │   ├── extract_tables.py       # Upgrade text parts to table parts from Docling table data
 │   ├── consolidate_parts.py    # Merge adjacent parts, drop fragments, fix Unicode
@@ -275,6 +278,7 @@ User: "finetune my tax deduction PDF"
 │           │                                             │
 │           ▼                                             │
 │  Step 5: Write grader ──────────► Main agent (creative) │
+│  Step 5.5b: Data Quality Gate ──► data_quality_gate.py  │
 │  Step 6: Upload everything ─────► scripts/finetune.py   │
 │                                                         │
 │  Step 7: Eval-First Loop (eval before training)         │
