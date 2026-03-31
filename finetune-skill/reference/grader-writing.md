@@ -187,11 +187,23 @@ Now you have a clear blueprint for the grader — the criteria, how each is eval
 
 ---
 
+## Critical Rules
+
+1. **ALWAYS start from a template.** Copy the closest template from `templates/` and customize. Never write a grader from scratch — templates include safety patterns (LLM fallback, error handling, graceful degradation) that hand-written graders miss.
+
+2. **NEVER return score 0.0 for a parsing/extraction failure.** If you can't parse the model's response format, use LLM-based extraction as fallback. Score 0.0 must mean the response is genuinely wrong or empty. Parsing failures that produce 0.0 are grader bugs — they waste eval runs and produce garbage training signal.
+
+3. **Separate extraction from scoring.** The model's response format is unpredictable. Extract the answer/label/data first (regex → LLM fallback), then score the extracted content. See `grader-mcq.js` for the pattern.
+
+---
+
 ## Grader Patterns
 
 ### Pattern 1: Pure Programmatic
 
 Best for structured outputs (JSON, code, specific formats) or when you can fully define "good" with rules.
+
+**⚠️ WARNING:** Pure programmatic graders are fragile when the model's response format is unpredictable (e.g., MCQ where the model buries the answer in prose). For tasks with verifiable answers, use `grader-mcq.js` or `grader-classification.js` instead — they include LLM extraction fallback.
 
 ```javascript
 function evaluate(input) {

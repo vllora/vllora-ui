@@ -439,11 +439,17 @@ Write a JavaScript grader function to `grader.js`. Scores model responses 0-1, r
 
 The grader function signature: `function evaluate(input) { ... return { score, reason }; }` where score is 0.0-1.0. The function can use `__langdb_call_llm_as_judge_obj(config, input)` for subjective quality assessment — `config` has `prompt_template` (message array with `{{history}}`/`{{response}}` template vars), `output_schema` (JSON Schema), and `completion_params` (`{model_name, temperature, max_tokens}`). Set `input.history` and `input.response` before calling. **Synchronous only** — no async/await.
 
-See [reference/grader-writing.md](reference/grader-writing.md) for 3 patterns (pure programmatic, LLM-as-judge, hybrid), design guidelines, and common mistakes. Pick the template that best matches the task:
+See [reference/grader-writing.md](reference/grader-writing.md) for 3 patterns (pure programmatic, LLM-as-judge, hybrid), design guidelines, and common mistakes.
+
+**⚠️ ALWAYS start from a template.** Copy the closest template and customize the criteria. NEVER write a grader from scratch — hand-written graders miss safety patterns (LLM fallback, error handling) that templates include. If no template matches exactly, use `grader-template.js` as the base.
+
+**⚠️ NEVER return score 0.0 for a parsing/extraction failure.** A score of 0 must mean the response is genuinely wrong or empty — not that the grader couldn't parse the format. Use LLM-based extraction as fallback when regex fails (see `grader-mcq.js` and `grader-classification.js` for the pattern).
 
 | Template | Best for | Key criteria |
 |----------|----------|-------------|
 | `templates/grader-template.js` | General-purpose (default) | accuracy, helpfulness, clarity, completeness, tone |
+| `templates/grader-mcq.js` | Multiple-choice / short-answer QA | answer correctness (LLM extraction fallback), reasoning quality, distractor analysis |
+| `templates/grader-classification.js` | Label assignment / categorization | label match (exact/partial/wrong), evidence, reasoning quality |
 | `templates/grader-extraction.js` | Structured data extraction (10-K metrics, medical coding) | field accuracy, hallucination rate, format compliance |
 | `templates/grader-compliance.js` | Rule application (FDA, tax, legal) | rule recall, false positives, citation accuracy |
 | `templates/grader-readability.js` | Simplification (contract→English, ELI5) | readability + Flesch-Kincaid, jargon elimination, accuracy preservation |
@@ -618,7 +624,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval \
 
 The poller monitors partial scores as rows complete and auto-cancels (exit code 2) if either:
 - **avg score < 0.05** after 20 rows — grader is scoring zero on everything
-- **>30% of scores are 0.0** after 20 rows — grader can't parse model responses or data has issues
+- **>10% of scores are 0.0** after 20 rows — grader can't parse model responses or data has issues
 
 A 0.0 score is always a bad signal: either the grader is wrong (can't parse the response format) or the data is wrong (bad ground truth, missing fields). You cannot train with records scoring 0 — fix the root cause first. If cancelled, run `diagnose-grader` to see the zero-score reasons, fix the grader, re-upload, and create a new eval. Use `--no-early-cancel` to disable.
 
@@ -635,7 +641,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
 
 The readiness gate runs **3 hard checks** (grader quality) and **8 soft checks** (quality signals). Hard checks ask "is the grader working?", NOT "is the base model good?" — GRPO can learn from low base model scores (DeepSeek R1-Zero: 15.6% → 71%).
 
-**Hard checks** (must ALL pass): sample count >= 50, score std > 0.10, average score > 0.05.
+**Hard checks** (must ALL pass): sample count >= 50, score std > 0.10, average score > 0.05, **zero-score fraction < 10%**.
 
 **Decision:**
 - **Exit code 0 (PASS)** → proceed to **Step 7d (Start Training)**

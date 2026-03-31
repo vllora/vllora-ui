@@ -689,7 +689,7 @@ def cmd_status(args: argparse.Namespace) -> None:
                                 score_str += f"  zeros={live_zero_rate:.0%}"
                             if avg_score < 0.05:
                                 score_str += "  ⚠ BROKEN — scoring ~0, cancel this eval!"
-                            elif live_zero_rate is not None and live_zero_rate > 0.30:
+                            elif live_zero_rate is not None and live_zero_rate > 0.10:
                                 score_str += f"  ⚠ BROKEN — {live_zero_rate:.0%} zeros, cancel this eval!"
                         else:
                             score_str = ""
@@ -764,8 +764,9 @@ def cmd_status(args: argparse.Namespace) -> None:
                 std_s = statistics.stdev(scores) if n > 1 else 0
                 dead_w = sum(1 for s in scores if s < 0.1) / n
                 pass_r = sum(1 for s in scores if s >= 0.7) / n
+                zero_frac = sum(1 for s in scores if s < 0.01) / n
                 print(f"  Latest eval: {latest_eval_file.name} ({n} scores)")
-                print(f"  avg={avg_s:.3f}, std={std_s:.3f}, dead_weight={dead_w:.1%}, pass_rate={pass_r:.1%}")
+                print(f"  avg={avg_s:.3f}, std={std_s:.3f}, zeros={zero_frac:.0%}, dead_weight={dead_w:.1%}, pass_rate={pass_r:.1%}")
                 high_frac = sum(1 for s in scores if s > 0.9) / n
                 binary_frac = sum(1 for s in scores if s <= 0.01 or s >= 0.99) / n
                 # Score concentration: most common value (rounded to 0.01)
@@ -775,8 +776,11 @@ def cmd_status(args: argparse.Namespace) -> None:
                 mode_frac = mode_ct / n
                 grader_ok = (std_s > 0.10 and mode_frac < 0.50)
                 signal_ok = avg_s > 0.05  # Only 0% is fatal (OpenAI RFT)
-                if grader_ok and signal_ok:
+                zeros_ok = zero_frac < 0.10  # >10% zeros = grader broken (xFinder ICLR 2025)
+                if grader_ok and signal_ok and zeros_ok:
                     print(f"  Verdict: PASS — grader quality OK, ready for training")
+                elif not zeros_ok:
+                    print(f"  Verdict: FAIL — {zero_frac:.0%} of scores are 0.0 (grader broken — use grader-mcq.js template with LLM extraction fallback)")
                 elif not signal_ok:
                     print(f"  Verdict: FAIL — avg near zero, no training signal at all")
                 elif mode_frac >= 0.50:
@@ -797,7 +801,7 @@ def cmd_status(args: argparse.Namespace) -> None:
             if completed_rows >= 20:
                 if avg is not None and avg < 0.05:
                     broken_running_evals.append(ed)
-                elif zero_rate is not None and zero_rate > 0.30:
+                elif zero_rate is not None and zero_rate > 0.10:
                     broken_running_evals.append(ed)
 
     # ── Recommended next step ──
@@ -834,7 +838,27 @@ def cmd_status(args: argparse.Namespace) -> None:
         cancelled_jobs = [j for j in job_list if j.get("status") == "cancelled"]
         done_training = [j for j in job_list if j.get("status") in ("completed", "succeeded")]
 
-        if active_training:
+        # Check if latest eval has high zero-rate (grader broken)
+        latest_eval_zero_rate = None
+        if latest_eval_file:
+            try:
+                ed = json.loads(latest_eval_file.read_text())
+                _avg, _count, zr = _compute_eval_partial_score(
+                    {"results": ed.get("results", [])}
+                )
+                latest_eval_zero_rate = zr
+            except Exception:
+                pass
+
+        grader_broken = (latest_eval_zero_rate is not None and latest_eval_zero_rate > 0.10)
+
+        if active_training and grader_broken:
+            print(f"  ⚠ Training is running BUT the latest eval has {latest_eval_zero_rate:.0%} zero scores — grader is broken!")
+            print(f"    Cancel the training job, fix the grader (use grader-mcq.js template), re-eval, then retrain.")
+            for j in active_training:
+                jid = j.get("id", "?")
+                print(f"    Run: finetune.py cancel-training --workflow-id {wf_id} --job-id {jid}")
+        elif active_training:
             print(f"  → Training running — poll it (Step 7e)")
         elif done_training:
             print(f"  → Analyze training results (Step 8b) and iterate if needed (Step 9)")
@@ -914,6 +938,7 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
       1. sample_count       — minimum dataset size (>= 50)
       2. score_std          — grader differentiation (> 0.10)
       3. avg_score          — nonzero signal (> 0.05)
+      4. zero_score_frac    — grader not broken (< 30% zeros)
       + score_concentration — dynamic: hard if > 70%, soft if 50-70%
 
     Soft checks (warnings, don't gate):
@@ -957,6 +982,7 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
         "max_binary_frac": 0.60,        # Binary works (DeepSeek-R1, DAPO) but less sample-efficient. Raised from 0.40 per research review.
         "min_avg_score": 0.05,          # Just needs nonzero signal (OpenAI: "0% success rate means cannot bootstrap")
         "max_mode_frac": 0.50,          # Score concentration — if >50% are one value, grader too coarse for GRPO (DAPO arXiv:2503.14476)
+        "max_zero_score_frac": 0.10,    # HARD: >10% zeros = grader likely broken (parsing failures, not wrong answers). xFinder (ICLR 2025): regex extraction is only 74% accurate.
         "max_dead_weight_frac": 0.50,   # Real GRPO has 30-99% zero-var prompts ("No Prompt Left Behind" ICLR 2026)
         "min_pass_rate": 0.20,          # Nice to have — hard examples are most valuable (arXiv:2508.14094)
         "pass_threshold": 0.70,         # Score threshold for "passing" a record
@@ -979,6 +1005,7 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
     std = statistics.stdev(scores) if n > 1 else 0.0
     high_frac = sum(1 for s in scores if s > 0.9) / n
     binary_frac = sum(1 for s in scores if s <= 0.01 or s >= 0.99) / n
+    zero_score_frac = sum(1 for s in scores if s < 0.01) / n
     dead_weight_frac = sum(1 for s in scores if s < 0.1) / n
     pass_rate = sum(1 for s in scores if s >= thresholds["pass_threshold"]) / n
 
@@ -1018,6 +1045,15 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
             "threshold": f"> {thresholds['min_avg_score']}",
             "pass": avg > thresholds["min_avg_score"],
             "fix": "Average score near zero — the base model produces no useful responses at all. GRPO needs at least some nonzero rewards. [OpenAI RFT: '0% success rate means RFT cannot bootstrap']",
+            "hard": True,
+        },
+        "zero_score_frac": {
+            "value": round(zero_score_frac, 4),
+            "threshold": f"< {thresholds['max_zero_score_frac']}",
+            "pass": zero_score_frac < thresholds["max_zero_score_frac"],
+            "fix": f"{zero_score_frac:.0%} of scores are exactly 0.0 — this usually means the grader can't parse the model's response format (not that answers are wrong). "
+                   f"Run diagnose-grader to check the zero-score reasons. Fix the grader to use LLM extraction fallback (see grader-mcq.js template). "
+                   f"[xFinder ICLR 2025 (arXiv:2405.11874): regex extraction is only 74% accurate on diverse LLM outputs]",
             "hard": True,
         },
         # Soft checks demoted from hard — research shows binary rewards work
@@ -2772,8 +2808,8 @@ def main() -> None:
         help="Score threshold below which to auto-cancel (default: 0.05)")
     p.add_argument("--early-cancel-min-rows", type=int, default=20,
         help="Minimum completed rows before checking early cancel (default: 20)")
-    p.add_argument("--early-cancel-zero-rate", type=float, default=0.30,
-        help="Cancel if more than this fraction of scores are 0.0 (default: 0.30 = 30%%)")
+    p.add_argument("--early-cancel-zero-rate", type=float, default=0.10,
+        help="Cancel if more than this fraction of scores are 0.0 (default: 0.10 = 10%%)")
 
     # create-training
     p = subparsers.add_parser("create-training", help="Create training job and save metadata locally")
