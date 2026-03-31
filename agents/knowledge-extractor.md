@@ -12,10 +12,11 @@ You extract knowledge from ONE source document for the vLLora finetune pipeline.
 
 1. **Wait for Docling** extraction to complete (poll task_id) — this is MANDATORY
 2. **Save** the Docling result to `docling-result.json` — this file MUST exist before proceeding
-3. **Build** knowledge parts from the Docling output
+3. **Build** knowledge parts using `build_knowledge_parts.py` (deterministic — ALWAYS use this first)
 4. **Post-process**: extract tables, consolidate parts
-5. **Upload** to the gateway
-6. Return a summary
+5. **Validate**: run `validate_extraction.py` on this document — MUST PASS
+6. **Upload** to the gateway
+7. Return a summary
 
 You work ONLY on extraction of your ONE document. Do NOT design topics, generate data, or merge indexes.
 
@@ -90,11 +91,12 @@ print(f'OK: {len(chunks)} chunks in docling-result.json')
 
 If this check fails, go to **Fallback** section at the bottom. Do NOT write custom regex scripts.
 
-### 3. Build knowledge parts
+### 3. Build knowledge parts (DETERMINISTIC — use build_knowledge_parts.py)
 
-**Path A — No custom instructions (default):**
+**⚠️ CRITICAL**: ALWAYS use `build_knowledge_parts.py` first. Do NOT write custom extract.py scripts unless explicitly required. This ensures the same PDF always produces the same knowledge parts across runs.
 
-Use the generic script. It reads `docling-result.json` and produces structured parts:
+**Step 3a — Run the deterministic extraction script:**
+
 ```bash
 python3 <SKILL_DIR>/scripts/build_knowledge_parts.py \
   "<DOC_DIR>/docling-result.json" \
@@ -107,9 +109,9 @@ Verify output:
 python3 -c "import json; d=json.load(open('<DOC_DIR>/knowledge_parts.json')); parts=d if isinstance(d,list) else d.get('parts',[]); print(f'{len(parts)} parts')"
 ```
 
-If the script fails or produces 0 parts, fall through to Path B.
+If the script succeeds and produces ≥1 parts, go to Step 4. Do NOT write custom code.
 
-**Path B — Custom instructions OR generic script failed:**
+**Step 3b — Only if `build_knowledge_parts.py` produces 0 parts AND CUSTOM_INSTRUCTIONS were provided:**
 
 Write a custom `<DOC_DIR>/extract.py` tailored to this document. **The script MUST read from `docling-result.json`** — never from raw PDF text or regex-based text splitting.
 
@@ -122,24 +124,6 @@ Your custom extract.py must:
 6. Prefix all part IDs with the document slug
 7. Produce `knowledge_parts.json` with typed parts (text, table, image)
 
-**Template for custom extract.py:**
-```python
-#!/usr/bin/env python3
-import json
-from pathlib import Path
-
-# ALWAYS load from docling-result.json — never from raw text
-docling_file = Path(__file__).parent / 'docling-result.json'
-with open(docling_file) as f:
-    docling_data = json.load(f)
-
-# Extract chunks from the Docling output
-chunks = docling_data if isinstance(docling_data, list) else docling_data.get('chunks', docling_data.get('results', []))
-
-# ... your custom grouping/splitting logic here, operating on chunks ...
-```
-
-Run it:
 ```bash
 cd "<DOC_DIR>" && python3 extract.py
 ```
@@ -154,7 +138,18 @@ python3 <SKILL_DIR>/scripts/extract_tables.py \
 python3 <SKILL_DIR>/scripts/consolidate_parts.py "<DOC_DIR>/knowledge_parts.json"
 ```
 
-### 5. Upload to gateway
+### 5. Validate extraction (MUST PASS)
+
+```bash
+python3 <SKILL_DIR>/scripts/validate_extraction.py "<DOC_DIR>/../" --fix
+```
+
+If validation reports FAIL for this document after `--fix`:
+1. Check the specific failure reasons in the output
+2. Re-run `consolidate_parts.py` with `--min-chars 50` if short-fragment issue
+3. Report the FAIL status and reasons in your summary — the orchestrator decides whether to proceed
+
+### 6. Upload to gateway
 
 ```bash
 python3 <SKILL_DIR>/scripts/finetune.py upload-knowledge \
@@ -164,7 +159,7 @@ python3 <SKILL_DIR>/scripts/finetune.py upload-knowledge \
   --name "$(basename '<DOC_PATH>')" \
   --force \
   --description "Source document: $(basename '<DOC_PATH>')" \
-  --metadata '{"extraction_method":"docling_hybrid"}'
+  --metadata '{"extraction_method":"docling_deterministic"}'
 ```
 
 ### Fallback (Docling genuinely unavailable or failed)
@@ -187,7 +182,9 @@ Return a structured summary to the parent agent:
 Document: <filename>
 Slug: <doc-slug>
 Parts extracted: N (N text, N table, N image)
-Extraction method: docling | pdftotext
+Extraction method: docling_deterministic | docling_custom | pdftotext
+Extraction script: build_knowledge_parts.py | custom extract.py (reason)
+Validation: PASS | WARN (details) | FAIL (details)
 docling-result.json: exists (N chunks) | missing (reason)
 Uploaded: yes | no (error details)
 Issues: any warnings or problems
@@ -196,10 +193,12 @@ Issues: any warnings or problems
 ## Rules
 
 - You handle exactly ONE document — the one specified in your prompt
+- **ALWAYS use `build_knowledge_parts.py` first** — do NOT write custom extract.py unless it produces 0 parts or CUSTOM_INSTRUCTIONS require it
 - **NEVER write extraction scripts that bypass Docling** — all extraction MUST start from `docling-result.json`
 - **NEVER fabricate parts or content** — extract only what exists in the document
 - **NEVER give up on Docling polling early** — large documents take minutes, poll up to 20 times
 - `docling-result.json` MUST exist in DOC_DIR when you finish — do not delete intermediate files
 - Always run consolidate after extraction
+- Always run validate after consolidation and report the result
 - If extraction fails, report the error clearly — do not retry indefinitely
 - Do not merge indexes or validate across documents — the orchestrator handles that

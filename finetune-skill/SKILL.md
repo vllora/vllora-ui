@@ -184,7 +184,9 @@ EOF
 
 ### Step 2: Extract Documents
 
-Extract all documents in parallel — **spawn one `knowledge-extractor` subagent per document**. Each agent handles its own PDF independently (Docling extraction, custom extract.py, post-processing, gateway upload).
+Extract all documents in parallel — **spawn one `knowledge-extractor` subagent per document**. Each agent handles its own PDF independently (Docling extraction, deterministic `build_knowledge_parts.py`, post-processing, gateway upload).
+
+> **Deterministic extraction rule**: Subagents MUST use `build_knowledge_parts.py` as the default extraction script. This ensures the same PDF always produces the same knowledge parts. Agents must NOT write custom extract.py scripts unless the user explicitly requests custom extraction for a specific document via CUSTOM_INSTRUCTIONS, or `build_knowledge_parts.py` produces 0 parts.
 
 **2a. Check Docling availability and submit all PDFs:**
 
@@ -220,26 +222,61 @@ For each document, spawn a subagent with:
 
 Spawn up to 4-5 agents at once. If there are more documents, spawn in batches.
 
-**2c. After ALL agents return — merge indexes:**
+**Retry on failure**: If a subagent fails:
+1. Check if `<DOC_DIR>/docling-result.json` exists (Docling succeeded but extraction failed).
+   - If yes: re-run `build_knowledge_parts.py` on the existing result.
+   - If no: re-submit to Docling and spawn the subagent again.
+2. If second attempt also fails: **warn the user** with the document name and error, then continue with remaining documents. Do NOT silently skip failed documents.
+
+**2c. After ALL agents return — merge indexes with completeness check:**
 
 ```bash
 python3 -c "
-import json, glob
+import json, glob, sys
+
+# Expected documents (set this from your Step 1 document list)
+expected_slugs = set()  # e.g., {'doc1-slug', 'doc2-slug'}
+# Populate from your actual document list:
+# expected_slugs = {'chess-tactics', 'opening-theory', 'endgame-manual'}
+
+found_files = sorted(glob.glob('finetune-project/knowledge/*/parts-index.json'))
+found_slugs = {f.split('/')[-2] for f in found_files}
+
+# Completeness check
+missing = expected_slugs - found_slugs if expected_slugs else set()
+if missing:
+    print(f'WARNING: {len(missing)} document(s) missing parts-index.json: {sorted(missing)}')
+    print('These documents failed extraction. Check subagent logs and re-extract before proceeding.')
+
+# Merge indexes
 parts = []
-for f in sorted(glob.glob('finetune-project/knowledge/*/parts-index.json')):
+for f in found_files:
     with open(f) as fh:
         data = json.load(fh)
         parts.extend(data.get('parts', data) if isinstance(data, dict) else data)
 with open('finetune-project/knowledge/all-parts-index.json', 'w') as fh:
     json.dump({'parts': parts}, fh, indent=2)
-print(f'Merged {len(parts)} parts from {len(glob.glob(\"finetune-project/knowledge/*/parts-index.json\"))} documents')
+print(f'Merged {len(parts)} parts from {len(found_files)} documents')
+
+if missing:
+    print(f'ACTION REQUIRED: Re-extract missing documents before proceeding to Step 3.')
+    sys.exit(1)
 "
 ```
 
-**2d. Validate:**
+If any documents are missing, re-extract them (see retry logic in 2b) before proceeding.
+
+**2d. Validate — MUST PASS before continuing:**
+
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/knowledge/
+python3 ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/knowledge/ --fix
 ```
+
+**This is a hard gate.** If validation reports FAIL after `--fix`:
+1. Read the specific failure reasons (short parts, low title diversity, etc.)
+2. Re-run `consolidate_parts.py` with adjusted thresholds on the failing documents
+3. Re-validate. If still FAIL, present the failure details to the user and ask whether to proceed or re-extract.
+4. Do NOT silently proceed to Step 3 with FAIL status — bad extraction poisons topics, records, and training.
 
 > **For full extraction workflow details** (if you need to understand or debug), read [reference/extraction-guide.md](reference/extraction-guide.md).
 

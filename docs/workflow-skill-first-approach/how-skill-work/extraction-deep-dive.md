@@ -133,33 +133,33 @@ This is why the agent can struggle with Step 2c — reading a 36MB JSON into its
 
 ## From Docling Result to Knowledge Parts
 
-The extraction script transforms raw Docling output into structured, typed parts. This is **not** a mechanical transformation — the agent writes custom code for each document because:
+The extraction uses `build_knowledge_parts.py` — a **deterministic script** that transforms raw Docling output into structured, typed parts. The same input always produces the same output, eliminating the non-determinism that caused flaky extraction across runs.
 
-1. **Heading detection is noisy** — Docling marks many things as `section_header` that aren't real headings (chess moves, page numbers, running headers)
-2. **Table handling varies** — some documents have well-structured tables, others have pseudo-tables
-3. **Image relevance differs** — diagrams are valuable; decorative headers are not
-4. **Domain-specific patterns** — game notation, mathematical formulas, etc. need special handling
+> **History**: Previously, subagents wrote custom extract.py scripts per document, causing different output on every run. As of 2026-03-31, the default is `build_knowledge_parts.py` for all documents. Custom scripts are only written when the user provides explicit CUSTOM_INSTRUCTIONS or the deterministic script produces 0 parts.
 
-### What the Extraction Script Does
+### What `build_knowledge_parts.py` Does
 
 ```python
-# Simplified overview — actual script is document-specific
+# Deterministic pipeline — same input always produces same output
 
-1. Load docling-result.json
-2. Build lookup structures (pointer → element, heading hierarchy)
-3. Walk through chunks in document order:
-   a. Classify each chunk: is it a real section? noise? continuation?
-   b. Merge small consecutive chunks under the same heading
-   c. Create text parts with titles from heading hierarchy
-4. Process tables from documents[].json_content.tables:
-   a. Extract cell structure (rows, columns, headers)
-   b. Convert to markdown table format
-   c. Create table parts with titles from nearby headings
-5. Process images from pictures[] or pages{}:
-   a. Extract base64 data
-   b. Create image parts with captions from adjacent text
-6. Write knowledge_parts.json and parts-index.json
+1. Load docling-result.json (chunks[])
+2. Filter noise: TOC, copyright, blank pages, chunks <20 chars
+3. Classify each chunk by type:
+   - text: default (prose, explanations)
+   - table: >3 pipe lines or "table"/"schedule" in heading
+   - image: has captions
+4. Split oversized chunks (>3000 chars) at paragraph/sentence boundaries
+5. Merge undersized chunks (<100 chars) with neighbors
+6. Assign IDs: {doc-slug}-{heading-slug}[-partN]
+7. Write knowledge_parts.json + parts-index.json
 ```
+
+### When Custom Extraction Is Needed
+
+Custom extract.py is only appropriate when:
+- `build_knowledge_parts.py` produces 0 parts (unusual document structure)
+- The user provides CUSTOM_INSTRUCTIONS (e.g., "split fee schedule into individual items")
+- Domain-specific content needs special handling (e.g., chess font parsing, music notation)
 
 ### Post-Extraction Consolidation
 
