@@ -252,13 +252,13 @@ export const apiDatasetAdapter: DatasetService = {
       recordsCount: db.record_count,
       knowledgeSourceCount: db.knowledge_source_count,
       topicCount: db.topic_count,
-      evalJobs: db.eval_jobs.map((j) => ({
+      evalJobs: (db.eval_jobs ?? []).map((j) => ({
         id: j.id,
         status: j.status,
         model: j.model ?? undefined,
         createdAt: parseUtcTimestamp(j.created_at),
       })),
-      trainingJobs: db.training_jobs.map((j) => ({
+      trainingJobs: (db.training_jobs ?? []).map((j) => ({
         id: j.id,
         status: j.status,
         model: j.model ?? undefined,

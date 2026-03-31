@@ -213,6 +213,39 @@ export interface DryRunDiagnosis {
   }[];
 }
 
+// Pre-training readiness gate verdict
+export type ReadinessVerdict = 'PASS' | 'WARN' | 'FAIL';
+
+// Single readiness criterion result
+export interface ReadinessCheck {
+  /** Machine identifier (e.g. 'score_std', 'prompt_learnability') */
+  readonly id: string;
+  /** Human-readable label (e.g. 'Score Variance') */
+  readonly label: string;
+  /** Hard checks gate training; soft checks are warnings */
+  readonly kind: 'hard' | 'soft';
+  /** Whether this check passed */
+  readonly passed: boolean;
+  /** Measured value */
+  readonly value: number;
+  /** Display string for threshold (e.g. '> 0.15') */
+  readonly threshold: string;
+  /** Fix suggestion shown when check fails */
+  readonly suggestion: string;
+  /** True when check couldn't run (not enough data) */
+  readonly skipped?: boolean;
+}
+
+// Aggregate readiness gate result
+export interface ReadinessGate {
+  readonly verdict: ReadinessVerdict;
+  readonly checks: ReadinessCheck[];
+  readonly hardPassed: number;
+  readonly hardTotal: number;
+  readonly softPassed: number;
+  readonly softTotal: number;
+}
+
 // Dry run statistics stored on dataset for UI display
 export interface EvalStats {
   // When this was run
@@ -244,6 +277,9 @@ export interface EvalStats {
 
   // Diagnosis and recommendations
   diagnosis: DryRunDiagnosis;
+
+  // Pre-training readiness gate (computed from per-record data during analysis)
+  readinessGate?: ReadinessGate;
 
   // Sample results for manual review (top/bottom scores)
   sampleResults: {

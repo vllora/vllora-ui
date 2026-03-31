@@ -34,6 +34,12 @@ import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { WorkspaceTabsConsumer } from "@/contexts/WorkspaceTabsContext";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { NewJobDialog } from "@/components/finetune/content/NewJobDialog";
 import type { TrainingEvalContext } from "@/components/finetune/content/NewJobDialog";
 import { NewEvaluationDialog } from "@/components/datasets/evaluation-dialog/NewEvaluationDialog";
@@ -544,7 +550,16 @@ function SidebarItem({ icon, label, badge, isActive, isNested, onClick }: Sideba
       )}
     >
       <span className="opacity-50 shrink-0">{icon}</span>
-      <span className="flex-1 truncate min-w-0">{label}</span>
+      <TooltipProvider delayDuration={400}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="flex-1 truncate min-w-0">{label}</span>
+          </TooltipTrigger>
+          <TooltipContent side="right" className="max-w-xs">
+            {label}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
       {badge}
     </button>
   );
@@ -623,7 +638,16 @@ function TopicTreeItems({
             onClick={() => onSelect(nodeId)}
             className="flex-1 flex items-center gap-1.5 min-w-0 text-left ml-1"
           >
-            <span className="flex-1 truncate min-w-0 font-medium">{node.name}</span>
+            <TooltipProvider delayDuration={400}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="flex-1 truncate min-w-0 font-medium">{node.name}</span>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-xs">
+                  {node.name}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <CountBadge count={count} />
           </button>
         </div>
@@ -657,7 +681,16 @@ function TopicTreeItems({
       )}
       style={{ paddingLeft: paddingLeft + 14 }}
     >
-      <span className="flex-1 truncate min-w-0">{node.name}</span>
+      <TooltipProvider delayDuration={400}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="flex-1 truncate min-w-0">{node.name}</span>
+          </TooltipTrigger>
+          <TooltipContent side="right" className="max-w-xs">
+            {node.name}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
       <CountBadge count={count} />
     </button>
   );

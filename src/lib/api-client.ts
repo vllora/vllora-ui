@@ -91,84 +91,8 @@ export async function apiClient(
     headers['Content-Type'] = 'application/json';
   }
 
-  // Make the request
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
+  const response = await fetch(url, { ...options, headers });
   return response;
-}
-
-// ─── GET request deduplication ─────────────────────────────────────────────────
-// Two layers:
-// 1. In-flight dedup: if the same GET is already in progress, share the result
-// 2. Short TTL cache (500ms): handles React.StrictMode sequential double-mount
-//    where mount→unmount→remount fires the same fetch twice in quick succession.
-// Not a persistent cache — entries expire after 500ms so data stays fresh.
-
-const DEDUP_TTL_MS = 500;
-
-interface BufferedResponse {
-  readonly status: number;
-  readonly statusText: string;
-  readonly headers: [string, string][];
-  readonly body: ArrayBuffer;
-}
-
-interface CachedEntry {
-  readonly response: BufferedResponse;
-  readonly expiresAt: number;
-}
-
-const inflightGets = new Map<string, Promise<BufferedResponse>>();
-const recentGets = new Map<string, CachedEntry>();
-
-function toResponse(buf: BufferedResponse): Response {
-  return new Response(buf.body, {
-    status: buf.status,
-    statusText: buf.statusText,
-    headers: buf.headers,
-  });
-}
-
-async function deduplicatedGet(endpoint: string, options?: RequestInit): Promise<Response> {
-  // Layer 1: return from in-flight request
-  const inflight = inflightGets.get(endpoint);
-  if (inflight) {
-    return toResponse(await inflight);
-  }
-
-  // Layer 2: return from short TTL cache (covers StrictMode sequential remount)
-  const cached = recentGets.get(endpoint);
-  if (cached && cached.expiresAt > Date.now()) {
-    return toResponse(cached.response);
-  }
-
-  const promise = apiClient(endpoint, { ...options, method: 'GET' }).then(
-    async (response) => {
-      const buf: BufferedResponse = {
-        status: response.status,
-        statusText: response.statusText,
-        headers: [...response.headers.entries()],
-        body: await response.arrayBuffer(),
-      };
-      return buf;
-    },
-  );
-
-  inflightGets.set(endpoint, promise);
-
-  try {
-    const buf = await promise;
-    // Cache successful responses briefly
-    if (buf.status >= 200 && buf.status < 400) {
-      recentGets.set(endpoint, { response: buf, expiresAt: Date.now() + DEDUP_TTL_MS });
-      setTimeout(() => recentGets.delete(endpoint), DEDUP_TTL_MS);
-    }
-    return toResponse(buf);
-  } finally {
-    inflightGets.delete(endpoint);
-  }
 }
 
 /**
@@ -176,7 +100,7 @@ async function deduplicatedGet(endpoint: string, options?: RequestInit): Promise
  */
 export const api = {
   async get(endpoint: string, options?: RequestInit) {
-    return deduplicatedGet(endpoint, options);
+    return apiClient(endpoint, { ...options, method: 'GET' });
   },
 
   async post(endpoint: string, data?: any, options?: RequestInit) {
@@ -209,13 +133,26 @@ export const api = {
 };
 
 /**
+ * API error with HTTP status code for downstream handling (e.g., 404 detection).
+ */
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+/**
  * Helper to parse JSON response and handle errors
  */
 export async function handleApiResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const error = await response.text();
     const errorJson = tryParseJson(error)
-    throw new Error(errorJson?.error || errorJson?.message || error || `API request failed with status ${response.status}`);
+    throw new ApiError(
+      errorJson?.error || errorJson?.message || error || `API request failed with status ${response.status}`,
+      response.status,
+    );
   }
 
   // Handle empty responses (e.g., 204 No Content or empty body)

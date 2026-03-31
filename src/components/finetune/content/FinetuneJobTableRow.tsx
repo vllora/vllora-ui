@@ -79,8 +79,12 @@ export function FinetuneJobTableRow({ job, onJobAction }: FinetuneJobTableRowPro
 
     setIsActionLoading(true);
     try {
-      await cancelFinetuneJob(job.workflow_id, job.provider_job_id);
-      toast.success('Job cancelled successfully');
+      const result = await cancelFinetuneJob(job.workflow_id, job.provider_job_id);
+      if (result.cloudCancelFailed) {
+        toast.warning('Job marked as cancelled locally, but the cloud training may still be running. Check the provider dashboard to confirm.');
+      } else {
+        toast.success('Job cancelled successfully');
+      }
       onJobAction?.();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to cancel job');

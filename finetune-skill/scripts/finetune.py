@@ -14,10 +14,12 @@ Usage:
   uv run scripts/finetune.py upload-records --workflow-id WF_ID --file training.jsonl
   uv run scripts/finetune.py upload-grader --workflow-id WF_ID --file grader.js
   uv run scripts/finetune.py verify --workflow-id WF_ID
+  uv run scripts/finetune.py cancel-training --workflow-id WF_ID --job-id JOB_ID
 
 Exit codes:
   0 - success
   1 - error (details on stderr)
+  2 - job was cancelled (not an error, but a terminal state)
 """
 
 import argparse
@@ -149,7 +151,9 @@ def cmd_upload_knowledge(args: argparse.Namespace) -> None:
     Or a bare array of part objects.
 
     Transforms: 'id' → 'reference_id', removes 'source_id' before upload.
-    When --force is set, deletes existing sources with the same name before uploading.
+    Always checks for existing sources with the same name to prevent duplicates
+    on retry. With --force, deletes and re-uploads. Without --force, skips if
+    a source with parts already exists (safe resume after crash).
     """
     doc_path = Path(args.file)
     if not doc_path.exists():
@@ -158,16 +162,34 @@ def cmd_upload_knowledge(args: argparse.Namespace) -> None:
 
     source_name = args.name or doc_path.name
 
-    # When --force, delete existing sources with same name first to avoid duplicates
-    if args.force:
+    # Always check for existing sources with same name to prevent duplicates.
+    # The gateway's knowledge source endpoint does plain INSERT (no upsert),
+    # so retrying without this check creates duplicate sources.
+    existing = _api("GET", f"{args.base_url}/finetune/workflows/{args.workflow_id}/knowledge")
+    existing_sources = existing if isinstance(existing, list) else existing.get("sources", [])
+    matching = [s for s in existing_sources if s.get("name") == source_name]
+
+    if matching and args.force:
         deleted = _delete_existing_knowledge_by_name(
             args.base_url, args.workflow_id, source_name,
         )
         if deleted:
             print(f"  Force mode: removed {deleted} existing source(s)")
+    elif matching:
+        # Check if existing source already has parts (completed upload)
+        existing_src = matching[0]
+        part_count = existing_src.get("part_count", existing_src.get("parts_count", 0))
+        if part_count > 0:
+            print(f"  Source '{source_name}' already exists with {part_count} parts — skipping (use --force to replace)")
+            print(f"  Knowledge source ID: {existing_src.get('id', 'unknown')}")
+            return
+        # Source exists but has no parts (crash during previous upload) — delete and re-upload
+        _delete_existing_knowledge_by_name(
+            args.base_url, args.workflow_id, source_name,
+        )
+        print(f"  Removed incomplete source '{source_name}' (0 parts) — re-uploading")
 
     # Upload the document as a knowledge source (always POST after cleanup)
-    files = {"file": (doc_path.name, doc_path.open("rb"), "application/pdf")}
     form_data = {
         "name": source_name,
         "description": args.description or f"Source document: {doc_path.name}",
@@ -175,12 +197,14 @@ def cmd_upload_knowledge(args: argparse.Namespace) -> None:
     if args.metadata:
         form_data["metadata"] = args.metadata
 
-    result = _api(
-        "POST",
-        f"{args.base_url}/finetune/workflows/{args.workflow_id}/knowledge",
-        files=files,
-        data=form_data,
-    )
+    with doc_path.open("rb") as fh:
+        files = {"file": (doc_path.name, fh, "application/pdf")}
+        result = _api(
+            "POST",
+            f"{args.base_url}/finetune/workflows/{args.workflow_id}/knowledge",
+            files=files,
+            data=form_data,
+        )
     ks_id = result.get("knowledge_source", {}).get("id", "unknown")
     print(f"Knowledge source uploaded: {ks_id}")
 
@@ -494,13 +518,13 @@ def cmd_upload_grader(args: argparse.Namespace) -> None:
         print(f"Error: Grader file not found: {grader_path}", file=sys.stderr)
         sys.exit(1)
 
-    files = {"file": (grader_path.name, grader_path.open("rb"), "application/javascript")}
-
-    _api(
-        "PATCH",
-        f"{args.base_url}/finetune/workflows/{args.workflow_id}/evaluator",
-        files=files,
-    )
+    with grader_path.open("rb") as fh:
+        files = {"file": (grader_path.name, fh, "application/javascript")}
+        _api(
+            "PATCH",
+            f"{args.base_url}/finetune/workflows/{args.workflow_id}/evaluator",
+            files=files,
+        )
     print(f"Grader uploaded: {grader_path.name}")
 
 
@@ -558,6 +582,837 @@ def cmd_verify(args: argparse.Namespace) -> None:
     else:
         print("\nSome checks failed. Re-run the upload for missing items.", file=sys.stderr)
         sys.exit(1)
+
+
+def cmd_status(args: argparse.Namespace) -> None:
+    """Show full workflow status: gateway API data + local checkpoint + jobs.
+
+    Single command to understand where a workflow stands — what's been
+    uploaded, what jobs have run, and what the next step should be.
+    Uses only the gateway REST API (no direct DB access).
+    """
+    wf_id = args.workflow_id
+    project_dir = Path(args.project_dir)
+    base_url = args.base_url
+
+    print(f"=== Workflow Status: {wf_id[:12]}... ===\n")
+
+    # ── Gateway data (via API) ──
+    print("── Gateway Data ──")
+    try:
+        wf = _api("GET", f"{base_url}/finetune/workflows/{wf_id}")
+    except SystemExit:
+        print("  Workflow not found or gateway unreachable!")
+        sys.exit(1)
+
+    print(f"  Name: {wf.get('name', '?')}")
+    obj = wf.get("objective", "")
+    print(f"  Objective: {obj[:120]}{'...' if len(obj) > 120 else ''}")
+
+    records_count = wf.get("records_count", wf.get("record_count", 0))
+    has_grader = "YES" if wf.get("eval_script") else "NO"
+
+    # Fetch topics and knowledge sources via API
+    topics_count = "?"
+    sources_count = "?"
+    parts_count = "?"
+    try:
+        topics_resp = _api("GET", f"{base_url}/finetune/workflows/{wf_id}/topics")
+        topics_list = topics_resp if isinstance(topics_resp, list) else topics_resp.get("topics", [])
+        topics_count = len(topics_list)
+    except SystemExit:
+        pass
+    try:
+        sources_resp = _api("GET", f"{base_url}/finetune/workflows/{wf_id}/knowledge")
+        sources_list = sources_resp if isinstance(sources_resp, list) else sources_resp.get("sources", [])
+        sources_count = len(sources_list)
+        parts_count = sum(s.get("part_count", s.get("parts_count", 0)) for s in sources_list)
+    except SystemExit:
+        pass
+
+    print(f"  Records: {records_count}")
+    print(f"  Topics: {topics_count}")
+    print(f"  Sources: {sources_count} ({parts_count} parts)")
+    print(f"  Grader: {has_grader}")
+
+    # ── Finetune jobs (from gateway API) ──
+    print("\n── Finetune Jobs ──")
+    job_list = []
+    try:
+        jobs = _api("GET", f"{base_url}/finetune/workflows/{wf_id}/jobs")
+        job_list = jobs if isinstance(jobs, list) else jobs.get("jobs", [])
+        if not job_list:
+            print("  No finetune jobs")
+        for j in job_list:
+            model = j.get("base_model", "?")
+            status = j.get("status", "?")
+            jid = j.get("id", "?")[:12]
+            print(f"  {jid}...  {status}  ({model})")
+    except SystemExit:
+        print("  Could not fetch jobs from gateway")
+
+    # ── Local checkpoint ──
+    print("\n── Local Checkpoint ──")
+    checkpoint_file = project_dir / ".checkpoint.json"
+    cp_steps: dict = {}
+    if checkpoint_file.exists():
+        cp = json.loads(checkpoint_file.read_text())
+        cp_steps = cp.get("steps", {})
+        for step_name, step_data in cp_steps.items():
+            status = step_data.get("status", "?")
+            completed = step_data.get("completed_at", "")[:19]
+            print(f"  {step_name}: {status} ({completed})")
+    else:
+        print("  No checkpoint file found")
+
+    def step_done(name: str) -> bool:
+        return cp_steps.get(name, {}).get("status") == "completed"
+
+    # ── Readiness gate (check latest eval if exists) ──
+    eval_dir = project_dir / "evaluations"
+    latest_eval_file = None
+    if eval_dir.exists():
+        eval_files = sorted(eval_dir.glob("eval-*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
+        for ef in eval_files:
+            try:
+                ed = json.loads(ef.read_text())
+                if ed.get("results") and len(ed["results"]) > 0:
+                    latest_eval_file = ef
+                    break
+            except (json.JSONDecodeError, KeyError):
+                pass
+
+    readiness_passed = step_done("readiness-pass")
+
+    if latest_eval_file and not readiness_passed:
+        print("\n── Readiness Gate ──")
+        # Quick inline check (same logic as readiness-check command)
+        try:
+            ed = json.loads(latest_eval_file.read_text())
+            scores = []
+            for r in ed.get("results", []):
+                epochs = r.get("epochs", {})
+                if isinstance(epochs, dict):
+                    for _ek, cands in epochs.items():
+                        if isinstance(cands, list):
+                            for c in cands:
+                                if isinstance(c, dict) and c.get("score") is not None:
+                                    scores.append(float(c["score"]))
+            if scores:
+                import statistics
+                n = len(scores)
+                avg_s = sum(scores) / n
+                std_s = statistics.stdev(scores) if n > 1 else 0
+                dead_w = sum(1 for s in scores if s < 0.1) / n
+                pass_r = sum(1 for s in scores if s >= 0.7) / n
+                print(f"  Latest eval: {latest_eval_file.name} ({n} scores)")
+                print(f"  avg={avg_s:.3f}, std={std_s:.3f}, dead_weight={dead_w:.1%}, pass_rate={pass_r:.1%}")
+                high_frac = sum(1 for s in scores if s > 0.9) / n
+                binary_frac = sum(1 for s in scores if s <= 0.01 or s >= 0.99) / n
+                # Score concentration: most common value (rounded to 0.01)
+                from collections import Counter
+                rounded = [round(s, 2) for s in scores]
+                mode_val, mode_ct = Counter(rounded).most_common(1)[0]
+                mode_frac = mode_ct / n
+                grader_ok = (std_s > 0.10 and mode_frac < 0.50)
+                signal_ok = avg_s > 0.05  # Only 0% is fatal (OpenAI RFT)
+                if grader_ok and signal_ok:
+                    print(f"  Verdict: PASS — grader quality OK, ready for training")
+                elif not signal_ok:
+                    print(f"  Verdict: FAIL — avg near zero, no training signal at all")
+                elif mode_frac >= 0.50:
+                    print(f"  Verdict: FAIL — {mode_frac:.0%} of scores are {mode_val}, grader too coarse")
+                else:
+                    print(f"  Verdict: FAIL — fix grader before training (std/binary/leniency)")
+        except Exception:
+            print(f"  Could not analyze {latest_eval_file.name}")
+
+    # ── Recommended next step ──
+    print("\n── Recommended Next Step ──")
+
+    if not step_done("create-workflow"):
+        print("  → Start from Step 1: Create workflow")
+    elif not step_done("extract"):
+        print("  → Resume from Step 2: Extract documents")
+    elif not step_done("topics"):
+        print("  → Resume from Step 3: Build topics")
+    elif not step_done("generate-data"):
+        print("  → Resume from Step 4: Generate records")
+    elif not step_done("grader"):
+        print("  → Resume from Step 5: Write grader")
+    elif not step_done("validate"):
+        print("  → Resume from Step 5.5: Validate")
+    elif records_count == 0 or records_count == "?":
+        print("  → Data was generated but may not be uploaded. Run verify.")
+    else:
+        active_training = [j for j in job_list if j.get("status") in ("running", "pending", "queued")]
+        cancelled_jobs = [j for j in job_list if j.get("status") == "cancelled"]
+        done_training = [j for j in job_list if j.get("status") in ("completed", "succeeded")]
+
+        if active_training:
+            print(f"  → Training running — poll it (Step 7e)")
+        elif done_training:
+            print(f"  → Analyze training results (Step 8b) and iterate if needed (Step 9)")
+        elif readiness_passed:
+            print(f"  → Readiness gate passed. Start training (Step 7d)")
+        else:
+            print(f"  → Run eval (Step 7b) then readiness gate (Step 7c) before training")
+
+
+def _extract_eval_data(results: list[dict]) -> dict:
+    """Extract structured data from eval results for readiness analysis.
+
+    Returns dict with:
+      - scores: flat list of all scores
+      - per_prompt: list of {scores, lengths, topic} per prompt
+      - has_lengths: whether completion lengths were available
+      - has_topics: whether topic labels were available
+    """
+    all_scores: list[float] = []
+    per_prompt: list[dict] = []
+
+    for r in results:
+        prompt_scores: list[float] = []
+        prompt_lengths: list[int] = []
+        topic = None
+
+        # Extract topic from row metadata
+        row = r.get("row", {})
+        if isinstance(row, dict):
+            topic = row.get("topic")
+
+        epochs = r.get("epochs", {})
+        if isinstance(epochs, dict):
+            for _epoch_key, candidates in epochs.items():
+                if not isinstance(candidates, list):
+                    continue
+                for c in candidates:
+                    if not isinstance(c, dict) or c.get("score") is None:
+                        continue
+                    score = float(c["score"])
+                    prompt_scores.append(score)
+                    all_scores.append(score)
+                    # Try to get completion length from candidate
+                    completion = c.get("completion", c.get("response", c.get("output", "")))
+                    if completion and isinstance(completion, str):
+                        prompt_lengths.append(len(completion))
+        elif r.get("score") is not None:
+            score = float(r["score"])
+            prompt_scores.append(score)
+            all_scores.append(score)
+
+        if prompt_scores:
+            entry: dict = {"scores": prompt_scores, "topic": topic}
+            if prompt_lengths:
+                entry["lengths"] = prompt_lengths
+            per_prompt.append(entry)
+
+    has_lengths = any("lengths" in p for p in per_prompt)
+    has_topics = any(p.get("topic") for p in per_prompt)
+
+    return {
+        "scores": all_scores,
+        "per_prompt": per_prompt,
+        "has_lengths": has_lengths,
+        "has_topics": has_topics,
+    }
+
+
+def cmd_readiness_check(args: argparse.Namespace) -> None:
+    """Check if eval results pass the pre-training readiness gate.
+
+    Computes readiness criteria from eval results. Training should only
+    start after ALL hard criteria pass. Returns structured JSON with
+    per-criterion details, verdict, and fix suggestions.
+
+    Hard checks (gate training — "is the grader working?"):
+      1. sample_count       — minimum dataset size (>= 50)
+      2. score_std          — grader differentiation (> 0.10)
+      3. avg_score          — nonzero signal (> 0.05)
+      + score_concentration — dynamic: hard if > 70%, soft if 50-70%
+
+    Soft checks (warnings, don't gate):
+      4. high_score_frac    — grader not too lenient
+      5. binary_frac        — grader uses full range
+      6. dead_weight_frac   — no wasted compute
+      7. pass_rate          — minimum viable quality
+      8. prompt_learnability — per-prompt variance for GRPO signal
+      9. score_length_corr  — reward hacking risk (Dr. GRPO)
+     10. topic_balance      — no single topic dominates
+
+    Exit codes: 0 = PASS, 1 = FAIL, 2 = WARN
+    """
+    eval_file = Path(args.file)
+    if not eval_file.exists():
+        print(f"Error: Eval file not found: {eval_file}", file=sys.stderr)
+        sys.exit(1)
+
+    data = json.loads(eval_file.read_text())
+    results = data.get("results", [])
+    if not results:
+        print(json.dumps({"verdict": "FAIL", "error": "No results in eval file", "checks": {}}))
+        sys.exit(1)
+
+    eval_data = _extract_eval_data(results)
+    scores = eval_data["scores"]
+    per_prompt = eval_data["per_prompt"]
+
+    if not scores:
+        print(json.dumps({"verdict": "FAIL", "error": "No scores found in eval results", "checks": {}}))
+        sys.exit(1)
+
+    # Parse thresholds — research-backed defaults, see iteration-strategy.md §5b
+    # Hard gates focus on GRADER QUALITY (is the grader working?) not model performance.
+    # GRPO can learn from low base model scores (DeepSeek R1-Zero: 15.6% → 71%, arXiv:2501.12948).
+    # Only 0% success is truly fatal (OpenAI RFT Guide).
+    defaults = {
+        "min_sample_count": 50,         # GRPO needs enough prompts for stable batches
+        "min_score_std": 0.10,          # Grader must differentiate — zero-variance → zero gradient (DAPO §2.2). Threshold is a heuristic.
+        "max_high_score_frac": 0.50,    # Grader leniency check. Heuristic — OpenAI recommends smooth scores.
+        "max_binary_frac": 0.60,        # Binary works (DeepSeek-R1, DAPO) but less sample-efficient. Raised from 0.40 per research review.
+        "min_avg_score": 0.05,          # Just needs nonzero signal (OpenAI: "0% success rate means cannot bootstrap")
+        "max_mode_frac": 0.50,          # Score concentration — if >50% are one value, grader too coarse for GRPO (DAPO arXiv:2503.14476)
+        "max_dead_weight_frac": 0.50,   # Real GRPO has 30-99% zero-var prompts ("No Prompt Left Behind" ICLR 2026)
+        "min_pass_rate": 0.20,          # Nice to have — hard examples are most valuable (arXiv:2508.14094)
+        "pass_threshold": 0.70,         # Score threshold for "passing" a record
+        "min_prompt_learnability": 0.30, # DAPO dynamic sampling (arXiv:2503.14476)
+        "max_score_length_corr": 0.30,  # Reward hacking risk (Dr. GRPO arXiv:2503.20783)
+        "max_topic_dominance": 0.40,    # No single topic should dominate training
+    }
+    thresholds = defaults.copy()
+    if args.thresholds:
+        try:
+            thresholds.update(json.loads(args.thresholds))
+        except json.JSONDecodeError:
+            print(f"Warning: Could not parse --thresholds, using defaults", file=sys.stderr)
+
+    import statistics
+
+    n = len(scores)
+    num_prompts = len(per_prompt)
+    avg = sum(scores) / n
+    std = statistics.stdev(scores) if n > 1 else 0.0
+    high_frac = sum(1 for s in scores if s > 0.9) / n
+    binary_frac = sum(1 for s in scores if s <= 0.01 or s >= 0.99) / n
+    dead_weight_frac = sum(1 for s in scores if s < 0.1) / n
+    pass_rate = sum(1 for s in scores if s >= thresholds["pass_threshold"]) / n
+
+    # Score concentration: fraction of scores at the most common value (rounded to 0.01)
+    # GRPO computes advantage = (reward - mean) / std within each K-group.
+    # If most scores are the same value, std→0 within groups → zero gradient.
+    # DAPO (arXiv:2503.14476) filters zero-variance groups for exactly this reason.
+    from collections import Counter
+    rounded_scores = [round(s, 2) for s in scores]
+    score_counter = Counter(rounded_scores)
+    if n > 0:
+        mode_value, mode_count = score_counter.most_common(1)[0]
+    else:
+        mode_value, mode_count = 0, 0
+    mode_frac = mode_count / n if n > 0 else 0
+
+    # ── Hard checks: grader quality + training viability ──
+    # These gate training. Focus on "is the grader working?" not "is the base model good?"
+    # GRPO can learn from low base model scores — DeepSeek R1-Zero started at 15.6% (arXiv:2501.12948).
+    checks: dict[str, dict] = {
+        "sample_count": {
+            "value": num_prompts,
+            "threshold": f">= {int(thresholds['min_sample_count'])}",
+            "pass": num_prompts >= thresholds["min_sample_count"],
+            "fix": f"Too few samples ({num_prompts}) — GRPO needs >= {int(thresholds['min_sample_count'])} prompts for stable advantage estimates.",
+            "hard": True,
+        },
+        "score_std": {
+            "value": round(std, 4),
+            "threshold": f"> {thresholds['min_score_std']}",
+            "pass": std > thresholds["min_score_std"],
+            "fix": "Grader not differentiating — zero-variance groups produce zero gradient (GRPO advantage = (r-mean)/std). Add more criteria or partial credit bands (0.2, 0.4, 0.6, 0.8). [DAPO §2.2; threshold is a heuristic]",
+            "hard": True,
+        },
+        "avg_score": {
+            "value": round(avg, 4),
+            "threshold": f"> {thresholds['min_avg_score']}",
+            "pass": avg > thresholds["min_avg_score"],
+            "fix": "Average score near zero — the base model produces no useful responses at all. GRPO needs at least some nonzero rewards. [OpenAI RFT: '0% success rate means RFT cannot bootstrap']",
+            "hard": True,
+        },
+        # Soft checks demoted from hard — research shows binary rewards work
+        # (DeepSeek-R1 arXiv:2501.12948, DAPO arXiv:2503.14476 both use 100% binary rewards).
+        "high_score_frac": {
+            "value": round(high_frac, 4),
+            "threshold": f"< {thresholds['max_high_score_frac']}",
+            "pass": high_frac < thresholds["max_high_score_frac"],
+            "fix": "Grader may be too lenient — if most completions score near-identical, within-group variance is small → weak gradients. Tighten grader criteria. [Heuristic; OpenAI recommends 'smooth scores, not pass/fail stamps']",
+            "hard": False,
+        },
+        "binary_frac": {
+            "value": round(binary_frac, 4),
+            "threshold": f"< {thresholds['max_binary_frac']}",
+            "pass": binary_frac < thresholds["max_binary_frac"],
+            "fix": "Many binary (0/1) scores — continuous scoring is more sample-efficient. Note: binary rewards DO work (DeepSeek-R1, DAPO both used 100% binary successfully). [arXiv:2501.12948, arXiv:2503.14476]",
+            "hard": False,
+        },
+        "score_concentration": {
+            "value": round(mode_frac, 4),
+            "threshold": f"< {thresholds['max_mode_frac']}",
+            "pass": mode_frac < thresholds["max_mode_frac"],
+            "fix": f"{mode_frac:.0%} of scores are exactly {mode_value} — within-group variance will be small → weak gradients. "
+                   f"Redesign grader with multi-point rubric (0-7 scale). "
+                   f"[DAPO arXiv:2503.14476 filters uniform groups; RGR-GRPO arXiv:2511.12344: rubric >> binary]",
+            # Hard fail at >70%: at K=8, most groups will score identically → zero gradient
+            # → wasted GPU hours. The grader is broken, not the data.
+            # Soft warn at 50-70%: some signal loss but training may still work.
+            "hard": mode_frac > 0.70,
+        },
+    }
+
+    # ── Soft checks: quality signals (warnings, don't gate training) ──
+    # Low base model scores are EXPECTED and even desirable — "Hard Examples Are All You Need"
+    # (arXiv:2508.14094) shows hard prompts yield 30-40% gains vs 3-15% for easy prompts on GSM8K.
+    checks["dead_weight_frac"] = {
+        "value": round(dead_weight_frac, 4),
+        "threshold": f"< {thresholds['max_dead_weight_frac']}",
+        "pass": dead_weight_frac < thresholds["max_dead_weight_frac"],
+        "fix": "Many dead-weight records (score<0.1) waste compute. DAPO handles this via dynamic sampling, but consider removing the worst offenders.",
+        "hard": False,
+    }
+    checks["pass_rate"] = {
+        "value": round(pass_rate, 4),
+        "threshold": f"> {thresholds['min_pass_rate']}",
+        "pass": pass_rate > thresholds["min_pass_rate"],
+        "fix": f"Low pass rate — but hard prompts are most valuable for GRPO. With K=8, pass@8 >> pass@1. [arXiv:2508.14094]",
+        "hard": False,
+    }
+
+    # ── Soft checks (warnings — don't gate training) ──
+
+    # Per-prompt learnability: fraction of prompts with score variance > 0
+    # DAPO insight: prompts where all K completions score identically = zero gradient
+    prompts_with_variance = sum(
+        1 for p in per_prompt
+        if len(p["scores"]) > 1 and statistics.stdev(p["scores"]) > 0.01
+    )
+    multi_score_prompts = sum(1 for p in per_prompt if len(p["scores"]) > 1)
+    if multi_score_prompts > 0:
+        learnability = prompts_with_variance / multi_score_prompts
+        checks["prompt_learnability"] = {
+            "value": round(learnability, 4),
+            "threshold": f"> {thresholds['min_prompt_learnability']}",
+            "pass": learnability > thresholds["min_prompt_learnability"],
+            "fix": f"Only {prompts_with_variance}/{multi_score_prompts} prompts have score variance — {multi_score_prompts - prompts_with_variance} prompts produce identical scores across completions (zero GRPO gradient). Remove or rewrite zero-variance prompts.",
+            "hard": False,
+            "detail": f"{prompts_with_variance}/{multi_score_prompts} prompts have variance",
+        }
+
+    # Score-length correlation: per Dr. GRPO, high correlation means grader
+    # rewards/punishes length rather than quality → reward hacking risk
+    if eval_data["has_lengths"]:
+        all_scored_lengths: list[tuple[float, int]] = []
+        for p in per_prompt:
+            if "lengths" not in p:
+                continue
+            for s_val, l_val in zip(p["scores"], p["lengths"]):
+                all_scored_lengths.append((s_val, l_val))
+
+        if len(all_scored_lengths) >= 10:
+            s_vals = [x[0] for x in all_scored_lengths]
+            l_vals = [x[1] for x in all_scored_lengths]
+            # Pearson correlation
+            s_mean = sum(s_vals) / len(s_vals)
+            l_mean = sum(l_vals) / len(l_vals)
+            cov = sum((s - s_mean) * (l - l_mean) for s, l in zip(s_vals, l_vals))
+            s_var = sum((s - s_mean) ** 2 for s in s_vals)
+            l_var = sum((l - l_mean) ** 2 for l in l_vals)
+            denom = (s_var * l_var) ** 0.5
+            corr = cov / denom if denom > 0 else 0.0
+
+            checks["score_length_corr"] = {
+                "value": round(abs(corr), 4),
+                "threshold": f"< {thresholds['max_score_length_corr']}",
+                "pass": abs(corr) < thresholds["max_score_length_corr"],
+                "fix": f"Score-length correlation is {corr:+.3f} — grader may be {'rewarding' if corr > 0 else 'punishing'} longer responses rather than judging quality. Rewrite grader to evaluate content independently of length.",
+                "hard": False,
+                "detail": f"r={corr:+.4f} across {len(all_scored_lengths)} scored completions",
+            }
+
+    # Topic balance: no single topic should dominate the dataset
+    if eval_data["has_topics"]:
+        topic_counts: dict[str, int] = {}
+        for p in per_prompt:
+            t = p.get("topic")
+            if t:
+                topic_counts[t] = topic_counts.get(t, 0) + 1
+        topics_with_labels = sum(topic_counts.values())
+        if topics_with_labels > 0 and len(topic_counts) > 1:
+            max_topic = max(topic_counts, key=lambda k: topic_counts[k])
+            max_topic_frac = topic_counts[max_topic] / topics_with_labels
+            checks["topic_balance"] = {
+                "value": round(max_topic_frac, 4),
+                "threshold": f"< {thresholds['max_topic_dominance']}",
+                "pass": max_topic_frac < thresholds["max_topic_dominance"],
+                "fix": f"Topic '{max_topic}' dominates at {max_topic_frac:.0%} of data — training will over-optimize for it. Add more data for under-represented topics or reduce '{max_topic}' records.",
+                "hard": False,
+                "detail": f"largest: '{max_topic}' ({topic_counts[max_topic]}/{topics_with_labels}), {len(topic_counts)} topics total",
+            }
+
+    # ── Compute verdict ──
+    hard_failed = [k for k, v in checks.items() if v.get("hard") and not v["pass"]]
+    soft_failed = [k for k, v in checks.items() if not v.get("hard") and not v["pass"]]
+    all_failed = hard_failed + soft_failed
+
+    # WARN if only 1 hard check fails marginally (within 80% of threshold).
+    # Map each hard check to its threshold key for numeric comparison.
+    _threshold_keys = {
+        "sample_count": ("min", "min_sample_count"),
+        "score_std": ("min", "min_score_std"),
+        "avg_score": ("min", "min_avg_score"),
+        "score_concentration": ("max", "max_mode_frac"),
+    }
+
+    def _is_marginal(check_name: str) -> bool:
+        mapping = _threshold_keys.get(check_name)
+        if not mapping:
+            return False
+        direction, key = mapping
+        value = checks[check_name]["value"]
+        threshold_val = thresholds.get(key, 0)
+        if direction == "min":
+            # Value must be within 80% of the min threshold (e.g., 0.08 vs 0.10)
+            return value > threshold_val * 0.8
+        else:
+            # Value must be within 125% of the max threshold (e.g., 0.55 vs 0.50)
+            return value < threshold_val * 1.25
+
+    marginal_hard = len(hard_failed) == 1 and all(
+        _is_marginal(k) for k in hard_failed
+    )
+
+    if not hard_failed and not soft_failed:
+        verdict = "PASS"
+    elif not hard_failed and soft_failed:
+        verdict = "WARN"
+    elif marginal_hard and not soft_failed:
+        verdict = "WARN"
+    else:
+        verdict = "FAIL"
+
+    result = {
+        "verdict": verdict,
+        "total_scores": n,
+        "total_prompts": num_prompts,
+        "checks": checks,
+        "failed_checks": all_failed,
+        "hard_failed": hard_failed,
+        "soft_failed": soft_failed,
+        "summary": {
+            "avg": round(avg, 4),
+            "std": round(std, 4),
+            "min": round(min(scores), 4),
+            "max": round(max(scores), 4),
+            "pass_rate": round(pass_rate, 4),
+            "dead_weight_count": sum(1 for s in scores if s < 0.1),
+        },
+    }
+
+    # Not all soft warnings are safe to train through.
+    # score_concentration > 70% means the grader is broken (most K=8 groups score
+    # identically → zero gradient). Fix grader before wasting GPU hours.
+    concentration_val = checks.get("score_concentration", {}).get("value", 0)
+    concentration_blocks_training = (
+        "score_concentration" in soft_failed and concentration_val > 0.70
+    )
+
+    if hard_failed:
+        fixes = [checks[k]["fix"] for k in hard_failed]
+        result["recommendation"] = "Fix before training: " + "; ".join(fixes)
+    elif concentration_blocks_training:
+        result["recommendation"] = (
+            f"FIX GRADER BEFORE TRAINING: {concentration_val:.0%} of scores are the same value. "
+            f"At K=8, most prompt groups will have all completions scoring identically → zero gradient → "
+            f"wasted compute. Run `diagnose-grader --file <this-eval-file> --workflow-id <wf-id>` "
+            f"to see WHY scores cluster and get specific fix suggestions, then edit grader.js and re-eval."
+        )
+    elif soft_failed:
+        fixes = [checks[k]["fix"] for k in soft_failed]
+        result["recommendation"] = "Can proceed to training, but consider: " + "; ".join(fixes)
+    else:
+        result["recommendation"] = "All checks passed. Ready for training."
+
+    print(json.dumps(result, indent=2))
+
+    if verdict == "FAIL":
+        sys.exit(1)
+    elif verdict == "WARN":
+        sys.exit(2)
+    else:
+        sys.exit(0)
+
+
+def cmd_diagnose_grader(args: argparse.Namespace) -> None:
+    """Diagnose grader issues from eval results.
+
+    Analyzes score distribution, groups records by score bucket, and shows
+    sample reason fields per bucket so the agent can understand WHY scores
+    cluster and WHAT to fix in the grader. Also fetches the current grader
+    source code from the gateway.
+
+    This is the bridge between "readiness-check says fix grader" and
+    "agent knows how to fix the grader."
+    """
+    eval_file = Path(args.file)
+    if not eval_file.exists():
+        print(f"Error: Eval file not found: {eval_file}", file=sys.stderr)
+        sys.exit(1)
+
+    data = json.loads(eval_file.read_text())
+    results = data.get("results", [])
+    if not results:
+        print("Error: No results in eval file", file=sys.stderr)
+        sys.exit(1)
+
+    # ── Score bucket analysis with reason patterns ──
+    from collections import defaultdict
+    buckets: dict[float, list[dict]] = defaultdict(list)
+    for r in results:
+        topic = r.get("row", {}).get("topic", "unknown")
+        for _epoch_key, candidates in r.get("epochs", {}).items():
+            if not isinstance(candidates, list):
+                continue
+            for c in candidates:
+                score = c.get("score")
+                if score is None:
+                    continue
+                buckets[round(float(score), 1)].append({
+                    "score": float(score),
+                    "reason": (c.get("reason") or "")[:300],
+                    "topic": topic,
+                    "row_index": r.get("row_index"),
+                })
+
+    total = sum(len(v) for v in buckets.values())
+
+    output: dict = {"total_scores": total, "buckets": {}, "diagnosis": [], "grader_source": None}
+
+    # Build bucket summary with sample reasons
+    for score_val in sorted(buckets.keys()):
+        items = buckets[score_val]
+        pct = len(items) / total * 100
+        sample_reasons = [it["reason"] for it in items[:3]]
+        output["buckets"][str(score_val)] = {
+            "count": len(items),
+            "percent": round(pct, 1),
+            "sample_reasons": sample_reasons,
+        }
+
+    # ── Auto-diagnosis based on distribution patterns ──
+    max_bucket_score = max(buckets.keys(), key=lambda k: len(buckets[k]))
+    max_bucket_pct = len(buckets[max_bucket_score]) / total * 100
+
+    if max_bucket_pct > 50:
+        dominant_reasons = [it["reason"] for it in buckets[max_bucket_score][:5]]
+        # Check if reasons mention "no figures", "did not provide", "non-responsive"
+        refusal_keywords = ["did not provide", "does not provide", "no specific", "non-responsive",
+                           "no figures", "no actual", "no metrics", "not provide any",
+                           "fails to", "failed to", "unable to", "need the", "without the",
+                           "cannot extract", "can't extract", "require", "need access"]
+        refusal_count = sum(
+            1 for reason in dominant_reasons
+            if any(kw in reason.lower() for kw in refusal_keywords)
+        )
+
+        if refusal_count >= 2:
+            output["diagnosis"].append({
+                "issue": f"{max_bucket_pct:.0f}% of scores are {max_bucket_score} — model refuses to answer most prompts",
+                "likely_cause": (
+                    "The model says it can't provide specific figures. This is a GRADER-PROMPT MISMATCH: "
+                    "the grader expects behavior (exact citations, page references) that the model can't "
+                    "produce from the prompt format. The model correctly declines instead of hallucinating, "
+                    "but the grader gives partial credit for 'not hallucinating' instead of scoring 0."
+                ),
+                "fix": [
+                    "**FIX THE GRADER** to match what the prompts can produce. Remove criteria the model "
+                    "can't satisfy from the current prompt format (e.g., page/section citations).",
+                    "Add early-exit for non-responses: if model doesn't extract any content → score 0.",
+                    "Remove score snapping (Math.round * 10 / 10) — let continuous scores through.",
+                    "If the model CAN answer from parametric knowledge, keep accuracy checks but "
+                    "remove citation requirements.",
+                ],
+                "root_cause": "GRADER-PROMPT MISMATCH — grader too strict for prompt format",
+            })
+        else:
+            output["diagnosis"].append({
+                "issue": f"{max_bucket_pct:.0f}% of scores are {max_bucket_score} — grader gives the same score to most responses",
+                "likely_cause": (
+                    "Grader criteria don't differentiate between different quality levels. "
+                    "Multiple failure modes produce the same score."
+                ),
+                "fix": [
+                    "Add early-exit: if no substantive content extracted → return {score: 0, reason: 'No content extracted'}",
+                    "Remove score snapping (Math.round * 10 / 10) — let continuous scores through for GRPO gradient",
+                    "Separate 'model refused' (score 0) from 'model tried but got wrong' (score 0.2-0.4)",
+                    "Weight accuracy/completeness higher than hallucination-avoidance for extraction tasks",
+                ],
+            })
+
+    # ── Check if prompts are missing source document context ──
+    if args.workflow_id:
+        try:
+            resp = requests.get(
+                f"{args.base_url}/finetune/workflows/{args.workflow_id}/records",
+                timeout=15,
+            )
+            if resp.status_code == 200:
+                records_data = resp.json()
+                recs = records_data.get("records", records_data) if isinstance(records_data, dict) else records_data
+                if isinstance(recs, list) and recs:
+                    msg_lengths = []
+                    for rec in recs[:50]:  # sample first 50
+                        rd = rec.get("data", {})
+                        if isinstance(rd, str):
+                            rd = json.loads(rd)
+                        msgs = rd.get("input", {}).get("messages", rd.get("messages", []))
+                        total = sum(len(m.get("content", "")) for m in msgs)
+                        msg_lengths.append(total)
+                    avg_len = sum(msg_lengths) / len(msg_lengths) if msg_lengths else 0
+                    long_context = sum(1 for l in msg_lengths if l > 2000)
+                    # Check if this task likely REQUIRES source document context.
+                    # Look for extraction-related keywords in system prompts.
+                    extraction_keywords = ["extract", "filing", "document", "report",
+                                          "10-k", "10k", "sec ", "cite", "section",
+                                          "page", "source", "reference"]
+                    sample_sys = []
+                    for rec in recs[:10]:
+                        rd2 = rec.get("data", {})
+                        if isinstance(rd2, str):
+                            rd2 = json.loads(rd2)
+                        msgs2 = rd2.get("input", {}).get("messages", rd2.get("messages", []))
+                        for m2 in msgs2:
+                            if m2.get("role") == "system":
+                                sample_sys.append(m2.get("content", "").lower())
+                    is_extraction_task = any(
+                        any(kw in sys_text for kw in extraction_keywords)
+                        for sys_text in sample_sys
+                    )
+
+                    output["record_context_check"] = {
+                        "avg_message_length": round(avg_len),
+                        "records_with_source_text": long_context,
+                        "records_sampled": len(msg_lengths),
+                        "has_source_context": long_context > len(msg_lengths) * 0.3,
+                        "is_extraction_task": is_extraction_task,
+                    }
+                    if long_context == 0 and is_extraction_task:
+                        output["diagnosis"].insert(0, {
+                            "issue": "GRADER-PROMPT MISMATCH: grader expects document extraction but prompts are short questions",
+                            "likely_cause": (
+                                f"All {len(msg_lengths)} sampled records have short messages (avg {avg_len:.0f} chars). "
+                                f"The system prompt references document extraction (filings, citations, pages) "
+                                f"but the grader criteria require information (exact citations, page references) "
+                                f"that the model can't produce from the prompt format alone."
+                            ),
+                            "fix": [
+                                "ADJUST THE GRADER to match what the prompts can produce. Remove criteria "
+                                "the model can't satisfy (e.g., page/section citations if no document is "
+                                "provided in the prompt). Score based on what the model CAN do.",
+                                "If the model can answer from parametric knowledge (e.g., public company "
+                                "financials), keep accuracy checks but remove citation requirements.",
+                                "If the task genuinely requires document-in-context analysis, that's a "
+                                "different prompt architecture — consult the team before restructuring.",
+                            ],
+                            "root_cause": "GRADER-PROMPT MISMATCH — grader too strict for the prompt format",
+                            "priority": "HIGH",
+                        })
+                    elif long_context == 0 and not is_extraction_task:
+                        output["record_context_check"]["note"] = (
+                            "Records don't include long source text, but the task doesn't appear to require "
+                            "document extraction. This is normal for knowledge/reasoning/style tasks."
+                        )
+        except Exception:
+            pass  # Gateway not available
+
+    if len(buckets.get(0.0, [])) > 0:
+        zero_reasons = [it["reason"] for it in buckets[0.0][:3]]
+        output["diagnosis"].append({
+            "issue": f"{len(buckets[0.0])} records scored 0.0 (dead weight)",
+            "sample_reasons": zero_reasons,
+            "fix": "Check if these are grader bugs (harsh early-exit) or genuinely empty responses. "
+                   "If grader bug → fix the early-exit condition. If model failure → remove these records.",
+        })
+
+    # ── Fetch current grader source from gateway ──
+    if args.workflow_id:
+        try:
+            resp = requests.get(
+                f"{args.base_url}/finetune/workflows/{args.workflow_id}/evaluator/versions",
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                versions = resp.json()
+                if isinstance(versions, list) and versions:
+                    latest = versions[-1]
+                    config = latest.get("config", {})
+                    script = config.get("script") or config.get("config", {}).get("script", "")
+                    if script:
+                        output["grader_source"] = script
+                        # Find scoring formula lines
+                        scoring_lines = []
+                        for i, line in enumerate(script.split("\n")):
+                            stripped = line.strip()
+                            if any(kw in stripped.lower() for kw in [
+                                "return {", "return{", "score =", "score=",
+                                "weighted", "finalscore", "basescore",
+                                "math.round", "math.min", "math.max",
+                            ]):
+                                scoring_lines.append(f"L{i}: {line.rstrip()[:120]}")
+                        if scoring_lines:
+                            output["scoring_formula_lines"] = scoring_lines
+        except Exception:
+            pass  # Gateway not available — agent can still use local grader.js
+
+    # ── Print human-readable diagnosis ──
+    print("=== Grader Diagnosis ===")
+    print(f"Total scores: {total}")
+    print()
+    print("Score distribution:")
+    for score_val in sorted(buckets.keys()):
+        items = buckets[score_val]
+        pct = len(items) / total * 100
+        bar = "█" * max(1, int(pct / 2))
+        print(f"  {score_val:.1f}: {len(items):4d} ({pct:5.1f}%) {bar}")
+    print()
+
+    if output["diagnosis"]:
+        print("Diagnosis:")
+        for d in output["diagnosis"]:
+            print(f"  ISSUE: {d['issue']}")
+            if "likely_cause" in d:
+                print(f"  CAUSE: {d['likely_cause']}")
+            if isinstance(d.get("fix"), list):
+                print("  FIX:")
+                for f in d["fix"]:
+                    print(f"    → {f}")
+            elif "fix" in d:
+                print(f"  FIX: {d['fix']}")
+            if "sample_reasons" in d:
+                print("  Sample reasons:")
+                for r in d["sample_reasons"]:
+                    print(f"    → {r[:150]}...")
+            print()
+
+    if output.get("scoring_formula_lines"):
+        print("Grader scoring formula (key lines):")
+        for line in output["scoring_formula_lines"]:
+            print(f"  {line}")
+        print()
+
+    print("Sample reasons per score bucket:")
+    for score_val in sorted(buckets.keys()):
+        items = buckets[score_val]
+        print(f"\n  Score {score_val} ({len(items)} records):")
+        for reason in [it["reason"] for it in items[:2]]:
+            print(f"    → {reason[:150]}...")
+
+    # Also output as JSON on stderr for programmatic use
+    print(json.dumps(output), file=sys.stderr)
 
 
 def cmd_create_eval(args: argparse.Namespace) -> None:
@@ -658,10 +1513,13 @@ def cmd_poll_eval(args: argparse.Namespace) -> None:
         metadata = _update_eval_metadata(metadata, result)
         eval_file.write_text(json.dumps(metadata, indent=2))
 
-        if status in ("completed", "failed", "error"):
+        if status in ("completed", "failed", "error", "cancelled"):
             metadata["completed_at"] = result.get("completed_at")
             eval_file.write_text(json.dumps(metadata, indent=2))
             print(f"Done: {status}. Saved to {eval_file}")
+            if status == "cancelled":
+                print("Eval was cancelled. Partial results (if any) have been saved.", file=sys.stderr)
+                sys.exit(2)
             if status != "completed":
                 sys.exit(1)
             return
@@ -703,12 +1561,67 @@ def cmd_create_training(args: argparse.Namespace) -> None:
             sys.exit(1)
     else:
         payload["training_config"] = {
-            "learning_rate": 0.000001,  # 1e-6: universal GRPO consensus (DeepSeekMath, DAPO, Dr. GRPO, TRL default)
+            "learning_rate": 0.000005,  # 5e-6: between DeepSeek-R1's 3e-6 (arXiv:2501.12948) and gateway default 1e-5. Food-label E2E test showed 1e-6 too slow to converge.
             "lora_rank": 8,
             "gradient_accumulation_steps": 5,
-            "epochs": 2,
+            "epochs": 8,  # Default; overridden below by adaptive logic if user didn't set --config
             "batch_size": 5,
         }
+
+    # Adaptive defaults based on dataset size and model choice.
+    # Fetches the workflow once to get record_count, then adjusts epochs and
+    # warns about model sizing.
+    # Ref: Food-label E2E test (2026-03-31): 9B OOM after 46 min with 225 records,
+    #       wasted time before falling back to 4B. Pre-flight check would have avoided this.
+    record_count = 0
+    try:
+        wf = _api("GET", f"{args.base_url}/finetune/workflows/{args.workflow_id}")
+        record_count = wf.get("records_count", wf.get("record_count", 0))
+        if not isinstance(record_count, int):
+            record_count = 0
+    except SystemExit:
+        pass  # Workflow fetch failed; skip adaptive logic
+
+    # Model size pre-flight check.
+    # GRPO generates K completions per record per step. More records × larger K × bigger model = more VRAM.
+    # The cloud provider has fixed GPU allocations — 9B models OOM with larger datasets.
+    # Heuristic based on empirical testing:
+    #   - 9B: works reliably with <100 records (K=8). >150 records risks OOM.
+    #   - 4B: works reliably with <500 records (K=8). >800 records may need K=4.
+    #   - 1.5B/2B: works with any practical dataset size.
+    base_model = payload.get("base_model", "")
+    model_lower = base_model.lower()
+    k_count = 8  # default response_candidates_count
+    if args.inference_params:
+        try:
+            k_count = json.loads(args.inference_params).get("response_candidates_count", 8)
+        except (json.JSONDecodeError, AttributeError):
+            pass
+
+    if record_count > 0:
+        if "9b" in model_lower and record_count > 100:
+            recommended = base_model.replace("9B", "4B").replace("9b", "4b")
+            print(f"  ⚠ WARNING: {base_model} with {record_count} records (K={k_count}) risks OOM.", file=sys.stderr)
+            print(f"    9B models work reliably with <100 records. You have {record_count}.", file=sys.stderr)
+            print(f"    Recommended: use {recommended} instead, or reduce response_candidates_count to 4.", file=sys.stderr)
+            print(f"    Proceeding anyway — if OOM occurs, retry with the smaller model.", file=sys.stderr)
+        elif "9b" in model_lower and k_count > 8:
+            print(f"  ⚠ WARNING: {base_model} with K={k_count} may OOM. Consider K=8 or use 4B model.", file=sys.stderr)
+
+    # Adaptive epochs (only when using defaults, not user --config)
+    # Small datasets exhaust quickly and need more passes; large datasets plateau earlier.
+    # Ref: DeepSeek-R1 (arXiv:2501.12948) used ~50k records with ~2 epochs;
+    #       food-label E2E test showed plateau at epoch 3 with 225 records.
+    if not args.config and record_count > 0:
+        if record_count < 50:
+            payload["training_config"]["epochs"] = 15
+        elif record_count < 200:
+            payload["training_config"]["epochs"] = 8
+        elif record_count < 500:
+            payload["training_config"]["epochs"] = 5
+        else:
+            payload["training_config"]["epochs"] = 3
+        print(f"Adaptive epochs: {payload['training_config']['epochs']} (based on {record_count} records)")
 
     if args.inference_params:
         try:
@@ -770,6 +1683,10 @@ def cmd_create_training(args: argparse.Namespace) -> None:
     print(f"Saved: {out_file}")
 
 
+class _JobNotFoundError(Exception):
+    """Raised when a job ID is not found in the workflow's job list."""
+
+
 def _poll_training_once(base_url: str, wf_id: str, job_id: str) -> dict:
     """Fetch training job status from the jobs list (single-job endpoint is broken)."""
     jobs = _api("GET", f"{base_url}/finetune/workflows/{wf_id}/jobs")
@@ -777,7 +1694,7 @@ def _poll_training_once(base_url: str, wf_id: str, job_id: str) -> dict:
     for job in job_list:
         if job.get("id") == job_id:
             return job
-    raise SystemExit(f"Error: Job {job_id} not found in workflow {wf_id}")
+    raise _JobNotFoundError(f"Job {job_id} not found in workflow {wf_id}")
 
 
 def _save_training_side_files(
@@ -803,6 +1720,246 @@ def _save_training_side_files(
         print(f"  Warning: Could not fetch epoch evals", file=sys.stderr)
 
 
+def _compute_ema(values: list[float], alpha: float = 0.3) -> list[float]:
+    """Compute exponential moving average over a series.
+
+    Alpha=0.3 balances responsiveness to recent changes vs. noise smoothing.
+    Higher alpha = more responsive, lower = smoother.
+    """
+    if not values:
+        return []
+    ema = [values[0]]
+    for v in values[1:]:
+        ema.append(alpha * v + (1 - alpha) * ema[-1])
+    return ema
+
+
+def _ema_slope(ema_values: list[float], window: int) -> float:
+    """Compute average slope of the last `window` EMA points.
+
+    Uses simple linear regression (least squares) over the window for
+    robustness against single-point noise.
+    """
+    tail = ema_values[-window:]
+    n = len(tail)
+    if n < 2:
+        return 0.0
+    x_mean = (n - 1) / 2.0
+    y_mean = sum(tail) / n
+    numerator = sum((i - x_mean) * (y - y_mean) for i, y in enumerate(tail))
+    denominator = sum((i - x_mean) ** 2 for i in range(n))
+    if denominator == 0:
+        return 0.0
+    return numerator / denominator
+
+
+def _check_length_exploitation(
+    base_url: str, wf_id: str, job_id: str,
+) -> dict | None:
+    """Detect length exploitation: response length growing while reward is flat.
+
+    Ref: Dr. GRPO (arXiv:2503.20783) — GRPO's 1/|o_i| normalization causes
+    incorrect responses to grow longer. Reward may appear stable while the
+    model is actively degenerating.
+
+    Only triggers when length grows >30% AND reward is flat or declining.
+    If reward is improving alongside length, the model is learning to give
+    better, more complete answers — that's healthy, not exploitation.
+
+    Returns dict with length trend info if exploitation detected, None otherwise.
+    """
+    try:
+        metrics = _api(
+            "GET",
+            f"{base_url}/finetune/workflows/{wf_id}/jobs/{job_id}/metrics",
+        )
+    except SystemExit:
+        return None
+
+    steps = metrics.get("steps", metrics.get("data", []))
+    if not isinstance(steps, list) or len(steps) < 6:
+        return None
+
+    # Extract mean_length and reward per step
+    lengths: list[float] = []
+    rewards: list[float] = []
+    for step in steps:
+        length = step.get("completions/mean_length") or step.get("completion_length")
+        if length is not None and isinstance(length, (int, float)):
+            lengths.append(float(length))
+
+        reward = step.get("reward/mean") or step.get("reward_mean")
+        if reward is not None and isinstance(reward, (int, float)):
+            rewards.append(float(reward))
+
+    if len(lengths) < 6:
+        return None
+
+    # Compare first third vs last third for length
+    third = len(lengths) // 3
+    early_avg = sum(lengths[:third]) / third
+    late_avg = sum(lengths[-third:]) / third
+
+    if early_avg <= 0:
+        return None
+
+    growth_ratio = (late_avg - early_avg) / early_avg
+
+    # No significant length growth — no exploitation
+    if growth_ratio <= 0.30:
+        return None
+
+    # Length grew >30%. Now check if reward is also improving.
+    # If reward is clearly improving, this is healthy learning, not exploitation.
+    if len(rewards) >= 6:
+        reward_ema = _compute_ema(rewards, alpha=0.3)
+        reward_slope = _ema_slope(reward_ema, window=min(len(reward_ema), 5))
+        # Positive reward slope above threshold means model is learning
+        if reward_slope > 0.005:
+            return None
+
+    return {
+        "length_exploitation": True,
+        "early_avg_length": round(early_avg, 1),
+        "late_avg_length": round(late_avg, 1),
+        "growth_pct": round(growth_ratio * 100, 1),
+    }
+
+
+def _check_score_plateau(
+    base_url: str, wf_id: str, job_id: str,
+    patience: int = 5, slope_threshold: float = 0.005,
+    min_warmup_epochs: int = 2,
+) -> dict | None:
+    """Check if training scores have plateaued across epoch evals.
+
+    Returns a dict with plateau/degradation info if detected, None otherwise.
+
+    Improved early stopping based on GRPO/RFT research:
+    - Uses EMA (alpha=0.3) instead of raw first-vs-last delta for noise robustness
+    - Linear regression slope over the patience window detects true trends
+    - Requires min_warmup_epochs before checking (GRPO has a slow-start phase;
+      arXiv:2507.18014 identifies 3 phases: slow start → rapid improvement → plateau)
+    - patience=5 epochs (up from 3) for statistical reliability
+    - slope_threshold=0.005/epoch — conservative to avoid aborting late-stage
+      hard-prompt learning (arXiv:2508.14094: hard examples yield 47% gains)
+    - Distinguishes "converged well" (high score) vs "stuck" (low score) —
+      GRPO has absorbing states at p=0 (arXiv:2503.06639)
+    - Checks for length exploitation (Dr. GRPO, arXiv:2503.20783)
+
+    Ref: Food-label E2E test (2026-03-31) showed plateau at epoch 3 with
+    225 records — score went 0.51→0.60 then +0.003 across 3 evals.
+    Continued training for 7+ more hours with no improvement.
+    """
+    try:
+        evals = _api(
+            "GET",
+            f"{base_url}/finetune/workflows/{wf_id}/finetune-evaluations",
+            params={"finetune_job_id": job_id},
+        )
+    except SystemExit:
+        return None
+
+    results = evals.get("results", [])
+    if not results:
+        return None
+
+    # Compute per-epoch average scores
+    # Each result has "epochs" dict: {"1": [{"score": 0.5}, ...], "2": [...], ...}
+    epoch_scores: dict[str, list[float]] = {}
+    for row in results:
+        epochs = row.get("epochs", {})
+        for epoch_key, items in epochs.items():
+            if not isinstance(items, list):
+                items = [items]
+            for item in items:
+                score = item.get("score")
+                if score is not None and isinstance(score, (int, float)):
+                    epoch_scores.setdefault(epoch_key, []).append(score)
+
+    # Warm-up guard: don't check until we have enough epochs.
+    # GRPO's slow-start phase (arXiv:2507.18014) means early epochs may
+    # show little improvement before rapid gains begin.
+    if len(epoch_scores) < max(patience, min_warmup_epochs + 1):
+        return None
+
+    # Sort epochs numerically and compute averages
+    def _sort_key(k: str):
+        try:
+            return float(k)
+        except (TypeError, ValueError):
+            return float("inf")
+
+    sorted_epochs = sorted(epoch_scores.keys(), key=_sort_key)
+    epoch_avgs = [
+        (k, sum(epoch_scores[k]) / len(epoch_scores[k]))
+        for k in sorted_epochs
+    ]
+
+    raw_scores = [avg for _, avg in epoch_avgs]
+
+    # EMA smoothing (alpha=0.3) — robust to noisy per-epoch eval variance.
+    # Raw first-vs-last comparison misses oscillation and V-shaped recovery.
+    ema_scores = _compute_ema(raw_scores, alpha=0.3)
+
+    # Slope of EMA over the patience window via linear regression.
+    # Positive slope = still improving, negative = degrading, near-zero = plateau.
+    slope = _ema_slope(ema_scores, window=patience)
+
+    best_epoch, best_score = max(epoch_avgs, key=lambda x: x[1])
+    last_score = epoch_avgs[-1][1]
+
+    result_base = {
+        "num_evals": len(epoch_avgs),
+        "patience": patience,
+        "ema_slope": round(slope, 6),
+        "slope_threshold": slope_threshold,
+        "best_epoch": best_epoch,
+        "best_score": round(best_score, 4),
+        "last_score": round(last_score, 4),
+        "all_avgs": [(k, round(v, 4)) for k, v in epoch_avgs],
+        "ema_values": [round(v, 4) for v in ema_scores],
+    }
+
+    # --- Signal 1: Score plateau (EMA slope near zero) ---
+    if abs(slope) < slope_threshold:
+        # Distinguish "converged well" vs "stuck at bad minimum".
+        # GRPO has absorbing states at p=0 (arXiv:2503.06639) — a plateau
+        # at low scores likely means the grader/data needs fixing, not that
+        # training should just stop.
+        if best_score >= 0.5:
+            quality = "converged"
+            action = "Deploy best checkpoint"
+        elif best_score >= 0.3:
+            quality = "mediocre"
+            action = "Consider improving grader/data quality before retraining"
+        else:
+            quality = "stuck"
+            action = "Investigate grader alignment and data quality — low plateau suggests fundamental issues"
+
+        return {
+            **result_base,
+            "signal": "plateau",
+            "quality": quality,
+            "action": action,
+            "plateaued": True,
+        }
+
+    # --- Signal 2: Score degradation (negative EMA slope) ---
+    # Reward declining over the patience window indicates overfitting,
+    # reward hacking, or policy collapse.
+    if slope < -slope_threshold:
+        return {
+            **result_base,
+            "signal": "degradation",
+            "quality": "degrading",
+            "action": "Stop training — scores declining. Deploy best checkpoint",
+            "plateaued": True,  # Backward compat: treated as stop signal
+        }
+
+    return None
+
+
 def cmd_poll_training(args: argparse.Namespace) -> None:
     """Poll a training job until complete, saving status and metrics locally."""
     import time
@@ -818,24 +1975,57 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
     if not wf_id:
         print("Error: --workflow-id not provided and not found in job file", file=sys.stderr)
         sys.exit(1)
-    poll_interval = args.poll_interval
     max_wait = args.max_wait
     output_dir = job_file.parent
 
-    print(f"Polling training job {job_id} every {poll_interval}s (max {max_wait}s)...")
-    elapsed = 0
+    # Adaptive polling: poll frequently early on, back off over time.
+    # Training jobs run 10min-2h+, so aggressive early polling catches fast
+    # failures while backing off saves API calls during long runs.
+    def _adaptive_interval(elapsed_s: float) -> int:
+        """Return poll interval based on elapsed time. Never exceeds 600s (10min)."""
+        if elapsed_s < 600:       # First 10 min: poll every 30s
+            return 30
+        elif elapsed_s < 3600:    # 10-60 min: poll every 2 min
+            return 120
+        else:                     # 60+ min: poll every 10 min (cap)
+            return 600
+
+    early_stop = not args.no_early_stop
+    print(f"Polling training job {job_id} with adaptive intervals (max {max_wait}s)...")
+    if early_stop:
+        print(
+            f"  Early stopping enabled (EMA-based, patience=5 epochs, "
+            f"min 2 epoch warm-up, length exploitation check)"
+        )
+    start_time = time.time()
     status = "unknown"
-    while elapsed < max_wait:
+    not_found_count = 0  # Track consecutive "job not found" responses
+    last_plateau_check = 0.0  # Only check plateau every 5 min to avoid API spam
+    while True:
+        elapsed = time.time() - start_time
+        if elapsed >= max_wait:
+            break
+
         try:
             result = _poll_training_once(args.base_url, wf_id, job_id)
+            not_found_count = 0  # Reset on success
+        except _JobNotFoundError:
+            not_found_count += 1
+            if not_found_count >= 3:
+                print(f"Error: Job {job_id} not found after {not_found_count} consecutive checks. Wrong job ID?", file=sys.stderr)
+                sys.exit(1)
+            interval = _adaptive_interval(elapsed)
+            print(f"  [{int(elapsed)}s] Job not in list (attempt {not_found_count}/3) — retrying in {interval}s...", file=sys.stderr)
+            time.sleep(interval)
+            continue
         except SystemExit:
-            print(f"  [{elapsed}s] API error — retrying...", file=sys.stderr)
-            time.sleep(poll_interval)
-            elapsed += poll_interval
+            interval = _adaptive_interval(elapsed)
+            print(f"  [{int(elapsed)}s] API error — retrying in {interval}s...", file=sys.stderr)
+            time.sleep(interval)
             continue
 
         status = result.get("status", "unknown")
-        print(f"  [{elapsed}s] {status}", flush=True)
+        print(f"  [{int(elapsed)}s] {status}", flush=True)
 
         metadata["status"] = status
         job_file.write_text(json.dumps(metadata, indent=2))
@@ -850,10 +2040,86 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
             print(f"Done: {status}. Saved to {job_file}")
             if status == "failed":
                 sys.exit(1)
+            if status == "cancelled":
+                print("Job was cancelled. Partial metrics (if any) have been saved.", file=sys.stderr)
+                sys.exit(2)
             return
 
-        time.sleep(poll_interval)
-        elapsed += poll_interval
+        # Early stopping: multi-signal check every 5 min.
+        # Ref: Food-label E2E test showed 7+ hours wasted on plateaued training.
+        #
+        # Signals checked (based on GRPO/RFT research):
+        # 1. Score plateau via EMA slope (arXiv:2507.18014 — 3-phase training)
+        # 2. Score degradation (negative EMA slope — overfitting/collapse)
+        # 3. Length exploitation (Dr. GRPO, arXiv:2503.20783 — reward flat + length growing)
+        if early_stop and status == "running" and (elapsed - last_plateau_check) > 300:
+            last_plateau_check = elapsed
+
+            # Signal 1 & 2: Score plateau or degradation
+            plateau = _check_score_plateau(args.base_url, wf_id, job_id)
+            if plateau:
+                signal = plateau.get("signal", "plateau")
+                quality = plateau.get("quality", "unknown")
+                action = plateau.get("action", "")
+
+                if signal == "degradation":
+                    print(f"\n  ⚠ SCORE DEGRADATION DETECTED", file=sys.stderr)
+                else:
+                    print(f"\n  ⚠ SCORE PLATEAU DETECTED ({quality})", file=sys.stderr)
+
+                print(f"    EMA slope: {plateau['ema_slope']:+.6f}/epoch (threshold: ±{plateau['slope_threshold']})", file=sys.stderr)
+                print(f"    Scores: {' → '.join(f'{s:.3f}' for _, s in plateau['all_avgs'])}", file=sys.stderr)
+                print(f"    EMA:    {' → '.join(f'{v:.3f}' for v in plateau['ema_values'])}", file=sys.stderr)
+                print(f"    Best: epoch {plateau['best_epoch']} ({plateau['best_score']:.3f})", file=sys.stderr)
+                print(f"    Assessment: {action}", file=sys.stderr)
+                print(f"    → Auto-cancelling to save compute. Use --no-early-stop to override.", file=sys.stderr)
+
+                # Cancel the job
+                try:
+                    _api("POST", f"{args.base_url}/finetune/workflows/{wf_id}/jobs/{job_id}/cancel")
+                    metadata["status"] = "cancelled"
+                    metadata["early_stop_reason"] = (
+                        f"{signal.title()}: EMA slope {plateau['ema_slope']:+.6f}/epoch "
+                        f"across {plateau['patience']} evals (quality: {quality}). "
+                        f"Best epoch: {plateau['best_epoch']} "
+                        f"(score {plateau['best_score']:.3f}). {action}"
+                    )
+                    job_file.write_text(json.dumps(metadata, indent=2))
+                    print(f"  Training cancelled (early stop). Best checkpoint: epoch {plateau['best_epoch']}")
+                except SystemExit:
+                    print(f"  Warning: Cancel request failed — training continues", file=sys.stderr)
+
+                sys.exit(2)
+
+            # Signal 3: Length exploitation (checked independently of score plateau)
+            # Dr. GRPO (arXiv:2503.20783): GRPO's 1/|o_i| normalization can cause
+            # responses to grow longer while reward stays flat — active degeneration
+            # disguised as stability.
+            length_info = _check_length_exploitation(args.base_url, wf_id, job_id)
+            if length_info:
+                print(f"\n  ⚠ LENGTH EXPLOITATION DETECTED", file=sys.stderr)
+                print(f"    Avg length: {length_info['early_avg_length']:.0f} → {length_info['late_avg_length']:.0f} tokens (+{length_info['growth_pct']:.0f}%)", file=sys.stderr)
+                print(f"    Ref: Dr. GRPO (arXiv:2503.20783) — length growth >30% with flat reward indicates degeneration", file=sys.stderr)
+                print(f"    → Auto-cancelling. Use --no-early-stop to override.", file=sys.stderr)
+
+                try:
+                    _api("POST", f"{args.base_url}/finetune/workflows/{wf_id}/jobs/{job_id}/cancel")
+                    metadata["status"] = "cancelled"
+                    metadata["early_stop_reason"] = (
+                        f"Length exploitation: avg length grew "
+                        f"{length_info['early_avg_length']:.0f} → {length_info['late_avg_length']:.0f} "
+                        f"tokens (+{length_info['growth_pct']:.0f}%). "
+                        f"Ref: Dr. GRPO (arXiv:2503.20783)"
+                    )
+                    job_file.write_text(json.dumps(metadata, indent=2))
+                    print(f"  Training cancelled (length exploitation).")
+                except SystemExit:
+                    print(f"  Warning: Cancel request failed — training continues", file=sys.stderr)
+
+                sys.exit(2)
+
+        interval = _adaptive_interval(elapsed)
+        time.sleep(interval)
 
     print(f"Timeout after {max_wait}s. Training still {status}.", file=sys.stderr)
     metadata["status"] = f"timeout ({status})"
@@ -881,6 +2147,170 @@ def cmd_search_knowledge(args: argparse.Namespace) -> None:
         content_preview = part.get("content", "")[:120].replace("\n", " ")
         print(f"  [{i + 1}] score={score:.4f}  id={part.get('id', '')}  title={title}")
         print(f"       {content_preview}...")
+
+
+def cmd_cancel_training(args: argparse.Namespace) -> None:
+    """Cancel a running training job.
+
+    Calls POST /finetune/workflows/{workflow_id}/jobs/{job_id}/cancel
+    and updates the local job tracking file if one exists.
+    """
+    wf_id = args.workflow_id
+    job_id = args.job_id
+
+    print(f"Cancelling training job {job_id} in workflow {wf_id}...")
+    _api(
+        "POST",
+        f"{args.base_url}/finetune/workflows/{wf_id}/jobs/{job_id}/cancel",
+    )
+    print(f"Cancel request sent for job {job_id}.")
+
+    # Update local tracking file if provided
+    if args.file:
+        job_file = Path(args.file)
+        if job_file.exists():
+            metadata = json.loads(job_file.read_text())
+            metadata["status"] = "cancelled"
+            job_file.write_text(json.dumps(metadata, indent=2))
+            print(f"Updated local file: {job_file}")
+
+
+def cmd_sync_jobs(args: argparse.Namespace) -> None:
+    """Sync training + eval jobs from gateway to local tracking files.
+
+    Fetches all jobs for the workflow from the gateway API and creates/updates
+    local tracking files. This allows the agent to pick up jobs created by
+    the UI or other agents.
+
+    Creates:
+      - training-jobs/train-NNN.json for each finetune job
+      - evaluations/eval-NNN.json for each eval job
+    Skips jobs that already have a local file with matching job_id.
+    """
+    wf_id = args.workflow_id
+    output_dir = Path(args.output_dir)
+
+    # ── Sync finetune jobs ──
+    training_dir = output_dir / "training-jobs"
+    training_dir.mkdir(parents=True, exist_ok=True)
+
+    jobs = _api("GET", f"{args.base_url}/finetune/workflows/{wf_id}/jobs")
+    job_list = jobs if isinstance(jobs, list) else jobs.get("jobs", [])
+
+    # Index existing local files by job_id
+    existing_job_ids = set()
+    for f in training_dir.glob("train-*.json"):
+        try:
+            data = json.loads(f.read_text())
+            existing_job_ids.add(data.get("job_id"))
+        except (json.JSONDecodeError, KeyError):
+            pass
+
+    # Find next train-NNN number
+    existing_nums = []
+    for f in training_dir.glob("train-*.json"):
+        try:
+            num = int(f.stem.split("-")[1])
+            existing_nums.append(num)
+        except (ValueError, IndexError):
+            pass
+    next_num = max(existing_nums, default=0) + 1
+
+    synced_training = 0
+    skipped_training = 0
+    for job in job_list:
+        job_id = job.get("id", "")
+        if job_id in existing_job_ids:
+            # Update status in existing file
+            for f in training_dir.glob("train-*.json"):
+                try:
+                    data = json.loads(f.read_text())
+                    if data.get("job_id") == job_id:
+                        data["status"] = job.get("status", data.get("status"))
+                        if job.get("fine_tuned_model"):
+                            data["fine_tuned_model"] = job["fine_tuned_model"]
+                        if job.get("error_message"):
+                            data["error_message"] = job["error_message"]
+                        if job.get("completed_at"):
+                            data["completed_at"] = job["completed_at"]
+                        f.write_text(json.dumps(data, indent=2))
+                        break
+                except (json.JSONDecodeError, KeyError):
+                    pass
+            skipped_training += 1
+            continue
+
+        # New job — create local tracking file
+        local_data = {
+            "job_id": job_id,
+            "provider_job_id": job.get("provider_job_id", job_id),
+            "workflow_id": wf_id,
+            "base_model": job.get("base_model", ""),
+            "output_model": job.get("fine_tuned_model", ""),
+            "training_config": job.get("training_config", {}),
+            "status": job.get("status", "unknown"),
+            "created_at": job.get("created_at", ""),
+            "source": "synced_from_gateway",
+        }
+        out_file = training_dir / f"train-{next_num:03d}.json"
+        out_file.write_text(json.dumps(local_data, indent=2))
+        next_num += 1
+        synced_training += 1
+        print(f"  Synced training job: {job_id[:8]}... → {out_file.name} (status={local_data['status']})")
+
+    # ── Sync eval jobs ──
+    eval_dir = output_dir / "evaluations"
+    eval_dir.mkdir(parents=True, exist_ok=True)
+
+    existing_eval_ids = set()
+    for f in eval_dir.glob("eval-*.json"):
+        try:
+            data = json.loads(f.read_text())
+            existing_eval_ids.add(data.get("evaluation_run_id"))
+        except (json.JSONDecodeError, KeyError):
+            pass
+
+    existing_eval_nums = []
+    for f in eval_dir.glob("eval-*.json"):
+        try:
+            num = int(f.stem.split("-")[1])
+            existing_eval_nums.append(num)
+        except (ValueError, IndexError):
+            pass
+    next_eval_num = max(existing_eval_nums, default=0) + 1
+
+    # Fetch eval runs from gateway (use the evaluations list endpoint)
+    synced_eval = 0
+    try:
+        eval_resp = _api("GET", f"{args.base_url}/finetune/workflows/{wf_id}/evaluations")
+        eval_list = eval_resp if isinstance(eval_resp, list) else eval_resp.get("evaluations", [])
+        for ev in eval_list:
+            eval_id = ev.get("evaluation_run_id", ev.get("id", ""))
+            if eval_id in existing_eval_ids:
+                continue
+            local_eval = {
+                "evaluation_run_id": eval_id,
+                "workflow_id": wf_id,
+                "status": ev.get("status", "unknown"),
+                "model": ev.get("model", ""),
+                "total_rows": ev.get("total_rows", 0),
+                "completed_rows": ev.get("completed_rows", 0),
+                "source": "synced_from_gateway",
+            }
+            out_file = eval_dir / f"eval-{next_eval_num:03d}.json"
+            out_file.write_text(json.dumps(local_eval, indent=2))
+            next_eval_num += 1
+            synced_eval += 1
+            print(f"  Synced eval job: {eval_id[:8]}... → {out_file.name} (status={local_eval['status']})")
+    except SystemExit:
+        print("  Warning: Could not fetch eval jobs from gateway", file=sys.stderr)
+
+    # Summary
+    total = synced_training + synced_eval
+    print(f"\nSync complete: {synced_training} new training jobs, {synced_eval} new eval jobs "
+          f"({skipped_training} training jobs already tracked)")
+    if total == 0:
+        print("All jobs already tracked locally — nothing to sync.")
 
 
 def cmd_delete_knowledge(args: argparse.Namespace) -> None:
@@ -917,6 +2347,157 @@ def cmd_delete_knowledge(args: argparse.Namespace) -> None:
         deleted += 1
 
     print(f"Deleted {deleted} knowledge source(s).")
+
+
+def _compact_cell(value, max_chars: int = 160) -> str:
+    """Render cell-safe text for table output."""
+    if value is None:
+        return ""
+    text = str(value).replace("\n", "\\n").replace("\r", "")
+    if len(text) > max_chars:
+        return text[: max_chars - 3] + "..."
+    return text
+
+
+def cmd_difficulty_probe(args: argparse.Namespace) -> None:
+    """Run difficulty distribution probe on eval results.
+
+    Analyzes K=1 eval scores to predict K=8 zero-variance rates,
+    classify prompts by difficulty, and assess grader granularity.
+    Tells you whether GRPO training will produce learning signal.
+
+    Research: DOTS+RR (arXiv:2506.05316), Hard Examples (arXiv:2508.14094),
+    No Prompt Left Behind (arXiv:2509.21880), RGR-GRPO (arXiv:2511.12344).
+
+    Exit codes: 0 = PASS, 1 = FAIL, 2 = WARN
+    """
+    import subprocess
+
+    script_dir = Path(__file__).parent
+    script = script_dir / "probe_difficulty.py"
+    if not script.exists():
+        print(f"Error: probe_difficulty.py not found at {script}", file=sys.stderr)
+        sys.exit(1)
+
+    cmd = [sys.executable, str(script), args.file]
+    if args.k:
+        cmd.extend(["--k", str(args.k)])
+    if args.output_json:
+        cmd.append("--json")
+    if args.save:
+        cmd.extend(["--save", args.save])
+    if args.compact:
+        cmd.append("--compact")
+
+    result = subprocess.run(cmd)
+    sys.exit(result.returncode)
+
+
+def cmd_data_quality_gate(args: argparse.Namespace) -> None:
+    """Run pre-eval data quality gate on training data.
+
+    Validates data quality BEFORE spending on evaluation or training.
+    Delegates to data_quality_gate.py for the actual checks.
+
+    Gates (ordered by cost):
+      1. structural           (free)  — dedup, length, format, topic balance
+      2. diversity            (free)  — trigram-based diversity & redundancy
+      3. completion_length    (free)  — estimates if max_output_tokens is sufficient
+      4. ground_truth_quality ($$)    — LLM scores GT specificity
+      5. alignment            ($$)    — LLM checks prompt-GT alignment
+
+    Exit codes: 0 = PASS, 1 = FAIL, 2 = WARN
+    """
+    import subprocess
+
+    script_dir = Path(__file__).parent
+    script = script_dir / "data_quality_gate.py"
+    if not script.exists():
+        print(f"Error: data_quality_gate.py not found at {script}", file=sys.stderr)
+        sys.exit(1)
+
+    cmd = [sys.executable, str(script), args.file]
+
+    if args.topics:
+        cmd.extend(["--topics", args.topics])
+    if args.parts:
+        cmd.extend(["--parts", args.parts])
+    if args.gate:
+        cmd.extend(["--gate", args.gate])
+    if args.llm_gates:
+        cmd.append("--llm-gates")
+    if args.all_gates:
+        cmd.append("--all-gates")
+    if args.sample:
+        cmd.extend(["--sample", str(args.sample)])
+    if args.gateway_url:
+        cmd.extend(["--gateway-url", args.gateway_url])
+    if args.max_output_tokens:
+        cmd.extend(["--max-output-tokens", str(args.max_output_tokens)])
+    if args.output_json:
+        cmd.append("--json")
+    if args.save:
+        cmd.extend(["--save", args.save])
+
+    result = subprocess.run(cmd)
+    sys.exit(result.returncode)
+
+
+def cmd_print_row_outputs(args: argparse.Namespace) -> None:
+    """Print per-epoch rollout output + score + reason for one row."""
+    result = _api(
+        "GET",
+        f"{args.base_url}/finetune/workflows/{args.workflow_id}/finetune-evaluations",
+        params={
+            "finetune_job_id": args.finetune_job_id,
+            "row_index": args.row_index,
+        },
+    )
+
+    raw_results = result.get("results", [])
+    if not raw_results:
+        print(
+            f"No results found for row_index={args.row_index} in finetune_job_id={args.finetune_job_id}.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    row = raw_results[0]
+    epochs = row.get("epochs", {})
+    if not epochs:
+        print(
+            f"No epoch entries found for row_index={args.row_index}.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    def _epoch_sort_key(k: str):
+        try:
+            return (0, float(k))
+        except (TypeError, ValueError):
+            return (1, str(k))
+
+    print("epoch | rollout_output | score | reason")
+    for epoch_key in sorted(epochs.keys(), key=_epoch_sort_key):
+        epoch_items = epochs.get(epoch_key) or []
+        if not isinstance(epoch_items, list):
+            epoch_items = [epoch_items]
+        if not epoch_items:
+            print(f"{epoch_key} |  |  | ")
+            continue
+
+        for item in epoch_items:
+            rollout_output = item.get("rollout_output")
+            if rollout_output is None:
+                rollout_output = item.get("rollout_content")
+            score = item.get("score", "")
+            reason = item.get("reason", "")
+            print(
+                f"{_compact_cell(epoch_key, 32)} | "
+                f"{_compact_cell(rollout_output, args.max_chars)} | "
+                f"{_compact_cell(score, 32)} | "
+                f"{_compact_cell(reason, args.max_chars)}"
+            )
 
 
 def main() -> None:
@@ -976,6 +2557,21 @@ def main() -> None:
     p.add_argument("--workflow-id", required=True, help="Workflow ID")
     p.add_argument("--db", help=f"Database path (default: {DEFAULT_DB_PATH})")
 
+    # status
+    p = subparsers.add_parser("status", help="Show full workflow status: gateway data + checkpoint + jobs + next step")
+    p.add_argument("--workflow-id", required=True, help="Workflow ID")
+    p.add_argument("--project-dir", default="finetune-project", help="Project directory (default: finetune-project/)")
+
+    # readiness-check
+    p = subparsers.add_parser("readiness-check", help="Check if eval results pass pre-training readiness gate")
+    p.add_argument("--file", required=True, help="Path to eval result JSON (from poll-eval)")
+    p.add_argument("--thresholds", default=None, help="JSON string with custom thresholds (optional)")
+
+    # diagnose-grader
+    p = subparsers.add_parser("diagnose-grader", help="Diagnose grader issues from eval results — shows score buckets, reason patterns, and grader source")
+    p.add_argument("--file", required=True, help="Path to eval result JSON (from poll-eval)")
+    p.add_argument("--workflow-id", default=None, help="Workflow ID (to fetch grader source from gateway)")
+
     # create-eval
     p = subparsers.add_parser("create-eval", help="Create evaluation job and save metadata locally")
     p.add_argument("--workflow-id", required=True, help="Workflow ID (used as dataset_id)")
@@ -1002,8 +2598,20 @@ def main() -> None:
     p = subparsers.add_parser("poll-training", help="Poll training job until complete, save status and metrics")
     p.add_argument("--workflow-id", required=False, default=None, help="Workflow ID (read from job file if omitted)")
     p.add_argument("--file", required=True, help="Path to train-NNN.json (from create-training)")
-    p.add_argument("--poll-interval", type=int, default=60, help="Poll interval in seconds (default: 60)")
-    p.add_argument("--max-wait", type=int, default=14400, help="Max wait in seconds (default: 14400)")
+    p.add_argument("--poll-interval", type=int, default=60, help="(Ignored — adaptive polling is used. Kept for backward compatibility)")
+    p.add_argument("--max-wait", type=int, default=7200, help="Max wait in seconds (default: 7200 = 2h, matching SKILL.md recommendation)")
+    p.add_argument("--no-early-stop", action="store_true", help="Disable automatic early stopping (EMA plateau, degradation, length exploitation)")
+
+    # cancel-training
+    p = subparsers.add_parser("cancel-training", help="Cancel a running training job")
+    p.add_argument("--workflow-id", required=True, help="Workflow ID")
+    p.add_argument("--job-id", required=True, help="Training job ID to cancel")
+    p.add_argument("--file", default=None, help="Path to local train-NNN.json to update status (optional)")
+
+    # sync-jobs
+    p = subparsers.add_parser("sync-jobs", help="Sync training + eval jobs from gateway to local tracking files")
+    p.add_argument("--workflow-id", required=True, help="Workflow ID")
+    p.add_argument("--output-dir", default="finetune-project", help="Project directory (default: finetune-project/)")
 
     # search-knowledge
     p = subparsers.add_parser("search-knowledge", help="Semantic search over knowledge parts")
@@ -1017,6 +2625,49 @@ def main() -> None:
     p.add_argument("--source-id", default=None, help="Specific knowledge source ID to delete")
     p.add_argument("--all", action="store_true", help="Delete all knowledge sources")
 
+    # difficulty-probe
+    p = subparsers.add_parser(
+        "difficulty-probe",
+        help="Analyze eval results for difficulty distribution and training signal prediction",
+    )
+    p.add_argument("--file", required=True, help="Path to eval results JSON")
+    p.add_argument("--k", type=int, default=8, help="Group size K for prediction (default: 8)")
+    p.add_argument("--output-json", action="store_true", help="Output JSON only")
+    p.add_argument("--save", help="Save full report to file")
+    p.add_argument("--compact", action="store_true", help="Omit per-prompt details")
+
+    # data-quality-gate
+    p = subparsers.add_parser(
+        "data-quality-gate",
+        help="Run pre-eval data quality gate on training data",
+    )
+    p.add_argument("--file", required=True, help="Path to training.jsonl")
+    p.add_argument("--topics", help="Path to topics.json for cross-referencing")
+    p.add_argument("--parts", help="Path to all-parts-index.json")
+    p.add_argument("--gate", help="Comma-separated gates: structural,diversity,completion_length,ground_truth_quality,alignment")
+    p.add_argument("--llm-gates", action="store_true", help="Include LLM-scored gates")
+    p.add_argument("--all-gates", action="store_true", help="Run all gates")
+    p.add_argument("--sample", type=int, default=30, help="Records to sample for LLM gates")
+    p.add_argument("--max-output-tokens", type=int, default=512, help="Planned max_output_tokens for training (for completion_length gate)")
+    p.add_argument("--gateway-url", default=DEFAULT_BASE_URL, help="Gateway URL for LLM calls")
+    p.add_argument("--output-json", action="store_true", help="Output JSON only")
+    p.add_argument("--save", help="Save full report to file")
+
+    # print-row-outputs
+    p = subparsers.add_parser(
+        "print-row-outputs",
+        help="Print epoch table for one row: rollout output, score, reason",
+    )
+    p.add_argument("--workflow-id", required=True, help="Workflow ID")
+    p.add_argument("--finetune-job-id", required=True, help="Finetune job ID")
+    p.add_argument("--row-index", required=True, type=int, help="Row index in eval results")
+    p.add_argument(
+        "--max-chars",
+        type=int,
+        default=160,
+        help="Max characters per text cell before truncation (default: 160)",
+    )
+
     args = parser.parse_args()
 
     commands = {
@@ -1027,12 +2678,20 @@ def main() -> None:
         "upload-records": cmd_upload_records,
         "upload-grader": cmd_upload_grader,
         "verify": cmd_verify,
+        "status": cmd_status,
+        "readiness-check": cmd_readiness_check,
+        "diagnose-grader": cmd_diagnose_grader,
         "create-eval": cmd_create_eval,
         "poll-eval": cmd_poll_eval,
         "create-training": cmd_create_training,
         "poll-training": cmd_poll_training,
         "search-knowledge": cmd_search_knowledge,
+        "cancel-training": cmd_cancel_training,
+        "sync-jobs": cmd_sync_jobs,
         "delete-knowledge": cmd_delete_knowledge,
+        "difficulty-probe": cmd_difficulty_probe,
+        "data-quality-gate": cmd_data_quality_gate,
+        "print-row-outputs": cmd_print_row_outputs,
     }
     commands[args.command](args)
 

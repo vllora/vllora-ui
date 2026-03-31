@@ -12,6 +12,7 @@ Before testing, read these guides to understand how the skill works internally:
 | [Extraction Deep Dive](how-skill-work/extraction-deep-dive.md) | Docling API, multi-document flow, knowledge_parts.json schema, debugging |
 | [Topic Generation Deep Dive](how-skill-work/generate-topics-deep-dive.md) | Topic hierarchy design, relation-builder subagent, topic-part linking |
 | [Record Generation Deep Dive](how-skill-work/generate-records-deep-dive.md) | LLM-powered data generation, record format, validation, grounding |
+| [RFT/GRPO Training Explained](how-skill-work/rft-grpo-training-explained.md) | How GRPO works step-by-step, G vs epochs, grader as training objective, failure modes, parameter reference |
 
 ## Prerequisites
 
@@ -63,11 +64,11 @@ The skill uses 3 sub-agents:
 
 | Agent | Purpose |
 |-------|---------|
+| `knowledge-extractor` | Per-document parallel extraction — spawned once per PDF in Step 2 |
+| `relation-builder` | Builds topic↔part relations from `all-parts-index.json` and `topics.json` |
 | `training-monitor` | Background watchdog — polls training metrics, detects anomalies, saves data for post-training analysis |
-| `execution-logger` | Appends timestamped entries to `execution-log.md` after each pipeline action |
-| `relation-builder` | Builds topic↔part relations from `parts-index.json` and `topics.json` |
 
-Without these agents, the skill still works but loses background monitoring, auto-logging, and automated relation building.
+Without these agents, the skill still works but loses parallel extraction, automated relation building, and background monitoring.
 
 ### 3. Copy test PDF documents
 
@@ -134,7 +135,7 @@ Run each pipeline step individually using the `finetune.py` wrapper script:
 cd "$TEST_DIR"
 
 # Step 1: Create workflow
-WORKFLOW_ID=$(uv run .claude/scripts/finetune.py create-workflow \
+WORKFLOW_ID=$(uv run .claude/skills/finetune-skill/scripts/finetune.py create-workflow \
   --name "Test Workflow" \
   --objective "Train a model to..." \
   --system-prompt "You are..." | tail -1)
@@ -148,7 +149,7 @@ for DOC in *.pdf; do
   DOC_SLUG=$(echo "${DOC%.pdf}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
   DOC_DIR="finetune-project/knowledge/$DOC_SLUG"
   [ -f "$DOC_DIR/knowledge_parts.json" ] || continue
-  uv run .claude/scripts/finetune.py upload-knowledge \
+  uv run .claude/skills/finetune-skill/scripts/finetune.py upload-knowledge \
     --workflow-id $WORKFLOW_ID \
     --file "$DOC" \
     --parts-file "$DOC_DIR/knowledge_parts.json" \
@@ -157,15 +158,15 @@ for DOC in *.pdf; do
 done
 
 # Step 3: Upload topics (after creating topics.json manually or via LLM)
-uv run .claude/scripts/finetune.py upload-topics \
+uv run .claude/skills/finetune-skill/scripts/finetune.py upload-topics \
   --workflow-id $WORKFLOW_ID --file finetune-project/topics.json
 
 # Step 3b: Upload relations (after creating relations.json)
-uv run .claude/scripts/finetune.py upload-relations \
+uv run .claude/skills/finetune-skill/scripts/finetune.py upload-relations \
   --workflow-id $WORKFLOW_ID --file finetune-project/relations.json
 
 # Step 4: Generate training records via generate_records.py, then upload
-uv run .claude/scripts/generate_records.py \
+uv run .claude/skills/finetune-skill/scripts/generate_records.py \
   --topics finetune-project/topics.json \
   --relations finetune-project/relations.json \
   --knowledge-dir finetune-project/knowledge \
@@ -174,20 +175,20 @@ uv run .claude/scripts/generate_records.py \
   --records-per-topic 10
 
 # Upload records to gateway
-uv run .claude/scripts/finetune.py upload-records \
+uv run .claude/skills/finetune-skill/scripts/finetune.py upload-records \
   --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl
 
 # Step 5: Upload grader
-uv run .claude/scripts/finetune.py upload-grader \
+uv run .claude/skills/finetune-skill/scripts/finetune.py upload-grader \
   --workflow-id $WORKFLOW_ID --file finetune-project/grader.js
 
 # Step 5.5: Validate (with cross-reference checks)
-uv run .claude/scripts/validate_dataset.py finetune-project/training.jsonl \
+uv run .claude/skills/finetune-skill/scripts/validate_dataset.py finetune-project/training.jsonl \
   --topics finetune-project/topics.json \
   --parts finetune-project/knowledge/all-parts-index.json
 
 # Step 6: Verify
-uv run .claude/scripts/finetune.py verify --workflow-id $WORKFLOW_ID
+uv run .claude/skills/finetune-skill/scripts/finetune.py verify --workflow-id $WORKFLOW_ID
 ```
 
 ## Verification Checkpoints
@@ -368,13 +369,13 @@ Open `http://localhost:5173/finetune` in a browser:
 ### 5. Test evaluation flow
 
 ```bash
-# Using the helper script (recommended)
-uv run .claude/scripts/run_evaluation.py --dataset-id $WF_ID --output evaluations/eval-v1.json --limit 10
+# Create eval job (non-blocking — saves metadata locally)
+uv run .claude/skills/finetune-skill/scripts/finetune.py create-eval \
+  --workflow-id $WF_ID --output-dir evaluations
 
-# Or manually via curl
-curl -X POST http://localhost:9090/finetune/evaluations \
-  -H 'Content-Type: application/json' \
-  -d '{"dataset_id":"'$WF_ID'","rollout_model_params":{"model":"gpt-4o-mini"}}'
+# Poll until complete
+uv run .claude/skills/finetune-skill/scripts/finetune.py poll-eval \
+  --file evaluations/eval-001.json
 ```
 
 **Expected**: 201 Created with evaluation_run_id
@@ -398,7 +399,7 @@ curl -X POST http://localhost:9090/finetune/evaluations \
 
 ### Issue: Workflow created but no records uploaded
 
-**Cause**: The agent used `upload_dataset.py` instead of `finetune.py upload-records`. `upload_dataset.py` posts to `/finetune/datasets` (cloud endpoint), not `/finetune/workflows/{id}/records` (local gateway).
+**Cause**: Records were uploaded via raw curl to the wrong endpoint, or `finetune.py upload-records` was not used. The correct endpoint is `POST /finetune/workflows/{id}/records` (local gateway).
 
 **Fix**: Use `finetune.py upload-records` which posts to the correct workflow records endpoint.
 

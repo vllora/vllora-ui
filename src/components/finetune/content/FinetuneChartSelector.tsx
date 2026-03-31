@@ -20,8 +20,10 @@ import type { FinetuneEvalResultsResponse } from "@/services/finetune-api";
 import { TrainingMetricsSection } from "./TrainingMetricsSection";
 import { FinetuneMetricsSection } from "./FinetuneMetricsSection";
 import { ScoreStrip } from "@/components/datasets/eval-dialog/ScoreStrip";
+import { getScoreDistributionInsights } from "../training-metrics-insights";
+import { BaselineComparisonPanel } from "./BaselineComparisonPanel";
 
-type ChartView = "scoreTrend" | "stability" | "reward" | "completions" | "scoreDistribution";
+type ChartView = "scoreTrend" | "stability" | "reward" | "completions" | "throughput" | "scoreDistribution" | "vsBaseline";
 
 /** Ordered by importance for finetune monitoring */
 const CHART_VIEWS: { key: ChartView; label: string; description: string }[] = [
@@ -29,7 +31,9 @@ const CHART_VIEWS: { key: ChartView; label: string; description: string }[] = [
   { key: "stability", label: "Loss", description: "Training loss, KL divergence, gradient norm, and learning rate. Shows whether training is converging and stable." },
   { key: "reward", label: "Reward", description: "Reward signal from the evaluator. Shows how well the model generates high-scoring responses and whether the evaluator provides useful learning signal." },
   { key: "completions", label: "Completions", description: "Response length and truncation rate. High truncation means responses hit the token limit — consider increasing max tokens." },
+  { key: "throughput", label: "Throughput", description: "Token throughput, batch size, and completion length per step. Drops may indicate shorter or degenerate completions." },
   { key: "scoreDistribution", label: "Score Distribution", description: "Per-record score histogram for the latest evaluation. Shows the spread of scores across your dataset." },
+  { key: "vsBaseline", label: "vs Baseline", description: "Compare training epoch scores against the baseline evaluation. Shows which topics improved, regressed, and by how much." },
 ];
 
 interface FinetuneChartSelectorProps {
@@ -41,6 +45,7 @@ interface FinetuneChartSelectorProps {
   readonly isLive: boolean;
   readonly jobId: string;
   readonly workflowId: string;
+  readonly baselineEvalId?: string;
 }
 
 /** Extract scores from the latest epoch across all rows. */
@@ -79,6 +84,7 @@ export function FinetuneChartSelector({
   isLive,
   jobId,
   workflowId,
+  baselineEvalId,
 }: FinetuneChartSelectorProps) {
   const [view, setView] = useState<ChartView>("scoreTrend");
 
@@ -128,13 +134,27 @@ export function FinetuneChartSelector({
         />
       )}
 
-      {(view === "reward" || view === "stability" || view === "completions") && (
+      {(view === "reward" || view === "stability" || view === "completions" || view === "throughput") && (
         <FinetuneMetricsSection
           jobId={jobId}
           workflowId={workflowId}
           isLive={isLive}
           defaultTab={view}
         />
+      )}
+
+      {view === "vsBaseline" && baselineEvalId && (
+        <BaselineComparisonPanel
+          workflowId={workflowId}
+          baselineEvalId={baselineEvalId}
+          finetuneJobId={jobId}
+        />
+      )}
+
+      {view === "vsBaseline" && !baselineEvalId && (
+        <div className="flex flex-col items-center justify-center gap-2 py-8 text-zinc-500">
+          <span className="text-xs">No baseline evaluation available. Run an eval first, then start training.</span>
+        </div>
       )}
 
       {view === "scoreDistribution" && (
@@ -156,6 +176,21 @@ export function FinetuneChartSelector({
               </div>
             )}
           </div>
+          {scores.length > 0 && (() => {
+            const insights = getScoreDistributionInsights(scores, mean);
+            if (insights.length === 0) return null;
+            const levelIcon = { ok: "✅", warn: "⚠️", critical: "🔴" } as const;
+            const levelColor = { ok: "text-emerald-400/70", warn: "text-amber-400/80", critical: "text-red-400/80" } as const;
+            return (
+              <div className="px-4 py-2 border-t border-white/5 flex flex-col gap-1">
+                {insights.map((ins, i) => (
+                  <p key={i} className={cn("text-[10px] leading-relaxed", levelColor[ins.level])}>
+                    {levelIcon[ins.level]} {ins.text}
+                  </p>
+                ))}
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>

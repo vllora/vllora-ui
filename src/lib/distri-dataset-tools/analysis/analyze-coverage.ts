@@ -13,6 +13,8 @@ import {
   GapRecommendation,
   GenerationTargets,
   getBalanceRating,
+  getCoverageRating,
+  MIN_RECORDS_PER_TOPIC,
 } from '@/types/coverage-types';
 import { datasetService, recordService } from '@/services/service-registry';
 import { computeCoverageStats } from '@/components/datasets/record-utils';
@@ -171,6 +173,8 @@ export function analyzeCoverage(props: {
   // Only calculate balance if there are topics configured
   let balanceScore: number | undefined;
   let balanceRating: CoverageReport['balanceRating'] | undefined;
+  let coverageCompleteness: number | undefined;
+  let coverageRating: CoverageReport['coverageRating'] | undefined;
 
   if (expectedTopics.length > 0) {
     const categorizedCounts: Record<string, number> = {};
@@ -179,6 +183,15 @@ export function analyzeCoverage(props: {
     }
     balanceScore = calculateBalanceScore(categorizedCounts, false);
     balanceRating = getBalanceRating(balanceScore);
+
+    // Coverage completeness: fraction of leaf topics with ≥MIN_RECORDS_PER_TOPIC records
+    // This measures whether every topic has enough data for meaningful GRPO training
+    // (arXiv:2509.21880: below 15 records, zero-variance collapse happens too early)
+    const topicsWithMinRecords = expectedTopics.filter(
+      (topic) => (counts[topic] || 0) >= MIN_RECORDS_PER_TOPIC
+    ).length;
+    coverageCompleteness = topicsWithMinRecords / expectedTopics.length;
+    coverageRating = getCoverageRating(coverageCompleteness);
   }
 
   // Generate recommendations
@@ -195,6 +208,8 @@ export function analyzeCoverage(props: {
     distribution,
     balanceScore,
     balanceRating,
+    coverageCompleteness,
+    coverageRating,
     recommendations,
     uncategorizedCount,
     uncategorizedPercentage: total > 0 ? (uncategorizedCount / total) * 100 : 0,
@@ -219,6 +234,17 @@ export function generateCoverageRecommendations(
     );
   }
 
+  // Check for topics below minimum record threshold (arXiv:2509.21880)
+  const belowMinTopics = Object.entries(distribution)
+    .filter(([, dist]) => dist.count > 0 && dist.count < MIN_RECORDS_PER_TOPIC)
+    .map(([name, dist]) => `${name} (${dist.count})`);
+
+  if (belowMinTopics.length > 0) {
+    recommendations.push(
+      `Topics below ${MIN_RECORDS_PER_TOPIC}-record minimum: ${belowMinTopics.slice(0, 5).join(', ')}. Below this threshold, zero-variance collapse happens too early in GRPO training.`
+    );
+  }
+
   // Check for underrepresented topics
   const underTopics = Object.entries(distribution)
     .filter(([, dist]) => dist.status === 'under')
@@ -227,11 +253,11 @@ export function generateCoverageRecommendations(
   if (underTopics.length > 0) {
     const topicNames = underTopics.slice(0, 3).map(([name]) => name);
     recommendations.push(
-      `Underrepresented topics: ${topicNames.join(', ')}. Consider generating synthetic data.`
+      `Under-covered topics: ${topicNames.join(', ')}. Generate more records for these skills.`
     );
   }
 
-  // Check for overrepresented topics
+  // Check for overrepresented easy topics (potential compute waste)
   const overTopics = Object.entries(distribution)
     .filter(([, dist]) => dist.status === 'over')
     .sort((a, b) => b[1].gap - a[1].gap);
@@ -239,7 +265,7 @@ export function generateCoverageRecommendations(
   if (overTopics.length > 0) {
     const topicNames = overTopics.slice(0, 3).map(([name]) => name);
     recommendations.push(
-      `Overrepresented topics: ${topicNames.join(', ')}. Dataset may be biased toward these.`
+      `Over-represented topics: ${topicNames.join(', ')}. If these are easy topics, they may waste compute during GRPO training.`
     );
   }
 

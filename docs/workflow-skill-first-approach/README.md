@@ -70,6 +70,8 @@ The **3-page UI redesign** (Canvas, Sources, Table) is the active workstream. An
 | [topic-knowledge-visualization.md](./topic-knowledge-visualization.md) | Topic-source relationship visualization phases |
 | [evaluator-versioning-ux.md](./evaluator-versioning-ux.md) | Grader version tracking: badges, snapshots, diff indicators |
 | [skill-e2e-test-notes.md](./skill-e2e-test-notes.md) | Skill E2E test results, API issues found, verification status |
+| [run-infrastructure.md](./run-infrastructure.md) | Run harness: `run-finetune-agent.sh`, `format-finetune-log.py`, transcript format, debugging logs |
+| [RFT/GRPO Training Explained](./how-skill-work/rft-grpo-training-explained.md) | How GRPO works step-by-step: G vs epochs, advantage computation, grader as objective, failure modes, full numeric examples |
 
 ## Mockups
 

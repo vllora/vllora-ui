@@ -224,6 +224,8 @@ The finetune pipeline is driven by `finetune-skill/` (external) and visualized b
 Topics Config → Categorization → Coverage & Generation → Grader Config → Evaluation → Training → Deployment
 ```
 
+> **Training stack**: GRPO via HuggingFace TRL `GRPOTrainer` + Unsloth (optimization wrapper, 90% VRAM reduction). Default base model: `unsloth/Qwen3.5-4B`. β=0 by default (KL values informational only). Full details in `finetune-skill/reference/training-metrics-guide.md`.
+
 > **Naming note**: The "Evaluation" step is called "Dry Run" in internal code (variable names, file names, DB stores, internal identifiers like `dryRunPollingManager`). The tool name is `run_evaluation`. Only user-facing display text says "Evaluation".
 
 ### Architecture (6 Layers, 3 Repos)
@@ -350,6 +352,32 @@ To investigate cloud endpoints (eval, training), start here:
 
 ---
 
+## Finetune Skill: Research-First Rule
+
+**Before modifying or suggesting changes to `finetune-skill/` thresholds, criteria, workflow steps, or training/eval logic**, you MUST:
+
+1. **Research first.** Search for what other platforms (OpenAI RFT, Together AI, HuggingFace TRL, Predibase) and papers (GRPO, DAPO, Dr. GRPO, DeepSeek-R1, "Tricks or Traps", "Hard Examples Are All You Need", "No Prompt Left Behind") actually do. Use web search or Agent tool for deep research.
+2. **Cite sources.** Every threshold, criterion, or workflow decision must reference a specific paper (arXiv ID), platform doc, or empirical finding. No "general best practice" without a source.
+3. **Explain the why.** When writing thresholds or criteria in code/docs, include inline comments with the research justification (paper name + arXiv ID). Anyone reading the code should understand why that specific number was chosen.
+4. **Challenge assumptions.** If a proposed change seems reasonable but you haven't verified it against GRPO/RFT literature, say so and research it before implementing. The cost of a wrong threshold (wasting GPU hours or blocking valid training) is high.
+
+This rule exists because GRPO/RFT has counterintuitive properties:
+- Low base model scores are expected and even desirable (DeepSeek R1-Zero: 15.6% → 71%)
+- Dead-weight prompts (30-99% per batch) are normal (ICLR 2026)
+- Hard examples yield 47% gains vs 3-15% for easy ones (arXiv:2508.14094)
+- Eval K=1 ≠ Training K=8, so eval metrics are lower bounds, not predictions
+
+**Key reference papers** (check these before any threshold change):
+- DeepSeek-R1 (arXiv:2501.12948) — GRPO from scratch, base model capabilities
+- DAPO (arXiv:2503.14476) — Dynamic sampling, clip-higher, zero-variance handling
+- Dr. GRPO (arXiv:2503.20783) — Length bias, score-length correlation
+- "Hard Examples Are All You Need" (arXiv:2508.14094) — Difficulty distribution
+- "No Prompt Left Behind" (arXiv:2509.21880, ICLR 2026) — Zero-variance prompt frequency
+- OpenAI RFT Guide — Platform requirements, grader quality
+- "Tricks or Traps" (arXiv:2508.08221) — Practical GRPO failure modes
+
+---
+
 ## Mandatory Conventions
 
 ### State Management (read `docs/state-management-pattern.md` first)
@@ -422,12 +450,12 @@ Skills extend Claude's capabilities. Auto-invoked when relevant, or invoke manua
 
 | Skill | Auto-invoke | When to use |
 |-------|-------------|------------|
-| `/finetune-context` | Yes | Load all feature docs — use when asked about the finetune feature |
-| `/finetune-fix <bug>` | Manual | Fix a bug (loads docs + cross-repo sources + state management pattern) |
-| `/finetune-develop <feature>` | Manual | Implement a feature (loads docs + cross-repo sources) |
-| `/finetune-arch` | Yes | Load full-stack architecture from all 6 layers across 3 repos |
-| `/finetune-ui <task>` | Manual | Design or enhance UI (loads UI components, @distri/react renderers, UX docs) |
-| `/finetune-e2e <test>` | Manual | E2E test with Playwright MCP (browser automation, screenshots, verification) |
+| `/finetune-context` | Yes | Load full pipeline context — skill definition, architecture, agents, cross-layer sync points |
+| `/finetune-fix <bug>` | Manual | Fix a bug (loads skill + UI readiness gate + state management) |
+| `/finetune-develop <feature>` | Manual | Implement a feature (loads skill + agents + UI + API reference) |
+| `/finetune-ui <task>` | Manual | Design or enhance UI (loads redesign docs, readiness gate, components) |
+| `/finetune-e2e <test>` | Manual | E2E test with browser automation (screenshots, verification) |
+| `/research-grpo` | Manual | Research latest GRPO/RFT papers, check if thresholds/techniques need updating |
 | `/skill-package-context` | Yes | Load skill package docs — use when asked about skill packaging, SKILL.md, JSONL format |
 
 ## Sub-Agents
@@ -439,21 +467,26 @@ Sub-agents run in isolated contexts with persistent project-level memory.
 | `code-reviewer` | Sonnet | After writing/modifying code — reviews for quality, patterns, security, architecture |
 | `architecture-explorer` | Sonnet | Cross-layer questions — traces data flow across all 6 layers (read-only) |
 | `debugger` | Sonnet | When hitting bugs — diagnoses errors across the full stack, implements fixes |
+| `grpo-researcher` | Sonnet | Research GRPO/RFT papers — searches arXiv, blogs, platform docs for new findings (read-only) |
 
 ## Team Commands
 
-Multi-agent teams for complex tasks. Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.
+Multi-agent teams for complex tasks. Enabled via `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in `.claude/settings.json`.
 
-| Command | Agents | When to use |
-|---------|--------|------------|
-| `/team-investigate <issue>` | 5 | Deep investigation: code reviewer, behavior validator, UX reviewer, fix agent, docs updater |
-| `/team-review <what>` | 5 | Comprehensive review: architecture, state machine, UX, devil's advocate, docs checker |
-| `/team-develop <feature>` | 4 | New feature: architect → frontend implementer → test & validate → docs updater |
-| `/team-ux-redesign <area>` | 4 | UX review: flow analyst, visual reviewer, info architecture → redesign proposer |
-| `/team-refactor <target>` | 4 | Safe refactoring: dependency mapper → migration planner → implementer → regression validator |
-| `/team-perf-audit <focus>` | 4 | Performance: bundle analyzer, render profiler, network analyzer → optimization implementer |
-| `/team-e2e-test <focus>` | 4 | E2E testing: test planner → happy path runner + edge case runner → bug reporter |
-| `/team-security <focus>` | 4 | Security audit: frontend, API, dependency, secrets auditors (OWASP-aligned) |
+Each team spawns 3 independent Claude sessions working in parallel. Teams cost 3-4x tokens vs single sessions — use only when parallelism provides real value (tasks > 4 hours sequentially, cross-layer work with clear file ownership, or competing hypotheses).
+
+| Command | Teammates | When to use |
+|---------|-----------|------------|
+| `/team-develop <feature>` | architect (Opus) + implementer + reviewer | Non-trivial features touching skill + UI + gateway layers |
+| `/team-investigate <issue>` | skill-investigator + ui-investigator + gateway-investigator | Cross-layer bugs where root cause is unclear — each explores a different layer |
+| `/team-review` | quality-reviewer + security-reviewer + test-reviewer | Pre-PR review — parallel code quality, security audit, and test coverage analysis |
+
+**Best practices** (from community research):
+- 3-5 teammates is the sweet spot — beyond 5, coordination overhead exceeds productivity
+- Each teammate should own different files — no two teammates editing the same file
+- Aim for 5-6 tasks per teammate
+- Monitor actively — redirect stuck teammates, synthesize findings
+- Shut down teammates gracefully when done (SendMessage with shutdown_request)
 
 ---
 

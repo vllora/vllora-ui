@@ -4,6 +4,8 @@ How the agent should analyze evaluation and training results, diagnose issues, a
 
 This document complements `iteration-strategy.md` (which covers the diagnosis framework) by defining **what the agent should compute, present, and offer** at each stage.
 
+> **Metric thresholds**: For all GRPO metric healthy ranges, red flags, and paper-backed threshold values, see [`training-metrics-guide.md`](training-metrics-guide.md). This document references those thresholds but does not redefine them — `training-metrics-guide.md` is the single source of truth for what metric values mean.
+
 ---
 
 ## Part 1: Available Data & How to Collect It
@@ -50,10 +52,10 @@ Each metric point in `metrics[]` contains:
 | Learning rate | `metrics.learning_rate` | Current LR (may decay) |
 | Reward | `metrics.reward` | Average grader score the model is achieving |
 | Reward std | `metrics.reward_std` | Diversity of scores across batch — should be > 0.05 |
-| Loss | `metrics.loss` | Policy gradient loss — should decrease |
-| Gradient norm | `metrics.grad_norm` | Training stability — spikes indicate instability |
-| KL divergence | `metrics.kl` | Drift from base model — too high = forgetting |
-| Clipping ratio | `metrics.completions/clipped_ratio` | Output truncation — > 0.7 is critical |
+| Loss | `metrics.loss` | GRPO policy loss — starts near 0, rises slightly as learning progresses (NOT like SFT loss). See `training-metrics-guide.md` §Loss |
+| Gradient norm | `metrics.grad_norm` | Training stability — spikes indicate instability. NaN = catastrophic failure |
+| KL divergence | `metrics.kl` | Drift from base model — healthy <1.0, warning >5.0. See `training-metrics-guide.md` §KL |
+| Clipping ratio | `metrics.completions/clipped_ratio` | Output truncation — healthy <0.1, critical >0.5. See `training-metrics-guide.md` §Completions |
 | Mean completion length | `metrics.completions/mean_length` | Whether responses are reasonable length |
 | Zero-std fraction | `metrics.frac_reward_zero_std` | Records where all candidates scored same — wasted training |
 
@@ -63,7 +65,7 @@ Each metric point in `metrics[]` contains:
 |--------|---------|-----------------|
 | Reward trend | Slope of `reward` over last N steps | Positive = learning, flat = stuck, negative = degrading |
 | KL trend | Slope of `kl` over last N steps | Rising = policy diverging, may need lower LR |
-| Loss trend | Slope of `loss` over last N steps | Should decrease; flat = not learning |
+| Loss trend | Slope of `loss` over last N steps | GRPO loss rises slightly as policy diverges — stuck at 0 = zero advantages (no learning) |
 | Reward plateau detection | Reward change < 0.01 over 20% of max_steps | Model has converged or stalled |
 | Clipping trend | `clipped_ratio` increasing? | Model generating longer outputs than `max_output_tokens` allows |
 
@@ -123,7 +125,7 @@ score_std = std_dev(all individual scores)
 | Bucket | Criteria | Count | Interpretation |
 |--------|----------|-------|----------------|
 | Failed (errors) | `status === "failed"` | N | Grader bugs — fix before anything else |
-| Zero (score = 0) | `score === 0` | N | **Dead-weight for RFT** — model cannot learn from these. Diagnose cause, then remove + regenerate replacements (see SKILL.md Step 8b+) |
+| Zero (score = 0) | `score === 0` | N | **Low signal for standard GRPO** — zero-score completions produce zero-variance groups. DAPO skips these via dynamic sampling. "No Prompt Left Behind" (arXiv:2509.21880) shows signal can be extracted via entropy-guided shaping. Diagnose cause; optionally remove + regenerate replacements (see SKILL.md Step 8b+). |
 | Low (0 < score < 0.4) | ... | N | Primary improvement targets |
 | Medium (0.4-0.7) | ... | N | Acceptable, could improve |
 | High (0.7-1.0) | ... | N | Working well |
@@ -176,11 +178,11 @@ clipping_max = max clipped_ratio during training
 
 | Check | Condition | Severity | Source/Rationale |
 |-------|-----------|----------|-----------------|
-| NaN/Inf in any metric | Any NaN or Inf in loss, reward, KL, grad_norm | Critical | — |
-| Clipping overload | `clipped_ratio` > 0.7 at any point | Critical | — |
-| KL explosion | KL > 2.0 or KL increased > 3x from start | Warning (for LLM-judge graders). Note: DAPO and Dr. GRPO disable KL entirely (beta=0) for rule-based rewards — if using pure programmatic graders, KL drift is less concerning. | DAPO (2503.14476), Dr. GRPO (2503.20783) |
-| Reward collapse | `reward_std` < 0.05 for > 50% of steps | Warning | — |
-| Weak signal | `frac_reward_zero_std` > 0.6 for > 50% of steps | **Critical** — most records produce identical rewards, model gets zero gradient. **First check**: is `response_candidates_count` ≥ 8? With G=2, this metric will be inherently high. **Then**: remove dead-weight records (score=0) and regenerate replacements. See SKILL.md Step 8b+. | All GRPO papers use G≥8 (see Part 6, Section 6g) |
+| NaN/Inf in any metric | Any NaN or Inf in loss, reward, KL, grad_norm | Critical | Unsloth docs: often from zero-length truncated completions |
+| Clipping overload | `clipped_ratio` > 0.5 at any point | Critical | DAPO, TRL — majority of completions incomplete, training signal degraded. See `training-metrics-guide.md` §Completions |
+| KL explosion | KL > 5.0 or KL increased > 3x from start | Warning only when beta > 0. **With beta=0 (modern GRPO default per DAPO/TRL): KL is unpenalized and not even tracked in most frameworks.** Only monitor KL trend relative to reward when beta=0. KL > 10.0 with beta > 0 = critical. | Original GRPO (DeepSeekMath, arXiv:2402.03300) used β=0.04; DeepSeek-R1 (arXiv:2501.12948) used β=0.001; DAPO/Dr. GRPO/TRL default to β=0. See `training-metrics-guide.md` §KL |
+| Reward collapse | `reward_std` < 0.05 for > 50% of steps | Warning. `reward_std` < 0.01 = Critical (zero learning signal). | Dr. GRPO (2503.20783): std normalization bias. See `training-metrics-guide.md` §Reward Std |
+| Weak signal | `frac_reward_zero_std` > 0.5 for > 50% of steps | **Warning** (>0.8 = **Critical**) — most records produce identical rewards, model gets zero gradient. **First check**: is `response_candidates_count` ≥ 8? With G=2, this metric will be inherently high. **Then**: remove dead-weight records (score=0) and regenerate replacements. See SKILL.md Step 8b+. | Dr. GRPO (2503.20783) G=8; TRL: "fraction of samples with reward std of zero". See `training-metrics-guide.md` §frac_reward_zero_std |
 | Entropy collapse | `entropy` dropping rapidly (>50% decline from start) | **Warning** — model losing exploration ability, becoming deterministic. Precursor to reward hacking. | DAPO (2503.14476, Section 4.3): *"Entropy... key metrics that we closely monitor."* TRL docs: *"A collapse in entropy means the policy is becoming overconfident."* |
 | Response length growing | `completions/mean_length` increasing >50% while `reward` flat or declining | **Warning** — possible length exploitation. Incorrect responses growing longer without quality improvement. | Dr. GRPO (2503.20783, Section 3.1): GRPO's `1/|o_i|` normalization causes *"incorrect responses to grow progressively longer."* |
 | Length-reward correlation | Correlation between response length and score > 0.7 | **Warning** — grader has exploitable length bias. Model will learn to pad responses. | MO-GRPO (2509.22047), GR3 (2603.10535): *"vacuous elongation can inflate the gradient norm"* |
@@ -248,24 +250,21 @@ For records that scored low on eval (< 0.4), how many improved during training?
                               │       │       │
                           avg < 0.5  0.5-0.6  avg > 0.6
                               │       │       │
-                          NO-GO    WARNING    │
+                          FAIL     WARN       │
                               │       │    Check pass_rate
                               │       │       │
                          Diagnose  Optional  ┌──┴──┐
                          (see 3b) improve   <70%  >70%
                                             │      │
-                                         WARNING   GO
+                                         WARN    Run readiness-check
                                             │      │
-                                         Optional  │
-                                         improve  Check score_std
-                                                    │
-                                               ┌────┴────┐
-                                            < 0.1      0.1-0.3
-                                               │         │
-                                          Grader not    READY
-                                          differentiating  │
-                                               │      Proceed to
-                                          Fix grader   training
+                                         Optional  ┌────┴────┐
+                                         improve  FAIL     PASS
+                                                    │         │
+                                               Fix failing  READY
+                                               criteria      │
+                                                    │      Proceed to
+                                               Re-eval    training
 ```
 
 ### 3b. Diagnosing Low Eval Scores
@@ -337,6 +336,55 @@ For records that scored low on eval (< 0.4), how many improved during training?
                               _tokens     spread
                               by 2x
 ```
+
+---
+
+## Part 3e: Pre-Training Readiness Gate
+
+After each eval completes, run the readiness gate before starting training. This prevents wasting GPU hours on bad data or a broken grader.
+
+**Run programmatically:**
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check --file evaluations/eval-NNN.json
+```
+
+**Hard checks** — grader quality gates (must ALL pass):
+
+These ask "is the grader working?", NOT "is the base model good?" GRPO can learn from low base model scores — DeepSeek R1-Zero started at 15.6% and reached 71% via GRPO alone (arXiv:2501.12948). OpenAI RFT Guide confirms only 0% success rate is truly fatal.
+
+| Check | Threshold | Why it matters | Fix if failing | Source |
+|-------|-----------|---------------|----------------|--------|
+| Sample count | >= 50 prompts | GRPO advantage estimates are noisy below 50 | Add more training data | OpenAI RFT: "several dozen to a few hundred" |
+| Score std | > 0.10 | Grader must differentiate — zero-std groups produce zero gradient (GRPO advantage = (r - mean)/std; std=0 → advantage=0) | Add criteria or partial credit bands (0.2, 0.4, 0.6, 0.8) | Zero-variance → zero gradient is fundamental to GRPO (DAPO §2.2). Threshold is a heuristic. |
+| Average score | > 0.05 | Just needs nonzero signal — only 0% success is fatal | If truly zero, base model may be incapable — try larger model | OpenAI RFT: "0% success rate means RFT cannot bootstrap" |
+
+**Soft checks** — quality signals (warnings, don't gate training):
+
+Low base model scores are **expected and even desirable**. "Hard Examples Are All You Need" (arXiv:2508.14094) shows training on the hardest 10% of examples yields 30-40% performance gains vs 3-15% for easy examples on GSM8K. Note: binary rewards work — DeepSeek-R1 (arXiv:2501.12948) and DAPO (arXiv:2503.14476) achieved state-of-the-art with 100% binary (0/1) rewards.
+
+| Check | Threshold | Why it matters | Fix if failing | Source |
+|-------|-----------|---------------|----------------|--------|
+| Score concentration | < 50% at single value | If >50% of scores cluster at one value, within-group variance is small → weak gradients | Add more granular scoring criteria | DAPO (arXiv:2503.14476): filters all-correct/all-incorrect groups. Threshold is a heuristic. |
+| High-score fraction (> 0.9) | < 50% | Lenient grader → small within-group variance → weak gradients | Tighten grader criteria | Heuristic. OpenAI recommends "smooth scores, not pass/fail stamps." |
+| Binary fraction (0 or 1) | < 60% | Continuous scoring is more sample-efficient — binary rewards produce signal only when a group has mixed outcomes, wasting compute on uniform groups. But binary works: DeepSeek-R1 used 100% binary. | Add intermediate scoring tiers if desired | DeepSeek-R1 (arXiv:2501.12948) uses binary; DAPO (arXiv:2503.14476) uses binary with dynamic sampling. |
+| Dead-weight fraction (< 0.1) | < 50% | Dead-weight prompts reduce sample efficiency. Real GRPO training has 30-99% zero-variance prompts per batch. "No Prompt Left Behind" (arXiv:2509.21880) argues signal CAN be extracted from these via entropy-guided shaping. | DAPO handles via dynamic sampling (skips uniform groups). Optionally remove worst offenders, but the cited paper argues against blanket filtering. | "No Prompt Left Behind" (ICLR 2026, arXiv:2509.21880) |
+| Pass rate (>= 0.7) | > 20% | Nice to have, but hard prompts are most valuable. Eval uses K=1; training uses K=8, so pass@8 >> pass@1 | Not a problem — hard examples produce the largest gains | "Hard Examples Are All You Need" (arXiv:2508.14094) |
+| Prompt learnability | > 30% of prompts have score variance | Zero-variance prompts give zero GRPO gradient — wasted compute | DAPO dynamic sampling skips these; or rewrite prompts for more variance | DAPO dynamic sampling (arXiv:2503.14476) |
+| Score-length correlation | \|r\| < 0.3 | High correlation means grader rewards/punishes length, not quality — reward hacking risk. Dr. GRPO identifies length bias from per-token loss normalization. | Rewrite grader to judge content, not length | Dr. GRPO (arXiv:2503.20783) identifies the problem; threshold is a heuristic. |
+| Topic balance | No single topic > 40% | Imbalanced topics cause over-optimization for common topics | Add data for under-represented topics | Heuristic — balanced training data is standard ML practice |
+
+**Why eval scores don't predict training performance:** Eval generates 1 completion per prompt (K=1). GRPO training generates K=8. A base model with 6.5% pass@1 has ~41% chance of at least 1 good completion per prompt (1-0.935^8). The eval distribution is a **lower bound** on training signal.
+
+**Verdicts:**
+| Exit code | Verdict | Meaning | Action |
+|-----------|---------|---------|--------|
+| 0 | PASS | All hard checks pass, no soft warnings | Proceed to training (Step 7d) |
+| 2 | WARN | Only soft checks failed, or 1 hard check marginally fails | Can train, but fixing the issue first is recommended |
+| 1 | FAIL | Any hard check fails | Must fix before training — return to Step 7b |
+
+**Max iterations:** 5 eval-only iterations before training. If readiness gate never passes after 5 iterations, escalate to user with a summary of all attempts.
+
+The `readiness-check` command outputs structured JSON with per-criterion values, thresholds, pass/fail status, and fix suggestions. The output distinguishes `hard_failed` (must fix) from `soft_failed` (should fix). The agent reads this output and either applies fixes (Step 9a) or proceeds to training (Step 7d).
 
 ---
 
@@ -484,7 +532,7 @@ Current → Proposed:
 
 Rationale: {overall_rationale}
 
-This is iteration {n}/5. After {remaining} more failed iterations, I'll suggest trying a larger base model.
+This is training iteration {n}/3. After {remaining} more failed iterations, I'll suggest trying a larger base model.
 
 Start a new training job with these settings?
 ```
@@ -575,7 +623,7 @@ Which approach do you want to try?
 
 1. **Lead with numbers, then explain.** Always show the scores/counts first, then interpret.
 
-2. **Use the GO/WARNING/NO-GO framework** for every evaluation. Users need a clear "should I proceed?" signal.
+2. **Use the readiness gate** (PASS/WARN/FAIL) for every evaluation. Users need a clear "should I proceed?" signal. Run `readiness-check` programmatically — see Part 3e.
 
 3. **Rank suggestions by impact.** If there are 5 things to fix, start with the one that affects the most records.
 
@@ -591,7 +639,7 @@ Which approach do you want to try?
 
 **After evaluation, always present in this order:**
 
-1. **Verdict**: GO / WARNING / NO-GO (one line)
+1. **Verdict**: PASS / WARN / FAIL from readiness gate (one line)
 2. **Key numbers**: avg score, pass rate, score std, error rate (2-3 lines)
 3. **Score distribution**: 5-bucket histogram (text-based)
 4. **Topic breakdown**: table of per-topic scores (sorted by score ascending)
@@ -621,7 +669,7 @@ Which approach do you want to try?
 - Iteration tracking (save results, update log)
 
 **Agent suggests, user decides:**
-- Whether to proceed to training (GO/WARNING/NO-GO is a suggestion)
+- Whether to proceed to training (readiness gate PASS/WARN/FAIL is a suggestion)
 - Which grader criteria to change (agent proposes, user approves)
 - Whether to regenerate data for a topic (agent identifies, user confirms)
 - When to stop iterating (agent tracks progress, user makes the call)

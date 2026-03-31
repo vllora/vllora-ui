@@ -26,6 +26,7 @@ export interface EpochScore {
   score: number;
   breakdown: ScoreBreakdown;
   logs?: string[];
+  rolloutContent?: string | null;
 }
 
 interface EpochScoresTableProps {
@@ -34,14 +35,15 @@ interface EpochScoresTableProps {
 }
 
 export function EpochScoresTable({
-  epochs,
-  criteriaNames,
+  epochs = [],
+  criteriaNames = [],
 }: EpochScoresTableProps) {
   const [selectedLogs, setSelectedLogs] = useState<{
     epoch: number;
     logs: string[];
   } | null>(null);
   const hasLogs = epochs.some((e) => e.logs && e.logs.length > 0);
+  const hasRollout = epochs.some((e) => e.rolloutContent != null && e.rolloutContent !== "");
 
   return (
     <>
@@ -50,14 +52,15 @@ export function EpochScoresTable({
           <thead>
             <tr className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
               <th className="text-left py-1.5 pr-3 w-20" title="Evaluation checkpoint. In RFT, the model generates multiple response candidates per prompt — each is scored separately (a, b, ...). The training algorithm uses score differences between candidates as learning signal.">Eval</th>
-              <th className="text-left py-1.5 pr-3 w-16">Score</th>
               {criteriaNames.map((c) => (
                 <th key={c} className="text-left py-1.5 pr-3 w-16">
                   {c}
                 </th>
               ))}
+              {hasRollout && <th className="text-left py-1.5 pr-3">Response</th>}
               <th className="text-left py-1.5 pr-2">Reasoning</th>
-              {hasLogs && <th className="text-center py-1.5 w-10">Logs</th>}
+              <th className="text-right py-1.5 pr-4">Score</th>
+              <th className="text-center py-1.5">{hasLogs ? "Logs" : ""}</th>
             </tr>
           </thead>
           <tbody>
@@ -91,8 +94,67 @@ export function EpochScoresTable({
                       </span>
                     )}
                   </td>
-                  <td className="py-1.5 pr-3">
-                    <span className="inline-flex items-center gap-1.5">
+                  {criteriaNames.map((c) => (
+                    <td
+                      key={c}
+                      className={cn(
+                        "py-1.5 pr-3 font-mono tabular-nums",
+                        e.breakdown.criteria[c] !== undefined
+                          ? getScoreColorClass(e.breakdown.criteria[c])
+                          : "text-zinc-600"
+                      )}
+                    >
+                      {e.breakdown.criteria[c] !== undefined
+                        ? formatScore(e.breakdown.criteria[c])
+                        : "-"}
+                    </td>
+                  ))}
+                  {hasRollout && (
+                    <td className="py-1.5 pr-3 max-w-[200px]">
+                      {e.rolloutContent ? (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="block truncate text-zinc-400 cursor-help">
+                                {e.rolloutContent.slice(0, 80)}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent
+                              side="top"
+                              className="max-w-md text-xs whitespace-pre-wrap bg-zinc-900 border-zinc-700/60"
+                            >
+                              {e.rolloutContent}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        <span className="text-zinc-600">—</span>
+                      )}
+                    </td>
+                  )}
+                  <td className="py-1.5 pr-2 text-zinc-500 max-w-[320px]">
+                    {e.breakdown.reasoning ? (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="block truncate cursor-help">
+                              {e.breakdown.reasoning}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent
+                            side="top"
+                            className="max-w-md text-xs whitespace-pre-wrap bg-zinc-900 border-zinc-700/60"
+                          >
+                            {e.breakdown.reasoning}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ) : (
+                      <span className="text-zinc-600">-</span>
+                    )}
+                  </td>
+                  <td className="py-1.5 pr-4 text-right">
+                    <span className="inline-flex items-center justify-end gap-1.5">
                       <span
                         className={cn(
                           "font-mono font-semibold tabular-nums",
@@ -125,57 +187,19 @@ export function EpochScoresTable({
                       )}
                     </span>
                   </td>
-                  {criteriaNames.map((c) => (
-                    <td
-                      key={c}
-                      className={cn(
-                        "py-1.5 pr-3 font-mono tabular-nums",
-                        e.breakdown.criteria[c] !== undefined
-                          ? getScoreColorClass(e.breakdown.criteria[c])
-                          : "text-zinc-600"
-                      )}
-                    >
-                      {e.breakdown.criteria[c] !== undefined
-                        ? formatScore(e.breakdown.criteria[c])
-                        : "-"}
-                    </td>
-                  ))}
-                  <td className="py-1.5 pr-2 text-zinc-500 max-w-[320px]">
-                    {e.breakdown.reasoning ? (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="block truncate cursor-help">
-                              {e.breakdown.reasoning}
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent
-                            side="top"
-                            className="max-w-md text-xs whitespace-pre-wrap bg-zinc-900 border-zinc-700/60"
-                          >
-                            {e.breakdown.reasoning}
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    ) : (
-                      <span className="text-zinc-600">-</span>
+                  <td className="py-1.5 text-center w-10">
+                    {hasRowLogs && (
+                      <button
+                        onClick={() =>
+                          setSelectedLogs({ epoch: e.epoch, logs: e.logs! })
+                        }
+                        className="p-0.5 hover:bg-zinc-800 rounded transition-colors"
+                        title="View logs"
+                      >
+                        <FileText className="h-3 w-3 text-zinc-500 hover:text-zinc-300" />
+                      </button>
                     )}
                   </td>
-                  {hasLogs && (
-                    <td className="py-1.5 text-center">
-                      {hasRowLogs && (
-                        <button
-                          onClick={() =>
-                            setSelectedLogs({ epoch: e.epoch, logs: e.logs! })
-                          }
-                          className="p-0.5 hover:bg-zinc-800 rounded transition-colors"
-                          title="View logs"
-                        >
-                          <FileText className="h-3 w-3 text-zinc-500 hover:text-zinc-300" />
-                        </button>
-                      )}
-                    </td>
-                  )}
                 </tr>
               );
             })}

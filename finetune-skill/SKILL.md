@@ -31,24 +31,37 @@ The training data defines the *prompts* the model practices on. The grader defin
 ## The Pipeline
 
 ```
-Define Objective → Extract Documents → Build Topics → Generate Data → Write Grader → Verify → Evaluate → Analyze → Train
-     ↓ upload          ↓ upload          ↓ upload        ↓ upload        ↓ upload                    ↓ iterate    ↓ iterate
-   (workflow)      (knowledge)        (topics)        (records)       (grader)                  (fix grader/data) (adjust config)
+Define Objective → Extract Docs → Build Topics → Generate Data → Write Grader → Validate
+     ↓ upload         ↓ upload        ↓ upload       ↓ upload       ↓ upload
+   (workflow)      (knowledge)      (topics)       (records)      (grader)
+
+                   ┌─────────────────────────────────────────────────────────┐
+                   │                                                         │
+Validate → Data Quality Gate → Verify → Evaluate                             │
+               ↓ FAIL                      ↓                                 │
+          Fix data (cheap)          ┌──────────────────────────────┐         │
+               ↓                    │   Eval-First Loop (fast)      │         │
+          Re-validate               │ Analyze → Readiness Gate ────→│── PASS ─→ Train → Analyze → Done
+                                    │      ↑         ↓ FAIL         │            ↓ bad
+                                    │      └── Fix data/grader ─────┘        Iterate (back to Eval)
+                                    └──────────────────────────────┘
 ```
 
-**Each step uploads to the gateway immediately** — the vLLora UI shows progress in real time. You don't wait until the end to push data.
+**Each step uploads to the gateway immediately** — the vLLora UI shows progress in real time.
 
-**Execute ALL steps (1-9).** Steps 1-6 prepare the dataset. Steps 7-9 evaluate and train the model. Do NOT stop at Step 6 — always run evaluation at minimum. If the user only asks for data preparation, you may stop at Step 6, but by default run the full pipeline including evaluation and training.
+**Execute ALL steps (1-9).** Steps 1-6 prepare the dataset. Step 7 runs eval iterations until data/grader are validated. Only then does training start. Do NOT stop at Step 6 — always run evaluation at minimum.
 
-**Wait for training to complete.** Do NOT exit after launching training. Poll `training-jobs/{JOB_ID}-monitor-report.json` (or use `finetune.py poll-training`) until training finishes. Then analyze results (Step 8) and iterate (Step 9) if the eval pass rate is below 80% or training shows anomalies. **The pipeline is not done until you've analyzed results and either iterated or confirmed the model meets the objective.**
+**Eval first, train later.** Do NOT start training on the first iteration. Run eval, check the readiness gate, fix issues, re-eval. Only start training after the readiness gate passes (Step 7c→7d). This avoids wasting hours of GPU time on bad data or a broken grader.
 
-**Auto-iterate when running non-interactively.** If the user is not responding (e.g., running via `claude -p`), do NOT ask "what would you like to do?" and stop. Instead, make your own judgment: if eval pass rate < 80%, apply the top-priority fix from the analysis and start a new iteration automatically. Max 3 auto-iterations.
+**Wait for training to complete.** Once training starts (Step 7d), poll until it finishes. Analyze results (Step 8b) and iterate (Step 9b) if needed.
+
+**Auto-iterate when running non-interactively.** If the user is not responding (e.g., running via `claude -p`), make your own judgment: if readiness gate fails, apply the top-priority fix and re-eval automatically. Max 5 eval-only auto-iterations, max 3 training auto-iterations.
 
 **Checkpoint after each step** — so the pipeline can resume after crashes:
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step <STEP_NAME> --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
-Step names: `create-workflow`, `extract`, `topics`, `relations`, `generate-data`, `grader`, `validate`, `upload-records`, `upload-grader`, `eval`, `training`, `analyze`.
+Step names: `create-workflow`, `extract`, `topics`, `relations`, `generate-data`, `grader`, `validate`, `data-quality-gate`, `upload-records`, `upload-grader`, `eval-N` (e.g. `eval-1`, `eval-2`), `readiness-pass`, `difficulty-probe`, `training`, `analyze`.
 
 ### Working Directory
 
@@ -113,36 +126,39 @@ fi
 
 **If an existing project is found:**
 1. Read `finetune-project/config.json` to get the `workflow_id`
-2. Check checkpoint state — this is the most reliable way to know what's done:
+2. **Run `status` to see the full picture** — this is the single source of truth:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py status --project-dir finetune-project
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py status --workflow-id $WORKFLOW_ID
 ```
-3. If no checkpoint file exists, fall back to local artifact detection:
-   - `knowledge/` exists + has parts → extraction is done
-   - `topics.json` exists → topics is done
-   - `relations.json` exists → relations is done
-   - `training.jsonl` exists → data generation is done
-   - `grader.js` exists → grader is done
-   - `evaluations/` has eval results → eval is done
-   - `training-jobs/` has job files → training was started
-4. Verify gateway state — `python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py verify --workflow-id $WORKFLOW_ID`
-5. **Pick up from the first incomplete step** — do NOT re-run completed steps
-6. Append to `execution-log.md` (never overwrite) with a "Resumed" entry:
+This shows gateway data (records, topics, sources, grader), all job statuses, local checkpoint state, and recommends the next step. **Follow its recommendation.**
+
+3. **Sync jobs from gateway** to pick up jobs created by the UI or other agents:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py sync-jobs --workflow-id $WORKFLOW_ID --output-dir finetune-project
+```
+This creates local tracking files for any jobs you don't already have and updates statuses for existing jobs (e.g., a job you created that was later cancelled from the UI).
+
+4. **Pick up from the recommended step** — do NOT re-run completed steps
+5. Append to `execution-log.md` (never overwrite) with a "Resumed" entry:
    ```
    ## Resumed — [timestamp]
-   - Previous run completed through Step N
-   - Gateway state: records=X, topics=Y, sources=Z, evaluator=YES/NO
-   - Picking up from Step M
+   - Status output: records=X, topics=Y, sources=Z, grader=YES/NO
+   - Jobs: [list active/cancelled/done]
+   - Picking up from Step M (per status recommendation)
    ```
 
 **Common resume scenarios:**
 | State found | What happened | Action |
 |-------------|---------------|--------|
 | `config.json` + `knowledge/` + no `topics.json` | Crashed during or after extraction | Resume from Step 3 (topics) |
-| Everything through `grader.js` + no `evaluations/` | Crashed before eval | Resume from Step 7 (eval + training) |
-| `evaluations/` has results + no `training-jobs/` | Eval completed but training never started | Analyze eval (Step 8), then start training |
+| Everything through `grader.js` + no `evaluations/` | Crashed before eval | Resume from Step 7b (create eval) |
+| `evaluations/` has results + no readiness-pass checkpoint | Eval completed, no readiness gate run | Run `readiness-check` on latest eval (Step 7c) |
+| Readiness gate FAIL + no fixes applied | Crashed during fix step | Read readiness output, apply fixes (Step 9a), re-eval |
+| Readiness gate PASS + no `training-jobs/` | Crashed before training start | Create training job (Step 7d) |
 | `training-jobs/` has a job file with status `running` | Training was in progress | Poll the existing job, don't create a new one |
-| `iterations.md` exists with iteration 1 results | First iteration completed | Read findings, apply fixes (Step 9), start iteration 2 |
+| `training-jobs/` has a job file with status `cancelled` | Job was cancelled (from UI or another agent) | Skip it. Analyze eval results. Start new job if needed (Step 9) |
+| `training-jobs/` has a job with `source: synced_from_gateway` | Job was created from the UI, not by this agent | Treat it like your own — poll it, analyze results when done |
+| `iterations.md` exists with iteration results | Previous iteration completed | Read findings, apply fixes (Step 9), continue iterating |
 
 ### Step 1: Define the Objective
 
@@ -170,15 +186,31 @@ EOF
 
 ### Step 2: Extract Documents
 
-Extract all documents in parallel — **spawn one `knowledge-extractor` subagent per document**. Each agent converts its PDF to Markdown (pymupdf4llm), writes a custom `extract.py` using langchain text splitters, post-processes, and uploads to the gateway.
+Extract all documents in parallel — **spawn one `knowledge-extractor` subagent per document**. Each agent handles its own PDF independently (Docling extraction, deterministic `build_knowledge_parts.py`, post-processing, gateway upload).
 
-**2a. Verify pymupdf4llm is available:**
+> **Deterministic extraction rule**: Subagents MUST use `build_knowledge_parts.py` as the default extraction script. This ensures the same PDF always produces the same knowledge parts. Agents must NOT write custom extract.py scripts unless the user explicitly requests custom extraction for a specific document via CUSTOM_INSTRUCTIONS, or `build_knowledge_parts.py` produces 0 parts.
+
+**2a. Verify Docling Serve is available:**
 
 ```bash
-uv run --with pymupdf4llm python -c "import pymupdf4llm; print('pymupdf4llm OK')"
+curl -sS --connect-timeout 5 http://127.0.0.1:5001/health 2>/dev/null && echo "DOCLING_OK" || echo "DOCLING_UNAVAILABLE"
 ```
 
-No Docker required — pymupdf4llm is a pure Python package. If uv is not available, install it: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+**If Docling is unavailable**, use the fallback text extractor instead:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/pdftotext_extract.py <pdf-path> -o <output-dir>/docling-result.json
+```
+This produces a simpler extraction (text-only, no table detection) but is sufficient for most documents. The `knowledge-extractor` subagent will work with either Docling or pdftotext output.
+
+If Docling is available, submit all PDFs at once (non-blocking):
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/docling_extract.py --submit-only \
+  "pdfs/doc1.pdf:finetune-project/knowledge/doc1-slug/docling-result.json" \
+  "pdfs/doc2.pdf:finetune-project/knowledge/doc2-slug/docling-result.json" \
+  ...
+```
+
+This returns a JSON manifest with `task_id` per document. Docling processes them in parallel.
 
 **2b. Spawn one `knowledge-extractor` per document (parallel):**
 
@@ -191,28 +223,63 @@ For each document, spawn a subagent with:
 
 Spawn up to 4-5 agents at once. If there are more documents, spawn in batches.
 
-**2c. After ALL agents return — merge indexes:**
+**Retry on failure**: If a subagent fails:
+1. Check if `<DOC_DIR>/docling-result.json` exists (Docling succeeded but extraction failed).
+   - If yes: re-run `build_knowledge_parts.py` on the existing result.
+   - If no: re-submit to Docling and spawn the subagent again.
+2. If second attempt also fails: **warn the user** with the document name and error, then continue with remaining documents. Do NOT silently skip failed documents.
+
+**2c. After ALL agents return — merge indexes with completeness check:**
 
 ```bash
 python3 -c "
-import json, glob
+import json, glob, sys
+
+# Expected documents (set this from your Step 1 document list)
+expected_slugs = set()  # e.g., {'doc1-slug', 'doc2-slug'}
+# Populate from your actual document list:
+# expected_slugs = {'chess-tactics', 'opening-theory', 'endgame-manual'}
+
+found_files = sorted(glob.glob('finetune-project/knowledge/*/parts-index.json'))
+found_slugs = {f.split('/')[-2] for f in found_files}
+
+# Completeness check
+missing = expected_slugs - found_slugs if expected_slugs else set()
+if missing:
+    print(f'WARNING: {len(missing)} document(s) missing parts-index.json: {sorted(missing)}')
+    print('These documents failed extraction. Check subagent logs and re-extract before proceeding.')
+
+# Merge indexes
 parts = []
-for f in sorted(glob.glob('finetune-project/knowledge/*/parts-index.json')):
+for f in found_files:
     with open(f) as fh:
         data = json.load(fh)
         parts.extend(data.get('parts', data) if isinstance(data, dict) else data)
 with open('finetune-project/knowledge/all-parts-index.json', 'w') as fh:
     json.dump({'parts': parts}, fh, indent=2)
-print(f'Merged {len(parts)} parts from {len(glob.glob(\"finetune-project/knowledge/*/parts-index.json\"))} documents')
+print(f'Merged {len(parts)} parts from {len(found_files)} documents')
+
+if missing:
+    print(f'ACTION REQUIRED: Re-extract missing documents before proceeding to Step 3.')
+    sys.exit(1)
 "
 ```
 
-**2d. Validate:**
+If any documents are missing, re-extract them (see retry logic in 2b) before proceeding.
+
+**2d. Validate — MUST PASS before continuing:**
+
 ```bash
-uv run ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/knowledge/
+python3 ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/knowledge/ --fix
 ```
 
-> **For full extraction workflow details** (if you need to understand or debug), read [reference/extraction-guide.md](reference/extraction-guide.md). Docling is available as a fallback for scanned PDFs — see that guide.
+**This is a hard gate.** If validation reports FAIL after `--fix`:
+1. Read the specific failure reasons (short parts, low title diversity, etc.)
+2. Re-run `consolidate_parts.py` with adjusted thresholds on the failing documents
+3. Re-validate. If still FAIL, present the failure details to the user and ask whether to proceed or re-extract.
+4. Do NOT silently proceed to Step 3 with FAIL status — bad extraction poisons topics, records, and training.
+
+> **For full extraction workflow details** (if you need to understand or debug), read [reference/extraction-guide.md](reference/extraction-guide.md).
 
 If there are no documents (objective-only pipeline), skip this step.
 
@@ -227,23 +294,28 @@ Use the user's focus areas to guide topic design in Step 3. All content is alrea
 
 ### Step 3: Build Topic Hierarchy
 
-**A topic = a type of training example you want to generate.** Each leaf topic answers the question: "what scenario should the model practice handling?" The hierarchy groups related scenarios together so you can balance coverage and spot gaps.
+**A topic = a skill the model needs to learn.** Each leaf topic answers the question: "what specific capability should the model practice?" The hierarchy groups related skills together so you can balance coverage, control difficulty distribution, and spot gaps.
+
+**Organize by SKILL, not by document structure.** Do NOT mirror chapter headings or section titles. Instead, analyze what skills the source material teaches and group by capability domain (arXiv:2601.03676: skill taxonomies outperform content-based organization).
 
 Decide what topics to create based on:
-- **The user's focus areas** — which documents/chapters/sections did the user say are most important? Prioritize these as top-level topics.
-- **The objective** — what behaviors does the model need? Each distinct behavior cluster becomes a topic.
-- **The documents** (if available) — what content exists to generate examples from? Read `knowledge/all-parts-index.json` (the merged index across all documents) and use `extraction_path` values as a checklist to make sure your topics cover the available material, not as a template to copy directly.
+- **The objective** — what behaviors/skills does the model need? Each distinct skill becomes a topic.
+- **The documents** (if available) — what skills does the content teach? Read `knowledge/all-parts-index.json` and identify the capabilities it covers. A single chapter may feed multiple skill topics; a single skill topic may draw from multiple chapters.
+- **Difficulty dimension** — for each skill, consider splitting into difficulty tiers (basic vs complex). GRPO requires outcome variance — the model must get some right and some wrong for learning to happen (arXiv:2508.14094: hard examples yield 47% gains vs 3-15% for easy ones).
+
+**Three-level hierarchy**: Domain (broad capability area) → Skill (specific competency) → Difficulty tier (based on base model performance).
 
 Save to `topics.json` as a **flat array** — every topic at the same level, hierarchy expressed via `parent_id`. Each topic has a `system_prompt` that describes its specialization:
 
 ```json
 [
-  {"id": "billing", "name": "Billing", "parent_id": null, "system_prompt": "Specialize in: payment and subscription questions. Help users understand billing cycles, charges, and payment methods."},
-  {"id": "billing-refunds", "name": "Refunds", "parent_id": "billing", "system_prompt": "Focus on: refund requests and policies. Guide users through the refund process, explain eligibility, and handle edge cases."}
+  {"id": "billing", "name": "Billing & Payments", "parent_id": null, "system_prompt": "Specialize in: payment processing, subscription management, and billing troubleshooting."},
+  {"id": "refund-processing", "name": "Refund Processing", "parent_id": "billing", "system_prompt": "Specialize in: handling refund requests, explaining eligibility, and processing different refund types."},
+  {"id": "refund-edge-cases", "name": "Refund Edge Cases", "parent_id": "refund-processing", "system_prompt": "Focus on: partial refunds, pro-rated calculations, exceptions to standard policy, and dispute resolution."}
 ]
 ```
 
-Aim for 3-7 root topics, 2-3 levels deep, each leaf supporting 10-30 training examples. See `reference/topic-hierarchy.md` for design guidelines.
+**Topic count**: Scale with dataset size — 5-10 leaf topics for 100-200 records, 20-40 for 500-1,000, 40-80 for 1,000-3,000. Target ~20 records per leaf topic (arXiv:2410.15226: more topics with fewer examples outperforms fewer topics with more examples). See `reference/topic-hierarchy.md` for full guidelines and research citations.
 
 **System prompt composition**: The `system_prompt` field on each topic is a **segment** that gets composed with its ancestors during record generation: `[Root --system-prompt] + [Root topic] + [Parent topic] + [Leaf topic]`. Each level adds specificity without contradicting the parent. Keep each segment to 1-2 sentences, 50-150 words total when composed.
 
@@ -254,6 +326,12 @@ Aim for 3-7 root topics, 2-3 levels deep, each leaf supporting 10-30 training ex
 > **ID format note:** Use human-readable slugs for topic `id` values (e.g., `"billing-refunds"`). `finetune.py upload-topics` auto-converts to UUIDs. Use the same slug as `topic_identifier` in `relations.json` and part string IDs as `part_identifier`. `finetune.py upload-relations` resolves everything locally — no manual ID mapping.
 
 If there are no documents (objective-only pipeline), skip this step.
+
+**Checkpoint** after topics and relations are complete:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step topics --project-dir finetune-project --workflow-id $WORKFLOW_ID
+python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step relations --project-dir finetune-project --workflow-id $WORKFLOW_ID
+```
 
 **Upload immediately** — push topics and relations to the gateway so the UI shows the topic hierarchy and coverage:
 ```bash
@@ -268,9 +346,9 @@ fi
 ```
 
 **Review topics with the user.** Present the topic hierarchy (name, parent, linked source material count, planned records-per-topic). Ask:
-- Are these the right focus areas?
-- Any topics to add, remove, or rebalance?
-- How many records per topic? (default: 8 per leaf)
+- Are these the right **skills** for the model to learn?
+- Any skills missing, or topics to split by difficulty?
+- How many records per topic? (default: 25 per leaf, target ~20 for optimal diversity)
 
 Adjust topics based on feedback before proceeding to data generation. This is the **primary filtering step** — topics determine what training data gets generated. Getting this right avoids regenerating data later.
 
@@ -304,34 +382,19 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --knowledge-dir finetune-project/knowledge \
   --system-prompt "You are an expert chess tutor..." \
   --output finetune-project/training.jsonl \
-  --records-per-topic 10 \
+  --records-per-topic 25 \
   --parallel 4 \
   --use-rag --workflow-id $WORKFLOW_ID \
   --upload-incremental
 ```
 
-Add `--use-rag` to augment the static relations.json context with semantically retrieved knowledge parts. The script searches the gateway's knowledge index for each topic and merges the top results with relation-linked parts (deduplicating by part ID). This improves context quality by finding relevant parts the relation-builder may have missed.
+The script makes **multiple LLM calls per topic** (one per prompt type: explain, scenario, compare/analyze, edge-case, application) for better diversity. By default, every leaf topic gets an equal number of records. Use `--weight-by-difficulty` to distribute based on base model eval scores — hard topics (0-30% success) get 40-50% of records, medium (30-70%) get 30-40%, easy (70-100%) get 10-20%. This is the recommended mode after the first evaluation, because GRPO learning signal is strongest on hard topics (arXiv:2508.14094: 47% gains from hard examples vs 3-15% from easy). Use `--weight-by-source` to distribute proportionally to linked source parts instead (max 3:1 imbalance ratio). Inner parallelism runs all prompt-type calls concurrently within each topic.
 
-For rapid iteration without building relations first, use `--rag-only`:
+Add `--use-rag` to augment the static relations.json context with semantically retrieved knowledge parts. The script searches the gateway's knowledge index for each topic and merges the top results with relation-linked parts (deduplicating by part ID). For rapid iteration without building relations first, use `--rag-only`. Additional flags: `--rag-top-k N` (chunks per topic, default 15), `--rag-second-retrieval` (re-query with generated question for sharper grounding).
 
-```bash
-# RAG-only: skip relations.json, retrieve context entirely via semantic search
-python3 ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
-  --topics finetune-project/topics.json \
-  --system-prompt "You are a cybersecurity expert..." \
-  --output finetune-project/training.jsonl \
-  --records-per-topic 10 \
-  --use-rag --rag-only --workflow-id $WORKFLOW_ID \
-  --upload-incremental
-```
+> **Prerequisite for RAG:** Knowledge source parts must have embeddings. The gateway generates them automatically (~30s after upload). Verify with: `python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py search-knowledge --workflow-id $WORKFLOW_ID --phrase "test query"`
 
-> **Prerequisite for RAG:** Knowledge source parts must have embeddings. The gateway generates them automatically (background job, ~30s after upload). Verify with: `python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py search-knowledge --workflow-id $WORKFLOW_ID --phrase "test query"`
-
-Two additional `--use-rag` flags:
-- `--rag-top-k N` — chunks to retrieve per topic (default: 15). Increase for broader context, decrease to reduce noise.
-- `--rag-second-retrieval` — after generating each question, re-queries the knowledge index with the question text to get sharper, question-specific `source_parts` and `ground_truth`. Improves grounding quality at the cost of one extra search call per record. Requires `--workflow-id`.
-
-The script loads topics + relations, finds leaf topics, gathers linked source chunks (plus RAG-retrieved chunks when `--use-rag` is set), and calls the LLM to generate grounded user prompts per topic. If some topics fail, use `--append` to retry without overwriting. Adapt `--records-per-topic`, `--model`, and `--temperature` to the project. Run multiple passes if needed (basic questions, then edge cases, then multi-turn). **Generate at least 100-200 total records.**
+If some topics fail, use `--append` to retry without overwriting. Adapt `--records-per-topic` (default 25), `--min-per-topic` (default 10), `--max-per-topic` (default 50) to the project. **Generate at least 200+ total records.**
 
 **Deduplicate** — parallel generation can produce near-duplicate prompts across overlapping topics:
 ```bash
@@ -351,7 +414,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
 
 The UI at `http://localhost:5173/finetune` also shows all records grouped by topic — point the user there for a visual review.
 
-### Step 4B: Alternate Path — NeMo Data Designer Generation
+### Step 4B: Recommended Path — NeMo Data Designer Generation
 
 > Use this path when the NeMo Data Designer server (`localhost:8000`) is available and you want to generate training data using it. See `reference/nemo-guide.md` for full API details, column types, and recipe structure.
 
@@ -431,6 +494,11 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
 
 ---
 
+**Checkpoint** after data generation (applies to both Step 4 and Step 4B):
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step generate-data --project-dir finetune-project --workflow-id $WORKFLOW_ID
+```
+
 ### Step 4.5: Generate Variants for Augmentation
 
 If some topics are under-represented, use `chat_completion.py` to create variants:
@@ -484,7 +552,12 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader \
   --workflow-id $WORKFLOW_ID --file grader.js
 ```
 
-### Step 5.5: Validate Before Upload
+**Checkpoint** after grader upload:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step grader --project-dir finetune-project --workflow-id $WORKFLOW_ID
+```
+
+### Step 5.5: Final Dataset Validation
 
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py finetune-project/training.jsonl \
@@ -493,6 +566,48 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py finetune-project/trainin
 ```
 
 Checks: valid JSON, required fields, message structure, no assistant messages (RFT), duplicate IDs, record count (minimum 50, recommend 100-200+), and short user messages (< 10 chars). The `--topics` and `--parts` flags cross-reference `topic` and `source_parts` fields against the actual topic hierarchy and parts index — flagging any orphaned references. Fix errors before proceeding.
+
+### Step 5.5b: Data Quality Gate (pre-eval — do NOT skip)
+
+**⚠️ Run this BEFORE evaluation.** Eval costs ~45 min and LLM calls. Training costs hours of GPU time. This gate catches data issues that waste those resources — vague ground truths, prompt-answer misalignment, near-duplicate prompts, and low diversity. Fixing data here is 10-100x cheaper than discovering the problem after training.
+
+**Quick gate (free — always run):**
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py finetune-project/training.jsonl \
+  --topics finetune-project/topics.json
+```
+
+This runs Gate 1 (structural) and Gate 2 (diversity) — no API calls, instant results. Checks: duplicate IDs, prompt length, ground truth presence/quality, topic balance, near-duplicate detection, and semantic diversity.
+
+**Full gate (with LLM scoring — run on first pipeline pass or after regeneration):**
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py finetune-project/training.jsonl \
+  --topics finetune-project/topics.json \
+  --all-gates \
+  --sample 30 \
+  --save finetune-project/data-quality-report.json
+```
+
+This adds Gate 3 (ground truth quality — LLM scores each GT for specificity) and Gate 4 (alignment — LLM checks if GT answers the prompt). Samples 30 records by default to keep cost low.
+
+**Or via `finetune.py`:**
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py data-quality-gate \
+  --file finetune-project/training.jsonl \
+  --topics finetune-project/topics.json \
+  --all-gates --save finetune-project/data-quality-report.json
+```
+
+**Decision:** Exit 0 = PASS (proceed), exit 1 = FAIL (must fix), exit 2 = WARN (review priorities).
+
+**5 gates**: Structural (free), Diversity (free), Completion Length (free), GT Quality ($), Alignment ($). See [reference/data-quality-gate.md](reference/data-quality-gate.md) for gate details, thresholds, common failure patterns, and research citations.
+
+**Checkpoint** after data quality gate passes:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step data-quality-gate --project-dir finetune-project --workflow-id $WORKFLOW_ID
+```
+
+> See [reference/data-quality-gate.md](reference/data-quality-gate.md) for threshold details and research citations.
 
 ### Step 6: Verify & Hand Off
 
@@ -504,101 +619,240 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py verify --workflow-id $WORKFLOW_I
 
 **Expected**: All counts > 0 and evaluator = YES. If any are missing, re-run the upload for that step.
 
-Tell the user the data is visible at `http://localhost:5173/finetune`, then **proceed immediately to Step 7** (evaluation).
-
-### Step 7: Start Evaluation & Training (Parallel)
-
-**Always start both eval AND training together.** They run on the cloud in parallel and answer different questions:
-
-| | Eval Job (~45 min) | Training Job (hours) |
-|---|---------|-------------|
-| **Tests** | Base model + your data + your grader | Whether finetuning improves the model |
-| **Tells you** | Is my data good? Is my grader fair? | Is the model learning? Are hyperparams right? |
-| **Iterate on** | Prompts, topics, grader criteria | Learning rate, epochs, lora_rank |
-
-**Two iteration loops** (run in parallel): **Fast loop** — eval finishes in ~45 min, iterate on data/grader immediately. **Slow loop** — training runs for hours, check metrics when done. Start both on every iteration — the fast loop improves data while the slow loop validates training.
-
-#### 7a. Pre-training validation
-
-Before starting training, validate `max_output_tokens`. The default is **512** — higher values (e.g., 2000) can cause training jobs to fail on the cloud infrastructure. Only increase if you see 100% clipping in training metrics.
-
-> **WARNING**: Setting `max_output_tokens` above 512 may cause training failures. Start with 512 and only increase if clipping is a problem.
-
-#### 7b. Create both jobs (non-blocking)
-
-Use `--create-only` to create the eval job without blocking, so you can start training immediately:
-
+**Checkpoint** after verify:
 ```bash
-# Create eval (saves metadata to evaluations/eval-001.json)
-# Use --limit N for quick iteration checks (e.g., --limit 50 to eval a subset)
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
-  --workflow-id $WORKFLOW_ID --output-dir evaluations
-
-# Available base models:
-# unsloth/Qwen3.5-0.8B, unsloth/Qwen3.5-2B, unsloth/Qwen3.5-4B, unsloth/Qwen3.5-9B
-
-# Create training job (saves metadata to training-jobs/train-001.json)
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
-  --workflow-id $WORKFLOW_ID \
-  --base-model "unsloth/Qwen3.5-4B" \
-  --output-model "chess-tutor-v1" \
-  --output-dir training-jobs
+python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step validate --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
-**Base model selection:**
-| Model | Best for |
-|-------|----------|
-| `unsloth/Qwen3.5-4B` | Fast experiments, narrow tasks |
-| Larger models (7B+) | Complex reasoning, broad domains |
+Tell the user the data is visible at `http://localhost:5173/finetune`, then **proceed immediately to Step 7** (evaluation).
 
-**GRPO training defaults** (research-validated — see `reference/analysis-strategy.md` Part 6 for full rationale and sources):
+### Step 7: Evaluate & Validate Before Training
 
-| Parameter | Default | Rationale |
-|-----------|---------|-----------|
-| `learning_rate` | **1e-6** | Universal consensus: DeepSeekMath, DAPO, Dr. GRPO, TRL all use 1e-6. Do NOT use SFT rates (2e-5 to 5e-5) — they are 20-50x too high for GRPO and cause KL explosions. |
-| `response_candidates_count` | **8** (minimum) | GRPO needs multiple candidates to compute advantages. With G=2, advantage estimates are too noisy. All published work uses G≥8: DeepSeekMath (G=64), DAPO (G=16), Dr. GRPO (G=8), TRL default (G=8). |
-| `warmup_steps` | **20-50** | DAPO uses 20, "Tricks or Traps" uses 50. Linear warmup then constant LR. |
+**Eval first, train later.** Eval is fast (~45 min) and cheap. Training is slow (hours) and expensive. Run eval iterations to validate data quality, grader correctness, and score distribution BEFORE committing to training.
 
-**Config adjustments (initial):**
-| Situation | Adjustment |
-|-----------|------------|
-| < 50 records | `epochs: 1` (avoid overfitting) |
-| > 500 records | `epochs: 3-4` |
-| Complex task | `lora_rank: 16` |
-| Simple task | `lora_rank: 4` |
-| Compute-constrained | `response_candidates_count: 4` (minimum viable, but signal quality degrades) |
-| Unstable training (KL spikes) | Lower `learning_rate` to 5e-7. If using LLM-judge grader, keep KL penalty enabled |
+| Phase | What runs | What it answers | Duration | Cost |
+|-------|-----------|----------------|----------|------|
+| **Eval iterations** | Base model + your data + your grader | Is my data good? Grader fair? Score spread? | ~45 min/iter | Low |
+| **Training** | Finetuned model with GRPO | Is the model learning? Hyperparams right? | Hours | High |
+
+**The flow:**
+```
+Eval → Readiness Gate → [FAIL] → Fix data/grader → Re-eval → ... → [PASS] → Train
+```
+**Max 5 eval-only iterations** before training. If readiness gate never passes, escalate to user.
+
+#### 7a. Pre-training validation (RFT-specific — do NOT skip)
+
+**⚠️ These checks are specific to RFT/GRPO training.** GRPO learns by comparing multiple completions per prompt — if all completions score the same, the gradient is zero and the model learns nothing. Validate BEFORE committing to an expensive training run.
+
+**7a-i. Validate max_output_tokens.**
+The default is **512** — higher values increase cost per step (8 completions × N tokens each). Only increase if you see >50% clipping in training metrics.
+
+**7a-ii. Validate grader score distribution (CRITICAL for GRPO).**
+Dry-run the grader on 3-5 sample records with varying quality responses. Scores should spread across 0.2-0.9 — if all cluster at one value, GRPO gets zero gradient. See [reference/grader-writing.md](reference/grader-writing.md) for scoring patterns and red flags.
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
+  --workflow-id $WORKFLOW_ID --script grader.js \
+  --row '{"messages": [{"role":"system","content":"..."}, {"role":"user","content":"..."}, {"role":"assistant","content":"Good detailed response..."}]}'
+```
+
+**7a-iii. Create a validation set (80/20 split) for reward hacking detection.**
+Split `training.jsonl` locally — train on 80%, keep 20% for post-training validation. After training, if `train_reward_mean` is high but validation performance is poor → reward hacking.
+
+#### 7b. Create eval job (eval-only — NO training yet)
+
+**⚠️ Before creating eval, verify records exist on the gateway:**
+```bash
+RECORD_COUNT=$(curl -s "http://localhost:9090/finetune/workflows/$WORKFLOW_ID/records" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d))")
+echo "Records on gateway: $RECORD_COUNT"
+if [ "$RECORD_COUNT" -lt 1 ]; then
+  echo "ERROR: No records on gateway — upload records first (Step 4)"
+  exit 1
+fi
+```
+
+Create eval job only — do NOT create a training job yet:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
+  --workflow-id $WORKFLOW_ID --output-dir evaluations
+```
 
 > **Note on eval IDs**: The `POST /finetune/evaluations` response returns `evaluation_run_id` — use this for polling. The workflow's `eval_job_ids` field may show a different internal ID that returns 404. Always use the ID from the create response.
 
-#### 7c. Monitor training + poll eval
-
-**Monitor training.** Delegate to the `training-monitor` subagent (installed at `.claude/agents/training-monitor.md`) — provide `GATEWAY_URL=http://localhost:9090`, `WORKFLOW_ID`, `JOB_ID` (from the training job file), and `OUTPUT_DIR=training-jobs`. The subagent writes a Python monitoring script, launches it via `nohup`, and **returns immediately** with the report file path. The script runs autonomously for the duration of training (30-120+ min), saving metrics and checking for anomalies.
-
-**Poll eval in foreground** (while the training monitor runs autonomously):
-
+**Poll eval in foreground:**
 ```bash
-# Poll eval in foreground (updates evaluations/eval-001.json with progress + results)
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval \
   --file evaluations/eval-001.json
 ```
 
-**After eval completes**, check if the training monitor report exists:
+When eval completes, proceed to **Step 7c (Readiness Gate)** — do NOT start training.
+
+#### 7c. Pre-Training Readiness Gate
+
+After eval completes, check if data and grader are ready for training:
+
 ```bash
-test -f training-jobs/{JOB_ID}-monitor-report.json && echo "Training done" || echo "Training still running"
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
+  --file evaluations/eval-001.json
 ```
 
-If training is still running, periodically check `tail -5 /tmp/training_monitor_{JOB_ID}.log` for progress. Once the report file appears, read it for anomalies before proceeding to analysis.
+The readiness gate runs **3 hard checks** (grader quality) and **8 soft checks** (quality signals). Hard checks ask "is the grader working?", NOT "is the base model good?" — GRPO can learn from low base model scores (DeepSeek R1-Zero: 15.6% → 71%).
 
-**Key rule**: When eval completes, **immediately analyze eval results** — don't wait for training. Both save data locally (`training-jobs/` and `evaluations/`) so Step 8 needs no API calls.
+**Hard checks** (must ALL pass): sample count >= 50, score std > 0.10, average score > 0.05.
 
-### Step 8: Analyze Results & Present Findings
+**Decision:**
+- **Exit code 0 (PASS)** → proceed to **Step 7d (Start Training)**
+- **Exit code 1 (FAIL)** → fix issues → return to **Step 7b (Re-eval)**
+- **Exit code 2 (WARN)** → check which soft checks failed before deciding
 
-Analyze each job's results **as soon as they arrive** — don't wait for both to finish. Present findings to the user. If the user is interactive, let them choose the next action. If running non-interactively (no user response), auto-apply the highest-priority fix and iterate.
+**⚠️ Critical WARN distinction:** `score_concentration` > 70% means the grader is broken — **fix before training**. Other soft warnings (`pass_rate`, `binary_frac`, `dead_weight`, `topic_balance`) are safe to train through.
 
-> **Read [reference/analysis-strategy.md](reference/analysis-strategy.md)** for decision trees, action templates, derived metrics, and presentation format.
+**If non-interactive** (running via `claude -p`): auto-fix if `score_concentration` > 70%, otherwise proceed to training.
 
-#### 8a. Analyze training results (when training completes)
+**Max 5 eval-only iterations.** If readiness gate never passes after 5 evals, escalate to user with diagnosis.
+
+> See [reference/readiness-gate.md](reference/readiness-gate.md) for the full check tables, WARN safety guide, and research citations.
+
+#### 7c+. Difficulty Probe (after readiness gate passes, before training)
+
+**⚠️ Run this after the readiness gate passes and before starting training.** Checks **per-prompt signal strength** — catches data that looks good in aggregate but produces zero gradient at the prompt level.
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py difficulty-probe \
+  --file evaluations/eval-001.json \
+  --save finetune-project/difficulty-report.json
+```
+
+**Decision:** Exit 0 = PASS (>= 30% learnable, proceed to training), exit 1 = FAIL (< 15% learnable, fix first), exit 2 = WARN (15-30%, review recommendations).
+
+> See [reference/readiness-gate.md](reference/readiness-gate.md) for difficulty probe details, fix recommendations, and research citations.
+
+**Checkpoint** after difficulty probe passes:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step difficulty-probe --project-dir finetune-project --workflow-id $WORKFLOW_ID
+```
+
+#### 7d. Start Training (only after readiness gate passes)
+
+Training starts here — only reached when the readiness gate indicates data and grader are solid.
+
+**Base model selection** (choose based on task complexity AND dataset size):
+| Model | Best for | Max records (K=8) | OOM risk |
+|-------|----------|-------------------|----------|
+| `unsloth/Qwen3.5-0.8B` | Quick iteration, prototyping, very narrow tasks | ~1000 | Very low |
+| `unsloth/Qwen3.5-2B` | Simple tasks, fast experiments | ~800 | Low |
+| `unsloth/Qwen3.5-4B` | **Default choice.** Good balance of quality and speed | ~500 | Low |
+| `unsloth/Qwen3.5-9B` | Complex reasoning, broad domains | ~100 | High with >100 records |
+
+> **⚠️ Start with 4B.** The 9B model OOMs with >100 records and K=8 on standard GPU allocations. Use 9B only for small, complex datasets (<100 records). Use 0.8B/2B for quick prototyping or when training keeps failing on larger models. The `create-training` script warns if the model/dataset combination risks OOM.
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
+  --workflow-id $WORKFLOW_ID \
+  --base-model "unsloth/Qwen3.5-4B" \
+  --output-model "project-v1" \
+  --output-dir training-jobs
+
+# To override defaults (e.g., after diagnosing issues from previous iterations):
+# python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
+#   --workflow-id $WORKFLOW_ID \
+#   --base-model "unsloth/Qwen3.5-4B" \
+#   --output-model "project-v2" \
+#   --config '{"learning_rate": 0.0000005, "epochs": 5, "lora_rank": 16}' \
+#   --inference-params '{"response_candidates_count": 16, "max_output_tokens": 1024}' \
+#   --output-dir training-jobs
+```
+
+**GRPO training defaults** (research-validated — see `reference/analysis-strategy.md` Part 6):
+
+| Parameter | Default | Rationale |
+|-----------|---------|-----------|
+| `learning_rate` | **5e-6** | Between DeepSeek-R1's 3e-6 (arXiv:2501.12948) and gateway default 1e-5. Food-label E2E test showed 1e-6 too slow to converge. Do NOT use SFT rates (2e-5 to 5e-5). |
+| `response_candidates_count` | **8** (minimum) | GRPO needs multiple candidates for advantage estimation. Published work uses G=8 (Dr. GRPO, TRL) to G=64 (DeepSeekMath). |
+| `warmup_steps` | **20-50** | DAPO (arXiv:2503.14476) uses 20, "Tricks or Traps" (arXiv:2508.08221) uses 50. Linear warmup then constant LR. |
+
+> **⚠️ RFT epochs ≠ SFT epochs.** In RFT/GRPO, the model generates **fresh responses each epoch** — there's no repetition risk. More epochs = more exploration. Published work uses high epoch counts: "Tricks or Traps" uses 50 epochs; OpenAI says RFT does "hundreds or thousands of epochs." Start conservatively and increase if reward is still improving.
+
+> **Adaptive epochs:** `finetune.py` automatically adjusts epochs based on dataset size when using defaults (no `--config`). The script fetches the record count from the workflow and applies the table below. Override with `--config '{"epochs": N}'` if needed.
+
+| Situation | Adjustment |
+|-----------|------------|
+| < 50 records | `epochs: 15` (small dataset needs more passes — OpenAI: "hundreds of epochs over the same few data points") |
+| 50-200 records | `epochs: 8` |
+| 200-500 records | `epochs: 5` |
+| > 500 records | `epochs: 3` (DeepSeek-R1 used ~50k records with ~2 epochs) |
+| Complex task | `lora_rank: 16` |
+| High KL but training otherwise healthy | **Do NOT lower LR just for KL.** With β=0 (our backend default), KL divergence values are un-normalized and purely informational. Do NOT use KL values to make training decisions. |
+| Unstable training (NaN loss, reward collapse) | Lower `learning_rate` to 1e-6. Check for 100% completion truncation first. |
+
+#### 7e. Monitor training
+
+**Spawn training monitor.** Delegate to the `training-monitor` subagent (`.claude/agents/training-monitor.md`) — provide `GATEWAY_URL=http://localhost:9090`, `WORKFLOW_ID`, `JOB_ID` (from the training job file), and `OUTPUT_DIR=training-jobs`. The subagent launches a detached Python script that runs autonomously.
+
+**Poll training in foreground:**
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
+  --file training-jobs/train-001.json \
+  --max-wait 7200
+```
+
+> **⚠️ NEVER use `sleep 300` or `sleep 600` in a Bash tool call to wait for training.** Always use `poll-training`.
+
+**Early stopping** is enabled by default. The poll script uses multi-signal detection based on GRPO/RFT research:
+
+1. **Score plateau** — EMA-smoothed scores (alpha=0.3) with linear regression slope over 5 epochs. Triggers when slope < 0.005/epoch after a 2-epoch warm-up. Distinguishes "converged" (score ≥0.5, deploy) vs "stuck" (score <0.3, investigate grader/data). Ref: arXiv:2507.18014 (3-phase GRPO training), arXiv:2503.06639 (absorbing states).
+2. **Score degradation** — Negative EMA slope (scores declining) indicates overfitting or policy collapse.
+3. **Length exploitation** — Response length growing >30% while reward is flat. Ref: Dr. GRPO (arXiv:2503.20783) — GRPO's normalization can cause degenerate lengthening.
+
+To disable: add `--no-early-stop`.
+
+When training completes (or is early-stopped), proceed to **Step 8b (Post-Training Analysis)**. If early-stopped, the best checkpoint is noted in the output — use that epoch's model.
+
+### Step 8: Analyze Results
+
+**Before analyzing, sync jobs** to catch status changes from the UI:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py sync-jobs --workflow-id $WORKFLOW_ID --output-dir finetune-project
+```
+
+**Handle cancelled jobs**: Skip analysis for cancelled jobs. Log it in execution-log.md. If ALL jobs were cancelled, proceed to Step 9.
+
+> **Read [reference/analysis-strategy.md](reference/analysis-strategy.md)** for decision trees and presentation format.
+> **Read [reference/training-metrics-guide.md](reference/training-metrics-guide.md)** for GRPO metric interpretation.
+
+#### 8a. Analyze eval results (after each eval — before training)
+
+This runs during the eval-first loop (Step 7b→7c). Compute:
+
+1. **Overall**: average score, pass rate (>0.7 threshold), score range
+2. **Per-topic breakdown**: group scores by topic, sort by average (weakest first). Low topic scores are expected for base models — focus on whether the grader differentiates quality within each topic, not absolute scores.
+3. **Low-scoring records**: list records <0.7 with their `reason` fields
+4. **Score concentration**: are scores spread out (good) or clustered at one value (grader too coarse)? If >50% are the same value, the grader needs more granular criteria — GRPO gets zero gradient when K=8 completions all score identically (DAPO arXiv:2503.14476).
+5. **Readiness gate output**: from `readiness-check` command — which criteria passed/failed. Pay special attention to `score_concentration` — it catches grader issues that `score_std` misses when outliers inflate the overall std.
+
+**Then run the readiness gate** (Step 7c) to decide: fix + re-eval, or proceed to training.
+
+#### 8a+. Filter Dead-Weight Records & Regenerate Replacements
+
+**Why this matters:** GRPO **cannot learn from negative-only rewards**. When every sampled response scores 0, the gradient is zero. Dead-weight records destabilize training.
+
+**After eval completes:**
+1. Find records where max score < 0.1 — these are dead weight
+2. Diagnose WHY (grader hard gate? wrong premise? model too weak?)
+3. Remove dead-weight records from `training.jsonl`
+4. Regenerate replacements if needed (`generate_records.py --append`)
+5. Re-validate and re-upload with `--force`:
+   ```bash
+   python3 ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py finetune-project/training.jsonl --topics finetune-project/topics.json
+   python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl
+   ```
+
+**When to skip regeneration:** If only 1-2 records out of 200+ scored 0, removing without replacement is fine.
+
+#### 8b. Analyze training results (after training completes)
+
+This runs after Step 7e. Training is expensive — analyze thoroughly:
 
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/analyze_training.py \
@@ -606,67 +860,65 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/analyze_training.py \
   --epoch-evals-file training-jobs/$JOB_ID-epoch-evals.json
 ```
 
-For JSON output: add `--json > training-jobs/job-v1-analysis.json`. The script computes reward trend, KL health, clipping ratio, loss stability, grad norm spikes, signal strength, and per-topic learning trajectories. Exits with code 1 if critical alerts found. Present findings immediately — don't wait for eval.
+The script computes reward trend, KL health, clipping ratio, loss stability, grad norm spikes, signal strength, and per-topic trajectories. Exits with code 1 if critical alerts found.
 
-#### 8b. Analyze eval results (when eval completes)
+#### 8c. Cross-reference eval + training (when both available)
 
-**Must compute:**
-1. **Overall**: average score, pass rate (>0.7 threshold), score range
-2. **Per-topic breakdown**: group scores by topic, sort by average (weakest first)
-3. **Low-scoring records**: list records <0.7 with their `reason` fields
-4. **Score distribution**: are scores spread out (good) or clustered (grader issue)?
+Combine eval scores with training metrics. Present per-topic eval scores alongside training health. Suggest prioritized actions.
 
-#### 8b+. Filter Dead-Weight Records & Regenerate Replacements
+#### 8d. Quick diagnosis patterns
 
-**Why this matters:** Research on GRPO/RFT shows that models **cannot learn from negative-only rewards**. When every sampled response to a question scores 0, the gradient is zero — the model learns nothing. Worse, these dead-weight records can actively destabilize training.
+> See [reference/analysis-strategy.md](reference/analysis-strategy.md) for the full diagnosis table and decision trees. Key patterns:
+> - All scores ~0 → grader broken. All scores ~1 → grader too lenient. >50% at one value → grader too coarse (most common: add early-exit for non-responses, remove score snapping).
+> - KL very high but reward improving → **normal for GRPO** (beta=0 default), no action needed.
+> - train_reward up, valid_reward flat → reward hacking, improve grader.
 
-**After eval completes:**
-1. Find records where max score < 0.1 — these are dead weight
-2. Diagnose WHY (grader hard gate? wrong premise? model too weak? ambiguous question?)
-3. Remove dead-weight records from `training.jsonl`
-4. Regenerate replacements for the same topics using `generate_records.py --append` with different parameters (higher temperature, different prompt types)
-5. Re-validate and re-upload
+#### 8e. Update Iteration Tracker
 
-**When to skip regeneration:** If only 1-2 records out of 200+ scored 0, removing without replacement is fine. Regenerate when dead-weight records are >5% of total or concentrated in a single topic.
+**After every eval/training cycle**, append a summary to `iterations.md` (create if it doesn't exist). Include: config, eval results (per-topic breakdown), training results (reward/KL/clipping), what changed, and next action. See [reference/analysis-strategy.md](reference/analysis-strategy.md) for the full template.
 
-#### 8c. Cross-reference (when both available)
-
-Combine eval scores with training metrics. Present a summary showing per-topic eval scores alongside training health indicators, then suggest prioritized actions. **Let the user choose** — they may direct their own analysis.
-
-#### 8c. Quick diagnosis patterns
-
-| Signal | Likely cause | Suggested action |
-|--------|-------------|-----------------|
-| All scores ~0 | Grader broken or too strict | Fix grader, dry-run, re-eval |
-| Some records score 0, rest normal | Dead-weight records | Remove + regenerate (Step 8b+) |
-| All scores ~1 | Grader too lenient | Add harder criteria, re-eval |
-| One topic consistently low | Weak prompts or poor source material | Regenerate records, add source material |
-| Good responses scoring low | Grader criteria misaligned | Adjust criteria weights or LLM judge prompt |
-| NaN/Inf loss in training | Learning rate too high | Lower `learning_rate` by 2x |
-| KL divergence exploding | Model drifting too far | Lower `learning_rate` by 2x |
-| Reward plateau | Grader not differentiating well | Improve grader for smoother score spread |
-| Reward collapse | Grader binary or reward hacking | Rewrite grader with partial credit |
-| No learning across epochs | Task too hard for base model | Try larger base model |
-| Overfitting (peak then decline) | Too many epochs | Reduce `epochs` to peak epoch |
-
-#### 8d. Update Iteration Tracker
-
-**After every eval/training cycle**, append a summary to `iterations.md`. Create it on the first iteration if it doesn't exist. Include: config, eval results (per-topic breakdown), training results (reward/KL/clipping), what changed from previous iteration, and actionable recommendations. See [reference/analysis-strategy.md](reference/analysis-strategy.md) for the full template.
+**Checkpoint** after analysis:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step analyze --project-dir finetune-project --workflow-id $WORKFLOW_ID
+```
 
 ### Step 9: Iterate (If Needed)
 
-Based on the user's choice from Step 8, apply fixes and start new jobs. **Max 5 iterations.**
+Two iteration loops with different speeds and costs:
 
 > **For full iteration diagnosis and escalation strategy**, read [reference/iteration-strategy.md](reference/iteration-strategy.md).
 
-#### 9a. Apply the chosen fix
+#### 9a. Eval-only iteration (readiness gate failed — fast, cheap)
 
-**Fixing the grader** (no data re-upload needed):
+Apply fixes and re-eval. Do NOT create a training job.
+
+**Fixing the grader** — first diagnose, then fix:
+
+**Step 1: Diagnose.** Run `diagnose-grader` to understand WHY scores cluster and WHAT to change:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py diagnose-grader \
+  --file evaluations/eval-001.json --workflow-id $WORKFLOW_ID
+```
+This shows: score distribution by bucket, sample `reason` fields, auto-diagnosis, fix suggestions, and grader source code. **Read this output carefully — the root cause might be DATA, not grader.**
+
+**The most common cause of score clustering is a grader-prompt mismatch** — the grader expects something the model can't do given the prompt format (e.g., page citations without documents). Fix the grader to match the prompts, NOT the data.
+
+> See [reference/iteration-strategy.md](reference/iteration-strategy.md) for the full diagnosis table (grader-prompt mismatch, score snapping, coarse scoring).
+
+**Step 2: Fix.** Edit `grader.js` based on the diagnosis, then upload:
 ```bash
 # Edit grader.js, then update:
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader \
   --workflow-id $WORKFLOW_ID --file grader.js
 ```
+
+**Step 3: Dry-run.** Verify the fix before re-eval:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
+  --workflow-id $WORKFLOW_ID --script grader.js \
+  --row '{"messages": [{"role":"system","content":"..."}, {"role":"user","content":"..."}, {"role":"assistant","content":"I cannot provide specific figures without the filing."}]}'
+```
+Check that a "model refused" response now scores 0 (not 0.3).
 
 **Fixing the data** (requires re-upload):
 ```bash
@@ -674,15 +926,22 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force \
   --workflow-id $WORKFLOW_ID --file training.jsonl
 ```
 
-#### 9b. Start new eval + training jobs
+**Return to Step 7b** — create a new eval and re-run the readiness gate. This is the fast loop (~45 min per iteration).
 
-After applying fixes, start new jobs — same as Step 7b but with incremented version numbers:
+#### 9b. Post-training iteration (training completed but results unsatisfactory)
+
+After training analysis (Step 8b), if results are unsatisfactory:
+
+1. **If only hyperparams need adjusting** (reward flat, clipping too high, etc.) — skip eval, go directly to **Step 7d** with new training config
+2. **If data or grader needs fixing** — apply fixes, return to **Step 7b** (re-eval first, then training)
+3. **If model is too weak** — try a larger base model (2B → 4B → 9B)
+
 ```bash
-# New eval
+# New eval after fixes
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
   --workflow-id $WORKFLOW_ID --output-dir evaluations
 
-# New training job with adjusted config
+# Only after readiness gate passes:
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
   --workflow-id $WORKFLOW_ID \
   --base-model "unsloth/Qwen3.5-4B" \
@@ -690,14 +949,16 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
   --output-dir training-jobs
 ```
 
-**Adjusting training config**: Modify parameters in the next job creation (Step 7b).
+**Max iterations:** 5 eval-only (Step 9a) + 3 training (Step 9b) before escalating to user.
 
-**If training failed with an opaque error** (e.g., "worker exited with status 1"): This is usually a transient cloud infrastructure failure. Retry with the same config first. If it fails again, try a smaller model or reduce batch size.
+**If training failed**: Retry once (transient failure). If it fails again, see [reference/iteration-strategy.md](reference/iteration-strategy.md) for the full diagnosis table and escalation ladder (lower LR → lower max_output_tokens → smaller model → stop and report).
+
+**"cancelled" is a TERMINAL state — do NOT retry cancelled jobs.** Only retry on "failed" states. To cancel a running job: `uv run scripts/finetune.py cancel-training --workflow-id WF_ID --job-id JOB_ID`.
 
 #### 9c. Iteration limits and escalation
 
 - **Max 5 iterations.** After 5, stop and report full diagnosis.
-- **Base model escalation:** After 2 failed iterations: `Qwen3.5-4B` → `7B` → larger.
+- **Base model escalation:** After 2 failed iterations: `Qwen3.5-4B` → `Qwen3.5-9B`. If training keeps failing (OOM/NaN), try smaller: `4B` → `2B` → `0.8B`.
 - **When to stop:** User satisfied, OR avg score > 0.8 AND training reward > 0.7, OR 3+ iterations with no improvement.
 
 ### Using the vLLora UI
@@ -712,9 +973,10 @@ Read these when you need more detail on a specific step:
 |------|-------------|
 | `reference/api-reference.md` | When making API calls — all 76 gateway endpoints with curl examples |
 | `reference/data-format.md` | When generating JSONL — format rules, validation, quality tips |
-| `reference/extraction-guide.md` | When extracting documents — pymupdf4llm + langchain splitting, knowledge_parts.json schema, Docling fallback |
+| `reference/extraction-guide.md` | When extracting documents — Docling Serve setup, hybrid chunk API, knowledge_parts.json schema, pdftotext fallback |
 | `reference/grader-writing.md` | When writing the grader — 3 patterns, design guidelines, common mistakes |
 | `reference/topic-hierarchy.md` | When designing topics — structure, coverage analysis, balance scoring |
+| `reference/readiness-gate.md` | When interpreting readiness gate or difficulty probe results — full check tables, WARN safety guide |
 | `reference/iteration-strategy.md` | When analyzing results — diagnosis, stall patterns, escalation ladder |
 | `reference/analysis-strategy.md` | **Read at Step 8** — data fields, decision trees, action templates, interactive presentation |
 | `reference/workflow-guide.md` | For the full detailed walkthrough of every step |
@@ -723,7 +985,7 @@ Read these when you need more detail on a specific step:
 
 Run with `uv run ${CLAUDE_SKILL_DIR}/scripts/<script>`. Key scripts:
 
-- **`convert_pdf_to_markdown.py`** — PDF → Markdown via pymupdf4llm (primary extraction — no Docker)
+- **`convert_pdf_to_markdown.py`** — PDF → Markdown via pymupdf4llm (utility, not primary extraction)
 - **`finetune.py`** — Gateway API wrapper (create workflow, upload knowledge/topics/records/grader, verify, create-eval, create-training, poll-eval, poll-training)
 - **`generate_records.py`** — Generate training records from topics + knowledge via LLM
 - **`validate_dataset.py`** — Validate JSONL (format, fields, RFT compliance, cross-reference topics/parts)

@@ -5,10 +5,10 @@
  * Also supports a compact list-only mode for the DryRunDialog.
  */
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { XCircle, AlertTriangle, RefreshCw, RotateCw, ChevronRight, StopCircle } from "lucide-react";
+import { XCircle, AlertTriangle, RefreshCw, RotateCw, ChevronRight, StopCircle, Loader2 } from "lucide-react";
 import { VerdictBadge } from "./VerdictBadge";
 import { ScoreStrip } from "./ScoreStrip";
 import { ResultsTable } from "./ResultsTable";
@@ -22,8 +22,29 @@ import { getJobTotalRows, getJobCompletedRows } from "@/types/eval-job";
 import { EvaluatorVersionBadge } from "@/components/shared/EvaluatorVersionBadge";
 import { useEvaluatorVersions } from "@/hooks/useEvaluatorVersions";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
-import { TopicEvalBreakdown } from "@/components/datasets/TopicEvalBreakdown";
-import type { TopicEvalStats } from "@/types/dataset-types";
+import { computeReadinessGate } from "@/lib/distri-dataset-tools/analysis/compute-readiness-gate";
+import type { TopicEvalStats, ReadinessGate } from "@/types/dataset-types";
+
+/**
+ * Map the readiness gate verdict to the cloud verdict format (GO/WARNING/NO-GO).
+ * When we have a readiness gate result, it takes priority over the cloud's simpler
+ * diagnosis — e.g., the cloud says "GO" but our gate detects 79% score concentration
+ * and says "FIX GRADER". This prevents contradictory signals in the UI.
+ */
+function mapReadinessToVerdict(gate: ReadinessGate | undefined, cloudVerdict: string): string {
+  if (!gate) return cloudVerdict;
+
+  // Check if score_concentration is extreme (>70%) — grader is broken
+  const concentrationCheck = gate.checks.find(c => c.id === "score_concentration");
+  const concentrationBlocksTraining = concentrationCheck != null
+    && !concentrationCheck.passed
+    && concentrationCheck.value > 0.70;
+
+  if (gate.verdict === "FAIL") return "NO-GO";
+  if (gate.verdict === "WARN" && concentrationBlocksTraining) return "NO-GO";
+  if (gate.verdict === "WARN") return "WARNING";
+  return "GO";
+}
 
 interface EvalActivityViewProps {
   /** Dataset ID for navigation (click record ID → switch to Records tab) */
@@ -42,7 +63,11 @@ interface EvalActivityViewProps {
 }
 
 function formatTime(ts: number): string {
-  const d = new Date(ts);
+  if (!ts || ts < 1_000_000_000) return "";
+  // Detect seconds-precision timestamps and convert to ms
+  const ms = ts < 1e12 ? ts * 1000 : ts;
+  const d = new Date(ms);
+  if (isNaN(d.getTime())) return "";
   const now = new Date();
   const isToday = d.toDateString() === now.toDateString();
   if (isToday) {
@@ -99,7 +124,6 @@ function EvalJobVersionBadge({ workflowId, jobCreatedAt }: { workflowId: string;
 /** Inline detail panel for a selected job (left side of split) */
 function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: EvalJob; workflowId: string; onCancel?: () => void; onRunAgain?: () => void; onRefresh?: (jobId: string) => void }) {
   const { sortedRecords } = DatasetDetailConsumer();
-  const [showTopicBreakdown, setShowTopicBreakdown] = useState(false);
   const result = job.result;
 
   // Use ALL scores from evaluationResults (full dataset), fall back to sampled sampleResults
@@ -152,25 +176,66 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
       if (!topic) continue;
       (byTopic[topic] ??= []).push(r.score);
     }
+    // First pass: compute stats
     const result2: Record<string, TopicEvalStats> = {};
     for (const [topic, scores2] of Object.entries(byTopic)) {
-      const mean = scores2.reduce((a, b) => a + b, 0) / scores2.length;
-      const std = Math.sqrt(scores2.reduce((a, b) => a + (b - mean) ** 2, 0) / scores2.length);
-      result2[topic] = {
-        mean,
-        std,
-        count: scores2.length,
-        status: mean >= 0.8 ? "good" : mean >= 0.6 ? "warning" : "problem",
-      };
+      const topicMean = scores2.reduce((a, b) => a + b, 0) / scores2.length;
+      const std = Math.sqrt(scores2.reduce((a, b) => a + (b - topicMean) ** 2, 0) / scores2.length);
+      result2[topic] = { mean: topicMean, std, count: scores2.length, status: "good" };
+    }
+    // Second pass: relative status (compared to dataset average, not absolute thresholds)
+    const allMeans = Object.values(result2).map(s => s.mean);
+    const datasetAvg = allMeans.length > 0 ? allMeans.reduce((a, b) => a + b, 0) / allMeans.length : 0;
+    for (const stats of Object.values(result2)) {
+      if (stats.mean < datasetAvg * 0.6) stats.status = "problem";
+      else if (stats.mean < datasetAvg * 0.85) stats.status = "warning";
     }
     return result2;
   }, [evaluationResults, recordTopicMap]);
 
+  // Readiness gate: prefer persisted value, fallback to live computation from snapshot
+  const readinessGate = useMemo<ReadinessGate | undefined>(() => {
+    if (result?.readinessGate) return result.readinessGate;
+    if (!evaluationResults || evaluationResults.length === 0) return undefined;
+    const scored = evaluationResults.filter(r => r.score != null);
+    if (scored.length === 0) return undefined;
+    return computeReadinessGate(scored, topicScores);
+  }, [result?.readinessGate, evaluationResults, topicScores]);
+
   const recommendations = result?.diagnosis?.recommendations || [];
-  const stats = result?.statistics;
   const verdict = result?.diagnosis?.verdict;
+
+  // Use persisted statistics when available (completed job), otherwise compute live from scores
+  const stats = useMemo(() => {
+    if (result?.statistics) return result.statistics;
+    if (scores.length === 0) return undefined;
+    const sorted = [...scores].sort((a, b) => a - b);
+    const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
+    const std = Math.sqrt(scores.reduce((a, b) => a + (b - mean) ** 2, 0) / scores.length);
+    const median = sorted.length % 2 === 0
+      ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+      : sorted[Math.floor(sorted.length / 2)];
+    return { mean, std, median, min: sorted[0], max: sorted[sorted.length - 1] };
+  }, [result?.statistics, scores]);
   // All hooks must be called before any early returns
   const [showRecs, setShowRecs] = useState(verdict !== "GO" && recommendations.length > 0);
+
+  // Auto-fetch results once when viewing a completed job that lacks results.
+  // Uses a Set to track which job IDs have been attempted (prevents re-fire on re-render).
+  const attemptedJobIds = useRef(new Set<string>());
+  useEffect(() => {
+    if (
+      job.status === "completed" &&
+      !result &&
+      !evaluationResults &&
+      job.evaluationRunId &&
+      onRefresh &&
+      !attemptedJobIds.current.has(job.id)
+    ) {
+      attemptedJobIds.current.add(job.id);
+      onRefresh(job.id);
+    }
+  }, [job.id, job.status, job.evaluationRunId, result, evaluationResults, onRefresh]);
 
   // For non-running jobs without results or evaluation data
   if (job.status !== "running" && !result && !evaluationResults) {
@@ -191,20 +256,15 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
     }
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 px-4">
-        <span className="text-xs text-zinc-500">
-          {job.status === "completed"
-            ? "Evaluation completed but per-record results are not available. This can happen when the eval was run externally (e.g., via the finetune skill) or the cloud didn't return row-level scores."
-            : "No results available"}
-        </span>
-        {job.status === "completed" && (
-          <button
-            type="button"
-            className="text-[10px] text-blue-400 hover:text-blue-300 hover:underline"
-            onClick={() => onRefresh?.(job.id)}
-          >
-            Retry fetching results
-          </button>
-        )}
+        <Loader2 className="h-5 w-5 animate-spin text-zinc-500" />
+        <span className="text-xs text-zinc-500">Loading evaluation results...</span>
+        <button
+          type="button"
+          className="text-[10px] text-blue-400 hover:text-blue-300 hover:underline"
+          onClick={() => onRefresh?.(job.id)}
+        >
+          Retry
+        </button>
       </div>
     );
   }
@@ -228,7 +288,7 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
                 Failed
               </span>
             ) : result ? (
-              <VerdictBadge verdict={result.diagnosis.verdict} />
+              <VerdictBadge verdict={mapReadinessToVerdict(readinessGate, result.diagnosis.verdict)} />
             ) : null}
             <span className="inline-flex items-center rounded bg-zinc-800/60 px-2 py-0.5 text-[10px] text-zinc-400 border border-zinc-700/40">
               {job.rolloutModel || "gpt-4o-mini"}
@@ -262,24 +322,6 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
           </div>
         </header>
 
-        {/* Running: progress view */}
-        {isRunning && (() => {
-          const total = getJobTotalRows(job);
-          const completed = getJobCompletedRows(job);
-          const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-          return (
-            <div className="flex-1 min-h-0 p-3">
-              <RunningView
-                job={job}
-                progress={pct}
-                onRecordIdClick={(recordId) => {
-                  emitter.emit('vllora_navigate_to_record', { workflowId, recordId });
-                }}
-              />
-            </div>
-          );
-        })()}
-
         {/* Error banner for failed jobs */}
         {!isRunning && job.status === "failed" && job.error && (
           <div className="shrink-0 mx-3 mt-2 rounded-md border border-red-500/30 bg-red-500/10 px-2.5 py-1.5">
@@ -299,8 +341,8 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
               </p>
             </div>
           </div>
-        ) : !isRunning && result && scores.length > 0 ? (
-          /* Score distribution + stats + recommendations */
+        ) : scores.length > 0 ? (
+          /* Score distribution + stats — shown during running AND after completion */
           <div className="shrink-0 px-3 pt-2 space-y-2">
             {/* Score distribution card — matches finetune chart style */}
             <div className="rounded-lg bg-[#111] overflow-hidden">
@@ -308,7 +350,7 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
               <div className="px-5 py-4 border-b border-white/5 flex items-start justify-between">
                 <div>
                   <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1">
-                    Avg Score
+                    Avg Score{isRunning ? " (live)" : ""}
                   </p>
                   <div className="flex items-baseline gap-3">
                     {stats && (
@@ -317,7 +359,7 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
                       </h2>
                     )}
                     <span className="text-xs font-medium text-slate-400">
-                      {scores.length} records · ±{stats?.std.toFixed(2)}
+                      {scores.length} scored · ±{stats?.std.toFixed(2)}
                     </span>
                   </div>
                 </div>
@@ -325,7 +367,7 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
 
               {/* Chart area */}
               <div className="p-4">
-                <ScoreStrip scores={scores} mean={stats?.mean} />
+                <ScoreStrip scores={scores} mean={stats?.mean} byTopic={Object.keys(topicScores).length > 0 ? topicScores : undefined} readinessGate={readinessGate} />
               </div>
 
               {/* Stats footer */}
@@ -338,16 +380,18 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
                 </div>
               )}
 
-              {/* Insight */}
-              {stats && (
+              {/* Insight — only show for completed jobs (live stats are still in flux) */}
+              {!isRunning && stats && (
                 <div className="px-5 py-2 border-t border-white/5">
                   <p className="text-[10px] text-slate-500 leading-relaxed">{getScoreInsight(stats)}</p>
                 </div>
               )}
             </div>
 
-            {/* Recommendations */}
-            {recommendations.length > 0 && (
+            {/* Readiness gate is now a tab in ScoreStrip ("Readiness") */}
+
+            {/* Recommendations — only for completed jobs */}
+            {!isRunning && recommendations.length > 0 && (
               <div>
                 <button
                   onClick={() => setShowRecs((v) => !v)}
@@ -369,25 +413,27 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
               </div>
             )}
 
-            {/* Per-topic breakdown */}
-            {Object.keys(topicScores).length > 0 && (
-              <div>
-                <button
-                  onClick={() => setShowTopicBreakdown((v) => !v)}
-                  className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
-                >
-                  <ChevronRight className={cn("h-3 w-3 transition-transform", showTopicBreakdown && "rotate-90")} />
-                  <span>Per-Topic Breakdown ({Object.keys(topicScores).length} topics)</span>
-                </button>
-                {showTopicBreakdown && (
-                  <div className="mt-2">
-                    <TopicEvalBreakdown byTopic={topicScores} />
-                  </div>
-                )}
-              </div>
-            )}
+            {/* Per-topic breakdown is now a tab in ScoreStrip ("By Topic") */}
           </div>
         ) : null}
+
+        {/* Running: progress view + results table (below chart if chart is shown) */}
+        {isRunning && (() => {
+          const total = getJobTotalRows(job);
+          const completed = getJobCompletedRows(job);
+          const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+          return (
+            <div className="flex-1 min-h-0 p-3">
+              <RunningView
+                job={job}
+                progress={pct}
+                onRecordIdClick={(recordId) => {
+                  emitter.emit('vllora_navigate_to_record', { workflowId, recordId });
+                }}
+              />
+            </div>
+          );
+        })()}
 
         {/* Results table fills remaining space */}
         {!isRunning && evaluationResults && evaluationResults.length > 0 && (

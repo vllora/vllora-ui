@@ -80,7 +80,9 @@ export function getJobFailedRows(job: EvalJob): number {
 
 /** Get average score from job */
 export function getJobAverageScore(job: EvalJob): number | undefined {
-  return job.pollingSnapshot?.summary?.average_score ?? undefined;
+  return job.pollingSnapshot?.summary?.average_score
+    ?? job.result?.statistics?.mean
+    ?? undefined;
 }
 
 /** Get passed count from job */

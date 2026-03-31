@@ -41,47 +41,47 @@ done
 sleep 1
 
 # --- Step 2: Clean Distri cache ---
-if [ -d "$DISTRI_DIR/.distri" ]; then
-  log "Deleting $DISTRI_DIR/.distri..."
-  rm -rf "$DISTRI_DIR/.distri"
-fi
+# if [ -d "$DISTRI_DIR/.distri" ]; then
+#   log "Deleting $DISTRI_DIR/.distri..."
+#   rm -rf "$DISTRI_DIR/.distri"
+# fi
 
 # --- Step 3: Build Distri UI and start server ---
-log "Building Distri frontend..."
-cd "$DISTRI_DIR"
-VITE_PREFIX=ui pnpm run build > /tmp/distri-ui-build.log 2>&1
-if [ $? -ne 0 ]; then
-  err "Frontend build failed. Check /tmp/distri-ui-build.log"
-  tail -20 /tmp/distri-ui-build.log
-  exit 1
-fi
-log "  Frontend build complete"
+# log "Building Distri frontend..."
+# cd "$DISTRI_DIR"
+# VITE_PREFIX=ui pnpm run build > /tmp/distri-ui-build.log 2>&1
+# if [ $? -ne 0 ]; then
+#   err "Frontend build failed. Check /tmp/distri-ui-build.log"
+#   tail -20 /tmp/distri-ui-build.log
+#   exit 1
+# fi
+# log "  Frontend build complete"
 
-log "Starting Distri server on port $DISTRI_PORT..."
-cargo run --package distri-server-cli --features "ui sqlite" -- serve --port=$DISTRI_PORT > /tmp/distri-server.log 2>&1 &
-DISTRI_PID=$!
-log "  Distri PID: $DISTRI_PID (logs: /tmp/distri-server.log)"
+# log "Starting Distri server on port $DISTRI_PORT..."
+# cargo run --package distri-server-cli --features "ui sqlite" -- serve --port=$DISTRI_PORT > /tmp/distri-server.log 2>&1 &
+# DISTRI_PID=$!
+# log "  Distri PID: $DISTRI_PID (logs: /tmp/distri-server.log)"
 
-# Wait for Distri to be ready
-log "Waiting for Distri server (port $DISTRI_PORT)..."
-for i in $(seq 1 60); do
-  if lsof -ti :$DISTRI_PORT > /dev/null 2>&1; then
-    log "  Distri server ready after ${i}s"
-    break
-  fi
-  if ! kill -0 $DISTRI_PID 2>/dev/null; then
-    err "Distri server exited unexpectedly. Check /tmp/distri-server.log"
-    tail -20 /tmp/distri-server.log
-    exit 1
-  fi
-  sleep 1
-done
+# # Wait for Distri to be ready
+# log "Waiting for Distri server (port $DISTRI_PORT)..."
+# for i in $(seq 1 60); do
+#   if lsof -ti :$DISTRI_PORT > /dev/null 2>&1; then
+#     log "  Distri server ready after ${i}s"
+#     break
+#   fi
+#   if ! kill -0 $DISTRI_PID 2>/dev/null; then
+#     err "Distri server exited unexpectedly. Check /tmp/distri-server.log"
+#     tail -20 /tmp/distri-server.log
+#     exit 1
+#   fi
+#   sleep 1
+# done
 
-if ! lsof -ti :$DISTRI_PORT > /dev/null 2>&1; then
-  err "Distri server failed to start within 60s"
-  tail -20 /tmp/distri-server.log
-  exit 1
-fi
+# if ! lsof -ti :$DISTRI_PORT > /dev/null 2>&1; then
+#   err "Distri server failed to start within 60s"
+#   tail -20 /tmp/distri-server.log
+#   exit 1
+# fi
 
 # --- Step 4: Start vLLora gateway ---
 log "Starting vLLora gateway on port $VLLORA_PORT..."

@@ -25,6 +25,7 @@ import { EvaluatorVersionHistory } from "../EvaluatorVersionHistory";
 import { EvaluatorVersionBadge } from "@/components/shared/EvaluatorVersionBadge";
 import { useEvaluatorVersions } from "@/hooks/useEvaluatorVersions";
 import { ErrorLogSection } from "../ErrorLogSection";
+import { EvalJobsConsumer } from "@/contexts/EvalJobsContext";
 import {
   formatFinetuneJobDate,
   getModelDisplayName,
@@ -49,7 +50,8 @@ import {
 
 export function JobDetailPanel({ job }: { job: FinetuneJob }) {
   const { latestVersion } = useEvaluatorVersions(job.workflow_id);
-  const { getJobEvaluations, refreshJobEvaluations } = FinetuneJobsConsumer();
+  const { getJobEvaluations, refreshJobEvaluations, loadJobs } = FinetuneJobsConsumer();
+  const { jobs: evalJobs } = EvalJobsConsumer();
   const {
     data: evalResults,
     isLoading: isLoadingEvals,
@@ -58,6 +60,14 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+
+  // Find the first completed baseline eval for comparison
+  const baselineEvalId = useMemo(() => {
+    const completedEval = evalJobs.find(
+      (j) => j.status === "completed" && j.evaluationRunId,
+    );
+    return completedEval?.evaluationRunId ?? null;
+  }, [evalJobs]);
 
   const summary = useMemo(() => {
     if (!evalResults?.results) return null;
@@ -74,8 +84,13 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
     if (isActionLoading) return;
     setIsActionLoading(true);
     try {
-      await cancelFinetuneJob(job.workflow_id, job.provider_job_id);
-      toast.success("Job cancelled");
+      const result = await cancelFinetuneJob(job.workflow_id, job.provider_job_id);
+      loadJobs(job.workflow_id);
+      if (result.cloudCancelFailed) {
+        toast.warning("Job marked as cancelled locally, but the cloud training may still be running. Check the provider dashboard to confirm.");
+      } else {
+        toast.success("Job cancelled");
+      }
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to cancel"
@@ -130,7 +145,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* ── Header — single row: status + model + metadata + actions ── */}
-      <header className="sticky top-0 z-10 border-b border-[#262626] px-4 py-1.5 shrink-0">
+      <header className="sticky top-0 z-20 border-b border-[#262626] bg-[#0a0a0a] px-4 py-1.5 shrink-0">
         <div className="flex items-center gap-2">
           <FinetuneJobStatusBadge
             status={job.status}
@@ -194,77 +209,82 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
         </div>
       </header>
 
-      {/* ── Top section: config + chart (shrinks, scrollable if tall) ── */}
-      <div className="shrink-0 max-h-[50vh] overflow-y-auto p-4 space-y-4">
-        {/* ── Epoch Progress (thin bar only) ── */}
-        {totalEpochs != null && summary?.latestEpoch != null && (
-          <EpochProgressBar
-            currentEpoch={Math.min(summary.latestEpoch + 1, totalEpochs)}
-            totalEpochs={totalEpochs}
-          />
-        )}
+      {/* ── Scrollable content: chart + insights + results ── */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="p-4 space-y-4">
+          {/* ── Epoch Progress (thin bar only) ── */}
+          {totalEpochs != null && summary?.latestEpoch != null && (
+            <EpochProgressBar
+              currentEpoch={Math.min(summary.latestEpoch + 1, totalEpochs)}
+              totalEpochs={totalEpochs}
+            />
+          )}
 
-        {/* ── Job Details ── */}
-        <FinetuneJobDetailsSection job={job} />
+          {/* ── Job Details ── */}
+          <FinetuneJobDetailsSection job={job} />
 
-        {/* ── Error ── */}
-        {job.error_message && (
-          <ErrorLogSection errorMessage={job.error_message} />
-        )}
+          {/* ── Error ── */}
+          {job.error_message && (
+            <ErrorLogSection errorMessage={job.error_message} />
+          )}
 
-        {/* ── Charts (Score Trend / Training Progress / Loss & Reward / Score Distribution) ── */}
-        {job.workflow_id ? (
-          canCancel && !evalResults?.results?.length ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-10 text-zinc-500">
-              <div className="relative">
-                <div className="w-10 h-10 rounded-full border-2 border-zinc-700 border-t-amber-400 animate-spin" />
+          {/* ── Charts (Score Trend / Training Progress / Loss & Reward / Score Distribution) ── */}
+          {job.workflow_id ? (
+            canCancel && !evalResults?.results?.length ? (
+              <div className="flex flex-col items-center justify-center gap-3 py-10 text-zinc-500">
+                <div className="relative">
+                  <div className="w-10 h-10 rounded-full border-2 border-zinc-700 border-t-amber-400 animate-spin" />
+                </div>
+                <div className="text-center space-y-1">
+                  <p className="text-sm font-medium text-zinc-300">
+                    {job.status === "pending" ? "Waiting for training to start" : "Training in progress"}
+                  </p>
+                  <p className="text-xs text-zinc-600">
+                    {job.status === "pending"
+                      ? "Your job is queued. Training will begin shortly and metrics will appear here."
+                      : "Evaluation scores will appear here as training progresses."}
+                  </p>
+                </div>
               </div>
-              <div className="text-center space-y-1">
-                <p className="text-sm font-medium text-zinc-300">
-                  {job.status === "pending" ? "Waiting for training to start" : "Training in progress"}
-                </p>
-                <p className="text-xs text-zinc-600">
-                  {job.status === "pending"
-                    ? "Your job is queued. Training will begin shortly and metrics will appear here."
-                    : "Evaluation scores will appear here as training progresses."}
-                </p>
-              </div>
-            </div>
+            ) : (
+              <FinetuneChartSelector
+                evalResults={evalResults}
+                isLoadingEvals={isLoadingEvals}
+                isRefreshing={isRefreshing}
+                evalsError={evalsError}
+                onRefresh={handleRefresh}
+                isLive={canCancel}
+                jobId={job.provider_job_id}
+                workflowId={job.workflow_id}
+                baselineEvalId={baselineEvalId ?? undefined}
+              />
+            )
           ) : (
-            <FinetuneChartSelector
-              evalResults={evalResults}
-              isLoadingEvals={isLoadingEvals}
-              isRefreshing={isRefreshing}
-              evalsError={evalsError}
-              onRefresh={handleRefresh}
-              isLive={canCancel}
-              jobId={job.provider_job_id}
+            !(job.status === "failed") && (
+              <div className="text-xs text-muted-foreground py-2">
+                No workflow linked to this job
+              </div>
+            )
+          )}
+
+          {/* ── Evaluator Version History ── */}
+          {job.workflow_id && (
+            <EvaluatorVersionHistory workflowId={job.workflow_id} />
+          )}
+
+          {/* Baseline comparison now lives inside FinetuneChartSelector ("vs Baseline" tab) */}
+        </div>
+
+        {/* ── Results table ── */}
+        {job.workflow_id && evalResults && evalResults.results.length > 0 && (
+          <div className="px-4 pb-4 [&_input]:!bg-[#141414] [&_input]:!border-[#262626] [&_button]:!border-[#262626] [&_button]:!text-slate-400 [&_button:hover]:!bg-white/5">
+            <PerRowDetailsSection
+              results={evalResults.results}
               workflowId={job.workflow_id}
             />
-          )
-        ) : (
-          !(job.status === "failed") && (
-            <div className="text-xs text-muted-foreground py-2">
-              No workflow linked to this job
-            </div>
-          )
-        )}
-
-        {/* ── Evaluator Version History ── */}
-        {job.workflow_id && (
-          <EvaluatorVersionHistory workflowId={job.workflow_id} />
+          </div>
         )}
       </div>
-
-      {/* ── Results table: fills remaining space, scrolls independently ── */}
-      {job.workflow_id && evalResults && evalResults.results.length > 0 && (
-        <div className="flex-1 min-h-0 flex flex-col px-4 pb-2 [&_input]:!bg-[#141414] [&_input]:!border-[#262626] [&_button]:!border-[#262626] [&_button]:!text-slate-400 [&_button:hover]:!bg-white/5">
-          <PerRowDetailsSection
-            results={evalResults.results}
-            workflowId={job.workflow_id}
-          />
-        </div>
-      )}
     </div>
   );
 }

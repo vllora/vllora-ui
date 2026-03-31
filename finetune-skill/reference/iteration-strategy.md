@@ -4,15 +4,24 @@ How to analyze evaluation results, diagnose issues, assess data quality, and ite
 
 ---
 
-## The Iteration Loop
+## The Eval-First Iteration Loop
+
+The pipeline runs in two phases:
 
 ```
-Run Evaluation → Analyze Results → Diagnose Issues → Apply Fixes → Re-evaluate
-                                 ↘ Check Distribution
-                                 ↘ Check Variety
+Phase 1 — Eval Iterations (fast, ~45 min each, cheap):
+  Eval → Readiness Gate → [FAIL] → Fix data/grader → Re-eval → ... → [PASS] →
+
+Phase 2 — Training (slow, hours, expensive):
+  Train → Analyze → [good] → Deploy
+                   → [bad]  → Fix → Back to Phase 1
 ```
 
-Typically 2-5 iterations are needed to reach a GO verdict.
+**Max 5 eval-only iterations** (Phase 1) before training. **Max 3 training iterations** (Phase 2) before escalating.
+
+Use `finetune.py readiness-check --file evaluations/eval-NNN.json` to run the readiness gate programmatically. See §5 for the criteria.
+
+Typically 2-3 eval iterations are needed to reach readiness, then 1-2 training iterations to converge.
 
 ---
 
@@ -88,13 +97,91 @@ Read the `reason` field from 5-10 low-scoring records. Look for:
 - **Irrelevant reasons** → Grader criteria misaligned with your objective
 - **"No assistant response found"** → The model didn't generate a response — check if the prompt is malformed
 
-### Step 5: GO / NO-GO Decision
+### Step 5: Pre-Training Readiness Gate
+
+Run the readiness gate to decide whether to proceed to training:
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check --file evaluations/eval-NNN.json
+```
 
 | Verdict | Criteria | Action |
 |---------|----------|--------|
-| **GO** | avg > 0.6, pass rate > 70%, std 0.15-0.30 | Proceed to training |
-| **WARNING** | avg 0.5-0.6 or pass rate 60-70% | Can train, but improvements likely help |
-| **NO-GO** | avg < 0.5 or pass rate < 60% or std < 0.1 | Must fix before training |
+| **PASS** (exit 0) | All 6 checks pass | Proceed to training (Step 7d) |
+| **WARN** (exit 2) | 1 check marginally fails | Can train, but improvements likely help |
+| **FAIL** (exit 1) | Any check fails | Must fix before training — return to Step 7b |
+
+**Hard checks** (must ALL pass — gate training):
+
+These focus on **grader quality** ("is the grader working?"), not model performance. GRPO can learn from low base model scores — DeepSeek R1-Zero started at 15.6% accuracy and reached 71% via GRPO alone (arXiv:2501.12948).
+
+| Check | Threshold | Why | Source |
+|-------|-----------|-----|--------|
+| Sample count | >= 50 prompts | GRPO advantage estimates are noisy below 50 | OpenAI RFT: "several dozen to a few hundred" |
+| Score std | > 0.10 | Grader must differentiate — zero-std groups produce zero gradient (GRPO advantage = (r-mean)/std; std=0 → advantage=0) | Zero-variance → zero gradient is fundamental to GRPO (DAPO §2.2). Threshold is a heuristic. |
+| Average score | > 0.05 | Just needs nonzero signal — only 0% success rate is truly fatal | OpenAI RFT: "0% success rate means RFT cannot bootstrap" |
+
+**Soft checks** (warnings — don't gate training, but fixing improves outcomes):
+
+Low base model scores are **expected and even desirable**. "Hard Examples Are All You Need" (arXiv:2508.14094) shows training on the hardest 10% yields 30-40% gains vs 3-15% for easy examples on GSM8K. Note: binary rewards work — DeepSeek-R1 (arXiv:2501.12948) and DAPO (arXiv:2503.14476) achieved state-of-the-art with 100% binary (0/1) rewards.
+
+| Check | Threshold | Why | Source |
+|-------|-----------|-----|--------|
+| Score concentration | < 50% at any single value | If >50% of scores cluster at one value, within-group variance is small → weak gradients | DAPO (arXiv:2503.14476): filters all-correct/all-incorrect groups. Threshold is a heuristic. |
+| High-score fraction | < 50% scoring > 0.9 | Lenient grader → small within-group variance → weak gradients | Heuristic. OpenAI recommends "smooth scores, not pass/fail stamps." |
+| Binary fraction | < 60% scoring 0 or 1 | Continuous scoring is more sample-efficient — binary produces signal only when a group has mixed outcomes. But binary works: DeepSeek-R1 used 100% binary successfully. | DeepSeek-R1 (arXiv:2501.12948), DAPO (arXiv:2503.14476) both use binary rewards. |
+| Dead-weight fraction | < 50% scoring < 0.1 | Reduces sample efficiency. "No Prompt Left Behind" (arXiv:2509.21880) shows 30-99% zero-var is normal AND argues signal can be extracted via entropy-guided shaping. DAPO skips these via dynamic sampling instead. | "No Prompt Left Behind" (ICLR 2026, arXiv:2509.21880) |
+| Pass rate (>0.7) | > 20% | Nice to have — but hard prompts are the most valuable. With K=8, pass@8 >> pass@1 | "Hard Examples Are All You Need" (arXiv:2508.14094) |
+| Prompt learnability | > 30% of prompts have score variance | Per-prompt variance drives GRPO learning — zero-variance prompts waste compute | DAPO dynamic sampling (arXiv:2503.14476) |
+| Score-length correlation | \|r\| < 0.3 | High correlation means grader rewards/punishes length — reward hacking risk. Dr. GRPO identifies length bias from per-token loss normalization. | Dr. GRPO (arXiv:2503.20783) identifies the problem; threshold is a heuristic. |
+| Topic balance | No topic > 40% of data | Imbalanced topics cause over-optimization for common topics | Heuristic — balanced training data is standard ML practice |
+
+**⚠️ Why eval scores don't predict training performance:** Eval generates 1 completion per prompt. GRPO training generates K=8. A model with 6.5% pass@1 has ~41% chance of at least one good completion per prompt (1-0.935^8). The eval distribution is a lower bound on training signal, not a prediction of it.
+
+### Step 5b: Grader Score Distribution Pre-Flight (Before Training)
+
+Even if the readiness gate passes, check whether the grader's score distribution will produce a **useful GRPO training signal**. GRPO learns by comparing G=8 completions per prompt — if all completions score similarly, the gradient is near-zero and the model learns nothing.
+
+**Check the score distribution from eval results:**
+
+```
+From your eval results, compute:
+  - Score mean (already in summary.average_score)
+  - Score std (compute from individual scores)
+  - Fraction of scores > 0.9
+  - Fraction of scores that are exactly 0 or exactly 1
+
+HEALTHY distribution (good GRPO signal):
+  Scores spread across 0.2-0.9, std > 0.10
+  Example: [0.2, 0.3, 0.5, 0.6, 0.7, 0.8, 0.9, 0.4]
+
+PROBLEMATIC distributions (weak GRPO signal):
+  ❌ Clustered high:  [0.85, 0.88, 0.90, 0.92, 0.87, 0.91, 0.89, 0.90]
+     → std ≈ 0.02. Base model already good. Grader too lenient.
+     → GRPO will have near-zero advantages → no learning.
+     → FIX: Make grader harder — add stricter criteria, penalize minor issues.
+
+  ❌ Binary (0 or 1): [0, 1, 0, 1, 0, 0, 1, 0]
+     → Coarse signal. Model can't distinguish "almost right" from "garbage."
+     → FIX: Add partial credit rubric (see grader-writing.md §Smooth Scoring).
+
+  ❌ All zeros:        [0, 0, 0, 0, 0, 0, 0, 0]
+     → No positive signal. GRPO cannot learn from negative-only rewards.
+     → FIX: Lower grader bar or try larger base model (see Part 8, Symptom 7).
+```
+
+**Pre-flight checklist before committing to training** (quick check — see `finetune.py readiness-check` for the full gate with all 11 checks):
+
+| Check | Pass | Fail → Action |
+|---|---|---|
+| Score std > 0.10 | ✅ | Grader not differentiating — add more criteria (HARD gate) |
+| Average score > 0.05 | ✅ | No signal — base model may be incapable (HARD gate) |
+| Fraction of scores > 0.9 is < 50% | ✅ | Grader too lenient — raise the bar (soft warning) |
+| Fraction of exact 0 or 1 is < 60% | ✅ | Binary works (DeepSeek-R1, DAPO) but less sample-efficient (soft warning) |
+
+> **Why this matters**: The most common GRPO training failure is "everything scores 0.9" — the base model is already good enough that the grader gives high marks to all G completions. The advantage formula divides by std: if std ≈ 0, advantages ≈ 0, gradients ≈ 0. The model trains for hours and learns nothing. This pre-flight check catches this BEFORE you waste compute.
+>
+> Reference: DAPO (arXiv:2503.14476) — identifies zero-variance groups as producing zero gradients and introduces dynamic sampling to filter them. Dr. GRPO (arXiv:2503.20783) — proposes removing std normalization entirely to avoid difficulty-dependent bias. See also `rft-grpo-training-explained.md` §What is Standard Deviation.
 
 ### Step 6: Continuation Readiness (for `finetuned/{cloud_job_id}` or `checkpointed/{cloud_job_id}`)
 
@@ -157,6 +244,47 @@ Use `--mode epoch` when deciding if the run trend is improving or degrading over
 | Scores flat across epochs (0.5 → 0.5 → 0.5) | Model not learning from these prompts | Check if prompts are too ambiguous or grader criteria don't align with what the model can improve |
 | Scores decrease (0.7 → 0.5 → 0.3) | Overfitting or grader instability | Reduce epochs, check grader consistency |
 | Some records improve, others don't | Mixed prompt quality | The non-improving records likely have issues — examine their prompts |
+
+### Reward Drop Drill-Down (Mandatory)
+
+If aggregate `reward` drops between epochs or across recent steps, do not only look at summary metrics. Drill into row-level behavior:
+
+1. Pull per-epoch row results (`/finetune-evaluations?finetune_job_id=...`).
+2. Identify rows with the largest score drops (for example: epoch 0/1 score > 0.7 but latest epoch < 0.4).
+3. For each dropped row, compare outputs across epochs (not just scores):
+   - Did the model become shorter, vague, or generic?
+   - Did it start missing required constraints it previously satisfied?
+   - Did the grader `reason` change consistently with output quality, or look inconsistent/noisy?
+4. Separate causes:
+   - Output quality clearly worsened -> training/data issue (overfitting drift, weak data balance, too many epochs).
+   - Output looks similar but score drops a lot -> grader instability or criteria mismatch.
+5. Apply fixes only after this row-level check. Do not change learning rate/epochs blindly from aggregate reward alone.
+
+This check is required whenever you detect a reward decrease, because aggregate reward can hide whether the problem is model behavior or grader behavior.
+
+#### Helper command: print one row across epochs
+
+Use `scripts/finetune.py print-row-outputs` to print a compact epoch-sorted table for one row:
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py print-row-outputs \
+  --workflow-id "$WORKFLOW_ID" \
+  --finetune-job-id "$JOB_ID" \
+  --row-index 12
+```
+
+Output format:
+
+```
+epoch | rollout_output | score | reason
+0 | ... | 0.82 | ...
+1 | ... | 0.67 | ...
+2 | ... | 0.39 | ...
+```
+
+Tips:
+- Start with rows that show the biggest score drop from early epochs to the latest epoch.
+- Increase `--max-chars` if output/reason text is truncated (default is 160 chars per text cell).
 
 ### Per-Record Epoch Comparison
 
@@ -385,6 +513,34 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --workflow-id $WO
 ---
 
 ## Part 7: Tracking Progress Across Iterations
+
+### Train/Validation Split (Recommended)
+
+Before training, split your records into a **training set (80-90%)** and a **validation set (10-20%)**. The validation set is NOT used during training — it's used to detect reward hacking afterward.
+
+**Why this matters for GRPO**: During training, the model generates fresh responses to training prompts, and the grader scores them. `train_reward_mean` will always go up (that's the objective). But if the model is reward hacking (exploiting grader shortcuts), it will score high on training prompts while performing the same or worse on unseen prompts. The validation set catches this.
+
+**How to split:**
+```
+From your training.jsonl (e.g., 100 records):
+  - training set: 80-90 records → used for training
+  - validation set: 10-20 records → held out, used for post-training eval only
+
+Rules:
+  - Split proportionally across topics (don't put all of one topic in validation)
+  - Validation records should cover all leaf topics if possible
+  - Save as separate files: training.jsonl + validation.jsonl
+```
+
+**How to use after training:**
+1. Run eval on the validation set using the fine-tuned model
+2. Compare `valid_reward_mean` to `train_reward_mean`
+3. If train reward is 20%+ higher than valid reward → reward hacking likely
+4. Select the checkpoint with the highest `valid_reward_mean`, not `train_reward_mean`
+
+> Reference: OpenAI RFT Guide — "Use a held-out validation set to detect reward hacking. Select checkpoints by validation reward, not training reward." See also Part 10, Step 2 for post-training diagnosis.
+
+**Note**: This is currently a manual process (split the file yourself). A future version of `finetune.py` will support `--validation-split 0.15` to automate this.
 
 ### Saving Results
 
@@ -769,3 +925,170 @@ If even starting over doesn't work:
 - The task may be too ambitious for the base model size — try a larger model
 - The task may be too ambiguous for automated grading — simplify to verifiable subtasks
 - Fine-tuning may not be the right solution — consider prompt engineering, RAG (retrieval-augmented generation), or a multi-agent workflow instead
+
+---
+
+## Part 10: Post-Training Iteration (Training Metrics Diagnosis)
+
+Parts 1-9 cover **pre-training iteration** (eval → fix data/grader → re-eval). This part covers what to do when **training itself fails or underperforms** — the model trained but metrics look bad.
+
+> For detailed metric definitions and thresholds, see [`training-metrics-guide.md`](training-metrics-guide.md).
+
+### Step 1: Run the Analysis Script
+
+After training completes (or fails), analyze the metrics:
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/analyze_training.py \
+  --workflow-id "$WORKFLOW_ID" \
+  --job-id "$JOB_ID"
+```
+
+This outputs alerts (CRITICAL/HIGH/WARNING) and a summary. Use the alerts to guide diagnosis.
+
+### Step 2: Diagnose Using the Quick Decision Table
+
+| What You See | Likely Cause | What to Change |
+|---|---|---|
+| KL explodes from step 1 (>1000) | Learning rate too high for this model/task | Halve LR: `1e-6` → `5e-7` → `2.5e-7` |
+| grad_norm NaN or Inf | Numerical overflow — often from zero-length completions or bad chat template | Check completions/min_length. If 0 → fix chat template or increase max_output_tokens |
+| Loss stuck at exactly 0.0 | All advantages are zero (reward_std ≈ 0) | Grader is too lenient — all responses score the same. Make grader harder (see Part 5) |
+| reward flat + frac_reward_zero_std > 0.5 | Base model already good at this task — no room to improve | Make grader harder, add stricter criteria, penalize verbosity |
+| reward declining over epochs | Model getting worse — possible reward hacking or instability | Reduce LR, add KL penalty (beta > 0), inspect outputs manually |
+| completions/clipped_ratio > 0.5 | Most responses truncated at max_output_tokens | Increase max_output_tokens (512 → 1024). Watch cost: G × tokens |
+| clip_ratio/region_mean = 0 + KL exploding | Trust region not constraining updates | Reduce LR. If using custom epsilon, check it's not too large |
+| reward up but KL >10 + outputs degenerate | Reward hacking | Add quality-focused grader criteria, enable KL penalty (beta=0.04), manual output review |
+
+### Step 3: The Hyperparameter Iteration Ladder
+
+Work through these in order — each level is more drastic. **Change ONE parameter at a time** so you can attribute the result.
+
+**Level 1: Learning Rate (most common fix)**
+
+```
+Default: 1e-6
+If KL explodes or grad_norm spikes: halve → 5e-7 → 2.5e-7
+If training is too slow (reward barely moves after full run): double → 2e-6
+Never go above 5e-6 for small models (4B)
+```
+
+**Level 2: max_output_tokens**
+
+```
+Default: 512
+If clipped_ratio > 0.3: increase → 1024
+If clipped_ratio > 0.5: increase → 1536 or 2048
+⚠️ Cost scales linearly: 1024 = 2× cost of 512 (G=8 × 1024 tokens per prompt)
+⚠️ May cause OOM on cloud infra above 1024
+```
+
+**Level 3: Epochs**
+
+```
+Default: 8
+If reward is still improving at end of run: increase → 12 or 15
+If reward peaks early then declines: decrease → 5
+GRPO is safe with many epochs (fresh responses each time) — no memorization risk
+```
+
+**Level 4: Batch Size / Gradient Accumulation**
+
+```
+Default: batch_size=5, gradient_accumulation_steps=5 (effective=25)
+If gradients are noisy (reward oscillates wildly): increase effective batch
+  → batch_size=5, accumulation=8 (effective=40)
+If training is too slow per step: decrease
+  → batch_size=5, accumulation=3 (effective=15)
+```
+
+**Level 5: LoRA Rank**
+
+```
+Default: 8
+If model can't learn the task (reward flat after LR tuning): increase → 16
+If overfitting (train reward high, valid reward low): decrease → 4
+Higher rank = more capacity but slower training
+```
+
+**Level 6: Grader Redesign (not a hyperparam — a strategy change)**
+
+If hyperparameter tuning doesn't help, the problem is usually the grader signal, not the training config. Go back to Part 5 (Data vs Grader diagnosis).
+
+### Step 4: Quick LR Calibration (Before Full Training)
+
+Before committing to a full training run (which may take hours), run a **5-10 step calibration**:
+
+```bash
+# Create a short training run
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
+  --workflow-id "$WORKFLOW_ID" \
+  --config '{"epochs": 1, "max_steps": 10}' \
+  --inference-params '{"max_output_tokens": 512}'
+
+# Poll for 5-10 steps, then check metrics
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
+  --workflow-id "$WORKFLOW_ID" --job-id "$JOB_ID" --max-polls 5
+
+# Analyze
+python3 ${CLAUDE_SKILL_DIR}/scripts/analyze_training.py \
+  --workflow-id "$WORKFLOW_ID" --job-id "$JOB_ID"
+```
+
+**What to look for after 5-10 steps:**
+
+| Metric | Healthy | Problem → Action |
+|---|---|---|
+| KL | < 10 | > 100 → halve LR and re-run calibration |
+| grad_norm | < 10 | > 1000 or NaN → halve LR, check data |
+| loss | 0.001 - 1.0 | > 100 → halve LR. Exactly 0 → grader issue |
+| reward_std | > 0.05 | < 0.02 → grader too lenient |
+| clipped_ratio | < 0.3 | > 0.5 → increase max_output_tokens |
+
+If calibration looks healthy, cancel the short run and start the full training:
+
+```bash
+# Cancel calibration run
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py cancel-training \
+  --workflow-id "$WORKFLOW_ID" --job-id "$CALIBRATION_JOB_ID"
+
+# Start full run with validated params
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
+  --workflow-id "$WORKFLOW_ID" \
+  --config '{"epochs": 8}'
+```
+
+### Step 5: Comparing Training Runs
+
+When iterating on training, save metrics for each run and compare:
+
+```markdown
+## Training Iteration Log
+
+### Run 1: Default params
+- Job: ft_abc123 → metrics saved to training-jobs/abc123-metrics.json
+- LR: 1e-6, epochs: 8, max_output_tokens: 512
+- Result: KL=603M at step 1 → CRITICAL. Cancelled.
+- Diagnosis: LR too high for this model/task
+
+### Run 2: Halved LR
+- Job: ft_def456
+- LR: 5e-7, epochs: 8, max_output_tokens: 512
+- Result: KL stable (<5), reward 0.6→0.75, clipped_ratio=0.15
+- Diagnosis: Healthy. Reward still improving at end → could benefit from more epochs
+
+### Run 3: Same LR, more epochs
+- Job: ft_ghi789
+- LR: 5e-7, epochs: 12, max_output_tokens: 512
+- Result: reward 0.6→0.82, plateaued at epoch 10
+- Decision: Deploy checkpoint from epoch 10
+```
+
+### Step 6: When to Stop Training Iteration
+
+| Condition | Action |
+|---|---|
+| Reward trending up, KL stable, no alerts | ✅ Training is working — let it finish |
+| Reward plateaued for >3 epochs | Stop and deploy — more epochs won't help |
+| 3+ training runs with different LR all fail | Problem is grader signal, not hyperparams → go back to Part 5 |
+| Reward up but model outputs are bad (manual check) | Reward hacking → redesign grader (Part 8, Symptom 8) |
+| All runs produce NaN within 5 steps | Data issue (empty completions, bad template) → check data pipeline |

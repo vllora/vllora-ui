@@ -67,6 +67,17 @@ export function ScoreCell({ jobScore }: { readonly jobScore?: RecordJobScore }) 
     return <span className="text-[10px] text-red-400/60">failed</span>;
   }
 
+  if (jobScore.status === "cancelled") {
+    if (jobScore.score !== undefined) {
+      return (
+        <span className="inline-flex items-center gap-0.5">
+          <ScorePill score={jobScore.score} />
+        </span>
+      );
+    }
+    return <span className="text-[10px] text-zinc-500/60">cancelled</span>;
+  }
+
   if (jobScore.score === undefined) {
     return <span className="text-muted-foreground/20" title="Not included in this evaluation run">—</span>;
   }
@@ -142,6 +153,7 @@ const STATUS_LABELS: Record<string, { text: string; color: string }> = {
   queued: { text: "Queued", color: "text-amber-400" },
   completed: { text: "Completed", color: "text-emerald-400" },
   failed: { text: "Failed", color: "text-red-400" },
+  cancelled: { text: "Cancelled", color: "text-zinc-400" },
 };
 
 export function JobColumnHeader({ column }: { readonly column: JobColumn }) {

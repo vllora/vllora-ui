@@ -66,6 +66,7 @@ interface PollingJobInfo {
   readonly workflowId: string;
   readonly sampleSize: number;
   readonly rolloutModel?: string;
+  readonly createdAt: number;
 }
 
 // =============================================================================
@@ -75,7 +76,7 @@ interface PollingJobInfo {
 /** Interval for polling cloud-proxy for progress (ms) */
 const POLL_INTERVAL_MS = 10_000;
 /** Max consecutive cloud-proxy errors before marking job failed */
-const MAX_CONSECUTIVE_ERRORS = 30;
+const MAX_CONSECUTIVE_ERRORS = 10;
 
 // =============================================================================
 // Singleton Class
@@ -233,6 +234,7 @@ class EvalJobManager {
       workflowId: job.workflowId,
       sampleSize: job.sampleSize,
       rolloutModel: job.rolloutModel,
+      createdAt: job.createdAt,
     };
 
     this.pollingJobs.set(job.id, jobInfo);
@@ -274,7 +276,7 @@ class EvalJobManager {
         sampleSize: jobInfo.sampleSize,
         rolloutModel: jobInfo.rolloutModel,
         status: 'running',
-        createdAt: 0,
+        createdAt: jobInfo.createdAt,
         pollingSnapshot: result,
       };
       emitter.emit('vllora_eval_job_update', { jobId, job: jobWithSnapshot });
@@ -296,6 +298,26 @@ class EvalJobManager {
         }
       }
     } catch (error) {
+      const lastError = error instanceof Error ? error.message : String(error);
+      const httpStatus = (error as { status?: number }).status;
+
+      // 404/410 = eval run doesn't exist on server — fail immediately, don't retry
+      if (httpStatus === 404 || httpStatus === 410) {
+        console.warn(`[EvalJobManager] Eval run not found (${httpStatus}), stopping poll for ${jobId}`);
+        this.stopPolling(jobId);
+        const errorMsg = `Evaluation run not found on server (ID: ${evaluationRunId})`;
+        const failedJob = await evalJobService.update(jobId, {
+          status: 'failed',
+          error: errorMsg,
+          completedAt: Date.now(),
+        });
+        if (failedJob) {
+          emitter.emit('vllora_eval_job_update', { jobId, job: failedJob });
+        }
+        await this.markWorkflowStepFailed(workflowId);
+        return;
+      }
+
       console.error(`[EvalJobManager] Poll failed for ${jobId}:`, error);
 
       const errorCount = (this.consecutiveErrors.get(jobId) ?? 0) + 1;
@@ -303,10 +325,7 @@ class EvalJobManager {
 
       if (errorCount >= MAX_CONSECUTIVE_ERRORS) {
         this.stopPolling(jobId);
-        const lastError = error instanceof Error ? error.message : String(error);
-        const errorMsg = lastError.includes('not found')
-          ? `Evaluation run not found on server (ID: ${evaluationRunId})`
-          : `Unable to reach evaluation server: ${lastError}`;
+        const errorMsg = `Unable to reach evaluation server after ${MAX_CONSECUTIVE_ERRORS} attempts: ${lastError}`;
         const unreachableJob = await evalJobService.update(jobId, {
           status: 'failed',
           error: errorMsg,

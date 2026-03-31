@@ -180,6 +180,7 @@ export interface FinetuneJob {
   fine_tuned_model?: string;
   provider: string;
   training_config?: FinetuneTrainingConfig;
+  inference_parameters?: FinetuneInferenceParameters;
   suffix?: string;
   error_message?: string;
   training_file_id: string;
@@ -197,11 +198,14 @@ function normalizeFinetuneJob(raw: Record<string, unknown>): FinetuneJob {
   if (!raw.workflow_id && raw.dataset_id) {
     raw.workflow_id = raw.dataset_id;
   }
-  // Extract evaluator_version from the request JSON blob if not at top level
-  if (raw.evaluator_version == null && raw.request != null) {
+  // Extract evaluator_version and inference_parameters from the request JSON blob if not at top level
+  if (raw.request != null) {
     const request = raw.request as Record<string, unknown>;
-    if (typeof request.evaluator_version === "number") {
+    if (raw.evaluator_version == null && typeof request.evaluator_version === "number") {
       raw.evaluator_version = request.evaluator_version;
+    }
+    if (raw.inference_parameters == null && request.inference_parameters != null) {
+      raw.inference_parameters = request.inference_parameters;
     }
   }
   return raw as unknown as FinetuneJob;
@@ -248,6 +252,8 @@ export interface EpochEntry {
   status?: string;
   score?: number | null;
   reason?: string | null;
+  is_success?: boolean;
+  rollout_content?: string | null;
   error_message?: string | null;
   logs?: string[] | null;
 }
@@ -295,12 +301,16 @@ export interface FlatEvaluationResult {
   logs?: string[];
   /** Latest epoch number (1-based) — present for finetune per-row results */
   epoch?: number;
+  /** Model rollout content (response text) for this evaluation entry */
+  rollout_content?: string;
   /** Score change from previous epoch — present when multiple epochs exist */
   trend?: number;
   /** Individual candidate scores at the previous eval checkpoint (for tooltip) */
   trendPrevScores?: number[];
   /** Individual candidate scores at the current eval checkpoint (for tooltip) */
   trendCurrentScores?: number[];
+  /** All candidate scores at the latest epoch (for "best of" tooltip) */
+  candidateScores?: number[];
 }
 
 
@@ -346,6 +356,7 @@ export function flattenEvaluationResults(
         score: currentScore,
         reason: entry.reason ?? undefined,
         error_message: entry.error_message ?? undefined,
+        rollout_content: entry.rollout_content ?? undefined,
         logs: entry.logs ?? undefined,
         epoch: latestEpochKey + 1,
         trend,
@@ -486,19 +497,24 @@ export async function getFinetuneJobStatus(
  * @param workflowId - The workflow ID (same as dataset ID)
  * @param jobId - The provider job ID to cancel
  */
-export async function cancelFinetuneJob(workflowId: string, jobId: string): Promise<void> {
+export async function cancelFinetuneJob(workflowId: string, jobId: string): Promise<{ cloudCancelFailed?: boolean }> {
   const response = await apiClient(
     `/finetune/workflows/${workflowId}/jobs/${jobId}/cancel`,
     {
       method: "POST",
     },
   );
+  if (response.status === 207) {
+    // Local cancel succeeded but cloud cancel failed — training may still be running
+    return { cloudCancelFailed: true };
+  }
   if (!response.ok) {
     const error = await response
       .json()
       .catch(() => ({ message: "Failed to cancel job" }));
     throw new Error(error.message || "Failed to cancel job");
   }
+  return {};
 }
 
 /**
@@ -681,6 +697,11 @@ export async function getEvaluationResult(
   const response = await apiClient(`/finetune/evaluations/${evaluationRunId}`, {
     method: "GET",
   });
+  // 404/410 = eval run expired or was deleted on cloud — throw typed error
+  // so callers (eval-polling-manager) can handle gracefully without retrying
+  if (response.status === 404 || response.status === 410) {
+    throw new Error(`Evaluation run ${evaluationRunId} not found (${response.status})`);
+  }
   return handleApiResponse<EvaluationResultResponse>(response);
 }
 
@@ -753,6 +774,9 @@ export async function getFinetuneEvaluations(
   epoch?: number,
 ): Promise<FinetuneEvalResultsResponse> {
   const params = new URLSearchParams();
+
+  params.set("include_rollout_content", "true");
+  
   if (finetuneJobId) params.set("finetune_job_id", finetuneJobId);
   if (rowIndex !== undefined) params.set("row_index", String(rowIndex));
   if (epoch !== undefined) params.set("epoch", String(epoch));
@@ -848,6 +872,8 @@ export async function getEvaluatorVersions(
     `/finetune/workflows/${workflowId}/evaluator/versions`,
     { method: "GET" },
   );
+  // 404 is expected when no evaluator has been uploaded yet — return empty
+  if (response.status === 404) return [];
   return handleApiResponse<EvaluatorVersionResponse[]>(response);
 }
 
@@ -869,5 +895,9 @@ export async function getFinetuneJobMetrics(
     `/finetune/workflows/${workflowId}/jobs/${jobId}/metrics`,
     { method: "GET" },
   );
+  // 404 = metrics not yet available (job just started or provider hasn't reported yet)
+  if (response.status === 404) {
+    return { provider_job_id: jobId, metrics: [] };
+  }
   return handleApiResponse<FinetuneJobMetricsResponse>(response);
 }

@@ -2,18 +2,21 @@
 name: knowledge-extractor
 description: Extracts knowledge from a SINGLE document (PDF, markdown, text) into structured parts. Spawned per-document by the orchestrator for parallel extraction.
 tools: Read, Write, Bash, Glob, Grep
-model: haiku
-maxTurns: 30
+model: sonnet
+maxTurns: 40
 ---
 
 You extract knowledge from ONE source document for the vLLora finetune pipeline. The orchestrator spawns one instance of you per document — you handle only your assigned document.
 
 ## Your Job
 
-1. Convert the PDF to Markdown using pymupdf4llm
-2. Write a custom `extract.py` that splits the markdown into structured knowledge parts
-3. Run it, post-process (consolidate), and upload to the gateway
-4. Return a summary
+1. **Wait for Docling** extraction to complete (poll task_id) — this is MANDATORY
+2. **Save** the Docling result to `docling-result.json` — this file MUST exist before proceeding
+3. **Build** knowledge parts using `build_knowledge_parts.py` (deterministic — ALWAYS use this first)
+4. **Post-process**: extract tables, consolidate parts
+5. **Validate**: run `validate_extraction.py` on this document — MUST PASS
+6. **Upload** to the gateway
+7. Return a summary
 
 You work ONLY on extraction of your ONE document. Do NOT design topics, generate data, or merge indexes.
 
@@ -27,7 +30,8 @@ The parent agent provides these as plain text in the prompt. **Use the actual va
 - **DOC_PATH** — absolute path to the PDF to extract
 - **DOC_SLUG** — the slug for this document (e.g., `irs-publication-525`)
 - **DOC_DIR** — absolute path to the output directory (e.g., `.../knowledge/irs-publication-525`)
-- **CUSTOM_INSTRUCTIONS** — (optional) user-specified extraction preferences. If provided, follow them in your `extract.py`.
+- **TASK_ID** — the Docling async task ID (already submitted by orchestrator). If empty, you must submit yourself.
+- **CUSTOM_INSTRUCTIONS** — (optional) user-specified extraction preferences for this document
 
 ## Algorithm
 
@@ -37,157 +41,111 @@ The parent agent provides these as plain text in the prompt. **Use the actual va
 mkdir -p <DOC_DIR>
 ```
 
-### 2. Convert PDF → Markdown
+### 2. Get Docling result (MANDATORY — do NOT skip)
+
+⚠️ **CRITICAL**: You MUST obtain the Docling result and save it as `<DOC_DIR>/docling-result.json`. Do NOT proceed to step 3 until this file exists and contains valid data. Do NOT write custom extraction scripts that bypass Docling.
+
+**If TASK_ID was provided** (orchestrator already submitted):
+
+Poll until complete. Large documents (100+ pages) can take 3-5 minutes. **Be patient — poll up to 20 times with 30s sleep between polls.**
 
 ```bash
-uv run <SKILL_DIR>/scripts/convert_pdf_to_markdown.py \
-  "<DOC_PATH>" \
-  "<DOC_DIR>/<DOC_SLUG>.md"
+python3 <SKILL_DIR>/scripts/docling_extract.py \
+  --poll-one <TASK_ID> --output "<DOC_DIR>/docling-result.json"
 ```
 
-Verify the markdown looks reasonable — open it and check:
-- Are there `##` or `###` headers? (enables header-aware splitting)
-- Are tables rendered as markdown tables?
-- Is there substantive content (not just a cover page)?
-
-If the output is empty or mostly garbled (scanned PDF with no OCR), try with `--force-ocr`:
+If status is `processing` or `pending`, sleep 30s and poll again:
 ```bash
-uv run <SKILL_DIR>/scripts/convert_pdf_to_markdown.py \
-  "<DOC_PATH>" "<DOC_DIR>/<DOC_SLUG>.md" --force-ocr
+sleep 30
+python3 <SKILL_DIR>/scripts/docling_extract.py \
+  --poll-one <TASK_ID> --output "<DOC_DIR>/docling-result.json"
 ```
 
-### 3. Write and run `extract.py`
+Repeat this poll loop. Do NOT give up early. Maximum 20 polls (10 minutes total). Only stop if status is `success` or `failed`.
 
-Write `<DOC_DIR>/extract.py`. The standard template (Level 3 splitting — header-aware + token-limited):
-
-```python
-"""
-Extract <DOC_SLUG> markdown into knowledge parts.
-
-Two-stage approach:
-1. MarkdownHeaderTextSplitter — splits on real ## / ### headers, carries section metadata
-2. RecursiveCharacterTextSplitter.from_tiktoken_encoder — size-limits large sections
-   at 2000 tokens with 500 overlap (optimized for text-embedding-3-small)
-"""
-import json
-import re
-from pathlib import Path
-
-from langchain_text_splitters import (
-    MarkdownHeaderTextSplitter,
-    RecursiveCharacterTextSplitter,
-)
-
-MD_PATH = Path("<DOC_DIR>/<DOC_SLUG>.md")
-OUT_DIR = Path("<DOC_DIR>")
-SLUG = "<DOC_SLUG>"
-SOURCE = "<SOURCE_NAME>"  # e.g. "NIST CSF 2.0" or the PDF filename
-
-
-def clean_md(text: str) -> str:
-    text = re.sub(r"!\[.*?\]\(.*?\)", "", text)          # remove image references
-    text = re.sub(r"<br\s*/?>", " ", text, flags=re.IGNORECASE)  # flatten <br>
-    text = re.sub(r"\n{3,}", "\n\n", text)               # collapse blank lines
-    return text.strip()
-
-
-def infer_title(doc) -> str:
-    meta = doc.metadata
-    title = meta.get("subsection") or meta.get("section") or ""
-    if title:
-        return re.sub(r"\*+", "", title).strip()
-    for line in doc.page_content.splitlines():
-        line = re.sub(r"^#+\s*", "", line.strip())
-        line = re.sub(r"\*+", "", line).strip()
-        if len(line) > 10:
-            return line[:100]
-    return SOURCE
-
-
-def main():
-    md_text = clean_md(MD_PATH.read_text(encoding="utf-8"))
-
-    # Stage 1 — split by headers (Level 3: document-specific structure)
-    header_splitter = MarkdownHeaderTextSplitter(
-        headers_to_split_on=[("##", "section"), ("###", "subsection")],
-        strip_headers=False,
-    )
-    header_docs = header_splitter.split_text(md_text)
-
-    # Stage 2 — enforce token limit (Level 2: recursive character splitting)
-    char_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-        model_name="text-embedding-3-small",
-        chunk_size=2000,
-        chunk_overlap=500,
-    )
-    final_docs = char_splitter.split_documents(header_docs)
-
-    parts = []
-    for idx, doc in enumerate(final_docs, start=1):
-        text = doc.page_content.strip()
-        if len(text) < 80:
-            continue
-        parts.append({
-            "id": f"{SLUG}-{idx:03d}",
-            "title": infer_title(doc),
-            "content": text,
-            "source": SOURCE,
-            "section": doc.metadata.get("section", ""),
-            "subsection": doc.metadata.get("subsection", ""),
-            "type": "text",
-        })
-
-    # Renumber after filtering
-    for i, p in enumerate(parts, start=1):
-        p["id"] = f"{SLUG}-{i:03d}"
-
-    knowledge_parts = {"parts": parts, "source": SOURCE, "document": SOURCE}
-    (OUT_DIR / "knowledge_parts.json").write_text(json.dumps(knowledge_parts, indent=2))
-
-    index = {
-        "parts": [
-            {"id": p["id"], "title": p["title"], "source": p["source"], "section": p["section"]}
-            for p in parts
-        ]
-    }
-    (OUT_DIR / "parts-index.json").write_text(json.dumps(index, indent=2))
-
-    print(f"Extracted {len(parts)} parts")
-    for p in parts[:5]:
-        print(f"  [{p['id']}] {p['title'][:70]}  ({len(p['content'])} chars)")
-
-
-if __name__ == "__main__":
-    main()
-```
-
-**Adapt the template for your document:**
-- Fill in `SLUG`, `SOURCE`, `MD_PATH`, `OUT_DIR`
-- If CUSTOM_INSTRUCTIONS say "split on `###` only" or "skip appendix" — apply those adjustments
-- If the document has no `##` headers (flat structure), remove the header splitter and use only `RecursiveCharacterTextSplitter` with `chunk_size=1500`
-- If tables are critical (financial docs, reference tables), add table detection: check if a chunk contains `|` rows, and set `"type": "table"` accordingly
-
-Run it (requires langchain-text-splitters and tiktoken):
+**If NO TASK_ID was provided** (fallback — submit yourself):
 ```bash
-cd "<DOC_DIR>" && uv run --with langchain-text-splitters --with tiktoken python extract.py
+uv run <SKILL_DIR>/scripts/docling_extract.py "<DOC_PATH>" \
+  --output "<DOC_DIR>/docling-result.json"
+```
+
+### 2b. VALIDATE Docling result exists
+
+**HARD GATE — do not proceed without this check passing:**
+
+```bash
+if [ ! -f "<DOC_DIR>/docling-result.json" ]; then
+  echo "FATAL: docling-result.json missing — cannot proceed"
+  exit 1
+fi
+python3 -c "
+import json, sys
+d = json.load(open('<DOC_DIR>/docling-result.json'))
+chunks = d if isinstance(d, list) else d.get('chunks', d.get('results', []))
+if not chunks:
+    print('FATAL: docling-result.json has 0 chunks')
+    sys.exit(1)
+print(f'OK: {len(chunks)} chunks in docling-result.json')
+"
+```
+
+If this check fails, go to **Fallback** section at the bottom. Do NOT write custom regex scripts.
+
+### 3. Build knowledge parts (DETERMINISTIC — use build_knowledge_parts.py)
+
+**⚠️ CRITICAL**: ALWAYS use `build_knowledge_parts.py` first. Do NOT write custom extract.py scripts unless explicitly required. This ensures the same PDF always produces the same knowledge parts across runs.
+
+**Step 3a — Run the deterministic extraction script:**
+
+```bash
+uv run <SKILL_DIR>/scripts/build_knowledge_parts.py \
+  "<DOC_DIR>/docling-result.json" \
+  -o "<DOC_DIR>/knowledge_parts.json" \
+  --slug "<DOC_SLUG>"
 ```
 
 Verify output:
 ```bash
-python3 -c "import json; d=json.load(open('<DOC_DIR>/knowledge_parts.json')); print(f'{len(d[\"parts\"])} parts')"
+python3 -c "import json; d=json.load(open('<DOC_DIR>/knowledge_parts.json')); parts=d if isinstance(d,list) else d.get('parts',[]); print(f'{len(parts)} parts')"
 ```
 
-If 0 parts or the script errors, read the markdown file first to understand its structure, then fix the splitter config.
+If the script succeeds and produces ≥1 parts, go to Step 4. Do NOT write custom code.
 
-### 4. Consolidate parts
+**Step 3b — Only if `build_knowledge_parts.py` produces 0 parts AND CUSTOM_INSTRUCTIONS were provided:**
+
+Write a custom `<DOC_DIR>/extract.py` tailored to this document. **The script MUST read from `docling-result.json`** — never from raw PDF text or regex-based text splitting.
+
+Your custom extract.py must:
+1. **Load `docling-result.json`** as its input (NOT knowledge_parts.json, NOT raw text)
+2. Read chunks to understand the document's structure
+3. Follow CUSTOM_INSTRUCTIONS if provided
+4. Group content by semantic units (section heading + content = one part)
+5. Target 200-2000 chars per part
+6. Prefix all part IDs with the document slug
+7. Produce `knowledge_parts.json` with typed parts (text, table, image)
+
+```bash
+cd "<DOC_DIR>" && python3 extract.py
+```
+
+### 4. Post-process
 
 ```bash
 uv run <SKILL_DIR>/scripts/consolidate_parts.py "<DOC_DIR>/knowledge_parts.json"
 ```
 
-This merges adjacent very-short parts, drops noise fragments, and fixes Unicode. Re-run the count after to confirm no parts were lost.
+### 5. Validate extraction (MUST PASS)
 
-### 5. Upload to gateway
+```bash
+python3 <SKILL_DIR>/scripts/validate_extraction.py "<DOC_DIR>/../" --fix
+```
+
+If validation reports FAIL for this document after `--fix`:
+1. Check the specific failure reasons in the output
+2. Re-run `consolidate_parts.py` with `--min-chars 50` if short-fragment issue
+3. Report the FAIL status and reasons in your summary — the orchestrator decides whether to proceed
+
+### 6. Upload to gateway
 
 ```bash
 uv run <SKILL_DIR>/scripts/finetune.py upload-knowledge \
@@ -197,36 +155,34 @@ uv run <SKILL_DIR>/scripts/finetune.py upload-knowledge \
   --name "$(basename '<DOC_PATH>')" \
   --force \
   --description "Source document: $(basename '<DOC_PATH>')" \
-  --metadata '{"extraction_method":"pymupdf4llm"}'
+  --metadata '{"extraction_method":"docling_deterministic"}'
 ```
 
-## Fallback: Docling (scanned PDFs or complex layouts)
+### Fallback (Docling genuinely unavailable or failed)
 
-If pymupdf4llm produces garbled output even with `--force-ocr` (e.g., heavily scanned document, complex multi-column layout), fall back to Docling if it's running:
+**Only use this if**: Docling health check fails (`curl http://127.0.0.1:5001/health` returns error) OR Docling task status is `failed` after polling. Do NOT use this fallback just because polling is slow.
 
 ```bash
-# Check Docling
-curl -sS http://127.0.0.1:5001/health && echo "Docling available"
+# Verify Docling is truly down
+curl -sS http://127.0.0.1:5001/health || echo "Docling unavailable — using pdftotext fallback"
 
-# Submit and extract
-uv run <SKILL_DIR>/scripts/docling_extract.py "<DOC_PATH>" \
-  --output "<DOC_DIR>/docling-result.json"
+# Convert PDF to markdown via pdftotext
+uv run <SKILL_DIR>/scripts/convert_pdf_to_markdown.py \
+  "<DOC_PATH>" "<DOC_DIR>/<DOC_SLUG>.md"
 
-# Build parts from Docling output
+# Build parts from markdown output
 uv run <SKILL_DIR>/scripts/build_knowledge_parts.py \
-  "<DOC_DIR>/docling-result.json" \
+  "<DOC_DIR>/<DOC_SLUG>.md" \
   -o "<DOC_DIR>/knowledge_parts.json" \
   --slug "<DOC_SLUG>"
 
 # Post-process
-uv run <SKILL_DIR>/scripts/extract_tables.py \
-  --docling-result "<DOC_DIR>/docling-result.json" \
-  --parts-file "<DOC_DIR>/knowledge_parts.json"
-
 uv run <SKILL_DIR>/scripts/consolidate_parts.py "<DOC_DIR>/knowledge_parts.json"
 ```
 
-Then upload with `--metadata '{"extraction_method":"docling_hybrid"}'`.
+Then skip step 5 (no docling-result.json for table extraction) and go to step 6 (upload).
+
+**Report `extraction_method: pdftotext`** in the upload metadata and in your summary so the orchestrator knows Docling was not used.
 
 ## What To Report
 
@@ -235,8 +191,11 @@ Return a structured summary to the parent agent:
 ```
 Document: <filename>
 Slug: <doc-slug>
-Parts extracted: N (N text, N table)
-Chunk config: header+recursive / recursive-only / docling
+Parts extracted: N (N text, N table, N image)
+Extraction method: docling_deterministic | docling_custom | pdftotext
+Extraction script: build_knowledge_parts.py | custom extract.py (reason)
+Validation: PASS | WARN (details) | FAIL (details)
+docling-result.json: exists (N chunks) | missing (reason)
 Uploaded: yes | no (error details)
 Issues: any warnings or problems
 ```
@@ -244,7 +203,12 @@ Issues: any warnings or problems
 ## Rules
 
 - You handle exactly ONE document — the one specified in your prompt
-- NEVER fabricate parts or content — extract only what exists in the document
+- **ALWAYS use `build_knowledge_parts.py` first** — do NOT write custom extract.py unless it produces 0 parts or CUSTOM_INSTRUCTIONS require it
+- **NEVER write extraction scripts that bypass Docling** — all extraction MUST start from `docling-result.json`
+- **NEVER fabricate parts or content** — extract only what exists in the document
+- **NEVER give up on Docling polling early** — large documents take minutes, poll up to 20 times
+- `docling-result.json` MUST exist in DOC_DIR when you finish — do not delete intermediate files
 - Always run consolidate after extraction
+- Always run validate after consolidation and report the result
 - If extraction fails, report the error clearly — do not retry indefinitely
 - Do not merge indexes or validate across documents — the orchestrator handles that

@@ -130,6 +130,153 @@ const STATUS_ICON: Record<DatasetFilterGroup, typeof Database> = {
   draft: FileEdit,
 };
 
+// ── Helper: status color for tooltip rows ──
+function jobStatusColor(status: string): string {
+  if (status === "completed" || status === "succeeded") return "text-emerald-400";
+  if (status === "running" || status === "pending" || status === "queued") return "text-blue-400";
+  if (status === "cancelled") return "text-zinc-400";
+  return "text-red-400";
+}
+
+function finetuneStatusColor(status: string): string {
+  if (status === "completed" || status === "succeeded") return "text-emerald-400";
+  if (status === "running") return "text-amber-400";
+  if (status === "pending" || status === "queued") return "text-amber-400";
+  if (status === "cancelled") return "text-zinc-400";
+  return "text-red-400";
+}
+
+// ── Jobs footer with tooltip ──
+function JobsFooterSummary({
+  evalJobs,
+  trainingJobs,
+  hasEvalScript,
+}: {
+  readonly evalJobs: readonly JobSummary[];
+  readonly trainingJobs: readonly JobSummary[];
+  readonly hasEvalScript: boolean;
+}) {
+  const hasJobs = evalJobs.length > 0 || trainingJobs.length > 0;
+
+  // Eval: latest relevant
+  const evalRunning = evalJobs.find(j => j.status === "running" || j.status === "pending");
+  const evalDone = evalJobs.find(j => j.status === "completed");
+  const evalFailed = evalJobs.find(j => j.status === "failed");
+  const evalLatest = evalRunning ?? evalDone ?? evalFailed;
+
+  // Training: latest relevant
+  const ftRunning = trainingJobs.find(j => j.status === "running");
+  const ftQueued = trainingJobs.find(j => ["pending", "queued"].includes(j.status));
+  const ftDone = trainingJobs.find(j => j.status === "completed" || j.status === "succeeded");
+  const ftFailed = trainingJobs.find(j => j.status === "failed");
+  const ftLatest = ftRunning ?? ftQueued ?? ftDone ?? ftFailed;
+
+  // Build the two summary lines
+  const evalLine = (() => {
+    if (evalJobs.length === 0) return null;
+    if (!evalLatest) return { label: "No active eval", color: "text-zinc-600", pulse: false, model: undefined as string | undefined };
+    if (evalRunning) return { label: "Evaluating", color: "text-blue-400", pulse: true, model: evalRunning.model };
+    if (evalDone) return { label: "Evaluated", color: "text-emerald-400", pulse: false, model: evalDone.model };
+    return { label: "Eval failed", color: "text-red-400", pulse: false, model: evalFailed?.model };
+  })();
+
+  const ftLine = (() => {
+    if (trainingJobs.length === 0) return null;
+    if (!ftLatest) return { label: "No active training", color: "text-zinc-600", pulse: false, model: undefined as string | undefined };
+    if (ftRunning) return { label: "Training", color: "text-amber-400", pulse: true, model: ftRunning.model };
+    if (ftQueued) return { label: "Queued", color: "text-amber-400", pulse: false, model: ftQueued.model };
+    if (ftDone) return { label: "Trained", color: "text-emerald-400", pulse: false, model: ftDone.model };
+    return { label: "Training failed", color: "text-red-400", pulse: false, model: ftFailed?.model };
+  })();
+
+  // Tooltip content: full job breakdown
+  const tooltipContent = (
+    <div className="flex flex-col gap-2 py-1">
+      {evalJobs.length > 0 && (
+        <div>
+          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+            Eval Jobs ({evalJobs.length})
+          </div>
+          {evalJobs.map((j) => (
+            <div key={j.id} className="flex items-center justify-between gap-3 text-[11px] py-0.5">
+              <span className="text-foreground/80 truncate">{j.id.slice(0, 8)}</span>
+              <span className="flex items-center gap-1.5 shrink-0">
+                {j.model && <span className="text-muted-foreground/60">{j.model}</span>}
+                <span className={cn("font-medium", jobStatusColor(j.status))}>{j.status}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {trainingJobs.length > 0 && (
+        <div>
+          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+            Finetune Jobs ({trainingJobs.length})
+          </div>
+          {trainingJobs.map((j) => (
+            <div key={j.id} className="flex items-center justify-between gap-3 text-[11px] py-0.5">
+              <span className="text-foreground/80 truncate">{j.id.slice(0, 8)}</span>
+              <span className="flex items-center gap-1.5 shrink-0">
+                {j.model && <span className="text-muted-foreground/60">{j.model}</span>}
+                <span className={cn("font-medium", finetuneStatusColor(j.status))}>{j.status}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  // The visible summary rows
+  const summaryRows = (
+    <div className="flex flex-col gap-1 min-w-0">
+      {evalLine && (
+        <div className="flex items-center gap-1.5 text-[11px]">
+          <FlaskConical className={cn("w-3.5 h-3.5 shrink-0", evalLine.pulse && "animate-pulse", evalLine.color)} />
+          <span className={cn("font-medium", evalLine.color)}>{evalLine.label}</span>
+          {evalLine.model && <span className="text-muted-foreground/50 text-[10px] truncate">{evalLine.model}</span>}
+        </div>
+      )}
+      {ftLine && (
+        <div className="flex items-center gap-1.5 text-[11px]">
+          <Zap className={cn("w-3.5 h-3.5 shrink-0", ftLine.pulse && "animate-pulse", ftLine.color)} />
+          <span className={cn("font-medium", ftLine.color)}>{ftLine.label}</span>
+          {ftLine.model && <span className="text-muted-foreground/50 text-[10px] truncate">{ftLine.model}</span>}
+        </div>
+      )}
+      {!hasJobs && (
+        <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/60">
+          {hasEvalScript ? (
+            <>
+              <FlaskConical className="w-3.5 h-3.5" />
+              Eval fn configured
+              <CircleCheck className="w-2.5 h-2.5 text-emerald-500" />
+            </>
+          ) : (
+            <>
+              <Ban className="w-3.5 h-3.5" />
+              No eval fn
+            </>
+          )}
+        </span>
+      )}
+    </div>
+  );
+
+  if (!hasJobs) return summaryRows;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="cursor-default">{summaryRows}</div>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" align="start" className="max-w-[280px]">
+        {tooltipContent}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function DatasetCard({
   name,
   filterGroup,
@@ -297,73 +444,11 @@ export function DatasetCard({
           {/* Footer — job summary lines */}
           <div className="px-0 pt-3 mt-2 border-t border-white/5">
             <div className="flex items-start justify-between gap-2">
-            <div className="flex flex-col gap-1 min-w-0">
-              {/* Eval jobs summary */}
-              {evalJobs.length > 0 && (() => {
-                const running = evalJobs.filter(j => j.status === 'running' || j.status === 'pending');
-                const done = evalJobs.filter(j => j.status === 'completed');
-                const failed = evalJobs.filter(j => j.status === 'failed');
-                const models = [...new Set(evalJobs.map(j => j.model).filter(Boolean))];
-                const parts: string[] = [];
-                if (running.length > 0) parts.push(`${running.length} running`);
-                if (done.length > 0) parts.push(`${done.length} done`);
-                if (failed.length > 0) parts.push(`${failed.length} failed`);
-                if (models.length > 0) parts.push(models.join(', '));
-                const isActive = running.length > 0;
-                return (
-                  <div className="flex items-center gap-1.5 text-[11px]">
-                    <FlaskConical className={cn("w-3.5 h-3.5 shrink-0", isActive ? "text-blue-400 animate-pulse" : "text-emerald-400")} />
-                    <span className={cn("font-medium", isActive ? "text-blue-400" : "text-emerald-400")}>
-                      {evalJobs.length} eval{evalJobs.length !== 1 ? 's' : ''}
-                    </span>
-                    <span className="text-muted-foreground/50 text-[10px] truncate">
-                      {parts.join(' · ')}
-                    </span>
-                  </div>
-                );
-              })()}
-
-              {/* Training jobs summary */}
-              {trainingJobs.length > 0 && (() => {
-                const running = trainingJobs.filter(j => ['running', 'pending', 'queued'].includes(j.status));
-                const done = trainingJobs.filter(j => j.status === 'completed');
-                const models = [...new Set(trainingJobs.map(j => j.model).filter(Boolean))];
-                const parts: string[] = [];
-                if (running.length > 0) parts.push(`${running.length} running`);
-                if (done.length > 0) parts.push(`${done.length} done`);
-                if (models.length > 0) parts.push(models.join(', '));
-                const isActive = running.length > 0;
-                return (
-                  <div className="flex items-center gap-1.5 text-[11px]">
-                    <Zap className={cn("w-3.5 h-3.5 shrink-0", isActive ? "text-amber-400 animate-pulse" : "text-emerald-400")} />
-                    <span className={cn("font-medium", isActive ? "text-amber-400" : "text-emerald-400")}>
-                      {trainingJobs.length} training
-                    </span>
-                    <span className="text-muted-foreground/50 text-[10px] truncate">
-                      {parts.join(' · ')}
-                    </span>
-                  </div>
-                );
-              })()}
-
-              {/* No jobs at all */}
-              {evalJobs.length === 0 && trainingJobs.length === 0 && (
-                <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/60">
-                  {hasEvalScript ? (
-                    <>
-                      <FlaskConical className="w-3.5 h-3.5" />
-                      Eval fn configured
-                      <CircleCheck className="w-2.5 h-2.5 text-emerald-500" />
-                    </>
-                  ) : (
-                    <>
-                      <Ban className="w-3.5 h-3.5" />
-                      No eval fn
-                    </>
-                  )}
-                </span>
-              )}
-            </div>
+            <JobsFooterSummary
+              evalJobs={evalJobs}
+              trainingJobs={trainingJobs}
+              hasEvalScript={hasEvalScript}
+            />
 
             {/* Right side: timestamp + menu */}
             <div className="flex items-center gap-2 shrink-0 pt-0.5">

@@ -28,8 +28,9 @@ import {
   ReferenceLine,
 } from "recharts";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, Activity, TrendingUp, Zap, Eye, EyeOff } from "lucide-react";
+import { AlertTriangle, Activity, TrendingUp, Zap, Eye, EyeOff, BarChart3 } from "lucide-react";
 import type { FinetuneJobMetricPoint } from "@/services/finetune-api";
+import { getMetricsInsights } from "./training-metrics-insights";
 
 // =============================================================================
 // Types & Constants
@@ -43,7 +44,7 @@ interface FinetuneMetricsChartProps {
   hideTabs?: boolean;
 }
 
-type MetricTab = "reward" | "stability" | "completions";
+type MetricTab = "reward" | "stability" | "completions" | "throughput";
 
 interface MetricDef {
   key: string;
@@ -63,26 +64,40 @@ const TAB_CONFIG: Record<
     metrics: [
       { key: "reward", label: "Reward", color: "#10b981", primary: true, description: "Average reward score from the evaluator. Higher = model generates better responses." },
       { key: "reward_std", label: "Reward Std", color: "#6366f1", primary: false, description: "Standard deviation of reward scores across candidates. Some variance is healthy." },
-      { key: "frac_reward_zero_std", label: "Zero Std Frac", color: "#f59e0b", primary: false, description: "Fraction of prompts where all candidates received the same score. High (>0.6) = evaluator can't differentiate." },
+      { key: "frac_reward_zero_std", label: "Zero Std Frac", color: "#f59e0b", primary: false, description: "Fraction of prompts where all G completions scored identically (zero learning signal). Healthy <0.2, warning >0.5, critical >0.8." },
     ],
   },
   stability: {
     label: "Loss",
     icon: <Activity className="h-3 w-3" />,
     metrics: [
-      { key: "loss", label: "Loss", color: "#ef4444", primary: true, description: "Policy loss — should generally decrease over training." },
-      { key: "kl", label: "KL Divergence", color: "#f59e0b", primary: false, description: "How far the model has drifted from the base model. Too high = may be overfitting." },
+      { key: "loss", label: "Loss", color: "#ef4444", primary: true, description: "GRPO policy loss — starts near 0 and rises slightly as learning progresses. Unlike SFT loss, lower is NOT always better." },
+      { key: "kl", label: "KL Divergence", color: "#f59e0b", primary: false, description: "Distance from base model distribution. With β=0 (default), this is informational only and does not affect training." },
       { key: "grad_norm", label: "Grad Norm", color: "#8b5cf6", primary: false, description: "Gradient norm — spikes indicate unstable training." },
       { key: "learning_rate", label: "Learning Rate", color: "#06b6d4", primary: false, description: "Current learning rate. May change if a schedule is used." },
+      { key: "clip_ratio/region_mean", label: "Clip Ratio", color: "#ec4899", primary: false, description: "Fraction of tokens clipped by trust region. 0.1-0.3 is healthy. High = updates too aggressive." },
     ],
   },
   completions: {
     label: "Completions",
     icon: <Zap className="h-3 w-3" />,
     metrics: [
-      { key: "completions/clipped_ratio", label: "Clipped Ratio", color: "#ef4444", primary: true, description: "Fraction of responses truncated. High (>0.7) = responses hit token limit." },
+      { key: "completions/clipped_ratio", label: "Clipped Ratio", color: "#ef4444", primary: true, description: "Fraction of responses truncated at max_output_tokens. Healthy <0.1, warning >0.1, critical >0.5." },
       { key: "completions/mean_length", label: "Mean Length", color: "#10b981", primary: false, description: "Average response length in tokens." },
-      { key: "completions/mean_terminated_length", label: "Terminated Length", color: "#6366f1", primary: false, description: "Average length of naturally-ended responses." },
+      { key: "completions/max_length", label: "Max Length", color: "#f59e0b", primary: false, description: "Longest response in tokens. If stuck at max_output_tokens, model is hitting the ceiling." },
+      { key: "completions/min_length", label: "Min Length", color: "#06b6d4", primary: false, description: "Shortest response. Decreasing min suggests some prompts get trivial answers." },
+      { key: "completions/mean_terminated_length", label: "Terminated Length", color: "#6366f1", primary: false, description: "Average length of naturally-ended (non-truncated) responses." },
+      { key: "completions/max_terminated_length", label: "Max Terminated", color: "#a855f7", primary: false, description: "Longest natural response. If close to max_output_tokens, you need more room." },
+      { key: "completions/min_terminated_length", label: "Min Terminated", color: "#14b8a6", primary: false, description: "Shortest natural response. Very short (<10) may indicate trivial answers — check grader." },
+    ],
+  },
+  throughput: {
+    label: "Throughput",
+    icon: <BarChart3 className="h-3 w-3" />,
+    metrics: [
+      { key: "num_tokens", label: "Tokens/Step", color: "#10b981", primary: true, description: "Total tokens processed per training step. Drops may indicate shorter completions." },
+      { key: "row_indices_count", label: "Batch Size", color: "#6366f1", primary: false, description: "Number of record samples per step. Should be consistent." },
+      { key: "completion_length", label: "Avg Completion", color: "#f59e0b", primary: false, description: "Average completion length across all candidates in the batch." },
     ],
   },
 };
@@ -95,8 +110,8 @@ function getAlertCount(metrics: FinetuneJobMetricPoint[]): number {
   if (metrics.length === 0) return 0;
   const latest = metrics[metrics.length - 1].metrics;
   let count = 0;
-  if (typeof latest["completions/clipped_ratio"] === "number" && (latest["completions/clipped_ratio"] as number) > 0.7) count++;
-  if (typeof latest.frac_reward_zero_std === "number" && (latest.frac_reward_zero_std as number) > 0.6) count++;
+  if (typeof latest["completions/clipped_ratio"] === "number" && (latest["completions/clipped_ratio"] as number) > 0.5) count++;
+  if (typeof latest.frac_reward_zero_std === "number" && (latest.frac_reward_zero_std as number) > 0.5) count++;
   for (const key of ["loss", "reward", "kl", "grad_norm"] as const) {
     const val = latest[key];
     if (val != null && (!isFinite(val as number) || isNaN(val as number))) count++;
@@ -113,29 +128,7 @@ function formatMetricValue(value: number): string {
   return value.toFixed(3);
 }
 
-function getMetricsInsight(latest: Record<string, unknown> | null, tab: MetricTab): string {
-  if (!latest) return "";
-  if (tab === "reward") {
-    const reward = typeof latest.reward === "number" ? latest.reward : null;
-    if (reward == null) return "Reward data not available yet.";
-    if (reward >= 0.9) return "Reward is high — generating good responses.";
-    if (reward >= 0.7) return "Reward is moderate — learning but has room to improve.";
-    return "Reward is low — may need more training or better data.";
-  }
-  if (tab === "stability") {
-    const loss = typeof latest.loss === "number" ? latest.loss : null;
-    if (loss == null) return "Loss data not available yet.";
-    if (loss < 0.1) return "Loss is healthy — learning steadily.";
-    if (loss < 1.0) return "Loss is moderate — training in progress.";
-    return "Loss is high — model may be struggling.";
-  }
-  if (tab === "completions") {
-    const clipped = typeof latest["completions/clipped_ratio"] === "number" ? latest["completions/clipped_ratio"] : null;
-    if (clipped != null && clipped > 0.7) return `${(clipped * 100).toFixed(0)}% truncated — consider increasing max tokens.`;
-    return "Completion metrics within normal range.";
-  }
-  return "";
-}
+// MetricInsight type and getMetricsInsights imported from ./training-metrics-insights
 
 // =============================================================================
 // Stacked lanes: normalize each metric into its own vertical band
@@ -336,12 +329,27 @@ export function FinetuneMetricsChart({
         learning_rate: typeof m.learning_rate === "number" ? m.learning_rate : undefined,
         "completions/clipped_ratio": typeof m["completions/clipped_ratio"] === "number" ? m["completions/clipped_ratio"] : undefined,
         "completions/mean_length": typeof m["completions/mean_length"] === "number" ? m["completions/mean_length"] : undefined,
+        "completions/max_length": typeof m["completions/max_length"] === "number" ? m["completions/max_length"] : undefined,
+        "completions/min_length": typeof m["completions/min_length"] === "number" ? m["completions/min_length"] : undefined,
         "completions/mean_terminated_length": typeof m["completions/mean_terminated_length"] === "number" ? m["completions/mean_terminated_length"] : undefined,
+        "completions/max_terminated_length": typeof m["completions/max_terminated_length"] === "number" ? m["completions/max_terminated_length"] : undefined,
+        "completions/min_terminated_length": typeof m["completions/min_terminated_length"] === "number" ? m["completions/min_terminated_length"] : undefined,
+        num_tokens: typeof m.num_tokens === "number" ? m.num_tokens : undefined,
+        row_indices_count: typeof m.row_indices_count === "number" ? m.row_indices_count : undefined,
+        completion_length: typeof m.completion_length === "number" ? m.completion_length : undefined,
+        "clip_ratio/region_mean": typeof m["clip_ratio/region_mean"] === "number" ? m["clip_ratio/region_mean"] : undefined,
+        "clip_ratio/high_mean": typeof m["clip_ratio/high_mean"] === "number" ? m["clip_ratio/high_mean"] : undefined,
+        "clip_ratio/low_mean": typeof m["clip_ratio/low_mean"] === "number" ? m["clip_ratio/low_mean"] : undefined,
       };
     });
   }, [metrics]);
 
   const latestMetrics = metrics.length > 0 ? metrics[metrics.length - 1].metrics : null;
+  // Full metrics history as Record[] for cross-metric trend checks (e.g., length-reward divergence)
+  const metricsHistory = useMemo(
+    () => metrics.map((p) => p.metrics as Record<string, unknown>),
+    [metrics],
+  );
   const latestStep = latestMetrics && typeof latestMetrics.global_step === "number" ? latestMetrics.global_step : metrics.length;
   const maxSteps = latestMetrics && typeof latestMetrics.max_steps === "number" ? latestMetrics.max_steps : null;
   const progressPercent = maxSteps && latestStep ? Math.round((latestStep / maxSteps) * 100) : null;
@@ -536,12 +544,22 @@ export function FinetuneMetricsChart({
         </div>
       </TooltipProvider>
 
-      {/* Insight */}
-      {latestMetrics && (
-        <div className="px-4 py-2 border-t border-white/5">
-          <p className="text-[10px] text-slate-500 leading-relaxed">{getMetricsInsight(latestMetrics, activeTab)}</p>
-        </div>
-      )}
+      {/* Insights */}
+      {latestMetrics && (() => {
+        const insights = getMetricsInsights(latestMetrics, activeTab, metricsHistory);
+        if (insights.length === 0) return null;
+        const levelIcon = { ok: "✅", warn: "⚠️", critical: "🔴" } as const;
+        const levelColor = { ok: "text-emerald-400/70", warn: "text-amber-400/80", critical: "text-red-400/80" } as const;
+        return (
+          <div className="px-4 py-2 border-t border-white/5 flex flex-col gap-1">
+            {insights.map((ins, i) => (
+              <p key={i} className={cn("text-[10px] leading-relaxed", levelColor[ins.level])}>
+                {levelIcon[ins.level]} {ins.text}
+              </p>
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 }

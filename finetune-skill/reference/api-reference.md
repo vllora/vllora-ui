@@ -559,7 +559,9 @@ curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
       "max_output_tokens": 1000,
       "temperature": 1.0,
       "top_p": 1.0,
-      "response_candidates_count": 2
+      "response_candidates_count": 2,
+      "enable_thinking": false,
+      "reasoning_effort": "medium"
     },
     "chunk_size": 100,
     "node_count": 1,
@@ -606,22 +608,26 @@ curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
 - `finetuned/{cloud_job_id}` requires source job success (`succeeded`) and provider success.
 - `checkpointed/{cloud_job_id}` allows any terminal source state (`succeeded`, `failed`, `cancelled`) as long as provider status is also terminal.
 
-**Training Config Defaults:**
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `learning_rate` | 0.00001 | Learning rate for LoRA fine-tuning |
-| `lora_rank` | 8 | LoRA rank (higher = more parameters, slower) |
-| `gradient_accumulation_steps` | 5 | Steps before weight update |
-| `epochs` | 2.0 | Number of training epochs |
-| `batch_size` | 5 | Training batch size |
+**Training Config Defaults (gateway fallbacks if omitted):**
+| Parameter | Gateway Default | GRPO-Optimized (used by `finetune.py`) | Description |
+|-----------|----------------|----------------------------------------|-------------|
+| `learning_rate` | 0.00001 (1e-5) | **0.000005 (5e-6)** | Learning rate. 5e-6 balances DeepSeek-R1's 3e-6 (arXiv:2501.12948) and gateway default; food-label E2E showed 1e-6 too slow |
+| `lora_rank` | 8 | 8 | LoRA rank (higher = more parameters, slower) |
+| `gradient_accumulation_steps` | 5 | 5 | Steps before weight update |
+| `epochs` | 2.0 | **8** | Training epochs. RFT needs many more than SFT (5-15 typical) |
+| `batch_size` | 5 | 5 | Training batch size |
 
-**Inference Parameters (used during training evaluation):**
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `max_output_tokens` | 1000 | Max tokens in generated response |
-| `temperature` | 1.0 | Sampling temperature |
-| `top_p` | 1.0 | Top-p nucleus sampling |
-| `response_candidates_count` | 2 | Candidates per response |
+**Inference Parameters (used during training rollouts):**
+| Parameter | Gateway Default | GRPO-Optimized (used by `finetune.py`) | Description |
+|-----------|----------------|----------------------------------------|-------------|
+| `max_output_tokens` | 1000 | **512** | Max tokens. Start low, increase only if >50% clipping |
+| `temperature` | 1.0 | 1.0 | Sampling temperature |
+| `top_p` | 1.0 | 1.0 | Top-p nucleus sampling |
+| `response_candidates_count` | 2 | **8** | Candidates per prompt. GRPO needs G≥8 for meaningful gradients |
+| `enable_thinking` | provider/model default | model-dependent | Enables/disables explicit reasoning mode for models that support it (e.g. Qwen thinking mode) |
+| `reasoning_effort` | provider/model default | model-dependent | Optional effort hint (for example `low`, `medium`, `high`) used only by models/providers that support it |
+
+> **Note:** `finetune.py create-training` sends GRPO-optimized values by default. If you call the API directly (raw curl), you must set these explicitly or you'll get the gateway fallbacks, which are SFT-oriented and produce weak GRPO training signal.
 
 **Optional fields:**
 | Field | Description |
@@ -630,6 +636,11 @@ curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
 | `node_count` | Nodes for distributed training |
 | `evaluator_version` | Which evaluator version to use |
 | `resume_mode` | Only for `checkpointed/{cloud_job_id}`. `weights-only` (default) or `full-state` |
+
+**Thinking/reasoning notes:**
+- `enable_thinking` and `reasoning_effort` are optional pass-through inference parameters.
+- If `reasoning_effort` is provided, it must be a non-empty string.
+- Unsupported providers/models ignore these fields safely.
 
 **Response:**
 ```json
@@ -862,7 +873,7 @@ Get per-epoch evaluation results showing how the model improves during training.
 curl "http://localhost:9090/finetune/workflows/WORKFLOW_ID/finetune-evaluations?finetune_job_id=ftjob-abc123&epoch=1"
 ```
 
-**Query params:** `finetune_job_id`, `row_index`, `epoch` (all optional filters)
+**Query params:** `finetune_job_id`, `row_index`, `epoch`, `include_rollout_content` (all optional filters)
 
 **Response:**
 ```json
@@ -871,9 +882,9 @@ curl "http://localhost:9090/finetune/workflows/WORKFLOW_ID/finetune-evaluations?
     "row_index": 0,
     "row": {"id": "record-1", "messages": []},
     "epochs": {
-      "0": [{"score": 0.5, "reason": "...", "status": "completed"}],
-      "1": [{"score": 0.7, "reason": "...", "status": "completed"}],
-      "2": [{"score": 0.85, "reason": "...", "status": "completed"}]
+      "0": [{"score": 0.5, "reason": "...", "status": "completed", "rollout_content": "Answer A"}],
+      "1": [{"score": 0.7, "reason": "...", "status": "completed", "rollout_content": "Answer B"}],
+      "2": [{"score": 0.85, "reason": "...", "status": "completed", "rollout_content": "Answer C"}]
     }
   }]
 }

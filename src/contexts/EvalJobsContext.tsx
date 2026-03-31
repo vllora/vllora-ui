@@ -97,20 +97,15 @@ function useEvalJobs(props: {
 
       // Catch-up: fetch per-record results from cloud for completed jobs.
       // pollingSnapshot is in-memory only, so after page reload it's gone.
-      // Also handles the race where BE set "completed" before FE fetched results.
-      // Retries up to 3 times on failure (cloud can return transient 500s).
+      // Single attempt here; the eval detail view auto-retries when opened.
       const isTerminal = job.status === 'completed' || job.status === 'failed';
       const needsSnapshot = isTerminal && !job.pollingSnapshot && job.evaluationRunId;
       if (needsSnapshot && !refreshedJobIdsRef.current.has(job.id)) {
         refreshedJobIdsRef.current.add(job.id);
-        const attemptRefresh = (retries: number) => {
-          evalPollingManager.refreshJob(job.id).catch(() => {
-            if (retries > 0) {
-              setTimeout(() => attemptRefresh(retries - 1), 5000);
-            }
-          });
-        };
-        attemptRefresh(2);
+        evalPollingManager.refreshJob(job.id).catch(() => {
+          // Allow retry when user opens eval detail view
+          refreshedJobIdsRef.current.delete(job.id);
+        });
       }
     }
   }, [jobs, loadJobs]);

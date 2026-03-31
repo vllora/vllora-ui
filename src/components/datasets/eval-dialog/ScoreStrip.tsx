@@ -28,19 +28,26 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { TopicEvalStats, ReadinessGate } from "@/types/dataset-types";
 
 interface ScoreStripProps {
   readonly scores: number[];
   readonly mean?: number;
   readonly className?: string;
+  /** Per-topic breakdown data — adds a "By Topic" tab when provided */
+  readonly byTopic?: Record<string, TopicEvalStats>;
+  /** Readiness gate result — adds a "Readiness" tab when provided */
+  readonly readinessGate?: ReadinessGate;
 }
 
-type ChartView = "distribution" | "sorted" | "boxplot";
+type ChartView = "distribution" | "sorted" | "boxplot" | "topics" | "readiness";
 
 const CHART_LABELS: Record<ChartView, string> = {
   distribution: "Distribution",
   sorted: "Sorted Scores",
   boxplot: "Box Plot",
+  topics: "By Topic",
+  readiness: "Readiness",
 };
 
 // ─── Color helpers ───
@@ -61,15 +68,23 @@ function scoreColor(s: number): string {
 
 // ─── Main component ───
 
-export function ScoreStrip({ scores, mean, className }: ScoreStripProps) {
+export function ScoreStrip({ scores, mean, className, byTopic, readinessGate }: ScoreStripProps) {
   const [view, setView] = useState<ChartView>("distribution");
+  const hasTopics = byTopic && Object.keys(byTopic).length > 0;
+
+  // Only show tabs that have data
+  const availableViews: ChartView[] = [
+    "distribution", "sorted", "boxplot",
+    ...(hasTopics ? ["topics" as const] : []),
+    ...(readinessGate ? ["readiness" as const] : []),
+  ];
 
   return (
     <div className={cn("w-full", className)}>
       {/* Chart type selector — pill-style segmented control */}
       <div className="flex items-center justify-end mb-1">
         <div className="flex items-center bg-zinc-800/40 rounded-md p-0.5 gap-0.5">
-          {(Object.keys(CHART_LABELS) as ChartView[]).map((key) => (
+          {availableViews.map((key) => (
             <button
               key={key}
               onClick={() => setView(key)}
@@ -90,6 +105,8 @@ export function ScoreStrip({ scores, mean, className }: ScoreStripProps) {
       {view === "distribution" && <DistributionChart scores={scores} mean={mean} />}
       {view === "sorted" && <SortedBarsChart scores={scores} mean={mean} />}
       {view === "boxplot" && <BoxPlotChart scores={scores} />}
+      {view === "topics" && hasTopics && <TopicBarChart byTopic={byTopic} />}
+      {view === "readiness" && readinessGate && <ReadinessView gate={readinessGate} />}
 
       {/* Mean legend with tooltip */}
       {mean != null && (
@@ -164,8 +181,8 @@ function DistributionChart({ scores, mean }: { scores: number[]; mean?: number }
   const meanX = mean !== undefined ? BIN_LABELS[Math.min(Math.floor(mean * 10), 9)] : undefined;
 
   return (
-    <ResponsiveContainer width="100%" height={140}>
-      <BarChart data={data} margin={{ top: 14, right: 4, bottom: 0, left: 4 }} barCategoryGap="8%">
+    <ResponsiveContainer width="100%" height={150}>
+      <BarChart data={data} margin={{ top: 24, right: 4, bottom: 0, left: 4 }} barCategoryGap="8%">
         <XAxis
           dataKey="range"
           tick={{ fontSize: 9, fill: "#52525b", fontFamily: "monospace" }}
@@ -189,7 +206,7 @@ function DistributionChart({ scores, mean }: { scores: number[]; mean?: number }
             stroke="rgba(255,255,255,0.5)"
             strokeWidth={1.5}
             strokeDasharray="3 2"
-            label={{ value: `Mean ${mean!.toFixed(2)}`, position: "top", fontSize: 9, fill: "#a1a1aa", fontFamily: "monospace" }}
+            label={{ value: `Mean ${mean!.toFixed(2)}`, position: "top", fontSize: 9, fill: "#a1a1aa", fontFamily: "monospace", offset: 14 }}
           />
         )}
       </BarChart>
@@ -360,5 +377,239 @@ function BoxPlotChart({ scores }: { scores: number[] }) {
         />
       </ScatterChart>
     </ResponsiveContainer>
+  );
+}
+
+// ─── Topic Horizontal Bar Chart ───
+
+// Topic status tooltips — reframed for GRPO: low base model scores are EXPECTED,
+// focus on grader quality and relative topic comparison, not absolute score level.
+const STATUS_TOOLTIPS: Record<string, { label: string; description: string; action: string }> = {
+  good: {
+    label: "Strong",
+    description: "This topic scores above average. The grader provides clear signal here.",
+    action: "Good training signal. GRPO will reinforce this capability.",
+  },
+  warning: {
+    label: "Typical",
+    description: "This topic scores in the expected range for a base model. Low scores are normal before training \u2014 GRPO learns from comparing K=8 completions, not from high absolute scores.",
+    action: "Check that the grader differentiates quality within this topic. If all records score identically, the grader may need topic-specific criteria.",
+  },
+  problem: {
+    label: "Weak",
+    description: "This topic scores well below average. This is not necessarily a problem \u2014 hard topics yield the largest training gains (arXiv:2508.14094). But verify the grader is working correctly for this topic.",
+    action: "Review 2\u20133 low-scoring records: are the grader\u2019s reasons sensible? If yes, these hard examples are valuable for training. If the reasons are wrong, adjust grader criteria for this topic.",
+  },
+};
+
+interface TopicDatum {
+  name: string;
+  shortName: string;
+  mean: number;
+  count: number;
+  status: string;
+  color: string;
+}
+
+function TopicChartTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: TopicDatum }> }) {
+  if (!active || !payload?.[0]) return null;
+  const d = payload[0].payload;
+  const tip = STATUS_TOOLTIPS[d.status];
+  return (
+    <div className="bg-zinc-900 border border-zinc-700 rounded-md px-3 py-2 shadow-lg max-w-[300px]">
+      <div className="text-[11px] text-zinc-200 font-medium mb-1">{d.name}</div>
+      <div className="text-[11px] text-zinc-400 space-y-0.5">
+        <div>Score: <span className="font-semibold text-zinc-200">{d.mean.toFixed(3)}</span> &middot; {d.count} records</div>
+        {tip && (
+          <>
+            <div className="border-t border-zinc-800 my-1" />
+            <div className="font-medium" style={{ color: d.color }}>{tip.label}</div>
+            <div className="text-[10px] text-zinc-500">{tip.description}</div>
+            <div className="text-[10px] text-zinc-400 italic mt-0.5">{tip.action}</div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TopicBarChart({ byTopic }: { byTopic: Record<string, TopicEvalStats> }) {
+  const data = useMemo<TopicDatum[]>(() => {
+    return Object.entries(byTopic)
+      .map(([name, stats]) => ({
+        name,
+        shortName: name.length > 20 ? name.slice(0, 18) + "\u2026" : name,
+        mean: stats.mean,
+        count: stats.count,
+        status: stats.status,
+        color: stats.mean >= 0.8 ? "#10b981" : stats.mean >= 0.6 ? "#eab308" : stats.mean >= 0.25 ? "#f97316" : "#ef4444",
+      }))
+      .sort((a, b) => b.mean - a.mean);
+  }, [byTopic]);
+
+  // Dynamic height: ~20px per topic, min 140, max 300
+  const chartHeight = Math.max(140, Math.min(300, data.length * 22));
+
+  return (
+    <div style={{ height: chartHeight, overflowY: chartHeight >= 300 ? "auto" : "hidden" }}>
+      <ResponsiveContainer width="100%" height={Math.max(chartHeight, data.length * 22)}>
+        <BarChart data={data} layout="vertical" margin={{ top: 0, right: 40, bottom: 0, left: 4 }}>
+          <XAxis type="number" domain={[0, 1]} tick={{ fontSize: 9, fill: "rgba(255,255,255,0.3)" }} tickLine={false} axisLine={false} />
+          <YAxis type="category" dataKey="shortName" width={140} tick={{ fontSize: 9, fill: "rgba(255,255,255,0.5)" }} tickLine={false} axisLine={false} />
+          <RechartsTooltip content={<TopicChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
+          <Bar dataKey="mean" radius={[0, 3, 3, 0]} label={{ position: "right", fontSize: 9, fill: "rgba(255,255,255,0.5)", formatter: (v) => typeof v === "number" ? v.toFixed(2) : String(v ?? "") }}>
+            {data.map((d, i) => (
+              <Cell key={i} fill={d.color} fillOpacity={0.7} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ─── Readiness Gate View ───
+
+/** Human-friendly labels and explanations for each check */
+const CHECK_META: Record<string, { label: string; why: string; source: string }> = {
+  sample_count: { label: "Samples", why: "GRPO needs enough prompts for stable advantage estimates.", source: "OpenAI RFT" },
+  score_std: { label: "Score Spread", why: "Grader must produce varied scores — zero spread = zero gradient.", source: "Dr. GRPO" },
+  score_concentration: { label: "Score Diversity", why: "If >50% of scores are the same value, the grader is too coarse. With K=8 completions all getting the same score, advantage=(r\u2212mean)/std=0 \u2192 zero gradient. The grader needs more granular criteria.", source: "DAPO (arXiv:2503.14476), Dr. GRPO (arXiv:2503.20783)" },
+  high_score_frac: { label: "Not Too Easy", why: "If most scores are >0.9, grader is too lenient — all K completions score high = no signal.", source: "DAPO" },
+  binary_frac: { label: "Partial Credit", why: "Continuous 0–1 scoring gives stronger gradient than binary pass/fail.", source: "DeepSeek-R1" },
+  avg_score: { label: "Has Signal", why: "Just needs nonzero — only 0% success is fatal. Low scores are expected for base models.", source: "OpenAI RFT" },
+  dead_weight_frac: { label: "Compute Efficiency", why: "Dead-weight prompts (score<0.1) waste GPU. 30–99% zero-variance per batch is normal.", source: "ICLR 2026" },
+  pass_rate: { label: "Quality Floor", why: "Eval K=1 ≠ Training K=8. A 6.5% pass@1 ≈ 41% pass@8. Hard examples = biggest gains.", source: "arXiv:2508.14094" },
+  prompt_learnability: { label: "Learnable Prompts", why: "Prompts where all completions score the same give zero GRPO gradient.", source: "DAPO" },
+  score_length_corr: { label: "No Length Bias", why: "High score↔length correlation = grader rewards verbosity, not quality.", source: "Dr. GRPO" },
+  topic_balance: { label: "Topic Balance", why: "No single topic should dominate >40% — prevents over-optimization.", source: "OpenAI RFT" },
+};
+
+function formatCheckValue(id: string, value: number): string {
+  if (id === "sample_count") return String(value);
+  return (value * 100).toFixed(1) + "%";
+}
+
+/** Progress bar showing value relative to threshold */
+function CheckGauge({ check }: { check: { id: string; passed: boolean; value: number; threshold: string; kind: string; skipped?: boolean; suggestion: string } }) {
+  const meta = CHECK_META[check.id];
+  const label = meta?.label ?? check.id;
+  const isHard = check.kind === "hard";
+  const isFailed = !check.passed && !check.skipped;
+
+  // Parse threshold for progress calculation
+  const threshNum = parseFloat(check.threshold.replace(/[<>=\s]/g, ""));
+  const isGt = check.threshold.includes(">");
+  // For ">" checks, progress = value/threshold (capped at 1). For "<" checks, progress = 1 - value/threshold
+  const ratio = isGt
+    ? Math.min(check.value / (threshNum || 1), 1.5)
+    : Math.min(1.5, threshNum > 0 ? 1 - (check.value / threshNum) + 1 : 1);
+  const progressPct = Math.max(0, Math.min(100, (ratio / 1.5) * 100));
+
+  const barColor = check.skipped
+    ? "bg-zinc-700"
+    : check.passed
+      ? "bg-emerald-500/60"
+      : isHard ? "bg-red-500/60" : "bg-amber-500/60";
+
+  const valueColor = check.skipped
+    ? "text-zinc-600"
+    : check.passed
+      ? "text-emerald-400"
+      : isHard ? "text-red-400" : "text-amber-400";
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="flex flex-col gap-1 cursor-help">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-zinc-400">{label}</span>
+              <span className={cn("text-[10px] font-mono font-semibold tabular-nums", valueColor)}>
+                {formatCheckValue(check.id, check.value)}
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+              <div className={cn("h-full rounded-full transition-all", barColor)} style={{ width: `${progressPct}%` }} />
+            </div>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="max-w-[320px] p-3">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-medium text-zinc-200">{label}</span>
+              <span className={cn("text-[9px] px-1 py-0.5 rounded font-medium", isHard ? "bg-zinc-700 text-zinc-300" : "bg-zinc-800 text-zinc-400")}>
+                {check.kind}
+              </span>
+              <span className={cn("text-[9px] font-medium", check.passed ? "text-emerald-400" : isFailed ? (isHard ? "text-red-400" : "text-amber-400") : "text-zinc-500")}>
+                {check.passed ? "passed" : check.skipped ? "skipped" : "failed"}
+              </span>
+            </div>
+            <div className="text-[11px] text-zinc-300">
+              <span className={cn("font-mono font-semibold", valueColor)}>{formatCheckValue(check.id, check.value)}</span>
+              <span className="text-zinc-600 mx-1">{check.threshold}</span>
+            </div>
+            {meta && <p className="text-[10px] text-zinc-400 leading-relaxed">{meta.why}</p>}
+            {isFailed && <p className="text-[10px] text-zinc-500 border-t border-zinc-800 pt-1.5">{check.suggestion}</p>}
+            {meta && <p className="text-[9px] text-zinc-600 italic">{meta.source}</p>}
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function ReadinessView({ gate }: { gate: ReadinessGate }) {
+  const hardChecks = gate.checks.filter(c => c.kind === "hard");
+  const softChecks = gate.checks.filter(c => c.kind === "soft");
+
+  // Check if score_concentration is extreme (>70%) — this means the grader is
+  // broken (most K=8 groups will score identically → zero gradient → wasted GPU).
+  // Unlike other soft warnings, this should NOT be treated as "safe to proceed."
+  const concentrationCheck = gate.checks.find(c => c.id === "score_concentration");
+  const concentrationBlocksTraining = concentrationCheck != null
+    && !concentrationCheck.passed
+    && concentrationCheck.value > 0.70;
+
+  const effectiveVerdict = gate.verdict === "WARN" && concentrationBlocksTraining ? "FIX_GRADER" : gate.verdict;
+  const verdictColor = effectiveVerdict === "PASS" ? "text-emerald-400"
+    : effectiveVerdict === "FIX_GRADER" ? "text-orange-400"
+    : effectiveVerdict === "WARN" ? "text-amber-400"
+    : "text-red-400";
+  const verdictBg = effectiveVerdict === "PASS" ? "bg-emerald-500/10"
+    : effectiveVerdict === "FIX_GRADER" ? "bg-orange-500/10"
+    : effectiveVerdict === "WARN" ? "bg-amber-500/10"
+    : "bg-red-500/10";
+
+  return (
+    <div className="space-y-3">
+      {/* Verdict header */}
+      <div className="flex items-center gap-3">
+        <div className={cn("px-2.5 py-1 rounded-md text-xs font-bold", verdictBg, verdictColor)}>
+          {effectiveVerdict === "FIX_GRADER" ? "FIX GRADER" : gate.verdict}
+        </div>
+        <span className="text-[10px] text-zinc-500">
+          {effectiveVerdict === "PASS" && "Grader quality verified. Ready for training."}
+          {effectiveVerdict === "FIX_GRADER" && `${Math.round(concentrationCheck!.value * 100)}% of scores are one value — fix grader before training or GPU hours will be wasted.`}
+          {effectiveVerdict === "WARN" && "Some quality signals below ideal — training can proceed."}
+          {effectiveVerdict === "FAIL" && "Grader issues detected. Fix before training."}
+        </span>
+        <span className="ml-auto text-[10px] text-zinc-600">
+          {gate.hardPassed}/{gate.hardTotal} hard · {gate.softPassed}/{gate.softTotal} soft
+        </span>
+      </div>
+
+      {/* Two-column gauge grid */}
+      <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+        <div className="space-y-2">
+          <p className="text-[9px] text-zinc-600 uppercase tracking-wider font-medium">Grader Quality</p>
+          {hardChecks.map(c => <CheckGauge key={c.id} check={c} />)}
+        </div>
+        <div className="space-y-2">
+          <p className="text-[9px] text-zinc-600 uppercase tracking-wider font-medium">Quality Signals</p>
+          {softChecks.map(c => <CheckGauge key={c.id} check={c} />)}
+        </div>
+      </div>
+    </div>
   );
 }
