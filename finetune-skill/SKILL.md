@@ -675,7 +675,13 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
 
 > **⚠️ NEVER use `sleep 300` or `sleep 600` in a Bash tool call to wait for training.** Always use `poll-training`.
 
-**Early stopping** is enabled by default. The poll script monitors epoch evaluation scores and auto-cancels training if the score plateaus (delta < 0.01 across 3 consecutive epoch evals). This prevents wasting compute on a model that has stopped improving. To disable: add `--no-early-stop`.
+**Early stopping** is enabled by default. The poll script uses multi-signal detection based on GRPO/RFT research:
+
+1. **Score plateau** — EMA-smoothed scores (alpha=0.3) with linear regression slope over 5 epochs. Triggers when slope < 0.005/epoch after a 2-epoch warm-up. Distinguishes "converged" (score ≥0.5, deploy) vs "stuck" (score <0.3, investigate grader/data). Ref: arXiv:2507.18014 (3-phase GRPO training), arXiv:2503.06639 (absorbing states).
+2. **Score degradation** — Negative EMA slope (scores declining) indicates overfitting or policy collapse.
+3. **Length exploitation** — Response length growing >30% while reward is flat. Ref: Dr. GRPO (arXiv:2503.20783) — GRPO's normalization can cause degenerate lengthening.
+
+To disable: add `--no-early-stop`.
 
 When training completes (or is early-stopped), proceed to **Step 8b (Post-Training Analysis)**. If early-stopped, the best checkpoint is noted in the output — use that epoch's model.
 

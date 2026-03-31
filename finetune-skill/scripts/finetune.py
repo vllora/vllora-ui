@@ -1670,16 +1670,114 @@ def _save_training_side_files(
         print(f"  Warning: Could not fetch epoch evals", file=sys.stderr)
 
 
+def _compute_ema(values: list[float], alpha: float = 0.3) -> list[float]:
+    """Compute exponential moving average over a series.
+
+    Alpha=0.3 balances responsiveness to recent changes vs. noise smoothing.
+    Higher alpha = more responsive, lower = smoother.
+    """
+    if not values:
+        return []
+    ema = [values[0]]
+    for v in values[1:]:
+        ema.append(alpha * v + (1 - alpha) * ema[-1])
+    return ema
+
+
+def _ema_slope(ema_values: list[float], window: int) -> float:
+    """Compute average slope of the last `window` EMA points.
+
+    Uses simple linear regression (least squares) over the window for
+    robustness against single-point noise.
+    """
+    tail = ema_values[-window:]
+    n = len(tail)
+    if n < 2:
+        return 0.0
+    x_mean = (n - 1) / 2.0
+    y_mean = sum(tail) / n
+    numerator = sum((i - x_mean) * (y - y_mean) for i, y in enumerate(tail))
+    denominator = sum((i - x_mean) ** 2 for i in range(n))
+    if denominator == 0:
+        return 0.0
+    return numerator / denominator
+
+
+def _check_length_exploitation(
+    base_url: str, wf_id: str, job_id: str,
+) -> dict | None:
+    """Detect length exploitation: response length growing while reward is flat.
+
+    Ref: Dr. GRPO (arXiv:2503.20783) — GRPO's 1/|o_i| normalization causes
+    incorrect responses to grow longer. Reward may appear stable while the
+    model is actively degenerating.
+
+    Returns dict with length trend info if exploitation detected, None otherwise.
+    """
+    try:
+        metrics = _api(
+            "GET",
+            f"{base_url}/finetune/workflows/{wf_id}/jobs/{job_id}/metrics",
+        )
+    except SystemExit:
+        return None
+
+    steps = metrics.get("steps", metrics.get("data", []))
+    if not isinstance(steps, list) or len(steps) < 6:
+        return None
+
+    # Extract mean_length per step (field: "completions/mean_length" or "completion_length")
+    lengths = []
+    for step in steps:
+        length = step.get("completions/mean_length") or step.get("completion_length")
+        if length is not None and isinstance(length, (int, float)):
+            lengths.append(float(length))
+
+    if len(lengths) < 6:
+        return None
+
+    # Compare first third vs last third
+    third = len(lengths) // 3
+    early_avg = sum(lengths[:third]) / third
+    late_avg = sum(lengths[-third:]) / third
+
+    if early_avg <= 0:
+        return None
+
+    growth_ratio = (late_avg - early_avg) / early_avg
+
+    # >30% length growth is the Dr. GRPO threshold for concern
+    if growth_ratio > 0.30:
+        return {
+            "length_exploitation": True,
+            "early_avg_length": round(early_avg, 1),
+            "late_avg_length": round(late_avg, 1),
+            "growth_pct": round(growth_ratio * 100, 1),
+        }
+
+    return None
+
+
 def _check_score_plateau(
     base_url: str, wf_id: str, job_id: str,
-    min_evals: int = 3, delta_threshold: float = 0.01,
+    patience: int = 5, slope_threshold: float = 0.005,
+    min_warmup_epochs: int = 2,
 ) -> dict | None:
     """Check if training scores have plateaued across epoch evals.
 
-    Returns a dict with plateau info if detected, None otherwise.
-    Early stopping signal: if avg score delta < delta_threshold across
-    min_evals consecutive epoch evaluations, the model has likely extracted
-    all learnable signal from the dataset.
+    Returns a dict with plateau/degradation info if detected, None otherwise.
+
+    Improved early stopping based on GRPO/RFT research:
+    - Uses EMA (alpha=0.3) instead of raw first-vs-last delta for noise robustness
+    - Linear regression slope over the patience window detects true trends
+    - Requires min_warmup_epochs before checking (GRPO has a slow-start phase;
+      arXiv:2507.18014 identifies 3 phases: slow start → rapid improvement → plateau)
+    - patience=5 epochs (up from 3) for statistical reliability
+    - slope_threshold=0.005/epoch — conservative to avoid aborting late-stage
+      hard-prompt learning (arXiv:2508.14094: hard examples yield 47% gains)
+    - Distinguishes "converged well" (high score) vs "stuck" (low score) —
+      GRPO has absorbing states at p=0 (arXiv:2503.06639)
+    - Checks for length exploitation (Dr. GRPO, arXiv:2503.20783)
 
     Ref: Food-label E2E test (2026-03-31) showed plateau at epoch 3 with
     225 records — score went 0.51→0.60 then +0.003 across 3 evals.
@@ -1711,7 +1809,10 @@ def _check_score_plateau(
                 if score is not None and isinstance(score, (int, float)):
                     epoch_scores.setdefault(epoch_key, []).append(score)
 
-    if len(epoch_scores) < min_evals:
+    # Warm-up guard: don't check until we have enough epochs.
+    # GRPO's slow-start phase (arXiv:2507.18014) means early epochs may
+    # show little improvement before rapid gains begin.
+    if len(epoch_scores) < max(patience, min_warmup_epochs + 1):
         return None
 
     # Sort epochs numerically and compute averages
@@ -1722,26 +1823,70 @@ def _check_score_plateau(
             return float("inf")
 
     sorted_epochs = sorted(epoch_scores.keys(), key=_sort_key)
-    epoch_avgs = [(k, sum(epoch_scores[k]) / len(epoch_scores[k])) for k in sorted_epochs]
+    epoch_avgs = [
+        (k, sum(epoch_scores[k]) / len(epoch_scores[k]))
+        for k in sorted_epochs
+    ]
 
-    # Check if the last min_evals epochs show flat scores
-    recent = epoch_avgs[-min_evals:]
-    first_avg = recent[0][1]
-    last_avg = recent[-1][1]
-    delta = last_avg - first_avg
+    raw_scores = [avg for _, avg in epoch_avgs]
 
-    if abs(delta) < delta_threshold:
-        best_epoch, best_score = max(epoch_avgs, key=lambda x: x[1])
+    # EMA smoothing (alpha=0.3) — robust to noisy per-epoch eval variance.
+    # Raw first-vs-last comparison misses oscillation and V-shaped recovery.
+    ema_scores = _compute_ema(raw_scores, alpha=0.3)
+
+    # Slope of EMA over the patience window via linear regression.
+    # Positive slope = still improving, negative = degrading, near-zero = plateau.
+    slope = _ema_slope(ema_scores, window=patience)
+
+    best_epoch, best_score = max(epoch_avgs, key=lambda x: x[1])
+    last_score = epoch_avgs[-1][1]
+
+    result_base = {
+        "num_evals": len(epoch_avgs),
+        "patience": patience,
+        "ema_slope": round(slope, 6),
+        "slope_threshold": slope_threshold,
+        "best_epoch": best_epoch,
+        "best_score": round(best_score, 4),
+        "last_score": round(last_score, 4),
+        "all_avgs": [(k, round(v, 4)) for k, v in epoch_avgs],
+        "ema_values": [round(v, 4) for v in ema_scores],
+    }
+
+    # --- Signal 1: Score plateau (EMA slope near zero) ---
+    if abs(slope) < slope_threshold:
+        # Distinguish "converged well" vs "stuck at bad minimum".
+        # GRPO has absorbing states at p=0 (arXiv:2503.06639) — a plateau
+        # at low scores likely means the grader/data needs fixing, not that
+        # training should just stop.
+        if best_score >= 0.5:
+            quality = "converged"
+            action = "Deploy best checkpoint"
+        elif best_score >= 0.3:
+            quality = "mediocre"
+            action = "Consider improving grader/data quality before retraining"
+        else:
+            quality = "stuck"
+            action = "Investigate grader alignment and data quality — low plateau suggests fundamental issues"
+
         return {
+            **result_base,
+            "signal": "plateau",
+            "quality": quality,
+            "action": action,
             "plateaued": True,
-            "num_evals": len(epoch_avgs),
-            "recent_evals": min_evals,
-            "delta": delta,
-            "first_score": first_avg,
-            "last_score": last_avg,
-            "best_epoch": best_epoch,
-            "best_score": best_score,
-            "all_avgs": [(k, round(v, 4)) for k, v in epoch_avgs],
+        }
+
+    # --- Signal 2: Score degradation (negative EMA slope) ---
+    # Reward declining over the patience window indicates overfitting,
+    # reward hacking, or policy collapse.
+    if slope < -slope_threshold:
+        return {
+            **result_base,
+            "signal": "degradation",
+            "quality": "degrading",
+            "action": "Stop training — scores declining. Deploy best checkpoint",
+            "plateaued": True,  # Backward compat: treated as stop signal
         }
 
     return None
@@ -1780,7 +1925,10 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
     early_stop = not args.no_early_stop
     print(f"Polling training job {job_id} with adaptive intervals (max {max_wait}s)...")
     if early_stop:
-        print(f"  Early stopping enabled: will cancel if score plateau detected (delta < 0.01 across 3 evals)")
+        print(
+            f"  Early stopping enabled (EMA-based, patience=5 epochs, "
+            f"min 2 epoch warm-up, length exploitation check)"
+        )
     start_time = time.time()
     status = "unknown"
     last_plateau_check = 0.0  # Only check plateau every 5 min to avoid API spam
@@ -1818,17 +1966,33 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
                 sys.exit(2)
             return
 
-        # Early stopping: check for score plateau every 5 min
+        # Early stopping: multi-signal check every 5 min.
         # Ref: Food-label E2E test showed 7+ hours wasted on plateaued training.
-        # Auto-cancels when score delta < 0.01 across 3 consecutive epoch evals.
+        #
+        # Signals checked (based on GRPO/RFT research):
+        # 1. Score plateau via EMA slope (arXiv:2507.18014 — 3-phase training)
+        # 2. Score degradation (negative EMA slope — overfitting/collapse)
+        # 3. Length exploitation (Dr. GRPO, arXiv:2503.20783 — reward flat + length growing)
         if early_stop and status == "running" and (elapsed - last_plateau_check) > 300:
             last_plateau_check = elapsed
+
+            # Signal 1 & 2: Score plateau or degradation
             plateau = _check_score_plateau(args.base_url, wf_id, job_id)
             if plateau:
-                print(f"\n  ⚠ SCORE PLATEAU DETECTED", file=sys.stderr)
-                print(f"    Score delta: {plateau['delta']:+.4f} across last {plateau['recent_evals']} evals", file=sys.stderr)
+                signal = plateau.get("signal", "plateau")
+                quality = plateau.get("quality", "unknown")
+                action = plateau.get("action", "")
+
+                if signal == "degradation":
+                    print(f"\n  ⚠ SCORE DEGRADATION DETECTED", file=sys.stderr)
+                else:
+                    print(f"\n  ⚠ SCORE PLATEAU DETECTED ({quality})", file=sys.stderr)
+
+                print(f"    EMA slope: {plateau['ema_slope']:+.6f}/epoch (threshold: ±{plateau['slope_threshold']})", file=sys.stderr)
                 print(f"    Scores: {' → '.join(f'{s:.3f}' for _, s in plateau['all_avgs'])}", file=sys.stderr)
+                print(f"    EMA:    {' → '.join(f'{v:.3f}' for v in plateau['ema_values'])}", file=sys.stderr)
                 print(f"    Best: epoch {plateau['best_epoch']} ({plateau['best_score']:.3f})", file=sys.stderr)
+                print(f"    Assessment: {action}", file=sys.stderr)
                 print(f"    → Auto-cancelling to save compute. Use --no-early-stop to override.", file=sys.stderr)
 
                 # Cancel the job
@@ -1836,12 +2000,40 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
                     _api("POST", f"{args.base_url}/finetune/workflows/{wf_id}/jobs/{job_id}/cancel")
                     metadata["status"] = "cancelled"
                     metadata["early_stop_reason"] = (
-                        f"Score plateau: delta {plateau['delta']:+.4f} across "
-                        f"{plateau['recent_evals']} evals. Best epoch: {plateau['best_epoch']} "
-                        f"(score {plateau['best_score']:.3f})"
+                        f"{signal.title()}: EMA slope {plateau['ema_slope']:+.6f}/epoch "
+                        f"across {plateau['patience']} evals (quality: {quality}). "
+                        f"Best epoch: {plateau['best_epoch']} "
+                        f"(score {plateau['best_score']:.3f}). {action}"
                     )
                     job_file.write_text(json.dumps(metadata, indent=2))
                     print(f"  Training cancelled (early stop). Best checkpoint: epoch {plateau['best_epoch']}")
+                except SystemExit:
+                    print(f"  Warning: Cancel request failed — training continues", file=sys.stderr)
+
+                sys.exit(2)
+
+            # Signal 3: Length exploitation (checked independently of score plateau)
+            # Dr. GRPO (arXiv:2503.20783): GRPO's 1/|o_i| normalization can cause
+            # responses to grow longer while reward stays flat — active degeneration
+            # disguised as stability.
+            length_info = _check_length_exploitation(args.base_url, wf_id, job_id)
+            if length_info:
+                print(f"\n  ⚠ LENGTH EXPLOITATION DETECTED", file=sys.stderr)
+                print(f"    Avg length: {length_info['early_avg_length']:.0f} → {length_info['late_avg_length']:.0f} tokens (+{length_info['growth_pct']:.0f}%)", file=sys.stderr)
+                print(f"    Ref: Dr. GRPO (arXiv:2503.20783) — length growth >30% with flat reward indicates degeneration", file=sys.stderr)
+                print(f"    → Auto-cancelling. Use --no-early-stop to override.", file=sys.stderr)
+
+                try:
+                    _api("POST", f"{args.base_url}/finetune/workflows/{wf_id}/jobs/{job_id}/cancel")
+                    metadata["status"] = "cancelled"
+                    metadata["early_stop_reason"] = (
+                        f"Length exploitation: avg length grew "
+                        f"{length_info['early_avg_length']:.0f} → {length_info['late_avg_length']:.0f} "
+                        f"tokens (+{length_info['growth_pct']:.0f}%). "
+                        f"Ref: Dr. GRPO (arXiv:2503.20783)"
+                    )
+                    job_file.write_text(json.dumps(metadata, indent=2))
+                    print(f"  Training cancelled (length exploitation).")
                 except SystemExit:
                     print(f"  Warning: Cancel request failed — training continues", file=sys.stderr)
 
@@ -2307,7 +2499,7 @@ def main() -> None:
     p.add_argument("--file", required=True, help="Path to train-NNN.json (from create-training)")
     p.add_argument("--poll-interval", type=int, default=60, help="(Ignored — adaptive polling is used. Kept for backward compatibility)")
     p.add_argument("--max-wait", type=int, default=7200, help="Max wait in seconds (default: 7200 = 2h, matching SKILL.md recommendation)")
-    p.add_argument("--no-early-stop", action="store_true", help="Disable automatic early stopping on score plateau")
+    p.add_argument("--no-early-stop", action="store_true", help="Disable automatic early stopping (EMA plateau, degradation, length exploitation)")
 
     # cancel-training
     p = subparsers.add_parser("cancel-training", help="Cancel a running training job")
