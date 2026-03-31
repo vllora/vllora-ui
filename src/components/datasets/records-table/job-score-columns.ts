@@ -68,7 +68,11 @@ export function buildJobColumns(
       model: job.rolloutModel,
     }));
 
+  // Exclude failed/cancelled finetune jobs — they have no useful scores and
+  // just add visual noise ("failed" on every row). Users can still see them
+  // in the sidebar job list with error details.
   const finetuneColumns: JobColumn[] = [...finetuneJobs]
+    .filter((job) => job.status !== "failed" && job.status !== "cancelled")
     .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
     .map((job) => ({
       id: job.id,

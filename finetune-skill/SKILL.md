@@ -615,11 +615,13 @@ The readiness gate runs **3 hard checks** (grader quality) and **8 soft checks**
 
 Training starts here — only reached when the readiness gate indicates data and grader are solid.
 
-**Base model selection:**
-| Model | Best for |
-|-------|----------|
-| `unsloth/Qwen3.5-4B` | Fast experiments, narrow tasks |
-| `unsloth/Qwen3.5-9B` | Complex reasoning, broad domains |
+**Base model selection** (choose based on task complexity AND dataset size):
+| Model | Best for | Max records (K=8) | OOM risk |
+|-------|----------|-------------------|----------|
+| `unsloth/Qwen3.5-4B` | **Default choice.** Fast, works with most datasets | ~500 | Low |
+| `unsloth/Qwen3.5-9B` | Complex reasoning, broad domains | ~100 | High with >100 records |
+
+> **⚠️ Start with 4B.** The 9B model OOMs with >100 records and K=8 on standard GPU allocations. Use 9B only for small, complex datasets (<100 records). The `create-training` script warns if the model/dataset combination risks OOM.
 
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \

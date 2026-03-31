@@ -697,6 +697,11 @@ export async function getEvaluationResult(
   const response = await apiClient(`/finetune/evaluations/${evaluationRunId}`, {
     method: "GET",
   });
+  // 404/410 = eval run expired or was deleted on cloud — throw typed error
+  // so callers (eval-polling-manager) can handle gracefully without retrying
+  if (response.status === 404 || response.status === 410) {
+    throw new Error(`Evaluation run ${evaluationRunId} not found (${response.status})`);
+  }
   return handleApiResponse<EvaluationResultResponse>(response);
 }
 
@@ -867,6 +872,8 @@ export async function getEvaluatorVersions(
     `/finetune/workflows/${workflowId}/evaluator/versions`,
     { method: "GET" },
   );
+  // 404 is expected when no evaluator has been uploaded yet — return empty
+  if (response.status === 404) return [];
   return handleApiResponse<EvaluatorVersionResponse[]>(response);
 }
 
@@ -888,5 +895,9 @@ export async function getFinetuneJobMetrics(
     `/finetune/workflows/${workflowId}/jobs/${jobId}/metrics`,
     { method: "GET" },
   );
+  // 404 = metrics not yet available (job just started or provider hasn't reported yet)
+  if (response.status === 404) {
+    return { provider_job_id: jobId, metrics: [] };
+  }
   return handleApiResponse<FinetuneJobMetricsResponse>(response);
 }

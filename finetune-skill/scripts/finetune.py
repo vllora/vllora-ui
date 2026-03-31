@@ -1517,27 +1517,60 @@ def cmd_create_training(args: argparse.Namespace) -> None:
             "batch_size": 5,
         }
 
-    # Adaptive epochs based on dataset size (only when using defaults, not user --config)
+    # Adaptive defaults based on dataset size and model choice.
+    # Fetches the workflow once to get record_count, then adjusts epochs and
+    # warns about model sizing.
+    # Ref: Food-label E2E test (2026-03-31): 9B OOM after 46 min with 225 records,
+    #       wasted time before falling back to 4B. Pre-flight check would have avoided this.
+    record_count = 0
+    try:
+        wf = _api("GET", f"{args.base_url}/finetune/workflows/{args.workflow_id}")
+        record_count = wf.get("records_count", wf.get("record_count", 0))
+        if not isinstance(record_count, int):
+            record_count = 0
+    except SystemExit:
+        pass  # Workflow fetch failed; skip adaptive logic
+
+    # Model size pre-flight check.
+    # GRPO generates K completions per record per step. More records × larger K × bigger model = more VRAM.
+    # The cloud provider has fixed GPU allocations — 9B models OOM with larger datasets.
+    # Heuristic based on empirical testing:
+    #   - 9B: works reliably with <100 records (K=8). >150 records risks OOM.
+    #   - 4B: works reliably with <500 records (K=8). >800 records may need K=4.
+    #   - 1.5B/2B: works with any practical dataset size.
+    base_model = payload.get("base_model", "")
+    model_lower = base_model.lower()
+    k_count = 8  # default response_candidates_count
+    if args.inference_params:
+        try:
+            k_count = json.loads(args.inference_params).get("response_candidates_count", 8)
+        except (json.JSONDecodeError, AttributeError):
+            pass
+
+    if record_count > 0:
+        if "9b" in model_lower and record_count > 100:
+            recommended = base_model.replace("9B", "4B").replace("9b", "4b")
+            print(f"  ⚠ WARNING: {base_model} with {record_count} records (K={k_count}) risks OOM.", file=sys.stderr)
+            print(f"    9B models work reliably with <100 records. You have {record_count}.", file=sys.stderr)
+            print(f"    Recommended: use {recommended} instead, or reduce response_candidates_count to 4.", file=sys.stderr)
+            print(f"    Proceeding anyway — if OOM occurs, retry with the smaller model.", file=sys.stderr)
+        elif "9b" in model_lower and k_count > 8:
+            print(f"  ⚠ WARNING: {base_model} with K={k_count} may OOM. Consider K=8 or use 4B model.", file=sys.stderr)
+
+    # Adaptive epochs (only when using defaults, not user --config)
     # Small datasets exhaust quickly and need more passes; large datasets plateau earlier.
     # Ref: DeepSeek-R1 (arXiv:2501.12948) used ~50k records with ~2 epochs;
-    #       food-label E2E test showed plateau at epoch 3 with 225 records;
-    #       OpenAI RFT guide recommends "hundreds of epochs" for small datasets.
-    if not args.config:
-        try:
-            wf = _api("GET", f"{args.base_url}/finetune/workflows/{args.workflow_id}")
-            record_count = wf.get("records_count", wf.get("record_count", 0))
-            if isinstance(record_count, int) and record_count > 0:
-                if record_count < 50:
-                    payload["training_config"]["epochs"] = 15
-                elif record_count < 200:
-                    payload["training_config"]["epochs"] = 8
-                elif record_count < 500:
-                    payload["training_config"]["epochs"] = 5
-                else:
-                    payload["training_config"]["epochs"] = 3
-                print(f"Adaptive epochs: {payload['training_config']['epochs']} (based on {record_count} records)")
-        except SystemExit:
-            pass  # Workflow fetch failed; keep default epochs=8
+    #       food-label E2E test showed plateau at epoch 3 with 225 records.
+    if not args.config and record_count > 0:
+        if record_count < 50:
+            payload["training_config"]["epochs"] = 15
+        elif record_count < 200:
+            payload["training_config"]["epochs"] = 8
+        elif record_count < 500:
+            payload["training_config"]["epochs"] = 5
+        else:
+            payload["training_config"]["epochs"] = 3
+        print(f"Adaptive epochs: {payload['training_config']['epochs']} (based on {record_count} records)")
 
     if args.inference_params:
         try:

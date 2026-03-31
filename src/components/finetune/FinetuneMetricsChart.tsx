@@ -345,6 +345,11 @@ export function FinetuneMetricsChart({
   }, [metrics]);
 
   const latestMetrics = metrics.length > 0 ? metrics[metrics.length - 1].metrics : null;
+  // Full metrics history as Record[] for cross-metric trend checks (e.g., length-reward divergence)
+  const metricsHistory = useMemo(
+    () => metrics.map((p) => p.metrics as Record<string, unknown>),
+    [metrics],
+  );
   const latestStep = latestMetrics && typeof latestMetrics.global_step === "number" ? latestMetrics.global_step : metrics.length;
   const maxSteps = latestMetrics && typeof latestMetrics.max_steps === "number" ? latestMetrics.max_steps : null;
   const progressPercent = maxSteps && latestStep ? Math.round((latestStep / maxSteps) * 100) : null;
@@ -541,7 +546,7 @@ export function FinetuneMetricsChart({
 
       {/* Insights */}
       {latestMetrics && (() => {
-        const insights = getMetricsInsights(latestMetrics, activeTab);
+        const insights = getMetricsInsights(latestMetrics, activeTab, metricsHistory);
         if (insights.length === 0) return null;
         const levelIcon = { ok: "✅", warn: "⚠️", critical: "🔴" } as const;
         const levelColor = { ok: "text-emerald-400/70", warn: "text-amber-400/80", critical: "text-red-400/80" } as const;

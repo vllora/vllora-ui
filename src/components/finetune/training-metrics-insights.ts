@@ -47,6 +47,7 @@
  * | grad_norm              | 0.5-2.0       | >100 (spikes) | NaN            | DeepSeekMath        |
  * | clip_ratio/region_mean | 0.1-0.3       | >0.5, <0.01   | —              | DAPO                |
  * | clipped_ratio          | <0.1          | 0.1-0.5       | >0.5           | DAPO, TRL           |
+ * | length↑ + reward flat  | —             | length +30%   | length +100%   | Dr. GRPO            |
  * | score (eval)           | ≥0.8 (target) | 0.6-0.8       | <0.6           | our guide           |
  */
 
@@ -65,11 +66,85 @@ function num(v: unknown): number | null {
   return typeof v === "number" && isFinite(v) ? v : null;
 }
 
+/**
+ * Compute mean of a number array. Returns null if empty.
+ */
+function mean(values: readonly number[]): number | null {
+  if (values.length === 0) return null;
+  return values.reduce((sum, v) => sum + v, 0) / values.length;
+}
+
+/**
+ * Detect length-reward divergence (Dr. GRPO length bias).
+ *
+ * Compares first half vs second half of training:
+ * - If mean_length increased >30% AND reward is flat/declining → warning
+ * - If mean_length increased >100% AND reward is flat/declining → critical
+ *
+ * Ref: Dr. GRPO (arXiv:2503.20783, §3.1): GRPO's 1/|o_i| normalization causes
+ * "incorrect responses to grow progressively longer."
+ * Ref: MO-GRPO (arXiv:2509.22047): "vacuous elongation can inflate the gradient norm"
+ *
+ * Requires ≥10 steps to produce meaningful results.
+ */
+function detectLengthRewardDivergence(history: readonly Record<string, unknown>[]): MetricInsight | null {
+  if (history.length < 10) return null;
+
+  const midpoint = Math.floor(history.length / 2);
+  const firstHalf = history.slice(0, midpoint);
+  const secondHalf = history.slice(midpoint);
+
+  const firstLengths = firstHalf.map((m) => num(m["completions/mean_length"])).filter((v): v is number => v != null);
+  const secondLengths = secondHalf.map((m) => num(m["completions/mean_length"])).filter((v): v is number => v != null);
+  const firstRewards = firstHalf.map((m) => num(m.reward)).filter((v): v is number => v != null);
+  const secondRewards = secondHalf.map((m) => num(m.reward)).filter((v): v is number => v != null);
+
+  const meanLenFirst = mean(firstLengths);
+  const meanLenSecond = mean(secondLengths);
+  const meanRewardFirst = mean(firstRewards);
+  const meanRewardSecond = mean(secondRewards);
+
+  if (meanLenFirst == null || meanLenSecond == null || meanRewardFirst == null || meanRewardSecond == null) return null;
+  if (meanLenFirst < 1) return null; // avoid division by zero
+
+  const lengthGrowth = (meanLenSecond - meanLenFirst) / meanLenFirst;
+  const rewardDelta = meanRewardSecond - meanRewardFirst;
+  const isRewardFlat = rewardDelta < 0.02;
+
+  if (lengthGrowth > 1.0 && isRewardFlat) {
+    return {
+      level: "critical",
+      text: `Response length doubled (+${(lengthGrowth * 100).toFixed(0)}%) while reward is ${rewardDelta < 0 ? "declining" : "flat"} — likely Dr. GRPO length bias. The model is padding responses without improving quality. Add a length penalty to your grader.`,
+    };
+  }
+
+  if (lengthGrowth > 0.3 && isRewardFlat) {
+    return {
+      level: "warn",
+      text: `Response length grew +${(lengthGrowth * 100).toFixed(0)}% while reward is ${rewardDelta < 0 ? "declining" : "flat"} — possible length exploitation (Dr. GRPO §3.1). Monitor whether outputs are getting verbose without improving quality.`,
+    };
+  }
+
+  return null;
+}
+
 // =============================================================================
 // Training Metrics Insights (Loss, Reward, Completions, Throughput tabs)
 // =============================================================================
 
-export function getMetricsInsights(latest: Record<string, unknown> | null, tab: MetricTab): readonly MetricInsight[] {
+/**
+ * Generate insights for the active metrics tab.
+ *
+ * @param latest  - The most recent metrics snapshot (used for absolute threshold checks)
+ * @param tab     - Which tab is active
+ * @param history - Full metrics history (used for cross-metric trend checks like length-reward divergence).
+ *                  Optional for backwards compatibility — trend checks are skipped when omitted.
+ */
+export function getMetricsInsights(
+  latest: Record<string, unknown> | null,
+  tab: MetricTab,
+  history?: readonly Record<string, unknown>[],
+): readonly MetricInsight[] {
   if (!latest) return [];
   const insights: MetricInsight[] = [];
 
@@ -203,6 +278,14 @@ export function getMetricsInsights(latest: Record<string, unknown> | null, tab: 
     }
     if (minTerm != null && minTerm < 10 && minTerm > 0) {
       insights.push({ level: "warn", text: `Shortest natural response is only ${minTerm} tokens — some prompts may be getting trivially short answers.` });
+    }
+
+    // Length-reward divergence: Dr. GRPO length bias detection.
+    // Requires metrics history (≥10 steps). Compares first half vs second half.
+    // Ref: Dr. GRPO (arXiv:2503.20783, §3.1), MO-GRPO (arXiv:2509.22047)
+    if (history && history.length >= 10) {
+      const lengthRewardInsight = detectLengthRewardDivergence(history);
+      if (lengthRewardInsight) insights.push(lengthRewardInsight);
     }
   }
 

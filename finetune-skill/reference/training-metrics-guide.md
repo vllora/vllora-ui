@@ -60,6 +60,7 @@ These are confirmed values from actual Unsloth+TRL GRPO training (Ref: [open-r1#
 | grad_norm NaN | Numerical failure | Fix truncation, check for zero masks |
 | reward_std near 0 | Uniform outcomes | Adjust task difficulty or grader sensitivity |
 | mean_length collapsing toward 0 | Length exploitation | Add length penalty to reward |
+| mean_length growing +30%+ but reward flat | Dr. GRPO length bias (arXiv:2503.20783) | Add length penalty to grader, inspect outputs for verbosity |
 | All completions at max_output_tokens | Model can't stop | Increase max_output_tokens, verify EOS in template |
 
 ## Metric Reference
@@ -209,6 +210,31 @@ These are confirmed values from actual Unsloth+TRL GRPO training (Ref: [open-r1#
 **`row_indices`** — Array of training record indices sampled in this batch.
 - **What it is**: Which records from your dataset were used this step. Each record index appears G times (once per generated completion) — e.g., `[52,52,52,52,52,52,52,52,69,69,69,69,69,69,69,69]` means records #52 and #69 were used with G=8 completions each (batch_size=2). This is normal GRPO behavior, NOT duplicate sampling. Across steps, tracks whether all records get fair coverage.
 
+## Cross-Metric Patterns (Runtime Checks)
+
+These patterns require comparing two metrics over time. They are checked in the UI insights panel using the full metrics history.
+
+### Length-Reward Divergence (Dr. GRPO Length Bias)
+
+**Pattern**: `completions/mean_length` increasing >30% from early training while `reward` is flat or declining.
+
+**What it means**: GRPO's per-token loss normalization (`1/|o_i|`) causes a length bias — incorrect responses grow progressively longer because longer sequences receive smaller per-token gradients, making them harder to penalize. The model learns to pad responses without improving quality.
+
+**Detection**: Compare the second half of training to the first half:
+- Compute mean `completions/mean_length` for first half vs second half → if second half is >30% higher, length is growing
+- Compute mean `reward` for first half vs second half → if reward delta < 0.02, reward is flat
+- If length growing AND reward flat/declining → length exploitation warning
+
+**Severity**: Warning. Critical if `completions/mean_length` doubles while reward declines.
+
+**Fix**: Add a length penalty to the grader (penalize verbose responses), or switch to Dr. GRPO's length-unbiased normalization if available. Inspect outputs to confirm the model is padding rather than producing longer reasoning.
+
+**References**:
+- Dr. GRPO (arXiv:2503.20783, §3.1): GRPO's `1/|o_i|` normalization causes *"incorrect responses to grow progressively longer"*
+- MO-GRPO (arXiv:2509.22047): *"vacuous elongation can inflate the gradient norm"*
+
+---
+
 ## Common Failure Modes
 
 ### 100% Completion Clipping
@@ -251,6 +277,7 @@ After each eval + training cycle, check:
 4. **frac_reward_zero_std > 0.5?** → Grader not discriminating — add partial credit, increase G
 5. **Reward plateaued for >50% of steps?** → Change approach (different model, more data, different grader)
 6. **High KL with healthy reward trend?** → Normal with beta=0 (modern GRPO default per DAPO/TRL — KL is unpenalized and not tracked in most frameworks). Only act if outputs degenerate
+7. **Response length growing +30%+ while reward flat?** → Dr. GRPO length bias (arXiv:2503.20783 §3.1) — model padding responses without quality gain. Add a length penalty to your grader or inspect outputs for verbosity.
 
 Max 5 iterations before escalating (change base model or rethink approach).
 
