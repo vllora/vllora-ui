@@ -169,7 +169,6 @@ def cmd_upload_knowledge(args: argparse.Namespace) -> None:
             print(f"  Force mode: removed {deleted} existing source(s)")
 
     # Upload the document as a knowledge source (always POST after cleanup)
-    files = {"file": (doc_path.name, doc_path.open("rb"), "application/pdf")}
     form_data = {
         "name": source_name,
         "description": args.description or f"Source document: {doc_path.name}",
@@ -177,12 +176,14 @@ def cmd_upload_knowledge(args: argparse.Namespace) -> None:
     if args.metadata:
         form_data["metadata"] = args.metadata
 
-    result = _api(
-        "POST",
-        f"{args.base_url}/finetune/workflows/{args.workflow_id}/knowledge",
-        files=files,
-        data=form_data,
-    )
+    with doc_path.open("rb") as fh:
+        files = {"file": (doc_path.name, fh, "application/pdf")}
+        result = _api(
+            "POST",
+            f"{args.base_url}/finetune/workflows/{args.workflow_id}/knowledge",
+            files=files,
+            data=form_data,
+        )
     ks_id = result.get("knowledge_source", {}).get("id", "unknown")
     print(f"Knowledge source uploaded: {ks_id}")
 
@@ -496,13 +497,13 @@ def cmd_upload_grader(args: argparse.Namespace) -> None:
         print(f"Error: Grader file not found: {grader_path}", file=sys.stderr)
         sys.exit(1)
 
-    files = {"file": (grader_path.name, grader_path.open("rb"), "application/javascript")}
-
-    _api(
-        "PATCH",
-        f"{args.base_url}/finetune/workflows/{args.workflow_id}/evaluator",
-        files=files,
-    )
+    with grader_path.open("rb") as fh:
+        files = {"file": (grader_path.name, fh, "application/javascript")}
+        _api(
+            "PATCH",
+            f"{args.base_url}/finetune/workflows/{args.workflow_id}/evaluator",
+            files=files,
+        )
     print(f"Grader uploaded: {grader_path.name}")
 
 
@@ -690,8 +691,7 @@ def cmd_status(args: argparse.Namespace) -> None:
                 # Score concentration: most common value (rounded to 0.01)
                 from collections import Counter
                 rounded = [round(s, 2) for s in scores]
-                mode_ct = Counter(rounded).most_common(1)[0][1]
-                mode_val = Counter(rounded).most_common(1)[0][0]
+                mode_val, mode_ct = Counter(rounded).most_common(1)[0]
                 mode_frac = mode_ct / n
                 grader_ok = (std_s > 0.10 and mode_frac < 0.50)
                 signal_ok = avg_s > 0.05  # Only 0% is fatal (OpenAI RFT)
@@ -804,16 +804,17 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
     start after ALL hard criteria pass. Returns structured JSON with
     per-criterion details, verdict, and fix suggestions.
 
-    Hard checks (gate training):
-      1. sample_count    — minimum dataset size
-      2. score_std       — grader differentiation
-      3. high_score_frac — grader not too lenient
-      4. binary_frac     — grader uses full range
-      5. dead_weight_frac — no wasted compute
-      6. avg_score       — data not too hard
-      7. pass_rate       — minimum viable quality
+    Hard checks (gate training — "is the grader working?"):
+      1. sample_count       — minimum dataset size (>= 50)
+      2. score_std          — grader differentiation (> 0.10)
+      3. avg_score          — nonzero signal (> 0.05)
+      + score_concentration — dynamic: hard if > 70%, soft if 50-70%
 
     Soft checks (warnings, don't gate):
+      4. high_score_frac    — grader not too lenient
+      5. binary_frac        — grader uses full range
+      6. dead_weight_frac   — no wasted compute
+      7. pass_rate          — minimum viable quality
       8. prompt_learnability — per-prompt variance for GRPO signal
       9. score_length_corr  — reward hacking risk (Dr. GRPO)
      10. topic_balance      — no single topic dominates
@@ -881,8 +882,11 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
     # DAPO (arXiv:2503.14476) filters zero-variance groups for exactly this reason.
     from collections import Counter
     rounded_scores = [round(s, 2) for s in scores]
-    mode_count = Counter(rounded_scores).most_common(1)[0][1] if n > 0 else 0
-    mode_value = Counter(rounded_scores).most_common(1)[0][0] if n > 0 else 0
+    score_counter = Counter(rounded_scores)
+    if n > 0:
+        mode_value, mode_count = score_counter.most_common(1)[0]
+    else:
+        mode_value, mode_count = 0, 0
     mode_frac = mode_count / n if n > 0 else 0
 
     # ── Hard checks: grader quality + training viability ──
@@ -1034,10 +1038,31 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
     soft_failed = [k for k, v in checks.items() if not v.get("hard") and not v["pass"]]
     all_failed = hard_failed + soft_failed
 
-    # WARN if only 1 hard check fails marginally, or only soft checks fail
+    # WARN if only 1 hard check fails marginally (within 80% of threshold).
+    # Map each hard check to its threshold key for numeric comparison.
+    _threshold_keys = {
+        "sample_count": ("min", "min_sample_count"),
+        "score_std": ("min", "min_score_std"),
+        "avg_score": ("min", "min_avg_score"),
+        "score_concentration": ("max", "max_mode_frac"),
+    }
+
+    def _is_marginal(check_name: str) -> bool:
+        mapping = _threshold_keys.get(check_name)
+        if not mapping:
+            return False
+        direction, key = mapping
+        value = checks[check_name]["value"]
+        threshold_val = thresholds.get(key, 0)
+        if direction == "min":
+            # Value must be within 80% of the min threshold (e.g., 0.08 vs 0.10)
+            return value > threshold_val * 0.8
+        else:
+            # Value must be within 125% of the max threshold (e.g., 0.55 vs 0.50)
+            return value < threshold_val * 1.25
+
     marginal_hard = len(hard_failed) == 1 and all(
-        (checks[k]["value"] > thresholds.get(f"min_{k}", 0) * 0.8 if "min_" in checks[k]["threshold"] else True)
-        for k in hard_failed
+        _is_marginal(k) for k in hard_failed
     )
 
     if not hard_failed and not soft_failed:
@@ -1637,6 +1662,10 @@ def cmd_create_training(args: argparse.Namespace) -> None:
     print(f"Saved: {out_file}")
 
 
+class _JobNotFoundError(Exception):
+    """Raised when a job ID is not found in the workflow's job list."""
+
+
 def _poll_training_once(base_url: str, wf_id: str, job_id: str) -> dict:
     """Fetch training job status from the jobs list (single-job endpoint is broken)."""
     jobs = _api("GET", f"{base_url}/finetune/workflows/{wf_id}/jobs")
@@ -1644,7 +1673,7 @@ def _poll_training_once(base_url: str, wf_id: str, job_id: str) -> dict:
     for job in job_list:
         if job.get("id") == job_id:
             return job
-    raise SystemExit(f"Error: Job {job_id} not found in workflow {wf_id}")
+    raise _JobNotFoundError(f"Job {job_id} not found in workflow {wf_id}")
 
 
 def _save_training_side_files(
@@ -1712,6 +1741,10 @@ def _check_length_exploitation(
     incorrect responses to grow longer. Reward may appear stable while the
     model is actively degenerating.
 
+    Only triggers when length grows >30% AND reward is flat or declining.
+    If reward is improving alongside length, the model is learning to give
+    better, more complete answers — that's healthy, not exploitation.
+
     Returns dict with length trend info if exploitation detected, None otherwise.
     """
     try:
@@ -1726,17 +1759,22 @@ def _check_length_exploitation(
     if not isinstance(steps, list) or len(steps) < 6:
         return None
 
-    # Extract mean_length per step (field: "completions/mean_length" or "completion_length")
-    lengths = []
+    # Extract mean_length and reward per step
+    lengths: list[float] = []
+    rewards: list[float] = []
     for step in steps:
         length = step.get("completions/mean_length") or step.get("completion_length")
         if length is not None and isinstance(length, (int, float)):
             lengths.append(float(length))
 
+        reward = step.get("reward/mean") or step.get("reward_mean")
+        if reward is not None and isinstance(reward, (int, float)):
+            rewards.append(float(reward))
+
     if len(lengths) < 6:
         return None
 
-    # Compare first third vs last third
+    # Compare first third vs last third for length
     third = len(lengths) // 3
     early_avg = sum(lengths[:third]) / third
     late_avg = sum(lengths[-third:]) / third
@@ -1746,16 +1784,25 @@ def _check_length_exploitation(
 
     growth_ratio = (late_avg - early_avg) / early_avg
 
-    # >30% length growth is the Dr. GRPO threshold for concern
-    if growth_ratio > 0.30:
-        return {
-            "length_exploitation": True,
-            "early_avg_length": round(early_avg, 1),
-            "late_avg_length": round(late_avg, 1),
-            "growth_pct": round(growth_ratio * 100, 1),
-        }
+    # No significant length growth — no exploitation
+    if growth_ratio <= 0.30:
+        return None
 
-    return None
+    # Length grew >30%. Now check if reward is also improving.
+    # If reward is clearly improving, this is healthy learning, not exploitation.
+    if len(rewards) >= 6:
+        reward_ema = _compute_ema(rewards, alpha=0.3)
+        reward_slope = _ema_slope(reward_ema, window=min(len(reward_ema), 5))
+        # Positive reward slope above threshold means model is learning
+        if reward_slope > 0.005:
+            return None
+
+    return {
+        "length_exploitation": True,
+        "early_avg_length": round(early_avg, 1),
+        "late_avg_length": round(late_avg, 1),
+        "growth_pct": round(growth_ratio * 100, 1),
+    }
 
 
 def _check_score_plateau(
@@ -1931,6 +1978,7 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
         )
     start_time = time.time()
     status = "unknown"
+    not_found_count = 0  # Track consecutive "job not found" responses
     last_plateau_check = 0.0  # Only check plateau every 5 min to avoid API spam
     while True:
         elapsed = time.time() - start_time
@@ -1939,6 +1987,16 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
 
         try:
             result = _poll_training_once(args.base_url, wf_id, job_id)
+            not_found_count = 0  # Reset on success
+        except _JobNotFoundError:
+            not_found_count += 1
+            if not_found_count >= 3:
+                print(f"Error: Job {job_id} not found after {not_found_count} consecutive checks. Wrong job ID?", file=sys.stderr)
+                sys.exit(1)
+            interval = _adaptive_interval(elapsed)
+            print(f"  [{int(elapsed)}s] Job not in list (attempt {not_found_count}/3) — retrying in {interval}s...", file=sys.stderr)
+            time.sleep(interval)
+            continue
         except SystemExit:
             interval = _adaptive_interval(elapsed)
             print(f"  [{int(elapsed)}s] API error — retrying in {interval}s...", file=sys.stderr)
