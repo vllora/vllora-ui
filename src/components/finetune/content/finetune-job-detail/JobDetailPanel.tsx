@@ -25,6 +25,7 @@ import { EvaluatorVersionHistory } from "../EvaluatorVersionHistory";
 import { EvaluatorVersionBadge } from "@/components/shared/EvaluatorVersionBadge";
 import { useEvaluatorVersions } from "@/hooks/useEvaluatorVersions";
 import { ErrorLogSection } from "../ErrorLogSection";
+import { EvalJobsConsumer } from "@/contexts/EvalJobsContext";
 import {
   formatFinetuneJobDate,
   getModelDisplayName,
@@ -50,6 +51,7 @@ import {
 export function JobDetailPanel({ job }: { job: FinetuneJob }) {
   const { latestVersion } = useEvaluatorVersions(job.workflow_id);
   const { getJobEvaluations, refreshJobEvaluations, loadJobs } = FinetuneJobsConsumer();
+  const { jobs: evalJobs } = EvalJobsConsumer();
   const {
     data: evalResults,
     isLoading: isLoadingEvals,
@@ -58,6 +60,14 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+
+  // Find the first completed baseline eval for comparison
+  const baselineEvalId = useMemo(() => {
+    const completedEval = evalJobs.find(
+      (j) => j.status === "completed" && j.evaluationRunId,
+    );
+    return completedEval?.evaluationRunId ?? null;
+  }, [evalJobs]);
 
   const summary = useMemo(() => {
     if (!evalResults?.results) return null;
@@ -246,6 +256,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
                 isLive={canCancel}
                 jobId={job.provider_job_id}
                 workflowId={job.workflow_id}
+                baselineEvalId={baselineEvalId ?? undefined}
               />
             )
           ) : (
@@ -260,6 +271,8 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
           {job.workflow_id && (
             <EvaluatorVersionHistory workflowId={job.workflow_id} />
           )}
+
+          {/* Baseline comparison now lives inside FinetuneChartSelector ("vs Baseline" tab) */}
         </div>
 
         {/* ── Results table ── */}

@@ -21,8 +21,9 @@ import { TrainingMetricsSection } from "./TrainingMetricsSection";
 import { FinetuneMetricsSection } from "./FinetuneMetricsSection";
 import { ScoreStrip } from "@/components/datasets/eval-dialog/ScoreStrip";
 import { getScoreDistributionInsights } from "../training-metrics-insights";
+import { BaselineComparisonPanel } from "./BaselineComparisonPanel";
 
-type ChartView = "scoreTrend" | "stability" | "reward" | "completions" | "throughput" | "scoreDistribution";
+type ChartView = "scoreTrend" | "stability" | "reward" | "completions" | "throughput" | "scoreDistribution" | "vsBaseline";
 
 /** Ordered by importance for finetune monitoring */
 const CHART_VIEWS: { key: ChartView; label: string; description: string }[] = [
@@ -32,6 +33,7 @@ const CHART_VIEWS: { key: ChartView; label: string; description: string }[] = [
   { key: "completions", label: "Completions", description: "Response length and truncation rate. High truncation means responses hit the token limit — consider increasing max tokens." },
   { key: "throughput", label: "Throughput", description: "Token throughput, batch size, and completion length per step. Drops may indicate shorter or degenerate completions." },
   { key: "scoreDistribution", label: "Score Distribution", description: "Per-record score histogram for the latest evaluation. Shows the spread of scores across your dataset." },
+  { key: "vsBaseline", label: "vs Baseline", description: "Compare training epoch scores against the baseline evaluation. Shows which topics improved, regressed, and by how much." },
 ];
 
 interface FinetuneChartSelectorProps {
@@ -43,6 +45,7 @@ interface FinetuneChartSelectorProps {
   readonly isLive: boolean;
   readonly jobId: string;
   readonly workflowId: string;
+  readonly baselineEvalId?: string;
 }
 
 /** Extract scores from the latest epoch across all rows. */
@@ -81,6 +84,7 @@ export function FinetuneChartSelector({
   isLive,
   jobId,
   workflowId,
+  baselineEvalId,
 }: FinetuneChartSelectorProps) {
   const [view, setView] = useState<ChartView>("scoreTrend");
 
@@ -137,6 +141,20 @@ export function FinetuneChartSelector({
           isLive={isLive}
           defaultTab={view}
         />
+      )}
+
+      {view === "vsBaseline" && baselineEvalId && (
+        <BaselineComparisonPanel
+          workflowId={workflowId}
+          baselineEvalId={baselineEvalId}
+          finetuneJobId={jobId}
+        />
+      )}
+
+      {view === "vsBaseline" && !baselineEvalId && (
+        <div className="flex flex-col items-center justify-center gap-2 py-8 text-zinc-500">
+          <span className="text-xs">No baseline evaluation available. Run an eval first, then start training.</span>
+        </div>
       )}
 
       {view === "scoreDistribution" && (

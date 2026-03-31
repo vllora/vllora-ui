@@ -448,12 +448,12 @@ Skills extend Claude's capabilities. Auto-invoked when relevant, or invoke manua
 
 | Skill | Auto-invoke | When to use |
 |-------|-------------|------------|
-| `/finetune-skill-context` | Yes | Load finetune skill pipeline context (SKILL.md, reference docs, scripts) |
+| `/finetune-context` | Yes | Load full pipeline context — skill definition, architecture, agents, cross-layer sync points |
 | `/finetune-fix <bug>` | Manual | Fix a bug (loads skill + UI readiness gate + state management) |
 | `/finetune-develop <feature>` | Manual | Implement a feature (loads skill + agents + UI + API reference) |
-| `/finetune-arch` | Yes | Load architecture across skill, agents, UI, and gateway |
 | `/finetune-ui <task>` | Manual | Design or enhance UI (loads redesign docs, readiness gate, components) |
 | `/finetune-e2e <test>` | Manual | E2E test with browser automation (screenshots, verification) |
+| `/research-grpo` | Manual | Research latest GRPO/RFT papers, check if thresholds/techniques need updating |
 | `/skill-package-context` | Yes | Load skill package docs — use when asked about skill packaging, SKILL.md, JSONL format |
 
 ## Sub-Agents
@@ -465,21 +465,26 @@ Sub-agents run in isolated contexts with persistent project-level memory.
 | `code-reviewer` | Sonnet | After writing/modifying code — reviews for quality, patterns, security, architecture |
 | `architecture-explorer` | Sonnet | Cross-layer questions — traces data flow across all 6 layers (read-only) |
 | `debugger` | Sonnet | When hitting bugs — diagnoses errors across the full stack, implements fixes |
+| `grpo-researcher` | Sonnet | Research GRPO/RFT papers — searches arXiv, blogs, platform docs for new findings (read-only) |
 
 ## Team Commands
 
-Multi-agent teams for complex tasks. Requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.
+Multi-agent teams for complex tasks. Enabled via `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in `.claude/settings.json`.
 
-| Command | Agents | When to use |
-|---------|--------|------------|
-| `/team-investigate <issue>` | 5 | Deep investigation: code reviewer, behavior validator, UX reviewer, fix agent, docs updater |
-| `/team-review <what>` | 5 | Comprehensive review: architecture, state machine, UX, devil's advocate, docs checker |
-| `/team-develop <feature>` | 4 | New feature: architect → frontend implementer → test & validate → docs updater |
-| `/team-ux-redesign <area>` | 4 | UX review: flow analyst, visual reviewer, info architecture → redesign proposer |
-| `/team-refactor <target>` | 4 | Safe refactoring: dependency mapper → migration planner → implementer → regression validator |
-| `/team-perf-audit <focus>` | 4 | Performance: bundle analyzer, render profiler, network analyzer → optimization implementer |
-| `/team-e2e-test <focus>` | 4 | E2E testing: test planner → happy path runner + edge case runner → bug reporter |
-| `/team-security <focus>` | 4 | Security audit: frontend, API, dependency, secrets auditors (OWASP-aligned) |
+Each team spawns 3 independent Claude sessions working in parallel. Teams cost 3-4x tokens vs single sessions — use only when parallelism provides real value (tasks > 4 hours sequentially, cross-layer work with clear file ownership, or competing hypotheses).
+
+| Command | Teammates | When to use |
+|---------|-----------|------------|
+| `/team-develop <feature>` | architect (Opus) + implementer + reviewer | Non-trivial features touching skill + UI + gateway layers |
+| `/team-investigate <issue>` | skill-investigator + ui-investigator + gateway-investigator | Cross-layer bugs where root cause is unclear — each explores a different layer |
+| `/team-review` | quality-reviewer + security-reviewer + test-reviewer | Pre-PR review — parallel code quality, security audit, and test coverage analysis |
+
+**Best practices** (from community research):
+- 3-5 teammates is the sweet spot — beyond 5, coordination overhead exceeds productivity
+- Each teammate should own different files — no two teammates editing the same file
+- Aim for 5-6 tasks per teammate
+- Monitor actively — redirect stuck teammates, synthesize findings
+- Shut down teammates gracefully when done (SendMessage with shutdown_request)
 
 ---
 
