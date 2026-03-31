@@ -416,7 +416,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/convert_nemo_rows.py \
   --input finetune-project/nemo-dataset-page-1.json \
   --output finetune-project/training.jsonl \
   --min-answerable 1.0 --min-groundedness 0.5 \
-  --include-ground-truth
+  --ground-truth-field reference_answer
 
 python3 ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py \
   finetune-project/training.jsonl --nemo
@@ -424,6 +424,8 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py \
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
   --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl
 ```
+
+`convert_nemo_rows.py` preserves top-level `topic` from NeMo rows so `upload-records` can assign workflow topics correctly. Use `--ground-truth-field <column>` when you want the evaluator to receive an auxiliary text field as `input.ground_truth`; `--include-ground-truth` remains as a shortcut for `reference_answer`.
 
 **Judge vs grader:** NeMo `judge_*` columns score rows for filtering at data-generation time. The vLLora `grader.js` scores model responses at evaluation/training time. Both are needed but serve different purposes.
 

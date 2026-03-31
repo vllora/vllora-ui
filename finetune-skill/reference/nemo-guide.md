@@ -360,10 +360,12 @@ curl -sS "http://localhost:8000/api/data-recipe/jobs/$JOB_ID/dataset?limit=200&o
 python3 ${CLAUDE_SKILL_DIR}/scripts/convert_nemo_rows.py \
   --input finetune-project/nemo-dataset-page-1.json \
   --output finetune-project/training.jsonl \
-  --include-ground-truth
+  --ground-truth-field reference_answer
 ```
 
 Filter by RAGAS-aligned judge scores with `--min-answerable 1.0 --min-groundedness 0.5 --min-specificity 1.0 --min-relevancy 0.5`. The converter detects all `judge_*`/`score_*` columns dynamically — no hardcoded field lists. It writes `nemo-metadata.jsonl` alongside `training.jsonl` with reference_answer, judge scores, and source fields.
+
+The converter preserves top-level `topic` from the NeMo row so `upload-records` can resolve topic assignment on the workflow. Use `--ground-truth-field <column>` to map any NeMo text column into evaluator-side `ground_truth`; `--include-ground-truth` is retained as a shortcut for `reference_answer`.
 
 **Validate:**
 ```bash
@@ -387,6 +389,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
 
 | Field | Goes to training? | Notes |
 |-------|-------------------|-------|
+| `topic` | Yes → top-level record field | Preserved for upload-time topic assignment |
 | `system_prompt` | Yes → `messages[0]` | Role definition |
 | `user_message` | Yes → `messages[1]` | The RFT prompt |
 | `reference_answer` | No → metadata sidecar | For grader writing and offline review |
@@ -406,7 +409,9 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
     {"role": "system", "content": "You are a NIST CSF 2.0 expert..."},
     {"role": "user", "content": "What are the six categories under GOVERN?"}
   ],
-  "id": "nemo-0001"
+  "id": "nemo-0001",
+  "topic": "csf-govern",
+  "ground_truth": "GOVERN establishes, communicates, and monitors the organization's cybersecurity risk management strategy and expectations."
 }
 ```
 

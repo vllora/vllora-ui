@@ -128,7 +128,7 @@ def validate_record(line_num: int, line: str) -> list[str]:
         if not isinstance(gt, str):
             errors.append(f"Line {line_num}: 'ground_truth' must be a string")
         elif len(gt.strip()) < 10:
-            errors.append(f"Line {line_num}: 'ground_truth' is too short ({len(gt.strip())} chars) — should contain a meaningful source excerpt")
+            errors.append(f"Line {line_num}: 'ground_truth' is too short ({len(gt.strip())} chars) — should contain meaningful evaluation reference text")
 
     return errors
 

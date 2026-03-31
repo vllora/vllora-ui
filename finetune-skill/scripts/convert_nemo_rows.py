@@ -15,7 +15,7 @@ Usage:
     --input finetune-project/nemo-job-dataset-page-1.json \
     --output finetune-project/training.jsonl \
     --min-answerable 1.0 --min-groundedness 0.5 --min-specificity 1.0 \
-    --include-ground-truth
+    --ground-truth-field reference_answer
 
   cat nemo-rows.jsonl | uv run scripts/convert_nemo_rows.py \
     --output finetune-project/training.jsonl
@@ -31,8 +31,9 @@ import sys
 from pathlib import Path
 
 
-# Training fields that go into messages[] — everything else is metadata
+# Training fields that go into messages[] — passthrough record fields are handled separately
 TRAINING_FIELDS = {"id", "system_prompt", "user_message"}
+RECORD_PASSTHROUGH_FIELDS = {"topic"}
 
 # Any column name that starts with these prefixes is a score/judge field → metadata sidecar
 _SCORE_PREFIXES = ("judge_", "score_")
@@ -40,7 +41,7 @@ _SCORE_PREFIXES = ("judge_", "score_")
 
 def _is_metadata_field(name: str) -> bool:
     """Return True if this column should go to the metadata sidecar, not training records."""
-    return name not in TRAINING_FIELDS
+    return name not in TRAINING_FIELDS | RECORD_PASSTHROUGH_FIELDS
 
 
 def load_nemo_rows(source: "Path | None") -> list[dict]:
@@ -85,7 +86,11 @@ def load_nemo_rows(source: "Path | None") -> list[dict]:
     return rows
 
 
-def validate_nemo_row(row: dict, index: int) -> list[str]:
+def validate_nemo_row(
+    row: dict,
+    index: int,
+    ground_truth_field: str | None = None,
+) -> list[str]:
     """Validate a single NeMo row has required fields for conversion."""
     errors: list[str] = []
 
@@ -98,6 +103,17 @@ def validate_nemo_row(row: dict, index: int) -> list[str]:
         errors.append(f"Row {index}: Missing or empty 'user_message'")
     elif len(um.strip()) < 10:
         errors.append(f"Row {index}: 'user_message' too short ({len(um.strip())} chars)")
+
+    topic = row.get("topic")
+    if topic is not None and not isinstance(topic, str):
+        errors.append(f"Row {index}: 'topic' must be a string when present")
+
+    if ground_truth_field:
+        ground_truth = row.get(ground_truth_field)
+        if ground_truth is not None and not isinstance(ground_truth, str):
+            errors.append(
+                f"Row {index}: ground truth field '{ground_truth_field}' must be a string when present"
+            )
 
     return errors
 
@@ -131,7 +147,7 @@ def filter_by_judge_scores(
 def convert_row(
     row: dict,
     index: int,
-    include_ground_truth: bool = False,
+    ground_truth_field: str | None = None,
     system_prompt_override: str | None = None,
 ) -> dict:
     """Convert a single NeMo row to vLLora training.jsonl format."""
@@ -145,10 +161,14 @@ def convert_row(
         "id": row.get("id", f"nemo-{index + 1:04d}"),
     }
 
-    if include_ground_truth:
-        ra = row.get("reference_answer")
-        if ra and isinstance(ra, str) and ra.strip():
-            record["ground_truth"] = ra.strip()
+    topic = row.get("topic")
+    if isinstance(topic, str) and topic.strip():
+        record["topic"] = topic.strip()
+
+    if ground_truth_field:
+        ground_truth = row.get(ground_truth_field)
+        if isinstance(ground_truth, str) and ground_truth.strip():
+            record["ground_truth"] = ground_truth.strip()
 
     return record
 
@@ -161,7 +181,7 @@ def extract_metadata(row: dict, index: int) -> dict:
     """
     meta: dict = {"id": row.get("id", f"nemo-{index + 1:04d}")}
     for key, val in row.items():
-        if key in TRAINING_FIELDS or val is None:
+        if not _is_metadata_field(key) or val is None:
             continue
         meta[key] = val
     return meta
@@ -217,7 +237,11 @@ def main() -> None:
     )
     parser.add_argument(
         "--include-ground-truth", action="store_true",
-        help="Copy reference_answer into training record's ground_truth field",
+        help="Backward-compatible alias for --ground-truth-field reference_answer",
+    )
+    parser.add_argument(
+        "--ground-truth-field", type=str, default=None,
+        help="Copy this NeMo text column into the training record's ground_truth field",
     )
     parser.add_argument(
         "--system-prompt-override", type=str, default=None,
@@ -237,6 +261,10 @@ def main() -> None:
         thresholds["judge_specificity"] = args.min_specificity
     if args.min_relevancy is not None:
         thresholds["score_relevancy"] = args.min_relevancy
+
+    ground_truth_field = args.ground_truth_field
+    if ground_truth_field is None and args.include_ground_truth:
+        ground_truth_field = "reference_answer"
 
     # Load rows
     rows = load_nemo_rows(args.input)
@@ -261,14 +289,14 @@ def main() -> None:
     metadata_rows: list[dict] = []
 
     for i, row in enumerate(rows):
-        errors = validate_nemo_row(row, i + 1)
+        errors = validate_nemo_row(row, i + 1, ground_truth_field=ground_truth_field)
         if errors:
             all_errors.extend(errors)
             continue
 
         records.append(convert_row(
             row, i,
-            include_ground_truth=args.include_ground_truth,
+            ground_truth_field=ground_truth_field,
             system_prompt_override=args.system_prompt_override,
         ))
         metadata_rows.append(extract_metadata(row, i))
@@ -296,6 +324,8 @@ def main() -> None:
         print(f"Filtered out:  {dropped}")
     print(f"Valid records: {len(records)}")
     print(f"Output:        {args.output}")
+    if ground_truth_field:
+        print(f"Ground truth:  {ground_truth_field} -> ground_truth")
 
     if all_errors:
         print(f"\n{len(all_errors)} validation error(s):", file=sys.stderr)
