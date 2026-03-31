@@ -649,11 +649,23 @@ The readiness gate runs **3 hard checks** (grader quality) and **8 soft checks**
 **Decision:**
 - **Exit code 0 (PASS)** → proceed to **Step 7d (Start Training)**
 - **Exit code 1 (FAIL)** → fix issues → return to **Step 7b (Re-eval)**
-- **Exit code 2 (WARN)** → check which soft checks failed before deciding
+- **Exit code 2 (WARN)** → **first eval: fix ALL warnings before training. Subsequent evals: only fix critical warnings.**
 
-**⚠️ Critical WARN distinction:** `score_concentration` > 70% means the grader is broken — **fix before training**. Other soft warnings (`pass_rate`, `binary_frac`, `dead_weight`, `topic_balance`) are safe to train through.
+**⚠️ First eval rule:** On the FIRST evaluation (no previous training has run), treat ALL soft warnings as must-fix. This is your one chance to validate the grader design before spending hours of GPU time. Fix each warning, re-eval, and only proceed to training when the gate returns PASS with no warnings. Training is expensive — getting the grader right first is 10-100x cheaper.
 
-**If non-interactive** (running via `claude -p`): auto-fix if `score_concentration` > 70%, otherwise proceed to training.
+**Warnings that MUST be fixed before first training:**
+- `score_concentration` > 70% — grader is too coarse, only produces a few distinct values. COPY the appropriate template (e.g., `grader-mcq.js`) which uses LLM-as-judge for continuous scoring.
+- `perfect_score_frac` > 50% — grader is too lenient. Add more discriminating criteria so correct answers score 0.5-0.7, only excellent answers score 0.9-1.0.
+- `high_score_frac` > 50% — same as above, grader doesn't differentiate quality levels.
+
+**Warnings safe to train through (even on first eval):**
+- `dead_weight_frac` — hard prompts are expected and valuable. 30-99% zero-var is normal. [arXiv:2509.21880]
+- `pass_rate` — low pass rate means hard task, which yields the best GRPO gains. [arXiv:2508.14094]
+- `topic_balance` — imbalanced topics can be addressed in later iterations.
+
+**On subsequent evals (after at least one training run):** Only `score_concentration` > 70% requires fixing. Other soft warnings are informational — you've already validated the grader design.
+
+**If non-interactive** (running via `claude -p`): auto-fix `score_concentration` > 70% and `perfect_score_frac` > 50% on first eval, otherwise proceed to training.
 
 **Max 5 eval-only iterations.** If readiness gate never passes after 5 evals, escalate to user with diagnosis.
 
