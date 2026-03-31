@@ -441,9 +441,11 @@ The grader function signature: `function evaluate(input) { ... return { score, r
 
 See [reference/grader-writing.md](reference/grader-writing.md) for 3 patterns (pure programmatic, LLM-as-judge, hybrid), design guidelines, and common mistakes.
 
-**⚠️ ALWAYS start from a template.** Copy the closest template and customize the criteria. NEVER write a grader from scratch — hand-written graders miss safety patterns (LLM fallback, error handling) that templates include. If no template matches exactly, use `grader-template.js` as the base.
+**⚠️ COPY a template file — do NOT write a grader from scratch.** Literally copy the closest template file to `grader.js`, then customize ONLY the domain-specific parts (criteria names, weights, system prompt, domain terms). Keep the template's architecture intact — especially the LLM-as-judge scoring, LLM extraction fallback, and error handling. Do NOT cherry-pick individual features from a template into a hand-written grader — this loses the template's scoring granularity and produces coarse scores that GRPO can't learn from. If no template matches exactly, use `grader-template.js` as the base.
 
 **⚠️ NEVER return score 0.0 for a parsing/extraction failure.** A score of 0 must mean the response is genuinely wrong or empty — not that the grader couldn't parse the format. Use LLM-based extraction as fallback when regex fails (see `grader-mcq.js` and `grader-classification.js` for the pattern).
+
+**⚠️ NEVER use programmatic checks (char count, keyword matching) as the primary scoring mechanism.** Programmatic checks are useful for fast guards (empty response, refusal detection, format compliance) but NOT for scoring quality. Use LLM-as-judge for quality assessment — it produces continuous scores that give GRPO smooth gradients. A programmatic check like `response.length > 150 → score 1.0` will produce coarse scores where gpt-4o-mini always gets 1.0 (it always writes long responses).
 
 | Template | Best for | Key criteria |
 |----------|----------|-------------|
@@ -625,6 +627,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval \
 The poller monitors partial scores as rows complete and auto-cancels (exit code 2) if either:
 - **avg score < 0.05** after 20 rows — grader is scoring zero on everything
 - **>10% of scores are 0.0** after 20 rows — grader can't parse model responses or data has issues
+- **>50% of scores are 1.0** after 20 rows — warns that grader may be too lenient (does NOT auto-cancel, since eval uses a stronger model than training; run difficulty-probe after eval completes for a precise K=8 prediction)
 
 A 0.0 score is always a bad signal: either the grader is wrong (can't parse the response format) or the data is wrong (bad ground truth, missing fields). You cannot train with records scoring 0 — fix the root cause first. If cancelled, run `diagnose-grader` to see the zero-score reasons, fix the grader, re-upload, and create a new eval. Use `--no-early-cancel` to disable.
 

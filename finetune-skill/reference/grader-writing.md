@@ -189,7 +189,7 @@ Now you have a clear blueprint for the grader — the criteria, how each is eval
 
 ## Critical Rules
 
-1. **ALWAYS start from a template.** Copy the closest template from `templates/` and customize. Never write a grader from scratch — templates include safety patterns (LLM fallback, error handling, graceful degradation) that hand-written graders miss.
+1. **COPY a template file — do NOT write from scratch or cherry-pick.** Literally `cp templates/grader-mcq.js grader.js` and customize the domain-specific parts (criteria, weights, system prompt). Keep the template's LLM-as-judge scoring architecture intact. If you write scoring logic from scratch (e.g., `if response.length > 150 → score 1.0`), you'll produce coarse scores that cluster at 0 or 1 — GRPO gets zero gradient from these.
 
 2. **NEVER return score 0.0 for a parsing/extraction failure.** If you can't parse the model's response format, use LLM-based extraction as fallback. Score 0.0 must mean the response is genuinely wrong or empty. Parsing failures that produce 0.0 are grader bugs — they waste eval runs and produce garbage training signal.
 

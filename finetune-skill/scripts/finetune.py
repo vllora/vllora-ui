@@ -681,7 +681,7 @@ def cmd_status(args: argparse.Namespace) -> None:
                         summary = live.get("summary", {})
                         avg_score = summary.get("average_score") if summary else None
                         # Compute zero rate from row-level results
-                        live_avg, live_count, live_zero_rate = _compute_eval_partial_score(live)
+                        live_avg, live_count, live_zero_rate, live_perfect_rate = _compute_eval_partial_score(live)
                         ed["_zero_rate"] = live_zero_rate  # store for later use in recommendations
                         if avg_score is not None:
                             score_str = f"  avg_score={avg_score:.3f}"
@@ -777,8 +777,12 @@ def cmd_status(args: argparse.Namespace) -> None:
                 grader_ok = (std_s > 0.10 and mode_frac < 0.50)
                 signal_ok = avg_s > 0.05  # Only 0% is fatal (OpenAI RFT)
                 zeros_ok = zero_frac < 0.10  # >10% zeros = grader broken (xFinder ICLR 2025)
+                perfect_frac_inline = sum(1 for s in scores if s >= 0.99) / n
                 if grader_ok and signal_ok and zeros_ok:
-                    print(f"  Verdict: PASS — grader quality OK, ready for training")
+                    if perfect_frac_inline > 0.50:
+                        print(f"  Verdict: PASS (with warning) — {perfect_frac_inline:.0%} of scores are 1.0 (grader may be too lenient, run difficulty-probe to check)")
+                    else:
+                        print(f"  Verdict: PASS — grader quality OK, ready for training")
                 elif not zeros_ok:
                     print(f"  Verdict: FAIL — {zero_frac:.0%} of scores are 0.0 (grader broken — use grader-mcq.js template with LLM extraction fallback)")
                 elif not signal_ok:
@@ -843,7 +847,7 @@ def cmd_status(args: argparse.Namespace) -> None:
         if latest_eval_file:
             try:
                 ed = json.loads(latest_eval_file.read_text())
-                _avg, _count, zr = _compute_eval_partial_score(
+                _avg, _count, zr, _pr = _compute_eval_partial_score(
                     {"results": ed.get("results", [])}
                 )
                 latest_eval_zero_rate = zr
@@ -975,20 +979,23 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
     # Hard gates focus on GRADER QUALITY (is the grader working?) not model performance.
     # GRPO can learn from low base model scores (DeepSeek R1-Zero: 15.6% → 71%, arXiv:2501.12948).
     # Only 0% success is truly fatal (OpenAI RFT Guide).
+    # Research-validated thresholds (2026-03-31 review). See research-readiness-gate-thresholds-2026-03-31.md.
     defaults = {
-        "min_sample_count": 50,         # GRPO needs enough prompts for stable batches
-        "min_score_std": 0.10,          # Grader must differentiate — zero-variance → zero gradient (DAPO §2.2). Threshold is a heuristic.
-        "max_high_score_frac": 0.50,    # Grader leniency check. Heuristic — OpenAI recommends smooth scores.
-        "max_binary_frac": 0.60,        # Binary works (DeepSeek-R1, DAPO) but less sample-efficient. Raised from 0.40 per research review.
-        "min_avg_score": 0.05,          # Just needs nonzero signal (OpenAI: "0% success rate means cannot bootstrap")
-        "max_mode_frac": 0.50,          # Score concentration — if >50% are one value, grader too coarse for GRPO (DAPO arXiv:2503.14476)
-        "max_zero_score_frac": 0.10,    # HARD: >10% zeros = grader likely broken (parsing failures, not wrong answers). xFinder (ICLR 2025): regex extraction is only 74% accurate.
-        "max_dead_weight_frac": 0.50,   # Real GRPO has 30-99% zero-var prompts ("No Prompt Left Behind" ICLR 2026)
-        "min_pass_rate": 0.20,          # Nice to have — hard examples are most valuable (arXiv:2508.14094)
+        "min_sample_count": 50,         # WELL-FOUNDED: OpenAI RFT uses same floor. DeepSeek/DAPO use 5K+ but 50 is "don't crash" minimum.
+        "min_score_std": 0.10,          # HEURISTIC: correct direction (zero-variance → zero gradient per DAPO §2.2). Exact value (0.05-0.10) is arbitrary.
+        "max_high_score_frac": 0.50,    # HEURISTIC: grader leniency. Overlaps with perfect_score_frac — kept for backward compat.
+        # binary_frac check REMOVED — DeepSeek-R1, DAPO, and all major GRPO successes use 100% binary rewards.
+        # Warning against binary contradicts the entire literature. OpenAI RFT recommends binary graders. (2026-03-31 research review)
+        "min_avg_score": 0.05,          # WELL-FOUNDED: OpenAI "0% = can't bootstrap". Math: 5% success → 34% non-degenerate groups at K=8.
+        "max_mode_frac": 0.70,          # RESEARCH-CORRECTED (was 0.50): at 0.70, P(all K=8 same) = 5.8% — almost all groups have variance. Hard fail at 0.85.
+        "max_zero_score_frac": 0.10,    # HEURISTIC: Imperfect Verifiers (arXiv:2510.00915) shows up to ~20% FN tolerable. 10% is conservative but defensible for catching parsing bugs.
+        "max_perfect_score_frac": 0.50, # WELL-FOUNDED as soft: eval K=1 (gpt-4o-mini) ≠ training K=8 (Qwen-4B). High eval scores don't predict training zero-variance.
+        "max_dead_weight_frac": 0.75,   # RESEARCH-CORRECTED (was 0.50): "No Prompt Left Behind" (ICLR 2026): 30-99% zero-var is normal. Eval dead-weight ≠ training dead-weight.
+        "min_pass_rate": 0.05,          # RESEARCH-CORRECTED (was 0.20): DeepSeek-R1 started at 15.6%. "Hard Examples" (arXiv:2508.14094): hard prompts yield 47% gains.
         "pass_threshold": 0.70,         # Score threshold for "passing" a record
-        "min_prompt_learnability": 0.30, # DAPO dynamic sampling (arXiv:2503.14476)
-        "max_score_length_corr": 0.30,  # Reward hacking risk (Dr. GRPO arXiv:2503.20783)
-        "max_topic_dominance": 0.40,    # No single topic should dominate training
+        "min_prompt_learnability": 0.30, # HEURISTIC: DAPO dynamic sampling concept. Questionable at K=1 eval — single sample gives noisy learnability.
+        "max_score_length_corr": 0.30,  # WELL-FOUNDED concept: Dr. GRPO (arXiv:2503.20783) validates length bias is real and structural. Exact threshold is heuristic.
+        "max_topic_dominance": 0.40,    # HEURISTIC: general ML practice, not GRPO-specific. Fine as soft warning.
     }
     thresholds = defaults.copy()
     if args.thresholds:
@@ -1004,6 +1011,7 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
     avg = sum(scores) / n
     std = statistics.stdev(scores) if n > 1 else 0.0
     high_frac = sum(1 for s in scores if s > 0.9) / n
+    perfect_frac = sum(1 for s in scores if s >= 0.99) / n
     binary_frac = sum(1 for s in scores if s <= 0.01 or s >= 0.99) / n
     zero_score_frac = sum(1 for s in scores if s < 0.01) / n
     dead_weight_frac = sum(1 for s in scores if s < 0.1) / n
@@ -1056,6 +1064,23 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
                    f"[xFinder ICLR 2025 (arXiv:2405.11874): regex extraction is only 74% accurate on diverse LLM outputs]",
             "hard": True,
         },
+        "perfect_score_frac": {
+            "value": round(perfect_frac, 4),
+            "threshold": f"< {thresholds['max_perfect_score_frac']}",
+            "pass": perfect_frac < thresholds["max_perfect_score_frac"],
+            "fix": f"{perfect_frac:.0%} of eval scores are at the maximum (≥0.99) — grader may be too lenient. "
+                   f"Note: eval uses a strong model (gpt-4o-mini) at K=1, while training uses a weaker base model at K=8, "
+                   f"so training scores will be lower and more varied. However, high eval scores suggest the grader "
+                   f"doesn't discriminate quality within correct answers. "
+                   f"Consider: add more criteria (distractor analysis, citation accuracy, reasoning depth) "
+                   f"so that 'correct answer' gets 0.5-0.7 and only 'correct + excellent reasoning' gets 0.9-1.0. "
+                   f"Run difficulty-probe for a more precise K=8 prediction before deciding. "
+                   f"[DAPO arXiv:2503.14476: zero-variance groups produce zero gradient]",
+            # Soft check — eval K=1 with a strong model doesn't directly predict training K=8 variance.
+            # The difficulty_probe and score_concentration checks are better signals for this.
+            # score_concentration (hard at >70%) already catches the worst cases.
+            "hard": False,
+        },
         # Soft checks demoted from hard — research shows binary rewards work
         # (DeepSeek-R1 arXiv:2501.12948, DAPO arXiv:2503.14476 both use 100% binary rewards).
         "high_score_frac": {
@@ -1065,13 +1090,9 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
             "fix": "Grader may be too lenient — if most completions score near-identical, within-group variance is small → weak gradients. Tighten grader criteria. [Heuristic; OpenAI recommends 'smooth scores, not pass/fail stamps']",
             "hard": False,
         },
-        "binary_frac": {
-            "value": round(binary_frac, 4),
-            "threshold": f"< {thresholds['max_binary_frac']}",
-            "pass": binary_frac < thresholds["max_binary_frac"],
-            "fix": "Many binary (0/1) scores — continuous scoring is more sample-efficient. Note: binary rewards DO work (DeepSeek-R1, DAPO both used 100% binary successfully). [arXiv:2501.12948, arXiv:2503.14476]",
-            "hard": False,
-        },
+        # binary_frac check REMOVED (2026-03-31 research review):
+        # DeepSeek-R1, DAPO, and all major GRPO successes use 100% binary rewards.
+        # Warning against binary contradicts the literature. OpenAI RFT recommends binary graders.
         "score_concentration": {
             "value": round(mode_frac, 4),
             "threshold": f"< {thresholds['max_mode_frac']}",
@@ -1079,10 +1100,10 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
             "fix": f"{mode_frac:.0%} of scores are exactly {mode_value} — within-group variance will be small → weak gradients. "
                    f"Redesign grader with multi-point rubric (0-7 scale). "
                    f"[DAPO arXiv:2503.14476 filters uniform groups; RGR-GRPO arXiv:2511.12344: rubric >> binary]",
-            # Hard fail at >70%: at K=8, most groups will score identically → zero gradient
-            # → wasted GPU hours. The grader is broken, not the data.
-            # Soft warn at 50-70%: some signal loss but training may still work.
-            "hard": mode_frac > 0.70,
+            # Hard fail at >85%: at K=8, P(all same) = 0.85^8 = 27% — significant fraction of degenerate groups.
+            # Soft warn at 70-85%: some signal loss but training still works (0.70^8 = 5.8% degenerate).
+            # Research-corrected 2026-03-31: previous hard threshold of 0.70 was too tight.
+            "hard": mode_frac > 0.85,
         },
     }
 
@@ -1093,14 +1114,18 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
         "value": round(dead_weight_frac, 4),
         "threshold": f"< {thresholds['max_dead_weight_frac']}",
         "pass": dead_weight_frac < thresholds["max_dead_weight_frac"],
-        "fix": "Many dead-weight records (score<0.1) waste compute. DAPO handles this via dynamic sampling, but consider removing the worst offenders.",
+        "fix": "Many eval-time dead-weight records (score<0.1). Note: eval dead-weight ≠ training dead-weight — "
+               "hard prompts may become learnable as model improves. 30-99% zero-var per batch is normal during GRPO. "
+               "[\"No Prompt Left Behind\" ICLR 2026, arXiv:2509.21880]",
         "hard": False,
     }
     checks["pass_rate"] = {
         "value": round(pass_rate, 4),
         "threshold": f"> {thresholds['min_pass_rate']}",
         "pass": pass_rate > thresholds["min_pass_rate"],
-        "fix": f"Low pass rate — but hard prompts are most valuable for GRPO. With K=8, pass@8 >> pass@1. [arXiv:2508.14094]",
+        "fix": "Very low pass rate — but hard prompts are the most valuable for GRPO (47% gains vs 3-15% for easy). "
+               "DeepSeek-R1 started at 15.6%. With K=8, pass@8 >> pass@1. "
+               "[arXiv:2508.14094; arXiv:2501.12948]",
         "hard": False,
     }
 
@@ -1596,10 +1621,11 @@ def _update_eval_metadata(metadata: dict, result: dict) -> dict:
 
 
 def _compute_eval_partial_score(result: dict) -> tuple:
-    """Extract average score and zero-rate from partial eval results.
+    """Extract average score, zero-rate, and perfect-rate from partial eval results.
 
-    Returns (average_score, num_scored_rows, zero_rate).
-    zero_rate is the fraction of scores that are exactly 0.0.
+    Returns (average_score, num_scored_rows, zero_rate, perfect_rate).
+    zero_rate is the fraction of scores < 0.01.
+    perfect_rate is the fraction of scores >= 0.99.
     """
     rows = result.get("results", [])
     if not rows:
@@ -1607,8 +1633,8 @@ def _compute_eval_partial_score(result: dict) -> tuple:
         summary = result.get("summary")
         if summary and summary.get("average_score") is not None:
             completed = result.get("completed_rows", 0)
-            return summary["average_score"], completed, None
-        return None, 0, None
+            return summary["average_score"], completed, None, None
+        return None, 0, None, None
 
     scores = []
     for row in rows:
@@ -1622,11 +1648,13 @@ def _compute_eval_partial_score(result: dict) -> tuple:
                     scores.append(score)
 
     if not scores:
-        return None, 0, None
+        return None, 0, None, None
     avg = sum(scores) / len(scores)
     zero_count = sum(1 for s in scores if s < 0.01)
     zero_rate = zero_count / len(scores)
-    return avg, len(scores), zero_rate
+    perfect_count = sum(1 for s in scores if s >= 0.99)
+    perfect_rate = perfect_count / len(scores)
+    return avg, len(scores), zero_rate, perfect_rate
 
 
 def cmd_poll_eval(args: argparse.Namespace) -> None:
@@ -1679,10 +1707,12 @@ def cmd_poll_eval(args: argparse.Namespace) -> None:
         total = result.get("total_rows", "?")
 
         # Show partial score in progress line
-        avg_score, scored_rows, zero_rate = _compute_eval_partial_score(result)
+        avg_score, scored_rows, zero_rate, perfect_rate = _compute_eval_partial_score(result)
         score_str = f", avg={avg_score:.3f}" if avg_score is not None else ""
         if zero_rate is not None:
             score_str += f", zeros={zero_rate:.0%}"
+        if perfect_rate is not None and perfect_rate > 0.3:
+            score_str += f", perfect={perfect_rate:.0%}"
         print(f"  [{elapsed}s] {status} ({completed}/{total} rows{score_str})", flush=True)
 
         # Update local JSON on every poll for progress tracking
@@ -1705,6 +1735,14 @@ def cmd_poll_eval(args: argparse.Namespace) -> None:
                     f"{zero_rate:.0%} of scores are 0.0 across {scored_rows} rows "
                     f"(threshold: {early_cancel_zero_rate:.0%}) — grader cannot parse "
                     f"model responses or data has issues"
+                )
+
+            if perfect_rate is not None and perfect_rate > 0.50 and cancel_reason is None:
+                # Warn but don't cancel — eval K=1 with strong model doesn't predict training K=8 variance
+                print(
+                    f"  ⚠ WARNING: {perfect_rate:.0%} of scores are 1.0 — grader may be too lenient. "
+                    f"Run difficulty-probe after eval completes to check K=8 prediction.",
+                    file=sys.stderr,
                 )
 
             if cancel_reason:
