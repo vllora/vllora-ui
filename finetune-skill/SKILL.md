@@ -136,8 +136,12 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py sync-jobs --workflow-id $WORKFLO
 ```
 This creates local tracking files for any jobs you don't already have and updates statuses for existing jobs (e.g., a job you created that was later cancelled from the UI).
 
-4. **Pick up from the recommended step** — do NOT re-run completed steps
-5. Append to `execution-log.md` (never overwrite) with a "Resumed" entry:
+4. **Cancel broken eval jobs** — if `status` shows a running eval scoring ~0.0, the grader is broken and the eval is wasting compute. Cancel it before proceeding:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py cancel-eval --workflow-id $WORKFLOW_ID --eval-id <EVAL_ID>
+```
+5. **Pick up from the recommended step** — do NOT re-run completed steps
+6. Append to `execution-log.md` (never overwrite) with a "Resumed" entry:
    ```
    ## Resumed — [timestamp]
    - Status output: records=X, topics=Y, sources=Z, grader=YES/NO
@@ -446,9 +450,11 @@ See [reference/grader-writing.md](reference/grader-writing.md) for 3 patterns (p
 
 Copy the closest template, then customize the criteria weights and programmatic checks for your domain.
 
-#### Step 5.1: Mandatory Dry-Run
+#### Step 5.1: Mandatory Dry-Run (two tests)
 
-**You MUST dry-run the grader before uploading.** This catches syntax errors, runtime crashes, and scoring logic bugs before they waste an entire evaluation run:
+**You MUST dry-run the grader before uploading.** Run TWO tests — a hand-crafted test AND a live test against real model outputs.
+
+**Test 1: Hand-crafted row** — catches syntax errors and basic scoring logic:
 
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
@@ -457,7 +463,18 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
   --row '{"messages": [{"role": "system", "content": "You are..."}, {"role": "user", "content": "What is X?"}, {"role": "assistant", "content": "X is..."}]}'
 ```
 
-Verify: no errors, score is reasonable (not always 0/1), reason is informative. Fix and re-run until it passes — do NOT proceed to upload until dry-run passes. The sandbox does NOT support `console.log` — use the `reason` field for debug output.
+**Test 2: Live model response (CRITICAL)** — catches graders that work on synthetic inputs but fail on real model outputs. This is the most common grader bug: the grader assumes a specific response format (e.g., "Answer: A") but the model responds differently (e.g., "Based on the guidelines..."):
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
+  --workflow-id $WORKFLOW_ID \
+  --script grader.js \
+  --live
+```
+
+The `--live` flag picks 3 random training records, sends each prompt to the LLM, and grades the real responses. If all live samples score 0.0, the grader is broken — fix the extraction/parsing logic to handle real model output formats before proceeding.
+
+**Both tests must pass.** If Test 1 passes but Test 2 scores 0.0, the grader has format assumptions that real models don't satisfy. Fix and re-test. Do NOT proceed to upload until both pass. The sandbox does NOT support `console.log` — use the `reason` field for debug output.
 
 **Upload immediately** — push the grader to the gateway so the UI shows it's ready for evaluation:
 ```bash
@@ -593,11 +610,17 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
 
 > **Note on eval IDs**: The `POST /finetune/evaluations` response returns `evaluation_run_id` — use this for polling. The workflow's `eval_job_ids` field may show a different internal ID that returns 404. Always use the ID from the create response.
 
-**Poll eval in foreground:**
+**Poll eval in foreground** (auto-cancels if grader is broken):
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval \
   --file evaluations/eval-001.json
 ```
+
+The poller monitors partial scores as rows complete and auto-cancels (exit code 2) if either:
+- **avg score < 0.05** after 20 rows — grader is scoring zero on everything
+- **>30% of scores are 0.0** after 20 rows — grader can't parse model responses or data has issues
+
+A 0.0 score is always a bad signal: either the grader is wrong (can't parse the response format) or the data is wrong (bad ground truth, missing fields). You cannot train with records scoring 0 — fix the root cause first. If cancelled, run `diagnose-grader` to see the zero-score reasons, fix the grader, re-upload, and create a new eval. Use `--no-early-cancel` to disable.
 
 When eval completes, proceed to **Step 7c (Readiness Gate)** — do NOT start training.
 

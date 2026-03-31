@@ -85,8 +85,57 @@ Run via `finetune.py difficulty-probe --file evaluations/eval-NNN.json --save di
 |-------|-----|----------|
 | Grader scores cluster at one value (>50%) | Redesign with multi-point rubric (0-7 scale) | RGR-GRPO (arXiv:2511.12344) |
 | Many dead prompts (score < 0.05) | Remove or add SFT warm-up to bootstrap | DeepSeek-R1 (arXiv:2501.12948) |
-| Many trivial prompts (score > 0.95) | Replace with harder variants | Hard Examples (arXiv:2508.14094) |
+| Many trivial prompts (score > 0.95) | Replace with harder variants using difficulty evolution (see below) | Hard Examples (arXiv:2508.14094) |
 | High predicted zero-var at K=8 | Increase K to 16, or redesign grader | DAPO (arXiv:2503.14476) |
+
+### Fixing Trivial Prompts: Difficulty Evolution Techniques
+
+When the difficulty probe flags prompts as trivial (base model scores > 0.95 consistently), the user messages are too easy — the model's 8 completions all score high → zero variance → zero GRPO gradient. Replace these with harder versions of the same questions.
+
+**Three techniques for making user messages harder** (the system prompt stays unchanged — only evolve the user message):
+
+**1. Add Constraints** — add 2-3 extra requirements the answer must satisfy.
+
+```
+Before: "What is a fork in chess?"
+After:  "What is a fork in chess? Your explanation must include (1) why
+         the forked pieces can't both escape, (2) an example where a fork
+         leads to material gain, and (3) a case where a fork is ineffective."
+```
+
+Why this helps GRPO: more constraints → harder to satisfy ALL of them → some completions miss one → score variance increases.
+
+**2. Deepen** — require "why" and "how" reasoning, not just "what."
+
+```
+Before: "What is a discovered attack?"
+After:  "Explain why discovered attacks are often more dangerous than direct
+         attacks, and analyze how the tempo advantage compounds when the
+         discovering piece also delivers check."
+```
+
+Why this helps GRPO: reasoning questions have more ways to partially succeed or fail → smoother score distribution.
+
+**3. Increase Reasoning Steps** — require multi-step analysis where each step builds on the previous.
+
+```
+Before: "Is Nxe5 a good move here?"
+After:  "Evaluate Nxe5 by considering: (1) the immediate material count after
+         the capture, (2) what recapture options Black has, (3) the resulting
+         position after Black's best recapture, and (4) whether White has a
+         follow-up tactic in that position."
+```
+
+Why this helps GRPO: multi-step prompts produce partial-credit scores (got steps 1-2 right, failed step 3) → strong gradient signal.
+
+**Rules for difficulty evolution:**
+- Only evolve the **user message** — keep the system prompt and topic assignment unchanged
+- The evolved question must still be **answerable from the linked source material** — don't drift outside the knowledge parts
+- Update `ground_truth` if the harder question needs a broader excerpt
+- Track lineage: set `evolved_from` pointing to the original record ID
+- **Don't use "concretize" or "complicate input"** operations — these tend to fabricate specific details (board positions, data tables) that may not exist in the source material
+
+> Technique names adapted from Evol-Instruct (WizardLM, ICLR 2024, arXiv:2304.12244). Only the 3 operations compatible with source-grounded data generation are recommended here.
 
 ---
 

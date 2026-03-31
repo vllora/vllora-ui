@@ -15,6 +15,7 @@ Usage:
   uv run scripts/finetune.py upload-grader --workflow-id WF_ID --file grader.js
   uv run scripts/finetune.py verify --workflow-id WF_ID
   uv run scripts/finetune.py cancel-training --workflow-id WF_ID --job-id JOB_ID
+  uv run scripts/finetune.py cancel-eval --workflow-id WF_ID --eval-id EVAL_ID
 
 Exit codes:
   0 - success
@@ -651,6 +652,64 @@ def cmd_status(args: argparse.Namespace) -> None:
     except SystemExit:
         print("  Could not fetch jobs from gateway")
 
+    # ── Eval jobs (from local tracking files) ──
+    print("\n── Eval Jobs ──")
+    eval_dir = project_dir / "evaluations"
+    eval_jobs_shown = []
+    if eval_dir.exists():
+        eval_files = sorted(eval_dir.glob("eval-*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
+        if not eval_files:
+            print("  No eval jobs")
+        for ef in eval_files:
+            try:
+                ed = json.loads(ef.read_text())
+                eid = ed.get("evaluation_run_id", "?")[:12]
+                estatus = ed.get("status", "?")
+                completed = ed.get("completed_rows", "?")
+                total = ed.get("total_rows", "?")
+
+                # For running evals, fetch live status + partial score from gateway
+                if estatus == "running":
+                    full_eid = ed.get("evaluation_run_id", "")
+                    try:
+                        live = _api("GET", f"{base_url}/finetune/evaluations/{full_eid}")
+                        estatus = live.get("status", estatus)
+                        completed = live.get("completed_rows", completed)
+                        total = live.get("total_rows", total)
+
+                        # Compute partial score
+                        summary = live.get("summary", {})
+                        avg_score = summary.get("average_score") if summary else None
+                        # Compute zero rate from row-level results
+                        live_avg, live_count, live_zero_rate = _compute_eval_partial_score(live)
+                        ed["_zero_rate"] = live_zero_rate  # store for later use in recommendations
+                        if avg_score is not None:
+                            score_str = f"  avg_score={avg_score:.3f}"
+                            if live_zero_rate is not None:
+                                score_str += f"  zeros={live_zero_rate:.0%}"
+                            if avg_score < 0.05:
+                                score_str += "  ⚠ BROKEN — scoring ~0, cancel this eval!"
+                            elif live_zero_rate is not None and live_zero_rate > 0.30:
+                                score_str += f"  ⚠ BROKEN — {live_zero_rate:.0%} zeros, cancel this eval!"
+                        else:
+                            score_str = ""
+                    except SystemExit:
+                        score_str = ""
+                else:
+                    score_str = ""
+
+                cancel_hint = ""
+                if estatus == "running":
+                    cancel_hint = f"  → cancel: finetune.py cancel-eval --workflow-id {wf_id} --eval-id {ed.get('evaluation_run_id', '?')} --file {ef}"
+                print(f"  {eid}...  {estatus} ({completed}/{total} rows){score_str}")
+                if cancel_hint:
+                    print(f"    {cancel_hint}")
+                eval_jobs_shown.append(ed)
+            except (json.JSONDecodeError, KeyError):
+                pass
+    else:
+        print("  No eval jobs")
+
     # ── Local checkpoint ──
     print("\n── Local Checkpoint ──")
     checkpoint_file = project_dir / ".checkpoint.json"
@@ -727,8 +786,34 @@ def cmd_status(args: argparse.Namespace) -> None:
         except Exception:
             print(f"  Could not analyze {latest_eval_file.name}")
 
+    # ── Check for running evals with broken graders (scoring ~0 or high zero-rate) ──
+    broken_running_evals = []
+    for ed in eval_jobs_shown:
+        if ed.get("status") == "running":
+            summary = ed.get("summary", {})
+            avg = summary.get("average_score") if summary else None
+            completed_rows = ed.get("completed_rows", 0)
+            zero_rate = ed.get("_zero_rate")  # set during eval jobs display
+            if completed_rows >= 20:
+                if avg is not None and avg < 0.05:
+                    broken_running_evals.append(ed)
+                elif zero_rate is not None and zero_rate > 0.30:
+                    broken_running_evals.append(ed)
+
     # ── Recommended next step ──
     print("\n── Recommended Next Step ──")
+
+    # Priority: cancel running evals that are scoring 0 (broken grader)
+    if broken_running_evals:
+        for ed in broken_running_evals:
+            eid = ed.get("evaluation_run_id", "?")
+            avg = (ed.get("summary") or {}).get("average_score", 0)
+            zr = ed.get("_zero_rate")
+            if zr is not None and zr > 0.30:
+                print(f"  ⚠ CANCEL eval {eid[:12]}... — {zr:.0%} of scores are 0.0 (grader is broken)")
+            else:
+                print(f"  ⚠ CANCEL eval {eid[:12]}... — scoring {avg:.3f} (grader is broken)")
+            print(f"    Run: finetune.py cancel-eval --workflow-id {wf_id} --eval-id {eid}")
 
     if not step_done("create-workflow"):
         print("  → Start from Step 1: Create workflow")
@@ -1474,11 +1559,49 @@ def _update_eval_metadata(metadata: dict, result: dict) -> dict:
     }
 
 
+def _compute_eval_partial_score(result: dict) -> tuple:
+    """Extract average score and zero-rate from partial eval results.
+
+    Returns (average_score, num_scored_rows, zero_rate).
+    zero_rate is the fraction of scores that are exactly 0.0.
+    """
+    rows = result.get("results", [])
+    if not rows:
+        # Fall back to summary if no row-level data
+        summary = result.get("summary")
+        if summary and summary.get("average_score") is not None:
+            completed = result.get("completed_rows", 0)
+            return summary["average_score"], completed, None
+        return None, 0, None
+
+    scores = []
+    for row in rows:
+        epochs = row.get("epochs", {})
+        for _epoch_key, items in epochs.items():
+            if not isinstance(items, list):
+                items = [items]
+            for item in items:
+                score = item.get("score")
+                if score is not None and isinstance(score, (int, float)):
+                    scores.append(score)
+
+    if not scores:
+        return None, 0, None
+    avg = sum(scores) / len(scores)
+    zero_count = sum(1 for s in scores if s < 0.01)
+    zero_rate = zero_count / len(scores)
+    return avg, len(scores), zero_rate
+
+
 def cmd_poll_eval(args: argparse.Namespace) -> None:
     """Poll an evaluation job until complete and save results locally.
 
     Reads the eval metadata from the local file, polls the gateway,
     updates the file with progress on every poll, and stops on completion.
+
+    With --early-cancel (default), auto-cancels if average score is
+    below threshold after enough rows complete — catches broken graders
+    that score 0.0 on everything before wasting the full eval run.
     """
     import time
 
@@ -1491,8 +1614,19 @@ def cmd_poll_eval(args: argparse.Namespace) -> None:
     eval_id = metadata["evaluation_run_id"]
     poll_interval = args.poll_interval
     max_wait = args.max_wait
+    early_cancel = not args.no_early_cancel
+    early_cancel_threshold = args.early_cancel_threshold
+    early_cancel_min_rows = args.early_cancel_min_rows
+    early_cancel_zero_rate = args.early_cancel_zero_rate
 
-    print(f"Polling eval {eval_id} every {poll_interval}s (max {max_wait}s)...")
+    if early_cancel:
+        print(
+            f"Polling eval {eval_id} every {poll_interval}s (max {max_wait}s) "
+            f"[early-cancel: score < {early_cancel_threshold} after {early_cancel_min_rows} rows]..."
+        )
+    else:
+        print(f"Polling eval {eval_id} every {poll_interval}s (max {max_wait}s)...")
+
     elapsed = 0
     status = "unknown"
     while elapsed < max_wait:
@@ -1507,11 +1641,51 @@ def cmd_poll_eval(args: argparse.Namespace) -> None:
         status = result.get("status", "unknown")
         completed = result.get("completed_rows", "?")
         total = result.get("total_rows", "?")
-        print(f"  [{elapsed}s] {status} ({completed}/{total} rows)", flush=True)
+
+        # Show partial score in progress line
+        avg_score, scored_rows, zero_rate = _compute_eval_partial_score(result)
+        score_str = f", avg={avg_score:.3f}" if avg_score is not None else ""
+        if zero_rate is not None:
+            score_str += f", zeros={zero_rate:.0%}"
+        print(f"  [{elapsed}s] {status} ({completed}/{total} rows{score_str})", flush=True)
 
         # Update local JSON on every poll for progress tracking
         metadata = _update_eval_metadata(metadata, result)
         eval_file.write_text(json.dumps(metadata, indent=2))
+
+        # Early cancel: detect broken grader before wasting the full run
+        # Two signals: (1) avg score near zero, (2) high zero-score rate
+        if early_cancel and status == "running" and scored_rows >= early_cancel_min_rows:
+            cancel_reason = None
+
+            if avg_score is not None and avg_score < early_cancel_threshold:
+                cancel_reason = (
+                    f"avg score {avg_score:.4f} across {scored_rows} rows "
+                    f"(threshold: {early_cancel_threshold})"
+                )
+
+            if zero_rate is not None and zero_rate > early_cancel_zero_rate:
+                cancel_reason = (
+                    f"{zero_rate:.0%} of scores are 0.0 across {scored_rows} rows "
+                    f"(threshold: {early_cancel_zero_rate:.0%}) — grader cannot parse "
+                    f"model responses or data has issues"
+                )
+
+            if cancel_reason:
+                print(
+                    f"\n  ⚠ BROKEN GRADER DETECTED: {cancel_reason}",
+                    file=sys.stderr,
+                )
+                print(
+                    f"    Auto-cancelling eval. Fix the grader (use diagnose-grader "
+                    f"for details) and re-run. Use --no-early-cancel to override.",
+                    file=sys.stderr,
+                )
+
+                metadata["status"] = "cancelled"
+                metadata["early_cancel_reason"] = f"Broken grader: {cancel_reason}"
+                eval_file.write_text(json.dumps(metadata, indent=2))
+                sys.exit(2)
 
         if status in ("completed", "failed", "error", "cancelled"):
             metadata["completed_at"] = result.get("completed_at")
@@ -2153,6 +2327,37 @@ def cmd_cancel_training(args: argparse.Namespace) -> None:
             print(f"Updated local file: {job_file}")
 
 
+def cmd_cancel_eval(args: argparse.Namespace) -> None:
+    """Cancel a running evaluation.
+
+    Marks the eval as cancelled locally (gateway DB + tracking file)
+    so the agent stops waiting. The cloud eval may continue running
+    but results will be ignored.
+    """
+    wf_id = args.workflow_id
+    eval_id = args.eval_id
+
+    print(f"Cancelling eval {eval_id} in workflow {wf_id}...")
+
+    try:
+        _api(
+            "PATCH",
+            f"{args.base_url}/finetune/workflows/{wf_id}/eval-jobs/{eval_id}",
+            json={"status": "cancelled"},
+        )
+        print(f"Eval {eval_id} marked as cancelled in gateway.")
+    except SystemExit:
+        print(f"  Warning: Could not update gateway (eval may be cloud-only). Updating local file only.", file=sys.stderr)
+
+    if args.file:
+        eval_file = Path(args.file)
+        if eval_file.exists():
+            metadata = json.loads(eval_file.read_text())
+            metadata["status"] = "cancelled"
+            eval_file.write_text(json.dumps(metadata, indent=2))
+            print(f"Updated local file: {eval_file}")
+
+
 def cmd_sync_jobs(args: argparse.Namespace) -> None:
     """Sync training + eval jobs from gateway to local tracking files.
 
@@ -2561,6 +2766,14 @@ def main() -> None:
     p.add_argument("--file", required=True, help="Path to eval metadata JSON (from create-eval)")
     p.add_argument("--poll-interval", type=int, default=30, help="Poll interval in seconds (default: 30)")
     p.add_argument("--max-wait", type=int, default=3600, help="Max wait in seconds (default: 3600)")
+    p.add_argument("--no-early-cancel", action="store_true",
+        help="Disable automatic early cancellation on broken grader detection")
+    p.add_argument("--early-cancel-threshold", type=float, default=0.05,
+        help="Score threshold below which to auto-cancel (default: 0.05)")
+    p.add_argument("--early-cancel-min-rows", type=int, default=20,
+        help="Minimum completed rows before checking early cancel (default: 20)")
+    p.add_argument("--early-cancel-zero-rate", type=float, default=0.30,
+        help="Cancel if more than this fraction of scores are 0.0 (default: 0.30 = 30%%)")
 
     # create-training
     p = subparsers.add_parser("create-training", help="Create training job and save metadata locally")
@@ -2585,6 +2798,12 @@ def main() -> None:
     p.add_argument("--workflow-id", required=True, help="Workflow ID")
     p.add_argument("--job-id", required=True, help="Training job ID to cancel")
     p.add_argument("--file", default=None, help="Path to local train-NNN.json to update status (optional)")
+
+    # cancel-eval
+    p = subparsers.add_parser("cancel-eval", help="Cancel a running evaluation")
+    p.add_argument("--workflow-id", required=True, help="Workflow ID")
+    p.add_argument("--eval-id", required=True, help="Eval job ID to cancel")
+    p.add_argument("--file", default=None, help="Path to local eval-NNN.json to update status (optional)")
 
     # sync-jobs
     p = subparsers.add_parser("sync-jobs", help="Sync training + eval jobs from gateway to local tracking files")
@@ -2658,6 +2877,7 @@ def main() -> None:
         "create-training": cmd_create_training,
         "poll-training": cmd_poll_training,
         "cancel-training": cmd_cancel_training,
+        "cancel-eval": cmd_cancel_eval,
         "sync-jobs": cmd_sync_jobs,
         "delete-knowledge": cmd_delete_knowledge,
         "difficulty-probe": cmd_difficulty_probe,
