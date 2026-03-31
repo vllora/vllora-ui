@@ -511,8 +511,13 @@ def generate_for_topic(
     # Compose hierarchical system prompt for this topic
     composed_prompt = compose_system_prompt(system_prompt, ancestors, topic)
 
-    # Distribute records across prompt types
-    distribution = distribute_across_prompt_types(records_per_topic)
+    # Over-request by 20% to compensate for LLM under-delivery and empty-prompt
+    # filtering, then trim to exact target. This is the standard approach used by
+    # Magpie (ICLR 2025) and NeMo — over-generate + trim is simpler and more
+    # reliable than retry loops, with negligible extra cost at 1.2x.
+    OVER_REQUEST_RATIO = 1.2
+    request_count = math.ceil(records_per_topic * OVER_REQUEST_RATIO)
+    distribution = distribute_across_prompt_types(request_count)
 
     # Run all prompt-type calls in parallel (inner parallelism)
     all_items: list[tuple[str, list[dict]]] = []
@@ -570,6 +575,18 @@ def generate_for_topic(
             if include_ground_truth and ground_truth and ground_truth.strip():
                 record["ground_truth"] = ground_truth.strip()
             records.append(record)
+
+    # Trim to exact target (we over-requested by 20%).
+    # If we still fell short, warn but return what we have.
+    if len(records) > records_per_topic:
+        records = records[:records_per_topic]
+    elif len(records) < records_per_topic:
+        shortfall = records_per_topic - len(records)
+        print(
+            f"  ⚠ Topic '{topic['name']}': generated {len(records)}/{records_per_topic} "
+            f"(shortfall: {shortfall}). Use --append to retry.",
+            file=sys.stderr,
+        )
 
     return records
 

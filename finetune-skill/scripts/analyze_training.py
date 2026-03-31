@@ -93,34 +93,14 @@ def analyze_metrics(data) -> dict:
             "message": f"Reward declined {r_start:.3f} → {r_end:.3f} (delta={r_delta:+.3f})",
         })
 
-    # KL divergence — GRPO-aware: KL alone is NOT diagnostic with beta=0
-    # Ref: training-metrics-guide.md §KL; DAPO (arXiv:2503.14476) removes KL entirely;
-    # TRL defaults beta=0; GRPO++ survey confirms KL monitoring abandoned for reasoning models.
-    #
-    # No paper specifies absolute KL thresholds for GRPO. KL scale varies 1000x+ across
-    # backends (TRL per-token avg vs summed). We only flag the combination of:
-    # KL rising + reward NOT improving = potential reward hacking (DAPO §4, "Tricks or Traps")
+    # KL divergence — NOT diagnostic on our backend.
+    # Ref: DAPO (arXiv:2503.14476) removes KL entirely (β=0); TRL defaults β=0.
+    # Our backend reports un-normalized KL that oscillates by 6 orders of magnitude
+    # step-to-step (correlated with completion length, not policy divergence).
+    # With β=0, KL is informational only. We skip automated KL analysis.
     kl_values = [s.get("kl", 0) for s in steps]
     kl_max = max(kl_values)
     kl_final = last.get("kl", 0)
-    kl_start = first.get("kl", 0)
-    # Monotonic rise check: is KL consistently increasing?
-    kl_monotonic = len(kl_values) >= 4 and all(
-        kl_values[i] <= kl_values[i + 1] for i in range(len(kl_values) - 3, len(kl_values) - 1)
-    )
-    if kl_monotonic and reward_trend != "improving":
-        alerts.append({
-            "severity": "WARNING",
-            "metric": "kl",
-            "message": f"KL divergence rising steadily ({kl_start:.2f} → {kl_final:.2f}) with {reward_trend} reward — model drifting without improvement, inspect output quality",
-        })
-    elif kl_monotonic and kl_start > 0 and kl_final > kl_start * 10:
-        # Very large KL increase even with improving reward — informational
-        alerts.append({
-            "severity": "INFO",
-            "metric": "kl",
-            "message": f"KL divergence rose significantly ({kl_start:.2f} → {kl_final:.2f}) — expected with beta=0, but monitor output quality",
-        })
 
     # Clipping ratio (completions truncated at max_output_tokens)
     # Thresholds: healthy <0.1, warn >0.1, critical >0.5
@@ -148,67 +128,51 @@ def analyze_metrics(data) -> dict:
                     "message": f"Clipping ratio rising ({first_avg:.0%} → {last_avg:.0%}) — model generating longer responses, may need higher max_output_tokens",
                 })
 
-    # Pre-compute grad values (needed by both loss and grad_norm checks)
-    grad_values = [s.get("grad_norm", 0) for s in steps]
-
-    # Loss stability
-    # GRPO loss starts at 0.0 (expected: ratio=1.0, zero-mean advantages). Healthy DAPO
-    # range: 0.0001-0.002 after hundreds of steps. (Ref: open-r1#239, AMD Unsloth tutorial)
-    # NaN = catastrophic. Stuck at 0 + NaN grad = Unsloth bug (issues #3006, #2824).
+    # Loss and grad_norm — our backend reports UN-NORMALIZED values that oscillate by
+    # 6 orders of magnitude step-to-step (correlated with completion length).
+    # Verified from real training data: loss ranges from 0.1 to 1,637,409 within the
+    # same run, grad_norm from 1.5 to 60,149,276. This is NOT instability — it's
+    # a normalization artifact. ZClip z-score detection would false-positive on every run.
+    #
+    # We only flag: NaN/Inf (catastrophic), all-zero loss (no learning signal).
+    # For training health, rely on REWARD metrics (which ARE on correct TRL scale).
+    #
+    # Ref: TRL#2995 (normalization), Unsloth gradient accumulation blog,
+    #      Unsloth issues #3006/#2824 (loss=0 + NaN grad bug)
     loss_values = [s.get("loss", 0) for s in steps]
-    has_nan = any(math.isnan(v) or math.isinf(v) for v in loss_values if isinstance(v, (int, float)))
-    grad_has_nan = any(
-        not math.isfinite(v) for v in grad_values if isinstance(v, (int, float))
-    ) if grad_values else False
-    if has_nan:
+    grad_values = [s.get("grad_norm", 0) for s in steps]
+    has_nan_loss = any(math.isnan(v) or math.isinf(v) for v in loss_values if isinstance(v, (int, float)))
+    has_nan_grad = any(
+        isinstance(v, (int, float)) and not math.isfinite(v) for v in grad_values
+    )
+
+    if has_nan_loss:
         alerts.append({
             "severity": "CRITICAL",
             "metric": "loss",
             "message": "NaN/Inf detected in loss — training numerically unstable. Check for zero-length completions or degenerate batches.",
         })
-    elif len(loss_values) > 3 and all(v == 0.0 for v in loss_values) and grad_has_nan:
-        # Unsloth-specific: loss=0 + grad_norm=NaN = known bug
-        # Ref: Unsloth issues #3006, #2824
-        alerts.append({
-            "severity": "CRITICAL",
-            "metric": "loss",
-            "message": "Loss stuck at 0 with NaN gradients — known Unsloth issue. Verify LoRA adapters applied (FastLanguageModel.get_peft_model) and try gradient_accumulation_steps=1.",
-        })
+    elif has_nan_grad:
+        if len(loss_values) > 3 and all(v == 0.0 for v in loss_values):
+            # Unsloth-specific: loss=0 + grad_norm=NaN = known bug
+            # Ref: Unsloth issues #3006, #2824
+            alerts.append({
+                "severity": "CRITICAL",
+                "metric": "loss",
+                "message": "Loss stuck at 0 with NaN gradients — known Unsloth issue. Verify LoRA adapters applied (FastLanguageModel.get_peft_model) and try gradient_accumulation_steps=1.",
+            })
+        else:
+            alerts.append({
+                "severity": "CRITICAL",
+                "metric": "grad_norm",
+                "message": "NaN/Inf grad_norm — numerical overflow, likely from zero-length completions or bad chat template.",
+            })
     elif len(loss_values) > 3 and all(v == 0.0 for v in loss_values):
         alerts.append({
             "severity": "CRITICAL",
             "metric": "loss",
-            "message": "Loss stuck at exactly 0.0 — zero advantages, model learning nothing. Check grader signal (reward_std, frac_reward_zero_std)",
+            "message": "Loss stuck at exactly 0.0 — zero advantages, model learning nothing. Check grader signal (reward_std, frac_reward_zero_std).",
         })
-
-    # Grad norm spikes — z-score based detection (scale-independent).
-    # Ref: ZClip (arXiv:2504.02507) — z-score spike detection with z_thres=2.5 on EMA-smoothed
-    # gradient norms. This is the only paper-backed spike detection method found.
-    # Also: Unsloth — NaN often from zero-length truncated completions.
-    # TRL healthy range: 0.33-1.66 with default max_grad_norm=1.0.
-    # (Ref: open-r1#239, AMD Unsloth tutorial)
-    grad_finite = [v for v in grad_values if isinstance(v, (int, float)) and math.isfinite(v)]
-    has_nan_grad = any(not math.isfinite(v) for v in grad_values if isinstance(v, (int, float)))
-    if has_nan_grad:
-        alerts.append({
-            "severity": "CRITICAL",
-            "metric": "grad_norm",
-            "message": "NaN/Inf grad_norm — numerical overflow, likely from zero-length completions or bad chat template",
-        })
-    elif len(grad_finite) >= 5:
-        # ZClip-style z-score detection: spike if z > 2.5 (recommended range 2.0-3.0)
-        # Ref: arXiv:2504.02507 §3 — "z_thres = 2.5"
-        mean_g = sum(grad_finite) / len(grad_finite)
-        std_g = math.sqrt(sum((v - mean_g) ** 2 for v in grad_finite) / len(grad_finite))
-        grad_max = max(grad_finite)
-        if std_g > 0:
-            z_score = (grad_max - mean_g) / std_g
-            if z_score > 2.5:
-                alerts.append({
-                    "severity": "WARNING",
-                    "metric": "grad_norm",
-                    "message": f"Grad norm spike detected (z-score={z_score:.1f}, max={grad_max:.1f}, mean={mean_g:.1f}) — may cause training instability",
-                })
 
     # Weak training signal
     # Thresholds: healthy 0.05-0.3, warn <0.05, critical <0.01
@@ -246,21 +210,21 @@ def analyze_metrics(data) -> dict:
         })
 
     # Reward hacking detection
-    # Ref: training-metrics-guide.md §Reward Hacking; GRPO++ (Wolfe) — reward up + KL rising + reward_std dropping
-    # Signature: model converges on a single high-scoring response pattern
+    # Ref: "Tricks or Traps" (arXiv:2508.08221) — reward hacking signatures;
+    #       DAPO (arXiv:2503.14476) — entropy collapse detection
+    # Signature: reward improving but reward_std collapsing (model converges on single pattern)
+    # NOTE: We use reward_std (correct TRL scale) instead of KL (un-normalized on our backend)
     if len(steps) >= 6:
         mid = len(steps) // 2
         first_half_std = sum(s.get("reward_std", 0) for s in steps[:mid]) / mid
         last_half_std = sum(s.get("reward_std", 0) for s in steps[mid:]) / (len(steps) - mid)
-        first_half_kl = sum(s.get("kl", 0) for s in steps[:mid]) / mid
-        last_half_kl = sum(s.get("kl", 0) for s in steps[mid:]) / (len(steps) - mid)
         if (reward_trend == "improving"
-                and last_half_std < first_half_std * 0.5  # reward_std dropped by 50%+
-                and last_half_kl > first_half_kl * 2.0):  # KL doubled
+                and first_half_std > 0.01
+                and last_half_std < first_half_std * 0.5):  # reward_std dropped by 50%+
             alerts.append({
                 "severity": "WARNING",
                 "metric": "reward_hacking",
-                "message": f"Possible reward hacking: reward improving but reward_std dropped ({first_half_std:.3f} → {last_half_std:.3f}) while KL rose — inspect outputs manually",
+                "message": f"Possible reward hacking: reward improving but reward_std dropped 50%+ ({first_half_std:.3f} → {last_half_std:.3f}) — model may be converging on a single high-scoring pattern. Inspect outputs manually.",
             })
 
     # High reward + low std = base model already good, grader too lenient
@@ -282,9 +246,13 @@ def analyze_metrics(data) -> dict:
             "delta": round(r_delta, 4),
             "trend": reward_trend,
         },
+        # NOTE: kl, loss, grad_norm are un-normalized on our backend (oscillate by
+        # 6 orders of magnitude step-to-step). Values are informational only.
+        # Use reward, reward_std, frac_reward_zero_std for training health assessment.
         "kl": {
             "final": round(kl_final, 4),
             "max": round(kl_max, 4),
+            "_note": "un-normalized (informational only)",
         },
         "clipping": {
             "avg": round(clip_avg, 4),
