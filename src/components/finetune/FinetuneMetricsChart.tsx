@@ -72,7 +72,7 @@ const TAB_CONFIG: Record<
     icon: <Activity className="h-3 w-3" />,
     metrics: [
       { key: "loss", label: "Loss", color: "#ef4444", primary: true, description: "GRPO policy loss — starts near 0 and rises slightly as learning progresses. Unlike SFT loss, lower is NOT always better." },
-      { key: "kl", label: "KL Divergence", color: "#f59e0b", primary: false, description: "How far the model has drifted from the base model. Too high = may be overfitting." },
+      { key: "kl", label: "KL Divergence", color: "#f59e0b", primary: false, description: "Distance from base model distribution. With β=0 (default), this is informational only and does not affect training." },
       { key: "grad_norm", label: "Grad Norm", color: "#8b5cf6", primary: false, description: "Gradient norm — spikes indicate unstable training." },
       { key: "learning_rate", label: "Learning Rate", color: "#06b6d4", primary: false, description: "Current learning rate. May change if a schedule is used." },
       { key: "clip_ratio/region_mean", label: "Clip Ratio", color: "#ec4899", primary: false, description: "Fraction of tokens clipped by trust region. 0.1-0.3 is healthy. High = updates too aggressive." },

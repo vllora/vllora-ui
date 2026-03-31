@@ -642,20 +642,23 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 
 | Parameter | Default | Rationale |
 |-----------|---------|-----------|
-| `learning_rate` | **1e-6** | DeepSeekMath, DAPO, Dr. GRPO, "Tricks or Traps", TRL all use 1e-6. Exception: DeepSeek-R1 uses 3e-6. Do NOT use SFT rates (2e-5 to 5e-5). |
+| `learning_rate` | **5e-6** | Between DeepSeek-R1's 3e-6 (arXiv:2501.12948) and gateway default 1e-5. Food-label E2E test showed 1e-6 too slow to converge. Do NOT use SFT rates (2e-5 to 5e-5). |
 | `response_candidates_count` | **8** (minimum) | GRPO needs multiple candidates for advantage estimation. Published work uses G=8 (Dr. GRPO, TRL) to G=64 (DeepSeekMath). |
 | `warmup_steps` | **20-50** | DAPO (arXiv:2503.14476) uses 20, "Tricks or Traps" (arXiv:2508.08221) uses 50. Linear warmup then constant LR. |
 
 > **⚠️ RFT epochs ≠ SFT epochs.** In RFT/GRPO, the model generates **fresh responses each epoch** — there's no repetition risk. More epochs = more exploration. Published work uses high epoch counts: "Tricks or Traps" uses 50 epochs; OpenAI says RFT does "hundreds or thousands of epochs." Start conservatively and increase if reward is still improving.
 
+> **Adaptive epochs:** `finetune.py` automatically adjusts epochs based on dataset size when using defaults (no `--config`). The script fetches the record count from the workflow and applies the table below. Override with `--config '{"epochs": N}'` if needed.
+
 | Situation | Adjustment |
 |-----------|------------|
-| < 50 records | `epochs: 15-30` (small dataset needs more passes — OpenAI: "hundreds of epochs over the same few data points") |
-| 50-200 records | `epochs: 10-20` |
-| > 500 records | `epochs: 5-10` |
+| < 50 records | `epochs: 15` (small dataset needs more passes — OpenAI: "hundreds of epochs over the same few data points") |
+| 50-200 records | `epochs: 8` |
+| 200-500 records | `epochs: 5` |
+| > 500 records | `epochs: 3` (DeepSeek-R1 used ~50k records with ~2 epochs) |
 | Complex task | `lora_rank: 16` |
-| High KL but training otherwise healthy | **Do NOT lower LR just for KL.** With beta=0 (modern GRPO default per DAPO/TRL), KL divergence is unpenalized and not even tracked in most frameworks. |
-| Unstable training (NaN loss, reward collapse) | Lower `learning_rate` to 5e-7. Check for 100% completion truncation first. |
+| High KL but training otherwise healthy | **Do NOT lower LR just for KL.** With β=0 (our backend default), KL divergence values are un-normalized and purely informational. Do NOT use KL values to make training decisions. |
+| Unstable training (NaN loss, reward collapse) | Lower `learning_rate` to 1e-6. Check for 100% completion truncation first. |
 
 #### 7e. Monitor training
 
@@ -665,12 +668,14 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
   --file training-jobs/train-001.json \
-  --poll-interval 60 --max-wait 7200
+  --max-wait 7200
 ```
 
 > **⚠️ NEVER use `sleep 300` or `sleep 600` in a Bash tool call to wait for training.** Always use `poll-training`.
 
-When training completes, proceed to **Step 8b (Post-Training Analysis)**.
+**Early stopping** is enabled by default. The poll script monitors epoch evaluation scores and auto-cancels training if the score plateaus (delta < 0.01 across 3 consecutive epoch evals). This prevents wasting compute on a model that has stopped improving. To disable: add `--no-early-stop`.
+
+When training completes (or is early-stopped), proceed to **Step 8b (Post-Training Analysis)**. If early-stopped, the best checkpoint is noted in the output — use that epoch's model.
 
 ### Step 8: Analyze Results
 
@@ -871,7 +876,9 @@ If training keeps failing, STOP retrying blindly and diagnose:
 | Multiple NaN jobs in a row | Grader returning 0 for all completions → zero gradient → NaN | Run eval first — check if base model can score >0 on any records |
 | Reward flat after many epochs | No learning signal — all completions scoring identically | Check `frac_reward_zero_std` — improve grader granularity (partial credit) |
 
-**Escalation ladder:**
+**"cancelled" is a TERMINAL state — do NOT retry cancelled jobs.** Only retry on "failed" states (OOM, timeout, gradient issues). If a training job is cancelled by the user, respect the cancellation. Do NOT automatically create a new training job. Ask the user what they want to do instead. To cancel a running job: `uv run scripts/finetune.py cancel-training --workflow-id WF_ID --job-id JOB_ID`.
+
+**Escalation ladder (for "failed" jobs only — never for "cancelled"):**
 1. **Retry once** with same config (transient failure)
 2. **Lower LR** to 5e-7 (KL/gradient issues)
 3. **Lower max_output_tokens** to 256 (OOM/truncation issues)

@@ -14,10 +14,12 @@ Usage:
   uv run scripts/finetune.py upload-records --workflow-id WF_ID --file training.jsonl
   uv run scripts/finetune.py upload-grader --workflow-id WF_ID --file grader.js
   uv run scripts/finetune.py verify --workflow-id WF_ID
+  uv run scripts/finetune.py cancel-training --workflow-id WF_ID --job-id JOB_ID
 
 Exit codes:
   0 - success
   1 - error (details on stderr)
+  2 - job was cancelled (not an error, but a terminal state)
 """
 
 import argparse
@@ -1508,12 +1510,34 @@ def cmd_create_training(args: argparse.Namespace) -> None:
             sys.exit(1)
     else:
         payload["training_config"] = {
-            "learning_rate": 0.000001,  # 1e-6: universal GRPO consensus (DeepSeekMath, DAPO, Dr. GRPO, TRL default)
+            "learning_rate": 0.000005,  # 5e-6: between DeepSeek-R1's 3e-6 (arXiv:2501.12948) and gateway default 1e-5. Food-label E2E test showed 1e-6 too slow to converge.
             "lora_rank": 8,
             "gradient_accumulation_steps": 5,
-            "epochs": 8,  # RFT/GRPO needs more epochs than SFT — model generates fresh responses each epoch (no memorization risk). Ref: Interconnects.ai analysis of OpenAI RFT
+            "epochs": 8,  # Default; overridden below by adaptive logic if user didn't set --config
             "batch_size": 5,
         }
+
+    # Adaptive epochs based on dataset size (only when using defaults, not user --config)
+    # Small datasets exhaust quickly and need more passes; large datasets plateau earlier.
+    # Ref: DeepSeek-R1 (arXiv:2501.12948) used ~50k records with ~2 epochs;
+    #       food-label E2E test showed plateau at epoch 3 with 225 records;
+    #       OpenAI RFT guide recommends "hundreds of epochs" for small datasets.
+    if not args.config:
+        try:
+            wf = _api("GET", f"{args.base_url}/finetune/workflows/{args.workflow_id}")
+            record_count = wf.get("records_count", wf.get("record_count", 0))
+            if isinstance(record_count, int) and record_count > 0:
+                if record_count < 50:
+                    payload["training_config"]["epochs"] = 15
+                elif record_count < 200:
+                    payload["training_config"]["epochs"] = 8
+                elif record_count < 500:
+                    payload["training_config"]["epochs"] = 5
+                else:
+                    payload["training_config"]["epochs"] = 3
+                print(f"Adaptive epochs: {payload['training_config']['epochs']} (based on {record_count} records)")
+        except SystemExit:
+            pass  # Workflow fetch failed; keep default epochs=8
 
     if args.inference_params:
         try:
@@ -1608,6 +1632,83 @@ def _save_training_side_files(
         print(f"  Warning: Could not fetch epoch evals", file=sys.stderr)
 
 
+def _check_score_plateau(
+    base_url: str, wf_id: str, job_id: str,
+    min_evals: int = 3, delta_threshold: float = 0.01,
+) -> dict | None:
+    """Check if training scores have plateaued across epoch evals.
+
+    Returns a dict with plateau info if detected, None otherwise.
+    Early stopping signal: if avg score delta < delta_threshold across
+    min_evals consecutive epoch evaluations, the model has likely extracted
+    all learnable signal from the dataset.
+
+    Ref: Food-label E2E test (2026-03-31) showed plateau at epoch 3 with
+    225 records — score went 0.51→0.60 then +0.003 across 3 evals.
+    Continued training for 7+ more hours with no improvement.
+    """
+    try:
+        evals = _api(
+            "GET",
+            f"{base_url}/finetune/workflows/{wf_id}/finetune-evaluations",
+            params={"finetune_job_id": job_id},
+        )
+    except SystemExit:
+        return None
+
+    results = evals.get("results", [])
+    if not results:
+        return None
+
+    # Compute per-epoch average scores
+    # Each result has "epochs" dict: {"1": [{"score": 0.5}, ...], "2": [...], ...}
+    epoch_scores: dict[str, list[float]] = {}
+    for row in results:
+        epochs = row.get("epochs", {})
+        for epoch_key, items in epochs.items():
+            if not isinstance(items, list):
+                items = [items]
+            for item in items:
+                score = item.get("score")
+                if score is not None and isinstance(score, (int, float)):
+                    epoch_scores.setdefault(epoch_key, []).append(score)
+
+    if len(epoch_scores) < min_evals:
+        return None
+
+    # Sort epochs numerically and compute averages
+    def _sort_key(k: str):
+        try:
+            return float(k)
+        except (TypeError, ValueError):
+            return float("inf")
+
+    sorted_epochs = sorted(epoch_scores.keys(), key=_sort_key)
+    epoch_avgs = [(k, sum(epoch_scores[k]) / len(epoch_scores[k])) for k in sorted_epochs]
+
+    # Check if the last min_evals epochs show flat scores
+    recent = epoch_avgs[-min_evals:]
+    first_avg = recent[0][1]
+    last_avg = recent[-1][1]
+    delta = last_avg - first_avg
+
+    if abs(delta) < delta_threshold:
+        best_epoch, best_score = max(epoch_avgs, key=lambda x: x[1])
+        return {
+            "plateaued": True,
+            "num_evals": len(epoch_avgs),
+            "recent_evals": min_evals,
+            "delta": delta,
+            "first_score": first_avg,
+            "last_score": last_avg,
+            "best_epoch": best_epoch,
+            "best_score": best_score,
+            "all_avgs": [(k, round(v, 4)) for k, v in epoch_avgs],
+        }
+
+    return None
+
+
 def cmd_poll_training(args: argparse.Namespace) -> None:
     """Poll a training job until complete, saving status and metrics locally."""
     import time
@@ -1623,24 +1724,43 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
     if not wf_id:
         print("Error: --workflow-id not provided and not found in job file", file=sys.stderr)
         sys.exit(1)
-    poll_interval = args.poll_interval
     max_wait = args.max_wait
     output_dir = job_file.parent
 
-    print(f"Polling training job {job_id} every {poll_interval}s (max {max_wait}s)...")
-    elapsed = 0
+    # Adaptive polling: poll frequently early on, back off over time.
+    # Training jobs run 10min-2h+, so aggressive early polling catches fast
+    # failures while backing off saves API calls during long runs.
+    def _adaptive_interval(elapsed_s: float) -> int:
+        """Return poll interval based on elapsed time. Never exceeds 600s (10min)."""
+        if elapsed_s < 600:       # First 10 min: poll every 30s
+            return 30
+        elif elapsed_s < 3600:    # 10-60 min: poll every 2 min
+            return 120
+        else:                     # 60+ min: poll every 10 min (cap)
+            return 600
+
+    early_stop = not args.no_early_stop
+    print(f"Polling training job {job_id} with adaptive intervals (max {max_wait}s)...")
+    if early_stop:
+        print(f"  Early stopping enabled: will cancel if score plateau detected (delta < 0.01 across 3 evals)")
+    start_time = time.time()
     status = "unknown"
-    while elapsed < max_wait:
+    last_plateau_check = 0.0  # Only check plateau every 5 min to avoid API spam
+    while True:
+        elapsed = time.time() - start_time
+        if elapsed >= max_wait:
+            break
+
         try:
             result = _poll_training_once(args.base_url, wf_id, job_id)
         except SystemExit:
-            print(f"  [{elapsed}s] API error — retrying...", file=sys.stderr)
-            time.sleep(poll_interval)
-            elapsed += poll_interval
+            interval = _adaptive_interval(elapsed)
+            print(f"  [{int(elapsed)}s] API error — retrying in {interval}s...", file=sys.stderr)
+            time.sleep(interval)
             continue
 
         status = result.get("status", "unknown")
-        print(f"  [{elapsed}s] {status}", flush=True)
+        print(f"  [{int(elapsed)}s] {status}", flush=True)
 
         metadata["status"] = status
         job_file.write_text(json.dumps(metadata, indent=2))
@@ -1660,13 +1780,68 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
                 sys.exit(2)
             return
 
-        time.sleep(poll_interval)
-        elapsed += poll_interval
+        # Early stopping: check for score plateau every 5 min
+        # Ref: Food-label E2E test showed 7+ hours wasted on plateaued training.
+        # Auto-cancels when score delta < 0.01 across 3 consecutive epoch evals.
+        if early_stop and status == "running" and (elapsed - last_plateau_check) > 300:
+            last_plateau_check = elapsed
+            plateau = _check_score_plateau(args.base_url, wf_id, job_id)
+            if plateau:
+                print(f"\n  ⚠ SCORE PLATEAU DETECTED", file=sys.stderr)
+                print(f"    Score delta: {plateau['delta']:+.4f} across last {plateau['recent_evals']} evals", file=sys.stderr)
+                print(f"    Scores: {' → '.join(f'{s:.3f}' for _, s in plateau['all_avgs'])}", file=sys.stderr)
+                print(f"    Best: epoch {plateau['best_epoch']} ({plateau['best_score']:.3f})", file=sys.stderr)
+                print(f"    → Auto-cancelling to save compute. Use --no-early-stop to override.", file=sys.stderr)
+
+                # Cancel the job
+                try:
+                    _api("POST", f"{args.base_url}/finetune/workflows/{wf_id}/jobs/{job_id}/cancel")
+                    metadata["status"] = "cancelled"
+                    metadata["early_stop_reason"] = (
+                        f"Score plateau: delta {plateau['delta']:+.4f} across "
+                        f"{plateau['recent_evals']} evals. Best epoch: {plateau['best_epoch']} "
+                        f"(score {plateau['best_score']:.3f})"
+                    )
+                    job_file.write_text(json.dumps(metadata, indent=2))
+                    print(f"  Training cancelled (early stop). Best checkpoint: epoch {plateau['best_epoch']}")
+                except SystemExit:
+                    print(f"  Warning: Cancel request failed — training continues", file=sys.stderr)
+
+                sys.exit(2)
+
+        interval = _adaptive_interval(elapsed)
+        time.sleep(interval)
 
     print(f"Timeout after {max_wait}s. Training still {status}.", file=sys.stderr)
     metadata["status"] = f"timeout ({status})"
     job_file.write_text(json.dumps(metadata, indent=2))
     sys.exit(1)
+
+
+def cmd_cancel_training(args: argparse.Namespace) -> None:
+    """Cancel a running training job.
+
+    Calls POST /finetune/workflows/{workflow_id}/jobs/{job_id}/cancel
+    and updates the local job tracking file if one exists.
+    """
+    wf_id = args.workflow_id
+    job_id = args.job_id
+
+    print(f"Cancelling training job {job_id} in workflow {wf_id}...")
+    _api(
+        "POST",
+        f"{args.base_url}/finetune/workflows/{wf_id}/jobs/{job_id}/cancel",
+    )
+    print(f"Cancel request sent for job {job_id}.")
+
+    # Update local tracking file if provided
+    if args.file:
+        job_file = Path(args.file)
+        if job_file.exists():
+            metadata = json.loads(job_file.read_text())
+            metadata["status"] = "cancelled"
+            job_file.write_text(json.dumps(metadata, indent=2))
+            print(f"Updated local file: {job_file}")
 
 
 def cmd_sync_jobs(args: argparse.Namespace) -> None:
@@ -2008,8 +2183,15 @@ def main() -> None:
     p = subparsers.add_parser("poll-training", help="Poll training job until complete, save status and metrics")
     p.add_argument("--workflow-id", required=False, default=None, help="Workflow ID (read from job file if omitted)")
     p.add_argument("--file", required=True, help="Path to train-NNN.json (from create-training)")
-    p.add_argument("--poll-interval", type=int, default=60, help="Poll interval in seconds (default: 60)")
-    p.add_argument("--max-wait", type=int, default=14400, help="Max wait in seconds (default: 14400)")
+    p.add_argument("--poll-interval", type=int, default=60, help="(Ignored — adaptive polling is used. Kept for backward compatibility)")
+    p.add_argument("--max-wait", type=int, default=7200, help="Max wait in seconds (default: 7200 = 2h, matching SKILL.md recommendation)")
+    p.add_argument("--no-early-stop", action="store_true", help="Disable automatic early stopping on score plateau")
+
+    # cancel-training
+    p = subparsers.add_parser("cancel-training", help="Cancel a running training job")
+    p.add_argument("--workflow-id", required=True, help="Workflow ID")
+    p.add_argument("--job-id", required=True, help="Training job ID to cancel")
+    p.add_argument("--file", default=None, help="Path to local train-NNN.json to update status (optional)")
 
     # sync-jobs
     p = subparsers.add_parser("sync-jobs", help="Sync training + eval jobs from gateway to local tracking files")
@@ -2054,6 +2236,7 @@ def main() -> None:
         "poll-eval": cmd_poll_eval,
         "create-training": cmd_create_training,
         "poll-training": cmd_poll_training,
+        "cancel-training": cmd_cancel_training,
         "sync-jobs": cmd_sync_jobs,
         "delete-knowledge": cmd_delete_knowledge,
         "print-row-outputs": cmd_print_row_outputs,

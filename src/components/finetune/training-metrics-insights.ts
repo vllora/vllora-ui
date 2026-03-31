@@ -43,7 +43,7 @@
  * | reward_std             | 0.05-0.3      | <0.05         | <0.01          | Dr. GRPO, TRL       |
  * | frac_reward_zero_std   | <0.2          | >0.5          | >0.8           | Dr. GRPO, our guide |
  * | loss (GRPO)            | 0.01-0.1      | <0.001, >1.0  | stuck 0, NaN   | DeepSeekMath, TRL   |
- * | kl                     | <1.0          | 1.0-5.0       | >5.0 (>10 bad) | DeepSeekMath        |
+ * | kl                     | informational | —             | NaN/Inf only   | DAPO (β=0 default)  |
  * | grad_norm              | 0.5-2.0       | >100 (spikes) | NaN            | DeepSeekMath        |
  * | clip_ratio/region_mean | 0.1-0.3       | >0.5, <0.01   | —              | DAPO                |
  * | clipped_ratio          | <0.1          | 0.1-0.5       | >0.5           | DAPO, TRL           |
