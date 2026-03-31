@@ -151,7 +151,9 @@ def cmd_upload_knowledge(args: argparse.Namespace) -> None:
     Or a bare array of part objects.
 
     Transforms: 'id' → 'reference_id', removes 'source_id' before upload.
-    When --force is set, deletes existing sources with the same name before uploading.
+    Always checks for existing sources with the same name to prevent duplicates
+    on retry. With --force, deletes and re-uploads. Without --force, skips if
+    a source with parts already exists (safe resume after crash).
     """
     doc_path = Path(args.file)
     if not doc_path.exists():
@@ -160,13 +162,32 @@ def cmd_upload_knowledge(args: argparse.Namespace) -> None:
 
     source_name = args.name or doc_path.name
 
-    # When --force, delete existing sources with same name first to avoid duplicates
-    if args.force:
+    # Always check for existing sources with same name to prevent duplicates.
+    # The gateway's knowledge source endpoint does plain INSERT (no upsert),
+    # so retrying without this check creates duplicate sources.
+    existing = _api("GET", f"{args.base_url}/finetune/workflows/{args.workflow_id}/knowledge")
+    existing_sources = existing if isinstance(existing, list) else existing.get("sources", [])
+    matching = [s for s in existing_sources if s.get("name") == source_name]
+
+    if matching and args.force:
         deleted = _delete_existing_knowledge_by_name(
             args.base_url, args.workflow_id, source_name,
         )
         if deleted:
             print(f"  Force mode: removed {deleted} existing source(s)")
+    elif matching:
+        # Check if existing source already has parts (completed upload)
+        existing_src = matching[0]
+        part_count = existing_src.get("part_count", existing_src.get("parts_count", 0))
+        if part_count > 0:
+            print(f"  Source '{source_name}' already exists with {part_count} parts — skipping (use --force to replace)")
+            print(f"  Knowledge source ID: {existing_src.get('id', 'unknown')}")
+            return
+        # Source exists but has no parts (crash during previous upload) — delete and re-upload
+        _delete_existing_knowledge_by_name(
+            args.base_url, args.workflow_id, source_name,
+        )
+        print(f"  Removed incomplete source '{source_name}' (0 parts) — re-uploading")
 
     # Upload the document as a knowledge source (always POST after cleanup)
     form_data = {
