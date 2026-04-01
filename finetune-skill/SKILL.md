@@ -640,7 +640,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader \
 curl -s "http://localhost:9090/finetune/workflows/$WORKFLOW_ID" | python3 -c "
 import sys, json
 wf = json.load(sys.stdin).get('workflow', {})
-evaluator = wf.get('evaluator')
+evaluator = wf.get('eval_script') or wf.get('evaluator')
 if not evaluator or evaluator == 'null' or len(str(evaluator)) < 10:
     print('FATAL: Evaluator NOT on gateway — upload-grader failed')
     sys.exit(1)
