@@ -23,6 +23,24 @@ Use `finetune.py readiness-check --file evaluations/eval-NNN.json` to run the re
 
 Typically 2-3 eval iterations are needed to reach readiness, then 1-2 training iterations to converge.
 
+### Budget definition and budget check
+
+**Budget** means the maximum resources the user allows for this iteration plan:
+- **Money budget**: max USD spend (for example, `$20` total for all training iterations).
+- **Time budget**: max wall-clock time (for example, `6 hours total` or `2 hours per run`).
+- **Run budget** (optional): max number of training runs.
+
+Before proposing Phase 2 training runs, the agent must ask the user:
+- "What budget am I allowed to use (time and money)?"
+- If not provided, ask a follow-up and do not assume unlimited budget.
+
+Use the budget to choose conservative defaults (smaller first run, fewer epochs, lower token/candidate settings), then expand only if the user approves.
+
+During training steps, the agent must track budget consumption and report it:
+- Before each training run: show **estimated cost/time** and ask for confirmation if it exceeds remaining budget.
+- After each run (or cancellation/failure): update **spent vs remaining** money/time budget.
+- If remaining budget is insufficient for the next planned run, stop and ask the user whether to increase budget or change plan.
+
 ### Load precision (Phase 2 training)
 
 Set `training_config.load_precision` when creating a provider finetune job (`bf16`, `4bit`, or `8bit`). The training container maps this to Unsloth / HF load flags.
