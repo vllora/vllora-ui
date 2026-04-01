@@ -1,5 +1,7 @@
 # NeMo Data Designer Guide
 
+> **Repo:** https://github.com/vllora/nemo — server source, plugin architecture, setup instructions.
+
 NeMo Data Designer generates synthetic training data from curated seed rows. It takes a pre-materialized parquet file as its seed, enriches each row at generation time using the gateway knowledge search (via the `rag-retrieval` plugin), then runs LLM columns to produce final prompt records.
 
 **Architecture:**

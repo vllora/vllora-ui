@@ -457,7 +457,7 @@ The `reference/api-reference.md` documents all gateway endpoints. Each step uplo
 | `grader-writing.md` | ~620 | 3 grader patterns, smooth scoring, reward hacking prevention, LLM-as-judge API |
 | `topic-hierarchy.md` | ~290 | Topic structure, source tracing, coverage analysis, per-topic scores |
 | `workflow-guide.md` | ~470 | Deep dive on each pipeline step (including categorization, variants, grader testing, evaluator versioning, training metrics, continuation runs, eval-job tracking) |
-| `nemo-guide.md` | ~340 | NeMo Data Designer integration: curated seed (materialize_seed.py), rag-retrieval + rag-relevancy plugins, RAGAS-aligned scoring columns, preview/full job workflow, convert_nemo_rows.py usage |
+| `nemo-guide.md` | ~340 | NeMo Data Designer integration: curated seed (materialize_seed.py), rag-retrieval + rag-relevancy plugins, RAGAS-aligned scoring columns, preview/full job workflow, convert_nemo_rows.py usage. Repo: https://github.com/vllora/nemo |
 | `data-quality-gate.md` | ~190 | Pre-eval data quality gate: 4 structural/diversity/GT/alignment checks, thresholds, research citations |
 | `readiness-gate.md` | ~100 | Post-eval readiness gate: hard checks (sample count, score std, avg score), soft checks, difficulty probe |
 | `nemo-columns-reference.md` | ~300 | All 11 built-in column types + 2 custom plugins: complete field schemas, sampler params, programmatic composition patterns |

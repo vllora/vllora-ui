@@ -420,7 +420,7 @@ The UI at `http://localhost:5173/finetune` also shows all records grouped by top
 
 ### Step 4B: Recommended Path — NeMo Data Designer Generation
 
-> Use this path when the NeMo Data Designer server (`localhost:8000`) is available and you want to generate training data using it. See `reference/nemo-guide.md` for full API details, column types, and recipe structure.
+> Use this path when the NeMo Data Designer server (`localhost:8000`) is available and you want to generate training data using it. See `reference/nemo-guide.md` for full API details, column types, and recipe structure. Repo: https://github.com/vllora/nemo
 
 **How this differs from Step 4:** Instead of `generate_records.py`, you use the NeMo server to generate rows via a recipe. Both templates implement the two-stage question generation pattern from arXiv 2509.25736 (https://arxiv.org/html/2509.25736v1): generate a diverse `raw_question` from topic context first, then retrieve question-specific chunks via `rag-retrieval` and refine into the final `user_message`. The `rag-retrieval` column plugin calls the gateway knowledge search per row at generation time — no need to pre-link relations for knowledge retrieval.
 
