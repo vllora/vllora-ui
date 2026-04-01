@@ -116,7 +116,11 @@ def load_relations(relations_path: Path) -> list[dict]:
 
 
 def load_all_parts(knowledge_dir: Path) -> dict[str, dict]:
-    """Load all parts from {doc-slug}/knowledge_parts.json files, keyed by part ID."""
+    """Load all parts from {doc-slug}/knowledge_parts.json files, keyed by part ID.
+
+    Also loads relevance labels from all-parts-index.json if available.
+    Parts marked as irrelevant (relevant=False) are excluded.
+    """
     parts: dict[str, dict] = {}
     pattern = str(knowledge_dir / "*" / "knowledge_parts.json")
     for kp_file in sorted(glob.glob(pattern)):
@@ -126,6 +130,26 @@ def load_all_parts(knowledge_dir: Path) -> dict[str, dict]:
                 parts[p["id"]] = p
         except (json.JSONDecodeError, KeyError) as e:
             print(f"Warning: Failed to load {kp_file}: {e}", file=sys.stderr)
+
+    # Load relevance labels from all-parts-index.json if it exists
+    index_path = knowledge_dir / "all-parts-index.json"
+    if index_path.exists():
+        try:
+            index_data = json.loads(index_path.read_text())
+            index_parts = index_data.get("parts", index_data) if isinstance(index_data, dict) else index_data
+            relevance_map = {p["id"]: p.get("relevant") for p in index_parts if "id" in p}
+
+            # Filter out irrelevant parts
+            excluded = 0
+            for part_id, relevant in relevance_map.items():
+                if relevant is False and part_id in parts:
+                    del parts[part_id]
+                    excluded += 1
+            if excluded > 0:
+                print(f"  Filtered out {excluded} irrelevant parts (relevant=false in all-parts-index.json)")
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f"Warning: Failed to load relevance labels from {index_path}: {e}", file=sys.stderr)
+
     return parts
 
 
@@ -153,25 +177,35 @@ def get_ancestor_chain(topic: dict, topic_index: dict[str, dict]) -> list[dict]:
 
 
 def compose_system_prompt(root_prompt: str, ancestors: list[dict], leaf: dict) -> str:
-    """Compose a hierarchical system prompt: root persona + ancestor specializations + leaf focus.
+    """Compose a hierarchical system prompt: root persona + narrowing context from ancestors + leaf focus.
 
-    Each level adds specificity without contradicting the parent.
+    Structure:
+      - Root prompt: persona and general behavior ("You are a... You should...")
+      - Domain (ancestor): narrows the field — ONLY what's new beyond the root
+      - Skill (leaf): specific focus area — the exact capability being practiced
+
+    Each child level adds ONLY what the parent doesn't already say.
+    The result reads as one coherent instruction, not a list of fragments.
     Target: 50-150 words total.
     """
-    segments = [root_prompt]
+    # Start with the root persona (this is the only "You are..." statement)
+    parts = [root_prompt.rstrip(".") + "."]
 
+    # Add ancestor context — each narrows the scope
     for ancestor in ancestors:
-        segment = ancestor.get("system_prompt")
-        if not segment:
-            segment = f"Specialize in: {ancestor['name']}"
-        segments.append(segment)
+        segment = ancestor.get("system_prompt", "")
+        if segment:
+            parts.append(segment.rstrip(".") + ".")
 
-    leaf_segment = leaf.get("system_prompt")
-    if not leaf_segment:
-        leaf_segment = f"Focus on: {leaf['name']}"
-    segments.append(leaf_segment)
+    # Add leaf focus — the specific skill being practiced
+    leaf_segment = leaf.get("system_prompt", "")
+    if leaf_segment:
+        parts.append(leaf_segment.rstrip(".") + ".")
+    else:
+        parts.append(f"Focus on: {leaf['name']}.")
 
-    return "\n\n".join(segments)
+    # Join as a single flowing paragraph instead of separate blocks
+    return " ".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -378,15 +412,17 @@ def _call_llm_for_type(
 Topic: {topic['name']}
 Focus: {focus}
 
-Source material:
+Source material (each section is labeled with a part ID like [p-001]):
 {chunk_text}
 
 Each prompt must be a realistic question/request grounded in the source material above.
 Do NOT generate generic questions — reference specific concepts, examples, or details from the source.
 
-For each prompt, also provide a "ground_truth" field: a concise excerpt from the source material above that contains the information needed to accurately answer the question. Keep it focused on the relevant passage(s) — complete enough to verify a correct answer, but not the entire source.
+For each prompt, also provide:
+- "ground_truth": a concise excerpt from the source material that contains the information needed to answer the question. Keep it focused — complete enough to verify a correct answer, but not the entire source.
+- "used_parts": an array of part IDs (e.g., ["p-001", "p-003"]) — ONLY the specific parts from the source material above that this question is derived from. Most questions should use 1-3 parts, not all of them.
 
-Return JSON: {{"items": [{{"prompt": "the question", "ground_truth": "relevant source excerpt"}}, ...]}}"""
+Return JSON: {{"items": [{{"prompt": "the question", "ground_truth": "relevant source excerpt", "used_parts": ["p-001"]}}, ...]}}"""
 
     request_data = json.dumps({
         "messages": [{"role": "user", "content": prompt}],
@@ -407,8 +443,12 @@ Return JSON: {{"items": [{{"prompt": "the question", "ground_truth": "relevant s
                                 "properties": {
                                     "prompt": {"type": "string"},
                                     "ground_truth": {"type": "string"},
+                                    "used_parts": {
+                                        "type": "array",
+                                        "items": {"type": "string"},
+                                    },
                                 },
-                                "required": ["prompt", "ground_truth"],
+                                "required": ["prompt", "ground_truth", "used_parts"],
                                 "additionalProperties": False,
                             },
                         },
@@ -553,9 +593,15 @@ def generate_for_topic(
     for type_name, items in all_items:
         for item in items:
             if isinstance(item, str):
-                item = {"prompt": item, "ground_truth": ""}
+                item = {"prompt": item, "ground_truth": "", "used_parts": []}
             prompt_text = item.get("prompt", "")
             ground_truth = item.get("ground_truth", "")
+            # Use per-record used_parts from LLM, validated against known part_ids.
+            # Falls back to all topic part_ids if LLM didn't provide or returned invalid.
+            raw_used = item.get("used_parts", [])
+            validated_used = [pid for pid in raw_used if pid in {p for p in part_ids}]
+            record_source_parts = validated_used if validated_used else part_ids
+
             if not prompt_text or not prompt_text.strip():
                 continue
 
@@ -569,7 +615,7 @@ def generate_for_topic(
                 "messages": messages,
                 "id": f"{topic['id']}-{record_idx:03d}",
                 "topic": topic["id"],
-                "source_parts": part_ids,
+                "source_parts": record_source_parts,
                 "prompt_type": type_name,
             }
             if include_ground_truth and ground_truth and ground_truth.strip():

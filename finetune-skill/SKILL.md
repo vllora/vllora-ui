@@ -291,6 +291,21 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/know
 3. Re-validate. If still FAIL, present the failure details to the user and ask whether to proceed or re-extract.
 4. Do NOT silently proceed to Step 3 with FAIL status — bad extraction poisons topics, records, and training.
 
+**2e. Verify gateway upload matches local data — MUST PASS:**
+
+After all subagents complete and validation passes, verify that the gateway received ALL documents and parts correctly:
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py verify --workflow-id $WORKFLOW_ID --db
+```
+
+Then manually confirm:
+1. **Source count** — the number of knowledge sources on the gateway equals the number of documents you submitted
+2. **Parts count per source** — each source has the expected number of parts (compare against local `parts-index.json` for each document)
+3. **Source names** — each source is named after the PDF file (e.g., `IRS-Pub596-...pdf`), NOT after `knowledge_parts.json` or any other artifact file
+
+If any source has 0 parts, or has a wrong name (like `knowledge_parts.json` instead of the PDF name), delete it and re-upload with the correct `--file <PDF_PATH>`. A mis-uploaded source will cause ALL downstream steps (topics, relations, records) to have broken references that silently pass validation but produce incorrect data in the UI.
+
 > **For full extraction workflow details** (if you need to understand or debug), read [reference/extraction-guide.md](reference/extraction-guide.md).
 
 If there are no documents (objective-only pipeline), skip this step.
@@ -358,17 +373,58 @@ Save to `topics.json` as a **flat array** — every topic at the same level, hie
 
 ```json
 [
-  {"id": "billing", "name": "Billing & Payments", "parent_id": null, "system_prompt": "Specialize in: payment processing, subscription management, and billing troubleshooting."},
-  {"id": "refund-processing", "name": "Refund Processing", "parent_id": "billing", "system_prompt": "Specialize in: handling refund requests, explaining eligibility, and processing different refund types.", "expected_difficulty": "medium"},
-  {"id": "payment-troubleshooting", "name": "Payment Troubleshooting", "parent_id": "billing", "system_prompt": "Focus on: diagnosing payment failures, international transactions, 3DS challenges, and fraud block resolution.", "expected_difficulty": "hard"}
+  {"id": "billing", "name": "Billing & Payments", "parent_id": null, "system_prompt": "Specialize in billing and payment operations, including processing, subscription management, and troubleshooting."},
+  {"id": "refund-processing", "name": "Refund Processing", "parent_id": "billing", "system_prompt": "Focus on: handling refund requests, determining eligibility per policy, and processing standard, partial, and pro-rated refunds.", "expected_difficulty": "medium"},
+  {"id": "payment-troubleshooting", "name": "Payment Troubleshooting", "parent_id": "billing", "system_prompt": "Focus on: diagnosing payment failures including expired cards, international transactions, 3DS challenges, and fraud block resolution.", "expected_difficulty": "hard"}
 ]
 ```
+
+Note: the domain topic ("Billing & Payments") does NOT repeat the root persona — it only adds the domain specialization. Leaf topics add the specific skill focus. When composed with a root prompt like "You are a customer support agent. Be helpful, accurate, and empathetic.", the result reads naturally as one instruction.
 
 The `expected_difficulty` field (`"easy"`, `"medium"`, `"hard"`) is an initial estimate — it gets refined to an actual pass-rate score after the difficulty probe in Step 7. Leaf topics only. Used to weight record generation (more records for harder topics).
 
 **Topic count**: Scale with dataset size — 5-10 leaf topics for 100-200 records, 20-40 for 500-1,000, 40-80 for 1,000-3,000. Target 15-25 records per leaf topic — fewer than 10 risks insufficient GRPO variance, more than 30 introduces redundancy (arXiv:2410.15226 §3.3; validated by domain RFT practice: arXiv:2509.25736 used 10-50 per topic). See `reference/topic-hierarchy.md` for full guidelines.
 
-**System prompt composition**: The `system_prompt` field on each topic is a **segment** that gets composed with its ancestors during record generation: `[Root --system-prompt] + [Root topic] + [Parent topic] + [Leaf topic]`. Each level adds specificity without contradicting the parent. Keep each segment to 1-2 sentences, 50-150 words total when composed.
+**System prompt composition**: The `system_prompt` field on each topic is a **segment** that gets composed into a single flowing sentence with the root prompt and ancestors: `[Root persona]. [Domain context]. [Leaf focus].`
+
+**Rules for writing segments:**
+- **Root prompt** (Step 1): the ONLY place with "You are..." persona. Sets identity + general behavior.
+- **Domain topics** (parent_id=null): narrow the field. Do NOT repeat the root persona. Write as a behavioral instruction — what the model should DO in this domain, not a list of keywords.
+- **Leaf topics**: the specific skill focus. Describe the **task and reasoning process**, not a list of nouns.
+
+**Bad (keyword grocery list):**
+```
+"Specialize in: recognizing life-threatening vs near-fatal asthma, oxygen targets,
+nebulized salbutamol/ipratropium, IV magnesium sulfate, systemic corticosteroids,
+ICU escalation criteria, and discharge planning after acute exacerbation."
+```
+This is a table of contents dumped into a sentence. The model doesn't know what to DO with these keywords.
+
+**Good (behavioral instruction):**
+```
+"When a patient presents with acute severe asthma, assess severity using BTS/SIGN
+criteria (life-threatening vs near-fatal), recommend stepwise treatment (nebulized
+salbutamol → ipratropium → IV magnesium → systemic corticosteroids), identify ICU
+escalation triggers, and plan discharge with prevention strategies."
+```
+This tells the model HOW to reason: assess → recommend → identify → plan. It uses the same domain terms but in context of what to do with them.
+
+**Bad (repeats root):**
+```
+Root: "You are a clinical reasoning assistant specializing in pulmonology."
+Domain: "You are a clinical reasoning assistant specializing in pulmonology."  ← REPEATS ROOT
+```
+
+**Good (each level adds only what's new):**
+```
+Root: "You are a clinical reasoning assistant. Apply evidence-based guidelines, cite sources, and reason step-by-step."
+Domain: "For pulmonology cases, use BTS/SIGN 2019 and GINA guidelines to assess airway conditions, classify severity, and recommend treatment."
+Leaf: "When managing acute severe asthma, assess severity (life-threatening vs near-fatal), apply stepwise bronchodilator escalation, identify ICU triggers, and plan discharge."
+```
+
+Result: "You are a clinical reasoning assistant. Apply evidence-based guidelines, cite sources, and reason step-by-step. For pulmonology cases, use BTS/SIGN 2019 and GINA guidelines to assess airway conditions, classify severity, and recommend treatment. When managing acute severe asthma, assess severity (life-threatening vs near-fatal), apply stepwise bronchodilator escalation, identify ICU triggers, and plan discharge."
+
+**Writing pattern for segments:** Start with a situational trigger ("When...", "For...", "Given..."), then describe the reasoning steps the model should follow using action verbs (assess, recommend, identify, compare, calculate, explain). Keep each segment to 1-2 sentences. Target 50-150 words total when composed.
 
 **Topic-source linking**: After uploading knowledge source parts, link them to topics via the `POST /topics/relations` API. Only link **relevant** parts — parts excluded during the relevance filter (step 2 above) should NOT appear in `relations.json`. Never fabricate references.
 
@@ -378,13 +434,19 @@ The `expected_difficulty` field (`"easy"`, `"medium"`, `"hard"`) is an initial e
 
 If there are no documents (objective-only pipeline), skip this step.
 
+**Self-check system_prompt quality before proceeding.** For each leaf topic, verify:
+1. Does the segment start with a situational trigger ("When...", "For...", "Given...")? If it starts with "Specialize in:" followed by a comma-separated list, rewrite it.
+2. Does it contain action verbs (assess, recommend, identify, compare, calculate)? If it's just nouns, rewrite it.
+3. Does it repeat anything already in the root prompt or parent topic? If so, remove the redundancy.
+4. Read the composed result (root + ancestors + leaf) aloud — does it read as one natural instruction? If it sounds like 4 separate fragments, smooth the transitions.
+
 **Checkpoint** after topics and relations are complete:
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step topics --project-dir finetune-project --workflow-id $WORKFLOW_ID
 python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step relations --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
-**Upload immediately** — push topics and relations to the gateway so the UI shows the topic hierarchy and coverage:
+**Upload immediately** — push topics, relations, and relevance labels to the gateway so the UI shows the topic hierarchy, coverage, and which parts are relevant:
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-topics \
   --workflow-id $WORKFLOW_ID --file topics.json
@@ -394,6 +456,10 @@ if [ -f relations.json ]; then
   python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-relations \
     --workflow-id $WORKFLOW_ID --file relations.json
 fi
+
+# Upload relevance labels to gateway (so UI shows which parts are relevant/irrelevant)
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py update-part-relevance \
+  --workflow-id $WORKFLOW_ID --parts-index knowledge/all-parts-index.json
 ```
 
 **Review topics with the user.** Present the topic hierarchy (name, parent, linked source material count, planned records-per-topic). Ask:
@@ -421,7 +487,7 @@ Write prompts to `training.jsonl` — one JSON object per line. Each line is a *
 {"messages": [{"role": "system", "content": "You are..."}, {"role": "user", "content": "..."}], "id": "record-1", "topic": "billing/refunds", "source_parts": ["p-001", "p-003"]}
 ```
 
-Each record includes `source_parts` — the IDs of the knowledge parts used as grounding material. This enables traceability from any record back to the specific document sections it was derived from.
+Each record includes `source_parts` — the IDs of the **specific** knowledge parts that this particular question was derived from (not all parts linked to the topic). The LLM tags which parts it used when generating each question, enabling precise traceability from any record back to the exact document sections it references. Most records use 1-3 parts.
 
 Use `generate_records.py` to generate user prompts via LLM, grounded in the knowledge chunks linked to each topic:
 

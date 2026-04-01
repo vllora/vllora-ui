@@ -162,6 +162,10 @@ python3 <SKILL_DIR>/scripts/finetune.py upload-knowledge \
   --metadata '{"extraction_method":"docling_deterministic"}'
 ```
 
+**⚠️ CRITICAL: `--file` MUST be the original PDF path (e.g., `pdfs/document.pdf`), NOT the knowledge_parts.json file.** Passing the wrong file creates a source named "knowledge_parts.json" with 0 parts — all downstream steps (topics, relations, records) will have broken references.
+
+**Post-upload verify**: After upload, confirm the output says the correct source name and a non-zero parts count. If it says `Parts uploaded: 0` or the source name doesn't match the PDF filename, something went wrong — delete and re-upload.
+
 ### Fallback (Docling genuinely unavailable or failed)
 
 **Only use this if**: Docling health check fails (`curl http://127.0.0.1:5001/health` returns error) OR Docling task status is `failed` after polling. Do NOT use this fallback just because polling is slow.

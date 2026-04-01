@@ -2964,6 +2964,74 @@ def cmd_delete_knowledge(args: argparse.Namespace) -> None:
     print(f"Deleted {deleted} knowledge source(s).")
 
 
+def cmd_update_part_relevance(args: argparse.Namespace) -> None:
+    """Update knowledge source parts with relevance labels from all-parts-index.json.
+
+    Reads the parts index, collects parts with `relevant` field set (true/false),
+    groups by source document, and PATCHes extraction_metadata on the gateway.
+    """
+    index_path = Path(args.parts_index)
+    if not index_path.exists():
+        print(f"Error: Parts index not found: {index_path}", file=sys.stderr)
+        sys.exit(1)
+
+    data = json.loads(index_path.read_text())
+    parts = data.get("parts", data) if isinstance(data, dict) else data
+
+    # Group parts by source_doc, only those with relevant field set
+    by_source: dict = {}
+    for part in parts:
+        rel = part.get("relevant")
+        if rel is None:
+            continue
+        source_doc = part.get("source_doc", "unknown")
+        by_source.setdefault(source_doc, []).append(part)
+
+    if not by_source:
+        print("No parts with relevance labels found. Nothing to update.")
+        return
+
+    # Resolve source IDs from gateway
+    wf_url = f"{args.base_url}/finetune/workflows/{args.workflow_id}/knowledge"
+    sources_resp = _api("GET", wf_url)
+    sources_list = sources_resp.get("knowledge_sources", [])
+
+    total_updated = 0
+    for source_doc, labeled_parts in by_source.items():
+        # Find the gateway source by name match
+        ks_id = None
+        for src in sources_list:
+            if src.get("name", "") == source_doc or src.get("reference_id", "") == source_doc:
+                ks_id = src["id"]
+                break
+
+        if not ks_id:
+            print(f"  Warning: No gateway source found for '{source_doc}', skipping {len(labeled_parts)} parts")
+            continue
+
+        # Build batch update payload
+        updates = []
+        for part in labeled_parts:
+            # Merge relevant into existing extraction_metadata
+            existing_meta = {}
+            if "pages" in part:
+                existing_meta["pages"] = part["pages"]
+            existing_meta["relevant"] = part["relevant"]
+
+            updates.append({
+                "part_identifier": part["id"],
+                "extraction_metadata": existing_meta,
+            })
+
+        result = _api("PATCH", f"{wf_url}/{ks_id}/parts", json=updates)
+        updated = result.get("updated", 0)
+        total_updated += updated
+        relevant_count = sum(1 for p in labeled_parts if p.get("relevant"))
+        print(f"  {source_doc}: {updated} parts updated ({relevant_count} relevant, {len(labeled_parts) - relevant_count} irrelevant)")
+
+    print(f"\nTotal: {total_updated} parts updated with relevance labels.")
+
+
 def _compact_cell(value, max_chars: int = 160) -> str:
     """Render cell-safe text for table output."""
     if value is None:
@@ -3251,6 +3319,12 @@ def main() -> None:
     p.add_argument("--source-id", default=None, help="Specific knowledge source ID to delete")
     p.add_argument("--all", action="store_true", help="Delete all knowledge sources")
 
+    # update-part-relevance
+    p = subparsers.add_parser("update-part-relevance", help="Update parts with relevance labels from all-parts-index.json")
+    p.add_argument("--workflow-id", required=True, help="Workflow ID")
+    p.add_argument("--parts-index", default="finetune-project/knowledge/all-parts-index.json",
+                   help="Path to all-parts-index.json (default: finetune-project/knowledge/all-parts-index.json)")
+
     # difficulty-probe
     p = subparsers.add_parser(
         "difficulty-probe",
@@ -3315,6 +3389,7 @@ def main() -> None:
         "cancel-eval": cmd_cancel_eval,
         "sync-jobs": cmd_sync_jobs,
         "delete-knowledge": cmd_delete_knowledge,
+        "update-part-relevance": cmd_update_part_relevance,
         "difficulty-probe": cmd_difficulty_probe,
         "data-quality-gate": cmd_data_quality_gate,
         "print-row-outputs": cmd_print_row_outputs,

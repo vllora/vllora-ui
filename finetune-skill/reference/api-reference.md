@@ -62,6 +62,7 @@ All endpoints use JSON unless noted. Auth via `Authorization: Bearer <token>` he
 | 41 | POST | `/finetune/workflows/{id}/knowledge/{ks_id}/parts` | Add parts to knowledge source |
 | 42 | GET | `/finetune/workflows/{id}/knowledge/{ks_id}/parts` | List knowledge source parts |
 | 43 | DELETE | `/finetune/workflows/{id}/knowledge/{ks_id}/parts/{part_id}` | Delete single part |
+| 43b | PATCH | `/finetune/workflows/{id}/knowledge/{ks_id}/parts` | Batch update parts extraction_metadata |
 | 43a | POST | `/finetune/workflows/{id}/knowledge/search` | Semantic search top-k knowledge parts |
 | **Eval Jobs** (workflow-scoped) | | | |
 | 44 | GET | `/finetune/workflows/{id}/eval-jobs` | List eval jobs |
@@ -352,6 +353,22 @@ List all parts of a knowledge source.
 ### DELETE `/finetune/workflows/{workflow_id}/knowledge/{ks_id}/parts/{part_id}`
 
 Delete a single part from a knowledge source.
+
+### PATCH `/finetune/workflows/{workflow_id}/knowledge/{ks_id}/parts`
+
+Batch update extraction_metadata on knowledge source parts. Used to set relevance labels after objective-based filtering in Step 3.
+
+Request body (array of updates):
+```json
+[
+  {"part_identifier": "p-001", "extraction_metadata": {"pages": [1, 2], "relevant": true}},
+  {"part_identifier": "p-002", "extraction_metadata": {"pages": [3], "relevant": false}}
+]
+```
+
+Response: `{"updated": 2}`
+
+Parts are resolved by `id` or `reference_id`. The `extraction_metadata` field is fully replaced per-part (merge with existing data before sending).
 
 ### POST `/finetune/workflows/{workflow_id}/knowledge/search`
 

@@ -36,6 +36,7 @@ interface DbSourceResponse {
 }
 
 function mapPart(db: DbPartResponse): KnowledgeSourcePart {
+  const extractionMeta = db.extraction_metadata as Record<string, unknown> | null;
   return {
     id: db.id,
     referenceId: db.reference_id ?? undefined,
@@ -45,7 +46,8 @@ function mapPart(db: DbPartResponse): KnowledgeSourcePart {
     contentMetadata: (db.content_metadata as Record<string, unknown>) ?? undefined,
     title: db.title ?? undefined,
     extractionPath: db.extraction_path ?? undefined,
-    extractionMetadata: (db.extraction_metadata as Record<string, unknown>) ?? undefined,
+    extractionMetadata: extractionMeta ?? undefined,
+    relevant: (extractionMeta?.relevant as boolean | null) ?? null,
   };
 }
 

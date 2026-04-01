@@ -46,14 +46,19 @@ function StatsBar({ sources }: { readonly sources: readonly KnowledgeSource[] })
     let text = 0;
     let table = 0;
     let image = 0;
+    let relevant = 0;
+    let irrelevant = 0;
     for (const s of sources) {
       for (const p of s.parts) {
         if (p.type === "text") text++;
         else if (p.type === "table") table++;
         else if (p.type === "image") image++;
+        if (p.relevant === true) relevant++;
+        else if (p.relevant === false) irrelevant++;
       }
     }
-    return { text, table, image, total: text + table + image };
+    const hasRelevanceLabels = relevant > 0 || irrelevant > 0;
+    return { text, table, image, total: text + table + image, relevant, irrelevant, hasRelevanceLabels };
   }, [sources]);
 
   return (
@@ -75,6 +80,19 @@ function StatsBar({ sources }: { readonly sources: readonly KnowledgeSource[] })
         <span className="inline-flex items-center gap-0.5">
           <ImageIcon className="w-2.5 h-2.5 text-purple-400/60" /> {stats.image}
         </span>
+      )}
+      {stats.hasRelevanceLabels && (
+        <>
+          <span className="text-border">|</span>
+          <span className="inline-flex items-center gap-0.5 text-blue-400/60">
+            {stats.relevant} relevant
+          </span>
+          {stats.irrelevant > 0 && (
+            <span className="inline-flex items-center gap-0.5 text-orange-400/60">
+              {stats.irrelevant} excluded
+            </span>
+          )}
+        </>
       )}
     </div>
   );
@@ -109,6 +127,16 @@ function SearchResultCard({
         )}>
           {typeLabel}
         </span>
+        {result.part.relevant === true && (
+          <span className="text-[9px] px-1 py-0.5 rounded font-medium uppercase tracking-wider bg-blue-500/10 text-blue-400 shrink-0">
+            Rel
+          </span>
+        )}
+        {result.part.relevant === false && (
+          <span className="text-[9px] px-1 py-0.5 rounded font-medium uppercase tracking-wider bg-orange-500/10 text-orange-400 shrink-0">
+            Irr
+          </span>
+        )}
       </div>
       <div className="flex items-center gap-1.5 mt-0.5">
         <FileText className="w-2.5 h-2.5 text-muted-foreground/40 shrink-0" />

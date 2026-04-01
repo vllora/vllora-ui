@@ -30,6 +30,7 @@ interface SemanticChunk {
   readonly text: string;
   readonly pageStart: number;
   readonly pageEnd: number;
+  readonly relevant?: boolean | null;
 }
 
 interface LegacySection {
@@ -181,6 +182,16 @@ function ChunkCard({
               >
                 <Database className="w-2.5 h-2.5" />
                 {recordCount} {recordCount === 1 ? 'record' : 'records'}
+              </span>
+            )}
+            {chunk.relevant === true && (
+              <span className="text-[9px] px-1 py-0.5 rounded font-medium uppercase tracking-wider bg-blue-500/10 text-blue-400 shrink-0">
+                Relevant
+              </span>
+            )}
+            {chunk.relevant === false && (
+              <span className="text-[9px] px-1 py-0.5 rounded font-medium uppercase tracking-wider bg-orange-500/10 text-orange-400 shrink-0">
+                Irrelevant
               </span>
             )}
           </div>
@@ -410,6 +421,7 @@ export function KnowledgeSourceViewer({ sourceId, chunkRecordCounts }: Knowledge
       text: part.content || '',
       pageStart: (part.extractionMetadata as Record<string, unknown>)?.pageStart as number || 1,
       pageEnd: (part.extractionMetadata as Record<string, unknown>)?.pageEnd as number || 1,
+      relevant: part.relevant,
     }));
   }, [source]);
 
