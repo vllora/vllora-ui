@@ -133,11 +133,14 @@ def validate_record(line_num: int, line: str) -> list[str]:
     return errors
 
 
-def load_valid_topics(topics_path: Path) -> set[str]:
-    """Load topic IDs from topics.json."""
+def load_valid_topics(topics_path: Path) -> tuple[set[str], set[str]]:
+    """Load topic IDs from topics.json. Returns (all_ids, leaf_ids)."""
     data = json.loads(topics_path.read_text())
     topics = data if isinstance(data, list) else data.get("topics", [])
-    return {t["id"] for t in topics if isinstance(t, dict) and "id" in t}
+    all_ids = {t["id"] for t in topics if isinstance(t, dict) and "id" in t}
+    parent_ids = {t.get("parent_id") for t in topics if isinstance(t, dict) and t.get("parent_id")}
+    leaf_ids = all_ids - parent_ids
+    return all_ids, leaf_ids
 
 
 def load_valid_parts(parts_path: Path) -> set[str]:
@@ -182,14 +185,15 @@ def main() -> None:
 
     # Load cross-reference data if provided
     valid_topics: set[str] | None = None
+    leaf_topics: set[str] | None = None
     valid_parts: set[str] | None = None
 
     if topics_path:
         if not topics_path.exists():
             print(f"Warning: Topics file not found: {topics_path} — skipping topic validation", file=sys.stderr)
         else:
-            valid_topics = load_valid_topics(topics_path)
-            print(f"Cross-referencing against {len(valid_topics)} topics from {topics_path.name}")
+            valid_topics, leaf_topics = load_valid_topics(topics_path)
+            print(f"Cross-referencing against {len(valid_topics)} topics ({len(leaf_topics)} leaf) from {topics_path.name}")
 
     if parts_path:
         if not parts_path.exists():
@@ -232,6 +236,8 @@ def main() -> None:
                     topic_counts[topic] += 1
                     if valid_topics is not None and topic not in valid_topics:
                         warnings.append(f"Line {line_num}: Topic '{topic}' not found in topics.json")
+                    elif leaf_topics is not None and topic not in leaf_topics:
+                        warnings.append(f"Line {line_num}: Topic '{topic}' is a parent topic, not a leaf — records should reference leaf topics only")
 
                 if record.get("ground_truth"):
                     gt_count += 1

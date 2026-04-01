@@ -116,17 +116,18 @@ relations.json (topic_identifier → part_identifier)
 topics.json + relations.json + knowledge_parts.json files
          ↓
   generate_records.py
-  ├── load_all_parts() ──→ excludes relevant: false
+  ├── load_all_parts() ──→ only relevant parts (filtered in Step 3a)
   ├── compose_system_prompt(root, ancestors, leaf) ──→ single flowing paragraph
   ├── For each leaf topic:
-  │   ├── Gather linked parts (from relations)
-  │   ├── Optional: RAG retrieval (--use-rag) ──→ excludes relevant: false
+  │   ├── Gather linked parts from relations (curated in Step 3d — NOT augmented with RAG)
   │   ├── 5 prompt types × N records per type:
   │   │   explain, scenario, compare/analyze, edge_case, application
   │   └── LLM generates question + tags used_parts ──→ 1-3 parts per record
   │         ↓
   │   Record: {messages, id, topic, source_parts, prompt_type, ground_truth}
   └── Parallel: up to 4 topics concurrently
+
+  Alternative: --rag-only mode (skip Step 3d, use gateway semantic search instead of relations)
          ↓
 training.jsonl (200+ records)
          ↓
@@ -137,30 +138,61 @@ training.jsonl (200+ records)
   ✓ Records on gateway
 ```
 
-### Layer 3B: NeMo Alternative (Optional)
+### Layer 3B: NeMo Alternative (Optional — requires NeMo server at localhost:8000)
 
 ```
-topics.json
+topics.json + root system prompt
          ↓
-  materialize_seed.py (--system-prompt, --topics)
+  materialize_seed.py (NeMo repo — not in this skill)
          ↓
-  curated-seed.parquet (topic, topic_path, composed_system_prompt, expected_difficulty)
+  curated-seed.parquet
+  ├── topic, topic_name, topic_path
+  ├── composed_system_prompt  (root + ancestors + leaf — same as generate_records.py)
+  └── expected_difficulty     (from topic metadata — NOT random)
          ↓
   NeMo server (localhost:8000)
-  ├── rag-retrieval → retrieved_chunks (from gateway search)
-  ├── raw_question → question_chunks → user_message (two-stage)
-  ├── reference_answer
-  └── judge columns (answerable, groundedness, specificity, relevancy)
+  ├── POST /seed/upload-curated  → upload parquet
+  ├── POST /seed/inspect-curated → verify schema
+  └── POST /jobs → recipe execution
          ↓
-  nemo-dataset.json
+  Recipe column pipeline (12 columns):
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │  1. retrieved_chunks    = rag-retrieval(topic_path → gateway search)    │
+  │  2. topic_context       = expression(topic_path) [seed passthrough]     │
+  │  3. difficulty          = expression(expected_difficulty) [from seed]    │
+  │  4. raw_question        = llm-text(topic + chunks → question)    [DROP] │
+  │  5. question_chunks     = rag-retrieval(raw_question → search)   [DROP] │
+  │  6. system_prompt       = expression(composed_system_prompt) [SEED]     │
+  │  7. user_message        = llm-text(refine raw_question + chunks)        │
+  │  8. reference_answer    = llm-text(answer from chunks)                  │
+  │  9. judge_answerable    = llm-judge(binary 0/1)                         │
+  │ 10. judge_groundedness  = llm-judge(0/0.5/1)                            │
+  │ 11. judge_specificity   = llm-judge(binary 0/1)                         │
+  │ 12. score_relevancy     = rag-relevancy(Jaccard overlap)                │
+  └──────────────────────────────────────────────────────────────────────────┘
          ↓
-  convert_nemo_rows.py (--workflow-id → recovers source_parts via gateway search)
+  Preview job (10 rows) → review → Full job
          ↓
-  data_quality_gate.py
+  GET /jobs/{id}/dataset → nemo-dataset.json
          ↓
-  training.jsonl
+  convert_nemo_rows.py
+  ├── filters by judge scores (answerable=1, groundedness≥0.75, specificity≥0.75)
+  ├── --workflow-id → recovers source_parts via gateway search
+  └── maps to training.jsonl format
+         ↓
+  data_quality_gate.py (format/structure — complements judge columns)
+         ↓
+  validate_dataset.py --nemo
+         ↓
+  upload-records
          ↓
   ✓ Records on gateway
+
+  ⚠️ Known limitations:
+  - rag-retrieval does NOT filter by relevant:true/false (NeMo server issue)
+  - source_parts are recovered via re-query (approximate, not exact)
+  - system_prompt MUST come from seed (expression), NOT LLM-generated per row
+  - materialize_seed.py lives in NeMo repo, not finetune-skill
 ```
 
 ### Layer 4: Knowledge + Topics → Grader (Step 5)
@@ -220,9 +252,10 @@ Step 3d (Relations):
   Irrelevant parts never appear in relations.json
 
 Step 4 (Generate):
-  load_all_parts() filters out relevant: false parts
-  RAG retrieval (--use-rag) filters out relevant: false parts
+  Only relevant parts reach here (filtered in Step 3a)
+  Relations link only relevant parts (curated in Step 3d)
   Records only reference relevant knowledge
+  (--rag-only mode: gateway search has safety-net filter for relevant:false)
 
 Step 4B (NeMo):
   ⚠ rag-retrieval plugin does NOT filter by relevance (known limitation)

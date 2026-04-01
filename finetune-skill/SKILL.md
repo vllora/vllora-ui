@@ -68,9 +68,9 @@ Steps 4 and 5 can run in parallel — both depend on extraction + topics, not on
 
 **Checkpoint after each step** — so the pipeline can resume after crashes:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step <STEP_NAME> --project-dir finetune-project --workflow-id $WORKFLOW_ID
+uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step <STEP_NAME> --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
-Step names: `create-workflow`, `extract`, `topics`, `relations`, `generate-data`, `grader`, `validate`, `data-quality-gate`, `upload-records`, `upload-grader`, `eval-N` (e.g. `eval-1`, `eval-2`), `readiness-pass`, `difficulty-probe`, `training`, `analyze`.
+Step names: `create-workflow`, `extract`, `topics`, `relations`, `generate-data`, `grader`, `validate`, `data-quality-gate`, `eval-N` (e.g. `eval-1`, `eval-2`), `readiness-pass`, `difficulty-probe`, `training`, `analyze`.
 
 ### Working Directory
 
@@ -137,19 +137,19 @@ fi
 1. Read `finetune-project/config.json` to get the `workflow_id`
 2. **Run `status` to see the full picture** — this is the single source of truth:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py status --workflow-id $WORKFLOW_ID
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py status --workflow-id $WORKFLOW_ID
 ```
 This shows gateway data (records, topics, sources, grader), all job statuses, local checkpoint state, and recommends the next step. **Follow its recommendation.**
 
 3. **Sync jobs from gateway** to pick up jobs created by the UI or other agents:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py sync-jobs --workflow-id $WORKFLOW_ID --output-dir finetune-project
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py sync-jobs --workflow-id $WORKFLOW_ID --output-dir finetune-project
 ```
 This creates local tracking files for any jobs you don't already have and updates statuses for existing jobs (e.g., a job you created that was later cancelled from the UI).
 
 4. **Cancel broken eval jobs** — if `status` shows a running eval scoring ~0.0, the grader is broken and the eval is wasting compute. Cancel it before proceeding:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py cancel-eval --workflow-id $WORKFLOW_ID --eval-id <EVAL_ID>
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py cancel-eval --workflow-id $WORKFLOW_ID --eval-id <EVAL_ID>
 ```
 5. **Pick up from the recommended step** — do NOT re-run completed steps
 6. Append to `execution-log.md` (never overwrite) with a "Resumed" entry:
@@ -183,7 +183,7 @@ Ask the user what behaviors the model should learn. Produce two things:
 
 **Upload immediately** — create the workflow on the gateway so the UI shows progress from the start:
 ```bash
-WORKFLOW_ID=$(python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-workflow \
+WORKFLOW_ID=$(uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-workflow \
   --name "My Project" \
   --objective "Train a model to..." | tail -1)
 echo "Workflow created: $WORKFLOW_ID"
@@ -213,15 +213,11 @@ Extract knowledge from all documents. Each document is processed independently b
 curl -sS --connect-timeout 5 http://127.0.0.1:5001/health 2>/dev/null && echo "DOCLING_OK" || echo "DOCLING_UNAVAILABLE"
 ```
 
-**If Docling is unavailable**, use the fallback text extractor instead:
-```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/pdftotext_extract.py <pdf-path> -o <output-dir>/docling-result.json
-```
-This produces a simpler extraction (text-only, no table detection) but is sufficient for most documents. The `knowledge-extractor` subagent will work with either Docling or pdftotext output.
+**If Docling is unavailable**, the `knowledge-extractor` subagent handles the fallback automatically — it uses `convert_pdf_to_markdown.py` to produce a `.md` file, then feeds it to `build_knowledge_parts.py`. Do NOT run `pdftotext_extract.py` separately from the orchestrator — delegate entirely to the subagent, which has its own fallback logic.
 
 If Docling is available, submit all PDFs at once:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/docling_extract.py --submit-only \
+uv run ${CLAUDE_SKILL_DIR}/scripts/docling_extract.py --submit-only \
   "pdfs/doc1.pdf:finetune-project/knowledge/doc1-slug/docling-result.json" \
   "pdfs/doc2.pdf:finetune-project/knowledge/doc2-slug/docling-result.json" \
   ...
@@ -287,7 +283,7 @@ If any documents are missing, re-extract them (see retry logic in 2b) before pro
 **2d. Validate — MUST PASS before continuing:**
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/knowledge/ --fix
+uv run ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/knowledge/ --fix
 ```
 
 **This is a hard gate.** If validation reports FAIL after `--fix`:
@@ -301,7 +297,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/know
 After all subagents complete and validation passes, verify that the gateway received ALL documents and parts correctly:
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py verify --workflow-id $WORKFLOW_ID --db
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py verify --workflow-id $WORKFLOW_ID
 ```
 
 Then manually confirm:
@@ -326,7 +322,7 @@ Use the user's focus areas to guide topic design in Step 3.
 
 **Checkpoint:**
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step extract --project-dir finetune-project --workflow-id $WORKFLOW_ID
+uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step extract --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
 ---
@@ -403,21 +399,21 @@ If there are no documents (objective-only pipeline), skip relations.
 
 **Checkpoint:**
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step topics --project-dir finetune-project --workflow-id $WORKFLOW_ID
-python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step relations --project-dir finetune-project --workflow-id $WORKFLOW_ID
+uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step topics --project-dir finetune-project --workflow-id $WORKFLOW_ID
+uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step relations --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
 **Upload** topics, relations, and relevance labels. **⚠️ If you redesigned topics (changed IDs, added/removed topics), you MUST re-upload before uploading records.** Records reference topic IDs — stale gateway topics cause FK violations and records with `topic: null`.
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-topics \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-topics \
   --workflow-id $WORKFLOW_ID --file topics.json
 
 if [ -f relations.json ]; then
-  python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-relations \
+  uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-relations \
     --workflow-id $WORKFLOW_ID --file relations.json
 fi
 
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py update-part-relevance \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py update-part-relevance \
   --workflow-id $WORKFLOW_ID --parts-index knowledge/all-parts-index.json
 ```
 
@@ -452,8 +448,7 @@ Each record includes per-record `source_parts` — the 1-3 specific parts the LL
 Use `generate_records.py` to generate user prompts via LLM, grounded in the knowledge chunks linked to each topic:
 
 ```bash
-# Standard: relations.json + optional RAG augmentation
-python3 ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
+uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --topics finetune-project/topics.json \
   --relations finetune-project/relations.json \
   --knowledge-dir finetune-project/knowledge \
@@ -461,15 +456,17 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --output finetune-project/training.jsonl \
   --records-per-topic 25 \
   --parallel 4 \
-  --use-rag --workflow-id $WORKFLOW_ID \
+  --workflow-id $WORKFLOW_ID \
   --upload-incremental
 ```
 
 The script makes **multiple LLM calls per topic** (one per prompt type: explain, scenario, compare/analyze, edge-case, application) for better diversity. By default, every leaf topic gets an equal number of records. Use `--weight-by-difficulty` to distribute based on base model eval scores — hard topics (0-30% success) get 40-50% of records, medium (30-70%) get 30-40%, easy (70-100%) get 10-20%. This is the recommended mode after the first evaluation, because GRPO learning signal is strongest on hard topics (arXiv:2508.14094: 47% gains from hard examples vs 3-15% from easy). Use `--weight-by-source` to distribute proportionally to linked source parts instead (max 3:1 imbalance ratio). Inner parallelism runs all prompt-type calls concurrently within each topic.
 
-Add `--use-rag` to augment the static relations.json context with semantically retrieved knowledge parts. This follows a two-stage question generation pattern (arXiv 2509.25736 — https://arxiv.org/html/2509.25736v1): first retrieve broad topic context, generate a diverse question, then retrieve again with the question itself for sharper grounding. The script searches the gateway's knowledge index for each topic and merges the top results with relation-linked parts (deduplicating by part ID). For rapid iteration without building relations first, use `--rag-only`. Additional flags: `--rag-top-k N` (chunks per topic, default 15), `--rag-second-retrieval` (enables the second per-question retrieval stage).
+**Context source:** Each topic's records are grounded in the parts linked via `relations.json` (built in Step 3d by the relation-builder). This is curated context — the relation-builder evaluated each part's relevance to each specific topic. Do NOT add `--use-rag` to augment this with uncurated semantic search results — it dilutes the curated context and undermines Step 3d.
 
-> **Prerequisite for RAG:** Knowledge source parts must have embeddings. The gateway generates them automatically (~30s after upload). Verify with: `python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py search-knowledge --workflow-id $WORKFLOW_ID --phrase "test query"`
+**Alternative: `--rag-only` mode** — if you skipped Step 3d (no relations), use `--use-rag --rag-only` to retrieve context via gateway semantic search instead. This is faster (skip relation-building) but less precise. Requires embeddings on the gateway.
+
+> **When to use `--rag-only`:** Quick iteration during early pipeline development, or when the relation-builder is unavailable. Once relations are built, use them — they are more precise than keyword-based semantic search.
 
 If some topics fail, use `--append` to retry without overwriting. Adapt `--records-per-topic` (default 25), `--min-per-topic` (default 10), `--max-per-topic` (default 50) to the project. **Generate at least 200+ total records.**
 
@@ -477,14 +474,16 @@ If some topics fail, use `--append` to retry without overwriting. Adapt `--recor
 
 **Deduplicate** — parallel generation can produce near-duplicate prompts across overlapping topics:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/deduplicate_records.py finetune-project/training.jsonl --threshold 0.85
+uv run ${CLAUDE_SKILL_DIR}/scripts/deduplicate_records.py finetune-project/training.jsonl --threshold 0.85
 ```
 
 With `--upload-incremental`, records appear in the UI as each topic completes — no separate upload step needed. If you ran without `--upload-incremental`, upload manually:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
   --workflow-id $WORKFLOW_ID --file training.jsonl
 ```
+
+> **Note:** `upload-records` resolves topic slugs → UUIDs via the local SQLite database at `~/.vllora/vllora.db`. If your DB is at a different path, pass `--db /path/to/vllora.db`. If the DB is unreachable, records will fail to upload with "topic IDs not found" — this means the topic slug→UUID mapping is missing, not that topics weren't uploaded.
 
 **Review generated data with the user.** Present a per-topic breakdown (topic name, record count, 2-3 sample prompts per topic). Ask:
 - Do these prompts look like realistic user questions?
@@ -496,6 +495,8 @@ The UI at `http://localhost:5173/finetune` also shows all records grouped by top
 ### Step 4B: Optional — NeMo Data Designer
 
 > **Optional.** Only use when NeMo server (`localhost:8000`) is already running. Step 4 is the default. See `reference/nemo-guide.md` for full details. Repo: https://github.com/vllora/nemo
+>
+> **⚠️ Prerequisite:** `materialize_seed.py` lives in the NeMo repo (not this skill). Clone it first: `git clone https://github.com/vllora/nemo && cd nemo && uv sync`
 
 > **⚠️ NeMo is pre-1.0 (v0.5.x).** Pin to a tested version. v0.5.4 had a supply chain security incident.
 
@@ -510,19 +511,19 @@ The UI at `http://localhost:5173/finetune` also shows all records grouped by top
 **Sequence:** (1) `materialize_seed.py --topics --system-prompt` → curated parquet with `composed_system_prompt` + `expected_difficulty`, (2) upload + inspect seed, (3) design recipe from `templates/nemo-recipe-template.json`, (4) preview job (10 rows), (5) full job, (6) convert + validate + upload:
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/convert_nemo_rows.py \
+uv run ${CLAUDE_SKILL_DIR}/scripts/convert_nemo_rows.py \
   --input finetune-project/nemo-dataset-page-1.json \
   --output finetune-project/training.jsonl \
   --min-answerable 1.0 --min-groundedness 0.75 --min-specificity 0.75 \
   --ground-truth-field reference_answer \
   --workflow-id $WORKFLOW_ID
 
-python3 ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py finetune-project/training.jsonl \
+uv run ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py finetune-project/training.jsonl \
   --topics finetune-project/topics.json
 
-python3 ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py finetune-project/training.jsonl --nemo
+uv run ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py finetune-project/training.jsonl --nemo
 
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
   --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl
 ```
 
@@ -532,7 +533,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
 
 **Checkpoint** after data generation (applies to both Step 4 and Step 4B):
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step generate-data --project-dir finetune-project --workflow-id $WORKFLOW_ID
+uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step generate-data --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
 ### Step 4.5: Generate Variants for Augmentation
@@ -547,7 +548,7 @@ If some topics are under-represented, use `chat_completion.py` to create variant
 
 ### Step 5: Write the Grader
 
-> **PREREQUISITES:** Steps 2 + 3 complete. Can run **in parallel** with Step 4 — both depend on extraction + topics, not on each other. Grader criteria must be grounded in actual extracted knowledge, not domain assumptions.
+> **PREREQUISITES:** Steps 2 + 3 complete. Grader *writing* can start in parallel with Step 4, but the **live dry-run** (Step 5.1 Test 2) requires records on the gateway — wait until Step 4 has uploaded at least some records before running `--live`.
 
 Write a JavaScript grader function to `grader.js`. Scores model responses 0-1, runs server-side during evaluation and training.
 
@@ -588,7 +589,7 @@ Copy the closest template, then customize the criteria weights and programmatic 
 **Test 1: Hand-crafted row** — catches syntax errors and basic scoring logic:
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
+uv run ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
   --workflow-id $WORKFLOW_ID \
   --script grader.js \
   --row '{"messages": [{"role": "system", "content": "You are..."}, {"role": "user", "content": "What is X?"}, {"role": "assistant", "content": "X is..."}]}'
@@ -597,7 +598,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
 **Test 2: Live model response (CRITICAL)** — catches graders that work on synthetic inputs but fail on real model outputs. This is the most common grader bug: the grader assumes a specific response format (e.g., "Answer: A") but the model responds differently (e.g., "Based on the guidelines..."):
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
+uv run ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
   --workflow-id $WORKFLOW_ID \
   --script grader.js \
   --live
@@ -609,19 +610,19 @@ The `--live` flag picks 3 random training records, sends each prompt to the LLM,
 
 **Upload immediately** — push the grader to the gateway so the UI shows it's ready for evaluation:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader \
   --workflow-id $WORKFLOW_ID --file grader.js
 ```
 
 **Checkpoint** after grader upload:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step grader --project-dir finetune-project --workflow-id $WORKFLOW_ID
+uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step grader --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
 ### Step 5.5: Final Dataset Validation
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py finetune-project/training.jsonl \
+uv run ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py finetune-project/training.jsonl \
   --topics finetune-project/topics.json \
   --parts finetune-project/knowledge/all-parts-index.json
 ```
@@ -634,7 +635,7 @@ Checks: valid JSON, required fields, message structure, no assistant messages (R
 
 **Quick gate (free — always run):**
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py finetune-project/training.jsonl \
+uv run ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py finetune-project/training.jsonl \
   --topics finetune-project/topics.json
 ```
 
@@ -642,7 +643,7 @@ This runs Gate 1 (structural) and Gate 2 (diversity) — no API calls, instant r
 
 **Full gate (with LLM scoring — run on first pipeline pass or after regeneration):**
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py finetune-project/training.jsonl \
+uv run ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py finetune-project/training.jsonl \
   --topics finetune-project/topics.json \
   --all-gates \
   --sample 30 \
@@ -653,7 +654,7 @@ This adds Gate 3 (ground truth quality — LLM scores each GT for specificity) a
 
 **Or via `finetune.py`:**
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py data-quality-gate \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py data-quality-gate \
   --file finetune-project/training.jsonl \
   --topics finetune-project/topics.json \
   --all-gates --save finetune-project/data-quality-report.json
@@ -665,7 +666,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py data-quality-gate \
 
 **Checkpoint** after data quality gate passes:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step data-quality-gate --project-dir finetune-project --workflow-id $WORKFLOW_ID
+uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step data-quality-gate --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
 > See [reference/data-quality-gate.md](reference/data-quality-gate.md) for threshold details and research citations.
@@ -675,14 +676,14 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step data-quality-gate 
 Since each step uploaded data immediately, the gateway already has the full workflow. Verify everything landed correctly before handing off to the UI.
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py verify --workflow-id $WORKFLOW_ID
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py verify --workflow-id $WORKFLOW_ID
 ```
 
 **Expected**: All counts > 0 and evaluator = YES. If any are missing, re-run the upload for that step.
 
 **Checkpoint** after verify:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step validate --project-dir finetune-project --workflow-id $WORKFLOW_ID
+uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step validate --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
 Tell the user the data is visible at `http://localhost:5173/finetune`, then **proceed immediately to Step 7** (evaluation).
@@ -711,7 +712,7 @@ The default is **512** — but this is a starting point, NOT a universal value. 
 
 **Run the completion_length gate BEFORE training and apply its `recommended_min`:**
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py training.jsonl \
+uv run ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py training.jsonl \
   --gate completion_length --max-output-tokens 512 --json
 ```
 If the gate returns a `recommended_min` value, **use it** as `max_output_tokens` in training config. The gate estimates required length from ground truth token lengths × task complexity multiplier, with 30% headroom above P95 (heuristic inspired by DAPO's overlong handling, arXiv:2503.14476 — not a direct DAPO parameter).
@@ -722,7 +723,7 @@ If the gate returns a `recommended_min` value, **use it** as `max_output_tokens`
 Dry-run the grader on 3-5 sample records with varying quality responses. Scores should spread across 0.2-0.9 — if all cluster at one value, GRPO gets zero gradient. See [reference/grader-writing.md](reference/grader-writing.md) for scoring patterns and red flags.
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
+uv run ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
   --workflow-id $WORKFLOW_ID --script grader.js \
   --row '{"messages": [{"role":"system","content":"..."}, {"role":"user","content":"..."}, {"role":"assistant","content":"Good detailed response..."}]}'
 ```
@@ -744,7 +745,7 @@ fi
 
 Create eval job only — do NOT create a training job yet:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
   --workflow-id $WORKFLOW_ID --output-dir evaluations
 ```
 
@@ -752,7 +753,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
 
 **Poll eval in foreground** (auto-cancels if grader is broken):
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval \
   --file evaluations/eval-001.json
 ```
 
@@ -770,11 +771,11 @@ When eval completes, proceed to **Step 7c (Readiness Gate)** — do NOT start tr
 After eval completes, check if data and grader are ready for training:
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
   --file evaluations/eval-001.json
 ```
 
-The readiness gate runs **3 hard checks** (grader quality) and **8 soft checks** (quality signals). Hard checks ask "is the grader working?", NOT "is the base model good?" — GRPO can learn from low base model scores (DeepSeek R1-Zero: 15.6% → 71%).
+The readiness gate runs **4 hard checks** (sample_count, score_std, avg_score, zero_score_frac < 10%) and **soft checks** (quality signals). Hard checks ask "is the grader working?", NOT "is the base model good?" — GRPO can learn from low base model scores (DeepSeek R1-Zero: 15.6% → 71%). `score_concentration` is dynamically hard (> 85% in one bucket) or soft.
 
 **Hard checks** (must ALL pass): sample count >= 50, score std > 0.10, average score > 0.05, **zero-score fraction < 10%**.
 
@@ -808,7 +809,7 @@ The readiness gate runs **3 hard checks** (grader quality) and **8 soft checks**
 **⚠️ Run this after the readiness gate passes and before starting training.** Checks **per-prompt signal strength** — catches data that looks good in aggregate but produces zero gradient at the prompt level.
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py difficulty-probe \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py difficulty-probe \
   --file evaluations/eval-001.json \
   --save finetune-project/difficulty-report.json
 ```
@@ -819,7 +820,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py difficulty-probe \
 
 **Checkpoint** after difficulty probe passes:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step difficulty-probe --project-dir finetune-project --workflow-id $WORKFLOW_ID
+uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step difficulty-probe --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
 #### 7d. Start Training (only after readiness gate passes)
@@ -837,14 +838,14 @@ Training starts here — only reached when the readiness gate indicates data and
 > **⚠️ Start with 4B.** The 9B model OOMs with >100 records and K=8 on standard GPU allocations. Use 9B only for small, complex datasets (<100 records). Use 0.8B/2B for quick prototyping or when training keeps failing on larger models. The `create-training` script warns if the model/dataset combination risks OOM.
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
   --workflow-id $WORKFLOW_ID \
   --base-model "unsloth/Qwen3.5-4B" \
   --output-model "project-v1" \
   --output-dir training-jobs
 
 # To override defaults (e.g., after diagnosing issues from previous iterations):
-# python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
+# uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 #   --workflow-id $WORKFLOW_ID \
 #   --base-model "unsloth/Qwen3.5-4B" \
 #   --output-model "project-v2" \
@@ -881,7 +882,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 
 **Poll training in foreground:**
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
   --file training-jobs/train-001.json \
   --max-wait 7200
 ```
@@ -903,7 +904,7 @@ When training completes (or is early-stopped), proceed to **Step 8b (Post-Traini
 
 **Before analyzing, sync jobs** to catch status changes from the UI:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py sync-jobs --workflow-id $WORKFLOW_ID --output-dir finetune-project
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py sync-jobs --workflow-id $WORKFLOW_ID --output-dir finetune-project
 ```
 
 **Handle cancelled jobs**: Skip analysis for cancelled jobs. Log it in execution-log.md. If ALL jobs were cancelled, proceed to Step 9.
@@ -934,8 +935,8 @@ This runs during the eval-first loop (Step 7b→7c). Compute:
 4. Regenerate replacements if needed (`generate_records.py --append`)
 5. Re-validate and re-upload with `--force`:
    ```bash
-   python3 ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py finetune-project/training.jsonl --topics finetune-project/topics.json
-   python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl
+   uv run ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py finetune-project/training.jsonl --topics finetune-project/topics.json
+   uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl
    ```
 
 **When to skip regeneration:** If only 1-2 records out of 200+ scored 0, removing without replacement is fine.
@@ -945,7 +946,7 @@ This runs during the eval-first loop (Step 7b→7c). Compute:
 This runs after Step 7e. Training is expensive — analyze thoroughly:
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/analyze_training.py \
+uv run ${CLAUDE_SKILL_DIR}/scripts/analyze_training.py \
   --metrics-file training-jobs/$JOB_ID-metrics.json \
   --epoch-evals-file training-jobs/$JOB_ID-epoch-evals.json
 ```
@@ -969,7 +970,7 @@ Combine eval scores with training metrics. Present per-topic eval scores alongsi
 
 **Checkpoint** after analysis:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step analyze --project-dir finetune-project --workflow-id $WORKFLOW_ID
+uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step analyze --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
 ### Step 9: Iterate (If Needed)
@@ -986,7 +987,7 @@ Apply fixes and re-eval. Do NOT create a training job.
 
 **Step 1: Diagnose.** Run `diagnose-grader` to understand WHY scores cluster and WHAT to change:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py diagnose-grader \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py diagnose-grader \
   --file evaluations/eval-001.json --workflow-id $WORKFLOW_ID
 ```
 This shows: score distribution by bucket, sample `reason` fields, auto-diagnosis, fix suggestions, and grader source code. **Read this output carefully — the root cause might be DATA, not grader.**
@@ -998,13 +999,13 @@ This shows: score distribution by bucket, sample `reason` fields, auto-diagnosis
 **Step 2: Fix.** Edit `grader.js` based on the diagnosis, then upload:
 ```bash
 # Edit grader.js, then update:
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader \
   --workflow-id $WORKFLOW_ID --file grader.js
 ```
 
 **Step 3: Dry-run.** Verify the fix before re-eval:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
+uv run ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
   --workflow-id $WORKFLOW_ID --script grader.js \
   --row '{"messages": [{"role":"system","content":"..."}, {"role":"user","content":"..."}, {"role":"assistant","content":"I cannot provide specific figures without the filing."}]}'
 ```
@@ -1012,7 +1013,7 @@ Check that a "model refused" response now scores 0 (not 0.3).
 
 **Fixing the data** (requires re-upload):
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force \
   --workflow-id $WORKFLOW_ID --file training.jsonl
 ```
 
@@ -1028,11 +1029,11 @@ After training analysis (Step 8b), if results are unsatisfactory:
 
 ```bash
 # New eval after fixes
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
   --workflow-id $WORKFLOW_ID --output-dir evaluations
 
 # Only after readiness gate passes:
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
   --workflow-id $WORKFLOW_ID \
   --base-model "unsloth/Qwen3.5-4B" \
   --output-model "project-v2" \

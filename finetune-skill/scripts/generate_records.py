@@ -140,11 +140,9 @@ def load_all_parts(knowledge_dir: Path) -> dict[str, dict]:
             relevance_map = {p["id"]: p.get("relevant") for p in index_parts if "id" in p}
 
             # Filter out irrelevant parts
-            excluded = 0
-            for part_id, relevant in relevance_map.items():
-                if relevant is False and part_id in parts:
-                    del parts[part_id]
-                    excluded += 1
+            before_count = len(parts)
+            parts = {pid: p for pid, p in parts.items() if relevance_map.get(pid) is not False}
+            excluded = before_count - len(parts)
             if excluded > 0:
                 print(f"  Filtered out {excluded} irrelevant parts (relevant=false in all-parts-index.json)")
         except (json.JSONDecodeError, KeyError) as e:
@@ -751,7 +749,7 @@ def generate_for_topic(
 
             record: dict = {
                 "messages": messages,
-                "id": f"{topic['id']}-{record_idx:03d}",
+                "id": f"{topic['id']}-{record_idx:03d}-{hash(prompt_text) % 10000:04d}",
                 "topic": topic["id"],
                 "source_parts": record_source_parts,
                 "prompt_type": type_name,
@@ -798,6 +796,7 @@ def upload_records_batch(
                 "upload-records",
                 "--workflow-id", workflow_id,
                 "--file", tmp_path,
+                "--base-url", base_url,
             ],
             capture_output=True,
             text=True,

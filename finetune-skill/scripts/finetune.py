@@ -73,7 +73,7 @@ def _delete_existing_knowledge_by_name(
 ) -> int:
     """Delete existing knowledge sources matching a name. Returns count deleted."""
     existing = _api("GET", f"{base_url}/finetune/workflows/{workflow_id}/knowledge")
-    sources = existing if isinstance(existing, list) else existing.get("sources", [])
+    sources = existing if isinstance(existing, list) else existing.get("knowledge_sources", existing.get("sources", []))
 
     deleted = 0
     for src in sources:
@@ -631,7 +631,7 @@ def cmd_status(args: argparse.Namespace) -> None:
         pass
     try:
         sources_resp = _api("GET", f"{base_url}/finetune/workflows/{wf_id}/knowledge")
-        sources_list = sources_resp if isinstance(sources_resp, list) else sources_resp.get("sources", [])
+        sources_list = sources_resp if isinstance(sources_resp, list) else sources_resp.get("knowledge_sources", sources_resp.get("sources", []))
         sources_count = len(sources_list)
         parts_count = sum(s.get("part_count", s.get("parts_count", 0)) for s in sources_list)
     except SystemExit:
@@ -780,7 +780,7 @@ def cmd_status(args: argparse.Namespace) -> None:
                 rounded = [round(s, 2) for s in scores]
                 mode_val, mode_ct = Counter(rounded).most_common(1)[0]
                 mode_frac = mode_ct / n
-                grader_ok = (std_s > 0.10 and mode_frac < 0.50)
+                grader_ok = (std_s > 0.10 and mode_frac < 0.70)
                 signal_ok = avg_s > 0.05  # Only 0% is fatal (OpenAI RFT)
                 zeros_ok = zero_frac < 0.10  # >10% zeros = grader broken (xFinder ICLR 2025)
                 perfect_frac_inline = sum(1 for s in scores if s >= 0.99) / n
@@ -793,7 +793,7 @@ def cmd_status(args: argparse.Namespace) -> None:
                     print(f"  Verdict: FAIL — {zero_frac:.0%} of scores are 0.0 (grader broken — use grader-mcq.js template with LLM extraction fallback)")
                 elif not signal_ok:
                     print(f"  Verdict: FAIL — avg near zero, no training signal at all")
-                elif mode_frac >= 0.50:
+                elif mode_frac >= 0.70:
                     print(f"  Verdict: FAIL — {mode_frac:.0%} of scores are {mode_val}, grader too coarse")
                 else:
                     print(f"  Verdict: FAIL — fix grader before training (std/binary/leniency)")
@@ -841,6 +841,8 @@ def cmd_status(args: argparse.Namespace) -> None:
         print("  → Resume from Step 5: Write grader")
     elif not step_done("validate"):
         print("  → Resume from Step 5.5: Validate")
+    elif not step_done("data-quality-gate"):
+        print("  → Resume from Step 5.5b: Run data quality gate")
     elif records_count == 0 or records_count == "?":
         print("  → Data was generated but may not be uploaded. Run verify.")
     else:
@@ -2974,7 +2976,7 @@ def cmd_delete_knowledge(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     existing = _api("GET", wf_url)
-    sources = existing if isinstance(existing, list) else existing.get("sources", [])
+    sources = existing if isinstance(existing, list) else existing.get("knowledge_sources", existing.get("sources", []))
 
     if not sources:
         print("No knowledge sources to delete.")

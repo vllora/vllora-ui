@@ -7,10 +7,11 @@ This document explains the full skill pipeline step by step, what happens at eac
 ```
 Step 1: Define Objective          (~1 min)    → workflow created on gateway       ↑ uploaded
 Step 2: Extract Documents         (~5-15 min) → per-document knowledge parts      ↑ uploaded
-Step 3: Build Topic Hierarchy     (~3-5 min)  → topics.json + relations.json      ↑ uploaded
-Step 4: Generate Training Data    (~5-20 min) → training.jsonl (50-200+ records)  ↑ uploaded
+Step 3: Build Topic Hierarchy     (~3-5 min)  → filter parts, topics, relations   ↑ uploaded
+Step 4: Generate Training Data    (~5-20 min) → training.jsonl (200+ records)     ↑ uploaded
+  or 4B: NeMo Data Designer      (optional)  → NeMo server + convert             ↑ uploaded
 Step 5: Write Grader              (~2-3 min)  → grader.js                         ↑ uploaded
-Step 5.5b: Data Quality Gate      (~1-3 min)  → pre-eval data quality validation  (local)
+Step 5.5: Validate + Quality Gate (~1-3 min)  → pre-eval data validation          (local)
 Step 6: Verify & Hand Off         (~30 sec)   → confirm all data in gateway DB
 ─────────────────────────────────────────────────────────────────────────────────────────────
 Step 7: Eval → Readiness Gate → Train  (~30-90 min) → eval-first, then train   ↑ cloud
@@ -18,9 +19,107 @@ Step 8: Analyze Results           (~5-10 min) → eval + training analysis
 Step 9: Iterate (If Needed)       (~30-60 min)→ eval-only or post-training fixes
 ```
 
+### Dependency Graph
+
+```
+Step 1: Define Objective
+    ↓
+Step 2: Extract Documents (parallel subagents per PDF)
+    ↓ [GATE: validate_extraction + verify gateway upload]
+Step 3: Build Topic Hierarchy
+    ├── 3a: Filter parts by relevance (relevant: true/false on each part)
+    ├── 3b: Design skill-based topics (NOT document structure)
+    ├── 3c: Write behavioral system prompt segments
+    └── 3d: Build topic-part relations (relation-builder subagent)
+    ↓ [Upload: topics + relations + relevance labels]
+    ├─→ Step 4: Generate Records (default — generate_records.py)
+    │     or Step 4B: NeMo Data Designer (optional — requires NeMo server)
+    │
+    └─→ Step 5: Write Grader (can start in parallel with Step 4)
+              ↓ [GATE: dry-run hand-crafted + live (needs records uploaded)]
+Step 5.5: validate_dataset.py [GATE]
+Step 5.5b: data_quality_gate.py [GATE]
+Step 6: Verify
+    ↓
+Step 7-9: Evaluate → Train → Iterate
+```
+
+### Data Flow: Relevance Filtering Through the Pipeline
+
+```
+Step 2: Extract → parts-index.json (relevant: null)
+Step 3a: Filter → all-parts-index.json (relevant: true/false) → uploaded to gateway
+Step 3d: Relations → only relevant:true parts linked to topics
+Step 4: generate_records.py → only relevant parts (filtered in Step 3a)
+                            → curated context from relations (Step 3d) — NOT augmented with RAG
+                            → each record gets per-record source_parts (1-3 parts)
+                            → alternative: --rag-only mode skips relations, uses gateway search
+Step 4B: NeMo → ⚠️ rag-retrieval does NOT filter by relevance (known limitation)
+                → convert_nemo_rows.py recovers source_parts via gateway search
+```
+
 **Each step uploads to the gateway immediately** via `scripts/finetune.py` — the vLLora UI shows progress in real time. There is no final "push" step; Step 6 just verifies everything landed correctly.
 
 **Steps 1-6** prepare the dataset (including the data quality gate at Step 5.5b). **Steps 7-9** evaluate and train the model. All steps run by default — do NOT stop at Step 6. If the user only asks for data preparation, you may stop at Step 6, but by default run the full pipeline including evaluation and training.
+
+### NeMo Data Designer Flow (Step 4B — Optional)
+
+When NeMo server is running at `localhost:8000`:
+
+```
+topics.json + system-prompt
+         ↓
+  materialize_seed.py (NeMo repo)
+         ↓
+  curated-seed.parquet
+  ├── topic, topic_name, topic_path
+  ├── composed_system_prompt  (root + ancestors + leaf — NOT LLM-generated)
+  └── expected_difficulty     (from topic metadata)
+         ↓
+  NeMo server (localhost:8000)
+  ├── POST /seed/upload-curated     → upload parquet
+  ├── POST /seed/inspect-curated    → preview rows
+  └── POST /jobs                    → submit recipe job
+         ↓
+  Recipe column pipeline:
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ 1. rag-retrieval (topic_path → gateway search → chunks)       │
+  │ 2. topic_context = expression(topic_path)  [seed passthrough]  │
+  │ 3. difficulty = expression(expected_difficulty) [from seed]     │
+  │ 4. raw_question = llm-text (grounded in retrieved_chunks)      │ drop:true
+  │ 5. question_chunks = rag-retrieval (raw_question → search)     │ drop:true
+  │ 6. system_prompt = expression(composed_system_prompt) [seed]   │
+  │ 7. user_message = llm-text (refine raw_question + chunks)      │
+  │ 8. reference_answer = llm-text (answer from chunks)            │
+  │ 9. judge_answerable = llm-judge (binary: can answer from ctx?) │
+  │ 10. judge_groundedness = llm-judge (0/0.5/1 grounding score)   │
+  │ 11. judge_specificity = llm-judge (domain terms present?)      │
+  │ 12. score_relevancy = rag-relevancy (Jaccard overlap)          │
+  └─────────────────────────────────────────────────────────────────┘
+         ↓
+  Preview job (10 rows) → review → Full job (target count)
+         ↓
+  GET /jobs/{id}/dataset → nemo-dataset.json
+         ↓
+  convert_nemo_rows.py
+  ├── --min-answerable 1.0 --min-groundedness 0.75 --min-specificity 0.75
+  ├── --ground-truth-field reference_answer
+  ├── --workflow-id $WF  → recovers source_parts via gateway search
+  └── filters by judge scores, maps to training.jsonl format
+         ↓
+  data_quality_gate.py (format/structure checks — complements judge columns)
+         ↓
+  validate_dataset.py --nemo
+         ↓
+  upload-records → gateway
+```
+
+**Key differences from Step 4:**
+- `system_prompt` is an expression passthrough from seed (consistent per topic), NOT LLM-generated per row
+- `difficulty` comes from seed `expected_difficulty`, NOT random sampling
+- `source_parts` are recovered post-generation via gateway search (approximate), NOT tagged per-record during generation
+- NeMo's `rag-retrieval` does NOT filter by `relevant: true/false` labels (known limitation)
+- Judge columns filter quality at generation time; `data_quality_gate.py` still needed for format/structure checks
 
 Total: ~20-45 minutes for Steps 1-6 with 3 documents and 100+ records.
 
@@ -40,7 +139,7 @@ All gateway API calls go through `scripts/finetune.py` — a single wrapper scri
 | `finetune.py status` | any | Full workflow status: gateway data + checkpoint + jobs + next step |
 | `finetune.py create-eval` | 7b | Creates evaluation job, saves metadata locally |
 | `finetune.py poll-eval` | 7b | Polls eval job until complete, saves results |
-| `finetune.py readiness-check` | 7c | Checks if eval results pass pre-training readiness gate (3 hard + 8 soft checks) |
+| `finetune.py readiness-check` | 7c | Checks if eval results pass pre-training readiness gate (4 hard + soft checks) |
 | `finetune.py create-training` | 7d | Creates training job, saves metadata locally |
 | `finetune.py poll-training` | 7e | Polls training job until complete, saves status + metrics |
 | `finetune.py sync-jobs` | 8 | Syncs training + eval jobs from gateway to local tracking files |
@@ -760,7 +859,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
   --file evaluations/eval-001.json
 ```
 
-The readiness gate runs **3 hard checks** (grader quality) and **8 soft checks** (quality signals):
+The readiness gate runs **4 hard checks** (sample_count, score_std, avg_score, zero_score_frac < 10%) and **soft checks** (quality signals):
 
 **Hard checks** (must ALL pass — these ask "is the grader working?", not "is the model good?"):
 | Check | Pass criteria | Research basis |
