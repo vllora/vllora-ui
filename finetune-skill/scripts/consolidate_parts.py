@@ -98,6 +98,109 @@ def _fix_false_headings(parts: list[dict]) -> list[dict]:
     return fixed
 
 
+def _merge_repeated_title_sequences(parts: list[dict]) -> list[dict]:
+    """Merge sequences of parts with generic repeated titles into paired parts.
+
+    Academic papers (especially clinical guidelines) repeat section headings
+    like "Recommendation" and "Rationale" for every topic. Docling creates
+    separate parts for each, losing the recommendation↔rationale association.
+
+    This function detects repeated generic titles and merges each instance
+    with its following context (e.g., Recommendation + Rationale pair) into
+    a single part with a disambiguated title.
+
+    Example: "Recommendation" → "Rationale" → "Recommendation" → "Rationale"
+    becomes: "Recommendation 1 + Rationale" → "Recommendation 2 + Rationale"
+    """
+    if not parts:
+        return parts
+
+    # Detect generic repeated titles (same title appears 5+ times)
+    title_counts: dict[str, int] = {}
+    for p in parts:
+        title = p.get("title", "").strip()
+        if title and p.get("type") == "text":
+            title_counts[title] = title_counts.get(title, 0) + 1
+
+    repeated_titles = {t for t, c in title_counts.items() if c >= 5}
+    if not repeated_titles:
+        return parts
+
+    # Find the dominant repeated title (the one that appears most)
+    dominant_title = max(repeated_titles, key=lambda t: title_counts[t])
+
+    # Merge strategy: each instance of a repeated title starts a new group.
+    # All parts until the next repeated-title instance are merged into one part.
+    # The merged part gets a numbered title: "Rationale 1", "Rationale 2", etc.
+    merged: list[dict] = []
+    current_group: list[dict] = []
+    group_counter: dict[str, int] = {}
+
+    def _flush_group():
+        if not current_group:
+            return
+        # First part's title is the group title
+        base_title = current_group[0].get("title", "untitled")
+        count = group_counter.get(base_title, 0) + 1
+        group_counter[base_title] = count
+
+        if len(current_group) == 1:
+            # Single part — just number the title
+            result = {**current_group[0]}
+            result["title"] = f"{base_title} {count}"
+            merged.append(result)
+        else:
+            # Multiple parts — merge content, combine titles
+            combined_content_parts = []
+            sub_titles = []
+            all_pages: list = []
+            all_chunks: list = []
+            for p in current_group:
+                t = p.get("title", "")
+                c = p.get("content", "")
+                if t and t != base_title and t not in sub_titles:
+                    sub_titles.append(t)
+                if c:
+                    if t and t != base_title:
+                        combined_content_parts.append(f"### {t}\n\n{c}")
+                    else:
+                        combined_content_parts.append(c)
+                all_pages.extend(p.get("extraction_metadata", {}).get("pages", []))
+                all_chunks.extend(p.get("extraction_metadata", {}).get("source_chunks", []))
+
+            title_suffix = f" + {', '.join(sub_titles)}" if sub_titles else ""
+            result = {**current_group[0]}
+            result["title"] = f"{base_title} {count}{title_suffix}"
+            result["content"] = "\n\n".join(combined_content_parts)
+            result["char_count"] = len(result["content"])
+            result["word_count"] = len(result["content"].split())
+            if all_pages:
+                result.setdefault("extraction_metadata", {})["pages"] = sorted(set(all_pages))
+            if all_chunks:
+                result.setdefault("extraction_metadata", {})["source_chunks"] = sorted(set(all_chunks))
+            merged.append(result)
+
+    for part in parts:
+        title = part.get("title", "").strip()
+        is_text = part.get("type") == "text"
+
+        if is_text and title in repeated_titles:
+            # This starts a new group — flush the previous one
+            _flush_group()
+            current_group = [part]
+        elif current_group and is_text:
+            # Continue the current group (this part follows a repeated-title part)
+            current_group.append(part)
+        else:
+            # Non-text part or no active group
+            _flush_group()
+            current_group = []
+            merged.append(part)
+
+    _flush_group()
+    return merged
+
+
 def consolidate_parts(
     parts: list[dict],
     min_chars: int = 50,
@@ -108,6 +211,9 @@ def consolidate_parts(
 
     # Phase 0: Fix false headings before merging
     parts = _fix_false_headings(parts)
+
+    # Phase 0.5: Merge repeated-title sequences (e.g., Recommendation/Rationale pairs)
+    parts = _merge_repeated_title_sequences(parts)
 
     merged: list[dict] = []
     buffer: dict | None = None
@@ -220,7 +326,10 @@ def validate_quality(parts: list[dict], total_pages: int | None = None) -> dict:
             "diversity_pct": round(diversity * 100),
             "top_title": top_title,
             "top_count": top_count,
-            "status": "OK" if diversity >= 0.5 else "FAIL",
+            # FAIL if <50% diverse (most parts share one title)
+            # WARN if 50-70% diverse (many repeated titles, consider merging)
+            # OK if >=70% diverse
+            "status": "OK" if diversity >= 0.70 else "WARN" if diversity >= 0.50 else "FAIL",
         }
 
     # Average content length

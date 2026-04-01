@@ -1,9 +1,9 @@
 /**
  * Pre-Training Readiness Gate
  *
- * Computes 10 readiness criteria from eval results — mirrors the Python
- * `finetune.py readiness-check` command. 3 hard checks gate training,
- * 8 soft checks are warnings.
+ * Computes 12 readiness criteria from eval results — mirrors the Python
+ * `finetune.py readiness-check` command. 4 hard checks gate training,
+ * 9 soft checks are warnings (score_concentration is dynamic: hard at >70%).
  *
  * Research basis for threshold choices:
  * - Zero-variance → zero gradient is fundamental to GRPO (DAPO §2.2, arXiv:2503.14476)
@@ -33,19 +33,22 @@ import type { FlatEvaluationResult } from '@/services/finetune-api';
 //     per batch is normal during GRPO training
 // =============================================================================
 
+// Research-validated thresholds (2026-03-31 review). See research-readiness-gate-thresholds-2026-03-31.md.
 const THRESHOLDS = {
-  minSampleCount: 50,           // GRPO needs enough prompts for stable batches (OpenAI: "several dozen to a few hundred")
-  minScoreStd: 0.10,           // Grader must differentiate — zero-variance → zero gradient (DAPO §2.2). Threshold is a heuristic.
-  maxHighScoreFrac: 0.50,      // Soft: lenient grader → weak within-group variance. Heuristic.
-  maxBinaryFrac: 0.60,         // Soft: binary works (DeepSeek-R1, DAPO) but less sample-efficient. Raised from 0.40 per research.
-  minAvgScore: 0.05,           // Just needs nonzero signal (OpenAI: "0% success rate means cannot bootstrap")
-  maxModeFrac: 0.50,           // Score concentration — >50% at one value means grader too coarse (DAPO arXiv:2503.14476)
-  maxDeadWeightFrac: 0.50,     // Soft — real GRPO has 30-99% zero-var prompts (ICLR 2026)
-  minPassRate: 0.20,           // Soft — hard examples are most valuable (arXiv:2508.14094)
+  minSampleCount: 50,           // WELL-FOUNDED: OpenAI RFT uses same floor. DeepSeek/DAPO use 5K+.
+  minScoreStd: 0.10,           // HEURISTIC: correct direction (zero-variance → zero gradient per DAPO §2.2). Exact value arbitrary.
+  maxHighScoreFrac: 0.50,      // HEURISTIC: grader leniency. Overlaps with perfectScoreFrac — kept for backward compat.
+  // binary_frac check REMOVED — DeepSeek-R1, DAPO, all major GRPO successes use 100% binary rewards.
+  minAvgScore: 0.05,           // WELL-FOUNDED: OpenAI "0% = can't bootstrap". Math: 5% success → 34% non-degenerate groups at K=8.
+  maxModeFrac: 0.70,           // RESEARCH-CORRECTED (was 0.50): at 0.70, P(all K=8 same) = 5.8%. Hard fail at 0.85.
+  maxZeroScoreFrac: 0.10,      // HEURISTIC: Imperfect Verifiers (arXiv:2510.00915) shows ~20% FN tolerable. 10% is conservative.
+  maxPerfectScoreFrac: 0.50,   // WELL-FOUNDED as soft: eval K=1 (gpt-4o-mini) ≠ training K=8 (Qwen-4B).
+  maxDeadWeightFrac: 0.75,     // RESEARCH-CORRECTED (was 0.50): "No Prompt Left Behind" (ICLR 2026): 30-99% zero-var is normal.
+  minPassRate: 0.05,           // RESEARCH-CORRECTED (was 0.20): DeepSeek-R1 started at 15.6%. Hard examples yield 47% gains.
   passScoreThreshold: 0.70,    // Score threshold for "passing" a record
-  minPromptLearnability: 0.30, // DAPO dynamic sampling (arXiv:2503.14476)
-  maxScoreLengthCorr: 0.30,    // Reward hacking risk (Dr. GRPO arXiv:2503.20783)
-  maxTopicDominance: 0.40,     // No single topic should dominate
+  minPromptLearnability: 0.30, // HEURISTIC: DAPO dynamic sampling concept. Questionable at K=1 eval.
+  maxScoreLengthCorr: 0.30,    // WELL-FOUNDED concept: Dr. GRPO (arXiv:2503.20783) validates length bias is structural.
+  maxTopicDominance: 0.40,     // HEURISTIC: general ML practice, not GRPO-specific.
 } as const;
 
 // =============================================================================
@@ -90,10 +93,12 @@ function pearsonCorrelation(xs: readonly number[], ys: readonly number[]): numbe
 // =============================================================================
 
 function computeHardChecks(scores: readonly number[], promptCount: number): ReadinessCheck[] {
+  const n = scores.length;
   const avg = mean(scores);
   const std = stdDev(scores, avg);
+  const zeroScoreFrac = n > 0 ? scores.filter(s => s < 0.01).length / n : 0;
 
-  // Hard gates: grader quality + training viability (only 3 hard checks)
+  // Hard gates: grader quality + training viability (4 hard checks)
   // Focus on "is the grader working?" not "is the base model good?"
   // Binary rewards work: DeepSeek-R1 and DAPO used 100% binary successfully.
   return [
@@ -101,7 +106,7 @@ function computeHardChecks(scores: readonly number[], promptCount: number): Read
       id: 'sample_count', label: 'Sample Count', kind: 'hard',
       value: promptCount, threshold: `>= ${THRESHOLDS.minSampleCount}`,
       passed: promptCount >= THRESHOLDS.minSampleCount,
-      suggestion: `Too few prompts (${promptCount}) — GRPO needs >= ${THRESHOLDS.minSampleCount} for stable advantage estimates.`,
+      suggestion: `Too few prompts (${promptCount}) — GRPO needs >= ${THRESHOLDS.minSampleCount} for stable advantage estimates. [OpenAI RFT Guide: "at least 50 training examples"]`,
     },
     {
       id: 'score_std', label: 'Score Variance', kind: 'hard',
@@ -113,7 +118,13 @@ function computeHardChecks(scores: readonly number[], promptCount: number): Read
       id: 'avg_score', label: 'Average Score', kind: 'hard',
       value: round4(avg), threshold: `> ${THRESHOLDS.minAvgScore}`,
       passed: avg > THRESHOLDS.minAvgScore,
-      suggestion: 'Average score near zero — the base model produces no useful responses. GRPO needs at least some nonzero rewards. [OpenAI RFT: "0% success rate means cannot bootstrap"]',
+      suggestion: 'Average score near zero — the base model produces no useful responses. GRPO needs at least some nonzero rewards. At 5% success, ~34% of K=8 groups have variance. [OpenAI RFT Guide; DeepSeek-R1 arXiv:2501.12948 started at 15.6%]',
+    },
+    {
+      id: 'zero_score_frac', label: 'Zero-Score Fraction', kind: 'hard',
+      value: round4(zeroScoreFrac), threshold: `< ${THRESHOLDS.maxZeroScoreFrac}`,
+      passed: zeroScoreFrac < THRESHOLDS.maxZeroScoreFrac,
+      suggestion: `${(zeroScoreFrac * 100).toFixed(0)}% of scores are exactly 0.0 — this usually means the grader can't parse the model's response format (not wrong answers). Fix the grader to use LLM extraction fallback. [xFinder ICLR 2025 arXiv:2405.11874: regex extraction only 74% accurate; Imperfect Verifiers arXiv:2510.00915: up to ~20% FN tolerable]`,
     },
   ];
 }
@@ -146,13 +157,13 @@ function computeModelPerformanceChecks(scores: readonly number[]): ReadinessChec
       id: 'dead_weight_frac', label: 'Dead-Weight Fraction', kind: 'soft',
       value: round4(deadWeightFrac), threshold: `< ${THRESHOLDS.maxDeadWeightFrac}`,
       passed: deadWeightFrac < THRESHOLDS.maxDeadWeightFrac,
-      suggestion: 'Many dead-weight records waste compute. DAPO handles this via dynamic sampling. [ICLR 2026: 30-99% zero-var prompts is normal]',
+      suggestion: 'Many eval-time dead-weight records (score<0.1). Note: eval dead-weight ≠ training dead-weight — hard prompts may become learnable as model improves. 30-99% zero-var per batch is normal during GRPO. ["No Prompt Left Behind" ICLR 2026, arXiv:2509.21880]',
     },
     {
       id: 'pass_rate', label: 'Pass Rate', kind: 'soft',
       value: round4(passRate), threshold: `> ${THRESHOLDS.minPassRate}`,
       passed: passRate > THRESHOLDS.minPassRate,
-      suggestion: `Low pass rate — but hard prompts are most valuable for GRPO. With K=8, pass@8 >> pass@1. [arXiv:2508.14094]`,
+      suggestion: 'Very low pass rate — but hard prompts are most valuable for GRPO (47% gains vs 3-15% for easy). DeepSeek-R1 started at 15.6%. With K=8, pass@8 >> pass@1. [arXiv:2508.14094; arXiv:2501.12948]',
     },
   ];
 }
@@ -183,20 +194,28 @@ function computeSoftChecks(
 function computeGraderQualitySoftChecks(scores: readonly number[]): ReadinessCheck[] {
   const n = scores.length;
   const highFrac = n > 0 ? scores.filter(s => s > 0.9).length / n : 0;
-  const binaryFrac = n > 0 ? scores.filter(s => s <= 0.01 || s >= 0.99).length / n : 0;
+  const perfectFrac = n > 0 ? scores.filter(s => s >= 0.99).length / n : 0;
   const { modeFrac, modeValue } = computeModeFraction(scores);
 
   return [
     {
-      // Hard fail at >70%: at K=8, most groups will score identically → zero gradient
-      // → wasted GPU hours. The grader is broken, not the data.
-      // Soft warn at 50-70%: some signal loss but training may still work.
-      // Research: RGR-GRPO (arXiv:2511.12344): rubric grading >> binary verification
+      // Hard fail at >85%: at K=8, P(all same) = 0.85^8 = 27% — significant degenerate fraction.
+      // Soft warn at 70-85%: 0.70^8 = 5.8% degenerate — training still works.
+      // Research-corrected 2026-03-31: previous hard threshold of 0.70 was too tight.
       id: 'score_concentration', label: 'Score Diversity',
-      kind: modeFrac > 0.70 ? 'hard' : 'soft',
+      kind: modeFrac > 0.85 ? 'hard' : 'soft',
       value: round4(modeFrac), threshold: `< ${THRESHOLDS.maxModeFrac}`,
       passed: modeFrac < THRESHOLDS.maxModeFrac,
       suggestion: `${(modeFrac * 100).toFixed(0)}% of scores are exactly ${modeValue.toFixed(2)} — within-group variance will be small → weak gradients. Redesign grader with multi-point rubric (0-7 scale). [DAPO arXiv:2503.14476; RGR-GRPO arXiv:2511.12344]`,
+    },
+    {
+      // Soft: eval uses a stronger model (gpt-4o-mini) at K=1, training uses a weaker
+      // base model at K=8 — so high eval scores don't necessarily mean training will
+      // have zero variance. Run difficulty-probe for a precise K=8 prediction.
+      id: 'perfect_score_frac', label: 'Perfect Score Fraction', kind: 'soft',
+      value: round4(perfectFrac), threshold: `< ${THRESHOLDS.maxPerfectScoreFrac}`,
+      passed: perfectFrac < THRESHOLDS.maxPerfectScoreFrac,
+      suggestion: `${(perfectFrac * 100).toFixed(0)}% of eval scores are at the maximum (≥0.99) — grader may be too lenient. Eval uses a strong model at K=1; training uses a weaker model at K=8, so scores will be lower. Run difficulty-probe for a precise prediction. Consider adding more discriminating criteria. [DAPO arXiv:2503.14476]`,
     },
     {
       id: 'high_score_frac', label: 'High Score Fraction', kind: 'soft',
@@ -204,12 +223,9 @@ function computeGraderQualitySoftChecks(scores: readonly number[]): ReadinessChe
       passed: highFrac < THRESHOLDS.maxHighScoreFrac,
       suggestion: 'Grader may be too lenient — if most completions score near-identical, within-group variance is small → weak gradients. [Heuristic; OpenAI recommends "smooth scores"]',
     },
-    {
-      id: 'binary_frac', label: 'Binary Score Fraction', kind: 'soft',
-      value: round4(binaryFrac), threshold: `< ${THRESHOLDS.maxBinaryFrac}`,
-      passed: binaryFrac < THRESHOLDS.maxBinaryFrac,
-      suggestion: 'Many binary (0/1) scores — continuous scoring is more sample-efficient. Note: binary rewards DO work (DeepSeek-R1, DAPO both used 100% binary). [arXiv:2501.12948, arXiv:2503.14476]',
-    },
+    // binary_frac check REMOVED (2026-03-31 research review):
+    // DeepSeek-R1, DAPO, and all major GRPO successes use 100% binary rewards.
+    // Warning against binary contradicts the literature.
   ];
 }
 

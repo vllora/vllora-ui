@@ -28,7 +28,8 @@ interface EvalRunsOverviewProps {
 function normalizeStatus(status: string): string {
   if (status === "completed") return "done";
   if (status === "running" || status === "pending") return "running";
-  if (status === "failed" || status === "cancelled") return "failed";
+  if (status === "cancelled") return "cancelled";
+  if (status === "failed") return "failed";
   return status;
 }
 
@@ -42,7 +43,9 @@ export function EvalRunsOverview({ workflowId }: EvalRunsOverviewProps) {
     [jobs],
   );
 
-  const completedJobs = sortedJobs.filter((j) => j.status === "completed" && j.result);
+  const completedJobs = sortedJobs.filter(
+    (j) => (j.status === "completed" || j.status === "cancelled") && j.result,
+  );
 
   if (jobs.length === 0) {
     return (
@@ -140,6 +143,8 @@ function RunRow({ job, latestVersion, inferVersion }: {
     ? "bg-emerald-500/15 text-emerald-400"
     : status === "running"
     ? "bg-blue-500/15 text-blue-400"
+    : status === "cancelled"
+    ? "bg-zinc-500/15 text-zinc-400"
     : "bg-red-500/15 text-red-400";
 
   const verdictColor = verdict === "GO"

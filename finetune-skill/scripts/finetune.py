@@ -15,6 +15,7 @@ Usage:
   uv run scripts/finetune.py upload-grader --workflow-id WF_ID --file grader.js
   uv run scripts/finetune.py verify --workflow-id WF_ID
   uv run scripts/finetune.py cancel-training --workflow-id WF_ID --job-id JOB_ID
+  uv run scripts/finetune.py cancel-eval --workflow-id WF_ID --eval-id EVAL_ID
 
 Exit codes:
   0 - success
@@ -651,6 +652,64 @@ def cmd_status(args: argparse.Namespace) -> None:
     except SystemExit:
         print("  Could not fetch jobs from gateway")
 
+    # ── Eval jobs (from local tracking files) ──
+    print("\n── Eval Jobs ──")
+    eval_dir = project_dir / "evaluations"
+    eval_jobs_shown = []
+    if eval_dir.exists():
+        eval_files = sorted(eval_dir.glob("eval-*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
+        if not eval_files:
+            print("  No eval jobs")
+        for ef in eval_files:
+            try:
+                ed = json.loads(ef.read_text())
+                eid = ed.get("evaluation_run_id", "?")[:12]
+                estatus = ed.get("status", "?")
+                completed = ed.get("completed_rows", "?")
+                total = ed.get("total_rows", "?")
+
+                # For running evals, fetch live status + partial score from gateway
+                if estatus == "running":
+                    full_eid = ed.get("evaluation_run_id", "")
+                    try:
+                        live = _api("GET", f"{base_url}/finetune/evaluations/{full_eid}")
+                        estatus = live.get("status", estatus)
+                        completed = live.get("completed_rows", completed)
+                        total = live.get("total_rows", total)
+
+                        # Compute partial score
+                        summary = live.get("summary", {})
+                        avg_score = summary.get("average_score") if summary else None
+                        # Compute zero rate from row-level results
+                        live_avg, live_count, live_zero_rate, live_perfect_rate = _compute_eval_partial_score(live)
+                        ed["_zero_rate"] = live_zero_rate  # store for later use in recommendations
+                        if avg_score is not None:
+                            score_str = f"  avg_score={avg_score:.3f}"
+                            if live_zero_rate is not None:
+                                score_str += f"  zeros={live_zero_rate:.0%}"
+                            if avg_score < 0.05:
+                                score_str += "  ⚠ BROKEN — scoring ~0, cancel this eval!"
+                            elif live_zero_rate is not None and live_zero_rate > 0.10:
+                                score_str += f"  ⚠ BROKEN — {live_zero_rate:.0%} zeros, cancel this eval!"
+                        else:
+                            score_str = ""
+                    except SystemExit:
+                        score_str = ""
+                else:
+                    score_str = ""
+
+                cancel_hint = ""
+                if estatus == "running":
+                    cancel_hint = f"  → cancel: finetune.py cancel-eval --workflow-id {wf_id} --eval-id {ed.get('evaluation_run_id', '?')} --file {ef}"
+                print(f"  {eid}...  {estatus} ({completed}/{total} rows){score_str}")
+                if cancel_hint:
+                    print(f"    {cancel_hint}")
+                eval_jobs_shown.append(ed)
+            except (json.JSONDecodeError, KeyError):
+                pass
+    else:
+        print("  No eval jobs")
+
     # ── Local checkpoint ──
     print("\n── Local Checkpoint ──")
     checkpoint_file = project_dir / ".checkpoint.json"
@@ -705,8 +764,9 @@ def cmd_status(args: argparse.Namespace) -> None:
                 std_s = statistics.stdev(scores) if n > 1 else 0
                 dead_w = sum(1 for s in scores if s < 0.1) / n
                 pass_r = sum(1 for s in scores if s >= 0.7) / n
+                zero_frac = sum(1 for s in scores if s < 0.01) / n
                 print(f"  Latest eval: {latest_eval_file.name} ({n} scores)")
-                print(f"  avg={avg_s:.3f}, std={std_s:.3f}, dead_weight={dead_w:.1%}, pass_rate={pass_r:.1%}")
+                print(f"  avg={avg_s:.3f}, std={std_s:.3f}, zeros={zero_frac:.0%}, dead_weight={dead_w:.1%}, pass_rate={pass_r:.1%}")
                 high_frac = sum(1 for s in scores if s > 0.9) / n
                 binary_frac = sum(1 for s in scores if s <= 0.01 or s >= 0.99) / n
                 # Score concentration: most common value (rounded to 0.01)
@@ -716,8 +776,15 @@ def cmd_status(args: argparse.Namespace) -> None:
                 mode_frac = mode_ct / n
                 grader_ok = (std_s > 0.10 and mode_frac < 0.50)
                 signal_ok = avg_s > 0.05  # Only 0% is fatal (OpenAI RFT)
-                if grader_ok and signal_ok:
-                    print(f"  Verdict: PASS — grader quality OK, ready for training")
+                zeros_ok = zero_frac < 0.10  # >10% zeros = grader broken (xFinder ICLR 2025)
+                perfect_frac_inline = sum(1 for s in scores if s >= 0.99) / n
+                if grader_ok and signal_ok and zeros_ok:
+                    if perfect_frac_inline > 0.50:
+                        print(f"  Verdict: PASS (with warning) — {perfect_frac_inline:.0%} of scores are 1.0 (grader may be too lenient, run difficulty-probe to check)")
+                    else:
+                        print(f"  Verdict: PASS — grader quality OK, ready for training")
+                elif not zeros_ok:
+                    print(f"  Verdict: FAIL — {zero_frac:.0%} of scores are 0.0 (grader broken — use grader-mcq.js template with LLM extraction fallback)")
                 elif not signal_ok:
                     print(f"  Verdict: FAIL — avg near zero, no training signal at all")
                 elif mode_frac >= 0.50:
@@ -727,8 +794,34 @@ def cmd_status(args: argparse.Namespace) -> None:
         except Exception:
             print(f"  Could not analyze {latest_eval_file.name}")
 
+    # ── Check for running evals with broken graders (scoring ~0 or high zero-rate) ──
+    broken_running_evals = []
+    for ed in eval_jobs_shown:
+        if ed.get("status") == "running":
+            summary = ed.get("summary", {})
+            avg = summary.get("average_score") if summary else None
+            completed_rows = ed.get("completed_rows", 0)
+            zero_rate = ed.get("_zero_rate")  # set during eval jobs display
+            if completed_rows >= 20:
+                if avg is not None and avg < 0.05:
+                    broken_running_evals.append(ed)
+                elif zero_rate is not None and zero_rate > 0.10:
+                    broken_running_evals.append(ed)
+
     # ── Recommended next step ──
     print("\n── Recommended Next Step ──")
+
+    # Priority: cancel running evals that are scoring 0 (broken grader)
+    if broken_running_evals:
+        for ed in broken_running_evals:
+            eid = ed.get("evaluation_run_id", "?")
+            avg = (ed.get("summary") or {}).get("average_score", 0)
+            zr = ed.get("_zero_rate")
+            if zr is not None and zr > 0.30:
+                print(f"  ⚠ CANCEL eval {eid[:12]}... — {zr:.0%} of scores are 0.0 (grader is broken)")
+            else:
+                print(f"  ⚠ CANCEL eval {eid[:12]}... — scoring {avg:.3f} (grader is broken)")
+            print(f"    Run: finetune.py cancel-eval --workflow-id {wf_id} --eval-id {eid}")
 
     if not step_done("create-workflow"):
         print("  → Start from Step 1: Create workflow")
@@ -749,7 +842,27 @@ def cmd_status(args: argparse.Namespace) -> None:
         cancelled_jobs = [j for j in job_list if j.get("status") == "cancelled"]
         done_training = [j for j in job_list if j.get("status") in ("completed", "succeeded")]
 
-        if active_training:
+        # Check if latest eval has high zero-rate (grader broken)
+        latest_eval_zero_rate = None
+        if latest_eval_file:
+            try:
+                ed = json.loads(latest_eval_file.read_text())
+                _avg, _count, zr, _pr = _compute_eval_partial_score(
+                    {"results": ed.get("results", [])}
+                )
+                latest_eval_zero_rate = zr
+            except Exception:
+                pass
+
+        grader_broken = (latest_eval_zero_rate is not None and latest_eval_zero_rate > 0.10)
+
+        if active_training and grader_broken:
+            print(f"  ⚠ Training is running BUT the latest eval has {latest_eval_zero_rate:.0%} zero scores — grader is broken!")
+            print(f"    Cancel the training job, fix the grader (use grader-mcq.js template), re-eval, then retrain.")
+            for j in active_training:
+                jid = j.get("id", "?")
+                print(f"    Run: finetune.py cancel-training --workflow-id {wf_id} --job-id {jid}")
+        elif active_training:
             print(f"  → Training running — poll it (Step 7e)")
         elif done_training:
             print(f"  → Analyze training results (Step 8b) and iterate if needed (Step 9)")
@@ -829,6 +942,7 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
       1. sample_count       — minimum dataset size (>= 50)
       2. score_std          — grader differentiation (> 0.10)
       3. avg_score          — nonzero signal (> 0.05)
+      4. zero_score_frac    — grader not broken (< 30% zeros)
       + score_concentration — dynamic: hard if > 70%, soft if 50-70%
 
     Soft checks (warnings, don't gate):
@@ -865,19 +979,23 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
     # Hard gates focus on GRADER QUALITY (is the grader working?) not model performance.
     # GRPO can learn from low base model scores (DeepSeek R1-Zero: 15.6% → 71%, arXiv:2501.12948).
     # Only 0% success is truly fatal (OpenAI RFT Guide).
+    # Research-validated thresholds (2026-03-31 review). See research-readiness-gate-thresholds-2026-03-31.md.
     defaults = {
-        "min_sample_count": 50,         # GRPO needs enough prompts for stable batches
-        "min_score_std": 0.10,          # Grader must differentiate — zero-variance → zero gradient (DAPO §2.2). Threshold is a heuristic.
-        "max_high_score_frac": 0.50,    # Grader leniency check. Heuristic — OpenAI recommends smooth scores.
-        "max_binary_frac": 0.60,        # Binary works (DeepSeek-R1, DAPO) but less sample-efficient. Raised from 0.40 per research review.
-        "min_avg_score": 0.05,          # Just needs nonzero signal (OpenAI: "0% success rate means cannot bootstrap")
-        "max_mode_frac": 0.50,          # Score concentration — if >50% are one value, grader too coarse for GRPO (DAPO arXiv:2503.14476)
-        "max_dead_weight_frac": 0.50,   # Real GRPO has 30-99% zero-var prompts ("No Prompt Left Behind" ICLR 2026)
-        "min_pass_rate": 0.20,          # Nice to have — hard examples are most valuable (arXiv:2508.14094)
+        "min_sample_count": 50,         # WELL-FOUNDED: OpenAI RFT uses same floor. DeepSeek/DAPO use 5K+ but 50 is "don't crash" minimum.
+        "min_score_std": 0.10,          # HEURISTIC: correct direction (zero-variance → zero gradient per DAPO §2.2). Exact value (0.05-0.10) is arbitrary.
+        "max_high_score_frac": 0.50,    # HEURISTIC: grader leniency. Overlaps with perfect_score_frac — kept for backward compat.
+        # binary_frac check REMOVED — DeepSeek-R1, DAPO, and all major GRPO successes use 100% binary rewards.
+        # Warning against binary contradicts the entire literature. OpenAI RFT recommends binary graders. (2026-03-31 research review)
+        "min_avg_score": 0.05,          # WELL-FOUNDED: OpenAI "0% = can't bootstrap". Math: 5% success → 34% non-degenerate groups at K=8.
+        "max_mode_frac": 0.70,          # RESEARCH-CORRECTED (was 0.50): at 0.70, P(all K=8 same) = 5.8% — almost all groups have variance. Hard fail at 0.85.
+        "max_zero_score_frac": 0.10,    # HEURISTIC: Imperfect Verifiers (arXiv:2510.00915) shows up to ~20% FN tolerable. 10% is conservative but defensible for catching parsing bugs.
+        "max_perfect_score_frac": 0.50, # WELL-FOUNDED as soft: eval K=1 (gpt-4o-mini) ≠ training K=8 (Qwen-4B). High eval scores don't predict training zero-variance.
+        "max_dead_weight_frac": 0.75,   # RESEARCH-CORRECTED (was 0.50): "No Prompt Left Behind" (ICLR 2026): 30-99% zero-var is normal. Eval dead-weight ≠ training dead-weight.
+        "min_pass_rate": 0.05,          # RESEARCH-CORRECTED (was 0.20): DeepSeek-R1 started at 15.6%. "Hard Examples" (arXiv:2508.14094): hard prompts yield 47% gains.
         "pass_threshold": 0.70,         # Score threshold for "passing" a record
-        "min_prompt_learnability": 0.30, # DAPO dynamic sampling (arXiv:2503.14476)
-        "max_score_length_corr": 0.30,  # Reward hacking risk (Dr. GRPO arXiv:2503.20783)
-        "max_topic_dominance": 0.40,    # No single topic should dominate training
+        "min_prompt_learnability": 0.30, # HEURISTIC: DAPO dynamic sampling concept. Questionable at K=1 eval — single sample gives noisy learnability.
+        "max_score_length_corr": 0.30,  # WELL-FOUNDED concept: Dr. GRPO (arXiv:2503.20783) validates length bias is real and structural. Exact threshold is heuristic.
+        "max_topic_dominance": 0.40,    # HEURISTIC: general ML practice, not GRPO-specific. Fine as soft warning.
     }
     thresholds = defaults.copy()
     if args.thresholds:
@@ -893,7 +1011,9 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
     avg = sum(scores) / n
     std = statistics.stdev(scores) if n > 1 else 0.0
     high_frac = sum(1 for s in scores if s > 0.9) / n
+    perfect_frac = sum(1 for s in scores if s >= 0.99) / n
     binary_frac = sum(1 for s in scores if s <= 0.01 or s >= 0.99) / n
+    zero_score_frac = sum(1 for s in scores if s < 0.01) / n
     dead_weight_frac = sum(1 for s in scores if s < 0.1) / n
     pass_rate = sum(1 for s in scores if s >= thresholds["pass_threshold"]) / n
 
@@ -935,6 +1055,32 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
             "fix": "Average score near zero — the base model produces no useful responses at all. GRPO needs at least some nonzero rewards. [OpenAI RFT: '0% success rate means RFT cannot bootstrap']",
             "hard": True,
         },
+        "zero_score_frac": {
+            "value": round(zero_score_frac, 4),
+            "threshold": f"< {thresholds['max_zero_score_frac']}",
+            "pass": zero_score_frac < thresholds["max_zero_score_frac"],
+            "fix": f"{zero_score_frac:.0%} of scores are exactly 0.0 — this usually means the grader can't parse the model's response format (not that answers are wrong). "
+                   f"Run diagnose-grader to check the zero-score reasons. Fix the grader to use LLM extraction fallback (see grader-mcq.js template). "
+                   f"[xFinder ICLR 2025 (arXiv:2405.11874): regex extraction is only 74% accurate on diverse LLM outputs]",
+            "hard": True,
+        },
+        "perfect_score_frac": {
+            "value": round(perfect_frac, 4),
+            "threshold": f"< {thresholds['max_perfect_score_frac']}",
+            "pass": perfect_frac < thresholds["max_perfect_score_frac"],
+            "fix": f"{perfect_frac:.0%} of eval scores are at the maximum (≥0.99) — grader may be too lenient. "
+                   f"Note: eval uses a strong model (gpt-4o-mini) at K=1, while training uses a weaker base model at K=8, "
+                   f"so training scores will be lower and more varied. However, high eval scores suggest the grader "
+                   f"doesn't discriminate quality within correct answers. "
+                   f"Consider: add more criteria (distractor analysis, citation accuracy, reasoning depth) "
+                   f"so that 'correct answer' gets 0.5-0.7 and only 'correct + excellent reasoning' gets 0.9-1.0. "
+                   f"Run difficulty-probe for a more precise K=8 prediction before deciding. "
+                   f"[DAPO arXiv:2503.14476: zero-variance groups produce zero gradient]",
+            # Soft check — eval K=1 with a strong model doesn't directly predict training K=8 variance.
+            # The difficulty_probe and score_concentration checks are better signals for this.
+            # score_concentration (hard at >70%) already catches the worst cases.
+            "hard": False,
+        },
         # Soft checks demoted from hard — research shows binary rewards work
         # (DeepSeek-R1 arXiv:2501.12948, DAPO arXiv:2503.14476 both use 100% binary rewards).
         "high_score_frac": {
@@ -944,13 +1090,9 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
             "fix": "Grader may be too lenient — if most completions score near-identical, within-group variance is small → weak gradients. Tighten grader criteria. [Heuristic; OpenAI recommends 'smooth scores, not pass/fail stamps']",
             "hard": False,
         },
-        "binary_frac": {
-            "value": round(binary_frac, 4),
-            "threshold": f"< {thresholds['max_binary_frac']}",
-            "pass": binary_frac < thresholds["max_binary_frac"],
-            "fix": "Many binary (0/1) scores — continuous scoring is more sample-efficient. Note: binary rewards DO work (DeepSeek-R1, DAPO both used 100% binary successfully). [arXiv:2501.12948, arXiv:2503.14476]",
-            "hard": False,
-        },
+        # binary_frac check REMOVED (2026-03-31 research review):
+        # DeepSeek-R1, DAPO, and all major GRPO successes use 100% binary rewards.
+        # Warning against binary contradicts the literature. OpenAI RFT recommends binary graders.
         "score_concentration": {
             "value": round(mode_frac, 4),
             "threshold": f"< {thresholds['max_mode_frac']}",
@@ -958,10 +1100,10 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
             "fix": f"{mode_frac:.0%} of scores are exactly {mode_value} — within-group variance will be small → weak gradients. "
                    f"Redesign grader with multi-point rubric (0-7 scale). "
                    f"[DAPO arXiv:2503.14476 filters uniform groups; RGR-GRPO arXiv:2511.12344: rubric >> binary]",
-            # Hard fail at >70%: at K=8, most groups will score identically → zero gradient
-            # → wasted GPU hours. The grader is broken, not the data.
-            # Soft warn at 50-70%: some signal loss but training may still work.
-            "hard": mode_frac > 0.70,
+            # Hard fail at >85%: at K=8, P(all same) = 0.85^8 = 27% — significant fraction of degenerate groups.
+            # Soft warn at 70-85%: some signal loss but training still works (0.70^8 = 5.8% degenerate).
+            # Research-corrected 2026-03-31: previous hard threshold of 0.70 was too tight.
+            "hard": mode_frac > 0.85,
         },
     }
 
@@ -972,14 +1114,18 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
         "value": round(dead_weight_frac, 4),
         "threshold": f"< {thresholds['max_dead_weight_frac']}",
         "pass": dead_weight_frac < thresholds["max_dead_weight_frac"],
-        "fix": "Many dead-weight records (score<0.1) waste compute. DAPO handles this via dynamic sampling, but consider removing the worst offenders.",
+        "fix": "Many eval-time dead-weight records (score<0.1). Note: eval dead-weight ≠ training dead-weight — "
+               "hard prompts may become learnable as model improves. 30-99% zero-var per batch is normal during GRPO. "
+               "[\"No Prompt Left Behind\" ICLR 2026, arXiv:2509.21880]",
         "hard": False,
     }
     checks["pass_rate"] = {
         "value": round(pass_rate, 4),
         "threshold": f"> {thresholds['min_pass_rate']}",
         "pass": pass_rate > thresholds["min_pass_rate"],
-        "fix": f"Low pass rate — but hard prompts are most valuable for GRPO. With K=8, pass@8 >> pass@1. [arXiv:2508.14094]",
+        "fix": "Very low pass rate — but hard prompts are the most valuable for GRPO (47% gains vs 3-15% for easy). "
+               "DeepSeek-R1 started at 15.6%. With K=8, pass@8 >> pass@1. "
+               "[arXiv:2508.14094; arXiv:2501.12948]",
         "hard": False,
     }
 
@@ -1474,11 +1620,52 @@ def _update_eval_metadata(metadata: dict, result: dict) -> dict:
     }
 
 
+def _compute_eval_partial_score(result: dict) -> tuple:
+    """Extract average score, zero-rate, and perfect-rate from partial eval results.
+
+    Returns (average_score, num_scored_rows, zero_rate, perfect_rate).
+    zero_rate is the fraction of scores < 0.01.
+    perfect_rate is the fraction of scores >= 0.99.
+    """
+    rows = result.get("results", [])
+    if not rows:
+        # Fall back to summary if no row-level data
+        summary = result.get("summary")
+        if summary and summary.get("average_score") is not None:
+            completed = result.get("completed_rows", 0)
+            return summary["average_score"], completed, None, None
+        return None, 0, None, None
+
+    scores = []
+    for row in rows:
+        epochs = row.get("epochs", {})
+        for _epoch_key, items in epochs.items():
+            if not isinstance(items, list):
+                items = [items]
+            for item in items:
+                score = item.get("score")
+                if score is not None and isinstance(score, (int, float)):
+                    scores.append(score)
+
+    if not scores:
+        return None, 0, None, None
+    avg = sum(scores) / len(scores)
+    zero_count = sum(1 for s in scores if s < 0.01)
+    zero_rate = zero_count / len(scores)
+    perfect_count = sum(1 for s in scores if s >= 0.99)
+    perfect_rate = perfect_count / len(scores)
+    return avg, len(scores), zero_rate, perfect_rate
+
+
 def cmd_poll_eval(args: argparse.Namespace) -> None:
     """Poll an evaluation job until complete and save results locally.
 
     Reads the eval metadata from the local file, polls the gateway,
     updates the file with progress on every poll, and stops on completion.
+
+    With --early-cancel (default), auto-cancels if average score is
+    below threshold after enough rows complete — catches broken graders
+    that score 0.0 on everything before wasting the full eval run.
     """
     import time
 
@@ -1491,8 +1678,19 @@ def cmd_poll_eval(args: argparse.Namespace) -> None:
     eval_id = metadata["evaluation_run_id"]
     poll_interval = args.poll_interval
     max_wait = args.max_wait
+    early_cancel = not args.no_early_cancel
+    early_cancel_threshold = args.early_cancel_threshold
+    early_cancel_min_rows = args.early_cancel_min_rows
+    early_cancel_zero_rate = args.early_cancel_zero_rate
 
-    print(f"Polling eval {eval_id} every {poll_interval}s (max {max_wait}s)...")
+    if early_cancel:
+        print(
+            f"Polling eval {eval_id} every {poll_interval}s (max {max_wait}s) "
+            f"[early-cancel: score < {early_cancel_threshold} after {early_cancel_min_rows} rows]..."
+        )
+    else:
+        print(f"Polling eval {eval_id} every {poll_interval}s (max {max_wait}s)...")
+
     elapsed = 0
     status = "unknown"
     while elapsed < max_wait:
@@ -1507,11 +1705,61 @@ def cmd_poll_eval(args: argparse.Namespace) -> None:
         status = result.get("status", "unknown")
         completed = result.get("completed_rows", "?")
         total = result.get("total_rows", "?")
-        print(f"  [{elapsed}s] {status} ({completed}/{total} rows)", flush=True)
+
+        # Show partial score in progress line
+        avg_score, scored_rows, zero_rate, perfect_rate = _compute_eval_partial_score(result)
+        score_str = f", avg={avg_score:.3f}" if avg_score is not None else ""
+        if zero_rate is not None:
+            score_str += f", zeros={zero_rate:.0%}"
+        if perfect_rate is not None and perfect_rate > 0.3:
+            score_str += f", perfect={perfect_rate:.0%}"
+        print(f"  [{elapsed}s] {status} ({completed}/{total} rows{score_str})", flush=True)
 
         # Update local JSON on every poll for progress tracking
         metadata = _update_eval_metadata(metadata, result)
         eval_file.write_text(json.dumps(metadata, indent=2))
+
+        # Early cancel: detect broken grader before wasting the full run
+        # Two signals: (1) avg score near zero, (2) high zero-score rate
+        if early_cancel and status == "running" and scored_rows >= early_cancel_min_rows:
+            cancel_reason = None
+
+            if avg_score is not None and avg_score < early_cancel_threshold:
+                cancel_reason = (
+                    f"avg score {avg_score:.4f} across {scored_rows} rows "
+                    f"(threshold: {early_cancel_threshold})"
+                )
+
+            if zero_rate is not None and zero_rate > early_cancel_zero_rate:
+                cancel_reason = (
+                    f"{zero_rate:.0%} of scores are 0.0 across {scored_rows} rows "
+                    f"(threshold: {early_cancel_zero_rate:.0%}) — grader cannot parse "
+                    f"model responses or data has issues"
+                )
+
+            if perfect_rate is not None and perfect_rate > 0.50 and cancel_reason is None:
+                # Warn but don't cancel — eval K=1 with strong model doesn't predict training K=8 variance
+                print(
+                    f"  ⚠ WARNING: {perfect_rate:.0%} of scores are 1.0 — grader may be too lenient. "
+                    f"Run difficulty-probe after eval completes to check K=8 prediction.",
+                    file=sys.stderr,
+                )
+
+            if cancel_reason:
+                print(
+                    f"\n  ⚠ BROKEN GRADER DETECTED: {cancel_reason}",
+                    file=sys.stderr,
+                )
+                print(
+                    f"    Auto-cancelling eval. Fix the grader (use diagnose-grader "
+                    f"for details) and re-run. Use --no-early-cancel to override.",
+                    file=sys.stderr,
+                )
+
+                metadata["status"] = "cancelled"
+                metadata["early_cancel_reason"] = f"Broken grader: {cancel_reason}"
+                eval_file.write_text(json.dumps(metadata, indent=2))
+                sys.exit(2)
 
         if status in ("completed", "failed", "error", "cancelled"):
             metadata["completed_at"] = result.get("completed_at")
@@ -2175,6 +2423,37 @@ def cmd_cancel_training(args: argparse.Namespace) -> None:
             print(f"Updated local file: {job_file}")
 
 
+def cmd_cancel_eval(args: argparse.Namespace) -> None:
+    """Cancel a running evaluation.
+
+    Marks the eval as cancelled locally (gateway DB + tracking file)
+    so the agent stops waiting. The cloud eval may continue running
+    but results will be ignored.
+    """
+    wf_id = args.workflow_id
+    eval_id = args.eval_id
+
+    print(f"Cancelling eval {eval_id} in workflow {wf_id}...")
+
+    try:
+        _api(
+            "PATCH",
+            f"{args.base_url}/finetune/workflows/{wf_id}/eval-jobs/{eval_id}",
+            json={"status": "cancelled"},
+        )
+        print(f"Eval {eval_id} marked as cancelled in gateway.")
+    except SystemExit:
+        print(f"  Warning: Could not update gateway (eval may be cloud-only). Updating local file only.", file=sys.stderr)
+
+    if args.file:
+        eval_file = Path(args.file)
+        if eval_file.exists():
+            metadata = json.loads(eval_file.read_text())
+            metadata["status"] = "cancelled"
+            eval_file.write_text(json.dumps(metadata, indent=2))
+            print(f"Updated local file: {eval_file}")
+
+
 def cmd_sync_jobs(args: argparse.Namespace) -> None:
     """Sync training + eval jobs from gateway to local tracking files.
 
@@ -2583,6 +2862,14 @@ def main() -> None:
     p.add_argument("--file", required=True, help="Path to eval metadata JSON (from create-eval)")
     p.add_argument("--poll-interval", type=int, default=30, help="Poll interval in seconds (default: 30)")
     p.add_argument("--max-wait", type=int, default=3600, help="Max wait in seconds (default: 3600)")
+    p.add_argument("--no-early-cancel", action="store_true",
+        help="Disable automatic early cancellation on broken grader detection")
+    p.add_argument("--early-cancel-threshold", type=float, default=0.05,
+        help="Score threshold below which to auto-cancel (default: 0.05)")
+    p.add_argument("--early-cancel-min-rows", type=int, default=20,
+        help="Minimum completed rows before checking early cancel (default: 20)")
+    p.add_argument("--early-cancel-zero-rate", type=float, default=0.10,
+        help="Cancel if more than this fraction of scores are 0.0 (default: 0.10 = 10%%)")
 
     # create-training
     p = subparsers.add_parser("create-training", help="Create training job and save metadata locally")
@@ -2607,6 +2894,12 @@ def main() -> None:
     p.add_argument("--workflow-id", required=True, help="Workflow ID")
     p.add_argument("--job-id", required=True, help="Training job ID to cancel")
     p.add_argument("--file", default=None, help="Path to local train-NNN.json to update status (optional)")
+
+    # cancel-eval
+    p = subparsers.add_parser("cancel-eval", help="Cancel a running evaluation")
+    p.add_argument("--workflow-id", required=True, help="Workflow ID")
+    p.add_argument("--eval-id", required=True, help="Eval job ID to cancel")
+    p.add_argument("--file", default=None, help="Path to local eval-NNN.json to update status (optional)")
 
     # sync-jobs
     p = subparsers.add_parser("sync-jobs", help="Sync training + eval jobs from gateway to local tracking files")
@@ -2687,6 +2980,7 @@ def main() -> None:
         "poll-training": cmd_poll_training,
         "search-knowledge": cmd_search_knowledge,
         "cancel-training": cmd_cancel_training,
+        "cancel-eval": cmd_cancel_eval,
         "sync-jobs": cmd_sync_jobs,
         "delete-knowledge": cmd_delete_knowledge,
         "difficulty-probe": cmd_difficulty_probe,

@@ -98,7 +98,7 @@ function useEvalJobs(props: {
       // Catch-up: fetch per-record results from cloud for completed jobs.
       // pollingSnapshot is in-memory only, so after page reload it's gone.
       // Single attempt here; the eval detail view auto-retries when opened.
-      const isTerminal = job.status === 'completed' || job.status === 'failed';
+      const isTerminal = job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled';
       const needsSnapshot = isTerminal && !job.pollingSnapshot && job.evaluationRunId;
       if (needsSnapshot && !refreshedJobIdsRef.current.has(job.id)) {
         refreshedJobIdsRef.current.add(job.id);
@@ -183,7 +183,7 @@ function useEvalJobs(props: {
   );
 
   const lastCompletedJob = useMemo(
-    () => jobs.find((j) => j.status === 'completed' && j.result) || null,
+    () => jobs.find((j) => (j.status === 'completed' || j.status === 'cancelled') && j.result) || null,
     [jobs]
   );
 

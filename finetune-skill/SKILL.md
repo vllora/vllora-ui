@@ -138,8 +138,12 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py sync-jobs --workflow-id $WORKFLO
 ```
 This creates local tracking files for any jobs you don't already have and updates statuses for existing jobs (e.g., a job you created that was later cancelled from the UI).
 
-4. **Pick up from the recommended step** — do NOT re-run completed steps
-5. Append to `execution-log.md` (never overwrite) with a "Resumed" entry:
+4. **Cancel broken eval jobs** — if `status` shows a running eval scoring ~0.0, the grader is broken and the eval is wasting compute. Cancel it before proceeding:
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py cancel-eval --workflow-id $WORKFLOW_ID --eval-id <EVAL_ID>
+```
+5. **Pick up from the recommended step** — do NOT re-run completed steps
+6. Append to `execution-log.md` (never overwrite) with a "Resumed" entry:
    ```
    ## Resumed — [timestamp]
    - Status output: records=X, topics=Y, sources=Z, grader=YES/NO
@@ -522,20 +526,30 @@ Write a JavaScript grader function to `grader.js`. Scores model responses 0-1, r
 
 The grader function signature: `function evaluate(input) { ... return { score, reason }; }` where score is 0.0-1.0. The function can use `__langdb_call_llm_as_judge_obj(config, input)` for subjective quality assessment — `config` has `prompt_template` (message array with `{{history}}`/`{{response}}` template vars), `output_schema` (JSON Schema), and `completion_params` (`{model_name, temperature, max_tokens}`). Set `input.history` and `input.response` before calling. **Synchronous only** — no async/await.
 
-See [reference/grader-writing.md](reference/grader-writing.md) for 3 patterns (pure programmatic, LLM-as-judge, hybrid), design guidelines, and common mistakes. Pick the template that best matches the task:
+See [reference/grader-writing.md](reference/grader-writing.md) for 3 patterns (pure programmatic, LLM-as-judge, hybrid), design guidelines, and common mistakes.
+
+**⚠️ COPY a template file — do NOT write a grader from scratch.** Literally copy the closest template file to `grader.js`, then customize ONLY the domain-specific parts (criteria names, weights, system prompt, domain terms). Keep the template's architecture intact — especially the LLM-as-judge scoring, LLM extraction fallback, and error handling. Do NOT cherry-pick individual features from a template into a hand-written grader — this loses the template's scoring granularity and produces coarse scores that GRPO can't learn from. If no template matches exactly, use `grader-template.js` as the base.
+
+**⚠️ NEVER return score 0.0 for a parsing/extraction failure.** A score of 0 must mean the response is genuinely wrong or empty — not that the grader couldn't parse the format. Use LLM-based extraction as fallback when regex fails (see `grader-mcq.js` and `grader-classification.js` for the pattern).
+
+**⚠️ NEVER use programmatic checks (char count, keyword matching) as the primary scoring mechanism.** Programmatic checks are useful for fast guards (empty response, refusal detection, format compliance) but NOT for scoring quality. Use LLM-as-judge for quality assessment — it produces continuous scores that give GRPO smooth gradients. A programmatic check like `response.length > 150 → score 1.0` will produce coarse scores where gpt-4o-mini always gets 1.0 (it always writes long responses).
 
 | Template | Best for | Key criteria |
 |----------|----------|-------------|
 | `templates/grader-template.js` | General-purpose (default) | accuracy, helpfulness, clarity, completeness, tone |
+| `templates/grader-mcq.js` | Multiple-choice / short-answer QA | answer correctness (LLM extraction fallback), reasoning quality, distractor analysis |
+| `templates/grader-classification.js` | Label assignment / categorization | label match (exact/partial/wrong), evidence, reasoning quality |
 | `templates/grader-extraction.js` | Structured data extraction (10-K metrics, medical coding) | field accuracy, hallucination rate, format compliance |
 | `templates/grader-compliance.js` | Rule application (FDA, tax, legal) | rule recall, false positives, citation accuracy |
 | `templates/grader-readability.js` | Simplification (contract→English, ELI5) | readability + Flesch-Kincaid, jargon elimination, accuracy preservation |
 
 Copy the closest template, then customize the criteria weights and programmatic checks for your domain.
 
-#### Step 5.1: Mandatory Dry-Run
+#### Step 5.1: Mandatory Dry-Run (two tests)
 
-**You MUST dry-run the grader before uploading.** This catches syntax errors, runtime crashes, and scoring logic bugs before they waste an entire evaluation run:
+**You MUST dry-run the grader before uploading.** Run TWO tests — a hand-crafted test AND a live test against real model outputs.
+
+**Test 1: Hand-crafted row** — catches syntax errors and basic scoring logic:
 
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
@@ -544,7 +558,18 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
   --row '{"messages": [{"role": "system", "content": "You are..."}, {"role": "user", "content": "What is X?"}, {"role": "assistant", "content": "X is..."}]}'
 ```
 
-Verify: no errors, score is reasonable (not always 0/1), reason is informative. Fix and re-run until it passes — do NOT proceed to upload until dry-run passes. The sandbox does NOT support `console.log` — use the `reason` field for debug output.
+**Test 2: Live model response (CRITICAL)** — catches graders that work on synthetic inputs but fail on real model outputs. This is the most common grader bug: the grader assumes a specific response format (e.g., "Answer: A") but the model responds differently (e.g., "Based on the guidelines..."):
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
+  --workflow-id $WORKFLOW_ID \
+  --script grader.js \
+  --live
+```
+
+The `--live` flag picks 3 random training records, sends each prompt to the LLM, and grades the real responses. If all live samples score 0.0, the grader is broken — fix the extraction/parsing logic to handle real model output formats before proceeding.
+
+**Both tests must pass.** If Test 1 passes but Test 2 scores 0.0, the grader has format assumptions that real models don't satisfy. Fix and re-test. Do NOT proceed to upload until both pass. The sandbox does NOT support `console.log` — use the `reason` field for debug output.
 
 **Upload immediately** — push the grader to the gateway so the UI shows it's ready for evaluation:
 ```bash
@@ -680,11 +705,18 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
 
 > **Note on eval IDs**: The `POST /finetune/evaluations` response returns `evaluation_run_id` — use this for polling. The workflow's `eval_job_ids` field may show a different internal ID that returns 404. Always use the ID from the create response.
 
-**Poll eval in foreground:**
+**Poll eval in foreground** (auto-cancels if grader is broken):
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval \
   --file evaluations/eval-001.json
 ```
+
+The poller monitors partial scores as rows complete and auto-cancels (exit code 2) if either:
+- **avg score < 0.05** after 20 rows — grader is scoring zero on everything
+- **>10% of scores are 0.0** after 20 rows — grader can't parse model responses or data has issues
+- **>50% of scores are 1.0** after 20 rows — warns that grader may be too lenient (does NOT auto-cancel, since eval uses a stronger model than training; run difficulty-probe after eval completes for a precise K=8 prediction)
+
+A 0.0 score is always a bad signal: either the grader is wrong (can't parse the response format) or the data is wrong (bad ground truth, missing fields). You cannot train with records scoring 0 — fix the root cause first. If cancelled, run `diagnose-grader` to see the zero-score reasons, fix the grader, re-upload, and create a new eval. Use `--no-early-cancel` to disable.
 
 When eval completes, proceed to **Step 7c (Readiness Gate)** — do NOT start training.
 
@@ -699,16 +731,28 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
 
 The readiness gate runs **3 hard checks** (grader quality) and **8 soft checks** (quality signals). Hard checks ask "is the grader working?", NOT "is the base model good?" — GRPO can learn from low base model scores (DeepSeek R1-Zero: 15.6% → 71%).
 
-**Hard checks** (must ALL pass): sample count >= 50, score std > 0.10, average score > 0.05.
+**Hard checks** (must ALL pass): sample count >= 50, score std > 0.10, average score > 0.05, **zero-score fraction < 10%**.
 
 **Decision:**
 - **Exit code 0 (PASS)** → proceed to **Step 7d (Start Training)**
 - **Exit code 1 (FAIL)** → fix issues → return to **Step 7b (Re-eval)**
-- **Exit code 2 (WARN)** → check which soft checks failed before deciding
+- **Exit code 2 (WARN)** → **first eval: fix ALL warnings before training. Subsequent evals: only fix critical warnings.**
 
-**⚠️ Critical WARN distinction:** `score_concentration` > 70% means the grader is broken — **fix before training**. Other soft warnings (`pass_rate`, `binary_frac`, `dead_weight`, `topic_balance`) are safe to train through.
+**⚠️ First eval rule:** On the FIRST evaluation (no previous training has run), treat ALL soft warnings as must-fix. This is your one chance to validate the grader design before spending hours of GPU time. Fix each warning, re-eval, and only proceed to training when the gate returns PASS with no warnings. Training is expensive — getting the grader right first is 10-100x cheaper.
 
-**If non-interactive** (running via `claude -p`): auto-fix if `score_concentration` > 70%, otherwise proceed to training.
+**Warnings that MUST be fixed before first training:**
+- `score_concentration` > 70% — grader is too coarse, only produces a few distinct values. COPY the appropriate template (e.g., `grader-mcq.js`) which uses LLM-as-judge for continuous scoring.
+- `perfect_score_frac` > 50% — grader is too lenient. Add more discriminating criteria so correct answers score 0.5-0.7, only excellent answers score 0.9-1.0.
+- `high_score_frac` > 50% — same as above, grader doesn't differentiate quality levels.
+
+**Warnings safe to train through (even on first eval):**
+- `dead_weight_frac` — hard prompts are expected and valuable. 30-99% zero-var is normal. [arXiv:2509.21880]
+- `pass_rate` — low pass rate means hard task, which yields the best GRPO gains. [arXiv:2508.14094]
+- `topic_balance` — imbalanced topics can be addressed in later iterations.
+
+**On subsequent evals (after at least one training run):** Only `score_concentration` > 70% requires fixing. Other soft warnings are informational — you've already validated the grader design.
+
+**If non-interactive** (running via `claude -p`): auto-fix `score_concentration` > 70% and `perfect_score_frac` > 50% on first eval, otherwise proceed to training.
 
 **Max 5 eval-only iterations.** If readiness gate never passes after 5 evals, escalate to user with diagnosis.
 

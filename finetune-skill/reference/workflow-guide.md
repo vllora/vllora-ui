@@ -362,6 +362,16 @@ See `iteration-strategy.md` for the full diagnostic framework.
 5. Ask: "Is this a bad response, or is the grader wrong?"
 6. Fix accordingly and re-evaluate
 
+### When the Difficulty Probe Flags Trivial Prompts
+
+If the difficulty probe (Step 7c+) reports many trivial prompts (score > 0.95), the user messages are too easy — all 8 completions score high, producing zero GRPO gradient. Use these techniques to make the user message harder while keeping the system prompt unchanged:
+
+1. **Add Constraints** — add 2-3 extra requirements the answer must satisfy
+2. **Deepen** — require "why/how" reasoning, not just "what" recall
+3. **Increase Reasoning Steps** — require multi-step analysis where each step builds on the previous
+
+See `readiness-gate.md` → "Fixing Trivial Prompts" for examples and rules.
+
 ### Typical Iteration Count
 
 - First-time users: 3-5 iterations (learning the grader + data balance)

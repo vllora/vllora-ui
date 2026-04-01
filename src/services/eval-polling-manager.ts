@@ -182,14 +182,63 @@ class EvalJobManager {
 
   /**
    * Cancel a running evaluation.
+   * Fetches the latest snapshot first so partial scores are preserved.
    */
   async cancelEval(jobId: string): Promise<void> {
     this.stopPolling(jobId);
-    await evalJobService.update(jobId, {
+
+    // Fetch partial results before marking cancelled
+    const job = await evalJobService.get(jobId);
+    let partialResult: EvalJob['result'] | undefined;
+    let partialSnapshot: EvalJob['pollingSnapshot'] | undefined;
+
+    if (job?.evaluationRunId) {
+      try {
+        const result = await getEvaluationResult(job.evaluationRunId);
+        partialSnapshot = result;
+
+        // Analyze partial results if any rows completed
+        if ((result.completed_rows ?? 0) > 0) {
+          const records = await recordService.getByDatasetId(job.workflowId);
+          const recordTopics: Record<number, string> = {};
+          for (let i = 0; i < records.length; i++) {
+            if (records[i].topic) {
+              recordTopics[i] = records[i].topic!;
+            }
+          }
+
+          const samplePercentage = Math.round(
+            (job.sampleSize / (result.total_rows || job.sampleSize)) * 100,
+          );
+          partialResult = analyzeEvalResults(
+            result,
+            samplePercentage,
+            Object.keys(recordTopics).length > 0 ? recordTopics : undefined,
+          );
+        }
+      } catch {
+        // Best-effort — if cloud is unreachable, cancel without partial results
+      }
+    }
+
+    const cancelledJob = await evalJobService.update(jobId, {
       status: 'cancelled',
       completedAt: Date.now(),
+      ...(partialResult ? { result: partialResult } : {}),
     });
-    toast.info('Evaluation cancelled');
+
+    if (cancelledJob) {
+      const jobWithSnapshot = {
+        ...cancelledJob,
+        ...(partialSnapshot ? { pollingSnapshot: partialSnapshot } : {}),
+      };
+      emitter.emit('vllora_eval_job_update', { jobId, job: jobWithSnapshot });
+    }
+
+    const hasPartial = (partialSnapshot?.completed_rows ?? 0) > 0;
+    toast.info(
+      hasPartial ? 'Evaluation cancelled — partial results preserved' : 'Evaluation cancelled',
+    );
   }
 
   /**

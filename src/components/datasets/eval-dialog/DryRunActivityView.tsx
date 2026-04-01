@@ -237,20 +237,13 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
     }
   }, [job.id, job.status, job.evaluationRunId, result, evaluationResults, onRefresh]);
 
-  // For non-running jobs without results or evaluation data
-  if (job.status !== "running" && !result && !evaluationResults) {
+  // For non-running, non-cancelled jobs without results or evaluation data
+  if (job.status !== "running" && job.status !== "cancelled" && !result && !evaluationResults) {
     if (job.status === "failed") {
       return (
         <div className="flex flex-col items-center justify-center h-full gap-2 px-4">
           <XCircle className="h-5 w-5 text-red-400" />
           <span className="text-xs text-red-400 text-center">{job.error || "Job failed"}</span>
-        </div>
-      );
-    }
-    if (job.status === "cancelled") {
-      return (
-        <div className="flex items-center justify-center h-full text-xs text-zinc-500">
-          Job was cancelled
         </div>
       );
     }
@@ -283,6 +276,10 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
                 <span className="size-1.5 rounded-full bg-blue-400 animate-pulse" />
                 Running
               </div>
+            ) : job.status === "cancelled" ? (
+              <span className="inline-flex items-center gap-1 rounded bg-zinc-500/10 border border-zinc-500/20 px-2 py-0.5 text-[10px] font-medium text-zinc-400">
+                Cancelled{result ? ' (partial)' : ''}
+              </span>
             ) : job.status === "failed" && !result ? (
               <span className="inline-flex items-center rounded bg-red-500/10 border border-red-500/20 px-2 py-0.5 text-[10px] font-medium text-red-400">
                 Failed
@@ -434,6 +431,14 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
             </div>
           );
         })()}
+
+        {/* Cancelled with no results — show empty state */}
+        {!isRunning && job.status === "cancelled" && scores.length === 0 && (
+          <div className="flex flex-col items-center justify-center flex-1 gap-2 px-4">
+            <StopCircle className="h-5 w-5 text-zinc-500/40" />
+            <span className="text-xs text-zinc-500">Cancelled before any records were scored</span>
+          </div>
+        )}
 
         {/* Results table fills remaining space */}
         {!isRunning && evaluationResults && evaluationResults.length > 0 && (
