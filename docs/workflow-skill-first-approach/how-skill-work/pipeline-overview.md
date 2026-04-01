@@ -57,10 +57,12 @@ Other helper scripts:
 |--------|------|-------------|
 | `docling_extract.py` | 2a | Submits PDF(s) to Docling Serve async API, polls until done, supports batch mode |
 | `pdftotext_extract.py` | 2a | Fallback PDF extraction via pdftotext (no Docker required), same output schema |
+| `build_knowledge_parts.py` | 2c | Deterministic Docling→knowledge_parts.json converter — default extraction, no custom script needed |
 | `extract_tables.py` | 2b | Upgrades text parts to table parts using structured Docling table data (headers, rows, metadata) |
 | `consolidate_parts.py` | 2c | Merges adjacent text parts, drops short fragments, fixes Unicode, validates quality |
 | `validate_extraction.py` | 2e | Cross-document extraction quality gate (parts/page, title diversity, avg length) |
-| `generate_records.py` | 4 | Generates records per leaf topic via LLM (calls `chat_completion.py`) |
+| `generate_records.py` | 4 | Fallback: generates records per leaf topic via LLM (calls `chat_completion.py`). Primary path is NeMo Data Designer — see Step 4B |
+| `convert_nemo_rows.py` | 4B | Converts NeMo DataDesigner output rows to `training.jsonl`; filters by judge scores; writes `nemo-metadata.jsonl` sidecar |
 | `chat_completion.py` | 4 | Calls LLM API — validates JSON when `response_format` is `json_object` |
 | `validate_dataset.py` | 5.5 | Validates JSONL format, fields, RFT compliance, cross-refs topics/parts |
 | `deduplicate_records.py` | 4 | Removes near-duplicate prompts across overlapping topics (threshold-based) |
@@ -216,11 +218,15 @@ ls -lh finetune-project/knowledge/*/docling-result.json
 
 **What happens**: For each document, the agent:
 1. **Reads the Docling result** — examines chunks 0-9, then samples from middle and end to understand the document structure
-2. **Writes a Python extraction script** at `knowledge/{doc-slug}/extract.py` — tailored to each document's structure (heading patterns, noise filters, table handling). The script lives inside the per-document directory, NOT in the project root.
-3. **Runs the script** — transforms raw Docling output into typed, structured `knowledge_parts.json`
-4. **Runs consolidation** — `scripts/consolidate_parts.py` merges adjacent text parts under the same heading, drops short fragments (<50 chars), fixes Unicode escape sequences, reassigns sequential IDs, and regenerates `parts-index.json`
-
-This is where the agent spends the most **context window** — it reads large JSON files to understand the document, then writes custom code. This is the step most likely to get stuck if the Docling result is very large (>30MB).
+2. **Runs `build_knowledge_parts.py`** — deterministic extraction from `docling-result.json`, no custom script needed:
+   ```bash
+   python3 ${CLAUDE_SKILL_DIR}/scripts/build_knowledge_parts.py \
+     finetune-project/knowledge/{doc-slug}/docling-result.json \
+     -o finetune-project/knowledge/{doc-slug}/knowledge_parts.json \
+     --slug {doc-slug}
+   ```
+   Only write a custom `extract.py` if: (a) `build_knowledge_parts.py` produces 0 parts, or (b) CUSTOM_INSTRUCTIONS were provided for this document. Custom scripts **must read from `docling-result.json`** — never from raw PDF text or regex-based splitting.
+3. **Runs consolidation** — `scripts/consolidate_parts.py` merges adjacent text parts under the same heading, drops short fragments (<50 chars), fixes Unicode escape sequences, reassigns sequential IDs, and regenerates `parts-index.json`
 
 **Consolidation** (run after the extraction script):
 ```bash
@@ -232,10 +238,10 @@ This reduces part count (e.g., 1018 raw → 45 consolidated), improves title div
 **Files produced** (per document):
 ```
 finetune-project/knowledge/{doc-slug}/
-├── extract.py                # Custom extraction script for THIS document
 ├── docling-result.json        # From step 2b (already exists)
 ├── knowledge_parts.json       # Structured parts: text, table, image (consolidated)
-└── parts-index.json           # Lightweight index for topic design (regenerated)
+├── parts-index.json           # Lightweight index for topic design (regenerated)
+└── extract.py                 # (optional) Custom script — only if build_knowledge_parts.py produces 0 parts
 ```
 
 Where `{doc-slug}` is the slugified filename (e.g., `chess-tactics/`, `strategy-guide/`).
@@ -488,6 +494,81 @@ for t, c in topics.most_common():
 print(f'Total: {sum(topics.values())}')
 " 2>/dev/null
 ```
+
+## Step 4B: Generate Training Data via NeMo Data Designer (Primary Path)
+
+**What happens**: NeMo Data Designer (repo: https://github.com/vllora/nemo) is the **recommended** path when the server is running at `localhost:8000`. Instead of `generate_records.py`, you submit a recipe to the NeMo server. The `rag-retrieval` column plugin calls the gateway knowledge search per row at generation time — no need to pre-link relations.
+
+**Two-stage question generation** (arXiv 2509.25736 — https://arxiv.org/html/2509.25736v1): both NeMo templates implement this pattern:
+```
+topic_path → rag-retrieval → retrieved_chunks
+                  ↓
+            raw_question    (drop:true — generated WITHOUT retrieved text to avoid anchoring bias)
+                  ↓
+raw_question → rag-retrieval → question_chunks   (drop:true — question-specific retrieval)
+                  ↓
+            user_message    (refines raw_question using question_chunks)
+```
+Key insight: generating the question blind first produces more diverse questions; the second retrieval grounds the final version in specific source material.
+
+**Script calls**:
+```bash
+# 1. Materialize seed parquet (one row per leaf topic)
+uv run nemo/materialize_seed.py \
+  --topics finetune-project/topics.json \
+  --output finetune-project/curated-seed.parquet
+
+# 2. Upload seed + inspect
+BLOCK_ID=$(date +%s)
+curl -sS -X POST "http://localhost:8000/api/data-recipe/seed/upload-curated" \
+  -F "file=@finetune-project/curated-seed.parquet" -F "block_id=$BLOCK_ID" \
+  > finetune-project/nemo-seed-upload.json
+FILE_ID=$(jq -r '.file_id' finetune-project/nemo-seed-upload.json)
+
+# 3. Preview recipe (execution_type: "preview", rows: 10) then full job
+JOB_ID=$(jq -r '.job_id' finetune-project/nemo-job.json)
+curl -sS "http://localhost:8000/api/data-recipe/jobs/$JOB_ID/dataset?limit=200&offset=0" \
+  > finetune-project/nemo-dataset-page-1.json
+
+# 4. Convert → validate → upload
+python3 ${CLAUDE_SKILL_DIR}/scripts/convert_nemo_rows.py \
+  --input finetune-project/nemo-dataset-page-1.json \
+  --output finetune-project/training.jsonl \
+  --min-answerable 1.0 --min-groundedness 0.5 \
+  --ground-truth-field reference_answer
+
+python3 ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py \
+  finetune-project/training.jsonl --nemo
+
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
+  --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl
+```
+
+**Files produced**:
+```
+finetune-project/
+├── curated-seed.parquet        # One row per leaf topic
+├── nemo-seed-upload.json       # Seed upload response (file_id, block_id)
+├── nemo-recipe.json            # Recipe definition
+├── nemo-preview.json           # Preview job metadata
+├── nemo-job.json               # Full job metadata
+├── nemo-dataset-page-1.json    # Raw NeMo output rows
+├── training.jsonl              # Converted + filtered training records
+└── nemo-metadata.jsonl         # Judge scores sidecar
+```
+
+**How to verify progress**:
+```bash
+# Check NeMo server is running
+curl -sS http://localhost:8000/health && echo "NeMo available"
+
+# Count converted records
+wc -l finetune-project/training.jsonl 2>/dev/null
+```
+
+See `reference/nemo-guide.md` for full recipe design, column types, template selection, and troubleshooting.
+
+---
 
 ### Step 4.5: Variant Generation (optional)
 

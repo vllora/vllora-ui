@@ -81,7 +81,7 @@ finetune-project/
 ├── training.jsonl, grader.js, topics.json, relations.json, config.json
 ├── execution-log.md, iterations.md
 ├── knowledge/                  # Per-document subdirs (slugified filename)
-│   ├── {doc-slug}/             # docling-result.json, knowledge_parts.json, parts-index.json, extract.py
+│   ├── {doc-slug}/             # {slug}.md, extract.py, knowledge_parts.json, parts-index.json
 │   └── all-parts-index.json   # Merged index across ALL documents
 ├── evaluations/                # eval-001.json, eval-002.json, ...
 └── training-jobs/              # train-001.json, {JOB_ID}-metrics.json, ...
@@ -107,14 +107,16 @@ Maintain `execution-log.md` as an **append-only** chronological record. Create i
 
 ### Prerequisites
 
-Before starting, verify the gateway is running and Python dependencies are available:
+Before starting, verify the gateway is running and `uv` is available:
 ```bash
 # Check gateway
 curl -s http://localhost:9090/finetune/workflows | head -c 100 && echo " OK" || echo "ERROR: Gateway not running at localhost:9090"
 
-# Ensure requests package is installed (needed by all helper scripts)
-python3 -c "import requests" 2>/dev/null || pip install requests
+# Check uv (used to run all helper scripts with their deps)
+uv --version 2>/dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
+
+All helper scripts use `uv run` with PEP 723 inline dependencies — no manual `pip install` needed.
 
 ### Resume from Previous Run
 
@@ -201,7 +203,7 @@ Extract all documents in parallel — **spawn one `knowledge-extractor` subagent
 
 > **Deterministic extraction rule**: Subagents MUST use `build_knowledge_parts.py` as the default extraction script. This ensures the same PDF always produces the same knowledge parts. Agents must NOT write custom extract.py scripts unless the user explicitly requests custom extraction for a specific document via CUSTOM_INSTRUCTIONS, or `build_knowledge_parts.py` produces 0 parts.
 
-**2a. Check Docling availability and submit all PDFs:**
+**2a. Verify Docling Serve is available:**
 
 ```bash
 curl -sS --connect-timeout 5 http://127.0.0.1:5001/health 2>/dev/null && echo "DOCLING_OK" || echo "DOCLING_UNAVAILABLE"
@@ -229,9 +231,8 @@ For each document, spawn a subagent with:
 - `SKILL_DIR=${CLAUDE_SKILL_DIR}`
 - `WORKFLOW_ID`, `GATEWAY_URL=http://localhost:9090`
 - `DOC_PATH` — the PDF path
-- `DOC_SLUG` — the slug (lowercase, hyphens)
+- `DOC_SLUG` — the slug (lowercase, hyphens, e.g. `nist-csf-2-0`)
 - `DOC_DIR` — e.g., `finetune-project/knowledge/<slug>`
-- `TASK_ID` — from the manifest (so the agent polls its own result)
 
 Spawn up to 4-5 agents at once. If there are more documents, spawn in batches.
 
@@ -492,6 +493,7 @@ Each record includes `source_parts` — the IDs of the **specific** knowledge pa
 Use `generate_records.py` to generate user prompts via LLM, grounded in the knowledge chunks linked to each topic:
 
 ```bash
+# Standard: relations.json + optional RAG augmentation
 python3 ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --topics finetune-project/topics.json \
   --relations finetune-project/relations.json \
@@ -500,10 +502,15 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --output finetune-project/training.jsonl \
   --records-per-topic 25 \
   --parallel 4 \
-  --upload-incremental --workflow-id $WORKFLOW_ID
+  --use-rag --workflow-id $WORKFLOW_ID \
+  --upload-incremental
 ```
 
 The script makes **multiple LLM calls per topic** (one per prompt type: explain, scenario, compare/analyze, edge-case, application) for better diversity. By default, every leaf topic gets an equal number of records. Use `--weight-by-difficulty` to distribute based on base model eval scores — hard topics (0-30% success) get 40-50% of records, medium (30-70%) get 30-40%, easy (70-100%) get 10-20%. This is the recommended mode after the first evaluation, because GRPO learning signal is strongest on hard topics (arXiv:2508.14094: 47% gains from hard examples vs 3-15% from easy). Use `--weight-by-source` to distribute proportionally to linked source parts instead (max 3:1 imbalance ratio). Inner parallelism runs all prompt-type calls concurrently within each topic.
+
+Add `--use-rag` to augment the static relations.json context with semantically retrieved knowledge parts. This follows a two-stage question generation pattern (arXiv 2509.25736 — https://arxiv.org/html/2509.25736v1): first retrieve broad topic context, generate a diverse question, then retrieve again with the question itself for sharper grounding. The script searches the gateway's knowledge index for each topic and merges the top results with relation-linked parts (deduplicating by part ID). For rapid iteration without building relations first, use `--rag-only`. Additional flags: `--rag-top-k N` (chunks per topic, default 15), `--rag-second-retrieval` (enables the second per-question retrieval stage).
+
+> **Prerequisite for RAG:** Knowledge source parts must have embeddings. The gateway generates them automatically (~30s after upload). Verify with: `python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py search-knowledge --workflow-id $WORKFLOW_ID --phrase "test query"`
 
 If some topics fail, use `--append` to retry without overwriting. Adapt `--records-per-topic` (default 25), `--min-per-topic` (default 10), `--max-per-topic` (default 50) to the project. **Generate at least 200+ total records.**
 
@@ -525,7 +532,87 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
 
 The UI at `http://localhost:5173/finetune` also shows all records grouped by topic — point the user there for a visual review.
 
-**Checkpoint** after data generation:
+### Step 4B: Recommended Path — NeMo Data Designer Generation
+
+> Use this path when the NeMo Data Designer server (`localhost:8000`) is available and you want to generate training data using it. See `reference/nemo-guide.md` for full API details, column types, and recipe structure. Repo: https://github.com/vllora/nemo
+
+**How this differs from Step 4:** Instead of `generate_records.py`, you use the NeMo server to generate rows via a recipe. Both templates implement the two-stage question generation pattern from arXiv 2509.25736 (https://arxiv.org/html/2509.25736v1): generate a diverse `raw_question` from topic context first, then retrieve question-specific chunks via `rag-retrieval` and refine into the final `user_message`. The `rag-retrieval` column plugin calls the gateway knowledge search per row at generation time — no need to pre-link relations for knowledge retrieval.
+
+**Step-by-step:**
+
+**1. Materialize the curated seed parquet** — relations not needed, `rag-retrieval` fetches from vLLora at generation time:
+```bash
+uv run nemo/materialize_seed.py \
+  --topics finetune-project/topics.json \
+  --output finetune-project/curated-seed.parquet
+```
+Produces one row per leaf topic. `rag-retrieval` uses `topic_path` (and `raw_question` for the second retrieval) as search queries against vLLora's embeddings.
+
+**2. Upload and inspect:**
+```bash
+BLOCK_ID=$(date +%s)
+curl -sS -X POST "http://localhost:8000/api/data-recipe/seed/upload-curated" \
+  -F "file=@finetune-project/curated-seed.parquet" -F "block_id=$BLOCK_ID" \
+  > finetune-project/nemo-seed-upload.json
+
+FILE_ID=$(jq -r '.file_id' finetune-project/nemo-seed-upload.json)
+curl -sS -X POST "http://localhost:8000/api/data-recipe/seed/inspect-curated" \
+  -H "Content-Type: application/json" \
+  -d "{\"block_id\": \"$BLOCK_ID\", \"file_id\": \"$FILE_ID\", \"preview_size\": 5}" \
+  > finetune-project/nemo-seed-inspect.json
+```
+
+**3. Design the recipe** — don't just copy the template. Choose the right pipeline for your domain:
+
+- **Topic-based Q&A** (policies, knowledge bases, tutorials): Copy `templates/nemo-recipe-template.json`. Replace `path` with `resolved_path` from `nemo-seed-inspect.json`, set `workflow_id` to `$WORKFLOW_ID`, adapt llm-text prompts for your domain. The default template generates `user_message` directly from retrieved text.
+- **Structured documents** (invoices, contracts, forms, specs): Copy `templates/nemo-recipe-structured-template.json`. This adds a subcategory `sampler` for document sections, `llm-structured` (drop:true) to extract typed fields, and an `expression` (drop:true) to compose a focused context before generating `user_message`. Adapt `output_format` schema to your document's actual fields.
+- **Custom**: Design columns from scratch using `reference/nemo-columns-reference.md`. Output contract: `system_prompt` + `user_message` are required for export into `training.jsonl`, even if the paper-inspired generation method uses extra intermediates like `raw_question`, `question_chunks`, and judge columns. `reference_answer` is strongly recommended. All other columns are design choices — use `"drop": true` for intermediates that feed downstream columns but shouldn't appear in the final dataset.
+
+**4. Preview first** (set `execution_type: "preview"`, `rows: 10`):
+```bash
+curl -sS -X POST "http://localhost:8000/api/data-recipe/jobs" \
+  -H "Content-Type: application/json" -d @finetune-project/nemo-recipe.json \
+  > finetune-project/nemo-preview.json
+
+PREVIEW_ID=$(jq -r '.job_id' finetune-project/nemo-preview.json)
+curl -sS "http://localhost:8000/api/data-recipe/jobs/$PREVIEW_ID/status"
+curl -sS "http://localhost:8000/api/data-recipe/jobs/$PREVIEW_ID/dataset?limit=10" \
+  > finetune-project/nemo-preview-dataset.json
+curl -sS "http://localhost:8000/api/data-recipe/jobs/$PREVIEW_ID/analysis" \
+  > finetune-project/nemo-preview-analysis.json
+```
+
+Read both before proceeding. `dataset` = semantic check (are rows useful prompts?). `analysis` = structural check (row counts, null columns, sampler distribution). Only run the full job once preview passes.
+
+**5. Full job** (update `execution_type: "full"` and `rows` to target count):
+```bash
+JOB_ID=$(jq -r '.job_id' finetune-project/nemo-job.json)
+curl -sS "http://localhost:8000/api/data-recipe/jobs/$JOB_ID/dataset?limit=200&offset=0" \
+  > finetune-project/nemo-dataset-page-1.json
+```
+
+**6. Convert → validate → upload:**
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/convert_nemo_rows.py \
+  --input finetune-project/nemo-dataset-page-1.json \
+  --output finetune-project/training.jsonl \
+  --min-answerable 1.0 --min-groundedness 0.5 \
+  --ground-truth-field reference_answer
+
+python3 ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py \
+  finetune-project/training.jsonl --nemo
+
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
+  --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl
+```
+
+`convert_nemo_rows.py` preserves top-level `topic` from NeMo rows so `upload-records` can assign workflow topics correctly. Use `--ground-truth-field <column>` when you want the evaluator to receive an auxiliary text field as `input.ground_truth`; `--include-ground-truth` remains as a shortcut for `reference_answer`.
+
+**Judge vs grader:** NeMo `judge_*` columns score rows for filtering at data-generation time. The vLLora `grader.js` scores model responses at evaluation/training time. Both are needed but serve different purposes.
+
+---
+
+**Checkpoint** after data generation (applies to both Step 4 and Step 4B):
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step generate-data --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
@@ -1058,7 +1145,7 @@ Read these when you need more detail on a specific step:
 |------|-------------|
 | `reference/api-reference.md` | When making API calls — all 76 gateway endpoints with curl examples |
 | `reference/data-format.md` | When generating JSONL — format rules, validation, quality tips |
-| `reference/extraction-guide.md` | When extracting documents — Docling API, response structure, knowledge_parts.json schema |
+| `reference/extraction-guide.md` | When extracting documents — Docling Serve setup, hybrid chunk API, knowledge_parts.json schema, pdftotext fallback |
 | `reference/grader-writing.md` | When writing the grader — 3 patterns, design guidelines, common mistakes |
 | `reference/topic-hierarchy.md` | When designing topics — structure, coverage analysis, balance scoring |
 | `reference/readiness-gate.md` | When interpreting readiness gate or difficulty probe results — full check tables, WARN safety guide |
@@ -1068,8 +1155,9 @@ Read these when you need more detail on a specific step:
 
 ## Helper Scripts
 
-Run with `python3 ${CLAUDE_SKILL_DIR}/scripts/<script>`. Key scripts:
+Run with `uv run ${CLAUDE_SKILL_DIR}/scripts/<script>`. Key scripts:
 
+- **`convert_pdf_to_markdown.py`** — PDF → Markdown via pymupdf4llm (utility, not primary extraction)
 - **`finetune.py`** — Gateway API wrapper (create workflow, upload knowledge/topics/records/grader, verify, create-eval, create-training, poll-eval, poll-training)
 - **`generate_records.py`** — Generate training records from topics + knowledge via LLM
 - **`validate_dataset.py`** — Validate JSONL (format, fields, RFT compliance, cross-reference topics/parts)
@@ -1078,8 +1166,8 @@ Run with `python3 ${CLAUDE_SKILL_DIR}/scripts/<script>`. Key scripts:
 - **`dry_run_grader.py`** — Dry-run grader on a single row (instant syntax/logic check)
 - **`consolidate_parts.py`** — Merge adjacent text parts, drop fragments, fix Unicode
 - **`validate_extraction.py`** — Cross-document extraction quality gate
-- **`docling_extract.py`** / **`pdftotext_extract.py`** — PDF extraction (Docling or fallback)
-- **`extract_tables.py`** — Upgrade text parts with Docling table data
+- **`docling_extract.py`** — Docling extraction (fallback for scanned/complex PDFs; requires Docker)
+- **`build_knowledge_parts.py`** / **`extract_tables.py`** — Docling fallback post-processing
 - **`chat_completion.py`** — Low-level LLM call wrapper (used internally by `generate_records.py`)
 - **`run_evaluation.py`** — Standalone eval script (legacy — prefer `finetune.py create-eval`)
 - **`start_training.py`** — Standalone training script (legacy — prefer `finetune.py create-training`)

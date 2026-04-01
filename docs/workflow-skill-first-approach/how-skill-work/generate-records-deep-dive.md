@@ -1,6 +1,35 @@
 # How Record Generation Works — Deep Dive
 
+> **Note:** This document covers the RAG-based fallback generation path via `generate_records.py`. The primary path is NeMo Data Designer — see SKILL.md Step 4B and the repo at https://github.com/vllora/nemo.
+
 The data generation step (Step 4) produces the actual training records — the prompts the model will practice on during fine-tuning. This document explains the generation strategy, how records are grounded in source material, the LLM calls involved, and the validation process.
+
+## Two-Path Architecture: NeMo Designer vs RAG Fallback
+
+Step 4 has two paths:
+
+| Path | When to use | Script |
+|------|-------------|--------|
+| **NeMo Data Designer (primary)** | NeMo server running at `localhost:8000`, any domain | repo: https://github.com/vllora/nemo — see SKILL.md Step 4B |
+| **RAG-based generation (this doc)** | No NeMo server, quick prototyping, fallback | `scripts/generate_records.py` |
+
+**NeMo implements the two-stage question generation pattern** from arXiv 2509.25736 (https://arxiv.org/html/2509.25736v1):
+
+```
+topic_path → rag-retrieval → retrieved_chunks
+                  ↓
+            raw_question    (drop:true — generated WITHOUT retrieved text to avoid anchoring bias)
+                  ↓
+raw_question → rag-retrieval → question_chunks   (drop:true — question-specific retrieval)
+                  ↓
+            user_message    (refines raw_question using question_chunks)
+```
+
+Key insight: generating the question blind first produces more diverse questions; the second retrieval then grounds the final `user_message` in source material specific to what was asked.
+
+**`generate_records.py` also has `--rag-second-retrieval`** — but this is different. It runs per-question retrieval after the question is already generated and only enriches `source_parts` metadata. It does **not** refine the generated question. The true two-stage refinement (where retrieved chunks improve question quality) only happens in NeMo.
+
+---
 
 ## What Records Are
 

@@ -52,7 +52,7 @@ The vLLora UI at `localhost:5173` visualizes the workflow data in real time (top
 2. The data prep pipeline (objective → knowledge → topics → data → grader → push to gateway)
 3. All vLLora gateway API endpoints with curl examples
 4. How to write effective graders (hybrid, partial credit, reward hacking prevention)
-5. How to extract documents via Docling Serve into structured knowledge parts
+5. How to extract documents via Docling Serve into structured knowledge parts (pdftotext available as fallback)
 6. How to push everything to the gateway for UI handoff
 
 ---
@@ -97,8 +97,9 @@ cp agents/*.md "$DEST/.claude/agents/"
 
 - **Gateway** running at `localhost:9090` (`npm run start:backend` from the gateway repo)
 - **Python 3** with `requests` library (`pip install requests`)
-- **Docling Serve** (optional, for PDF extraction — falls back to `pdftotext` if unavailable)
+- **uv** for running Python scripts (`curl -LsSf https://astral.sh/uv/install.sh | sh`) — handles script dependencies automatically
 - **Claude Code** with Bash permissions — the skill and agents run shell commands extensively
+- **Docker + Docling Serve** (optional — only needed for scanned PDFs or complex multi-column layouts)
 
 ### Verify installation
 
@@ -131,39 +132,46 @@ finetune-skill/
 │   ├── training-metrics-guide.md # ~240 lines — GRPO metric interpretation, paper-backed thresholds
 │   ├── iteration-strategy.md   # ~1090 lines — Eval analysis, training analysis, diagnosis, fixes, escalation
 │   ├── data-quality-gate.md    # ~170 lines — Pre-eval data quality gate: 4 gates, thresholds, research citations
+│   ├── readiness-gate.md       # ~100 lines — Post-eval readiness gate: hard checks, soft checks, difficulty probe
 │   ├── data-format.md          # ~110 lines — JSONL format spec
 │   ├── extraction-guide.md     # ~985 lines — Docling Serve setup, API calls, knowledge_parts.json schema
 │   ├── knowledge-parts-schema.json  # JSON schema for knowledge_parts.json
 │   ├── grader-writing.md       # ~620 lines — grader patterns + anti-patterns
 │   ├── topic-hierarchy.md      # ~290 lines — topic design + coverage analysis
-│   └── workflow-guide.md       # ~470 lines — per-step deep dive
+│   ├── workflow-guide.md       # ~470 lines — per-step deep dive
+│   ├── nemo-guide.md           # ~340 lines — NeMo Data Designer integration (curated seed, rag-retrieval, RAGAS scoring)
+│   └── nemo-columns-reference.md  # All 11 built-in column types + 2 custom plugins, with full field schemas
 │
-├── scripts/                    # Helper scripts (run with `python3`, requires `requests`)
+├── scripts/                    # Helper scripts (run with `uv run`, PEP 723 inline deps)
 │   ├── finetune.py             # Gateway API wrapper (create workflow, upload, verify)
 │   ├── generate_records.py     # LLM-based training record generation (--parallel, --upload-incremental)
+│   ├── convert_pdf_to_markdown.py  # PDF → Markdown via pymupdf4llm (utility, not primary extraction)
+│   ├── convert_nemo_rows.py    # Convert NeMo DataDesigner output to training.jsonl + metadata sidecar
 │   ├── chat_completion.py      # LLM chat completions (validates JSON output)
 │   ├── dry_run_grader.py       # Test grader on one record via gateway sandbox
-│   ├── validate_dataset.py     # Validate JSONL (format, fields, cross-ref topics/parts)
+│   ├── validate_dataset.py     # Validate JSONL (format, fields, cross-ref topics/parts; --nemo flag)
 │   ├── run_evaluation.py       # Create eval, poll until complete (~30 min timeout)
 │   ├── start_training.py       # Start training, poll until complete
 │   ├── analyze_training.py     # Fetch + analyze training metrics, per-epoch evals, alerts
 │   ├── print_metrics_table.py  # Print training metrics table (per-epoch or per-step)
-│   ├── build_knowledge_parts.py # Generic Docling→knowledge_parts.json (no LLM needed)
+│   ├── build_knowledge_parts.py # Docling→knowledge_parts.json (used in Docling fallback path)
 │   ├── checkpoint.py           # Pipeline checkpointing (save/check/reset step progress)
 │   ├── data_quality_gate.py    # Pre-eval data quality gate (structural, diversity, GT quality, alignment)
 │   ├── probe_difficulty.py     # Post-eval difficulty probe (signal prediction, grader granularity)
 │   ├── deduplicate_records.py  # Remove near-duplicate prompts (trigram similarity)
-│   ├── extract_tables.py       # Upgrade text parts to table parts from Docling table data
+│   ├── extract_tables.py       # Upgrade text parts with Docling cell structure (Docling fallback)
 │   ├── consolidate_parts.py    # Merge adjacent parts, drop fragments, fix Unicode
 │   ├── validate_extraction.py  # Cross-document extraction quality gate
-│   ├── docling_extract.py      # Docling async extraction (--batch, --submit-only, --poll-one)
-│   └── pdftotext_extract.py    # Fallback extraction via pdftotext (no Docker)
+│   ├── docling_extract.py      # Docling async extraction — fallback for scanned/complex PDFs
+│   └── pdftotext_extract.py    # Last-resort extraction via pdftotext (no Python deps)
 │
-├── templates/                  # Grader templates (pick closest, then customize)
+├── templates/                  # Grader templates + recipe starters
 │   ├── grader-template.js      # General-purpose rubric (accuracy, helpfulness, clarity)
 │   ├── grader-extraction.js    # Structured data extraction (field accuracy, hallucination)
 │   ├── grader-compliance.js    # Rule application (rule recall, false positives, citations)
-│   └── grader-readability.js   # Simplification (readability + Flesch-Kincaid, jargon-free)
+│   ├── grader-readability.js   # Simplification (readability + Flesch-Kincaid, jargon-free)
+│   ├── nemo-recipe-template.json  # NeMo Data Designer recipe starter (curated seed + rag-retrieval + RAGAS scoring)
+│   └── nemo-recipe-structured-template.json  # NeMo recipe for structured docs (subcategory sampler + llm-structured + expression)
 │
 └── README.md                   # This file
 ```
@@ -448,7 +456,11 @@ The `reference/api-reference.md` documents all gateway endpoints. Each step uplo
 | `extraction-guide.md` | ~985 | Docling Serve setup, hybrid chunk API, knowledge_parts.json schema, image extraction, troubleshooting |
 | `grader-writing.md` | ~620 | 3 grader patterns, smooth scoring, reward hacking prevention, LLM-as-judge API |
 | `topic-hierarchy.md` | ~290 | Topic structure, source tracing, coverage analysis, per-topic scores |
-| `workflow-guide.md` | ~470 | Deep dive on each pipeline step (including categorization, variants, grader testing, evaluator versioning, training metrics, eval-job tracking) |
+| `workflow-guide.md` | ~470 | Deep dive on each pipeline step (including categorization, variants, grader testing, evaluator versioning, training metrics, continuation runs, eval-job tracking) |
+| `nemo-guide.md` | ~340 | NeMo Data Designer integration: curated seed (materialize_seed.py), rag-retrieval + rag-relevancy plugins, RAGAS-aligned scoring columns, preview/full job workflow, convert_nemo_rows.py usage. Repo: https://github.com/vllora/nemo |
+| `data-quality-gate.md` | ~190 | Pre-eval data quality gate: 4 structural/diversity/GT/alignment checks, thresholds, research citations |
+| `readiness-gate.md` | ~100 | Post-eval readiness gate: hard checks (sample count, score std, avg score), soft checks, difficulty probe |
+| `nemo-columns-reference.md` | ~300 | All 11 built-in column types + 2 custom plugins: complete field schemas, sampler params, programmatic composition patterns |
 
 ### Helper Scripts (PEP 723)
 
@@ -456,13 +468,14 @@ All scripts use inline dependency declarations — run with `uv run script.py` (
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/finetune.py` | Gateway API wrapper — 17 subcommands: create-workflow, upload-knowledge/topics/relations/records/grader, verify, status, readiness-check, diagnose-grader, create-eval, poll-eval, create-training, poll-training, sync-jobs, delete-knowledge, print-row-outputs |
-| `scripts/generate_records.py` | Generate training records from topics + knowledge — calls LLM per leaf topic |
+| `scripts/finetune.py` | Gateway API wrapper — 18 subcommands: create-workflow, upload-knowledge/topics/relations/records/grader, verify, status, readiness-check, diagnose-grader, create-eval, poll-eval, create-training, poll-training, search-knowledge, cancel-training, sync-jobs, delete-knowledge, print-row-outputs |
+| `scripts/generate_records.py` | Fallback data generation from topics + knowledge — calls LLM per leaf topic; supports `--use-rag`, `--weight-by-difficulty` |
+| `scripts/convert_nemo_rows.py` | Convert NeMo DataDesigner output rows to vLLora training.jsonl; filters by judge scores; writes `nemo-metadata.jsonl` sidecar |
 | `scripts/analyze_training.py` | Post-training analysis: reward trend, KL health, clipping, loss stability, grad norm, per-topic learning. Paper-backed thresholds with `# Ref:` comments |
 | `scripts/print_metrics_table.py` | Print training metrics table (per-epoch or per-step) — human-readable format |
 | `scripts/chat_completion.py` | Call LLM via gateway — validates JSON output when `response_format` is `json_object` |
 | `scripts/dry_run_grader.py` | Dry-run grader on a single row — instant syntax/logic check via gateway sandbox |
-| `scripts/validate_dataset.py` | Validate JSONL: format, fields, RFT compliance, cross-reference topics/parts |
+| `scripts/validate_dataset.py` | Validate JSONL: format, fields, RFT compliance, cross-reference topics/parts; `--nemo` flag checks for metadata leakage |
 | `scripts/checkpoint.py` | Pipeline checkpoint — save/check/reset step progress for crash recovery |
 | `scripts/deduplicate_records.py` | Remove near-duplicate prompts via trigram similarity (threshold-based) |
 | `scripts/build_knowledge_parts.py` | Generic Docling→knowledge_parts.json converter (no LLM needed) |
@@ -473,6 +486,7 @@ All scripts use inline dependency declarations — run with `uv run script.py` (
 | `scripts/validate_extraction.py` | Cross-document extraction quality gate (parts/page, title diversity, avg length) |
 | `scripts/docling_extract.py` | Submit PDF(s) to Docling Serve async API, poll until done, supports batch + submit-only mode |
 | `scripts/pdftotext_extract.py` | Fallback PDF extraction via pdftotext (no Docker required), same output schema |
+| `scripts/convert_pdf_to_markdown.py` | PDF → Markdown via pymupdf4llm — utility script, not primary extraction |
 
 These scripts solve the #1 testing issue (agents creating shell scripts instead of executing API calls) by providing ready-to-run commands.
 
@@ -482,6 +496,8 @@ These scripts solve the #1 testing issue (agents creating shell scripts instead 
 - `grader-extraction.js` — Structured data extraction (field accuracy, hallucination rate, format)
 - `grader-compliance.js` — Rule/regulation application (rule recall, false positives, citations)
 - `grader-readability.js` — Simplification/plain-language (readability + Flesch-Kincaid, jargon-free)
+- `nemo-recipe-template.json` — NeMo Data Designer recipe starter (curated seed + rag-retrieval + 4 RAGAS scoring columns: AspectCritic, ResponseGroundedness, Tele-Specificity, ResponseRelevancy)
+- `nemo-recipe-structured-template.json` — NeMo recipe for structured documents (subcategory sampler + llm-structured field extraction + expression composer)
 
 ---
 
@@ -631,7 +647,7 @@ those values in the next API call.
 
 ### Issue 5: PDF reading fails
 
-**Fix applied**: Added pdftotext fallback in Step 2 with full path `/opt/homebrew/bin/pdftotext`.
+**Fix applied**: Primary extraction uses Docling Serve with deterministic `build_knowledge_parts.py`. Fallback: pdftotext when Docling is unavailable. `convert_pdf_to_markdown.py` (pymupdf4llm) available as a utility.
 
 ### Issue 6: Too few training records
 
@@ -792,11 +808,13 @@ Both write through the same gateway API → same SQLite database. Workflows, rec
 - [x] Test multi-document extraction (9 PDFs, contract-translator)
 - [x] Test iteration loop (auto-iterate in non-interactive mode)
 - [x] Test resume from previous run (checkpoint-based)
+- [ ] Test full Mode A handoff (create workflow → push data → open UI → verify Lucy sees it)
 - [ ] Test with very large documents (500+ pages)
 - [ ] Test without any document (objective-only, no PDF)
 - [ ] Test on Cowork (no local filesystem — may need adaptations)
 - [ ] Test `food-label-compliance` (compliance grader template)
 - [ ] Test `medical-icd-coder` (structured extraction grader template)
+- [ ] Test with different document types (not just chess/NIST PDFs)
 
 ### Skill improvements
 
@@ -807,6 +825,9 @@ Both write through the same gateway API → same SQLite database. Workflows, rec
 - [x] Checkpoint per step for crash recovery
 - [x] Pre-submission validation before eval
 - [x] Persistent training failure escalation ladder
+- [x] Add NeMo Data Designer path — curated seed + rag-retrieval plugin + RAGAS quality scoring
+- [x] Add `convert_nemo_rows.py` and `validate_dataset.py --nemo` for NeMo output handling
+- [x] Update api-reference.md with all gateway endpoints
 - [ ] Add guidance for multi-turn conversation training data
 - [ ] Add guidance for structured output fine-tuning (JSON schema enforcement)
 - [ ] Improve `finetune.py poll-training` to also save metrics incrementally
