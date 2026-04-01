@@ -23,6 +23,16 @@ Use `finetune.py readiness-check --file evaluations/eval-NNN.json` to run the re
 
 Typically 2-3 eval iterations are needed to reach readiness, then 1-2 training iterations to converge.
 
+### Load precision (Phase 2 training)
+
+Set `training_config.load_precision` when creating a provider finetune job (`bf16`, `4bit`, or `8bit`). The training container maps this to Unsloth / HF load flags.
+
+| Value | When to use |
+|-------|-------------|
+| `bf16` | Default. Best numerical stability and usually fewer quantization edge cases; use when VRAM fits the model at full precision. |
+| `4bit` | Tight GPU memory or larger base models; classic QLoRA-style loading. |
+| `8bit` | Middle ground between memory and stability. |
+
 ---
 
 ## Part 1: Analyzing Evaluation Results

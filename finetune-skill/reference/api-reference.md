@@ -553,7 +553,8 @@ curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
       "lora_rank": 8,
       "gradient_accumulation_steps": 5,
       "epochs": 2.0,
-      "batch_size": 5
+      "batch_size": 5,
+      "load_precision": "bf16"
     },
     "inference_parameters": {
       "max_output_tokens": 1000,
@@ -616,6 +617,7 @@ curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
 | `gradient_accumulation_steps` | 5 | 5 | Steps before weight update |
 | `epochs` | 2.0 | **8** | Training epochs. RFT needs many more than SFT (5-15 typical) |
 | `batch_size` | 5 | 5 | Training batch size |
+| `load_precision` | `bf16` (omitted = bf16) | workload-dependent | Base model weights: `bf16` (full precision, default), `4bit` (QLoRA, lowest VRAM), `8bit` (middle ground). |
 
 **Inference Parameters (used during training rollouts):**
 | Parameter | Gateway Default | GRPO-Optimized (used by `finetune.py`) | Description |
@@ -636,6 +638,7 @@ curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
 | `node_count` | Nodes for distributed training |
 | `evaluator_version` | Which evaluator version to use |
 | `resume_mode` | Only for `checkpointed/{cloud_job_id}`. `weights-only` (default) or `full-state` |
+| `load_precision` | Optional. `bf16`, `4bit`, or `8bit` (see training config table). Omitted means `bf16`. |
 
 **Thinking/reasoning notes:**
 - `enable_thinking` and `reasoning_effort` are optional pass-through inference parameters.
