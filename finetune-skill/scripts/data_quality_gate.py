@@ -78,9 +78,10 @@ THRESHOLDS = {
     "max_misaligned_frac": 0.15,        # < 15% of records with score < 0.4
     # Gate 5: Completion Length
     # Multiplier: model outputs are typically 1.5-3x longer than ground truth.
-    # DAPO (arXiv:2503.14476) defaults to L_max=20,480 with 25% buffer.
-    # "Tricks or Traps" (arXiv:2508.08221): truncation causes "defective EOS
-    # token modeling" and introduces training noise.
+    # DAPO (arXiv:2503.14476) uses overlong soft-punishment zone at 16K-20K tokens
+    # (~20% absolute zone, not a percentage-based buffer).
+    # "Tricks or Traps" (arXiv:2508.08221, general RL survey including GRPO):
+    # truncation causes "defective EOS token modeling" and introduces training noise.
     "gt_token_multiplier": 2.0,         # GT chars → estimated model tokens (chars/4 * multiplier)
     "truncation_warn_ratio": 0.05,      # WARN if estimated P95 exceeds max_output_tokens (even 5% is risky)
     "truncation_fail_ratio": 0.30,      # FAIL if >30% — high risk of widespread clipping
@@ -713,11 +714,12 @@ def gate_alignment(
 # Gate 5: Completion Length Estimation (free — no API calls)
 #
 # Research:
-#   - DAPO (arXiv:2503.14476): defaults to L_max=20,480 with 25% buffer.
-#     Overlong filtering masks truncated completions from loss.
-#   - "Tricks or Traps" (arXiv:2508.08221): truncation "prematurely
-#     terminates multi-step reasoning, causing well-structured reasoning
-#     to be falsely labeled as negative samples."
+#   - DAPO (arXiv:2503.14476, GRPO variant): uses overlong soft-punishment
+#     zone at 16K-20K tokens (~20% absolute zone). Overlong filtering masks
+#     truncated completions from loss.
+#   - "Tricks or Traps" (arXiv:2508.08221, general RL survey incl. GRPO):
+#     truncation "prematurely terminates multi-step reasoning, causing
+#     well-structured reasoning to be falsely labeled as negative samples."
 #   - TRL mask_truncated_completions: zeros out truncated completions,
 #     but when ALL are truncated → entire batch zeroed → NaN KL.
 #     (Unsloth explicitly warns against this.)
@@ -776,7 +778,7 @@ def gate_completion_length(
     # - Medium system prompts (100-250 tokens): structured task → 3x GT
     # - Long system prompts (>250 tokens): multi-step analysis → 5x GT
     #
-    # Rationale: The food-label compliance system prompt is ~314 tokens
+    # Rationale: A multi-rule compliance system prompt is ~314 tokens
     # and instructs "comprehensive multi-rule audit" → model produces
     # 510+ token outputs from ~100 token GTs (5x multiplier). A simple
     # "answer the question" prompt would produce ~1.5-2x GT length.
@@ -800,18 +802,25 @@ def gate_completion_length(
     gt_p95 = sorted(gt_token_lengths)[min(len(gt_token_lengths) - 1, int(len(gt_token_lengths) * 0.95))]
     est_p50 = int(gt_p50 * multiplier)
     est_p95 = int(gt_p95 * multiplier)
-    recommended_min = int(gt_p95 * multiplier * 1.3)  # 30% headroom above P95 estimate
+    recommended_min = int(gt_p95 * multiplier * 1.3)  # 30% headroom above P95 estimate (empirical heuristic)
 
-    # Direct P95 check: if estimated P95 exceeds the limit, warn regardless of fraction
+    # Direct P95 check: if estimated P95 exceeds the limit, FAIL the gate.
+    # Rationale: Insufficient max_output_tokens has caused 9-13 hours of wasted GPU
+    # time due to 100% completion truncation from insufficient max_output_tokens.
+    # A soft warning is not enough — the agent ignores it. This must block training.
+    # DAPO (arXiv:2503.14476) uses overlong soft-punishment (absolute zone at
+    # 16K-20K tokens). We apply the same principle at smaller scale with 30%
+    # headroom above P95 — our heuristic, not a direct DAPO parameter.
     if est_p95 > max_output_tokens:
         issues.append({
-            "severity": "soft",
+            "severity": "hard",
             "check": "completion_p95_exceeds_limit",
             "message": (
                 f"Estimated model P95={est_p95} tokens exceeds max_output_tokens={max_output_tokens}. "
-                f"At least 5% of completions will likely be truncated, and the actual rate may be higher "
-                f"(model outputs vary). Recommend >= {recommended_min} tokens. "
-                f"[DAPO arXiv:2503.14476 uses 25% buffer above expected max]"
+                f"At least 5% of completions will be truncated — with GRPO's K=8 completions per prompt, "
+                f"truncation corrupts the reward signal and wastes compute. "
+                f"Set max_output_tokens >= {recommended_min}. "
+                f"[Headroom heuristic inspired by DAPO arXiv:2503.14476 overlong handling]"
             ),
             "value": est_p95,
             "max_output_tokens": max_output_tokens,
@@ -829,8 +838,8 @@ def gate_completion_length(
                 f"GT P95={gt_p95} tokens, estimated model P95={est_p95} tokens. "
                 f"100% truncation means ALL K=8 completions are cut off → grader scores incomplete "
                 f"answers → zero useful gradient. Recommend >= {recommended_min} tokens. "
-                f"[DAPO arXiv:2503.14476 defaults to 16K-20K; "
-                f"'Tricks or Traps' arXiv:2508.08221: truncation causes defective EOS modeling]"
+                f"[DAPO arXiv:2503.14476 uses overlong soft-punishment at 16K-20K; "
+                f"'Tricks or Traps' arXiv:2508.08221 (general RL incl. GRPO): truncation causes defective EOS modeling]"
             ),
             "value": round(truncation_frac, 3),
             "threshold": THRESHOLDS["truncation_fail_ratio"],
@@ -846,7 +855,7 @@ def gate_completion_length(
                 f"estimated {truncation_frac:.0%} of completions risk truncation. "
                 f"GT P95={gt_p95} tokens, estimated model P95={est_p95} tokens. "
                 f"Recommend >= {recommended_min} tokens to avoid clipping. "
-                f"[DAPO uses 25% buffer above expected max length]"
+                f"[Heuristic inspired by DAPO arXiv:2503.14476 overlong handling]"
             ),
             "value": round(truncation_frac, 3),
             "threshold": THRESHOLDS["truncation_warn_ratio"],

@@ -583,8 +583,17 @@ Eval → Readiness Gate → [FAIL] → Fix data/grader → Re-eval → ... → [
 
 **⚠️ These checks are specific to RFT/GRPO training.** GRPO learns by comparing multiple completions per prompt — if all completions score the same, the gradient is zero and the model learns nothing. Validate BEFORE committing to an expensive training run.
 
-**7a-i. Validate max_output_tokens.**
-The default is **512** — higher values increase cost per step (8 completions × N tokens each). Only increase if you see >50% clipping in training metrics.
+**7a-i. Set max_output_tokens using the data quality gate (MANDATORY).**
+The default is **512** — but this is a starting point, NOT a universal value. Different tasks need different limits (classification ~128, MCQ reasoning ~1500, code gen ~2000+). A wrong value causes 100% completion truncation → grader scores garbage → zero useful gradient.
+
+**Run the completion_length gate BEFORE training and apply its `recommended_min`:**
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py training.jsonl \
+  --gate completion_length --max-output-tokens 512 --json
+```
+If the gate returns a `recommended_min` value, **use it** as `max_output_tokens` in training config. The gate estimates required length from ground truth token lengths × task complexity multiplier, with 30% headroom above P95 (heuristic inspired by DAPO's overlong handling, arXiv:2503.14476 — not a direct DAPO parameter).
+
+**Do NOT skip this step.** Training with insufficient `max_output_tokens` causes 100% completion truncation — the grader scores incomplete responses, producing noise instead of gradient signal. This can waste 9-13+ hours of GPU time. Higher `max_output_tokens` increases cost per step (8 completions × N tokens each), but truncated training is far more expensive (all compute wasted).
 
 **7a-ii. Validate grader score distribution (CRITICAL for GRPO).**
 Dry-run the grader on 3-5 sample records with varying quality responses. Scores should spread across 0.2-0.9 — if all cluster at one value, GRPO gets zero gradient. See [reference/grader-writing.md](reference/grader-writing.md) for scoring patterns and red flags.

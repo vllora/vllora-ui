@@ -88,11 +88,11 @@ The multiplier accounts for model verbosity — base models produce chain-of-tho
 
 | Check | Threshold | Severity | Research basis |
 |-------|-----------|----------|----------------|
-| Estimated P95 > max_output_tokens | Any exceedance | Soft | DAPO (arXiv:2503.14476): uses 25% buffer above expected max |
+| Estimated P95 > max_output_tokens | Any exceedance | **Hard** | Headroom heuristic inspired by DAPO (arXiv:2503.14476) overlong handling. Promoted from Soft after real training runs wasted 9-13 hours from truncation. |
 | Estimated truncation fraction | > 5% | Soft | "Tricks or Traps" (arXiv:2508.08221): truncation = training noise |
-| Estimated truncation fraction | > 30% | Hard | 100% truncation in food-label training caused completely flat reward |
+| Estimated truncation fraction | > 30% | Hard | 100% truncation causes completely flat reward — all compute wasted |
 
-**Why this matters**: In the food-label compliance test, `max_output_tokens=512` caused 100% completion truncation. The grader scored truncated answers, all K=8 completions were equally cut off, and the reward signal became noise. The training monitor flagged `clipped_ratio=1.0` at step 1, but training continued for 140 steps before cancellation — wasting ~9 hours of GPU time.
+**Why this matters**: When `max_output_tokens` is too low, 100% of completions get truncated. The grader scores truncated answers, all K=8 completions are equally cut off, and the reward signal becomes noise. The training monitor may flag `clipped_ratio=1.0` at step 1, but training can continue for hours before cancellation — wasting GPU time.
 
 **Limitation**: This is a heuristic. Ground truth length is a proxy, not a measurement of actual model output length. The adaptive multiplier improves accuracy but cannot perfectly predict model verbosity. For highest confidence, run a few base model rollouts and measure actual completion lengths.
 

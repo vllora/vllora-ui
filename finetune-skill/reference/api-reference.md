@@ -611,7 +611,7 @@ curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
 **Training Config Defaults (gateway fallbacks if omitted):**
 | Parameter | Gateway Default | GRPO-Optimized (used by `finetune.py`) | Description |
 |-----------|----------------|----------------------------------------|-------------|
-| `learning_rate` | 0.00001 (1e-5) | **0.000005 (5e-6)** | Learning rate. 5e-6 balances DeepSeek-R1's 3e-6 (arXiv:2501.12948) and gateway default; food-label E2E showed 1e-6 too slow |
+| `learning_rate` | 0.00001 (1e-5) | **0.000005 (5e-6)** | Learning rate. 5e-6 balances DeepSeek-R1's 3e-6 (arXiv:2501.12948) and gateway default |
 | `lora_rank` | 8 | 8 | LoRA rank (higher = more parameters, slower) |
 | `gradient_accumulation_steps` | 5 | 5 | Steps before weight update |
 | `epochs` | 2.0 | **8** | Training epochs. RFT needs many more than SFT (5-15 typical) |

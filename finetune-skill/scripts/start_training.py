@@ -39,14 +39,14 @@ def start_training(
         "output_model": output_model,
         "display_name": display_name or f"Fine-tune {output_model}",
         "training_config": {
-            "learning_rate": 0.000005,  # 5e-6: between DeepSeek-R1's 3e-6 (arXiv:2501.12948) and gateway default 1e-5. Ref: food-label E2E test showed 1e-6 too slow.
+            "learning_rate": 0.000005,  # 5e-6: between DeepSeek-R1's 3e-6 (arXiv:2501.12948) and gateway default 1e-5.
             "lora_rank": 8,
             "gradient_accumulation_steps": 5,
             "epochs": 8,  # RFT/GRPO needs more epochs than SFT — fresh responses each epoch (no memorization risk). Ref: Interconnects.ai analysis of OpenAI RFT
             "batch_size": 5,
         },
         "inference_parameters": {
-            "max_output_tokens": 512,
+            "max_output_tokens": 512,  # Starting default — finetune.py auto-adjusts based on dataset content
             "temperature": 1.0,
             "top_p": 1.0,
             "response_candidates_count": 8,  # GRPO minimum: all published work uses G>=8

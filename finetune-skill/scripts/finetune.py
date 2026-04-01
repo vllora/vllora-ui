@@ -880,9 +880,13 @@ def _extract_eval_data(results: list[dict]) -> dict:
       - per_prompt: list of {scores, lengths, topic} per prompt
       - has_lengths: whether completion lengths were available
       - has_topics: whether topic labels were available
+      - response_token_lengths: list of estimated token counts for eval
+        model responses (from row.messages[role=assistant] or candidate
+        rollout_content). Used to predict training truncation risk.
     """
     all_scores: list[float] = []
     per_prompt: list[dict] = []
+    response_token_lengths: list[int] = []
 
     for r in results:
         prompt_scores: list[float] = []
@@ -893,6 +897,18 @@ def _extract_eval_data(results: list[dict]) -> dict:
         row = r.get("row", {})
         if isinstance(row, dict):
             topic = row.get("topic")
+
+            # Extract eval model response length from row messages.
+            # The eval generates a response stored as the assistant message.
+            # This is the eval model's output (e.g., gpt-4o-mini), which is
+            # typically more concise than what a smaller training model would
+            # produce — making it a lower bound for training token needs.
+            for msg in row.get("messages", []):
+                if msg.get("role") == "assistant":
+                    content = msg.get("content", "")
+                    if content:
+                        response_token_lengths.append(max(1, len(content.strip()) // 4))
+                    break
 
         epochs = r.get("epochs", {})
         if isinstance(epochs, dict):
@@ -909,6 +925,11 @@ def _extract_eval_data(results: list[dict]) -> dict:
                     completion = c.get("completion", c.get("response", c.get("output", "")))
                     if completion and isinstance(completion, str):
                         prompt_lengths.append(len(completion))
+                    # Also try rollout_content (finetune-evaluations endpoint)
+                    rollout = c.get("rollout_content", c.get("rollout_output", ""))
+                    if rollout and isinstance(rollout, str) and not completion:
+                        prompt_lengths.append(len(rollout))
+                        response_token_lengths.append(max(1, len(rollout.strip()) // 4))
         elif r.get("score") is not None:
             score = float(r["score"])
             prompt_scores.append(score)
@@ -928,6 +949,7 @@ def _extract_eval_data(results: list[dict]) -> dict:
         "per_prompt": per_prompt,
         "has_lengths": has_lengths,
         "has_topics": has_topics,
+        "response_token_lengths": response_token_lengths,
     }
 
 
@@ -1199,6 +1221,48 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
                 "hard": False,
                 "detail": f"largest: '{max_topic}' ({topic_counts[max_topic]}/{topics_with_labels}), {len(topic_counts)} topics total",
             }
+
+    # ── Truncation risk: predict if max_output_tokens is too low for training ──
+    # The eval model (e.g., gpt-4o-mini) is typically more concise than the
+    # base training model (e.g., Qwen3.5-4B doing GRPO exploration). Eval
+    # response lengths are therefore a LOWER BOUND for training token needs.
+    # We apply a 1.5x multiplier to account for the base model being less
+    # concise and GRPO encouraging longer chain-of-thought exploration.
+    response_lengths = eval_data.get("response_token_lengths", [])
+    max_output_tokens = getattr(args, "max_output_tokens", 512)
+    if response_lengths and len(response_lengths) >= 10:
+        sorted_lengths = sorted(response_lengths)
+        eval_p50 = sorted_lengths[len(sorted_lengths) // 2]
+        eval_p95 = sorted_lengths[min(len(sorted_lengths) - 1, int(len(sorted_lengths) * 0.95))]
+        eval_max = sorted_lengths[-1]
+
+        # 1.5x multiplier: base models are less concise than gpt-4o-mini.
+        # This is a conservative empirical estimate — actual ratio varies
+        # by task and model, but 1.5x avoids false negatives while not
+        # over-alarming on short-response tasks.
+        predicted_training_p95 = int(eval_p95 * 1.5)
+        recommended_min = int(predicted_training_p95 * 1.3)  # 30% headroom
+
+        truncation_risk = predicted_training_p95 > max_output_tokens
+        checks["truncation_risk"] = {
+            "value": predicted_training_p95,
+            "threshold": f"< {max_output_tokens} (planned max_output_tokens)",
+            "pass": not truncation_risk,
+            "fix": (
+                f"Eval model responses: P50={eval_p50}, P95={eval_p95}, max={eval_max} tokens. "
+                f"Training model (weaker, less concise) predicted P95 ≈ {predicted_training_p95} tokens "
+                f"(eval P95 × 1.5). With max_output_tokens={max_output_tokens}, completions will be "
+                f"truncated → grader scores garbage → zero useful gradient. "
+                f"Set max_output_tokens >= {recommended_min}."
+            ),
+            "hard": truncation_risk,
+            "detail": (
+                f"eval_p50={eval_p50}, eval_p95={eval_p95}, eval_max={eval_max}, "
+                f"predicted_training_p95={predicted_training_p95}, "
+                f"max_output_tokens={max_output_tokens}, "
+                f"recommended_min={recommended_min}"
+            ),
+        }
 
     # ── Compute verdict ──
     hard_failed = [k for k, v in checks.items() if v.get("hard") and not v["pass"]]
@@ -1809,7 +1873,7 @@ def cmd_create_training(args: argparse.Namespace) -> None:
             sys.exit(1)
     else:
         payload["training_config"] = {
-            "learning_rate": 0.000005,  # 5e-6: between DeepSeek-R1's 3e-6 (arXiv:2501.12948) and gateway default 1e-5. Food-label E2E test showed 1e-6 too slow to converge.
+            "learning_rate": 0.000005,  # 5e-6: between DeepSeek-R1's 3e-6 (arXiv:2501.12948) and gateway default 1e-5.
             "lora_rank": 8,
             "gradient_accumulation_steps": 5,
             "epochs": 8,  # Default; overridden below by adaptive logic if user didn't set --config
@@ -1819,7 +1883,7 @@ def cmd_create_training(args: argparse.Namespace) -> None:
     # Adaptive defaults based on dataset size and model choice.
     # Fetches the workflow once to get record_count, then adjusts epochs and
     # warns about model sizing.
-    # Ref: Food-label E2E test (2026-03-31): 9B OOM after 46 min with 225 records,
+    # Ref: Empirical testing showed 9B OOM after 46 min with 225 records,
     #       wasted time before falling back to 4B. Pre-flight check would have avoided this.
     record_count = 0
     try:
@@ -1859,7 +1923,7 @@ def cmd_create_training(args: argparse.Namespace) -> None:
     # Adaptive epochs (only when using defaults, not user --config)
     # Small datasets exhaust quickly and need more passes; large datasets plateau earlier.
     # Ref: DeepSeek-R1 (arXiv:2501.12948) used ~50k records with ~2 epochs;
-    #       food-label E2E test showed plateau at epoch 3 with 225 records.
+    #       empirical testing showed plateau at epoch 3 with 225 records.
     if not args.config and record_count > 0:
         if record_count < 50:
             payload["training_config"]["epochs"] = 15
@@ -1884,6 +1948,40 @@ def cmd_create_training(args: argparse.Namespace) -> None:
             "top_p": 1.0,
             "response_candidates_count": 8,  # GRPO minimum: all published work uses G>=8 (DeepSeekMath G=64, DAPO G=16, TRL default G=8)
         }
+
+    # Auto-adjust max_output_tokens based on dataset content.
+    # Mirrors the completion_length gate logic from data_quality_gate.py.
+    # Fetches records from gateway, estimates required token length from
+    # ground truth + system prompt complexity, and upgrades max_output_tokens
+    # if the default 512 (or user-provided value) is too low.
+    #
+    # Why: Insufficient max_output_tokens has caused 9-13 hours of wasted GPU time
+    # due to 100% completion truncation from insufficient max_output_tokens.
+    # Different tasks need different limits (classification ~128, MCQ reasoning
+    # ~1500, code gen ~2000+). A fixed default cannot work for all scenarios.
+    # Headroom: 30% above P95 estimate (heuristic inspired by DAPO's overlong
+    # soft-punishment zone, arXiv:2503.14476 — not a direct DAPO parameter).
+    current_max_tokens = payload["inference_parameters"].get("max_output_tokens", 512)
+    try:
+        records = _api(
+            "GET",
+            f"{args.base_url}/finetune/workflows/{args.workflow_id}/records",
+        )
+        if isinstance(records, list) and len(records) > 0:
+            recommended = _estimate_recommended_max_tokens(records)
+            if recommended > current_max_tokens:
+                print(
+                    f"  Auto-adjusting max_output_tokens: {current_max_tokens} → {recommended} "
+                    f"(based on dataset content analysis — ground truth length × task complexity, "
+                    f"with 30% headroom above P95). Override with --inference-params if needed.",
+                    file=sys.stderr,
+                )
+                payload["inference_parameters"]["max_output_tokens"] = recommended
+    except (SystemExit, Exception) as e:
+        # Non-fatal: if record fetch fails, proceed with current value.
+        # The data_quality_gate should have already caught this pre-training.
+        print(f"  Note: Could not auto-adjust max_output_tokens (record fetch failed). "
+              f"Using {current_max_tokens}.", file=sys.stderr)
 
     result = _api(
         "POST",
@@ -1929,6 +2027,68 @@ def cmd_create_training(args: argparse.Namespace) -> None:
     }
     out_file.write_text(json.dumps(metadata, indent=2))
     print(f"Saved: {out_file}")
+
+
+def _estimate_recommended_max_tokens(records: list[dict]) -> int:
+    """Estimate the recommended max_output_tokens from dataset content.
+
+    Mirrors the completion_length gate logic from data_quality_gate.py:
+    1. Extracts ground truth token lengths (4 chars/token heuristic)
+    2. Applies adaptive multiplier based on system prompt complexity
+    3. Returns P95 estimate × 1.3 (30% headroom — empirical heuristic
+       inspired by DAPO's overlong soft-punishment approach, not a
+       direct DAPO parameter)
+
+    Returns the recommended minimum, or 512 if estimation is not possible
+    (e.g., no ground truth fields in the dataset).
+    """
+    import statistics as _stats
+
+    gt_lengths: list[int] = []
+    sys_lengths: list[int] = []
+
+    for record in records:
+        # Extract ground truth
+        gt = record.get("ground_truth", "")
+        if gt and gt.strip():
+            gt_lengths.append(max(1, len(gt.strip()) // 4))
+
+        # Extract system prompt length
+        for msg in record.get("messages", []):
+            if msg.get("role") == "system":
+                sys_lengths.append(max(1, len(msg.get("content", "").strip()) // 4))
+                break
+
+    if not gt_lengths:
+        return 512  # No ground truth — can't estimate, keep default
+
+    # Adaptive multiplier based on task complexity (system prompt length).
+    # Short prompts (<100 tokens): simple Q&A → 2x GT
+    # Medium prompts (100-250 tokens): structured task → 3x GT
+    # Long prompts (>250 tokens): multi-step analysis → 5x GT
+    avg_sys_tokens = _stats.mean(sys_lengths) if sys_lengths else 0
+    if avg_sys_tokens > 250:
+        multiplier = 5.0
+    elif avg_sys_tokens > 100:
+        multiplier = 3.0
+    else:
+        multiplier = 2.0
+
+    # P95 of ground truth lengths
+    sorted_gt = sorted(gt_lengths)
+    p95_idx = min(len(sorted_gt) - 1, int(len(sorted_gt) * 0.95))
+    gt_p95 = sorted_gt[p95_idx]
+
+    # Recommended: P95 estimate with 30% headroom.
+    # Heuristic inspired by DAPO's overlong soft-punishment zone
+    # (arXiv:2503.14476 uses a ~20% absolute zone at 16K-20K tokens,
+    # not a percentage-based buffer — we adapt the principle for
+    # smaller-scale tasks).
+    recommended = int(gt_p95 * multiplier * 1.3)
+
+    # Clamp to reasonable range: minimum 256, maximum 4096
+    # (beyond 4096 is very expensive with K=8 completions per prompt)
+    return max(256, min(4096, recommended))
 
 
 class _JobNotFoundError(Exception):
@@ -2083,19 +2243,24 @@ def _check_score_plateau(
 
     Returns a dict with plateau/degradation info if detected, None otherwise.
 
-    Improved early stopping based on GRPO/RFT research:
-    - Uses EMA (alpha=0.3) instead of raw first-vs-last delta for noise robustness
+    Improved early stopping based on GRPO research:
+    - Uses EMA (alpha=0.3) for noise robustness (standard signal processing
+      heuristic — appropriate for epoch-level data with 5-30 points)
     - Linear regression slope over the patience window detects true trends
-    - Requires min_warmup_epochs before checking (GRPO has a slow-start phase;
-      arXiv:2507.18014 identifies 3 phases: slow start → rapid improvement → plateau)
-    - patience=5 epochs (up from 3) for statistical reliability
+    - Requires min_warmup_epochs before checking. GRPO has a slow-start phase
+      (arXiv:2507.18014 identifies 3 phases: slow start → rapid improvement
+      → plateau). Patience/warmup are now adaptive to total_epochs (see
+      cmd_poll_training) — our heuristic, not from the paper.
     - slope_threshold=0.005/epoch — conservative to avoid aborting late-stage
-      hard-prompt learning (arXiv:2508.14094: hard examples yield 47% gains)
+      hard-prompt learning (arXiv:2508.14094: hard examples yield 47% gains
+      — verified GRPO-specific)
     - Distinguishes "converged well" (high score) vs "stuck" (low score) —
-      GRPO has absorbing states at p=0 (arXiv:2503.06639)
-    - Checks for length exploitation (Dr. GRPO, arXiv:2503.20783)
+      GRPO has absorbing states at p=0 (arXiv:2503.06639 — verified
+      GRPO-specific)
+    - Length exploitation detected separately (Dr. GRPO, arXiv:2503.20783 —
+      verified GRPO-specific: 1/|o_i| normalization causes length bias)
 
-    Ref: Food-label E2E test (2026-03-31) showed plateau at epoch 3 with
+    Ref: Empirical testing showed plateau at epoch 3 with
     225 records — score went 0.51→0.60 then +0.003 across 3 evals.
     Continued training for 7+ more hours with no improvement.
     """
@@ -2239,11 +2404,26 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
             return 600
 
     early_stop = not args.no_early_stop
+
+    # Adaptive early stopping: patience and warmup scale with total epochs.
+    # Fixed patience=5 was too conservative for short runs (3-5 epochs) —
+    # a short training run completed only 1.6 epochs, and early stopping
+    # never fired because it needed 6+ epochs of data.
+    # arXiv:2507.18014 observes a 3-phase GRPO training pattern (slow start
+    # → rapid improvement → plateau), with slow-start at 0-10% of training.
+    # The patience/warmup formulas below are our own heuristic (not from the
+    # paper) designed to ensure early stopping can fire on short runs while
+    # still respecting the slow-start phase.
+    total_epochs = metadata.get("training_config", {}).get("epochs", 8)
+    adaptive_patience = max(3, min(5, total_epochs // 3))
+    adaptive_warmup = max(1, total_epochs // 5)
+
     print(f"Polling training job {job_id} with adaptive intervals (max {max_wait}s)...")
     if early_stop:
         print(
-            f"  Early stopping enabled (EMA-based, patience=5 epochs, "
-            f"min 2 epoch warm-up, length exploitation check)"
+            f"  Early stopping enabled (EMA-based, patience={adaptive_patience} epochs, "
+            f"min {adaptive_warmup} epoch warm-up, length exploitation check) "
+            f"[adaptive for {total_epochs}-epoch run]"
         )
     start_time = time.time()
     status = "unknown"
@@ -2294,7 +2474,7 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
             return
 
         # Early stopping: multi-signal check every 5 min.
-        # Ref: Food-label E2E test showed 7+ hours wasted on plateaued training.
+        # Ref: Empirical testing showed 7+ hours wasted on plateaued training.
         #
         # Signals checked (based on GRPO/RFT research):
         # 1. Score plateau via EMA slope (arXiv:2507.18014 — 3-phase training)
@@ -2304,7 +2484,11 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
             last_plateau_check = elapsed
 
             # Signal 1 & 2: Score plateau or degradation
-            plateau = _check_score_plateau(args.base_url, wf_id, job_id)
+            plateau = _check_score_plateau(
+                args.base_url, wf_id, job_id,
+                patience=adaptive_patience,
+                min_warmup_epochs=adaptive_warmup,
+            )
             if plateau:
                 signal = plateau.get("signal", "plateau")
                 quality = plateau.get("quality", "unknown")
@@ -2823,6 +3007,9 @@ def main() -> None:
     p = subparsers.add_parser("readiness-check", help="Check if eval results pass pre-training readiness gate")
     p.add_argument("--file", required=True, help="Path to eval result JSON (from poll-eval)")
     p.add_argument("--thresholds", default=None, help="JSON string with custom thresholds (optional)")
+    p.add_argument("--max-output-tokens", type=int, default=512,
+                   help="Planned max_output_tokens for training (default: 512). "
+                        "Used to check if eval response lengths predict truncation risk.")
 
     # diagnose-grader
     p = subparsers.add_parser("diagnose-grader", help="Diagnose grader issues from eval results — shows score buckets, reason patterns, and grader source")
