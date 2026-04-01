@@ -45,6 +45,23 @@ mkdir -p <DOC_DIR>
 
 ⚠️ **CRITICAL**: You MUST obtain the Docling result and save it as `<DOC_DIR>/docling-result.json`. Do NOT proceed to step 3 until this file exists and contains valid data. Do NOT write custom extraction scripts that bypass Docling.
 
+**Check for existing result first** — if `<DOC_DIR>/docling-result.json` already exists with valid data, reuse it (skip re-extraction). This avoids re-processing when creating a new workflow from previously extracted documents:
+```bash
+if [ -f "<DOC_DIR>/docling-result.json" ]; then
+  python3 -c "
+import json, sys
+d = json.load(open('<DOC_DIR>/docling-result.json'))
+chunks = d if isinstance(d, list) else d.get('chunks', d.get('results', []))
+if chunks:
+    print(f'Reusing existing extraction: {len(chunks)} chunks')
+    sys.exit(0)
+sys.exit(1)
+" && echo "SKIP_DOCLING=true" || echo "Existing file invalid — re-extracting"
+fi
+```
+
+**If existing result is valid, skip to Step 3.** Otherwise continue:
+
 **If TASK_ID was provided** (orchestrator already submitted):
 
 Poll until complete. Large documents (100+ pages) can take 3-5 minutes. **Be patient — poll up to 20 times with 30s sleep between polls.**
@@ -94,6 +111,24 @@ If this check fails, go to **Fallback** section at the bottom. Do NOT write cust
 ### 3. Build knowledge parts (DETERMINISTIC — use build_knowledge_parts.py)
 
 **⚠️ CRITICAL**: ALWAYS use `build_knowledge_parts.py` first. Do NOT write custom extract.py scripts unless explicitly required. This ensures the same PDF always produces the same knowledge parts across runs.
+
+**Check for existing parts first** — if `knowledge_parts.json` already exists with valid data, skip rebuilding. `parts-index.json` is always generated alongside it by `build_knowledge_parts.py`, so checking one is sufficient:
+```bash
+if [ -f "<DOC_DIR>/knowledge_parts.json" ]; then
+  python3 -c "
+import json, sys
+data = json.load(open('<DOC_DIR>/knowledge_parts.json'))
+parts = data.get('parts', data) if isinstance(data, dict) else data
+if parts and len(parts) > 0:
+    print(f'Reusing existing knowledge parts: {len(parts)} parts')
+    sys.exit(0)
+print('knowledge_parts.json exists but empty — rebuilding')
+sys.exit(1)
+" && echo "SKIP_BUILD=true"
+fi
+```
+
+**If existing parts are valid, skip to Step 5 (validate).** Otherwise build:
 
 **Step 3a — Run the deterministic extraction script:**
 

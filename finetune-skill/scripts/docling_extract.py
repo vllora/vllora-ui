@@ -93,13 +93,25 @@ def submit_async(
     return task_id
 
 
+def _write_status(output_path: Path, status_data: dict) -> None:
+    """Write extraction status to docling-status.json alongside the output file."""
+    status_path = output_path.parent / "docling-status.json"
+    status_path.write_text(json.dumps(status_data, indent=2))
+
+
 def poll_until_done(
     docling_url: str,
     task_id: str,
+    output_path: Path,
     poll_interval: int = 15,
     max_wait: int = 1800,
 ) -> bool:
-    """Poll Docling status until task completes or fails. Returns True on success."""
+    """Poll Docling status until task completes or fails. Returns True on success.
+
+    Writes docling-status.json to the output directory on each poll with:
+    task_id, status, poll_count, elapsed_seconds, queue_position, last_checked.
+    """
+    task_id = _validate_task_id(task_id)
     url = f"{docling_url}/v1/status/poll/{task_id}"
     elapsed = 0
     attempt = 0
@@ -110,8 +122,19 @@ def poll_until_done(
             resp = requests.get(url)
             resp.raise_for_status()
             data = resp.json()
-            # Docling uses "task_status" field, fall back to "status"
             status = data.get("task_status", data.get("status", "unknown"))
+            pos = data.get("task_position", "")
+
+            # Write status file on every poll
+            _write_status(output_path, {
+                "task_id": task_id,
+                "status": status,
+                "poll_count": attempt,
+                "elapsed_seconds": elapsed,
+                "queue_position": pos or None,
+                "last_checked": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "pdf": output_path.parent.name,
+            })
 
             if status in ("success", "completed"):
                 print(f"  [{attempt}] Docling completed after {elapsed}s")
@@ -121,7 +144,6 @@ def poll_until_done(
                 print(f"ERROR: Docling task failed: {error}", file=sys.stderr)
                 return False
 
-            pos = data.get("task_position", "")
             pos_info = f", queue_pos={pos}" if pos else ""
             print(f"  [{attempt}] status={status}{pos_info}, elapsed={elapsed}s")
         except requests.RequestException as e:
@@ -149,16 +171,48 @@ def extract_single(
     max_tokens: int,
     poll_interval: int,
     max_wait: int,
+    skip_existing: bool = False,
 ) -> bool:
     """Extract a single PDF. Returns True on success."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Skip if result already exists (reuse previous extraction)
+    if skip_existing and output_path.exists():
+        try:
+            data = json.loads(output_path.read_text())
+            chunks = data if isinstance(data, list) else data.get("chunks", data.get("results", []))
+            if chunks:
+                size_mb = output_path.stat().st_size / (1024 * 1024)
+                print(f"Reusing existing extraction: {output_path} ({size_mb:.1f}MB, {len(chunks)} chunks)")
+                _write_status(output_path, {
+                    "task_id": None,
+                    "status": "reused_existing",
+                    "poll_count": 0,
+                    "elapsed_seconds": 0,
+                    "last_checked": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "pdf": pdf_path.name,
+                    "note": "docling-result.json already existed with valid data — skipped re-extraction",
+                })
+                return True
+        except (json.JSONDecodeError, OSError):
+            print(f"  Existing {output_path} is invalid — re-extracting")
 
     print(f"Submitting {pdf_path.name} to Docling (async, max_tokens={max_tokens})...")
     task_id = submit_async(docling_url, pdf_path, max_tokens)
     print(f"  Task ID: {task_id}")
 
+    # Write initial status
+    _write_status(output_path, {
+        "task_id": task_id,
+        "status": "submitted",
+        "poll_count": 0,
+        "elapsed_seconds": 0,
+        "last_checked": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "pdf": pdf_path.name,
+    })
+
     print(f"Polling for completion (interval={poll_interval}s, max={max_wait}s)...")
-    if not poll_until_done(docling_url, task_id, poll_interval, max_wait):
+    if not poll_until_done(docling_url, task_id, output_path, poll_interval, max_wait):
         return False
 
     print("Fetching result...")
@@ -180,19 +234,52 @@ def extract_batch(
     max_tokens: int,
     poll_interval: int,
     max_wait: int,
+    skip_existing: bool = False,
 ) -> bool:
     """Submit all PDFs first, then poll all in parallel. Returns True if all succeed."""
-    # Submit all
+    # Submit all (skip existing if requested)
     tasks: list[tuple[str, Path, Path]] = []
+    skipped = 0
     for pdf_path, output_path in pairs:
         if not pdf_path.exists():
             print(f"ERROR: PDF not found: {pdf_path}", file=sys.stderr)
             return False
         output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Skip if result already exists
+        if skip_existing and output_path.exists():
+            try:
+                data = json.loads(output_path.read_text())
+                chunks = data if isinstance(data, list) else data.get("chunks", data.get("results", []))
+                if chunks:
+                    size_mb = output_path.stat().st_size / (1024 * 1024)
+                    print(f"Reusing existing: {pdf_path.name} ({size_mb:.1f}MB, {len(chunks)} chunks)")
+                    _write_status(output_path, {
+                        "task_id": None, "status": "reused_existing", "poll_count": 0,
+                        "elapsed_seconds": 0, "last_checked": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                        "pdf": pdf_path.name,
+                    })
+                    skipped += 1
+                    continue
+            except (json.JSONDecodeError, OSError):
+                print(f"  Existing {output_path} is invalid — re-extracting")
+
         print(f"Submitting {pdf_path.name}...")
         task_id = submit_async(docling_url, pdf_path, max_tokens)
         print(f"  Task ID: {task_id}")
+        _write_status(output_path, {
+            "task_id": task_id, "status": "submitted", "poll_count": 0,
+            "elapsed_seconds": 0, "last_checked": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "pdf": pdf_path.name,
+        })
         tasks.append((task_id, pdf_path, output_path))
+
+    if skipped:
+        print(f"\nSkipped {skipped} document(s) with existing extractions.")
+
+    if not tasks:
+        print(f"\nAll documents already extracted — nothing to submit.")
+        return True
 
     print(f"\nAll {len(tasks)} PDFs submitted. Polling for completion...\n")
 
@@ -211,6 +298,15 @@ def extract_batch(
                 data = resp.json()
                 status = data.get("task_status", data.get("status", "unknown"))
 
+                # Write status on every poll
+                pos = data.get("task_position", "")
+                _write_status(output_path, {
+                    "task_id": task_id, "status": status, "poll_count": attempt,
+                    "elapsed_seconds": elapsed, "queue_position": pos or None,
+                    "last_checked": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "pdf": pdf_path.name,
+                })
+
                 if status in ("success", "completed"):
                     print(f"  [{attempt}] {pdf_path.name} completed after {elapsed}s")
                     result = fetch_result(docling_url, task_id)
@@ -225,7 +321,6 @@ def extract_batch(
                     print(f"ERROR: {pdf_path.name} failed: {error}", file=sys.stderr)
                     return False
                 else:
-                    pos = data.get("task_position", "")
                     pos_info = f" (queue #{pos})" if pos else ""
                     print(f"  [{attempt}] {pdf_path.name}: {status}{pos_info}")
             except requests.RequestException as e:
@@ -251,14 +346,39 @@ def submit_batch_only(
     docling_url: str,
     pairs: list[tuple[Path, Path]],
     max_tokens: int,
+    skip_existing: bool = False,
 ) -> list[dict]:
-    """Submit all PDFs without waiting. Returns a manifest of task entries."""
+    """Submit all PDFs without waiting. Returns a manifest of task entries.
+
+    With skip_existing=True, PDFs whose output file already contains valid data
+    get a manifest entry with status='reused_existing' and task_id=None — no
+    Docling request is made.
+    """
     manifest = []
     for pdf_path, output_path in pairs:
         if not pdf_path.exists():
             print(f"ERROR: PDF not found: {pdf_path}", file=sys.stderr)
             sys.exit(1)
         output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Skip if result already exists
+        if skip_existing and output_path.exists():
+            try:
+                data = json.loads(output_path.read_text())
+                chunks = data if isinstance(data, list) else data.get("chunks", data.get("results", []))
+                if chunks:
+                    size_mb = output_path.stat().st_size / (1024 * 1024)
+                    print(f"Reusing existing: {pdf_path.name} ({size_mb:.1f}MB, {len(chunks)} chunks)")
+                    manifest.append({
+                        "task_id": None,
+                        "pdf": str(pdf_path),
+                        "output": str(output_path),
+                        "status": "reused_existing",
+                    })
+                    continue
+            except (json.JSONDecodeError, OSError):
+                print(f"  Existing {output_path} is invalid — submitting to Docling")
+
         print(f"Submitting {pdf_path.name}...")
         task_id = submit_async(docling_url, pdf_path, max_tokens)
         entry = {
@@ -272,18 +392,40 @@ def submit_batch_only(
     return manifest
 
 
+def _validate_task_id(task_id: str) -> str:
+    """Validate and clean a task ID. Strips output paths accidentally appended with ':'."""
+    if ":" in task_id:
+        # Agent may have passed "task_id:output_path" — extract just the UUID
+        clean = task_id.split(":")[0]
+        print(f"  Warning: task_id contained ':' — extracted UUID: {clean}", file=sys.stderr)
+        return clean
+    if "/" in task_id:
+        print(f"  Warning: task_id contains '/' — this looks like a path, not a UUID: {task_id}", file=sys.stderr)
+    return task_id.strip()
+
+
 def poll_one_task(
     docling_url: str,
     task_id: str,
     output_path: Path,
 ) -> dict:
     """Poll a single task. Returns status dict with 'status' field.
-    If completed, fetches result and saves to output_path."""
+    If completed, fetches result and saves to output_path.
+    Also writes docling-status.json alongside the output."""
+    task_id = _validate_task_id(task_id)
     try:
         resp = requests.get(f"{docling_url}/v1/status/poll/{task_id}", timeout=30)
         resp.raise_for_status()
         data = resp.json()
         status = data.get("task_status", data.get("status", "unknown"))
+        pos = data.get("task_position", "")
+
+        status_info = {
+            "task_id": task_id, "status": status,
+            "queue_position": pos or None,
+            "last_checked": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "pdf": output_path.parent.name,
+        }
 
         if status in ("success", "completed"):
             result = fetch_result(docling_url, task_id)
@@ -291,13 +433,17 @@ def poll_one_task(
                 json.dump(result, f, ensure_ascii=False)
             chunks = len(result.get("chunks", []))
             size_mb = output_path.stat().st_size / (1024 * 1024)
-            return {"status": "completed", "chunks": chunks, "size_mb": round(size_mb, 1)}
+            status_info.update({"status": "completed", "chunks": chunks, "size_mb": round(size_mb, 1)})
+            _write_status(output_path, status_info)
+            return status_info
         elif status in ("failed", "error"):
             error = data.get("error", data.get("detail", "unknown"))
-            return {"status": "failed", "error": error}
+            status_info["error"] = error
+            _write_status(output_path, status_info)
+            return status_info
         else:
-            pos = data.get("task_position", "")
-            return {"status": status, "queue_position": pos}
+            _write_status(output_path, status_info)
+            return status_info
     except requests.RequestException as e:
         return {"status": "error", "error": str(e)}
 
@@ -313,6 +459,8 @@ def main():
     parser.add_argument("--max-tokens", type=int, default=8192, help="Max tokens per Docling chunk — safety ceiling, not target size (default: 8192)")
     parser.add_argument("--poll-interval", type=int, default=15, help="Poll interval in seconds (default: 15)")
     parser.add_argument("--max-wait", type=int, default=1800, help="Max wait time in seconds (default: 1800)")
+    parser.add_argument("--skip-existing", action="store_true",
+                        help="Skip documents where docling-result.json already exists with valid data")
     args = parser.parse_args()
 
     # Check Docling health
@@ -344,7 +492,8 @@ def main():
         if not pairs:
             print("ERROR: No pdf:output pairs provided", file=sys.stderr)
             sys.exit(1)
-        manifest = submit_batch_only(args.docling_url, pairs, args.max_tokens)
+        manifest = submit_batch_only(args.docling_url, pairs, args.max_tokens,
+                                     skip_existing=args.skip_existing)
         print(json.dumps(manifest, indent=2))
         sys.exit(0)
 
@@ -360,7 +509,8 @@ def main():
         if not pairs:
             print("ERROR: No pdf:output pairs provided", file=sys.stderr)
             sys.exit(1)
-        ok = extract_batch(args.docling_url, pairs, args.max_tokens, args.poll_interval, args.max_wait)
+        ok = extract_batch(args.docling_url, pairs, args.max_tokens, args.poll_interval, args.max_wait,
+                           skip_existing=args.skip_existing)
         sys.exit(0 if ok else 1)
     else:
         # Single mode
@@ -377,6 +527,7 @@ def main():
         ok = extract_single(
             args.docling_url, pdf_path, Path(args.output),
             args.max_tokens, args.poll_interval, args.max_wait,
+            skip_existing=args.skip_existing,
         )
         sys.exit(0 if ok else 1)
 

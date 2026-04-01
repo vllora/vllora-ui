@@ -524,7 +524,7 @@ def _call_llm_for_type(
 Topic: {topic['name']}
 Focus: {focus}
 
-Source material (each section is labeled with a part ID like [p-001]):
+Source material (each section is numbered [1], [2], etc.):
 {chunk_text}
 
 Each prompt must be a realistic question/request grounded in the source material above.
@@ -532,9 +532,9 @@ Do NOT generate generic questions — reference specific concepts, examples, or 
 
 For each prompt, also provide:
 - "ground_truth": a concise excerpt from the source material that contains the information needed to answer the question. Keep it focused — complete enough to verify a correct answer, but not the entire source.
-- "used_parts": an array of part IDs (e.g., ["p-001", "p-003"]) — ONLY the specific parts from the source material above that this question is derived from. Most questions should use 1-3 parts, not all of them.
+- "used_parts": an array of section numbers as strings (e.g., ["1", "3"]) — ONLY the specific sections from the source material above that this question is derived from. Most questions should use 1-3 sections, not all of them.
 
-Return JSON: {{"items": [{{"prompt": "the question", "ground_truth": "relevant source excerpt", "used_parts": ["p-001"]}}, ...]}}"""
+Return JSON: {{"items": [{{"prompt": "the question", "ground_truth": "relevant source excerpt", "used_parts": ["1"]}}, ...]}}"""
 
     request_data = json.dumps({
         "messages": [{"role": "user", "content": prompt}],
@@ -645,10 +645,15 @@ def generate_for_topic(
         rag_part_ids = [p["id"] for p in rag_parts]
         chunks.extend(rag_parts)
 
-    # Build source material text (limit to 20 chunks to avoid context overflow)
+    # Build source material text with numbered labels for reliable LLM tagging.
+    # Full IDs like "irs-pub596-earned-income-credit-2025-p-016" are too long for
+    # the LLM to reproduce accurately in used_parts. We label each section with
+    # [1], [2], etc. and maintain a map back to full IDs.
     chunk_segments = []
-    for c in chunks[:20]:
-        part_id = c["id"]
+    alias_to_id: dict[str, str] = {}
+    for idx, c in enumerate(chunks[:20]):
+        label = str(idx + 1)
+        alias_to_id[label] = c["id"]
         title = c.get("title", "")
         content = c.get("content", "")
         meta = c.get("content_metadata", {})
@@ -660,12 +665,12 @@ def generate_for_topic(
             caption = meta.get("caption", "Data table")
             header_str = f" — columns: {', '.join(headers)}" if headers else ""
             chunk_segments.append(
-                f"[{part_id}] {title}\n"
+                f"[{label}] {title}\n"
                 f"[TABLE: {caption} — {num_rows} rows × {num_cols} cols{header_str}]\n"
                 f"{content}"
             )
         else:
-            chunk_segments.append(f"[{part_id}] {title}\n{content}")
+            chunk_segments.append(f"[{label}] {title}\n{content}")
 
     chunk_text = "\n---\n".join(chunk_segments)
 
@@ -723,12 +728,11 @@ def generate_for_topic(
 
             record_idx += 1
 
-            # Use per-record used_parts from LLM, validated against known part_ids + RAG parts.
-            # Falls back to all source parts if LLM didn't provide or returned invalid.
+            # Map LLM's short aliases (S1, S2, ...) back to real part IDs.
+            # Falls back to all source parts if LLM didn't tag or returned invalid aliases.
             raw_used = item.get("used_parts", [])
-            all_known_ids = set(all_source_parts)
-            validated_used = [pid for pid in raw_used if pid in all_known_ids]
-            record_source_parts = validated_used if validated_used else list(all_source_parts)
+            resolved_used = [alias_to_id[alias] for alias in raw_used if alias in alias_to_id]
+            record_source_parts = resolved_used if resolved_used else list(all_source_parts)
 
             # Second retrieval: re-query with the generated question for sharper context
             if second_retrieval and workflow_id:

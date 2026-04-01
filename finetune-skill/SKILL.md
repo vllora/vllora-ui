@@ -91,7 +91,9 @@ finetune-project/
 
 **Table-heavy documents**: Write a "synthesis part" — a prose summary of key facts from tables — and include it as a text part alongside the table parts. This gives the model facts to reference conversationally.
 
-**Workflow reuse**: Reuse the existing workflow when iterating (adding records, re-running evals, retraining). The API supports upserting records — duplicates are updated in place, new records are inserted, and existing eval scores are preserved. Only create a new workflow when starting a completely different project or dataset.
+**Workflow ID comes from `config.json` ONLY.** If `finetune-project/config.json` exists, read the `workflow_id` from it — that is the current workflow. If it does NOT exist, ALWAYS create a new workflow via `create-workflow`. Do NOT search the gateway API for workflows with the same name and reuse their ID. Workflow names are not unique — multiple runs can have the same name. The `config.json` file is the single source of truth for which workflow this project belongs to.
+
+**Workflow reuse**: When iterating on the SAME project (adding records, re-running evals, retraining), reuse the workflow from `config.json`. The API supports upserting records. Only create a new workflow (delete `config.json` first) when starting a completely different project.
 
 **Error handling**: If an API call returns a 4xx/5xx error, do NOT abandon the workflow and create a new one. Read the error message, fix the issue (e.g., duplicate IDs, invalid data), and retry the same request against the same workflow.
 
@@ -99,9 +101,16 @@ finetune-project/
 
 ### Execution Log
 
-Maintain `execution-log.md` as an **append-only** chronological record. Create it at the START of Step 1. Write to it IMMEDIATELY after each action — not retroactively.
+Maintain `execution-log.md` as an **append-only** chronological record. Append a section IMMEDIATELY after EACH step completes — not retroactively. Never overwrite.
 
-**Format:** `## Step N: Name` → `- [timestamp] Action` → `Strategy:` / `Results:` / `Issues:` sub-items. Log after every action (not just step boundaries), include strategy for LLM-driven actions, never overwrite, and log failures before fixing. See [reference/workflow-guide.md](reference/workflow-guide.md) for a full example.
+**Minimum required fields per step** (see [reference/execution-log-template.md](reference/execution-log-template.md) for full template):
+- **Step 2**: per-document part counts + types, reused existing: yes/no, validation: PASS/FAIL, gateway sources count
+- **Step 3**: relevance filter counts (total/relevant/excluded), topic count + hierarchy, relation count + cross-doc balance
+- **Step 4**: records count, per-topic counts, source_parts coverage
+- **Step 5**: template used, dry-run scores (both tests), gateway verify: yes/no
+- **Step 7**: eval job ID, avg/std/zero_frac scores, readiness verdict
+
+**⚠️ Log EVERY step, not just Step 1.** If the execution log has only Step 1 when Step 5 is complete, the log is useless for debugging.
 
 ---
 
@@ -122,14 +131,16 @@ All helper scripts use `uv run` with PEP 723 inline dependencies — no manual `
 
 **ALWAYS check for an existing `finetune-project/` directory before starting a new pipeline.** If one exists, this is a continuation — do NOT start from scratch.
 
-**Detection:**
+**Reusing extractions across workflows:** Even when creating a NEW workflow (new `config.json` + workflow ID), existing `knowledge/{slug}/docling-result.json` files can be reused. Docling extraction is the slowest step — if the same PDFs were already extracted in a previous run, the `--skip-existing` flag (and knowledge-extractor subagent) will detect and reuse them. Do NOT delete the `knowledge/` directory when starting a new workflow from the same documents.
+
+**Detection** — `config.json` is the ONLY way to detect an existing project. Do NOT list workflows from the gateway API to find one with a matching name:
 ```bash
 if [ -f finetune-project/config.json ]; then
   echo "EXISTING PROJECT FOUND — resuming"
   WORKFLOW_ID=$(python3 -c "import json; print(json.load(open('finetune-project/config.json'))['workflow_id'])")
   echo "Workflow ID: $WORKFLOW_ID"
 else
-  echo "No existing project — starting fresh"
+  echo "No config.json — will create new workflow in Step 1"
 fi
 ```
 
@@ -181,20 +192,27 @@ Ask the user what behaviors the model should learn. Produce two things:
 
 > **Note:** The system prompt is NOT stored on the workflow. It's composed at record generation time (Step 4) from a root persona + per-topic segments, and embedded in each record's `messages[0]`. Save it locally for use in Step 4.
 
-**Upload immediately** — create the workflow on the gateway so the UI shows progress from the start:
+**Create a new workflow** — only if `config.json` doesn't already exist. Do NOT search the gateway API for existing workflows by name:
 ```bash
-WORKFLOW_ID=$(uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-workflow \
-  --name "My Project" \
-  --objective "Train a model to..." | tail -1)
-echo "Workflow created: $WORKFLOW_ID"
+if [ -f finetune-project/config.json ]; then
+  WORKFLOW_ID=$(python3 -c "import json; print(json.load(open('finetune-project/config.json'))['workflow_id'])")
+  echo "Using existing workflow: $WORKFLOW_ID"
+else
+  WORKFLOW_ID=$(uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-workflow \
+    --name "My Project" \
+    --objective "Train a model to..." | tail -1)
+  echo "Workflow created: $WORKFLOW_ID"
+fi
 ```
 Save `$WORKFLOW_ID` — every subsequent step uses it to upload data incrementally.
 
-**Persist the workflow ID** to a config file so it's easy to find later:
+**Persist the workflow ID** to a config file and checkpoint immediately — if the agent crashes after this, the resume logic can find the project:
 ```bash
+mkdir -p finetune-project
 cat > finetune-project/config.json << EOF
 {"workflow_id": "$WORKFLOW_ID", "gateway_url": "http://localhost:9090"}
 EOF
+uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step create-workflow --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
 ### Step 2: Extract Documents
@@ -215,24 +233,27 @@ curl -sS --connect-timeout 5 http://127.0.0.1:5001/health 2>/dev/null && echo "D
 
 **If Docling is unavailable**, the `knowledge-extractor` subagent handles the fallback automatically — it uses `convert_pdf_to_markdown.py` to produce a `.md` file, then feeds it to `build_knowledge_parts.py`. Do NOT run `pdftotext_extract.py` separately from the orchestrator — delegate entirely to the subagent, which has its own fallback logic.
 
-If Docling is available, submit all PDFs at once:
+If Docling is available, submit all PDFs at once. Use `--skip-existing` to reuse previous extractions — this avoids re-processing PDFs whose `docling-result.json` already exists (useful when creating a new workflow from the same documents):
 ```bash
-uv run ${CLAUDE_SKILL_DIR}/scripts/docling_extract.py --submit-only \
+uv run ${CLAUDE_SKILL_DIR}/scripts/docling_extract.py --submit-only --skip-existing \
   "pdfs/doc1.pdf:finetune-project/knowledge/doc1-slug/docling-result.json" \
   "pdfs/doc2.pdf:finetune-project/knowledge/doc2-slug/docling-result.json" \
   ...
 ```
 
-This returns a JSON manifest with `task_id` per document. Docling processes them in parallel. **"Parallel" means multiple documents extract concurrently within Step 2 — it does NOT mean you can start Step 3 or later steps while extraction is running. You MUST wait for ALL extraction to finish before proceeding.**
+This returns a JSON manifest with entries per document. Each entry has `task_id`, `pdf`, `output`, and `status`. With `--skip-existing`, documents whose `docling-result.json` already has valid data get `status: "reused_existing"` and `task_id: null` — no Docling request is made for those.
+
+**"Parallel" means multiple documents extract concurrently within Step 2 — it does NOT mean you can start Step 3 or later steps while extraction is running. You MUST wait for ALL extraction to finish before proceeding.**
 
 **2b. Spawn one `knowledge-extractor` per document (parallel within this step):**
 
-For each document, spawn a subagent with:
+For each document in the manifest, spawn a subagent with:
 - `SKILL_DIR=${CLAUDE_SKILL_DIR}`
 - `WORKFLOW_ID`, `GATEWAY_URL=http://localhost:9090`
-- `DOC_PATH` — the PDF path
+- `DOC_PATH` — the PDF path (from manifest `pdf` field)
 - `DOC_SLUG` — the slug (lowercase, hyphens, e.g. `nist-csf-2-0`)
 - `DOC_DIR` — e.g., `finetune-project/knowledge/<slug>`
+- `TASK_ID` — the Docling task ID from the manifest `task_id` field (UUID only). If the manifest entry has `status: "reused_existing"` (task_id is null), pass empty string — the subagent will detect the existing `docling-result.json` and skip Docling.
 
 Spawn up to 4-5 agents at once. If there are more documents, spawn in batches.
 
@@ -608,16 +629,29 @@ The `--live` flag picks 3 random training records, sends each prompt to the LLM,
 
 **Both tests must pass.** If Test 1 passes but Test 2 scores 0.0, the grader has format assumptions that real models don't satisfy. Fix and re-test. Do NOT proceed to upload until both pass. The sandbox does NOT support `console.log` — use the `reason` field for debug output.
 
-**Upload immediately** — push the grader to the gateway so the UI shows it's ready for evaluation:
+**Upload + verify + checkpoint** — run ALL THREE commands. Do NOT checkpoint the grader without uploading and verifying first. If the verify fails, the upload silently failed — re-run `upload-grader`.
+
 ```bash
+# 1. Upload
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader \
   --workflow-id $WORKFLOW_ID --file grader.js
-```
 
-**Checkpoint** after grader upload:
-```bash
+# 2. Verify it landed on gateway (MANDATORY — do not skip)
+curl -s "http://localhost:9090/finetune/workflows/$WORKFLOW_ID" | python3 -c "
+import sys, json
+wf = json.load(sys.stdin).get('workflow', {})
+evaluator = wf.get('evaluator')
+if not evaluator or evaluator == 'null' or len(str(evaluator)) < 10:
+    print('FATAL: Evaluator NOT on gateway — upload-grader failed')
+    sys.exit(1)
+print('Evaluator verified on gateway: OK')
+"
+
+# 3. Only checkpoint AFTER verify passes
 uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step grader --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
+
+**⚠️ If the verify step prints FATAL, do NOT run the checkpoint.** Re-run `upload-grader` and try again.
 
 ### Step 5.5: Final Dataset Validation
 
@@ -629,9 +663,9 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py finetune-project/training
 
 Checks: valid JSON, required fields, message structure, no assistant messages (RFT), duplicate IDs, record count (minimum 50, recommend 100-200+), and short user messages (< 10 chars). The `--topics` and `--parts` flags cross-reference `topic` and `source_parts` fields against the actual topic hierarchy and parts index — flagging any orphaned references. Fix errors before proceeding.
 
-### Step 5.5b: Data Quality Gate (pre-eval — do NOT skip)
+### Step 5.5b: Data Quality Gate (MANDATORY — do NOT skip)
 
-**⚠️ Run this BEFORE evaluation.** Eval costs ~45 min and LLM calls. Training costs hours of GPU time. This gate catches data issues that waste those resources — vague ground truths, prompt-answer misalignment, near-duplicate prompts, and low diversity. Fixing data here is 10-100x cheaper than discovering the problem after training.
+**⚠️ This step is REQUIRED before evaluation.** Do NOT skip it even if Step 5.5 (validate) passed. `validate_dataset.py` checks format; this gate checks **data quality** — duplicates, diversity, ground truth quality, prompt alignment. Eval costs ~45 min and LLM calls. Training costs hours of GPU time. Fixing data here is 10-100x cheaper than discovering the problem after training.
 
 **Quick gate (free — always run):**
 ```bash
@@ -1067,6 +1101,7 @@ Read these when you need more detail on a specific step:
 | `reference/extraction-guide.md` | When extracting documents — Docling Serve setup, hybrid chunk API, knowledge_parts.json schema, pdftotext fallback |
 | `reference/grader-writing.md` | When writing the grader — 3 patterns, design guidelines, common mistakes |
 | `reference/topic-hierarchy.md` | When designing topics — structure, coverage analysis, balance scoring |
+| `reference/execution-log-template.md` | When writing the execution log — per-step fields, failure/resume patterns |
 | `reference/readiness-gate.md` | When interpreting readiness gate or difficulty probe results — full check tables, WARN safety guide |
 | `reference/iteration-strategy.md` | When analyzing results — diagnosis, stall patterns, escalation ladder |
 | `reference/analysis-strategy.md` | **Read at Step 8** — data fields, decision trees, action templates, interactive presentation |
