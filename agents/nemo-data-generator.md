@@ -52,18 +52,20 @@ If NeMo is not running, report failure immediately — do NOT fall back to `gene
 
 ### 2. Materialize curated seed
 
-The seed parquet MUST include `composed_system_prompt` (root + ancestor segments + leaf focus) so all records in a topic share the same prompt. Use `materialize_seed.py` from the NeMo repo:
+The seed parquet MUST include `composed_system_prompt` (root + ancestor segments + leaf focus) so all records in a topic share the same prompt. Run `materialize_seed.py` from the NeMo repo:
 
 ```bash
-uv run nemo/materialize_seed.py \
+uv run <NEMO_REPO>/materialize_seed.py \
   --topics <PROJECT_DIR>/topics.json \
   --system-prompt "<SYSTEM_PROMPT>" \
   --output <PROJECT_DIR>/curated-seed.parquet
 ```
 
+Where `<NEMO_REPO>` is the path to the cloned NeMo repo (e.g., `/Users/.../nemo`). The `--system-prompt` flag composes hierarchical prompts per topic (root + ancestor segments + leaf focus — same logic as `generate_records.py`).
+
 **Verify the seed has required columns:** `topic`, `topic_name`, `topic_path`, `composed_system_prompt`, `expected_difficulty`.
 
-If `materialize_seed.py` is not available (NeMo repo not cloned), report failure.
+If `materialize_seed.py` is not available (NeMo repo not cloned at expected path), check common locations: `../nemo/`, `../../nemo/`, `~/Documents/GitHub/nemo/`. If not found, report failure with clone instructions.
 
 ### 3. Upload and inspect seed
 
