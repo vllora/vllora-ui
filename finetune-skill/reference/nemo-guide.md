@@ -231,11 +231,11 @@ Any intermediate column that feeds downstream columns but shouldn't appear in th
 | Topic-based Q&A (policies, tutorials, knowledge bases) | Direct generation — `rag-retrieval` → `llm-text` for each output | `templates/nemo-recipe-template.json` |
 | Structured documents (invoices, contracts, forms, specs) | Programmatic composition — extract fields first, compose context, then generate | `templates/nemo-recipe-structured-template.json` |
 
-**Two-stage question generation pattern (recommended — both templates use this):**
+**Two-stage question generation pattern (both templates use this):**
 
-Based on arxiv 2509.25736: generate a diverse question from topic context first, then retrieve chunks specific to that question and ground it.
+Inspired by multi-stage retrieval pipelines (arXiv:2509.25736 describes a similar retrieve-generate-refine approach for telecom): generate a diverse question from topic context first (without seeing retrieved text, to avoid anchoring bias), then retrieve chunks specific to that question and use them to ground the final prompt. Note: the cited paper actually retrieves first then generates — the "blind question first" design is a recipe choice for diversity, not a direct replication of the paper's method.
 
-The paper defines the generation and filtering method. Our exported `training.jsonl` rows still require final `system_prompt` and `user_message` fields because that is the fixed message contract used by the rest of the finetune pipeline.
+Our exported `training.jsonl` rows still require final `system_prompt` and `user_message` fields because that is the fixed message contract used by the rest of the finetune pipeline.
 
 ```
 topic_path ──→ rag-retrieval   → retrieved_chunks  (broad topic context, for system_prompt)
@@ -460,6 +460,26 @@ curl -sS -X POST "http://localhost:8000/api/data-recipe/gateway-ping" \
 Returns `{"ok": true, "status": 200, "body": {"matches": [...]}}` if working, or `{"ok": false, "status": 404, ...}` / `{"ok": false, "error": "Connection refused"}` if not.
 
 **If `retrieved_chunks` exists but is empty**: the HTTP call succeeded but the search returned no matches. The workflow's knowledge base is empty or embeddings haven't been generated yet. Ensure knowledge sources for this workflow have been processed by the gateway.
+
+---
+
+## Known Limitations
+
+### RAG retrieval does not filter by relevance labels
+
+The `rag-retrieval` plugin queries the gateway search API which returns ALL matching parts regardless of the `relevant: true/false` label set during Step 3 (topic design). Parts marked as irrelevant to the workflow objective can appear in NeMo-generated records.
+
+**Impact:** Records may be grounded in irrelevant document sections (e.g., "How to Get Tax Help" in an EIC calculator pipeline).
+
+**Workaround:** The `convert_nemo_rows.py` script recovers `source_parts` via gateway search with relevance filtering (when `--workflow-id` is provided). However, the NeMo generation itself still sees irrelevant chunks. A proper fix requires the NeMo server's `rag-retrieval` plugin to check `extraction_metadata.relevant` and skip parts marked `false`.
+
+### Source traceability is recovered, not native
+
+NeMo's `rag-retrieval` column concatenates chunk text and discards part IDs. The `source_parts` field on converted records is recovered by re-querying the gateway with the `user_message` — this is an approximation, not an exact record of which parts were used during generation. For precise per-record traceability, use `generate_records.py` (Step 4) instead.
+
+### System prompt must come from seed parquet
+
+The recipe templates use `{{ composed_system_prompt }}` as an expression passthrough from the seed. If the seed parquet does not include a `composed_system_prompt` column (composed by `materialize_seed.py` from root persona + topic hierarchy), the `system_prompt` column will be empty. Ensure `materialize_seed.py` is called with `--system-prompt` and that the seed includes this column.
 
 ---
 

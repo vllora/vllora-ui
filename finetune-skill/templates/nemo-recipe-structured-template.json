@@ -1,5 +1,5 @@
 {
-  "_comment": "NeMo Data Designer recipe template for STRUCTURED DOCUMENT extraction (invoices, contracts, forms, specs). Pattern: rag-retrieval → topic_context expression (seed passthrough) → subcategory sampler → llm-structured (drop:true) → expression (drop:true) → two-stage question generation (raw_question + question_chunks) → llm-text outputs. Copy, replace <PLACEHOLDERS>, adapt output_format schema and section values to your document type. NOTE: _comment fields are NOT allowed inside column objects — NeMo rejects them. Only this top-level _comment is safe. topic_context expression re-materializes the seed topic_path so it is guaranteed available in all downstream llm-text Jinja2 contexts.",
+  "_comment": "NeMo Data Designer recipe template for STRUCTURED DOCUMENT extraction (invoices, contracts, forms, specs). IMPORTANT: system_prompt is an expression passthrough from the seed parquet (composed by materialize_seed.py from root persona + topic hierarchy), NOT LLM-generated. All records in a topic share the same system prompt for consistent GRPO training. Pattern: rag-retrieval → topic_context expression → subcategory sampler → llm-structured (drop:true) → expression (drop:true) → two-stage question generation → llm-text outputs. Copy, replace <PLACEHOLDERS>, adapt output_format schema and section values to your document type.",
   "recipe": {
     "seed_config": {
       "source": {
@@ -69,18 +69,15 @@
       },
       {
         "name": "difficulty",
-        "column_type": "sampler",
-        "sampler_type": "category",
-        "params": {
-          "values": ["beginner", "intermediate", "advanced"]
-        }
+        "column_type": "expression",
+        "expr": "{{ expected_difficulty | default('medium') }}"
       },
       {
         "name": "raw_question",
         "column_type": "llm-text",
         "model_alias": "openai-text",
         "drop": true,
-        "prompt": "Generate one question a {{difficulty}} audience might ask about the '{{doc_section}}' aspects of this topic. Be creative and think about practical application — don't constrain yourself to specific facts.\n\nTopic: {{topic_context}}\nSection focus: {{doc_section}}\n\nReturn only the question."
+        "prompt": "Generate one question a {{difficulty}} audience might ask about the '{{doc_section}}' aspects of this topic. The question should reference specific rules, values, or procedures from the source material — not generic concepts.\n\nTopic: {{topic_context}}\nSection focus: {{doc_section}}\n\nSource material:\n{{retrieved_chunks}}\n\nReturn only the question."
       },
       {
         "name": "question_chunks",
@@ -93,9 +90,8 @@
       },
       {
         "name": "system_prompt",
-        "column_type": "llm-text",
-        "model_alias": "openai-text",
-        "prompt": "Write a concise system prompt (2-3 sentences) for an AI assistant trained on this document type. Define the assistant's role using only the '{{doc_section}}' aspects of the material. Adapt the tone for a {{difficulty}} audience.\n\nDocument context: {{topic_context}}\n\nReturn only the system prompt."
+        "column_type": "expression",
+        "expr": "{{ composed_system_prompt }}"
       },
       {
         "name": "user_message",

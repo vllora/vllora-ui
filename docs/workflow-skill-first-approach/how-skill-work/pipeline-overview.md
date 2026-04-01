@@ -61,7 +61,7 @@ Other helper scripts:
 | `extract_tables.py` | 2b | Upgrades text parts to table parts using structured Docling table data (headers, rows, metadata) |
 | `consolidate_parts.py` | 2c | Merges adjacent text parts, drops short fragments, fixes Unicode, validates quality |
 | `validate_extraction.py` | 2e | Cross-document extraction quality gate (parts/page, title diversity, avg length) |
-| `generate_records.py` | 4 | Fallback: generates records per leaf topic via LLM (calls `chat_completion.py`). Primary path is NeMo Data Designer — see Step 4B |
+| `generate_records.py` | 4 | Default: generates records per leaf topic via LLM (calls `chat_completion.py`). NeMo Data Designer is an optional alternative — see Step 4B |
 | `convert_nemo_rows.py` | 4B | Converts NeMo DataDesigner output rows to `training.jsonl`; filters by judge scores; writes `nemo-metadata.jsonl` sidecar |
 | `chat_completion.py` | 4 | Calls LLM API — validates JSON when `response_format` is `json_object` |
 | `validate_dataset.py` | 5.5 | Validates JSONL format, fields, RFT compliance, cross-refs topics/parts |
@@ -495,11 +495,11 @@ print(f'Total: {sum(topics.values())}')
 " 2>/dev/null
 ```
 
-## Step 4B: Generate Training Data via NeMo Data Designer (Primary Path)
+## Step 4B: Generate Training Data via NeMo Data Designer (Optional Path)
 
-**What happens**: NeMo Data Designer (repo: https://github.com/vllora/nemo) is the **recommended** path when the server is running at `localhost:8000`. Instead of `generate_records.py`, you submit a recipe to the NeMo server. The `rag-retrieval` column plugin calls the gateway knowledge search per row at generation time — no need to pre-link relations.
+**What happens**: NeMo Data Designer (repo: https://github.com/vllora/nemo) is an **optional** alternative when the server is running at `localhost:8000`. Instead of `generate_records.py`, you submit a recipe to the NeMo server. The `rag-retrieval` column plugin calls the gateway knowledge search per row at generation time — no need to pre-link relations. Main advantages over Step 4: judge columns for quality filtering and `reference_answer` generation.
 
-**Two-stage question generation** (arXiv 2509.25736 — https://arxiv.org/html/2509.25736v1): both NeMo templates implement this pattern:
+**Two-stage question generation** — inspired by multi-stage retrieval pipelines (arXiv:2509.25736 describes a similar retrieve-generate-refine approach). Note: the cited paper retrieves first then generates; this template generates a blind question first for diversity, then retrieves — a recipe design choice, not a paper replication. Both templates implement this pattern:
 ```
 topic_path → rag-retrieval → retrieved_chunks
                   ↓

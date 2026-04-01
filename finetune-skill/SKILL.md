@@ -199,11 +199,15 @@ EOF
 
 ### Step 2: Extract Documents
 
-Extract all documents in parallel — **spawn one `knowledge-extractor` subagent per document**. Each agent handles its own PDF independently (Docling extraction, deterministic `build_knowledge_parts.py`, post-processing, gateway upload).
+> **PREREQUISITES:** Step 1 complete (workflow created, objective defined).
+
+Extract knowledge from all documents. Each document is processed independently by a `knowledge-extractor` subagent.
+
+**Outputs:** `knowledge/{slug}/knowledge_parts.json`, `knowledge/{slug}/parts-index.json` (per document), `knowledge/all-parts-index.json` (merged)
 
 > **Deterministic extraction rule**: Subagents MUST use `build_knowledge_parts.py` as the default extraction script. This ensures the same PDF always produces the same knowledge parts. Agents must NOT write custom extract.py scripts unless the user explicitly requests custom extraction for a specific document via CUSTOM_INSTRUCTIONS, or `build_knowledge_parts.py` produces 0 parts.
 
-**2a. Verify Docling Serve is available:**
+**2a. Check Docling availability:**
 
 ```bash
 curl -sS --connect-timeout 5 http://127.0.0.1:5001/health 2>/dev/null && echo "DOCLING_OK" || echo "DOCLING_UNAVAILABLE"
@@ -318,157 +322,108 @@ If there are no documents (objective-only pipeline), skip this step.
 
 **If the user wants to re-extract a specific document** (e.g., "the fee schedule in Contract-A got merged into one big part — split those into individual items"), spawn a new `knowledge-extractor` for just that document with `CUSTOM_INSTRUCTIONS` set to the user's request. Then re-merge indexes and re-validate. Only re-extract the specific documents the user flagged — not all of them.
 
-Use the user's focus areas to guide topic design in Step 3. All content is already on disk; topics control what gets used for training.
+Use the user's focus areas to guide topic design in Step 3.
+
+**Checkpoint:**
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step extract --project-dir finetune-project --workflow-id $WORKFLOW_ID
+```
+
+---
 
 ### Step 3: Build Topic Hierarchy
 
-> **PREREQUISITE:** Step 2 extraction must be **fully complete** — all subagents returned, `all-parts-index.json` merged, and `validate_extraction.py` passed. Do NOT start this step while extraction is still running.
+> **PREREQUISITES:** Step 2 fully complete (all subagents returned, `all-parts-index.json` merged, validation passed). Do NOT start while extraction is running.
 
-**A topic = a skill the model needs to learn.** Each leaf topic answers the question: "what specific capability should the model practice?" The hierarchy groups related skills together so you can balance coverage, control difficulty distribution, and spot gaps.
+Filter extracted parts by relevance, design a skill-based topic hierarchy, build topic-part relations, and write behavioral system prompt segments. Topics define WHAT training data gets generated — getting this right avoids regenerating data later.
 
-**Organize by SKILL, not by document structure.** Do NOT mirror chapter headings, section titles, or document agendas. The user may provide multiple PDFs — each with its own structure — but overlapping content across documents should merge into the same topic, not create duplicates. A topic hierarchy is a **capability map**, not a table of contents.
+**Outputs:** `topics.json`, `relations.json`, updated `all-parts-index.json` (with relevance labels)
 
-**Bad example (mirrors document structure):**
-```
-❌ "EIC Eligibility Rules" → "Filing Status" → "Income Limits" → "Qualifying Child Tests"
-❌ "EIC Computation" → "No Children" → "One Child" → "Two Children" → "Three+ Children"
-```
-This copies the IRS Pub 596 chapter outline. Every heading becomes a topic. It produces narrow, overlapping topics that don't represent distinct skills.
+**3a. Filter parts by relevance to the objective.**
 
-**Good example (organized by skill):**
-```
-✅ "Eligibility Determination" (skill: given a taxpayer scenario, determine if they qualify)
-✅ "Credit Calculation" (skill: given eligible taxpayer, compute the exact credit amount)
-✅ "Multi-Factor Edge Cases" (skill: handle scenarios with competing rules or boundary conditions)
-```
-Each topic is a **task the model must perform**, not a section it must recite. Multiple document sections feed into each skill topic. Content from Pub 596 Chapter 1 AND Pub 501 dependent rules both feed "Eligibility Determination."
+Not all extracted content is relevant to the finetune goal. Read `knowledge/all-parts-index.json` and at least 2-3 per-document `knowledge_parts.json` files. For each part, ask: "does this content teach a skill the model needs for the stated objective?"
 
-**When multiple documents exist, synthesize across them.** Read ALL extracted parts indexes. Look for overlapping concepts that span documents — these become single topics drawing from multiple sources, not separate topics per document. Two PDFs covering "dependent rules" should produce ONE topic on dependent determination, linked to parts from both documents.
+Write the label back to `all-parts-index.json` — set `"relevant": true` for parts that contribute to the objective, `"relevant": false` for parts that don't. This persists the filtering decision so anyone looking at the index can see which parts were used. Log the summary (total/relevant/excluded + sample excluded titles) in `execution-log.md`.
 
-**When documents exist, topics MUST be grounded in the extracted content — not in your general knowledge of the subject.** Read `knowledge/all-parts-index.json` and the individual `knowledge_parts.json` files to understand what the documents actually cover. Your topics should reflect the specific content, terminology, tables, rules, and examples found in the extracted parts. Do NOT invent topics based on what you think the documents "probably" contain.
-
-**How to build topics from extracted content:**
-1. Read `knowledge/all-parts-index.json` and at least 2-3 per-document `knowledge_parts.json` files
-2. **Filter parts by relevance to the objective.** Not all extracted content is relevant to the finetune goal. A 200-page IRS publication may have 50 parts but only 15 are relevant to "EIC tax credit calculation." For each part, ask: "does this content teach a skill the model needs for the stated objective?" **Write the label back to `all-parts-index.json`** — set `"relevant": true` for parts that contribute to the objective, `"relevant": false` for parts that don't. This persists the filtering decision so anyone looking at the index can see which parts are used and which are skipped. Only `relevant: true` parts should become topics or appear in `relations.json`. Log the filtering summary (total/relevant/excluded + sample excluded titles) in `execution-log.md`.
-3. From the **relevant parts only**, list every distinct **task/skill** the content teaches (not every section/heading)
-4. Group related skills into domains — ask "what would a user ask the model to DO?" not "what chapter is this from?"
-5. For each skill, check which relevant parts from which documents contribute — a skill often draws from multiple documents and multiple sections within a document
-6. Merge overlapping skills across documents into single topics
-7. For each leaf topic, estimate `expected_difficulty` (`"easy"`, `"medium"`, `"hard"`) based on whether the skill involves simple lookup vs. multi-step reasoning — this is metadata on the topic, not a separate sub-topic
-
-**Example — IRS Pub 596 (120 parts) + Pub 501 (80 parts) for objective "EIC tax credit calculator":**
+**Example** — IRS Pub 596 (120 parts) + Pub 501 (80 parts) for objective "EIC tax credit calculator":
 - Pub 596 parts about EIC rules, tables, worksheets → **relevant** (keep)
 - Pub 596 parts about "How to get tax help", "Privacy Act notice" → **irrelevant** (exclude)
-- Pub 501 parts about dependent tests, filing status → **relevant** (they affect EIC eligibility)
-- Pub 501 parts about standard deduction amounts, itemized deductions → **irrelevant** (exclude)
-- Result: ~60 relevant parts out of 200 total → topics built from those 60 only
+- Pub 501 parts about dependent tests, filing status → **relevant** (affect EIC eligibility)
+- Pub 501 parts about standard deduction amounts → **irrelevant** (exclude)
+- Result: ~60 relevant parts out of 200 → topics built from those 60 only
 
-Decide what topics to create based on:
-- **The relevant extracted content (REQUIRED when documents exist)** — from the filtered parts, identify skills/tasks the content teaches, synthesized across all documents. Each distinct skill becomes a topic. A single chapter may feed multiple skill topics; a single skill topic may draw from multiple chapters and multiple documents.
-- **The objective** — the primary filter. Every topic must serve the stated objective. If a skill from the content doesn't contribute to the objective, it doesn't become a topic — even if the content covers it thoroughly.
-- **Difficulty dimension** — for each leaf skill, estimate expected difficulty as a metadata field (`"expected_difficulty": "hard"`), not as a separate hierarchy level. GRPO requires outcome variance — the model must get some right and some wrong for learning to happen (arXiv:2508.14094: hard examples yield 47% gains vs 3-15% for easy ones). The actual difficulty score gets updated after the base model evaluation (difficulty probe).
+**3b. Design skill-based topics from relevant parts.**
 
-**Two-level hierarchy**: Domain (broad capability area) → Skill (specific competency). Difficulty is metadata on each leaf topic, not a structural level — this avoids doubling leaf count and keeps the hierarchy clean (TAGS arXiv:2601.13995: difficulty as weight outperforms difficulty as structure).
+From the relevant parts only, identify distinct skills the content teaches. Organize by **skill** (what the model learns to DO), not by document structure.
 
-Save to `topics.json` as a **flat array** — every topic at the same level, hierarchy expressed via `parent_id`. Each topic has a `system_prompt` that describes its specialization:
+```
+❌ Bad (mirrors document headings): "Filing Status" → "Income Limits" → "Qualifying Child Tests"
+✅ Good (organized by skill): "Eligibility Determination" → "Credit Calculation" → "Multi-Factor Edge Cases"
+```
+
+Each topic is a task the model must perform. Multiple document sections feed into each skill topic. A single skill topic may draw from multiple chapters and multiple documents. When multiple documents cover overlapping content, merge into single topics.
+
+**Two-level hierarchy:** Domain (broad capability area) → Skill (specific competency). Difficulty is metadata on each leaf topic (`"expected_difficulty": "easy"|"medium"|"hard"`), not a structural level — this avoids doubling leaf count (TAGS arXiv:2601.13995). Target 15-25 records per leaf topic, 5-40 leaf topics depending on dataset size. See `reference/topic-hierarchy.md` for full guidelines.
+
+**3c. Write behavioral system prompt segments.**
+
+The `system_prompt` on each topic is a **segment** composed with ancestors into one flowing instruction: `[Root persona]. [Domain context]. [Leaf focus].`
+
+- **Root** (Step 1): the only "You are..." statement. Sets persona + behavior.
+- **Domain** (parent_id=null): narrows the field. Do NOT repeat the root.
+- **Leaf**: specific skill focus with action verbs.
+
+Each level adds ONLY what the parent doesn't already say. Write as behavioral instructions (When/For/Given + action verbs like assess, recommend, identify, compare), NOT keyword lists.
+
+```
+❌ Bad: "Specialize in: oxygen targets, nebulized salbutamol, IV magnesium, ICU criteria..."
+✅ Good: "When managing acute severe asthma, assess severity using BTS/SIGN criteria,
+         recommend stepwise bronchodilator escalation, identify ICU triggers, and plan discharge."
+```
+
+**Self-check** before proceeding — for each leaf topic verify: (1) starts with situational trigger, (2) contains action verbs, (3) doesn't repeat root/parent, (4) composed result reads as one natural instruction.
+
+Save to `topics.json` as a flat array with `parent_id` for hierarchy:
 
 ```json
 [
-  {"id": "billing", "name": "Billing & Payments", "parent_id": null, "system_prompt": "Specialize in billing and payment operations, including processing, subscription management, and troubleshooting."},
-  {"id": "refund-processing", "name": "Refund Processing", "parent_id": "billing", "system_prompt": "Focus on: handling refund requests, determining eligibility per policy, and processing standard, partial, and pro-rated refunds.", "expected_difficulty": "medium"},
-  {"id": "payment-troubleshooting", "name": "Payment Troubleshooting", "parent_id": "billing", "system_prompt": "Focus on: diagnosing payment failures including expired cards, international transactions, 3DS challenges, and fraud block resolution.", "expected_difficulty": "hard"}
+  {"id": "billing", "name": "Billing & Payments", "parent_id": null, "system_prompt": "For billing cases, apply payment processing rules, subscription policies, and troubleshooting procedures."},
+  {"id": "refund-processing", "name": "Refund Processing", "parent_id": "billing", "system_prompt": "When handling refund requests, determine eligibility per policy and process standard, partial, or pro-rated refunds.", "expected_difficulty": "medium"},
+  {"id": "payment-troubleshooting", "name": "Payment Troubleshooting", "parent_id": "billing", "system_prompt": "When diagnosing payment failures, check card expiry, international transaction rules, 3DS challenges, and fraud block resolution.", "expected_difficulty": "hard"}
 ]
 ```
 
-Note: the domain topic ("Billing & Payments") does NOT repeat the root persona — it only adds the domain specialization. Leaf topics add the specific skill focus. When composed with a root prompt like "You are a customer support agent. Be helpful, accurate, and empathetic.", the result reads naturally as one instruction.
+**3d. Build topic-part relations.**
 
-The `expected_difficulty` field (`"easy"`, `"medium"`, `"hard"`) is an initial estimate — it gets refined to an actual pass-rate score after the difficulty probe in Step 7. Leaf topics only. Used to weight record generation (more records for harder topics).
+Delegate to the `relation-builder` subagent — provide `PROJECT_DIR` and `OBJECTIVE`. It reads `all-parts-index.json` and `topics.json`, links only `relevant: true` parts to leaf topics (max 15 per topic), and writes `relations.json`. These relations define which knowledge parts each topic's records will be grounded in, and they flow through to per-record `source_parts` traceability in Step 4.
 
-**Topic count**: Scale with dataset size — 5-10 leaf topics for 100-200 records, 20-40 for 500-1,000, 40-80 for 1,000-3,000. Target 15-25 records per leaf topic — fewer than 10 risks insufficient GRPO variance, more than 30 introduces redundancy (arXiv:2410.15226 §3.3; validated by domain RFT practice: arXiv:2509.25736 used 10-50 per topic). See `reference/topic-hierarchy.md` for full guidelines.
+> **ID format note:** Use human-readable slugs for topic `id` values (e.g., `"billing-refunds"`). `finetune.py upload-topics` auto-converts to UUIDs. Use the same slug as `topic_identifier` in `relations.json`.
 
-**System prompt composition**: The `system_prompt` field on each topic is a **segment** that gets composed into a single flowing sentence with the root prompt and ancestors: `[Root persona]. [Domain context]. [Leaf focus].`
+If there are no documents (objective-only pipeline), skip relations.
 
-**Rules for writing segments:**
-- **Root prompt** (Step 1): the ONLY place with "You are..." persona. Sets identity + general behavior.
-- **Domain topics** (parent_id=null): narrow the field. Do NOT repeat the root persona. Write as a behavioral instruction — what the model should DO in this domain, not a list of keywords.
-- **Leaf topics**: the specific skill focus. Describe the **task and reasoning process**, not a list of nouns.
-
-**Bad (keyword grocery list):**
-```
-"Specialize in: recognizing life-threatening vs near-fatal asthma, oxygen targets,
-nebulized salbutamol/ipratropium, IV magnesium sulfate, systemic corticosteroids,
-ICU escalation criteria, and discharge planning after acute exacerbation."
-```
-This is a table of contents dumped into a sentence. The model doesn't know what to DO with these keywords.
-
-**Good (behavioral instruction):**
-```
-"When a patient presents with acute severe asthma, assess severity using BTS/SIGN
-criteria (life-threatening vs near-fatal), recommend stepwise treatment (nebulized
-salbutamol → ipratropium → IV magnesium → systemic corticosteroids), identify ICU
-escalation triggers, and plan discharge with prevention strategies."
-```
-This tells the model HOW to reason: assess → recommend → identify → plan. It uses the same domain terms but in context of what to do with them.
-
-**Bad (repeats root):**
-```
-Root: "You are a clinical reasoning assistant specializing in pulmonology."
-Domain: "You are a clinical reasoning assistant specializing in pulmonology."  ← REPEATS ROOT
-```
-
-**Good (each level adds only what's new):**
-```
-Root: "You are a clinical reasoning assistant. Apply evidence-based guidelines, cite sources, and reason step-by-step."
-Domain: "For pulmonology cases, use BTS/SIGN 2019 and GINA guidelines to assess airway conditions, classify severity, and recommend treatment."
-Leaf: "When managing acute severe asthma, assess severity (life-threatening vs near-fatal), apply stepwise bronchodilator escalation, identify ICU triggers, and plan discharge."
-```
-
-Result: "You are a clinical reasoning assistant. Apply evidence-based guidelines, cite sources, and reason step-by-step. For pulmonology cases, use BTS/SIGN 2019 and GINA guidelines to assess airway conditions, classify severity, and recommend treatment. When managing acute severe asthma, assess severity (life-threatening vs near-fatal), apply stepwise bronchodilator escalation, identify ICU triggers, and plan discharge."
-
-**Writing pattern for segments:** Start with a situational trigger ("When...", "For...", "Given..."), then describe the reasoning steps the model should follow using action verbs (assess, recommend, identify, compare, calculate, explain). Keep each segment to 1-2 sentences. Target 50-150 words total when composed.
-
-**Topic-source linking**: After uploading knowledge source parts, link them to topics via the `POST /topics/relations` API. Only link **relevant** parts — parts excluded during the relevance filter (step 2 above) should NOT appear in `relations.json`. Never fabricate references.
-
-**Build topic-part relations.** Delegate to the `relation-builder` subagent (installed at `.claude/agents/relation-builder.md`) — provide `PROJECT_DIR` (the absolute path to the finetune-project directory) and `OBJECTIVE` (the workflow objective statement, so the agent can filter irrelevant parts). It reads `knowledge/all-parts-index.json` and `topics.json`, matches relevant parts to topics, and writes `relations.json`.
-
-> **ID format note:** Use human-readable slugs for topic `id` values (e.g., `"billing-refunds"`). `finetune.py upload-topics` auto-converts to UUIDs. Use the same slug as `topic_identifier` in `relations.json` and part string IDs as `part_identifier`. `finetune.py upload-relations` resolves everything locally — no manual ID mapping.
-
-If there are no documents (objective-only pipeline), skip this step.
-
-**Self-check system_prompt quality before proceeding.** For each leaf topic, verify:
-1. Does the segment start with a situational trigger ("When...", "For...", "Given...")? If it starts with "Specialize in:" followed by a comma-separated list, rewrite it.
-2. Does it contain action verbs (assess, recommend, identify, compare, calculate)? If it's just nouns, rewrite it.
-3. Does it repeat anything already in the root prompt or parent topic? If so, remove the redundancy.
-4. Read the composed result (root + ancestors + leaf) aloud — does it read as one natural instruction? If it sounds like 4 separate fragments, smooth the transitions.
-
-**Checkpoint** after topics and relations are complete:
+**Checkpoint:**
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step topics --project-dir finetune-project --workflow-id $WORKFLOW_ID
 python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step relations --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
-**Upload immediately** — push topics, relations, and relevance labels to the gateway so the UI shows the topic hierarchy, coverage, and which parts are relevant:
+**Upload** topics, relations, and relevance labels:
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-topics \
   --workflow-id $WORKFLOW_ID --file topics.json
 
-# Upload relations (if they exist)
 if [ -f relations.json ]; then
   python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-relations \
     --workflow-id $WORKFLOW_ID --file relations.json
 fi
 
-# Upload relevance labels to gateway (so UI shows which parts are relevant/irrelevant)
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py update-part-relevance \
   --workflow-id $WORKFLOW_ID --parts-index knowledge/all-parts-index.json
 ```
 
-**Review topics with the user.** Present the topic hierarchy (name, parent, linked source material count, planned records-per-topic). Ask:
-- Are these the right **skills** for the model to learn?
-- Any skills missing, or topics to split by difficulty?
-- How many records per topic? (default: 25 per leaf, target ~20 for optimal diversity)
+**Review with the user.** Present topic hierarchy (name, parent, linked parts count, planned records-per-topic). Ask: are these the right skills? Any missing? How many records per topic?
 
-Adjust topics based on feedback before proceeding to data generation. This is the **primary filtering step** — topics determine what training data gets generated. Getting this right avoids regenerating data later.
+---
 
 ### Step 3.5: Categorize Existing Records
 
@@ -482,13 +437,17 @@ Skip this step if generating all data from scratch.
 
 ### Step 4: Generate Training Data
 
-Write prompts to `training.jsonl` — one JSON object per line. Each line is a **prompt** (system + user messages only — no assistant messages):
+> **PREREQUISITES:** Step 3 complete (topics uploaded, relations built).
+
+Generate training prompts grounded in the knowledge parts linked to each topic via relations (Step 3d). Each record is a system + user message pair — no assistant messages (GRPO generates its own responses).
+
+**Outputs:** `training.jsonl`
+
+Each record includes per-record `source_parts` — the 1-3 specific parts the LLM tagged as used when generating that question (traced via relations from Step 3d):
 
 ```jsonl
 {"messages": [{"role": "system", "content": "You are..."}, {"role": "user", "content": "..."}], "id": "record-1", "topic": "billing/refunds", "source_parts": ["p-001", "p-003"]}
 ```
-
-Each record includes `source_parts` — the IDs of the **specific** knowledge parts that this particular question was derived from (not all parts linked to the topic). The LLM tags which parts it used when generating each question, enabling precise traceability from any record back to the exact document sections it references. Most records use 1-3 parts.
 
 Use `generate_records.py` to generate user prompts via LLM, grounded in the knowledge chunks linked to each topic:
 
@@ -532,83 +491,40 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
 
 The UI at `http://localhost:5173/finetune` also shows all records grouped by topic — point the user there for a visual review.
 
-### Step 4B: Recommended Path — NeMo Data Designer Generation
+### Step 4B: Optional — NeMo Data Designer
 
-> Use this path when the NeMo Data Designer server (`localhost:8000`) is available and you want to generate training data using it. See `reference/nemo-guide.md` for full API details, column types, and recipe structure. Repo: https://github.com/vllora/nemo
+> **Optional.** Only use when NeMo server (`localhost:8000`) is already running. Step 4 is the default. See `reference/nemo-guide.md` for full details. Repo: https://github.com/vllora/nemo
 
-**How this differs from Step 4:** Instead of `generate_records.py`, you use the NeMo server to generate rows via a recipe. Both templates implement the two-stage question generation pattern from arXiv 2509.25736 (https://arxiv.org/html/2509.25736v1): generate a diverse `raw_question` from topic context first, then retrieve question-specific chunks via `rag-retrieval` and refine into the final `user_message`. The `rag-retrieval` column plugin calls the gateway knowledge search per row at generation time — no need to pre-link relations for knowledge retrieval.
+> **⚠️ NeMo is pre-1.0 (v0.5.x).** Pin to a tested version. v0.5.4 had a supply chain security incident.
 
-**Step-by-step:**
+| | Step 4 (default) | Step 4B (NeMo) |
+|---|---|---|
+| Setup | None | NeMo server + OpenAI key + recipe |
+| Traceability | Full per-record `source_parts` | Recovered via gateway search (approximate) |
+| Quality filtering | Post-generation | At generation time (judge columns) |
+| Reference answers | Not generated | Generated — useful for grader writing |
+| Best for | Default, small datasets | Teams with NeMo deployed, large datasets |
 
-**1. Materialize the curated seed parquet** — relations not needed, `rag-retrieval` fetches from vLLora at generation time:
-```bash
-uv run nemo/materialize_seed.py \
-  --topics finetune-project/topics.json \
-  --output finetune-project/curated-seed.parquet
-```
-Produces one row per leaf topic. `rag-retrieval` uses `topic_path` (and `raw_question` for the second retrieval) as search queries against vLLora's embeddings.
+**Sequence:** (1) `materialize_seed.py --topics --system-prompt` → curated parquet with `composed_system_prompt` + `expected_difficulty`, (2) upload + inspect seed, (3) design recipe from `templates/nemo-recipe-template.json`, (4) preview job (10 rows), (5) full job, (6) convert + validate + upload:
 
-**2. Upload and inspect:**
-```bash
-BLOCK_ID=$(date +%s)
-curl -sS -X POST "http://localhost:8000/api/data-recipe/seed/upload-curated" \
-  -F "file=@finetune-project/curated-seed.parquet" -F "block_id=$BLOCK_ID" \
-  > finetune-project/nemo-seed-upload.json
-
-FILE_ID=$(jq -r '.file_id' finetune-project/nemo-seed-upload.json)
-curl -sS -X POST "http://localhost:8000/api/data-recipe/seed/inspect-curated" \
-  -H "Content-Type: application/json" \
-  -d "{\"block_id\": \"$BLOCK_ID\", \"file_id\": \"$FILE_ID\", \"preview_size\": 5}" \
-  > finetune-project/nemo-seed-inspect.json
-```
-
-**3. Design the recipe** — don't just copy the template. Choose the right pipeline for your domain:
-
-- **Topic-based Q&A** (policies, knowledge bases, tutorials): Copy `templates/nemo-recipe-template.json`. Replace `path` with `resolved_path` from `nemo-seed-inspect.json`, set `workflow_id` to `$WORKFLOW_ID`, adapt llm-text prompts for your domain. The default template generates `user_message` directly from retrieved text.
-- **Structured documents** (invoices, contracts, forms, specs): Copy `templates/nemo-recipe-structured-template.json`. This adds a subcategory `sampler` for document sections, `llm-structured` (drop:true) to extract typed fields, and an `expression` (drop:true) to compose a focused context before generating `user_message`. Adapt `output_format` schema to your document's actual fields.
-- **Custom**: Design columns from scratch using `reference/nemo-columns-reference.md`. Output contract: `system_prompt` + `user_message` are required for export into `training.jsonl`, even if the paper-inspired generation method uses extra intermediates like `raw_question`, `question_chunks`, and judge columns. `reference_answer` is strongly recommended. All other columns are design choices — use `"drop": true` for intermediates that feed downstream columns but shouldn't appear in the final dataset.
-
-**4. Preview first** (set `execution_type: "preview"`, `rows: 10`):
-```bash
-curl -sS -X POST "http://localhost:8000/api/data-recipe/jobs" \
-  -H "Content-Type: application/json" -d @finetune-project/nemo-recipe.json \
-  > finetune-project/nemo-preview.json
-
-PREVIEW_ID=$(jq -r '.job_id' finetune-project/nemo-preview.json)
-curl -sS "http://localhost:8000/api/data-recipe/jobs/$PREVIEW_ID/status"
-curl -sS "http://localhost:8000/api/data-recipe/jobs/$PREVIEW_ID/dataset?limit=10" \
-  > finetune-project/nemo-preview-dataset.json
-curl -sS "http://localhost:8000/api/data-recipe/jobs/$PREVIEW_ID/analysis" \
-  > finetune-project/nemo-preview-analysis.json
-```
-
-Read both before proceeding. `dataset` = semantic check (are rows useful prompts?). `analysis` = structural check (row counts, null columns, sampler distribution). Only run the full job once preview passes.
-
-**5. Full job** (update `execution_type: "full"` and `rows` to target count):
-```bash
-JOB_ID=$(jq -r '.job_id' finetune-project/nemo-job.json)
-curl -sS "http://localhost:8000/api/data-recipe/jobs/$JOB_ID/dataset?limit=200&offset=0" \
-  > finetune-project/nemo-dataset-page-1.json
-```
-
-**6. Convert → validate → upload:**
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/convert_nemo_rows.py \
   --input finetune-project/nemo-dataset-page-1.json \
   --output finetune-project/training.jsonl \
-  --min-answerable 1.0 --min-groundedness 0.5 \
-  --ground-truth-field reference_answer
+  --min-answerable 1.0 --min-groundedness 0.75 --min-specificity 0.75 \
+  --ground-truth-field reference_answer \
+  --workflow-id $WORKFLOW_ID
 
-python3 ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py \
-  finetune-project/training.jsonl --nemo
+python3 ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py finetune-project/training.jsonl \
+  --topics finetune-project/topics.json
+
+python3 ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py finetune-project/training.jsonl --nemo
 
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
   --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl
 ```
 
-`convert_nemo_rows.py` preserves top-level `topic` from NeMo rows so `upload-records` can assign workflow topics correctly. Use `--ground-truth-field <column>` when you want the evaluator to receive an auxiliary text field as `input.ground_truth`; `--include-ground-truth` remains as a shortcut for `reference_answer`.
-
-**Judge vs grader:** NeMo `judge_*` columns score rows for filtering at data-generation time. The vLLora `grader.js` scores model responses at evaluation/training time. Both are needed but serve different purposes.
+> **Key differences from Step 4:** `system_prompt` is an expression passthrough from seed (not LLM-generated per-row). `difficulty` comes from `expected_difficulty` in seed (not random). `source_parts` recovered via `--workflow-id` gateway search. NeMo judge columns filter quality at generation time; `data_quality_gate.py` still needed for format/structure checks.
 
 ---
 
@@ -629,7 +545,7 @@ If some topics are under-represented, use `chat_completion.py` to create variant
 
 ### Step 5: Write the Grader
 
-> **PREREQUISITE:** Steps 2 (extraction) and 3 (topics) must be **complete**. The grader criteria must be grounded in the actual extracted knowledge and topic structure — not assumptions about the domain. Can run in parallel with Step 4 (data generation).
+> **PREREQUISITES:** Steps 2 + 3 complete. Can run **in parallel** with Step 4 — both depend on extraction + topics, not on each other. Grader criteria must be grounded in actual extracted knowledge, not domain assumptions.
 
 Write a JavaScript grader function to `grader.js`. Scores model responses 0-1, runs server-side during evaluation and training.
 

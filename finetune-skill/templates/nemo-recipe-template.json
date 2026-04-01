@@ -1,5 +1,5 @@
 {
-  "_comment": "NeMo Data Designer recipe template for RFT prompt generation. Two-stage question generation (arxiv 2509.25736): raw_question from topic context alone → question_chunks retrieval → user_message grounds raw_question in question-specific chunks. Copy, replace <PLACEHOLDERS>, and adapt prompts for your domain. NOTE: _comment fields are NOT allowed inside column objects — NeMo rejects them. Only this top-level _comment is safe. topic_context expression column re-materializes the seed topic_path so it is guaranteed available in all downstream llm-text Jinja2 contexts (seed columns can disappear from context after drop:true columns process).",
+  "_comment": "NeMo Data Designer recipe template for RFT prompt generation. Two-stage question generation: raw_question from topic context → question_chunks retrieval → user_message grounds in question-specific chunks. IMPORTANT: system_prompt is an expression passthrough from the seed parquet (composed by materialize_seed.py from root persona + topic hierarchy), NOT an LLM-generated column. All records in a topic share the same system prompt — this is required for consistent GRPO training signal. Copy, replace <PLACEHOLDERS>, and adapt prompts for your domain. NOTE: _comment fields are NOT allowed inside column objects — NeMo rejects them. Only this top-level _comment is safe.",
   "recipe": {
     "seed_config": {
       "source": {
@@ -24,18 +24,15 @@
       },
       {
         "name": "difficulty",
-        "column_type": "sampler",
-        "sampler_type": "category",
-        "params": {
-          "values": ["beginner", "intermediate", "advanced"]
-        }
+        "column_type": "expression",
+        "expr": "{{ expected_difficulty | default('medium') }}"
       },
       {
         "name": "raw_question",
         "column_type": "llm-text",
         "model_alias": "openai-text",
         "drop": true,
-        "prompt": "Generate one question a {{difficulty}} learner might genuinely ask about this topic. Be creative and think about what would actually be useful to know — don't constrain yourself to specific facts from any document.\n\nTopic: {{topic_context}}\n\nReturn only the question."
+        "prompt": "Generate one question a {{difficulty}} learner might genuinely ask about this topic. The question should target skills and concepts from the source material below — reference specific rules, procedures, or details rather than asking generic questions.\n\nTopic: {{topic_context}}\n\nSource material (use this to inform what to ask about):\n{{retrieved_chunks}}\n\nReturn only the question."
       },
       {
         "name": "question_chunks",
@@ -48,9 +45,8 @@
       },
       {
         "name": "system_prompt",
-        "column_type": "llm-text",
-        "model_alias": "openai-text",
-        "prompt": "Write a concise system prompt (2-3 sentences) for an AI assistant being trained on this topic. Define the assistant's role and boundaries using only ideas supported by the source material. Adapt the tone for a {{difficulty}} learner.\n\nTopic: {{topic_context}}\n\nSource material:\n{{retrieved_chunks}}\n\nReturn only the system prompt."
+        "column_type": "expression",
+        "expr": "{{ composed_system_prompt }}"
       },
       {
         "name": "user_message",

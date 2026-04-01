@@ -258,6 +258,10 @@ def retrieve_rag_parts(
         part_id = part.get("id", "")
         if part_id in existing:
             continue
+        # Skip parts marked irrelevant (relevance label stored in extraction_metadata)
+        ext_meta = part.get("extraction_metadata")
+        if isinstance(ext_meta, dict) and ext_meta.get("relevant") is False:
+            continue
         rag_parts.append({
             "id": part_id,
             "title": part.get("title", ""),
@@ -302,6 +306,10 @@ def retrieve_parts_by_phrase(
         part = m.get("part", {})
         part_id = part.get("id", "")
         if part_id in existing:
+            continue
+        # Skip parts marked irrelevant (relevance label stored in extraction_metadata)
+        ext_meta = part.get("extraction_metadata")
+        if isinstance(ext_meta, dict) and ext_meta.get("relevant") is False:
             continue
         parts.append({
             "id": part_id,
@@ -712,17 +720,17 @@ def generate_for_topic(
                 item = {"prompt": item, "ground_truth": "", "used_parts": []}
             prompt_text = item.get("prompt", "")
             ground_truth = item.get("ground_truth", "")
-            # Use per-record used_parts from LLM, validated against known part_ids.
-            # Falls back to all topic part_ids if LLM didn't provide or returned invalid.
-            raw_used = item.get("used_parts", [])
-            validated_used = [pid for pid in raw_used if pid in {p for p in part_ids}]
-            record_source_parts = validated_used if validated_used else part_ids
-
             if not prompt_text or not prompt_text.strip():
                 continue
 
             record_idx += 1
-            record_source_parts = list(all_source_parts)
+
+            # Use per-record used_parts from LLM, validated against known part_ids + RAG parts.
+            # Falls back to all source parts if LLM didn't provide or returned invalid.
+            raw_used = item.get("used_parts", [])
+            all_known_ids = set(all_source_parts)
+            validated_used = [pid for pid in raw_used if pid in all_known_ids]
+            record_source_parts = validated_used if validated_used else list(all_source_parts)
 
             # Second retrieval: re-query with the generated question for sharper context
             if second_retrieval and workflow_id:

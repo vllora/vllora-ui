@@ -1,33 +1,21 @@
 # How Record Generation Works — Deep Dive
 
-> **Note:** This document covers the RAG-based fallback generation path via `generate_records.py`. The primary path is NeMo Data Designer — see SKILL.md Step 4B and the repo at https://github.com/vllora/nemo.
+> **Note:** This document covers the default generation path via `generate_records.py`. NeMo Data Designer is an optional alternative — see SKILL.md Step 4B.
 
 The data generation step (Step 4) produces the actual training records — the prompts the model will practice on during fine-tuning. This document explains the generation strategy, how records are grounded in source material, the LLM calls involved, and the validation process.
 
-## Two-Path Architecture: NeMo Designer vs RAG Fallback
+## Two-Path Architecture
 
 Step 4 has two paths:
 
 | Path | When to use | Script |
 |------|-------------|--------|
-| **NeMo Data Designer (primary)** | NeMo server running at `localhost:8000`, any domain | repo: https://github.com/vllora/nemo — see SKILL.md Step 4B |
-| **RAG-based generation (this doc)** | No NeMo server, quick prototyping, fallback | `scripts/generate_records.py` |
+| **`generate_records.py` (default, this doc)** | Default path — no additional infrastructure needed | `scripts/generate_records.py` |
+| **NeMo Data Designer (optional)** | When NeMo server is running and you need judge columns + reference answers | repo: https://github.com/vllora/nemo — see SKILL.md Step 4B |
 
-**NeMo implements the two-stage question generation pattern** from arXiv 2509.25736 (https://arxiv.org/html/2509.25736v1):
+**NeMo's two-stage template** generates a `raw_question` without seeing retrieved text first (for diversity), then retrieves question-specific chunks, then refines into the final `user_message`. This is inspired by multi-stage retrieval pipelines (arXiv:2509.25736 describes a similar retrieve-generate-refine approach for telecom), but note the paper actually retrieves first — the "blind question first" design is a recipe choice, not a direct replication.
 
-```
-topic_path → rag-retrieval → retrieved_chunks
-                  ↓
-            raw_question    (drop:true — generated WITHOUT retrieved text to avoid anchoring bias)
-                  ↓
-raw_question → rag-retrieval → question_chunks   (drop:true — question-specific retrieval)
-                  ↓
-            user_message    (refines raw_question using question_chunks)
-```
-
-Key insight: generating the question blind first produces more diverse questions; the second retrieval then grounds the final `user_message` in source material specific to what was asked.
-
-**`generate_records.py` also has `--rag-second-retrieval`** — but this is different. It runs per-question retrieval after the question is already generated and only enriches `source_parts` metadata. It does **not** refine the generated question. The true two-stage refinement (where retrieved chunks improve question quality) only happens in NeMo.
+**`generate_records.py` with `--use-rag --rag-second-retrieval`** provides a lighter version of the same idea: generates questions grounded in linked parts, then enriches `source_parts` metadata with question-specific retrieval. It does not refine the question text itself.
 
 ---
 

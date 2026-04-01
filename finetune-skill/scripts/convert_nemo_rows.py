@@ -144,11 +144,49 @@ def filter_by_judge_scores(
     return kept, len(rows) - len(kept)
 
 
+def recover_source_parts(
+    user_message: str,
+    workflow_id: str,
+    gateway_url: str,
+    top_k: int = 5,
+) -> list[str]:
+    """Recover source_parts by re-querying the gateway with the user_message.
+
+    NeMo's rag-retrieval concatenates chunk text and discards part IDs.
+    This re-queries the gateway search API with the question to recover
+    the most relevant part IDs for traceability.
+    """
+    import requests
+
+    try:
+        resp = requests.post(
+            f"{gateway_url}/finetune/workflows/{workflow_id}/knowledge/search",
+            json={"phrase": user_message, "top_k": top_k},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        matches = resp.json().get("matches", [])
+        part_ids = []
+        for m in matches:
+            part = m.get("part", {})
+            part_id = part.get("id", "")
+            # Skip parts marked irrelevant
+            ext_meta = part.get("extraction_metadata")
+            if isinstance(ext_meta, dict) and ext_meta.get("relevant") is False:
+                continue
+            if part_id:
+                part_ids.append(part_id)
+        return part_ids
+    except Exception:
+        return []
+
+
 def convert_row(
     row: dict,
     index: int,
     ground_truth_field: str | None = None,
     system_prompt_override: str | None = None,
+    source_parts: list[str] | None = None,
 ) -> dict:
     """Convert a single NeMo row to vLLora training.jsonl format."""
     system_prompt = system_prompt_override or row["system_prompt"]
@@ -164,6 +202,9 @@ def convert_row(
     topic = row.get("topic")
     if isinstance(topic, str) and topic.strip():
         record["topic"] = topic.strip()
+
+    if source_parts:
+        record["source_parts"] = source_parts
 
     if ground_truth_field:
         ground_truth = row.get(ground_truth_field)
@@ -247,6 +288,18 @@ def main() -> None:
         "--system-prompt-override", type=str, default=None,
         help="Override all system prompts with this text",
     )
+    parser.add_argument(
+        "--workflow-id", type=str, default=None,
+        help="Workflow ID — enables source_parts recovery via gateway search (recommended for traceability)",
+    )
+    parser.add_argument(
+        "--gateway-url", type=str, default="http://localhost:9090",
+        help="Gateway URL for source_parts recovery (default: http://localhost:9090)",
+    )
+    parser.add_argument(
+        "--source-parts-top-k", type=int, default=5,
+        help="Number of parts to recover per record via gateway search (default: 5)",
+    )
     args = parser.parse_args()
 
     # Build filter thresholds — RAGAS flags take precedence over aliases
@@ -283,6 +336,11 @@ def main() -> None:
         print("Error: All rows filtered out — lower thresholds or check judge scores", file=sys.stderr)
         sys.exit(2)
 
+    # Recover source_parts via gateway search if workflow_id is provided
+    recover_parts = args.workflow_id is not None
+    if recover_parts:
+        print(f"Source traceability: recovering source_parts via gateway search (top_k={args.source_parts_top_k})")
+
     # Validate and convert
     all_errors: list[str] = []
     records: list[dict] = []
@@ -294,10 +352,20 @@ def main() -> None:
             all_errors.extend(errors)
             continue
 
+        source_parts = None
+        if recover_parts:
+            source_parts = recover_source_parts(
+                user_message=row.get("user_message", ""),
+                workflow_id=args.workflow_id,
+                gateway_url=args.gateway_url,
+                top_k=args.source_parts_top_k,
+            )
+
         records.append(convert_row(
             row, i,
             ground_truth_field=ground_truth_field,
             system_prompt_override=args.system_prompt_override,
+            source_parts=source_parts,
         ))
         metadata_rows.append(extract_metadata(row, i))
 
