@@ -10,7 +10,7 @@ All endpoints use JSON unless noted. Auth via `Authorization: Bearer <token>` he
 
 ---
 
-## Quick Reference (76 endpoints)
+## Quick Reference (77 endpoints)
 
 | # | Method | Endpoint | Purpose |
 |---|--------|----------|---------|
@@ -81,31 +81,32 @@ All endpoints use JSON unless noted. Auth via `Authorization: Bearer <token>` he
 | 56 | GET | `/finetune/workflows/{id}/evaluator/versions` | Evaluator version history |
 | **Training Jobs** (workflow-scoped) | | | |
 | 57 | POST | `/finetune/workflows/{id}/jobs` | Create training job |
-| 58 | GET | `/finetune/workflows/{id}/jobs` | List training jobs |
-| 59 | GET | `/finetune/workflows/{id}/jobs/{job_id}/status` | Get job status |
-| 60 | GET | `/finetune/workflows/{id}/jobs/{job_id}/metrics` | Get training metrics |
-| 61 | POST | `/finetune/workflows/{id}/jobs/{job_id}/cancel` | Cancel job |
-| 62 | POST | `/finetune/workflows/{id}/jobs/{job_id}/resume` | Resume cancelled job |
-| 63 | GET | `/finetune/workflows/{id}/jobs/{job_id}/weights/url` | Download weights URL |
+| 58 | POST | `/finetune/workflows/{id}/jobs/estimate` | Estimate training time and cost |
+| 59 | GET | `/finetune/workflows/{id}/jobs` | List training jobs |
+| 60 | GET | `/finetune/workflows/{id}/jobs/{job_id}/status` | Get job status |
+| 61 | GET | `/finetune/workflows/{id}/jobs/{job_id}/metrics` | Get training metrics |
+| 62 | POST | `/finetune/workflows/{id}/jobs/{job_id}/cancel` | Cancel job |
+| 63 | POST | `/finetune/workflows/{id}/jobs/{job_id}/resume` | Resume cancelled job |
+| 64 | GET | `/finetune/workflows/{id}/jobs/{job_id}/weights/url` | Download weights URL |
 | **Analytics & Evaluations** (workflow-scoped, read-only) | | | |
-| 64 | GET | `/finetune/workflows/{id}/analytics` | Get dataset analytics |
-| 65 | GET | `/finetune/workflows/{id}/finetune-evaluations` | Per-epoch training evaluations |
+| 65 | GET | `/finetune/workflows/{id}/analytics` | Get dataset analytics |
+| 66 | GET | `/finetune/workflows/{id}/finetune-evaluations` | Per-epoch training evaluations |
 | **Cross-Workflow Eval Jobs** | | | |
-| 66 | GET | `/finetune/eval-jobs` | List eval jobs by status (cross-workflow) |
-| 67 | GET | `/finetune/eval-jobs/{job_id}` | Get eval job by ID (cross-workflow) |
-| 68 | PATCH | `/finetune/eval-jobs/{job_id}` | Update eval job by ID (cross-workflow) |
-| 69 | DELETE | `/finetune/eval-jobs/{job_id}` | Delete eval job by ID (cross-workflow) |
+| 67 | GET | `/finetune/eval-jobs` | List eval jobs by status (cross-workflow) |
+| 68 | GET | `/finetune/eval-jobs/{job_id}` | Get eval job by ID (cross-workflow) |
+| 69 | PATCH | `/finetune/eval-jobs/{job_id}` | Update eval job by ID (cross-workflow) |
+| 70 | DELETE | `/finetune/eval-jobs/{job_id}` | Delete eval job by ID (cross-workflow) |
 | **Analytics** (non-workflow-scoped) | | | |
-| 70 | POST | `/finetune/analytics/dry-run` | Dataset analytics dry run |
+| 71 | POST | `/finetune/analytics/dry-run` | Dataset analytics dry run |
 | **Evaluations** (non-workflow-scoped, cloud) | | | |
-| 71 | POST | `/finetune/evaluations` | Create evaluation run |
-| 72 | GET | `/finetune/evaluations/{evaluation_run_id}` | Poll evaluation results |
+| 72 | POST | `/finetune/evaluations` | Create evaluation run |
+| 73 | GET | `/finetune/evaluations/{evaluation_run_id}` | Poll evaluation results |
 | **Deployments** | | | |
-| 73 | POST | `/finetune/deployments` | Deploy model |
-| 74 | DELETE | `/finetune/deployments/{deployment_id}` | Delete deployment |
+| 74 | POST | `/finetune/deployments` | Deploy model |
+| 75 | DELETE | `/finetune/deployments/{deployment_id}` | Delete deployment |
 | **Topic Hierarchy AI** | | | |
-| 75 | POST | `/finetune/topic-hierarchy/generate` | Generate topic hierarchy |
-| 76 | POST | `/finetune/topic-hierarchy/adjust` | Adjust topic hierarchy |
+| 76 | POST | `/finetune/topic-hierarchy/generate` | Generate topic hierarchy |
+| 77 | POST | `/finetune/topic-hierarchy/adjust` | Adjust topic hierarchy |
 
 ---
 
@@ -656,6 +657,45 @@ curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
   "created_at": "2026-03-05T10:00:00Z"
 }
 ```
+
+### POST `/finetune/workflows/{workflow_id}/jobs/estimate`
+
+Estimate a reinforcement training run before creating it. Returns projected duration and USD cost using the configured/default instance profile (`VERTEX_NVIDIA_L4`) and current workflow row count.
+
+```bash
+curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs/estimate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "base_model": "unsloth/Qwen3.5-4B",
+    "training_config": {
+      "epochs": 2.0,
+      "batch_size": 5
+    },
+    "inference_parameters": {
+      "max_output_tokens": 256,
+      "response_candidates_count": 4
+    }
+  }'
+```
+
+**Estimate response:**
+```json
+{
+  "workflow_id": "2f90adcc-9ff4-4c3c-a8f6-734d7f920bf9",
+  "job_type": "provider_finetune",
+  "instance": "VERTEX_NVIDIA_L4",
+  "base_model": "unsloth/Qwen3.5-4B",
+  "total_rows": 200,
+  "estimated_duration_seconds": 4540,
+  "estimated_cost_usd": 1.21
+}
+```
+
+**Notes:**
+- Request shape is nearly identical to training create payload (base model + optional training/inference settings).
+- Estimation can be inaccurate and should be used only as a reference.
+- The estimator currently does not reserve capacity; it is a planning estimate only.
+- `base_model` must be non-empty.
 
 ### GET `/finetune/workflows/{workflow_id}/jobs`
 
