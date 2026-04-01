@@ -2234,6 +2234,134 @@ def _check_length_exploitation(
     }
 
 
+def _check_completion_clipping(
+    base_url: str, wf_id: str, job_id: str,
+) -> dict | None:
+    """Detect fatal completion clipping: max_output_tokens too low for the task.
+
+    When completions/clipped_ratio is consistently high, the grader scores
+    truncated (incomplete) responses, producing noise instead of gradient signal.
+    Training is wasting GPU time and should be cancelled.
+
+    Ref: training-metrics-guide.md §Completion Metrics:
+    - clipped_ratio > 0.5 = critical (majority truncated)
+    - clipped_ratio = 1.0 = all truncated, zero useful signal
+    - mean_terminated_length = 0 = no completion ever finishes naturally
+
+    Thresholds:
+    - FATAL (auto-cancel): clipped_ratio >= 0.50 sustained over 3+ steps
+      (majority of completions truncated → grader scores garbage)
+    - CATASTROPHIC (auto-cancel immediately): clipped_ratio >= 0.90 on first step
+      (nearly all truncated — max_output_tokens is wildly insufficient)
+
+    Returns dict with clipping info if detected, None otherwise.
+    """
+    CLIPPED_FATAL = 0.50
+    CLIPPED_CATASTROPHIC = 0.90
+    SUSTAINED_STEPS = 3
+
+    try:
+        raw = _api(
+            "GET",
+            f"{base_url}/finetune/workflows/{wf_id}/jobs/{job_id}/metrics",
+        )
+    except SystemExit:
+        return None
+
+    # Unwrap the wrapped metrics response
+    points = raw.get("metrics", [])
+    if not isinstance(points, list):
+        return None
+
+    steps = [
+        p["metrics"] for p in points
+        if isinstance(p, dict) and "metrics" in p and isinstance(p["metrics"], dict)
+    ]
+    if not steps:
+        return None
+
+    # Extract clipping data from each step
+    clipping_data: list[dict] = []
+    for s in steps:
+        clipped_ratio = s.get("completions/clipped_ratio")
+        if not isinstance(clipped_ratio, (int, float)):
+            continue
+        max_len = s.get("completions/max_length")
+        mean_len = s.get("completions/mean_length")
+        mean_term = s.get("completions/mean_terminated_length")
+        global_step = s.get("global_step", 0)
+        clipping_data.append({
+            "step": global_step,
+            "clipped_ratio": float(clipped_ratio),
+            "max_length": float(max_len) if isinstance(max_len, (int, float)) else None,
+            "mean_length": float(mean_len) if isinstance(mean_len, (int, float)) else None,
+            "mean_terminated_length": float(mean_term) if isinstance(mean_term, (int, float)) else None,
+        })
+
+    if not clipping_data:
+        return None
+
+    latest = clipping_data[-1]
+
+    # CATASTROPHIC: first step shows >=90% clipping — immediately fatal
+    if len(clipping_data) >= 1 and clipping_data[0]["clipped_ratio"] >= CLIPPED_CATASTROPHIC:
+        # Estimate required max_output_tokens from terminated lengths
+        recommended = _estimate_recommended_from_clipping(clipping_data)
+        return {
+            "clipping_detected": True,
+            "severity": "catastrophic",
+            "latest_clipped_ratio": latest["clipped_ratio"],
+            "sustained_steps": len(clipping_data),
+            "max_length": latest.get("max_length"),
+            "mean_terminated_length": latest.get("mean_terminated_length"),
+            "recommended_max_output_tokens": recommended,
+            "ratios": [d["clipped_ratio"] for d in clipping_data],
+        }
+
+    # FATAL: sustained high clipping over SUSTAINED_STEPS
+    if len(clipping_data) >= SUSTAINED_STEPS:
+        recent = clipping_data[-SUSTAINED_STEPS:]
+        all_above_fatal = all(d["clipped_ratio"] >= CLIPPED_FATAL for d in recent)
+        if all_above_fatal:
+            recommended = _estimate_recommended_from_clipping(clipping_data)
+            return {
+                "clipping_detected": True,
+                "severity": "sustained",
+                "latest_clipped_ratio": latest["clipped_ratio"],
+                "sustained_steps": SUSTAINED_STEPS,
+                "max_length": latest.get("max_length"),
+                "mean_terminated_length": latest.get("mean_terminated_length"),
+                "recommended_max_output_tokens": recommended,
+                "ratios": [d["clipped_ratio"] for d in clipping_data],
+            }
+
+    return None
+
+
+def _estimate_recommended_from_clipping(clipping_data: list[dict]) -> int | None:
+    """Estimate a better max_output_tokens from terminated completion lengths.
+
+    Uses the max terminated length across all steps + 50% headroom.
+    If no completions terminated naturally (all truncated), returns None —
+    the caller should suggest 2x the current max_output_tokens.
+    """
+    terminated_lengths = [
+        d["mean_terminated_length"]
+        for d in clipping_data
+        if d.get("mean_terminated_length") and d["mean_terminated_length"] > 0
+    ]
+    if not terminated_lengths:
+        # All completions truncated — suggest 2x current max
+        max_lengths = [d["max_length"] for d in clipping_data if d.get("max_length")]
+        if max_lengths:
+            return int(max(max_lengths) * 2)
+        return None
+
+    # Use max terminated length + 50% headroom
+    max_natural = max(terminated_lengths)
+    return int(max_natural * 1.5)
+
+
 def _check_score_plateau(
     base_url: str, wf_id: str, job_id: str,
     patience: int = 5, slope_threshold: float = 0.005,
@@ -2421,9 +2549,9 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
     print(f"Polling training job {job_id} with adaptive intervals (max {max_wait}s)...")
     if early_stop:
         print(
-            f"  Early stopping enabled (EMA-based, patience={adaptive_patience} epochs, "
-            f"min {adaptive_warmup} epoch warm-up, length exploitation check) "
-            f"[adaptive for {total_epochs}-epoch run]"
+            f"  Early stopping enabled (completion clipping, EMA-based plateau, "
+            f"patience={adaptive_patience} epochs, min {adaptive_warmup} epoch warm-up, "
+            f"length exploitation check) [adaptive for {total_epochs}-epoch run]"
         )
     start_time = time.time()
     status = "unknown"
@@ -2472,6 +2600,52 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
                 print("Job was cancelled. Partial metrics (if any) have been saved.", file=sys.stderr)
                 sys.exit(2)
             return
+
+        # Early stopping: completion clipping check on EVERY poll.
+        # Clipping is detectable on the first metrics checkpoint (30s in) and
+        # wastes 100% of GPU time if not caught. Medical-QA incident: 12h wasted
+        # with 100% clipping at max_output_tokens=512.
+        if early_stop and status == "running":
+            clipping_info = _check_completion_clipping(args.base_url, wf_id, job_id)
+            if clipping_info:
+                severity = clipping_info["severity"]
+                ratio = clipping_info["latest_clipped_ratio"]
+                max_len = clipping_info.get("max_length")
+                recommended = clipping_info.get("recommended_max_output_tokens")
+
+                print(f"\n  ⚠ COMPLETION CLIPPING DETECTED ({severity.upper()})", file=sys.stderr)
+                print(f"    {ratio:.0%} of completions truncated at max_output_tokens={int(max_len) if max_len else '?'}", file=sys.stderr)
+                print(f"    Clipping history: {' → '.join(f'{r:.0%}' for r in clipping_info['ratios'])}", file=sys.stderr)
+
+                term_len = clipping_info.get("mean_terminated_length")
+                if term_len and term_len > 0:
+                    print(f"    Natural completion length: ~{int(term_len)} tokens", file=sys.stderr)
+                else:
+                    print(f"    No completions terminate naturally — model can't finish in the token budget", file=sys.stderr)
+
+                if recommended:
+                    print(f"    Recommended: set max_output_tokens >= {recommended}", file=sys.stderr)
+                else:
+                    print(f"    Recommended: at least double current max_output_tokens", file=sys.stderr)
+
+                print(f"    Ref: training-metrics-guide.md §100% Completion Clipping", file=sys.stderr)
+                print(f"    → Auto-cancelling to save compute. Use --no-early-stop to override.", file=sys.stderr)
+
+                try:
+                    _api("POST", f"{args.base_url}/finetune/workflows/{wf_id}/jobs/{job_id}/cancel")
+                    metadata["status"] = "cancelled"
+                    metadata["early_stop_reason"] = (
+                        f"Completion clipping ({severity}): {ratio:.0%} of completions truncated "
+                        f"at max_output_tokens={int(max_len) if max_len else '?'}. "
+                        f"{'Recommended: max_output_tokens >= ' + str(recommended) if recommended else 'Double max_output_tokens and retry'}. "
+                        f"Ref: training-metrics-guide.md"
+                    )
+                    job_file.write_text(json.dumps(metadata, indent=2))
+                    print(f"  Training cancelled (completion clipping).")
+                except SystemExit:
+                    print(f"  Warning: Cancel request failed — training continues", file=sys.stderr)
+
+                sys.exit(2)
 
         # Early stopping: multi-signal check every 5 min.
         # Ref: Empirical testing showed 7+ hours wasted on plateaued training.

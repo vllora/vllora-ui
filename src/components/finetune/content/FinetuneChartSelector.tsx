@@ -46,6 +46,7 @@ interface FinetuneChartSelectorProps {
   readonly jobId: string;
   readonly workflowId: string;
   readonly baselineEvalId?: string;
+  readonly maxOutputTokens?: number;
 }
 
 /** Extract scores from the latest epoch across all rows. */
@@ -85,6 +86,7 @@ export function FinetuneChartSelector({
   jobId,
   workflowId,
   baselineEvalId,
+  maxOutputTokens,
 }: FinetuneChartSelectorProps) {
   const [view, setView] = useState<ChartView>("scoreTrend");
 
@@ -140,6 +142,7 @@ export function FinetuneChartSelector({
           workflowId={workflowId}
           isLive={isLive}
           defaultTab={view}
+          maxOutputTokens={maxOutputTokens}
         />
       )}
 

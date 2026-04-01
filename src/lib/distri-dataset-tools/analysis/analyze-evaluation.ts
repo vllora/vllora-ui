@@ -24,6 +24,7 @@ import {
 } from '@/types/dataset-types';
 import { computeReadinessGate } from './compute-readiness-gate';
 import { datasetService } from '@/services/service-registry';
+import { DEFAULT_INFERENCE_PARAMETERS } from '@/services/finetune-api';
 import type { EvaluationResultResponse, FlatEvaluationResult } from '@/services/finetune-api';
 import { flattenEvaluationResults } from '@/services/finetune-api';
 
@@ -372,7 +373,9 @@ export function analyzeEvalResults(
   const diagnosis = diagnoseResults(mean, std, percentAboveZero, percentPerfect, byTopic);
 
   // Compute pre-training readiness gate (mirrors finetune.py readiness-check)
-  const readinessGate = computeReadinessGate(scoredResults, byTopic);
+  const readinessGate = computeReadinessGate(scoredResults, byTopic, {
+    maxOutputTokens: DEFAULT_INFERENCE_PARAMETERS.max_output_tokens,
+  });
 
   // Extract sample results for manual review (only scored results)
   const sortedScoredResults = [...scoredResults].sort((a, b) => b.score! - a.score!);

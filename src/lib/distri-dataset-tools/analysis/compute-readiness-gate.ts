@@ -315,18 +315,97 @@ function computeTopicBalance(byTopic: Record<string, TopicEvalStats>): Readiness
 }
 
 // =============================================================================
+// Truncation Risk Check
+// =============================================================================
+
+/**
+ * Predict whether planned max_output_tokens is too low for training.
+ *
+ * The eval model (e.g., gpt-4o-mini) is more concise than the base training
+ * model (e.g., Qwen3.5-4B doing GRPO exploration). Eval response lengths
+ * are a LOWER BOUND for training token needs. We apply a 1.5x multiplier
+ * to account for the base model being less concise.
+ *
+ * Mirrors finetune.py readiness-check `truncation_risk` check.
+ */
+function computeTruncationRisk(
+  results: readonly FlatEvaluationResult[],
+  maxOutputTokens: number,
+): ReadinessCheck {
+  // Estimate token counts from rollout_content (4 chars/token heuristic)
+  const tokenLengths: number[] = [];
+  for (const r of results) {
+    const content = r.rollout_content;
+    if (content && content.length > 0) {
+      tokenLengths.push(Math.max(1, Math.floor(content.trim().length / 4)));
+    }
+  }
+
+  if (tokenLengths.length < 10) {
+    return {
+      id: 'truncation_risk', label: 'Truncation Risk', kind: 'soft',
+      value: 0, threshold: `< ${maxOutputTokens} (planned max_output_tokens)`,
+      passed: true, skipped: true,
+      suggestion: 'Not enough eval responses with content to estimate truncation risk.',
+    };
+  }
+
+  const sorted = [...tokenLengths].sort((a, b) => a - b);
+  const evalP50 = sorted[Math.floor(sorted.length / 2)];
+  const evalP95 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))];
+  const evalMax = sorted[sorted.length - 1];
+
+  // 1.5x multiplier: base models are less concise than gpt-4o-mini.
+  // Conservative empirical estimate — actual ratio varies by task and model.
+  const predictedTrainingP95 = Math.floor(evalP95 * 1.5);
+  const recommendedMin = Math.floor(predictedTrainingP95 * 1.3); // 30% headroom
+
+  const isTruncationRisk = predictedTrainingP95 > maxOutputTokens;
+
+  return {
+    id: 'truncation_risk', label: 'Truncation Risk',
+    kind: isTruncationRisk ? 'hard' : 'soft',
+    value: predictedTrainingP95,
+    threshold: `< ${maxOutputTokens} (planned max_output_tokens)`,
+    passed: !isTruncationRisk,
+    suggestion: `Eval model responses: P50=${evalP50}, P95=${evalP95}, max=${evalMax} tokens. `
+      + `Training model (weaker, less concise) predicted P95 ≈ ${predictedTrainingP95} tokens `
+      + `(eval P95 × 1.5). With max_output_tokens=${maxOutputTokens}, completions will be `
+      + `truncated → grader scores garbage → zero useful gradient. `
+      + `Set max_output_tokens >= ${recommendedMin}.`,
+  };
+}
+
+// =============================================================================
 // Main
 // =============================================================================
+
+export interface ReadinessGateOptions {
+  /** Planned max_output_tokens for training. If provided, enables truncation risk check. */
+  readonly maxOutputTokens?: number;
+}
 
 export function computeReadinessGate(
   scoredResults: readonly FlatEvaluationResult[],
   byTopic: Record<string, TopicEvalStats>,
+  options?: ReadinessGateOptions,
 ): ReadinessGate {
   const scores = scoredResults.filter(r => r.score != null).map(r => r.score!);
   const promptCount = new Set(scoredResults.map(r => r.row_index)).size;
 
   const hardChecks = computeHardChecks(scores, promptCount);
   const softChecks = computeSoftChecks(scores, scoredResults, byTopic);
+
+  // Truncation risk: only if maxOutputTokens is provided
+  if (options?.maxOutputTokens != null) {
+    const truncationCheck = computeTruncationRisk(scoredResults, options.maxOutputTokens);
+    if (truncationCheck.kind === 'hard') {
+      hardChecks.push(truncationCheck);
+    } else {
+      softChecks.push(truncationCheck);
+    }
+  }
+
   const checks = [...hardChecks, ...softChecks];
 
   const hardPassed = hardChecks.filter(c => c.passed).length;

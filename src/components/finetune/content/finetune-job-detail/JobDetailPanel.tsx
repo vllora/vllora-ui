@@ -257,6 +257,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
                 jobId={job.provider_job_id}
                 workflowId={job.workflow_id}
                 baselineEvalId={baselineEvalId ?? undefined}
+                maxOutputTokens={job.inference_parameters?.max_output_tokens}
               />
             )
           ) : (

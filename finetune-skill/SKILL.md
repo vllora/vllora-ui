@@ -49,6 +49,15 @@ Validate → Data Quality Gate → Verify → Evaluate                          
 
 **Each step uploads to the gateway immediately** — the vLLora UI shows progress in real time.
 
+**Respect step dependencies — do NOT pre-draft steps before their inputs exist.** The dependency graph is:
+
+```
+Extract (Step 2) → Topics (Step 3) → ┬→ Generate Records (Step 4)
+                                      └→ Write Grader (Step 5)      → Validate (Step 5.5)
+```
+
+Steps 4 and 5 can run in parallel — both depend on extraction + topics, not on each other. But do NOT start topics before extraction finishes, and do NOT start records or grader before topics are complete. Do NOT "pre-draft" topics or graders while extraction is still running — you will produce blind guesses disconnected from the actual document content, leading to poor topic coverage and grader criteria that don't match the data.
+
 **Execute ALL steps (1-9).** Steps 1-6 prepare the dataset. Step 7 runs eval iterations until data/grader are validated. Only then does training start. Do NOT stop at Step 6 — always run evaluation at minimum.
 
 **Eval first, train later.** Do NOT start training on the first iteration. Run eval, check the readiness gate, fix issues, re-eval. Only start training after the readiness gate passes (Step 7c→7d). This avoids wasting hours of GPU time on bad data or a broken grader.
@@ -204,7 +213,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/pdftotext_extract.py <pdf-path> -o <output-d
 ```
 This produces a simpler extraction (text-only, no table detection) but is sufficient for most documents. The `knowledge-extractor` subagent will work with either Docling or pdftotext output.
 
-If Docling is available, submit all PDFs at once (non-blocking):
+If Docling is available, submit all PDFs at once:
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/docling_extract.py --submit-only \
   "pdfs/doc1.pdf:finetune-project/knowledge/doc1-slug/docling-result.json" \
@@ -212,9 +221,9 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/docling_extract.py --submit-only \
   ...
 ```
 
-This returns a JSON manifest with `task_id` per document. Docling processes them in parallel.
+This returns a JSON manifest with `task_id` per document. Docling processes them in parallel. **"Parallel" means multiple documents extract concurrently within Step 2 — it does NOT mean you can start Step 3 or later steps while extraction is running. You MUST wait for ALL extraction to finish before proceeding.**
 
-**2b. Spawn one `knowledge-extractor` per document (parallel):**
+**2b. Spawn one `knowledge-extractor` per document (parallel within this step):**
 
 For each document, spawn a subagent with:
 - `SKILL_DIR=${CLAUDE_SKILL_DIR}`
@@ -232,7 +241,7 @@ Spawn up to 4-5 agents at once. If there are more documents, spawn in batches.
    - If no: re-submit to Docling and spawn the subagent again.
 2. If second attempt also fails: **warn the user** with the document name and error, then continue with remaining documents. Do NOT silently skip failed documents.
 
-**2c. After ALL agents return — merge indexes with completeness check:**
+**2c. WAIT here until ALL agents return — then merge indexes with completeness check. Do NOT proceed to Step 3 until this merge completes and 2d validation passes:**
 
 ```bash
 python3 -c "
@@ -297,34 +306,73 @@ Use the user's focus areas to guide topic design in Step 3. All content is alrea
 
 ### Step 3: Build Topic Hierarchy
 
+> **PREREQUISITE:** Step 2 extraction must be **fully complete** — all subagents returned, `all-parts-index.json` merged, and `validate_extraction.py` passed. Do NOT start this step while extraction is still running.
+
 **A topic = a skill the model needs to learn.** Each leaf topic answers the question: "what specific capability should the model practice?" The hierarchy groups related skills together so you can balance coverage, control difficulty distribution, and spot gaps.
 
-**Organize by SKILL, not by document structure.** Do NOT mirror chapter headings or section titles. Instead, analyze what skills the source material teaches and group by capability domain (arXiv:2601.03676: skill taxonomies outperform content-based organization).
+**Organize by SKILL, not by document structure.** Do NOT mirror chapter headings, section titles, or document agendas. The user may provide multiple PDFs — each with its own structure — but overlapping content across documents should merge into the same topic, not create duplicates. A topic hierarchy is a **capability map**, not a table of contents.
+
+**Bad example (mirrors document structure):**
+```
+❌ "EIC Eligibility Rules" → "Filing Status" → "Income Limits" → "Qualifying Child Tests"
+❌ "EIC Computation" → "No Children" → "One Child" → "Two Children" → "Three+ Children"
+```
+This copies the IRS Pub 596 chapter outline. Every heading becomes a topic. It produces narrow, overlapping topics that don't represent distinct skills.
+
+**Good example (organized by skill):**
+```
+✅ "Eligibility Determination" (skill: given a taxpayer scenario, determine if they qualify)
+✅ "Credit Calculation" (skill: given eligible taxpayer, compute the exact credit amount)
+✅ "Multi-Factor Edge Cases" (skill: handle scenarios with competing rules or boundary conditions)
+```
+Each topic is a **task the model must perform**, not a section it must recite. Multiple document sections feed into each skill topic. Content from Pub 596 Chapter 1 AND Pub 501 dependent rules both feed "Eligibility Determination."
+
+**When multiple documents exist, synthesize across them.** Read ALL extracted parts indexes. Look for overlapping concepts that span documents — these become single topics drawing from multiple sources, not separate topics per document. Two PDFs covering "dependent rules" should produce ONE topic on dependent determination, linked to parts from both documents.
+
+**When documents exist, topics MUST be grounded in the extracted content — not in your general knowledge of the subject.** Read `knowledge/all-parts-index.json` and the individual `knowledge_parts.json` files to understand what the documents actually cover. Your topics should reflect the specific content, terminology, tables, rules, and examples found in the extracted parts. Do NOT invent topics based on what you think the documents "probably" contain.
+
+**How to build topics from extracted content:**
+1. Read `knowledge/all-parts-index.json` and at least 2-3 per-document `knowledge_parts.json` files
+2. **Filter parts by relevance to the objective.** Not all extracted content is relevant to the finetune goal. A 200-page IRS publication may have 50 parts but only 15 are relevant to "EIC tax credit calculation." For each part, ask: "does this content teach a skill the model needs for the stated objective?" **Write the label back to `all-parts-index.json`** — set `"relevant": true` for parts that contribute to the objective, `"relevant": false` for parts that don't. This persists the filtering decision so anyone looking at the index can see which parts are used and which are skipped. Only `relevant: true` parts should become topics or appear in `relations.json`. Log the filtering summary (total/relevant/excluded + sample excluded titles) in `execution-log.md`.
+3. From the **relevant parts only**, list every distinct **task/skill** the content teaches (not every section/heading)
+4. Group related skills into domains — ask "what would a user ask the model to DO?" not "what chapter is this from?"
+5. For each skill, check which relevant parts from which documents contribute — a skill often draws from multiple documents and multiple sections within a document
+6. Merge overlapping skills across documents into single topics
+7. For each leaf topic, estimate `expected_difficulty` (`"easy"`, `"medium"`, `"hard"`) based on whether the skill involves simple lookup vs. multi-step reasoning — this is metadata on the topic, not a separate sub-topic
+
+**Example — IRS Pub 596 (120 parts) + Pub 501 (80 parts) for objective "EIC tax credit calculator":**
+- Pub 596 parts about EIC rules, tables, worksheets → **relevant** (keep)
+- Pub 596 parts about "How to get tax help", "Privacy Act notice" → **irrelevant** (exclude)
+- Pub 501 parts about dependent tests, filing status → **relevant** (they affect EIC eligibility)
+- Pub 501 parts about standard deduction amounts, itemized deductions → **irrelevant** (exclude)
+- Result: ~60 relevant parts out of 200 total → topics built from those 60 only
 
 Decide what topics to create based on:
-- **The objective** — what behaviors/skills does the model need? Each distinct skill becomes a topic.
-- **The documents** (if available) — what skills does the content teach? Read `knowledge/all-parts-index.json` and identify the capabilities it covers. A single chapter may feed multiple skill topics; a single skill topic may draw from multiple chapters.
-- **Difficulty dimension** — for each skill, consider splitting into difficulty tiers (basic vs complex). GRPO requires outcome variance — the model must get some right and some wrong for learning to happen (arXiv:2508.14094: hard examples yield 47% gains vs 3-15% for easy ones).
+- **The relevant extracted content (REQUIRED when documents exist)** — from the filtered parts, identify skills/tasks the content teaches, synthesized across all documents. Each distinct skill becomes a topic. A single chapter may feed multiple skill topics; a single skill topic may draw from multiple chapters and multiple documents.
+- **The objective** — the primary filter. Every topic must serve the stated objective. If a skill from the content doesn't contribute to the objective, it doesn't become a topic — even if the content covers it thoroughly.
+- **Difficulty dimension** — for each leaf skill, estimate expected difficulty as a metadata field (`"expected_difficulty": "hard"`), not as a separate hierarchy level. GRPO requires outcome variance — the model must get some right and some wrong for learning to happen (arXiv:2508.14094: hard examples yield 47% gains vs 3-15% for easy ones). The actual difficulty score gets updated after the base model evaluation (difficulty probe).
 
-**Three-level hierarchy**: Domain (broad capability area) → Skill (specific competency) → Difficulty tier (based on base model performance).
+**Two-level hierarchy**: Domain (broad capability area) → Skill (specific competency). Difficulty is metadata on each leaf topic, not a structural level — this avoids doubling leaf count and keeps the hierarchy clean (TAGS arXiv:2601.13995: difficulty as weight outperforms difficulty as structure).
 
 Save to `topics.json` as a **flat array** — every topic at the same level, hierarchy expressed via `parent_id`. Each topic has a `system_prompt` that describes its specialization:
 
 ```json
 [
   {"id": "billing", "name": "Billing & Payments", "parent_id": null, "system_prompt": "Specialize in: payment processing, subscription management, and billing troubleshooting."},
-  {"id": "refund-processing", "name": "Refund Processing", "parent_id": "billing", "system_prompt": "Specialize in: handling refund requests, explaining eligibility, and processing different refund types."},
-  {"id": "refund-edge-cases", "name": "Refund Edge Cases", "parent_id": "refund-processing", "system_prompt": "Focus on: partial refunds, pro-rated calculations, exceptions to standard policy, and dispute resolution."}
+  {"id": "refund-processing", "name": "Refund Processing", "parent_id": "billing", "system_prompt": "Specialize in: handling refund requests, explaining eligibility, and processing different refund types.", "expected_difficulty": "medium"},
+  {"id": "payment-troubleshooting", "name": "Payment Troubleshooting", "parent_id": "billing", "system_prompt": "Focus on: diagnosing payment failures, international transactions, 3DS challenges, and fraud block resolution.", "expected_difficulty": "hard"}
 ]
 ```
 
-**Topic count**: Scale with dataset size — 5-10 leaf topics for 100-200 records, 20-40 for 500-1,000, 40-80 for 1,000-3,000. Target ~20 records per leaf topic (arXiv:2410.15226: more topics with fewer examples outperforms fewer topics with more examples). See `reference/topic-hierarchy.md` for full guidelines and research citations.
+The `expected_difficulty` field (`"easy"`, `"medium"`, `"hard"`) is an initial estimate — it gets refined to an actual pass-rate score after the difficulty probe in Step 7. Leaf topics only. Used to weight record generation (more records for harder topics).
+
+**Topic count**: Scale with dataset size — 5-10 leaf topics for 100-200 records, 20-40 for 500-1,000, 40-80 for 1,000-3,000. Target 15-25 records per leaf topic — fewer than 10 risks insufficient GRPO variance, more than 30 introduces redundancy (arXiv:2410.15226 §3.3; validated by domain RFT practice: arXiv:2509.25736 used 10-50 per topic). See `reference/topic-hierarchy.md` for full guidelines.
 
 **System prompt composition**: The `system_prompt` field on each topic is a **segment** that gets composed with its ancestors during record generation: `[Root --system-prompt] + [Root topic] + [Parent topic] + [Leaf topic]`. Each level adds specificity without contradicting the parent. Keep each segment to 1-2 sentences, 50-150 words total when composed.
 
-**Topic-source linking**: After uploading knowledge source parts, link them to topics via the `POST /topics/relations` API. Only create links to parts you've actually extracted — never fabricate references.
+**Topic-source linking**: After uploading knowledge source parts, link them to topics via the `POST /topics/relations` API. Only link **relevant** parts — parts excluded during the relevance filter (step 2 above) should NOT appear in `relations.json`. Never fabricate references.
 
-**Build topic-part relations.** Delegate to the `relation-builder` subagent (installed at `.claude/agents/relation-builder.md`) — provide `PROJECT_DIR` (the absolute path to the finetune-project directory). It reads `knowledge/all-parts-index.json` and `topics.json`, matches parts to topics, and writes `relations.json`.
+**Build topic-part relations.** Delegate to the `relation-builder` subagent (installed at `.claude/agents/relation-builder.md`) — provide `PROJECT_DIR` (the absolute path to the finetune-project directory) and `OBJECTIVE` (the workflow objective statement, so the agent can filter irrelevant parts). It reads `knowledge/all-parts-index.json` and `topics.json`, matches relevant parts to topics, and writes `relations.json`.
 
 > **ID format note:** Use human-readable slugs for topic `id` values (e.g., `"billing-refunds"`). `finetune.py upload-topics` auto-converts to UUIDs. Use the same slug as `topic_identifier` in `relations.json` and part string IDs as `part_identifier`. `finetune.py upload-relations` resolves everything locally — no manual ID mapping.
 
@@ -428,14 +476,18 @@ If some topics are under-represented, use `chat_completion.py` to create variant
 
 ### Step 5: Write the Grader
 
+> **PREREQUISITE:** Steps 2 (extraction) and 3 (topics) must be **complete**. The grader criteria must be grounded in the actual extracted knowledge and topic structure — not assumptions about the domain. Can run in parallel with Step 4 (data generation).
+
 Write a JavaScript grader function to `grader.js`. Scores model responses 0-1, runs server-side during evaluation and training.
 
-**Before writing the grader, analyze the training data:**
-1. Read 10-15 sample rows from `training.jsonl` spanning different topics
-2. For each, think about what a perfect vs. mediocre vs. bad response looks like
-3. Identify 3-5 domain-specific qualities that separate good from bad
-4. Design criteria and weight allocation
-5. Then write the JS grader informed by this analysis
+**Before writing the grader, analyze the extracted knowledge and topic structure:**
+1. Read the extracted knowledge parts (`knowledge/all-parts-index.json` and 2-3 per-document `knowledge_parts.json` files) to understand the domain's specific rules, terminology, formulas, tables, and edge cases
+2. Read `topics.json` to understand the skill areas the model will be tested on
+3. For each topic, think about what a perfect vs. mediocre vs. bad response looks like — grounded in what the source documents actually say, not your general knowledge
+4. Identify 3-5 domain-specific qualities that separate good from bad — these MUST reflect the actual content (e.g., specific IRS rules, exact formulas, threshold values from the documents)
+5. Design criteria and weight allocation informed by the source material and topic structure
+6. Then write the JS grader informed by this analysis
+7. If `training.jsonl` already exists (Step 4 finished first), also read 10-15 sample rows to validate your criteria against real prompts
 
 The grader function signature: `function evaluate(input) { ... return { score, reason }; }` where score is 0.0-1.0. The function can use `__langdb_call_llm_as_judge_obj(config, input)` for subjective quality assessment — `config` has `prompt_template` (message array with `{{history}}`/`{{response}}` template vars), `output_schema` (JSON Schema), and `completion_params` (`{model_name, temperature, max_tokens}`). Set `input.history` and `input.response` before calling. **Synchronous only** — no async/await.
 
@@ -767,9 +819,10 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
 
 **Early stopping** is enabled by default. The poll script uses multi-signal detection based on GRPO/RFT research:
 
-1. **Score plateau** — EMA-smoothed scores (alpha=0.3) with linear regression slope over 5 epochs. Triggers when slope < 0.005/epoch after a 2-epoch warm-up. Distinguishes "converged" (score ≥0.5, deploy) vs "stuck" (score <0.3, investigate grader/data). Ref: arXiv:2507.18014 (3-phase GRPO training), arXiv:2503.06639 (absorbing states).
-2. **Score degradation** — Negative EMA slope (scores declining) indicates overfitting or policy collapse.
-3. **Length exploitation** — Response length growing >30% while reward is flat. Ref: Dr. GRPO (arXiv:2503.20783) — GRPO's normalization can cause degenerate lengthening.
+1. **Completion clipping** (checked every poll, not just every 5 min) — Detects when `max_output_tokens` is too low and completions are being truncated. Catastrophic (≥90% clipping on first step) triggers immediate cancel. Sustained (≥50% clipping over 3+ steps) also auto-cancels. Reports recommended `max_output_tokens` based on natural completion lengths. Ref: training-metrics-guide.md §100% Completion Clipping. Incident: Medical-QA with `max_output_tokens=512` ran 12h at 100% clipping before manual cancel.
+2. **Score plateau** — EMA-smoothed scores (alpha=0.3) with linear regression slope over 5 epochs. Triggers when slope < 0.005/epoch after a 2-epoch warm-up. Distinguishes "converged" (score ≥0.5, deploy) vs "stuck" (score <0.3, investigate grader/data). Ref: arXiv:2507.18014 (3-phase GRPO training), arXiv:2503.06639 (absorbing states).
+3. **Score degradation** — Negative EMA slope (scores declining) indicates overfitting or policy collapse.
+4. **Length exploitation** — Response length growing >30% while reward is flat. Ref: Dr. GRPO (arXiv:2503.20783) — GRPO's normalization can cause degenerate lengthening.
 
 To disable: add `--no-early-stop`.
 

@@ -23,8 +23,9 @@ import { datasetService, workflowService } from '@/services/service-registry';
 // Alert Thresholds (from reinforcement_metrics_cheatsheet.md)
 // =============================================================================
 
-const CLIPPED_RATIO_RED = 0.7;
-const CLIPPED_RATIO_YELLOW = 0.2;
+// training-metrics-guide.md §Completion Metrics: critical > 0.5, warning > 0.1
+const CLIPPED_RATIO_RED = 0.5;
+const CLIPPED_RATIO_YELLOW = 0.1;
 const REWARD_STD_YELLOW = 0.3;
 const FRAC_REWARD_ZERO_STD_RED = 0.6;
 const FRAC_REWARD_ZERO_STD_YELLOW = 0.3;

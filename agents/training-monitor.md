@@ -148,7 +148,8 @@ The script must use **only Python stdlib** (`urllib.request`, `json`, `math`, `t
    **Only after confirming real data exists**, check anomalies:
 
    - **CRITICAL: NaN/Inf** in loss, reward, or grad_norm → immediate exit. Note: NaN in `kl` with beta=0 is also critical.
-   - **CRITICAL: High clipping** — `completions/clipped_ratio` above critical threshold → exit
+   - **CRITICAL: Catastrophic clipping** — `completions/clipped_ratio` >= 0.90 on any step → immediate exit (max_output_tokens is wildly insufficient, training signal is garbage)
+   - **CRITICAL: Sustained clipping** — `completions/clipped_ratio` >= 0.50 for 3+ consecutive steps → exit (majority of completions truncated). Include `completions/max_length`, `completions/mean_terminated_length`, and a recommended `max_output_tokens` value in the report (use max terminated length × 1.5, or 2× current max_output_tokens if no completions terminate naturally).
    - **WARNING: KL divergence** — **ONLY if beta > 0**: last 5 polls all rising AND latest above warn threshold. **If beta=0: skip absolute KL checks entirely.** Instead, only flag if KL is rising AND reward is stagnating simultaneously (possible reward hacking).
    - **WARNING: Weak signal** — `frac_reward_zero_std` above warn threshold for 5+ consecutive polls
    - **WARNING: Reward collapse** — `reward_std` below warn threshold for 5+ consecutive polls

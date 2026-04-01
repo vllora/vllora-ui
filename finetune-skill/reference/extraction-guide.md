@@ -683,7 +683,8 @@ for part in parts:
         "extraction_path": part.get("extraction_path", ""),
         "pages": part.get("extraction_metadata", {}).get("pages", []),
         "content_preview": part["content"][:200],
-        "source_doc": source_filename  # e.g., "chess-tactics.pdf"
+        "source_doc": source_filename,  # e.g., "chess-tactics.pdf"
+        "relevant": None  # Set in Step 3 (topic design) — True if relevant to objective, False if not, None if not yet classified
     })
 with open(f"knowledge/doc-{N}/parts-index.json", "w") as f:
     json.dump(index, f, indent=2)

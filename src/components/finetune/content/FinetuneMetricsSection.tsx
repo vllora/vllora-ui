@@ -21,6 +21,8 @@ interface FinetuneMetricsSectionProps {
   isLive?: boolean;
   /** Pre-select a specific tab (reward/stability/completions) */
   defaultTab?: "reward" | "stability" | "completions" | "throughput";
+  /** max_output_tokens from job inference parameters — used for clipping alert */
+  maxOutputTokens?: number;
 }
 
 const POLL_INTERVAL = 15_000;
@@ -30,6 +32,7 @@ export function FinetuneMetricsSection({
   workflowId,
   isLive,
   defaultTab,
+  maxOutputTokens,
 }: FinetuneMetricsSectionProps) {
   const [metrics, setMetrics] = useState<FinetuneJobMetricPoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -135,6 +138,7 @@ export function FinetuneMetricsSection({
         isLive={isLive}
         defaultTab={defaultTab}
         hideTabs
+        maxOutputTokens={maxOutputTokens}
       />
     );
   }

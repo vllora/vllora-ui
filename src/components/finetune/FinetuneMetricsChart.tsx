@@ -42,6 +42,7 @@ interface FinetuneMetricsChartProps {
   isLive?: boolean;
   defaultTab?: MetricTab;
   hideTabs?: boolean;
+  maxOutputTokens?: number;
 }
 
 type MetricTab = "reward" | "stability" | "completions" | "throughput";
@@ -281,6 +282,7 @@ export function FinetuneMetricsChart({
   isLive,
   defaultTab,
   hideTabs,
+  maxOutputTokens,
 }: FinetuneMetricsChartProps) {
   const [internalTab, setInternalTab] = useState<MetricTab>(defaultTab ?? "reward");
   const activeTab = hideTabs ? (defaultTab ?? "reward") : internalTab;
@@ -546,7 +548,7 @@ export function FinetuneMetricsChart({
 
       {/* Insights */}
       {latestMetrics && (() => {
-        const insights = getMetricsInsights(latestMetrics, activeTab, metricsHistory);
+        const insights = getMetricsInsights(latestMetrics, activeTab, metricsHistory, maxOutputTokens);
         if (insights.length === 0) return null;
         const levelIcon = { ok: "✅", warn: "⚠️", critical: "🔴" } as const;
         const levelColor = { ok: "text-emerald-400/70", warn: "text-amber-400/80", critical: "text-red-400/80" } as const;

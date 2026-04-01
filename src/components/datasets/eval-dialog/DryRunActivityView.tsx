@@ -23,6 +23,7 @@ import { EvaluatorVersionBadge } from "@/components/shared/EvaluatorVersionBadge
 import { useEvaluatorVersions } from "@/hooks/useEvaluatorVersions";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { computeReadinessGate } from "@/lib/distri-dataset-tools/analysis/compute-readiness-gate";
+import { DEFAULT_INFERENCE_PARAMETERS } from "@/services/finetune-api";
 import type { TopicEvalStats, ReadinessGate } from "@/types/dataset-types";
 
 /**
@@ -199,7 +200,9 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
     if (!evaluationResults || evaluationResults.length === 0) return undefined;
     const scored = evaluationResults.filter(r => r.score != null);
     if (scored.length === 0) return undefined;
-    return computeReadinessGate(scored, topicScores);
+    return computeReadinessGate(scored, topicScores, {
+      maxOutputTokens: DEFAULT_INFERENCE_PARAMETERS.max_output_tokens,
+    });
   }, [result?.readinessGate, evaluationResults, topicScores]);
 
   const recommendations = result?.diagnosis?.recommendations || [];

@@ -144,6 +144,7 @@ export function getMetricsInsights(
   latest: Record<string, unknown> | null,
   tab: MetricTab,
   history?: readonly Record<string, unknown>[],
+  maxOutputTokens?: number | null,
 ): readonly MetricInsight[] {
   if (!latest) return [];
   const insights: MetricInsight[] = [];
@@ -254,9 +255,18 @@ export function getMetricsInsights(
     // Ref: DAPO — overlong filtering; TRL: "ratio of truncated completions"
     // Ref: our guide — ">0.5 majority incomplete, at 1.0 training is broken"
     if (clipped != null) {
-      if (clipped >= 0.95) insights.push({ level: "critical", text: `${(clipped * 100).toFixed(0)}% of responses are truncated — the model never finishes naturally. Rewards are computed on incomplete outputs, making training noisy. Increase max_output_tokens.` });
-      else if (clipped > 0.5) insights.push({ level: "critical", text: `${(clipped * 100).toFixed(0)}% of responses are truncated — majority of completions are incomplete. Training signal is degraded. Increase max_output_tokens.` });
-      else if (clipped > 0.1) insights.push({ level: "warn", text: `${(clipped * 100).toFixed(0)}% truncated — some responses hit the token limit. Monitor whether this affects score quality.` });
+      // Compute recommended max_output_tokens from natural completion length
+      const recommended = termLen != null && termLen > 0
+        ? Math.ceil(termLen * 1.5)
+        : maxOutputTokens != null ? maxOutputTokens * 2 : null;
+      const currentStr = maxOutputTokens != null ? ` (currently ${maxOutputTokens})` : "";
+      const fixStr = recommended != null
+        ? ` Increase max_output_tokens to at least ${recommended}${currentStr}.`
+        : " Increase max_output_tokens.";
+
+      if (clipped >= 0.95) insights.push({ level: "critical", text: `${(clipped * 100).toFixed(0)}% of responses are truncated — the model never finishes naturally. Training is producing no useful signal.${fixStr}` });
+      else if (clipped > 0.5) insights.push({ level: "critical", text: `${(clipped * 100).toFixed(0)}% of responses are truncated — majority of training signal is noise.${fixStr}` });
+      else if (clipped > 0.1) insights.push({ level: "warn", text: `${(clipped * 100).toFixed(0)}% truncated — some responses hit the token limit.${fixStr}` });
       else insights.push({ level: "ok", text: "Most responses complete naturally without truncation." });
     }
     // Uniform truncation: min = max = max_output_tokens

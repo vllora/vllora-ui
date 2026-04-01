@@ -16,15 +16,32 @@ relevant to each topic in a finetune pipeline.
 The parent agent provides these as plain text. **Use the actual paths directly.**
 
 - **PROJECT_DIR** — absolute path to the working directory (e.g., `/Users/alice/my-project/finetune-project`)
+- **OBJECTIVE** — the workflow objective statement (e.g., "Train a model to calculate EIC tax credits"). Used to filter out parts irrelevant to the finetune goal.
 - The relevant files are at:
   - `<PROJECT_DIR>/knowledge/all-parts-index.json` — lightweight index with id, type, title, extraction_path, pages, content_preview per part
   - `<PROJECT_DIR>/topics.json` — flat array of topics with id, name, parent_id
 
 ## Algorithm
 
+### Step 0: Filter parts by objective relevance
+
+Check if `all-parts-index.json` already has `"relevant"` labels (set by the parent agent in Step 3). If so, use them — only process parts with `"relevant": true`. Skip parts with `"relevant": false`.
+
+If labels are missing (`"relevant": null` or field absent), classify each part yourself based on the OBJECTIVE. A part is irrelevant if its content does not teach, explain, or contain data needed for the stated objective — even if it comes from a document that is otherwise relevant. **Write the labels back** to `all-parts-index.json` so the decisions are persisted.
+
+Examples of irrelevant parts (exclude from all subsequent steps):
+- Administrative sections: "How to Get Tax Help", "Privacy Act Notice", "What's New This Year"
+- Unrelated chapters: standard deduction tables in a publication used for EIC rules
+- Boilerplate: copyright notices, table of contents, glossary (unless the glossary defines domain terms needed for the objective)
+- Tangential content: sections about other tax credits when the objective is specifically about EIC
+
+Log excluded parts in the report (count + sample titles).
+
+### Step 1: Match relevant parts to topics
+
 For each **leaf topic** (topics with no children):
 
-1. **Retrieve candidates** — scan parts-index for parts whose title,
+1. **Retrieve candidates** — from the **relevant parts only** (Step 0 output), scan for parts whose title,
    extraction_path, or content_preview match the topic's subject.
    Use the topic name and keywords as search criteria.
 
@@ -81,4 +98,6 @@ Write `relations.json` to the PROJECT_DIR:
 ]
 ```
 
-Report: total relations created, relations per topic (min/avg/max), any topics with 0 relations, any documents with 0 relations.
+Report:
+- **Filtering**: total parts in index, relevant parts kept, irrelevant parts excluded (with sample titles of excluded)
+- **Relations**: total relations created, relations per topic (min/avg/max), any topics with 0 relations, any documents with 0 relations

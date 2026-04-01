@@ -34,31 +34,51 @@ Skill-based hierarchies outperform content-based ones (STEPS taxonomy, arXiv:260
 
 A single chapter may feed multiple skill topics. A single skill topic may draw from multiple chapters.
 
+### 1b. Merge Across Multiple Documents
+
+**When users provide multiple PDFs, synthesize topics across all documents — do NOT create per-document topic branches.**
+
+Multiple documents often cover overlapping concepts from different angles. Two IRS publications may both discuss dependent eligibility. A product manual and a troubleshooting guide may both cover the same features. These should merge into shared skill topics, not produce duplicate topic trees.
+
+| DON'T (per-document topics) | DO (merged skill topics) |
+|----------------------------|--------------------------|
+| "Pub 596 — Eligibility" + "Pub 501 — Dependents" | "Dependent Eligibility Determination" (draws from both) |
+| "Manual A — Installation" + "Manual B — Setup Guide" | "System Installation & Configuration" (draws from both) |
+| "Contract-A — Payment Terms" + "Contract-B — Billing" | "Payment & Billing Rules" (draws from both) |
+
+**Process**: Read ALL `parts-index.json` files across documents → identify overlapping concepts → create unified topics → link parts from multiple documents to the same topic via relations.
+
 ### 2. Breadth Over Depth
 
 **More unique topics outperform fewer topics with more examples each.**
 
-The synthetic data diversity study (arXiv:2410.15226) tested 100K vs 300K topics with 10/20/30 examples per topic. 300K topics consistently outperformed 100K. Performance saturates or deteriorates as examples per topic increase — **~20 examples per topic** is the sweet spot.
+The synthetic data diversity study (arXiv:2410.15226) found that more granular topics reduce redundancy, but performance deteriorates above 20-30 generations per topic due to repetition. Note: this paper studied pre-training diversity, not domain-specific RFT — the 20-record number is directionally useful but not a prescriptive RFT finding. Domain-specific RFT practice validates the range: the telecom RFT paper (arXiv:2509.25736) used 10-50 records per topic across 41-50 topics successfully.
+
+**Target 15-25 records per leaf topic.** Fewer than 10 risks insufficient coverage for the grader to discriminate variants within the skill. More than 30 introduces diminishing diversity returns.
 
 **When in doubt, split a broad topic into narrower ones rather than adding more examples.**
 
-### 3. Include a Difficulty Dimension
+### 3. Include a Difficulty Dimension (as Metadata)
 
 **GRPO requires outcome variance — the model must get some right and some wrong for learning to happen.**
 
 The "Hard Examples" paper (arXiv:2508.14094) found training on the hardest 10% yields **47% gains** vs 3-15% for easy examples. "No Prompt Left Behind" (arXiv:2509.21880) showed 30-99% of prompts become zero-variance (zero gradient) during GRPO — easy prompts go zero-variance first.
 
-Each leaf topic should target a specific difficulty tier so you can control the distribution during training.
+Encode difficulty as an `expected_difficulty` metadata field on each leaf topic — **not** as a 3rd structural level of the hierarchy. This keeps the hierarchy clean (Domain → Skill) while still enabling difficulty-weighted record generation. The initial estimate (`"easy"`, `"medium"`, `"hard"`) is refined to an actual pass-rate score after the base model difficulty probe. Prompts within each topic should naturally span a range of complexity — the difficulty label controls record count allocation and prompt distribution, not the topic structure itself.
 
-### 4. Weight Toward Hard Topics
+### 4. Weight Toward Hard Topics (But Not Impossible Ones)
 
-**Uniform distribution wastes compute on easy topics that quickly produce zero gradient.**
+**Uniform distribution wastes compute on easy topics that quickly produce zero gradient. But extremely hard topics (<10% pass rate) also waste compute — the model can't generate any successful completions, so there's no positive signal for GRPO to reinforce.**
 
-| Difficulty Tier | Base Model Success Rate | Target Record Share | Why |
-|----------------|------------------------|-------------------|-----|
-| Hard | 0-30% | 40-50% | Maximum learning signal (arXiv:2508.14094) |
-| Medium | 30-70% | 30-40% | Good variance, stable gradient |
-| Easy | 70-100% | 10-20% | Quickly becomes zero-variance |
+| Difficulty Tier | Base Model Pass Rate | Target Record Share | Why |
+|----------------|----------------------|-------------------|-----|
+| Too hard (flag) | <10% | Reduce or simplify | No GRPO signal — all completions fail, zero variance. Model likely lacks base capability. Simplify prompts or remove. (AdaRFT arXiv:2504.05520: filters ≤10% as wasteful) |
+| Hard (prioritize) | 10-40% | 40-50% | Maximum learning signal — model sometimes succeeds, creating useful variance (arXiv:2508.14094: 47% gains) |
+| Medium | 40-70% | 30-40% | Good variance, stable gradient, reliable convergence |
+| Easy (include sparingly) | 70-90% | 10-20% | Quickly becomes zero-variance but useful for stability |
+| Too easy (deprioritize) | >90% | Minimal | Near-zero variance — model already knows this, no learning signal (arXiv:2509.21880) |
+
+**The productive GRPO band is 10-90% pass rate.** Topics outside this band contribute little to training. The optimal target is ~50% pass rate (AdaRFT arXiv:2504.05520: β=0.5 reduces training steps by 43-71%).
 
 Measure difficulty *after* running the base model evaluation (eval-first approach), not guessed beforehand.
 
@@ -72,6 +92,7 @@ Measure difficulty *after* running the base model evaluation (eval-first approac
   "name": "Human-Readable Name",
   "parent_id": null,
   "system_prompt": "Focus on...",
+  "expected_difficulty": "medium",
   "reference_id": "optional-external-ref"
 }
 ```
@@ -82,73 +103,56 @@ Measure difficulty *after* running the base model evaluation (eval-first approac
 | `name` | Yes | Display name — should describe the **skill**, not the source section |
 | `parent_id` | No | Parent topic ID (null for root topics) |
 | `system_prompt` | No | System prompt segment — guides the model during training |
+| `expected_difficulty` | No | Initial difficulty estimate: `"easy"`, `"medium"`, or `"hard"`. Leaf topics only. Refined to actual pass-rate after difficulty probe. Used to weight record generation. |
 | `reference_id` | No | External reference ID for topic-source linking |
 
 ---
 
-## Three-Level Hierarchy: Domain → Skill → Difficulty
+## Two-Level Hierarchy: Domain → Skill (Difficulty as Metadata)
 
-Based on research (STEPS arXiv:2601.03676, TAGS arXiv:2601.13995), a well-designed hierarchy has three conceptual levels:
+Based on research (STEPS arXiv:2601.03676, TAGS arXiv:2601.13995), a well-designed hierarchy has two structural levels with difficulty encoded as metadata on leaf topics:
 
 ```
 Level 1: Capability Domain (broad area — what the model helps with)
   Level 2: Skill (specific capability — what the model learns to do)
-    Level 3: Difficulty Tier (how hard — based on base model eval scores)
+            └── expected_difficulty: "easy" | "medium" | "hard" (metadata, not a hierarchy level)
 ```
+
+**Why not 3 levels with difficulty as the 3rd?** TAGS (arXiv:2601.13995) found that encoding difficulty as a composite weight outperforms encoding it as a structural dimension. Making difficulty a hierarchy level doubles your leaf count (every skill gets basic + complex variants), which for small datasets (100-300 records) means each leaf gets fewer than 10 records — too few for GRPO variance. Keeping difficulty as metadata preserves topic granularity while still enabling difficulty-weighted record generation.
 
 ### Example: Chess Tutor
 
 ```
 Tactical Pattern Recognition (domain)
-├── Fork Detection (skill)
-│   ├── fork-detection-basic         → obvious forks (1-2 candidate moves)
-│   └── fork-detection-complex       → hidden forks (2-3 move calculation)
-├── Pin Recognition (skill)
-│   ├── pin-recognition-absolute     → absolute pins against king
-│   └── pin-recognition-relative     → relative pins requiring evaluation
-└── Combination Calculation (skill)
-    ├── combination-2-move           → 2-move forced sequences
-    └── combination-3-plus           → 3+ moves with branching
+├── fork-detection          → recognizing and exploiting forks          [hard]
+├── pin-recognition         → identifying absolute and relative pins     [medium]
+└── combination-calculation → calculating forced multi-move sequences    [hard]
 
 Strategic Thinking (domain)
-├── Pawn Structure Evaluation (skill)
-│   ├── pawn-structure-static        → evaluate given position
-│   └── pawn-structure-dynamic       → evaluate after pawn break
-└── Plan Formation (skill)
-    ├── plan-single-idea             → positions with one clear plan
-    └── plan-competing-ideas         → positions requiring plan comparison
+├── pawn-structure-eval     → evaluating pawn formations and weaknesses  [medium]
+└── plan-formation          → selecting and comparing strategic plans    [hard]
 
 Endgame Technique (domain)
-├── King & Pawn (skill)
-│   ├── kp-basic-opposition          → simple opposition and key squares
-│   └── kp-breakthrough              → pawn breakthroughs and triangulation
-└── Rook Endgames (skill)
-    ├── rook-endgame-lucena          → Lucena/Philidor pattern recognition
-    └── rook-endgame-complex         → rook + multiple pawns calculation
+├── king-pawn-endgames      → opposition, key squares, breakthroughs    [medium]
+└── rook-endgames           → Lucena/Philidor, rook + pawns             [hard]
 ```
+
+7 leaf topics instead of 14. Each gets ~25-35 records. Difficulty `[hard]`/`[medium]` controls record weighting — hard topics get more records and harder prompt variants, not a separate sub-topic.
 
 ### Example: Customer Support
 
 ```
 Billing & Payments (domain)
-├── Refund Processing (skill)
-│   ├── refund-standard              → standard refund flow, clear policy
-│   └── refund-edge-cases            → partial refunds, pro-rated, exceptions
-├── Plan Management (skill)
-│   ├── plan-upgrade-downgrade       → standard plan changes
-│   └── plan-complex-migration       → mid-cycle changes, grandfathered plans
-└── Payment Troubleshooting (skill)
-    ├── payment-common-failures      → expired card, insufficient funds
-    └── payment-rare-failures        → international, 3DS, fraud blocks
+├── refund-processing       → handling refund requests, eligibility, policy    [medium]
+├── plan-management         → upgrades, downgrades, mid-cycle migrations      [medium]
+└── payment-troubleshooting → diagnosing failures, international, fraud       [hard]
 
 Technical Support (domain)
-├── API Integration (skill)
-│   ├── api-auth-setup               → initial auth, token generation
-│   └── api-advanced-debugging       → rate limits, edge cases, race conditions
-└── Performance Diagnosis (skill)
-    ├── perf-common-bottlenecks      → slow queries, missing indexes
-    └── perf-complex-investigation   → distributed tracing, cascading failures
+├── api-integration         → auth setup, debugging, rate limits              [hard]
+└── performance-diagnosis   → query optimization, distributed tracing         [hard]
 ```
+
+5 leaf topics instead of 10. Prompts within each topic naturally span easy-to-hard — the `expected_difficulty` controls the record count allocation and prompt complexity distribution, not the topic structure.
 
 ---
 
