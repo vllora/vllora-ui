@@ -62,7 +62,7 @@ export function makeCreateTrainingResponse(
     provider_job_id: `prov-${jobId}`,
     workflow_id: 'ds-backend-001',
     status: 'pending',
-    base_model: 'unsloth/Qwen3.5-4B',
+    base_model: 'Qwen3.5-4B',
     provider: 'test',
     training_file_id: 'file-001',
     created_at: new Date().toISOString(),

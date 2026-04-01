@@ -84,7 +84,7 @@ export async function seedWorkflow(
   if (opts.jobId) {
     await workflowService.updateStepData(workflow.id, 'training', {
       jobId: opts.jobId,
-      baseModel: 'unsloth/Qwen3.5-4B',
+      baseModel: 'Qwen3.5-4B',
       status: 'completed',
       startedAt: Date.now(),
       metrics: null,

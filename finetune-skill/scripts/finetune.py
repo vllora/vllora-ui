@@ -3235,7 +3235,7 @@ def main() -> None:
     # create-training
     p = subparsers.add_parser("create-training", help="Create training job and save metadata locally")
     p.add_argument("--workflow-id", required=True, help="Workflow ID")
-    p.add_argument("--base-model", required=True, help="Base model (e.g., unsloth/Qwen3.5-4B)")
+    p.add_argument("--base-model", required=True, help="Base model (e.g., Qwen3.5-4B)")
     p.add_argument("--output-model", default=None, help="Output model name")
     p.add_argument("--display-name", default=None, help="Human-readable training job name")
     p.add_argument("--config", default=None, help="Training config JSON string")

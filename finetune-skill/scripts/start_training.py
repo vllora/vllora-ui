@@ -4,7 +4,7 @@
 """Start a reinforcement fine-tuning job on the vLLora gateway.
 
 Usage:
-  uv run scripts/start_training.py --workflow-id WF_ID --dataset-id ds_abc123 --output-model my-model [--base-model unsloth/Qwen3.5-4B]
+  uv run scripts/start_training.py --workflow-id WF_ID --dataset-id ds_abc123 --output-model my-model [--base-model Qwen3.5-4B]
 
 Creates a training job under a workflow and polls until complete.
 """
@@ -18,7 +18,7 @@ from pathlib import Path
 import requests
 
 DEFAULT_BASE_URL = "http://localhost:9090"
-DEFAULT_BASE_MODEL = "unsloth/Qwen3.5-4B"
+DEFAULT_BASE_MODEL = "Qwen3.5-4B"
 POLL_INTERVAL = 15
 MAX_POLL_ATTEMPTS = 300  # ~75 minutes
 

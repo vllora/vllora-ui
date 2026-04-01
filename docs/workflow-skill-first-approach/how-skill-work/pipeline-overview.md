@@ -813,7 +813,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py difficulty-probe \
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
   --workflow-id $WORKFLOW_ID \
-  --base-model "unsloth/Qwen3.5-4B" \
+  --base-model "Qwen3.5-4B" \
   --output-model "project-v1" \
   --output-dir training-jobs
 ```
@@ -821,9 +821,9 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 **Base model selection** (start with 4B — 9B OOMs with >100 records at K=8):
 | Model | Best for | Max records (K=8) | OOM risk |
 |-------|----------|-------------------|----------|
-| `unsloth/Qwen3.5-0.8B` | Quick iteration, prototyping, very narrow tasks | ~1000 | Very low |
-| `unsloth/Qwen3.5-2B` | Simple tasks, fast experiments | ~800 | Low |
-| `unsloth/Qwen3.5-4B` | **Default choice.** Good balance of quality and speed | ~500 | Low |
+| `Qwen3.5-0.8B` | Quick iteration, prototyping, very narrow tasks | ~1000 | Very low |
+| `Qwen3.5-2B` | Simple tasks, fast experiments | ~800 | Low |
+| `Qwen3.5-4B` | **Default choice.** Good balance of quality and speed | ~500 | Low |
 | `unsloth/Qwen3.5-9B` | Complex reasoning, broad domains | ~100 | High with >100 records |
 
 **GRPO training defaults** (research-validated):

@@ -394,7 +394,7 @@ User clicks "Start Training" (or Lucy calls start_training tool)
 │  Displays:                                              │
 │  ┌───────────────────────────────────────────────┐      │
 │  │ Status: Running                               │      │
-│  │ Base Model: unsloth/Qwen3.5-4B                │      │
+│  │ Base Model: Qwen3.5-4B                        │      │
 │  │                                               │      │
 │  │ Training Loss Chart:                          │      │
 │  │   1.2 ┤╲                                      │      │

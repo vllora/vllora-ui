@@ -8,7 +8,7 @@
 | Parameter | Value |
 |-----------|-------|
 | Test directory | `/Users/anhthuduong/Documents/GitHub/test-samples/financial-doc-analyzer` |
-| Models | `claude sonnet` (agent), `gpt-4o-mini` (eval), `unsloth/Qwen3.5-4B` (training) |
+| Models | `claude sonnet` (agent), `gpt-4o-mini` (eval), `Qwen3.5-4B` (training) |
 | Max turns | 200 |
 | Documents | Apple 10-K (963KB, ~77p), Microsoft 10-K (3.2MB, ~200p), Tesla 10-K (1.7MB, ~200p) |
 
@@ -84,7 +84,7 @@ Full 10-K Metrics Extraction (30)
 
 | Parameter | Value |
 |-----------|-------|
-| Base model | unsloth/Qwen3.5-4B |
+| Base model | Qwen3.5-4B |
 | Output model | financial-doc-analyzer-v1 |
 | Config | 8 epochs, lr 1e-06, LoRA 16, 8 candidates (GRPO) |
 | Epoch 1 avg score | 0.40 |

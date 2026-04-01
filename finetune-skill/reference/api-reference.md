@@ -546,7 +546,7 @@ curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
   -d '{
     "job_type": "provider_finetune",
     "dataset": "ds_abc123",
-    "base_model": "unsloth/Qwen3.5-4B",
+    "base_model": "Qwen3.5-4B",
     "output_model": "my-custom-model-1234567890",
     "display_name": "Customer Support Fine-tune",
     "training_config": {
@@ -652,7 +652,7 @@ curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
   "id": "ft_job_001",
   "provider_job_id": "ftjob-abc123",
   "status": "pending",
-  "base_model": "unsloth/Qwen3.5-4B",
+  "base_model": "Qwen3.5-4B",
   "dataset_id": "ds_abc123",
   "created_at": "2026-03-05T10:00:00Z"
 }
@@ -660,42 +660,78 @@ curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
 
 ### POST `/finetune/workflows/{workflow_id}/jobs/estimate`
 
-Estimate a reinforcement training run before creating it. Returns projected duration and USD cost using the configured/default instance profile (`VERTEX_NVIDIA_L4`) and current workflow row count.
+Estimate one or more reinforcement training runs before creating jobs. Returns grouped projected duration and USD cost per input config using the configured/default instance profile (`VERTEX_NVIDIA_L4`) and current workflow row count.
 
 ```bash
 curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs/estimate \
   -H "Content-Type: application/json" \
-  -d '{
-    "base_model": "unsloth/Qwen3.5-4B",
-    "training_config": {
-      "epochs": 2.0,
-      "batch_size": 5
+  -d '[
+    {
+      "base_model": "Qwen3.5-4B",
+      "training_config": {
+        "epochs": 2.0,
+        "batch_size": 5
+      },
+      "inference_parameters": {
+        "max_output_tokens": 256,
+        "response_candidates_count": 4
+      }
     },
-    "inference_parameters": {
-      "max_output_tokens": 256,
-      "response_candidates_count": 4
+    {
+      "base_model": "Qwen3.5-2B",
+      "training_config": {
+        "epochs": 1.0,
+        "batch_size": 5
+      },
+      "inference_parameters": {
+        "max_output_tokens": 256,
+        "response_candidates_count": 4
+      }
     }
-  }'
+  ]'
 ```
 
 **Estimate response:**
 ```json
-{
-  "workflow_id": "2f90adcc-9ff4-4c3c-a8f6-734d7f920bf9",
-  "job_type": "provider_finetune",
-  "instance": "VERTEX_NVIDIA_L4",
-  "base_model": "unsloth/Qwen3.5-4B",
-  "total_rows": 200,
-  "estimated_duration_seconds": 4540,
-  "estimated_cost_usd": 1.21
-}
+[
+  {
+    "config_index": 0,
+    "estimations": [
+      {
+        "workflow_id": "2f90adcc-9ff4-4c3c-a8f6-734d7f920bf9",
+        "job_type": "provider_finetune",
+        "instance": "VERTEX_NVIDIA_L4",
+        "base_model": "Qwen3.5-4B",
+        "total_rows": 200,
+        "estimated_duration_seconds": 4540,
+        "estimated_cost_usd": 1.21
+      }
+    ]
+  },
+  {
+    "config_index": 1,
+    "estimations": [
+      {
+        "workflow_id": "2f90adcc-9ff4-4c3c-a8f6-734d7f920bf9",
+        "job_type": "provider_finetune",
+        "instance": "VERTEX_NVIDIA_L4",
+        "base_model": "Qwen3.5-2B",
+        "total_rows": 200,
+        "estimated_duration_seconds": 1180,
+        "estimated_cost_usd": 0.31
+      }
+    ]
+  }
+]
 ```
 
 **Notes:**
-- Request shape is nearly identical to training create payload (base model + optional training/inference settings).
+- Request body is a root JSON array. Each item is nearly identical to training create payload (base model + optional training/inference settings).
+- Response is grouped by input item via `config_index`.
+- Each group has an `estimations` array; today it returns one default instance estimate, but this is future-ready for multiple instance types.
 - Estimation can be inaccurate and should be used only as a reference.
 - The estimator currently does not reserve capacity; it is a planning estimate only.
-- `base_model` must be non-empty.
+- Every request item must include non-empty `base_model`.
 
 ### GET `/finetune/workflows/{workflow_id}/jobs`
 
@@ -713,7 +749,7 @@ Check training job status.
   "id": "ft_job_001",
   "provider_job_id": "ftjob-abc123",
   "status": "running",
-  "base_model": "unsloth/Qwen3.5-4B",
+  "base_model": "Qwen3.5-4B",
   "fine_tuned_model": null,
   "training_config": {},
   "created_at": "...",

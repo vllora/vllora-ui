@@ -608,7 +608,7 @@ Key fields to use for analysis:
   "id": "ft_job_001",
   "provider_job_id": "ftjob-abc123",
   "status": "succeeded",
-  "base_model": "unsloth/Qwen3.5-4B",
+  "base_model": "Qwen3.5-4B",
   "fine_tuned_model": "my-custom-model",
   "training_config": {"learning_rate": 0.00001, "lora_rank": 8, "epochs": 2.0},
   "created_at": "...",
@@ -657,7 +657,7 @@ Maintain `iteration-log.md` to track what changed and why:
 
 ## Training Run 1
 - Job: ft_job_001 → saved to training-jobs/job-001.json
-- Base model: unsloth/Qwen3.5-4B → Output: my-custom-model
+- Base model: Qwen3.5-4B → Output: my-custom-model
 - Epoch scores: 0→0.52, 1→0.68, 2→0.79 → saved to training-jobs/job-001-epochs.json
 - Status: succeeded
 ```

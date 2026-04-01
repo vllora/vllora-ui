@@ -96,7 +96,7 @@ export function NewJobDialog({
   initialConfig,
   evalContext,
 }: NewJobDialogProps) {
-  const defaultBaseModel = initialConfig?.base_model || "unsloth/Qwen3.5-4B";
+  const defaultBaseModel = initialConfig?.base_model || "Qwen3.5-4B";
   const defaultEpochs =
     initialConfig?.training_config?.epochs ?? DEFAULT_TRAINING_CONFIG.epochs;
 

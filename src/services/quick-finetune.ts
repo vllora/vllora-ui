@@ -87,7 +87,7 @@ export async function startFinetuneTraining(
   const {
     workflowId,
     datasetName,
-    baseModel = 'unsloth/Qwen3.5-4B',
+    baseModel = 'Qwen3.5-4B',
     trainingConfig,
     inferenceParameters,
     chunkSize,
@@ -160,7 +160,7 @@ export async function startFinetuneTraining(
 export async function quickFinetune(options: QuickFinetuneOptions): Promise<QuickFinetuneResult> {
   const {
     workflowId,
-    baseModel = 'unsloth/Qwen3.5-4B',
+    baseModel = 'Qwen3.5-4B',
     trainingConfig,
     inferenceParameters,
     chunkSize,

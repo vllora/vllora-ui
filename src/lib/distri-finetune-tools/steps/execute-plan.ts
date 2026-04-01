@@ -597,7 +597,7 @@ async function executeFinetune(ctx: StepContext): Promise<StepResult> {
   // quickFinetune disabled during plan execution
   // const result = await quickFinetune({
   //   workflowId: workflow_id,
-  //   baseModel: 'unsloth/Qwen3.5-4B',
+  //   baseModel: 'Qwen3.5-4B',
   //   trainingConfig: {
   //     learning_rate: 0.00001,
   //     epochs: 2,

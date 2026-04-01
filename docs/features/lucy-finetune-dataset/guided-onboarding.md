@@ -416,7 +416,7 @@ interface ExecutePlanResult {
    - Data provenance (which knowledge sources were used)
    - Topic hierarchy visualization
    - Record statistics and coverage analysis
-7. **Start Finetune Job** - Automatically creates and submits the training job using `quickFinetune()` with base model `unsloth/Qwen3.5-4B` and default hyperparameters: learning rate `0.00001`, epochs `2`, batch size `10` (samples), LoRA rank `8`. Emits `vllora_finetune_job_created` event and switches UI to Jobs tab. (Non-fatal if fails, user can start manually)
+7. **Start Finetune Job** - Automatically creates and submits the training job using `quickFinetune()` with base model `Qwen3.5-4B` and default hyperparameters: learning rate `0.00001`, epochs `2`, batch size `10` (samples), LoRA rank `8`. Emits `vllora_finetune_job_created` event and switches UI to Jobs tab. (Non-fatal if fails, user can start manually)
 
 ## Progress Indicators
 

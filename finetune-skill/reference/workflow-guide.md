@@ -396,7 +396,7 @@ This shows git-style diffs between consecutive versions. Log version numbers in 
 
 | Model | Parameters | Good For |
 |-------|-----------|----------|
-| `unsloth/Qwen3.5-4B` | 4B | Fast experiments, narrow tasks |
+| `Qwen3.5-4B` | 4B | Fast experiments, narrow tasks |
 | Larger models | 7B+ | Complex reasoning, broad domains |
 
 Start with the smaller model for faster iteration. Scale up once you've validated your dataset and grader.

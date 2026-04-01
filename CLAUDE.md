@@ -224,7 +224,7 @@ The finetune pipeline is driven by `finetune-skill/` (external) and visualized b
 Topics Config → Categorization → Coverage & Generation → Grader Config → Evaluation → Training → Deployment
 ```
 
-> **Training stack**: GRPO via HuggingFace TRL `GRPOTrainer` + Unsloth (optimization wrapper, 90% VRAM reduction). Default base model: `unsloth/Qwen3.5-4B`. β=0 by default (KL values informational only). Full details in `finetune-skill/reference/training-metrics-guide.md`.
+> **Training stack**: GRPO via HuggingFace TRL `GRPOTrainer` + Unsloth (optimization wrapper, 90% VRAM reduction). Default base model: `Qwen3.5-4B`. β=0 by default (KL values informational only). Full details in `finetune-skill/reference/training-metrics-guide.md`.
 
 > **Naming note**: The "Evaluation" step is called "Dry Run" in internal code (variable names, file names, DB stores, internal identifiers like `dryRunPollingManager`). The tool name is `run_evaluation`. Only user-facing display text says "Evaluation".
 

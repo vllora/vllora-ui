@@ -845,9 +845,9 @@ Training starts here — only reached when the readiness gate indicates data and
 **Base model selection** (choose based on task complexity AND dataset size):
 | Model | Best for | Max records (K=8) | OOM risk |
 |-------|----------|-------------------|----------|
-| `unsloth/Qwen3.5-0.8B` | Quick iteration, prototyping, very narrow tasks | ~1000 | Very low |
-| `unsloth/Qwen3.5-2B` | Simple tasks, fast experiments | ~800 | Low |
-| `unsloth/Qwen3.5-4B` | **Default choice.** Good balance of quality and speed | ~500 | Low |
+| `Qwen3.5-0.8B` | Quick iteration, prototyping, very narrow tasks | ~1000 | Very low |
+| `Qwen3.5-2B` | Simple tasks, fast experiments | ~800 | Low |
+| `Qwen3.5-4B` | **Default choice.** Good balance of quality and speed | ~500 | Low |
 | `unsloth/Qwen3.5-9B` | Complex reasoning, broad domains | ~100 | High with >100 records |
 
 > **⚠️ Start with 4B.** The 9B model OOMs with >100 records and K=8 on standard GPU allocations. Use 9B only for small, complex datasets (<100 records). Use 0.8B/2B for quick prototyping or when training keeps failing on larger models. The `create-training` script warns if the model/dataset combination risks OOM.
@@ -855,14 +855,14 @@ Training starts here — only reached when the readiness gate indicates data and
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
   --workflow-id $WORKFLOW_ID \
-  --base-model "unsloth/Qwen3.5-4B" \
+  --base-model "Qwen3.5-4B" \
   --output-model "project-v1" \
   --output-dir training-jobs
 
 # To override defaults (e.g., after diagnosing issues from previous iterations):
 # python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 #   --workflow-id $WORKFLOW_ID \
-#   --base-model "unsloth/Qwen3.5-4B" \
+#   --base-model "Qwen3.5-4B" \
 #   --output-model "project-v2" \
 #   --config '{"learning_rate": 0.0000005, "epochs": 5, "lora_rank": 16}' \
 #   --inference-params '{"response_candidates_count": 16, "max_output_tokens": 1024}' \
@@ -1050,7 +1050,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
 # Only after readiness gate passes:
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
   --workflow-id $WORKFLOW_ID \
-  --base-model "unsloth/Qwen3.5-4B" \
+  --base-model "Qwen3.5-4B" \
   --output-model "project-v2" \
   --output-dir training-jobs
 ```
