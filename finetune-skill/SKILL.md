@@ -390,7 +390,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
 
 The script makes **multiple LLM calls per topic** (one per prompt type: explain, scenario, compare/analyze, edge-case, application) for better diversity. By default, every leaf topic gets an equal number of records. Use `--weight-by-difficulty` to distribute based on base model eval scores — hard topics (0-30% success) get 40-50% of records, medium (30-70%) get 30-40%, easy (70-100%) get 10-20%. This is the recommended mode after the first evaluation, because GRPO learning signal is strongest on hard topics (arXiv:2508.14094: 47% gains from hard examples vs 3-15% from easy). Use `--weight-by-source` to distribute proportionally to linked source parts instead (max 3:1 imbalance ratio). Inner parallelism runs all prompt-type calls concurrently within each topic.
 
-Add `--use-rag` to augment the static relations.json context with semantically retrieved knowledge parts. The script searches the gateway's knowledge index for each topic and merges the top results with relation-linked parts (deduplicating by part ID). For rapid iteration without building relations first, use `--rag-only`. Additional flags: `--rag-top-k N` (chunks per topic, default 15), `--rag-second-retrieval` (re-query with generated question for sharper grounding).
+Add `--use-rag` to augment the static relations.json context with semantically retrieved knowledge parts. This follows a two-stage question generation pattern (arXiv 2509.25736 — https://arxiv.org/html/2509.25736v1): first retrieve broad topic context, generate a diverse question, then retrieve again with the question itself for sharper grounding. The script searches the gateway's knowledge index for each topic and merges the top results with relation-linked parts (deduplicating by part ID). For rapid iteration without building relations first, use `--rag-only`. Additional flags: `--rag-top-k N` (chunks per topic, default 15), `--rag-second-retrieval` (enables the second per-question retrieval stage).
 
 > **Prerequisite for RAG:** Knowledge source parts must have embeddings. The gateway generates them automatically (~30s after upload). Verify with: `python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py search-knowledge --workflow-id $WORKFLOW_ID --phrase "test query"`
 
@@ -418,7 +418,7 @@ The UI at `http://localhost:5173/finetune` also shows all records grouped by top
 
 > Use this path when the NeMo Data Designer server (`localhost:8000`) is available and you want to generate training data using it. See `reference/nemo-guide.md` for full API details, column types, and recipe structure.
 
-**How this differs from Step 4:** Instead of `generate_records.py`, you use the NeMo server to generate rows via a recipe. The `rag-retrieval` column plugin calls the gateway knowledge search per row at generation time — no need to pre-link relations for knowledge retrieval.
+**How this differs from Step 4:** Instead of `generate_records.py`, you use the NeMo server to generate rows via a recipe. Both templates implement the two-stage question generation pattern from arXiv 2509.25736 (https://arxiv.org/html/2509.25736v1): generate a diverse `raw_question` from topic context first, then retrieve question-specific chunks via `rag-retrieval` and refine into the final `user_message`. The `rag-retrieval` column plugin calls the gateway knowledge search per row at generation time — no need to pre-link relations for knowledge retrieval.
 
 **Step-by-step:**
 

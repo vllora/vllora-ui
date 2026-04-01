@@ -170,7 +170,8 @@ finetune-skill/
 │   ├── grader-extraction.js    # Structured data extraction (field accuracy, hallucination)
 │   ├── grader-compliance.js    # Rule application (rule recall, false positives, citations)
 │   ├── grader-readability.js   # Simplification (readability + Flesch-Kincaid, jargon-free)
-│   └── nemo-recipe-template.json  # NeMo Data Designer recipe starter (curated seed + rag-retrieval + RAGAS scoring)
+│   ├── nemo-recipe-template.json  # NeMo Data Designer recipe starter (curated seed + rag-retrieval + RAGAS scoring)
+│   └── nemo-recipe-structured-template.json  # NeMo recipe for structured docs (subcategory sampler + llm-structured + expression)
 │
 └── README.md                   # This file
 ```
@@ -496,6 +497,7 @@ These scripts solve the #1 testing issue (agents creating shell scripts instead 
 - `grader-compliance.js` — Rule/regulation application (rule recall, false positives, citations)
 - `grader-readability.js` — Simplification/plain-language (readability + Flesch-Kincaid, jargon-free)
 - `nemo-recipe-template.json` — NeMo Data Designer recipe starter (curated seed + rag-retrieval + 4 RAGAS scoring columns: AspectCritic, ResponseGroundedness, Tele-Specificity, ResponseRelevancy)
+- `nemo-recipe-structured-template.json` — NeMo recipe for structured documents (subcategory sampler + llm-structured field extraction + expression composer)
 
 ---
 
