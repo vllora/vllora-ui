@@ -132,12 +132,12 @@ finetune-skill/
 │   ├── training-metrics-guide.md # ~240 lines — GRPO metric interpretation, paper-backed thresholds
 │   ├── iteration-strategy.md   # ~1090 lines — Eval analysis, training analysis, diagnosis, fixes, escalation
 │   ├── data-quality-gate.md    # ~170 lines — Pre-eval data quality gate: 4 gates, thresholds, research citations
+│   ├── readiness-gate.md       # ~100 lines — Post-eval readiness gate: hard checks, soft checks, difficulty probe
 │   ├── data-format.md          # ~110 lines — JSONL format spec
 │   ├── extraction-guide.md     # ~985 lines — Docling Serve setup, API calls, knowledge_parts.json schema
 │   ├── knowledge-parts-schema.json  # JSON schema for knowledge_parts.json
 │   ├── grader-writing.md       # ~620 lines — grader patterns + anti-patterns
 │   ├── topic-hierarchy.md      # ~290 lines — topic design + coverage analysis
-│   ├── iteration-strategy.md   # ~1090 lines — analysis, diagnosis, escalation
 │   ├── workflow-guide.md       # ~470 lines — per-step deep dive
 │   ├── nemo-guide.md           # ~340 lines — NeMo Data Designer integration (curated seed, rag-retrieval, RAGAS scoring)
 │   └── nemo-columns-reference.md  # All 11 built-in column types + 2 custom plugins, with full field schemas
@@ -457,6 +457,8 @@ The `reference/api-reference.md` documents all gateway endpoints. Each step uplo
 | `topic-hierarchy.md` | ~290 | Topic structure, source tracing, coverage analysis, per-topic scores |
 | `workflow-guide.md` | ~470 | Deep dive on each pipeline step (including categorization, variants, grader testing, evaluator versioning, training metrics, continuation runs, eval-job tracking) |
 | `nemo-guide.md` | ~340 | NeMo Data Designer integration: curated seed (materialize_seed.py), rag-retrieval + rag-relevancy plugins, RAGAS-aligned scoring columns, preview/full job workflow, convert_nemo_rows.py usage |
+| `data-quality-gate.md` | ~190 | Pre-eval data quality gate: 4 structural/diversity/GT/alignment checks, thresholds, research citations |
+| `readiness-gate.md` | ~100 | Post-eval readiness gate: hard checks (sample count, score std, avg score), soft checks, difficulty probe |
 | `nemo-columns-reference.md` | ~300 | All 11 built-in column types + 2 custom plugins: complete field schemas, sampler params, programmatic composition patterns |
 
 ### Helper Scripts (PEP 723)
