@@ -167,7 +167,7 @@ def cmd_upload_knowledge(args: argparse.Namespace) -> None:
     # The gateway's knowledge source endpoint does plain INSERT (no upsert),
     # so retrying without this check creates duplicate sources.
     existing = _api("GET", f"{args.base_url}/finetune/workflows/{args.workflow_id}/knowledge")
-    existing_sources = existing if isinstance(existing, list) else existing.get("sources", [])
+    existing_sources = existing if isinstance(existing, list) else existing.get("knowledge_sources", existing.get("sources", []))
     matching = [s for s in existing_sources if s.get("name") == source_name]
 
     if matching and args.force:
@@ -179,7 +179,9 @@ def cmd_upload_knowledge(args: argparse.Namespace) -> None:
     elif matching:
         # Check if existing source already has parts (completed upload)
         existing_src = matching[0]
-        part_count = existing_src.get("part_count", existing_src.get("parts_count", 0))
+        # Gateway returns parts as array "part", not a count field
+        parts_array = existing_src.get("part", existing_src.get("parts", []))
+        part_count = len(parts_array) if isinstance(parts_array, list) else existing_src.get("part_count", 0)
         if part_count > 0:
             print(f"  Source '{source_name}' already exists with {part_count} parts — skipping (use --force to replace)")
             print(f"  Knowledge source ID: {existing_src.get('id', 'unknown')}")
@@ -480,7 +482,11 @@ def cmd_upload_records(args: argparse.Namespace) -> None:
         records.append(record)
 
     if topic_misses:
-        print(f"Warning: {topic_misses} records have unresolved topic IDs", file=sys.stderr)
+        print(f"Error: {topic_misses} records have topic IDs not found in gateway topics.", file=sys.stderr)
+        print("  This means records reference topics that were never uploaded (or were deleted).", file=sys.stderr)
+        print("  Fix: upload topics first (finetune.py upload-topics), then retry upload-records.", file=sys.stderr)
+        print("  Or check training.jsonl — records may have ad-hoc topic IDs not in topics.json.", file=sys.stderr)
+        sys.exit(1)
 
     if parse_errors:
         print(f"Warning: {parse_errors} lines skipped due to JSON errors", file=sys.stderr)

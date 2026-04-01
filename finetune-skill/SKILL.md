@@ -407,7 +407,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step topics --project-d
 python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step relations --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
-**Upload** topics, relations, and relevance labels:
+**Upload** topics, relations, and relevance labels. **⚠️ If you redesigned topics (changed IDs, added/removed topics), you MUST re-upload before uploading records.** Records reference topic IDs — stale gateway topics cause FK violations and records with `topic: null`.
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-topics \
   --workflow-id $WORKFLOW_ID --file topics.json
@@ -472,6 +472,8 @@ Add `--use-rag` to augment the static relations.json context with semantically r
 > **Prerequisite for RAG:** Knowledge source parts must have embeddings. The gateway generates them automatically (~30s after upload). Verify with: `python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py search-knowledge --workflow-id $WORKFLOW_ID --phrase "test query"`
 
 If some topics fail, use `--append` to retry without overwriting. Adapt `--records-per-topic` (default 25), `--min-per-topic` (default 10), `--max-per-topic` (default 50) to the project. **Generate at least 200+ total records.**
+
+**⚠️ Every record's `topic` field MUST match a leaf topic ID in `topics.json`.** Do NOT invent ad-hoc topic IDs during generation. If you generate records with a custom script instead of `generate_records.py`, validate topic IDs before writing to `training.jsonl`. The `upload-records` command will reject records with topic IDs that don't exist on the gateway — mismatched topics cause FK violations and silent data loss.
 
 **Deduplicate** — parallel generation can produce near-duplicate prompts across overlapping topics:
 ```bash
