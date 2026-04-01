@@ -277,8 +277,8 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
                 Running
               </div>
             ) : job.status === "cancelled" ? (
-              <span className="inline-flex items-center rounded bg-zinc-500/10 border border-zinc-500/20 px-2 py-0.5 text-[10px] font-medium text-zinc-400">
-                Cancelled
+              <span className="inline-flex items-center gap-1 rounded bg-zinc-500/10 border border-zinc-500/20 px-2 py-0.5 text-[10px] font-medium text-zinc-400">
+                Cancelled{result ? ' (partial)' : ''}
               </span>
             ) : job.status === "failed" && !result ? (
               <span className="inline-flex items-center rounded bg-red-500/10 border border-red-500/20 px-2 py-0.5 text-[10px] font-medium text-red-400">
