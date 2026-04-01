@@ -1,0 +1,177 @@
+{
+  "_comment": "NeMo Data Designer recipe template for STRUCTURED DOCUMENT extraction (invoices, contracts, forms, specs). Pattern: rag-retrieval → topic_context expression (seed passthrough) → subcategory sampler → llm-structured (drop:true) → expression (drop:true) → two-stage question generation (raw_question + question_chunks) → llm-text outputs. Copy, replace <PLACEHOLDERS>, adapt output_format schema and section values to your document type. NOTE: _comment fields are NOT allowed inside column objects — NeMo rejects them. Only this top-level _comment is safe. topic_context expression re-materializes the seed topic_path so it is guaranteed available in all downstream llm-text Jinja2 contexts.",
+  "recipe": {
+    "seed_config": {
+      "source": {
+        "seed_type": "curated",
+        "path": "<REPLACE: resolved_path from POST /seed/inspect-curated response>",
+        "topic_filter": null
+      }
+    },
+    "columns": [
+      {
+        "name": "retrieved_chunks",
+        "column_type": "rag-retrieval",
+        "workflow_id": "<REPLACE: workflow ID>",
+        "gateway_url": "http://localhost:9090",
+        "top_k": 15,
+        "query_field": "topic_path"
+      },
+      {
+        "name": "topic_context",
+        "column_type": "expression",
+        "expr": "{{ topic_path }}"
+      },
+      {
+        "name": "doc_section",
+        "column_type": "sampler",
+        "sampler_type": "subcategory",
+        "category_field": "topic",
+        "params": {
+          "categories": {
+            "<REPLACE: topic-id-1>": ["<section-a>", "<section-b>", "<section-c>"],
+            "<REPLACE: topic-id-2>": ["<section-d>", "<section-e>"],
+            "_default": ["overview", "details", "requirements", "examples"]
+          }
+        }
+      },
+      {
+        "name": "extracted_fields",
+        "column_type": "llm-structured",
+        "model_alias": "openai-text",
+        "drop": true,
+        "prompt": "Extract the key structured fields from this document section. Focus on the '{{doc_section}}' aspects.\n\nDocument section: {{topic_context}}\nContent:\n{{retrieved_chunks}}\n\nExtract the fields defined in the output schema. Use null for fields not present in the content.",
+        "output_format": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "Title or heading of this section"
+            },
+            "key_values": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "Key facts, values, or requirements from this section"
+            },
+            "summary": {
+              "type": "string",
+              "description": "One-sentence summary of the section's main point"
+            }
+          },
+          "required": ["title", "key_values", "summary"]
+        }
+      },
+      {
+        "name": "composed_context",
+        "column_type": "expression",
+        "drop": true,
+        "expr": "Section: {{ doc_section }}\nTopic: {{ topic_context }}\n\n{% set fields = extracted_fields | tojson | fromjson %}Title: {{ fields.get('title', '') }}\nKey points:\n{% for kv in fields.get('key_values', []) %}- {{ kv }}\n{% endfor %}\nSummary: {{ fields.get('summary', '') }}\n\n---\nSource material:\n{{ retrieved_chunks }}"
+      },
+      {
+        "name": "difficulty",
+        "column_type": "sampler",
+        "sampler_type": "category",
+        "params": {
+          "values": ["beginner", "intermediate", "advanced"]
+        }
+      },
+      {
+        "name": "raw_question",
+        "column_type": "llm-text",
+        "model_alias": "openai-text",
+        "drop": true,
+        "prompt": "Generate one question a {{difficulty}} audience might ask about the '{{doc_section}}' aspects of this topic. Be creative and think about practical application — don't constrain yourself to specific facts.\n\nTopic: {{topic_context}}\nSection focus: {{doc_section}}\n\nReturn only the question."
+      },
+      {
+        "name": "question_chunks",
+        "column_type": "rag-retrieval",
+        "workflow_id": "<REPLACE: workflow ID>",
+        "gateway_url": "http://localhost:9090",
+        "top_k": 10,
+        "query_field": "raw_question",
+        "drop": true
+      },
+      {
+        "name": "system_prompt",
+        "column_type": "llm-text",
+        "model_alias": "openai-text",
+        "prompt": "Write a concise system prompt (2-3 sentences) for an AI assistant trained on this document type. Define the assistant's role using only the '{{doc_section}}' aspects of the material. Adapt the tone for a {{difficulty}} audience.\n\nDocument context: {{topic_context}}\n\nReturn only the system prompt."
+      },
+      {
+        "name": "user_message",
+        "column_type": "llm-text",
+        "model_alias": "openai-text",
+        "prompt": "Refine this question to make it specific to the '{{doc_section}}' section, answerable from the document content, and natural for a {{difficulty}} audience. Keep the intent of the original question but anchor it to concrete details and terminology from the source. Ask for explanation, application, or analysis — not simple lookup.\n\nTopic: {{topic_context}}\nSection: {{doc_section}}\nOriginal question: {{raw_question}}\n\nDocument content:\n{{composed_context}}\n\nAdditional context:\n{{question_chunks}}\n\nReturn only the refined question."
+      },
+      {
+        "name": "reference_answer",
+        "column_type": "llm-text",
+        "model_alias": "openai-text",
+        "prompt": "Write a concise, accurate reference answer grounded in the document content. Focus on the '{{doc_section}}' aspects. Be factually precise.\n\nDocument content:\n{{composed_context}}\n\nAdditional context:\n{{question_chunks}}\n\nQuestion: {{user_message}}\n\nReturn only the answer."
+      },
+      {
+        "name": "judge_answerable",
+        "column_type": "llm-judge",
+        "model_alias": "openai-text",
+        "prompt": "Does the document content contain sufficient information to answer this question, without needing outside knowledge?\n\nQuestion: {{user_message}}\nContent: {{composed_context}}\n\nAdditional context: {{question_chunks}}",
+        "scores": [
+          {
+            "name": "answerable",
+            "description": "Whether the question can be answered from the provided content alone.",
+            "options": {
+              "0": "Content does not contain sufficient information to answer the question.",
+              "1": "Content contains sufficient information to answer the question."
+            }
+          }
+        ]
+      },
+      {
+        "name": "judge_groundedness",
+        "column_type": "llm-judge",
+        "model_alias": "openai-text",
+        "prompt": "How well is the reference answer supported by the document content?\n\nQuestion: {{user_message}}\nAnswer: {{reference_answer}}\nContent: {{composed_context}}\n\nAdditional context: {{question_chunks}}",
+        "scores": [
+          {
+            "name": "groundedness",
+            "description": "Whether every claim in the answer is directly supported by the content.",
+            "options": {
+              "0": "Not grounded — answer contains claims absent from or contradicted by content.",
+              "0.5": "Partially grounded — most claims supported but some require outside knowledge.",
+              "1": "Fully grounded — every claim is directly supported by content."
+            }
+          }
+        ]
+      },
+      {
+        "name": "judge_specificity",
+        "column_type": "llm-judge",
+        "model_alias": "openai-text",
+        "prompt": "Does the question use domain-specific terminology that appears in the document content, rather than generic language?\n\nQuestion: {{user_message}}\nContent: {{composed_context}}\n\nAdditional context: {{question_chunks}}",
+        "scores": [
+          {
+            "name": "specificity",
+            "description": "Whether the question contains domain-specific terms grounded in the content.",
+            "options": {
+              "0": "Generic — question uses no domain-specific terms found in the content.",
+              "1": "Specific — question uses domain terminology present in the content."
+            }
+          }
+        ]
+      },
+      {
+        "name": "score_relevancy",
+        "column_type": "rag-relevancy",
+        "workflow_id": "<REPLACE: workflow ID>",
+        "gateway_url": "http://localhost:9090",
+        "top_k": 10,
+        "query_field_a": "user_message",
+        "query_field_b": "reference_answer"
+      }
+    ]
+  },
+  "run": {
+    "rows": 10,
+    "execution_type": "preview",
+    "run_name": "<REPLACE: descriptive name for this run>"
+  }
+}

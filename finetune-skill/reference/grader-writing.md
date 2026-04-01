@@ -13,7 +13,7 @@ function evaluate(input) {
   // input.messages = the full conversation (system + user + assistant messages)
   // input.response = the model's generated response (string, set by runtime)
   // input.history = conversation history (string, set by runtime)
-  // input.ground_truth = source reference excerpt (string, optional — from training record)
+  // input.ground_truth = optional reference text (string — from training record)
   // Must return: { score: <number 0-1>, reason: <string> }
 }
 ```
@@ -109,13 +109,13 @@ Always guard with `typeof __langdb_call_stockfish === "function"` — this helpe
 
 ---
 
-## Using Source Reference Data (`ground_truth`)
+## Using Optional Reference Data (`ground_truth`)
 
-When training records include a `ground_truth` field (a concise excerpt from the source material), the grader can use it to verify factual accuracy of model responses.
+When training records include a `ground_truth` field (usually a concise source excerpt, but it can be any auxiliary reference string), the grader can use it to verify factual accuracy or apply task-specific evaluation logic.
 
 ### How it works
 
-- `input.ground_truth` contains the relevant source excerpt (string, may be empty/absent)
+- `input.ground_truth` contains the reference text (string, may be empty/absent)
 - `{{ground_truth}}` is a template variable that auto-resolves in `__langdb_call_llm_as_judge_obj` prompts
 - The generated grader templates already include conditional `ground_truth` support
 
@@ -143,9 +143,9 @@ Evaluate the response on these criteria:
 
 ### Best practices
 
-- Use `ground_truth` for **accuracy verification**, not exact match — the model should convey the same information, not quote the source verbatim
+- Use `ground_truth` for evaluator-side reference context. A source excerpt is the most common pattern, but any intentionally chosen text field is valid.
 - The field is **optional** — graders must work with or without it (use conditional inclusion as shown above)
-- Keep excerpts focused: just the passage(s) relevant to the question, not the entire source document
+- Keep the text focused on whatever the grader needs — for source excerpts, include only the passage(s) relevant to the question rather than the whole document
 - `generate_records.py` produces `ground_truth` by default; disable with `--no-ground-truth`
 
 ---

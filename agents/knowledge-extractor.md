@@ -27,7 +27,7 @@ The parent agent provides these as plain text in the prompt. **Use the actual va
 - **SKILL_DIR** — absolute path to the finetune skill directory
 - **WORKFLOW_ID** — the workflow UUID
 - **GATEWAY_URL** — e.g., `http://localhost:9090`
-- **DOC_PATH** — absolute path to the PDF/document to extract
+- **DOC_PATH** — absolute path to the PDF to extract
 - **DOC_SLUG** — the slug for this document (e.g., `irs-publication-525`)
 - **DOC_DIR** — absolute path to the output directory (e.g., `.../knowledge/irs-publication-525`)
 - **TASK_ID** — the Docling async task ID (already submitted by orchestrator). If empty, you must submit yourself.
@@ -65,7 +65,7 @@ Repeat this poll loop. Do NOT give up early. Maximum 20 polls (10 minutes total)
 
 **If NO TASK_ID was provided** (fallback — submit yourself):
 ```bash
-python3 <SKILL_DIR>/scripts/docling_extract.py "<DOC_PATH>" \
+uv run <SKILL_DIR>/scripts/docling_extract.py "<DOC_PATH>" \
   --output "<DOC_DIR>/docling-result.json"
 ```
 
@@ -98,7 +98,7 @@ If this check fails, go to **Fallback** section at the bottom. Do NOT write cust
 **Step 3a — Run the deterministic extraction script:**
 
 ```bash
-python3 <SKILL_DIR>/scripts/build_knowledge_parts.py \
+uv run <SKILL_DIR>/scripts/build_knowledge_parts.py \
   "<DOC_DIR>/docling-result.json" \
   -o "<DOC_DIR>/knowledge_parts.json" \
   --slug "<DOC_SLUG>"
@@ -131,11 +131,7 @@ cd "<DOC_DIR>" && python3 extract.py
 ### 4. Post-process
 
 ```bash
-python3 <SKILL_DIR>/scripts/extract_tables.py \
-  --docling-result "<DOC_DIR>/docling-result.json" \
-  --parts-file "<DOC_DIR>/knowledge_parts.json"
-
-python3 <SKILL_DIR>/scripts/consolidate_parts.py "<DOC_DIR>/knowledge_parts.json"
+uv run <SKILL_DIR>/scripts/consolidate_parts.py "<DOC_DIR>/knowledge_parts.json"
 ```
 
 ### 5. Validate extraction (MUST PASS)
@@ -152,7 +148,7 @@ If validation reports FAIL for this document after `--fix`:
 ### 6. Upload to gateway
 
 ```bash
-python3 <SKILL_DIR>/scripts/finetune.py upload-knowledge \
+uv run <SKILL_DIR>/scripts/finetune.py upload-knowledge \
   --workflow-id <WORKFLOW_ID> \
   --file "<DOC_PATH>" \
   --parts-file "<DOC_DIR>/knowledge_parts.json" \
@@ -167,10 +163,24 @@ python3 <SKILL_DIR>/scripts/finetune.py upload-knowledge \
 **Only use this if**: Docling health check fails (`curl http://127.0.0.1:5001/health` returns error) OR Docling task status is `failed` after polling. Do NOT use this fallback just because polling is slow.
 
 ```bash
-python3 <SKILL_DIR>/scripts/pdftotext_extract.py "<DOC_PATH>" \
-  -o "<DOC_DIR>/knowledge_parts.json"
+# Verify Docling is truly down
+curl -sS http://127.0.0.1:5001/health || echo "Docling unavailable — using pdftotext fallback"
+
+# Convert PDF to markdown via pdftotext
+uv run <SKILL_DIR>/scripts/convert_pdf_to_markdown.py \
+  "<DOC_PATH>" "<DOC_DIR>/<DOC_SLUG>.md"
+
+# Build parts from markdown output
+uv run <SKILL_DIR>/scripts/build_knowledge_parts.py \
+  "<DOC_DIR>/<DOC_SLUG>.md" \
+  -o "<DOC_DIR>/knowledge_parts.json" \
+  --slug "<DOC_SLUG>"
+
+# Post-process
+uv run <SKILL_DIR>/scripts/consolidate_parts.py "<DOC_DIR>/knowledge_parts.json"
 ```
-Then skip step 4 (no docling-result.json for table extraction) and go to step 5 (upload).
+
+Then skip step 5 (no docling-result.json for table extraction) and go to step 6 (upload).
 
 **Report `extraction_method: pdftotext`** in the upload metadata and in your summary so the orchestrator knows Docling was not used.
 

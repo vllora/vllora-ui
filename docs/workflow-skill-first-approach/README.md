@@ -45,7 +45,7 @@ Without the agents, the skill still runs but loses auto-logging, automated relat
 
 See [skill-testing-guide.md](./skill-testing-guide.md) for detailed setup and testing instructions.
 
-## Current Status (2026-03-18)
+## Current Status (2026-03-31)
 
 The **3-page UI redesign** (Canvas, Sources, Table) is the active workstream. An HTML mockup serves as the design source of truth, and the React UI is being updated to match it.
 
@@ -54,6 +54,10 @@ The **3-page UI redesign** (Canvas, Sources, Table) is the active workstream. An
 - React: Unified table with dynamic job score columns (eval + train)
 - React: Redesigned record detail sidebar (split eval/train scores, conversation layout, source context)
 - React: Canvas quality scores, source topic dots, data flow banner, prompt panel
+
+- Skill: NeMo Data Designer integration (Step 4B) — two-stage generation (arXiv 2509.25736), rag-retrieval plugin, RAGAS scoring, convert_nemo_rows.py
+- Skill: Data quality gate (Step 5.5b), readiness gate (Step 7c), difficulty probe
+- Skill: Docling-first extraction with deterministic `build_knowledge_parts.py` (custom extract.py only for edge cases)
 
 **Read [implementation-status.md](./implementation-status.md) for the full breakdown.**
 
@@ -72,6 +76,7 @@ The **3-page UI redesign** (Canvas, Sources, Table) is the active workstream. An
 | [skill-e2e-test-notes.md](./skill-e2e-test-notes.md) | Skill E2E test results, API issues found, verification status |
 | [run-infrastructure.md](./run-infrastructure.md) | Run harness: `run-finetune-agent.sh`, `format-finetune-log.py`, transcript format, debugging logs |
 | [RFT/GRPO Training Explained](./how-skill-work/rft-grpo-training-explained.md) | How GRPO works step-by-step: G vs epochs, advantage computation, grader as objective, failure modes, full numeric examples |
+| [NeMo Data Designer Guide](../../finetune-skill/reference/nemo-guide.md) | NeMo primary generation path: two-stage question generation (arXiv 2509.25736), rag-retrieval plugin, recipe design, preview/full job workflow. Repo: https://github.com/vllora/nemo |
 
 ## Mockups
 
