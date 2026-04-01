@@ -64,9 +64,10 @@ The skill requires two things in your project's `.claude/` directory:
 ```bash
 your-project/
 └── .claude/
-    ├── agents/                        # Companion agents (3 files)
+    ├── agents/                        # Companion agents (4 files)
     │   ├── knowledge-extractor.md     # Document extraction (Step 2)
     │   ├── relation-builder.md        # Topic-part matching (Step 3)
+    │   ├── nemo-data-generator.md     # NeMo Data Designer generation (Step 4B, optional)
     │   └── training-monitor.md        # Training anomaly detection (Step 7)
     └── skills/
         └── finetune-skill/            # The skill itself
@@ -96,10 +97,10 @@ cp agents/*.md "$DEST/.claude/agents/"
 ### Prerequisites
 
 - **Gateway** running at `localhost:9090` (`npm run start:backend` from the gateway repo)
-- **Python 3** with `requests` library (`pip install requests`)
-- **uv** for running Python scripts (`curl -LsSf https://astral.sh/uv/install.sh | sh`) — handles script dependencies automatically
+- **uv** for running Python scripts (`curl -LsSf https://astral.sh/uv/install.sh | sh`) — all scripts use PEP 723 inline deps, no manual `pip install` needed
 - **Claude Code** with Bash permissions — the skill and agents run shell commands extensively
 - **Docker + Docling Serve** (optional — only needed for scanned PDFs or complex multi-column layouts)
+- **NeMo Data Designer** (optional — only if `use_nemo: true`, see Configuration below)
 
 ### Verify installation
 
@@ -110,6 +111,47 @@ claude  # start Claude Code
 # Claude should auto-detect the skill. Test with:
 # "I want to finetune a model on my tax documents"
 ```
+
+### Configuration
+
+The skill reads project-level configuration from `finetune-project/config.json` (created automatically at Step 1). To set defaults **before** running the skill, create a `finetune-defaults.json` in your project root:
+
+```json
+// finetune-defaults.json (optional — place in project root)
+{
+  "use_nemo": true
+}
+```
+
+The agent merges this into `config.json` when creating a new workflow. No skill modification needed.
+
+#### Available flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `use_nemo` | `false` | `false` → Step 4A: generate records via `generate_records.py` (default, no extra infrastructure). `true` → Step 4B: generate records via NeMo Data Designer (requires NeMo server at `localhost:8000` + OpenAI API key). |
+
+#### NeMo Data Designer setup (when `use_nemo: true`)
+
+```bash
+# 1. Clone and set up NeMo
+git clone https://github.com/vllora/nemo
+cd nemo && uv sync
+
+# 2. Set OpenAI API key
+echo "OPENAI_API_KEY=sk-..." > .env
+
+# 3. Start the server
+uv run uvicorn server:app --host 0.0.0.0 --port 8000
+
+# 4. Enable in your project
+cd /path/to/your-project
+echo '{"use_nemo": true}' > finetune-defaults.json
+```
+
+NeMo adds judge columns (quality filtering at generation time) and `reference_answer` generation but requires additional infrastructure. See `reference/nemo-guide.md` for full details.
+
+**Switching between modes:** Change the flag and delete the `generate-data` checkpoint to re-run Step 4 with the other path. Steps 1-3 and 5+ are identical regardless of the flag.
 
 ---
 
@@ -276,7 +318,20 @@ User: "finetune my tax deduction PDF"
 │    User: "Looks good, but add more on SALT deductions"  │
 │           │                                             │
 │           ▼                                             │
-│  Step 4: Generate training data ► scripts/generate_*.py │
+│  Step 4: Generate training data                         │
+│    Check config.json use_nemo flag:                     │
+│    ├─ false (default) → scripts/generate_records.py     │
+│    └─ true → spawn nemo-data-generator subagent:        │
+│           │                                             │
+│    ┌──────────────────────────────────────┐             │
+│    │  SUBAGENT: nemo-data-generator       │             │
+│    │  Model: Sonnet | maxTurns: 60        │             │
+│    │                                      │             │
+│    │  Materialize seed → recipe design    │             │
+│    │  → preview → full job → convert      │             │
+│    │  → validate → upload                 │             │
+│    │  Writes: training.jsonl              │             │
+│    └──────────────────────────────────────┘             │
 │           │                                             │
 │           ▼  🗣️ REVIEW WITH USER                        │
 │    "184 records generated. Per-topic breakdown:          │
@@ -352,6 +407,7 @@ User: "finetune my tax deduction PDF"
 |----------|------|-------|-----------|--------------|---------|
 | `knowledge-extractor` | 2 | Sonnet | 1 per PDF | Each PDF needs Docling polling + custom extract.py — Sonnet handles complex document structure better than Haiku | N agents process N PDFs in parallel. Total time = slowest PDF, not sum of all |
 | `relation-builder` | 3b | Sonnet | 1 | Parts-index scanning needs understanding of topic-part semantic relevance, not just keyword matching. Max 15 relations per leaf topic | Fresh context for index matching, main stays clean |
+| `nemo-data-generator` | 4B | Sonnet | 1 | NeMo recipe design + API orchestration (seed upload, preview, full job, convert). Only spawned when `use_nemo: true` in config | NeMo context (600+ lines of reference docs) stays out of main agent. Falls back to Step 4A if NeMo is down |
 | `training-monitor` | 7c | Sonnet | 1 | Training runs 30-120 min — writes monitoring script with paper-backed thresholds from training-metrics-guide.md | Writes script, launches `nohup`, returns instantly. Distinguishes "no data yet" from actual NaN anomalies |
 
 **User review checkpoints (🗣️):**

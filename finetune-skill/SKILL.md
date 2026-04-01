@@ -206,12 +206,36 @@ fi
 ```
 Save `$WORKFLOW_ID` — every subsequent step uses it to upload data incrementally.
 
-**Persist the workflow ID** to a config file and checkpoint immediately — if the agent crashes after this, the resume logic can find the project:
+**Persist the workflow ID** to a config file and checkpoint immediately:
 ```bash
 mkdir -p finetune-project
 cat > finetune-project/config.json << EOF
-{"workflow_id": "$WORKFLOW_ID", "gateway_url": "http://localhost:9090"}
+{"workflow_id": "$WORKFLOW_ID", "gateway_url": "http://localhost:9090", "use_nemo": false}
 EOF
+```
+
+Then check if the user has a `finetune-defaults.json` in the project root — if so, merge those settings into `config.json`:
+```bash
+if [ -f finetune-defaults.json ]; then
+  python3 -c "
+import json
+config = json.load(open('finetune-project/config.json'))
+defaults = json.load(open('finetune-defaults.json'))
+config.update(defaults)
+json.dump(config, open('finetune-project/config.json', 'w'))
+print(f'Merged defaults: {defaults}')
+"
+fi
+```
+
+> **`use_nemo` flag**: Controls record generation at Step 4. `false` (default) → `generate_records.py`. `true` → NeMo Data Designer (requires server at `localhost:8000`).
+>
+> **To set defaults**, create `finetune-defaults.json` in the project root before running the skill:
+> ```json
+> {"use_nemo": true}
+> ```
+
+```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step create-workflow --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
@@ -456,6 +480,17 @@ Skip this step if generating all data from scratch.
 
 > **PREREQUISITES:** Step 3 complete (topics uploaded, relations built).
 
+**Check `config.json` for `use_nemo` flag:**
+```bash
+USE_NEMO=$(python3 -c "import json; print(json.load(open('finetune-project/config.json')).get('use_nemo', False))" 2>/dev/null || echo "False")
+```
+
+If `use_nemo` is `True`, skip to **Step 4B** below. Otherwise continue with the default path.
+
+---
+
+#### Step 4A: Default — `generate_records.py`
+
 Generate training prompts grounded in the knowledge parts linked to each topic via relations (Step 3d). Each record is a system + user message pair — no assistant messages (GRPO generates its own responses).
 
 **Outputs:** `training.jsonl`
@@ -513,42 +548,21 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
 
 The UI at `http://localhost:5173/finetune` also shows all records grouped by topic — point the user there for a visual review.
 
-### Step 4B: Optional — NeMo Data Designer
+#### Step 4B: NeMo Data Designer (when `use_nemo: true`)
 
-> **Optional.** Only use when NeMo server (`localhost:8000`) is already running. Step 4 is the default. See `reference/nemo-guide.md` for full details. Repo: https://github.com/vllora/nemo
->
-> **⚠️ Prerequisite:** `materialize_seed.py` lives in the NeMo repo (not this skill). Clone it first: `git clone https://github.com/vllora/nemo && cd nemo && uv sync`
+> **Activated by:** `"use_nemo": true` in `finetune-project/config.json`. The user sets this flag — the agent does not decide. If the flag is `false` or missing, use Step 4A above.
 
-> **⚠️ NeMo is pre-1.0 (v0.5.x).** Pin to a tested version. v0.5.4 had a supply chain security incident.
+**Spawn the `nemo-data-generator` subagent** with:
+- `SKILL_DIR=${CLAUDE_SKILL_DIR}`
+- `PROJECT_DIR` — absolute path to `finetune-project/`
+- `WORKFLOW_ID`, `GATEWAY_URL=http://localhost:9090`
+- `NEMO_URL=http://localhost:8000`
+- `SYSTEM_PROMPT` — the root system prompt from Step 1
+- `RECORDS_PER_TOPIC` — target records per leaf topic (default: 25)
 
-| | Step 4 (default) | Step 4B (NeMo) |
-|---|---|---|
-| Setup | None | NeMo server + OpenAI key + recipe |
-| Traceability | Full per-record `source_parts` | Recovered via gateway search (approximate) |
-| Quality filtering | Post-generation | At generation time (judge columns) |
-| Reference answers | Not generated | Generated — useful for grader writing |
-| Best for | Default, small datasets | Teams with NeMo deployed, large datasets |
+The subagent handles everything: verify NeMo → materialize seed → design recipe → preview → full job → convert → validate → upload. It returns a summary with record counts and any issues.
 
-**Sequence:** (1) `materialize_seed.py --topics --system-prompt` → curated parquet with `composed_system_prompt` + `expected_difficulty`, (2) upload + inspect seed, (3) design recipe from `templates/nemo-recipe-template.json`, (4) preview job (10 rows), (5) full job, (6) convert + validate + upload:
-
-```bash
-uv run ${CLAUDE_SKILL_DIR}/scripts/convert_nemo_rows.py \
-  --input finetune-project/nemo-dataset-page-1.json \
-  --output finetune-project/training.jsonl \
-  --min-answerable 1.0 --min-groundedness 0.75 --min-specificity 0.75 \
-  --ground-truth-field reference_answer \
-  --workflow-id $WORKFLOW_ID
-
-uv run ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py finetune-project/training.jsonl \
-  --topics finetune-project/topics.json
-
-uv run ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py finetune-project/training.jsonl --nemo
-
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
-  --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl
-```
-
-> **Key differences from Step 4:** `system_prompt` is an expression passthrough from seed (not LLM-generated per-row). `difficulty` comes from `expected_difficulty` in seed (not random). `source_parts` recovered via `--workflow-id` gateway search. NeMo judge columns filter quality at generation time; `data_quality_gate.py` still needed for format/structure checks.
+If the subagent reports NeMo is not running, fall back to Step 4A (`generate_records.py`).
 
 ---
 
