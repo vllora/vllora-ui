@@ -42,6 +42,7 @@ import { toast } from "sonner";
 
 // Providers that support finetuning
 const FINETUNE_PROVIDERS = [
+  { value: "langdb", label: "vLLora (GRPO)" },
   { value: "openai", label: "OpenAI" },
   { value: "together", label: "Together AI" },
   { value: "fireworks", label: "Fireworks AI" },
@@ -50,6 +51,12 @@ const FINETUNE_PROVIDERS = [
 
 // Base models for finetuning by provider
 const FINETUNE_MODELS: Record<string, Array<{ value: string; label: string }>> = {
+  langdb: [
+    { value: "Qwen3.5-0.8B", label: "Qwen 3.5 0.8B (fast prototyping)" },
+    { value: "Qwen3.5-2B", label: "Qwen 3.5 2B (simple tasks)" },
+    { value: "Qwen3.5-4B", label: "Qwen 3.5 4B (recommended default)" },
+    { value: "Qwen3.5-9B", label: "Qwen 3.5 9B (complex reasoning, <100 records)" },
+  ],
   openai: [
     { value: "gpt-4o-mini-2024-07-18", label: "GPT-4o Mini (2024-07-18)" },
     { value: "gpt-4o-2024-08-06", label: "GPT-4o (2024-08-06)" },
