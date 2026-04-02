@@ -6,18 +6,19 @@ How to analyze evaluation results, diagnose issues, assess data quality, and ite
 
 ## The Eval-First Iteration Loop
 
-The pipeline runs in two phases:
+The pipeline runs in two phases, with a topic-level iteration path when topics themselves are the problem:
 
 ```
 Phase 1 — Eval Iterations (fast, ~45 min each, cheap):
   Eval → Readiness Gate → [FAIL] → Fix data/grader → Re-eval → ... → [PASS] →
+                                  → Fix topics (if DEAD_WEIGHT/AMBIGUOUS for 2+ evals) → Re-eval
 
 Phase 2 — Training (slow, hours, expensive):
   Train → Analyze → [good] → Deploy
                    → [bad]  → Fix → Back to Phase 1
 ```
 
-**Max 5 eval-only iterations** (Phase 1) before training. **Max 3 training iterations** (Phase 2) before escalating.
+**Max 5 eval-only iterations** (Phase 1) before training. **Max 3 training iterations** (Phase 2) before escalating. Topic-level fixes (SKILL.md Step 9c) count toward the Phase 1 budget.
 
 Use `finetune.py readiness-check --file evaluations/eval-NNN.json` to run the readiness gate programmatically. See §5 for the criteria.
 
@@ -652,7 +653,11 @@ uv run scripts/finetune.py log-iteration --project-dir finetune-project \
   --changes "First training: lr=5e-6, epochs=8" --change-type baseline --verdict PASS
 ```
 
-The command auto-computes metrics (eval: avg_score, zero_rate, distinct_buckets; training: final_reward, reward_delta, KL) and prints a delta comparison vs the previous same-phase iteration. Read `iterations.json` before making changes to check if the last fix helped.
+The command auto-computes metrics and prints a delta comparison vs the previous same-phase iteration:
+- **Eval**: avg_score, zero_rate, distinct_buckets, **plus per-topic metrics** (avg_score, zero_rate, score_std per topic). Topics with >80% zeros and std<0.05 across consecutive evals are flagged as `stalled_topics` in the entry.
+- **Training**: final_reward, reward_delta, KL.
+
+Read `iterations.json` before making changes to check if the last fix helped — the per-topic deltas show which topics improved and which are stuck.
 
 Example output:
 ```
@@ -667,12 +672,15 @@ This log is critical for diagnosing stalls — if scores aren't improving, the h
 
 ### Comparing Iterations
 
-When reviewing whether a change helped, compare the previous and current evaluation files:
+When reviewing whether a change helped, compare the previous and current evaluation files. `log-iteration` prints this automatically:
 
 1. **Overall**: Did average score and pass rate improve?
-2. **Per-topic**: Did the weak topics improve without degrading strong ones?
+2. **Per-topic** (from `per_topic` field in iterations.json): Did the weak topics improve without degrading strong ones? The delta output shows `avg old→new` and `zero old→new` per topic.
 3. **Per-record**: Are the same records still failing, or different ones?
 4. **Grader reasons**: Are the complaints changing (progress) or staying the same (stuck)?
+5. **Stalled topics**: If `stalled_topics` appears in the iteration entry, those topics had no improvement AND no score variance (>80% zeros, std<0.05) — they're dead weight for GRPO. See SKILL.md Step 9c for topic-level fixes.
+
+**Important**: A topic with low avg but some variance (std>=0.05) is `HARD_BUT_LEARNING` — the strongest training signal for GRPO. Do not remove it. Only topics with near-zero variance are truly stalled.
 
 If the same records keep failing with the same reasons after multiple iterations, the issue is likely fundamental — move to Part 8.
 
@@ -819,14 +827,22 @@ The model learned to game the grader — producing responses that score well but
 
 ### Symptom 6: One topic always scores low, no matter what
 
-**Root cause: The grader criteria don't fit that topic.**
+**Root cause depends on the per-topic classification.** Run `diagnose-grader` — the `per_topic` section classifies each topic:
 
-A grader designed for question-answering may not work well for topics that require a different response style (e.g., troubleshooting, creative writing, emotional support).
+| Classification | Pattern | Meaning |
+|---|---|---|
+| `DEAD_WEIGHT` | >80% zeros, std<0.05 | No useful gradient — model can't produce anything scoreable |
+| `AMBIGUOUS` | high variance (std>0.3), low avg | Topic too broad — records don't agree on what "good" looks like |
+| `WEAK` | low avg, >50% zeros, std<0.08 | Model stuck, almost no variance |
+| `HARD_BUT_LEARNING` | low avg but std>=0.05 | Hard topic with partial credit — **best training signal, keep it** |
 
-**How to verify:** Check if the low-scoring topic requires fundamentally different response qualities than the high-scoring topics.
+**How to verify:** Check `iterations.json` per-topic metrics across 2+ evals. A single bad eval doesn't mean the topic is broken — look for persistent patterns.
 
-**Fix:**
-1. Make the grader topic-aware — check the user's message to determine what kind of response is appropriate:
+**Fix — depends on classification:**
+
+1. **`HARD_BUT_LEARNING`** — do nothing. Low average with score variance is exactly what GRPO needs. These topics produce the strongest gradient signal.
+
+2. **`WEAK` or grader doesn't fit the topic** — make the grader topic-aware:
    ```javascript
    // Adjust expectations based on query type
    const isTroubleshooting = userContent.match(/error|broken|not working|help/i);
@@ -838,7 +854,12 @@ A grader designed for question-answering may not work well for topics that requi
      if (content.length > 100) score += 0.3;
    }
    ```
-2. Or split into separate fine-tuning runs — one per topic cluster that needs different evaluation criteria
+
+3. **`AMBIGUOUS`** — split into 2-3 narrower subtopics in `topics.json`, regenerate records, re-upload and re-eval (SKILL.md Step 9c).
+
+4. **`DEAD_WEIGHT`** (persistent across 2+ evals) — remove the topic and its records. The base model genuinely cannot do this task.
+
+5. Or split into separate fine-tuning runs — one per topic cluster that needs different evaluation criteria.
 
 ### Symptom 7: Base model scores near 0% — can't even get started
 

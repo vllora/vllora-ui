@@ -405,6 +405,11 @@ User: "finetune my tax deduction PDF"
 │        │   early-exit for refusals, re-eval             │
 │        └─ DATA issue → regenerate records, re-eval      │
 │    9b: Post-training iter ───► fix → re-eval or retrain │
+│    9c: Topic-level iter (stalled 2+ evals):             │
+│        per-topic diagnosis → classify each topic        │
+│        ├─ DEAD_WEIGHT (no variance) → remove topic      │
+│        ├─ AMBIGUOUS (too broad) → split into subtopics  │
+│        └─ HARD_BUT_LEARNING → keep (best RFT signal)   │
 └─────────────────────────────────────────────────────────┘
 ```
 

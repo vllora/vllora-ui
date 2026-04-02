@@ -877,9 +877,9 @@ This context allows the agent to make informed decisions about which tools to us
 
 ---
 
-## Two Iteration Loops (Inner & Outer)
+## Three Iteration Loops (Inner, Topic-Level & Outer)
 
-Beyond the linear 7-step pipeline, Lucy supports two reactive iteration loops for improving dataset quality and training outcomes.
+Beyond the linear 7-step pipeline, Lucy supports three reactive iteration loops for improving dataset quality and training outcomes.
 
 ```
                     ┌──────────────────────────────────────────┐
@@ -910,6 +910,8 @@ Beyond the linear 7-step pipeline, Lucy supports two reactive iteration loops fo
 
 **Inner loop** uses `analyze_evaluation` (reactive, runs on eval completion or catch-up). Implements the full RFT decision tree (Steps A-F): score classification, health assessment, per-topic diagnosis, grader health, cross-iteration comparison, escalation ladder.
 
+**Topic-level loop** (branch of inner loop): When `diagnose-grader` per-topic output shows persistent `DEAD_WEIGHT` or `AMBIGUOUS` classifications across 2+ evals, topic restructuring is needed — split broad topics, remove impossible ones. Topics classified `HARD_BUT_LEARNING` (low avg but score variance >= 0.05) are never removed — they produce the strongest GRPO gradient signal.
+
 **Outer loop** uses `analyze_training` + `get_training_metrics` (reactive, runs after training completes). Per-epoch analysis detects overfitting, no-learning, and reward hacking patterns.
 
 **Iteration step types** supported by `execute_plan`:
@@ -920,11 +922,12 @@ type ExecutionStepId =
   | 'grader' | 'upload' | 'dryrun' | 'finetune'
   // Iteration steps (inner loop)
   | 'regenerate_topic' | 'adjust_grader' | 'analyze'
+  | 'fix_topics'  // Topic-level iteration (Step 9c)
   // Outer loop
   | 'post_training_eval';
 ```
 
-Both loops work via agent instruction compliance + reactive analysis tools. Iteration state is persisted in IndexedDB for cross-iteration memory.
+All three loops work via agent instruction compliance + reactive analysis tools. Iteration state is persisted in IndexedDB for cross-iteration memory.
 
 ---
 
