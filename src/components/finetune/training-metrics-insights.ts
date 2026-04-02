@@ -42,13 +42,19 @@
  * | reward (0-1 grader)    | 0.7-1.0       | 0.4-0.7       | <0.4           | our guide           |
  * | reward_std             | 0.05-0.3      | <0.05         | <0.01          | Dr. GRPO, TRL       |
  * | frac_reward_zero_std   | <0.2          | >0.5          | >0.8           | Dr. GRPO, our guide |
- * | loss (GRPO)            | 0.01-0.1      | <0.001, >1.0  | stuck 0, NaN   | DeepSeekMath, TRL   |
- * | kl                     | informational | —             | NaN/Inf only   | DAPO (β=0 default)  |
- * | grad_norm              | 0.5-2.0       | >100 (spikes) | NaN            | DeepSeekMath        |
+ * | loss (GRPO)            | TREND-BASED   | spike >5x min | NaN/0+NaN_grad | see note below      |
+ * | kl                     | TREND-BASED   | grew >10x     | NaN/Inf        | DAPO (β=0 default)  |
+ * | grad_norm              | TREND-BASED   | spike >10x avg| NaN            | see note below      |
  * | clip_ratio/region_mean | 0.1-0.3       | >0.5, <0.01   | —              | DAPO                |
  * | clipped_ratio          | <0.1          | 0.1-0.5       | >0.5           | DAPO, TRL           |
  * | length↑ + reward flat  | —             | length +30%   | length +100%   | Dr. GRPO            |
  * | score (eval)           | ≥0.8 (target) | 0.6-0.8       | <0.6           | our guide           |
+ *
+ * NOTE on loss/KL/grad_norm: Absolute scale varies by backend (TRL reports per-token
+ * mean ~0.001; Unsloth/custom may report sum-over-batch ~1e8). We use TREND detection
+ * (is it spiking relative to its own history?) instead of absolute thresholds.
+ * Only NaN/Inf is an absolute check. Reward/reward_std/frac_zero_std/clipped_ratio
+ * are [0,1] scale-independent and use absolute thresholds.
  */
 
 // =============================================================================
@@ -174,7 +180,7 @@ export function getMetricsInsights(
     // Ref: our guide — "Above 0.5 → half the batch provides no gradient. Above 0.8 → training is stalled."
     if (fracZero != null) {
       if (fracZero > 0.8) insights.push({ level: "critical", text: `${(fracZero * 100).toFixed(0)}% of prompts have zero reward variance — training gets no useful gradient from most examples. Increase G (completions per prompt) or adjust grader.` });
-      else if (fracZero > 0.5) insights.push({ level: "warn", text: `${(fracZero * 100).toFixed(0)}% of prompts have zero reward variance — over half the batch provides no learning signal.` });
+      else if (fracZero > 0.5) insights.push({ level: "warn", text: `${(fracZero * 100).toFixed(0)}% of prompts have zero reward variance — common in GRPO with G=8 (30-99% is normal per "No Prompt Left Behind", ICLR 2026). Only a concern if reward is also stagnant.` });
     }
   }
 
@@ -212,26 +218,83 @@ export function getMetricsInsights(
       }
     }
 
-    // KL: With β=0 (TRL/DAPO default), KL is purely informational — not a training constraint.
-    // TRL doesn't even log KL when β=0. If reported, values are informational only.
-    // Healthy TRL range: 0.0004 → 0.01-0.04, spike to ~5.0.
-    // Ref: DAPO (arXiv:2503.14476) — removes KL entirely (β=0)
-    // Ref: open-r1#239 — KL 0.0004 initially, gradual rise, can spike to 5.33
+    // =========================================================================
+    // KL, Loss, Grad Norm: SCALE VARIES BY BACKEND
+    //
+    // Standard TRL GRPOTrainer reports:
+    //   loss: 0.0001-0.002, KL: 0.0004-5.0, grad_norm: 0.3-1.7
+    //
+    // But backends using Unsloth, custom aggregation, or non-DAPO loss_type
+    // may report values 10^6-10^12 higher (sum over tokens vs mean, batch
+    // accumulation, etc.). Our actual training shows loss=5.43e+08 which is
+    // NOT a bug — just a different aggregation scale.
+    //
+    // Strategy: Use TREND detection (via history param) instead of absolute
+    // thresholds. Only check NaN/Inf for absolute failures.
+    // =========================================================================
+
+    // KL: With β=0 (TRL/DAPO default), KL is informational — not in the loss.
+    // NaN = catastrophic. Otherwise, show the trend if history is available.
+    // Ref: DAPO (arXiv:2503.14476) — removes KL penalty entirely (β=0)
     if (kl != null) {
       if (!isFinite(kl) || isNaN(kl)) {
         insights.push({ level: "critical", text: "KL divergence is NaN — numerical failure. If using Unsloth with mask_truncated_completions=true, this can happen when all completions are truncated." });
       }
-      // KL absolute value depends on β setting and backend aggregation.
-      // With β=0: informational only, no threshold needed.
+      // Trend: if KL increased >10x from early training, the model is diverging
+      if (history && history.length >= 10) {
+        const earlyKLs = history.slice(0, 5).map((m) => num(m.kl)).filter((v): v is number => v != null && v > 0);
+        const recentKLs = history.slice(-5).map((m) => num(m.kl)).filter((v): v is number => v != null && v > 0);
+        const earlyMedian = earlyKLs.length > 0 ? earlyKLs.sort((a, b) => a - b)[Math.floor(earlyKLs.length / 2)] : null;
+        const recentMedian = recentKLs.length > 0 ? recentKLs.sort((a, b) => a - b)[Math.floor(recentKLs.length / 2)] : null;
+        if (earlyMedian != null && recentMedian != null && earlyMedian > 0) {
+          const klGrowth = recentMedian / earlyMedian;
+          if (klGrowth > 10) {
+            insights.push({ level: "warn", text: `KL grew ${klGrowth.toFixed(0)}x from early training — model is diverging from the base distribution. With β=0 this doesn't penalize loss, but may produce degenerate outputs.` });
+          } else if (klGrowth < 0.1) {
+            insights.push({ level: "ok", text: `KL decreased ${(1/klGrowth).toFixed(0)}x — model is converging back toward base distribution.` });
+          }
+        }
+      }
     }
 
-    // Grad norm: TRL reports pre-clipping L2 norm (default max_grad_norm=1.0).
-    // Healthy TRL range: 0.33-1.66. NaN = catastrophic (Unsloth: zero-length completions).
-    // Ref: AMD Unsloth tutorial — grad_norm in 0.3-1.7 range
-    // Ref: Unsloth docs — "NaN often from zero-length truncated completions"
+    // Loss: NaN/Inf = catastrophic. Otherwise use trend detection.
+    // Ref: open-r1#239 — "loss starts at 0, rises to 0.0001-0.0019" (TRL scale)
+    // NOTE: Absolute loss values vary by orders of magnitude across backends.
+    if (loss != null) {
+      if (!isFinite(loss) || isNaN(loss)) {
+        insights.push({ level: "critical", text: "Loss is NaN/Inf — catastrophic numerical failure. Check for zero-length completions or degenerate batches. (Unsloth: verify LoRA adapters applied, try gradient_accumulation_steps=1)" });
+      } else if (loss === 0 && gradNorm != null && (!isFinite(gradNorm) || isNaN(gradNorm))) {
+        insights.push({ level: "critical", text: "Loss is 0 with NaN gradients — known Unsloth issue. Verify LoRA adapters are applied (FastLanguageModel.get_peft_model) and try gradient_accumulation_steps=1." });
+      }
+      // Trend: if loss increased >5x from its minimum, training may be destabilizing
+      if (history && history.length >= 10) {
+        const allLosses = history.map((m) => num(m.loss)).filter((v): v is number => v != null && v > 0);
+        if (allLosses.length >= 10) {
+          const minLoss = Math.min(...allLosses.slice(Math.floor(allLosses.length * 0.3))); // min after warm-up
+          const recentLoss = allLosses[allLosses.length - 1];
+          if (minLoss > 0 && recentLoss > minLoss * 5) {
+            insights.push({ level: "warn", text: `Loss spiked ${(recentLoss / minLoss).toFixed(0)}x above its minimum — possible instability. If persistent, reduce learning rate.` });
+          }
+        }
+      }
+    }
+
+    // Grad norm: NaN = catastrophic. Otherwise use trend detection.
+    // Ref: TRL default max_grad_norm=1.0 (clips gradients), but reported value
+    // may be pre-clipping and scale varies by backend.
     if (gradNorm != null) {
       if (!isFinite(gradNorm) || isNaN(gradNorm)) {
         insights.push({ level: "critical", text: "Gradient norm is NaN — catastrophic numerical failure. Often caused by zero-length completions, missing LoRA adapters, or gradient_accumulation_steps > 1 bug in Unsloth." });
+      }
+      // Trend: if grad_norm spiked >10x above recent average, flag it
+      if (history && history.length >= 10) {
+        const recentGrads = history.slice(-10).map((m) => num(m.grad_norm)).filter((v): v is number => v != null && v > 0);
+        if (recentGrads.length >= 5 && gradNorm > 0) {
+          const avgGrad = recentGrads.reduce((s, v) => s + v, 0) / recentGrads.length;
+          if (avgGrad > 0 && gradNorm > avgGrad * 10) {
+            insights.push({ level: "warn", text: `Gradient norm spike (${gradNorm.toExponential(1)}) — ${(gradNorm / avgGrad).toFixed(0)}x above recent average. May cause training instability.` });
+          }
+        }
       }
     }
 
@@ -326,6 +389,9 @@ export function getMetricsInsights(
 interface EpochSummary {
   readonly avgScore: number;
   readonly stdDev: number;
+  /** Rollout model used for this eval (e.g., "gpt-4o-mini", "Qwen3.5-4B").
+   *  When present, trend comparison only compares evals from the same model. */
+  readonly model?: string;
 }
 
 /**
@@ -364,17 +430,45 @@ export function getScoreTrendInsights(epochData: readonly EpochSummary[]): reado
     insights.push({ level: "ok", text: `Avg score is ${score.toFixed(2)} at eval ${epochData.length}.` });
   }
 
-  // Improvement trend (need ≥2 epochs) — this is the most important signal in GRPO
+  // Improvement trend (need ≥2 epochs) — this is the most important signal in GRPO.
+  // IMPORTANT: Only compare evals from the same model. Comparing GPT-4o-mini eval
+  // (grader validation) with Qwen-4B eval (base model baseline) is meaningless.
   if (epochData.length >= 2) {
-    const first = epochData[0];
-    const delta = score - first.avgScore;
-    if (delta > 0.05) {
-      insights.push({ level: "ok", text: `Score improved by +${delta.toFixed(3)} across ${epochData.length} evals — model is learning. GRPO is working.` });
-    } else if (delta > -0.02) {
-      insights.push({ level: "warn", text: `Score change is flat (${delta >= 0 ? "+" : ""}${delta.toFixed(3)}) across ${epochData.length} evals — model may have plateaued. Consider adjusting learning rate or increasing data diversity.` });
+    const latestModel = latest.model;
+
+    // Find the first eval from the SAME model for comparison
+    const sameModelEvals = latestModel
+      ? epochData.filter((e) => e.model === latestModel)
+      : epochData;
+
+    if (sameModelEvals.length >= 2) {
+      const first = sameModelEvals[0];
+      const delta = score - first.avgScore;
+      const evalCount = sameModelEvals.length;
+      const modelLabel = latestModel ? ` (${latestModel})` : "";
+
+      if (delta > 0.05) {
+        insights.push({ level: "ok", text: `Score improved by +${delta.toFixed(3)} across ${evalCount} evals${modelLabel} — model is learning. GRPO is working.` });
+      } else if (delta > -0.02) {
+        insights.push({ level: "warn", text: `Score change is flat (${delta >= 0 ? "+" : ""}${delta.toFixed(3)}) across ${evalCount} evals${modelLabel} — model may have plateaued. Consider adjusting learning rate or increasing data diversity.` });
+      } else {
+        // Ref: "Tricks or Traps" (arXiv:2508.08221) — reward hacking failure mode
+        insights.push({ level: "critical", text: `Score dropped by ${Math.abs(delta).toFixed(3)}${modelLabel} — model is regressing. Possible causes: reward hacking, overfitting, or learning rate too high.` });
+      }
+    } else if (sameModelEvals.length === 1 && latestModel) {
+      // First eval for this model — no comparison possible yet
+      insights.push({ level: "ok", text: `First eval for ${latestModel} — baseline score is ${score.toFixed(2)}. Compare with subsequent evals on the same model to measure improvement.` });
     } else {
-      // Ref: "Tricks or Traps" (arXiv:2508.08221) — reward hacking failure mode
-      insights.push({ level: "critical", text: `Score dropped by ${Math.abs(delta).toFixed(3)} — model is regressing. Possible causes: reward hacking, overfitting, or learning rate too high.` });
+      // No model info — fall back to comparing first vs last
+      const first = epochData[0];
+      const delta = score - first.avgScore;
+      if (delta > 0.05) {
+        insights.push({ level: "ok", text: `Score improved by +${delta.toFixed(3)} across ${epochData.length} evals.` });
+      } else if (delta > -0.02) {
+        insights.push({ level: "warn", text: `Score change is flat (${delta >= 0 ? "+" : ""}${delta.toFixed(3)}) across ${epochData.length} evals.` });
+      } else {
+        insights.push({ level: "critical", text: `Score dropped by ${Math.abs(delta).toFixed(3)} — model may be regressing.` });
+      }
     }
   }
 

@@ -52,9 +52,9 @@ Each metric point in `metrics[]` contains:
 | Learning rate | `metrics.learning_rate` | Current LR (may decay) |
 | Reward | `metrics.reward` | Average grader score the model is achieving |
 | Reward std | `metrics.reward_std` | Diversity of scores across batch — should be > 0.05 |
-| Loss | `metrics.loss` | GRPO policy loss — starts near 0, rises slightly as learning progresses (NOT like SFT loss). See `training-metrics-guide.md` §Loss |
-| Gradient norm | `metrics.grad_norm` | Training stability — spikes indicate instability. NaN = catastrophic failure |
-| KL divergence | `metrics.kl` | Drift from base model — healthy <1.0, warning >5.0. See `training-metrics-guide.md` §KL |
+| Loss | `metrics.loss` | GRPO policy loss — **absolute scale varies by backend** (TRL DAPO: 0.0-0.05; other backends: can be 1e6+). Use trend analysis, not absolute thresholds. NaN = catastrophic. See `training-metrics-guide.md` §Loss |
+| Gradient norm | `metrics.grad_norm` | Training stability — **scale varies by backend**. Use spike detection (>10x recent average), not absolute thresholds. NaN = catastrophic |
+| KL divergence | `metrics.kl` | Drift from base model — **informational with β=0** (TRL/DAPO default). Use trend: grew >10x from early training = diverging. NaN = catastrophic. See `training-metrics-guide.md` §KL |
 | Clipping ratio | `metrics.completions/clipped_ratio` | Output truncation — healthy <0.1, critical >0.5. See `training-metrics-guide.md` §Completions |
 | Mean completion length | `metrics.completions/mean_length` | Whether responses are reasonable length |
 | Zero-std fraction | `metrics.frac_reward_zero_std` | Records where all candidates scored same — wasted training |

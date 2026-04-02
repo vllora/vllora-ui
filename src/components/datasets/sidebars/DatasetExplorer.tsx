@@ -48,7 +48,7 @@ import { useEvaluatorVersions } from "@/hooks/useEvaluatorVersions";
 import { getJobAverageScore } from "@/types/eval-job";
 import type { TopicHierarchyNode } from "@/types/dataset-types";
 import { JobStatusBadge, normalizeJobStatus } from "@/components/datasets/shared/JobStatusBadge";
-import { evalJobDisplayName, finetuneJobDisplayName } from "@/lib/job-display-name";
+import { evalJobDisplayName, finetuneJobDisplayName, isBaseModel } from "@/lib/job-display-name";
 
 // ============================================================================
 // Types
@@ -369,12 +369,22 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       >
         {dryRunJobs.map((job) => {
           const normalized = normalizeJobStatus(job.status);
+          const isBase = isBaseModel(job.rolloutModel);
           return (
             <SidebarItem
               key={job.id}
               icon={<BarChart3 className="w-3.5 h-3.5" />}
               label={evalJobDisplayName(job.id)}
-              badge={<JobStatusBadge status={normalized} className="ml-auto" />}
+              badge={
+                <span className="ml-auto flex items-center gap-1.5">
+                  {isBase && (
+                    <span className="text-[9px] font-semibold uppercase tracking-wider px-1 py-0.5 rounded bg-orange-500/10 text-orange-400 leading-none">
+                      base
+                    </span>
+                  )}
+                  <JobStatusBadge status={normalized} />
+                </span>
+              }
               isActive={selectedNodeId === `evaluations/jobs/${job.id}`}
               onClick={() => handleSelect(`evaluations/jobs/${job.id}`)}
             />

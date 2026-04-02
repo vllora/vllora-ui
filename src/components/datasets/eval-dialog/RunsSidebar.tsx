@@ -8,6 +8,7 @@
 import { Loader2, CheckCircle2, XCircle, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { EvalJob } from "@/types/eval-job";
+import { isBaseModel } from "@/lib/job-display-name";
 
 interface RunsSidebarProps {
   jobs: EvalJob[];
@@ -59,8 +60,13 @@ export function RunsSidebar({ jobs, selectedId, onSelectJob }: RunsSidebarProps)
             >
               <StatusIcon status={job.status} />
               <div className="flex-1 min-w-0">
-                <div className="font-medium truncate">
+                <div className="font-medium truncate flex items-center gap-1">
                   {job.rolloutModel || "gpt-4o-mini"}
+                  {isBaseModel(job.rolloutModel) && (
+                    <span className="text-[8px] font-semibold uppercase tracking-wider px-0.5 rounded bg-orange-500/10 text-orange-400 leading-none">
+                      base
+                    </span>
+                  )}
                 </div>
                 <div className="text-[10px] text-zinc-500 truncate">
                   <span>{job.sampleSize}s</span>
