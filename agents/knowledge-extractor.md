@@ -169,6 +169,105 @@ cd "<DOC_DIR>" && python3 extract.py
 uv run <SKILL_DIR>/scripts/consolidate_parts.py "<DOC_DIR>/knowledge_parts.json"
 ```
 
+### 4b. Fix table content format (MANDATORY for all table parts)
+
+After post-processing, ensure **every table part** has properly formatted content that the UI can render. Read the `knowledge_parts.json` and fix any table part that is missing headers or has orphaned header fragments.
+
+**Every table part's `content` field MUST have this structure:**
+```
+| Header1 | Header2 | Header3 |
+|---|---|---|
+| data1 | data2 | data3 |
+| data4 | data5 | data6 |
+```
+
+**Common problems to fix:**
+1. **Missing header row** — content starts with data rows (e.g., `| Benzene | 71-43-2 | ...`). Fix: prepend the header row from `content_metadata.headers`.
+2. **Orphaned header fragments** — content starts with partial headers from page continuation (e.g., `| (mg/L) | MCL (mg/L) | Status HA Document |`). Fix: remove the orphan row and prepend the correct full header.
+3. **Docling spanning header rows** — content starts with `| | | Standards | Standards | Standards |` (multi-row header artifacts). Fix: remove these rows and prepend the correct single-row header.
+4. **Missing `|---|---|` separator** — UI table renderer needs this after the header row. Fix: add it.
+
+**Script to fix all table parts:**
+```bash
+python3 -c "
+import json
+with open('<DOC_DIR>/knowledge_parts.json') as f:
+    data = json.load(f)
+parts = data.get('parts', data) if isinstance(data, dict) else data
+changed = 0
+for p in parts:
+    if p.get('type') != 'table':
+        continue
+    content = p.get('content', '')
+    meta = p.get('content_metadata', {})
+    headers = meta.get('headers', [])
+    if not headers or not content.strip():
+        continue
+    lines = content.strip().split('\n')
+
+    # Detect if content already has a proper header + separator
+    # Check: line 0 has pipes, line 1 has |---|---| pattern
+    already_has_header = False
+    for i, line in enumerate(lines):
+        if '---' in line and '|' in line:
+            # Found a separator — check if previous line looks like a header
+            if i > 0 and '|' in lines[i-1]:
+                already_has_header = True
+            break
+    if already_has_header:
+        continue
+
+    # Build header + separator
+    header_line = '| ' + ' | '.join(headers) + ' |'
+    sep_line = '| ' + ' | '.join('---' for _ in headers) + ' |'
+
+    # Remove orphaned header fragments before prepending the correct header.
+    # These are: rows that are all dashes/empty, partial headers from page
+    # continuations, or Docling spanning header artifacts.
+    header_set = {h.lower().strip() for h in headers}
+    clean_lines = []
+    for line in lines:
+        if not line.strip().startswith('|'):
+            clean_lines.append(line)
+            continue
+        cells = [c.strip() for c in line.split('|') if c.strip()]
+        if not cells:
+            continue
+        # Skip: all empty/dashes
+        if all(c in ('-', '', '—') for c in cells):
+            continue
+        # Skip: section divider rows (all cells same value, e.g. 'INORGANICS')
+        unique_vals = set(c for c in cells if c.strip())
+        if len(unique_vals) <= 1 and len(cells) > 2:
+            continue
+        # Skip: header-like rows — cell text matches or is a substring of a known header.
+        # Catches both exact duplicates ('Chemicals') and partial fragments ('(mg/L)' from 'MCLG (mg/L)')
+        header_lower = [h.lower() for h in headers]
+        match_count = 0
+        for c in cells:
+            cl = c.lower().strip()
+            if not cl or cl == '-':
+                continue
+            # Exact match or substring match (either direction)
+            if cl in header_set or any(cl in h or h in cl for h in header_lower):
+                match_count += 1
+        has_numeric = any(c.strip()[:1].isdigit() for c in cells if c.strip() and c.strip() not in ('-', ''))
+        if match_count >= 2 and not has_numeric:
+            continue
+        clean_lines.append(line)
+
+    p['content'] = header_line + '\n' + sep_line + '\n' + '\n'.join(clean_lines)
+    changed += 1
+if isinstance(data, dict):
+    data['parts'] = parts
+with open('<DOC_DIR>/knowledge_parts.json', 'w') as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+print(f'Fixed {changed} table parts')
+"
+```
+
+**Why headers on every fragment**: Each table fragment is a separate part linked to topics. When `generate_records.py` builds the LLM prompt, it includes the content of each part. Without headers, the LLM sees 13 pipe-separated values per row and can confuse MCLG (col 3) with MCL (col 4) — the exact error that caused wrong ground truths in earlier tests. The ~30 extra tokens per fragment (header + separator) is negligible compared to the data corruption risk.
+
 ### 5. Validate extraction (MUST PASS)
 
 ```bash
@@ -181,7 +280,10 @@ If validation reports FAIL for this document after `--fix`:
 3. If **table quality FAIL** (inconsistent columns, mixed content, missing metadata) — **read the source PDF directly and fix the tables yourself:**
    - Use the `Read` tool to view the PDF pages that contain the broken table (e.g., `Read: <DOC_PATH>` with `pages: "9-20"`)
    - You can SEE the actual table — extract the correct headers, column names with units, and all data rows
-   - Write the corrected table as a part in `knowledge_parts.json` with `"type": "table"`, markdown content, and `"content_metadata": {"headers": [...], "num_rows": N, "num_cols": M, "extraction_method": "agent_visual"}`
+   - Write the corrected table as a part in `knowledge_parts.json` with:
+     - `"type": "table"`
+     - `"content"`: markdown table with header row + `|---|` separator + data rows (see Step 4b format)
+     - `"content_metadata": {"headers": [...], "num_rows": N, "num_cols": M, "extraction_method": "agent_visual"}`
    - Remove the old broken table fragments (parts with same title but garbled content)
    - Re-run `validate_extraction.py` to confirm PASS
    - This is the PREFERRED approach — you are a vision-capable LLM, use that ability

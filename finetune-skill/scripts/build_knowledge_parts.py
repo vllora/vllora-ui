@@ -68,7 +68,9 @@ def detect_type(chunk: dict) -> str:
         return "table"
 
     for h in headings:
-        if "table" in h.lower() or "schedule" in h.lower():
+        h_lower = h.lower()
+        # Match "table"/"tables" as a whole word — not inside "vegetables", "acceptable", etc.
+        if re.search(r'\btables?\b', h_lower) or "schedule" in h_lower:
             return "table"
 
     # Image detection (captions)
