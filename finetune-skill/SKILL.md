@@ -527,7 +527,9 @@ The script makes **multiple LLM calls per topic** (one per prompt type: explain,
 
 > **When to use `--rag-only`:** Quick iteration during early pipeline development, or when the relation-builder is unavailable. Once relations are built, use them — they are more precise than keyword-based semantic search.
 
-If some topics fail, use `--append` to retry without overwriting. Adapt `--records-per-topic` (default 25), `--min-per-topic` (default 10), `--max-per-topic` (default 50) to the project. **Generate at least 200+ total records.**
+If some topics fail, use `--append` to retry without overwriting. In append mode, topics already present in the output file are automatically skipped to prevent duplicates after crash+retry. Adapt `--records-per-topic` (default 25), `--min-per-topic` (default 10), `--max-per-topic` (default 50) to the project. **Generate at least 200+ total records.**
+
+**`--ground-truth-format`** (recommended for structured-output tasks): When the project requires a specific answer format (e.g. `"Eligible. EIC: $[amount]"` or `"Answer: [letter]"`), pass this flag so ground truths are generated in that format instead of verbose source excerpts. This ensures ground truths match the grader's regex extraction patterns and the model's expected output format during GRPO training. Example: `--ground-truth-format 'Eligible. EIC: $[amount] OR Not eligible. Reason: [specific rule]'`
 
 **⚠️ Every record's `topic` field MUST match a leaf topic ID in `topics.json`.** Do NOT invent ad-hoc topic IDs during generation. If you generate records with a custom script instead of `generate_records.py`, validate topic IDs before writing to `training.jsonl`. The `upload-records` command will reject records with topic IDs that don't exist on the gateway — mismatched topics cause FK violations and silent data loss.
 
@@ -657,12 +659,13 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader \
 # 2. Verify it landed on gateway (MANDATORY — do not skip)
 curl -s "http://localhost:9090/finetune/workflows/$WORKFLOW_ID" | python3 -c "
 import sys, json
-wf = json.load(sys.stdin).get('workflow', {})
+data = json.load(sys.stdin)
+wf = data.get('workflow', data)  # API may return object directly or nested under 'workflow'
 evaluator = wf.get('eval_script') or wf.get('evaluator')
 if not evaluator or evaluator == 'null' or len(str(evaluator)) < 10:
     print('FATAL: Evaluator NOT on gateway — upload-grader failed')
     sys.exit(1)
-print('Evaluator verified on gateway: OK')
+print(f'Evaluator verified on gateway: OK ({len(str(evaluator))} chars)')
 "
 
 # 3. Only checkpoint AFTER verify passes
@@ -803,18 +806,25 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
 
 > **Note on eval IDs**: The `POST /finetune/evaluations` response returns `evaluation_run_id` — use this for polling. The workflow's `eval_job_ids` field may show a different internal ID that returns 404. Always use the ID from the create response.
 
-**Poll eval in foreground** (auto-cancels if grader is broken):
+**Poll eval in foreground** (diagnose-first early cancel):
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval \
   --file evaluations/eval-001.json
 ```
 
-The poller monitors partial scores as rows complete and auto-cancels (exit code 2) if either:
-- **avg score < 0.05** after 20 rows — grader is scoring zero on everything
-- **>10% of scores are 0.0** after 20 rows — grader can't parse model responses or data has issues
-- **>50% of scores are 1.0** after 20 rows — warns that grader may be too lenient (does NOT auto-cancel, since eval uses a stronger model than training; run difficulty-probe after eval completes for a precise K=8 prediction)
+The poller monitors partial scores and triggers a **diagnose-then-decide** check if either:
+- **avg score < 0.05** after 20 rows — grader may be scoring zero on everything
+- **>30% of scores are 0.0** after 20 rows — grader may not be able to parse model responses
+- **>50% of scores are 1.0** after 20 rows — warns that grader may be too lenient (does NOT cancel)
 
-A 0.0 score is always a bad signal: either the grader is wrong (can't parse the response format) or the data is wrong (bad ground truth, missing fields). You cannot train with records scoring 0 — fix the root cause first. If cancelled, run `diagnose-grader` to see the zero-score reasons, fix the grader, re-upload, and create a new eval. Use `--no-early-cancel` to disable.
+When triggered, the poller **diagnoses before deciding**:
+1. Classifies zero-score reasons: parsing failures vs wrong answers vs refusals
+2. **If grader is broken** (mostly parsing failures) → cancels eval, prints fix → exit code 2
+3. **If zeros are legitimate** (mostly wrong answers + score variance exists) → **continues polling** — base models scoring 0 on 15-50% of prompts is normal (DeepSeek R1-Zero, arXiv:2501.12948)
+
+This means the poller never wastes an eval on a false alarm, and never lets a broken grader run to completion.
+
+**If the eval IS cancelled** (exit code 2), the output tells you exactly what to fix. Apply that fix before creating a new eval. Use `--no-early-cancel` to disable.
 
 When eval completes, proceed to **Step 7c (Readiness Gate)** — do NOT start training.
 
@@ -836,25 +846,11 @@ The readiness gate runs **4 hard checks** (sample_count, score_std, avg_score, z
 - **Exit code 1 (FAIL)** → fix issues → return to **Step 7b (Re-eval)**
 - **Exit code 2 (WARN)** → **first eval: fix ALL warnings before training. Subsequent evals: only fix critical warnings.**
 
-**⚠️ First eval rule:** On the FIRST evaluation (no previous training has run), treat ALL soft warnings as must-fix. This is your one chance to validate the grader design before spending hours of GPU time. Fix each warning, re-eval, and only proceed to training when the gate returns PASS with no warnings. Training is expensive — getting the grader right first is 10-100x cheaper.
-
-**Warnings that MUST be fixed before first training:**
-- `score_concentration` > 70% — grader is too coarse, only produces a few distinct values. COPY the appropriate template (e.g., `grader-mcq.js`) which uses LLM-as-judge for continuous scoring.
-- `perfect_score_frac` > 50% — grader is too lenient. Add more discriminating criteria so correct answers score 0.5-0.7, only excellent answers score 0.9-1.0.
-- `high_score_frac` > 50% — same as above, grader doesn't differentiate quality levels.
-
-**Warnings safe to train through (even on first eval):**
-- `dead_weight_frac` — hard prompts are expected and valuable. 30-99% zero-var is normal. [arXiv:2509.21880]
-- `pass_rate` — low pass rate means hard task, which yields the best GRPO gains. [arXiv:2508.14094]
-- `topic_balance` — imbalanced topics can be addressed in later iterations.
-
-**On subsequent evals (after at least one training run):** Only `score_concentration` > 70% requires fixing. Other soft warnings are informational — you've already validated the grader design.
-
-**If non-interactive** (running via `claude -p`): auto-fix `score_concentration` > 70% and `perfect_score_frac` > 50% on first eval, otherwise proceed to training.
+**⚠️ First eval rule:** On the FIRST evaluation (no previous training has run), treat ALL soft warnings as must-fix — this is your one chance to validate grader design before hours of GPU time. Subsequent evals: only fix `score_concentration` > 70%. If non-interactive: auto-fix `score_concentration` > 70% and `perfect_score_frac` > 50% on first eval.
 
 **Max 5 eval-only iterations.** If readiness gate never passes after 5 evals, escalate to user with diagnosis.
 
-> See [reference/readiness-gate.md](reference/readiness-gate.md) for the full check tables, WARN safety guide, and research citations.
+> See [reference/readiness-gate.md](reference/readiness-gate.md) for the full check tables, which warnings must be fixed vs safe to train through, WARN safety guide, and research citations.
 
 #### 7c+. Difficulty Probe (after readiness gate passes, before training)
 
@@ -941,14 +937,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
 
 > **⚠️ NEVER use `sleep 300` or `sleep 600` in a Bash tool call to wait for training.** Always use `poll-training`.
 
-**Early stopping** is enabled by default. The poll script uses multi-signal detection based on GRPO/RFT research:
-
-1. **Completion clipping** (checked every poll, not just every 5 min) — Detects when `max_output_tokens` is too low and completions are being truncated. Catastrophic (≥90% clipping on first step) triggers immediate cancel. Sustained (≥50% clipping over 3+ steps) also auto-cancels. Reports recommended `max_output_tokens` based on natural completion lengths. Ref: training-metrics-guide.md §100% Completion Clipping. Incident: Medical-QA with `max_output_tokens=512` ran 12h at 100% clipping before manual cancel.
-2. **Score plateau** — EMA-smoothed scores (alpha=0.3) with linear regression slope over 5 epochs. Triggers when slope < 0.005/epoch after a 2-epoch warm-up. Distinguishes "converged" (score ≥0.5, deploy) vs "stuck" (score <0.3, investigate grader/data). Ref: arXiv:2507.18014 (3-phase GRPO training), arXiv:2503.06639 (absorbing states).
-3. **Score degradation** — Negative EMA slope (scores declining) indicates overfitting or policy collapse.
-4. **Length exploitation** — Response length growing >30% while reward is flat. Ref: Dr. GRPO (arXiv:2503.20783) — GRPO's normalization can cause degenerate lengthening.
-
-To disable: add `--no-early-stop`.
+**Early stopping** is enabled by default — detects completion clipping, score plateau, score degradation, and length exploitation. Add `--no-early-stop` to disable. See [reference/training-metrics-guide.md](reference/training-metrics-guide.md) for signal details and thresholds.
 
 When training completes (or is early-stopped), proceed to **Step 8b (Post-Training Analysis)**. If early-stopped, the best checkpoint is noted in the output — use that epoch's model.
 
@@ -966,13 +955,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py sync-jobs --workflow-id $WORKFLOW
 
 #### 8a. Analyze eval results (after each eval — before training)
 
-This runs during the eval-first loop (Step 7b→7c). Compute:
-
-1. **Overall**: average score, pass rate (>0.7 threshold), score range
-2. **Per-topic breakdown**: group scores by topic, sort by average (weakest first). Low topic scores are expected for base models — focus on whether the grader differentiates quality within each topic, not absolute scores.
-3. **Low-scoring records**: list records <0.7 with their `reason` fields
-4. **Score concentration**: are scores spread out (good) or clustered at one value (grader too coarse)? If >50% are the same value, the grader needs more granular criteria — GRPO gets zero gradient when K=8 completions all score identically (DAPO arXiv:2503.14476).
-5. **Readiness gate output**: from `readiness-check` command — which criteria passed/failed. Pay special attention to `score_concentration` — it catches grader issues that `score_std` misses when outliers inflate the overall std.
+This runs during the eval-first loop (Step 7b→7c). Compute overall scores, per-topic breakdown (weakest first), low-scoring record reasons, and score concentration. Low topic scores are expected for base models — focus on whether the grader differentiates quality, not absolute scores. See [reference/analysis-strategy.md](reference/analysis-strategy.md) Part 1a for the full metrics table and formulas.
 
 **Then run the readiness gate** (Step 7c) to decide: fix + re-eval, or proceed to training.
 
@@ -1035,33 +1018,23 @@ Two iteration loops with different speeds and costs:
 
 Apply fixes and re-eval. Do NOT create a training job.
 
-**Fixing the grader** — first diagnose, then fix:
+**Fixing the grader** — diagnose → fix → dry-run:
 
-**Step 1: Diagnose.** Run `diagnose-grader` to understand WHY scores cluster and WHAT to change:
 ```bash
+# 1. Diagnose: shows score distribution, sample reasons, auto-diagnosis, fix suggestions
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py diagnose-grader \
   --file evaluations/eval-001.json --workflow-id $WORKFLOW_ID
-```
-This shows: score distribution by bucket, sample `reason` fields, auto-diagnosis, fix suggestions, and grader source code. **Read this output carefully — the root cause might be DATA, not grader.**
 
-**The most common cause of score clustering is a grader-prompt mismatch** — the grader expects something the model can't do given the prompt format (e.g., page citations without documents). Fix the grader to match the prompts, NOT the data.
-
-> See [reference/iteration-strategy.md](reference/iteration-strategy.md) for the full diagnosis table (grader-prompt mismatch, score snapping, coarse scoring).
-
-**Step 2: Fix.** Edit `grader.js` based on the diagnosis, then upload:
-```bash
-# Edit grader.js, then update:
+# 2. Fix grader.js based on diagnosis, then upload
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader \
   --workflow-id $WORKFLOW_ID --file grader.js
+
+# 3. Dry-run to verify the fix
+uv run ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
+  --workflow-id $WORKFLOW_ID --script grader.js --live
 ```
 
-**Step 3: Dry-run.** Verify the fix before re-eval:
-```bash
-uv run ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
-  --workflow-id $WORKFLOW_ID --script grader.js \
-  --row '{"messages": [{"role":"system","content":"..."}, {"role":"user","content":"..."}, {"role":"assistant","content":"I cannot provide specific figures without the filing."}]}'
-```
-Check that a "model refused" response now scores 0 (not 0.3).
+**⚠️ The most common cause of score clustering is a grader-prompt mismatch** — fix the grader to match the prompts, NOT the data. See [reference/iteration-strategy.md](reference/iteration-strategy.md) for the full diagnosis table.
 
 **Fixing the data** (requires re-upload):
 ```bash

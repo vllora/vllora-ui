@@ -1729,6 +1729,136 @@ def _compute_eval_partial_score(result: dict) -> tuple:
     return avg, len(scores), zero_rate, perfect_rate
 
 
+def _diagnose_and_decide(
+    partial_results: list[dict],
+    workflow_id: str | None,
+    base_url: str,
+) -> bool:
+    """Diagnose partial eval results to decide: cancel or continue?
+
+    Classifies zero-score reasons into parsing failures (grader bug) vs
+    wrong answers (expected base model behavior). Returns True if the grader
+    is actually broken and the eval should be cancelled.
+
+    Returns:
+        True  = grader is broken → cancel eval
+        False = zeros are legitimate wrong answers → keep polling
+    """
+    from collections import defaultdict
+
+    buckets: dict[float, list[str]] = defaultdict(list)
+    for r in partial_results:
+        for _epoch_key, candidates in r.get("epochs", {}).items():
+            if not isinstance(candidates, list):
+                continue
+            for c in candidates:
+                score = c.get("score")
+                if score is not None:
+                    buckets[round(float(score), 1)].append(
+                        (c.get("reason") or "")[:200]
+                    )
+
+    total = sum(len(v) for v in buckets.values())
+    if total == 0:
+        print("    No scored rows to diagnose.", file=sys.stderr)
+        return True  # can't tell, cancel to be safe
+
+    print(f"\n    ── Diagnosis ({total} scored rows) ──", file=sys.stderr)
+
+    # Show score distribution
+    for score_val in sorted(buckets.keys()):
+        reasons = buckets[score_val]
+        pct = len(reasons) / total * 100
+        print(f"    Score {score_val}: {len(reasons)} ({pct:.0f}%)", file=sys.stderr)
+        for reason in reasons[:2]:
+            if reason:
+                print(f"      → {reason[:120]}", file=sys.stderr)
+
+    # Classify zero-score reasons
+    zero_reasons = buckets.get(0.0, [])
+    if not zero_reasons:
+        return True  # zeros from avg-score check, not zero-rate — cancel
+
+    parse_fail_kw = [
+        "cannot extract", "could not extract", "can't extract",
+        "empty", "too short", "no response",
+    ]
+    wrong_answer_kw = [
+        "wrong eligibility", "wrong answer", "incorrect",
+        "wrong", "model said",
+    ]
+    refusal_kw = [
+        "refused", "i cannot", "i'm unable", "i need more",
+    ]
+
+    parse_fail = sum(
+        1 for r in zero_reasons
+        if any(kw in r.lower() for kw in parse_fail_kw)
+    )
+    wrong_answer = sum(
+        1 for r in zero_reasons
+        if any(kw in r.lower() for kw in wrong_answer_kw)
+    )
+    refusal = sum(
+        1 for r in zero_reasons
+        if any(kw in r.lower() for kw in refusal_kw)
+    )
+
+    print(f"\n    ── Zero-score breakdown ({len(zero_reasons)} zeros) ──", file=sys.stderr)
+    if parse_fail:
+        print(f"    • {parse_fail} parsing failures (grader can't extract answer)", file=sys.stderr)
+    if wrong_answer:
+        print(f"    • {wrong_answer} wrong answers (model got it wrong — expected for base model)", file=sys.stderr)
+    if refusal:
+        print(f"    • {refusal} refusals (model refused to answer)", file=sys.stderr)
+    other = len(zero_reasons) - parse_fail - wrong_answer - refusal
+    if other > 0:
+        print(f"    • {other} other/unclear", file=sys.stderr)
+
+    # Decision: is the grader broken or are zeros legitimate?
+    if parse_fail > wrong_answer and parse_fail > len(zero_reasons) * 0.5:
+        print(
+            f"\n    ✎ GRADER BUG: Can't parse model responses. "
+            f"Fix regex patterns or add LLM extraction fallback in grader.js.",
+            file=sys.stderr,
+        )
+        return True  # cancel — grader needs fixing
+
+    if wrong_answer >= parse_fail:
+        non_zero_scores = total - len(zero_reasons)
+        print(
+            f"\n    ✓ GRADER OK: Zeros are mostly wrong answers ({wrong_answer}/{len(zero_reasons)}). "
+            f"{non_zero_scores} rows scored > 0 — grader differentiates correctly.",
+            file=sys.stderr,
+        )
+        # Check: do we have score variance among the non-zero scores?
+        # If yes, the grader is working — zeros are just hard prompts.
+        non_zero_buckets = {k: v for k, v in buckets.items() if k > 0.0}
+        if len(non_zero_buckets) >= 2:
+            print(
+                f"    Score variance confirmed: {len(non_zero_buckets)} distinct non-zero buckets.",
+                file=sys.stderr,
+            )
+            return False  # keep polling — grader is fine
+        else:
+            print(
+                f"    ⚠ Only {len(non_zero_buckets)} non-zero bucket — grader may still lack granularity.",
+                file=sys.stderr,
+            )
+            return True  # cancel — grader might be too coarse
+
+    if refusal > len(zero_reasons) * 0.5:
+        print(
+            f"\n    ✎ MODEL ISSUE: Model refuses to answer. "
+            f"Check if system prompts are too restrictive or missing source context.",
+            file=sys.stderr,
+        )
+        return True  # cancel — data/prompt issue
+
+    # Unclear — cancel to be safe
+    return True
+
+
 def cmd_poll_eval(args: argparse.Namespace) -> None:
     """Poll an evaluation job until complete and save results locally.
 
@@ -1748,6 +1878,7 @@ def cmd_poll_eval(args: argparse.Namespace) -> None:
 
     metadata = json.loads(eval_file.read_text())
     eval_id = metadata["evaluation_run_id"]
+    wf_id = metadata.get("workflow_id", getattr(args, "workflow_id", None))
     poll_interval = args.poll_interval
     max_wait = args.max_wait
     early_cancel = not args.no_early_cancel
@@ -1819,19 +1950,47 @@ def cmd_poll_eval(args: argparse.Namespace) -> None:
 
             if cancel_reason:
                 print(
-                    f"\n  ⚠ BROKEN GRADER DETECTED: {cancel_reason}",
+                    f"\n  ⚠ High zero/low score detected: {cancel_reason}",
                     file=sys.stderr,
                 )
                 print(
-                    f"    Auto-cancelling eval. Fix the grader (use diagnose-grader "
-                    f"for details) and re-run. Use --no-early-cancel to override.",
+                    f"    Diagnosing before deciding to cancel...",
                     file=sys.stderr,
                 )
 
-                metadata["status"] = "cancelled"
-                metadata["early_cancel_reason"] = f"Broken grader: {cancel_reason}"
-                eval_file.write_text(json.dumps(metadata, indent=2))
-                sys.exit(2)
+                # Diagnose FIRST — decide whether to cancel based on root cause
+                partial_results = metadata.get("results", [])
+                is_grader_broken = True  # default: cancel unless diagnosis says otherwise
+                if partial_results:
+                    try:
+                        is_grader_broken = _diagnose_and_decide(
+                            partial_results, wf_id, args.base_url,
+                        )
+                    except Exception as diag_err:
+                        print(
+                            f"    (diagnosis failed: {diag_err} — cancelling to be safe)",
+                            file=sys.stderr,
+                        )
+
+                if is_grader_broken:
+                    # Grader is actually broken — cancel and require fix
+                    metadata["status"] = "cancelled"
+                    metadata["early_cancel_reason"] = f"Broken grader: {cancel_reason}"
+                    eval_file.write_text(json.dumps(metadata, indent=2))
+                    print(
+                        f"\n    ⚠ Eval cancelled. FIX the grader issue above, "
+                        f"then create a new eval.",
+                        file=sys.stderr,
+                    )
+                    sys.exit(2)
+                else:
+                    # Zeros are from wrong answers, not grader bugs — keep polling
+                    print(
+                        f"\n    → Continuing eval (zeros are legitimate wrong answers, "
+                        f"not grader bugs).",
+                        file=sys.stderr,
+                    )
+                    early_cancel = False  # disable further checks for this eval
 
         if status in ("completed", "failed", "error", "cancelled"):
             metadata["completed_at"] = result.get("completed_at")
@@ -3305,8 +3464,10 @@ def main() -> None:
         help="Score threshold below which to auto-cancel (default: 0.05)")
     p.add_argument("--early-cancel-min-rows", type=int, default=20,
         help="Minimum completed rows before checking early cancel (default: 20)")
-    p.add_argument("--early-cancel-zero-rate", type=float, default=0.10,
-        help="Cancel if more than this fraction of scores are 0.0 (default: 0.10 = 10%%)")
+    p.add_argument("--early-cancel-zero-rate", type=float, default=0.30,
+        help="Cancel if more than this fraction of scores are 0.0 (default: 0.30 = 30%%). "
+             "Base models routinely score 0 on 15-50%% of prompts (DeepSeek-R1, arXiv:2501.12948; "
+             "'No Prompt Left Behind', arXiv:2509.21880). 10%% was too aggressive for first evals.")
 
     # create-training
     p = subparsers.add_parser("create-training", help="Create training job and save metadata locally")

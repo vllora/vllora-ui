@@ -529,6 +529,7 @@ def _call_llm_for_type(
     base_url: str,
     scripts_dir: Path,
     include_ground_truth: bool,
+    ground_truth_format: str | None = None,
 ) -> list[dict]:
     """Make one LLM call for a specific prompt type. Returns raw items.
 
@@ -550,10 +551,10 @@ Each prompt must be a realistic question/request grounded in the source material
 Do NOT generate generic questions — reference specific concepts, examples, or details from the source.
 
 For each prompt, also provide:
-- "ground_truth": a concise excerpt from the source material that contains the information needed to answer the question. Keep it focused — complete enough to verify a correct answer, but not the entire source.
+- "ground_truth": {f'Answer in this exact format: {ground_truth_format}. Do NOT include explanations or source excerpts — only the structured answer.' if ground_truth_format else 'a concise excerpt from the source material that contains the information needed to answer the question. Keep it focused — complete enough to verify a correct answer, but not the entire source.'}
 - "used_parts": an array of section numbers as strings (e.g., ["1", "3"]) — ONLY the specific sections from the source material above that this question is derived from. Most questions should use 1-3 sections, not all of them.
 
-Return JSON: {{"items": [{{"prompt": "the question", "ground_truth": "relevant source excerpt", "used_parts": ["1"]}}, ...]}}"""
+Return JSON: {{"items": [{{"prompt": "the question", "ground_truth": "{'structured answer' if ground_truth_format else 'relevant source excerpt'}", "used_parts": ["1"]}}, ...]}}"""
 
     request_data = json.dumps({
         "messages": [{"role": "user", "content": prompt}],
@@ -656,6 +657,7 @@ def generate_for_topic(
     base_url: str,
     scripts_dir: Path,
     include_ground_truth: bool = True,
+    ground_truth_format: str | None = None,
     rag_parts: list[dict] | None = None,
     workflow_id: str | None = None,
     enrich_sources: bool = False,
@@ -742,6 +744,7 @@ def generate_for_topic(
                 base_url=base_url,
                 scripts_dir=scripts_dir,
                 include_ground_truth=include_ground_truth,
+                ground_truth_format=ground_truth_format,
             ): pt["name"]
             for pt, count in distribution
         }
@@ -869,10 +872,10 @@ def upload_records_batch(
             [
                 sys.executable,
                 str(scripts_dir / "finetune.py"),
+                "--base-url", gateway_url,
                 "upload-records",
                 "--workflow-id", workflow_id,
                 "--file", tmp_path,
-                "--base-url", base_url,
             ],
             capture_output=True,
             text=True,
@@ -926,6 +929,12 @@ def main() -> None:
     parser.add_argument("--base-url", default="http://localhost:9090", help="Gateway base URL")
     parser.add_argument("--append", action="store_true", help="Append to existing file instead of overwriting")
     parser.add_argument("--no-ground-truth", action="store_true", help="Skip generating ground_truth excerpts")
+    parser.add_argument(
+        "--ground-truth-format", default=None,
+        help="Override default ground_truth instruction. Describe the expected format, e.g. "
+             "'Structured answer: Eligible. EIC: $[amount] or Not eligible. Reason: [rule]'. "
+             "When set, ground truths are generated in this format instead of source excerpts.",
+    )
     parser.add_argument(
         "--parallel", type=int, default=1,
         help="Number of topics to generate concurrently (default: 1, max: 8). "
@@ -1088,8 +1097,28 @@ def main() -> None:
                 upload_failures.append(topic_id)
 
     # Initialize output file (clear if not appending)
+    existing_topics: set[str] = set()
     if not args.append:
         output_path.open("w").close()
+    elif output_path.exists():
+        # In append mode, detect topics already present in the output file
+        # to avoid regenerating them (prevents duplicates after crash+retry).
+        with output_path.open() as f:
+            for line in f:
+                try:
+                    rec = json.loads(line)
+                    existing_topics.add(rec.get("topic", ""))
+                except json.JSONDecodeError:
+                    pass
+        if existing_topics:
+            original_count = len(tasks)
+            tasks = [t for t in tasks if t[1]["id"] not in existing_topics]
+            skipped = original_count - len(tasks)
+            print(
+                f"Append mode: skipping {skipped} topic(s) already in {output_path.name}: "
+                f"{', '.join(sorted(existing_topics))}",
+                file=sys.stderr,
+            )
 
     def _get_rag_parts(topic: dict, ancestors: list[dict]) -> list[dict] | None:
         """Retrieve RAG parts for a topic if --use-rag is enabled."""
@@ -1117,6 +1146,7 @@ def main() -> None:
         base_url=args.base_url,
         scripts_dir=scripts_dir,
         include_ground_truth=not args.no_ground_truth,
+        ground_truth_format=getattr(args, 'ground_truth_format', None),
     )
     if getattr(args, 'use_rag', False) or args.enrich_sources:
         common_kwargs["workflow_id"] = args.workflow_id
