@@ -963,9 +963,24 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval \
 - GPT-4o-mini eval avg=0.85 does NOT mean Qwen-4B will score 0.85 — base models typically score much lower
 - The base model baseline is the "before" in before/after comparison
 - Without it, you can't measure if training actually improved the model
-- Expected: base model scores will be LOW (0.05-0.30) — this is normal, not a grader problem
 
-**Do NOT run the readiness gate on this eval.** The base model will fail readiness checks (low avg, high zeros) — that's expected. Just log the baseline:
+**Do NOT run the readiness gate on this eval.** The base model may fail readiness checks — that's expected. Just log the baseline.
+
+**⚠️ CRITICAL: Analyze the base model score before proceeding to training.**
+
+| Base model avg score | What it means | Action |
+|---------------------|---------------|--------|
+| **< 0.10** | Model can't do the task at all | ✓ Ideal for GRPO — maximum room to improve. Proceed. (DeepSeek-R1: 15.6%→71%, arXiv:2501.12948) |
+| **0.10 - 0.50** | Model has some knowledge but struggles | ✓ Good for GRPO — strong learning signal expected. Proceed. |
+| **0.50 - 0.75** | Model is mediocre to decent | ✓ GRPO can improve this. Proceed. |
+| **0.75 - 0.85** | Model is already good | ⚠️ **GRPO efficiency drops dramatically.** "Hard Examples Are All You Need" (arXiv:2508.14094) found easy prompts (>0.80 success rate) maintain learnable variance for only 3.7% of training steps — 96.3% of compute is wasted. Improvement IS possible but typically small (2-7%, e.g., AlphaMaze: 86%→93%, arXiv:2502.14669). Consider: (1) **Make the grader stricter** — add criteria so base model scores lower, creating more headroom. (2) **Proceed but set expectations** — improvement will be marginal. (3) **Don't train** if the base model already meets requirements. |
+| **> 0.85** | Model already excels | ⚠️ **GRPO will produce near-zero improvement for most prompts.** Options: (1) **Don't train** — base model may be good enough. (2) **Switch to SFT** — SFT can teach output format even when the model knows the content (no score variance needed). (3) **Make grader much stricter** to create artificial headroom. |
+
+**Why this happens**: GRPO computes advantages by contrasting K completions per prompt. When the base model scores high, all completions score similarly → advantage ≈ 0 → no gradient. With continuous graders, even nonzero variance produces tiny advantages that drive negligible learning.
+
+**Research basis**: DeepSeek-R1 (arXiv:2501.12948) started at 15.6% and reached 71% — canonical GRPO success from a low base. "Hard Examples" (arXiv:2508.14094): easy prompts yield 3.49% improvement vs 34.19% for hard prompts — a 10x difference. AlphaMaze (arXiv:2502.14669): GRPO improved 86%→93% — proving improvement IS possible from high baselines, just small.
+
+**Note**: The "use a smaller base model" strategy is NOT well supported — DeepSeek found distillation from larger models outperforms direct RL on smaller models (arXiv:2501.12948 §4). Consider distillation instead if you need a smaller model.
 
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
@@ -1104,7 +1119,15 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
   --change-type baseline --verdict PASS
 ```
 
-The `log-iteration` delta will show the improvement: base model avg=0.15 → trained model avg=0.65 = **+0.50 improvement**. This is the real measure of whether training worked.
+The `log-iteration` delta will show the improvement. Interpret the result:
+
+| Improvement (Δ) | Verdict | Action |
+|-----------------|---------|--------|
+| **> +0.15** | ✓ Strong improvement | Deploy. GRPO worked well. |
+| **+0.05 to +0.15** | ~ Moderate improvement | Deploy if acceptable. Consider more epochs or harder data for next iteration. |
+| **+0.02 to +0.05** | ⚠ Marginal improvement | Check: was base model already >0.75? If so, this is expected — GRPO has limited headroom (arXiv:2508.14094: only 3.7% of steps learnable for easy prompts). Deploy if acceptable, or make grader stricter for next iteration. |
+| **-0.02 to +0.02** | ⚠ No meaningful improvement | Training didn't help. Likely cause: base model already too good (>0.75) or grader not differentiating. See Step 7d guidance. |
+| **< -0.02** | ❌ Regression | Training made the model worse. Deploy the base model, not the trained one. Investigate: reward hacking, overfitting, or lr too high. |
 
 #### 8c. Analyze training metrics (after training completes)
 

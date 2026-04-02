@@ -982,7 +982,7 @@ This outputs alerts (CRITICAL/HIGH/WARNING) and a summary. Use the alerts to gui
 | KL explodes from step 1 (>1000) | Learning rate too high for this model/task | Halve LR: `1e-6` → `5e-7` → `2.5e-7` |
 | grad_norm NaN or Inf | Numerical overflow — often from zero-length completions or bad chat template | Check completions/min_length. If 0 → fix chat template or increase max_output_tokens |
 | Loss stuck at exactly 0.0 | All advantages are zero (reward_std ≈ 0) | Grader is too lenient — all responses score the same. Make grader harder (see Part 5) |
-| reward flat + frac_reward_zero_std > 0.5 | Base model already good at this task — no room to improve | Make grader harder, add stricter criteria, penalize verbosity |
+| reward flat + frac_reward_zero_std > 0.5 | Base model already good at this task — limited GRPO headroom | **Check base model eval score.** If >0.75: GRPO efficiency drops dramatically — 96% compute wasted for easy prompts (arXiv:2508.14094). (1) Make grader stricter to create headroom. (2) Consider SFT instead — teaches format without needing score variance. (3) Don't train — base model may be good enough. (4) For smaller model: use distillation from a larger model, not direct GRPO. |
 | reward declining over epochs | Model getting worse — possible reward hacking or instability | Reduce LR, add KL penalty (beta > 0), inspect outputs manually |
 | completions/clipped_ratio > 0.5 | Most responses truncated at max_output_tokens | Increase max_output_tokens (512 → 1024). Watch cost: G × tokens |
 | clip_ratio/region_mean = 0 + KL exploding | Trust region not constraining updates | Reduce LR. If using custom epsilon, check it's not too large |

@@ -83,7 +83,37 @@ These are confirmed values from actual Unsloth+TRL GRPO training (Ref: [open-r1#
 - **What it is**: What percentage of training questions produced zero learning signal? If 8 out of 8 completions for a question all score 0.7, that question taught the model nothing. This metric tells you how many questions are "wasted" each step.
 - Healthy: Below 0.2 (20%).
 - Red flag: Above 0.5 → half the batch provides no gradient. Above 0.8 → training is stalled.
+- Note: 30-99% is actually NORMAL in GRPO (Ref: "No Prompt Left Behind", arXiv:2509.21880, ICLR 2026). Only a concern when reward is also stagnant.
 - Fix: Increase G, adjust grader sensitivity, mix easy/hard prompts.
+
+### Task Difficulty vs GRPO Effectiveness
+
+**GRPO has diminishing returns when the base model already performs well.** This is the most common reason for "reward flat" training — not a bug, just insufficient headroom.
+
+GRPO learns by contrasting K completions per prompt — reinforcing better ones and suppressing worse ones. When the base model already scores high (>0.7), most completions in a batch score similarly → advantage ≈ 0 → no gradient → no learning.
+
+| Base model score | GRPO headroom | Expected outcome | Source |
+|-----------------|---------------|-----------------|--------|
+| < 0.20 | Maximum | Large improvement (DeepSeek-R1: 15.6% → 71%) | arXiv:2501.12948 |
+| 0.20 - 0.50 | Strong | Good improvement expected | Consistent with all findings |
+| 0.50 - 0.75 | Moderate | Meaningful improvement possible | No specific paper; interpolation |
+| **0.75 - 0.85** | **Dramatically reduced** | **Small improvement (2-7%) but 96% of compute wasted. AlphaMaze: 86%→93%.** | arXiv:2508.14094, arXiv:2502.14669 |
+| > 0.85 | Near zero | Improvement near-zero for most prompts. Consider SFT or accept base model. | arXiv:2508.14094 (3.7% learnable steps) |
+
+**Key paper**: "Hard Examples Are All You Need" (arXiv:2508.14094) — easy prompts (>0.80 success rate) maintain learnable variance for only **3.7% of training steps** vs 34.1% for hard prompts. Easy-only training yields **3.49% improvement** vs **34.19%** for hard-only — a 10x difference.
+
+**How to detect during training:**
+- Reward oscillates around the base model score without trending up
+- frac_reward_zero_std stays high (>50%) because most prompts already score well
+- reward_std may be nonzero but advantages are tiny (all completions score 0.7-0.9)
+
+**Fixes:**
+1. **Make the grader stricter** — add criteria, require exact format, penalize verbosity. Lowers base model scores, creating headroom.
+2. **Switch to SFT** — SFT doesn't need score variance. It can teach output format even when the model already knows the content.
+3. **Don't train** — if the base model already meets requirements, accept it.
+4. **Distillation** — if you need a smaller model, distill from a larger trained model rather than training the small model directly with GRPO (DeepSeek found distillation outperforms direct RL on smaller models, arXiv:2501.12948 §4).
+
+Note: "Use a smaller base model for more GRPO headroom" is NOT supported by research — smaller models have less capacity and direct RL on them often underperforms distillation.
 
 ### Stability Metrics
 
