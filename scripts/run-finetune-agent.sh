@@ -18,7 +18,7 @@
 # The raw JSONL contains every event (messages, tool calls, tool results, usage).
 # The markdown is a human-readable transcript for analysis.
 
-set -uo pipefail
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -80,9 +80,13 @@ if curl -s --connect-timeout 3 "$GATEWAY_URL/health" >/dev/null 2>&1; then
 else
   echo "   ⚠ Gateway not reachable at $GATEWAY_URL"
   echo "   Start it with: npm run start:backend (from gateway repo)"
-  echo ""
-  read -r -p "Continue anyway? [y/N] " response
-  [[ "$response" =~ ^[Yy]$ ]] || exit 1
+  if [[ "${BATCH_MODE:-}" == "true" ]]; then
+    echo "   BATCH_MODE=true — skipping prompt, continuing..."
+  else
+    echo ""
+    read -r -p "Continue anyway? [y/N] " response
+    [[ "$response" =~ ^[Yy]$ ]] || exit 1
+  fi
 fi
 
 # Check PDFs exist
@@ -108,24 +112,18 @@ mkdir -p "$RUN_DIR"
 JSONL_FILE="$RUN_DIR/stream.jsonl"
 MD_FILE="$RUN_DIR/transcript.md"
 META_FILE="$RUN_DIR/meta.json"
+TOOL_RESULTS_FILE="$RUN_DIR/tool-results.jsonl"
 
 # Save full prompt
 cp "$PROJECT_DIR/finetune-prompt.md" "$RUN_DIR/prompt.md" 2>/dev/null || echo "$PROMPT" > "$RUN_DIR/prompt.md"
 
-# Save metadata (use python for safe JSON encoding)
-python3 -c "
-import json, sys
-meta = {
-    'run_id': '$RUN_ID',
-    'project_dir': '$PROJECT_DIR',
-    'gateway_url': '$GATEWAY_URL',
-    'max_turns': $MAX_TURNS,
-    'pdf_count': $PDF_COUNT,
-    'started_at': '$(date -u +%Y-%m-%dT%H:%M:%SZ)',
-}
-with open('$META_FILE', 'w') as f:
-    json.dump(meta, f, indent=2)
-"
+# Save metadata
+python3 "$SCRIPT_DIR/_write-meta.py" "$META_FILE" create \
+  --run-id "$RUN_ID" \
+  --project-dir "$PROJECT_DIR" \
+  --gateway-url "$GATEWAY_URL" \
+  --max-turns "$MAX_TURNS" \
+  --pdf-count "$PDF_COUNT"
 
 # Save PID file so the run can be stopped externally
 PID_FILE="$RUN_DIR/pid"
@@ -264,25 +262,20 @@ finalize() {
   fi
 
   # Update meta.json
-  python3 -c "
-import json
-with open('$META_FILE') as f:
-    meta = json.load(f)
-meta['finished_at'] = '$(date -u +%Y-%m-%dT%H:%M:%SZ)'
-meta['session_id'] = '$session_id'
-meta['exit_code'] = $exit_code
-meta['turns'] = $turns
-meta['tool_calls'] = $tool_calls
-meta['errors'] = $errors
-meta['subagent_count'] = $subagent_count
-with open('$META_FILE', 'w') as f:
-    json.dump(meta, f, indent=2)
-" 2>/dev/null || true
+  python3 "$SCRIPT_DIR/_write-meta.py" "$META_FILE" finalize \
+    --session-id "${session_id:-}" \
+    --exit-code "$exit_code" \
+    --turns "$turns" \
+    --tool-calls "$tool_calls" \
+    --errors "$errors" \
+    --subagent-count "$subagent_count" 2>/dev/null || true
 }
 
 # ─── Signal handling ─────────────────────────────────────────────────────────
 
 CLAUDE_PID=""
+FORMATTER_PID=""
+FIFO_PATH="$RUN_DIR/stream.fifo"
 
 cleanup() {
   echo ""
@@ -293,6 +286,14 @@ cleanup() {
     kill "$CLAUDE_PID" 2>/dev/null
     wait "$CLAUDE_PID" 2>/dev/null || true
   fi
+
+  # Kill the formatter if still running
+  if [[ -n "$FORMATTER_PID" ]] && kill -0 "$FORMATTER_PID" 2>/dev/null; then
+    wait "$FORMATTER_PID" 2>/dev/null || true
+  fi
+
+  # Clean up FIFO
+  rm -f "$FIFO_PATH"
 
   # Run finalize (collects subagents, writes summary)
   finalize "130"
@@ -315,25 +316,46 @@ trap cleanup INT TERM
 echo "🚀 Starting finetune agent..."
 echo ""
 
-# Run claude and pipe directly to the formatter (which also saves raw JSONL).
-# No tee — the formatter handles both writing the raw stream and the markdown.
-# This avoids pipe buffering issues (tee + python3 in a pipeline buffers on macOS).
+# Use a named pipe (FIFO) instead of a shell pipeline so we get:
+#   1. The real Claude PID (for reliable kill via stop script)
+#   2. The real Claude exit code (not the formatter's)
+mkfifo "$FIFO_PATH"
+
+# Start formatter reading from FIFO (background)
+PYTHONUNBUFFERED=1 python3 -u "$SCRIPT_DIR/format-finetune-log.py" "$MD_FILE" "$JSONL_FILE" "$TOOL_RESULTS_FILE" < "$FIFO_PATH" &
+FORMATTER_PID=$!
+
+# Start Claude writing to FIFO (background so we can capture its PID)
+"${CLAUDE_CMD[@]}" > "$FIFO_PATH" 2>&1 &
+CLAUDE_PID=$!
+echo "$CLAUDE_PID" > "$PID_FILE"
+
+# Wait for Claude to finish — its exit code is what matters
 set +e
-"${CLAUDE_CMD[@]}" 2>&1 | PYTHONUNBUFFERED=1 python3 -u "$SCRIPT_DIR/format-finetune-log.py" "$MD_FILE" "$JSONL_FILE" &
-PIPE_PID=$!
-
-# The pipeline runs as a single process group. Save the group PID.
-echo "$PIPE_PID" > "$PID_FILE"
-# Also try to find the actual claude PID (first process in pipe)
-CLAUDE_PID=$(jobs -p 2>/dev/null | head -1 || echo "$PIPE_PID")
-
-wait "$PIPE_PID" 2>/dev/null
+wait "$CLAUDE_PID"
 CLAUDE_EXIT=$?
 set -e
+CLAUDE_PID=""  # Claude has exited
+
+# Wait for formatter to drain remaining data from FIFO
+wait "$FORMATTER_PID" 2>/dev/null || true
+FORMATTER_PID=""
+
+# Clean up FIFO
+rm -f "$FIFO_PATH"
 
 # ─── Finalize (collect subagents, write summary, update meta) ────────────────
 
 finalize "$CLAUDE_EXIT"
+
+# ─── Automated analysis ────────────────────────────────────────────────────
+
+echo ""
+echo "📊 Analyzing run..."
+set +e
+python3 "$SCRIPT_DIR/analyze-finetune-run.py" "$RUN_DIR" --project-dir "$PROJECT_DIR"
+ANALYSIS_EXIT=$?
+set -e
 
 echo ""
 echo "═══════════════════════════════════════════════════════"
@@ -343,10 +365,12 @@ else
   echo "  ❌ Run failed (exit $CLAUDE_EXIT): $RUN_ID"
 fi
 echo ""
-echo "  📄 Transcript:  $MD_FILE"
-echo "  📊 Raw stream:  $JSONL_FILE"
-echo "  📋 Metadata:    $META_FILE"
-[[ -d "$RUN_DIR/subagents" ]] && echo "  🤖 Subagents:   $RUN_DIR/subagents/"
+echo "  📄 Transcript:    $MD_FILE"
+echo "  📊 Raw stream:    $JSONL_FILE"
+echo "  📋 Metadata:      $META_FILE"
+[[ -f "$RUN_DIR/verdict.json" ]] && echo "  🏁 Verdict:       $RUN_DIR/verdict.json"
+[[ -s "$TOOL_RESULTS_FILE" ]] && echo "  🔧 Tool results:  $TOOL_RESULTS_FILE"
+[[ -d "$RUN_DIR/subagents" ]] && echo "  🤖 Subagents:     $RUN_DIR/subagents/"
 echo "═══════════════════════════════════════════════════════"
 
 exit $CLAUDE_EXIT

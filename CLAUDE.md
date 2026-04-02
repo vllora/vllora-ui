@@ -429,18 +429,25 @@ Hook scripts live in `.claude/hooks/`. Configuration is in `.claude/settings.jso
 
 ## Documentation Sync Rule
 
-After ANY code change, check whether it affects behavior documented in `docs/features/` or `finetune-skill/`. If it does, **update the relevant doc file(s) in the same change**:
+**MANDATORY — enforced by PostToolUse hook.** After ANY code change to pipeline source files, you MUST update the relevant docs **in the same response** (not "later", not "in a follow-up"). The hook will remind you which docs to check.
 
 | What changed | Update |
 |-------------|--------|
-| Skill pipeline steps or constraints | `finetune-skill/SKILL.md` |
-| Skill API usage or new endpoints | `finetune-skill/reference/api-reference.md` |
-| Skill known issues or testing | `finetune-skill/README.md` |
+| `generate_records.py` | `how-skill-work/generate-records-deep-dive.md`, `pipeline-overview.md`, `data-pipeline-flow.md`, `SKILL.md` Step 4, `README.md` |
+| `deduplicate_records.py` | `how-skill-work/generate-records-deep-dive.md`, `pipeline-overview.md` |
+| `finetune.py` (subcommands/thresholds) | `SKILL.md`, `README.md`, `pipeline-overview.md`, verify `compute-readiness-gate.ts` sync |
+| Other skill scripts | `README.md` script table, `pipeline-overview.md` helper scripts table |
+| `SKILL.md` | `README.md`, `pipeline-overview.md` |
+| Skill reference docs | `SKILL.md`, `README.md`, `agents/training-monitor.md` |
+| Skill subagents | `README.md` agent delegation, `pipeline-overview.md` subagent table |
+| Topic hierarchy or system prompt logic | `how-skill-work/generate-topics-deep-dive.md` |
 | State machine transitions | `docs/features/lucy-finetune-dataset/state-machine.md` |
 | Tools added/removed/modified | `docs/features/lucy-finetune-dataset/architecture.md` |
 | Event emitters added/changed | `docs/features/lucy-finetune-dataset/event-emitter-guide.md` |
 | Agent prompt/tools changed | The relevant agent md in `gateway/agents/finetune/` |
 | Skill packaging logic | `docs/features/skill-package/README.md`, `architecture.md`, or `data-flow.md` |
+
+**To verify all docs are in sync**: run `/sync-docs` — it reads all source files, compares against docs, and auto-fixes gaps.
 
 ---
 
@@ -457,6 +464,7 @@ Skills extend Claude's capabilities. Auto-invoked when relevant, or invoke manua
 | `/finetune-e2e <test>` | Manual | E2E test with browser automation (screenshots, verification) |
 | `/research-grpo` | Manual | Research latest GRPO/RFT papers, check if thresholds/techniques need updating |
 | `/skill-package-context` | Yes | Load skill package docs — use when asked about skill packaging, SKILL.md, JSONL format |
+| `/sync-docs` | Yes | Verify and auto-fix pipeline docs — reads source files, compares against docs, updates outdated content |
 
 ## Sub-Agents
 

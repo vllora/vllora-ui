@@ -53,10 +53,10 @@ if kill -0 "$PID" 2>/dev/null; then
   echo "  Run:  $RUN_ID"
   echo "  PID:  $PID"
 
-  # Kill the process group (pipeline)
-  kill -- -"$PID" 2>/dev/null || kill "$PID" 2>/dev/null || true
+  # Send SIGTERM to the Claude process (PID file now stores the real Claude PID)
+  kill "$PID" 2>/dev/null || true
 
-  # Wait up to 10 seconds
+  # Wait up to 10 seconds for graceful shutdown
   for i in $(seq 1 10); do
     kill -0 "$PID" 2>/dev/null || break
     sleep 1
@@ -64,7 +64,7 @@ if kill -0 "$PID" 2>/dev/null; then
 
   # Force kill if still running
   if kill -0 "$PID" 2>/dev/null; then
-    kill -9 -- -"$PID" 2>/dev/null || kill -9 "$PID" 2>/dev/null || true
+    kill -9 "$PID" 2>/dev/null || true
   fi
 
   echo "  ✓ Agent stopped"
@@ -139,19 +139,12 @@ if [[ $SUBAGENT_COUNT -gt 0 ]]; then
 fi
 
 # Update meta.json
-python3 -c "
-import json
-with open('$META_FILE') as f:
-    meta = json.load(f)
-meta['finished_at'] = '$(date -u +%Y-%m-%dT%H:%M:%SZ)'
-meta['session_id'] = '$SESSION_ID'
-meta['exit_code'] = 130
-meta['turns'] = $TURNS
-meta['tool_calls'] = $TOOL_CALLS
-meta['subagent_count'] = $SUBAGENT_COUNT
-with open('$META_FILE', 'w') as f:
-    json.dump(meta, f, indent=2)
-" 2>/dev/null || true
+python3 "$SCRIPT_DIR/_write-meta.py" "$META_FILE" finalize \
+  --session-id "${SESSION_ID:-}" \
+  --exit-code 130 \
+  --turns "$TURNS" \
+  --tool-calls "$TOOL_CALLS" \
+  --subagent-count "$SUBAGENT_COUNT" 2>/dev/null || true
 
 # ─── Summary ─────────────────────────────────────────────────────────────────
 

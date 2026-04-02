@@ -5,10 +5,14 @@ Converts Claude Code JSONL output to a readable markdown transcript.
 Reads JSONL line-by-line from stdin (no buffering — writes immediately).
 Writes formatted markdown to argv[1].
 Optionally saves raw JSONL to argv[2] (replaces tee).
+Optionally saves full (untruncated) tool results to argv[3] for debugging.
 Prints compact live progress to stderr.
 
 Usage:
-  # Main agent (with raw JSONL save):
+  # Main agent (with raw JSONL save + full tool results):
+  claude -p "..." --output-format stream-json | python3 -u format-finetune-log.py transcript.md stream.jsonl tool-results.jsonl
+
+  # Main agent (without full tool results):
   claude -p "..." --output-format stream-json | python3 -u format-finetune-log.py transcript.md stream.jsonl
 
   # Subagent transcript (reformat from file):
@@ -84,7 +88,7 @@ def format_timestamp(entry: dict) -> str:
     return datetime.now().strftime("%H:%M:%S")
 
 
-def process_line(entry: dict, md_file, state: dict):
+def process_line(entry: dict, md_file, state: dict, tool_results_file=None):
     """Process a single JSONL entry. State is mutated in place."""
     entry_type = entry.get("type", "")
     message = entry.get("message", {})
@@ -190,6 +194,18 @@ def process_line(entry: dict, md_file, state: dict):
                 )
                 md_file.flush()
 
+                # Save full (untruncated) tool result for debugging
+                if tool_results_file and len(text) > 1500:
+                    record = {
+                        "tool_use_id": block.get("tool_use_id", ""),
+                        "is_error": is_error,
+                        "content_length": len(text),
+                        "content": text,
+                        "timestamp": ts,
+                    }
+                    tool_results_file.write(json.dumps(record, ensure_ascii=False) + "\n")
+                    tool_results_file.flush()
+
             elif block_type == "text" and is_subagent and state["turns"] == 0:
                 text = block.get("text", "")
                 if text.strip():
@@ -249,20 +265,33 @@ def process_line(entry: dict, md_file, state: dict):
                 md_file.flush()
                 preview = truncate(formatted.replace("\n", " "), 80)
                 print(f"\r  {label}: {preview}", end="", file=sys.stderr)
+
+                # Save full tool input for heavy tools (Bash, Write, Edit have large inputs)
+                if tool_results_file and name in ("Bash", "Write", "Edit", "Agent"):
+                    record = {
+                        "tool_use_id": block.get("id", ""),
+                        "tool_name": name,
+                        "input": inp,
+                        "timestamp": ts,
+                    }
+                    tool_results_file.write(json.dumps(record, ensure_ascii=False) + "\n")
+                    tool_results_file.flush()
         return
 
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: format-finetune-log.py <output.md> [raw.jsonl]", file=sys.stderr)
+        print("Usage: format-finetune-log.py <output.md> [raw.jsonl] [tool-results.jsonl]", file=sys.stderr)
         sys.exit(1)
 
     md_path = sys.argv[1]
     jsonl_path = sys.argv[2] if len(sys.argv) >= 3 else None
+    tool_results_path = sys.argv[3] if len(sys.argv) >= 4 else None
 
     # Open output files
     md_file = open(md_path, "a", encoding="utf-8", buffering=1)  # line-buffered
     jsonl_file = open(jsonl_path, "a", encoding="utf-8", buffering=1) if jsonl_path else None
+    tool_results_file = open(tool_results_path, "a", encoding="utf-8", buffering=1) if tool_results_path else None
 
     state = {
         "turns": 0,
@@ -302,7 +331,7 @@ def main():
                     md_file.flush()
 
             # Process the entry
-            process_line(entry, md_file, state)
+            process_line(entry, md_file, state, tool_results_file)
 
     except KeyboardInterrupt:
         md_file.write(f"\n\n---\n\n**⏹ Interrupted at {datetime.now().strftime('%H:%M:%S')}**\n")
@@ -319,6 +348,8 @@ def main():
         md_file.close()
         if jsonl_file:
             jsonl_file.close()
+        if tool_results_file:
+            tool_results_file.close()
 
 
 if __name__ == "__main__":
