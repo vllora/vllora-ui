@@ -67,6 +67,10 @@ Each prompt type uses different instructions and temperatures:
 
 **Key insight from "Hard Examples Are All You Need"** (arXiv:2508.14094): Hard examples yield **47% gains** vs 3-15% for easy ones. The `edge_case` (temp 1.0) and `compare_analyze` types are most likely to produce these high-value hard prompts.
 
+**Structured-output override** (`--ground-truth-format`): When set, a constraint is injected into the LLM prompt that forces ALL prompt types into scenario-based questions with concrete inputs. Open-ended prompts ("Explain...", "Describe...", "Compare pros and cons...") are incompatible with structured-output tasks (e.g., "Eligible. EIC: $X") — they produce model refusals during training because the model can't answer "Explain..." with a structured determination. The constraint converts every type to "Given [specific scenario], determine [answer]."
+
+**Append-mode dedup**: When `--append` is used (e.g., after a crash), the script reads the existing output JSONL and skips topics already present, preventing duplicate records.
+
 ### 2. Source-Weighted Topic Distribution
 
 By default, every leaf topic gets an **equal number of records** (`--records-per-topic`). This is the recommended approach:

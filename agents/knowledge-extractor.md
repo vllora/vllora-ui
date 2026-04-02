@@ -177,8 +177,16 @@ python3 <SKILL_DIR>/scripts/validate_extraction.py "<DOC_DIR>/../" --fix
 
 If validation reports FAIL for this document after `--fix`:
 1. Check the specific failure reasons in the output
-2. Re-run `consolidate_parts.py` with `--min-chars 50` if short-fragment issue
-3. Report the FAIL status and reasons in your summary — the orchestrator decides whether to proceed
+2. If **short-fragment issue** — re-run `consolidate_parts.py` with `--min-chars 50`
+3. If **table quality FAIL** (inconsistent columns, mixed content, missing metadata) — **read the source PDF directly and fix the tables yourself:**
+   - Use the `Read` tool to view the PDF pages that contain the broken table (e.g., `Read: <DOC_PATH>` with `pages: "9-20"`)
+   - You can SEE the actual table — extract the correct headers, column names with units, and all data rows
+   - Write the corrected table as a part in `knowledge_parts.json` with `"type": "table"`, markdown content, and `"content_metadata": {"headers": [...], "num_rows": N, "num_cols": M, "extraction_method": "agent_visual"}`
+   - Remove the old broken table fragments (parts with same title but garbled content)
+   - Re-run `validate_extraction.py` to confirm PASS
+   - This is the PREFERRED approach — you are a vision-capable LLM, use that ability
+   - **Fallback only**: if you cannot read the PDF, use `camelot_extract_tables.py --pdf <DOC_PATH> --parts <DOC_DIR>/knowledge_parts.json --pages <table-pages>`
+4. Re-validate. If still FAIL, report the status and reasons in your summary
 
 ### 6. Upload to gateway
 

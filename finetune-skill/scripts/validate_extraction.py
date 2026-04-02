@@ -110,6 +110,66 @@ def validate_file(path: Path) -> dict:
             f"WARN: Only {len(paths)} unique extraction paths for {len(parts)} parts"
         )
 
+    # Check 9: Table quality — detect garbled table extractions
+    # Catches: inconsistent column counts, title/content mismatch, mixed content
+    table_parts = [p for p in parts if p.get("type") == "table"]
+    for tp in table_parts:
+        content = tp.get("content", "")
+        title = tp.get("title", "")
+        pipe_rows = [l for l in content.split("\n") if l.strip().startswith("|")]
+
+        if len(pipe_rows) < 3:
+            continue  # Not enough rows to analyze
+
+        # Check 9a: Column count consistency
+        col_counts = []
+        for row in pipe_rows:
+            cells = row.split("|")
+            col_counts.append(len(cells))
+        if col_counts:
+            from collections import Counter as _Counter
+            count_freq = _Counter(col_counts)
+            modal_count, modal_freq = count_freq.most_common(1)[0]
+            inconsistent = len(pipe_rows) - modal_freq
+            inconsistent_pct = inconsistent / len(pipe_rows)
+            if inconsistent_pct > 0.15:
+                # Large tables with column issues → FAIL (will corrupt ground truths)
+                # Small tables → WARN (less impact)
+                severity = "FAIL" if len(pipe_rows) > 20 else "WARN"
+                issues.append(
+                    f"{severity}: Table '{title[:40]}' has inconsistent columns: "
+                    f"{inconsistent}/{len(pipe_rows)} rows ({inconsistent_pct:.0%}) "
+                    f"differ from modal {modal_count} cols. "
+                    f"Column data may be shifted — ground truths will cite wrong values. "
+                    f"Fix: run camelot_extract_tables.py or read the PDF pages directly."
+                )
+
+        # Check 9b: Title/content mismatch — title doesn't reflect table data
+        if pipe_rows and len(content) > 5000:
+            # Check if non-table text precedes the table (mixed content)
+            first_pipe_idx = content.find("|")
+            if first_pipe_idx > 300:
+                prefix_text = content[:first_pipe_idx].strip()
+                prefix_lines = [l for l in prefix_text.split("\n") if l.strip()]
+                if len(prefix_lines) > 5:
+                    # Mixed content in large tables → FAIL (title wrong, columns garbled)
+                    severity = "FAIL" if len(content) > 10000 else "WARN"
+                    issues.append(
+                        f"{severity}: Table '{title[:40]}' has {len(prefix_lines)} lines of "
+                        f"non-table text before the table data ({first_pipe_idx} chars). "
+                        f"Merged with adjacent content — title is wrong, columns likely shifted. "
+                        f"Fix: run camelot_extract_tables.py or read the PDF pages directly."
+                    )
+
+        # Check 9c: Very large table without metadata
+        meta = tp.get("content_metadata", {})
+        if len(content) > 10000 and not meta.get("num_rows") and not meta.get("headers"):
+            issues.append(
+                f"FAIL: Large table '{title[:40]}' ({len(content)} chars) has no "
+                f"structured metadata (headers, row count). Raw text, not parsed table. "
+                f"Fix: run camelot_extract_tables.py or read the PDF pages directly."
+            )
+
     overall = "FAIL" if any(i.startswith("FAIL") for i in issues) else \
               "WARN" if any(i.startswith("WARN") for i in issues) else "PASS"
 

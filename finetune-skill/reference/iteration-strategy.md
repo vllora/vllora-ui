@@ -638,23 +638,24 @@ Compare scores across epochs to see if training is working. See Part 2 for how t
 
 ### Iteration Log
 
-Maintain `iteration-log.md` to track what changed and why:
+Use `finetune.py log-iteration` to maintain `iterations.json` — a structured changelog with metrics and delta comparisons:
 
-```markdown
-## Iteration 1
-- Dataset ID: my-dataset-v1 (backend: ds_abc123)
-- Eval run: eval_xyz789 → saved to evaluations/eval-v1.json
-- Result: avg=0.45, pass_rate=60%, std=0.35 → NO-GO
-- Low-scoring topics: technical/api (avg=0.2), technical/login (avg=0.3)
-- Top grader complaints: "Response too short", "Missing step-by-step instructions"
-- Changes made: Relaxed length check in grader, added 15 prompts to technical/*
+```bash
+# After each eval readiness check:
+uv run scripts/finetune.py log-iteration --project-dir finetune-project \
+  --phase eval --eval-file evaluations/eval-001.json \
+  --changes "Initial eval with default grader" --change-type baseline --verdict FAIL
 
-## Iteration 2
-- Dataset ID: my-dataset-v2 (backend: ds_def456)
-- Eval run: eval_abc012 → saved to evaluations/eval-v2.json
-- Result: avg=0.72, pass_rate=85%, std=0.22 → GO
-- Decision: Proceed to training
+# After each training analysis:
+uv run scripts/finetune.py log-iteration --project-dir finetune-project \
+  --phase training --training-file training-jobs/train-001.json \
+  --changes "First training: lr=5e-6, epochs=8" --change-type baseline --verdict PASS
+```
 
+The command auto-computes metrics (eval: avg_score, zero_rate, distinct_buckets; training: final_reward, reward_delta, KL) and prints a delta comparison vs the previous same-phase iteration. Read `iterations.json` before making changes to check if the last fix helped.
+
+Example output:
+```
 ## Training Run 1
 - Job: ft_job_001 → saved to training-jobs/job-001.json
 - Base model: Qwen3.5-4B → Output: my-custom-model
@@ -1087,29 +1088,33 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 
 ### Step 5: Comparing Training Runs
 
-When iterating on training, save metrics for each run and compare:
+Use `finetune.py log-iteration --phase training` after each run. It auto-extracts metrics from the training side files and compares with the previous run:
 
-```markdown
-## Training Iteration Log
+```bash
+# After run 1
+uv run scripts/finetune.py log-iteration --project-dir finetune-project \
+  --phase training --training-file training-jobs/train-001.json \
+  --changes "Default params: lr=1e-6, epochs=8" --change-type baseline --verdict FAIL
 
-### Run 1: Default params
-- Job: ft_abc123 → metrics saved to training-jobs/abc123-metrics.json
-- LR: 1e-6, epochs: 8, max_output_tokens: 512
-- Result: KL=603M at step 1 → CRITICAL. Cancelled.
-- Diagnosis: LR too high for this model/task
-
-### Run 2: Halved LR
-- Job: ft_def456
-- LR: 5e-7, epochs: 8, max_output_tokens: 512
-- Result: KL stable (<5), reward 0.6→0.75, clipped_ratio=0.15
-- Diagnosis: Healthy. Reward still improving at end → could benefit from more epochs
-
-### Run 3: Same LR, more epochs
-- Job: ft_ghi789
-- LR: 5e-7, epochs: 12, max_output_tokens: 512
-- Result: reward 0.6→0.82, plateaued at epoch 10
-- Decision: Deploy checkpoint from epoch 10
+# After run 2
+uv run scripts/finetune.py log-iteration --project-dir finetune-project \
+  --phase training --training-file training-jobs/train-002.json \
+  --changes "Halved LR to 5e-7" --change-type hyperparams --verdict PASS
 ```
+
+Output:
+```
+=== Iteration 4 (training) vs 3 ===
+Changes: [hyperparams] Halved LR to 5e-7
+
+  final_reward        : 0.0000 → 0.7500 (↑ 0.7500) ✓
+  final_kl            : 603000000 → 4.8000 (↓ ...) ✓
+  reward_delta        : 0.0000 → 0.1500 (↑ 0.1500) ✓
+
+  Verdict: PASS
+```
+
+All iterations (eval + training) live in `iterations.json` — the agent reads this before making changes to understand the full history.
 
 ### Step 6: When to Stop Training Iteration
 

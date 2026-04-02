@@ -513,6 +513,311 @@ def cmd_upload_records(args: argparse.Namespace) -> None:
     print(f"Records uploaded: {total_uploaded}")
 
 
+def cmd_filter_records(args: argparse.Namespace) -> None:
+    """Filter out bad records from local JSONL and gateway based on eval results.
+
+    Reads eval results, identifies records to remove (by score threshold, reason
+    pattern, or topic), removes them from the local JSONL file, and optionally
+    syncs the deletions to the gateway. Prints a summary of what was removed
+    so the agent can regenerate replacements with --append.
+    """
+    eval_file = Path(args.file)
+    if not eval_file.exists():
+        print(f"Error: Eval file not found: {eval_file}", file=sys.stderr)
+        sys.exit(1)
+
+    eval_data = json.loads(eval_file.read_text())
+    results = eval_data.get("results", [])
+    if not results:
+        print("Error: No results in eval file", file=sys.stderr)
+        sys.exit(1)
+
+    # Build set of record IDs to remove
+    remove_ids: set[str] = set()
+    remove_reasons: dict[str, str] = {}
+    max_score = args.max_score
+    reason_pattern = args.reason_pattern
+
+    for r in results:
+        row = r.get("row", {})
+        record_id = row.get("id", row.get("record_id", ""))
+        if not record_id:
+            continue
+
+        for _epoch_key, candidates in r.get("epochs", {}).items():
+            if not isinstance(candidates, list):
+                continue
+            for c in candidates:
+                score = c.get("score")
+                reason = c.get("reason", "")
+                if score is None:
+                    continue
+
+                should_remove = False
+
+                # Filter by score threshold
+                if max_score is not None and float(score) <= max_score:
+                    should_remove = True
+
+                # Filter by reason pattern
+                if reason_pattern and reason_pattern.lower() in reason.lower():
+                    should_remove = True
+
+                if should_remove:
+                    remove_ids.add(record_id)
+                    remove_reasons[record_id] = f"score={score}, reason={reason[:80]}"
+
+    # Filter by topic if specified
+    if args.topic:
+        for r in results:
+            row = r.get("row", {})
+            record_id = row.get("id", row.get("record_id", ""))
+            topic = row.get("topic", "")
+            if topic == args.topic:
+                remove_ids.add(record_id)
+                remove_reasons[record_id] = f"topic={topic}"
+
+    if not remove_ids:
+        print("No records matched the filter criteria.")
+        return
+
+    print(f"Records to remove: {len(remove_ids)}")
+
+    # Remove from local JSONL
+    jsonl_path = Path(args.training_file) if args.training_file else None
+    local_removed = 0
+    if jsonl_path and jsonl_path.exists():
+        lines = jsonl_path.read_text().strip().splitlines()
+        kept = []
+        removed_topics: dict[str, int] = {}
+        for line in lines:
+            try:
+                rec = json.loads(line)
+                rid = rec.get("id", "")
+                if rid in remove_ids:
+                    local_removed += 1
+                    topic = rec.get("topic", "unknown")
+                    removed_topics[topic] = removed_topics.get(topic, 0) + 1
+                else:
+                    kept.append(line)
+            except json.JSONDecodeError:
+                kept.append(line)
+        jsonl_path.write_text("\n".join(kept) + "\n" if kept else "")
+        print(f"Local JSONL: {len(lines)} → {len(kept)} ({local_removed} removed)")
+        if removed_topics:
+            print("  Removed by topic:")
+            for topic, count in sorted(removed_topics.items(), key=lambda x: -x[1]):
+                print(f"    {topic}: {count}")
+
+    # Remove from gateway
+    if args.sync_gateway and args.workflow_id:
+        gw_removed = 0
+        for rid in remove_ids:
+            try:
+                _api(
+                    "DELETE",
+                    f"{args.base_url}/finetune/workflows/{args.workflow_id}/records/{rid}",
+                )
+                gw_removed += 1
+            except SystemExit:
+                pass  # record may not exist on gateway
+        print(f"Gateway: {gw_removed} records deleted")
+
+    # Summary for regeneration
+    if removed_topics:
+        print(f"\nTo regenerate replacements, run generate_records.py --append with "
+              f"--records-per-topic targeting these topics:")
+        for topic, count in sorted(removed_topics.items(), key=lambda x: -x[1]):
+            print(f"  {topic}: needs {count} replacement(s)")
+
+    # Show sample reasons
+    if args.verbose:
+        print("\nSample removed records:")
+        for rid, reason in list(remove_reasons.items())[:10]:
+            print(f"  {rid}: {reason}")
+
+
+def cmd_log_iteration(args: argparse.Namespace) -> None:
+    """Log an eval or training iteration with what changed and the results.
+
+    Maintains iterations.json in the project dir — a structured changelog
+    so the agent (and humans) can track what was tried, what improved,
+    and what regressed across eval and training cycles.
+
+    Call after every eval readiness check OR after training analysis.
+    """
+    from datetime import datetime, timezone
+
+    project_dir = Path(args.project_dir)
+    iterations_file = project_dir / "iterations.json"
+
+    iterations: list[dict] = []
+    if iterations_file.exists():
+        iterations = json.loads(iterations_file.read_text())
+
+    iteration_num = len(iterations) + 1
+    phase = args.phase  # "eval" or "training"
+
+    entry: dict = {
+        "iteration": iteration_num,
+        "phase": phase,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "changes": args.changes,
+        "change_type": args.change_type,
+    }
+
+    if phase == "eval":
+        eval_file = Path(args.eval_file)
+        if not eval_file.exists():
+            print(f"Error: Eval file not found: {eval_file}", file=sys.stderr)
+            sys.exit(1)
+        eval_data = json.loads(eval_file.read_text())
+
+        scores: list[float] = []
+        for r in eval_data.get("results", []):
+            for _ek, candidates in r.get("epochs", {}).items():
+                if isinstance(candidates, list):
+                    for c in candidates:
+                        s = c.get("score")
+                        if s is not None:
+                            scores.append(float(s))
+
+        avg_score = sum(scores) / len(scores) if scores else 0
+        zero_rate = sum(1 for s in scores if s < 0.01) / len(scores) if scores else 0
+        perfect_rate = sum(1 for s in scores if s >= 0.99) / len(scores) if scores else 0
+        score_std = (sum((s - avg_score) ** 2 for s in scores) / len(scores)) ** 0.5 if scores else 0
+
+        entry["eval_file"] = str(eval_file)
+        entry["eval_id"] = eval_data.get("evaluation_run_id", "")
+        entry["metrics"] = {
+            "total_scores": len(scores),
+            "avg_score": round(avg_score, 4),
+            "score_std": round(score_std, 4),
+            "zero_rate": round(zero_rate, 4),
+            "perfect_rate": round(perfect_rate, 4),
+            "distinct_buckets": len({round(s, 2) for s in scores}),
+        }
+        entry["verdict"] = args.verdict
+
+    elif phase == "training":
+        train_file = Path(args.training_file)
+        if not train_file.exists():
+            print(f"Error: Training file not found: {train_file}", file=sys.stderr)
+            sys.exit(1)
+        train_data = json.loads(train_file.read_text())
+
+        entry["training_file"] = str(train_file)
+        entry["job_id"] = train_data.get("job_id", "")
+        entry["status"] = train_data.get("status", "")
+        entry["model"] = train_data.get("base_model", "")
+        entry["fine_tuned_model"] = train_data.get("fine_tuned_model", "")
+
+        # Extract training config
+        config = train_data.get("training_config", {})
+        inference = train_data.get("inference_parameters", {})
+        entry["config"] = {
+            "epochs": config.get("epochs"),
+            "learning_rate": config.get("learning_rate"),
+            "lora_rank": config.get("lora_rank"),
+            "batch_size": config.get("batch_size"),
+            "max_output_tokens": inference.get("max_output_tokens"),
+            "K": inference.get("response_candidates_count"),
+        }
+
+        # Extract training metrics from side files if available
+        metrics_file = train_file.parent / f"{train_file.stem}-metrics.json"
+        if metrics_file.exists():
+            try:
+                metrics_data = json.loads(metrics_file.read_text())
+                steps = metrics_data if isinstance(metrics_data, list) else metrics_data.get("steps", [])
+                if steps:
+                    last = steps[-1]
+                    entry["metrics"] = {
+                        "final_reward": last.get("reward_mean") or last.get("reward"),
+                        "final_kl": last.get("kl_mean") or last.get("kl"),
+                        "final_clipping": last.get("clipped_ratio"),
+                        "total_steps": len(steps),
+                        "epochs_completed": last.get("epoch"),
+                    }
+                    # Also get first step for comparison
+                    first = steps[0]
+                    entry["metrics"]["initial_reward"] = first.get("reward_mean") or first.get("reward")
+                    reward_delta = (entry["metrics"].get("final_reward") or 0) - (entry["metrics"].get("initial_reward") or 0)
+                    entry["metrics"]["reward_delta"] = round(reward_delta, 4)
+            except (json.JSONDecodeError, KeyError):
+                pass
+
+        if train_data.get("early_stop_reason"):
+            entry["early_stop_reason"] = train_data["early_stop_reason"]
+
+        entry["verdict"] = args.verdict
+
+    # Compare with previous iteration of the same phase
+    prev_same_phase = [it for it in iterations if it.get("phase") == phase]
+    if prev_same_phase and entry.get("metrics"):
+        prev = prev_same_phase[-1]
+        prev_m = prev.get("metrics", {})
+        curr_m = entry["metrics"]
+
+        # Pick comparison keys based on phase
+        if phase == "eval":
+            compare_keys = {
+                "avg_score": True,       # higher is better
+                "zero_rate": False,      # lower is better
+                "perfect_rate": False,   # lower is better (usually)
+                "distinct_buckets": True,  # higher is better
+            }
+        else:
+            compare_keys = {
+                "final_reward": True,    # higher is better
+                "final_kl": False,       # lower is better
+                "reward_delta": True,    # higher is better
+            }
+
+        delta: dict = {}
+        for key, higher_is_better in compare_keys.items():
+            old_val = prev_m.get(key)
+            new_val = curr_m.get(key)
+            if old_val is not None and new_val is not None:
+                diff = new_val - old_val
+                improved = (diff > 0) if higher_is_better else (diff < 0)
+                delta[key] = {
+                    "old": old_val,
+                    "new": new_val,
+                    "diff": round(diff, 4),
+                    "improved": improved,
+                }
+        entry["delta"] = delta
+
+        prev_num = prev.get("iteration", "?")
+        print(f"\n=== Iteration {iteration_num} ({phase}) vs {prev_num} ===")
+        print(f"Changes: [{args.change_type}] {args.changes}")
+        print()
+        for key, d in delta.items():
+            arrow = "↑" if d["diff"] > 0 else "↓" if d["diff"] < 0 else "="
+            status = "✓" if d["improved"] else "✗" if not d["improved"] and d["diff"] != 0 else "="
+            fmt = ".1%" if "rate" in key else ".4f"
+            old_str = f"{d['old']:{fmt}}" if isinstance(d['old'], float) else str(d['old'])
+            new_str = f"{d['new']:{fmt}}" if isinstance(d['new'], float) else str(d['new'])
+            diff_str = f"{abs(d['diff']):{fmt}}" if isinstance(d['diff'], float) else str(abs(d['diff']))
+            print(f"  {key:20s}: {old_str} → {new_str} ({arrow} {diff_str}) {status}")
+        print(f"\n  Verdict: {args.verdict}")
+    else:
+        print(f"\n=== Iteration {iteration_num} ({phase} baseline) ===")
+        print(f"Changes: {args.changes}")
+        if entry.get("metrics"):
+            for k, v in entry["metrics"].items():
+                if v is not None:
+                    print(f"  {k}: {v}")
+        if phase == "training" and entry.get("config"):
+            print(f"  Config: {json.dumps(entry['config'])}")
+        print(f"  Verdict: {args.verdict}")
+
+    iterations.append(entry)
+    iterations_file.write_text(json.dumps(iterations, indent=2))
+    print(f"\nSaved to {iterations_file}")
+
+
 def cmd_upload_grader(args: argparse.Namespace) -> None:
     """Upload a grader/evaluator script to a workflow.
 
@@ -1548,12 +1853,62 @@ def cmd_diagnose_grader(args: argparse.Namespace) -> None:
             pass  # Gateway not available
 
     if len(buckets.get(0.0, [])) > 0:
-        zero_reasons = [it["reason"] for it in buckets[0.0][:3]]
+        zero_items = buckets[0.0]
+        zero_reasons = [it["reason"] for it in zero_items[:3]]
+
+        # Classify zero reasons to distinguish grader fix vs record fix
+        refusal_kw = ["refused", "not applicable", "please provide", "i cannot",
+                      "i need more", "i'm unable", "cannot determine without"]
+        parse_kw = ["cannot extract", "could not extract", "can't extract",
+                    "empty", "too short", "no response"]
+        wrong_kw = ["wrong", "incorrect", "model said"]
+
+        refusal_count = sum(1 for it in zero_items if any(k in it["reason"].lower() for k in refusal_kw))
+        parse_count = sum(1 for it in zero_items if any(k in it["reason"].lower() for k in parse_kw))
+        wrong_count = sum(1 for it in zero_items if any(k in it["reason"].lower() for k in wrong_kw))
+
+        fix_parts: list[str] = []
+        fix_target = "grader"  # default
+
+        if parse_count > len(zero_items) * 0.3:
+            fix_parts.append(
+                f"FIX GRADER: {parse_count} parsing failures — grader can't extract answers from "
+                f"model responses. Add LLM extraction fallback or broaden regex patterns."
+            )
+
+        if refusal_count > len(zero_items) * 0.2:
+            fix_parts.append(
+                f"FIX RECORDS: {refusal_count} refusals — model refuses to answer these prompts. "
+                f"Likely cause: prompts are too vague or open-ended for a structured-output task. "
+                f"Regenerate with --ground-truth-format to force scenario-based prompts, or "
+                f"remove/replace vague prompts (\"Explain...\", \"Describe...\", \"Compare...\")."
+            )
+            fix_target = "records" if refusal_count > parse_count else "grader"
+
+        if wrong_count > len(zero_items) * 0.3:
+            fix_parts.append(
+                f"FIX GRADER (partial credit): {wrong_count} wrong answers scoring flat 0.0 — "
+                f"add partial credit (0.01-0.1) for wrong answers that show domain knowledge. "
+                f"Flat 0.0 kills GRPO gradient signal."
+            )
+
+        if not fix_parts:
+            fix_parts.append(
+                "Check if these are grader bugs (harsh early-exit) or genuinely empty responses. "
+                "If grader bug → fix the early-exit condition. If model failure → remove these records."
+            )
+
         output["diagnosis"].append({
-            "issue": f"{len(buckets[0.0])} records scored 0.0 (dead weight)",
+            "issue": f"{len(zero_items)} records scored 0.0 (dead weight)",
             "sample_reasons": zero_reasons,
-            "fix": "Check if these are grader bugs (harsh early-exit) or genuinely empty responses. "
-                   "If grader bug → fix the early-exit condition. If model failure → remove these records.",
+            "zero_breakdown": {
+                "parsing_failures": parse_count,
+                "refusals": refusal_count,
+                "wrong_answers": wrong_count,
+                "other": len(zero_items) - parse_count - refusal_count - wrong_count,
+            },
+            "fix_target": fix_target,
+            "fix": fix_parts,
         })
 
     # ── Fetch current grader source from gateway ──
@@ -3419,6 +3774,30 @@ def main() -> None:
     p.add_argument("--force", action="store_true", help="Delete all existing records before uploading")
     p.add_argument("--db", default=None, help="Path to vLLora SQLite database (default: ~/.vllora/vllora.db)")
 
+    # log-iteration
+    p = subparsers.add_parser("log-iteration", help="Log eval or training iteration to iterations.json")
+    p.add_argument("--project-dir", required=True, help="Path to finetune-project directory")
+    p.add_argument("--phase", required=True, choices=["eval", "training"],
+                   help="Phase: eval (after readiness check) or training (after training analysis)")
+    p.add_argument("--eval-file", default=None, help="Path to eval JSON file (required for phase=eval)")
+    p.add_argument("--training-file", default=None, help="Path to training job JSON file (required for phase=training)")
+    p.add_argument("--changes", required=True, help="What was changed in this iteration (free text)")
+    p.add_argument("--change-type", required=True, choices=["baseline", "grader", "records", "both", "hyperparams"],
+                   help="What type of change: baseline (first), grader, records, both, hyperparams")
+    p.add_argument("--verdict", required=True, choices=["PASS", "WARN", "FAIL"],
+                   help="Verdict: PASS (proceed), WARN (some issues), FAIL (must fix)")
+
+    # filter-records
+    p = subparsers.add_parser("filter-records", help="Remove bad records from JSONL and gateway based on eval results")
+    p.add_argument("--file", required=True, help="Path to eval JSON file (e.g., evaluations/eval-001.json)")
+    p.add_argument("--training-file", default=None, help="Path to training.jsonl (removes matching records from local file)")
+    p.add_argument("--max-score", type=float, default=None, help="Remove records with score <= this value (e.g., 0.0)")
+    p.add_argument("--reason-pattern", default=None, help="Remove records whose reason contains this text (case-insensitive)")
+    p.add_argument("--topic", default=None, help="Remove all records from this topic")
+    p.add_argument("--workflow-id", default=None, help="Workflow ID (required with --sync-gateway)")
+    p.add_argument("--sync-gateway", action="store_true", help="Also delete removed records from the gateway API")
+    p.add_argument("--verbose", action="store_true", help="Show sample removed records")
+
     # upload-grader
     p = subparsers.add_parser("upload-grader", help="Upload grader/evaluator script")
     p.add_argument("--workflow-id", required=True, help="Workflow ID")
@@ -3573,6 +3952,8 @@ def main() -> None:
         "upload-topics": cmd_upload_topics,
         "upload-relations": cmd_upload_relations,
         "upload-records": cmd_upload_records,
+        "log-iteration": cmd_log_iteration,
+        "filter-records": cmd_filter_records,
         "upload-grader": cmd_upload_grader,
         "verify": cmd_verify,
         "status": cmd_status,

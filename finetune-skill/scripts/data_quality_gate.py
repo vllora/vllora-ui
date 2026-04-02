@@ -891,6 +891,181 @@ def gate_completion_length(
 
 
 # ─────────────────────────────────────────────────────────────────────
+# Source Accuracy Gate
+# ─────────────────────────────────────────────────────────────────────
+
+
+def gate_source_accuracy(
+    records: list[dict],
+    knowledge_dir: str,
+    sample_size: int = 50,
+) -> dict:
+    """Verify ground truth numeric claims exist in linked source parts.
+
+    Samples records, extracts numeric values from ground truths, and checks
+    whether those values appear in the source material. Catches cascading
+    errors from bad extraction (e.g., MCLG cited as MCL, shifted columns).
+
+    This is a fast, offline check — no LLM calls needed.
+    """
+    import re
+
+    kdir = Path(knowledge_dir)
+    if not kdir.exists():
+        return {
+            "gate": "source_accuracy",
+            "passed": True,
+            "verdict": "SKIP",
+            "stats": {"reason": "knowledge_dir not found"},
+            "issues": [],
+        }
+
+    # Load all knowledge parts content, keyed by part ID
+    part_contents: dict[str, str] = {}
+    for kp_file in kdir.glob("*/knowledge_parts.json"):
+        try:
+            data = json.loads(kp_file.read_text())
+            parts_list = data if isinstance(data, list) else data.get("parts", [])
+            for p in parts_list:
+                pid = p.get("id", "")
+                if pid:
+                    part_contents[pid] = p.get("content", "")
+        except (json.JSONDecodeError, KeyError):
+            pass
+
+    if not part_contents:
+        return {
+            "gate": "source_accuracy",
+            "passed": True,
+            "verdict": "SKIP",
+            "stats": {"reason": "no knowledge parts loaded"},
+            "issues": [],
+        }
+
+    # Sample records that have ground_truth and source_parts
+    candidates = [
+        r for r in records
+        if r.get("ground_truth") and r.get("source_parts")
+    ]
+    import random
+    random.seed(42)
+    sampled = random.sample(candidates, min(sample_size, len(candidates))) if candidates else []
+
+    if not sampled:
+        return {
+            "gate": "source_accuracy",
+            "passed": True,
+            "verdict": "SKIP",
+            "stats": {"reason": "no records with ground_truth + source_parts"},
+            "issues": [],
+        }
+
+    # For each sampled record, extract numeric values from GT and check source
+    total_checked = 0
+    total_values = 0
+    unverified_count = 0
+    unverified_samples: list[dict] = []
+
+    # Regex for numeric values with optional units
+    num_pattern = re.compile(
+        r'(?:^|[\s:=])(\d+(?:\.\d+)?)\s*'
+        r'(?:mg/L|ug/L|µg/L|ppm|ppb|µg/m3|ug/m3|pCi/L|mg/kg|%|'
+        r'mg/L|µg/m³|CFR|mcl|mclg)?',
+        re.IGNORECASE,
+    )
+
+    for rec in sampled:
+        gt = rec.get("ground_truth", "")
+        source_part_ids = rec.get("source_parts", [])
+
+        # Extract numeric values from GT (skip very common ones like 0, 1)
+        gt_numbers = set()
+        for match in num_pattern.finditer(gt):
+            val = match.group(1)
+            if val not in ("0", "1", "0.0", "1.0", "100"):
+                gt_numbers.add(val)
+
+        if not gt_numbers:
+            continue
+
+        total_checked += 1
+        total_values += len(gt_numbers)
+
+        # Gather source content for this record's linked parts
+        source_text = ""
+        for pid in source_part_ids:
+            source_text += part_contents.get(pid, "") + "\n"
+
+        # Check if each GT number appears in the source
+        missing_values = []
+        for val in gt_numbers:
+            if val not in source_text:
+                missing_values.append(val)
+
+        if missing_values:
+            unverified_count += 1
+            if len(unverified_samples) < 10:
+                user_msg = ""
+                for m in rec.get("messages", []):
+                    if m.get("role") == "user":
+                        user_msg = m.get("content", "")[:80]
+                unverified_samples.append({
+                    "topic": rec.get("topic", "?"),
+                    "prompt": user_msg,
+                    "gt": gt[:120],
+                    "missing_values": missing_values[:5],
+                    "source_parts": len(source_part_ids),
+                })
+
+    # Compute accuracy rate
+    if total_checked == 0:
+        accuracy_rate = 1.0
+    else:
+        accuracy_rate = 1.0 - (unverified_count / total_checked)
+
+    issues: list[dict] = []
+    passed = True
+
+    if accuracy_rate < 0.70:
+        passed = False
+        issues.append({
+            "check": "source_accuracy",
+            "severity": "hard",
+            "message": (
+                f"FAIL: {unverified_count}/{total_checked} sampled records ({1-accuracy_rate:.0%}) "
+                f"have ground truth values NOT found in linked source parts. "
+                f"Likely cause: extraction quality issues (shifted table columns, merged content). "
+                f"Fix extraction first, then regenerate records."
+            ),
+        })
+    elif accuracy_rate < 0.85:
+        issues.append({
+            "check": "source_accuracy",
+            "severity": "soft",
+            "message": (
+                f"WARN: {unverified_count}/{total_checked} sampled records ({1-accuracy_rate:.0%}) "
+                f"have ground truth values not confirmed in source. "
+                f"Some may be LLM-computed (e.g., exceedance amounts) — verify manually."
+            ),
+        })
+
+    return {
+        "gate": "source_accuracy",
+        "passed": passed,
+        "verdict": "FAIL" if not passed else ("WARN" if issues else "PASS"),
+        "stats": {
+            "sampled": len(sampled),
+            "checked": total_checked,
+            "total_values": total_values,
+            "unverified": unverified_count,
+            "accuracy_rate": round(accuracy_rate, 4),
+        },
+        "issues": issues,
+        "samples": unverified_samples,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────
 # Orchestrator
 # ─────────────────────────────────────────────────────────────────────
 
@@ -901,6 +1076,7 @@ def run_gates(
     gateway_url: str,
     sample_size: int,
     max_output_tokens: int = 512,
+    knowledge_dir: str | None = None,
 ) -> dict:
     """Run selected quality gates and produce a combined verdict."""
     results: list[dict] = []
@@ -913,6 +1089,9 @@ def run_gates(
 
     if "completion_length" in gates:
         results.append(gate_completion_length(records, max_output_tokens))
+
+    if "source_accuracy" in gates and knowledge_dir:
+        results.append(gate_source_accuracy(records, knowledge_dir, sample_size))
 
     if "ground_truth_quality" in gates:
         results.append(gate_ground_truth_quality(records, gateway_url, sample_size))
@@ -952,7 +1131,8 @@ def _prioritize_fixes(issues: list[dict]) -> list[dict]:
     """Rank issues by fix priority (hard first, then by impact)."""
     # Hard failures first, then by severity and type
     priority_order = {
-        "completion_truncation_critical": 1,  # Highest — guarantees wasted training
+        "source_accuracy": 0,                  # Highest — wrong facts in GT = wrong model
+        "completion_truncation_critical": 1,  # Guarantees wasted training
         "record_count": 2,
         "duplicate_ids": 3,
         "empty_prompts": 4,
@@ -1023,6 +1203,14 @@ def print_report(report: dict) -> None:
             if "records" in issue:
                 print(f"     Records: {issue['records'][:5]}")
 
+        # Show source_accuracy samples
+        if gate_name == "source_accuracy" and gate.get("samples"):
+            print(f"  Sample unverified records:")
+            for s in gate["samples"][:5]:
+                print(f"    [{s['topic']}] {s['prompt']}")
+                print(f"      GT: {s['gt']}")
+                print(f"      Missing values: {s['missing_values']}")
+
     if report["fix_priorities"]:
         print(f"\n{'─' * 60}")
         print("FIX PRIORITIES (address in order):")
@@ -1053,10 +1241,11 @@ def main() -> None:
     )
     parser.add_argument("input", help="Path to training.jsonl")
     parser.add_argument("--topics", help="Path to topics.json for cross-referencing")
-    parser.add_argument("--parts", help="Path to all-parts-index.json (reserved for future use)")
+    parser.add_argument("--parts", help="Path to all-parts-index.json (for source_accuracy gate)")
+    parser.add_argument("--knowledge-dir", help="Path to knowledge/ directory (for source_accuracy gate)")
     parser.add_argument(
         "--gate", default=None,
-        help="Comma-separated gates to run (structural, diversity, completion_length, ground_truth_quality, alignment). Default: structural,diversity,completion_length",
+        help="Comma-separated gates to run (structural, diversity, completion_length, source_accuracy, ground_truth_quality, alignment). Default: structural,diversity,completion_length",
     )
     parser.add_argument(
         "--llm-gates", action="store_true",
@@ -1105,12 +1294,15 @@ def main() -> None:
     if args.gate:
         gates = [g.strip() for g in args.gate.split(",")]
     elif args.all_gates:
-        gates = ["structural", "diversity", "completion_length", "ground_truth_quality", "alignment"]
+        gates = ["structural", "diversity", "completion_length", "source_accuracy", "ground_truth_quality", "alignment"]
     elif args.llm_gates:
-        gates = ["structural", "diversity", "completion_length", "ground_truth_quality", "alignment"]
+        gates = ["structural", "diversity", "completion_length", "source_accuracy", "ground_truth_quality", "alignment"]
     else:
-        # Default: cheap gates only (all free)
-        gates = ["structural", "diversity", "completion_length"]
+        # Default: cheap gates only (all free, no LLM)
+        default_gates = ["structural", "diversity", "completion_length"]
+        if args.knowledge_dir:
+            default_gates.append("source_accuracy")
+        gates = default_gates
 
     if not args.json:
         print(f"Running data quality gate on {len(records)} records...")
@@ -1118,7 +1310,10 @@ def main() -> None:
         if any(g in gates for g in ["ground_truth_quality", "alignment"]):
             print(f"LLM sample size: {args.sample}")
 
-    report = run_gates(records, topics_data, gates, args.gateway_url, args.sample, args.max_output_tokens)
+    report = run_gates(
+        records, topics_data, gates, args.gateway_url, args.sample,
+        args.max_output_tokens, knowledge_dir=args.knowledge_dir,
+    )
 
     if args.json:
         print(json.dumps(report, indent=2))

@@ -144,8 +144,10 @@ All gateway API calls go through `scripts/finetune.py` — a single wrapper scri
 | `finetune.py create-training` | 7d | Creates training job, saves metadata locally |
 | `finetune.py poll-training` | 7e | Polls training job until complete, saves status + metrics |
 | `finetune.py sync-jobs` | 8 | Syncs training + eval jobs from gateway to local tracking files |
-| `finetune.py diagnose-grader` | 9a | Diagnose grader issues: score buckets, reason patterns, grader source, record context check. Tells the agent WHY scores cluster and whether the root cause is DATA or GRADER. |
-| `finetune.py data-quality-gate` | 5.5b | Run pre-eval data quality gate (structural, diversity, completion length, GT quality, alignment) |
+| `finetune.py diagnose-grader` | 9a | Diagnose grader issues: score buckets, reason patterns, grader source, record context check. Classifies zeros into parsing failures / wrong answers / refusals — tells agent whether to fix GRADER or RECORDS. |
+| `finetune.py filter-records` | 9a | Remove bad records from local JSONL + gateway based on eval scores/reasons. Supports `--max-score`, `--reason-pattern`, `--topic` filters. |
+| `finetune.py log-iteration` | 8e | Log eval or training iteration to `iterations.json` with structured metrics + delta comparison vs previous iteration. Tracks what changed and whether it helped. |
+| `finetune.py data-quality-gate` | 5.5b | Run pre-eval data quality gate (structural, diversity, completion length, **source accuracy**, GT quality, alignment) |
 | `finetune.py difficulty-probe` | 7c+ | Post-eval difficulty distribution probe (signal prediction, grader granularity) |
 | `finetune.py cancel-training` | 7e | Cancel a running training job |
 | `finetune.py delete-knowledge` | — | Delete knowledge source(s) from a workflow |
@@ -159,14 +161,15 @@ Other helper scripts:
 | `pdftotext_extract.py` | 2a | Fallback PDF extraction via pdftotext (no Docker required), same output schema |
 | `build_knowledge_parts.py` | 2c | Deterministic Docling→knowledge_parts.json converter — default extraction, no custom script needed |
 | `extract_tables.py` | 2b | Upgrades text parts to table parts using structured Docling table data (headers, rows, metadata) |
+| `camelot_extract_tables.py` | 2d | **Table fallback** — re-extracts tables using Camelot stream mode when Docling produces garbled tables (inconsistent columns, mixed content). Multi-page stitching. Run when `validate_extraction.py` warns about table quality. |
 | `consolidate_parts.py` | 2c | Merges adjacent text parts, drops short fragments, fixes Unicode, validates quality |
 | `validate_extraction.py` | 2e | Cross-document extraction quality gate (parts/page, title diversity, avg length) |
-| `generate_records.py` | 4 | Default: generates records per leaf topic via LLM (calls `chat_completion.py`). NeMo Data Designer is an optional alternative — see Step 4B |
+| `generate_records.py` | 4 | Default: generates records per leaf topic via LLM (calls `chat_completion.py`). Supports `--ground-truth-format` for structured-output tasks (forces scenario-based prompts). `--append` auto-skips existing topics. NeMo Data Designer is an optional alternative — see Step 4B |
 | `convert_nemo_rows.py` | 4B | Converts NeMo DataDesigner output rows to `training.jsonl`; filters by judge scores; writes `nemo-metadata.jsonl` sidecar |
 | `chat_completion.py` | 4 | Calls LLM API — validates JSON when `response_format` is `json_object` |
 | `validate_dataset.py` | 5.5 | Validates JSONL format, fields, RFT compliance, cross-refs topics/parts |
 | `deduplicate_records.py` | 4 | Removes near-duplicate prompts across overlapping topics (threshold-based) |
-| `data_quality_gate.py` | 5.5b | Pre-eval data quality gate: structural checks, diversity analysis, completion length, GT quality scoring, prompt-GT alignment |
+| `data_quality_gate.py` | 5.5b | Pre-eval data quality gate: structural checks, diversity analysis, completion length, **source accuracy** (GT values vs source parts), GT quality scoring, prompt-GT alignment |
 | `probe_difficulty.py` | 7c+ | Post-eval difficulty probe: difficulty buckets, K=8 zero-var prediction, grader granularity, per-topic signal |
 | `dry_run_grader.py` | 5 | Tests grader on one record via gateway sandbox |
 | `run_evaluation.py` | 7b | Legacy: Creates eval job, polls until complete. Prefer `finetune.py create-eval` + `poll-eval` |

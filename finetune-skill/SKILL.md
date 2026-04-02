@@ -331,11 +331,37 @@ If any documents are missing, re-extract them (see retry logic in 2b) before pro
 uv run ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/knowledge/ --fix
 ```
 
-**This is a hard gate.** If validation reports FAIL after `--fix`:
-1. Read the specific failure reasons (short parts, low title diversity, etc.)
+**This is a hard gate.** If validation reports FAIL or WARN after `--fix`:
+1. Read the specific failure reasons (short parts, low title diversity, **table quality issues**, etc.)
 2. Re-run `consolidate_parts.py` with adjusted thresholds on the failing documents
-3. Re-validate. If still FAIL, present the failure details to the user and ask whether to proceed or re-extract.
-4. Do NOT silently proceed to Step 3 with FAIL status — bad extraction poisons topics, records, and training.
+3. **If table quality FAIL** (inconsistent columns, mixed content, missing metadata) — **read the PDF pages directly and fix the tables yourself:**
+
+   You are a vision-capable LLM. Use the `Read` tool to view the problematic PDF pages (it supports `pages` parameter for PDFs). You will see the actual table with correct headers, columns, values, and footnotes. Then write corrected table parts to `knowledge_parts.json`.
+
+   **Step-by-step:**
+   ```
+   # 1. Read the PDF pages that contain the broken table
+   Read the PDF file with pages parameter, e.g.: pages "9-20"
+
+   # 2. You can now SEE the table — extract the correct headers and data
+
+   # 3. Write the corrected table part to knowledge_parts.json with:
+   #    - "type": "table"
+   #    - "content": markdown pipe-delimited table (| header1 | header2 | ... |)
+   #    - "content_metadata": {"headers": [...], "num_rows": N, "num_cols": M}
+   #    - Remove the old broken table fragments (same title, wrong data)
+   ```
+
+   This is the best approach because:
+   - **Free** — no extra API cost, you're already running
+   - **Accurate** — you see the actual table visually, no parsing errors
+   - **Handles complexity** — footnotes, superscripts, spanning headers, multi-page tables
+   - **No dependencies** — no Camelot, opencv, or other packages to install
+
+   > **Fallback only**: If you cannot read the PDF (e.g., running in a text-only environment), use `camelot_extract_tables.py --pages <table-pages>` instead.
+
+4. Re-validate after fixing. If still FAIL, present the failure details to the user and ask whether to proceed or re-extract.
+5. Do NOT silently proceed to Step 3 with FAIL status — bad extraction poisons topics, records, and training.
 
 **2e. Verify gateway upload matches local data — MUST PASS:**
 
@@ -529,7 +555,11 @@ The script makes **multiple LLM calls per topic** (one per prompt type: explain,
 
 If some topics fail, use `--append` to retry without overwriting. In append mode, topics already present in the output file are automatically skipped to prevent duplicates after crash+retry. Adapt `--records-per-topic` (default 25), `--min-per-topic` (default 10), `--max-per-topic` (default 50) to the project. **Generate at least 200+ total records.**
 
-**`--ground-truth-format`** (recommended for structured-output tasks): When the project requires a specific answer format (e.g. `"Eligible. EIC: $[amount]"` or `"Answer: [letter]"`), pass this flag so ground truths are generated in that format instead of verbose source excerpts. This ensures ground truths match the grader's regex extraction patterns and the model's expected output format during GRPO training. Example: `--ground-truth-format 'Eligible. EIC: $[amount] OR Not eligible. Reason: [specific rule]'`
+**`--ground-truth-format`** (recommended for structured-output tasks): When the project requires a specific answer format (e.g. `"Eligible. EIC: $[amount]"` or `"Answer: [letter]"`), pass this flag so:
+1. Ground truths are generated in that format instead of verbose source excerpts
+2. **All prompt types are forced into scenario-based questions** — open-ended prompts like "Explain...", "Compare..." are converted to concrete scenarios with specific inputs, since they can't be answered in a structured format. This prevents model refusals during training.
+
+Example: `--ground-truth-format 'Eligible. EIC: $[amount] OR Not eligible. Reason: [specific rule]'`
 
 **⚠️ Every record's `topic` field MUST match a leaf topic ID in `topics.json`.** Do NOT invent ad-hoc topic IDs during generation. If you generate records with a custom script instead of `generate_records.py`, validate topic IDs before writing to `training.jsonl`. The `upload-records` command will reject records with topic IDs that don't exist on the gateway — mismatched topics cause FK violations and silent data loss.
 
@@ -691,10 +721,11 @@ Checks: valid JSON, required fields, message structure, no assistant messages (R
 **Quick gate (free — always run):**
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py finetune-project/training.jsonl \
-  --topics finetune-project/topics.json
+  --topics finetune-project/topics.json \
+  --knowledge-dir finetune-project/knowledge
 ```
 
-This runs Gate 1 (structural) and Gate 2 (diversity) — no API calls, instant results. Checks: duplicate IDs, prompt length, ground truth presence/quality, topic balance, near-duplicate detection, and semantic diversity.
+This runs structural, diversity, and **source accuracy** gates — no API calls, instant results. Checks: duplicate IDs, prompt length, ground truth presence/quality, topic balance, near-duplicate detection, semantic diversity, and **whether ground truth numeric values exist in the linked source parts** (catches extraction quality issues like shifted table columns before they cascade into wrong training data).
 
 **Full gate (with LLM scoring — run on first pipeline pass or after regeneration):**
 ```bash
@@ -841,6 +872,12 @@ The readiness gate runs **4 hard checks** (sample_count, score_std, avg_score, z
 
 **Hard checks** (must ALL pass): sample count >= 50, score std > 0.10, average score > 0.05, **zero-score fraction < 10%**.
 
+> **Two different zero-score thresholds** — don't confuse them:
+> - **Readiness gate** (`readiness-check`): `zero_score_frac < 10%` — "is the data quality good enough to train?" Stricter because zeros produce zero GRPO gradient.
+> - **Early-cancel** (`poll-eval`): `zero_rate > 30%` — "is the grader completely broken?" More lenient because base models legitimately score 0 on 15-50% of prompts.
+>
+> The readiness gate's 10% threshold matches the UI (`compute-readiness-gate.ts`). If readiness fails on `zero_score_frac`, improve the grader to give partial credit for wrong-but-informed answers instead of flat 0.0.
+
 **Decision:**
 - **Exit code 0 (PASS)** → proceed to **Step 7d (Start Training)**
 - **Exit code 1 (FAIL)** → fix issues → return to **Step 7b (Re-eval)**
@@ -849,6 +886,31 @@ The readiness gate runs **4 hard checks** (sample_count, score_std, avg_score, z
 **⚠️ First eval rule:** On the FIRST evaluation (no previous training has run), treat ALL soft warnings as must-fix — this is your one chance to validate grader design before hours of GPU time. Subsequent evals: only fix `score_concentration` > 70%. If non-interactive: auto-fix `score_concentration` > 70% and `perfect_score_frac` > 50% on first eval.
 
 **Max 5 eval-only iterations.** If readiness gate never passes after 5 evals, escalate to user with diagnosis.
+
+**After every readiness check**, log the iteration so changes and results are tracked:
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
+  --project-dir finetune-project \
+  --eval-file evaluations/eval-001.json \
+  --changes "Initial eval with default grader" \
+  --change-type baseline \
+  --verdict FAIL
+```
+
+This creates `finetune-project/iterations.json` with structured metrics per iteration. On subsequent iterations, it prints a **delta comparison** showing what improved/regressed:
+```
+=== Iteration 2 vs 1 ===
+Changes: [grader] Added partial credit for wrong answers (0.01-0.05)
+
+  avg_score           : 0.4052 → 0.4033 (↓ 0.0019) =
+  zero_rate           : 39.7%  → 8.9%   (↓ 30.8%)  ✓
+  perfect_rate        : 20.9%  → 20.6%  (↓  0.3%)  =
+  distinct_buckets    : 7      → 9      (↑ 2)       ✓
+
+  Readiness: PASS
+```
+
+**Read `iterations.json` before making changes** — check if the previous change helped before piling on more fixes. If a change made things worse, revert it.
 
 > See [reference/readiness-gate.md](reference/readiness-gate.md) for the full check tables, which warnings must be fixed vs safe to train through, WARN safety guide, and research citations.
 
@@ -1001,7 +1063,27 @@ Combine eval scores with training metrics. Present per-topic eval scores alongsi
 
 #### 8e. Update Iteration Tracker
 
-**After every eval/training cycle**, append a summary to `iterations.md` (create if it doesn't exist). Include: config, eval results (per-topic breakdown), training results (reward/KL/clipping), what changed, and next action. See [reference/analysis-strategy.md](reference/analysis-strategy.md) for the full template.
+**After every eval or training cycle**, log the iteration with structured metrics:
+
+```bash
+# After eval + readiness check:
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
+  --project-dir finetune-project --phase eval \
+  --eval-file evaluations/eval-002.json \
+  --changes "Added partial credit for wrong answers" \
+  --change-type grader --verdict PASS
+
+# After training + analysis:
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
+  --project-dir finetune-project --phase training \
+  --training-file training-jobs/train-001.json \
+  --changes "First training run: lr=5e-6, epochs=8, K=8" \
+  --change-type baseline --verdict PASS
+```
+
+This maintains `finetune-project/iterations.json` with per-iteration metrics. For eval: avg_score, zero_rate, distinct_buckets. For training: final_reward, reward_delta, KL, clipping. Each iteration shows a delta comparison vs the previous same-phase iteration.
+
+**Read `iterations.json` before making changes** — if the last change regressed metrics, revert before trying something new.
 
 **Checkpoint** after analysis:
 ```bash
@@ -1018,29 +1100,65 @@ Two iteration loops with different speeds and costs:
 
 Apply fixes and re-eval. Do NOT create a training job.
 
-**Fixing the grader** — diagnose → fix → dry-run:
+**Step 1: Diagnose** — determines whether to fix the grader, the records, or both:
 
 ```bash
-# 1. Diagnose: shows score distribution, sample reasons, auto-diagnosis, fix suggestions
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py diagnose-grader \
   --file evaluations/eval-001.json --workflow-id $WORKFLOW_ID
+```
 
-# 2. Fix grader.js based on diagnosis, then upload
+The diagnosis classifies zero-score records and tells you **what to fix**:
+
+| Diagnosis says | Root cause | Fix |
+|---------------|------------|-----|
+| `FIX GRADER: parsing failures` | Grader can't extract answers from model responses | Broaden regex, add LLM fallback in grader.js |
+| `FIX GRADER (partial credit)` | Wrong answers get flat 0.0 — kills GRPO gradient | Add partial credit (0.01-0.1) for wrong-but-informed answers |
+| `FIX RECORDS: refusals` | Prompts are too vague for structured output | Regenerate with `--ground-truth-format`, or remove vague prompts |
+| Score clustering (>70% one value) | Grader doesn't differentiate quality levels | Use LLM-as-judge template with continuous scoring |
+
+**Step 2a: Fix the grader** (if diagnosis says `FIX GRADER`):
+```bash
+# Edit grader.js, then upload + dry-run
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader \
   --workflow-id $WORKFLOW_ID --file grader.js
-
-# 3. Dry-run to verify the fix
 uv run ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
   --workflow-id $WORKFLOW_ID --script grader.js --live
 ```
 
-**⚠️ The most common cause of score clustering is a grader-prompt mismatch** — fix the grader to match the prompts, NOT the data. See [reference/iteration-strategy.md](reference/iteration-strategy.md) for the full diagnosis table.
-
-**Fixing the data** (requires re-upload):
+**Step 2b: Fix the records** (if diagnosis says `FIX RECORDS`):
 ```bash
+# Option A: Filter out bad records + regenerate replacements (PREFERRED)
+# 1. Remove records that scored 0 due to refusals
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py filter-records \
+  --file evaluations/eval-001.json \
+  --training-file finetune-project/training.jsonl \
+  --max-score 0.0 --reason-pattern "refused" \
+  --workflow-id $WORKFLOW_ID --sync-gateway --verbose
+
+# 2. Regenerate replacements for removed records (--append skips existing topics)
+uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
+  --topics finetune-project/topics.json --relations finetune-project/relations.json \
+  --knowledge-dir finetune-project/knowledge --system-prompt "..." \
+  --output finetune-project/training.jsonl --append \
+  --ground-truth-format 'the expected output format' \
+  --records-per-topic 25 --parallel 4
+
+# 3. Re-upload
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force \
-  --workflow-id $WORKFLOW_ID --file training.jsonl
+  --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl
+
+# Option B: Full regeneration (if most records are bad)
+uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
+  --topics finetune-project/topics.json --relations finetune-project/relations.json \
+  --knowledge-dir finetune-project/knowledge --system-prompt "..." \
+  --output finetune-project/training.jsonl \
+  --ground-truth-format 'the expected output format' \
+  --records-per-topic 25 --parallel 4
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force \
+  --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl
 ```
+
+**⚠️ Don't default to "fix the grader" for every issue.** Read the diagnosis carefully — refusals and vague prompts are record problems, not grader problems. Fixing the grader to tolerate bad prompts just masks the issue.
 
 **Return to Step 7b** — create a new eval and re-run the readiness gate. This is the fast loop (~45 min per iteration).
 
@@ -1103,14 +1221,15 @@ Read these when you need more detail on a specific step:
 Run with `uv run ${CLAUDE_SKILL_DIR}/scripts/<script>`. Key scripts:
 
 - **`convert_pdf_to_markdown.py`** — PDF → Markdown via pymupdf4llm (utility, not primary extraction)
-- **`finetune.py`** — Gateway API wrapper (create workflow, upload knowledge/topics/records/grader, verify, create-eval, create-training, poll-eval, poll-training)
+- **`finetune.py`** — Gateway API wrapper (create workflow, upload knowledge/topics/records/grader, verify, create-eval, create-training, poll-eval, poll-training, filter-records, diagnose-grader)
 - **`generate_records.py`** — Generate training records from topics + knowledge via LLM
 - **`validate_dataset.py`** — Validate JSONL (format, fields, RFT compliance, cross-reference topics/parts)
 - **`analyze_training.py`** — Analyze training metrics (reward trend, KL, clipping, loss, per-epoch evals)
 - **`print_metrics_table.py`** — Print training metrics table (per-epoch or per-step)
 - **`dry_run_grader.py`** — Dry-run grader on a single row (instant syntax/logic check)
 - **`consolidate_parts.py`** — Merge adjacent text parts, drop fragments, fix Unicode
-- **`validate_extraction.py`** — Cross-document extraction quality gate
+- **`validate_extraction.py`** — Cross-document extraction quality gate (includes table quality checks)
+- **`camelot_extract_tables.py`** — Camelot-based table extraction fallback for complex tables that Docling garbles (stream mode, multi-page stitching, 99%+ accuracy on regulatory tables)
 - **`docling_extract.py`** — Docling extraction (fallback for scanned/complex PDFs; requires Docker)
 - **`build_knowledge_parts.py`** / **`extract_tables.py`** — Docling fallback post-processing
 - **`chat_completion.py`** — Low-level LLM call wrapper (used internally by `generate_records.py`)

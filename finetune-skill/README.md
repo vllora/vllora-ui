@@ -74,7 +74,7 @@ your-project/
         └── finetune-skill/            # The skill itself
             ├── SKILL.md
             ├── reference/             # 14 reference docs (api-reference, analysis-strategy, topic-hierarchy, nemo-guide, etc.)
-            ├── scripts/               # 19 Python helpers (finetune.py has 23 subcommands)
+            ├── scripts/               # 19 Python helpers (finetune.py has 25 subcommands)
             └── templates/             # Starter files
 ```
 
@@ -203,8 +203,9 @@ finetune-skill/
 │   ├── probe_difficulty.py     # Post-eval difficulty probe (signal prediction, grader granularity)
 │   ├── deduplicate_records.py  # Remove near-duplicate prompts (trigram similarity)
 │   ├── extract_tables.py       # Upgrade text parts with Docling cell structure (Docling fallback)
+│   ├── camelot_extract_tables.py # Table fallback — Camelot stream for complex tables
 │   ├── consolidate_parts.py    # Merge adjacent parts, drop fragments, fix Unicode
-│   ├── validate_extraction.py  # Cross-document extraction quality gate
+│   ├── validate_extraction.py  # Cross-document extraction quality gate (+ table quality)
 │   ├── docling_extract.py      # Docling async extraction — fallback for scanned/complex PDFs
 │   └── pdftotext_extract.py    # Last-resort extraction via pdftotext (no Python deps)
 │
@@ -531,8 +532,8 @@ All scripts use inline dependency declarations — run with `uv run script.py` (
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/finetune.py` | Gateway API wrapper — 23 subcommands: create-workflow, upload-knowledge/topics/relations/records/grader, verify, status, readiness-check, diagnose-grader, create-eval, poll-eval, create-training, poll-training, cancel-eval, cancel-training, search-knowledge, delete-knowledge, sync-jobs, update-part-relevance, difficulty-probe, data-quality-gate, print-row-outputs |
-| `scripts/generate_records.py` | Default record generation from topics + knowledge — calls LLM per leaf topic with 5 prompt types; supports `--enrich-sources` (recommended), `--weight-by-difficulty`, `--use-rag` |
+| `scripts/finetune.py` | Gateway API wrapper — 25 subcommands: create-workflow, upload-knowledge/topics/relations/records/grader, verify, status, readiness-check, diagnose-grader, create-eval, poll-eval, create-training, poll-training, cancel-eval, cancel-training, search-knowledge, delete-knowledge, sync-jobs, update-part-relevance, difficulty-probe, data-quality-gate, print-row-outputs, **log-iteration**, **filter-records** |
+| `scripts/generate_records.py` | Default record generation from topics + knowledge — calls LLM per leaf topic with 5 prompt types; supports `--enrich-sources` (recommended), `--weight-by-difficulty`, `--use-rag`, **`--ground-truth-format`** (structured output tasks) |
 | `scripts/convert_nemo_rows.py` | Convert NeMo DataDesigner output rows to vLLora training.jsonl; filters by judge scores; writes `nemo-metadata.jsonl` sidecar |
 | `scripts/analyze_training.py` | Post-training analysis: reward trend, KL health, clipping, loss stability, grad norm, per-topic learning. Paper-backed thresholds with `# Ref:` comments |
 | `scripts/print_metrics_table.py` | Print training metrics table (per-epoch or per-step) — human-readable format |
@@ -546,7 +547,8 @@ All scripts use inline dependency declarations — run with `uv run script.py` (
 | `scripts/start_training.py` | Start training job, poll until complete — legacy, prefer `finetune.py create-training` |
 | `scripts/consolidate_parts.py` | Merge adjacent text parts, drop short fragments, fix Unicode, regenerate parts-index |
 | `scripts/extract_tables.py` | Upgrade text parts to table parts using Docling table data |
-| `scripts/validate_extraction.py` | Cross-document extraction quality gate (parts/page, title diversity, avg length) |
+| `scripts/camelot_extract_tables.py` | **Table extraction fallback** — Camelot stream mode for complex tables that Docling garbles. Multi-page stitching, 99%+ accuracy on regulatory tables. |
+| `scripts/validate_extraction.py` | Cross-document extraction quality gate (parts/page, title diversity, avg length, **table column consistency**) |
 | `scripts/docling_extract.py` | Submit PDF(s) to Docling Serve async API, poll until done, supports batch + submit-only mode |
 | `scripts/pdftotext_extract.py` | Fallback PDF extraction via pdftotext (no Docker required), same output schema |
 | `scripts/convert_pdf_to_markdown.py` | PDF → Markdown via pymupdf4llm — utility script, not primary extraction |

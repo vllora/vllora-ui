@@ -539,11 +539,26 @@ def _call_llm_for_type(
     focus = topic.get("system_prompt", topic.get("name", ""))
     type_instruction = prompt_type["instruction"].format(n=count)
 
+    # When ground_truth_format is set, every prompt must be answerable in that format.
+    # Open-ended prompts ("Explain...", "Compare...") produce refusals when the model
+    # is trained to output structured answers. Convert all prompt types to scenario-based.
+    structured_constraint = ""
+    if ground_truth_format:
+        structured_constraint = f"""
+CRITICAL: The model is trained to output ONLY structured answers in this format:
+  {ground_truth_format}
+Every prompt MUST be a concrete scenario with specific inputs (names, numbers, dates,
+conditions) that can be answered in that exact format. Do NOT generate open-ended questions
+like "Explain...", "Describe...", "Compare...", "What are the pros and cons..." — these
+cannot be answered with a structured determination. Instead, always frame as a specific
+case: "Given [specific situation with numbers], determine [the answer]."
+"""
+
     prompt = f"""{type_instruction}
 
 Topic: {topic['name']}
 Focus: {focus}
-
+{structured_constraint}
 Source material (each section is numbered [1], [2], etc.):
 {chunk_text}
 
