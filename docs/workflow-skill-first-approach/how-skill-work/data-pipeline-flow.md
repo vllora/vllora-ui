@@ -116,22 +116,27 @@ relations.json (topic_identifier → part_identifier)
 topics.json + relations.json + knowledge_parts.json files
          ↓
   generate_records.py
+  ├── Pre-flight: warn for leaf topics with zero relations (would be SKIPPED)
   ├── load_all_parts() ──→ only relevant parts (filtered in Step 3a)
-  ├── compose_system_prompt(root, ancestors, leaf) ──→ single flowing paragraph
+  ├── compose_system_prompt(root, ancestors, leaf) ──→ single flowing paragraph (warn if >200 words)
   ├── For each leaf topic:
+  │   ├── Guard: skip if 0 source parts (no relations + no RAG) → warn, don't hallucinate
   │   ├── Gather linked parts from relations (curated in Step 3d — NOT augmented with RAG)
-  │   ├── 5 prompt types × N records per type:
+  │   ├── 5 prompt types × N records per type (with retry on failure):
   │   │   explain, scenario, compare/analyze, edge_case, application
   │   └── LLM generates question + tags used_parts ──→ 1-3 parts per record
   │         ↓
+  │       --enrich-sources: re-query gateway with generated question → enrich source_parts (cached)
+  │         ↓
   │   Record: {messages, id, topic, source_parts, prompt_type, ground_truth}
-  └── Parallel: up to 4 topics concurrently
+  ├── Parallel: up to 4 topics concurrently
+  └── Summary table: Topic | Target | Got | Sources | Prompt Types
 
   Alternative: --rag-only mode (skip Step 3d, use gateway semantic search instead of relations)
          ↓
 training.jsonl (200+ records)
          ↓
-  deduplicate_records.py (threshold 0.85)
+  deduplicate_records.py (threshold 0.85) ← MANDATORY
          ↓
   upload-records (incremental or batch)
          ↓

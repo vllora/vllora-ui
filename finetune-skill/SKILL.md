@@ -513,12 +513,15 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --records-per-topic 25 \
   --parallel 4 \
   --workflow-id $WORKFLOW_ID \
-  --upload-incremental
+  --upload-incremental \
+  --enrich-sources
 ```
 
 The script makes **multiple LLM calls per topic** (one per prompt type: explain, scenario, compare/analyze, edge-case, application) for better diversity. By default, every leaf topic gets an equal number of records. Use `--weight-by-difficulty` to distribute based on base model eval scores — hard topics (0-30% success) get 40-50% of records, medium (30-70%) get 30-40%, easy (70-100%) get 10-20%. This is the recommended mode after the first evaluation, because GRPO learning signal is strongest on hard topics (arXiv:2508.14094: 47% gains from hard examples vs 3-15% from easy). Use `--weight-by-source` to distribute proportionally to linked source parts instead (max 3:1 imbalance ratio). Inner parallelism runs all prompt-type calls concurrently within each topic.
 
 **Context source:** Each topic's records are grounded in the parts linked via `relations.json` (built in Step 3d by the relation-builder). This is curated context — the relation-builder evaluated each part's relevance to each specific topic. Do NOT add `--use-rag` to augment this with uncurated semantic search results — it dilutes the curated context and undermines Step 3d.
+
+**`--enrich-sources`** (recommended): After generating each question, re-queries the gateway with the question text to find additional matching parts. This enriches `source_parts` with question-specific matches without polluting the curated topic→parts context used for generation. Unlike `--use-rag` (which adds uncurated parts BEFORE generation), this only supplements traceability AFTER generation — the LLM never sees these extra parts.
 
 **Alternative: `--rag-only` mode** — if you skipped Step 3d (no relations), use `--use-rag --rag-only` to retrieve context via gateway semantic search instead. This is faster (skip relation-building) but less precise. Requires embeddings on the gateway.
 
@@ -528,10 +531,11 @@ If some topics fail, use `--append` to retry without overwriting. Adapt `--recor
 
 **⚠️ Every record's `topic` field MUST match a leaf topic ID in `topics.json`.** Do NOT invent ad-hoc topic IDs during generation. If you generate records with a custom script instead of `generate_records.py`, validate topic IDs before writing to `training.jsonl`. The `upload-records` command will reject records with topic IDs that don't exist on the gateway — mismatched topics cause FK violations and silent data loss.
 
-**Deduplicate** — parallel generation can produce near-duplicate prompts across overlapping topics:
+**⚠️ ALWAYS deduplicate** after generation — overlapping topics (e.g., "Fork Detection" and "Combination Calculation" both referencing Chapter 3) produce similar questions. This is mandatory, not optional:
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/deduplicate_records.py finetune-project/training.jsonl --threshold 0.85
 ```
+This removes near-duplicate prompts (trigram similarity > 0.85). Expect 5-15% reduction. If duplicates exceed 20%, the topic hierarchy has too much overlap — consider merging topics.
 
 With `--upload-incremental`, records appear in the UI as each topic completes — no separate upload step needed. If you ran without `--upload-incremental`, upload manually:
 ```bash

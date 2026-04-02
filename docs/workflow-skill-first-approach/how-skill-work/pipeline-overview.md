@@ -52,6 +52,7 @@ Step 3a: Filter → all-parts-index.json (relevant: true/false) → uploaded to 
 Step 3d: Relations → only relevant:true parts linked to topics
 Step 4: generate_records.py → only relevant parts (filtered in Step 3a)
                             → curated context from relations (Step 3d) — NOT augmented with RAG
+                            → --enrich-sources: re-queries with generated question for per-record source_parts
                             → each record gets per-record source_parts (1-3 parts)
                             → alternative: --rag-only mode skips relations, uses gateway search
 Step 4B: NeMo → ⚠️ rag-retrieval does NOT filter by relevance (known limitation)
@@ -205,7 +206,7 @@ Each local file maps to a gateway API endpoint. The `finetune.py` script handles
 
 The skill writes records in **OpenAI format** locally (system content is a composed prompt — see Step 4):
 ```json
-{"messages": [{"role": "system", "content": "You are...\n\nSpecialize in: ...\n\nFocus on: ..."}, {"role": "user", "content": "..."}], "id": "r-001", "topic": "forks", "source_parts": ["chess-tactics-ch3"]}
+{"messages": [{"role": "system", "content": "You are... For tactical positions, identify forcing moves... When identifying fork opportunities, assess knight forks..."}, {"role": "user", "content": "..."}], "id": "r-001", "topic": "forks", "source_parts": ["chess-tactics-ch3"]}
 ```
 
 `finetune.py upload-records` transforms each record to **gateway format** before uploading:
@@ -479,13 +480,13 @@ finetune-project/
 **`topics.json` structure**:
 ```json
 [
-  {"id": "tactics", "name": "Tactical Patterns", "parent_id": null, "system_prompt": "Specialize in: tactical chess patterns and combinations."},
-  {"id": "forks", "name": "Forks", "parent_id": "tactics", "system_prompt": "Focus on: fork tactics — knight forks, pawn forks, queen forks."},
-  {"id": "pins", "name": "Pins", "parent_id": "tactics", "system_prompt": "Focus on: pin and skewer tactics, absolute vs relative pins."}
+  {"id": "tactics", "name": "Tactical Patterns", "parent_id": null, "system_prompt": "For tactical positions, identify forcing moves, calculate variations, and evaluate material vs positional trade-offs."},
+  {"id": "forks", "name": "Forks", "parent_id": "tactics", "system_prompt": "When identifying fork opportunities, assess knight forks, pawn forks, and queen forks based on piece placement and king safety.", "expected_difficulty": "medium"},
+  {"id": "pins", "name": "Pins", "parent_id": "tactics", "system_prompt": "When analyzing pin and skewer tactics, distinguish absolute from relative pins and recommend appropriate exploitation strategies.", "expected_difficulty": "medium"}
 ]
 ```
 
-Each topic's `system_prompt` is a **segment** that gets composed with its ancestors during record generation (Step 4). Root topics use `"Specialize in: ..."`, leaf topics use `"Focus on: ..."`. Keep each segment to 1-2 sentences.
+Each topic's `system_prompt` is a **segment** that gets composed with its ancestors during record generation (Step 4). Write as behavioral instructions using When/For/Given + action verbs (assess, recommend, identify, compare). Each level adds only what the parent doesn't already say. Keep each segment to 1-2 sentences.
 
 **`relations.json` structure**:
 ```json
@@ -542,7 +543,8 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --output finetune-project/training.jsonl \
   --records-per-topic 25 \
   --parallel 4 \
-  --upload-incremental --workflow-id $WORKFLOW_ID
+  --upload-incremental --workflow-id $WORKFLOW_ID \
+  --enrich-sources
 ```
 
 Key flags: `--parallel` (inner parallelism per topic), `--upload-incremental` (records appear in UI as each topic completes), `--weight-by-difficulty` (distribute by base model eval scores — hard topics get more records), `--weight-by-source` (distribute proportionally to linked source parts), `--append` (retry failed topics without overwriting), `--min-per-topic` / `--max-per-topic` (bounds per topic).
@@ -551,10 +553,11 @@ Key flags: `--parallel` (inner parallelism per topic), `--upload-incremental` (r
 
 **Which files to read for source material**: The agent reads full part content from `{doc-slug}/knowledge_parts.json` files (not the merged index, which only has previews). It uses `all-parts-index.json` to locate which document a part belongs to.
 
-**Deduplication** — parallel generation can produce near-duplicate prompts across overlapping topics:
+**⚠️ Deduplication (mandatory)** — overlapping topics produce similar questions. Always run after generation:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/deduplicate_records.py finetune-project/training.jsonl --threshold 0.85
+uv run ${CLAUDE_SKILL_DIR}/scripts/deduplicate_records.py finetune-project/training.jsonl --threshold 0.85
 ```
+Expect 5-15% reduction. If >20% are duplicates, the topic hierarchy has too much overlap — consider merging topics.
 
 **Files produced**:
 ```
@@ -564,10 +567,10 @@ finetune-project/
 
 **Record format** (OpenAI/skill format — no assistant messages for RFT):
 ```json
-{"messages": [{"role": "system", "content": "You are an expert chess tutor...\n\nSpecialize in: tactical chess patterns and combinations.\n\nFocus on: fork tactics — knight forks, pawn forks, queen forks."}, {"role": "user", "content": "Explain the knight fork"}], "id": "forks-001", "topic": "forks", "source_parts": ["chess-tactics-chapter-3"]}
+{"messages": [{"role": "system", "content": "You are an expert chess tutor. For tactical positions, identify forcing moves, calculate variations, and evaluate material vs positional trade-offs. When identifying fork opportunities, assess knight forks, pawn forks, and queen forks based on piece placement and king safety."}, {"role": "user", "content": "Explain the knight fork"}], "id": "forks-001", "topic": "forks", "source_parts": ["chess-tactics-chapter-3"]}
 ```
 
-The system message is a **composed prompt** — `generate_records.py` walks up the topic hierarchy and joins the root persona (`--system-prompt`) with ancestor and leaf `system_prompt` segments. Each leaf topic gets a different composed prompt. See `generate-records-deep-dive.md` for the composition logic.
+The system message is a **composed prompt** — `generate_records.py` walks up the topic hierarchy and joins the root persona (`--system-prompt`) with ancestor and leaf `system_prompt` segments, joined with a space into a single flowing paragraph. Each leaf topic gets a different composed prompt. See `generate-records-deep-dive.md` for the composition logic.
 
 **Upload** (immediately after generation):
 ```bash
@@ -608,7 +611,7 @@ raw_question → rag-retrieval → question_chunks   (drop:true — question-spe
                   ↓
             user_message    (refines raw_question using question_chunks)
 ```
-Key insight: generating the question blind first produces more diverse questions; the second retrieval grounds the final version in specific source material.
+Key insight: generating the question blind first produces more diverse questions; the retrieval step grounds the final version in specific source material.
 
 **Script calls**:
 ```bash

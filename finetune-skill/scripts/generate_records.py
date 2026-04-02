@@ -203,7 +203,19 @@ def compose_system_prompt(root_prompt: str, ancestors: list[dict], leaf: dict) -
         parts.append(f"Focus on: {leaf['name']}.")
 
     # Join as a single flowing paragraph instead of separate blocks
-    return " ".join(parts)
+    composed = " ".join(parts)
+
+    # Warn if the composed prompt exceeds the 200-word guideline (target: 50-150 words).
+    # Overly long system prompts waste token budget during training.
+    word_count = len(composed.split())
+    if word_count > 200:
+        print(
+            f"  ⚠ System prompt for '{leaf.get('name', leaf.get('id', '?'))}' is {word_count} words "
+            f"(target: 50-150). Consider shortening topic system_prompt fields.",
+            file=sys.stderr,
+        )
+
+    return composed
 
 
 def build_search_query(topic: dict, ancestors: list[dict]) -> str:
@@ -280,9 +292,9 @@ def retrieve_parts_by_phrase(
 ) -> list[dict]:
     """Retrieve knowledge parts by a raw search phrase (e.g. a generated question).
 
-    Used for the second retrieval pass: after the LLM generates a question,
-    re-query the index with that question text to get sharper, question-specific
-    context. Returns parts in the same format as load_all_parts() values.
+    Used by --enrich-sources: after the LLM generates a question,
+    re-query the index with that question text to find sharper, question-specific
+    source parts. Returns parts in the same format as load_all_parts() values.
     """
     import requests  # PEP 723 dependency, available via `uv run`
 
@@ -505,6 +517,9 @@ def distribute_across_prompt_types(total: int) -> list[tuple[dict, int]]:
 # Single LLM call for one prompt type
 # ---------------------------------------------------------------------------
 
+MAX_LLM_RETRIES = 2  # Retry once on transient failures (network, timeout, bad JSON)
+
+
 def _call_llm_for_type(
     prompt_type: dict,
     count: int,
@@ -515,7 +530,11 @@ def _call_llm_for_type(
     scripts_dir: Path,
     include_ground_truth: bool,
 ) -> list[dict]:
-    """Make one LLM call for a specific prompt type. Returns raw items."""
+    """Make one LLM call for a specific prompt type. Returns raw items.
+
+    Retries up to MAX_LLM_RETRIES times on transient failures (network errors,
+    timeouts, invalid JSON). Each retry is logged to stderr.
+    """
     focus = topic.get("system_prompt", topic.get("name", ""))
     type_instruction = prompt_type["instruction"].format(n=count)
 
@@ -573,42 +592,53 @@ Return JSON: {{"items": [{{"prompt": "the question", "ground_truth": "relevant s
     })
 
     chat_script = scripts_dir / "chat_completion.py"
-    result = subprocess.run(
-        [sys.executable, str(chat_script), "--base-url", base_url],
-        input=request_data,
-        capture_output=True,
-        text=True,
-    )
 
-    if result.returncode != 0:
-        print(
-            f"    [{prompt_type['name']}] LLM call failed: {result.stderr[:200]}",
-            file=sys.stderr,
+    last_error = ""
+    for attempt in range(1, MAX_LLM_RETRIES + 1):
+        result = subprocess.run(
+            [sys.executable, str(chat_script), "--base-url", base_url],
+            input=request_data,
+            capture_output=True,
+            text=True,
         )
-        return []
 
-    try:
-        response = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        print(
-            f"    [{prompt_type['name']}] Invalid JSON: {result.stdout[:200]}",
-            file=sys.stderr,
-        )
-        return []
+        if result.returncode != 0:
+            last_error = f"LLM call failed: {result.stderr[:200]}"
+            if attempt < MAX_LLM_RETRIES:
+                print(f"    [{prompt_type['name']}] {last_error} (retry {attempt}/{MAX_LLM_RETRIES - 1})", file=sys.stderr)
+                continue
+            print(f"    [{prompt_type['name']}] {last_error} (no retries left)", file=sys.stderr)
+            return []
 
-    if isinstance(response, dict) and "error" in response:
-        print(
-            f"    [{prompt_type['name']}] LLM error: {response['error']}",
-            file=sys.stderr,
-        )
-        return []
+        try:
+            response = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            last_error = f"Invalid JSON: {result.stdout[:200]}"
+            if attempt < MAX_LLM_RETRIES:
+                print(f"    [{prompt_type['name']}] {last_error} (retry {attempt}/{MAX_LLM_RETRIES - 1})", file=sys.stderr)
+                continue
+            print(f"    [{prompt_type['name']}] {last_error} (no retries left)", file=sys.stderr)
+            return []
 
-    items = response.get("items", [])
-    if not items:
-        prompts = response.get("prompts", [])
-        items = [{"prompt": p, "ground_truth": ""} for p in prompts]
+        if isinstance(response, dict) and "error" in response:
+            last_error = f"LLM error: {response['error']}"
+            if attempt < MAX_LLM_RETRIES:
+                print(f"    [{prompt_type['name']}] {last_error} (retry {attempt}/{MAX_LLM_RETRIES - 1})", file=sys.stderr)
+                continue
+            print(f"    [{prompt_type['name']}] {last_error} (no retries left)", file=sys.stderr)
+            return []
 
-    return items
+        # Success
+        items = response.get("items", [])
+        if not items:
+            prompts = response.get("prompts", [])
+            items = [{"prompt": p, "ground_truth": ""} for p in prompts]
+
+        if attempt > 1:
+            print(f"    [{prompt_type['name']}] Succeeded on attempt {attempt}", file=sys.stderr)
+        return items
+
+    return []  # Should not reach here, but safety fallback
 
 
 # ---------------------------------------------------------------------------
@@ -628,7 +658,7 @@ def generate_for_topic(
     include_ground_truth: bool = True,
     rag_parts: list[dict] | None = None,
     workflow_id: str | None = None,
-    second_retrieval: bool = False,
+    enrich_sources: bool = False,
 ) -> list[dict]:
     """Generate records for a single leaf topic via multiple parallel LLM calls."""
     # Find parts linked to this topic
@@ -644,6 +674,18 @@ def generate_for_topic(
     if rag_parts:
         rag_part_ids = [p["id"] for p in rag_parts]
         chunks.extend(rag_parts)
+
+    # Guard: skip topics with no source material. Generating without context
+    # produces hallucinated questions — the same problem as blind-question-first
+    # (arXiv:2509.25736). Better to skip and warn than produce bad data.
+    if not chunks:
+        print(
+            f"  ⚠ SKIPPED topic '{topic.get('name', topic['id'])}': "
+            f"no source parts found (0 relations, 0 RAG parts). "
+            f"Add relations via relation-builder or use --use-rag.",
+            file=sys.stderr,
+        )
+        return []
 
     # Build source material text with numbered labels for reliable LLM tagging.
     # Full IDs like "irs-pub596-earned-income-credit-2025-p-016" are too long for
@@ -687,6 +729,7 @@ def generate_for_topic(
 
     # Run all prompt-type calls in parallel (inner parallelism)
     all_items: list[tuple[str, list[dict]]] = []
+    failed_types: list[str] = []
     with ThreadPoolExecutor(max_workers=len(distribution)) as inner_pool:
         futures = {
             inner_pool.submit(
@@ -706,17 +749,38 @@ def generate_for_topic(
             type_name = futures[future]
             try:
                 items = future.result()
-                all_items.append((type_name, items))
+                if items:
+                    all_items.append((type_name, items))
+                else:
+                    failed_types.append(type_name)
             except Exception as e:
+                failed_types.append(type_name)
                 print(
                     f"    [{type_name}] Exception: {e}",
                     file=sys.stderr,
                 )
 
+    if failed_types:
+        print(
+            f"  ⚠ Topic '{topic.get('name', topic['id'])}': {len(failed_types)} prompt type(s) "
+            f"failed after retries: {', '.join(failed_types)}",
+            file=sys.stderr,
+        )
+
     # Build records from all collected items
     all_source_parts = part_ids + rag_part_ids
     records: list[dict] = []
     record_idx = 0
+
+    # Cache for --enrich-sources: avoid redundant gateway calls for similar questions
+    # within the same topic. Key = frozenset of first 6 significant words, value = [part IDs].
+    enrich_cache: dict[frozenset, list[str]] = {}
+
+    def _enrich_key(text: str) -> frozenset:
+        """Extract key words from question for cache lookup."""
+        words = [w.lower() for w in text.split() if len(w) > 3][:6]
+        return frozenset(words)
+
     for type_name, items in all_items:
         for item in items:
             if isinstance(item, str):
@@ -734,17 +798,25 @@ def generate_for_topic(
             resolved_used = [alias_to_id[alias] for alias in raw_used if alias in alias_to_id]
             record_source_parts = resolved_used if resolved_used else list(all_source_parts)
 
-            # Second retrieval: re-query with the generated question for sharper context
-            if second_retrieval and workflow_id:
-                q_parts = retrieve_parts_by_phrase(
-                    phrase=prompt_text,
-                    workflow_id=workflow_id,
-                    base_url=base_url,
-                    top_k=5,
-                    existing_part_ids=set(record_source_parts),
-                )
-                if q_parts:
-                    record_source_parts.extend([p["id"] for p in q_parts])
+            # Enrich sources: re-query with the generated question for sharper context.
+            # Uses a per-topic cache to avoid redundant gateway calls for similar questions.
+            if enrich_sources and workflow_id:
+                cache_key = _enrich_key(prompt_text)
+                if cache_key in enrich_cache:
+                    # Use cached results, filtering out already-present parts
+                    cached_ids = [pid for pid in enrich_cache[cache_key] if pid not in set(record_source_parts)]
+                    record_source_parts.extend(cached_ids)
+                else:
+                    q_parts = retrieve_parts_by_phrase(
+                        phrase=prompt_text,
+                        workflow_id=workflow_id,
+                        base_url=base_url,
+                        top_k=5,
+                        existing_part_ids=set(record_source_parts),
+                    )
+                    enriched_ids = [p["id"] for p in q_parts] if q_parts else []
+                    enrich_cache[cache_key] = enriched_ids
+                    record_source_parts.extend(enriched_ids)
 
             messages = [
                 {"role": "system", "content": composed_prompt},
@@ -869,9 +941,9 @@ def main() -> None:
                         help="Number of RAG results to retrieve per topic (default: 15)")
     parser.add_argument("--rag-only", action="store_true",
                         help="Use only RAG retrieval, skip relations.json entirely (requires --use-rag)")
-    parser.add_argument("--rag-second-retrieval", action="store_true",
+    parser.add_argument("--enrich-sources", action="store_true",
                         help="After generating each question, re-query the knowledge index with the question "
-                             "text to get sharper, question-specific source_parts (requires --use-rag)")
+                             "text to enrich source_parts with question-specific matches (requires --workflow-id)")
     args = parser.parse_args()
 
     if args.upload_incremental and not args.workflow_id:
@@ -879,6 +951,9 @@ def main() -> None:
         sys.exit(1)
     if args.use_rag and not args.workflow_id:
         print("Error: --workflow-id required with --use-rag", file=sys.stderr)
+        sys.exit(1)
+    if args.enrich_sources and not args.workflow_id:
+        print("Error: --workflow-id required with --enrich-sources", file=sys.stderr)
         sys.exit(1)
     if args.rag_only and not args.use_rag:
         print("Error: --rag-only requires --use-rag", file=sys.stderr)
@@ -957,6 +1032,22 @@ def main() -> None:
             else:
                 difficulty_info = ", medium (no eval data)"
         print(f"  {leaf['name']}: {topic_counts[leaf['id']]} records ({part_count} source parts{difficulty_info})")
+    # Pre-flight: check relations coverage for every leaf topic
+    uncovered_topics = []
+    for leaf in leaves:
+        part_count = sum(1 for r in relations if r["topic_identifier"] == leaf["id"])
+        if part_count == 0:
+            uncovered_topics.append(leaf)
+    if uncovered_topics and not getattr(args, 'rag_only', False):
+        print(f"\n⚠ WARNING: {len(uncovered_topics)} leaf topic(s) have ZERO relations (no source material):")
+        for t in uncovered_topics:
+            print(f"  - {t['name']} ({t['id']})")
+        if not getattr(args, 'use_rag', False) and not args.enrich_sources:
+            print("  These topics will be SKIPPED. Add relations via relation-builder or use --use-rag.")
+        elif getattr(args, 'use_rag', False):
+            print("  Will attempt RAG retrieval for these topics.")
+        print()
+
     if getattr(args, 'use_rag', False):
         mode_label = "RAG-only" if args.rag_only else "relations + RAG"
         print(f"RAG enabled ({mode_label}, top_k={args.rag_top_k})")
@@ -1027,9 +1118,10 @@ def main() -> None:
         scripts_dir=scripts_dir,
         include_ground_truth=not args.no_ground_truth,
     )
-    if getattr(args, 'use_rag', False):
+    if getattr(args, 'use_rag', False) or args.enrich_sources:
         common_kwargs["workflow_id"] = args.workflow_id
-        common_kwargs["second_retrieval"] = getattr(args, 'rag_second_retrieval', False)
+    if args.enrich_sources:
+        common_kwargs["enrich_sources"] = True
 
     if parallel <= 1:
         # Sequential mode (inner parallelism still active)
@@ -1098,6 +1190,34 @@ def main() -> None:
           f"{len(leaves) - len(failed_topics)}/{len(leaves)} topics")
     print(f"Output: {output_path}")
 
+    # Per-topic summary table
+    topic_record_counts: dict[str, int] = {}
+    topic_type_counts: dict[str, dict[str, int]] = {}
+    topic_source_counts: dict[str, int] = {}
+    for _, topic_id, records in all_results:
+        topic_record_counts[topic_id] = len(records)
+        type_counts: dict[str, int] = {}
+        source_ids: set[str] = set()
+        for r in records:
+            t = r.get("prompt_type", "unknown")
+            type_counts[t] = type_counts.get(t, 0) + 1
+            source_ids.update(r.get("source_parts", []))
+        topic_type_counts[topic_id] = type_counts
+        topic_source_counts[topic_id] = len(source_ids)
+
+    if topic_record_counts:
+        print(f"\n{'Topic':<40} {'Target':>6} {'Got':>5} {'Sources':>7} {'Prompt Types'}")
+        print("-" * 90)
+        for leaf in leaves:
+            tid = leaf["id"]
+            target = topic_counts.get(tid, 0)
+            got = topic_record_counts.get(tid, 0)
+            sources = topic_source_counts.get(tid, 0)
+            types = topic_type_counts.get(tid, {})
+            type_str = ", ".join(f"{k}={v}" for k, v in sorted(types.items())) if types else "SKIPPED"
+            status = " ⚠" if got < target else ""
+            print(f"  {leaf['name']:<38} {target:>6} {got:>5} {sources:>7}   {type_str}{status}")
+
     # Per-type summary
     type_totals: dict[str, int] = {}
     for _, _, records in all_results:
@@ -1105,7 +1225,7 @@ def main() -> None:
             t = r.get("prompt_type", "unknown")
             type_totals[t] = type_totals.get(t, 0) + 1
     if type_totals:
-        print(f"By prompt type: {', '.join(f'{k}={v}' for k, v in sorted(type_totals.items()))}")
+        print(f"\nBy prompt type: {', '.join(f'{k}={v}' for k, v in sorted(type_totals.items()))}")
 
     if args.upload_incremental:
         print(f"Uploaded: {uploaded_records} records to workflow {args.workflow_id}")
