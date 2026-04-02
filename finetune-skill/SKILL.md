@@ -947,7 +947,9 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step difficulty-probe --
 
 #### 7d. Base Model Baseline Eval (after readiness passes, before training)
 
-**Run one eval on the actual base model** to establish the pre-training baseline. All previous evals used GPT-4o-mini (strong model) to validate the grader — now we need the real score that GRPO will start from.
+**Default to Qwen3.5-4B.** The 4B model is the recommended starting point for all tasks. Do NOT try to predict base model performance from GPT-4o-mini eval scores — they are different models with different capabilities and do not correlate reliably on specific tasks. (Ref: emergent abilities research, arXiv:2206.07682 — capabilities appear at different scale thresholds per model family.)
+
+**Run the baseline eval** on Qwen3.5-4B:
 
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
@@ -974,7 +976,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval \
 | **0.10 - 0.50** | Model has some knowledge but struggles | ✓ Good for GRPO — strong learning signal expected. Proceed. |
 | **0.50 - 0.75** | Model is mediocre to decent | ✓ GRPO can improve this. Proceed. |
 | **0.75 - 0.85** | Model is already good | ⚠️ **GRPO efficiency drops dramatically.** "Hard Examples Are All You Need" (arXiv:2508.14094) found easy prompts (>0.80 success rate) maintain learnable variance for only 3.7% of training steps — 96.3% of compute is wasted. Improvement IS possible but typically small (2-7%, e.g., AlphaMaze: 86%→93%, arXiv:2502.14669). Consider: (1) **Make the grader stricter** — add criteria so base model scores lower, creating more headroom. (2) **Proceed but set expectations** — improvement will be marginal. (3) **Don't train** if the base model already meets requirements. |
-| **> 0.85** | Model already excels | ⚠️ **GRPO will produce near-zero improvement for most prompts.** Options: (1) **Don't train** — base model may be good enough. (2) **Switch to SFT** — SFT can teach output format even when the model knows the content (no score variance needed). (3) **Make grader much stricter** to create artificial headroom. |
+| **> 0.85** | Model already excels | ⚠️ **GRPO will produce near-zero improvement for most prompts.** Options: (1) **Don't train** — base model may be good enough. (2) **Make grader much stricter** to create artificial headroom. (3) **Report to user** — the task may not benefit from GRPO training at this model size. |
 
 **Why this happens**: GRPO computes advantages by contrasting K completions per prompt. When the base model scores high, all completions score similarly → advantage ≈ 0 → no gradient. With continuous graders, even nonzero variance produces tiny advantages that drive negligible learning.
 
@@ -996,13 +998,14 @@ After training completes, run another eval on the **trained** model and compare 
 
 Training starts here — only reached when the readiness gate indicates data and grader are solid.
 
-**Base model selection** (choose based on task complexity AND dataset size):
-| Model | Best for | Max records (K=8) | OOM risk |
-|-------|----------|-------------------|----------|
-| `Qwen3.5-0.8B` | Quick iteration, prototyping, very narrow tasks | ~1000 | Very low |
-| `Qwen3.5-2B` | Simple tasks, fast experiments | ~800 | Low |
-| `Qwen3.5-4B` | **Default choice.** Good balance of quality and speed | ~500 | Low |
-| `unsloth/Qwen3.5-9B` | Complex reasoning, broad domains | ~100 | High with >100 records |
+**Base model**: Default to **Qwen3.5-4B**. Only change after the base model eval (Step 7d) gives a concrete reason to.
+
+| Model | When to use | Max records (K=8) | OOM risk |
+|-------|-------------|-------------------|----------|
+| `Qwen3.5-0.8B` | Only after 4B training showed no improvement AND you want to test if a smaller model learns better on this narrow task | ~1000 | Very low |
+| `Qwen3.5-2B` | After 4B training showed no improvement, as intermediate test | ~800 | Low |
+| `Qwen3.5-4B` | **Always start here.** Best balance of capacity and speed. | ~500 | Low |
+| `unsloth/Qwen3.5-9B` | Only if 4B training plateaued and task requires complex reasoning | ~100 | High with >100 records |
 
 > **⚠️ Start with 4B.** The 9B model OOMs with >100 records and K=8 on standard GPU allocations. Use 9B only for small, complex datasets (<100 records). Use 0.8B/2B for quick prototyping or when training keeps failing on larger models. The `create-training` script warns if the model/dataset combination risks OOM.
 
@@ -1128,6 +1131,34 @@ The `log-iteration` delta will show the improvement. Interpret the result:
 | **+0.02 to +0.05** | ⚠ Marginal improvement | Check: was base model already >0.75? If so, this is expected — GRPO has limited headroom (arXiv:2508.14094: only 3.7% of steps learnable for easy prompts). Deploy if acceptable, or make grader stricter for next iteration. |
 | **-0.02 to +0.02** | ⚠ No meaningful improvement | Training didn't help. Likely cause: base model already too good (>0.75) or grader not differentiating. See Step 7d guidance. |
 | **< -0.02** | ❌ Regression | Training made the model worse. Deploy the base model, not the trained one. Investigate: reward hacking, overfitting, or lr too high. |
+
+**⚠️ MANDATORY CHECKPOINT — answer these before proceeding:**
+
+```
+1. What was the base model eval score (Step 7d)?          → ___
+2. What is the trained model eval score (Step 8b)?        → ___
+3. Improvement (Δ = trained - base):                      → ___
+4. Was base model score > 0.75?                           → yes/no
+5. If yes AND Δ < 0.05: GRPO had insufficient headroom.
+   → Decision (pick one):
+     a) ACCEPT base model (already good enough)
+     b) RETRY with stricter grader (return to Step 5, make grader harder)
+     c) RETRY with smaller base model (0.8B/2B) — use with caution, run Step 7d first
+     d) REPORT to user — task may not benefit from GRPO at this model size
+6. Log decision:
+   uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
+     --project-dir finetune-project \
+     --training-file training-jobs/train-NNN.json \
+     --changes "Training result: Δ=___, decision: ___" \
+     --change-type baseline --verdict ___
+```
+
+**Do NOT start another training job without completing this checkpoint.** If you decide to try a smaller model (option c), run a base model eval on it first:
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
+  --workflow-id $WORKFLOW_ID --model "Qwen3.5-0.8B" --output-dir finetune-project/evaluations
+```
+If the smaller model scores <0.50, proceed with GRPO training on it. If it also scores >0.75, the task is fundamentally easy — accept the base model and report to the user that GRPO training is unlikely to help.
 
 #### 8c. Analyze training metrics (after training completes)
 
@@ -1258,8 +1289,18 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force \
 After training analysis (Step 8c), if results are unsatisfactory:
 
 1. **If only hyperparams need adjusting** (reward flat, clipping too high, etc.) — skip eval, go directly to **Step 7e** with new training config
-2. **If data or grader needs fixing** — apply fixes, return to **Step 7b** (re-eval first, then training)
-3. **If model is too weak** — try a larger base model (2B → 4B → 9B)
+2. **If specific topics are underperforming** — analyze per-topic scores from the post-training eval. For each low-scoring topic:
+   - **Check topic records**: Are the prompts clear? Are ground truths correct? Use `filter-records` to remove bad records, `generate_records.py --append` to regenerate.
+   - **Check topic relations**: Are the right source parts linked? Does the topic have enough context? Re-run relation-builder if needed.
+   - **Check topic system prompt**: Does it include the domain rules the model needs? Update and re-generate records.
+   - After fixing, return to **Step 7b** (re-eval with updated records, then retrain)
+3. **If grader needs fixing** (all topics score similarly, or grader too lenient/strict) — fix grader, return to **Step 7b**
+4. **If model is too weak** — try a larger base model (2B → 4B → 9B)
+4. **If base model scored too high (>0.75) and training showed no improvement** — the task is too easy for this model. GRPO has limited headroom (see Step 7d analysis table). Options in priority order:
+   - **Accept the base model** — if it already meets requirements, deploy without training. This is the simplest and often best option.
+   - **Make grader stricter** → return to Step 5 (rewrite grader with harder criteria to lower base model scores), then re-eval + retrain
+   - **Report to user** — explain that the base model already performs well and GRPO has limited headroom. The user may decide the base model is good enough, or may want to adjust the grader/task requirements.
+   - **Try a smaller base model** (4B → 2B → 0.8B) — **use with caution**. Smaller models have less capacity (0.8B→4B is a 26-point benchmark gap). The smaller model may lack knowledge to learn the task at all. Run Step 7d base model eval first — if 0.8B scores near zero, it can't learn this task. Only works for very narrow, well-defined tasks. Research note: DeepSeek found distillation from larger models outperforms direct RL on smaller models (arXiv:2501.12948 §4).
 
 ```bash
 # New eval after fixes

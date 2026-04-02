@@ -98,7 +98,7 @@ GRPO learns by contrasting K completions per prompt — reinforcing better ones 
 | 0.20 - 0.50 | Strong | Good improvement expected | Consistent with all findings |
 | 0.50 - 0.75 | Moderate | Meaningful improvement possible | No specific paper; interpolation |
 | **0.75 - 0.85** | **Dramatically reduced** | **Small improvement (2-7%) but 96% of compute wasted. AlphaMaze: 86%→93%.** | arXiv:2508.14094, arXiv:2502.14669 |
-| > 0.85 | Near zero | Improvement near-zero for most prompts. Consider SFT or accept base model. | arXiv:2508.14094 (3.7% learnable steps) |
+| > 0.85 | Near zero | Improvement near-zero for most prompts. Accept base model or make grader stricter. | arXiv:2508.14094 (3.7% learnable steps) |
 
 **Key paper**: "Hard Examples Are All You Need" (arXiv:2508.14094) — easy prompts (>0.80 success rate) maintain learnable variance for only **3.7% of training steps** vs 34.1% for hard prompts. Easy-only training yields **3.49% improvement** vs **34.19%** for hard-only — a 10x difference.
 
@@ -107,13 +107,14 @@ GRPO learns by contrasting K completions per prompt — reinforcing better ones 
 - frac_reward_zero_std stays high (>50%) because most prompts already score well
 - reward_std may be nonzero but advantages are tiny (all completions score 0.7-0.9)
 
-**Fixes:**
-1. **Make the grader stricter** — add criteria, require exact format, penalize verbosity. Lowers base model scores, creating headroom.
-2. **Switch to SFT** — SFT doesn't need score variance. It can teach output format even when the model already knows the content.
-3. **Don't train** — if the base model already meets requirements, accept it.
-4. **Distillation** — if you need a smaller model, distill from a larger trained model rather than training the small model directly with GRPO (DeepSeek found distillation outperforms direct RL on smaller models, arXiv:2501.12948 §4).
+**Fixes (in priority order):**
+1. **Accept the base model** — if it already meets requirements, don't train. Simplest option.
+2. **Make the grader stricter** — add criteria, require exact format, penalize verbosity. Lowers base model scores, creating headroom for GRPO.
+3. **Accept the base model** — report to the user that GRPO has limited headroom. The base model may already be good enough.
+4. **Distillation** — if you need a smaller deployed model, train the 4B with GRPO first, then distill to 0.8B/2B. DeepSeek found distillation outperforms direct RL on smaller models (arXiv:2501.12948 §4).
+5. **Try a smaller base model** — use with caution. 0.8B→4B is a 26-point benchmark gap (Qwen3.5 benchmarks). The smaller model may lack capacity to learn the task. Only works for very narrow tasks where the 0.8B has sufficient base knowledge. Always run a base model eval first — if it scores near zero, it can't learn this task via GRPO.
 
-Note: "Use a smaller base model for more GRPO headroom" is NOT supported by research — smaller models have less capacity and direct RL on them often underperforms distillation.
+**⚠️ Do NOT use GPT-4o-mini eval scores to predict base model performance.** GPT-4o-mini and Qwen are fundamentally different models — a task easy for GPT-4o-mini may be hard for Qwen-4B (e.g., format following, domain knowledge). Always evaluate the actual base model (Step 7d).
 
 ### Stability Metrics
 
