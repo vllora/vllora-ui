@@ -182,9 +182,9 @@ Training data is **prompts only** — the model generates its own responses duri
 
 This pipeline is inspired by the "Think Less, Label Better" approach (arXiv 2509.25736), which uses RAG at *data-generation time* (not inference time) to ground synthetic training examples in real domain knowledge. The key insight: retrieve relevant knowledge chunks before asking the LLM to generate questions — the LLM produces better, more specific prompts when it sees the actual source material.
 
-Our two-retrieval pipeline:
-1. **First retrieval** (`--use-rag`, per topic): query = topic name + system_prompt → retrieves the most relevant chunks for the topic as a whole. All questions for that topic are generated from this shared context.
-2. **Second retrieval** (`--rag-second-retrieval`, per question): query = the generated question itself → retrieves sharper, question-specific chunks. Each record gets its own `source_parts` tailored to what that specific question is asking.
+Our pipeline supports two retrieval mechanisms (independent of each other):
+1. **Topic-level RAG** (`--use-rag`, per topic): query = topic name + system_prompt → retrieves the most relevant chunks for the topic as a whole. All questions for that topic are generated from this shared context. **Optional** — only needed when relations are incomplete or absent.
+2. **Source enrichment** (`--enrich-sources`, per question): query = the generated question itself → retrieves sharper, question-specific chunks. Each record gets its own `source_parts` tailored to what that specific question is asking. **Recommended** — supplements traceability after generation without polluting curated context. Independent of `--use-rag`, only requires `--workflow-id`.
 
 > **Note on answer refinement:** The paper also has a refinement stage that rewrites LLM-generated answers using a second model. This does not apply to our pipeline — we generate **prompts only** for GRPO training. The fine-tuned model generates its own answers during training and the grader scores them. There is no answer to refine.
 
@@ -198,7 +198,7 @@ By default, `generate_records.py` gathers source material from pre-computed `rel
 **When to use:**
 - `--use-rag` — When relations exist but may be incomplete. RAG fills gaps without replacing curated mappings
 - `--rag-only` — When skipping the relation-building step entirely. Useful for rapid prototyping or when the knowledge base is small enough that semantic search alone provides sufficient coverage
-- `--rag-second-retrieval` — When you want question-specific `source_parts`. Makes N additional search calls (one per generated question). Pairs with `--use-rag`
+- `--enrich-sources` — Recommended for all runs. Enriches per-record `source_parts` with question-specific matches. Independent of `--use-rag`, only requires `--workflow-id`
 
 **Embedding readiness**: Parts need embeddings before search works. The gateway's background job processes parts in batches of 32 every 30 seconds. After uploading knowledge, wait ~30s then verify: `finetune.py search-knowledge --workflow-id WF --phrase "test query"`
 

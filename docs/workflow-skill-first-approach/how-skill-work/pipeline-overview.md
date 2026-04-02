@@ -7,10 +7,11 @@ This document explains the full skill pipeline step by step, what happens at eac
 ```
 Step 1: Define Objective          (~1 min)    → workflow created on gateway       ↑ uploaded
 Step 2: Extract Documents         (~5-15 min) → per-document knowledge parts      ↑ uploaded
-Step 3: Build Topic Hierarchy     (~3-5 min)  → topics.json + relations.json      ↑ uploaded
-Step 4: Generate Training Data    (~5-20 min) → training.jsonl (50-200+ records)  ↑ uploaded
+Step 3: Build Topic Hierarchy     (~3-5 min)  → filter parts, topics, relations   ↑ uploaded
+Step 4: Generate Training Data    (~5-20 min) → training.jsonl (200+ records)     ↑ uploaded
+  or 4B: NeMo Data Designer      (optional)  → NeMo server + convert             ↑ uploaded
 Step 5: Write Grader              (~2-3 min)  → grader.js                         ↑ uploaded
-Step 5.5b: Data Quality Gate      (~1-3 min)  → pre-eval data quality validation  (local)
+Step 5.5: Validate + Quality Gate (~1-3 min)  → pre-eval data validation          (local)
 Step 6: Verify & Hand Off         (~30 sec)   → confirm all data in gateway DB
 ─────────────────────────────────────────────────────────────────────────────────────────────
 Step 7: Eval → Readiness Gate → Train  (~30-90 min) → eval-first, then train   ↑ cloud
@@ -18,9 +19,108 @@ Step 8: Analyze Results           (~5-10 min) → eval + training analysis
 Step 9: Iterate (If Needed)       (~30-60 min)→ eval-only or post-training fixes
 ```
 
+### Dependency Graph
+
+```
+Step 1: Define Objective
+    ↓
+Step 2: Extract Documents (parallel subagents per PDF)
+    ↓ [GATE: validate_extraction + verify gateway upload]
+Step 3: Build Topic Hierarchy
+    ├── 3a: Filter parts by relevance (relevant: true/false on each part)
+    ├── 3b: Design skill-based topics (NOT document structure)
+    ├── 3c: Write behavioral system prompt segments
+    └── 3d: Build topic-part relations (relation-builder subagent)
+    ↓ [Upload: topics + relations + relevance labels]
+    ├─→ Step 4: Generate Records (default — generate_records.py)
+    │     or Step 4B: NeMo Data Designer (optional — requires NeMo server)
+    │
+    └─→ Step 5: Write Grader (can start in parallel with Step 4)
+              ↓ [GATE: dry-run hand-crafted + live (needs records uploaded)]
+Step 5.5: validate_dataset.py [GATE]
+Step 5.5b: data_quality_gate.py [GATE]
+Step 6: Verify
+    ↓
+Step 7-9: Evaluate → Train → Iterate
+```
+
+### Data Flow: Relevance Filtering Through the Pipeline
+
+```
+Step 2: Extract → parts-index.json (relevant: null)
+Step 3a: Filter → all-parts-index.json (relevant: true/false) → uploaded to gateway
+Step 3d: Relations → only relevant:true parts linked to topics
+Step 4: generate_records.py → only relevant parts (filtered in Step 3a)
+                            → curated context from relations (Step 3d) — NOT augmented with RAG
+                            → --enrich-sources: re-queries with generated question for per-record source_parts
+                            → each record gets per-record source_parts (1-3 parts)
+                            → alternative: --rag-only mode skips relations, uses gateway search
+Step 4B: NeMo → ⚠️ rag-retrieval does NOT filter by relevance (known limitation)
+                → convert_nemo_rows.py recovers source_parts via gateway search
+```
+
 **Each step uploads to the gateway immediately** via `scripts/finetune.py` — the vLLora UI shows progress in real time. There is no final "push" step; Step 6 just verifies everything landed correctly.
 
 **Steps 1-6** prepare the dataset (including the data quality gate at Step 5.5b). **Steps 7-9** evaluate and train the model. All steps run by default — do NOT stop at Step 6. If the user only asks for data preparation, you may stop at Step 6, but by default run the full pipeline including evaluation and training.
+
+### NeMo Data Designer Flow (Step 4B — Optional)
+
+When NeMo server is running at `localhost:8000`:
+
+```
+topics.json + system-prompt
+         ↓
+  materialize_seed.py (NeMo repo)
+         ↓
+  curated-seed.parquet
+  ├── topic, topic_name, topic_path
+  ├── composed_system_prompt  (root + ancestors + leaf — NOT LLM-generated)
+  └── expected_difficulty     (from topic metadata)
+         ↓
+  NeMo server (localhost:8000)
+  ├── POST /seed/upload-curated     → upload parquet
+  ├── POST /seed/inspect-curated    → preview rows
+  └── POST /jobs                    → submit recipe job
+         ↓
+  Recipe column pipeline:
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ 1. rag-retrieval (topic_path → gateway search → chunks)       │
+  │ 2. topic_context = expression(topic_path)  [seed passthrough]  │
+  │ 3. difficulty = expression(expected_difficulty) [from seed]     │
+  │ 4. raw_question = llm-text (grounded in retrieved_chunks)      │ drop:true
+  │ 5. question_chunks = rag-retrieval (raw_question → search)     │ drop:true
+  │ 6. system_prompt = expression(composed_system_prompt) [seed]   │
+  │ 7. user_message = llm-text (refine raw_question + chunks)      │
+  │ 8. reference_answer = llm-text (answer from chunks)            │
+  │ 9. judge_answerable = llm-judge (binary: can answer from ctx?) │
+  │ 10. judge_groundedness = llm-judge (0/0.5/1 grounding score)   │
+  │ 11. judge_specificity = llm-judge (domain terms present?)      │
+  │ 12. score_relevancy = rag-relevancy (Jaccard overlap)          │
+  └─────────────────────────────────────────────────────────────────┘
+         ↓
+  Preview job (10 rows) → review → Full job (target count)
+         ↓
+  GET /jobs/{id}/dataset → nemo-dataset.json
+         ↓
+  convert_nemo_rows.py
+  ├── --min-answerable 1.0 --min-groundedness 0.75 --min-specificity 0.75
+  ├── --ground-truth-field reference_answer
+  ├── --workflow-id $WF  → recovers source_parts via gateway search
+  └── filters by judge scores, maps to training.jsonl format
+         ↓
+  data_quality_gate.py (format/structure checks — complements judge columns)
+         ↓
+  validate_dataset.py --nemo
+         ↓
+  upload-records → gateway
+```
+
+**Key differences from Step 4:**
+- `system_prompt` is an expression passthrough from seed (consistent per topic), NOT LLM-generated per row
+- `difficulty` comes from seed `expected_difficulty`, NOT random sampling
+- `source_parts` are recovered post-generation via gateway search (approximate), NOT tagged per-record during generation
+- NeMo's `rag-retrieval` does NOT filter by `relevant: true/false` labels (known limitation)
+- Judge columns filter quality at generation time; `data_quality_gate.py` still needed for format/structure checks
 
 Total: ~20-45 minutes for Steps 1-6 with 3 documents and 100+ records.
 
@@ -40,7 +140,7 @@ All gateway API calls go through `scripts/finetune.py` — a single wrapper scri
 | `finetune.py status` | any | Full workflow status: gateway data + checkpoint + jobs + next step |
 | `finetune.py create-eval` | 7b | Creates evaluation job, saves metadata locally |
 | `finetune.py poll-eval` | 7b | Polls eval job until complete, saves results |
-| `finetune.py readiness-check` | 7c | Checks if eval results pass pre-training readiness gate (3 hard + 8 soft checks) |
+| `finetune.py readiness-check` | 7c | Checks if eval results pass pre-training readiness gate (4 hard + soft checks) |
 | `finetune.py create-training` | 7d | Creates training job, saves metadata locally |
 | `finetune.py poll-training` | 7e | Polls training job until complete, saves status + metrics |
 | `finetune.py sync-jobs` | 8 | Syncs training + eval jobs from gateway to local tracking files |
@@ -61,7 +161,7 @@ Other helper scripts:
 | `extract_tables.py` | 2b | Upgrades text parts to table parts using structured Docling table data (headers, rows, metadata) |
 | `consolidate_parts.py` | 2c | Merges adjacent text parts, drops short fragments, fixes Unicode, validates quality |
 | `validate_extraction.py` | 2e | Cross-document extraction quality gate (parts/page, title diversity, avg length) |
-| `generate_records.py` | 4 | Fallback: generates records per leaf topic via LLM (calls `chat_completion.py`). Primary path is NeMo Data Designer — see Step 4B |
+| `generate_records.py` | 4 | Default: generates records per leaf topic via LLM (calls `chat_completion.py`). NeMo Data Designer is an optional alternative — see Step 4B |
 | `convert_nemo_rows.py` | 4B | Converts NeMo DataDesigner output rows to `training.jsonl`; filters by judge scores; writes `nemo-metadata.jsonl` sidecar |
 | `chat_completion.py` | 4 | Calls LLM API — validates JSON when `response_format` is `json_object` |
 | `validate_dataset.py` | 5.5 | Validates JSONL format, fields, RFT compliance, cross-refs topics/parts |
@@ -106,7 +206,7 @@ Each local file maps to a gateway API endpoint. The `finetune.py` script handles
 
 The skill writes records in **OpenAI format** locally (system content is a composed prompt — see Step 4):
 ```json
-{"messages": [{"role": "system", "content": "You are...\n\nSpecialize in: ...\n\nFocus on: ..."}, {"role": "user", "content": "..."}], "id": "r-001", "topic": "forks", "source_parts": ["chess-tactics-ch3"]}
+{"messages": [{"role": "system", "content": "You are... For tactical positions, identify forcing moves... When identifying fork opportunities, assess knight forks..."}, {"role": "user", "content": "..."}], "id": "r-001", "topic": "forks", "source_parts": ["chess-tactics-ch3"]}
 ```
 
 `finetune.py upload-records` transforms each record to **gateway format** before uploading:
@@ -380,13 +480,13 @@ finetune-project/
 **`topics.json` structure**:
 ```json
 [
-  {"id": "tactics", "name": "Tactical Patterns", "parent_id": null, "system_prompt": "Specialize in: tactical chess patterns and combinations."},
-  {"id": "forks", "name": "Forks", "parent_id": "tactics", "system_prompt": "Focus on: fork tactics — knight forks, pawn forks, queen forks."},
-  {"id": "pins", "name": "Pins", "parent_id": "tactics", "system_prompt": "Focus on: pin and skewer tactics, absolute vs relative pins."}
+  {"id": "tactics", "name": "Tactical Patterns", "parent_id": null, "system_prompt": "For tactical positions, identify forcing moves, calculate variations, and evaluate material vs positional trade-offs."},
+  {"id": "forks", "name": "Forks", "parent_id": "tactics", "system_prompt": "When identifying fork opportunities, assess knight forks, pawn forks, and queen forks based on piece placement and king safety.", "expected_difficulty": "medium"},
+  {"id": "pins", "name": "Pins", "parent_id": "tactics", "system_prompt": "When analyzing pin and skewer tactics, distinguish absolute from relative pins and recommend appropriate exploitation strategies.", "expected_difficulty": "medium"}
 ]
 ```
 
-Each topic's `system_prompt` is a **segment** that gets composed with its ancestors during record generation (Step 4). Root topics use `"Specialize in: ..."`, leaf topics use `"Focus on: ..."`. Keep each segment to 1-2 sentences.
+Each topic's `system_prompt` is a **segment** that gets composed with its ancestors during record generation (Step 4). Write as behavioral instructions using When/For/Given + action verbs (assess, recommend, identify, compare). Each level adds only what the parent doesn't already say. Keep each segment to 1-2 sentences.
 
 **`relations.json` structure**:
 ```json
@@ -443,7 +543,8 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --output finetune-project/training.jsonl \
   --records-per-topic 25 \
   --parallel 4 \
-  --upload-incremental --workflow-id $WORKFLOW_ID
+  --upload-incremental --workflow-id $WORKFLOW_ID \
+  --enrich-sources
 ```
 
 Key flags: `--parallel` (inner parallelism per topic), `--upload-incremental` (records appear in UI as each topic completes), `--weight-by-difficulty` (distribute by base model eval scores — hard topics get more records), `--weight-by-source` (distribute proportionally to linked source parts), `--append` (retry failed topics without overwriting), `--min-per-topic` / `--max-per-topic` (bounds per topic).
@@ -452,10 +553,11 @@ Key flags: `--parallel` (inner parallelism per topic), `--upload-incremental` (r
 
 **Which files to read for source material**: The agent reads full part content from `{doc-slug}/knowledge_parts.json` files (not the merged index, which only has previews). It uses `all-parts-index.json` to locate which document a part belongs to.
 
-**Deduplication** — parallel generation can produce near-duplicate prompts across overlapping topics:
+**⚠️ Deduplication (mandatory)** — overlapping topics produce similar questions. Always run after generation:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/deduplicate_records.py finetune-project/training.jsonl --threshold 0.85
+uv run ${CLAUDE_SKILL_DIR}/scripts/deduplicate_records.py finetune-project/training.jsonl --threshold 0.85
 ```
+Expect 5-15% reduction. If >20% are duplicates, the topic hierarchy has too much overlap — consider merging topics.
 
 **Files produced**:
 ```
@@ -465,10 +567,10 @@ finetune-project/
 
 **Record format** (OpenAI/skill format — no assistant messages for RFT):
 ```json
-{"messages": [{"role": "system", "content": "You are an expert chess tutor...\n\nSpecialize in: tactical chess patterns and combinations.\n\nFocus on: fork tactics — knight forks, pawn forks, queen forks."}, {"role": "user", "content": "Explain the knight fork"}], "id": "forks-001", "topic": "forks", "source_parts": ["chess-tactics-chapter-3"]}
+{"messages": [{"role": "system", "content": "You are an expert chess tutor. For tactical positions, identify forcing moves, calculate variations, and evaluate material vs positional trade-offs. When identifying fork opportunities, assess knight forks, pawn forks, and queen forks based on piece placement and king safety."}, {"role": "user", "content": "Explain the knight fork"}], "id": "forks-001", "topic": "forks", "source_parts": ["chess-tactics-chapter-3"]}
 ```
 
-The system message is a **composed prompt** — `generate_records.py` walks up the topic hierarchy and joins the root persona (`--system-prompt`) with ancestor and leaf `system_prompt` segments. Each leaf topic gets a different composed prompt. See `generate-records-deep-dive.md` for the composition logic.
+The system message is a **composed prompt** — `generate_records.py` walks up the topic hierarchy and joins the root persona (`--system-prompt`) with ancestor and leaf `system_prompt` segments, joined with a space into a single flowing paragraph. Each leaf topic gets a different composed prompt. See `generate-records-deep-dive.md` for the composition logic.
 
 **Upload** (immediately after generation):
 ```bash
@@ -495,11 +597,11 @@ print(f'Total: {sum(topics.values())}')
 " 2>/dev/null
 ```
 
-## Step 4B: Generate Training Data via NeMo Data Designer (Primary Path)
+## Step 4B: Generate Training Data via NeMo Data Designer (Optional Path)
 
-**What happens**: NeMo Data Designer (repo: https://github.com/vllora/nemo) is the **recommended** path when the server is running at `localhost:8000`. Instead of `generate_records.py`, you submit a recipe to the NeMo server. The `rag-retrieval` column plugin calls the gateway knowledge search per row at generation time — no need to pre-link relations.
+**What happens**: NeMo Data Designer (repo: https://github.com/vllora/nemo) is an **optional** alternative when the server is running at `localhost:8000`. Instead of `generate_records.py`, you submit a recipe to the NeMo server. The `rag-retrieval` column plugin calls the gateway knowledge search per row at generation time — no need to pre-link relations. Main advantages over Step 4: judge columns for quality filtering and `reference_answer` generation.
 
-**Two-stage question generation** (arXiv 2509.25736 — https://arxiv.org/html/2509.25736v1): both NeMo templates implement this pattern:
+**Two-stage question generation** — inspired by multi-stage retrieval pipelines (arXiv:2509.25736 describes a similar retrieve-generate-refine approach). Note: the cited paper retrieves first then generates; this template generates a blind question first for diversity, then retrieves — a recipe design choice, not a paper replication. Both templates implement this pattern:
 ```
 topic_path → rag-retrieval → retrieved_chunks
                   ↓
@@ -509,7 +611,7 @@ raw_question → rag-retrieval → question_chunks   (drop:true — question-spe
                   ↓
             user_message    (refines raw_question using question_chunks)
 ```
-Key insight: generating the question blind first produces more diverse questions; the second retrieval grounds the final version in specific source material.
+Key insight: generating the question blind first produces more diverse questions; the retrieval step grounds the final version in specific source material.
 
 **Script calls**:
 ```bash
@@ -760,7 +862,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
   --file evaluations/eval-001.json
 ```
 
-The readiness gate runs **3 hard checks** (grader quality) and **8 soft checks** (quality signals):
+The readiness gate runs **4 hard checks** (sample_count, score_std, avg_score, zero_score_frac < 10%) and **soft checks** (quality signals):
 
 **Hard checks** (must ALL pass — these ask "is the grader working?", not "is the model good?"):
 | Check | Pass criteria | Research basis |

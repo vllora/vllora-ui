@@ -31,11 +31,12 @@ Fine-tuning involves reading documents, designing topics, generating diverse tra
 ```
 Agent (with this skill) — runs the full pipeline (eval-first):
 ───────────────────────────────────────────────────────────
-1. Read docs, extract knowledge        6. Data Quality Gate (pre-eval)
-2. Design topic hierarchy              7. Verify & hand off
-3. Generate 100-200+ training prompts  8. Eval → Readiness Gate → [PASS] → Train
-4. Write hybrid grader function        9. Analyze results (eval + training)
-5. Validate dataset                   10. Iterate (fix data/grader, re-eval/retrain)
+1. Define objective, create workflow    5.5 Data Quality Gate (pre-eval)
+2. Extract documents (parallel)         6. Verify & hand off
+3. Filter parts + design topics         7. Eval → Readiness Gate → [PASS] → Train
+   + build relations                    8. Analyze results (eval + training)
+4. Generate 200+ training records       9. Iterate (fix data/grader, re-eval/retrain)
+5. Write hybrid grader function
 ```
 
 The vLLora UI at `localhost:5173` visualizes the workflow data in real time (topics, records, eval scores, training metrics). The agent drives the pipeline; the UI displays the results.
@@ -64,15 +65,16 @@ The skill requires two things in your project's `.claude/` directory:
 ```bash
 your-project/
 └── .claude/
-    ├── agents/                        # Companion agents (3 files)
+    ├── agents/                        # Companion agents (4 files)
     │   ├── knowledge-extractor.md     # Document extraction (Step 2)
     │   ├── relation-builder.md        # Topic-part matching (Step 3)
+    │   ├── nemo-data-generator.md     # NeMo Data Designer generation (Step 4B, optional)
     │   └── training-monitor.md        # Training anomaly detection (Step 7)
     └── skills/
         └── finetune-skill/            # The skill itself
             ├── SKILL.md
-            ├── reference/             # 11 reference docs (analysis-strategy, training-metrics-guide, data-quality-gate, etc.)
-            ├── scripts/               # 19 Python helpers (finetune.py has 18 subcommands)
+            ├── reference/             # 14 reference docs (api-reference, analysis-strategy, topic-hierarchy, nemo-guide, etc.)
+            ├── scripts/               # 19 Python helpers (finetune.py has 23 subcommands)
             └── templates/             # Starter files
 ```
 
@@ -96,10 +98,10 @@ cp agents/*.md "$DEST/.claude/agents/"
 ### Prerequisites
 
 - **Gateway** running at `localhost:9090` (`npm run start:backend` from the gateway repo)
-- **Python 3** with `requests` library (`pip install requests`)
-- **uv** for running Python scripts (`curl -LsSf https://astral.sh/uv/install.sh | sh`) — handles script dependencies automatically
+- **uv** for running Python scripts (`curl -LsSf https://astral.sh/uv/install.sh | sh`) — all scripts use PEP 723 inline deps, no manual `pip install` needed
 - **Claude Code** with Bash permissions — the skill and agents run shell commands extensively
 - **Docker + Docling Serve** (optional — only needed for scanned PDFs or complex multi-column layouts)
+- **NeMo Data Designer** (optional — only if `use_nemo: true`, see Configuration below)
 
 ### Verify installation
 
@@ -111,6 +113,47 @@ claude  # start Claude Code
 # "I want to finetune a model on my tax documents"
 ```
 
+### Configuration
+
+The skill reads project-level configuration from `finetune-project/config.json` (created automatically at Step 1). To set defaults **before** running the skill, create a `finetune-defaults.json` in your project root:
+
+```json
+// finetune-defaults.json (optional — place in project root)
+{
+  "use_nemo": true
+}
+```
+
+The agent merges this into `config.json` when creating a new workflow. No skill modification needed.
+
+#### Available flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `use_nemo` | `false` | `false` → Step 4A: generate records via `generate_records.py` (default, no extra infrastructure). `true` → Step 4B: generate records via NeMo Data Designer (requires NeMo server at `localhost:8000` + OpenAI API key). |
+
+#### NeMo Data Designer setup (when `use_nemo: true`)
+
+```bash
+# 1. Clone and set up NeMo
+git clone https://github.com/vllora/nemo
+cd nemo && uv sync
+
+# 2. Set OpenAI API key
+echo "OPENAI_API_KEY=sk-..." > .env
+
+# 3. Start the server
+uv run uvicorn server:app --host 0.0.0.0 --port 8000
+
+# 4. Enable in your project
+cd /path/to/your-project
+echo '{"use_nemo": true}' > finetune-defaults.json
+```
+
+NeMo adds judge columns (quality filtering at generation time) and `reference_answer` generation but requires additional infrastructure. See `reference/nemo-guide.md` for full details.
+
+**Switching between modes:** Change the flag and delete the `generate-data` checkpoint to re-run Step 4 with the other path. Steps 1-3 and 5+ are identical regardless of the flag.
+
 ---
 
 ## Architecture
@@ -119,7 +162,7 @@ claude  # start Claude Code
 
 ```
 finetune-skill/
-├── SKILL.md                    # Main entry point (~870 lines)
+├── SKILL.md                    # Main entry point (~1140 lines)
 │   ├── YAML frontmatter        # name + description (auto-triggering)
 │   ├── Core concepts           # How RFT works, prerequisites
 │   ├── Working directory spec  # What files the agent creates
@@ -192,18 +235,20 @@ The YAML `description` field in SKILL.md is the primary trigger mechanism. It's 
 
 ```
 finetune-project/               # Agent creates this working directory
-├── training.jsonl              # 100-200+ prompts (system + user messages only)
+├── training.jsonl              # 200+ records (system + user messages, source_parts per record)
 ├── grader.js                   # Hybrid grader (programmatic + LLM-as-judge)
-├── topics.json                 # Topic hierarchy (flat, with parent_id)
-├── relations.json              # Topic → part mappings for data generation
+├── topics.json                 # 2-level hierarchy (Domain → Skill, expected_difficulty metadata)
+├── relations.json              # Curated topic → part mappings for data generation
+├── config.json                 # Workflow config (workflow_id, gateway_url, use_nemo)
 ├── knowledge/                  # Extracted domain knowledge
 │   ├── chess-tactics/           # Per-document subdirectory (slugified filename)
-│   │   ├── docling-result.json # Raw Docling response
+│   │   ├── docling-result.json # Raw Docling response (reused with --skip-existing)
+│   │   ├── docling-status.json # Extraction status tracking
 │   │   ├── knowledge_parts.json# Typed parts (text, table, image)
 │   │   └── parts-index.json    # Lightweight part index
 │   ├── strategy-guide/          # Second document
 │   │   └── ...
-│   ├── all-parts-index.json    # Merged index across all documents
+│   ├── all-parts-index.json    # Merged index (relevant: true/false labels per part)
 │   └── extraction-notes.md     # Extraction notes
 ├── evaluations/                # API responses from evaluation runs
 │   └── eval-v1.json
@@ -255,8 +300,10 @@ User: "finetune my tax deduction PDF"
 │    User: "Focus on chapters 2, 4, 5"                    │
 │           │                                             │
 │           ▼                                             │
-│  Step 3: Design topics (guided by user's focus)         │
-│    Main agent creates topics covering Ch 2, 4, 5        │
+│  Step 3: Filter + design topics (guided by user's focus) │
+│    3a: Label parts relevant/irrelevant to objective     │
+│    3b: Design 2-level skill-based topics (Domain→Skill) │
+│    3c: Write behavioral system prompts (When/For/Given) │
 │           │                                             │
 │           ▼                                             │
 │    ┌──────────────────────────────────────┐             │
@@ -276,7 +323,21 @@ User: "finetune my tax deduction PDF"
 │    User: "Looks good, but add more on SALT deductions"  │
 │           │                                             │
 │           ▼                                             │
-│  Step 4: Generate training data ► scripts/generate_*.py │
+│  Step 4: Generate training data                         │
+│    Check config.json use_nemo flag:                     │
+│    ├─ false (default) → generate_records.py             │
+│    │   (--enrich-sources for per-record traceability)   │
+│    └─ true → spawn nemo-data-generator subagent:        │
+│           │                                             │
+│    ┌──────────────────────────────────────┐             │
+│    │  SUBAGENT: nemo-data-generator       │             │
+│    │  Model: Sonnet | maxTurns: 60        │             │
+│    │                                      │             │
+│    │  Materialize seed → recipe design    │             │
+│    │  → preview → full job → convert      │             │
+│    │  → validate → upload                 │             │
+│    │  Writes: training.jsonl              │             │
+│    └──────────────────────────────────────┘             │
 │           │                                             │
 │           ▼  🗣️ REVIEW WITH USER                        │
 │    "184 records generated. Per-topic breakdown:          │
@@ -350,8 +411,9 @@ User: "finetune my tax deduction PDF"
 
 | Subagent | Step | Model | Instances | Why delegate? | Benefit |
 |----------|------|-------|-----------|--------------|---------|
-| `knowledge-extractor` | 2 | Sonnet | 1 per PDF | Each PDF needs Docling polling + custom extract.py — Sonnet handles complex document structure better than Haiku | N agents process N PDFs in parallel. Total time = slowest PDF, not sum of all |
-| `relation-builder` | 3b | Sonnet | 1 | Parts-index scanning needs understanding of topic-part semantic relevance, not just keyword matching. Max 15 relations per leaf topic | Fresh context for index matching, main stays clean |
+| `knowledge-extractor` | 2 | Sonnet | 1 per PDF | Each PDF needs Docling polling + `build_knowledge_parts.py` + `consolidate_parts.py`. Supports `--skip-existing` to reuse prior extractions | N agents process N PDFs in parallel. Total time = slowest PDF, not sum of all |
+| `relation-builder` | 3d | Sonnet | 1 | Cross-document matching of relevant parts (from Step 3a) to skill-based topics. Requires OBJECTIVE context. Max 15 relations per leaf topic | Fresh context for index matching, main stays clean |
+| `nemo-data-generator` | 4B | Sonnet | 1 | NeMo recipe design + API orchestration (seed upload, preview, full job, convert). Only spawned when `use_nemo: true` in config | NeMo context (600+ lines of reference docs) stays out of main agent. Falls back to Step 4A if NeMo is down |
 | `training-monitor` | 7c | Sonnet | 1 | Training runs 30-120 min — writes monitoring script with paper-backed thresholds from training-metrics-guide.md | Writes script, launches `nohup`, returns instantly. Distinguishes "no data yet" from actual NaN anomalies |
 
 **User review checkpoints (🗣️):**
@@ -410,11 +472,12 @@ The skill runs the **entire finetune pipeline end-to-end** using an **eval-first
 ```
 Agent (CLI) — Eval-First Pipeline
 ──────────────────────────────────
-1. Define objective
+1. Define objective, create workflow on gateway
 2. Extract documents (parallel via knowledge-extractor subagents)
-3. Build topic hierarchy + relations (via relation-builder subagent)
-4. Generate JSONL training data
-5. Write grader
+3. Filter relevant parts → design skill-based topics → build relations (relation-builder subagent)
+4. Generate training records (generate_records.py with --enrich-sources, or NeMo via sub-agent)
+5. Write grader + dry-run
+5.5 Data quality gate (structural, diversity, ground truth, alignment)
 6. Verify gateway state
 7. Eval → Readiness Gate → [FAIL → fix → re-eval] → [PASS → Train]
 8. Analyze results (eval + training metrics)
@@ -431,7 +494,7 @@ The `reference/api-reference.md` documents all gateway endpoints. Each step uplo
 
 ## What We've Built
 
-### SKILL.md (~870 lines)
+### SKILL.md (~1140 lines)
 
 - YAML frontmatter with pushy description for auto-triggering
 - Prerequisites check (base model capability, task clarity, smooth scoring)
@@ -468,8 +531,8 @@ All scripts use inline dependency declarations — run with `uv run script.py` (
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/finetune.py` | Gateway API wrapper — 18 subcommands: create-workflow, upload-knowledge/topics/relations/records/grader, verify, status, readiness-check, diagnose-grader, create-eval, poll-eval, create-training, poll-training, search-knowledge, cancel-training, sync-jobs, delete-knowledge, print-row-outputs |
-| `scripts/generate_records.py` | Fallback data generation from topics + knowledge — calls LLM per leaf topic; supports `--use-rag`, `--weight-by-difficulty` |
+| `scripts/finetune.py` | Gateway API wrapper — 23 subcommands: create-workflow, upload-knowledge/topics/relations/records/grader, verify, status, readiness-check, diagnose-grader, create-eval, poll-eval, create-training, poll-training, cancel-eval, cancel-training, search-knowledge, delete-knowledge, sync-jobs, update-part-relevance, difficulty-probe, data-quality-gate, print-row-outputs |
+| `scripts/generate_records.py` | Default record generation from topics + knowledge — calls LLM per leaf topic with 5 prompt types; supports `--enrich-sources` (recommended), `--weight-by-difficulty`, `--use-rag` |
 | `scripts/convert_nemo_rows.py` | Convert NeMo DataDesigner output rows to vLLora training.jsonl; filters by judge scores; writes `nemo-metadata.jsonl` sidecar |
 | `scripts/analyze_training.py` | Post-training analysis: reward trend, KL health, clipping, loss stability, grad norm, per-topic learning. Paper-backed thresholds with `# Ref:` comments |
 | `scripts/print_metrics_table.py` | Print training metrics table (per-epoch or per-step) — human-readable format |
@@ -477,7 +540,7 @@ All scripts use inline dependency declarations — run with `uv run script.py` (
 | `scripts/dry_run_grader.py` | Dry-run grader on a single row — instant syntax/logic check via gateway sandbox |
 | `scripts/validate_dataset.py` | Validate JSONL: format, fields, RFT compliance, cross-reference topics/parts; `--nemo` flag checks for metadata leakage |
 | `scripts/checkpoint.py` | Pipeline checkpoint — save/check/reset step progress for crash recovery |
-| `scripts/deduplicate_records.py` | Remove near-duplicate prompts via trigram similarity (threshold-based) |
+| `scripts/deduplicate_records.py` | Remove near-duplicate prompts via trigram similarity (mandatory after generation, threshold 0.85) |
 | `scripts/build_knowledge_parts.py` | Generic Docling→knowledge_parts.json converter (no LLM needed) |
 | `scripts/run_evaluation.py` | Create eval job, poll until complete (~30 min timeout) — legacy, prefer `finetune.py create-eval` |
 | `scripts/start_training.py` | Start training job, poll until complete — legacy, prefer `finetune.py create-training` |
@@ -507,7 +570,7 @@ These scripts solve the #1 testing issue (agents creating shell scripts instead 
 vLLora uses reinforcement fine-tuning (RFT). The model generates its own responses during training and the grader scores them. Training data only needs system + user messages. We don't call it "RFT" in the skill — just "fine-tuning" to keep it simple.
 
 ### LLM-assisted data generation
-The skill uses `scripts/generate_records.py` to generate training records via LLM API calls (through `scripts/chat_completion.py`). For each leaf topic, the script gathers linked source material from knowledge parts, then calls the LLM to generate grounded user prompts. This produces more diverse, document-grounded prompts than the agent writing them directly.
+The skill uses `scripts/generate_records.py` to generate training records via LLM API calls. For each leaf topic, the script gathers curated source material from `relations.json` (built by the relation-builder subagent), then makes multiple LLM calls per topic — one per prompt type (explain, scenario, compare/analyze, edge-case, application) with different temperatures for diversity. Each record includes per-record `source_parts` traceability. With `--enrich-sources`, the script re-queries the gateway with each generated question to find additional matching parts. Optional NeMo Data Designer path available via `use_nemo: true` flag.
 
 ### Only platform APIs documented
 The skill only covers endpoints the agent can't replicate locally: dataset upload, evaluation, training, model serving, and local workflow management. No Lucy chat completion endpoint, no IndexedDB, no browser-side tools.
@@ -524,8 +587,8 @@ The backend requires UUID-formatted dataset_id values. The skill includes `uuidg
 ### Full timestamps in execution log
 The skill requires `YYYY-MM-DD HH:MM:SS` format (not just date) so step durations are visible. Early tests showed agents using date-only timestamps, making it impossible to see how long each step took.
 
-### Lightweight source tracing
-Topics link back to document parts via the topic-source relations API (`POST /topics/relations`). Records encode topic in their ID (e.g., `pins-003`). Just enough breadcrumbs to trace back when scores are low, using the formal relations endpoint instead of inline references.
+### Per-record source traceability
+Topics link to document parts via curated relations (Step 3d). Each generated record includes a `source_parts` array with the specific part IDs the LLM used to create that question. With `--enrich-sources`, the script re-queries the gateway with the generated question to find additional matching parts. This provides full traceability from a low-scoring record back to the exact source material.
 
 ### Skill only talks to localhost:9090
 The skill ONLY communicates with the vLLora gateway at `localhost:9090`. It never calls cloud APIs directly. The gateway proxies cloud requests (eval, training, datasets) transparently. This simplifies the skill and keeps the gateway as the single integration point.
@@ -828,6 +891,15 @@ Both write through the same gateway API → same SQLite database. Workflows, rec
 - [x] Add NeMo Data Designer path — curated seed + rag-retrieval plugin + RAGAS quality scoring
 - [x] Add `convert_nemo_rows.py` and `validate_dataset.py --nemo` for NeMo output handling
 - [x] Update api-reference.md with all gateway endpoints
+- [x] Relevance filtering — parts labeled relevant/irrelevant in Step 3a, persisted to `all-parts-index.json` and gateway
+- [x] 2-level topic hierarchy (Domain → Skill) with `expected_difficulty` as metadata, not structural level
+- [x] Behavioral system prompts — "When/For/Given + action verbs" pattern, composed as single flowing paragraph
+- [x] Per-record `source_parts` traceability — LLM tags `[1]`, `[2]` aliases, mapped back to real part IDs
+- [x] `--enrich-sources` flag — re-queries gateway with generated question for question-specific source_parts (decoupled from `--use-rag`)
+- [x] NeMo sub-agent (`nemo-data-generator.md`) — isolated NeMo workflow, spawned only when `use_nemo: true`
+- [x] `finetune-defaults.json` — project-level config without modifying the skill
+- [x] Table fragment consolidation in `consolidate_parts.py` — merges multi-page table fragments
+- [x] Docling reuse (`--skip-existing`) and status tracking (`docling-status.json`)
 - [ ] Add guidance for multi-turn conversation training data
 - [ ] Add guidance for structured output fine-tuning (JSON schema enforcement)
 - [ ] Improve `finetune.py poll-training` to also save metrics incrementally
@@ -844,6 +916,7 @@ Both write through the same gateway API → same SQLite database. Workflows, rec
 **Infrastructure:**
 - **Training monitor false NaN** when job not in list yet — fixed (10-poll grace period) but depends on LLM following instructions
 - **Over-linking** in relation-builder — fixed (capped at 15 per topic)
+- **NeMo rag-retrieval** does not filter by `relevant: true/false` — known NeMo server limitation
 - Agent sometimes writes output to unexpected directories
 - Checkpoint usage is inconsistent — some runs don't call checkpoint.py at all
 - `iterations.md` creation instruction added but not yet verified in a full run

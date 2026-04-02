@@ -68,9 +68,9 @@ Steps 4 and 5 can run in parallel — both depend on extraction + topics, not on
 
 **Checkpoint after each step** — so the pipeline can resume after crashes:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step <STEP_NAME> --project-dir finetune-project --workflow-id $WORKFLOW_ID
+uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step <STEP_NAME> --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
-Step names: `create-workflow`, `extract`, `topics`, `relations`, `generate-data`, `grader`, `validate`, `data-quality-gate`, `upload-records`, `upload-grader`, `eval-N` (e.g. `eval-1`, `eval-2`), `readiness-pass`, `difficulty-probe`, `training`, `analyze`.
+Step names: `create-workflow`, `extract`, `topics`, `relations`, `generate-data`, `grader`, `validate`, `data-quality-gate`, `eval-N` (e.g. `eval-1`, `eval-2`), `readiness-pass`, `difficulty-probe`, `training`, `analyze`.
 
 ### Working Directory
 
@@ -91,7 +91,9 @@ finetune-project/
 
 **Table-heavy documents**: Write a "synthesis part" — a prose summary of key facts from tables — and include it as a text part alongside the table parts. This gives the model facts to reference conversationally.
 
-**Workflow reuse**: Reuse the existing workflow when iterating (adding records, re-running evals, retraining). The API supports upserting records — duplicates are updated in place, new records are inserted, and existing eval scores are preserved. Only create a new workflow when starting a completely different project or dataset.
+**Workflow ID comes from `config.json` ONLY.** If `finetune-project/config.json` exists, read the `workflow_id` from it — that is the current workflow. If it does NOT exist, ALWAYS create a new workflow via `create-workflow`. Do NOT search the gateway API for workflows with the same name and reuse their ID. Workflow names are not unique — multiple runs can have the same name. The `config.json` file is the single source of truth for which workflow this project belongs to.
+
+**Workflow reuse**: When iterating on the SAME project (adding records, re-running evals, retraining), reuse the workflow from `config.json`. The API supports upserting records. Only create a new workflow (delete `config.json` first) when starting a completely different project.
 
 **Error handling**: If an API call returns a 4xx/5xx error, do NOT abandon the workflow and create a new one. Read the error message, fix the issue (e.g., duplicate IDs, invalid data), and retry the same request against the same workflow.
 
@@ -99,9 +101,16 @@ finetune-project/
 
 ### Execution Log
 
-Maintain `execution-log.md` as an **append-only** chronological record. Create it at the START of Step 1. Write to it IMMEDIATELY after each action — not retroactively.
+Maintain `execution-log.md` as an **append-only** chronological record. Append a section IMMEDIATELY after EACH step completes — not retroactively. Never overwrite.
 
-**Format:** `## Step N: Name` → `- [timestamp] Action` → `Strategy:` / `Results:` / `Issues:` sub-items. Log after every action (not just step boundaries), include strategy for LLM-driven actions, never overwrite, and log failures before fixing. See [reference/workflow-guide.md](reference/workflow-guide.md) for a full example.
+**Minimum required fields per step** (see [reference/execution-log-template.md](reference/execution-log-template.md) for full template):
+- **Step 2**: per-document part counts + types, reused existing: yes/no, validation: PASS/FAIL, gateway sources count
+- **Step 3**: relevance filter counts (total/relevant/excluded), topic count + hierarchy, relation count + cross-doc balance
+- **Step 4**: records count, per-topic counts, source_parts coverage
+- **Step 5**: template used, dry-run scores (both tests), gateway verify: yes/no
+- **Step 7**: eval job ID, avg/std/zero_frac scores, readiness verdict
+
+**⚠️ Log EVERY step, not just Step 1.** If the execution log has only Step 1 when Step 5 is complete, the log is useless for debugging.
 
 ---
 
@@ -122,14 +131,16 @@ All helper scripts use `uv run` with PEP 723 inline dependencies — no manual `
 
 **ALWAYS check for an existing `finetune-project/` directory before starting a new pipeline.** If one exists, this is a continuation — do NOT start from scratch.
 
-**Detection:**
+**Reusing extractions across workflows:** Even when creating a NEW workflow (new `config.json` + workflow ID), existing `knowledge/{slug}/docling-result.json` files can be reused. Docling extraction is the slowest step — if the same PDFs were already extracted in a previous run, the `--skip-existing` flag (and knowledge-extractor subagent) will detect and reuse them. Do NOT delete the `knowledge/` directory when starting a new workflow from the same documents.
+
+**Detection** — `config.json` is the ONLY way to detect an existing project. Do NOT list workflows from the gateway API to find one with a matching name:
 ```bash
 if [ -f finetune-project/config.json ]; then
   echo "EXISTING PROJECT FOUND — resuming"
   WORKFLOW_ID=$(python3 -c "import json; print(json.load(open('finetune-project/config.json'))['workflow_id'])")
   echo "Workflow ID: $WORKFLOW_ID"
 else
-  echo "No existing project — starting fresh"
+  echo "No config.json — will create new workflow in Step 1"
 fi
 ```
 
@@ -137,19 +148,19 @@ fi
 1. Read `finetune-project/config.json` to get the `workflow_id`
 2. **Run `status` to see the full picture** — this is the single source of truth:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py status --workflow-id $WORKFLOW_ID
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py status --workflow-id $WORKFLOW_ID
 ```
 This shows gateway data (records, topics, sources, grader), all job statuses, local checkpoint state, and recommends the next step. **Follow its recommendation.**
 
 3. **Sync jobs from gateway** to pick up jobs created by the UI or other agents:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py sync-jobs --workflow-id $WORKFLOW_ID --output-dir finetune-project
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py sync-jobs --workflow-id $WORKFLOW_ID --output-dir finetune-project
 ```
 This creates local tracking files for any jobs you don't already have and updates statuses for existing jobs (e.g., a job you created that was later cancelled from the UI).
 
 4. **Cancel broken eval jobs** — if `status` shows a running eval scoring ~0.0, the grader is broken and the eval is wasting compute. Cancel it before proceeding:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py cancel-eval --workflow-id $WORKFLOW_ID --eval-id <EVAL_ID>
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py cancel-eval --workflow-id $WORKFLOW_ID --eval-id <EVAL_ID>
 ```
 5. **Pick up from the recommended step** — do NOT re-run completed steps
 6. Append to `execution-log.md` (never overwrite) with a "Resumed" entry:
@@ -181,58 +192,92 @@ Ask the user what behaviors the model should learn. Produce two things:
 
 > **Note:** The system prompt is NOT stored on the workflow. It's composed at record generation time (Step 4) from a root persona + per-topic segments, and embedded in each record's `messages[0]`. Save it locally for use in Step 4.
 
-**Upload immediately** — create the workflow on the gateway so the UI shows progress from the start:
+**Create a new workflow** — only if `config.json` doesn't already exist. Do NOT search the gateway API for existing workflows by name:
 ```bash
-WORKFLOW_ID=$(python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-workflow \
-  --name "My Project" \
-  --objective "Train a model to..." | tail -1)
-echo "Workflow created: $WORKFLOW_ID"
+if [ -f finetune-project/config.json ]; then
+  WORKFLOW_ID=$(python3 -c "import json; print(json.load(open('finetune-project/config.json'))['workflow_id'])")
+  echo "Using existing workflow: $WORKFLOW_ID"
+else
+  WORKFLOW_ID=$(uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-workflow \
+    --name "My Project" \
+    --objective "Train a model to..." | tail -1)
+  echo "Workflow created: $WORKFLOW_ID"
+fi
 ```
 Save `$WORKFLOW_ID` — every subsequent step uses it to upload data incrementally.
 
-**Persist the workflow ID** to a config file so it's easy to find later:
+**Persist the workflow ID** to a config file and checkpoint immediately:
 ```bash
+mkdir -p finetune-project
 cat > finetune-project/config.json << EOF
-{"workflow_id": "$WORKFLOW_ID", "gateway_url": "http://localhost:9090"}
+{"workflow_id": "$WORKFLOW_ID", "gateway_url": "http://localhost:9090", "use_nemo": false}
 EOF
+```
+
+Then check if the user has a `finetune-defaults.json` in the project root — if so, merge those settings into `config.json`:
+```bash
+if [ -f finetune-defaults.json ]; then
+  python3 -c "
+import json
+config = json.load(open('finetune-project/config.json'))
+defaults = json.load(open('finetune-defaults.json'))
+config.update(defaults)
+json.dump(config, open('finetune-project/config.json', 'w'))
+print(f'Merged defaults: {defaults}')
+"
+fi
+```
+
+> **`use_nemo` flag**: Controls record generation at Step 4. `false` (default) → `generate_records.py`. `true` → NeMo Data Designer (requires server at `localhost:8000`).
+>
+> **To set defaults**, create `finetune-defaults.json` in the project root before running the skill:
+> ```json
+> {"use_nemo": true}
+> ```
+
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step create-workflow --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
 ### Step 2: Extract Documents
 
-Extract all documents in parallel — **spawn one `knowledge-extractor` subagent per document**. Each agent handles its own PDF independently (Docling extraction, deterministic `build_knowledge_parts.py`, post-processing, gateway upload).
+> **PREREQUISITES:** Step 1 complete (workflow created, objective defined).
+
+Extract knowledge from all documents. Each document is processed independently by a `knowledge-extractor` subagent.
+
+**Outputs:** `knowledge/{slug}/knowledge_parts.json`, `knowledge/{slug}/parts-index.json` (per document), `knowledge/all-parts-index.json` (merged)
 
 > **Deterministic extraction rule**: Subagents MUST use `build_knowledge_parts.py` as the default extraction script. This ensures the same PDF always produces the same knowledge parts. Agents must NOT write custom extract.py scripts unless the user explicitly requests custom extraction for a specific document via CUSTOM_INSTRUCTIONS, or `build_knowledge_parts.py` produces 0 parts.
 
-**2a. Verify Docling Serve is available:**
+**2a. Check Docling availability:**
 
 ```bash
 curl -sS --connect-timeout 5 http://127.0.0.1:5001/health 2>/dev/null && echo "DOCLING_OK" || echo "DOCLING_UNAVAILABLE"
 ```
 
-**If Docling is unavailable**, use the fallback text extractor instead:
-```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/pdftotext_extract.py <pdf-path> -o <output-dir>/docling-result.json
-```
-This produces a simpler extraction (text-only, no table detection) but is sufficient for most documents. The `knowledge-extractor` subagent will work with either Docling or pdftotext output.
+**If Docling is unavailable**, the `knowledge-extractor` subagent handles the fallback automatically — it uses `convert_pdf_to_markdown.py` to produce a `.md` file, then feeds it to `build_knowledge_parts.py`. Do NOT run `pdftotext_extract.py` separately from the orchestrator — delegate entirely to the subagent, which has its own fallback logic.
 
-If Docling is available, submit all PDFs at once:
+If Docling is available, submit all PDFs at once. Use `--skip-existing` to reuse previous extractions — this avoids re-processing PDFs whose `docling-result.json` already exists (useful when creating a new workflow from the same documents):
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/docling_extract.py --submit-only \
+uv run ${CLAUDE_SKILL_DIR}/scripts/docling_extract.py --submit-only --skip-existing \
   "pdfs/doc1.pdf:finetune-project/knowledge/doc1-slug/docling-result.json" \
   "pdfs/doc2.pdf:finetune-project/knowledge/doc2-slug/docling-result.json" \
   ...
 ```
 
-This returns a JSON manifest with `task_id` per document. Docling processes them in parallel. **"Parallel" means multiple documents extract concurrently within Step 2 — it does NOT mean you can start Step 3 or later steps while extraction is running. You MUST wait for ALL extraction to finish before proceeding.**
+This returns a JSON manifest with entries per document. Each entry has `task_id`, `pdf`, `output`, and `status`. With `--skip-existing`, documents whose `docling-result.json` already has valid data get `status: "reused_existing"` and `task_id: null` — no Docling request is made for those.
+
+**"Parallel" means multiple documents extract concurrently within Step 2 — it does NOT mean you can start Step 3 or later steps while extraction is running. You MUST wait for ALL extraction to finish before proceeding.**
 
 **2b. Spawn one `knowledge-extractor` per document (parallel within this step):**
 
-For each document, spawn a subagent with:
+For each document in the manifest, spawn a subagent with:
 - `SKILL_DIR=${CLAUDE_SKILL_DIR}`
 - `WORKFLOW_ID`, `GATEWAY_URL=http://localhost:9090`
-- `DOC_PATH` — the PDF path
+- `DOC_PATH` — the PDF path (from manifest `pdf` field)
 - `DOC_SLUG` — the slug (lowercase, hyphens, e.g. `nist-csf-2-0`)
 - `DOC_DIR` — e.g., `finetune-project/knowledge/<slug>`
+- `TASK_ID` — the Docling task ID from the manifest `task_id` field (UUID only). If the manifest entry has `status: "reused_existing"` (task_id is null), pass empty string — the subagent will detect the existing `docling-result.json` and skip Docling.
 
 Spawn up to 4-5 agents at once. If there are more documents, spawn in batches.
 
@@ -283,7 +328,7 @@ If any documents are missing, re-extract them (see retry logic in 2b) before pro
 **2d. Validate — MUST PASS before continuing:**
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/knowledge/ --fix
+uv run ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/knowledge/ --fix
 ```
 
 **This is a hard gate.** If validation reports FAIL after `--fix`:
@@ -291,6 +336,21 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/know
 2. Re-run `consolidate_parts.py` with adjusted thresholds on the failing documents
 3. Re-validate. If still FAIL, present the failure details to the user and ask whether to proceed or re-extract.
 4. Do NOT silently proceed to Step 3 with FAIL status — bad extraction poisons topics, records, and training.
+
+**2e. Verify gateway upload matches local data — MUST PASS:**
+
+After all subagents complete and validation passes, verify that the gateway received ALL documents and parts correctly:
+
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py verify --workflow-id $WORKFLOW_ID
+```
+
+Then manually confirm:
+1. **Source count** — the number of knowledge sources on the gateway equals the number of documents you submitted
+2. **Parts count per source** — each source has the expected number of parts (compare against local `parts-index.json` for each document)
+3. **Source names** — each source is named after the PDF file (e.g., `IRS-Pub596-...pdf`), NOT after `knowledge_parts.json` or any other artifact file
+
+If any source has 0 parts, or has a wrong name (like `knowledge_parts.json` instead of the PDF name), delete it and re-upload with the correct `--file <PDF_PATH>`. A mis-uploaded source will cause ALL downstream steps (topics, relations, records) to have broken references that silently pass validation but produce incorrect data in the UI.
 
 > **For full extraction workflow details** (if you need to understand or debug), read [reference/extraction-guide.md](reference/extraction-guide.md).
 
@@ -303,106 +363,108 @@ If there are no documents (objective-only pipeline), skip this step.
 
 **If the user wants to re-extract a specific document** (e.g., "the fee schedule in Contract-A got merged into one big part — split those into individual items"), spawn a new `knowledge-extractor` for just that document with `CUSTOM_INSTRUCTIONS` set to the user's request. Then re-merge indexes and re-validate. Only re-extract the specific documents the user flagged — not all of them.
 
-Use the user's focus areas to guide topic design in Step 3. All content is already on disk; topics control what gets used for training.
+Use the user's focus areas to guide topic design in Step 3.
+
+**Checkpoint:**
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step extract --project-dir finetune-project --workflow-id $WORKFLOW_ID
+```
+
+---
 
 ### Step 3: Build Topic Hierarchy
 
-> **PREREQUISITE:** Step 2 extraction must be **fully complete** — all subagents returned, `all-parts-index.json` merged, and `validate_extraction.py` passed. Do NOT start this step while extraction is still running.
+> **PREREQUISITES:** Step 2 fully complete (all subagents returned, `all-parts-index.json` merged, validation passed). Do NOT start while extraction is running.
 
-**A topic = a skill the model needs to learn.** Each leaf topic answers the question: "what specific capability should the model practice?" The hierarchy groups related skills together so you can balance coverage, control difficulty distribution, and spot gaps.
+Filter extracted parts by relevance, design a skill-based topic hierarchy, build topic-part relations, and write behavioral system prompt segments. Topics define WHAT training data gets generated — getting this right avoids regenerating data later.
 
-**Organize by SKILL, not by document structure.** Do NOT mirror chapter headings, section titles, or document agendas. The user may provide multiple PDFs — each with its own structure — but overlapping content across documents should merge into the same topic, not create duplicates. A topic hierarchy is a **capability map**, not a table of contents.
+**Outputs:** `topics.json`, `relations.json`, updated `all-parts-index.json` (with relevance labels)
 
-**Bad example (mirrors document structure):**
-```
-❌ "EIC Eligibility Rules" → "Filing Status" → "Income Limits" → "Qualifying Child Tests"
-❌ "EIC Computation" → "No Children" → "One Child" → "Two Children" → "Three+ Children"
-```
-This copies the IRS Pub 596 chapter outline. Every heading becomes a topic. It produces narrow, overlapping topics that don't represent distinct skills.
+**3a. Filter parts by relevance to the objective.**
 
-**Good example (organized by skill):**
-```
-✅ "Eligibility Determination" (skill: given a taxpayer scenario, determine if they qualify)
-✅ "Credit Calculation" (skill: given eligible taxpayer, compute the exact credit amount)
-✅ "Multi-Factor Edge Cases" (skill: handle scenarios with competing rules or boundary conditions)
-```
-Each topic is a **task the model must perform**, not a section it must recite. Multiple document sections feed into each skill topic. Content from Pub 596 Chapter 1 AND Pub 501 dependent rules both feed "Eligibility Determination."
+Not all extracted content is relevant to the finetune goal. Read `knowledge/all-parts-index.json` and at least 2-3 per-document `knowledge_parts.json` files. For each part, ask: "does this content teach a skill the model needs for the stated objective?"
 
-**When multiple documents exist, synthesize across them.** Read ALL extracted parts indexes. Look for overlapping concepts that span documents — these become single topics drawing from multiple sources, not separate topics per document. Two PDFs covering "dependent rules" should produce ONE topic on dependent determination, linked to parts from both documents.
+Write the label back to `all-parts-index.json` — set `"relevant": true` for parts that contribute to the objective, `"relevant": false` for parts that don't. This persists the filtering decision so anyone looking at the index can see which parts were used. Log the summary (total/relevant/excluded + sample excluded titles) in `execution-log.md`.
 
-**When documents exist, topics MUST be grounded in the extracted content — not in your general knowledge of the subject.** Read `knowledge/all-parts-index.json` and the individual `knowledge_parts.json` files to understand what the documents actually cover. Your topics should reflect the specific content, terminology, tables, rules, and examples found in the extracted parts. Do NOT invent topics based on what you think the documents "probably" contain.
-
-**How to build topics from extracted content:**
-1. Read `knowledge/all-parts-index.json` and at least 2-3 per-document `knowledge_parts.json` files
-2. **Filter parts by relevance to the objective.** Not all extracted content is relevant to the finetune goal. A 200-page IRS publication may have 50 parts but only 15 are relevant to "EIC tax credit calculation." For each part, ask: "does this content teach a skill the model needs for the stated objective?" **Write the label back to `all-parts-index.json`** — set `"relevant": true` for parts that contribute to the objective, `"relevant": false` for parts that don't. This persists the filtering decision so anyone looking at the index can see which parts are used and which are skipped. Only `relevant: true` parts should become topics or appear in `relations.json`. Log the filtering summary (total/relevant/excluded + sample excluded titles) in `execution-log.md`.
-3. From the **relevant parts only**, list every distinct **task/skill** the content teaches (not every section/heading)
-4. Group related skills into domains — ask "what would a user ask the model to DO?" not "what chapter is this from?"
-5. For each skill, check which relevant parts from which documents contribute — a skill often draws from multiple documents and multiple sections within a document
-6. Merge overlapping skills across documents into single topics
-7. For each leaf topic, estimate `expected_difficulty` (`"easy"`, `"medium"`, `"hard"`) based on whether the skill involves simple lookup vs. multi-step reasoning — this is metadata on the topic, not a separate sub-topic
-
-**Example — IRS Pub 596 (120 parts) + Pub 501 (80 parts) for objective "EIC tax credit calculator":**
+**Example** — IRS Pub 596 (120 parts) + Pub 501 (80 parts) for objective "EIC tax credit calculator":
 - Pub 596 parts about EIC rules, tables, worksheets → **relevant** (keep)
 - Pub 596 parts about "How to get tax help", "Privacy Act notice" → **irrelevant** (exclude)
-- Pub 501 parts about dependent tests, filing status → **relevant** (they affect EIC eligibility)
-- Pub 501 parts about standard deduction amounts, itemized deductions → **irrelevant** (exclude)
-- Result: ~60 relevant parts out of 200 total → topics built from those 60 only
+- Pub 501 parts about dependent tests, filing status → **relevant** (affect EIC eligibility)
+- Pub 501 parts about standard deduction amounts → **irrelevant** (exclude)
+- Result: ~60 relevant parts out of 200 → topics built from those 60 only
 
-Decide what topics to create based on:
-- **The relevant extracted content (REQUIRED when documents exist)** — from the filtered parts, identify skills/tasks the content teaches, synthesized across all documents. Each distinct skill becomes a topic. A single chapter may feed multiple skill topics; a single skill topic may draw from multiple chapters and multiple documents.
-- **The objective** — the primary filter. Every topic must serve the stated objective. If a skill from the content doesn't contribute to the objective, it doesn't become a topic — even if the content covers it thoroughly.
-- **Difficulty dimension** — for each leaf skill, estimate expected difficulty as a metadata field (`"expected_difficulty": "hard"`), not as a separate hierarchy level. GRPO requires outcome variance — the model must get some right and some wrong for learning to happen (arXiv:2508.14094: hard examples yield 47% gains vs 3-15% for easy ones). The actual difficulty score gets updated after the base model evaluation (difficulty probe).
+**3b. Design skill-based topics from relevant parts.**
 
-**Two-level hierarchy**: Domain (broad capability area) → Skill (specific competency). Difficulty is metadata on each leaf topic, not a structural level — this avoids doubling leaf count and keeps the hierarchy clean (TAGS arXiv:2601.13995: difficulty as weight outperforms difficulty as structure).
+From the relevant parts only, identify distinct skills the content teaches. Organize by **skill** (what the model learns to DO), not by document structure.
 
-Save to `topics.json` as a **flat array** — every topic at the same level, hierarchy expressed via `parent_id`. Each topic has a `system_prompt` that describes its specialization:
+```
+❌ Bad (mirrors document headings): "Filing Status" → "Income Limits" → "Qualifying Child Tests"
+✅ Good (organized by skill): "Eligibility Determination" → "Credit Calculation" → "Multi-Factor Edge Cases"
+```
+
+Each topic is a task the model must perform. Multiple document sections feed into each skill topic. A single skill topic may draw from multiple chapters and multiple documents. When multiple documents cover overlapping content, merge into single topics.
+
+**Two-level hierarchy:** Domain (broad capability area) → Skill (specific competency). Difficulty is metadata on each leaf topic (`"expected_difficulty": "easy"|"medium"|"hard"`), not a structural level — this avoids doubling leaf count (TAGS arXiv:2601.13995). Target 15-25 records per leaf topic, 5-40 leaf topics depending on dataset size. See `reference/topic-hierarchy.md` for full guidelines.
+
+**3c. Write behavioral system prompt segments.**
+
+The `system_prompt` on each topic is a **segment** composed with ancestors into one flowing instruction: `[Root persona]. [Domain context]. [Leaf focus].`
+
+- **Root** (Step 1): the only "You are..." statement. Sets persona + behavior.
+- **Domain** (parent_id=null): narrows the field. Do NOT repeat the root.
+- **Leaf**: specific skill focus with action verbs.
+
+Each level adds ONLY what the parent doesn't already say. Write as behavioral instructions (When/For/Given + action verbs like assess, recommend, identify, compare), NOT keyword lists.
+
+```
+❌ Bad: "Specialize in: oxygen targets, nebulized salbutamol, IV magnesium, ICU criteria..."
+✅ Good: "When managing acute severe asthma, assess severity using BTS/SIGN criteria,
+         recommend stepwise bronchodilator escalation, identify ICU triggers, and plan discharge."
+```
+
+**Self-check** before proceeding — for each leaf topic verify: (1) starts with situational trigger, (2) contains action verbs, (3) doesn't repeat root/parent, (4) composed result reads as one natural instruction.
+
+Save to `topics.json` as a flat array with `parent_id` for hierarchy:
 
 ```json
 [
-  {"id": "billing", "name": "Billing & Payments", "parent_id": null, "system_prompt": "Specialize in: payment processing, subscription management, and billing troubleshooting."},
-  {"id": "refund-processing", "name": "Refund Processing", "parent_id": "billing", "system_prompt": "Specialize in: handling refund requests, explaining eligibility, and processing different refund types.", "expected_difficulty": "medium"},
-  {"id": "payment-troubleshooting", "name": "Payment Troubleshooting", "parent_id": "billing", "system_prompt": "Focus on: diagnosing payment failures, international transactions, 3DS challenges, and fraud block resolution.", "expected_difficulty": "hard"}
+  {"id": "billing", "name": "Billing & Payments", "parent_id": null, "system_prompt": "For billing cases, apply payment processing rules, subscription policies, and troubleshooting procedures."},
+  {"id": "refund-processing", "name": "Refund Processing", "parent_id": "billing", "system_prompt": "When handling refund requests, determine eligibility per policy and process standard, partial, or pro-rated refunds.", "expected_difficulty": "medium"},
+  {"id": "payment-troubleshooting", "name": "Payment Troubleshooting", "parent_id": "billing", "system_prompt": "When diagnosing payment failures, check card expiry, international transaction rules, 3DS challenges, and fraud block resolution.", "expected_difficulty": "hard"}
 ]
 ```
 
-The `expected_difficulty` field (`"easy"`, `"medium"`, `"hard"`) is an initial estimate — it gets refined to an actual pass-rate score after the difficulty probe in Step 7. Leaf topics only. Used to weight record generation (more records for harder topics).
+**3d. Build topic-part relations.**
 
-**Topic count**: Scale with dataset size — 5-10 leaf topics for 100-200 records, 20-40 for 500-1,000, 40-80 for 1,000-3,000. Target 15-25 records per leaf topic — fewer than 10 risks insufficient GRPO variance, more than 30 introduces redundancy (arXiv:2410.15226 §3.3; validated by domain RFT practice: arXiv:2509.25736 used 10-50 per topic). See `reference/topic-hierarchy.md` for full guidelines.
+Delegate to the `relation-builder` subagent — provide `PROJECT_DIR` and `OBJECTIVE`. It reads `all-parts-index.json` and `topics.json`, links only `relevant: true` parts to leaf topics (max 15 per topic), and writes `relations.json`. These relations define which knowledge parts each topic's records will be grounded in, and they flow through to per-record `source_parts` traceability in Step 4.
 
-**System prompt composition**: The `system_prompt` field on each topic is a **segment** that gets composed with its ancestors during record generation: `[Root --system-prompt] + [Root topic] + [Parent topic] + [Leaf topic]`. Each level adds specificity without contradicting the parent. Keep each segment to 1-2 sentences, 50-150 words total when composed.
+> **ID format note:** Use human-readable slugs for topic `id` values (e.g., `"billing-refunds"`). `finetune.py upload-topics` auto-converts to UUIDs. Use the same slug as `topic_identifier` in `relations.json`.
 
-**Topic-source linking**: After uploading knowledge source parts, link them to topics via the `POST /topics/relations` API. Only link **relevant** parts — parts excluded during the relevance filter (step 2 above) should NOT appear in `relations.json`. Never fabricate references.
+If there are no documents (objective-only pipeline), skip relations.
 
-**Build topic-part relations.** Delegate to the `relation-builder` subagent (installed at `.claude/agents/relation-builder.md`) — provide `PROJECT_DIR` (the absolute path to the finetune-project directory) and `OBJECTIVE` (the workflow objective statement, so the agent can filter irrelevant parts). It reads `knowledge/all-parts-index.json` and `topics.json`, matches relevant parts to topics, and writes `relations.json`.
-
-> **ID format note:** Use human-readable slugs for topic `id` values (e.g., `"billing-refunds"`). `finetune.py upload-topics` auto-converts to UUIDs. Use the same slug as `topic_identifier` in `relations.json` and part string IDs as `part_identifier`. `finetune.py upload-relations` resolves everything locally — no manual ID mapping.
-
-If there are no documents (objective-only pipeline), skip this step.
-
-**Checkpoint** after topics and relations are complete:
+**Checkpoint:**
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step topics --project-dir finetune-project --workflow-id $WORKFLOW_ID
-python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step relations --project-dir finetune-project --workflow-id $WORKFLOW_ID
+uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step topics --project-dir finetune-project --workflow-id $WORKFLOW_ID
+uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step relations --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
-**Upload immediately** — push topics and relations to the gateway so the UI shows the topic hierarchy and coverage:
+**Upload** topics, relations, and relevance labels. **⚠️ If you redesigned topics (changed IDs, added/removed topics), you MUST re-upload before uploading records.** Records reference topic IDs — stale gateway topics cause FK violations and records with `topic: null`.
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-topics \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-topics \
   --workflow-id $WORKFLOW_ID --file topics.json
 
-# Upload relations (if they exist)
 if [ -f relations.json ]; then
-  python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-relations \
+  uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-relations \
     --workflow-id $WORKFLOW_ID --file relations.json
 fi
+
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py update-part-relevance \
+  --workflow-id $WORKFLOW_ID --parts-index knowledge/all-parts-index.json
 ```
 
-**Review topics with the user.** Present the topic hierarchy (name, parent, linked source material count, planned records-per-topic). Ask:
-- Are these the right **skills** for the model to learn?
-- Any skills missing, or topics to split by difficulty?
-- How many records per topic? (default: 25 per leaf, target ~20 for optimal diversity)
+**Review with the user.** Present topic hierarchy (name, parent, linked parts count, planned records-per-topic). Ask: are these the right skills? Any missing? How many records per topic?
 
-Adjust topics based on feedback before proceeding to data generation. This is the **primary filtering step** — topics determine what training data gets generated. Getting this right avoids regenerating data later.
+---
 
 ### Step 3.5: Categorize Existing Records
 
@@ -416,19 +478,33 @@ Skip this step if generating all data from scratch.
 
 ### Step 4: Generate Training Data
 
-Write prompts to `training.jsonl` — one JSON object per line. Each line is a **prompt** (system + user messages only — no assistant messages):
+> **PREREQUISITES:** Step 3 complete (topics uploaded, relations built).
+
+**Check `config.json` for `use_nemo` flag:**
+```bash
+USE_NEMO=$(python3 -c "import json; print(json.load(open('finetune-project/config.json')).get('use_nemo', False))" 2>/dev/null || echo "False")
+```
+
+If `use_nemo` is `True`, skip to **Step 4B** below. Otherwise continue with the default path.
+
+---
+
+#### Step 4A: Default — `generate_records.py`
+
+Generate training prompts grounded in the knowledge parts linked to each topic via relations (Step 3d). Each record is a system + user message pair — no assistant messages (GRPO generates its own responses).
+
+**Outputs:** `training.jsonl`
+
+Each record includes per-record `source_parts` — the 1-3 specific parts the LLM tagged as used when generating that question (traced via relations from Step 3d):
 
 ```jsonl
 {"messages": [{"role": "system", "content": "You are..."}, {"role": "user", "content": "..."}], "id": "record-1", "topic": "billing/refunds", "source_parts": ["p-001", "p-003"]}
 ```
 
-Each record includes `source_parts` — the IDs of the knowledge parts used as grounding material. This enables traceability from any record back to the specific document sections it was derived from.
-
 Use `generate_records.py` to generate user prompts via LLM, grounded in the knowledge chunks linked to each topic:
 
 ```bash
-# Standard: relations.json + optional RAG augmentation
-python3 ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
+uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --topics finetune-project/topics.json \
   --relations finetune-project/relations.json \
   --knowledge-dir finetune-project/knowledge \
@@ -436,28 +512,38 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --output finetune-project/training.jsonl \
   --records-per-topic 25 \
   --parallel 4 \
-  --use-rag --workflow-id $WORKFLOW_ID \
-  --upload-incremental
+  --workflow-id $WORKFLOW_ID \
+  --upload-incremental \
+  --enrich-sources
 ```
 
 The script makes **multiple LLM calls per topic** (one per prompt type: explain, scenario, compare/analyze, edge-case, application) for better diversity. By default, every leaf topic gets an equal number of records. Use `--weight-by-difficulty` to distribute based on base model eval scores — hard topics (0-30% success) get 40-50% of records, medium (30-70%) get 30-40%, easy (70-100%) get 10-20%. This is the recommended mode after the first evaluation, because GRPO learning signal is strongest on hard topics (arXiv:2508.14094: 47% gains from hard examples vs 3-15% from easy). Use `--weight-by-source` to distribute proportionally to linked source parts instead (max 3:1 imbalance ratio). Inner parallelism runs all prompt-type calls concurrently within each topic.
 
-Add `--use-rag` to augment the static relations.json context with semantically retrieved knowledge parts. This follows a two-stage question generation pattern (arXiv 2509.25736 — https://arxiv.org/html/2509.25736v1): first retrieve broad topic context, generate a diverse question, then retrieve again with the question itself for sharper grounding. The script searches the gateway's knowledge index for each topic and merges the top results with relation-linked parts (deduplicating by part ID). For rapid iteration without building relations first, use `--rag-only`. Additional flags: `--rag-top-k N` (chunks per topic, default 15), `--rag-second-retrieval` (enables the second per-question retrieval stage).
+**Context source:** Each topic's records are grounded in the parts linked via `relations.json` (built in Step 3d by the relation-builder). This is curated context — the relation-builder evaluated each part's relevance to each specific topic. Do NOT add `--use-rag` to augment this with uncurated semantic search results — it dilutes the curated context and undermines Step 3d.
 
-> **Prerequisite for RAG:** Knowledge source parts must have embeddings. The gateway generates them automatically (~30s after upload). Verify with: `python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py search-knowledge --workflow-id $WORKFLOW_ID --phrase "test query"`
+**`--enrich-sources`** (recommended): After generating each question, re-queries the gateway with the question text to find additional matching parts. This enriches `source_parts` with question-specific matches without polluting the curated topic→parts context used for generation. Unlike `--use-rag` (which adds uncurated parts BEFORE generation), this only supplements traceability AFTER generation — the LLM never sees these extra parts.
+
+**Alternative: `--rag-only` mode** — if you skipped Step 3d (no relations), use `--use-rag --rag-only` to retrieve context via gateway semantic search instead. This is faster (skip relation-building) but less precise. Requires embeddings on the gateway.
+
+> **When to use `--rag-only`:** Quick iteration during early pipeline development, or when the relation-builder is unavailable. Once relations are built, use them — they are more precise than keyword-based semantic search.
 
 If some topics fail, use `--append` to retry without overwriting. Adapt `--records-per-topic` (default 25), `--min-per-topic` (default 10), `--max-per-topic` (default 50) to the project. **Generate at least 200+ total records.**
 
-**Deduplicate** — parallel generation can produce near-duplicate prompts across overlapping topics:
+**⚠️ Every record's `topic` field MUST match a leaf topic ID in `topics.json`.** Do NOT invent ad-hoc topic IDs during generation. If you generate records with a custom script instead of `generate_records.py`, validate topic IDs before writing to `training.jsonl`. The `upload-records` command will reject records with topic IDs that don't exist on the gateway — mismatched topics cause FK violations and silent data loss.
+
+**⚠️ ALWAYS deduplicate** after generation — overlapping topics (e.g., "Fork Detection" and "Combination Calculation" both referencing Chapter 3) produce similar questions. This is mandatory, not optional:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/deduplicate_records.py finetune-project/training.jsonl --threshold 0.85
+uv run ${CLAUDE_SKILL_DIR}/scripts/deduplicate_records.py finetune-project/training.jsonl --threshold 0.85
 ```
+This removes near-duplicate prompts (trigram similarity > 0.85). Expect 5-15% reduction. If duplicates exceed 20%, the topic hierarchy has too much overlap — consider merging topics.
 
 With `--upload-incremental`, records appear in the UI as each topic completes — no separate upload step needed. If you ran without `--upload-incremental`, upload manually:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
   --workflow-id $WORKFLOW_ID --file training.jsonl
 ```
+
+> **Note:** `upload-records` resolves topic slugs → UUIDs via the local SQLite database at `~/.vllora/vllora.db`. If your DB is at a different path, pass `--db /path/to/vllora.db`. If the DB is unreachable, records will fail to upload with "topic IDs not found" — this means the topic slug→UUID mapping is missing, not that topics weren't uploaded.
 
 **Review generated data with the user.** Present a per-topic breakdown (topic name, record count, 2-3 sample prompts per topic). Ask:
 - Do these prompts look like realistic user questions?
@@ -466,89 +552,27 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
 
 The UI at `http://localhost:5173/finetune` also shows all records grouped by topic — point the user there for a visual review.
 
-### Step 4B: Recommended Path — NeMo Data Designer Generation
+#### Step 4B: NeMo Data Designer (when `use_nemo: true`)
 
-> Use this path when the NeMo Data Designer server (`localhost:8000`) is available and you want to generate training data using it. See `reference/nemo-guide.md` for full API details, column types, and recipe structure. Repo: https://github.com/vllora/nemo
+> **Activated by:** `"use_nemo": true` in `finetune-project/config.json`. The user sets this flag — the agent does not decide. If the flag is `false` or missing, use Step 4A above.
 
-**How this differs from Step 4:** Instead of `generate_records.py`, you use the NeMo server to generate rows via a recipe. Both templates implement the two-stage question generation pattern from arXiv 2509.25736 (https://arxiv.org/html/2509.25736v1): generate a diverse `raw_question` from topic context first, then retrieve question-specific chunks via `rag-retrieval` and refine into the final `user_message`. The `rag-retrieval` column plugin calls the gateway knowledge search per row at generation time — no need to pre-link relations for knowledge retrieval.
+**Spawn the `nemo-data-generator` subagent** with:
+- `SKILL_DIR=${CLAUDE_SKILL_DIR}`
+- `PROJECT_DIR` — absolute path to `finetune-project/`
+- `WORKFLOW_ID`, `GATEWAY_URL=http://localhost:9090`
+- `NEMO_URL=http://localhost:8000`
+- `SYSTEM_PROMPT` — the root system prompt from Step 1
+- `RECORDS_PER_TOPIC` — target records per leaf topic (default: 25)
 
-**Step-by-step:**
+The subagent handles everything: verify NeMo → materialize seed → design recipe → preview → full job → convert → validate → upload. It returns a summary with record counts and any issues.
 
-**1. Materialize the curated seed parquet** — relations not needed, `rag-retrieval` fetches from vLLora at generation time:
-```bash
-uv run nemo/materialize_seed.py \
-  --topics finetune-project/topics.json \
-  --output finetune-project/curated-seed.parquet
-```
-Produces one row per leaf topic. `rag-retrieval` uses `topic_path` (and `raw_question` for the second retrieval) as search queries against vLLora's embeddings.
-
-**2. Upload and inspect:**
-```bash
-BLOCK_ID=$(date +%s)
-curl -sS -X POST "http://localhost:8000/api/data-recipe/seed/upload-curated" \
-  -F "file=@finetune-project/curated-seed.parquet" -F "block_id=$BLOCK_ID" \
-  > finetune-project/nemo-seed-upload.json
-
-FILE_ID=$(jq -r '.file_id' finetune-project/nemo-seed-upload.json)
-curl -sS -X POST "http://localhost:8000/api/data-recipe/seed/inspect-curated" \
-  -H "Content-Type: application/json" \
-  -d "{\"block_id\": \"$BLOCK_ID\", \"file_id\": \"$FILE_ID\", \"preview_size\": 5}" \
-  > finetune-project/nemo-seed-inspect.json
-```
-
-**3. Design the recipe** — don't just copy the template. Choose the right pipeline for your domain:
-
-- **Topic-based Q&A** (policies, knowledge bases, tutorials): Copy `templates/nemo-recipe-template.json`. Replace `path` with `resolved_path` from `nemo-seed-inspect.json`, set `workflow_id` to `$WORKFLOW_ID`, adapt llm-text prompts for your domain. The default template generates `user_message` directly from retrieved text.
-- **Structured documents** (invoices, contracts, forms, specs): Copy `templates/nemo-recipe-structured-template.json`. This adds a subcategory `sampler` for document sections, `llm-structured` (drop:true) to extract typed fields, and an `expression` (drop:true) to compose a focused context before generating `user_message`. Adapt `output_format` schema to your document's actual fields.
-- **Custom**: Design columns from scratch using `reference/nemo-columns-reference.md`. Output contract: `system_prompt` + `user_message` are required for export into `training.jsonl`, even if the paper-inspired generation method uses extra intermediates like `raw_question`, `question_chunks`, and judge columns. `reference_answer` is strongly recommended. All other columns are design choices — use `"drop": true` for intermediates that feed downstream columns but shouldn't appear in the final dataset.
-
-**4. Preview first** (set `execution_type: "preview"`, `rows: 10`):
-```bash
-curl -sS -X POST "http://localhost:8000/api/data-recipe/jobs" \
-  -H "Content-Type: application/json" -d @finetune-project/nemo-recipe.json \
-  > finetune-project/nemo-preview.json
-
-PREVIEW_ID=$(jq -r '.job_id' finetune-project/nemo-preview.json)
-curl -sS "http://localhost:8000/api/data-recipe/jobs/$PREVIEW_ID/status"
-curl -sS "http://localhost:8000/api/data-recipe/jobs/$PREVIEW_ID/dataset?limit=10" \
-  > finetune-project/nemo-preview-dataset.json
-curl -sS "http://localhost:8000/api/data-recipe/jobs/$PREVIEW_ID/analysis" \
-  > finetune-project/nemo-preview-analysis.json
-```
-
-Read both before proceeding. `dataset` = semantic check (are rows useful prompts?). `analysis` = structural check (row counts, null columns, sampler distribution). Only run the full job once preview passes.
-
-**5. Full job** (update `execution_type: "full"` and `rows` to target count):
-```bash
-JOB_ID=$(jq -r '.job_id' finetune-project/nemo-job.json)
-curl -sS "http://localhost:8000/api/data-recipe/jobs/$JOB_ID/dataset?limit=200&offset=0" \
-  > finetune-project/nemo-dataset-page-1.json
-```
-
-**6. Convert → validate → upload:**
-```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/convert_nemo_rows.py \
-  --input finetune-project/nemo-dataset-page-1.json \
-  --output finetune-project/training.jsonl \
-  --min-answerable 1.0 --min-groundedness 0.5 \
-  --ground-truth-field reference_answer
-
-python3 ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py \
-  finetune-project/training.jsonl --nemo
-
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
-  --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl
-```
-
-`convert_nemo_rows.py` preserves top-level `topic` from NeMo rows so `upload-records` can assign workflow topics correctly. Use `--ground-truth-field <column>` when you want the evaluator to receive an auxiliary text field as `input.ground_truth`; `--include-ground-truth` remains as a shortcut for `reference_answer`.
-
-**Judge vs grader:** NeMo `judge_*` columns score rows for filtering at data-generation time. The vLLora `grader.js` scores model responses at evaluation/training time. Both are needed but serve different purposes.
+If the subagent reports NeMo is not running, fall back to Step 4A (`generate_records.py`).
 
 ---
 
 **Checkpoint** after data generation (applies to both Step 4 and Step 4B):
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step generate-data --project-dir finetune-project --workflow-id $WORKFLOW_ID
+uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step generate-data --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
 ### Step 4.5: Generate Variants for Augmentation
@@ -563,7 +587,7 @@ If some topics are under-represented, use `chat_completion.py` to create variant
 
 ### Step 5: Write the Grader
 
-> **PREREQUISITE:** Steps 2 (extraction) and 3 (topics) must be **complete**. The grader criteria must be grounded in the actual extracted knowledge and topic structure — not assumptions about the domain. Can run in parallel with Step 4 (data generation).
+> **PREREQUISITES:** Steps 2 + 3 complete. Grader *writing* can start in parallel with Step 4, but the **live dry-run** (Step 5.1 Test 2) requires records on the gateway — wait until Step 4 has uploaded at least some records before running `--live`.
 
 Write a JavaScript grader function to `grader.js`. Scores model responses 0-1, runs server-side during evaluation and training.
 
@@ -604,7 +628,7 @@ Copy the closest template, then customize the criteria weights and programmatic 
 **Test 1: Hand-crafted row** — catches syntax errors and basic scoring logic:
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
+uv run ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
   --workflow-id $WORKFLOW_ID \
   --script grader.js \
   --row '{"messages": [{"role": "system", "content": "You are..."}, {"role": "user", "content": "What is X?"}, {"role": "assistant", "content": "X is..."}]}'
@@ -613,7 +637,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
 **Test 2: Live model response (CRITICAL)** — catches graders that work on synthetic inputs but fail on real model outputs. This is the most common grader bug: the grader assumes a specific response format (e.g., "Answer: A") but the model responds differently (e.g., "Based on the guidelines..."):
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
+uv run ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
   --workflow-id $WORKFLOW_ID \
   --script grader.js \
   --live
@@ -623,34 +647,47 @@ The `--live` flag picks 3 random training records, sends each prompt to the LLM,
 
 **Both tests must pass.** If Test 1 passes but Test 2 scores 0.0, the grader has format assumptions that real models don't satisfy. Fix and re-test. Do NOT proceed to upload until both pass. The sandbox does NOT support `console.log` — use the `reason` field for debug output.
 
-**Upload immediately** — push the grader to the gateway so the UI shows it's ready for evaluation:
+**Upload + verify + checkpoint** — run ALL THREE commands. Do NOT checkpoint the grader without uploading and verifying first. If the verify fails, the upload silently failed — re-run `upload-grader`.
+
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader \
+# 1. Upload
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader \
   --workflow-id $WORKFLOW_ID --file grader.js
+
+# 2. Verify it landed on gateway (MANDATORY — do not skip)
+curl -s "http://localhost:9090/finetune/workflows/$WORKFLOW_ID" | python3 -c "
+import sys, json
+wf = json.load(sys.stdin).get('workflow', {})
+evaluator = wf.get('eval_script') or wf.get('evaluator')
+if not evaluator or evaluator == 'null' or len(str(evaluator)) < 10:
+    print('FATAL: Evaluator NOT on gateway — upload-grader failed')
+    sys.exit(1)
+print('Evaluator verified on gateway: OK')
+"
+
+# 3. Only checkpoint AFTER verify passes
+uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step grader --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
-**Checkpoint** after grader upload:
-```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step grader --project-dir finetune-project --workflow-id $WORKFLOW_ID
-```
+**⚠️ If the verify step prints FATAL, do NOT run the checkpoint.** Re-run `upload-grader` and try again.
 
 ### Step 5.5: Final Dataset Validation
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py finetune-project/training.jsonl \
+uv run ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py finetune-project/training.jsonl \
   --topics finetune-project/topics.json \
   --parts finetune-project/knowledge/all-parts-index.json
 ```
 
 Checks: valid JSON, required fields, message structure, no assistant messages (RFT), duplicate IDs, record count (minimum 50, recommend 100-200+), and short user messages (< 10 chars). The `--topics` and `--parts` flags cross-reference `topic` and `source_parts` fields against the actual topic hierarchy and parts index — flagging any orphaned references. Fix errors before proceeding.
 
-### Step 5.5b: Data Quality Gate (pre-eval — do NOT skip)
+### Step 5.5b: Data Quality Gate (MANDATORY — do NOT skip)
 
-**⚠️ Run this BEFORE evaluation.** Eval costs ~45 min and LLM calls. Training costs hours of GPU time. This gate catches data issues that waste those resources — vague ground truths, prompt-answer misalignment, near-duplicate prompts, and low diversity. Fixing data here is 10-100x cheaper than discovering the problem after training.
+**⚠️ This step is REQUIRED before evaluation.** Do NOT skip it even if Step 5.5 (validate) passed. `validate_dataset.py` checks format; this gate checks **data quality** — duplicates, diversity, ground truth quality, prompt alignment. Eval costs ~45 min and LLM calls. Training costs hours of GPU time. Fixing data here is 10-100x cheaper than discovering the problem after training.
 
 **Quick gate (free — always run):**
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py finetune-project/training.jsonl \
+uv run ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py finetune-project/training.jsonl \
   --topics finetune-project/topics.json
 ```
 
@@ -658,7 +695,7 @@ This runs Gate 1 (structural) and Gate 2 (diversity) — no API calls, instant r
 
 **Full gate (with LLM scoring — run on first pipeline pass or after regeneration):**
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py finetune-project/training.jsonl \
+uv run ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py finetune-project/training.jsonl \
   --topics finetune-project/topics.json \
   --all-gates \
   --sample 30 \
@@ -669,7 +706,7 @@ This adds Gate 3 (ground truth quality — LLM scores each GT for specificity) a
 
 **Or via `finetune.py`:**
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py data-quality-gate \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py data-quality-gate \
   --file finetune-project/training.jsonl \
   --topics finetune-project/topics.json \
   --all-gates --save finetune-project/data-quality-report.json
@@ -681,7 +718,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py data-quality-gate \
 
 **Checkpoint** after data quality gate passes:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step data-quality-gate --project-dir finetune-project --workflow-id $WORKFLOW_ID
+uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step data-quality-gate --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
 > See [reference/data-quality-gate.md](reference/data-quality-gate.md) for threshold details and research citations.
@@ -691,14 +728,14 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step data-quality-gate 
 Since each step uploaded data immediately, the gateway already has the full workflow. Verify everything landed correctly before handing off to the UI.
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py verify --workflow-id $WORKFLOW_ID
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py verify --workflow-id $WORKFLOW_ID
 ```
 
 **Expected**: All counts > 0 and evaluator = YES. If any are missing, re-run the upload for that step.
 
 **Checkpoint** after verify:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step validate --project-dir finetune-project --workflow-id $WORKFLOW_ID
+uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step validate --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
 Tell the user the data is visible at `http://localhost:5173/finetune`, then **proceed immediately to Step 7** (evaluation).
@@ -727,7 +764,7 @@ The default is **512** — but this is a starting point, NOT a universal value. 
 
 **Run the completion_length gate BEFORE training and apply its `recommended_min`:**
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py training.jsonl \
+uv run ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py training.jsonl \
   --gate completion_length --max-output-tokens 512 --json
 ```
 If the gate returns a `recommended_min` value, **use it** as `max_output_tokens` in training config. The gate estimates required length from ground truth token lengths × task complexity multiplier, with 30% headroom above P95 (heuristic inspired by DAPO's overlong handling, arXiv:2503.14476 — not a direct DAPO parameter).
@@ -738,7 +775,7 @@ If the gate returns a `recommended_min` value, **use it** as `max_output_tokens`
 Dry-run the grader on 3-5 sample records with varying quality responses. Scores should spread across 0.2-0.9 — if all cluster at one value, GRPO gets zero gradient. See [reference/grader-writing.md](reference/grader-writing.md) for scoring patterns and red flags.
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
+uv run ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
   --workflow-id $WORKFLOW_ID --script grader.js \
   --row '{"messages": [{"role":"system","content":"..."}, {"role":"user","content":"..."}, {"role":"assistant","content":"Good detailed response..."}]}'
 ```
@@ -760,7 +797,7 @@ fi
 
 Create eval job only — do NOT create a training job yet:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
   --workflow-id $WORKFLOW_ID --output-dir evaluations
 ```
 
@@ -768,7 +805,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
 
 **Poll eval in foreground** (auto-cancels if grader is broken):
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval \
   --file evaluations/eval-001.json
 ```
 
@@ -786,11 +823,11 @@ When eval completes, proceed to **Step 7c (Readiness Gate)** — do NOT start tr
 After eval completes, check if data and grader are ready for training:
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
   --file evaluations/eval-001.json
 ```
 
-The readiness gate runs **3 hard checks** (grader quality) and **8 soft checks** (quality signals). Hard checks ask "is the grader working?", NOT "is the base model good?" — GRPO can learn from low base model scores (DeepSeek R1-Zero: 15.6% → 71%).
+The readiness gate runs **4 hard checks** (sample_count, score_std, avg_score, zero_score_frac < 10%) and **soft checks** (quality signals). Hard checks ask "is the grader working?", NOT "is the base model good?" — GRPO can learn from low base model scores (DeepSeek R1-Zero: 15.6% → 71%). `score_concentration` is dynamically hard (> 85% in one bucket) or soft.
 
 **Hard checks** (must ALL pass): sample count >= 50, score std > 0.10, average score > 0.05, **zero-score fraction < 10%**.
 
@@ -824,7 +861,7 @@ The readiness gate runs **3 hard checks** (grader quality) and **8 soft checks**
 **⚠️ Run this after the readiness gate passes and before starting training.** Checks **per-prompt signal strength** — catches data that looks good in aggregate but produces zero gradient at the prompt level.
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py difficulty-probe \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py difficulty-probe \
   --file evaluations/eval-001.json \
   --save finetune-project/difficulty-report.json
 ```
@@ -835,7 +872,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py difficulty-probe \
 
 **Checkpoint** after difficulty probe passes:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step difficulty-probe --project-dir finetune-project --workflow-id $WORKFLOW_ID
+uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step difficulty-probe --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
 #### 7d. Start Training (only after readiness gate passes)
@@ -853,14 +890,14 @@ Training starts here — only reached when the readiness gate indicates data and
 > **⚠️ Start with 4B.** The 9B model OOMs with >100 records and K=8 on standard GPU allocations. Use 9B only for small, complex datasets (<100 records). Use 0.8B/2B for quick prototyping or when training keeps failing on larger models. The `create-training` script warns if the model/dataset combination risks OOM.
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
   --workflow-id $WORKFLOW_ID \
   --base-model "Qwen3.5-4B" \
   --output-model "project-v1" \
   --output-dir training-jobs
 
 # To override defaults (e.g., after diagnosing issues from previous iterations):
-# python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
+# uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 #   --workflow-id $WORKFLOW_ID \
 #   --base-model "Qwen3.5-4B" \
 #   --output-model "project-v2" \
@@ -897,7 +934,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 
 **Poll training in foreground:**
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
   --file training-jobs/train-001.json \
   --max-wait 7200
 ```
@@ -919,7 +956,7 @@ When training completes (or is early-stopped), proceed to **Step 8b (Post-Traini
 
 **Before analyzing, sync jobs** to catch status changes from the UI:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py sync-jobs --workflow-id $WORKFLOW_ID --output-dir finetune-project
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py sync-jobs --workflow-id $WORKFLOW_ID --output-dir finetune-project
 ```
 
 **Handle cancelled jobs**: Skip analysis for cancelled jobs. Log it in execution-log.md. If ALL jobs were cancelled, proceed to Step 9.
@@ -950,8 +987,8 @@ This runs during the eval-first loop (Step 7b→7c). Compute:
 4. Regenerate replacements if needed (`generate_records.py --append`)
 5. Re-validate and re-upload with `--force`:
    ```bash
-   python3 ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py finetune-project/training.jsonl --topics finetune-project/topics.json
-   python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl
+   uv run ${CLAUDE_SKILL_DIR}/scripts/validate_dataset.py finetune-project/training.jsonl --topics finetune-project/topics.json
+   uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl
    ```
 
 **When to skip regeneration:** If only 1-2 records out of 200+ scored 0, removing without replacement is fine.
@@ -961,7 +998,7 @@ This runs during the eval-first loop (Step 7b→7c). Compute:
 This runs after Step 7e. Training is expensive — analyze thoroughly:
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/analyze_training.py \
+uv run ${CLAUDE_SKILL_DIR}/scripts/analyze_training.py \
   --metrics-file training-jobs/$JOB_ID-metrics.json \
   --epoch-evals-file training-jobs/$JOB_ID-epoch-evals.json
 ```
@@ -985,7 +1022,7 @@ Combine eval scores with training metrics. Present per-topic eval scores alongsi
 
 **Checkpoint** after analysis:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step analyze --project-dir finetune-project --workflow-id $WORKFLOW_ID
+uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step analyze --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
 ### Step 9: Iterate (If Needed)
@@ -1002,7 +1039,7 @@ Apply fixes and re-eval. Do NOT create a training job.
 
 **Step 1: Diagnose.** Run `diagnose-grader` to understand WHY scores cluster and WHAT to change:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py diagnose-grader \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py diagnose-grader \
   --file evaluations/eval-001.json --workflow-id $WORKFLOW_ID
 ```
 This shows: score distribution by bucket, sample `reason` fields, auto-diagnosis, fix suggestions, and grader source code. **Read this output carefully — the root cause might be DATA, not grader.**
@@ -1014,13 +1051,13 @@ This shows: score distribution by bucket, sample `reason` fields, auto-diagnosis
 **Step 2: Fix.** Edit `grader.js` based on the diagnosis, then upload:
 ```bash
 # Edit grader.js, then update:
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader \
   --workflow-id $WORKFLOW_ID --file grader.js
 ```
 
 **Step 3: Dry-run.** Verify the fix before re-eval:
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
+uv run ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
   --workflow-id $WORKFLOW_ID --script grader.js \
   --row '{"messages": [{"role":"system","content":"..."}, {"role":"user","content":"..."}, {"role":"assistant","content":"I cannot provide specific figures without the filing."}]}'
 ```
@@ -1028,7 +1065,7 @@ Check that a "model refused" response now scores 0 (not 0.3).
 
 **Fixing the data** (requires re-upload):
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force \
   --workflow-id $WORKFLOW_ID --file training.jsonl
 ```
 
@@ -1044,11 +1081,11 @@ After training analysis (Step 8b), if results are unsatisfactory:
 
 ```bash
 # New eval after fixes
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
   --workflow-id $WORKFLOW_ID --output-dir evaluations
 
 # Only after readiness gate passes:
-python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
   --workflow-id $WORKFLOW_ID \
   --base-model "Qwen3.5-4B" \
   --output-model "project-v2" \
@@ -1082,6 +1119,7 @@ Read these when you need more detail on a specific step:
 | `reference/extraction-guide.md` | When extracting documents — Docling Serve setup, hybrid chunk API, knowledge_parts.json schema, pdftotext fallback |
 | `reference/grader-writing.md` | When writing the grader — 3 patterns, design guidelines, common mistakes |
 | `reference/topic-hierarchy.md` | When designing topics — structure, coverage analysis, balance scoring |
+| `reference/execution-log-template.md` | When writing the execution log — per-step fields, failure/resume patterns |
 | `reference/readiness-gate.md` | When interpreting readiness gate or difficulty probe results — full check tables, WARN safety guide |
 | `reference/iteration-strategy.md` | When analyzing results — diagnosis, stall patterns, escalation ladder |
 | `reference/analysis-strategy.md` | **Read at Step 8** — data fields, decision trees, action templates, interactive presentation |

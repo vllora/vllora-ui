@@ -1,33 +1,21 @@
 # How Record Generation Works — Deep Dive
 
-> **Note:** This document covers the RAG-based fallback generation path via `generate_records.py`. The primary path is NeMo Data Designer — see SKILL.md Step 4B and the repo at https://github.com/vllora/nemo.
+> **Note:** This document covers the default generation path via `generate_records.py`. NeMo Data Designer is an optional alternative — see SKILL.md Step 4B.
 
 The data generation step (Step 4) produces the actual training records — the prompts the model will practice on during fine-tuning. This document explains the generation strategy, how records are grounded in source material, the LLM calls involved, and the validation process.
 
-## Two-Path Architecture: NeMo Designer vs RAG Fallback
+## Two-Path Architecture
 
 Step 4 has two paths:
 
 | Path | When to use | Script |
 |------|-------------|--------|
-| **NeMo Data Designer (primary)** | NeMo server running at `localhost:8000`, any domain | repo: https://github.com/vllora/nemo — see SKILL.md Step 4B |
-| **RAG-based generation (this doc)** | No NeMo server, quick prototyping, fallback | `scripts/generate_records.py` |
+| **`generate_records.py` (default, this doc)** | Default path — no additional infrastructure needed | `scripts/generate_records.py` |
+| **NeMo Data Designer (optional)** | When NeMo server is running and you need judge columns + reference answers | repo: https://github.com/vllora/nemo — see SKILL.md Step 4B |
 
-**NeMo implements the two-stage question generation pattern** from arXiv 2509.25736 (https://arxiv.org/html/2509.25736v1):
+**NeMo's two-stage template** generates a `raw_question` without seeing retrieved text first (for diversity), then retrieves question-specific chunks, then refines into the final `user_message`. This is inspired by multi-stage retrieval pipelines (arXiv:2509.25736 describes a similar retrieve-generate-refine approach for telecom), but note the paper actually retrieves first — the "blind question first" design is a recipe choice, not a direct replication.
 
-```
-topic_path → rag-retrieval → retrieved_chunks
-                  ↓
-            raw_question    (drop:true — generated WITHOUT retrieved text to avoid anchoring bias)
-                  ↓
-raw_question → rag-retrieval → question_chunks   (drop:true — question-specific retrieval)
-                  ↓
-            user_message    (refines raw_question using question_chunks)
-```
-
-Key insight: generating the question blind first produces more diverse questions; the second retrieval then grounds the final `user_message` in source material specific to what was asked.
-
-**`generate_records.py` also has `--rag-second-retrieval`** — but this is different. It runs per-question retrieval after the question is already generated and only enriches `source_parts` metadata. It does **not** refine the generated question. The true two-stage refinement (where retrieved chunks improve question quality) only happens in NeMo.
+**`generate_records.py` with `--enrich-sources`** provides a lighter version of the same idea: generates questions grounded in linked parts, then enriches `source_parts` metadata with question-specific retrieval. Unlike `--use-rag`, `--enrich-sources` is independent and only requires `--workflow-id`. It does not refine the question text itself — it only supplements traceability after generation.
 
 ---
 
@@ -38,7 +26,7 @@ A training record is a **prompt** — a system message + user message that the m
 ```json
 {
   "messages": [
-    {"role": "system", "content": "You are an expert chess tutor...\n\nSpecialize in: tactical chess patterns and combinations.\n\nFocus on: fork tactics — knight forks, pawn forks, queen forks."},
+    {"role": "system", "content": "You are an expert chess tutor who teaches tactical and strategic concepts. When analyzing chess positions, identify tactical patterns including forks, pins, skewers, and discovered attacks, prioritizing forcing sequences. For fork opportunities, calculate all candidate moves that attack two or more pieces simultaneously, evaluating whether the fork is absolute or can be parried."},
     {"role": "user", "content": "Explain the knight fork and when it's most effective"}
   ],
   "id": "forks-001",
@@ -201,13 +189,15 @@ This means a topic with 5 prompt types completes in ~1 LLM call time, not 5x.
   │  │    │  Segment 1: --system-prompt CLI arg          │ ← root        │  │
   │  │    │  "You are an expert chess tutor..."           │   persona     │  │
   │  │    │                                               │               │  │
-  │  │    │  Segment 2: ancestor[0].system_prompt         │ ← mid-level  │  │
-  │  │    │  "Specialize in: tactical patterns"           │   focus       │  │
+  │  │    │  Segment 2: ancestor[0].system_prompt         │ ← domain      │  │
+  │  │    │  "When analyzing chess positions, identify    │   focus       │  │
+  │  │    │   tactical patterns including forks, pins..." │               │  │
   │  │    │                                               │               │  │
-  │  │    │  Segment 3: leaf.system_prompt                │ ← leaf        │  │
-  │  │    │  "Focus on: knight fork tactics"              │   focus       │  │
+  │  │    │  Segment 3: leaf.system_prompt                │ ← skill       │  │
+  │  │    │  "For fork opportunities, calculate all       │   focus       │  │
+  │  │    │   candidate moves that attack two or more..." │               │  │
   │  │    └─────────────────────────────────────────────┘                │  │
-  │  │    Joined with \n\n → composed_prompt                             │  │
+  │  │    Joined with space → single flowing paragraph                   │  │
   │  │                                                                   │  │
   │  │  NOTE: This is PER-TOPIC (same for all records of this topic).    │  │
   │  │  Different leaf topics get different composed prompts.             │  │
@@ -425,9 +415,9 @@ This means a topic with 5 prompt types completes in ~1 LLM call time, not 5x.
   │  SCOPE:   Per-topic (hierarchical composition)           │
   │  SOURCE:  --system-prompt CLI arg + topic hierarchy      │
   │                                                          │
-  │  "You are an expert chess tutor...\n\n                   │
-  │   Specialize in: tactical patterns...\n\n                │
-  │   Focus on: knight fork tactics..."                      │
+  │  "You are an expert chess tutor... When analyzing        │
+  │   chess positions, identify tactical patterns...         │
+  │   For fork opportunities, calculate all candidate..."    │
   │                                                          │
   │  Does NOT contain source material / knowledge parts.     │
   │  The system prompt is about WHO the model is.            │
@@ -458,20 +448,20 @@ Each training record gets a **composed** system prompt, not just the root `--sys
 
 1. **`build_topic_index(topics)`** — creates a lookup dict from topic ID to topic dict
 2. **`get_ancestor_chain(topic, topic_index)`** — walks from leaf to root via `parent_id`, returns `[root, ..., parent]` (excludes the leaf)
-3. **`compose_system_prompt(root_prompt, ancestors, leaf)`** — joins segments with `\n\n`:
+3. **`compose_system_prompt(root_prompt, ancestors, leaf)`** — joins segments with a space (`" ".join()`) into a single flowing paragraph:
    - `root_prompt` (the `--system-prompt` CLI argument — the model persona)
-   - Each ancestor's `system_prompt` (falls back to `"Specialize in: {name}"` if missing)
-   - The leaf's `system_prompt` (falls back to `"Focus on: {name}"` if missing)
+   - Each ancestor's `system_prompt` (falls back to the topic's `name` field if missing)
+   - The leaf's `system_prompt` (falls back to the topic's `name` field if missing)
 
-**Example**: For a 3-level topic hierarchy with leaf topic "Knight Forks":
+**Example**: For a 2-level topic hierarchy with leaf topic "Fork Detection":
 
 ```
 Root persona:     "You are an expert chess tutor who teaches tactical and strategic concepts."
-Root topic:       "Specialize in: tactical chess patterns and combinations."
-Leaf topic:       "Focus on: knight fork tactics — attacking king and rook simultaneously."
+Domain topic:     "When analyzing chess positions, identify tactical patterns including forks, pins, skewers, and discovered attacks, prioritizing forcing sequences."
+Leaf (skill):     "For fork opportunities, calculate all candidate moves that attack two or more pieces simultaneously, evaluating whether the fork is absolute or can be parried."
 ```
 
-The composed prompt in `messages[0].content` becomes all three segments joined by `\n\n` (target: 50-150 words total, 3 segments for a 3-level hierarchy).
+The composed prompt in `messages[0].content` becomes all segments joined with a space into a single flowing paragraph (target: 50-150 words total, 3 segments for a 2-level hierarchy).
 
 Records for different leaf topics get **different composed prompts**, even though they share the same root persona and may share intermediate ancestors. This gives each topic's training records a progressively narrower focus.
 
@@ -649,32 +639,54 @@ sqlite3 $DB "SELECT topic, COUNT(*) FROM workflow_records WHERE workflow_id='$WF
 
 ---
 
+## Built-in Safeguards
+
+`generate_records.py` has several safeguards to prevent silent data quality issues:
+
+| Safeguard | What it does |
+|-----------|-------------|
+| **Zero-relation guard** | Skips topics with no source parts instead of generating hallucinated questions. Prints clear warning with remediation advice. |
+| **LLM retry** | Retries failed LLM calls once (MAX_LLM_RETRIES=2). Logs each retry attempt and which prompt types failed per topic. |
+| **Pre-flight relations check** | Before generation starts, lists all leaf topics with zero relations so you can fix `relations.json` first. |
+| **System prompt length warning** | Warns if the composed system prompt exceeds 200 words (target: 50-150). |
+| **Enrich-sources caching** | Caches `--enrich-sources` gateway search results by question keywords within each topic to avoid redundant calls. |
+| **Per-topic summary table** | Prints `Topic | Target | Got | Sources | Prompt Types` at the end, with ⚠ for shortfalls. |
+| **Over-request + trim** | Requests 1.2× the target per topic, then trims to exact count. Compensates for LLM under-delivery. |
+| **Relevance filtering** | All retrieval functions (RAG + enrich-sources) skip parts marked `relevant: false`. |
+
+---
+
 ## Common Issues
 
 ### Few or no records generated
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
+| 0 records for a topic | Topic has zero relations (no source parts) | The script **skips** topics with no source material and prints a warning. Add relations via relation-builder or use `--use-rag` |
 | 0 records | LLM API key missing or invalid | Check if `OPENAI_API_KEY` is set |
 | 0 records | `chat_completion.py` not found | Check `scripts/chat_completion.py` exists |
-| <10 records per topic | Some prompt-type calls failed | Check stderr for per-type error messages |
+| <10 records per topic | Some prompt-type calls failed | Check stderr — the script retries once per prompt type and lists failed types per topic |
 | All records in one topic | Agent only processed one leaf topic | Check if it looped over all leaves |
+
+### Pre-flight validation
+
+The script runs a **pre-flight check** before generation: it verifies every leaf topic has at least 1 relation. Topics with zero relations are listed upfront as warnings, so you can fix `relations.json` before waiting for LLM calls.
 
 ### Records not grounded in source material
 
 - **Symptom**: Prompts are generic ("Tell me about chess") instead of specific ("Explain the Lucena position from Chapter 8")
 - **Cause**: `relations.json` is empty, or the generation prompt didn't include source material
-- **Check**: Look at `source_parts` in records — empty arrays mean no grounding
+- **Check**: Look at `source_parts` in records — empty arrays mean no grounding. The per-topic summary table at the end shows `Sources` count per topic.
 
 ### Duplicate or repetitive prompts
 
 - **Cause**: Even with multi-call, overlapping prompt types can produce similar prompts
-- **Fix**: Run `deduplicate_records.py --threshold 0.85` after generation
+- **Fix**: **Always** run `deduplicate_records.py --threshold 0.85` after generation. This is mandatory, not optional. Expect 5-15% reduction. If duplicates exceed 20%, the topic hierarchy has too much overlap — consider merging topics.
 
 ### Topic distribution is heavily skewed
 
 - **Symptom**: One topic has 50 records, another has 3
-- **Check**: The script prints per-topic planned counts at startup. Default is equal distribution. If using `--weight-by-source` and weighting looks wrong, adjust `--min-per-topic` / `--max-per-topic` or switch back to equal (drop the flag)
+- **Check**: The per-topic summary table printed at the end shows `Target` vs `Got` for each topic with ⚠ for shortfalls. Default is equal distribution. If using `--weight-by-source` and weighting looks wrong, adjust `--min-per-topic` / `--max-per-topic` or switch back to equal (drop the flag)
 
 ---
 

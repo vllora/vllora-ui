@@ -234,6 +234,16 @@ export function KnowledgePartViewer({ sourceId, partId }: KnowledgePartViewerPro
           )}>
             {config.label}
           </span>
+          {part.relevant === true && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded font-medium uppercase tracking-wider bg-blue-500/10 text-blue-400">
+              Relevant
+            </span>
+          )}
+          {part.relevant === false && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded font-medium uppercase tracking-wider bg-orange-500/10 text-orange-400">
+              Irrelevant
+            </span>
+          )}
           {partIndex >= 0 && (
             <span className="text-[10px] text-muted-foreground/40 shrink-0">
               {partIndex + 1} of {totalParts}

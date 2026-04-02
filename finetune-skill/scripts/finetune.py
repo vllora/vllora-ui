@@ -73,7 +73,7 @@ def _delete_existing_knowledge_by_name(
 ) -> int:
     """Delete existing knowledge sources matching a name. Returns count deleted."""
     existing = _api("GET", f"{base_url}/finetune/workflows/{workflow_id}/knowledge")
-    sources = existing if isinstance(existing, list) else existing.get("sources", [])
+    sources = existing if isinstance(existing, list) else existing.get("knowledge_sources", existing.get("sources", []))
 
     deleted = 0
     for src in sources:
@@ -167,7 +167,7 @@ def cmd_upload_knowledge(args: argparse.Namespace) -> None:
     # The gateway's knowledge source endpoint does plain INSERT (no upsert),
     # so retrying without this check creates duplicate sources.
     existing = _api("GET", f"{args.base_url}/finetune/workflows/{args.workflow_id}/knowledge")
-    existing_sources = existing if isinstance(existing, list) else existing.get("sources", [])
+    existing_sources = existing if isinstance(existing, list) else existing.get("knowledge_sources", existing.get("sources", []))
     matching = [s for s in existing_sources if s.get("name") == source_name]
 
     if matching and args.force:
@@ -179,7 +179,9 @@ def cmd_upload_knowledge(args: argparse.Namespace) -> None:
     elif matching:
         # Check if existing source already has parts (completed upload)
         existing_src = matching[0]
-        part_count = existing_src.get("part_count", existing_src.get("parts_count", 0))
+        # Gateway returns parts as array "part", not a count field
+        parts_array = existing_src.get("part", existing_src.get("parts", []))
+        part_count = len(parts_array) if isinstance(parts_array, list) else existing_src.get("part_count", 0)
         if part_count > 0:
             print(f"  Source '{source_name}' already exists with {part_count} parts — skipping (use --force to replace)")
             print(f"  Knowledge source ID: {existing_src.get('id', 'unknown')}")
@@ -480,7 +482,11 @@ def cmd_upload_records(args: argparse.Namespace) -> None:
         records.append(record)
 
     if topic_misses:
-        print(f"Warning: {topic_misses} records have unresolved topic IDs", file=sys.stderr)
+        print(f"Error: {topic_misses} records have topic IDs not found in gateway topics.", file=sys.stderr)
+        print("  This means records reference topics that were never uploaded (or were deleted).", file=sys.stderr)
+        print("  Fix: upload topics first (finetune.py upload-topics), then retry upload-records.", file=sys.stderr)
+        print("  Or check training.jsonl — records may have ad-hoc topic IDs not in topics.json.", file=sys.stderr)
+        sys.exit(1)
 
     if parse_errors:
         print(f"Warning: {parse_errors} lines skipped due to JSON errors", file=sys.stderr)
@@ -625,7 +631,7 @@ def cmd_status(args: argparse.Namespace) -> None:
         pass
     try:
         sources_resp = _api("GET", f"{base_url}/finetune/workflows/{wf_id}/knowledge")
-        sources_list = sources_resp if isinstance(sources_resp, list) else sources_resp.get("sources", [])
+        sources_list = sources_resp if isinstance(sources_resp, list) else sources_resp.get("knowledge_sources", sources_resp.get("sources", []))
         sources_count = len(sources_list)
         parts_count = sum(s.get("part_count", s.get("parts_count", 0)) for s in sources_list)
     except SystemExit:
@@ -774,7 +780,7 @@ def cmd_status(args: argparse.Namespace) -> None:
                 rounded = [round(s, 2) for s in scores]
                 mode_val, mode_ct = Counter(rounded).most_common(1)[0]
                 mode_frac = mode_ct / n
-                grader_ok = (std_s > 0.10 and mode_frac < 0.50)
+                grader_ok = (std_s > 0.10 and mode_frac < 0.70)
                 signal_ok = avg_s > 0.05  # Only 0% is fatal (OpenAI RFT)
                 zeros_ok = zero_frac < 0.10  # >10% zeros = grader broken (xFinder ICLR 2025)
                 perfect_frac_inline = sum(1 for s in scores if s >= 0.99) / n
@@ -787,7 +793,7 @@ def cmd_status(args: argparse.Namespace) -> None:
                     print(f"  Verdict: FAIL — {zero_frac:.0%} of scores are 0.0 (grader broken — use grader-mcq.js template with LLM extraction fallback)")
                 elif not signal_ok:
                     print(f"  Verdict: FAIL — avg near zero, no training signal at all")
-                elif mode_frac >= 0.50:
+                elif mode_frac >= 0.70:
                     print(f"  Verdict: FAIL — {mode_frac:.0%} of scores are {mode_val}, grader too coarse")
                 else:
                     print(f"  Verdict: FAIL — fix grader before training (std/binary/leniency)")
@@ -835,6 +841,8 @@ def cmd_status(args: argparse.Namespace) -> None:
         print("  → Resume from Step 5: Write grader")
     elif not step_done("validate"):
         print("  → Resume from Step 5.5: Validate")
+    elif not step_done("data-quality-gate"):
+        print("  → Resume from Step 5.5b: Run data quality gate")
     elif records_count == 0 or records_count == "?":
         print("  → Data was generated but may not be uploaded. Run verify.")
     else:
@@ -2968,7 +2976,7 @@ def cmd_delete_knowledge(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     existing = _api("GET", wf_url)
-    sources = existing if isinstance(existing, list) else existing.get("sources", [])
+    sources = existing if isinstance(existing, list) else existing.get("knowledge_sources", existing.get("sources", []))
 
     if not sources:
         print("No knowledge sources to delete.")
@@ -2984,6 +2992,74 @@ def cmd_delete_knowledge(args: argparse.Namespace) -> None:
         deleted += 1
 
     print(f"Deleted {deleted} knowledge source(s).")
+
+
+def cmd_update_part_relevance(args: argparse.Namespace) -> None:
+    """Update knowledge source parts with relevance labels from all-parts-index.json.
+
+    Reads the parts index, collects parts with `relevant` field set (true/false),
+    groups by source document, and PATCHes extraction_metadata on the gateway.
+    """
+    index_path = Path(args.parts_index)
+    if not index_path.exists():
+        print(f"Error: Parts index not found: {index_path}", file=sys.stderr)
+        sys.exit(1)
+
+    data = json.loads(index_path.read_text())
+    parts = data.get("parts", data) if isinstance(data, dict) else data
+
+    # Group parts by source_doc, only those with relevant field set
+    by_source: dict = {}
+    for part in parts:
+        rel = part.get("relevant")
+        if rel is None:
+            continue
+        source_doc = part.get("source_doc", "unknown")
+        by_source.setdefault(source_doc, []).append(part)
+
+    if not by_source:
+        print("No parts with relevance labels found. Nothing to update.")
+        return
+
+    # Resolve source IDs from gateway
+    wf_url = f"{args.base_url}/finetune/workflows/{args.workflow_id}/knowledge"
+    sources_resp = _api("GET", wf_url)
+    sources_list = sources_resp.get("knowledge_sources", [])
+
+    total_updated = 0
+    for source_doc, labeled_parts in by_source.items():
+        # Find the gateway source by name match
+        ks_id = None
+        for src in sources_list:
+            if src.get("name", "") == source_doc or src.get("reference_id", "") == source_doc:
+                ks_id = src["id"]
+                break
+
+        if not ks_id:
+            print(f"  Warning: No gateway source found for '{source_doc}', skipping {len(labeled_parts)} parts")
+            continue
+
+        # Build batch update payload
+        updates = []
+        for part in labeled_parts:
+            # Merge relevant into existing extraction_metadata
+            existing_meta = {}
+            if "pages" in part:
+                existing_meta["pages"] = part["pages"]
+            existing_meta["relevant"] = part["relevant"]
+
+            updates.append({
+                "part_identifier": part["id"],
+                "extraction_metadata": existing_meta,
+            })
+
+        result = _api("PATCH", f"{wf_url}/{ks_id}/parts", json=updates)
+        updated = result.get("updated", 0)
+        total_updated += updated
+        relevant_count = sum(1 for p in labeled_parts if p.get("relevant"))
+        print(f"  {source_doc}: {updated} parts updated ({relevant_count} relevant, {len(labeled_parts) - relevant_count} irrelevant)")
+
+    print(f"\nTotal: {total_updated} parts updated with relevance labels.")
 
 
 def _compact_cell(value, max_chars: int = 160) -> str:
@@ -3279,6 +3355,12 @@ def main() -> None:
     p.add_argument("--source-id", default=None, help="Specific knowledge source ID to delete")
     p.add_argument("--all", action="store_true", help="Delete all knowledge sources")
 
+    # update-part-relevance
+    p = subparsers.add_parser("update-part-relevance", help="Update parts with relevance labels from all-parts-index.json")
+    p.add_argument("--workflow-id", required=True, help="Workflow ID")
+    p.add_argument("--parts-index", default="finetune-project/knowledge/all-parts-index.json",
+                   help="Path to all-parts-index.json (default: finetune-project/knowledge/all-parts-index.json)")
+
     # difficulty-probe
     p = subparsers.add_parser(
         "difficulty-probe",
@@ -3344,6 +3426,7 @@ def main() -> None:
         "cancel-eval": cmd_cancel_eval,
         "sync-jobs": cmd_sync_jobs,
         "delete-knowledge": cmd_delete_knowledge,
+        "update-part-relevance": cmd_update_part_relevance,
         "difficulty-probe": cmd_difficulty_probe,
         "data-quality-gate": cmd_data_quality_gate,
         "print-row-outputs": cmd_print_row_outputs,

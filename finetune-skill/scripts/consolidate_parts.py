@@ -252,6 +252,58 @@ def consolidate_parts(
         if chunks:
             p.setdefault("extraction_metadata", {})["source_chunks"] = sorted(set(chunks))
 
+    # Consolidate table fragments with the same title.
+    # Docling splits multi-page tables (e.g., EIC lookup table) into many fragments
+    # per page, all with the same title. These are NOT duplicates — each contains
+    # a different portion of the table (different income ranges, etc.).
+    # Strategy: merge all fragments with the same title into one combined table part,
+    # but drop tiny fragments (<50 chars) that are just headers like "(Continued)".
+    table_by_title: dict[str, list[dict]] = {}
+    non_table_parts: list[dict] = []
+    for p in merged:
+        if p["type"] == "table":
+            title = p.get("title", "").strip()
+            if title:
+                table_by_title.setdefault(title, []).append(p)
+            else:
+                non_table_parts.append(p)
+        else:
+            non_table_parts.append(p)
+
+    merged_tables = 0
+    for title, table_parts in table_by_title.items():
+        if len(table_parts) <= 1:
+            non_table_parts.append(table_parts[0])
+            continue
+
+        # Drop tiny fragments (<50 chars) like "(Continued)" headers
+        substantial = [p for p in table_parts if len(p.get("content", "")) >= 50]
+        if not substantial:
+            substantial = table_parts  # keep all if none are substantial
+
+        if len(substantial) == 1:
+            non_table_parts.append(substantial[0])
+            merged_tables += len(table_parts) - 1
+        else:
+            # Merge all substantial fragments into one combined table part
+            combined = dict(substantial[0])
+            combined["content"] = "\n\n".join(p.get("content", "") for p in substantial)
+            # Merge page ranges
+            all_pages = []
+            for p in substantial:
+                all_pages.extend(p.get("extraction_metadata", {}).get("pages", []))
+            if all_pages:
+                combined.setdefault("extraction_metadata", {})["pages"] = sorted(set(all_pages))
+            non_table_parts.append(combined)
+            merged_tables += len(table_parts) - 1
+
+    # Preserve original ordering
+    id_order = {p.get("id", ""): i for i, p in enumerate(merged)}
+    merged = sorted(non_table_parts, key=lambda p: id_order.get(p.get("id", ""), 999))
+
+    if merged_tables:
+        print(f"  [INFO] Consolidated {merged_tables} table fragments into combined table parts (by title)")
+
     # Drop short text parts
     before_count = len(merged)
     consolidated = [

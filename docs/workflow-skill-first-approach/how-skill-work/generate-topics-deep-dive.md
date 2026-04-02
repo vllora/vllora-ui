@@ -46,7 +46,7 @@ A single chapter may feed into multiple skill-based topics. A single skill-based
 
 The "Hard Examples" paper (arXiv:2508.14094) found that training on the hardest 10% of examples yields **47% gains** vs 3-15% for easy examples. "No Prompt Left Behind" (arXiv:2509.21880) showed that **30-99% of prompts become zero-variance** (all rollouts same reward → zero gradient) during GRPO training — easy prompts go zero-variance first.
 
-**Implication**: Each leaf topic should target a specific difficulty tier. Don't mix easy and hard examples in the same topic — this makes it impossible to control the difficulty distribution during training.
+**Implication**: Each leaf topic should have an `expected_difficulty` metadata field that reflects how hard it is for the base model. This enables difficulty-weighted record distribution during training — allocating more records to hard topics where GRPO has the highest learning signal.
 
 ### Principle 4: Don't Distribute Evenly — Weight Toward Hard
 
@@ -73,49 +73,35 @@ This distribution should be measured *after* running the base model evaluation (
 
 ## Recommended Topic Hierarchy Design
 
-### Three-Level Structure: Domain → Skill → Difficulty
+### Two-Level Structure: Domain → Skill (Difficulty as Metadata)
 
-Based on the research, a well-designed hierarchy has three conceptual levels:
+Based on the research, a well-designed hierarchy has two structural levels, with difficulty tracked as metadata on leaf topics:
 
 ```
 Level 1: Content Domain (broad area of knowledge)
-  Level 2: Skill/Capability (what the model learns to do)
-    Level 3: Difficulty Tier (how hard it is for the base model)
+  Level 2: Skill/Capability (leaf topic — what the model learns to do)
+    └── expected_difficulty: "easy" | "medium" | "hard" (metadata field, NOT a structural level)
 ```
 
 **Example for a Chess Tutor fine-tune:**
 
 ```
 Chess Tactics (domain)
-├── Fork Detection (skill)
-│   ├── fork-detection-basic        → puzzles where fork is obvious (1-2 candidate moves)
-│   └── fork-detection-complex      → puzzles requiring 2-3 move calculation to find fork
-├── Pin Recognition (skill)
-│   ├── pin-recognition-absolute    → absolute pins against the king (clear pattern)
-│   └── pin-recognition-relative    → relative pins requiring material evaluation
-└── Combination Calculation (skill)
-    ├── combination-2-move          → 2-move forced sequences
-    └── combination-3-plus-move     → 3+ move sequences with branching
+├── Fork Detection (skill, leaf)         expected_difficulty: "medium"
+├── Pin Recognition (skill, leaf)        expected_difficulty: "medium"
+└── Combination Calculation (skill, leaf) expected_difficulty: "hard"
 
 Chess Strategy (domain)
-├── Pawn Structure Evaluation (skill)
-│   ├── pawn-structure-static       → evaluate given position (no calculation needed)
-│   └── pawn-structure-dynamic      → evaluate after a pawn break sequence
-├── Piece Placement (skill)
-│   ├── piece-placement-middlegame  → standard middlegame piece coordination
-│   └── piece-placement-endgame     → endgame-specific piece activity
-└── Plan Formation (skill)
-    ├── plan-single-idea            → positions with one clear plan
-    └── plan-competing-ideas        → positions requiring plan comparison
+├── Pawn Structure Evaluation (skill, leaf)  expected_difficulty: "medium"
+├── Piece Placement (skill, leaf)            expected_difficulty: "easy"
+└── Plan Formation (skill, leaf)             expected_difficulty: "hard"
 
 Chess Endgames (domain)
-├── King & Pawn Technique (skill)
-│   ├── kp-basic-opposition         → simple opposition and key squares
-│   └── kp-complex-breakthrough     → pawn breakthroughs and triangulation
-└── Rook Endgame Technique (skill)
-    ├── rook-endgame-lucena         → Lucena/Philidor positions (pattern recognition)
-    └── rook-endgame-complex        → rook + multiple pawns (calculation required)
+├── King & Pawn Technique (skill, leaf)      expected_difficulty: "medium"
+└── Rook Endgame Technique (skill, leaf)     expected_difficulty: "hard"
 ```
+
+Each skill IS the leaf topic. Difficulty is not a separate structural level — it is an `expected_difficulty` metadata field on each leaf, used to inform record distribution weighting.
 
 ### Topic Count Guidelines
 
@@ -133,7 +119,7 @@ Derived from research (arXiv:2410.15226 for breadth, arXiv:2508.14094 for per-to
 - **Minimum 15 records per leaf topic** — below this, zero-variance collapse happens too early in training (arXiv:2509.21880)
 - **Sweet spot ~20 records per topic** — diminishing returns beyond this for a given topic (arXiv:2410.15226)
 - **More leaf topics is almost always better** — split before you deepen
-- **Difficulty tiers double your effective topic count** — 10 skills × 2 difficulty tiers = 20 leaf topics
+- **Difficulty metadata enables targeted weighting** — leaf topics with `expected_difficulty: "hard"` get more records allocated
 
 ### What Changed from Previous Guidelines
 
@@ -143,8 +129,8 @@ Derived from research (arXiv:2410.15226 for breadth, arXiv:2508.14094 for per-to
 | Mirror document structure | Organize by skill/capability | STEPS taxonomy outperforms content-based (arXiv:2601.03676) |
 | 10-30 records per leaf | 15-30 records per leaf, sweet spot ~20 | Redundancy hurts beyond 20 (arXiv:2410.15226) |
 | Balance score targets uniformity | Weight toward hard topics (40-50%) | Hard examples yield 47% gains vs 3-15% (arXiv:2508.14094) |
-| No difficulty dimension | Explicit difficulty tiers in hierarchy | GRPO needs outcome variance; easy topics waste compute |
-| Topics = content categories | Topics = skill × difficulty intersection | DeepSeek-R1, STEPS, AceGRPO all organize by capability |
+| No difficulty dimension | `expected_difficulty` metadata on leaf topics | GRPO needs outcome variance; easy topics waste compute |
+| Topics = content categories | Topics = skills with difficulty as metadata | DeepSeek-R1, STEPS, AceGRPO all organize by capability |
 
 ---
 
@@ -158,7 +144,7 @@ Derived from research (arXiv:2410.15226 for breadth, arXiv:2508.14094 for per-to
                     │                                  │
   objective   ────► │  2. Designs skill-based          │
   (from Step 1)     │     hierarchy with difficulty    │
-                    │     tiers at leaf level           │
+                    │     metadata on leaf topics       │
                     └─────────────────────────────────┘
                               │
                               ▼
@@ -197,8 +183,8 @@ Derived from research (arXiv:2410.15226 for breadth, arXiv:2508.14094 for per-to
 3. **Identifies skills** — extracts the capabilities the source material can teach (NOT the document structure)
 4. **Designs topics** — creates a tree structure where:
    - Root topics = broad capability domains (scale with dataset size)
-   - Mid-level topics = specific skills or competencies
-   - Leaf topics = skill × difficulty intersection (each should support 15-30 records)
+   - Leaf topics = specific skills or competencies (each should support 15-30 records)
+   - Each leaf topic gets an `expected_difficulty` metadata field ("easy", "medium", or "hard")
 5. **Writes `topics.json`** — a flat array with `parent_id` references for hierarchy
 
 ### Topic Structure
@@ -209,25 +195,22 @@ Derived from research (arXiv:2410.15226 for breadth, arXiv:2508.14094 for per-to
     "id": "tactics",
     "name": "Tactical Pattern Recognition",
     "parent_id": null,
-    "system_prompt": "Specialize in: identifying and executing tactical patterns in chess positions"
+    "system_prompt": "When presented with chess positions, identify and execute tactical patterns including forks, pins, skewers, and discovered attacks, prioritizing forcing sequences that win material or deliver checkmate."
   },
   {
     "id": "fork-detection",
     "name": "Fork Detection",
     "parent_id": "tactics",
-    "system_prompt": "Specialize in: recognizing fork opportunities across all piece types"
-  },
-  {
-    "id": "fork-detection-complex",
-    "name": "Complex Fork Detection",
-    "parent_id": "fork-detection",
-    "system_prompt": "Focus on: multi-move fork setups requiring 2-3 moves of calculation, where the fork is not immediately visible"
+    "expected_difficulty": "medium",
+    "system_prompt": "For positions containing fork opportunities, calculate all candidate moves that attack two or more pieces simultaneously, evaluating whether the fork is absolute or can be parried."
   }
 ]
 ```
 
+Note: `"fork-detection"` is a leaf topic (no children) with `expected_difficulty` metadata. The hierarchy is 2 levels: `tactics` (domain) -> `fork-detection` (skill leaf).
+
 Key fields:
-- **`id`** — unique identifier, used in records (`"topic": "fork-detection-complex"`) and relations
+- **`id`** — unique identifier, used in records (`"topic": "fork-detection"`) and relations
 - **`parent_id`** — links to parent topic (null for roots), creates the tree
 - **`system_prompt`** — a segment in the hierarchical prompt composition chain. During record generation, this field is composed with ancestor system_prompts to form the full system message (see [System Prompt Composition](#system-prompt-composition) below)
 
@@ -240,8 +223,8 @@ The agent does NOT mirror the document structure. Instead, it extracts skills:
 | 1. Read objective | Understand target behaviors | "Teach chess tactics and strategy" |
 | 2. Scan source material | Identify what skills the material can teach | Forks, pins, calculation, evaluation, planning |
 | 3. Group by capability domain | Create root topics from skill clusters | Tactical Patterns, Strategic Thinking, Endgame Technique |
-| 4. Identify specific skills | Create mid-level topics per skill | Fork Detection, Pin Recognition, Combination Calculation |
-| 5. Add difficulty dimension | Create leaf topics per difficulty tier | fork-detection-basic, fork-detection-complex |
+| 4. Identify specific skills | Create leaf topics per skill | Fork Detection, Pin Recognition, Combination Calculation |
+| 5. Assign difficulty metadata | Set `expected_difficulty` on each leaf topic | fork-detection: "medium", combination-calculation: "hard" |
 | 6. Cross-reference sources | Each leaf topic may draw from multiple chapters/sections | "Fork Detection" draws from Ch.3, Ch.7, and the workbook |
 
 **Example mapping** (a single source chapter feeds multiple skill topics):
@@ -267,12 +250,12 @@ Note how "Combination Calculation" draws from both Chapter 3 AND Chapter 5. This
 |------|-----|--------|
 | Organize by skill, not chapter | Skill taxonomies outperform content-based | STEPS (arXiv:2601.03676) |
 | Scale root topics with dataset (2-15) | More breadth = better coverage | arXiv:2410.15226 |
-| 2-3 levels deep | Deeper = more specific but harder to balance | — |
+| 2 levels (Domain → Skill) | Simple structure, difficulty is metadata not hierarchy | — |
 | 15-30 records per leaf (target ~20) | Redundancy hurts beyond 20 | arXiv:2410.15226 |
-| Include difficulty tiers at leaf level | GRPO needs outcome variance | arXiv:2508.14094, arXiv:2509.21880 |
+| Assign `expected_difficulty` metadata to leaf topics | GRPO needs outcome variance; informs record distribution weighting | arXiv:2508.14094, arXiv:2509.21880 |
 | Descriptive system_prompt | Each topic's segment composes into the final training prompt | — |
-| Root: "Specialize in: ..." | Root topics set the broad domain focus | — |
-| Leaf: "Focus on: ..." | Leaf topics narrow to specific scenarios + difficulty | — |
+| Root: behavioral instruction (When/For/Given) | Root topics set the broad domain focus with action verbs | — |
+| Leaf: behavioral instruction (When/For/Given) | Leaf topics narrow to specific scenarios with action verbs | — |
 | No overlapping topics | A record should clearly belong to one leaf topic | — |
 | Each leaf topic draws from 1+ source sections | Skills cut across document boundaries | DeepSeek-R1 (arXiv:2501.12948) |
 
@@ -283,24 +266,21 @@ The `system_prompt` field on each topic is not used in isolation. During record 
 ```
 [Root persona from --system-prompt]    "You are an expert chess tutor..."
 
-[Root topic system_prompt]             "Specialize in: tactical pattern recognition."
+[Root topic system_prompt]             "When presented with chess positions, identify and execute tactical patterns..."
 
-[Parent topic system_prompt]           "Specialize in: recognizing fork opportunities."
-
-[Leaf topic system_prompt]             "Focus on: multi-move fork setups requiring 2-3 moves of calculation."
+[Leaf topic system_prompt]             "For positions containing fork opportunities, calculate all candidate moves..."
 ```
 
-Segments are joined with `\n\n`. For a 3-level hierarchy this produces 4 segments (root persona + 3 topic levels). Target: **50-150 words total**.
+Segments are joined with a space (`" ".join()`) to produce a single flowing paragraph. For a 2-level hierarchy this produces 3 segments (root persona + domain topic + leaf topic). Target: **50-150 words total**.
 
 **Writing guidelines for system_prompt fields:**
 
 | Level | Convention | Example |
 |-------|-----------|---------|
-| Root topic | `"Specialize in: ..."` | `"Specialize in: tactical pattern recognition in chess positions."` |
-| Mid-level (skill) | `"Specialize in: ..."` | `"Specialize in: recognizing fork opportunities across all piece types."` |
-| Leaf topic (skill + difficulty) | `"Focus on: ..."` | `"Focus on: multi-move fork setups requiring 2-3 moves of calculation, where the fork is not immediately visible."` |
+| Root topic (domain) | Behavioral instruction using When/For/Given + action verbs | `"When presented with chess positions, identify and execute tactical patterns including forks, pins, skewers, and discovered attacks, prioritizing forcing sequences that win material or deliver checkmate."` |
+| Leaf topic (skill) | Behavioral instruction narrowing to specific skill | `"For positions containing fork opportunities, calculate all candidate moves that attack two or more pieces simultaneously, evaluating whether the fork is absolute or can be parried."` |
 
-Each level adds specificity without contradicting its parent. If a topic has no `system_prompt`, the script falls back to its `name` field (e.g., `"Specialize in: Fork Detection"`).
+Each level adds specificity without contradicting its parent. Use "When/For/Given + action verbs" patterns instead of "Specialize in:" or "Focus on:" prefixes. If a topic has no `system_prompt`, the script falls back to its `name` field.
 
 For research and design guidelines, see [prompt-composition-research.md](prompt-composition-research.md).
 
@@ -367,11 +347,11 @@ Matching parts to topics requires scanning `all-parts-index.json` (potentially 3
 
 ```json
 [
-  {"topic_identifier": "fork-detection-complex", "part_identifier": "chess-tactics-chapter-3-forks"},
-  {"topic_identifier": "fork-detection-complex", "part_identifier": "workbook-section-advanced-tactics"},
-  {"topic_identifier": "fork-detection-complex", "part_identifier": "game-collection-tactical-themes"},
-  {"topic_identifier": "pin-recognition-absolute", "part_identifier": "chess-tactics-chapter-3-pins"},
-  {"topic_identifier": "pin-recognition-absolute", "part_identifier": "endgame-book-chapter-2-pin-technique"}
+  {"topic_identifier": "fork-detection", "part_identifier": "chess-tactics-chapter-3-forks"},
+  {"topic_identifier": "fork-detection", "part_identifier": "workbook-section-advanced-tactics"},
+  {"topic_identifier": "fork-detection", "part_identifier": "game-collection-tactical-themes"},
+  {"topic_identifier": "pin-recognition", "part_identifier": "chess-tactics-chapter-3-pins"},
+  {"topic_identifier": "pin-recognition", "part_identifier": "endgame-book-chapter-2-pin-technique"}
 ]
 ```
 
@@ -382,7 +362,7 @@ Matching parts to topics requires scanning `all-parts-index.json` (potentially 3
 
 Relations can and SHOULD link a topic to parts from **different documents**. Since topics are skill-based, a single skill may be taught across multiple source documents:
 
-- `fork-detection-complex` links to parts from the tactics textbook, the workbook, AND the game collection
+- `fork-detection` links to parts from the tactics textbook, the workbook, AND the game collection
 - This is expected — skills cut across document boundaries
 
 ---
@@ -454,11 +434,11 @@ GROUP BY t.id;"
 - **Cause**: Agent copied document headings instead of extracting skills
 - **Fix**: Instruct the agent to identify what SKILLS the source material teaches, then group by capability, not by chapter. A single chapter may feed into 3-5 different skill topics.
 
-### No difficulty dimension in topics
+### No difficulty metadata on topics
 
-- **Symptom**: All leaf topics are at the same difficulty level (e.g., "Forks" without basic/complex split)
-- **Cause**: Agent didn't consider difficulty as a dimension
-- **Fix**: After base model evaluation, split topics with wide score variance into difficulty tiers. If a topic scores 20% on hard prompts and 80% on easy ones, split it.
+- **Symptom**: Leaf topics are missing `expected_difficulty` fields
+- **Cause**: Agent didn't assign difficulty metadata to leaf topics
+- **Fix**: After base model evaluation, assign `expected_difficulty` ("easy", "medium", or "hard") to each leaf topic based on observed base model success rates. This metadata informs record distribution weighting.
 
 ### No `relations.json` produced
 
@@ -476,7 +456,7 @@ GROUP BY t.id;"
 
 - **Symptom**: A "fork-detection" topic links to an "endgame pawn structure" part
 - **Cause**: The subagent matched on a keyword that appears in both contexts
-- **Check**: `python3 -c "import json; [print(x) for x in json.load(open('relations.json')) if x['topic_identifier']=='fork-detection-complex']"`
+- **Check**: `python3 -c "import json; [print(x) for x in json.load(open('relations.json')) if x['topic_identifier']=='fork-detection']"`
 
 ### Topics don't cover all source material
 
@@ -498,7 +478,7 @@ else:
 ### Too few leaf topics
 
 - **Symptom**: 5 leaf topics for a 500-record dataset (100 records per topic = redundancy)
-- **Fix**: Refer to the [Topic Count Guidelines](#topic-count-guidelines) table. Split topics by adding the difficulty dimension or by decomposing broad skills into sub-skills.
+- **Fix**: Refer to the [Topic Count Guidelines](#topic-count-guidelines) table. Decompose broad skills into narrower sub-skills to increase leaf topic count.
 
 ---
 

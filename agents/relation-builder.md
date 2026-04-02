@@ -53,10 +53,19 @@ For each **leaf topic** (topics with no children):
    again with broader terms (synonyms, related concepts, parent topic
    context). Stop when >=3 verified relations or candidates exhausted.
 
-4. **Cross-document matching** — when multiple documents exist, search
-   across ALL documents' parts, not just the one that seems most related
-   by filename. Tax rules might appear in multiple IRS publications, chess
-   concepts across multiple chapters. Cast a wide net.
+4. **Cross-document matching (MANDATORY when multiple documents exist)** —
+   For EVERY leaf topic, explicitly search ALL documents, not just the
+   primary one. The relation-builder tends to over-index on the document
+   whose name matches the topic — actively counter this by searching
+   secondary documents FIRST. Example: for "Qualifying Child Tests"
+   in an EIC pipeline, search Pub 501 (dependents) BEFORE Pub 596 (EIC)
+   because the definition of "qualifying child" lives in Pub 501.
+
+5. **Balanced document coverage** — after building all relations, check
+   that every document has at least 10% representation in the total
+   relation count. If a document has <10%, re-scan its parts for
+   additional topic matches. A document was uploaded for a reason — if
+   zero or near-zero of its parts are linked, something was missed.
 
 ### Example (topic: `tactics-pins`)
 

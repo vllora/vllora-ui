@@ -17,6 +17,8 @@ export interface KnowledgeSourcePart {
   readonly title?: string;
   readonly extractionPath?: string;
   readonly extractionMetadata?: Record<string, unknown>;
+  /** Whether this part is relevant to the workflow objective. null = not yet classified. */
+  readonly relevant?: boolean | null;
 }
 
 export interface KnowledgeSource {
