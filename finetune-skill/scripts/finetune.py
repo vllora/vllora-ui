@@ -656,7 +656,17 @@ def cmd_log_iteration(args: argparse.Namespace) -> None:
         iterations = json.loads(iterations_file.read_text())
 
     iteration_num = len(iterations) + 1
-    phase = args.phase  # "eval" or "training"
+
+    # Auto-detect phase from provided file if --phase not given
+    phase = args.phase
+    if not phase:
+        if args.eval_file:
+            phase = "eval"
+        elif args.training_file:
+            phase = "training"
+        else:
+            print("Error: provide --phase, --eval-file, or --training-file", file=sys.stderr)
+            sys.exit(1)
 
     entry: dict = {
         "iteration": iteration_num,
@@ -3777,10 +3787,10 @@ def main() -> None:
     # log-iteration
     p = subparsers.add_parser("log-iteration", help="Log eval or training iteration to iterations.json")
     p.add_argument("--project-dir", required=True, help="Path to finetune-project directory")
-    p.add_argument("--phase", required=True, choices=["eval", "training"],
-                   help="Phase: eval (after readiness check) or training (after training analysis)")
-    p.add_argument("--eval-file", default=None, help="Path to eval JSON file (required for phase=eval)")
-    p.add_argument("--training-file", default=None, help="Path to training job JSON file (required for phase=training)")
+    p.add_argument("--phase", default=None, choices=["eval", "training"],
+                   help="Phase: eval or training. Auto-detected from --eval-file / --training-file if omitted.")
+    p.add_argument("--eval-file", default=None, help="Path to eval JSON file (auto-sets phase=eval)")
+    p.add_argument("--training-file", default=None, help="Path to training job JSON file (auto-sets phase=training)")
     p.add_argument("--changes", required=True, help="What was changed in this iteration (free text)")
     p.add_argument("--change-type", required=True, choices=["baseline", "grader", "records", "both", "hyperparams"],
                    help="What type of change: baseline (first), grader, records, both, hyperparams")

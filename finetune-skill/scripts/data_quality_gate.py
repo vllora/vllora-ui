@@ -1066,6 +1066,154 @@ def gate_source_accuracy(
 
 
 # ─────────────────────────────────────────────────────────────────────
+# GT Factual Verification Gate (LLM-based)
+# ─────────────────────────────────────────────────────────────────────
+
+
+def gate_gt_verification(
+    records: list[dict],
+    gateway_url: str,
+    sample_size: int = 20,
+) -> dict:
+    """LLM-based factual verification of ground truth answers.
+
+    Samples records and asks an LLM: "Is this ground truth factually correct
+    given the question and system prompt?" Catches:
+    - Values confused with similar-but-different concepts (MCL vs MCLG vs TT)
+    - Missing items in multi-value answers (missing allergens)
+    - Incorrect domain knowledge (tahini is sesame, not "none")
+
+    More expensive than source_accuracy (uses LLM calls) but catches semantic
+    errors that string matching cannot.
+    """
+    import random
+    import requests
+
+    random.seed(42)
+    sampled = random.sample(records, min(sample_size, len(records)))
+
+    verified = 0
+    flagged = 0
+    flagged_samples: list[dict] = []
+
+    for rec in sampled:
+        messages = rec.get("messages", [])
+        gt = rec.get("ground_truth", "")
+        if not gt or not messages:
+            continue
+
+        sys_prompt = ""
+        user_msg = ""
+        for m in messages:
+            if m.get("role") == "system":
+                sys_prompt = m.get("content", "")
+            elif m.get("role") == "user":
+                user_msg = m.get("content", "")
+
+        if not user_msg:
+            continue
+
+        # Ask LLM to verify the GT
+        verify_prompt = f"""You are a fact-checker. Given a question and a proposed ground truth answer, determine if the answer is factually correct.
+
+System context: {sys_prompt[:500]}
+
+Question: {user_msg[:500]}
+
+Proposed ground truth: {gt}
+
+Is this ground truth factually correct? Consider:
+1. Are all specific values (numbers, limits, thresholds) accurate?
+2. Are all items that should be listed actually included? (no missing items)
+3. Are the correct technical terms used? (e.g., "treatment technique" vs "MCL" for lead/copper)
+4. Is the verdict/determination correct given the question?
+
+Respond with ONLY valid JSON:
+{{"correct": true/false, "issue": "brief explanation if incorrect, empty string if correct"}}"""
+
+        try:
+            resp = requests.post(
+                f"{gateway_url}/v1/chat/completions",
+                json={
+                    "messages": [{"role": "user", "content": verify_prompt}],
+                    "model": "gpt-4o-mini",
+                    "temperature": 0.0,
+                    "max_tokens": 150,
+                    "response_format": {"type": "json_object"},
+                },
+                timeout=30,
+            )
+            if resp.status_code == 200:
+                result = resp.json()
+                content = result.get("choices", [{}])[0].get("message", {}).get("content", "{}")
+                import json as _json
+                parsed = _json.loads(content)
+                is_correct = parsed.get("correct", True)
+                issue = parsed.get("issue", "")
+
+                verified += 1
+                if not is_correct and issue:
+                    flagged += 1
+                    if len(flagged_samples) < 10:
+                        flagged_samples.append({
+                            "topic": rec.get("topic", "?"),
+                            "question": user_msg[:80],
+                            "gt": gt[:100],
+                            "issue": issue[:150],
+                        })
+        except Exception:
+            pass  # Skip on API error
+
+    if verified == 0:
+        return {
+            "gate": "gt_verification",
+            "passed": True,
+            "verdict": "SKIP",
+            "stats": {"reason": "no records verified (API unavailable?)"},
+            "issues": [],
+        }
+
+    error_rate = flagged / verified
+    issues: list[dict] = []
+    passed = True
+
+    if error_rate > 0.20:
+        passed = False
+        issues.append({
+            "check": "gt_factual_errors",
+            "severity": "hard",
+            "message": (
+                f"FAIL: {flagged}/{verified} sampled GTs ({error_rate:.0%}) have factual errors. "
+                f"Ground truths contain incorrect values or missing items. "
+                f"Fix: review flagged records, correct GTs, and re-upload."
+            ),
+        })
+    elif error_rate > 0.10:
+        issues.append({
+            "check": "gt_factual_errors",
+            "severity": "soft",
+            "message": (
+                f"WARN: {flagged}/{verified} sampled GTs ({error_rate:.0%}) may have factual errors. "
+                f"Review flagged samples below."
+            ),
+        })
+
+    return {
+        "gate": "gt_verification",
+        "passed": passed,
+        "verdict": "FAIL" if not passed else ("WARN" if issues else "PASS"),
+        "stats": {
+            "sampled": len(sampled),
+            "verified": verified,
+            "flagged": flagged,
+            "error_rate": round(error_rate, 4),
+        },
+        "issues": issues,
+        "samples": flagged_samples,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────
 # Orchestrator
 # ─────────────────────────────────────────────────────────────────────
 
@@ -1092,6 +1240,9 @@ def run_gates(
 
     if "source_accuracy" in gates and knowledge_dir:
         results.append(gate_source_accuracy(records, knowledge_dir, sample_size))
+
+    if "gt_verification" in gates:
+        results.append(gate_gt_verification(records, gateway_url, sample_size))
 
     if "ground_truth_quality" in gates:
         results.append(gate_ground_truth_quality(records, gateway_url, sample_size))
@@ -1132,6 +1283,7 @@ def _prioritize_fixes(issues: list[dict]) -> list[dict]:
     # Hard failures first, then by severity and type
     priority_order = {
         "source_accuracy": 0,                  # Highest — wrong facts in GT = wrong model
+        "gt_factual_errors": 0,               # Same priority — factual errors in GT
         "completion_truncation_critical": 1,  # Guarantees wasted training
         "record_count": 2,
         "duplicate_ids": 3,
@@ -1202,6 +1354,14 @@ def print_report(report: dict) -> None:
             print(f"  {sev} {issue['message']}")
             if "records" in issue:
                 print(f"     Records: {issue['records'][:5]}")
+
+        # Show gt_verification samples
+        if gate_name == "gt_verification" and gate.get("samples"):
+            print(f"  Flagged records:")
+            for s in gate["samples"][:5]:
+                print(f"    [{s['topic']}] Q: {s['question']}")
+                print(f"      GT: {s['gt']}")
+                print(f"      Issue: {s['issue']}")
 
         # Show source_accuracy samples
         if gate_name == "source_accuracy" and gate.get("samples"):
@@ -1294,9 +1454,9 @@ def main() -> None:
     if args.gate:
         gates = [g.strip() for g in args.gate.split(",")]
     elif args.all_gates:
-        gates = ["structural", "diversity", "completion_length", "source_accuracy", "ground_truth_quality", "alignment"]
+        gates = ["structural", "diversity", "completion_length", "source_accuracy", "gt_verification", "ground_truth_quality", "alignment"]
     elif args.llm_gates:
-        gates = ["structural", "diversity", "completion_length", "source_accuracy", "ground_truth_quality", "alignment"]
+        gates = ["structural", "diversity", "completion_length", "source_accuracy", "gt_verification", "ground_truth_quality", "alignment"]
     else:
         # Default: cheap gates only (all free, no LLM)
         default_gates = ["structural", "diversity", "completion_length"]

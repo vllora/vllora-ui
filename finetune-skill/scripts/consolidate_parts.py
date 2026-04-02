@@ -12,6 +12,7 @@ Usage:
 """
 
 import json
+import re
 import sys
 import argparse
 from collections import Counter
@@ -189,8 +190,18 @@ def _merge_repeated_title_sequences(parts: list[dict]) -> list[dict]:
             _flush_group()
             current_group = [part]
         elif current_group and is_text:
-            # Continue the current group (this part follows a repeated-title part)
-            current_group.append(part)
+            # Check if this part has a distinct section heading (e.g., "A.1", "B.4", "D.12")
+            # that indicates it's a separate knowledge unit, not a continuation.
+            # Don't merge Q&A parts — they're individually valuable for topic linking.
+            has_section_id = bool(re.match(r'^[A-Z]\.\d+', title))
+            if has_section_id:
+                # Flush current group and start this as a standalone part
+                _flush_group()
+                current_group = []
+                merged.append(part)
+            else:
+                # Continue the current group (this part follows a repeated-title part)
+                current_group.append(part)
         else:
             # Non-text part or no active group
             _flush_group()

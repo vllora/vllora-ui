@@ -547,26 +547,32 @@ def _call_llm_for_type(
         structured_constraint = f"""
 CRITICAL: The model is trained to output ONLY structured answers in this format:
   {ground_truth_format}
-Every prompt MUST be a concrete scenario with specific inputs (names, numbers, dates,
-conditions) that can be answered in that exact format. Do NOT generate open-ended questions
-like "Explain...", "Describe...", "Compare...", "What are the pros and cons..." — these
-cannot be answered with a structured determination. Instead, always frame as a specific
-case: "Given [specific situation with numbers], determine [the answer]."
+Rules:
+1. Every prompt MUST be a concrete scenario with specific inputs (names, numbers, dates,
+   conditions) that can be answered in that exact format. Do NOT generate open-ended
+   questions like "Explain...", "Describe...", "Compare..." — frame as specific cases.
+2. The ground truth MUST use ONLY the exact vocabulary/values specified in the format
+   above. If the format lists specific valid values (e.g., category names, status codes),
+   use ONLY those values — never synonyms, ingredient names, or alternative phrasings.
+3. Each item in the ground truth should appear exactly once — no duplicates.
+4. Do NOT use "OR" in the ground truth — pick the single correct answer.
 """
 
     prompt = f"""{type_instruction}
 
 Topic: {topic['name']}
-Focus: {focus}
+Domain rules (from the topic's system prompt — these are critical constraints for the ground truth):
+{focus}
 {structured_constraint}
 Source material (each section is numbered [1], [2], etc.):
 {chunk_text}
 
 Each prompt must be a realistic question/request grounded in the source material above.
 Do NOT generate generic questions — reference specific concepts, examples, or details from the source.
+The ground truth MUST be consistent with both the domain rules above AND the source material values.
 
 For each prompt, also provide:
-- "ground_truth": {f'Answer in this exact format: {ground_truth_format}. Do NOT include explanations or source excerpts — only the structured answer.' if ground_truth_format else 'a concise excerpt from the source material that contains the information needed to answer the question. Keep it focused — complete enough to verify a correct answer, but not the entire source.'}
+- "ground_truth": {f'Answer in this exact format: {ground_truth_format}. CRITICAL RULES for ground truth accuracy: (1) Every value (numbers, limits, thresholds, categories) MUST come directly from the source material — look them up, do NOT guess. If the source shows a special designation (like TT for treatment technique), use that exact designation. (2) COMPLETENESS: If the answer is a list (comma-separated items, multiple values), check EVERY input element independently. Do NOT stop after finding the first match — scan ALL inputs and include ALL matches. For example, if the input has 3 ingredients and 2 are allergens, list BOTH allergens, not just the first one found. (3) Do NOT include explanations or source excerpts — only the structured answer.' if ground_truth_format else 'a concise excerpt from the source material that contains the information needed to answer the question. Keep it focused — complete enough to verify a correct answer, but not the entire source.'}
 - "used_parts": an array of section numbers as strings (e.g., ["1", "3"]) — ONLY the specific sections from the source material above that this question is derived from. Most questions should use 1-3 sections, not all of them.
 
 Return JSON: {{"items": [{{"prompt": "the question", "ground_truth": "{'structured answer' if ground_truth_format else 'relevant source excerpt'}", "used_parts": ["1"]}}, ...]}}"""

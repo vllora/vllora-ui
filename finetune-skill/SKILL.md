@@ -62,7 +62,7 @@ Steps 4 and 5 can run in parallel — both depend on extraction + topics, not on
 
 **Eval first, train later.** Do NOT start training on the first iteration. Run eval, check the readiness gate, fix issues, re-eval. Only start training after the readiness gate passes (Step 7c→7d). This avoids wasting hours of GPU time on bad data or a broken grader.
 
-**Wait for training to complete.** Once training starts (Step 7d), poll until it finishes. Analyze results (Step 8b) and iterate (Step 9b) if needed.
+**Wait for training to complete.** Once training starts (Step 7e), poll until it finishes. Run post-training eval on the trained model (Step 8b) and compare with the base model baseline (Step 7d). Analyze training metrics (Step 8c) and iterate (Step 9b) if needed.
 
 **Auto-iterate when running non-interactively.** If the user is not responding (e.g., running via `claude -p`), make your own judgment: if readiness gate fails, apply the top-priority fix and re-eval automatically. Max 5 eval-only auto-iterations, max 3 training auto-iterations.
 
@@ -178,7 +178,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py cancel-eval --workflow-id $WORKFL
 | Everything through `grader.js` + no `evaluations/` | Crashed before eval | Resume from Step 7b (create eval) |
 | `evaluations/` has results + no readiness-pass checkpoint | Eval completed, no readiness gate run | Run `readiness-check` on latest eval (Step 7c) |
 | Readiness gate FAIL + no fixes applied | Crashed during fix step | Read readiness output, apply fixes (Step 9a), re-eval |
-| Readiness gate PASS + no `training-jobs/` | Crashed before training start | Create training job (Step 7d) |
+| Readiness gate PASS + no `training-jobs/` | Crashed before training start | Create training job (Step 7e) |
 | `training-jobs/` has a job file with status `running` | Training was in progress | Poll the existing job, don't create a new one |
 | `training-jobs/` has a job file with status `cancelled` | Job was cancelled (from UI or another agent) | Skip it. Analyze eval results. Start new job if needed (Step 9) |
 | `training-jobs/` has a job with `source: synced_from_gateway` | Job was created from the UI, not by this agent | Treat it like your own — poll it, analyze results when done |
@@ -559,7 +559,14 @@ If some topics fail, use `--append` to retry without overwriting. In append mode
 1. Ground truths are generated in that format instead of verbose source excerpts
 2. **All prompt types are forced into scenario-based questions** — open-ended prompts like "Explain...", "Compare..." are converted to concrete scenarios with specific inputs, since they can't be answered in a structured format. This prevents model refusals during training.
 
-Example: `--ground-truth-format 'Eligible. EIC: $[amount] OR Not eligible. Reason: [specific rule]'`
+**⚠️ CRITICAL: Include the exact valid vocabulary in the format string.** If the answer must use specific category names, LIST THEM in the format. Do NOT use placeholders like "allergen1, allergen2" — the LLM will use ingredient names (casein, whey, ghee) instead of category names (milk). Bad vs good:
+- ✗ Bad: `--ground-truth-format 'allergen1, allergen2 OR none'`
+- ✓ Good: `--ground-truth-format 'Comma-separated from ONLY these values: milk, eggs, fish, shellfish, tree nuts, peanuts, wheat, soybeans, sesame. If no allergens: none. Use ONLY these exact names, never ingredient names like casein or whey.'`
+
+Examples:
+- Classification: `--ground-truth-format 'COMPLIANT. Per 40 CFR [section]: [limit type] for [contaminant] is [value]. Sample at [value] is within limits. OR NON-COMPLIANT with exceedance.'`
+- Allergen detection: `--ground-truth-format 'Comma-separated from ONLY: milk, eggs, fish, shellfish, tree nuts, peanuts, wheat, soybeans, sesame. If none: none'`
+- MCQ: `--ground-truth-format 'Single letter: A, B, C, or D'`
 
 **⚠️ Every record's `topic` field MUST match a leaf topic ID in `topics.json`.** Do NOT invent ad-hoc topic IDs during generation. If you generate records with a custom script instead of `generate_records.py`, validate topic IDs before writing to `training.jsonl`. The `upload-records` command will reject records with topic IDs that don't exist on the gateway — mismatched topics cause FK violations and silent data loss.
 
@@ -736,7 +743,12 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py finetune-project/trainin
   --save finetune-project/data-quality-report.json
 ```
 
-This adds Gate 3 (ground truth quality — LLM scores each GT for specificity) and Gate 4 (alignment — LLM checks if GT answers the prompt). Samples 30 records by default to keep cost low.
+This adds:
+- **GT factual verification** (LLM-based) — asks an LLM "is this ground truth factually correct?" for a sample of records. Catches semantic errors like confusing MCL with Treatment Technique, missing allergens in multi-value answers, incorrect domain mappings. Flags records with >20% error rate as FAIL.
+- **Ground truth quality** — LLM scores each GT for specificity and completeness.
+- **Alignment** — LLM checks if GT actually answers the prompt.
+
+Samples 30 records by default to keep cost low. The GT verification gate is the most important — it catches errors that string matching (source_accuracy) cannot detect.
 
 **Or via `finetune.py`:**
 ```bash
@@ -879,7 +891,7 @@ The readiness gate runs **4 hard checks** (sample_count, score_std, avg_score, z
 > The readiness gate's 10% threshold matches the UI (`compute-readiness-gate.ts`). If readiness fails on `zero_score_frac`, improve the grader to give partial credit for wrong-but-informed answers instead of flat 0.0.
 
 **Decision:**
-- **Exit code 0 (PASS)** → proceed to **Step 7d (Start Training)**
+- **Exit code 0 (PASS)** → proceed to **Step 7e (Start Training)**
 - **Exit code 1 (FAIL)** → fix issues → return to **Step 7b (Re-eval)**
 - **Exit code 2 (WARN)** → **first eval: fix ALL warnings before training. Subsequent evals: only fix critical warnings.**
 
@@ -933,7 +945,39 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py difficulty-probe \
 uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step difficulty-probe --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
-#### 7d. Start Training (only after readiness gate passes)
+#### 7d. Base Model Baseline Eval (after readiness passes, before training)
+
+**Run one eval on the actual base model** to establish the pre-training baseline. All previous evals used GPT-4o-mini (strong model) to validate the grader — now we need the real score that GRPO will start from.
+
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
+  --workflow-id $WORKFLOW_ID \
+  --model "Qwen3.5-4B" \
+  --output-dir finetune-project/evaluations
+
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval \
+  --file finetune-project/evaluations/eval-NNN.json
+```
+
+**Why this matters:**
+- GPT-4o-mini eval avg=0.85 does NOT mean Qwen-4B will score 0.85 — base models typically score much lower
+- The base model baseline is the "before" in before/after comparison
+- Without it, you can't measure if training actually improved the model
+- Expected: base model scores will be LOW (0.05-0.30) — this is normal, not a grader problem
+
+**Do NOT run the readiness gate on this eval.** The base model will fail readiness checks (low avg, high zeros) — that's expected. Just log the baseline:
+
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
+  --project-dir finetune-project \
+  --eval-file finetune-project/evaluations/eval-NNN.json \
+  --changes "Base model (Qwen3.5-4B) baseline eval — pre-training" \
+  --change-type baseline --verdict PASS
+```
+
+After training completes, run another eval on the **trained** model and compare with this baseline using `log-iteration`.
+
+#### 7e. Start Training (only after readiness gate passes)
 
 Training starts here — only reached when the readiness gate indicates data and grader are solid.
 
@@ -1001,7 +1045,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
 
 **Early stopping** is enabled by default — detects completion clipping, score plateau, score degradation, and length exploitation. Add `--no-early-stop` to disable. See [reference/training-metrics-guide.md](reference/training-metrics-guide.md) for signal details and thresholds.
 
-When training completes (or is early-stopped), proceed to **Step 8b (Post-Training Analysis)**. If early-stopped, the best checkpoint is noted in the output — use that epoch's model.
+When training completes (or is early-stopped), proceed to **Step 8b (Post-Training Eval)**. If early-stopped, the best checkpoint is noted in the output — use that epoch's model.
 
 ### Step 8: Analyze Results
 
@@ -1038,7 +1082,31 @@ This runs during the eval-first loop (Step 7b→7c). Compute overall scores, per
 
 **When to skip regeneration:** If only 1-2 records out of 200+ scored 0, removing without replacement is fine.
 
-#### 8b. Analyze training results (after training completes)
+#### 8b. Post-Training Eval (compare with baseline)
+
+After training completes, run an eval on the **trained model** to measure improvement:
+
+```bash
+# Eval on the trained model
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
+  --workflow-id $WORKFLOW_ID \
+  --model "TRAINED_MODEL_NAME" \
+  --output-dir finetune-project/evaluations
+
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval \
+  --file finetune-project/evaluations/eval-NNN.json
+
+# Log and compare with base model baseline (Step 7d)
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
+  --project-dir finetune-project \
+  --eval-file finetune-project/evaluations/eval-NNN.json \
+  --changes "Post-training eval on trained model" \
+  --change-type baseline --verdict PASS
+```
+
+The `log-iteration` delta will show the improvement: base model avg=0.15 → trained model avg=0.65 = **+0.50 improvement**. This is the real measure of whether training worked.
+
+#### 8c. Analyze training metrics (after training completes)
 
 This runs after Step 7e. Training is expensive — analyze thoroughly:
 
@@ -1164,9 +1232,9 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force \
 
 #### 9b. Post-training iteration (training completed but results unsatisfactory)
 
-After training analysis (Step 8b), if results are unsatisfactory:
+After training analysis (Step 8c), if results are unsatisfactory:
 
-1. **If only hyperparams need adjusting** (reward flat, clipping too high, etc.) — skip eval, go directly to **Step 7d** with new training config
+1. **If only hyperparams need adjusting** (reward flat, clipping too high, etc.) — skip eval, go directly to **Step 7e** with new training config
 2. **If data or grader needs fixing** — apply fixes, return to **Step 7b** (re-eval first, then training)
 3. **If model is too weak** — try a larger base model (2B → 4B → 9B)
 

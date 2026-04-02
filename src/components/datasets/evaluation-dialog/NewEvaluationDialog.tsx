@@ -13,7 +13,9 @@ import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -34,10 +36,16 @@ import {
 } from "lucide-react";
 
 const ROLLOUT_MODEL_OPTIONS = [
-  { value: "gpt-4o-mini", label: "GPT-4o Mini" },
-  { value: "gpt-4o", label: "GPT-4o" },
-  { value: "gpt-4.1", label: "GPT-4.1" },
-  { value: "gpt-4.1-mini", label: "GPT-4.1 Mini" },
+  // Strong models — for grader/data validation (Phase 1)
+  { value: "gpt-4o-mini", label: "GPT-4o Mini", group: "Eval Models" },
+  { value: "gpt-4o", label: "GPT-4o", group: "Eval Models" },
+  { value: "gpt-4.1", label: "GPT-4.1", group: "Eval Models" },
+  { value: "gpt-4.1-mini", label: "GPT-4.1 Mini", group: "Eval Models" },
+  // Base models — for pre/post-training baseline comparison
+  { value: "Qwen3.5-0.8B", label: "Qwen 3.5 0.8B", group: "Base Models" },
+  { value: "Qwen3.5-2B", label: "Qwen 3.5 2B", group: "Base Models" },
+  { value: "Qwen3.5-4B", label: "Qwen 3.5 4B (default)", group: "Base Models" },
+  { value: "Qwen3.5-9B", label: "Qwen 3.5 9B", group: "Base Models" },
 ];
 
 function getDefaultSampleSize(recordCount: number): number {
@@ -261,11 +269,22 @@ export function NewEvaluationDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {ROLLOUT_MODEL_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
+                <SelectGroup>
+                  <SelectLabel className="text-[10px] text-muted-foreground/70">Eval Models (grader validation)</SelectLabel>
+                  {ROLLOUT_MODEL_OPTIONS.filter((o) => o.group === "Eval Models").map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+                <SelectGroup>
+                  <SelectLabel className="text-[10px] text-muted-foreground/70">Base Models (pre/post-training baseline)</SelectLabel>
+                  {ROLLOUT_MODEL_OPTIONS.filter((o) => o.group === "Base Models").map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
               </SelectContent>
             </Select>
           </div>
