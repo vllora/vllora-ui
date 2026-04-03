@@ -1004,7 +1004,7 @@ This outputs alerts (CRITICAL/HIGH/WARNING) and a summary. Use the alerts to gui
 | grad_norm NaN or Inf | Numerical overflow — often from zero-length completions or bad chat template | Check completions/min_length. If 0 → fix chat template or increase max_output_tokens |
 | Loss stuck at exactly 0.0 | All advantages are zero (reward_std ≈ 0) | Grader is too lenient — all responses score the same. Make grader harder (see Part 5) |
 | reward flat + frac_reward_zero_std > 0.5 | Base model already good at this task — limited GRPO headroom | **Check base model eval score.** If >0.75: GRPO efficiency drops dramatically — 96% compute wasted for easy prompts (arXiv:2508.14094). (1) Make grader stricter to create headroom. (2) Consider SFT instead — teaches format without needing score variance. (3) Don't train — base model may be good enough. (4) For smaller model: use distillation from a larger model, not direct GRPO. |
-| reward declining over epochs | Model getting worse — possible reward hacking or instability | Reduce LR, add KL penalty (beta > 0), inspect outputs manually |
+| reward declining over epochs | Model getting worse — possible reward hacking or instability | Reduce LR, optionally enable KL penalty (beta > 0) if you want stronger KL regularization, inspect outputs manually |
 | completions/clipped_ratio > 0.5 | Most responses truncated at max_output_tokens | Increase max_output_tokens (512 → 1024). Watch cost: G × tokens |
 | clip_ratio/region_mean = 0 + KL exploding | Trust region not constraining updates | Reduce LR. If using custom epsilon, check it's not too large |
 | reward up but KL >10 + outputs degenerate | Reward hacking | Add quality-focused grader criteria, enable KL penalty (beta=0.04), manual output review |
@@ -1012,6 +1012,12 @@ This outputs alerts (CRITICAL/HIGH/WARNING) and a summary. Use the alerts to gui
 ### Step 3: The Hyperparameter Iteration Ladder
 
 Work through these in order — each level is more drastic. **Change ONE parameter at a time** so you can attribute the result.
+
+**GRPO-specific switches (before touching LR):**
+
+- `loss_type` (default `dr_grpo`): Keep `dr_grpo` unless you have a paper-backed reason to switch; other modes change loss scale and can invalidate thresholds in `training-metrics-guide.md`.
+- `mask_truncated_completions` (default `true`): Leave enabled; if you see NaN KL with all completions truncated, fix truncation first (increase `max_output_tokens`) instead of disabling masking.
+- `beta` (default `0.0`): Modern GRPO practice is `beta=0` (no KL penalty). Only increase beta when you explicitly want KL regularization to fight reward hacking — see `training-metrics-guide.md` §KL for recommended ranges.
 
 **Level 1: Learning Rate (most common fix)**
 
