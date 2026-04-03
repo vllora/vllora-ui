@@ -2883,8 +2883,14 @@ def _poll_training_once(base_url: str, wf_id: str, job_id: str) -> dict:
 
 def _save_training_side_files(
     base_url: str, wf_id: str, job_id: str, output_dir: Path,
+    provider_job_id: str | None = None,
 ) -> None:
-    """Fetch and save metrics + epoch evals to side files."""
+    """Fetch and save metrics + epoch evals to side files.
+
+    The metrics endpoint uses internal job_id, but the finetune-evaluations
+    endpoint requires provider_job_id (the cloud-side ID). Using the internal
+    ID returns empty results silently.
+    """
     metrics_file = output_dir / f"{job_id}-metrics.json"
     try:
         metrics = _api("GET", f"{base_url}/finetune/workflows/{wf_id}/jobs/{job_id}/metrics")
@@ -2893,11 +2899,18 @@ def _save_training_side_files(
         print(f"  Warning: Could not fetch metrics", file=sys.stderr)
 
     evals_file = output_dir / f"{job_id}-epoch-evals.json"
+    # finetune-evaluations endpoint requires provider_job_id, not internal ID.
+    # Fall back to no filter if provider_job_id is unavailable.
+    eval_params = (
+        {"finetune_job_id": provider_job_id}
+        if provider_job_id
+        else {}
+    )
     try:
         evals = _api(
             "GET",
             f"{base_url}/finetune/workflows/{wf_id}/finetune-evaluations",
-            params={"finetune_job_id": job_id},
+            params=eval_params,
         )
         evals_file.write_text(json.dumps(evals, indent=2))
     except SystemExit:
@@ -3142,10 +3155,15 @@ def _check_score_plateau(
     base_url: str, wf_id: str, job_id: str,
     patience: int = 5, slope_threshold: float = 0.005,
     min_warmup_epochs: int = 2,
+    provider_job_id: str | None = None,
 ) -> dict | None:
     """Check if training scores have plateaued across epoch evals.
 
     Returns a dict with plateau/degradation info if detected, None otherwise.
+
+    Note: The finetune-evaluations endpoint requires provider_job_id (cloud ID),
+    not the internal job_id. Using the wrong ID returns empty results, silently
+    disabling early stopping.
 
     Improved early stopping based on GRPO research:
     - Uses EMA (alpha=0.3) for noise robustness (standard signal processing
@@ -3168,11 +3186,17 @@ def _check_score_plateau(
     225 records — score went 0.51→0.60 then +0.003 across 3 evals.
     Continued training for 7+ more hours with no improvement.
     """
+    # finetune-evaluations requires provider_job_id, not internal job_id.
+    eval_params = (
+        {"finetune_job_id": provider_job_id}
+        if provider_job_id
+        else {}
+    )
     try:
         evals = _api(
             "GET",
             f"{base_url}/finetune/workflows/{wf_id}/finetune-evaluations",
-            params={"finetune_job_id": job_id},
+            params=eval_params,
         )
     except SystemExit:
         return None
@@ -3288,6 +3312,7 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
 
     metadata = json.loads(job_file.read_text())
     job_id = metadata["job_id"]
+    provider_job_id = metadata.get("provider_job_id")
     wf_id = args.workflow_id or metadata.get("workflow_id")
     if not wf_id:
         print("Error: --workflow-id not provided and not found in job file", file=sys.stderr)
@@ -3362,7 +3387,7 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
         metadata["status"] = status
         job_file.write_text(json.dumps(metadata, indent=2))
 
-        _save_training_side_files(args.base_url, wf_id, job_id, output_dir)
+        _save_training_side_files(args.base_url, wf_id, job_id, output_dir, provider_job_id)
 
         if status in ("succeeded", "completed", "failed", "cancelled"):
             metadata["completed_at"] = result.get("completed_at")
@@ -3450,6 +3475,7 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
                 args.base_url, wf_id, job_id,
                 patience=adaptive_patience,
                 min_warmup_epochs=adaptive_warmup,
+                provider_job_id=provider_job_id,
             )
             if plateau:
                 signal = plateau.get("signal", "plateau")
