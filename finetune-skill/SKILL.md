@@ -72,6 +72,42 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step <STEP_NAME> --proje
 ```
 Step names: `create-workflow`, `extract`, `topics`, `relations`, `generate-data`, `grader`, `validate`, `data-quality-gate`, `eval-N` (e.g. `eval-1`, `eval-2`), `readiness-pass`, `difficulty-probe`, `training`, `analyze`.
 
+### Research Context: This is GRPO, Not SFT
+
+This pipeline uses **GRPO (Group Relative Policy Optimization)** — a reinforcement learning method, NOT supervised fine-tuning. GRPO has counterintuitive properties that differ from SFT and generic ML. When you encounter unexpected behavior during eval or training, **research before guessing**:
+
+**How GRPO works (always keep this in mind):**
+- The model generates K completions per prompt (default K=8)
+- Your grader scores each completion (0-1)
+- GRPO computes advantages by comparing scores within each group — reinforces better completions, suppresses worse ones
+- If all K completions score the same (zero variance) → zero gradient → that prompt teaches nothing
+- The model will find and exploit ANY shortcut that maximizes the grader score — this is by design, not a bug
+
+**When something unexpected happens — research it:**
+1. **Search for the specific pattern** in GRPO/RFT literature first, not generic ML advice. GRPO behaves differently from SFT on most metrics.
+2. **Key papers to consult** (use web search to find relevant sections):
+   - DeepSeek-R1 (arXiv:2501.12948) — GRPO from scratch, what base model scores mean
+   - DAPO (arXiv:2503.14476) — β=0 default, dynamic sampling, clip-higher
+   - Dr. GRPO (arXiv:2503.20783) — length bias from per-token normalization
+   - "Hard Examples Are All You Need" (arXiv:2508.14094) — difficulty vs learning signal
+   - "No Prompt Left Behind" (arXiv:2509.21880, ICLR 2026) — zero-variance prompts (30-99% is normal)
+   - "Tricks or Traps" (arXiv:2508.08221) — normalization strategies, failure modes
+   - TRL GRPOTrainer docs — metric definitions, config options, known issues
+3. **Key sources for practical guidance:**
+   - OpenAI RFT Guide — grader quality requirements, data format
+   - Unsloth GRPO blog + issues (#3006, #2824) — known training bugs (NaN grad, loss=0)
+   - HuggingFace open-r1 issues — real-world GRPO training problems and solutions
+4. **What to search for:**
+   - Don't search "model not learning" (too generic). Search "GRPO reward flat frac_reward_zero_std" or "GRPO reward hacking detection" (specific to our training method).
+   - Include "GRPO" or "RFT" or "reinforcement fine-tuning" in every search query.
+   - Check if the behavior is actually expected (e.g., high zero-variance is normal, low base model scores are expected, KL rising with β=0 is informational only).
+
+**Common traps from applying SFT intuition to GRPO:**
+- "Loss should decrease" — wrong. GRPO loss starts at 0 and rises slightly (on-policy → off-policy divergence).
+- "More data is better" — not always. Easy records (base model scores >0.8) provide almost no gradient. Hard records with zero base model score also provide nothing.
+- "Low eval scores mean training will fail" — wrong. DeepSeek-R1 started at 15.6% and reached 71%. Low base scores = high GRPO headroom.
+- "High zero-variance means broken training" — wrong. 30-99% zero-variance per batch is normal (arXiv:2509.21880). Only a problem when reward is also flat.
+
 ### Working Directory
 
 Create a local directory for all artifacts:
@@ -249,81 +285,18 @@ Extract knowledge from all documents. Each document is processed independently b
 
 > **Deterministic extraction rule**: Subagents MUST use `build_knowledge_parts.py` as the default extraction script. This ensures the same PDF always produces the same knowledge parts. Agents must NOT write custom extract.py scripts unless the user explicitly requests custom extraction for a specific document via CUSTOM_INSTRUCTIONS, or `build_knowledge_parts.py` produces 0 parts.
 
-**2a. Check Docling availability:**
+**2a. Check Docling** — `curl -sS --connect-timeout 5 http://127.0.0.1:5001/health`. If unavailable, the `knowledge-extractor` subagent handles fallback automatically.
 
-```bash
-curl -sS --connect-timeout 5 http://127.0.0.1:5001/health 2>/dev/null && echo "DOCLING_OK" || echo "DOCLING_UNAVAILABLE"
-```
+**2b. Submit & extract** — Submit all PDFs to Docling with `--skip-existing` (reuses existing `docling-result.json`). Spawn one `knowledge-extractor` subagent per document (up to 4-5 parallel). Wait for ALL to complete before proceeding.
 
-**If Docling is unavailable**, the `knowledge-extractor` subagent handles the fallback automatically — it uses `convert_pdf_to_markdown.py` to produce a `.md` file, then feeds it to `build_knowledge_parts.py`. Do NOT run `pdftotext_extract.py` separately from the orchestrator — delegate entirely to the subagent, which has its own fallback logic.
-
-If Docling is available, submit all PDFs at once. Use `--skip-existing` to reuse previous extractions — this avoids re-processing PDFs whose `docling-result.json` already exists (useful when creating a new workflow from the same documents):
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/docling_extract.py --submit-only --skip-existing \
-  "pdfs/doc1.pdf:finetune-project/knowledge/doc1-slug/docling-result.json" \
-  "pdfs/doc2.pdf:finetune-project/knowledge/doc2-slug/docling-result.json" \
-  ...
+  "pdfs/doc1.pdf:finetune-project/knowledge/doc1-slug/docling-result.json" ...
 ```
 
-This returns a JSON manifest with entries per document. Each entry has `task_id`, `pdf`, `output`, and `status`. With `--skip-existing`, documents whose `docling-result.json` already has valid data get `status: "reused_existing"` and `task_id: null` — no Docling request is made for those.
+> See [reference/extraction-guide.md](reference/extraction-guide.md) for subagent parameters, retry logic, and merge script.
 
-**"Parallel" means multiple documents extract concurrently within Step 2 — it does NOT mean you can start Step 3 or later steps while extraction is running. You MUST wait for ALL extraction to finish before proceeding.**
-
-**2b. Spawn one `knowledge-extractor` per document (parallel within this step):**
-
-For each document in the manifest, spawn a subagent with:
-- `SKILL_DIR=${CLAUDE_SKILL_DIR}`
-- `WORKFLOW_ID`, `GATEWAY_URL=http://localhost:9090`
-- `DOC_PATH` — the PDF path (from manifest `pdf` field)
-- `DOC_SLUG` — the slug (lowercase, hyphens, e.g. `nist-csf-2-0`)
-- `DOC_DIR` — e.g., `finetune-project/knowledge/<slug>`
-- `TASK_ID` — the Docling task ID from the manifest `task_id` field (UUID only). If the manifest entry has `status: "reused_existing"` (task_id is null), pass empty string — the subagent will detect the existing `docling-result.json` and skip Docling.
-
-Spawn up to 4-5 agents at once. If there are more documents, spawn in batches.
-
-**Retry on failure**: If a subagent fails:
-1. Check if `<DOC_DIR>/docling-result.json` exists (Docling succeeded but extraction failed).
-   - If yes: re-run `build_knowledge_parts.py` on the existing result.
-   - If no: re-submit to Docling and spawn the subagent again.
-2. If second attempt also fails: **warn the user** with the document name and error, then continue with remaining documents. Do NOT silently skip failed documents.
-
-**2c. WAIT here until ALL agents return — then merge indexes with completeness check. Do NOT proceed to Step 3 until this merge completes and 2d validation passes:**
-
-```bash
-python3 -c "
-import json, glob, sys
-
-# Expected documents (set this from your Step 1 document list)
-expected_slugs = set()  # e.g., {'doc1-slug', 'doc2-slug'}
-# Populate from your actual document list:
-# expected_slugs = {'chess-tactics', 'opening-theory', 'endgame-manual'}
-
-found_files = sorted(glob.glob('finetune-project/knowledge/*/parts-index.json'))
-found_slugs = {f.split('/')[-2] for f in found_files}
-
-# Completeness check
-missing = expected_slugs - found_slugs if expected_slugs else set()
-if missing:
-    print(f'WARNING: {len(missing)} document(s) missing parts-index.json: {sorted(missing)}')
-    print('These documents failed extraction. Check subagent logs and re-extract before proceeding.')
-
-# Merge indexes
-parts = []
-for f in found_files:
-    with open(f) as fh:
-        data = json.load(fh)
-        parts.extend(data.get('parts', data) if isinstance(data, dict) else data)
-with open('finetune-project/knowledge/all-parts-index.json', 'w') as fh:
-    json.dump({'parts': parts}, fh, indent=2)
-print(f'Merged {len(parts)} parts from {len(found_files)} documents')
-
-if missing:
-    print(f'ACTION REQUIRED: Re-extract missing documents before proceeding to Step 3.')
-    sys.exit(1)
-"
-```
-
-If any documents are missing, re-extract them (see retry logic in 2b) before proceeding.
+**2c. Merge indexes** — Merge all per-document `parts-index.json` into `knowledge/all-parts-index.json`. Verify all expected documents are present. Do NOT proceed to Step 3 until merge completes.
 
 **2d. Validate — MUST PASS before continuing:**
 
@@ -363,33 +336,9 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/knowl
 4. Re-validate after fixing. If still FAIL, present the failure details to the user and ask whether to proceed or re-extract.
 5. Do NOT silently proceed to Step 3 with FAIL status — bad extraction poisons topics, records, and training.
 
-**2e. Verify gateway upload matches local data — MUST PASS:**
+**2e. Verify gateway upload** — `uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py verify --workflow-id $WORKFLOW_ID`. Confirm source count, parts count per source, and source names match local data. If any source has 0 parts or wrong name, re-upload.
 
-After all subagents complete and validation passes, verify that the gateway received ALL documents and parts correctly:
-
-```bash
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py verify --workflow-id $WORKFLOW_ID
-```
-
-Then manually confirm:
-1. **Source count** — the number of knowledge sources on the gateway equals the number of documents you submitted
-2. **Parts count per source** — each source has the expected number of parts (compare against local `parts-index.json` for each document)
-3. **Source names** — each source is named after the PDF file (e.g., `IRS-Pub596-...pdf`), NOT after `knowledge_parts.json` or any other artifact file
-
-If any source has 0 parts, or has a wrong name (like `knowledge_parts.json` instead of the PDF name), delete it and re-upload with the correct `--file <PDF_PATH>`. A mis-uploaded source will cause ALL downstream steps (topics, relations, records) to have broken references that silently pass validation but produce incorrect data in the UI.
-
-> **For full extraction workflow details** (if you need to understand or debug), read [reference/extraction-guide.md](reference/extraction-guide.md).
-
-If there are no documents (objective-only pipeline), skip this step.
-
-**Review extraction with the user.** Present a per-document summary of what was extracted (document name, section count, parts count, sample section titles). Ask:
-- Do these look like the right sections from each document?
-- Any documents where the extraction missed important content or grouped things incorrectly?
-- Which areas should we focus training on?
-
-**If the user wants to re-extract a specific document** (e.g., "the fee schedule in Contract-A got merged into one big part — split those into individual items"), spawn a new `knowledge-extractor` for just that document with `CUSTOM_INSTRUCTIONS` set to the user's request. Then re-merge indexes and re-validate. Only re-extract the specific documents the user flagged — not all of them.
-
-Use the user's focus areas to guide topic design in Step 3.
+**Review with user.** Present per-document summary (name, parts count, sample titles). Ask about focus areas for training. If user wants re-extraction of specific documents, spawn new subagent with `CUSTOM_INSTRUCTIONS`.
 
 **Checkpoint:**
 ```bash
@@ -450,43 +399,28 @@ Each level adds ONLY what the parent doesn't already say. Write as behavioral in
 
 **Self-check** before proceeding — for each leaf topic verify: (1) starts with situational trigger, (2) contains action verbs, (3) doesn't repeat root/parent, (4) composed result reads as one natural instruction.
 
-Save to `topics.json` as a flat array with `parent_id` for hierarchy:
+Save to `topics.json` as a flat array with `parent_id` for hierarchy. See `reference/topic-hierarchy.md` for JSON format and examples.
 
-```json
-[
-  {"id": "billing", "name": "Billing & Payments", "parent_id": null, "system_prompt": "For billing cases, apply payment processing rules, subscription policies, and troubleshooting procedures."},
-  {"id": "refund-processing", "name": "Refund Processing", "parent_id": "billing", "system_prompt": "When handling refund requests, determine eligibility per policy and process standard, partial, or pro-rated refunds.", "expected_difficulty": "medium"},
-  {"id": "payment-troubleshooting", "name": "Payment Troubleshooting", "parent_id": "billing", "system_prompt": "When diagnosing payment failures, check card expiry, international transaction rules, 3DS challenges, and fraud block resolution.", "expected_difficulty": "hard"}
-]
-```
+**3d. Build topic-part relations.** Delegate to `relation-builder` subagent — links relevant parts to leaf topics (max 15 per topic). Writes `relations.json`.
 
-**3d. Build topic-part relations.**
-
-Delegate to the `relation-builder` subagent — provide `PROJECT_DIR` and `OBJECTIVE`. It reads `all-parts-index.json` and `topics.json`, links only `relevant: true` parts to leaf topics (max 15 per topic), and writes `relations.json`. These relations define which knowledge parts each topic's records will be grounded in, and they flow through to per-record `source_parts` traceability in Step 4.
-
-> **ID format note:** Use human-readable slugs for topic `id` values (e.g., `"billing-refunds"`). `finetune.py upload-topics` auto-converts to UUIDs. Use the same slug as `topic_identifier` in `relations.json`.
-
-If there are no documents (objective-only pipeline), skip relations.
-
-**Checkpoint:**
+**Upload** topics, relations, and relevance labels:
 ```bash
-uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step topics --project-dir finetune-project --workflow-id $WORKFLOW_ID
-uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step relations --project-dir finetune-project --workflow-id $WORKFLOW_ID
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-topics --workflow-id $WORKFLOW_ID --file topics.json
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-relations --workflow-id $WORKFLOW_ID --file relations.json
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py update-part-relevance --workflow-id $WORKFLOW_ID --parts-index knowledge/all-parts-index.json
 ```
 
-**Upload** topics, relations, and relevance labels. **⚠️ If you redesigned topics (changed IDs, added/removed topics), you MUST re-upload before uploading records.** Records reference topic IDs — stale gateway topics cause FK violations and records with `topic: null`.
-```bash
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-topics \
-  --workflow-id $WORKFLOW_ID --file topics.json
+> **⚠️** If you redesigned topics (changed IDs), re-upload before uploading records — stale gateway topics cause FK violations.
 
-if [ -f relations.json ]; then
-  uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-relations \
-    --workflow-id $WORKFLOW_ID --file relations.json
-fi
+**3e. Agent quality check — read and verify topics yourself.**
 
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py update-part-relevance \
-  --workflow-id $WORKFLOW_ID --parts-index knowledge/all-parts-index.json
-```
+Before presenting to the user, verify the topic hierarchy by reading the source material:
+- **Coverage**: Read `all-parts-index.json` titles. Is every major section of the source covered by at least one topic? Any obvious gaps?
+- **Overlap**: Do any two leaf topics cover the same content? Overlapping topics produce duplicate records that waste training signal.
+- **Balance**: Are topics roughly equal in scope? A topic covering 100 pages vs one covering 2 pages will produce very different record quality.
+- **Relations**: For each leaf topic, read its linked parts. Do they actually contain relevant content for that topic? Wrong relations → wrong records → wrong GTs.
+
+This takes ~2 minutes and catches issues that automated checks miss.
 
 **Review with the user.** Present topic hierarchy (name, parent, linked parts count, planned records-per-topic). Ask: are these the right skills? Any missing? How many records per topic?
 
@@ -543,78 +477,46 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --enrich-sources
 ```
 
-The script makes **multiple LLM calls per topic** (one per prompt type: explain, scenario, compare/analyze, edge-case, application) for better diversity. By default, every leaf topic gets an equal number of records. Use `--weight-by-difficulty` to distribute based on base model eval scores — hard topics (0-30% success) get 40-50% of records, medium (30-70%) get 30-40%, easy (70-100%) get 10-20%. This is the recommended mode after the first evaluation, because GRPO learning signal is strongest on hard topics (arXiv:2508.14094: 47% gains from hard examples vs 3-15% from easy). Use `--weight-by-source` to distribute proportionally to linked source parts instead (max 3:1 imbalance ratio). Inner parallelism runs all prompt-type calls concurrently within each topic.
+Key flags: `--enrich-sources` (recommended: enriches source_parts traceability), `--append` (retry failed topics without overwriting), `--upload-incremental` (records appear in UI as each topic completes). Generate **200+ total records**, 15-25 per leaf topic.
 
-**Context source:** Each topic's records are grounded in the parts linked via `relations.json` (built in Step 3d by the relation-builder). This is curated context — the relation-builder evaluated each part's relevance to each specific topic. Do NOT add `--use-rag` to augment this with uncurated semantic search results — it dilutes the curated context and undermines Step 3d.
-
-**`--enrich-sources`** (recommended): After generating each question, re-queries the gateway with the question text to find additional matching parts. This enriches `source_parts` with question-specific matches without polluting the curated topic→parts context used for generation. Unlike `--use-rag` (which adds uncurated parts BEFORE generation), this only supplements traceability AFTER generation — the LLM never sees these extra parts.
-
-**Alternative: `--rag-only` mode** — if you skipped Step 3d (no relations), use `--use-rag --rag-only` to retrieve context via gateway semantic search instead. This is faster (skip relation-building) but less precise. Requires embeddings on the gateway.
-
-> **When to use `--rag-only`:** Quick iteration during early pipeline development, or when the relation-builder is unavailable. Once relations are built, use them — they are more precise than keyword-based semantic search.
-
-If some topics fail, use `--append` to retry without overwriting. In append mode, topics already present in the output file are automatically skipped to prevent duplicates after crash+retry. Adapt `--records-per-topic` (default 25), `--min-per-topic` (default 10), `--max-per-topic` (default 50) to the project. **Generate at least 200+ total records.**
-
-**`--ground-truth-format`** (recommended for structured-output tasks): When the project requires a specific answer format (e.g. `"Eligible. EIC: $[amount]"` or `"Answer: [letter]"`), pass this flag so:
-1. Ground truths are generated in that format instead of verbose source excerpts
-2. **All prompt types are forced into scenario-based questions** — open-ended prompts like "Explain...", "Compare..." are converted to concrete scenarios with specific inputs, since they can't be answered in a structured format. This prevents model refusals during training.
-
-**⚠️ CRITICAL: Include the exact valid vocabulary in the format string.** If the answer must use specific category names, LIST THEM in the format. Do NOT use placeholders like "allergen1, allergen2" — the LLM will use ingredient names (casein, whey, ghee) instead of category names (milk). Bad vs good:
+**`--ground-truth-format`** (recommended for structured-output tasks): Forces scenario-based prompts with specific answer format. **⚠️ Include exact valid vocabulary** — don't use placeholders:
 - ✗ Bad: `--ground-truth-format 'allergen1, allergen2 OR none'`
-- ✓ Good: `--ground-truth-format 'Comma-separated from ONLY these values: milk, eggs, fish, shellfish, tree nuts, peanuts, wheat, soybeans, sesame. If no allergens: none. Use ONLY these exact names, never ingredient names like casein or whey.'`
+- ✓ Good: `--ground-truth-format 'Comma-separated from ONLY: milk, eggs, fish, shellfish, tree nuts, peanuts, wheat, soybeans, sesame. If none: none'`
 
-Examples:
-- Classification: `--ground-truth-format 'COMPLIANT. Per 40 CFR [section]: [limit type] for [contaminant] is [value]. Sample at [value] is within limits. OR NON-COMPLIANT with exceedance.'`
-- Allergen detection: `--ground-truth-format 'Comma-separated from ONLY: milk, eggs, fish, shellfish, tree nuts, peanuts, wheat, soybeans, sesame. If none: none'`
-- MCQ: `--ground-truth-format 'Single letter: A, B, C, or D'`
-
-**⚠️ Every record's `topic` field MUST match a leaf topic ID in `topics.json`.** Do NOT invent ad-hoc topic IDs during generation. If you generate records with a custom script instead of `generate_records.py`, validate topic IDs before writing to `training.jsonl`. The `upload-records` command will reject records with topic IDs that don't exist on the gateway — mismatched topics cause FK violations and silent data loss.
-
-**⚠️ ALWAYS deduplicate** after generation — overlapping topics (e.g., "Fork Detection" and "Combination Calculation" both referencing Chapter 3) produce similar questions. This is mandatory, not optional:
+**⚠️ ALWAYS deduplicate** after generation:
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/deduplicate_records.py finetune-project/training.jsonl --threshold 0.85
 ```
-This removes near-duplicate prompts (trigram similarity > 0.85). Expect 5-15% reduction. If duplicates exceed 20%, the topic hierarchy has too much overlap — consider merging topics.
 
-With `--upload-incremental`, records appear in the UI as each topic completes — no separate upload step needed. If you ran without `--upload-incremental`, upload manually:
-```bash
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
-  --workflow-id $WORKFLOW_ID --file training.jsonl
-```
+> See [reference/data-format.md](reference/data-format.md) for full `generate_records.py` options, weighting modes, RAG mode, and upload details.
 
-> **Note:** `upload-records` resolves topic slugs → UUIDs via the local SQLite database at `~/.vllora/vllora.db`. If your DB is at a different path, pass `--db /path/to/vllora.db`. If the DB is unreachable, records will fail to upload with "topic IDs not found" — this means the topic slug→UUID mapping is missing, not that topics weren't uploaded.
+**Review with user.** Present per-topic breakdown (name, count, sample prompts). Point user to UI at `localhost:5173/finetune`.
 
-**Review generated data with the user.** Present a per-topic breakdown (topic name, record count, 2-3 sample prompts per topic). Ask:
-- Do these prompts look like realistic user questions?
-- Any topics with weak/repetitive prompts that need regeneration?
-- Any gaps — scenarios the user expected but didn't see?
+#### Step 4B: NeMo Data Designer (OPTIONAL — only when `use_nemo: true` in config.json)
 
-The UI at `http://localhost:5173/finetune` also shows all records grouped by topic — point the user there for a visual review.
+> **Skip this section unless the user explicitly set `"use_nemo": true`.** The default path is Step 4A above.
 
-#### Step 4B: NeMo Data Designer (when `use_nemo: true`)
-
-> **Activated by:** `"use_nemo": true` in `finetune-project/config.json`. The user sets this flag — the agent does not decide. If the flag is `false` or missing, use Step 4A above.
-
-**Spawn the `nemo-data-generator` subagent** with:
-- `SKILL_DIR=${CLAUDE_SKILL_DIR}`
-- `PROJECT_DIR` — absolute path to `finetune-project/`
-- `WORKFLOW_ID`, `GATEWAY_URL=http://localhost:9090`
-- `NEMO_URL=http://localhost:8000`
-- `SYSTEM_PROMPT` — the root system prompt from Step 1
-- `RECORDS_PER_TOPIC` — target records per leaf topic (default: 25)
-
-The subagent handles everything: verify NeMo → materialize seed → design recipe → preview → full job → convert → validate → upload. It returns a summary with record counts and any issues.
-
-If the subagent reports NeMo is not running, fall back to Step 4A (`generate_records.py`).
+Spawn `nemo-data-generator` subagent with `PROJECT_DIR`, `WORKFLOW_ID`, `SYSTEM_PROMPT`, `RECORDS_PER_TOPIC`. It handles the full NeMo pipeline. If NeMo unavailable, fall back to Step 4A.
 
 ---
+
+**4e. Agent quality check — read and verify records yourself.**
+
+After generation, **read records from every topic** (at least 3-5 per topic, mix of easy and hard prompts) and check:
+- **GT self-consistency**: Does the answer/verdict match the reasoning/evidence within the same GT? (e.g., "COMPLIANT" but explanation says "exceeds limit" = contradiction)
+- **GT factual accuracy**: Cross-reference 5-10 numeric values in GTs against the source parts. Do the numbers match? (e.g., if GT says "MCL for benzene is 0.005 mg/L", verify this appears in the source table)
+- **Prompt-GT alignment**: Does the GT actually answer the question asked? Does it use the correct format specified in the system prompt?
+- **Vocabulary consistency**: Are GTs using the exact vocabulary from `--ground-truth-format`? Any synonyms, abbreviations, or variants that would confuse the grader?
+- **Duplicate patterns**: Are different prompts producing identical GTs? (>5 identical GTs = low diversity, wasted GRPO signal)
+
+If >10% of sampled records have issues, **fix before proceeding** — re-generate the bad records with `generate_records.py --append` (skips completed topics) or `filter-records` + regenerate.
 
 **Checkpoint** after data generation (applies to both Step 4 and Step 4B):
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step generate-data --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
-### Step 4.5: Generate Variants for Augmentation
+### Step 4.5: Generate Variants for Augmentation (OPTIONAL)
 
 If some topics are under-represented, use `chat_completion.py` to create variants:
 
@@ -623,6 +525,7 @@ If some topics are under-represented, use `chat_completion.py` to create variant
 3. Keep system prompt and prior turns unchanged — vary only the final user message
 4. Track lineage: `"source_record_id"` pointing to the original
 5. Generate 3-5 variants per source record, append to `training.jsonl`
+6. **Run the Step 4e quality check on the new variants too** — generated variants can drift from the original's quality
 
 ### Step 5: Write the Grader
 
@@ -646,6 +549,29 @@ See [reference/grader-writing.md](reference/grader-writing.md) for 3 patterns (p
 **⚠️ COPY a template file — do NOT write a grader from scratch.** Literally copy the closest template file to `grader.js`, then customize ONLY the domain-specific parts (criteria names, weights, system prompt, domain terms). Keep the template's architecture intact — especially the LLM-as-judge scoring, LLM extraction fallback, and error handling. Do NOT cherry-pick individual features from a template into a hand-written grader — this loses the template's scoring granularity and produces coarse scores that GRPO can't learn from. If no template matches exactly, use `grader-template.js` as the base.
 
 **⚠️ NEVER return score 0.0 for a parsing/extraction failure.** A score of 0 must mean the response is genuinely wrong or empty — not that the grader couldn't parse the format. Use LLM-based extraction as fallback when regex fails (see `grader-mcq.js` and `grader-classification.js` for the pattern).
+
+**⚠️ GRPO CRITICAL: Wrong answers MUST get nonzero scores (0.01-0.10).** This is the #1 grader mistake. GRPO learns by comparing K completions per prompt. If all wrong answers score 0.0, the model gets zero gradient from those prompts — they're dead weight. A score of 0.01-0.10 for "wrong but attempted" gives GRPO the contrast it needs (0.01 vs 0.8 = useful gradient, 0.0 vs 0.8 = wasted prompt). This applies to:
+- Model says "none" when answer exists → score 0.02 (not 0.0)
+- Model gives wrong answer but correct format → score 0.05 (not 0.0)
+- Model partially correct (1 of 3 items) → score proportional to partial correctness
+
+**Only these should score exactly 0.0**: genuinely empty response, prompt copy/repetition, or complete refusal ("I cannot help"). Everything else gets at least 0.01.
+
+**⚠️ When fixing the grader in iteration (Step 9a), NEVER remove partial credit.** If the current grader gives 0.03 for wrong answers, do NOT change it to 0.0 — that makes the score distribution MORE binary and kills GRPO gradient. The fix for "too many wrong answers" is better records or a better model, NOT harsher scoring. Harsher scoring = more zeros = less gradient = worse training.
+
+**⚠️ MANDATORY: Include a length penalty in EVERY grader.** GRPO's #1 failure mode is length exploitation — the model learns verbose responses because longer = more content = higher scores. This happens in almost every training run if the grader doesn't penalize length. Add this to your grader from the start (not as a fix after training fails):
+
+```javascript
+// Length penalty — MANDATORY for GRPO. Adjust expectedMaxWords based on GT lengths.
+var expectedMaxWords = 30; // Set from GT P95 word count + 50% headroom
+var words = response.split(/\s+/).length;
+if (words > expectedMaxWords) {
+    var penalty = Math.min(0.5, (words - expectedMaxWords) / expectedMaxWords);
+    score *= (1 - penalty);
+}
+```
+
+Calculate `expectedMaxWords` from your ground truth lengths: count words in 5-10 GTs, take the longest, add 50%. For allergen detection (GT: "milk, eggs") → ~10 words max. For compliance verdicts (GT: 30-60 tokens) → ~50 words max. For open-ended explanations → set higher or use a softer penalty curve.
 
 **⚠️ NEVER use programmatic checks (char count, keyword matching) as the primary scoring mechanism.** Programmatic checks are useful for fast guards (empty response, refusal detection, format compliance) but NOT for scoring quality. Use LLM-as-judge for quality assessment — it produces continuous scores that give GRPO smooth gradients. A programmatic check like `response.length > 150 → score 1.0` will produce coarse scores where gpt-4o-mini always gets 1.0 (it always writes long responses).
 
@@ -685,6 +611,16 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
 The `--live` flag picks 3 random training records, sends each prompt to the LLM, and grades the real responses. If all live samples score 0.0, the grader is broken — fix the extraction/parsing logic to handle real model output formats before proceeding.
 
 **Both tests must pass.** If Test 1 passes but Test 2 scores 0.0, the grader has format assumptions that real models don't satisfy. Fix and re-test. Do NOT proceed to upload until both pass. The sandbox does NOT support `console.log` — use the `reason` field for debug output.
+
+**Test 3: Adversarial robustness (agent thinks through edge cases).** Before uploading, **read your grader code and think about how it handles these adversarial model behaviors** — because GRPO WILL find these if they score higher:
+
+- **Over-prediction**: Model lists all possible answers (e.g., all 9 allergens, all contaminants). Does your grader penalize false positives hard enough, or does high recall + low precision still get a decent score?
+- **Under-prediction**: Model says "none" or gives empty/minimal response. Does your grader give 0.0, or does it give partial credit that rewards saying nothing?
+- **Length exploitation (MOST COMMON GRPO FAILURE)**: Model generates increasingly verbose responses because longer = more content = higher scores on F1/LLM-judge graders. GRPO reinforces this until completions hit max_output_tokens, causing 100% clipping and training collapse. **Your grader MUST penalize length from the start.** Check: if a correct 10-word answer and a correct 200-word answer both exist, does the grader score them the same? If yes, the model will learn to always write 200 words. Add a length penalty: `if (wordCount > expectedMax) score *= Math.max(0.5, 1 - (wordCount - expectedMax) / expectedMax)`. Set `expectedMax` based on your GT lengths (P95 word count + 50% headroom).
+- **Format gaming**: Model outputs the exact format template without correct content (e.g., "COMPLIANT. Per 40 CFR 141.XX: MCL for [contaminant] is [value]" with placeholders). Does your grader check actual values or just format?
+- **Copying the prompt**: Model repeats back the question or system prompt. Does your grader detect this?
+
+For each case, mentally trace through your grader logic. If any adversarial response would score >0.3, the grader has an exploitable weakness that GRPO will find during training. Fix it now — adding a hard gate or penalty is much cheaper than discovering the exploit after a failed training run.
 
 **Upload + verify + checkpoint** — run ALL THREE commands. Do NOT checkpoint the grader without uploading and verifying first. If the verify fails, the upload silently failed — re-run `upload-grader`.
 
@@ -762,6 +698,15 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py data-quality-gate \
 
 **5 gates**: Structural (free), Diversity (free), Completion Length (free), GT Quality ($), Alignment ($). See [reference/data-quality-gate.md](reference/data-quality-gate.md) for gate details, thresholds, common failure patterns, and research citations.
 
+**Step 5.5c: GT Self-Consistency Check (MANDATORY — agent performs this directly)**
+
+After the automated gates pass, **read records from every topic** and check: does each GT contradict itself? Specifically:
+- Does the **conclusion** (verdict, answer, classification) match the **evidence** (numbers, reasoning, citations) in the same GT?
+- Examples of contradictions: "COMPLIANT" but explanation says "exceeds the limit"; answer says "none" but explanation lists an item; classification says "positive" but reasoning says "no evidence found."
+- If >10% of sampled records have internal contradictions, **stop and fix the records** before proceeding. Contradictory GTs corrupt training — the model can't learn consistent behavior from inconsistent examples.
+
+This check catches issues that automated gates miss because it requires understanding the relationship between different parts of the same GT.
+
 **Checkpoint** after data quality gate passes:
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step data-quality-gate --project-dir finetune-project --workflow-id $WORKFLOW_ID
@@ -806,7 +751,16 @@ Eval → Readiness Gate → [FAIL] → Fix data/grader → Re-eval → ... → [
 **⚠️ These checks are specific to RFT/GRPO training.** GRPO learns by comparing multiple completions per prompt — if all completions score the same, the gradient is zero and the model learns nothing. Validate BEFORE committing to an expensive training run.
 
 **7a-i. Set max_output_tokens using the data quality gate (MANDATORY).**
-The default is **512** — but this is a starting point, NOT a universal value. Different tasks need different limits (classification ~128, MCQ reasoning ~1500, code gen ~2000+). A wrong value causes 100% completion truncation → grader scores garbage → zero useful gradient.
+
+**⚠️ Do NOT default to 512 or 1024.** Set max_output_tokens based on ACTUAL expected output length:
+- Allergen list (3-15 tokens) → **128**
+- Compliance verdict (30-60 tokens) → **256**
+- Short answer (50-100 tokens) → **256-512**
+- Explanation/reasoning (200+ tokens) → **512-1024**
+
+**Too high = length exploitation.** If expected output is 15 tokens but max_output_tokens is 512, GRPO has 500 tokens of "room" to pad. The model WILL fill it because longer responses often score better on F1/LLM-judge graders. Setting max_output_tokens close to expected length acts as a natural length constraint — the model can't be verbose if there's no room.
+
+**Too low = truncation.** If the model can't finish its response, the grader scores garbage.
 
 **Run the completion_length gate BEFORE training and apply its `recommended_min`:**
 ```bash
@@ -869,7 +823,19 @@ This means the poller never wastes an eval on a false alarm, and never lets a br
 
 **If the eval IS cancelled** (exit code 2), the output tells you exactly what to fix. Apply that fix before creating a new eval. Use `--no-early-cancel` to disable.
 
-When eval completes, proceed to **Step 7c (Readiness Gate)** — do NOT start training.
+When eval completes, **immediately log the iteration** before doing anything else:
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
+  --project-dir finetune-project \
+  --eval-file evaluations/eval-NNN.json \
+  --changes "describe what changed since last eval" \
+  --change-type baseline|grader|records \
+  --verdict PENDING
+```
+
+> **⚠️ This is MANDATORY — do NOT skip.** Log every eval, even cancelled ones. The iteration tracker is how you (and future runs) know what was tried and what worked. Update the verdict to PASS/FAIL after the readiness check. If you don't log iterations, you lose track of what changed and can't tell if fixes helped or regressed.
+
+Then proceed to **Step 7c (Readiness Gate)** — do NOT start training.
 
 #### 7c. Pre-Training Readiness Gate
 
@@ -1048,7 +1014,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 | High KL but training otherwise healthy | **Do NOT lower LR just for KL.** With β=0 (our backend default), KL divergence values are un-normalized and purely informational. Do NOT use KL values to make training decisions. |
 | Unstable training (NaN loss, reward collapse) | Lower `learning_rate` to 1e-6. Check for 100% completion truncation first. |
 
-#### 7e. Monitor training
+#### 7f. Monitor training
 
 **Spawn training monitor.** Delegate to the `training-monitor` subagent (`.claude/agents/training-monitor.md`) — provide `GATEWAY_URL=http://localhost:9090`, `WORKFLOW_ID`, `JOB_ID` (from the training job file), and `OUTPUT_DIR=training-jobs`. The subagent launches a detached Python script that runs autonomously.
 
@@ -1081,6 +1047,23 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py sync-jobs --workflow-id $WORKFLOW
 
 This runs during the eval-first loop (Step 7b→7c). Compute overall scores, per-topic breakdown (weakest first), low-scoring record reasons, and score concentration. Low topic scores are expected for base models — focus on whether the grader differentiates quality, not absolute scores. See [reference/analysis-strategy.md](reference/analysis-strategy.md) Part 1a for the full metrics table and formulas.
 
+**8a-agent. Read the actual model responses yourself.** After computing scores, **read the eval results thoroughly** — all low-scoring records, a sample of mid-range, and some high-scoring records across every topic. The eval result contains the grader's `reason` field which includes the parsed model output. Check:
+
+- **Low-scoring records**: Read both the model's response AND the grader's reason. Is the model's response a reasonable attempt that the grader scored harshly, or genuinely bad? Does the reason explain the score correctly? If the reason says "parsing failed" or "could not extract" → grader bug (can't parse the response format). If the reason says "wrong answer" but the response looks correct → grader logic bug.
+- **High-scoring records**: Read the reason — what criteria did the grader use? Is the model genuinely good, or is the grader too lenient? If the reason just says "matches" without checking important criteria → grader needs more checks.
+- **Reason patterns**: Do many records share the same reason text? (e.g., 30 records all say "Model said 'none'" or all say "F1=0.10, R=1.00, FP=8") → systematic issue. The reason tells you the exact failure mode — use it to decide whether to fix the grader, the records, or the prompts.
+- **Response patterns**: Are many model outputs identical? (e.g., always says "none", always lists all options, always gives the same template) → dominant strategy that may exploit the grader.
+- **Format compliance**: Does the model follow the output format from the system prompt? If not, does the reason show the grader handled it (e.g., LLM fallback extraction) or failed?
+
+The reason field is the most diagnostic — it tells you exactly what the grader checked and why it gave the score it did.
+
+**8a-research. Reason through unexpected patterns — don't just report numbers.** When eval scores are surprising (too high, too low, or clustered), think through why:
+- "Why would the model give this response?" — Consider what the model knows from its system prompt and training data. Is the prompt clear enough?
+- "Why would the grader give this score?" — Trace through the grader logic with the actual response. Is the grader testing what matters?
+- "What would GRPO learn from this score distribution?" — If 64% score 1.0 and 17% score 0.0, GRPO gets strong signal from the 0→1 boundary but nothing from the 1.0 records. Is that what we want?
+
+This reasoning often reveals the fix before training even starts.
+
 **Then run the readiness gate** (Step 7c) to decide: fix + re-eval, or proceed to training.
 
 #### 8a+. Filter Dead-Weight Records & Regenerate Replacements
@@ -1102,7 +1085,11 @@ This runs during the eval-first loop (Step 7b→7c). Compute overall scores, per
 
 #### 8b. Post-Training Eval (compare with baseline)
 
-After training completes, run an eval on the **trained model** to measure improvement:
+After training completes, run an eval on the **trained model** to measure improvement.
+
+**Resuming a partially-completed flow:** If you're restarting and find training completed but no post-training eval result exists (eval was cancelled, failed, or never created), you MUST create a new eval on the trained model before proceeding. Check `iterations.json` and the evaluations folder — if there's no completed eval on the trained model (the model name will be the job ID or the `fine_tuned_model` from the training job status), create one now. Do NOT skip this step or jump to iteration/retraining.
+
+**Get the trained model name** from the training job file: read `training-jobs/train-NNN.json` → field `fine_tuned_model` (or `provider_job_id` if `fine_tuned_model` is null — some providers use the job ID as the model name).
 
 ```bash
 # Eval on the trained model
@@ -1122,6 +1109,8 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
   --change-type baseline --verdict PASS
 ```
 
+**Read the post-training eval responses** — apply the same 8a-agent analysis to this eval. Compare the trained model's responses with the base model's responses (from Step 7d eval). What changed? Is the trained model better, or did it learn an exploit? This comparison is more valuable than the score delta alone.
+
 The `log-iteration` delta will show the improvement. Interpret the result:
 
 | Improvement (Δ) | Verdict | Action |
@@ -1130,7 +1119,7 @@ The `log-iteration` delta will show the improvement. Interpret the result:
 | **+0.05 to +0.15** | ~ Moderate improvement | Deploy if acceptable. Consider more epochs or harder data for next iteration. |
 | **+0.02 to +0.05** | ⚠ Marginal improvement | Check: was base model already >0.75? If so, this is expected — GRPO has limited headroom (arXiv:2508.14094: only 3.7% of steps learnable for easy prompts). Deploy if acceptable, or make grader stricter for next iteration. |
 | **-0.02 to +0.02** | ⚠ No meaningful improvement | Training didn't help. Likely cause: base model already too good (>0.75) or grader not differentiating. See Step 7d guidance. |
-| **< -0.02** | ❌ Regression | Training made the model worse. Deploy the base model, not the trained one. Investigate: reward hacking, overfitting, or lr too high. |
+| **< -0.02** | ❌ Regression | Training made the model worse. Deploy the base model, not the trained one. **But first**: run Step 8c analysis to understand WHY — if there's an exploitable grader pattern, fix the grader and retrain (don't just give up). |
 
 **⚠️ MANDATORY CHECKPOINT — answer these before proceeding:**
 
@@ -1139,13 +1128,22 @@ The `log-iteration` delta will show the improvement. Interpret the result:
 2. What is the trained model eval score (Step 8b)?        → ___
 3. Improvement (Δ = trained - base):                      → ___
 4. Was base model score > 0.75?                           → yes/no
-5. If yes AND Δ < 0.05: GRPO had insufficient headroom.
-   → Decision (pick one):
-     a) ACCEPT base model (already good enough)
-     b) RETRY with stricter grader (return to Step 5, make grader harder)
-     c) RETRY with smaller base model (0.8B/2B) — use with caution, run Step 7d first
-     d) REPORT to user — task may not benefit from GRPO at this model size
-6. Log decision:
+5. Run Step 8c (analyze_training.py) BEFORE deciding.     → Done? yes/no
+6. Did Step 8c find epoch-level patterns?                 → yes/no
+   (epoch_collapse, over_prediction, output_collapse)
+7. Decision — use the FIRST matching rule:
+   a) If Step 8c found exploitable grader pattern (over_prediction, output_collapse)
+      → FIX GRADER FIRST (return to Step 5, fix the exploit), then retrain.
+        Do NOT accept the base model when there's a fixable grader issue — the
+        regression means the grader has a weakness GRPO found, not that training
+        can't help. Fixing the grader closes the exploit.
+   b) If Step 8c found epoch_collapse but no grader exploit
+      → RETRY with fewer epochs (stop before the collapse epoch), same grader.
+   c) If Step 8c found no patterns AND base model > 0.75 AND Δ < 0.05
+      → ACCEPT base model (already good enough) or make grader stricter.
+   d) If none of the above apply
+      → REPORT to user with full analysis from Step 8c.
+8. Log decision:
    uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
      --project-dir finetune-project \
      --training-file training-jobs/train-NNN.json \
@@ -1160,21 +1158,88 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
 ```
 If the smaller model scores <0.50, proceed with GRPO training on it. If it also scores >0.75, the task is fundamentally easy — accept the base model and report to the user that GRPO training is unlikely to help.
 
-#### 8c. Analyze training metrics (after training completes)
+#### 8c. Analyze training metrics (after Step 8b)
 
-This runs after Step 7e. Training is expensive — analyze thoroughly:
+Run this **after** the post-training eval (Step 8b) so you can cross-reference training health with eval scores:
 
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/analyze_training.py \
-  --metrics-file training-jobs/$JOB_ID-metrics.json \
-  --epoch-evals-file training-jobs/$JOB_ID-epoch-evals.json
+  --workflow-id $WORKFLOW_ID --job-id $JOB_ID --save
 ```
 
-The script computes reward trend, KL health, clipping ratio, loss stability, grad norm spikes, signal strength, and per-topic trajectories. Exits with code 1 if critical alerts found.
+Or from saved files: `--metrics-file training-jobs/$JOB_ID-metrics.json --epoch-evals-file training-jobs/$JOB_ID-epoch-evals.json`
 
-#### 8c. Cross-reference eval + training (when both available)
+The script computes:
+- **Reward trend** — improving/flat/declining based on first→last delta (Ref: DeepSeekMath §3.2)
+- **Clipping ratio** — completion truncation rate, trend detection (empirical thresholds: healthy <0.1, critical >0.5)
+- **Signal strength** — reward_std (diversity between completions) and frac_reward_zero_std (wasted prompts). Zero-std alerts are conditional on reward being flat — 30-99% zero-std is normal in GRPO when reward is still improving (Ref: arXiv:2509.21880)
+- **Reward hacking detection** — reward improving but reward_std collapsing 50%+ (heuristic: diversity collapse suggests model found exploitable pattern)
+- **NaN/catastrophic detection** — loss or grad_norm NaN/Inf, loss stuck at zero
+- **Per-topic trajectories** — from epoch evaluations, shows which topics improved/stagnated/degraded
+- **Top regressions & improvements** — the 5 records with the biggest score drops and gains, including their input, model output, and grader reason. Regressions tell you what training broke; improvements tell you what's working.
 
-Combine eval scores with training metrics. Present per-topic eval scores alongside training health. Suggest prioritized actions.
+> **Note on loss, KL, grad_norm**: Our backend reports un-normalized values that oscillate by 6 orders of magnitude step-to-step. The script only flags NaN/Inf and stuck-at-zero for these metrics. For training health, rely on **reward metrics** which are on the correct 0-1 grader scale.
+
+Exits with code 1 if critical alerts found.
+
+**Per-record epoch analysis — what to look for:** Read the top regressions carefully. The grader `reason` field is the most diagnostic — it tells you exactly WHY the score dropped. Common patterns:
+
+| Pattern in top regressions | What it means | Fix |
+|---------------------------|--------------|-----|
+| High recall (R=1.00) but low precision (P=0.1-0.2), many false positives (FP=5-8) | **Over-prediction exploit**: model learned "list everything" to maximize recall. GRPO found this is easier than being precise. | Add hard penalty for false positives in grader (not just F1). Reduce epochs — check trajectories, the collapse often happens at a specific epoch (e.g., fine through epoch 3, crashed at epoch 4). |
+| All regressed records have identical or near-identical outputs | **Collapsed to single strategy**: model converged on one response pattern regardless of input. | Grader has exploitable shortcut. Inspect what the repeated output is, then penalize it explicitly. Reduce epochs. |
+| Scores fine through epoch N, then sudden crash at epoch N+1 | **Overfitting cliff**: model overfit to training distribution and lost generalization. | Use fewer epochs (stop at epoch N). This is the most common fix — many tasks need 2-3 epochs, not 5. |
+| Regressed records are all single-answer prompts, improved records are multi-answer | **Asymmetric reward**: grader rewards complex outputs more (more things to match → more partial credit). Model learns to always give complex answers. | Normalize grader scores so single-answer and multi-answer prompts have similar score distributions. |
+| Format penalty dominates the reason (e.g., "Format penalty: -0.25 (94 words)") | **Length exploitation then penalty**: model generates longer outputs to include more content but gets penalized for format. Conflicting signals. | Simplify format requirements, or make format checking binary (pass/fail) instead of a penalty scale. |
+| Trajectories oscillate wildly per record (e.g., [1.0, 0.4, 1.0, 0.2, 0.8]) | **Grader instability**: grader gives different scores for similar outputs. Training signal is noisy. | Inspect grader — is it using regex that's sensitive to minor formatting? Is it an LLM-judge with high variance? Make grader more deterministic. |
+
+> These patterns are from observed training runs, not paper-backed. They are diagnostic heuristics — always verify by reading the actual model outputs.
+
+**8c-agent. Read the epoch records yourself.** After running the script, **read the epoch evaluation data thoroughly** — all records the script flagged (regressions, improvements), plus samples from stagnant records and each topic. For each:
+
+- **Compare the model's response across epochs**: Read `rollout_content` at epoch 0 vs the last epoch. How did the response change? Did it get longer/shorter? More/less specific? Did it switch from correct to incorrect, or from one wrong pattern to another?
+- **Read the grader reason at each epoch**: Does the reason explain why the score changed? Look for patterns like "R=1.00 P=0.11 FP=8" (over-prediction), "parsing failed" (format drift), or "Model said 'none'" (under-prediction). The reason tells you exactly what the grader saw.
+- **Cross-reference regressions with improvements**: Are the records that improved the opposite pattern of those that regressed? (e.g., regressions are single-answer prompts that the model now over-predicts, improvements are multi-answer prompts that benefit from over-prediction) → this reveals the exploit strategy.
+- **Check the collapse epoch**: If the script reported `epoch_collapse`, read 5 records at the collapse boundary. What changed in the model's behavior between epoch N-1 (good) and epoch N (bad)?
+
+This is the most diagnostic step in the entire analysis. Score numbers tell you "something went wrong." Reading the actual responses tells you "the model started listing all 9 allergens at epoch 4" — which directly tells you the fix (add FP penalty, reduce epochs).
+
+**8c-research. Reason through the problem — don't just match patterns.** The diagnosis tables below are starting points, not answers. When you see unexpected metrics or epoch behavior, **think through it like a researcher**:
+
+1. **Observe**: What exactly happened? State the facts from the data — scores, trajectories, model outputs, grader reasons. No interpretation yet.
+
+2. **Hypothesize**: What could cause this? Generate 2-3 possible explanations. Think about what GRPO is actually doing — it generates K completions, scores them, and reinforces the better ones. Ask yourself:
+   - "What strategy would maximize the grader score with minimal effort?"
+   - "If I were the model, what shortcut would I learn from this grader?"
+   - "Which records give the strongest gradient signal, and what do they teach?"
+
+3. **Verify**: Test each hypothesis against the data. Read specific records that should confirm or reject each hypothesis. For example:
+   - If you hypothesize "model learned to over-predict" → check: do high-scoring records have more items in the output? Do low-scoring records have fewer?
+   - If you hypothesize "grader is too lenient on topic X" → check: read the grader reason for high-scoring records in topic X — is the grader actually checking quality?
+   - If you hypothesize "epoch collapse from overfitting" → check: read the same record at epoch N-1 (good) and epoch N (bad) — did the output quality actually change, or did the grader become inconsistent?
+
+4. **Root cause**: Which hypothesis survived verification? The root cause is always one of three things:
+   - **Grader weakness** — the grader rewards a shortcut the model found. Fix the grader.
+   - **Data issue** — records are wrong, contradictory, or too homogeneous. Fix the records.
+   - **Training config** — too many epochs, wrong LR, insufficient max_output_tokens. Fix the config.
+
+5. **Fix and predict**: Before implementing the fix, predict what will change. "If I add a false-positive penalty to the grader, the over-prediction strategy will score lower, forcing the model to be more precise." If you can't predict the effect, you don't understand the root cause yet — go back to step 3.
+
+**Don't just follow the table below.** Use it as a starting point, then reason through the specific situation. Every task is different — the table can't cover every case.
+
+**Training metrics → diagnosis (starting points):** Cross-reference the script output with post-training eval scores (Step 8b). The following signals may indicate data or grader fixes are needed — not just hyperparams.
+
+> **Disclaimer**: These are heuristics inferred from GRPO mechanics, not paper-backed rules. Always investigate the specific cause before acting.
+
+| Training metric signal | Possible causes (check in order) | Fix |
+|----------------------|--------------------------------|-----|
+| Per-topic: some topics **stagnant** while others improve | **1) Topic already saturated** — base model scores >0.8 on that topic (check Step 7d per-topic scores). No headroom for GRPO. **2) Records too vague or GTs incorrect** — zero-variance from all-wrong or all-right. | 1) Make grader stricter for that topic, or accept base model performance. 2) `filter-records` + `generate_records.py --append` to regenerate. |
+| Per-topic: some topics **degraded** | **1) Grader criteria inconsistency** — grader rewards behavior in topic A that it penalizes in topic B. This is the most likely cause (Ref: MO-GRPO, arXiv:2509.22047 — high-variance objectives dominate gradient). **2) System prompt conflict** — less likely, only matters if prompts directly contradict what grader rewards. | 1) Review grader rubric — ensure criteria are compatible across all topics. Check reward_std per-topic if available: high-variance topics dominate. 2) Review system prompts for direct contradictions. |
+| `frac_reward_zero_std` high + reward flat | **1) Easy-saturation** — per-topic base scores >0.8, all completions score similarly. **2) Hard-impossible** — per-topic base scores ~0, base model can't bootstrap. **3) Insufficient epochs** — training hasn't converged yet. | 1) Make grader stricter to create headroom. Do NOT just remove easy records — arXiv:2509.21880 shows they can still provide signal. 2) Larger base model, or simplify prompts. 3) Run more epochs before concluding data is the problem. |
+| `reward_std` near zero + grader verified OK | **1) Model saturation** — if mean reward ~1.0, the model has learned the task. This is success, not a problem. **2) Task is narrow** — legitimate ceiling. **3) Prompts lack diversity** — all test the same pattern. | 1) Deploy — training is complete. 2) Accept the result. 3) Add diverse prompts: vary question types, input formats, edge cases. |
+| Reward hacking (reward up, std collapsing) | **Primary: Grader has exploitable weakness** — model found a pattern (format, length, keywords) that scores high without genuine quality. This is fundamentally a grader problem, not a data problem (Ref: Weng 2024 reward hacking survey). | **Primary fix**: Inspect model outputs manually to identify the exploit. Tighten grader to penalize the specific exploit. Enable/increase beta to slow divergence while diagnosing. **Secondary** (after grader is fixed): add targeted adversarial records that expose the now-closed exploit. |
+
+**If any signal points to grader or data fixes**: go to **Step 9b item 2-3**, NOT item 1 (hyperparams only). Fixing hyperparams alone won't help if the grader or training data is the problem.
 
 #### 8d. Quick diagnosis patterns
 
@@ -1239,6 +1304,12 @@ The diagnosis classifies zero-score records and tells you **what to fix**:
 | Score clustering (>70% one value) | Grader doesn't differentiate quality levels | Use LLM-as-judge template with continuous scoring |
 
 **Step 2a: Fix the grader** (if diagnosis says `FIX GRADER`):
+
+**⚠️ GRPO grader fix rules — read before editing:**
+- **NEVER remove partial credit.** If wrong answers currently score 0.03, do NOT change them to 0.0. More zeros = less gradient = worse training. This is the opposite of SFT intuition.
+- **NEVER make the grader more binary.** If the fix increases the percentage of 0.0 or 1.0 scores, it's the wrong fix. GRPO needs scores spread across 0.0-1.0.
+- **The goal is MORE granularity, not stricter scoring.** Add intermediate scores (0.1, 0.3, 0.5) instead of collapsing everything to 0 or 1.
+
 ```bash
 # Edit grader.js, then upload + dry-run
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader \
@@ -1282,21 +1353,28 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force \
 
 **⚠️ Don't default to "fix the grader" for every issue.** Read the diagnosis carefully — refusals and vague prompts are record problems, not grader problems. Fixing the grader to tolerate bad prompts just masks the issue.
 
+**Before re-running eval — verify your fix.** Read the changed files and confirm the fix actually addresses the diagnosed issue:
+- If you fixed the grader: re-run Test 3 (adversarial robustness) mentally. Does the fix close the specific exploit found in Step 8a-agent? Trace through the grader with the exact model response pattern that caused the problem.
+- If you fixed records: read 5-10 of the new/changed records. Are the GTs correct and consistent? Do they avoid the pattern that caused low scores?
+- If you fixed both: verify they're aligned — the grader's new criteria match what the new records produce.
+
+Don't burn another 45-min eval cycle on a fix that doesn't address the root cause.
+
 **Return to Step 7b** — create a new eval and re-run the readiness gate. This is the fast loop (~45 min per iteration).
 
 #### 9b. Post-training iteration (training completed but results unsatisfactory)
 
-After training analysis (Step 8c), if results are unsatisfactory:
+After training analysis (Step 8c), use the **training metrics → topics/records diagnosis table** (Step 8c) to determine the right fix. **Check that table first** — if any signal points to records/topics, do NOT default to hyperparams-only (item 1).
 
-1. **If only hyperparams need adjusting** (reward flat, clipping too high, etc.) — skip eval, go directly to **Step 7e** with new training config
-2. **If specific topics are underperforming** — analyze per-topic scores from the post-training eval. For each low-scoring topic:
+1. **If ONLY hyperparams need adjusting** (reward flat but per-topic trajectories all improving, clipping too high, etc.) — skip pre-training eval, go directly to **Step 7e** with new training config. After training completes, **always run Step 8b** (post-training eval) to measure improvement.
+2. **If specific topics are underperforming** (per-topic trajectories show stagnant/degraded, or training signals from Step 8c diagnosis table) — for each problematic topic:
    - **Check topic records**: Are the prompts clear? Are ground truths correct? Use `filter-records` to remove bad records, `generate_records.py --append` to regenerate.
    - **Check topic relations**: Are the right source parts linked? Does the topic have enough context? Re-run relation-builder if needed.
    - **Check topic system prompt**: Does it include the domain rules the model needs? Update and re-generate records.
    - After fixing, return to **Step 7b** (re-eval with updated records, then retrain)
 3. **If grader needs fixing** (all topics score similarly, or grader too lenient/strict) — fix grader, return to **Step 7b**
 4. **If model is too weak** — try a larger base model (2B → 4B → 9B)
-4. **If base model scored too high (>0.75) and training showed no improvement** — the task is too easy for this model. GRPO has limited headroom (see Step 7d analysis table). Options in priority order:
+5. **If base model scored too high (>0.75) and training showed no improvement** — the task is too easy for this model. GRPO has limited headroom (see Step 7d analysis table). Options in priority order:
    - **Accept the base model** — if it already meets requirements, deploy without training. This is the simplest and often best option.
    - **Make grader stricter** → return to Step 5 (rewrite grader with harder criteria to lower base model scores), then re-eval + retrain
    - **Report to user** — explain that the base model already performs well and GRPO has limited headroom. The user may decide the base model is good enough, or may want to adjust the grader/task requirements.
@@ -1331,39 +1409,22 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 
 The vLLora UI at **http://localhost:5173** provides score distributions, training metrics charts, and interactive grader editing. Tell the user to open it after Step 6.
 
-## Reference Files (Deep Dives)
+## Reference Files
 
-Read these when you need more detail on a specific step:
+Read on demand when you need deeper detail. The most important ones are called out in the steps above.
 
 | File | When to read |
 |------|-------------|
-| `reference/api-reference.md` | When making API calls — all 76 gateway endpoints with curl examples |
-| `reference/data-format.md` | When generating JSONL — format rules, validation, quality tips |
-| `reference/extraction-guide.md` | When extracting documents — Docling Serve setup, hybrid chunk API, knowledge_parts.json schema, pdftotext fallback |
-| `reference/grader-writing.md` | When writing the grader — 3 patterns, design guidelines, common mistakes |
-| `reference/topic-hierarchy.md` | When designing topics — structure, coverage analysis, balance scoring |
-| `reference/execution-log-template.md` | When writing the execution log — per-step fields, failure/resume patterns |
-| `reference/readiness-gate.md` | When interpreting readiness gate or difficulty probe results — full check tables, WARN safety guide |
-| `reference/iteration-strategy.md` | When analyzing results — diagnosis, stall patterns, escalation ladder |
-| `reference/analysis-strategy.md` | **Read at Step 8** — data fields, decision trees, action templates, interactive presentation |
-| `reference/workflow-guide.md` | For the full detailed walkthrough of every step |
+| `reference/api-reference.md` | Making API calls — all gateway endpoints |
+| `reference/data-format.md` | Generating JSONL — format, options, upload |
+| `reference/extraction-guide.md` | Extraction details — Docling, subagent params, merge script |
+| `reference/grader-writing.md` | Writing graders — patterns, guidelines, mistakes |
+| `reference/topic-hierarchy.md` | Designing topics — structure, JSON format, balance |
+| `reference/readiness-gate.md` | Interpreting readiness gate results |
+| `reference/iteration-strategy.md` | Diagnosing stalls, escalation ladder |
+| `reference/analysis-strategy.md` | **Read at Step 8** — decision trees, per-record analysis |
+| `reference/training-metrics-guide.md` | **Read at Step 8** — GRPO metric interpretation |
 
 ## Helper Scripts
 
-Run with `uv run ${CLAUDE_SKILL_DIR}/scripts/<script>`. Key scripts:
-
-- **`convert_pdf_to_markdown.py`** — PDF → Markdown via pymupdf4llm (utility, not primary extraction)
-- **`finetune.py`** — Gateway API wrapper (create workflow, upload knowledge/topics/records/grader, verify, create-eval, create-training, poll-eval, poll-training, filter-records, diagnose-grader)
-- **`generate_records.py`** — Generate training records from topics + knowledge via LLM
-- **`validate_dataset.py`** — Validate JSONL (format, fields, RFT compliance, cross-reference topics/parts)
-- **`analyze_training.py`** — Analyze training metrics (reward trend, KL, clipping, loss, per-epoch evals)
-- **`print_metrics_table.py`** — Print training metrics table (per-epoch or per-step)
-- **`dry_run_grader.py`** — Dry-run grader on a single row (instant syntax/logic check)
-- **`consolidate_parts.py`** — Merge adjacent text parts, drop fragments, fix Unicode
-- **`validate_extraction.py`** — Cross-document extraction quality gate (includes table quality checks)
-- **`camelot_extract_tables.py`** — Camelot-based table extraction fallback for complex tables that Docling garbles (stream mode, multi-page stitching, 99%+ accuracy on regulatory tables)
-- **`docling_extract.py`** — Docling extraction (fallback for scanned/complex PDFs; requires Docker)
-- **`build_knowledge_parts.py`** / **`extract_tables.py`** — Docling fallback post-processing
-- **`chat_completion.py`** — Low-level LLM call wrapper (used internally by `generate_records.py`)
-- **`run_evaluation.py`** — Standalone eval script (legacy — prefer `finetune.py create-eval`)
-- **`start_training.py`** — Standalone training script (legacy — prefer `finetune.py create-training`)
+Run with `uv run ${CLAUDE_SKILL_DIR}/scripts/<script>`. Key ones: `finetune.py` (gateway API wrapper — 25 subcommands), `generate_records.py`, `analyze_training.py`, `validate_extraction.py`, `dry_run_grader.py`, `data_quality_gate.py`. Run any script with `--help` for usage.

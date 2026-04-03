@@ -1951,6 +1951,64 @@ def cmd_diagnose_grader(args: argparse.Namespace) -> None:
         except Exception:
             pass  # Gateway not available — agent can still use local grader.js
 
+    # ── Response pattern analysis ──
+    # Parse model outputs from reason fields to detect systematic patterns.
+    # The reason field often contains "Model: [x, y, z]" or "Model said 'none'" etc.
+    import re
+    model_outputs: list[str] = []
+    for score_val, items in buckets.items():
+        for it in items:
+            reason = it.get("reason", "")
+            # Extract model output from reason — look for "Model: [...]" or "Model said '...'"
+            m = re.search(r"Model:\s*\[([^\]]*)\]", reason)
+            if m:
+                model_outputs.append(m.group(1).strip())
+            else:
+                m2 = re.search(r"Model said '([^']*)'", reason)
+                if m2:
+                    model_outputs.append(m2.group(1).strip())
+
+    if model_outputs:
+        from collections import Counter
+        output_counts = Counter(model_outputs)
+        most_common = output_counts.most_common(3)
+        total_outputs = len(model_outputs)
+
+        # Check for dominant response pattern (>20% of all outputs identical)
+        if most_common and most_common[0][1] > total_outputs * 0.2:
+            dominant_output = most_common[0][0]
+            dominant_pct = most_common[0][1] / total_outputs * 100
+            output["diagnosis"].append({
+                "issue": f"Response pattern: {dominant_pct:.0f}% of model outputs are '{dominant_output[:80]}' — model has a dominant response strategy",
+                "likely_cause": (
+                    "The model defaults to a single answer pattern for most prompts. "
+                    "This reduces GRPO learning signal (all completions similar → zero-variance groups)."
+                ),
+                "fix": [
+                    f"If '{dominant_output[:50]}' is a valid answer for some prompts but wrong for others, "
+                    "the grader may need a harder penalty for incorrect use of this pattern.",
+                    "Check if the model is over-predicting (listing too many items to maximize recall) "
+                    "or under-predicting (saying 'none' to avoid penalties).",
+                ],
+            })
+
+        # Check for over-prediction: many outputs have high item counts
+        # (e.g., model listing all 9 allergens when GT has 1-2)
+        high_item_outputs = [o for o in model_outputs if o.count(",") >= 4]
+        if high_item_outputs and len(high_item_outputs) > total_outputs * 0.2:
+            output["diagnosis"].append({
+                "issue": f"Over-prediction: {len(high_item_outputs)}/{total_outputs} ({len(high_item_outputs)*100//total_outputs}%) model responses list 5+ items — model may be listing everything to maximize recall",
+                "likely_cause": (
+                    "Model learned that listing more items increases recall (and F1). "
+                    "This is a grader exploit — F1 rewards recall even with low precision."
+                ),
+                "fix": [
+                    "Add explicit false-positive penalty to grader (not just F1).",
+                    "Example: if FP > TP, cap score at 0.2 regardless of F1.",
+                    "Or: score = F1 * (1 - FP_rate) to penalize precision loss.",
+                ],
+            })
+
     # ── Print human-readable diagnosis ──
     print("=== Grader Diagnosis ===")
     print(f"Total scores: {total}")
@@ -2361,6 +2419,15 @@ def cmd_poll_eval(args: argparse.Namespace) -> None:
             metadata["completed_at"] = result.get("completed_at")
             eval_file.write_text(json.dumps(metadata, indent=2))
             print(f"Done: {status}. Saved to {eval_file}")
+            if status == "completed":
+                print(
+                    f"\n⚠️  MANDATORY: Log this eval iteration before proceeding:\n"
+                    f"   uv run ${{CLAUDE_SKILL_DIR}}/scripts/finetune.py log-iteration \\\n"
+                    f"     --project-dir finetune-project \\\n"
+                    f"     --eval-file {eval_file} \\\n"
+                    f"     --changes \"describe what changed\" \\\n"
+                    f"     --change-type baseline|grader|records --verdict PENDING"
+                )
             if status == "cancelled":
                 print("Eval was cancelled. Partial results (if any) have been saved.", file=sys.stderr)
                 sys.exit(2)
@@ -3126,6 +3193,18 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
             metadata["error_message"] = result.get("error_message")
             job_file.write_text(json.dumps(metadata, indent=2))
             print(f"Done: {status}. Saved to {job_file}")
+            if status in ("succeeded", "completed"):
+                print(
+                    f"\n⚠️  NEXT STEPS:\n"
+                    f"   1. Run post-training eval (Step 8b):\n"
+                    f"      uv run ${{CLAUDE_SKILL_DIR}}/scripts/finetune.py create-eval \\\n"
+                    f"        --workflow-id $WORKFLOW_ID --model \"{metadata.get('fine_tuned_model', 'TRAINED_MODEL')}\" --output-dir finetune-project/evaluations\n"
+                    f"   2. Log this training iteration:\n"
+                    f"      uv run ${{CLAUDE_SKILL_DIR}}/scripts/finetune.py log-iteration \\\n"
+                    f"        --project-dir finetune-project --phase training \\\n"
+                    f"        --training-file {job_file} \\\n"
+                    f"        --changes \"describe training config\" --change-type baseline --verdict PENDING"
+                )
             if status == "failed":
                 sys.exit(1)
             if status == "cancelled":

@@ -321,6 +321,8 @@ For each record, compare epoch 0 (before training) to the last epoch:
 - **Stagnant records**: The model can't figure out how to score better — the prompt may be too vague, or the grader criteria may conflict
 - **Degraded records**: Something is wrong — check if the grader is penalizing behaviors the model learned from other records
 
+When per-topic trajectories show stagnant or degraded topics, **always check whether the fix is in records/topics, not just hyperparams**. See the **Training Metrics → Topics/Records Diagnosis** table in `analysis-strategy.md` §2d for the full mapping from training signals to data fixes.
+
 ---
 
 ## Part 3: Analyzing Topic Distribution

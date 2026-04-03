@@ -172,7 +172,7 @@ Derived from research (arXiv:2410.15226 for breadth, arXiv:2508.14094 for per-to
 - **Minimum 15 records per leaf topic** — below this, zero-variance collapse happens too early (arXiv:2509.21880)
 - **Sweet spot ~20 records per topic** — diminishing returns beyond this (arXiv:2410.15226)
 - **More leaf topics is almost always better** — split before you deepen
-- **Difficulty tiers double effective topic count** — 10 skills × 2 difficulty tiers = 20 leaf topics
+- **Difficulty as metadata enables weighted generation** — 10 skills with difficulty labels let `generate_records.py --weight-by-difficulty` allocate more records to hard topics
 
 ---
 
@@ -238,21 +238,24 @@ The subagent writes `relations.json` — a flat array of `{topic_identifier, par
 
 If there are no documents (objective-only pipeline), skip this phase — no relations needed.
 
-### Phase 3: Upload (Step 6)
+### Phase 3: Upload (Step 3)
 
-After uploading topics, upload the relations via the API:
+Upload topics and relations via the CLI (auto-converts slug IDs to UUIDs):
 
 ```bash
-if [ -f relations.json ]; then
-  RELATIONS=$(cat relations.json)
-  curl -X POST http://localhost:9090/finetune/workflows/$WORKFLOW_ID/topics/relations \
-    -H "Content-Type: application/json" \
-    -d "{\"relations\": $RELATIONS}"
-fi
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-topics --workflow-id $WORKFLOW_ID --file topics.json
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-relations --workflow-id $WORKFLOW_ID --file relations.json
 ```
 
-- `topic_identifier` — the topic's `id` or `reference_id`
-- `part_identifier` — the knowledge source part's `id` or `reference_id` (alias: `source_identifier`)
+### Phase 4: Agent Verification (Step 3e)
+
+**After building topics and relations, the agent verifies them by reading the source material:**
+- **Coverage**: Read `all-parts-index.json` titles. Is every major section covered by at least one topic?
+- **Overlap**: Do any two leaf topics cover the same content? Overlapping topics produce duplicate records.
+- **Balance**: Are topics roughly equal in scope?
+- **Relations**: For each leaf topic, read its linked parts. Do they actually contain relevant content?
+
+This agent self-check catches issues that automated tools miss — wrong relations, missing topics, overlapping scopes.
 
 ### Why this matters
 
@@ -282,16 +285,12 @@ For records, encode the topic in the ID (e.g., `fork-detection-basic-001`) so yo
 
 ### ID Format
 
-Use slash-separated paths matching the hierarchy:
-```
-domain-topic
-domain-topic/skill-topic
-domain-topic/skill-topic/difficulty-tier
-```
+Use slug-based IDs matching the 2-level hierarchy. Keep IDs lowercase with hyphens:
 
-Keep IDs lowercase, use hyphens for spaces:
-- Good: `"tactics/fork-detection/fork-detection-complex"`
-- Bad: `"Chapter 3/Section 3.1/Forks"`
+- Good: `"fork-detection"`, `"pin-recognition"`, `"payment-troubleshooting"`
+- Bad: `"Chapter 3/Section 3.1/Forks"`, `"tactics/fork-detection/fork-detection-complex"`
+
+Note: `finetune.py upload-topics` auto-converts slugs to UUIDs for the gateway. Use the same slug as `topic_identifier` in `relations.json`.
 
 ### Common Mistakes
 

@@ -30,15 +30,19 @@ Step 3: Build Topic Hierarchy
     ├── 3a: Filter parts by relevance (relevant: true/false on each part)
     ├── 3b: Design skill-based topics (NOT document structure)
     ├── 3c: Write behavioral system prompt segments
-    └── 3d: Build topic-part relations (relation-builder subagent)
+    ├── 3d: Build topic-part relations (relation-builder subagent)
+    └── 3e: Agent reads source material to verify topic coverage, overlap, balance, relations
     ↓ [Upload: topics + relations + relevance labels]
     ├─→ Step 4: Generate Records (default — generate_records.py)
     │     or Step 4B: NeMo Data Designer (optional — requires NeMo server)
     │
     └─→ Step 5: Write Grader (can start in parallel with Step 4)
               ↓ [GATE: dry-run hand-crafted + live (needs records uploaded)]
+Step 4e: Agent reads records from every topic to verify GT consistency, factual accuracy, vocabulary
 Step 5.5: validate_dataset.py [GATE]
 Step 5.5b: data_quality_gate.py [GATE]
+Step 5.5c: Agent checks GT self-consistency (verdict matches evidence)
+Step 5.1 Test 3: Agent thinks through adversarial grader exploits
 Step 6: Verify
     ↓
 Step 7-9: Evaluate → Train → Iterate
@@ -58,6 +62,8 @@ Step 4: generate_records.py → only relevant parts (filtered in Step 3a)
 Step 4B: NeMo → ⚠️ rag-retrieval does NOT filter by relevance (known limitation)
                 → convert_nemo_rows.py recovers source_parts via gateway search
 ```
+
+> **GRPO research context**: The SKILL.md includes a "Research Context: This is GRPO, Not SFT" section near the top. GRPO (Group Relative Policy Optimization) has fundamentally different expectations from SFT — low base model scores are expected and desirable, dead-weight prompts are normal, and eval K=1 scores are lower bounds. See that section before interpreting any pipeline metrics.
 
 **Each step uploads to the gateway immediately** via `scripts/finetune.py` — the vLLora UI shows progress in real time. There is no final "push" step; Step 6 just verifies everything landed correctly.
 
@@ -144,9 +150,9 @@ All gateway API calls go through `scripts/finetune.py` — a single wrapper scri
 | `finetune.py create-training` | 7d | Creates training job, saves metadata locally |
 | `finetune.py poll-training` | 7e | Polls training job until complete, saves status + metrics |
 | `finetune.py sync-jobs` | 8 | Syncs training + eval jobs from gateway to local tracking files |
-| `finetune.py diagnose-grader` | 9a | Diagnose grader issues: score buckets, reason patterns, grader source, record context check. Classifies zeros into parsing failures / wrong answers / refusals — tells agent whether to fix GRADER or RECORDS. |
+| `finetune.py diagnose-grader` | 9a | Diagnose grader issues: score buckets, reason patterns, grader source, record context check. Classifies zeros into parsing failures / wrong answers / refusals — tells agent whether to fix GRADER or RECORDS. Also includes response pattern analysis — detects dominant model response patterns and over-prediction from reason fields. |
 | `finetune.py filter-records` | 9a | Remove bad records from local JSONL + gateway based on eval scores/reasons. Supports `--max-score`, `--reason-pattern`, `--topic` filters. |
-| `finetune.py log-iteration` | 8e | Log eval or training iteration to `iterations.json` with structured metrics + delta comparison vs previous iteration. Tracks what changed and whether it helped. |
+| `finetune.py log-iteration` | 8d | Log eval or training iteration to `iterations.json` with structured metrics + delta comparison vs previous iteration. Tracks what changed and whether it helped. |
 | `finetune.py data-quality-gate` | 5.5b | Run pre-eval data quality gate (structural, diversity, completion length, **source accuracy**, GT quality, alignment) |
 | `finetune.py difficulty-probe` | 7c+ | Post-eval difficulty distribution probe (signal prediction, grader granularity) |
 | `finetune.py cancel-training` | 7e | Cancel a running training job |
@@ -163,7 +169,7 @@ Other helper scripts:
 | `extract_tables.py` | 2b | Upgrades text parts to table parts using structured Docling table data (headers, rows, metadata) |
 | `camelot_extract_tables.py` | 2d | **Table fallback** — re-extracts tables using Camelot stream mode when Docling produces garbled tables (inconsistent columns, mixed content). Multi-page stitching. Run when `validate_extraction.py` warns about table quality. |
 | `consolidate_parts.py` | 2c | Merges adjacent text parts, drops short fragments, fixes Unicode, validates quality |
-| `validate_extraction.py` | 2e | Cross-document extraction quality gate (parts/page, title diversity, avg length) |
+| `validate_extraction.py` | 2e | Cross-document extraction quality gate (parts/page, title diversity, avg length). Also detects page break artifacts in pipe tables (non-table lines + repeated headers) — FAIL for large tables with artifacts. |
 | `generate_records.py` | 4 | Default: generates records per leaf topic via LLM (calls `chat_completion.py`). Supports `--ground-truth-format` for structured-output tasks (forces scenario-based prompts). `--append` auto-skips existing topics. NeMo Data Designer is an optional alternative — see Step 4B |
 | `convert_nemo_rows.py` | 4B | Converts NeMo DataDesigner output rows to `training.jsonl`; filters by judge scores; writes `nemo-metadata.jsonl` sidecar |
 | `chat_completion.py` | 4 | Calls LLM API — validates JSON when `response_format` is `json_object` |
@@ -174,7 +180,7 @@ Other helper scripts:
 | `dry_run_grader.py` | 5 | Tests grader on one record via gateway sandbox |
 | `run_evaluation.py` | 7b | Legacy: Creates eval job, polls until complete. Prefer `finetune.py create-eval` + `poll-eval` |
 | `start_training.py` | 7d | Legacy: Starts training job, polls until complete. Prefer `finetune.py create-training` + `poll-training` |
-| `analyze_training.py` | 8b | Fetches/analyzes training metrics — reward trend, KL health, clipping, loss stability, per-epoch evals, severity-tagged alerts |
+| `analyze_training.py` | 8c | Fetches/analyzes training metrics — reward trend, KL health, clipping, loss stability, per-epoch evals, severity-tagged alerts. Also does per-record epoch analysis (top regressions/improvements with model output + grader reason), auto-detects epoch_collapse/over_prediction/output_collapse patterns. Fixed epoch eval fetch (uses provider_job_id). |
 | `print_metrics_table.py` | 8 | Print training metrics table (per-epoch or per-step) — human-readable format |
 | `checkpoint.py` | all | Pipeline checkpoint — save/check/reset step progress for crash recovery |
 
@@ -436,7 +442,7 @@ fi
 python3 ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/knowledge/
 ```
 
-This checks per-document: parts-per-page ratio (>15 = FAIL), short parts (<50 chars, >20% = FAIL), title diversity (<50% = FAIL), avg content length (<100 chars = FAIL), and Unicode encoding issues. Use `--fix` to auto-run `consolidate_parts.py` on failing documents:
+This checks per-document: parts-per-page ratio (>15 = FAIL), short parts (<50 chars, >20% = FAIL), title diversity (<50% = FAIL), avg content length (<100 chars = FAIL), Unicode encoding issues, and page break artifacts in pipe tables (non-table lines + repeated headers — FAIL for large tables with artifacts). Use `--fix` to auto-run `consolidate_parts.py` on failing documents:
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/knowledge/ --fix
 ```
@@ -992,6 +998,8 @@ This runs during the eval-first loop (Step 7b→7c). Compute:
 4. **Score distribution**: are scores spread out (good) or clustered (grader issue)?
 5. **Readiness gate output**: which criteria passed/failed
 
+**8a-agent: Agent reads eval responses + reasons.** The agent manually reads a sample of model responses and grader reasons to build intuition about failure modes before deciding on fixes.
+
 Then run the readiness gate (Step 7c) to decide: fix + re-eval, or proceed to training.
 
 **Filter dead-weight records**: Find records where max score < 0.1 (dead weight for GRPO), diagnose why, remove them, regenerate replacements if needed.
@@ -1025,11 +1033,19 @@ Reward: 0.2 → 0.7 | KL: stable | No anomalies
 What would you like to do?
 ```
 
-### 8c. Update iteration tracker
+**Mandatory checkpoint**: Before deciding next steps after training, the agent MUST run Step 8c analysis first. Decision uses first-match rules: grader exploit detected → fix grader (not "accept base model"); epoch collapse → check data quality; etc.
+
+### 8c. Analyze training results in depth
+
+**8c-agent: Agent reads epoch records across training.** The agent reads per-record epoch data (via `analyze_training.py` or `print-row-outputs`) to understand how specific records changed across epochs — top regressions, top improvements, model output text, and grader reasons.
+
+**8c-research: 5-step reasoning framework for unexpected training behavior.** When training metrics show unexpected patterns (reward collapse, epoch collapse, output collapse), the agent applies a structured reasoning framework: (1) identify the pattern, (2) check known causes, (3) verify with per-record data, (4) propose fix, (5) validate fix hypothesis against data.
+
+### 8d. Update iteration tracker
 
 After every eval/training cycle, append a summary to `iterations.md`.
 
-### 8d. Quick diagnosis patterns
+### 8e. Quick diagnosis patterns
 
 | Signal | Likely cause | Suggested action |
 |--------|-------------|-----------------|
@@ -1061,7 +1077,7 @@ After every eval/training cycle, append a summary to `iterations.md`.
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py diagnose-grader \
   --file evaluations/eval-001.json --workflow-id $WORKFLOW_ID
 ```
-This shows score distribution, reason patterns per bucket, auto-diagnosis (DATA vs GRADER root cause), the grader source code, and whether records include source document text.
+This shows score distribution, reason patterns per bucket, auto-diagnosis (DATA vs GRADER root cause), the grader source code, whether records include source document text, and response pattern analysis (dominant model response patterns, over-prediction detected from reason fields).
 
 **Step 2: Fix based on diagnosis.** The most common root cause is a grader-prompt mismatch:
 
@@ -1151,7 +1167,7 @@ t=74m  training-jobs/train-001.json (creating)       ← training job
 t=74m  training-monitor launched (background)        ← Step 7e
 t=2-4h training-jobs/train-001.json (complete)       ← training done
 t=2-4h training-jobs/{JOB_ID}-metrics.json           ← monitor metrics saved
-t=2-4h iterations.md (updated)                       ← Step 8e
+t=2-4h iterations.md (updated)                       ← Step 8d
 ```
 
 ## Monitoring a Running Skill Agent

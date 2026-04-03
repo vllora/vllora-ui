@@ -498,12 +498,20 @@ The `reference/api-reference.md` documents all gateway endpoints. Each step uplo
 ### SKILL.md (~1140 lines)
 
 - YAML frontmatter with pushy description for auto-triggering
+- **GRPO Research Context** section at top — how GRPO works, where to research, key papers, common SFT traps to avoid
 - Prerequisites check (base model capability, task clarity, smooth scoring)
 - Eval-first pipeline: objective → extraction → topics → data generation → grader → verify → eval → readiness gate → train → analyze → iterate
 - Working directory structure with multi-document knowledge layout
 - Execution log specification with full timestamps (`YYYY-MM-DD HH:MM:SS`)
 - Checkpoint calls after every major step (crash recovery via `checkpoint.py`)
+- **Agent quality checks** at Steps 3e, 4e, 5.5c — agent reads and verifies topics, records, GT consistency itself
+- **Adversarial grader robustness test** (Step 5.1) — agent thinks through 5 exploit patterns before uploading
 - Pre-submission validation before eval/training (prevents empty eval results)
+- **8a-agent/8a-research**: agent reads eval responses + reasons; reasoning framework for unexpected eval patterns
+- **8c-agent/8c-research**: agent reads epoch records; 5-step diagnostic reasoning framework (observe → hypothesize → verify → root cause → fix and predict)
+- **Post-fix verification** (Step 9a) — verify fix before re-running eval
+- **Mandatory checkpoint revised** — must run Step 8c before deciding; first-match rules prioritize grader fix over "accept base model"
+- **Resume guidance** (Step 8b) — create new eval if post-training eval was cancelled
 - Persistent training failure escalation ladder (retry → lower LR → smaller model → stop)
 - Explicit directives: "execute commands directly, never create .sh files"
 - All gateway API calls via `scripts/finetune.py` wrapper
@@ -532,10 +540,10 @@ All scripts use inline dependency declarations — run with `uv run script.py` (
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/finetune.py` | Gateway API wrapper — 25 subcommands: create-workflow, upload-knowledge/topics/relations/records/grader, verify, status, readiness-check, diagnose-grader, create-eval, poll-eval, create-training, poll-training, cancel-eval, cancel-training, search-knowledge, delete-knowledge, sync-jobs, update-part-relevance, difficulty-probe, data-quality-gate, print-row-outputs, **log-iteration**, **filter-records** |
+| `scripts/finetune.py` | Gateway API wrapper — 25 subcommands: create-workflow, upload-knowledge/topics/relations/records/grader, verify, status, readiness-check, diagnose-grader (now with **response pattern analysis**: detects dominant responses >20% identical, over-prediction >20% listing 5+ items), create-eval, poll-eval, create-training, poll-training, cancel-eval, cancel-training, search-knowledge, delete-knowledge, sync-jobs, update-part-relevance, difficulty-probe, data-quality-gate, print-row-outputs, **log-iteration**, **filter-records** |
 | `scripts/generate_records.py` | Default record generation from topics + knowledge — calls LLM per leaf topic with 5 prompt types; supports `--enrich-sources` (recommended), `--weight-by-difficulty`, `--use-rag`, **`--ground-truth-format`** (structured output tasks) |
 | `scripts/convert_nemo_rows.py` | Convert NeMo DataDesigner output rows to vLLora training.jsonl; filters by judge scores; writes `nemo-metadata.jsonl` sidecar |
-| `scripts/analyze_training.py` | Post-training analysis: reward trend, KL health, clipping, loss stability, grad norm, per-topic learning. Paper-backed thresholds with `# Ref:` comments |
+| `scripts/analyze_training.py` | Post-training analysis: reward trend, KL health, clipping, loss stability, grad norm, per-topic learning. Uses `provider_job_id` for epoch eval fetch (matching UI behavior). Per-record analysis: top 5 regressions/improvements with input, model output, grader reason. Auto-detects 3 epoch patterns: `epoch_collapse` (score drops >8%), `over_prediction` (R=1.00 + low precision), `output_collapse` (identical outputs). Zero-std alerts conditional on reward being flat (30-99% normal per arXiv:2509.21880) |
 | `scripts/print_metrics_table.py` | Print training metrics table (per-epoch or per-step) — human-readable format |
 | `scripts/chat_completion.py` | Call LLM via gateway — validates JSON output when `response_format` is `json_object` |
 | `scripts/dry_run_grader.py` | Dry-run grader on a single row — instant syntax/logic check via gateway sandbox |
@@ -548,7 +556,7 @@ All scripts use inline dependency declarations — run with `uv run script.py` (
 | `scripts/consolidate_parts.py` | Merge adjacent text parts, drop short fragments, fix Unicode, regenerate parts-index |
 | `scripts/extract_tables.py` | Upgrade text parts to table parts using Docling table data |
 | `scripts/camelot_extract_tables.py` | **Table extraction fallback** — Camelot stream mode for complex tables that Docling garbles. Multi-page stitching, 99%+ accuracy on regulatory tables. |
-| `scripts/validate_extraction.py` | Cross-document extraction quality gate (parts/page, title diversity, avg length, **table column consistency**) |
+| `scripts/validate_extraction.py` | Cross-document extraction quality gate (parts/page, title diversity, avg length, **table column consistency**, **pipe-table page break artifact detection** — flags non-table lines + repeated headers inside pipe-delimited tables, FAIL on large tables >10K chars with artifacts) |
 | `scripts/docling_extract.py` | Submit PDF(s) to Docling Serve async API, poll until done, supports batch + submit-only mode |
 | `scripts/pdftotext_extract.py` | Fallback PDF extraction via pdftotext (no Docker required), same output schema |
 | `scripts/convert_pdf_to_markdown.py` | PDF → Markdown via pymupdf4llm — utility script, not primary extraction |
@@ -670,7 +678,7 @@ Tested with real chess PDF and live backend at localhost:9090.
 | Readiness gate | ✅ Working | finetune.py readiness-check, 3 hard + 8 soft checks |
 | Training creation + monitoring | ✅ Working | Monitor launches OK, false NaN fixed (10-poll grace period) |
 | Training completion | ⚠️ Issues | KL explosion with contract data — persistent failure guidance added |
-| Post-training analysis | ✅ Working | analyze_training.py with paper-backed thresholds |
+| Post-training analysis | ✅ Working | analyze_training.py: fixed epoch eval fetch (`provider_job_id`), per-record regressions/improvements, 3 auto-detected epoch patterns |
 | Iteration loop (eval-first) | ✅ Working | Eval-only iterations + post-training iterations tested |
 | Job sync from gateway | ✅ Working | finetune.py sync-jobs picks up UI-created jobs |
 | Checkpoint + resume | ⚠️ Partial | Checkpoints now at every step, but not all runs use them yet |
@@ -902,6 +910,15 @@ Both write through the same gateway API → same SQLite database. Workflows, rec
 - [x] `finetune-defaults.json` — project-level config without modifying the skill
 - [x] Table fragment consolidation in `consolidate_parts.py` — merges multi-page table fragments
 - [x] Docling reuse (`--skip-existing`) and status tracking (`docling-status.json`)
+- [x] GRPO Research Context section in SKILL.md — how GRPO works, key papers, SFT traps
+- [x] Agent self-verification quality checks (Steps 3e, 4e, 5.5c) — agent reads and verifies its own output
+- [x] Adversarial grader robustness test (Step 5.1) — 5 exploit patterns before upload
+- [x] 5-step diagnostic reasoning framework for training analysis (8c-research)
+- [x] Post-fix verification before re-running eval (Step 9a)
+- [x] `analyze_training.py` epoch eval fetch fix (`provider_job_id`) + per-record analysis + 3 auto-detected epoch patterns
+- [x] `validate_extraction.py` pipe-table page break artifact detection (Check 9a-ii)
+- [x] `diagnose-grader` response pattern analysis (dominant patterns, over-prediction)
+- [x] Citation audit — removed incorrect paper attributions from reference docs + UI
 - [ ] Add guidance for multi-turn conversation training data
 - [ ] Add guidance for structured output fine-tuning (JSON schema enforcement)
 - [ ] Improve `finetune.py poll-training` to also save metrics incrementally
@@ -914,6 +931,7 @@ Both write through the same gateway API → same SQLite database. Workflows, rec
 - **Grader score distribution** — pre-training distribution check added in Step 7a-ii + readiness gate enforces spread. Verified working in eval-first flow.
 - **Epoch defaults** — fixed: RFT uses 10-30 epochs for small datasets, 5-10 for large (not SFT-style 1-4). Published work uses even higher: "Tricks or Traps" uses 50; OpenAI says "hundreds or thousands." Fresh responses each pass, no repetition risk.
 - **KL thresholds** — fixed: high KL is normal with beta=0 (GRPO default). KL alone is no longer diagnostic in training-metrics-guide.md.
+- **Citation accuracy** — fixed: removed incorrect Dr. GRPO attributions for `reward_std`/`frac_zero_std` thresholds (now marked as empirical heuristics), removed wrong "Tricks or Traps" attribution for reward hacking thresholds. Updated in `training-metrics-guide.md`, `analysis-strategy.md`, `iteration-strategy.md`, and UI (`training-metrics-insights.ts`). TRL `loss_type` table expanded from 4 to 8+ modes.
 
 **Infrastructure:**
 - **Training monitor false NaN** when job not in list yet — fixed (10-poll grace period) but depends on LLM following instructions

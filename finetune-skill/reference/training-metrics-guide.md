@@ -17,7 +17,7 @@ vLLora uses **GRPO (Group Relative Policy Optimization)** for reinforcement fine
 
 ### Metric Scale Warning
 
-⚠️ **Absolute metric values (loss, KL, grad_norm) vary by 1000x+ depending on TRL's `loss_type` setting.** TRL supports four normalization modes:
+⚠️ **Absolute metric values (loss, KL, grad_norm) vary by 1000x+ depending on TRL's `loss_type` setting.** TRL supports 8+ normalization modes (Ref: [TRL GRPOConfig source](https://github.com/huggingface/trl/blob/main/trl/trainer/grpo_config.py)):
 
 | loss_type | Normalization | Typical loss range |
 |-----------|--------------|-------------------|
@@ -25,6 +25,10 @@ vLLora uses **GRPO (Group Relative Policy Optimization)** for reinforcement fine
 | `"grpo"` (original) | Per-sequence length, then average over group | 0.1–10 |
 | `"dr_grpo"` | Global constant (max_length × G) | varies |
 | `"bnpo"` | Active tokens in local batch | varies |
+| `"cispo"` | Clips importance weights instead of advantage-scaled weights | varies |
+| `"sapo"` | Soft adaptive policy optimization (asymmetric temperature gating) | varies |
+| `"luspo"` | Length-unbiased sequence-level loss | varies |
+| `"vespo"` | Variational sequence-level soft policy optimization | varies |
 
 Our GCP training instance may not explicitly set `loss_type`, so it uses whatever TRL default is installed. Additionally, Unsloth's `unsloth_train()` fixes a [universal gradient accumulation bug](https://unsloth.ai/blog/gradient) where naive averaging inflates loss by a factor of `gradient_accumulation_steps`. If vanilla TRL `train()` is used, loss and gradients will be proportionally inflated.
 
@@ -52,8 +56,8 @@ These are confirmed values from actual Unsloth+TRL GRPO training (Ref: [open-r1#
 
 | Observation | Diagnosis | Action |
 |---|---|---|
-| Reward trending up, KL < 1.0, clipped_ratio < 0.1 | Healthy training | Continue or deploy |
-| Reward flat, frac_reward_zero_std > 0.5 | No learning signal | Fix grader (avoid binary 0/1), increase G, adjust difficulty |
+| Reward trending up, clipped_ratio < 0.1 | Healthy training | Continue or deploy |
+| Reward flat + frac_reward_zero_std > 0.5 | No learning signal (note: high zero-std alone is normal — arXiv:2509.21880) | Fix grader (avoid binary 0/1), increase G, adjust difficulty |
 | Reward up but KL rising + outputs degenerate | Reward hacking (KL alone is not diagnostic — check output quality) | Enable/increase beta, add quality grader criteria, inspect outputs |
 | Loss stuck at 0.0 | Zero advantages | Check data pipeline, reward function, chat template |
 | clipped_ratio > 0.5 | Truncation dominating | Increase max_output_tokens |
@@ -75,15 +79,15 @@ These are confirmed values from actual Unsloth+TRL GRPO training (Ref: [open-r1#
 
 **`reward_std`** — Standard deviation of rewards across the batch.
 - **What it is**: How much do the scores vary? If the model generates 8 answers to a question and they ALL get the same score, std is 0. GRPO learns by comparing better completions to worse ones within the same group — if there's no difference, there's nothing to learn from.
-- Healthy: Non-zero, proportional to reward scale (0.05-0.3 for [0,1] graders).
+- Healthy: Non-zero, proportional to reward scale (0.05-0.3 for [0,1] graders — empirical heuristic, no paper specifies exact range).
 - Red flag: Near zero → all completions score identically, killing GRPO's learning signal.
 - Fix: Adjust grader to provide more granular scores. Increase G (completions per prompt).
 
 **`frac_reward_zero_std`** — Fraction of prompts where ALL G completions got identical rewards.
 - **What it is**: What percentage of training questions produced zero learning signal? If 8 out of 8 completions for a question all score 0.7, that question taught the model nothing. This metric tells you how many questions are "wasted" each step.
-- Healthy: Below 0.2 (20%).
-- Red flag: Above 0.5 → half the batch provides no gradient. Above 0.8 → training is stalled.
-- Note: 30-99% is actually NORMAL in GRPO (Ref: "No Prompt Left Behind", arXiv:2509.21880, ICLR 2026). Only a concern when reward is also stagnant.
+- Healthy: Below 0.2 (20%) — empirical heuristic.
+- Red flag: Above 0.5 **AND reward is flat** → half the batch provides no gradient and model isn't learning. Above 0.8 + flat reward → training is stalled.
+- **Important**: 30-99% zero-std is actually NORMAL in GRPO (Ref: "No Prompt Left Behind", arXiv:2509.21880, ICLR 2026). High zero-std with rising reward = healthy — the model is still learning from the minority of prompts that provide signal. Only diagnose as a problem when reward is also stagnant.
 - Fix: Increase G, adjust grader sensitivity, mix easy/hard prompts.
 
 ### Task Difficulty vs GRPO Effectiveness

@@ -47,10 +47,18 @@ def fetch_job_status(base_url: str, workflow_id: str, job_id: str) -> dict:
     return resp.json()
 
 
-def fetch_epoch_evals(base_url: str, workflow_id: str, job_id: str) -> dict:
-    """Fetch per-epoch per-record evaluations from the gateway API."""
+def fetch_epoch_evals(base_url: str, workflow_id: str, provider_job_id: str) -> dict:
+    """Fetch per-epoch per-record evaluations from the gateway API.
+
+    NOTE: The finetune-evaluations endpoint requires the PROVIDER job ID
+    (not the internal job ID). The UI uses job.provider_job_id for this call.
+    Pass include_rollout_content=true to get actual model outputs per epoch.
+    """
     url = f"{base_url}/finetune/workflows/{workflow_id}/finetune-evaluations"
-    resp = requests.get(url, params={"finetune_job_id": job_id}, timeout=30)
+    resp = requests.get(url, params={
+        "finetune_job_id": provider_job_id,
+        "include_rollout_content": "true",
+    }, timeout=60)
     resp.raise_for_status()
     return resp.json()
 
@@ -176,7 +184,7 @@ def analyze_metrics(data) -> dict:
 
     # Weak training signal
     # Thresholds: healthy 0.05-0.3, warn <0.05, critical <0.01
-    # Ref: training-metrics-guide.md §Reward Std; Dr. GRPO (arXiv:2503.20783)
+    # Ref: training-metrics-guide.md §Reward Std; empirical heuristic for [0,1] grader scale
     reward_std_values = [s.get("reward_std", 0) for s in steps]
     reward_std_final = last.get("reward_std", 0)
     if reward_std_final < 0.01 and len(steps) > 5:
@@ -192,28 +200,31 @@ def analyze_metrics(data) -> dict:
             "message": f"Reward std low ({reward_std_final:.3f}) — limited diversity between completions (healthy: 0.05-0.3)",
         })
 
-    # frac_reward_zero_std: healthy <0.2, warn >0.5, critical >0.8
-    # Ref: training-metrics-guide.md §frac_reward_zero_std; Dr. GRPO (arXiv:2503.20783)
+    # frac_reward_zero_std: warn >0.5+reward_flat, critical >0.8+reward_flat
+    # Ref: "No Prompt Left Behind" (arXiv:2509.21880) — 30-99% normal in GRPO
+    # These thresholds are empirical; only meaningful when reward is also stagnant
     zero_std_values = [s.get("frac_reward_zero_std", 0) for s in steps]
     zero_std_avg = sum(zero_std_values) / len(zero_std_values) if zero_std_values else 0
-    if zero_std_avg > 0.80:
+    # Only alert on high zero-std when reward is ALSO flat — 30-99% zero-std is normal
+    # in GRPO (arXiv:2509.21880). High zero-std with rising reward = healthy learning.
+    if zero_std_avg > 0.80 and reward_trend != "improving":
         alerts.append({
             "severity": "CRITICAL",
             "metric": "zero_std",
-            "message": f"{zero_std_avg:.0%} avg zero-std fraction — training gets no useful gradient from most examples",
+            "message": f"{zero_std_avg:.0%} avg zero-std fraction with {reward_trend} reward — training gets no useful gradient from most examples",
         })
-    elif zero_std_avg > 0.50:
+    elif zero_std_avg > 0.50 and reward_trend != "improving":
         alerts.append({
             "severity": "WARNING",
             "metric": "zero_std",
-            "message": f"{zero_std_avg:.0%} avg zero-std fraction — over half the batch provides no learning signal",
+            "message": f"{zero_std_avg:.0%} avg zero-std fraction with {reward_trend} reward — over half the batch provides no learning signal (note: 30-99% zero-std is normal in GRPO if reward is still improving)",
         })
 
     # Reward hacking detection
-    # Ref: "Tricks or Traps" (arXiv:2508.08221) — reward hacking signatures;
-    #       DAPO (arXiv:2503.14476) — entropy collapse detection
-    # Signature: reward improving but reward_std collapsing (model converges on single pattern)
-    # NOTE: We use reward_std (correct TRL scale) instead of KL (un-normalized on our backend)
+    # Heuristic: reward improving but reward_std collapsing → model converges on single
+    # exploitable pattern. No single paper sources this exact rule — it follows from GRPO
+    # mechanics (diversity collapse). DAPO (arXiv:2503.14476) describes entropy collapse
+    # as a related failure mode. We use reward_std instead of KL (un-normalized on our backend).
     if len(steps) >= 6:
         mid = len(steps) // 2
         first_half_std = sum(s.get("reward_std", 0) for s in steps[:mid]) / mid
@@ -261,11 +272,12 @@ def analyze_metrics(data) -> dict:
         "loss": {
             "start": round(first.get("loss", 0), 4),
             "end": round(last.get("loss", 0), 4),
-            "has_nan": has_nan,
+            "has_nan": has_nan_loss,
+            "_note": "un-normalized (informational only)",
         },
         "grad_norm": {
-            "median": round(grad_median, 2),
-            "max": round(grad_max, 2),
+            "has_nan": has_nan_grad,
+            "_note": "un-normalized (informational only)",
         },
         "alerts": alerts,
     }
@@ -275,8 +287,12 @@ def analyze_metrics(data) -> dict:
 # Per-epoch evaluation analysis
 # ---------------------------------------------------------------------------
 
-def analyze_epoch_evals(data: dict) -> dict:
-    """Analyze per-epoch per-record evaluations for learning trajectories."""
+def analyze_epoch_evals(data: dict, top_n: int = 5) -> dict:
+    """Analyze per-epoch per-record evaluations for learning trajectories.
+
+    Returns aggregate counts, per-topic summaries, and the top N biggest
+    regressions and improvements with their content for diagnosis.
+    """
     results = data.get("results", [])
     if not results:
         return {"error": "No per-epoch evaluation data"}
@@ -285,6 +301,7 @@ def analyze_epoch_evals(data: dict) -> dict:
     stagnant = 0
     degraded = 0
     topic_deltas: dict[str, list[float]] = {}
+    all_records: list[dict] = []
 
     for record in results:
         epochs = record.get("epochs", {})
@@ -305,8 +322,37 @@ def analyze_epoch_evals(data: dict) -> dict:
         else:
             stagnant += 1
 
-        topic = record.get("row", {}).get("topic", "unknown")
+        row = record.get("row", {})
+        topic = row.get("topic", "unknown")
         topic_deltas.setdefault(topic, []).append(delta)
+
+        # Collect per-epoch trajectory
+        trajectory = []
+        for ek in epoch_keys:
+            ep = epochs[ek]
+            trajectory.append(round(ep[0].get("score", 0), 3) if ep else 0)
+
+        # Collect record info for top regressions/improvements
+        messages = row.get("messages", [])
+        user_msg = next((m.get("content", "") for m in messages if m.get("role") == "user"), "")
+        first_output = first_epoch_data[0].get("rollout_content", "") if first_epoch_data else ""
+        last_output = last_epoch_data[0].get("rollout_content", "") if last_epoch_data else ""
+        first_reason = first_epoch_data[0].get("reason", "") if first_epoch_data else ""
+        last_reason = last_epoch_data[0].get("reason", "") if last_epoch_data else ""
+
+        all_records.append({
+            "row_index": record.get("row_index", "?"),
+            "topic": topic,
+            "input": user_msg[:200],
+            "delta": round(delta, 4),
+            "first_score": round(first_score, 4),
+            "last_score": round(last_score, 4),
+            "trajectory": trajectory,
+            "first_output": first_output[:300] if first_output else "",
+            "last_output": last_output[:300] if last_output else "",
+            "first_reason": first_reason[:200] if first_reason else "",
+            "last_reason": last_reason[:200] if last_reason else "",
+        })
 
     total = improved + stagnant + degraded
 
@@ -320,12 +366,66 @@ def analyze_epoch_evals(data: dict) -> dict:
             "label": "improved" if avg_delta > 0.1 else "degraded" if avg_delta < -0.1 else "stagnant",
         })
 
+    # Top regressions and improvements — these are the most diagnostic records.
+    # Regressions tell you what training broke. Improvements tell you what's working.
+    sorted_by_delta = sorted(all_records, key=lambda r: r["delta"])
+    top_regressions = sorted_by_delta[:top_n]
+    top_improvements = sorted_by_delta[-top_n:][::-1]
+
+    # --- Pattern detection on per-record epoch data ---
+    epoch_alerts: list[dict] = []
+
+    # 1. Epoch-level collapse detection: scores fine through epoch N, then crash at N+1.
+    #    Look at per-epoch averages — if any epoch drops >0.1 from the previous.
+    if all_records and all_records[0].get("trajectory"):
+        num_epochs = len(all_records[0]["trajectory"])
+        epoch_avgs = []
+        for e in range(num_epochs):
+            scores_at_e = [r["trajectory"][e] for r in all_records if len(r.get("trajectory", [])) > e]
+            epoch_avgs.append(sum(scores_at_e) / len(scores_at_e) if scores_at_e else 0)
+
+        for e in range(1, len(epoch_avgs)):
+            drop = epoch_avgs[e - 1] - epoch_avgs[e]
+            if drop > 0.08:
+                epoch_alerts.append({
+                    "type": "epoch_collapse",
+                    "message": f"Score collapsed at epoch {e}: {epoch_avgs[e-1]:.3f} → {epoch_avgs[e]:.3f} (Δ={-drop:+.3f}). Model was fine through epoch {e-1}. Consider using fewer epochs (stop at {e-1}).",
+                    "collapse_epoch": e,
+                    "epoch_avgs": [round(a, 3) for a in epoch_avgs],
+                })
+                break  # report first collapse only
+
+    # 2. Over-prediction pattern: top regressions all show high recall + low precision
+    #    (model learned to list everything). Detect from grader reason fields.
+    over_predict_count = 0
+    for r in top_regressions:
+        reason = r.get("last_reason", "")
+        if "R=1.00" in reason and ("P=0.1" in reason or "P=0.2" in reason):
+            over_predict_count += 1
+    if over_predict_count >= 3:
+        epoch_alerts.append({
+            "type": "over_prediction",
+            "message": f"{over_predict_count}/{len(top_regressions)} top regressions show R=1.00 with low precision — model learned to over-predict (list all possible answers to maximize recall). Fix: add hard penalty for false positives in grader, not just F1.",
+        })
+
+    # 3. Identical output collapse: top regressions all have the same last_output
+    if top_regressions:
+        outputs = [r.get("last_output", "").strip() for r in top_regressions if r.get("last_output")]
+        if outputs and len(set(outputs)) == 1 and outputs[0]:
+            epoch_alerts.append({
+                "type": "output_collapse",
+                "message": f"All top regressions produce identical output — model collapsed to a single strategy: '{outputs[0][:100]}'. Fix: inspect grader for exploitable shortcut.",
+            })
+
     return {
         "total_records": total,
         "improved": improved,
         "stagnant": stagnant,
         "degraded": degraded,
         "topics": topic_summary,
+        "top_regressions": top_regressions,
+        "top_improvements": top_improvements,
+        "epoch_alerts": epoch_alerts,
     }
 
 
@@ -378,6 +478,43 @@ def print_summary(
             print(f"  [{label_char}] {topic_info['topic']}: avg delta={topic_info['avg_delta']:+.3f} ({topic_info['record_count']} records)")
         print()
 
+        # Top regressions — most diagnostic for understanding what training broke
+        regressions = epoch_result.get("top_regressions", [])
+        if regressions and regressions[0]["delta"] < -0.1:
+            print("Biggest regressions (what training broke):")
+            for rec in regressions:
+                if rec["delta"] >= -0.1:
+                    break
+                print(f"  #{rec['row_index']} [{rec['topic']}] score: {rec['first_score']:.2f} → {rec['last_score']:.2f} (Δ={rec['delta']:+.2f})")
+                print(f"    Input: {rec['input'][:120]}")
+                if rec.get("last_output"):
+                    print(f"    Last output: {rec['last_output'][:120]}")
+                if rec.get("last_reason"):
+                    print(f"    Last reason: {rec['last_reason'][:120]}")
+                print()
+
+        # Top improvements — what's working
+        improvements = epoch_result.get("top_improvements", [])
+        if improvements and improvements[0]["delta"] > 0.1:
+            print("Biggest improvements (what training helped):")
+            for rec in improvements:
+                if rec["delta"] <= 0.1:
+                    break
+                print(f"  #{rec['row_index']} [{rec['topic']}] score: {rec['first_score']:.2f} → {rec['last_score']:.2f} (Δ={rec['delta']:+.2f})")
+                print(f"    Input: {rec['input'][:120]}")
+                print()
+
+        # Epoch-level pattern alerts
+        epoch_alerts = epoch_result.get("epoch_alerts", [])
+        if epoch_alerts:
+            print("⚠️  Epoch-level patterns detected:")
+            for alert in epoch_alerts:
+                print(f"  [{alert['type']}] {alert['message']}")
+                if alert.get("epoch_avgs"):
+                    avgs = alert["epoch_avgs"]
+                    print(f"    Per-epoch averages: {' → '.join(f'{a:.3f}' for a in avgs)}")
+            print()
+
 
 # ---------------------------------------------------------------------------
 # CLI
@@ -407,23 +544,28 @@ def main() -> None:
     else:
         metrics_data = fetch_metrics(args.base_url, args.workflow_id, args.job_id)
 
-    # Fetch or load epoch evals
-    epoch_data = None
-    if args.epoch_evals_file:
-        epoch_data = json.loads(Path(args.epoch_evals_file).read_text())
-    elif has_api_args:
-        try:
-            epoch_data = fetch_epoch_evals(args.base_url, args.workflow_id, args.job_id)
-        except requests.RequestException as e:
-            print(f"Warning: Could not fetch epoch evals: {e}", file=sys.stderr)
-
-    # Fetch job status
+    # Fetch job status first — we need provider_job_id for epoch evals
     job_status = None
+    provider_job_id = None
     if has_api_args:
         try:
             job_status = fetch_job_status(args.base_url, args.workflow_id, args.job_id)
+            provider_job_id = job_status.get("provider_job_id")
         except requests.RequestException as e:
             print(f"Warning: Could not fetch job status: {e}", file=sys.stderr)
+
+    # Fetch or load epoch evals
+    # NOTE: finetune-evaluations endpoint requires the PROVIDER job ID, not the internal one.
+    epoch_data = None
+    if args.epoch_evals_file:
+        epoch_data = json.loads(Path(args.epoch_evals_file).read_text())
+    elif has_api_args and provider_job_id:
+        try:
+            epoch_data = fetch_epoch_evals(args.base_url, args.workflow_id, provider_job_id)
+        except requests.RequestException as e:
+            print(f"Warning: Could not fetch epoch evals: {e}", file=sys.stderr)
+    elif has_api_args:
+        print("Warning: Could not resolve provider_job_id — epoch evals unavailable", file=sys.stderr)
 
     # Save fetched data
     if args.save and has_api_args:

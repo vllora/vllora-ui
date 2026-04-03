@@ -144,6 +144,35 @@ def validate_file(path: Path) -> dict:
                     f"Fix: run camelot_extract_tables.py or read the PDF pages directly."
                 )
 
+        # Check 9a-ii: Non-table lines inside a pipe-delimited table
+        # A well-formed pipe table should ONLY contain pipe rows and separator rows.
+        # Any other non-empty line is an extraction artifact (page headers, footers,
+        # repeated column headers from multi-page PDFs, etc).
+        if len(pipe_rows) > 20:
+            all_lines = [l.strip() for l in content.split("\n") if l.strip()]
+            non_table_lines = [l for l in all_lines
+                               if not l.startswith("|") and not l.startswith("---")]
+
+            # Duplicate header detection: any pipe row after the separator that
+            # matches the first header row's column names is a repeated header.
+            repeated_headers = 0
+            if len(pipe_rows) >= 2:
+                header_cols = {c.strip().lower() for c in pipe_rows[0].split("|") if c.strip()}
+                for row in pipe_rows[2:]:  # skip header + separator
+                    row_cols = {c.strip().lower() for c in row.split("|") if c.strip()}
+                    # If >50% of header column names appear in this row, it's a repeated header
+                    if header_cols and len(header_cols & row_cols) > len(header_cols) * 0.5:
+                        repeated_headers += 1
+
+            if len(non_table_lines) >= 3 or repeated_headers >= 2:
+                severity = "FAIL" if len(content) > 10000 else "WARN"
+                issues.append(
+                    f"{severity}: Table '{title[:40]}' has {len(non_table_lines)} non-table "
+                    f"line(s) and {repeated_headers} repeated header(s) mixed into table data. "
+                    f"Likely cause: multi-page PDF table with page breaks embedded in extraction. "
+                    f"Fix: remove non-pipe lines and duplicate headers from the table content."
+                )
+
         # Check 9b: Title/content mismatch — title doesn't reflect table data
         if pipe_rows and len(content) > 5000:
             # Check if non-table text precedes the table (mixed content)
