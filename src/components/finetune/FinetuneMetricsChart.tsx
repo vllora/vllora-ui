@@ -53,6 +53,7 @@ interface MetricDef {
   color: string;
   primary: boolean;
   description: string;
+  group?: string;
 }
 
 const TAB_CONFIG: Record<
@@ -83,13 +84,13 @@ const TAB_CONFIG: Record<
     label: "Completions",
     icon: <Zap className="h-3 w-3" />,
     metrics: [
-      { key: "completions/clipped_ratio", label: "Clipped Ratio", color: "#ef4444", primary: true, description: "Fraction of responses truncated at max_output_tokens. Healthy <0.1, warning >0.1, critical >0.5." },
-      { key: "completions/mean_length", label: "Mean Length", color: "#10b981", primary: false, description: "Average response length in tokens." },
-      { key: "completions/max_length", label: "Max Length", color: "#f59e0b", primary: false, description: "Longest response in tokens. If stuck at max_output_tokens, model is hitting the ceiling." },
-      { key: "completions/min_length", label: "Min Length", color: "#06b6d4", primary: false, description: "Shortest response. Decreasing min suggests some prompts get trivial answers." },
-      { key: "completions/mean_terminated_length", label: "Terminated Length", color: "#6366f1", primary: false, description: "Average length of naturally-ended (non-truncated) responses." },
-      { key: "completions/max_terminated_length", label: "Max Terminated", color: "#a855f7", primary: false, description: "Longest natural response. If close to max_output_tokens, you need more room." },
-      { key: "completions/min_terminated_length", label: "Min Terminated", color: "#14b8a6", primary: false, description: "Shortest natural response. Very short (<10) may indicate trivial answers — check grader." },
+      { key: "completions/clipped_ratio", label: "Clipped Ratio", color: "#ef4444", primary: true, description: "Fraction of responses truncated at max_output_tokens. Healthy <0.1, warning >0.1, critical >0.5.", group: "ratio" },
+      { key: "completions/mean_length", label: "Mean Length", color: "#10b981", primary: true, description: "Average response length in tokens.", group: "length" },
+      { key: "completions/max_length", label: "Max Length", color: "#f59e0b", primary: false, description: "Longest response in tokens. If stuck at max_output_tokens, model is hitting the ceiling.", group: "length" },
+      { key: "completions/min_length", label: "Min Length", color: "#06b6d4", primary: false, description: "Shortest response. Decreasing min suggests some prompts get trivial answers.", group: "length" },
+      { key: "completions/mean_terminated_length", label: "Natural Avg", color: "#6366f1", primary: true, description: "Average length of responses that finished naturally (model output EOS). Compare with Mean Length — a big gap means many responses are being truncated.", group: "length" },
+      { key: "completions/max_terminated_length", label: "Natural Max", color: "#a855f7", primary: false, description: "Longest response that finished naturally. If close to max_output_tokens, the model needs more room.", group: "length" },
+      { key: "completions/min_terminated_length", label: "Natural Min", color: "#14b8a6", primary: false, description: "Shortest response that finished naturally. Very short (<10 tokens) may indicate trivial answers — check grader.", group: "length" },
     ],
   },
   throughput: {
@@ -273,6 +274,100 @@ function LaneLabels({
 }
 
 // =============================================================================
+// Grouped charts: metrics sharing a Y-axis within each group
+// =============================================================================
+
+const GROUP_LABELS: Record<string, string> = {
+  ratio: "Clip Ratio",
+  length: "Response Length (tokens)",
+};
+
+function GroupedCharts({
+  chartData,
+  visibleMetrics,
+  maxOutputTokens,
+}: {
+  chartData: Record<string, unknown>[];
+  visibleMetrics: MetricDef[];
+  maxOutputTokens?: number;
+}) {
+  const groups = useMemo(() => {
+    const map = new Map<string, MetricDef[]>();
+    for (const m of visibleMetrics) {
+      const g = m.group ?? "default";
+      const list = map.get(g);
+      if (list) list.push(m);
+      else map.set(g, [m]);
+    }
+    return Array.from(map.entries());
+  }, [visibleMetrics]);
+
+  return (
+    <>
+      {groups.map(([groupName, metrics]) => {
+        const vals = metrics.flatMap((m) =>
+          chartData.map((d) => d[m.key]).filter((v): v is number => typeof v === "number" && isFinite(v)),
+        );
+        const minVal = vals.length > 0 ? Math.min(...vals) : 0;
+        const maxVal = vals.length > 0 ? Math.max(...vals) : 1;
+        const pad = (maxVal - minVal) * 0.1 || 0.1;
+        const yDomain: [number, number] = [Math.max(0, minVal - pad), maxVal + pad];
+        const height = metrics.length <= 1 ? 130 : 220;
+
+        return (
+          <div key={groupName} className="px-4" style={{ height }}>
+            <p className="text-[9px] font-bold text-slate-600 uppercase tracking-wider pt-2 pb-1">
+              {GROUP_LABELS[groupName] ?? groupName}
+            </p>
+            <ResponsiveContainer width="100%" height="85%">
+              <LineChart data={chartData} margin={{ top: 4, right: 16, bottom: 4, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#262626" strokeOpacity={0.4} vertical={false} />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#64748b" }} dy={8} interval="preserveStartEnd" />
+                <YAxis domain={yDomain} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#475569" }} tickFormatter={formatMetricValue} width={50} />
+                <RechartsTooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null;
+                    return (
+                      <div className="rounded-lg border border-[#262626] bg-[#141414]/95 px-3 py-2 shadow-xl backdrop-blur-sm">
+                        <p className="text-[10px] font-mono text-slate-500 mb-1.5 border-b border-[#262626] pb-1">{label}</p>
+                        <div className="space-y-1">
+                          {metrics.map((m) => {
+                            const entry = payload.find((p) => p.dataKey === m.key);
+                            return (
+                              <div key={m.key} className="flex items-center justify-between gap-4 text-[11px]">
+                                <span className="flex items-center gap-1.5">
+                                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: m.color }} />
+                                  <span className="text-slate-400">{m.label}</span>
+                                </span>
+                                <span className="font-mono font-bold" style={{ color: m.color }}>
+                                  {typeof entry?.value === "number" ? formatMetricValue(entry.value) : "-"}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  }}
+                  cursor={{ stroke: "#334155", strokeDasharray: "4 4" }}
+                />
+                {groupName === "ratio" && <ReferenceLine y={0.7} stroke="#ef4444" strokeOpacity={0.3} strokeDasharray="4 4" />}
+                {groupName === "length" && maxOutputTokens != null && (
+                  <ReferenceLine y={maxOutputTokens} stroke="#ef4444" strokeOpacity={0.3} strokeDasharray="4 4" />
+                )}
+                {metrics.map((m) => (
+                  <Line key={m.key} type="monotone" dataKey={m.key} name={m.label} stroke={m.color} strokeWidth={m.primary ? 2 : 1.5} dot={false} activeDot={{ r: 3, fill: m.color, stroke: "#111", strokeWidth: 1.5 }} connectNulls />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+// =============================================================================
 // Main Component
 // =============================================================================
 
@@ -290,17 +385,18 @@ export function FinetuneMetricsChart({
   const alertCount = useMemo(() => getAlertCount(metrics), [metrics]);
 
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(() => {
-    return new Set(TAB_CONFIG[defaultTab ?? "reward"].metrics.map((m) => m.key));
+    const tab = TAB_CONFIG[defaultTab ?? "reward"];
+    return new Set(tab.metrics.filter((m) => m.primary).map((m) => m.key));
   });
 
   const handleTabChange = useCallback((tab: MetricTab) => {
     setActiveTab(tab);
-    setVisibleKeys(new Set(TAB_CONFIG[tab].metrics.map((m) => m.key)));
+    setVisibleKeys(new Set(TAB_CONFIG[tab].metrics.filter((m) => m.primary).map((m) => m.key)));
   }, [setActiveTab]);
 
   useMemo(() => {
     if (hideTabs && defaultTab) {
-      setVisibleKeys(new Set(TAB_CONFIG[defaultTab].metrics.map((m) => m.key)));
+      setVisibleKeys(new Set(TAB_CONFIG[defaultTab].metrics.filter((m) => m.primary).map((m) => m.key)));
     }
   }, [hideTabs, defaultTab]);
 
@@ -362,6 +458,7 @@ export function FinetuneMetricsChart({
   );
   const visibleMetrics = availableMetrics.filter((m) => visibleKeys.has(m.key));
   const isSingleMetric = visibleMetrics.length <= 1;
+  const hasGroups = visibleMetrics.some((m) => m.group);
 
   // Build laned data for multi-metric stacked view
   const { data: lanedData, lanes } = useMemo(
@@ -437,77 +534,82 @@ export function FinetuneMetricsChart({
       )}
 
       {/* Chart */}
-      <div className="relative" style={{ height: chartHeight }}>
-        {/* Lane labels (stacked mode only) */}
-        {!isSingleMetric && (
-          <LaneLabels lanes={lanes} visibleMetrics={visibleMetrics} chartData={chartData as Record<string, unknown>[]} />
-        )}
+      {hasGroups && !isSingleMetric ? (
+        /* Grouped charts: metrics sharing a Y-axis within each group */
+        <GroupedCharts chartData={chartData as Record<string, unknown>[]} visibleMetrics={visibleMetrics} maxOutputTokens={maxOutputTokens} />
+      ) : (
+        <div className="relative" style={{ height: chartHeight }}>
+          {/* Lane labels (stacked mode only) */}
+          {!isSingleMetric && (
+            <LaneLabels lanes={lanes} visibleMetrics={visibleMetrics} chartData={chartData as Record<string, unknown>[]} />
+          )}
 
-        <div className={cn("w-full h-full", !isSingleMetric ? "pl-[70px]" : "p-4 pr-2")}>
-          <ResponsiveContainer width="100%" height="100%">
-            {isSingleMetric ? (
-              /* Single metric: real Y-axis + full tooltip */
-              <LineChart data={chartData} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#262626" strokeOpacity={0.4} vertical={false} />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#64748b" }} dy={8} interval="preserveStartEnd" />
-                <YAxis domain={singleYDomain} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#475569" }} tickFormatter={(v: number) => formatMetricValue(v)} width={50} />
-                <RechartsTooltip
-                  content={({ active, payload, label }) => {
-                    if (!active || !payload?.[0]) return null;
-                    const m = visibleMetrics[0];
-                    return (
-                      <div className="rounded-lg border border-[#262626] bg-[#141414]/95 px-3 py-2 shadow-xl backdrop-blur-sm">
-                        <p className="text-[10px] font-mono text-slate-500 mb-1">{label}</p>
-                        <div className="flex items-center gap-2 text-[11px]">
-                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: m.color }} />
-                          <span className="text-slate-400">{m.label}</span>
-                          <span className="font-mono font-bold" style={{ color: m.color }}>
-                            {typeof payload[0].value === "number" ? formatMetricValue(payload[0].value as number) : "-"}
-                          </span>
+          <div className={cn("w-full h-full", !isSingleMetric ? "pl-[70px]" : "p-4 pr-2")}>
+            <ResponsiveContainer width="100%" height="100%">
+              {isSingleMetric ? (
+                /* Single metric: real Y-axis + full tooltip */
+                <LineChart data={chartData} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#262626" strokeOpacity={0.4} vertical={false} />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#64748b" }} dy={8} interval="preserveStartEnd" />
+                  <YAxis domain={singleYDomain} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#475569" }} tickFormatter={(v: number) => formatMetricValue(v)} width={50} />
+                  <RechartsTooltip
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload?.[0]) return null;
+                      const m = visibleMetrics[0];
+                      return (
+                        <div className="rounded-lg border border-[#262626] bg-[#141414]/95 px-3 py-2 shadow-xl backdrop-blur-sm">
+                          <p className="text-[10px] font-mono text-slate-500 mb-1">{label}</p>
+                          <div className="flex items-center gap-2 text-[11px]">
+                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: m.color }} />
+                            <span className="text-slate-400">{m.label}</span>
+                            <span className="font-mono font-bold" style={{ color: m.color }}>
+                              {typeof payload[0].value === "number" ? formatMetricValue(payload[0].value as number) : "-"}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  }}
-                  cursor={{ stroke: "#334155", strokeDasharray: "4 4" }}
-                />
-                {visibleMetrics[0]?.key === "completions/clipped_ratio" && (
-                  <ReferenceLine y={0.7} stroke="#ef4444" strokeOpacity={0.3} strokeDasharray="4 4" />
-                )}
-                <Line type="monotone" dataKey={visibleMetrics[0]?.key} stroke={visibleMetrics[0]?.color} strokeWidth={2} dot={false} activeDot={{ r: 4, fill: visibleMetrics[0]?.color }} connectNulls />
-              </LineChart>
-            ) : (
-              /* Stacked lanes: all metrics in one chart, each in its own band */
-              <LineChart data={lanedData} margin={{ top: 8, right: 16, bottom: 4, left: -20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#262626" strokeOpacity={0.15} vertical={false} />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#64748b" }} dy={8} interval="preserveStartEnd" />
-                <YAxis domain={[-0.02, 1.02]} axisLine={false} tickLine={false} tick={false} width={1} />
-                <RechartsTooltip
-                  content={<StackedTooltip visibleMetrics={visibleMetrics} />}
-                  cursor={{ stroke: "#334155", strokeDasharray: "4 4" }}
-                />
-                {/* Lane separator lines */}
-                {lanes.slice(0, -1).map((lane, i) => (
-                  <ReferenceLine key={`sep-${i}`} y={lane.yMin - LANE_GAP / 2} stroke="#262626" strokeOpacity={0.5} strokeDasharray="2 4" />
-                ))}
-                {/* One Line per metric */}
-                {visibleMetrics.map((m) => (
-                  <Line
-                    key={m.key}
-                    type="monotone"
-                    dataKey={m.key}
-                    name={m.label}
-                    stroke={m.color}
-                    strokeWidth={1.5}
-                    dot={false}
-                    activeDot={{ r: 3, fill: m.color, stroke: "#111", strokeWidth: 1.5 }}
-                    connectNulls
+                      );
+                    }}
+                    cursor={{ stroke: "#334155", strokeDasharray: "4 4" }}
                   />
-                ))}
-              </LineChart>
-            )}
-          </ResponsiveContainer>
+                  {visibleMetrics[0]?.key === "completions/clipped_ratio" && (
+                    <ReferenceLine y={0.7} stroke="#ef4444" strokeOpacity={0.3} strokeDasharray="4 4" />
+                  )}
+                  <Line type="monotone" dataKey={visibleMetrics[0]?.key} stroke={visibleMetrics[0]?.color} strokeWidth={2} dot={false} activeDot={{ r: 4, fill: visibleMetrics[0]?.color }} connectNulls />
+                </LineChart>
+              ) : (
+                /* Stacked lanes: all metrics in one chart, each in its own band */
+                <LineChart data={lanedData} margin={{ top: 8, right: 16, bottom: 4, left: -20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#262626" strokeOpacity={0.15} vertical={false} />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#64748b" }} dy={8} interval="preserveStartEnd" />
+                  <YAxis domain={[-0.02, 1.02]} axisLine={false} tickLine={false} tick={false} width={1} />
+                  <RechartsTooltip
+                    content={<StackedTooltip visibleMetrics={visibleMetrics} />}
+                    cursor={{ stroke: "#334155", strokeDasharray: "4 4" }}
+                  />
+                  {/* Lane separator lines */}
+                  {lanes.slice(0, -1).map((lane, i) => (
+                    <ReferenceLine key={`sep-${i}`} y={lane.yMin - LANE_GAP / 2} stroke="#262626" strokeOpacity={0.5} strokeDasharray="2 4" />
+                  ))}
+                  {/* One Line per metric */}
+                  {visibleMetrics.map((m) => (
+                    <Line
+                      key={m.key}
+                      type="monotone"
+                      dataKey={m.key}
+                      name={m.label}
+                      stroke={m.color}
+                      strokeWidth={1.5}
+                      dot={false}
+                      activeDot={{ r: 3, fill: m.color, stroke: "#111", strokeWidth: 1.5 }}
+                      connectNulls
+                    />
+                  ))}
+                </LineChart>
+              )}
+            </ResponsiveContainer>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Legend */}
       <TooltipProvider delayDuration={200}>

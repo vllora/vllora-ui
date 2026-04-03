@@ -158,10 +158,11 @@ Evaluate the response on these criteria:
 
 1. **Read 10-15 sample rows** from `training.jsonl` spanning different topics
 2. **For each row**, imagine: what would a perfect response look like? A mediocre one? A terrible one?
-3. **Identify 3-5 domain-specific qualities** that separate good from bad — these become your criteria
-4. **Decide for each criterion**: programmatic check (format, structure, keywords) or LLM judgment (tone, accuracy, reasoning quality)?
-5. **Assign weights** — which criteria matter most for your objective?
-6. **Then write the JS** informed by this analysis
+3. **Design a checklist rubric** of 7-20 binary criteria (see Checklist Rubric Design below)
+4. **Validate rubric quality**: check for the 4 failure modes (coverage gaps, conflated dimensions, misaligned direction, redundant criteria)
+5. **Decide for each criterion**: programmatic check (format, structure, keywords) or LLM judgment (tone, accuracy, reasoning quality)?
+6. **Assign weights** — which criteria matter most for your objective? Or use implicit aggregation (let the LLM judge weight them)
+7. **Then write the JS** informed by this analysis
 
 ### Example Walkthrough
 
@@ -184,6 +185,239 @@ From this analysis, you'd identify these criteria:
 | Format | Programmatic | 0.10 | Minimum length, no jargon without explanation |
 
 Now you have a clear blueprint for the grader — the criteria, how each is evaluated, and how they're weighted.
+
+---
+
+## Checklist Rubric Design (Research-Backed)
+
+**The single biggest improvement you can make to a grader is decomposing it into a checklist rubric** instead of asking the LLM judge to give a holistic score. Rubrics as Rewards (arXiv:2507.17746) showed up to 31% improvement in training signal quality on non-verifiable domains (medical, science). Rethinking Rubric Design (arXiv:2602.05125) showed 160% reward improvement for Qwen3-4B.
+
+### Why rubrics beat holistic scoring
+
+A holistic prompt like "Rate this response 0-5 on quality" gives the LLM judge too much latitude. Different calls may weight different aspects differently, producing noisy scores. A rubric decomposes the judgment into **specific, answerable questions** — each criterion is a binary yes/no or a narrow 0-3 scale. This gives GRPO a much richer gradient signal.
+
+### How to design a rubric
+
+1. **Write 7-20 binary criteria** — each is a yes/no question answerable from the completion alone
+2. **Categorize each criterion** by importance:
+   - **Essential** (weight 1.0): Must be correct for a passing score
+   - **Important** (weight 0.7): Significantly affects quality
+   - **Optional** (weight 0.3): Nice-to-have, not critical
+3. **Check for the 4 failure modes** (RRD, arXiv:2602.05125):
+   - **Lack of coverage**: Does the rubric miss important quality dimensions?
+   - **Conflated dimensions**: Does any criterion blend two separate concerns? Split it.
+   - **Misaligned direction**: Does any criterion accidentally reward bad behavior?
+   - **Redundancy**: Are any criteria correlated >0.7? (Test: if criterion A is true, is criterion B almost always true too?) Merge or remove redundant ones — they artificially amplify one dimension.
+4. **Optimal count**: Empirically stabilizes around 15-20 criteria after recursive decomposition. Fewer than 7 is too coarse; more than 20 adds noise without signal.
+
+### Example: Food allergen detection rubric
+
+```
+Essential (weight 1.0):
+  ✅ Are all allergens present in the ingredient list correctly identified?
+  ✅ Are hidden sources (whey→milk, tahini→sesame) correctly mapped?
+  ✅ Is the response free of false positives (allergens NOT in the ingredients)?
+
+Important (weight 0.7):
+  ✅ Does the response use the canonical allergen name (not just the ingredient)?
+  ✅ Is the output in the correct format (comma-separated list)?
+
+Optional (weight 0.3):
+  ✅ Is the response concise (list only, no explanation)?
+  ✅ Does the response handle "none" correctly when no allergens are present?
+```
+
+### Example: Medical Q&A rubric
+
+```
+Essential (weight 1.0):
+  ✅ Is the primary diagnosis/answer medically accurate?
+  ✅ Are safety-critical warnings included (drug interactions, contraindications)?
+  ✅ Is the response free of dangerous misinformation?
+
+Important (weight 0.7):
+  ✅ Does the response cite the mechanism of action (not just the conclusion)?
+  ✅ Is medical terminology explained in plain language?
+  ✅ Does the response recommend consulting a healthcare provider for treatment decisions?
+  ✅ Are all aspects of the question addressed?
+
+Optional (weight 0.3):
+  ✅ Is the response structured with clear sections?
+  ✅ Is the tone empathetic and reassuring?
+  ✅ Is the response concise without unnecessary repetition?
+```
+
+### Two aggregation strategies
+
+**Explicit aggregation** (recommended for programmatic graders): Grade each criterion programmatically or via separate LLM calls, then compute weighted sum. More transparent and debuggable.
+
+**Implicit aggregation** (recommended for LLM-as-judge graders): Pass all criteria to the LLM judge in a single prompt, ask for per-criterion binary scores, then compute weighted sum in JS. RaR (arXiv:2507.17746) found that removing manual weight labels and letting the judge weight implicitly sometimes performed better — but explicit weights give you more control for iteration.
+
+---
+
+## Stratified Scoring: Gate Correctness Before Quality
+
+**Never mix correctness and quality in a flat weighted sum.** HERO (arXiv:2510.07242) showed +9-11 points by using correctness as a gate.
+
+The problem: if correctness is 40% weight and quality is 60%, a wrong-but-well-written answer (0.0 × 0.4 + 0.8 × 0.6 = 0.48) can score higher than a correct-but-terse answer (1.0 × 0.4 + 0.3 × 0.6 = 0.58). The gap is small, and noise can flip them — GRPO then learns that writing style matters more than being right.
+
+### The fix: stratified normalization
+
+```javascript
+// Correctness gates the score range
+if (isCorrect) {
+    // Correct answers score 0.5-1.0
+    finalScore = 0.5 + 0.5 * qualityScore;
+} else {
+    // Wrong answers score 0.0-0.5
+    finalScore = 0.0 + 0.5 * qualityScore;
+}
+```
+
+This guarantees that the worst correct answer (0.5) always scores higher than the best wrong answer (0.5). Quality signal is preserved within each tier — GRPO learns both "be correct" and "be good quality" without conflating them.
+
+### When to use stratified scoring
+
+Use it when you have **any binary correctness check**, even partial:
+- Classification: is the label correct?
+- Extraction: are the key fields present?
+- QA: does the answer match the ground truth?
+- Compliance: is the conclusion (compliant/non-compliant) correct?
+
+If correctness is purely subjective (creative writing, tone), use the standard weighted approach instead.
+
+---
+
+## Multi-Criteria Variance Normalization
+
+**Manual weights don't work if criteria have different variances.** MO-GRPO (arXiv:2509.22047) showed that when combining multiple reward functions, high-variance criteria dominate regardless of their stated weight.
+
+Example: You set F1=40%, conciseness=15%. But F1 scores range 0.0-1.0 (high variance) while conciseness scores cluster at 0.7-0.9 (low variance). GRPO optimizes almost entirely for F1 because it drives the group advantage — conciseness is effectively ignored.
+
+### The fix: calibrate on a sample batch
+
+Before training, run your grader on 20-30 sample completions. Compute the standard deviation of each criterion's scores. If any criterion has >3x the std of another, either:
+
+1. **Rescale the low-variance criterion** to spread its scores wider (e.g., map 0.7-0.9 → 0.0-1.0)
+2. **Increase the weight** of the low-variance criterion proportionally
+3. **Use variance-based normalization**: `weight_i = stated_weight_i / std(criterion_i)`, then renormalize weights to sum to 1.0
+
+The goal is that each criterion contributes meaningfully to the group advantage signal. If a criterion's scores barely vary, GRPO can't learn from it regardless of its weight.
+
+---
+
+## LLM Judge Best Practices
+
+### Temperature averaging (Multiple Evidence Calibration)
+
+LLM judges are stochastic — the same completion can get different scores on different calls. This noise biases GRPO gradients (Noise-Corrected GRPO, arXiv:2510.18924).
+
+**Fix:** Call the judge with `temperature: 0.7` and average over k=2-3 calls:
+
+```javascript
+completion_params: {
+    model_name: "gpt-4.1",
+    temperature: 0.7,  // not 0.0
+    max_tokens: 1000
+}
+
+// Call k times and average
+var scores = [];
+for (var i = 0; i < 2; i++) {
+    var result = __langdb_call_llm_as_judge_obj(config, input);
+    if (!result.error) scores.push(result);
+}
+// Average per-criterion scores across calls
+```
+
+This costs 2-3x more per completion but significantly reduces grader noise. Use k=2 for cost-sensitive runs, k=3 for high-stakes training.
+
+**Note:** Temperature 0.0 gives deterministic-ish results but can produce overconfident scores. Temperature 0.7 with averaging gives more calibrated scores that better reflect genuine uncertainty.
+
+### Judge model selection
+
+- Use a **different model family** than the training model when possible (Weng, 2024). A Qwen model judged by GPT-4.1 is less susceptible to in-context reward hacking (the model learning to write in the judge's preferred style).
+- `gpt-4.1` is the recommended default judge. `gpt-4.1-mini` is acceptable for cost-sensitive runs but produces noisier scores.
+- For domain-specific tasks, include **domain context in the judge's system prompt** (the extracted knowledge, not just generic "you are an expert").
+
+### Contrastive examples in judge prompts
+
+Include examples of both correct and incorrect responses in the judge prompt (OpenAI RFT Cookbook). This anchors the judge's scoring scale and prevents score drift:
+
+```javascript
+content: `...
+Examples of scoring:
+
+HIGH SCORE (4-5): "The allergens present are: milk (from whey protein), wheat (from semolina). These are hidden sources that require careful label reading."
+
+LOW SCORE (0-1): "This food contains all major allergens including milk, eggs, fish, shellfish, tree nuts, peanuts, wheat, soybeans, and sesame." [Over-predicts — lists allergens not present in the ingredients]
+
+LOW SCORE (0-1): "No allergens detected." [Under-predicts — misses hidden sources like whey→milk]
+
+Now evaluate the actual response:
+...`
+```
+
+---
+
+## Pre-Training Grader Validation Protocol
+
+**Run these 3 tests before launching training.** Catching a broken grader here saves hours of wasted GPU time.
+
+### Test 1: Consistency (grader noise)
+
+Score 5-10 **paraphrased correct answers** — same factual content, different wording. Score variance across paraphrases should be < ±0.15.
+
+If variance > 0.15: the grader is too sensitive to surface-level wording. Fix the judge prompt to focus on factual content, not phrasing. Or use temperature averaging (k=2-3).
+
+### Test 2: Discrimination (signal quality)
+
+Score 5 clearly **correct** answers and 5 clearly **wrong** answers. The mean score difference should be > 0.4.
+
+If difference < 0.4: the grader can't tell good from bad. GRPO will get almost no useful gradient. Fix the criteria — they're either too lenient (everything scores well) or too strict (everything scores poorly).
+
+### Test 3: Exploitation (adversarial robustness)
+
+Score answers that **game** the grader without being genuinely good:
+- Correct answer + massive irrelevant padding → should score < 0.5
+- Lists ALL possible answers to maximize recall → should score < 0.4
+- Copies the question back with minor changes → should score < 0.2
+- Perfect format with factually wrong content → should score < 0.3
+
+If any adversarial response scores > 0.4: the grader has an exploitable weakness that GRPO **will** find during training. Add a specific hard gate or penalty.
+
+### Running the tests
+
+```bash
+# Consistency: test with paraphrased correct answers
+uv run ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
+  --workflow-id $WORKFLOW_ID --script grader.js \
+  --row '{"messages": [...], "ground_truth": "..."}'
+# Run 5+ times with semantically equivalent assistant content
+
+# Discrimination: test with known-good and known-bad
+# Run with a clearly correct response → expect score > 0.7
+# Run with a clearly wrong response → expect score < 0.3
+
+# Exploitation: test with adversarial responses
+# Run with over-prediction, padding, prompt copying
+```
+
+---
+
+## Monitoring for Reward Hacking During Training
+
+After training starts, **inspect actual model completions** at regular intervals (Composite Rewards, arXiv:2509.15557; OpenAI RFT Cookbook). Common exploitation patterns:
+
+| Pattern | How to detect | Fix |
+|---------|--------------|-----|
+| **Length explosion** | Mean completion length growing >30% per checkpoint | Tighten `max_output_tokens`, add conciseness criterion |
+| **Synonym stuffing** | Lists all possible correct answers to maximize recall | Add false-positive penalty, cap precision-recall tradeoff |
+| **Format padding** | Correct content buried in boilerplate headers/disclaimers | Add format gate that penalizes non-content tokens |
+| **Style mimicry** | Responses sound like the judge model, not like the training objective | Use a different judge model family, add domain-specific tone criteria |
+| **Prompt echoing** | Response contains verbatim chunks of the input prompt | Add programmatic check: similarity(input, output) > threshold → score 0.05 |
+
+When a pattern is found, add a **targeted negative reward** for that specific behavior — not a generic penalty. The fix is always domain-specific.
 
 ---
 

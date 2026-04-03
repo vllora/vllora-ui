@@ -561,14 +561,15 @@ If some topics are under-represented, use `chat_completion.py` to create variant
 
 Write a JavaScript grader function to `grader.js`. Scores model responses 0-1, runs server-side during evaluation and training.
 
-**Before writing the grader, analyze the extracted knowledge and topic structure:**
+**Before writing the grader, analyze the extracted knowledge and design a checklist rubric:**
 1. Read the extracted knowledge parts (`knowledge/all-parts-index.json` and 2-3 per-document `knowledge_parts.json` files) to understand the domain's specific rules, terminology, formulas, tables, and edge cases
 2. Read `topics.json` to understand the skill areas the model will be tested on
 3. For each topic, think about what a perfect vs. mediocre vs. bad response looks like — grounded in what the source documents actually say, not your general knowledge
-4. Identify 3-5 domain-specific qualities that separate good from bad — these MUST reflect the actual content (e.g., specific IRS rules, exact formulas, threshold values from the documents)
-5. Design criteria and weight allocation informed by the source material and topic structure
-6. Then write the JS grader informed by this analysis
-7. If `training.jsonl` already exists (Step 4 finished first), also read 10-15 sample rows to validate your criteria against real prompts
+4. **Design a checklist rubric of 7-20 binary criteria** (Rubrics as Rewards, arXiv:2507.17746 — up to 31% signal improvement). Categorize each criterion as Essential (weight 1.0), Important (weight 0.7), or Optional (weight 0.3). These MUST reflect the actual domain content (e.g., specific IRS rules, exact formulas, threshold values from the documents)
+5. **Validate rubric quality** — check for 4 failure modes (RRD, arXiv:2602.05125): coverage gaps, conflated dimensions, misaligned direction, redundant criteria (correlation >0.7 → merge)
+6. **Use stratified scoring** — if a binary correctness check exists (even partial), use it as a gate: correct answers score 0.5-1.0, wrong answers score 0.02-0.5 (HERO, arXiv:2510.07242 — +9-11 points). This prevents "wrong but well-written" from outscoring "correct but terse"
+7. Then write the JS grader informed by this analysis. See [reference/grader-writing.md](reference/grader-writing.md) for the full rubric design guide.
+8. If `training.jsonl` already exists (Step 4 finished first), also read 10-15 sample rows to validate your criteria against real prompts
 
 The grader function signature: `function evaluate(input) { ... return { score, reason }; }` where score is 0.0-1.0. The function can use `__langdb_call_llm_as_judge_obj(config, input)` for subjective quality assessment — `config` has `prompt_template` (message array with `{{history}}`/`{{response}}` template vars), `output_schema` (JSON Schema), and `completion_params` (`{model_name, temperature, max_tokens}`). Set `input.history` and `input.response` before calling. **Synchronous only** — no async/await.
 
@@ -652,6 +653,18 @@ The `--live` flag picks 3 random training records, sends each prompt to the LLM,
 - **Copying the prompt**: Model repeats back the question or system prompt. Does your grader detect this?
 
 For each case, mentally trace through your grader logic. If any adversarial response would score >0.3, the grader has an exploitable weakness that GRPO will find during training. Fix it now — adding a hard gate or penalty is much cheaper than discovering the exploit after a failed training run.
+
+**Test 4: Grader Validation Protocol (3 checks — MANDATORY before training).** These catch grader problems that waste GPU time. Run after Test 1-3 pass, using the dry-run script.
+
+- **Consistency check**: Pick 1 training record. Write 5 paraphrased correct answers (same facts, different wording). Run each through the grader. Score variance should be < ±0.15. If higher, the grader is too sensitive to surface wording — fix the judge prompt to focus on factual content, or use temperature averaging (Noise-Corrected GRPO, arXiv:2510.18924).
+
+- **Discrimination check**: Score 5 clearly correct answers and 5 clearly wrong answers. Mean score difference should be > 0.4 (e.g., correct mean 0.75, wrong mean 0.15 → difference 0.60, OK). If difference < 0.4, the grader can't tell good from bad — GRPO gets almost no useful gradient. Fix criteria.
+
+- **Exploitation check**: Score 3 adversarial responses: (1) correct answer + massive padding/repetition, (2) lists ALL possible answers to maximize recall, (3) copies the question back with minor additions. All should score < 0.4. If any scores > 0.4, add a hard gate or penalty for that pattern.
+
+Log the results: `Consistency: var=X.XX, Discrimination: diff=X.XX, Exploitation: max_adversarial=X.XX`. If any check fails, fix the grader and re-run before proceeding.
+
+See [reference/grader-writing.md](reference/grader-writing.md) "Pre-Training Grader Validation Protocol" for details.
 
 **Upload + verify + checkpoint** — run ALL THREE commands. Do NOT checkpoint the grader without uploading and verifying first. If the verify fails, the upload silently failed — re-run `upload-grader`.
 
