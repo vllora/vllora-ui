@@ -150,9 +150,9 @@ All gateway API calls go through `scripts/finetune.py` — a single wrapper scri
 | `finetune.py create-training` | 7d | Creates training job, saves metadata locally |
 | `finetune.py poll-training` | 7e | Polls training job until complete, saves status + metrics |
 | `finetune.py sync-jobs` | 8 | Syncs training + eval jobs from gateway to local tracking files |
-| `finetune.py diagnose-grader` | 9a | Diagnose grader issues: score buckets, reason patterns, grader source, record context check. Classifies zeros into parsing failures / wrong answers / refusals — tells agent whether to fix GRADER or RECORDS. Also includes response pattern analysis — detects dominant model response patterns and over-prediction from reason fields. |
+| `finetune.py diagnose-grader` | 9a/9c | Diagnose grader issues: score buckets, reason patterns, grader source, record context check. Classifies zeros into parsing failures / wrong answers / refusals — tells agent whether to fix GRADER or RECORDS. Also includes response pattern analysis (dominant model response patterns, over-prediction from reason fields) and **per-topic classification** (`DEAD_WEIGHT`, `AMBIGUOUS`, `WEAK`, `HARD_BUT_LEARNING`, `OK`) based on score variance. |
 | `finetune.py filter-records` | 9a | Remove bad records from local JSONL + gateway based on eval scores/reasons. Supports `--max-score`, `--reason-pattern`, `--topic` filters. |
-| `finetune.py log-iteration` | 8d | Log eval or training iteration to `iterations.json` with structured metrics + delta comparison vs previous iteration. Tracks what changed and whether it helped. |
+| `finetune.py log-iteration` | 8e | Log eval or training iteration to `iterations.json` with structured metrics + delta comparison vs previous iteration. Eval entries include **per-topic metrics** (avg_score, zero_rate, score_std per topic) and flag `stalled_topics`. |
 | `finetune.py data-quality-gate` | 5.5b | Run pre-eval data quality gate (structural, diversity, completion length, **source accuracy**, GT quality, alignment) |
 | `finetune.py difficulty-probe` | 7c+ | Post-eval difficulty distribution probe (signal prediction, grader granularity) |
 | `finetune.py cancel-training` | 7e | Cancel a running training job |
@@ -1066,7 +1066,7 @@ After every eval/training cycle, append a summary to `iterations.md`.
 
 ## Step 9: Iterate (If Needed)
 
-**What happens**: Two iteration loops with different speeds and costs.
+**What happens**: Three iteration loops with different speeds and costs.
 
 > **For full iteration diagnosis and escalation strategy**, read `reference/iteration-strategy.md`.
 
@@ -1077,7 +1077,7 @@ After every eval/training cycle, append a summary to `iterations.md`.
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py diagnose-grader \
   --file evaluations/eval-001.json --workflow-id $WORKFLOW_ID
 ```
-This shows score distribution, reason patterns per bucket, auto-diagnosis (DATA vs GRADER root cause), the grader source code, whether records include source document text, and response pattern analysis (dominant model response patterns, over-prediction detected from reason fields).
+This shows score distribution, reason patterns per bucket, auto-diagnosis (DATA vs GRADER root cause), the grader source code, whether records include source document text, response pattern analysis (dominant model response patterns, over-prediction detected from reason fields), and a **per-topic breakdown** classifying each topic as `OK`, `HARD_BUT_LEARNING`, `DEAD_WEIGHT`, `AMBIGUOUS`, or `WEAK`.
 
 **Step 2: Fix based on diagnosis.** The most common root cause is a grader-prompt mismatch:
 
@@ -1102,7 +1102,11 @@ Return to Step 7b — create a new eval and re-run the readiness gate. ~45 min p
 2. **Data or grader needs fixing** — apply fixes, return to Step 7b (re-eval first, then training)
 3. **Model too weak** — try a larger base model (2B → 4B → 9B). If training keeps failing (OOM/NaN), try smaller: `4B` → `2B` → `0.8B`.
 
-### 9c. Iteration limits and escalation
+### 9c. Topic-level iteration (stalled topics after 2+ evals)
+
+When `diagnose-grader` per-topic output shows persistent `DEAD_WEIGHT` or `AMBIGUOUS` topics across 2+ consecutive evals, the topic itself is the problem — not the grader or records. Fix by splitting broad topics, removing impossible ones, or regenerating records with better grounding. Topics classified `HARD_BUT_LEARNING` (low avg but score variance >= 0.05) are the strongest GRPO training signal — never remove them. See SKILL.md Step 9c for the full decision table and commands.
+
+### 9d. Iteration limits and escalation
 
 - **Max 5 eval-only iterations** before training. If readiness gate never passes, escalate to user.
 - **Max 3 training iterations.**

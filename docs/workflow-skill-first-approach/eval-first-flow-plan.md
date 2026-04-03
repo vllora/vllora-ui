@@ -93,7 +93,7 @@ Step 8b: Post-training analysis (after training completes)
 
 **Current:** "Apply fixes and start new jobs" — always creates both eval + training.
 
-**New:** Two iteration loops:
+**New:** Three iteration loops:
 
 ```
 Step 9a: Eval-only iteration (readiness gate failed)
@@ -106,6 +106,12 @@ Step 9b: Post-training iteration (training completed but results unsatisfactory)
   - Adjust hyperparams, fix grader, regenerate data
   - Return to Step 7b (re-eval with new data)
   - May skip straight to Step 7e (training) if only hyperparams changed
+
+Step 9c: Topic-level iteration (stalled topics after 2+ evals)
+  - Per-topic diagnosis via diagnose-grader (DEAD_WEIGHT, AMBIGUOUS, HARD_BUT_LEARNING)
+  - Split/remove/regenerate topics, re-upload, re-eval
+  - Only triggered when topics show no improvement for 2+ consecutive evals
+  - HARD_BUT_LEARNING topics (low avg, some variance) are kept — best GRPO signal
 ```
 
 ---

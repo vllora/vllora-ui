@@ -43,7 +43,8 @@ Validate → Data Quality Gate → Verify → Evaluate                          
                ↓                    │   Eval-First Loop (fast)      │         │
           Re-validate               │ Analyze → Readiness Gate ────→│── PASS ─→ Train → Analyze → Done
                                     │      ↑         ↓ FAIL         │            ↓ bad
-                                    │      └── Fix data/grader ─────┘        Iterate (back to Eval)
+                                    │      ├── Fix data/grader ─────┘        Iterate (back to Eval)
+                                    │      └── Fix topics (if stalled 2+ evals)
                                     └──────────────────────────────┘
 ```
 
@@ -1349,7 +1350,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step analyze --project-d
 
 ### Step 9: Iterate (If Needed)
 
-Two iteration loops with different speeds and costs:
+Three iteration loops with different speeds and costs:
 
 > **For full iteration diagnosis and escalation strategy**, read [reference/iteration-strategy.md](reference/iteration-strategy.md).
 
@@ -1469,7 +1470,64 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 
 **"cancelled" is a TERMINAL state — do NOT retry cancelled jobs.** Only retry on "failed" states. To cancel a running job: `uv run scripts/finetune.py cancel-training --workflow-id WF_ID --job-id JOB_ID`.
 
-#### 9c. Iteration limits and escalation
+#### 9c. Topic-level iteration (stalled topics after 2+ evals)
+
+**When to trigger:** After 2+ eval iterations, check `iterations.json` for per-topic metrics. If any topic shows no improvement across consecutive evals, it may be a topic problem — not a grader or record problem.
+
+**Step 1: Diagnose topics**
+
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py diagnose-grader \
+  --file evaluations/eval-NNN.json --workflow-id $WORKFLOW_ID
+```
+
+The `per_topic` section in the output classifies each topic based on **score variance** (not just average). GRPO learns from variance — a hard topic with spread is the strongest training signal.
+
+| Classification | Pattern | Meaning | Action |
+|---|---|---|---|
+| `DEAD_WEIGHT` | >80% zeros, std<0.05 | No useful gradient — model can't produce anything scoreable | Remove or radically simplify |
+| `AMBIGUOUS` | high variance (std>0.3), low avg | Topic is too broad — records don't agree on what "good" looks like | Split into subtopics |
+| `WEAK` | low avg, >50% zeros, std<0.08 | Model is stuck, almost no variance | Check records; simplify or remove if records are fine |
+| `HARD_BUT_LEARNING` | low avg but std>=0.05 | Hard topic where model sometimes gets partial credit | **Keep — best training signal for GRPO** |
+| `OK` | Reasonable scores | No topic-level issue | Keep |
+
+**Important:** `HARD_BUT_LEARNING` topics look bad by average score but are the most valuable for training. GRPO needs variance within prompt groups to compute gradients. A topic with avg=0.15 but std=0.2 is gold. Do NOT remove or "fix" these.
+
+Cross-reference with `iterations.json` — if a topic was `DEAD_WEIGHT` in both the current and previous eval, it's a persistent topic problem, not a transient one.
+
+**Step 2: Fix topics** (only for topics classified `DEAD_WEIGHT` or `AMBIGUOUS` across 2+ evals)
+
+| Diagnosis | Action |
+|---|---|
+| `DEAD_WEIGHT` + records look reasonable | Topic is too hard for base model → **remove** the topic and its records |
+| `DEAD_WEIGHT` + records have wrong premise | **Regenerate** records for this topic with better grounding |
+| `AMBIGUOUS` + broad topic name | **Split** into 2-3 narrower subtopics in `topics.json` |
+| `AMBIGUOUS` + narrow topic but mixed records | Records mix different skills → **regenerate** with tighter prompt focus |
+
+**Step 3: Apply topic changes**
+
+```bash
+# Edit topics.json (split/remove/rename), then re-upload
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-topics --force \
+  --workflow-id $WORKFLOW_ID --file finetune-project/topics.json
+
+# Remove records for deleted/changed topics from training.jsonl, regenerate
+uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
+  --topics finetune-project/topics.json --relations finetune-project/relations.json \
+  --knowledge-dir finetune-project/knowledge --system-prompt "..." \
+  --output finetune-project/training.jsonl --append \
+  --records-per-topic 25 --parallel 4
+
+# Re-upload all records
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force \
+  --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl
+```
+
+**Return to Step 7b** — re-eval to verify the topic fix improved things.
+
+**⚠️ Topic changes are expensive** (re-upload + regenerate + re-eval). Only trigger when a topic has been `DEAD_WEIGHT` or `AMBIGUOUS` for **2+ consecutive evals**, not on the first bad result. A topic with `WEAK` classification should be fixed via grader/record changes first (Step 9a). **Never remove `HARD_BUT_LEARNING` topics** — they are the strongest training signal.
+
+#### 9d. Iteration limits and escalation
 
 - **Max 5 iterations.** After 5, stop and report full diagnosis.
 - **Base model escalation:** After 2 failed iterations: `Qwen3.5-4B` → `Qwen3.5-9B`. If training keeps failing (OOM/NaN), try smaller: `4B` → `2B` → `0.8B`.

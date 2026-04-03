@@ -572,7 +572,12 @@ curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
       "gradient_accumulation_steps": 5,
       "epochs": 2.0,
       "batch_size": 5,
-      "load_precision": "bf16"
+      "load_precision": "bf16",
+      "mask_truncated_completions": true,
+      "loss_type": "dr_grpo",
+      "importance_sampling_level": "sentence",
+      "scale_rewards": "none",
+      "beta": 0.0
     },
     "inference_parameters": {
       "max_output_tokens": 1000,
@@ -636,6 +641,11 @@ curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
 | `epochs` | 2.0 | **8** | Training epochs. RFT needs many more than SFT (5-15 typical) |
 | `batch_size` | 5 | 5 | Training batch size |
 | `load_precision` | `bf16` (omitted = bf16) | workload-dependent | Base model weights: `bf16` (full precision, default), `4bit` (QLoRA, lowest VRAM), `8bit` (middle ground). |
+| `mask_truncated_completions` | `true` | `true` (recommended) | Whether to zero out KL/reward for completions that were forcibly truncated. With all completions truncated, this can produce NaN KL — increase `max_output_tokens` if that happens. |
+| `loss_type` | `"dr_grpo"` | `"dr_grpo"` | TRL loss normalization mode: `dr_grpo`, `grpo`, `dapo`, or `bnpo`. See `training-metrics-guide.md` for scale differences. |
+| `importance_sampling_level` | `"token"` | `"token"` | Importance sampling granularity: `token` (per-token) or `sequence` (per-sequence). |
+| `scale_rewards` | `"none"` | `"none"` | Optional reward rescaling: `group`, `batch`, or `none`. |
+| `beta` | `0.0` | `0.0` | KL coefficient. `0.0` (modern default) disables KL penalty; set `>0` only when you explicitly want KL regularization. |
 
 **Inference Parameters (used during training rollouts):**
 | Parameter | Gateway Default | GRPO-Optimized (used by `finetune.py`) | Description |

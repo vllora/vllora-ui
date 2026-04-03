@@ -683,14 +683,23 @@ def cmd_log_iteration(args: argparse.Namespace) -> None:
             sys.exit(1)
         eval_data = json.loads(eval_file.read_text())
 
+        from collections import defaultdict
         scores: list[float] = []
+        topic_scores: dict[str, list[float]] = defaultdict(list)
         for r in eval_data.get("results", []):
+            topic = None
+            row = r.get("row", {})
+            if isinstance(row, dict):
+                topic = row.get("topic")
             for _ek, candidates in r.get("epochs", {}).items():
                 if isinstance(candidates, list):
                     for c in candidates:
                         s = c.get("score")
                         if s is not None:
-                            scores.append(float(s))
+                            score_val = float(s)
+                            scores.append(score_val)
+                            if topic:
+                                topic_scores[topic].append(score_val)
 
         avg_score = sum(scores) / len(scores) if scores else 0
         zero_rate = sum(1 for s in scores if s < 0.01) / len(scores) if scores else 0
@@ -707,6 +716,22 @@ def cmd_log_iteration(args: argparse.Namespace) -> None:
             "perfect_rate": round(perfect_rate, 4),
             "distinct_buckets": len({round(s, 2) for s in scores}),
         }
+
+        # Per-topic metrics
+        if topic_scores:
+            per_topic: dict[str, dict] = {}
+            for t, t_scores in sorted(topic_scores.items()):
+                t_avg = sum(t_scores) / len(t_scores)
+                t_zero = sum(1 for s in t_scores if s < 0.01) / len(t_scores)
+                t_std = (sum((s - t_avg) ** 2 for s in t_scores) / len(t_scores)) ** 0.5
+                per_topic[t] = {
+                    "count": len(t_scores),
+                    "avg_score": round(t_avg, 4),
+                    "zero_rate": round(t_zero, 4),
+                    "score_std": round(t_std, 4),
+                }
+            entry["per_topic"] = per_topic
+
         entry["verdict"] = args.verdict
 
     elif phase == "training":
@@ -811,6 +836,36 @@ def cmd_log_iteration(args: argparse.Namespace) -> None:
             new_str = f"{d['new']:{fmt}}" if isinstance(d['new'], float) else str(d['new'])
             diff_str = f"{abs(d['diff']):{fmt}}" if isinstance(d['diff'], float) else str(abs(d['diff']))
             print(f"  {key:20s}: {old_str} → {new_str} ({arrow} {diff_str}) {status}")
+
+        # Per-topic delta comparison (eval phase only)
+        curr_pt = entry.get("per_topic", {})
+        prev_pt = prev.get("per_topic", {})
+        if curr_pt and prev_pt:
+            all_topics = sorted(set(curr_pt) | set(prev_pt))
+            stalled: list[str] = []
+            print(f"\n  Per-topic changes:")
+            for t in all_topics:
+                c = curr_pt.get(t)
+                p = prev_pt.get(t)
+                if not c:
+                    print(f"    {t:30s}: REMOVED")
+                    continue
+                if not p:
+                    print(f"    {t:30s}: NEW avg={c['avg_score']:.3f} zero={c['zero_rate']:.0%} n={c['count']}")
+                    continue
+                avg_diff = c["avg_score"] - p["avg_score"]
+                zero_diff = c["zero_rate"] - p["zero_rate"]
+                avg_arrow = "↑" if avg_diff > 0.005 else "↓" if avg_diff < -0.005 else "="
+                zero_arrow = "↑" if zero_diff > 0.005 else "↓" if zero_diff < -0.005 else "="
+                print(f"    {t:30s}: avg {p['avg_score']:.3f}→{c['avg_score']:.3f} ({avg_arrow}{abs(avg_diff):.3f})  zero {p['zero_rate']:.0%}→{c['zero_rate']:.0%} ({zero_arrow}{abs(zero_diff):.0%})")
+                # Flag stalled: no improvement AND no variance (dead weight).
+                # Topics with low avg but some std are HARD_BUT_LEARNING — good for RFT.
+                if avg_diff < 0.01 and c["zero_rate"] > 0.8 and c["score_std"] < 0.05:
+                    stalled.append(t)
+            if stalled:
+                entry["stalled_topics"] = stalled
+                print(f"\n  ⚠️  DEAD WEIGHT topics (no improvement, >80% zeros, no variance): {', '.join(stalled)}")
+
         print(f"\n  Verdict: {args.verdict}")
     else:
         print(f"\n=== Iteration {iteration_num} ({phase} baseline) ===")
@@ -821,6 +876,13 @@ def cmd_log_iteration(args: argparse.Namespace) -> None:
                     print(f"  {k}: {v}")
         if phase == "training" and entry.get("config"):
             print(f"  Config: {json.dumps(entry['config'])}")
+        # Show per-topic baseline for first eval
+        if phase == "eval" and entry.get("per_topic"):
+            pt = entry["per_topic"]
+            print(f"\n  Per-topic baseline ({len(pt)} topics):")
+            for t in sorted(pt, key=lambda k: pt[k]["avg_score"]):
+                m = pt[t]
+                print(f"    {t:30s}: avg={m['avg_score']:.3f}  zero={m['zero_rate']:.0%}  std={m['score_std']:.3f}  n={m['count']}")
         print(f"  Verdict: {args.verdict}")
 
     iterations.append(entry)
@@ -1736,6 +1798,84 @@ def cmd_diagnose_grader(args: argparse.Namespace) -> None:
             "sample_reasons": sample_reasons,
         }
 
+    # ── Per-topic summary ──
+    topic_agg: dict[str, list[float]] = defaultdict(list)
+    for _sv, items in buckets.items():
+        for it in items:
+            t = it.get("topic", "unknown")
+            topic_agg[t].append(it["score"])
+
+    if len(topic_agg) > 1 or (len(topic_agg) == 1 and "unknown" not in topic_agg):
+        per_topic_summary: list[dict] = []
+        for t in sorted(topic_agg):
+            t_scores = topic_agg[t]
+            t_avg = sum(t_scores) / len(t_scores)
+            t_zero = sum(1 for s in t_scores if s < 0.01) / len(t_scores)
+            t_std = (sum((s - t_avg) ** 2 for s in t_scores) / len(t_scores)) ** 0.5
+            # Classification based on score variance, not just avg.
+            # GRPO learns from variance — a hard topic with spread is
+            # valuable. Only flag topics with no useful gradient signal.
+            classification = "OK"
+            if t_zero > 0.8 and t_std < 0.05:
+                # Nearly all zeros AND no variance — truly dead weight,
+                # model can't produce anything scoreable for this topic
+                classification = "DEAD_WEIGHT"
+            elif t_std > 0.3 and t_avg < 0.4:
+                # High variance + low avg — topic is too broad, records
+                # don't agree on what "good" looks like
+                classification = "AMBIGUOUS"
+            elif t_avg < 0.15 and t_std >= 0.05:
+                # Low avg but some variance — hard topic where model
+                # sometimes gets partial credit. This is GOOD for RFT.
+                classification = "HARD_BUT_LEARNING"
+            elif t_avg < 0.15 and t_zero > 0.5 and t_std < 0.08:
+                # Low avg, many zeros, almost no variance — model is
+                # stuck and not producing useful gradient
+                classification = "WEAK"
+            per_topic_summary.append({
+                "topic": t,
+                "count": len(t_scores),
+                "avg_score": round(t_avg, 4),
+                "zero_rate": round(t_zero, 4),
+                "score_std": round(t_std, 4),
+                "classification": classification,
+            })
+        # Sort worst first
+        per_topic_summary.sort(key=lambda x: x["avg_score"])
+        output["per_topic"] = per_topic_summary
+
+        # HARD_BUT_LEARNING is good for RFT — don't flag it as a problem
+        problem_topics = [p for p in per_topic_summary
+                          if p["classification"] not in ("OK", "HARD_BUT_LEARNING")]
+        if problem_topics:
+            output["diagnosis"].append({
+                "issue": f"{len(problem_topics)} topic(s) flagged for poor performance",
+                "topics": [
+                    {"topic": p["topic"], "classification": p["classification"],
+                     "avg_score": p["avg_score"], "zero_rate": p["zero_rate"],
+                     "score_std": p["score_std"]}
+                    for p in problem_topics
+                ],
+                "fix": [
+                    "DEAD_WEIGHT: >80% zeros AND no variance (std<0.05) — model produces zero useful gradient. Remove or simplify the topic. (SKILL.md Step 9c)",
+                    "AMBIGUOUS: high variance + low avg — topic is too broad. Split into narrower subtopics. (SKILL.md Step 9c)",
+                    "WEAK: low avg, many zeros, no variance — model is stuck. Check records first; if records are fine, consider removing or simplifying the topic.",
+                ],
+            })
+        # Note topics that are hard but learning — these are valuable
+        learning_topics = [p for p in per_topic_summary
+                           if p["classification"] == "HARD_BUT_LEARNING"]
+        if learning_topics:
+            output["diagnosis"].append({
+                "issue": f"{len(learning_topics)} topic(s) are hard but producing gradient signal — keep them",
+                "topics": [
+                    {"topic": p["topic"], "avg_score": p["avg_score"],
+                     "score_std": p["score_std"]}
+                    for p in learning_topics
+                ],
+                "fix": ["No action needed — hard topics with score variance are the strongest training signal for GRPO."],
+            })
+
     # ── Auto-diagnosis based on distribution patterns ──
     max_bucket_score = max(buckets.keys(), key=lambda k: len(buckets[k]))
     max_bucket_pct = len(buckets[max_bucket_score]) / total * 100
@@ -2020,6 +2160,19 @@ def cmd_diagnose_grader(args: argparse.Namespace) -> None:
         bar = "█" * max(1, int(pct / 2))
         print(f"  {score_val:.1f}: {len(items):4d} ({pct:5.1f}%) {bar}")
     print()
+
+    if output.get("per_topic"):
+        print("Per-topic breakdown (worst first):")
+        for pt in output["per_topic"]:
+            cls = pt["classification"]
+            if cls == "OK":
+                flag = ""
+            elif cls == "HARD_BUT_LEARNING":
+                flag = " ✓ hard but learning (good for RFT)"
+            else:
+                flag = f" ← {cls}"
+            print(f"  {pt['topic']:30s}  avg={pt['avg_score']:.3f}  zero={pt['zero_rate']:.0%}  std={pt['score_std']:.3f}  n={pt['count']}{flag}")
+        print()
 
     if output["diagnosis"]:
         print("Diagnosis:")

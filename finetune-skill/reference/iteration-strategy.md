@@ -6,18 +6,19 @@ How to analyze evaluation results, diagnose issues, assess data quality, and ite
 
 ## The Eval-First Iteration Loop
 
-The pipeline runs in two phases:
+The pipeline runs in two phases, with a topic-level iteration path when topics themselves are the problem:
 
 ```
 Phase 1 — Eval Iterations (fast, ~45 min each, cheap):
   Eval → Readiness Gate → [FAIL] → Fix data/grader → Re-eval → ... → [PASS] →
+                                  → Fix topics (if DEAD_WEIGHT/AMBIGUOUS for 2+ evals) → Re-eval
 
 Phase 2 — Training (slow, hours, expensive):
   Train → Analyze → [good] → Deploy
                    → [bad]  → Fix → Back to Phase 1
 ```
 
-**Max 5 eval-only iterations** (Phase 1) before training. **Max 3 training iterations** (Phase 2) before escalating.
+**Max 5 eval-only iterations** (Phase 1) before training. **Max 3 training iterations** (Phase 2) before escalating. Topic-level fixes (SKILL.md Step 9c) count toward the Phase 1 budget.
 
 Use `finetune.py readiness-check --file evaluations/eval-NNN.json` to run the readiness gate programmatically. See §5 for the criteria.
 
@@ -654,7 +655,11 @@ uv run scripts/finetune.py log-iteration --project-dir finetune-project \
   --changes "First training: lr=5e-6, epochs=8" --change-type baseline --verdict PASS
 ```
 
-The command auto-computes metrics (eval: avg_score, zero_rate, distinct_buckets; training: final_reward, reward_delta, KL) and prints a delta comparison vs the previous same-phase iteration. Read `iterations.json` before making changes to check if the last fix helped.
+The command auto-computes metrics and prints a delta comparison vs the previous same-phase iteration:
+- **Eval**: avg_score, zero_rate, distinct_buckets, **plus per-topic metrics** (avg_score, zero_rate, score_std per topic). Topics with >80% zeros and std<0.05 across consecutive evals are flagged as `stalled_topics` in the entry.
+- **Training**: final_reward, reward_delta, KL.
+
+Read `iterations.json` before making changes to check if the last fix helped — the per-topic deltas show which topics improved and which are stuck.
 
 Example output:
 ```
@@ -669,12 +674,15 @@ This log is critical for diagnosing stalls — if scores aren't improving, the h
 
 ### Comparing Iterations
 
-When reviewing whether a change helped, compare the previous and current evaluation files:
+When reviewing whether a change helped, compare the previous and current evaluation files. `log-iteration` prints this automatically:
 
 1. **Overall**: Did average score and pass rate improve?
-2. **Per-topic**: Did the weak topics improve without degrading strong ones?
+2. **Per-topic** (from `per_topic` field in iterations.json): Did the weak topics improve without degrading strong ones? The delta output shows `avg old→new` and `zero old→new` per topic.
 3. **Per-record**: Are the same records still failing, or different ones?
 4. **Grader reasons**: Are the complaints changing (progress) or staying the same (stuck)?
+5. **Stalled topics**: If `stalled_topics` appears in the iteration entry, those topics had no improvement AND no score variance (>80% zeros, std<0.05) — they're dead weight for GRPO. See SKILL.md Step 9c for topic-level fixes.
+
+**Important**: A topic with low avg but some variance (std>=0.05) is `HARD_BUT_LEARNING` — the strongest training signal for GRPO. Do not remove it. Only topics with near-zero variance are truly stalled.
 
 If the same records keep failing with the same reasons after multiple iterations, the issue is likely fundamental — move to Part 8.
 
@@ -821,14 +829,22 @@ The model learned to game the grader — producing responses that score well but
 
 ### Symptom 6: One topic always scores low, no matter what
 
-**Root cause: The grader criteria don't fit that topic.**
+**Root cause depends on the per-topic classification.** Run `diagnose-grader` — the `per_topic` section classifies each topic:
 
-A grader designed for question-answering may not work well for topics that require a different response style (e.g., troubleshooting, creative writing, emotional support).
+| Classification | Pattern | Meaning |
+|---|---|---|
+| `DEAD_WEIGHT` | >80% zeros, std<0.05 | No useful gradient — model can't produce anything scoreable |
+| `AMBIGUOUS` | high variance (std>0.3), low avg | Topic too broad — records don't agree on what "good" looks like |
+| `WEAK` | low avg, >50% zeros, std<0.08 | Model stuck, almost no variance |
+| `HARD_BUT_LEARNING` | low avg but std>=0.05 | Hard topic with partial credit — **best training signal, keep it** |
 
-**How to verify:** Check if the low-scoring topic requires fundamentally different response qualities than the high-scoring topics.
+**How to verify:** Check `iterations.json` per-topic metrics across 2+ evals. A single bad eval doesn't mean the topic is broken — look for persistent patterns.
 
-**Fix:**
-1. Make the grader topic-aware — check the user's message to determine what kind of response is appropriate:
+**Fix — depends on classification:**
+
+1. **`HARD_BUT_LEARNING`** — do nothing. Low average with score variance is exactly what GRPO needs. These topics produce the strongest gradient signal.
+
+2. **`WEAK` or grader doesn't fit the topic** — make the grader topic-aware:
    ```javascript
    // Adjust expectations based on query type
    const isTroubleshooting = userContent.match(/error|broken|not working|help/i);
@@ -840,7 +856,12 @@ A grader designed for question-answering may not work well for topics that requi
      if (content.length > 100) score += 0.3;
    }
    ```
-2. Or split into separate fine-tuning runs — one per topic cluster that needs different evaluation criteria
+
+3. **`AMBIGUOUS`** — split into 2-3 narrower subtopics in `topics.json`, regenerate records, re-upload and re-eval (SKILL.md Step 9c).
+
+4. **`DEAD_WEIGHT`** (persistent across 2+ evals) — remove the topic and its records. The base model genuinely cannot do this task.
+
+5. Or split into separate fine-tuning runs — one per topic cluster that needs different evaluation criteria.
 
 ### Symptom 7: Base model scores near 0% — can't even get started
 
@@ -985,7 +1006,7 @@ This outputs alerts (CRITICAL/HIGH/WARNING) and a summary. Use the alerts to gui
 | grad_norm NaN or Inf | Numerical overflow — often from zero-length completions or bad chat template | Check completions/min_length. If 0 → fix chat template or increase max_output_tokens |
 | Loss stuck at exactly 0.0 | All advantages are zero (reward_std ≈ 0) | Grader is too lenient — all responses score the same. Make grader harder (see Part 5) |
 | reward flat + frac_reward_zero_std > 0.5 | Base model already good at this task — limited GRPO headroom | **Check base model eval score.** If >0.75: GRPO efficiency drops dramatically — 96% compute wasted for easy prompts (arXiv:2508.14094). (1) Make grader stricter to create headroom. (2) Consider SFT instead — teaches format without needing score variance. (3) Don't train — base model may be good enough. (4) For smaller model: use distillation from a larger model, not direct GRPO. |
-| reward declining over epochs | Model getting worse — possible reward hacking or instability | Reduce LR, add KL penalty (beta > 0), inspect outputs manually |
+| reward declining over epochs | Model getting worse — possible reward hacking or instability | Reduce LR, optionally enable KL penalty (beta > 0) if you want stronger KL regularization, inspect outputs manually |
 | completions/clipped_ratio > 0.5 | Most responses truncated at max_output_tokens | Increase max_output_tokens (512 → 1024). Watch cost: G × tokens |
 | clip_ratio/region_mean = 0 + KL exploding | Trust region not constraining updates | Reduce LR. If using custom epsilon, check it's not too large |
 | reward up but KL >10 + outputs degenerate | Reward hacking | Add quality-focused grader criteria, enable KL penalty (beta=0.04), manual output review |
@@ -993,6 +1014,12 @@ This outputs alerts (CRITICAL/HIGH/WARNING) and a summary. Use the alerts to gui
 ### Step 3: The Hyperparameter Iteration Ladder
 
 Work through these in order — each level is more drastic. **Change ONE parameter at a time** so you can attribute the result.
+
+**GRPO-specific switches (before touching LR):**
+
+- `loss_type` (default `dr_grpo`): Keep `dr_grpo` unless you have a paper-backed reason to switch; other modes change loss scale and can invalidate thresholds in `training-metrics-guide.md`.
+- `mask_truncated_completions` (default `true`): Leave enabled; if you see NaN KL with all completions truncated, fix truncation first (increase `max_output_tokens`) instead of disabling masking.
+- `beta` (default `0.0`): Modern GRPO practice is `beta=0` (no KL penalty). Only increase beta when you explicitly want KL regularization to fight reward hacking — see `training-metrics-guide.md` §KL for recommended ranges.
 
 **Level 1: Learning Rate (most common fix)**
 
