@@ -6,6 +6,17 @@
  * Scores on: readability, accuracy preservation, jargon elimination, completeness.
  *
  * Customize: TARGET_GRADE_LEVEL, FORBIDDEN_JARGON
+ *
+ * GRPO LENGTH EXPLOITATION: Without conciseness control, GRPO models learn verbose
+ * responses because longer = more content = higher scores. This template includes a
+ * CONCISENESS criterion in the LLM judge to prevent this. Customize the weight for your task.
+ *
+ * ⚠️ DRPO ANTI-PATTERN (arXiv:2510.04474): If you add programmatic word-count penalties,
+ * NEVER apply them uniformly to correct AND wrong answers. A penalized correct-but-verbose
+ * answer can drop below wrong-answer scores, inverting its GRPO advantage. The LLM
+ * conciseness criterion used here is safe (semantic, not raw token count).
+ *
+ * Ref: Dr. GRPO (arXiv:2503.20783), DAPO (arXiv:2503.14476), DRPO (arXiv:2510.04474)
  */
 function evaluate(input) {
     let response = "";
@@ -77,6 +88,7 @@ Rate the response on these criteria (0-5 scale):
 3. JARGON_FREE: Are technical terms replaced with everyday equivalents or explained? (5=no unexplained jargon, 0=still uses technical language)
 4. COMPLETENESS: Are all important points from the original covered? Nothing critical omitted? (5=covers everything, 0=missing key points)
 5. STRUCTURE: Is it well-organized with clear sections/bullets? Easy to scan? (5=excellent structure, 0=wall of text)
+6. CONCISENESS: Does the response answer without unnecessary padding, repetition, or filler? A concise correct answer should score higher than a verbose correct answer. (5=tight and focused, 0=bloated with repetition/filler)
 
 Answer in JSON format:
 {
@@ -85,7 +97,8 @@ Answer in JSON format:
   "accuracy": number (0-5),
   "jargon_free": number (0-5),
   "completeness": number (0-5),
-  "structure": number (0-5)
+  "structure": number (0-5),
+  "conciseness": number (0-5)
 }`
             }
         ],
@@ -97,9 +110,10 @@ Answer in JSON format:
                 accuracy: { type: "number", minimum: 0, maximum: 5 },
                 jargon_free: { type: "number", minimum: 0, maximum: 5 },
                 completeness: { type: "number", minimum: 0, maximum: 5 },
-                structure: { type: "number", minimum: 0, maximum: 5 }
+                structure: { type: "number", minimum: 0, maximum: 5 },
+                conciseness: { type: "number", minimum: 0, maximum: 5 }
             },
-            required: ["reasoning", "readability", "accuracy", "jargon_free", "completeness", "structure"],
+            required: ["reasoning", "readability", "accuracy", "jargon_free", "completeness", "structure", "conciseness"],
             additionalProperties: false
         },
         completion_params: { model_name: "gpt-4.1", temperature: 0.0, max_tokens: 1000 }
@@ -119,9 +133,11 @@ Answer in JSON format:
         const jf = typeof result.jargon_free === 'number' ? result.jargon_free : 0;
         const comp = typeof result.completeness === 'number' ? result.completeness : 0;
         const str = typeof result.structure === 'number' ? result.structure : 0;
+        const con = typeof result.conciseness === 'number' ? result.conciseness : 0;
 
         // Weight: readability and accuracy balanced — both matter equally
-        const weighted = (rd * 0.25) + (acc * 0.30) + (jf * 0.20) + (comp * 0.15) + (str * 0.10);
+        // Conciseness at 12% weight to prevent GRPO length exploitation (empirical; DRPO arXiv:2510.04474)
+        const weighted = (rd * 0.22) + (acc * 0.27) + (jf * 0.18) + (comp * 0.13) + (str * 0.08) + (con * 0.12);
         let finalScore = Math.max(0, Math.min(1, weighted / 5.0));
         if (isNaN(finalScore)) finalScore = 0;
 
@@ -129,7 +145,7 @@ Answer in JSON format:
             score: finalScore,
             reason: result.reasoning || "No reasoning",
             readability: rd, accuracy: acc, jargon_free: jf,
-            completeness: comp, structure: str,
+            completeness: comp, structure: str, conciseness: con,
             flesch_kincaid_grade: parseFloat(fleschKincaid.toFixed(1))
         };
     } catch (error) {

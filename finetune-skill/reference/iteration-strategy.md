@@ -135,7 +135,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check --file evaluatio
 
 | Verdict | Criteria | Action |
 |---------|----------|--------|
-| **PASS** (exit 0) | All 6 checks pass | Proceed to training (Step 7d) |
+| **PASS** (exit 0) | All 4 hard + 8 soft checks pass | Proceed to training (Step 7d) |
 | **WARN** (exit 2) | 1 check marginally fails | Can train, but improvements likely help |
 | **FAIL** (exit 1) | Any check fails | Must fix before training — return to Step 7b |
 

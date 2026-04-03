@@ -15,6 +15,20 @@
  *   0.0     — Empty response, refusal, or completely wrong category
  *
  * Customize: VALID_LABELS, LABEL_ALIASES, DOMAIN
+ *
+ * GRPO LENGTH EXPLOITATION: Without conciseness control, GRPO models learn verbose
+ * responses. This template includes a SOFT word-count penalty on WRONG/PARTIAL answers
+ * and a brevity bonus on CORRECT answers.
+ *
+ * ⚠️ DRPO ANTI-PATTERN (arXiv:2510.04474): NEVER apply word-count penalties uniformly
+ * to correct AND wrong answers. A penalized correct-but-verbose answer can score BELOW
+ * wrong answers, inverting its GRPO advantage and teaching the model "verbose + correct
+ * is worse than wrong." This template avoids this by:
+ *   - Correct answers: NO word-count penalty, only LLM conciseness criterion + brevity bonus
+ *   - Wrong/partial answers: soft multiplicative word-count penalty (max 25%)
+ *
+ * Customize expectedMaxWords based on GT lengths. Set to 0 to disable.
+ * Ref: Dr. GRPO (arXiv:2503.20783), DAPO (arXiv:2503.14476), DRPO (arXiv:2510.04474)
  */
 function evaluate(input) {
     // ─── Extract response and context ───
@@ -75,11 +89,45 @@ function evaluate(input) {
 
     // ─── Step 5: Combine into final score ───
 
+    // ─── Conciseness: word count + brevity bonus / penalty ───
+    // Customize expectedMaxWords based on your GT lengths (P95 word count + 50% headroom).
+    // DRPO (arXiv:2510.04474): NEVER penalize correct answers with word-count — it can
+    // invert their GRPO advantage. Instead: brevity bonus for correct+concise, penalty
+    // only on wrong/partial. Multiplicative form (GR3 arXiv:2603.10535); additive collapses.
+    var expectedMaxWords = 100; // TODO: Set from GT P95 word count + 50% headroom
+    var wordCount = response.split(/\s+/).length;
+
+    // Compute penalty factor for wrong/partial answers ONLY
+    var wrongPenaltyFactor = 1.0;
+    var penaltyNote = "";
+    if (expectedMaxWords > 0 && wordCount > expectedMaxWords * 2) {
+        wrongPenaltyFactor = 0.75;
+        penaltyNote = " Conciseness: severely over expected length (" + wordCount + " words, expected <" + expectedMaxWords + ")";
+    } else if (expectedMaxWords > 0 && wordCount > expectedMaxWords) {
+        var overRatio = (wordCount - expectedMaxWords) / expectedMaxWords;
+        var penalty = Math.min(0.15, overRatio * 0.15);
+        wrongPenaltyFactor = 1 - penalty;
+        penaltyNote = " Conciseness: over expected length (" + wordCount + " words, -" + Math.round(penalty * 100) + "%)";
+    }
+
+    // Compute brevity bonus for correct answers (reward conciseness without punishing verbosity)
+    var brevityBonus = 0;
+    var brevityNote = "";
+    if (expectedMaxWords > 0 && wordCount <= expectedMaxWords * 0.7 && wordCount >= 10) {
+        // Correct + concise: small bonus (+0.03 to +0.05) — creates gradient toward brevity
+        // without risking score inversion (DRPO arXiv:2510.04474)
+        brevityBonus = 0.03 + 0.02 * (1 - wordCount / (expectedMaxWords * 0.7));
+        brevityNote = " Brevity bonus: +" + brevityBonus.toFixed(2) + " (concise at " + wordCount + " words)";
+    }
+
     if (matchResult === "exact") {
-        var finalScore = 0.6 + (explanationScore * 0.4);
+        // Correct: NO word-count penalty (DRPO safe). LLM conciseness criterion already
+        // in explanation quality provides semantic length signal. Add brevity bonus only.
+        var finalScore = 0.6 + (explanationScore * 0.4) + brevityBonus;
+        finalScore = Math.max(0, Math.min(1.0, finalScore));
         return {
-            score: Math.min(1.0, finalScore),
-            reason: "Correct label (" + correctLabel + "). Explanation quality: " + explanationScore.toFixed(2) + "/1.0. Extraction: " + extractionMethod + ".",
+            score: finalScore,
+            reason: "Correct label (" + correctLabel + "). Explanation quality: " + explanationScore.toFixed(2) + "/1.0. Extraction: " + extractionMethod + "." + brevityNote,
             model_label: modelLabel,
             correct_label: correctLabel,
             match_type: "exact",
@@ -89,11 +137,13 @@ function evaluate(input) {
     }
 
     if (matchResult === "partial") {
-        // Close but not exact — e.g., "positive" vs "slightly positive", or parent category
+        // Partial match: apply word-count penalty but floor above wrong-tier max (0.2)
+        // to prevent partial-vs-wrong score inversion (same DRPO principle)
         var partialBase = 0.3 + (explanationScore * 0.2);
+        var partialScore = Math.max(0.21, Math.min(0.5, partialBase) * wrongPenaltyFactor);
         return {
-            score: Math.min(0.5, partialBase),
-            reason: "Partial match (model: " + modelLabel + ", correct: " + correctLabel + "). Explanation quality: " + explanationScore.toFixed(2) + "/1.0.",
+            score: partialScore,
+            reason: "Partial match (model: " + modelLabel + ", correct: " + correctLabel + "). Explanation quality: " + explanationScore.toFixed(2) + "/1.0." + penaltyNote,
             model_label: modelLabel,
             correct_label: correctLabel,
             match_type: "partial",
@@ -102,11 +152,12 @@ function evaluate(input) {
         };
     }
 
-    // Wrong label
+    // Wrong label: apply word-count penalty (verbose + wrong should be penalized more)
     var wrongScore = explanationScore * 0.2;
+    var wrongFinal = Math.min(0.2, wrongScore) * wrongPenaltyFactor;
     return {
-        score: Math.min(0.2, wrongScore),
-        reason: "Wrong label (model: " + modelLabel + ", correct: " + correctLabel + "). Explanation quality: " + explanationScore.toFixed(2) + "/1.0.",
+        score: wrongFinal,
+        reason: "Wrong label (model: " + modelLabel + ", correct: " + correctLabel + "). Explanation quality: " + explanationScore.toFixed(2) + "/1.0." + penaltyNote,
         model_label: modelLabel,
         correct_label: correctLabel,
         match_type: "wrong",

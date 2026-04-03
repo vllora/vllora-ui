@@ -675,7 +675,7 @@ Tested with real chess PDF and live backend at localhost:9090.
 | Data generation (100-200+ records) | ✅ Working | generate_records.py with --upload-incremental |
 | Grader writing + dry-run | ✅ Working | 4 templates: general, extraction, compliance, readability |
 | Evaluation creation + polling | ✅ Working | finetune.py create-eval + poll-eval, avg 0.65-0.84 across tests |
-| Readiness gate | ✅ Working | finetune.py readiness-check, 3 hard + 8 soft checks |
+| Readiness gate | ✅ Working | finetune.py readiness-check, 4 hard + 8 soft checks |
 | Training creation + monitoring | ✅ Working | Monitor launches OK, false NaN fixed (10-poll grace period) |
 | Training completion | ⚠️ Issues | KL explosion with contract data — persistent failure guidance added |
 | Post-training analysis | ✅ Working | analyze_training.py: fixed epoch eval fetch (`provider_job_id`), per-record regressions/improvements, 3 auto-detected epoch patterns |

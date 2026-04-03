@@ -17,6 +17,7 @@ These ask "is the grader working?", NOT "is the base model good?" GRPO can learn
 | Sample count >= 50 | ✅ | Too few prompts — GRPO needs sufficient samples for stable advantage estimates | OpenAI RFT: "several dozen to a few hundred" |
 | Score std > 0.10 | ✅ | Grader not differentiating — when all completions score identically, advantages=0, zero gradient. Add criteria or partial credit | Zero-variance → zero gradient is fundamental to GRPO (DAPO §2.2). Threshold is a heuristic. |
 | Average score > 0.05 | ✅ | Near-zero means no signal at all — 0% success rate means RFT cannot bootstrap | OpenAI RFT: "If a model has a 0% success rate, you cannot bootstrap to higher performance" |
+| Zero-score fraction < 10% | ✅ | If >10% of scores are exactly 0.0, those records are dead weight with zero gradient contribution. Fix grader to give nonzero scores for "wrong but attempted" (0.01-0.10). | GRPO gradient ∝ advantage; score=0.0 for all K completions → advantage=0 → zero gradient. See SKILL.md Step 5. |
 
 ### Soft Checks (warnings — training can proceed)
 

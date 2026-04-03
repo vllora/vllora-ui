@@ -83,30 +83,23 @@ This pipeline uses **GRPO (Group Relative Policy Optimization)** — a reinforce
 - If all K completions score the same (zero variance) → zero gradient → that prompt teaches nothing
 - The model will find and exploit ANY shortcut that maximizes the grader score — this is by design, not a bug
 
-**When something unexpected happens — research it:**
-1. **Search for the specific pattern** in GRPO/RFT literature first, not generic ML advice. GRPO behaves differently from SFT on most metrics.
-2. **Key papers to consult** (use web search to find relevant sections):
-   - DeepSeek-R1 (arXiv:2501.12948) — GRPO from scratch, what base model scores mean
-   - DAPO (arXiv:2503.14476) — β=0 default, dynamic sampling, clip-higher
-   - Dr. GRPO (arXiv:2503.20783) — length bias from per-token normalization
-   - "Hard Examples Are All You Need" (arXiv:2508.14094) — difficulty vs learning signal
-   - "No Prompt Left Behind" (arXiv:2509.21880, ICLR 2026) — zero-variance prompts (30-99% is normal)
-   - "Tricks or Traps" (arXiv:2508.08221) — normalization strategies, failure modes
-   - TRL GRPOTrainer docs — metric definitions, config options, known issues
-3. **Key sources for practical guidance:**
-   - OpenAI RFT Guide — grader quality requirements, data format
-   - Unsloth GRPO blog + issues (#3006, #2824) — known training bugs (NaN grad, loss=0)
-   - HuggingFace open-r1 issues — real-world GRPO training problems and solutions
-4. **What to search for:**
-   - Don't search "model not learning" (too generic). Search "GRPO reward flat frac_reward_zero_std" or "GRPO reward hacking detection" (specific to our training method).
-   - Include "GRPO" or "RFT" or "reinforcement fine-tuning" in every search query.
-   - Check if the behavior is actually expected (e.g., high zero-variance is normal, low base model scores are expected, KL rising with β=0 is informational only).
+**When a fix isn't working — research before retrying.** Follow this file's steps and tables for normal pipeline execution. But if you've tried a fix and it didn't help (same problem persists after grader change, training still failing after config adjustment), **stop and web search before trying again.** GRPO has counterintuitive properties — the fix you'd guess from SFT experience is often wrong.
+
+**How to research** (only when a fix fails or you hit an unfamiliar problem):
+1. Web search with GRPO-specific queries — always include "GRPO" or "RFT":
+   - ✗ "model generating long responses" (generic, gets SFT advice)
+   - ✓ "GRPO length exploitation completions growing" (specific)
+2. Key sources: TRL GRPOTrainer docs, arXiv papers (DeepSeek-R1 2501.12948, DAPO 2503.14476, Dr. GRPO 2503.20783, GR3 2603.10535, GRPO-LEAD 2504.09696, "Hard Examples" 2508.14094, "No Prompt Left Behind" 2509.21880), OpenAI RFT Guide, Unsloth issues
+3. **Verify citations before writing them.** Read the actual paper section, not just the abstract. Confirm the paper says what you claim — don't cite a related paper for a claim it didn't make. Say "documents" vs "recommends" accurately.
+4. Check if the recommended fix is available in our training API before implementing
+5. Implement the best AVAILABLE fix, noting limitations in the execution log
 
 **Common traps from applying SFT intuition to GRPO:**
 - "Loss should decrease" — wrong. GRPO loss starts at 0 and rises slightly (on-policy → off-policy divergence).
 - "More data is better" — not always. Easy records (base model scores >0.8) provide almost no gradient. Hard records with zero base model score also provide nothing.
 - "Low eval scores mean training will fail" — wrong. DeepSeek-R1 started at 15.6% and reached 71%. Low base scores = high GRPO headroom.
 - "High zero-variance means broken training" — wrong. 30-99% zero-variance per batch is normal (arXiv:2509.21880). Only a problem when reward is also flat.
+- "Add a length penalty to fix verbose outputs" — depends on the form. **Additive** penalties (`score -= λ * length`) cause "length collapse" for any λ (GR3 arXiv:2603.10535). **Multiplicative** threshold penalties (`score *= factor`) are safer (GR3 endorses this form). The algorithmic root cause is per-token `1/|o_i|` normalization (Dr. GRPO arXiv:2503.20783). Best fix: semantic conciseness via LLM-judge or tight `max_output_tokens`.
 
 ### Working Directory
 
@@ -139,14 +132,21 @@ finetune-project/
 
 Maintain `execution-log.md` as an **append-only** chronological record. Append a section IMMEDIATELY after EACH step completes — not retroactively. Never overwrite.
 
-**Minimum required fields per step** (see [reference/execution-log-template.md](reference/execution-log-template.md) for full template):
-- **Step 2**: per-document part counts + types, reused existing: yes/no, validation: PASS/FAIL, gateway sources count
-- **Step 3**: relevance filter counts (total/relevant/excluded), topic count + hierarchy, relation count + cross-doc balance
-- **Step 4**: records count, per-topic counts, source_parts coverage
-- **Step 5**: template used, dry-run scores (both tests), gateway verify: yes/no
-- **Step 7**: eval job ID, avg/std/zero_frac scores, readiness verdict
+**Minimum required fields per step** (see [reference/execution-log-template.md](reference/execution-log-template.md) for full template). **ALL fields below are mandatory — not suggestions.** The execution log is the primary debugging artifact when something goes wrong in later steps. Skipping fields here costs hours of re-investigation later.
+
+- **Every step**: timestamp (ISO 8601 or `YYYY-MM-DD HH:MM`), duration (minutes or "< 1 min")
+- **Step 2**: per-document: Docling chunks → build_knowledge_parts count + table count. Reused existing: yes/no. Validation: PASS/FAIL. Gateway verify: N sources, M total parts.
+- **Step 3**: relevance filter: total/relevant/excluded + 2-3 sample excluded titles. Topic count: N total (M leaf). **Difficulty breakdown: N easy, N medium, N hard.** System prompt self-check: passed/failed. Relations: N total, per-topic range min-max. Upload counts: topics=N, relations=N, relevance labels=N.
+- **Step 4**: mode (relations/rag-only). Records per topic (default or custom). **Per-topic counts** (topic-name: N, ...). source_parts coverage: N/total with per-record tagging. Dedup: removed N. Upload: N records.
+- **Step 5**: template copied (exact filename). **Criteria list with weights** (e.g., "F1=0.40, hidden_bonus=0.20, conciseness=0.15"). Dry-run Test 1: score + reason summary. **Dry-run Test 2 (live): 3 sample scores** (e.g., "0.7, 0.3, 1.0"). If Test 2 fails, log the failure reason BEFORE the fix, then log the retry scores. Gateway verify: evaluator uploaded, char count.
+- **Step 7 (each eval)**: eval job ID, model name, **duration (minutes)**. Results: avg, std, zero_frac%, perfect_frac%, **score mode at frac%**. **Per-topic scores: topic-name=avg (weakest first).** Readiness gate: PASS/FAIL with hard check details.
+- **Step 7e (training)**: job ID, base model, **full config: epochs, learning_rate, lora_rank, max_output_tokens, response_candidates_count (K), batch_size**. Note: `loss_type="dr_grpo"` is the default.
+- **Step 8 (analysis)**: per-topic breakdown (weakest topics). Dead-weight records: N scoring 0.0. Training metrics: final_reward, reward_delta, KL, clipping%. Recommendations.
+- **Step 9 (each iteration)**: iteration number, what changed and why, change_type (grader/records/both/hyperparams). Re-eval results: avg=X (was Y), Δ=Z. Verdict.
 
 **⚠️ Log EVERY step, not just Step 1.** If the execution log has only Step 1 when Step 5 is complete, the log is useless for debugging.
+
+**⚠️ Per-topic scores are the most diagnostic field.** When eval avg is 0.68, knowing that "hidden-sesame=0.31, hidden-egg=0.42, explicit-allergens=0.95" tells you exactly where to focus. An avg alone tells you nothing actionable.
 
 ---
 
@@ -289,6 +289,8 @@ Extract knowledge from all documents. Each document is processed independently b
 
 **2b. Submit & extract** — Submit all PDFs to Docling with `--skip-existing` (reuses existing `docling-result.json`). Spawn one `knowledge-extractor` subagent per document (up to 4-5 parallel). Wait for ALL to complete before proceeding.
 
+> **⚠️ Upload ownership**: Subagents upload to the gateway after validating their extraction. Do NOT re-upload sources yourself — this creates duplicates (4 sources instead of 2). If you need to fix extraction quality after subagents finish, update the local `knowledge_parts.json` and use `upload-knowledge --force` which **overwrites** the existing source instead of creating a new one.
+
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/docling_extract.py --submit-only --skip-existing \
   "pdfs/doc1.pdf:finetune-project/knowledge/doc1-slug/docling-result.json" ...
@@ -336,7 +338,9 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/knowl
 4. Re-validate after fixing. If still FAIL, present the failure details to the user and ask whether to proceed or re-extract.
 5. Do NOT silently proceed to Step 3 with FAIL status — bad extraction poisons topics, records, and training.
 
-**2e. Verify gateway upload** — `uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py verify --workflow-id $WORKFLOW_ID`. Confirm source count, parts count per source, and source names match local data. If any source has 0 parts or wrong name, re-upload.
+**2e. Verify gateway upload** — `uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py verify --workflow-id $WORKFLOW_ID`. Confirm source count matches the number of PDFs (not more, not fewer), parts count per source > 0, and source names match local data.
+
+> **⚠️ Duplicate check**: If source count > number of PDFs, subagents and orchestrator both uploaded — duplicates exist. Delete the extras via `DELETE /finetune/workflows/$WORKFLOW_ID/knowledge/$KS_ID` before proceeding. If you need to fix extraction quality and re-upload, ALWAYS use `upload-knowledge --force` which overwrites the existing source. NEVER create a second source for the same PDF.
 
 **Review with user.** Present per-document summary (name, parts count, sample titles). Ask about focus areas for training. If user wants re-extraction of specific documents, spawn new subagent with `CUSTOM_INSTRUCTIONS`.
 
@@ -354,6 +358,14 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step extract --project-d
 Filter extracted parts by relevance, design a skill-based topic hierarchy, build topic-part relations, and write behavioral system prompt segments. Topics define WHAT training data gets generated — getting this right avoids regenerating data later.
 
 **Outputs:** `topics.json`, `relations.json`, updated `all-parts-index.json` (with relevance labels)
+
+**⚠️ Topic consistency: reuse existing structure when available.** Topic design is the largest source of run-to-run variance — the same PDF can produce 8 or 13 leaf topics depending on LLM judgment calls about granularity. This changes record counts by 30%+ and hides per-item difficulty from GRPO. To prevent this:
+
+1. **If `topics.json` already exists** in the project directory (from a prior run or manual design), treat it as the authoritative topic structure. Do NOT redesign from scratch. Instead: read the existing topics, verify they still cover the extracted content, and only add/remove topics if the source material has materially changed (new documents added, objective changed). Log "Reusing existing topic structure" in execution-log.md.
+2. **If no `topics.json` exists**, design topics per 3a-3e below, then save the result. This becomes the stable structure for future iterations on the same documents.
+3. **When iterating** (Step 9 — fixing data/grader after eval), NEVER redesign the topic hierarchy unless the user explicitly requests it. Topic changes cascade to records, relations, and grader — they are expensive.
+
+> **Why this matters for GRPO**: Topic structure determines difficulty-diagnostic granularity. If "Milk" and "Egg" are separate topics, you can see that the model scores 0.8 on Milk but 0.3 on Egg and target more Egg records. If they're merged into "Dairy+Egg," that signal is lost. Consistent topics across runs also make eval comparisons meaningful — comparing eval scores across runs requires the same topic structure. (Ref: arXiv:2508.14094 — difficulty targeting requires per-item granularity; DataDreamer arXiv:2402.10379 — reproducible pipelines cache taxonomy artifacts.)
 
 **3a. Filter parts by relevance to the objective.**
 
@@ -380,6 +392,22 @@ From the relevant parts only, identify distinct skills the content teaches. Orga
 Each topic is a task the model must perform. Multiple document sections feed into each skill topic. A single skill topic may draw from multiple chapters and multiple documents. When multiple documents cover overlapping content, merge into single topics.
 
 **Two-level hierarchy:** Domain (broad capability area) → Skill (specific competency). Difficulty is metadata on each leaf topic (`"expected_difficulty": "easy"|"medium"|"hard"`), not a structural level — this avoids doubling leaf count (TAGS arXiv:2601.13995). Target 15-25 records per leaf topic, 5-40 leaf topics depending on dataset size. See `reference/topic-hierarchy.md` for full guidelines.
+
+**Granularity rule for enumerable items:** When the source material defines a list of distinct items that the model must handle individually (e.g., 9 FDA allergens, 14 tax forms, 12 compliance rules), **prefer one leaf topic per item** rather than merging items into groups. Merging hides per-item difficulty from GRPO — you can't target "the model fails on Sesame" if Sesame is merged into "Tree Nut, Peanut, and Sesame." This rule applies when:
+- The source explicitly enumerates items (a list, table, or set of categories)
+- Each item has distinct detection/handling characteristics (different hidden names, different rules)
+- The total leaf count stays within 5-40 (if >40 items, group by shared characteristics)
+
+When multiple documents discuss the same enumerable item (e.g., two PDFs both cover milk allergens), merge those documents' content into the SAME per-item topic — not into a broader group. The merging is across documents for the same item, not across items.
+
+```
+❌ Bad (merges items): "Hidden Dairy and Egg Sources" (hides per-allergen difficulty)
+✅ Good (per-item): "Hidden Milk/Dairy Sources" + "Hidden Egg Sources" (GRPO can target each)
+❌ Bad (per-document): "PDF-1 Milk" + "PDF-2 Milk" (duplicates across documents)
+✅ Good (merged per-item): "Hidden Milk/Dairy Sources" (draws from both PDFs)
+```
+
+> **Research basis**: GRPO learning signal is strongest on hard items (arXiv:2508.14094 — 47% gains from hardest 10%). Per-item topics enable difficulty-weighted record generation. Merged topics mask which items the model struggles with, preventing targeted improvement. The synthetic diversity study (arXiv:2410.15226) confirms more granular topics reduce redundancy up to 20-30 records/topic.
 
 **3c. Write behavioral system prompt segments.**
 
@@ -559,19 +587,22 @@ See [reference/grader-writing.md](reference/grader-writing.md) for 3 patterns (p
 
 **⚠️ When fixing the grader in iteration (Step 9a), NEVER remove partial credit.** If the current grader gives 0.03 for wrong answers, do NOT change it to 0.0 — that makes the score distribution MORE binary and kills GRPO gradient. The fix for "too many wrong answers" is better records or a better model, NOT harsher scoring. Harsher scoring = more zeros = less gradient = worse training.
 
-**⚠️ MANDATORY: Include a length penalty in EVERY grader.** GRPO's #1 failure mode is length exploitation — the model learns verbose responses because longer = more content = higher scores. This happens in almost every training run if the grader doesn't penalize length. Add this to your grader from the start (not as a fix after training fails):
+**⚠️ MANDATORY: Prevent length exploitation.** GRPO's #1 failure mode is the model learning verbose responses because longer = more content = higher scores. This happens in almost every training run. Four defenses (all active or recommended):
 
-```javascript
-// Length penalty — MANDATORY for GRPO. Adjust expectedMaxWords based on GT lengths.
-var expectedMaxWords = 30; // Set from GT P95 word count + 50% headroom
-var words = response.split(/\s+/).length;
-if (words > expectedMaxWords) {
-    var penalty = Math.min(0.5, (words - expectedMaxWords) / expectedMaxWords);
-    score *= (1 - penalty);
-}
-```
+**Defense 1 (algorithm — ACTIVE by default):** The vLLora cloud uses `loss_type="dr_grpo"` + `mask_truncated_completions=True` + `repetition_penalty=1.1` by default. Dr. GRPO (arXiv:2503.20783) removes the algorithmic root cause (per-sequence `1/|o_i|` normalization). Truncation masking (DAPO, arXiv:2503.14476) ensures truncated completions contribute zero gradient. Repetition penalty (1.1) discourages repetitive padding at generation time. **If length exploitation occurs despite these, the cause is reward-correlated (the grader rewards verbosity)** — focus on Defenses 2-4.
 
-Calculate `expectedMaxWords` from your ground truth lengths: count words in 5-10 GTs, take the longest, add 50%. For allergen detection (GT: "milk, eggs") → ~10 words max. For compliance verdicts (GT: 30-60 tokens) → ~50 words max. For open-ended explanations → set higher or use a softer penalty curve.
+**Defense 2 (max_output_tokens — set tight):** Set `max_output_tokens` close to expected output length (see Step 7a-i). Allergen list → 128, compliance verdict → 256. This is a natural constraint — the model can't be verbose if there's no room.
+
+**Defense 3 (grader — penalize verbosity as a quality issue):** Make the grader score "correct but padded" lower than "correct and concise." Two approaches, both valid:
+- **Add a conciseness criterion to LLM-as-judge** (recommended for judge-based graders): Include "Penalize responses that pad correct information with unnecessary repetition or explanation" in the judge prompt. Weight it 10-15%. This is the safest approach — semantic evaluation avoids the pitfalls of programmatic length measurement.
+- **Soft multiplicative threshold penalty** (acceptable for programmatic graders): No penalty below expected length, then gradual **multiplicative** penalty above it (`score *= (1 - penalty)`). Set threshold from GT P95 word count + 50% headroom. Cap max penalty at 15-25%. **NEVER use additive penalties** (`score -= λ * length`) — GR3 (arXiv:2603.10535) proves these cause "length collapse" for any λ because the length term creates an optimization shortcut independent of task performance.
+
+> **⚠️ DRPO ANTI-PATTERN — CRITICAL (arXiv:2510.04474):** When adding a word-count penalty to a grader, **NEVER apply it uniformly to both correct and wrong answers.** GRPO computes advantages relative to the group mean. If a correct-but-verbose answer gets penalized (e.g., 0.8 × 0.75 = 0.60) and the group includes wrong answers at 0.0-0.10, the penalized correct answer may fall below the group mean — GRPO then assigns it **negative** advantage and actively discourages it. The model learns "verbose + correct is worse than wrong." **Safe patterns:**
+> - Apply word-count penalties **only to wrong/partial answers** (correct answers rely on the LLM conciseness criterion)
+> - Add a small **brevity bonus** (+0.03-0.05) for correct+concise answers (creates positive gradient toward brevity without risking score inversion)
+> - All 6 grader templates already implement this DRPO-safe pattern
+
+> **Research basis**: Dr. GRPO (arXiv:2503.20783) identifies the algorithmic root cause (per-token `1/|o_i|` normalization). DAPO (arXiv:2503.14476) adds overlong filtering + soft punishment at the training level. GR3 (arXiv:2603.10535) proves additive length penalties collapse and endorses multiplicative rescaling. GRPO-LEAD (arXiv:2504.09696) couples length control to task correctness via exponential decay. DRPO (arXiv:2510.04474) proves that uniform length penalties on correct answers can invert their GRPO advantage. OpenAI RFT cookbook documents verbosity as a grader design failure mode and recommends rubric refinement (not explicit penalty terms).
 
 **⚠️ NEVER use programmatic checks (char count, keyword matching) as the primary scoring mechanism.** Programmatic checks are useful for fast guards (empty response, refusal detection, format compliance) but NOT for scoring quality. Use LLM-as-judge for quality assessment — it produces continuous scores that give GRPO smooth gradients. A programmatic check like `response.length > 150 → score 1.0` will produce coarse scores where gpt-4o-mini always gets 1.0 (it always writes long responses).
 
@@ -616,7 +647,7 @@ The `--live` flag picks 3 random training records, sends each prompt to the LLM,
 
 - **Over-prediction**: Model lists all possible answers (e.g., all 9 allergens, all contaminants). Does your grader penalize false positives hard enough, or does high recall + low precision still get a decent score?
 - **Under-prediction**: Model says "none" or gives empty/minimal response. Does your grader give 0.0, or does it give partial credit that rewards saying nothing?
-- **Length exploitation (MOST COMMON GRPO FAILURE)**: Model generates increasingly verbose responses because longer = more content = higher scores on F1/LLM-judge graders. GRPO reinforces this until completions hit max_output_tokens, causing 100% clipping and training collapse. **Your grader MUST penalize length from the start.** Check: if a correct 10-word answer and a correct 200-word answer both exist, does the grader score them the same? If yes, the model will learn to always write 200 words. Add a length penalty: `if (wordCount > expectedMax) score *= Math.max(0.5, 1 - (wordCount - expectedMax) / expectedMax)`. Set `expectedMax` based on your GT lengths (P95 word count + 50% headroom).
+- **Length exploitation (MOST COMMON GRPO FAILURE)**: Model generates increasingly verbose responses because longer = more content = higher scores on F1/LLM-judge graders. GRPO reinforces this until completions hit max_output_tokens, causing clipping and training collapse. Check: if a correct 10-word answer and a correct 200-word answer both exist, does the grader score them the same? If yes, the model WILL learn to always write 200 words. Your grader must score "correct and concise" higher than "correct but padded" — see the 4 defenses in Step 5 above. Note: the algorithmic root cause (Dr. GRPO length bias) is already mitigated by the default training config. If length exploitation occurs, it's because the grader rewards verbosity. Also verify max_output_tokens is tight (Step 7a-i).
 - **Format gaming**: Model outputs the exact format template without correct content (e.g., "COMPLIANT. Per 40 CFR 141.XX: MCL for [contaminant] is [value]" with placeholders). Does your grader check actual values or just format?
 - **Copying the prompt**: Model repeats back the question or system prompt. Does your grader detect this?
 
@@ -971,7 +1002,7 @@ Training starts here — only reached when the readiness gate indicates data and
 | `Qwen3.5-0.8B` | Only after 4B training showed no improvement AND you want to test if a smaller model learns better on this narrow task | ~1000 | Very low |
 | `Qwen3.5-2B` | After 4B training showed no improvement, as intermediate test | ~800 | Low |
 | `Qwen3.5-4B` | **Always start here.** Best balance of capacity and speed. | ~500 | Low |
-| `unsloth/Qwen3.5-9B` | Only if 4B training plateaued and task requires complex reasoning | ~100 | High with >100 records |
+| `Qwen3.5-9B` | Only if 4B training plateaued and task requires complex reasoning | ~100 | High with >100 records |
 
 > **⚠️ Start with 4B.** The 9B model OOMs with >100 records and K=8 on standard GPU allocations. Use 9B only for small, complex datasets (<100 records). Use 0.8B/2B for quick prototyping or when training keeps failing on larger models. The `create-training` script warns if the model/dataset combination risks OOM.
 
@@ -998,7 +1029,23 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 |-----------|---------|-----------|
 | `learning_rate` | **5e-6** | Between DeepSeek-R1's 3e-6 (arXiv:2501.12948) and gateway default 1e-5. Food-label E2E test showed 1e-6 too slow to converge. Do NOT use SFT rates (2e-5 to 5e-5). |
 | `response_candidates_count` | **8** (minimum) | GRPO needs multiple candidates for advantage estimation. Published work uses G=8 (Dr. GRPO, TRL) to G=64 (DeepSeekMath). |
-| `warmup_steps` | **20-50** | DAPO (arXiv:2503.14476) uses 20, "Tricks or Traps" (arXiv:2508.08221) uses 50. Linear warmup then constant LR. |
+| `warmup_ratio` | **configurable** | Uses `warmup_ratio` (not `warmup_steps`). The cloud applies cosine LR scheduler — LR decays after warmup, not constant. |
+
+> **Actual cloud training config** (set by the cloud worker, not user-configurable):
+>
+> | Parameter | Value | What it does |
+> |-----------|-------|-------------|
+> | `loss_type` | `"dr_grpo"` | Removes per-token `1/|o_i|` normalization — eliminates algorithmic length bias (Dr. GRPO, arXiv:2503.20783) |
+> | `mask_truncated_completions` | `True` | Truncated completions contribute zero gradient (DAPO, arXiv:2503.14476). Prevents NaN from all-truncated batches — but see `max_output_tokens` sizing |
+> | `repetition_penalty` | `1.1` | Generation-time penalty against repetitive tokens — discourages padding via repetition |
+> | `importance_sampling_level` | `"sequence"` | Sequence-level importance sampling (GSPO/Qwen approach) |
+> | `epsilon` / `epsilon_high` | `3e-4` / `4e-4` | Tight asymmetric clipping — very conservative policy updates per step |
+> | `lr_scheduler_type` | `"cosine"` | Cosine annealing after warmup — LR decays through training |
+> | `optim` | `"adamw_8bit"` | 8-bit AdamW for VRAM savings |
+> | `max_grad_norm` | `1.0` | Gradient clipping — prevents explosion |
+> | `weight_decay` | `0.01` | Standard regularization |
+>
+> **Implications for analysis**: (1) If length exploitation occurs, it's grader-side, not algorithmic — fix the grader. (2) The tight epsilon values mean `clip_ratio` should stay very low; high `clip_ratio` is a stronger signal than usual. (3) Cosine LR means reward may plateau in late training as LR approaches zero — this is expected, not a bug. (4) `mask_truncated_completions=True` means truncated completions are excluded from loss — if `clipped_ratio` is high, those samples are wasted compute.
 
 > **⚠️ RFT epochs ≠ SFT epochs.** In RFT/GRPO, the model generates **fresh responses each epoch** — there's no repetition risk. More epochs = more exploration. Published work uses high epoch counts: "Tricks or Traps" uses 50 epochs; OpenAI says RFT does "hundreds or thousands of epochs." Start conservatively and increase if reward is still improving.
 
@@ -1029,7 +1076,19 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
 
 **Early stopping** is enabled by default — detects completion clipping, score plateau, score degradation, and length exploitation. Add `--no-early-stop` to disable. See [reference/training-metrics-guide.md](reference/training-metrics-guide.md) for signal details and thresholds.
 
-When training completes (or is early-stopped), proceed to **Step 8b (Post-Training Eval)**. If early-stopped, the best checkpoint is noted in the output — use that epoch's model.
+When training completes (or is early-stopped), **immediately log the training iteration** before doing anything else:
+
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
+  --project-dir finetune-project --phase training \
+  --training-file training-jobs/train-NNN.json \
+  --changes "Training run: lr=5e-6, epochs=8, K=8, base=Qwen3.5-4B" \
+  --change-type baseline --verdict PASS
+```
+
+> **⚠️ MANDATORY — do NOT skip.** This captures the training config, reward trajectory, KL, clipping ratio, and early-stop reason into `iterations.json`. Without this, you cannot compare training runs during iteration (Step 9b). If training was early-stopped, note the reason in `--changes` and set `--verdict WARN`. If training failed, set `--verdict FAIL`.
+
+If early-stopped, the best checkpoint is noted in the output — use that epoch's model. Proceed to **Step 8b (Post-Training Eval)**.
 
 ### Step 8: Analyze Results
 
@@ -1143,11 +1202,11 @@ The `log-iteration` delta will show the improvement. Interpret the result:
       → ACCEPT base model (already good enough) or make grader stricter.
    d) If none of the above apply
       → REPORT to user with full analysis from Step 8c.
-8. Log decision:
+8. Log the post-training analysis decision (training metrics already logged in Step 7f):
    uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
-     --project-dir finetune-project \
-     --training-file training-jobs/train-NNN.json \
-     --changes "Training result: Δ=___, decision: ___" \
+     --project-dir finetune-project --phase eval \
+     --eval-file evaluations/eval-NNN.json \
+     --changes "Post-training analysis: Δ=___, decision: ___" \
      --change-type baseline --verdict ___
 ```
 
@@ -1250,25 +1309,23 @@ This is the most diagnostic step in the entire analysis. Score numbers tell you 
 
 #### 8e. Update Iteration Tracker
 
-**After every eval or training cycle**, log the iteration with structured metrics:
+**Verify all iterations are logged.** At this point, `iterations.json` should contain entries for:
+- Every eval run (`--phase eval`) — logged at Step 7b after each eval completes
+- Every training run (`--phase training`) — logged at Step 7f after training completes
+- The post-training eval (`--phase eval`) — logged at Step 8b
+
+If any are missing, log them now. The iteration tracker is how you compare across runs during Step 9.
 
 ```bash
-# After eval + readiness check:
+# Example: log a missed eval iteration
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
   --project-dir finetune-project --phase eval \
   --eval-file evaluations/eval-002.json \
   --changes "Added partial credit for wrong answers" \
   --change-type grader --verdict PASS
-
-# After training + analysis:
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
-  --project-dir finetune-project --phase training \
-  --training-file training-jobs/train-001.json \
-  --changes "First training run: lr=5e-6, epochs=8, K=8" \
-  --change-type baseline --verdict PASS
 ```
 
-This maintains `finetune-project/iterations.json` with per-iteration metrics. For eval: avg_score, zero_rate, distinct_buckets. For training: final_reward, reward_delta, KL, clipping. Each iteration shows a delta comparison vs the previous same-phase iteration.
+`iterations.json` tracks per-iteration metrics. For eval: avg_score, zero_rate, distinct_buckets. For training: final_reward, reward_delta, KL, clipping. Each iteration shows a delta comparison vs the previous same-phase iteration.
 
 **Read `iterations.json` before making changes** — if the last change regressed metrics, revert before trying something new.
 

@@ -8,6 +8,18 @@
  *   __langdb_call_llm_as_judge_obj(config, input) → result matching output_schema, or { error }
  *
  * Must return: { score: <0-1>, reason: <string> }
+ *
+ * GRPO LENGTH EXPLOITATION: Without conciseness control, GRPO models learn verbose
+ * responses because longer = more content = higher scores. This template includes a
+ * CONCISENESS criterion in the LLM judge (12% weight) to prevent this.
+ *
+ * ⚠️ DRPO ANTI-PATTERN (arXiv:2510.04474): If you add programmatic word-count penalties,
+ * NEVER apply them uniformly to correct AND wrong answers. A penalized correct-but-verbose
+ * answer can drop below wrong-answer scores, inverting its GRPO advantage. The LLM
+ * conciseness criterion used here is safe because it's semantic (judges padding/repetition,
+ * not raw token count) and is part of the weighted average (can't invert score tiers).
+ *
+ * Ref: Dr. GRPO (arXiv:2503.20783), DAPO (arXiv:2503.14476), DRPO (arXiv:2510.04474)
  */
 function evaluate(input) {
     // 1. Extract response and history from input
@@ -72,6 +84,7 @@ Rate the response on these criteria (0-5 scale):
 3. CLARITY: Is it well-structured and easy to understand?
 4. COMPLETENESS: Are all aspects of the question covered?
 5. TONE: Is the tone appropriate for the context?
+6. CONCISENESS: Does the response answer without unnecessary padding, repetition, or filler? A concise correct answer should score higher than a verbose correct answer. (5=tight and focused, 0=bloated with repetition/filler)
 ` + (groundTruth ? `
 When a Source Reference is provided, use it to verify the model's response is factually accurate and covers the correct information. The model does not need to quote the source verbatim.
 ` : "") + `
@@ -84,7 +97,8 @@ Answer in JSON format:
   "helpfulness": number (0-5),
   "clarity": number (0-5),
   "completeness": number (0-5),
-  "tone": number (0-5)
+  "tone": number (0-5),
+  "conciseness": number (0-5)
 }`
             }
         ],
@@ -96,9 +110,10 @@ Answer in JSON format:
                 helpfulness: { type: "number", minimum: 0, maximum: 5 },
                 clarity: { type: "number", minimum: 0, maximum: 5 },
                 completeness: { type: "number", minimum: 0, maximum: 5 },
-                tone: { type: "number", minimum: 0, maximum: 5 }
+                tone: { type: "number", minimum: 0, maximum: 5 },
+                conciseness: { type: "number", minimum: 0, maximum: 5 }
             },
-            required: ["reasoning", "accuracy", "helpfulness", "clarity", "completeness", "tone"],
+            required: ["reasoning", "accuracy", "helpfulness", "clarity", "completeness", "tone", "conciseness"],
             additionalProperties: false
         },
         completion_params: {
@@ -128,13 +143,17 @@ Answer in JSON format:
         const clarity = typeof result.clarity === 'number' ? result.clarity : 0;
         const completeness = typeof result.completeness === 'number' ? result.completeness : 0;
         const tone = typeof result.tone === 'number' ? result.tone : 0;
+        const conciseness = typeof result.conciseness === 'number' ? result.conciseness : 0;
 
         const judgeReasoning = result.reasoning || "No reasoning provided";
 
-        // Average across criteria (each 0-5), normalize to 0-1
-        const total = accuracy + helpfulness + clarity + completeness + tone;
-        const avgScore = total / 5;
-        let finalScore = avgScore / 5.0;
+        // Weighted average across criteria (each 0-5), normalize to 0-1
+        // Conciseness at 12% weight to prevent GRPO length exploitation
+        // without dominating the score. Weight is empirical; see DRPO (arXiv:2510.04474) for why
+        // grader-side length signals must be carefully weighted to avoid advantage inversion.
+        const weighted = (accuracy * 0.25) + (helpfulness * 0.20) + (clarity * 0.18) +
+            (completeness * 0.15) + (tone * 0.10) + (conciseness * 0.12);
+        let finalScore = weighted / 5.0;
 
         if (isNaN(finalScore)) finalScore = 0;
         finalScore = Math.max(0, Math.min(1, finalScore));
@@ -146,7 +165,8 @@ Answer in JSON format:
             helpfulness: helpfulness,
             clarity: clarity,
             completeness: completeness,
-            tone: tone
+            tone: tone,
+            conciseness: conciseness
         };
     } catch (error) {
         return {

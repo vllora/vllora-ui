@@ -5,6 +5,17 @@
  * Scores on: field accuracy, hallucination rate, completeness, format compliance.
  *
  * Customize: REQUIRED_FIELDS, FORMAT_PATTERN, HALLUCINATION_KEYWORDS
+ *
+ * GRPO LENGTH EXPLOITATION: Without conciseness control, GRPO models learn verbose
+ * responses because longer = more content = higher scores. This template includes a
+ * CONCISENESS criterion in the LLM judge to prevent this. Customize the weight for your task.
+ *
+ * ⚠️ DRPO ANTI-PATTERN (arXiv:2510.04474): If you add programmatic word-count penalties,
+ * NEVER apply them uniformly to correct AND wrong answers. A penalized correct-but-verbose
+ * answer can drop below wrong-answer scores, inverting its GRPO advantage. The LLM
+ * conciseness criterion used here is safe (semantic, not raw token count).
+ *
+ * Ref: Dr. GRPO (arXiv:2503.20783), DAPO (arXiv:2503.14476), DRPO (arXiv:2510.04474)
  */
 function evaluate(input) {
     let response = "";
@@ -67,6 +78,7 @@ Rate the extraction on these criteria (0-5 scale):
 2. HALLUCINATION: Does the response contain any numbers, dates, or facts NOT in the source? (5=no hallucination, 0=heavily hallucinated)
 3. COMPLETENESS: Were all relevant data points extracted? Nothing important missed?
 4. FORMAT: Is the output in the expected structured format? Easy to parse?
+5. CONCISENESS: Does the response extract data without unnecessary padding, repetition, or filler? A concise extraction should score higher than one buried in verbose prose. (5=tight and focused, 0=bloated with repetition/filler)
 
 Answer in JSON format:
 {
@@ -74,7 +86,8 @@ Answer in JSON format:
   "field_accuracy": number (0-5),
   "hallucination": number (0-5, higher=better),
   "completeness": number (0-5),
-  "format": number (0-5)
+  "format": number (0-5),
+  "conciseness": number (0-5)
 }`
             }
         ],
@@ -85,9 +98,10 @@ Answer in JSON format:
                 field_accuracy: { type: "number", minimum: 0, maximum: 5 },
                 hallucination: { type: "number", minimum: 0, maximum: 5 },
                 completeness: { type: "number", minimum: 0, maximum: 5 },
-                format: { type: "number", minimum: 0, maximum: 5 }
+                format: { type: "number", minimum: 0, maximum: 5 },
+                conciseness: { type: "number", minimum: 0, maximum: 5 }
             },
-            required: ["reasoning", "field_accuracy", "hallucination", "completeness", "format"],
+            required: ["reasoning", "field_accuracy", "hallucination", "completeness", "format", "conciseness"],
             additionalProperties: false
         },
         completion_params: { model_name: "gpt-4.1", temperature: 0.0, max_tokens: 1000 }
@@ -106,16 +120,18 @@ Answer in JSON format:
         const hal = typeof result.hallucination === 'number' ? result.hallucination : 0;
         const comp = typeof result.completeness === 'number' ? result.completeness : 0;
         const fmt = typeof result.format === 'number' ? result.format : 0;
+        const con = typeof result.conciseness === 'number' ? result.conciseness : 0;
 
         // Weight: accuracy and hallucination matter most for extraction
-        const weighted = (fa * 0.35) + (hal * 0.30) + (comp * 0.25) + (fmt * 0.10);
+        // Conciseness at 10% weight to prevent GRPO length exploitation (empirical; DRPO arXiv:2510.04474)
+        const weighted = (fa * 0.30) + (hal * 0.27) + (comp * 0.23) + (fmt * 0.10) + (con * 0.10);
         let finalScore = Math.max(0, Math.min(1, weighted / 5.0));
         if (isNaN(finalScore)) finalScore = 0;
 
         return {
             score: finalScore,
             reason: result.reasoning || "No reasoning",
-            field_accuracy: fa, hallucination: hal, completeness: comp, format: fmt
+            field_accuracy: fa, hallucination: hal, completeness: comp, format: fmt, conciseness: con
         };
     } catch (error) {
         return { score: 0, reason: "Error: " + (error.message || "Unknown") };

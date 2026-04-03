@@ -6,6 +6,17 @@
  * Scores on: rule recall, false positives, citation accuracy, explanation.
  *
  * Customize: RULE_KEYWORDS, MIN_RULES_EXPECTED
+ *
+ * GRPO LENGTH EXPLOITATION: Without conciseness control, GRPO models learn verbose
+ * responses because longer = more content = higher scores. This template includes a
+ * CONCISENESS criterion in the LLM judge to prevent this. Customize the weight for your task.
+ *
+ * ⚠️ DRPO ANTI-PATTERN (arXiv:2510.04474): If you add programmatic word-count penalties,
+ * NEVER apply them uniformly to correct AND wrong answers. A penalized correct-but-verbose
+ * answer can drop below wrong-answer scores, inverting its GRPO advantage. The LLM
+ * conciseness criterion used here is safe (semantic, not raw token count).
+ *
+ * Ref: Dr. GRPO (arXiv:2503.20783), DAPO (arXiv:2503.14476), DRPO (arXiv:2510.04474)
  */
 function evaluate(input) {
     let response = "";
@@ -68,6 +79,7 @@ Rate the response on these criteria (0-5 scale):
 3. CITATION_ACCURACY: Are rule references (section numbers, publication names) correct? (5=all correct, 0=fabricated citations)
 4. EXPLANATION: Does the model explain WHY each rule applies in plain language? (5=clear reasoning, 0=just lists rules)
 5. COMPLETENESS: Does it cover interactions between rules (e.g., one rule affects another)? (5=considers interactions, 0=treats rules in isolation)
+6. CONCISENESS: Does the response apply rules without unnecessary padding, repetition, or filler? A concise correct analysis should score higher than a verbose one. (5=tight and focused, 0=bloated with repetition/filler)
 
 Answer in JSON format:
 {
@@ -76,7 +88,8 @@ Answer in JSON format:
   "false_positives": number (0-5, higher=better),
   "citation_accuracy": number (0-5),
   "explanation": number (0-5),
-  "completeness": number (0-5)
+  "completeness": number (0-5),
+  "conciseness": number (0-5)
 }`
             }
         ],
@@ -88,9 +101,10 @@ Answer in JSON format:
                 false_positives: { type: "number", minimum: 0, maximum: 5 },
                 citation_accuracy: { type: "number", minimum: 0, maximum: 5 },
                 explanation: { type: "number", minimum: 0, maximum: 5 },
-                completeness: { type: "number", minimum: 0, maximum: 5 }
+                completeness: { type: "number", minimum: 0, maximum: 5 },
+                conciseness: { type: "number", minimum: 0, maximum: 5 }
             },
-            required: ["reasoning", "rule_recall", "false_positives", "citation_accuracy", "explanation", "completeness"],
+            required: ["reasoning", "rule_recall", "false_positives", "citation_accuracy", "explanation", "completeness", "conciseness"],
             additionalProperties: false
         },
         completion_params: { model_name: "gpt-4.1", temperature: 0.0, max_tokens: 1000 }
@@ -110,9 +124,11 @@ Answer in JSON format:
         const ca = typeof result.citation_accuracy === 'number' ? result.citation_accuracy : 0;
         const ex = typeof result.explanation === 'number' ? result.explanation : 0;
         const comp = typeof result.completeness === 'number' ? result.completeness : 0;
+        const con = typeof result.conciseness === 'number' ? result.conciseness : 0;
 
         // Weight: recall and false positives matter most for compliance
-        const weighted = (rr * 0.30) + (fp * 0.25) + (ca * 0.20) + (ex * 0.15) + (comp * 0.10);
+        // Conciseness at 10% weight to prevent GRPO length exploitation (empirical; DRPO arXiv:2510.04474)
+        const weighted = (rr * 0.27) + (fp * 0.22) + (ca * 0.18) + (ex * 0.13) + (comp * 0.10) + (con * 0.10);
         let finalScore = Math.max(0, Math.min(1, weighted / 5.0));
         if (isNaN(finalScore)) finalScore = 0;
 
@@ -120,7 +136,7 @@ Answer in JSON format:
             score: finalScore,
             reason: result.reasoning || "No reasoning",
             rule_recall: rr, false_positives: fp, citation_accuracy: ca,
-            explanation: ex, completeness: comp
+            explanation: ex, completeness: comp, conciseness: con
         };
     } catch (error) {
         return { score: 0, reason: "Error: " + (error.message || "Unknown") };

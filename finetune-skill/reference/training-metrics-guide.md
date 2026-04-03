@@ -30,7 +30,7 @@ vLLora uses **GRPO (Group Relative Policy Optimization)** for reinforcement fine
 | `"luspo"` | Length-unbiased sequence-level loss | varies |
 | `"vespo"` | Variational sequence-level soft policy optimization | varies |
 
-Our GCP training instance may not explicitly set `loss_type`, so it uses whatever TRL default is installed. Additionally, Unsloth's `unsloth_train()` fixes a [universal gradient accumulation bug](https://unsloth.ai/blog/gradient) where naive averaging inflates loss by a factor of `gradient_accumulation_steps`. If vanilla TRL `train()` is used, loss and gradients will be proportionally inflated.
+The vLLora cloud training API uses `loss_type="dr_grpo"` by default, with `mask_truncated_completions=True`, `importance_sampling_level="sequence"`, and tight asymmetric clipping (`epsilon=3e-4`, `epsilon_high=4e-4`). This means: (1) no algorithmic length bias from per-token normalization, (2) truncated completions contribute zero gradient, (3) sequence-level importance sampling. Additionally, Unsloth's `unsloth_train()` fixes a [universal gradient accumulation bug](https://unsloth.ai/blog/gradient) where naive averaging inflates loss by a factor of `gradient_accumulation_steps`. If vanilla TRL `train()` is used, loss and gradients will be proportionally inflated.
 
 ### Actual TRL/Unsloth Metric Ranges (from real training runs)
 
@@ -60,11 +60,11 @@ These are confirmed values from actual Unsloth+TRL GRPO training (Ref: [open-r1#
 | Reward flat + frac_reward_zero_std > 0.5 | No learning signal (note: high zero-std alone is normal — arXiv:2509.21880) | Fix grader (avoid binary 0/1), increase G, adjust difficulty |
 | Reward up but KL rising + outputs degenerate | Reward hacking (KL alone is not diagnostic — check output quality) | Enable/increase beta, add quality grader criteria, inspect outputs |
 | Loss stuck at 0.0 | Zero advantages | Check data pipeline, reward function, chat template |
-| clipped_ratio > 0.5 | Truncation dominating | Increase max_output_tokens |
+| clipped_ratio > 0.5 | Truncation dominating — with `mask_truncated_completions=True` (active), these samples contribute zero gradient = wasted compute | Increase max_output_tokens |
 | grad_norm NaN | Numerical failure | Fix truncation, check for zero masks |
 | reward_std near 0 | Uniform outcomes | Adjust task difficulty or grader sensitivity |
-| mean_length collapsing toward 0 | Length exploitation | Add length penalty to reward |
-| mean_length growing +30%+ but reward flat | Dr. GRPO length bias (arXiv:2503.20783) | Add length penalty to grader, inspect outputs for verbosity |
+| mean_length collapsing toward 0 | Model gaming length-insensitive reward | Inspect grader — ensure it doesn't reward empty/minimal responses. Check for accidental 0.0 on short valid answers |
+| mean_length growing +30%+ but reward flat | Reward-correlated length exploitation (algorithmic cause already mitigated by `dr_grpo`) | **First**: tighten `max_output_tokens` to GT P95 + 50% headroom. **Then**: add conciseness criterion to grader (LLM judge at 10-15% weight). ⚠️ Do NOT add a uniform word-count penalty to correct answers — this inverts their GRPO advantage (DRPO arXiv:2510.04474). Apply word-count penalties only to wrong/partial answers. Inspect outputs for verbosity |
 | All completions at max_output_tokens | Model can't stop | Increase max_output_tokens, verify EOS in template |
 
 ## Metric Reference
@@ -262,10 +262,17 @@ These patterns require comparing two metrics over time. They are checked in the 
 
 **Severity**: Warning. Critical if `completions/mean_length` doubles while reward declines.
 
-**Fix**: Add a length penalty to the grader (penalize verbose responses), or switch to Dr. GRPO's length-unbiased normalization if available. Inspect outputs to confirm the model is padding rather than producing longer reasoning.
+**Fix** (in priority order):
+1. **Tighten `max_output_tokens`** to GT P95 word count + 50% headroom. This is the cheapest and most effective constraint.
+2. **Add a conciseness criterion to your LLM-as-judge** (10-15% weight). This provides semantic length control without the risks of programmatic penalties.
+3. **If using programmatic word-count penalties**: apply them ONLY to wrong/partial answers. ⚠️ **DRPO anti-pattern (arXiv:2510.04474)**: a uniform penalty on all answers can push correct-but-verbose scores below the group mean, giving them negative GRPO advantage. The model then learns "verbose + correct is worse than wrong." All 6 grader templates now implement DRPO-safe scoring (penalty on wrong only, brevity bonus on correct).
+4. **Already active**: vLLora cloud uses `loss_type="dr_grpo"` by default, which eliminates the algorithmic root cause (per-token `1/|o_i|` normalization). If length is STILL growing despite this, the issue is reward-correlated (grader rewards verbosity) — focus on steps 1-3.
+5. **Inspect outputs** to confirm the model is padding rather than producing longer reasoning.
 
 **References**:
 - Dr. GRPO (arXiv:2503.20783, §3.1): GRPO's `1/|o_i|` normalization causes *"incorrect responses to grow progressively longer"*
+- DRPO (arXiv:2510.04474): uniform length penalties can invert correct-answer advantages in group-relative computation
+- GR3 (arXiv:2603.10535): additive length penalties (`score -= λ * length`) cause collapse; multiplicative rescaling is safe
 - MO-GRPO (arXiv:2509.22047): *"vacuous elongation can inflate the gradient norm"*
 
 ---
@@ -312,7 +319,7 @@ After each eval + training cycle, check:
 4. **frac_reward_zero_std > 0.5?** → Grader not discriminating — add partial credit, increase G
 5. **Reward plateaued for >50% of steps?** → Change approach (different model, more data, different grader)
 6. **High KL with healthy reward trend?** → Normal with beta=0 (modern GRPO default per DAPO/TRL — KL is unpenalized and not tracked in most frameworks). Only act if outputs degenerate
-7. **Response length growing +30%+ while reward flat?** → Dr. GRPO length bias (arXiv:2503.20783 §3.1) — model padding responses without quality gain. Add a length penalty to your grader or inspect outputs for verbosity.
+7. **Response length growing +30%+ while reward flat?** → Dr. GRPO length bias (arXiv:2503.20783 §3.1) — model padding responses without quality gain. Tighten `max_output_tokens`, add LLM conciseness criterion (10-15% weight). ⚠️ Do NOT add uniform word-count penalties to correct answers (DRPO anti-pattern, arXiv:2510.04474). Inspect outputs for verbosity.
 
 Max 5 iterations before escalating (change base model or rethink approach).
 
@@ -326,6 +333,8 @@ The metric ranges, red flags, and recommendations in this guide are derived from
 - **Dr. GRPO** (Liu et al., 2025) — Removes length and std bias from GRPO. G=8, shows frac_reward_zero_std impact. [arXiv:2503.20783](https://arxiv.org/abs/2503.20783)
 - **GTPO** (Zhang et al., 2025) — Stabilizing GRPO via gradient and entropy control. Entropy monitoring catches collapse earlier than KL. [arXiv:2508.03772](https://arxiv.org/abs/2508.03772)
 - **GRPO Effective Loss** (Gu et al., 2025) — Analysis of GRPO loss dynamics and success amplification bias. [arXiv:2503.06639](https://arxiv.org/abs/2503.06639)
+- **GR3** (2025) — Proves additive length penalties collapse; multiplicative rescaling (`R * 1/(1 + α * len/group_mean)`, α=0.33) is reward-aware and safe. [arXiv:2603.10535](https://arxiv.org/abs/2603.10535)
+- **DRPO** (2025) — Decoupled Reward Policy Optimization. Shows that uniform length penalties on correct answers can invert their GRPO advantage, teaching the model "verbose + correct is worse than wrong." Fix: penalty on wrong answers only, or decoupled advantage computation. [arXiv:2510.04474](https://arxiv.org/abs/2510.04474)
 
 ### Implementation Docs
 - **TRL GRPOTrainer** — Hugging Face reference implementation. Metric definitions, default hyperparameters. [docs.huggingface.co/trl/grpo_trainer](https://huggingface.co/docs/trl/main/en/grpo_trainer)

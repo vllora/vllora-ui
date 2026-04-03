@@ -18,6 +18,21 @@
  *   0.0     — Empty response, refusal, or no ground truth
  *
  * Customize: ANSWER_CHOICES, DOMAIN, REASONING_CRITERIA
+ *
+ * GRPO LENGTH EXPLOITATION: Without conciseness control, GRPO models learn verbose
+ * responses. This template includes a SOFT word-count penalty on WRONG answers only
+ * and a brevity bonus on CORRECT answers.
+ *
+ * ⚠️ DRPO ANTI-PATTERN (arXiv:2510.04474): NEVER apply word-count penalties uniformly
+ * to correct AND wrong answers. A penalized correct-but-verbose answer can score BELOW
+ * wrong answers, inverting its GRPO advantage and teaching the model "verbose + correct
+ * is worse than wrong." This template avoids this by:
+ *   - Correct answers: NO word-count penalty, only LLM conciseness criterion + brevity bonus
+ *   - Wrong answers: soft multiplicative word-count penalty (max 25%)
+ *
+ * The algorithmic fix (loss_type="dr_grpo") is active by default in vLLora cloud.
+ * Customize expectedMaxWords based on GT lengths. Set to 0 to disable.
+ * Ref: Dr. GRPO (arXiv:2503.20783), DAPO (arXiv:2503.14476), DRPO (arXiv:2510.04474)
  */
 function evaluate(input) {
     // ─── Extract response and context ───
@@ -87,12 +102,47 @@ function evaluate(input) {
 
     // ─── Step 5: Combine into final score ───
 
+    // ─── Conciseness: word count + brevity bonus / penalty ───
+    // Customize expectedMaxWords based on your GT lengths (P95 word count + 50% headroom).
+    // DRPO (arXiv:2510.04474): NEVER penalize correct answers with word-count — it can
+    // invert their GRPO advantage. Instead: brevity bonus for correct+concise, penalty
+    // only on wrong answers. Multiplicative form (GR3 arXiv:2603.10535); additive collapses.
+    var expectedMaxWords = 200; // TODO: Set from GT P95 word count + 50% headroom
+    var wordCount = response.split(/\s+/).length;
+
+    // Penalty factor for wrong answers ONLY
+    var wrongPenaltyFactor = 1.0;
+    var penaltyNote = "";
+    if (expectedMaxWords > 0 && wordCount > expectedMaxWords * 2) {
+        wrongPenaltyFactor = 0.75;
+        penaltyNote = " Conciseness: severely over expected length (" + wordCount + " words, expected <" + expectedMaxWords + ")";
+    } else if (expectedMaxWords > 0 && wordCount > expectedMaxWords) {
+        var overRatio = (wordCount - expectedMaxWords) / expectedMaxWords;
+        var penalty = Math.min(0.15, overRatio * 0.15);
+        wrongPenaltyFactor = 1 - penalty;
+        penaltyNote = " Conciseness: over expected length (" + wordCount + " words, -" + Math.round(penalty * 100) + "%)";
+    }
+
+    // Brevity bonus for correct answers (reward conciseness without punishing verbosity)
+    var brevityBonus = 0;
+    var brevityNote = "";
+    if (expectedMaxWords > 0 && wordCount <= expectedMaxWords * 0.7 && wordCount >= 10) {
+        brevityBonus = 0.03 + 0.02 * (1 - wordCount / (expectedMaxWords * 0.7));
+        brevityNote = " Brevity bonus: +" + brevityBonus.toFixed(2) + " (concise at " + wordCount + " words)";
+    }
+
+    var reasonParts = [];
+
     if (isCorrect) {
-        // Correct: 0.6 base + up to 0.4 from reasoning quality
-        var finalScore = 0.6 + (reasoningScore * 0.4);
+        // Correct: NO word-count penalty (DRPO safe). LLM reasoning quality assessment
+        // already provides semantic length signal. Add brevity bonus only.
+        var finalScore = 0.6 + (reasoningScore * 0.4) + brevityBonus;
+        finalScore = Math.max(0, Math.min(1.0, finalScore));
+        reasonParts.push("Correct (" + correctAnswer + "). Reasoning quality: " + reasoningScore.toFixed(2) + "/1.0. Extraction: " + extractionMethod + "." + brevityNote);
+
         return {
-            score: Math.min(1.0, finalScore),
-            reason: "Correct (" + correctAnswer + "). Reasoning quality: " + reasoningScore.toFixed(2) + "/1.0. Extraction: " + extractionMethod + ".",
+            score: finalScore,
+            reason: reasonParts.join(" "),
             model_answer: modelAnswer,
             correct_answer: correctAnswer,
             reasoning_score: reasoningScore,
@@ -100,11 +150,14 @@ function evaluate(input) {
         };
     }
 
-    // Wrong answer: up to 0.4 from reasoning quality (partial credit for GRPO signal)
+    // Wrong answer: apply word-count penalty (verbose + wrong should be penalized more)
     var partialScore = reasoningScore * 0.4;
+    var finalScoreWrong = Math.min(0.4, partialScore) * wrongPenaltyFactor;
+    reasonParts.push("Incorrect (model: " + modelAnswer + ", correct: " + correctAnswer + "). Reasoning quality: " + reasoningScore.toFixed(2) + "/1.0. Extraction: " + extractionMethod + "." + penaltyNote);
+
     return {
-        score: Math.min(0.4, partialScore),
-        reason: "Incorrect (model: " + modelAnswer + ", correct: " + correctAnswer + "). Reasoning quality: " + reasoningScore.toFixed(2) + "/1.0. Extraction: " + extractionMethod + ".",
+        score: finalScoreWrong,
+        reason: reasonParts.join(" "),
         model_answer: modelAnswer,
         correct_answer: correctAnswer,
         reasoning_score: reasoningScore,

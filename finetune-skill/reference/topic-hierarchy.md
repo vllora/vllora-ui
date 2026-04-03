@@ -58,6 +58,34 @@ The synthetic data diversity study (arXiv:2410.15226) found that more granular t
 
 **When in doubt, split a broad topic into narrower ones rather than adding more examples.**
 
+### 2b. Granularity Rule for Enumerable Items
+
+**When the source material defines a list of distinct items the model must handle individually, create one leaf topic per item — do not merge items into groups.**
+
+This applies to: allergens (FDA Big 9), tax forms, compliance regulations, medical conditions, product categories, or any explicitly enumerated set where each item has distinct characteristics.
+
+**Why this matters for GRPO:** Merging items hides per-item difficulty. If "Milk" and "Egg" are separate topics, you can see the model scores 0.8 on Milk but 0.3 on Egg and generate more Egg records. If merged into "Dairy+Egg," that signal is lost. GRPO's learning is strongest when you can target the hard items specifically (arXiv:2508.14094 — 47% gains from hardest 10%).
+
+| DON'T (merges items) | DO (per-item topics) |
+|------|------|
+| "Hidden Dairy and Egg Sources" | "Hidden Milk/Dairy Sources" + "Hidden Egg Sources" |
+| "Wheat and Soy Detection" | "Hidden Wheat/Gluten Sources" + "Hidden Soybean Sources" |
+| "Tax Forms 1040 and W-2" | "Form 1040 Filing" + "W-2 Processing" |
+
+**When to merge instead:** If the total item count would produce >40 leaf topics, group items by shared characteristics (e.g., group 50 ICD-10 codes by body system). Also merge when items genuinely share the same detection mechanism and difficulty profile — but be explicit about why in the execution log.
+
+**Multi-document overlap:** When multiple documents discuss the same enumerable item, merge their content into the SAME per-item topic. The merge is across documents for one item, not across items into a broader group.
+
+### 2c. Topic Consistency Across Runs
+
+**Topic design is the largest source of run-to-run variance.** The same PDF can produce 8 or 13 leaf topics depending on LLM judgment calls. This changes record counts by 30%+ and makes eval comparisons across runs meaningless.
+
+**Rule: Reuse existing topic structure.** If `topics.json` already exists from a prior run, treat it as the authoritative structure. Verify coverage against the current extracted content, add/remove topics only if the source material has materially changed. Do NOT redesign from scratch on re-runs.
+
+**Why:** Consistent topics make eval comparisons meaningful (same topics → same difficulty breakdown → comparable scores). Redesigning topics cascades to records, relations, and grader — an expensive change that should be intentional, not accidental.
+
+> **Research basis**: Schema-first prompting (providing the taxonomy as a constraint rather than asking the LLM to invent it) is the most effective technique for reducing taxonomy variance (KONDA tool, SCI-K 2025; OntoGenix, IJCAI 2025). Temperature=0 reduces sampling noise but cannot eliminate judgment-level variance between "merge" vs "split" decisions (arXiv:2408.04667). DataDreamer (arXiv:2402.10379, ACL 2024) advocates caching taxonomy artifacts to guarantee reproducibility.
+
 ### 3. Include a Difficulty Dimension (as Metadata)
 
 **GRPO requires outcome variance — the model must get some right and some wrong for learning to happen.**
@@ -451,3 +479,7 @@ The `seed_topics` parameter is useful — but pass **skill descriptions** not do
 | Reinforce-Ada | arXiv:2510.04996 | Dynamic budget allocation → 2x convergence speedup |
 | DRA-GRPO | arXiv:2505.09655 | Diversity-aware rewards; 7K samples sufficient |
 | OpenAI RFT Guide | platform.openai.com | Works with ~100 examples; quality > quantity |
+| DataDreamer | arXiv:2402.10379 | Reproducible LLM pipelines; cache taxonomy artifacts for consistency |
+| "Non-Determinism of Deterministic LLM Settings" | arXiv:2408.04667 | Temperature=0 does not guarantee determinism; batch-size nondeterminism persists |
+| KONDA | SCI-K 2025 | Schema-first extraction reduces taxonomy variance vs open-ended generation |
+| AdaRFT | arXiv:2504.05520 | Filters ≤10% pass-rate prompts as wasteful; β=0.5 optimal difficulty target |

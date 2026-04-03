@@ -370,11 +370,27 @@ This rule exists because GRPO/RFT has counterintuitive properties:
 **Key reference papers** (check these before any threshold change):
 - DeepSeek-R1 (arXiv:2501.12948) — GRPO from scratch, base model capabilities
 - DAPO (arXiv:2503.14476) — Dynamic sampling, clip-higher, zero-variance handling
-- Dr. GRPO (arXiv:2503.20783) — Length bias, score-length correlation
+- Dr. GRPO (arXiv:2503.20783) — Algorithmic length bias from per-token `1/|o_i|` normalization
+- GR3 (arXiv:2603.10535) — Additive vs multiplicative length penalties, collapse proof
+- GRPO-LEAD (arXiv:2504.09696) — Difficulty-aware length reweighting
 - "Hard Examples Are All You Need" (arXiv:2508.14094) — Difficulty distribution
 - "No Prompt Left Behind" (arXiv:2509.21880, ICLR 2026) — Zero-variance prompt frequency
 - OpenAI RFT Guide — Platform requirements, grader quality
 - "Tricks or Traps" (arXiv:2508.08221) — Practical GRPO failure modes
+
+### Citation Verification Checklist (MANDATORY before committing)
+
+Every citation added to `finetune-skill/` code, comments, or docs must pass this checklist. This exists because we caught misattributed citations (Dr. GRPO cited for claims GR3 actually made) and overstated platform recommendations (OpenAI "recommends" vs "documents as a failure mode"). These errors propagate to users and erode trust.
+
+**For each citation, verify ALL of the following:**
+
+1. **Paper exists.** Fetch the arXiv abstract page or platform doc URL. Confirm title, authors, and date. Do NOT cite a paper you haven't at least read the abstract of.
+2. **The paper actually says what you claim.** Read the specific section that supports your claim. If you're citing "Dr. GRPO says X," find the paragraph in the paper where it says X. If you can't find it, the attribution is wrong — find the right paper.
+3. **Distinguish what vs who.** A claim can be true without being from the paper you cite. "Additive length penalties cause collapse" is true (GR3 proves it), but citing Dr. GRPO for this claim is wrong (Dr. GRPO is about algorithmic normalization, not grader penalties). Always cite the paper that **proves or demonstrates** the specific claim, not just a related paper.
+4. **Distinguish "recommends" vs "documents."** If a platform (OpenAI, HuggingFace) documents a failure mode, that's different from recommending a specific fix. Say "OpenAI documents X as a failure mode" not "OpenAI recommends Y" unless they literally recommend Y.
+5. **Check the scope.** A paper about training-algorithm-level fixes (DAPO's soft overlong punishment) is not the same as guidance for grader-side design. State which level the citation applies to: algorithm, training config, or grader/reward function.
+
+**When reviewing someone else's citation:** Use the `/research-grpo` skill or `grpo-researcher` subagent to verify claims against actual paper content before approving.
 
 ---
 

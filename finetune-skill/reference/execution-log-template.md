@@ -44,11 +44,12 @@ This is a **reference** for what to log at each step — NOT a skeleton to copy 
 - Upload: <total> records to gateway
 
 ## Step 5: Write Grader
-- [timestamp] Template: <which template copied>
-- Criteria: <list of scoring criteria + weights>
+- [timestamp] Template: <exact filename copied, e.g., grader-classification.js>
+- Criteria with weights: <e.g., "F1=0.40, hidden_bonus=0.20, false_positive_penalty=0.25, conciseness=0.15">
 - Dry-run Test 1 (hand-crafted): score=<X>, reason="<summary>"
 - Dry-run Test 2 (live model): scores=<X, Y, Z> for 3 samples
-- Gateway verify: evaluator uploaded: yes/no
+  - If Test 2 failed: reason="<why>", fix="<what was changed>", retry scores=<X, Y, Z>
+- Gateway verify: evaluator uploaded, <N> chars
 - Upload: grader.js to gateway
 
 ## Step 5.5b: Data Quality Gate
@@ -62,28 +63,38 @@ This is a **reference** for what to log at each step — NOT a skeleton to copy 
 - [timestamp] Gateway status: records=<N>, topics=<N>, sources=<N>, grader=YES/NO
 - All data verified on gateway
 
-## Step 7: Evaluation
+## Step 7: Evaluation (log EACH eval separately)
 - [timestamp] Eval job: <ID>, model: <name>
-- Duration: <minutes>
-- Results: avg=<X>, std=<Y>, zero_frac=<Z>%, mode=<val> at <frac>%
-- Per-topic scores: <topic>=<avg>, ...
-- Readiness gate: PASS/FAIL (hard checks: <details>)
+- Duration: <N> minutes
+- Results: avg=<X>, std=<Y>, zero_frac=<Z>%, perfect_frac=<W>%, mode=<val> at <frac>%
+- Per-topic scores (weakest first):
+  - <weakest-topic>=<avg>, <next-weakest>=<avg>, ..., <strongest>=<avg>
+- Readiness gate: PASS/FAIL (hard checks: <pass/fail details>)
+- Difficulty probe (if run): predicted zero-var=<N>%
 
-## Step 7d: Training (if readiness passed)
+## Step 7e: Training
 - [timestamp] Training job: <ID>, base model: <name>
-- Config: epochs=<N>, max_output_tokens=<N>, learning_rate=<N>
-- Duration: <hours>
-- Final reward: <X>, KL: <Y>
+- Config: epochs=<N>, learning_rate=<X>, lora_rank=<N>, max_output_tokens=<N>, K=<N>, batch_size=<N>
+- loss_type: dr_grpo (default)
+- Duration: <N> hours (or "in progress")
+- Final metrics: reward=<X>, reward_delta=<X>, KL=<X>, clipping=<X>%
+- Early stop: yes/no (reason: <reason>)
 
 ## Step 8: Analysis
-- [timestamp] Per-topic breakdown: <weakest topics>
+- [timestamp] Per-topic breakdown (weakest first):
+  - <topic>=<avg> (was <prev> in prior eval), ...
 - Dead-weight records: <N> scoring 0.0
-- Recommendations: <fix grader / regenerate data / retrain>
+- Training metrics: final_reward=<X>, reward_delta=<X>, KL=<X>, clipping=<X>%
+- Epoch-level patterns: <epoch_collapse / over_prediction / output_collapse / none>
+- Recommendations: <fix grader / regenerate data / retrain / deploy>
 
-## Step 9: Iteration (if needed)
-- [timestamp] Iteration <N>: <what was changed and why>
-- Changes: <data fix / grader fix / hyperparams>
-- Re-eval results: avg=<X> (was <Y>)
+## Step 9: Iteration (log EACH iteration separately)
+- [timestamp] Iteration <N>, change_type: <grader / records / both / hyperparams>
+- What changed: <specific description of the fix>
+- Why: <diagnosis that led to this fix>
+- Re-eval results: avg=<X> (was <Y>), Δ=<Z>
+- Per-topic deltas: <topic>=<new> (was <old>), ...
+- Verdict: PASS/FAIL
 ```
 
 ---
