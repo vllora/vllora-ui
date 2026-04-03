@@ -2551,13 +2551,20 @@ def cmd_create_training(args: argparse.Namespace) -> None:
     # Auto-adjust max_output_tokens based on dataset content.
     # Mirrors the completion_length gate logic from data_quality_gate.py.
     # Fetches records from gateway, estimates required token length from
-    # ground truth + system prompt complexity, and upgrades max_output_tokens
-    # if the default 512 (or user-provided value) is too low.
+    # ground truth + system prompt complexity, and adjusts max_output_tokens
+    # both UP (prevent truncation) and DOWN (prevent padding/NaN).
     #
-    # Why: Insufficient max_output_tokens has caused 9-13 hours of wasted GPU time
-    # due to 100% completion truncation from insufficient max_output_tokens.
-    # Different tasks need different limits (classification ~128, MCQ reasoning
-    # ~1500, code gen ~2000+). A fixed default cannot work for all scenarios.
+    # Why BOTH directions matter:
+    # - Too low: 100% completion truncation → grader scores garbage → wasted
+    #   GPU time (9-13h incidents). This was the original motivation.
+    # - Too high: For short-output tasks (classification, extraction), the base
+    #   model fills the token budget with padding. With mask_truncated_completions
+    #   =True (cloud default), all completions get truncated → completion_mask
+    #   becomes all-zeros → kl=nan crash at early steps (Unsloth #3006, #3260).
+    #   Even without the crash, excess budget encourages length exploitation.
+    #
+    # Different tasks need different limits (classification ~64-128, MCQ ~1500,
+    # code gen ~2000+). A fixed default cannot work for all scenarios.
     # Headroom: 30% above P95 estimate (heuristic inspired by DAPO's overlong
     # soft-punishment zone, arXiv:2503.14476 — not a direct DAPO parameter).
     current_max_tokens = payload["inference_parameters"].get("max_output_tokens", 512)
@@ -2568,11 +2575,20 @@ def cmd_create_training(args: argparse.Namespace) -> None:
         )
         if isinstance(records, list) and len(records) > 0:
             recommended = _estimate_recommended_max_tokens(records)
-            if recommended > current_max_tokens:
+            if recommended != current_max_tokens:
+                direction = "↑" if recommended > current_max_tokens else "↓"
+                reason = (
+                    "too low — risk of completion truncation"
+                    if recommended > current_max_tokens
+                    else "too high for short-output task — risk of kl=nan from "
+                         "all-truncated batches (mask_truncated_completions=True)"
+                )
                 print(
-                    f"  Auto-adjusting max_output_tokens: {current_max_tokens} → {recommended} "
-                    f"(based on dataset content analysis — ground truth length × task complexity, "
-                    f"with 30% headroom above P95). Override with --inference-params if needed.",
+                    f"  Auto-adjusting max_output_tokens: {current_max_tokens} → "
+                    f"{recommended} {direction} ({reason}). "
+                    f"Based on dataset content analysis — ground truth length × "
+                    f"task complexity, with 30% headroom above P95. "
+                    f"Override with --inference-params if needed.",
                     file=sys.stderr,
                 )
                 payload["inference_parameters"]["max_output_tokens"] = recommended
@@ -2685,9 +2701,17 @@ def _estimate_recommended_max_tokens(records: list[dict]) -> int:
     # smaller-scale tasks).
     recommended = int(gt_p95 * multiplier * 1.3)
 
-    # Clamp to reasonable range: minimum 256, maximum 4096
-    # (beyond 4096 is very expensive with K=8 completions per prompt)
-    return max(256, min(4096, recommended))
+    # Clamp to reasonable range: minimum 64, maximum 4096.
+    # Floor of 64 (not higher): short-output tasks like classification or
+    # allergen detection have GT of 1-10 tokens. Setting max_output_tokens
+    # too high (e.g., 512 for a 5-token task) gives GRPO room to pad —
+    # the base model fills the token budget, all completions get truncated
+    # at the limit, and mask_truncated_completions=True zeros out the
+    # completion mask → kl=nan crash (Unsloth issues #3006, #3260).
+    # 64 tokens is generous for any classification/extraction task while
+    # preventing the 500-token padding problem.
+    # Ceiling of 4096: beyond this is very expensive with K=8 completions.
+    return max(64, min(4096, recommended))
 
 
 class _JobNotFoundError(Exception):

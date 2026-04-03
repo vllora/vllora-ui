@@ -1452,7 +1452,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 
 **Max iterations:** 5 eval-only (Step 9a) + 3 training (Step 9b) before escalating to user.
 
-**If training failed**: Retry once (transient failure). If it fails again, see [reference/iteration-strategy.md](reference/iteration-strategy.md) for the full diagnosis table and escalation ladder (lower LR → lower max_output_tokens → smaller model → stop and report).
+**If training failed**: Check the error message first. Common failure: `kl=nan` at an early step — this means `max_output_tokens` is too high for the task (the base model fills the budget, all completions get truncated, mask becomes all-zeros). The `create-training` command auto-adjusts `max_output_tokens` based on GT length, but if you overrode it with `--inference-params`, remove the override and let auto-adjustment work. For other failures: retry once (transient). If it fails again, see [reference/iteration-strategy.md](reference/iteration-strategy.md) for the full diagnosis table and escalation ladder (lower LR → lower max_output_tokens → smaller model → stop and report).
 
 **"cancelled" is a TERMINAL state — do NOT retry cancelled jobs.** Only retry on "failed" states. To cancel a running job: `uv run scripts/finetune.py cancel-training --workflow-id WF_ID --job-id JOB_ID`.
 
