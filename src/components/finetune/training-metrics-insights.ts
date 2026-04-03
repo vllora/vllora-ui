@@ -184,63 +184,37 @@ export function getMetricsInsights(
     }
   }
 
-  if (tab === "loss" || tab === "kl" || tab === "gradNorm" || tab === "clipRatio") {
+  if (tab === "loss") {
     const loss = num(latest.loss);
-    const kl = num(latest.kl);
     const gradNorm = num(latest.grad_norm);
 
-    // =========================================================================
-    // Loss, KL, and grad_norm scale context:
-    //
-    // Our backend (Unsloth + TRL GRPOTrainer) may report these on different scales
-    // depending on loss_type and whether unsloth_train() is used:
-    //   - TRL DAPO default: loss 0.0-0.002, KL 0.0004-5.0, grad_norm 0.33-1.66
-    //   - Non-DAPO or accumulation bug: values can be 1000x+ higher
-    // Ref: open-r1#239 (actual TRL GRPO logs), Unsloth gradient accumulation blog,
-    //       TRL#2995 (normalization), AMD Unsloth tutorial (actual training output)
-    //
-    // We flag: NaN/Inf, loss stuck at 0, and provide context for interpretation.
-    // Reward metrics (reward, reward_std, frac_reward_zero_std) are confirmed on
-    // standard TRL scale (0-1) and use absolute thresholds.
-    // =========================================================================
-
-    // Loss: GRPO loss starts at 0.0 (expected — ratio=1.0, zero-mean advantages).
-    // With DAPO loss_type, healthy range is 0.0001-0.002 after hundreds of steps.
-    // Ref: open-r1#239 — "loss starts at 0, rises to 0.0001-0.0019"
-    // Ref: Unsloth — "loss=0 + grad_norm=NaN = missing LoRA adapters or GA>1 bug"
     if (loss != null) {
       if (!isFinite(loss) || isNaN(loss)) {
         insights.push({ level: "critical", text: "Loss is NaN/Inf — catastrophic numerical failure. Check for zero-length completions or degenerate batches. (Unsloth: verify LoRA adapters applied, try gradient_accumulation_steps=1)" });
       } else if (loss === 0 && gradNorm != null && (!isFinite(gradNorm) || isNaN(gradNorm))) {
-        // Unsloth-specific: loss=0 + grad_norm=NaN = known bug
-        // Ref: Unsloth issues #3006, #2824
         insights.push({ level: "critical", text: "Loss is 0 with NaN gradients — known Unsloth issue. Verify LoRA adapters are applied (FastLanguageModel.get_peft_model) and try gradient_accumulation_steps=1." });
       }
+      // Trend: if loss increased >5x from its minimum, training may be destabilizing
+      if (history && history.length >= 10) {
+        const allLosses = history.map((m) => num(m.loss)).filter((v): v is number => v != null && v > 0);
+        if (allLosses.length >= 10) {
+          const minLoss = Math.min(...allLosses.slice(Math.floor(allLosses.length * 0.3)));
+          const recentLoss = allLosses[allLosses.length - 1];
+          if (minLoss > 0 && recentLoss > minLoss * 5) {
+            insights.push({ level: "warn", text: `Loss spiked ${(recentLoss / minLoss).toFixed(0)}x above its minimum — possible instability. If persistent, reduce learning rate.` });
+          }
+        }
+      }
     }
+  }
 
-    // =========================================================================
-    // KL, Loss, Grad Norm: SCALE VARIES BY BACKEND
-    //
-    // Standard TRL GRPOTrainer reports:
-    //   loss: 0.0001-0.002, KL: 0.0004-5.0, grad_norm: 0.3-1.7
-    //
-    // But backends using Unsloth, custom aggregation, or non-DAPO loss_type
-    // may report values 10^6-10^12 higher (sum over tokens vs mean, batch
-    // accumulation, etc.). Our actual training shows loss=5.43e+08 which is
-    // NOT a bug — just a different aggregation scale.
-    //
-    // Strategy: Use TREND detection (via history param) instead of absolute
-    // thresholds. Only check NaN/Inf for absolute failures.
-    // =========================================================================
+  if (tab === "kl") {
+    const kl = num(latest.kl);
 
-    // KL: With β=0 (TRL/DAPO default), KL is informational — not in the loss.
-    // NaN = catastrophic. Otherwise, show the trend if history is available.
-    // Ref: DAPO (arXiv:2503.14476) — removes KL penalty entirely (β=0)
     if (kl != null) {
       if (!isFinite(kl) || isNaN(kl)) {
         insights.push({ level: "critical", text: "KL divergence is NaN — numerical failure. If using Unsloth with mask_truncated_completions=true, this can happen when all completions are truncated." });
       }
-      // Trend: if KL increased >10x from early training, the model is diverging
       if (history && history.length >= 10) {
         const earlyKLs = history.slice(0, 5).map((m) => num(m.kl)).filter((v): v is number => v != null && v > 0);
         const recentKLs = history.slice(-5).map((m) => num(m.kl)).filter((v): v is number => v != null && v > 0);
@@ -256,37 +230,15 @@ export function getMetricsInsights(
         }
       }
     }
+  }
 
-    // Loss: NaN/Inf = catastrophic. Otherwise use trend detection.
-    // Ref: open-r1#239 — "loss starts at 0, rises to 0.0001-0.0019" (TRL scale)
-    // NOTE: Absolute loss values vary by orders of magnitude across backends.
-    if (loss != null) {
-      if (!isFinite(loss) || isNaN(loss)) {
-        insights.push({ level: "critical", text: "Loss is NaN/Inf — catastrophic numerical failure. Check for zero-length completions or degenerate batches. (Unsloth: verify LoRA adapters applied, try gradient_accumulation_steps=1)" });
-      } else if (loss === 0 && gradNorm != null && (!isFinite(gradNorm) || isNaN(gradNorm))) {
-        insights.push({ level: "critical", text: "Loss is 0 with NaN gradients — known Unsloth issue. Verify LoRA adapters are applied (FastLanguageModel.get_peft_model) and try gradient_accumulation_steps=1." });
-      }
-      // Trend: if loss increased >5x from its minimum, training may be destabilizing
-      if (history && history.length >= 10) {
-        const allLosses = history.map((m) => num(m.loss)).filter((v): v is number => v != null && v > 0);
-        if (allLosses.length >= 10) {
-          const minLoss = Math.min(...allLosses.slice(Math.floor(allLosses.length * 0.3))); // min after warm-up
-          const recentLoss = allLosses[allLosses.length - 1];
-          if (minLoss > 0 && recentLoss > minLoss * 5) {
-            insights.push({ level: "warn", text: `Loss spiked ${(recentLoss / minLoss).toFixed(0)}x above its minimum — possible instability. If persistent, reduce learning rate.` });
-          }
-        }
-      }
-    }
+  if (tab === "gradNorm") {
+    const gradNorm = num(latest.grad_norm);
 
-    // Grad norm: NaN = catastrophic. Otherwise use trend detection.
-    // Ref: TRL default max_grad_norm=1.0 (clips gradients), but reported value
-    // may be pre-clipping and scale varies by backend.
     if (gradNorm != null) {
       if (!isFinite(gradNorm) || isNaN(gradNorm)) {
         insights.push({ level: "critical", text: "Gradient norm is NaN — catastrophic numerical failure. Often caused by zero-length completions, missing LoRA adapters, or gradient_accumulation_steps > 1 bug in Unsloth." });
       }
-      // Trend: if grad_norm spiked >10x above recent average, flag it
       if (history && history.length >= 10) {
         const recentGrads = history.slice(-10).map((m) => num(m.grad_norm)).filter((v): v is number => v != null && v > 0);
         if (recentGrads.length >= 5 && gradNorm > 0) {
@@ -297,10 +249,9 @@ export function getMetricsInsights(
         }
       }
     }
+  }
 
-    // Clip ratio: 0-1 range (fraction of clipped tokens), scale-independent.
-    // Ref: DAPO (arXiv:2503.14476) — ε_low=0.2, ε_high=0.28; TRL: trust region clipping
-    // clip_ratio=0 is normal when num_iterations=1 (generation policy = current policy)
+  if (tab === "clipRatio") {
     const clipRegion = num(latest["clip_ratio/region_mean"]);
     if (clipRegion != null) {
       if (clipRegion > 0.5) insights.push({ level: "warn", text: `Clip ratio is ${(clipRegion * 100).toFixed(0)}% — policy updates are heavily constrained by the trust region. This limits learning speed.` });
@@ -362,20 +313,17 @@ export function getMetricsInsights(
     }
   }
 
-  if (tab === "tokens" || tab === "batchSize" || tab === "avgCompletion") {
+  if (tab === "tokens") {
     const tokens = num(latest.num_tokens);
-    const batchSize = num(latest.row_indices_count);
-
-    // Ref: TRL — "total number of tokens processed"; our guide — "drops indicate skipped batches"
     if (tokens != null && tokens < 1000) {
       insights.push({ level: "warn", text: "Very low token throughput — batches may be small or completions very short." });
     }
-    // Ref: our guide — "should match configured batch size, if low → prompts may be filtered"
+  }
+
+  if (tab === "batchSize") {
+    const batchSize = num(latest.row_indices_count);
     if (batchSize != null && batchSize < 4) {
       insights.push({ level: "warn", text: `Batch size is only ${batchSize} — very few records per step. May cause noisy gradients.` });
-    }
-    if (insights.length === 0) {
-      insights.push({ level: "ok", text: "Throughput metrics are within normal range." });
     }
   }
 

@@ -168,7 +168,9 @@ function getAlertCount(metrics: FinetuneJobMetricPoint[]): number {
 }
 
 function formatMetricValue(value: number): string {
-  if (Math.abs(value) < 0.001) return value.toExponential(1);
+  if (value === 0) return "0";
+  if (Math.abs(value) < 0.0001) return (value * 1000000).toFixed(1) + "µ";
+  if (Math.abs(value) < 0.001) return (value * 1000).toFixed(2) + "m";
   if (Math.abs(value) >= 1000000) return (value / 1000000).toFixed(1) + "M";
   if (Math.abs(value) >= 1000) return (value / 1000).toFixed(1) + "K";
   if (Math.abs(value) >= 100) return value.toFixed(0);
@@ -255,7 +257,7 @@ function StackedTooltip({
 
   return (
     <div className="rounded-lg border border-[#262626] bg-[#141414]/95 px-3 py-2 shadow-xl backdrop-blur-sm">
-      <p className="text-[10px] font-mono text-slate-500 mb-1.5 border-b border-[#262626] pb-1">{label}</p>
+      <p className="text-[10px] font-mono text-slate-500 mb-1.5 border-b border-[#262626] pb-1">Step {label}</p>
       <div className="space-y-1">
         {visibleMetrics.map((m) => {
           const val = raw[m.key];
@@ -327,7 +329,7 @@ const GROUP_LABELS: Record<string, string> = {
   ratio: "Clip Ratio",
   length: "Response Length (tokens)",
   score: "Reward Score",
-  signal: "Learning Signal",
+  signal: "Dead Prompts",
   policy: "Policy Loss & KL",
   stability: "Training Stability",
   schedule: "Learning Rate",
@@ -373,14 +375,14 @@ function GroupedCharts({
             <ResponsiveContainer width="100%" height="85%">
               <LineChart data={chartData} syncId="completions-sync" margin={{ top: 4, right: 16, bottom: 4, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#262626" strokeOpacity={0.4} vertical={false} />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#64748b" }} dy={8} interval="preserveStartEnd" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#64748b" }} dy={8} tickFormatter={(v: number) => `Step ${v}`} interval="equidistantPreserveStart" />
                 <YAxis domain={yDomain} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#475569" }} tickFormatter={formatMetricValue} width={50} />
                 <RechartsTooltip
                   content={({ active, payload, label }) => {
                     if (!active || !payload?.length) return null;
                     return (
                       <div className="rounded-lg border border-[#262626] bg-[#141414]/95 px-3 py-2 shadow-xl backdrop-blur-sm">
-                        <p className="text-[10px] font-mono text-slate-500 mb-1.5 border-b border-[#262626] pb-1">{label}</p>
+                        <p className="text-[10px] font-mono text-slate-500 mb-1.5 border-b border-[#262626] pb-1">Step {label}</p>
                         <div className="space-y-1">
                           {metrics.map((m) => {
                             const entry = payload.find((p) => p.dataKey === m.key);
@@ -468,7 +470,7 @@ export function FinetuneMetricsChart({
     return metrics.map((point, idx) => {
       const m = point.metrics;
       return {
-        name: `Step ${typeof m.global_step === "number" ? m.global_step : idx + 1}`,
+        name: typeof m.global_step === "number" ? m.global_step : idx + 1,
         reward: typeof m.reward === "number" ? m.reward : undefined,
         reward_std: typeof m.reward_std === "number" ? m.reward_std : undefined,
         frac_reward_zero_std: typeof m.frac_reward_zero_std === "number" ? m.frac_reward_zero_std : undefined,
@@ -547,8 +549,43 @@ export function FinetuneMetricsChart({
               <TooltipTrigger asChild>
                 <Info className="h-3.5 w-3.5 text-slate-600 hover:text-slate-400 cursor-help transition-colors" />
               </TooltipTrigger>
-              <TooltipContent side="bottom" className="max-w-[320px]">
-                <p className="text-[11px] leading-relaxed">{TAB_CONFIG[activeTab].description}</p>
+              <TooltipContent side="bottom" className="max-w-[360px] p-3">
+                <p className="text-[11px] leading-relaxed text-slate-300 mb-2">{TAB_CONFIG[activeTab].description}</p>
+                {(() => {
+                  const tab = TAB_CONFIG[activeTab];
+                  const groups = new Map<string, MetricDef[]>();
+                  for (const m of tab.metrics) {
+                    const g = m.group ?? "default";
+                    const list = groups.get(g);
+                    if (list) list.push(m);
+                    else groups.set(g, [m]);
+                  }
+                  if (groups.size <= 1 && tab.metrics.length <= 1) return null;
+                  return (
+                    <div className="space-y-2 border-t border-white/10 pt-2">
+                      {Array.from(groups.entries()).map(([groupName, groupMetrics]) => (
+                        <div key={groupName}>
+                          {groups.size > 1 && (
+                            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                              {GROUP_LABELS[groupName] ?? groupName}
+                            </p>
+                          )}
+                          <div className="space-y-1">
+                            {groupMetrics.map((m) => (
+                              <div key={m.key} className="flex items-start gap-1.5 text-[10px]">
+                                <span className="w-2 h-2 rounded-full shrink-0 mt-0.5" style={{ backgroundColor: m.color }} />
+                                <span>
+                                  <span className="font-medium text-slate-300">{m.label}</span>
+                                  <span className="text-slate-500"> — {m.description}</span>
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -611,7 +648,7 @@ export function FinetuneMetricsChart({
                 /* Single metric: real Y-axis + full tooltip */
                 <LineChart data={chartData} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#262626" strokeOpacity={0.4} vertical={false} />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#64748b" }} dy={8} interval="preserveStartEnd" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#64748b" }} dy={8} tickFormatter={(v: number) => `Step ${v}`} interval="equidistantPreserveStart" />
                   <YAxis domain={singleYDomain} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#475569" }} tickFormatter={(v: number) => formatMetricValue(v)} width={50} />
                   <RechartsTooltip
                     content={({ active, payload, label }) => {
@@ -619,7 +656,7 @@ export function FinetuneMetricsChart({
                       const m = visibleMetrics[0];
                       return (
                         <div className="rounded-lg border border-[#262626] bg-[#141414]/95 px-3 py-2 shadow-xl backdrop-blur-sm">
-                          <p className="text-[10px] font-mono text-slate-500 mb-1">{label}</p>
+                          <p className="text-[10px] font-mono text-slate-500 mb-1">Step {label}</p>
                           <div className="flex items-center gap-2 text-[11px]">
                             <span className="w-2 h-2 rounded-full" style={{ backgroundColor: m.color }} />
                             <span className="text-slate-400">{m.label}</span>
@@ -641,7 +678,7 @@ export function FinetuneMetricsChart({
                 /* Stacked lanes: all metrics in one chart, each in its own band */
                 <LineChart data={lanedData} margin={{ top: 8, right: 16, bottom: 4, left: -20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#262626" strokeOpacity={0.15} vertical={false} />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#64748b" }} dy={8} interval="preserveStartEnd" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#64748b" }} dy={8} tickFormatter={(v: number) => `Step ${v}`} interval="equidistantPreserveStart" />
                   <YAxis domain={[-0.02, 1.02]} axisLine={false} tickLine={false} tick={false} width={1} />
                   <RechartsTooltip
                     content={<StackedTooltip visibleMetrics={visibleMetrics} />}
