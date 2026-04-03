@@ -28,7 +28,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, Activity, TrendingUp, Zap, Eye, EyeOff, BarChart3 } from "lucide-react";
+import { AlertTriangle, Activity, TrendingUp, Zap, Eye, EyeOff, BarChart3, Info } from "lucide-react";
 import type { FinetuneJobMetricPoint } from "@/services/finetune-api";
 import { getMetricsInsights } from "./training-metrics-insights";
 
@@ -45,7 +45,7 @@ interface FinetuneMetricsChartProps {
   maxOutputTokens?: number;
 }
 
-type MetricTab = "reward" | "stability" | "completions" | "throughput";
+type MetricTab = "reward" | "loss" | "kl" | "lr" | "gradNorm" | "clipRatio" | "completions" | "tokens" | "batchSize" | "avgCompletion";
 
 interface MetricDef {
   key: string;
@@ -58,31 +58,62 @@ interface MetricDef {
 
 const TAB_CONFIG: Record<
   MetricTab,
-  { label: string; icon: React.ReactNode; metrics: readonly MetricDef[] }
+  { label: string; icon: React.ReactNode; description: string; metrics: readonly MetricDef[] }
 > = {
   reward: {
     label: "Reward",
     icon: <TrendingUp className="h-3 w-3" />,
+    description: "Reward signal from the grader. Shows how well the model generates high-scoring responses. Reward Std shows score variance (some is healthy — GRPO needs differences to learn). Zero Std Frac shows what % of prompts got identical scores across all completions (= zero learning signal).",
     metrics: [
-      { key: "reward", label: "Reward", color: "#10b981", primary: true, description: "Average reward score from the evaluator. Higher = model generates better responses." },
-      { key: "reward_std", label: "Reward Std", color: "#6366f1", primary: false, description: "Standard deviation of reward scores across candidates. Some variance is healthy." },
-      { key: "frac_reward_zero_std", label: "Zero Std Frac", color: "#f59e0b", primary: false, description: "Fraction of prompts where all G completions scored identically (zero learning signal). Healthy <0.2, warning >0.5, critical >0.8." },
+      { key: "reward", label: "Reward", color: "#10b981", primary: true, description: "Average reward score from the evaluator. Higher = model generates better responses.", group: "score" },
+      { key: "reward_std", label: "Reward Std", color: "#6366f1", primary: true, description: "Standard deviation of reward scores across candidates. Some variance is healthy.", group: "score" },
+      { key: "frac_reward_zero_std", label: "Zero Std Frac", color: "#f59e0b", primary: true, description: "Fraction of prompts where all G completions scored identically (zero learning signal). Healthy <0.2, warning >0.5, critical >0.8.", group: "signal" },
     ],
   },
-  stability: {
+  loss: {
     label: "Loss",
     icon: <Activity className="h-3 w-3" />,
+    description: "GRPO policy loss. Unlike SFT, loss starts near 0 and rises slightly as the model learns — this is normal. A spike followed by recovery is fine. Sustained NaN or explosion means training is broken.",
     metrics: [
       { key: "loss", label: "Loss", color: "#ef4444", primary: true, description: "GRPO policy loss — starts near 0 and rises slightly as learning progresses. Unlike SFT loss, lower is NOT always better." },
-      { key: "kl", label: "KL Divergence", color: "#f59e0b", primary: false, description: "Distance from base model distribution. With β=0 (default), this is informational only and does not affect training." },
-      { key: "grad_norm", label: "Grad Norm", color: "#8b5cf6", primary: false, description: "Gradient norm — spikes indicate unstable training." },
-      { key: "learning_rate", label: "Learning Rate", color: "#06b6d4", primary: false, description: "Current learning rate. May change if a schedule is used." },
-      { key: "clip_ratio/region_mean", label: "Clip Ratio", color: "#ec4899", primary: false, description: "Fraction of tokens clipped by trust region. 0.1-0.3 is healthy. High = updates too aggressive." },
+    ],
+  },
+  kl: {
+    label: "KL Divergence",
+    icon: <Activity className="h-3 w-3" />,
+    description: "How far the model has drifted from the base model. With β=0 (default), KL is informational only and does not affect training. Useful for tracking how much the model has changed.",
+    metrics: [
+      { key: "kl", label: "KL Divergence", color: "#f59e0b", primary: true, description: "Distance from base model distribution. With β=0 (default), this is informational only and does not affect training." },
+    ],
+  },
+  lr: {
+    label: "Learning Rate",
+    icon: <TrendingUp className="h-3 w-3" />,
+    description: "Learning rate schedule over training. Shows warmup (ramp up), peak, and decay phases. If the curve looks wrong, check your scheduler config (cosine, linear, constant).",
+    metrics: [
+      { key: "learning_rate", label: "Learning Rate", color: "#06b6d4", primary: true, description: "Current learning rate from the scheduler. Shows warmup, peak, and decay phases." },
+    ],
+  },
+  gradNorm: {
+    label: "Grad Norm",
+    icon: <Activity className="h-3 w-3" />,
+    description: "Magnitude of gradient updates. Smooth values = stable training. Spikes = unstable batches or degenerate completions. Sustained high values may need a lower learning rate.",
+    metrics: [
+      { key: "grad_norm", label: "Grad Norm", color: "#8b5cf6", primary: true, description: "Gradient norm — spikes indicate unstable training." },
+    ],
+  },
+  clipRatio: {
+    label: "Clip Ratio",
+    icon: <Activity className="h-3 w-3" />,
+    description: "Fraction of token-level updates clipped by the PPO/GRPO trust region. 0.1-0.3 is healthy. Too high means the model is trying to change too fast and updates are being constrained.",
+    metrics: [
+      { key: "clip_ratio/region_mean", label: "Clip Ratio", color: "#ec4899", primary: true, description: "Fraction of tokens clipped by trust region. 0.1-0.3 is healthy. High = updates too aggressive." },
     ],
   },
   completions: {
     label: "Completions",
     icon: <Zap className="h-3 w-3" />,
+    description: "Response length and truncation. Clipped Ratio shows what % of responses hit max_output_tokens. Mean Length is the overall average. Natural Avg is the average for responses that finished on their own (model output EOS). A big gap between Mean Length and Natural Avg means truncation is inflating the average.",
     metrics: [
       { key: "completions/clipped_ratio", label: "Clipped Ratio", color: "#ef4444", primary: true, description: "Fraction of responses truncated at max_output_tokens. Healthy <0.1, warning >0.1, critical >0.5.", group: "ratio" },
       { key: "completions/mean_length", label: "Mean Length", color: "#10b981", primary: true, description: "Average response length in tokens.", group: "length" },
@@ -93,13 +124,28 @@ const TAB_CONFIG: Record<
       { key: "completions/min_terminated_length", label: "Natural Min", color: "#14b8a6", primary: false, description: "Shortest response that finished naturally. Very short (<10 tokens) may indicate trivial answers — check grader.", group: "length" },
     ],
   },
-  throughput: {
-    label: "Throughput",
+  tokens: {
+    label: "Tokens/Step",
     icon: <BarChart3 className="h-3 w-3" />,
+    description: "Total tokens processed per training step. Sudden drops may indicate shorter completions or filtered batches.",
     metrics: [
       { key: "num_tokens", label: "Tokens/Step", color: "#10b981", primary: true, description: "Total tokens processed per training step. Drops may indicate shorter completions." },
-      { key: "row_indices_count", label: "Batch Size", color: "#6366f1", primary: false, description: "Number of record samples per step. Should be consistent." },
-      { key: "completion_length", label: "Avg Completion", color: "#f59e0b", primary: false, description: "Average completion length across all candidates in the batch." },
+    ],
+  },
+  batchSize: {
+    label: "Batch Size",
+    icon: <BarChart3 className="h-3 w-3" />,
+    description: "Number of record samples per training step. Should be consistent throughout training — drops may indicate prompts being filtered.",
+    metrics: [
+      { key: "row_indices_count", label: "Batch Size", color: "#6366f1", primary: true, description: "Number of record samples per step. Should be consistent." },
+    ],
+  },
+  avgCompletion: {
+    label: "Avg Completion",
+    icon: <BarChart3 className="h-3 w-3" />,
+    description: "Average completion length across all candidates in each batch. Trends here mirror the Completions tab but include all G completions per prompt.",
+    metrics: [
+      { key: "completion_length", label: "Avg Completion", color: "#f59e0b", primary: true, description: "Average completion length across all candidates in the batch." },
     ],
   },
 };
@@ -280,6 +326,11 @@ function LaneLabels({
 const GROUP_LABELS: Record<string, string> = {
   ratio: "Clip Ratio",
   length: "Response Length (tokens)",
+  score: "Reward Score",
+  signal: "Learning Signal",
+  policy: "Policy Loss & KL",
+  stability: "Training Stability",
+  schedule: "Learning Rate",
 };
 
 function GroupedCharts({
@@ -320,7 +371,7 @@ function GroupedCharts({
               {GROUP_LABELS[groupName] ?? groupName}
             </p>
             <ResponsiveContainer width="100%" height="85%">
-              <LineChart data={chartData} margin={{ top: 4, right: 16, bottom: 4, left: 0 }}>
+              <LineChart data={chartData} syncId="completions-sync" margin={{ top: 4, right: 16, bottom: 4, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#262626" strokeOpacity={0.4} vertical={false} />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#64748b" }} dy={8} interval="preserveStartEnd" />
                 <YAxis domain={yDomain} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#475569" }} tickFormatter={formatMetricValue} width={50} />
@@ -491,6 +542,16 @@ export function FinetuneMetricsChart({
       <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">{TAB_CONFIG[activeTab].label}</p>
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Info className="h-3.5 w-3.5 text-slate-600 hover:text-slate-400 cursor-help transition-colors" />
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-[320px]">
+                <p className="text-[11px] leading-relaxed">{TAB_CONFIG[activeTab].description}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <TooltipProvider delayDuration={200}>
             <Tooltip>
               <TooltipTrigger asChild>

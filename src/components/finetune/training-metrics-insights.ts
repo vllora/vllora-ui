@@ -66,7 +66,7 @@ export interface MetricInsight {
   readonly text: string;
 }
 
-type MetricTab = "reward" | "stability" | "completions" | "throughput";
+type MetricTab = "reward" | "loss" | "kl" | "lr" | "gradNorm" | "clipRatio" | "completions" | "tokens" | "batchSize" | "avgCompletion";
 
 function num(v: unknown): number | null {
   return typeof v === "number" && isFinite(v) ? v : null;
@@ -184,7 +184,7 @@ export function getMetricsInsights(
     }
   }
 
-  if (tab === "stability") {
+  if (tab === "loss" || tab === "kl" || tab === "gradNorm" || tab === "clipRatio") {
     const loss = num(latest.loss);
     const kl = num(latest.kl);
     const gradNorm = num(latest.grad_norm);
@@ -362,7 +362,7 @@ export function getMetricsInsights(
     }
   }
 
-  if (tab === "throughput") {
+  if (tab === "tokens" || tab === "batchSize" || tab === "avgCompletion") {
     const tokens = num(latest.num_tokens);
     const batchSize = num(latest.row_indices_count);
 

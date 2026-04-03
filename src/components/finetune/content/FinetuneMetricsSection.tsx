@@ -20,7 +20,7 @@ interface FinetuneMetricsSectionProps {
   workflowId: string;
   isLive?: boolean;
   /** Pre-select a specific tab (reward/stability/completions) */
-  defaultTab?: "reward" | "stability" | "completions" | "throughput";
+  defaultTab?: "reward" | "loss" | "kl" | "lr" | "gradNorm" | "clipRatio" | "completions" | "tokens" | "batchSize" | "avgCompletion";
   /** max_output_tokens from job inference parameters — used for clipping alert */
   maxOutputTokens?: number;
 }

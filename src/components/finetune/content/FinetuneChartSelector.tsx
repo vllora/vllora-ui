@@ -23,15 +23,21 @@ import { ScoreStrip } from "@/components/datasets/eval-dialog/ScoreStrip";
 import { getScoreDistributionInsights } from "../training-metrics-insights";
 import { BaselineComparisonPanel } from "./BaselineComparisonPanel";
 
-type ChartView = "scoreTrend" | "stability" | "reward" | "completions" | "throughput" | "scoreDistribution" | "vsBaseline";
+type ChartView = "scoreTrend" | "loss" | "kl" | "lr" | "gradNorm" | "clipRatio" | "reward" | "completions" | "tokens" | "batchSize" | "avgCompletion" | "scoreDistribution" | "vsBaseline";
 
 /** Ordered by importance for finetune monitoring */
 const CHART_VIEWS: { key: ChartView; label: string; description: string }[] = [
   { key: "scoreTrend", label: "Score Trend", description: "Average evaluation score over time with ±1σ confidence band. The primary indicator of whether your model is improving." },
-  { key: "stability", label: "Loss", description: "Training loss, KL divergence, gradient norm, and learning rate. Shows whether training is converging and stable." },
+  { key: "loss", label: "Loss", description: "GRPO policy loss. Starts near 0 and rises slightly as learning progresses — unlike SFT, lower is NOT always better." },
+  { key: "kl", label: "KL Divergence", description: "Distance from base model distribution. With β=0 (default), this is informational only." },
+  { key: "lr", label: "Learning Rate", description: "Learning rate schedule — warmup, peak, and decay phases. The most important hyperparameter to monitor." },
+  { key: "gradNorm", label: "Grad Norm", description: "Gradient norm — spikes indicate unstable training or degenerate batches." },
+  { key: "clipRatio", label: "Clip Ratio", description: "Fraction of tokens clipped by trust region. 0.1-0.3 is healthy. High = updates too aggressive." },
   { key: "reward", label: "Reward", description: "Reward signal from the evaluator. Shows how well the model generates high-scoring responses and whether the evaluator provides useful learning signal." },
   { key: "completions", label: "Completions", description: "Response length and truncation rate. High truncation means responses hit the token limit — consider increasing max tokens." },
-  { key: "throughput", label: "Throughput", description: "Token throughput, batch size, and completion length per step. Drops may indicate shorter or degenerate completions." },
+  { key: "tokens", label: "Tokens/Step", description: "Total tokens processed per training step. Drops may indicate shorter or degenerate completions." },
+  { key: "batchSize", label: "Batch Size", description: "Number of record samples per step. Should be consistent — drops may indicate filtered prompts." },
+  { key: "avgCompletion", label: "Avg Completion", description: "Average completion length across all candidates in the batch." },
   { key: "scoreDistribution", label: "Score Distribution", description: "Per-record score histogram for the latest evaluation. Shows the spread of scores across your dataset." },
   { key: "vsBaseline", label: "vs Baseline", description: "Compare training epoch scores against the baseline evaluation. Shows which topics improved, regressed, and by how much." },
 ];
@@ -136,7 +142,7 @@ export function FinetuneChartSelector({
         />
       )}
 
-      {(view === "reward" || view === "stability" || view === "completions" || view === "throughput") && (
+      {(view === "reward" || view === "loss" || view === "kl" || view === "lr" || view === "gradNorm" || view === "clipRatio" || view === "completions" || view === "tokens" || view === "batchSize" || view === "avgCompletion") && (
         <FinetuneMetricsSection
           jobId={jobId}
           workflowId={workflowId}
