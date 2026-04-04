@@ -5,7 +5,7 @@
  * Single source of truth for all dataset-related data.
  */
 
-import { createContext, useContext, useCallback, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useCallback, useState, useEffect, useMemo, type ReactNode } from 'react';
 import { Dataset, DatasetEvaluation, DatasetWithRecords } from '@/types/dataset-types';
 import { Span } from '@/types/common-type';
 import { datasetService, recordService, knowledgeSourceService, evalJobService, workflowService } from '@/services/service-registry';
@@ -253,7 +253,7 @@ function useDatasets() {
     };
   }, [loadDatasets]);
 
-  return {
+  return useMemo(() => ({
     datasets,
     isLoading,
     error,
@@ -272,7 +272,7 @@ function useDatasets() {
     renameDataset,
     spanExistsInDataset,
     getDatasetsBySpanId,
-  };
+  }), [datasets, isLoading, error, loadDatasets, getDatasetWithRecords, getRecordCount, getTopicCoverageStats, createDataset, addSpansToDataset, importRecords, clearDatasetRecords, deleteDataset, deleteRecord, updateRecordTopic, updateRecordData, renameDataset, spanExistsInDataset, getDatasetsBySpanId]);
 }
 
 // ============================================================================

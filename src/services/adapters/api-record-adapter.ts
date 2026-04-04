@@ -38,24 +38,35 @@ interface DbTopicRow {
  * Caches per workflowId for the lifetime of the page.
  */
 const topicCaches = new Map<string, { nameToId: Map<string, string>; idToName: Map<string, string> }>();
+// Deduplicate concurrent in-flight requests for the same workflowId
+const topicInflight = new Map<string, Promise<{ nameToId: Map<string, string>; idToName: Map<string, string> }>>();
 
 async function getTopicMaps(workflowId: string): Promise<{ nameToId: Map<string, string>; idToName: Map<string, string> }> {
   const cached = topicCaches.get(workflowId);
   if (cached) return cached;
 
-  const response = await api.get(`/finetune/workflows/${workflowId}/topics`);
-  const data = await handleApiResponse<{ topics: DbTopicRow[] }>(response);
+  const inflight = topicInflight.get(workflowId);
+  if (inflight) return inflight;
 
-  const nameToId = new Map<string, string>();
-  const idToName = new Map<string, string>();
-  for (const t of data.topics) {
-    nameToId.set(t.name, t.id);
-    idToName.set(t.id, t.name);
-  }
+  const promise = (async () => {
+    const response = await api.get(`/finetune/workflows/${workflowId}/topics`);
+    const data = await handleApiResponse<{ topics: DbTopicRow[] }>(response);
 
-  const maps = { nameToId, idToName };
-  topicCaches.set(workflowId, maps);
-  return maps;
+    const nameToId = new Map<string, string>();
+    const idToName = new Map<string, string>();
+    for (const t of data.topics) {
+      nameToId.set(t.name, t.id);
+      idToName.set(t.id, t.name);
+    }
+
+    const maps = { nameToId, idToName };
+    topicCaches.set(workflowId, maps);
+    topicInflight.delete(workflowId);
+    return maps;
+  })();
+
+  topicInflight.set(workflowId, promise);
+  return promise;
 }
 
 /** Invalidate cached topic maps (call after topic hierarchy changes) */

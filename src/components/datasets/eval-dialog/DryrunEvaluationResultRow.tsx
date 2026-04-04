@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import type { FlatEvaluationResult } from "@/services/finetune-api";
 import { getScoreColorClass, formatScore, parseScoreBreakdown } from "@/utils/parse-score-breakdown";
 import { LogsPopover } from "./LogsPopover";
-import { ChevronRight, Copy, Check } from "lucide-react";
+import { ChevronRight, Copy, Check, ExternalLink } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -288,24 +288,10 @@ export function DryrunEvaluationResultRow({
           </div>
         )}
 
-        {/* Input — clickable link to navigate to record */}
-        {onNavigateToRecord ? (
-          <button
-            type="button"
-            className="flex-1 min-w-0 pr-4 text-[12px] text-zinc-300 truncate text-left hover:underline hover:text-zinc-100 transition-colors"
-            onClick={(e) => {
-              e.stopPropagation();
-              onNavigateToRecord(result.dataset_row_id, result);
-            }}
-            title="View in records table"
-          >
-            {inputText}
-          </button>
-        ) : (
-          <div className="flex-1 min-w-0 pr-4 text-[12px] text-zinc-300 truncate">
-            {inputText}
-          </div>
-        )}
+        {/* Input text */}
+        <div className="flex-1 min-w-0 pr-4 text-[12px] text-zinc-300 truncate">
+          {inputText}
+        </div>
 
         {/* Topic */}
         {topicName && (
@@ -404,6 +390,27 @@ export function DryrunEvaluationResultRow({
         <div className="w-10 shrink-0 flex items-center justify-center">
           {hasLogs ? <LogsPopover logs={result.logs!} rowIndex={index} /> : null}
         </div>
+
+        {/* Navigate to record */}
+        {onNavigateToRecord && (
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="w-7 shrink-0 flex items-center justify-center text-zinc-600 hover:text-zinc-300 transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onNavigateToRecord(result.dataset_row_id, result);
+                  }}
+                >
+                  <ExternalLink className="h-3 w-3" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="left" className="text-[10px]">View in records table</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
       </div>
 
       {/* Expanded content: output + reason + criteria breakdown (only for non-finetune rows) */}

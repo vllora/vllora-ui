@@ -250,7 +250,7 @@ export function TrainingMetricsChart({
   return (
     <div
       className={cn(
-        "rounded-lg bg-[#111] overflow-hidden",
+        "rounded-lg bg-[#111] overflow-hidden outline-none [&_*]:outline-none",
         className
       )}
     >

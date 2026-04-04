@@ -139,6 +139,10 @@ function useFinetuneJobsLogic() {
     }
   }, []);
 
+  // Use ref for jobs inside callbacks to avoid recreating them when jobs array changes
+  const jobsRef = useRef(jobs);
+  jobsRef.current = jobs;
+
   // Get evaluation state for a job
   const getJobEvaluations = useCallback((jobId: string): JobEvaluationState => {
     return jobEvaluations[jobId] ?? { data: null, isLoading: false, error: null };
@@ -146,11 +150,11 @@ function useFinetuneJobsLogic() {
 
   // Manual refresh evaluations for a job (on-demand cloud-proxy fetch)
   const refreshJobEvaluations = useCallback((jobId: string) => {
-    const job = jobs.find((j) => j.id === jobId);
+    const job = jobsRef.current.find((j) => j.id === jobId);
     if (job) {
       fetchJobEvaluations(job, false);
     }
-  }, [jobs, fetchJobEvaluations]);
+  }, [fetchJobEvaluations]);
 
   const stopEvalPolling = useCallback((jobId: string) => {
     if (evalPollIntervalsRef.current[jobId]) {
@@ -164,20 +168,17 @@ function useFinetuneJobsLogic() {
     const jobId = job.id;
     if (evalPollIntervalsRef.current[jobId]) return;
 
-    // Skip initial fetch — the mount effect (line ~310) already handles it.
-    // Starting the interval directly avoids the duplicate request.
-
     // Poll cloud-proxy every 20s for progress (with stop condition)
     evalPollIntervalsRef.current[jobId] = setInterval(() => {
-      // Check current job status — stop if no longer active
-      const currentJob = jobs.find((j) => j.id === jobId);
+      // Check current job status via ref — stop if no longer active
+      const currentJob = jobsRef.current.find((j) => j.id === jobId);
       if (!currentJob || (currentJob.status !== 'pending' && currentJob.status !== 'running')) {
         stopEvalPolling(jobId);
         return;
       }
       fetchJobEvaluations(job);
     }, 20_000);
-  }, [fetchJobEvaluations, jobs, stopEvalPolling]);
+  }, [fetchJobEvaluations, stopEvalPolling]);
 
   // Start/stop eval polling based on job status
   useEffect(() => {

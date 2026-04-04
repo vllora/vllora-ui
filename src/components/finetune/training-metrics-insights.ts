@@ -66,7 +66,7 @@ export interface MetricInsight {
   readonly text: string;
 }
 
-type MetricTab = "reward" | "loss" | "kl" | "lr" | "gradNorm" | "clipRatio" | "completions" | "tokens" | "batchSize" | "avgCompletion";
+type MetricTab = "reward" | "loss" | "kl" | "lr" | "gradNorm" | "clipRatio" | "deadPrompts" | "completions" | "tokens" | "batchSize" | "avgCompletion";
 
 function num(v: unknown): number | null {
   return typeof v === "number" && isFinite(v) ? v : null;
@@ -158,26 +158,22 @@ export function getMetricsInsights(
   if (tab === "reward") {
     const reward = num(latest.reward);
     const rewardStd = num(latest.reward_std);
-    const fracZero = num(latest.frac_reward_zero_std);
 
-    // Reward: absolute value depends on grader scale. Thresholds below assume [0,1] grader.
-    // Ref: DeepSeekMath §3.2 — "steady upward trend"; our guide: "rapid explosion = reward hacking"
     if (reward != null) {
       if (reward >= 0.9) insights.push({ level: "ok", text: "Reward is high — model generates strong responses." });
       else if (reward >= 0.7) insights.push({ level: "ok", text: "Reward is moderate — learning is productive." });
       else if (reward >= 0.4) insights.push({ level: "warn", text: "Reward is low — model is still learning. Check if the grader provides enough gradient (avoid binary 0/1 scores)." });
       else insights.push({ level: "critical", text: "Reward is very low — the model may not be learning. Verify the grader works correctly and data quality." });
     }
-    // reward_std: GRPO needs within-group diversity. Healthy 0.05-0.3 for [0,1] graders.
-    // Ref: Empirical heuristic for [0,1] grader scale; TRL docs: "little diversity for that prompt"
     if (rewardStd != null && rewardStd < 0.01) {
       insights.push({ level: "critical", text: "Reward std is near zero — all completions score identically. GRPO learns by comparing better vs worse completions within each group. Without variance, there is no learning signal. Increase G or adjust grader sensitivity." });
     } else if (rewardStd != null && rewardStd < 0.05) {
       insights.push({ level: "warn", text: `Reward std is low (${rewardStd.toFixed(3)}) — limited diversity between completions. Healthy range for [0,1] graders is 0.05-0.3.` });
     }
-    // frac_reward_zero_std: warn >0.5 + flat reward, critical >0.8 + flat reward
-    // Ref: "No Prompt Left Behind" (arXiv:2509.21880) — 30-99% zero-std is normal in GRPO
-    // These thresholds only meaningful when reward is also stagnant
+  }
+
+  if (tab === "deadPrompts") {
+    const fracZero = num(latest.frac_reward_zero_std);
     if (fracZero != null) {
       if (fracZero > 0.8) insights.push({ level: "critical", text: `${(fracZero * 100).toFixed(0)}% of prompts have zero reward variance — training gets no useful gradient from most examples. Increase G (completions per prompt) or adjust grader.` });
       else if (fracZero > 0.5) insights.push({ level: "warn", text: `${(fracZero * 100).toFixed(0)}% of prompts have zero reward variance — common in GRPO with G=8 (30-99% is normal per "No Prompt Left Behind", ICLR 2026). Only a concern if reward is also stagnant.` });

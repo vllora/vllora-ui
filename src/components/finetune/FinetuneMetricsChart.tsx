@@ -10,7 +10,7 @@
  * Legend toggles metrics on/off.
  */
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useRef, useEffect, memo } from "react";
 import {
   Tooltip,
   TooltipContent,
@@ -28,7 +28,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, Activity, TrendingUp, Zap, Eye, EyeOff, BarChart3, Info } from "lucide-react";
+import { AlertTriangle, Activity, TrendingUp, Zap, Eye, EyeOff, BarChart3, Info, TrendingDown } from "lucide-react";
 import type { FinetuneJobMetricPoint } from "@/services/finetune-api";
 import { getMetricsInsights } from "./training-metrics-insights";
 
@@ -45,7 +45,7 @@ interface FinetuneMetricsChartProps {
   maxOutputTokens?: number;
 }
 
-type MetricTab = "reward" | "loss" | "kl" | "lr" | "gradNorm" | "clipRatio" | "completions" | "tokens" | "batchSize" | "avgCompletion";
+type MetricTab = "reward" | "loss" | "kl" | "lr" | "gradNorm" | "clipRatio" | "deadPrompts" | "completions" | "tokens" | "batchSize" | "avgCompletion";
 
 interface MetricDef {
   key: string;
@@ -65,9 +65,8 @@ const TAB_CONFIG: Record<
     icon: <TrendingUp className="h-3 w-3" />,
     description: "Reward signal from the grader. Shows how well the model generates high-scoring responses. Reward Std shows score variance (some is healthy — GRPO needs differences to learn). Zero Std Frac shows what % of prompts got identical scores across all completions (= zero learning signal).",
     metrics: [
-      { key: "reward", label: "Reward", color: "#10b981", primary: true, description: "Average reward score from the evaluator. Higher = model generates better responses.", group: "score" },
-      { key: "reward_std", label: "Reward Std", color: "#6366f1", primary: true, description: "Standard deviation of reward scores across candidates. Some variance is healthy.", group: "score" },
-      { key: "frac_reward_zero_std", label: "Zero Std Frac", color: "#f59e0b", primary: true, description: "Fraction of prompts where all G completions scored identically (zero learning signal). Healthy <0.2, warning >0.5, critical >0.8.", group: "signal" },
+      { key: "reward", label: "Reward", color: "#10b981", primary: true, description: "Average reward score from the evaluator. Higher = model generates better responses." },
+      { key: "reward_std", label: "Reward Std", color: "#6366f1", primary: true, description: "Standard deviation of reward scores across candidates. Some variance is healthy." },
     ],
   },
   loss: {
@@ -103,11 +102,19 @@ const TAB_CONFIG: Record<
     ],
   },
   clipRatio: {
-    label: "Clip Ratio",
+    label: "Trust Region",
     icon: <Activity className="h-3 w-3" />,
-    description: "Fraction of token-level updates clipped by the PPO/GRPO trust region. 0.1-0.3 is healthy. Too high means the model is trying to change too fast and updates are being constrained.",
+    description: "Fraction of token-level policy updates clipped by the GRPO trust region (epsilon). 0.1-0.3 is healthy. Too high means the model is trying to change too fast. Different from Clipped Ratio in Completions (which measures response truncation).",
     metrics: [
-      { key: "clip_ratio/region_mean", label: "Clip Ratio", color: "#ec4899", primary: true, description: "Fraction of tokens clipped by trust region. 0.1-0.3 is healthy. High = updates too aggressive." },
+      { key: "clip_ratio/region_mean", label: "Trust Region", color: "#ec4899", primary: true, description: "Fraction of tokens clipped by trust region. 0.1-0.3 is healthy. High = updates too aggressive." },
+    ],
+  },
+  deadPrompts: {
+    label: "Dead Prompts",
+    icon: <Activity className="h-3 w-3" />,
+    description: "Fraction of prompts where all G completions scored identically (zero reward variance). These prompts provide no learning signal to GRPO. Healthy <0.2, warning >0.5, critical >0.8.",
+    metrics: [
+      { key: "frac_reward_zero_std", label: "Zero Std Frac", color: "#f59e0b", primary: true, description: "Fraction of prompts with zero reward variance. Healthy <0.2, warning >0.5, critical >0.8." },
     ],
   },
   completions: {
@@ -176,6 +183,43 @@ function formatMetricValue(value: number): string {
   if (Math.abs(value) >= 100) return value.toFixed(0);
   if (Math.abs(value) >= 1) return value.toFixed(2);
   return value.toFixed(3);
+}
+
+/** Apply exponential moving average smoothing to chart data */
+function applyEmaSmoothing(
+  data: Record<string, unknown>[],
+  metricKeys: string[],
+  alpha = 0.3,
+): Record<string, unknown>[] {
+  const ema: Record<string, number> = {};
+  return data.map((point) => {
+    const smoothed = { ...point };
+    for (const key of metricKeys) {
+      const raw = point[key];
+      if (typeof raw !== "number" || !isFinite(raw)) continue;
+      if (ema[key] == null) {
+        ema[key] = raw;
+      } else {
+        ema[key] = alpha * raw + (1 - alpha) * ema[key];
+      }
+      smoothed[key] = ema[key];
+    }
+    return smoothed;
+  });
+}
+
+const MAX_CHART_POINTS = 400;
+
+/** Downsample data to at most maxPoints, preserving first/last and local extremes */
+function downsample<T>(data: readonly T[], maxPoints: number): T[] {
+  if (data.length <= maxPoints) return data as T[];
+  const stride = Math.ceil(data.length / maxPoints);
+  const result: T[] = [data[0]];
+  for (let i = stride; i < data.length - 1; i += stride) {
+    result.push(data[i]);
+  }
+  result.push(data[data.length - 1]);
+  return result;
 }
 
 // MetricInsight type and getMetricsInsights imported from ./training-metrics-insights
@@ -329,7 +373,6 @@ const GROUP_LABELS: Record<string, string> = {
   ratio: "Clip Ratio",
   length: "Response Length (tokens)",
   score: "Reward Score",
-  signal: "Dead Prompts",
   policy: "Policy Loss & KL",
   stability: "Training Stability",
   schedule: "Learning Rate",
@@ -409,7 +452,7 @@ function GroupedCharts({
                   <ReferenceLine y={maxOutputTokens} stroke="#ef4444" strokeOpacity={0.3} strokeDasharray="4 4" />
                 )}
                 {metrics.map((m) => (
-                  <Line key={m.key} type="monotone" dataKey={m.key} name={m.label} stroke={m.color} strokeWidth={m.primary ? 2 : 1.5} dot={false} activeDot={{ r: 3, fill: m.color, stroke: "#111", strokeWidth: 1.5 }} connectNulls />
+                  <Line key={m.key} type="monotone" dataKey={m.key} name={m.label} stroke={m.color} strokeWidth={m.primary ? 2 : 1.5} dot={false} activeDot={{ r: 3, fill: m.color, stroke: "#111", strokeWidth: 1.5 }} connectNulls isAnimationActive={false} />
                 ))}
               </LineChart>
             </ResponsiveContainer>
@@ -424,7 +467,7 @@ function GroupedCharts({
 // Main Component
 // =============================================================================
 
-export function FinetuneMetricsChart({
+export const FinetuneMetricsChart = memo(function FinetuneMetricsChart({
   metrics,
   className,
   isLive,
@@ -436,6 +479,16 @@ export function FinetuneMetricsChart({
   const activeTab = hideTabs ? (defaultTab ?? "reward") : internalTab;
   const setActiveTab = setInternalTab;
   const alertCount = useMemo(() => getAlertCount(metrics), [metrics]);
+
+  // Skip animation on initial mount (fast render), enable on subsequent updates (smooth polling)
+  const hasMountedRef = useRef(false);
+  useEffect(() => {
+    const timer = setTimeout(() => { hasMountedRef.current = true; }, 1000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const [isSmoothed, setIsSmoothed] = useState(false);
+  const [isLogScale, setIsLogScale] = useState(false);
 
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(() => {
     const tab = TAB_CONFIG[defaultTab ?? "reward"];
@@ -495,6 +548,16 @@ export function FinetuneMetricsChart({
     });
   }, [metrics]);
 
+  // Apply EMA smoothing + downsampling for performance
+  const displayData = useMemo(() => {
+    let data = chartData;
+    if (isSmoothed) {
+      const allKeys = TAB_CONFIG[activeTab].metrics.map((m) => m.key);
+      data = applyEmaSmoothing(data as Record<string, unknown>[], allKeys) as typeof chartData;
+    }
+    return downsample(data, MAX_CHART_POINTS);
+  }, [chartData, isSmoothed, activeTab]);
+
   const latestMetrics = metrics.length > 0 ? metrics[metrics.length - 1].metrics : null;
   // Full metrics history as Record[] for cross-metric trend checks (e.g., length-reward divergence)
   const metricsHistory = useMemo(
@@ -507,7 +570,7 @@ export function FinetuneMetricsChart({
 
   const tabConfig = TAB_CONFIG[activeTab];
   const availableMetrics = tabConfig.metrics.filter((m) =>
-    chartData.some((d) => (d as Record<string, unknown>)[m.key] != null)
+    displayData.some((d) => (d as Record<string, unknown>)[m.key] != null)
   );
   const visibleMetrics = availableMetrics.filter((m) => visibleKeys.has(m.key));
   const isSingleMetric = visibleMetrics.length <= 1;
@@ -515,31 +578,66 @@ export function FinetuneMetricsChart({
 
   // Build laned data for multi-metric stacked view
   const { data: lanedData, lanes } = useMemo(
-    () => buildLanedData(chartData as Record<string, unknown>[], visibleMetrics),
-    [chartData, visibleMetrics],
+    () => buildLanedData(displayData as Record<string, unknown>[], visibleMetrics),
+    [displayData, visibleMetrics],
   );
 
-  // Y domain for single metric
-  const singleYDomain = useMemo<[number, number]>(() => {
-    if (!isSingleMetric || !visibleMetrics[0]) return [0, 1];
-    const vals = chartData.map((d) => (d as Record<string, unknown>)[visibleMetrics[0].key])
-      .filter((v): v is number => typeof v === "number" && isFinite(v));
-    if (vals.length === 0) return [0, 1];
+  // Whether to use shared Y-axis (single metric OR multiple without groups)
+  const useSharedAxis = isSingleMetric || !hasGroups;
+
+  // When log scale is on, replace 0/negative values with a floor so log() doesn't break
+  const logSafeData = useMemo(() => {
+    if (!isLogScale) return displayData;
+    const keys = visibleMetrics.map((m) => m.key);
+    return displayData.map((d) => {
+      const safe = { ...d } as Record<string, unknown>;
+      for (const k of keys) {
+        const v = safe[k];
+        if (typeof v === "number" && v <= 0) safe[k] = undefined;
+      }
+      return safe as typeof d;
+    });
+  }, [displayData, isLogScale, visibleMetrics]);
+
+  // Y domain for shared-axis chart (all visible metrics on one axis)
+  const sharedYDomain = useMemo<[number, number]>(() => {
+    if (!useSharedAxis) return [0, 1];
+    const source = isLogScale ? logSafeData : displayData;
+    const vals = visibleMetrics.flatMap((m) =>
+      source.map((d) => (d as Record<string, unknown>)[m.key])
+        .filter((v): v is number => typeof v === "number" && isFinite(v) && v > 0),
+    );
+    if (vals.length === 0) return isLogScale ? [0.001, 1] : [0, 1];
     const min = Math.min(...vals);
     const max = Math.max(...vals);
+    if (isLogScale) {
+      return [min * 0.5, max * 2];
+    }
     const pad = (max - min) * 0.1 || 0.1;
     return [Math.max(0, min - pad), max + pad];
-  }, [isSingleMetric, visibleMetrics, chartData]);
+  }, [useSharedAxis, visibleMetrics, displayData, logSafeData, isLogScale]);
+
+  // Only show log toggle when data spans 100x+ range (or already toggled on)
+  const showLogToggle = useMemo(() => {
+    if (!useSharedAxis) return false;
+    if (isLogScale) return true;
+    const vals = visibleMetrics.flatMap((m) =>
+      displayData.map((d) => (d as Record<string, unknown>)[m.key])
+        .filter((v): v is number => typeof v === "number" && isFinite(v) && v > 0),
+    );
+    if (vals.length < 2) return false;
+    return Math.max(...vals) / Math.min(...vals) >= 100;
+  }, [useSharedAxis, isLogScale, visibleMetrics, displayData]);
 
   if (metrics.length === 0) {
     return <div className="text-xs text-muted-foreground py-4 text-center">No training metrics available yet</div>;
   }
 
   // Chart height scales with number of visible metrics in stacked mode
-  const chartHeight = isSingleMetric ? 200 : Math.max(160, visibleMetrics.length * 60);
+  const chartHeight = useSharedAxis ? 200 : Math.max(160, visibleMetrics.length * 60);
 
   return (
-    <div className={cn("rounded-lg bg-[#111] overflow-hidden", className)}>
+    <div className={cn("rounded-lg bg-[#111] overflow-hidden outline-none [&_*]:outline-none", className)}>
       {/* Header */}
       <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -603,6 +701,56 @@ export function FinetuneMetricsChart({
           </TooltipProvider>
         </div>
         <div className="flex items-center gap-2">
+          {/* Smoothing toggle */}
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => setIsSmoothed((p) => !p)}
+                  className={cn(
+                    "p-1 rounded transition-colors text-[10px] font-medium",
+                    isSmoothed ? "bg-blue-500/20 text-blue-400" : "text-zinc-600 hover:text-zinc-400",
+                  )}
+                >
+                  <TrendingDown className="h-3 w-3" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-[240px]">
+                <p className="text-[10px] font-medium">{isSmoothed ? "Smoothing ON — click to show raw values" : "Smooth noisy data"}</p>
+                <p className="text-[9px] text-zinc-500 mt-0.5">
+                  {isSmoothed
+                    ? "Currently showing exponential moving average. Raw values are hidden."
+                    : "Apply exponential moving average to reduce noise and reveal trends. Useful for Loss, Reward, and Grad Norm."}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          {/* Log scale toggle — only show when data spans 100x+ range */}
+          {showLogToggle && (
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setIsLogScale((p) => !p)}
+                    className={cn(
+                      "px-1.5 py-0.5 rounded transition-colors text-[10px] font-mono font-medium",
+                      isLogScale ? "bg-blue-500/20 text-blue-400" : "text-zinc-600 hover:text-zinc-400",
+                    )}
+                  >
+                    log
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[240px]">
+                  <p className="text-[10px] font-medium">{isLogScale ? "Log scale ON — click for linear" : "Switch to log scale"}</p>
+                  <p className="text-[9px] text-zinc-500 mt-0.5">
+                    {isLogScale
+                      ? "Currently using logarithmic Y-axis. Small values are more visible but large differences appear compressed."
+                      : "Use logarithmic Y-axis when values span orders of magnitude (e.g., loss dropping from 1000 to 0.001). Makes small changes visible."}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           {alertCount > 0 && (
             <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded text-xs text-amber-400 font-medium">
               <AlertTriangle className="h-3 w-3" />{alertCount} alert{alertCount > 1 ? "s" : ""}
@@ -634,45 +782,55 @@ export function FinetuneMetricsChart({
       {/* Chart */}
       {hasGroups && !isSingleMetric ? (
         /* Grouped charts: metrics sharing a Y-axis within each group */
-        <GroupedCharts chartData={chartData as Record<string, unknown>[]} visibleMetrics={visibleMetrics} maxOutputTokens={maxOutputTokens} />
+        <GroupedCharts chartData={displayData as Record<string, unknown>[]} visibleMetrics={visibleMetrics} maxOutputTokens={maxOutputTokens} />
       ) : (
         <div className="relative" style={{ height: chartHeight }}>
           {/* Lane labels (stacked mode only) */}
-          {!isSingleMetric && (
-            <LaneLabels lanes={lanes} visibleMetrics={visibleMetrics} chartData={chartData as Record<string, unknown>[]} />
+          {!useSharedAxis && (
+            <LaneLabels lanes={lanes} visibleMetrics={visibleMetrics} chartData={displayData as Record<string, unknown>[]} />
           )}
 
-          <div className={cn("w-full h-full", !isSingleMetric ? "pl-[70px]" : "p-4 pr-2")}>
+          <div className={cn("w-full h-full", !useSharedAxis ? "pl-[70px]" : "p-4 pr-2")}>
             <ResponsiveContainer width="100%" height="100%">
-              {isSingleMetric ? (
-                /* Single metric: real Y-axis + full tooltip */
-                <LineChart data={chartData} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
+              {useSharedAxis ? (
+                /* Shared Y-axis: one or more metrics on the same scale */
+                <LineChart data={isLogScale ? logSafeData : displayData} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#262626" strokeOpacity={0.4} vertical={false} />
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#64748b" }} dy={8} tickFormatter={(v: number) => `Step ${v}`} interval="equidistantPreserveStart" />
-                  <YAxis domain={singleYDomain} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#475569" }} tickFormatter={(v: number) => formatMetricValue(v)} width={50} />
+                  <YAxis domain={sharedYDomain} scale={isLogScale ? "log" : "auto"} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#475569" }} tickFormatter={(v: number) => formatMetricValue(v)} width={50} />
                   <RechartsTooltip
                     content={({ active, payload, label }) => {
-                      if (!active || !payload?.[0]) return null;
-                      const m = visibleMetrics[0];
+                      if (!active || !payload?.length) return null;
                       return (
                         <div className="rounded-lg border border-[#262626] bg-[#141414]/95 px-3 py-2 shadow-xl backdrop-blur-sm">
-                          <p className="text-[10px] font-mono text-slate-500 mb-1">Step {label}</p>
-                          <div className="flex items-center gap-2 text-[11px]">
-                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: m.color }} />
-                            <span className="text-slate-400">{m.label}</span>
-                            <span className="font-mono font-bold" style={{ color: m.color }}>
-                              {typeof payload[0].value === "number" ? formatMetricValue(payload[0].value as number) : "-"}
-                            </span>
+                          <p className="text-[10px] font-mono text-slate-500 mb-1.5 border-b border-[#262626] pb-1">Step {label}</p>
+                          <div className="space-y-1">
+                            {visibleMetrics.map((m) => {
+                              const entry = payload.find((p) => p.dataKey === m.key);
+                              return (
+                                <div key={m.key} className="flex items-center justify-between gap-4 text-[11px]">
+                                  <span className="flex items-center gap-1.5">
+                                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: m.color }} />
+                                    <span className="text-slate-400">{m.label}</span>
+                                  </span>
+                                  <span className="font-mono font-bold" style={{ color: m.color }}>
+                                    {typeof entry?.value === "number" ? formatMetricValue(entry.value) : "-"}
+                                  </span>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       );
                     }}
                     cursor={{ stroke: "#334155", strokeDasharray: "4 4" }}
                   />
-                  {visibleMetrics[0]?.key === "completions/clipped_ratio" && (
+                  {visibleMetrics.some((m) => m.key === "completions/clipped_ratio") && (
                     <ReferenceLine y={0.7} stroke="#ef4444" strokeOpacity={0.3} strokeDasharray="4 4" />
                   )}
-                  <Line type="monotone" dataKey={visibleMetrics[0]?.key} stroke={visibleMetrics[0]?.color} strokeWidth={2} dot={false} activeDot={{ r: 4, fill: visibleMetrics[0]?.color }} connectNulls />
+                  {visibleMetrics.map((m) => (
+                    <Line key={m.key} type="monotone" dataKey={m.key} stroke={m.color} strokeWidth={m.primary ? 2 : 1.5} dot={false} activeDot={{ r: 4, fill: m.color }} connectNulls isAnimationActive={hasMountedRef.current} animationDuration={300} />
+                  ))}
                 </LineChart>
               ) : (
                 /* Stacked lanes: all metrics in one chart, each in its own band */
@@ -714,8 +872,8 @@ export function FinetuneMetricsChart({
         <div className="px-4 py-2 bg-black/20 border-t border-white/5 flex flex-wrap items-center gap-x-4 gap-y-1.5">
           {availableMetrics.map((metric) => {
             const isVisible = visibleKeys.has(metric.key);
-            const latestVal = chartData.length > 0
-              ? ((chartData[chartData.length - 1] as Record<string, unknown>)[metric.key] as number | undefined)
+            const latestVal = displayData.length > 0
+              ? ((displayData[displayData.length - 1] as Record<string, unknown>)[metric.key] as number | undefined)
               : undefined;
             return (
               <Tooltip key={metric.key}>
@@ -764,4 +922,4 @@ export function FinetuneMetricsChart({
       })()}
     </div>
   );
-}
+});

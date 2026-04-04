@@ -222,11 +222,21 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
     [records, searchQuery, generatedFilter, sourceDocumentFilter, sortConfig]
   );
 
+  // Stabilize getDatasetWithRecords via ref to prevent callback cascade
+  const getDatasetWithRecordsRef = useRef(getDatasetWithRecords);
+  getDatasetWithRecordsRef.current = getDatasetWithRecords;
+
+  // Track when the last full fetch completed (to suppress redundant refreshes)
+  const lastFetchAtRef = useRef<number>(0);
+  const isLoadingRef = useRef(false);
+
   // Load dataset and records (with loading indicator for initial load)
   const loadDataset = useCallback(async () => {
+    if (isLoadingRef.current) return; // Prevent concurrent loads
+    isLoadingRef.current = true;
     setIsLoading(true);
     try {
-      const result = await getDatasetWithRecords(workflowId);
+      const result = await getDatasetWithRecordsRef.current(workflowId);
       if (result) {
         setDataset(result);
         setRecords(result.records);
@@ -237,13 +247,15 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
       toast.error("Failed to load workflow");
     } finally {
       setIsLoading(false);
+      isLoadingRef.current = false;
     }
-  }, [workflowId, getDatasetWithRecords]);
+  }, [workflowId]);
 
   // Refresh dataset silently (no loading indicator - for background syncs)
   const refreshDataset = useCallback(async () => {
+    if (isLoadingRef.current) return; // Skip if a load is already in progress
     try {
-      const result = await getDatasetWithRecords(workflowId);
+      const result = await getDatasetWithRecordsRef.current(workflowId);
       if (result) {
         setDataset(result);
         setRecords(result.records);
@@ -252,10 +264,7 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
     } catch (err) {
       console.error("Failed to refresh dataset:", err);
     }
-  }, [workflowId, getDatasetWithRecords]);
-
-  // Track when the last full fetch completed (to suppress redundant refreshes)
-  const lastFetchAtRef = useRef<number>(0);
+  }, [workflowId]);
 
   // Debounced version for event-driven refreshes (coalesces rapid-fire events
   // like polling emits into a single refresh within a 10s window).
@@ -281,38 +290,38 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
     loadDataset();
   }, [loadDataset]);
 
-  // Listen for dataset refresh events (use silent refresh to avoid unmounting dialogs)
+  // Listen for dataset refresh events — use debounced to coalesce rapid-fire events
   useEffect(() => {
-    const handleRefresh = () => refreshDataset();
+    const handleRefresh = () => debouncedRefresh();
     emitter.on("vllora_dataset_refresh" as any, handleRefresh);
     return () => {
       emitter.off("vllora_dataset_refresh" as any, handleRefresh);
     };
-  }, [refreshDataset]);
+  }, [debouncedRefresh]);
 
   // Listen for scoped detail-only refresh (avoids reloading the entire dataset list)
   useEffect(() => {
     const handleDetailRefresh = (data: { workflowId: string }) => {
-      if (data.workflowId === workflowId) refreshDataset();
+      if (data.workflowId === workflowId) debouncedRefresh();
     };
     emitter.on("vllora_dataset_detail_refresh" as any, handleDetailRefresh);
     return () => {
       emitter.off("vllora_dataset_detail_refresh" as any, handleDetailRefresh);
     };
-  }, [workflowId, refreshDataset]);
+  }, [workflowId, debouncedRefresh]);
 
   // Refresh records when dry run completes (scores are persisted to individual records)
   useEffect(() => {
     const handleDryRunUpdate = (data: { jobId: string; job: { status: string } }) => {
       if (data.job.status === "completed") {
-        refreshDataset();
+        debouncedRefresh();
       }
     };
     emitter.on("vllora_eval_job_update", handleDryRunUpdate);
     return () => {
       emitter.off("vllora_eval_job_update", handleDryRunUpdate);
     };
-  }, [refreshDataset]);
+  }, [debouncedRefresh]);
 
   // Listen for data generation progress from Lucy agent tools (generate_initial_data)
   // This keeps isGeneratingTraces/generationProgress in sync so tab spinners work
@@ -401,21 +410,19 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
     }
   }, [datasets, workflowId]);
 
-  // Load record counts for dropdown
-  useEffect(() => {
-    const loadCounts = async () => {
-      const counts: Record<string, number> = {};
-      counts[workflowId] = records.length;
-      for (const ds of datasets) {
-        if (ds.id !== workflowId) {
-          counts[ds.id] = await getRecordCount(ds.id);
-        }
-      }
-      setDatasetRecordCounts(counts);
-    };
-    if (datasets.length > 1) {
-      loadCounts();
+  // Record counts for dropdown — lazy-loaded, currently unused (DatasetBreadcrumb not rendered)
+  const loadDatasetCounts = useCallback(async () => {
+    if (datasets.length <= 1) return;
+    const counts: Record<string, number> = {};
+    counts[workflowId] = records.length;
+    const otherDatasets = datasets.filter((ds) => ds.id !== workflowId);
+    const results = await Promise.all(
+      otherDatasets.map((ds) => getRecordCount(ds.id)),
+    );
+    for (let i = 0; i < otherDatasets.length; i++) {
+      counts[otherDatasets[i].id] = results[i];
     }
+    setDatasetRecordCounts(counts);
   }, [datasets, workflowId, records.length, getRecordCount]);
 
   // Listen for workflow-triggered section/view mode changes (e.g., grader_config -> evaluator)
@@ -1351,6 +1358,7 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
     // Navigation
     datasets,
     datasetRecordCounts,
+    loadDatasetCounts,
     onBack,
     onSelectDataset,
 

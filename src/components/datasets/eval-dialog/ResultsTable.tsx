@@ -272,6 +272,7 @@ export function ResultsTable({
           </div>
         )}
         <div className="w-10 shrink-0 text-center py-2">Logs</div>
+        {onNavigateToRecord && <div className="w-7 shrink-0" />}
       </div>
 
       {/* Virtualized rows */}

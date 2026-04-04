@@ -177,7 +177,7 @@ export function PerRowDetailsSection({ results, workflowId }: PerRowDetailsSecti
       onRowClick={handleRowClick}
       renderExpandedContent={renderExpandedContent}
       onNavigateToRecord={handleNavigateToRecord}
-      fillHeight
+      maxHeight={500}
     />
   );
 }

@@ -65,9 +65,11 @@ function CopyButton({
 
 interface FinetuneJobDetailsSectionProps {
   job: FinetuneJob;
+  currentStep?: number;
+  maxSteps?: number;
 }
 
-export function FinetuneJobDetailsSection({ job }: FinetuneJobDetailsSectionProps) {
+export function FinetuneJobDetailsSection({ job, currentStep, maxSteps }: FinetuneJobDetailsSectionProps) {
   const items: React.ReactNode[] = [];
 
   items.push(
@@ -160,6 +162,28 @@ export function FinetuneJobDetailsSection({ job }: FinetuneJobDetailsSectionProp
       <span key="duration" className="flex items-center gap-1.5">
         <span className="text-slate-500">{job.status === "running" ? "Elapsed" : "Duration"}</span>
         <span className="text-slate-300">{duration}</span>
+      </span>
+    );
+  }
+
+  // ETA — compute from elapsed time and step progress
+  if (job.status === "running" && currentStep && maxSteps && currentStep > 0 && currentStep < maxSteps) {
+    const elapsedMs = Date.now() - parseFinetuneJobDate(job.created_at).getTime();
+    const msPerStep = elapsedMs / currentStep;
+    const remainingMs = msPerStep * (maxSteps - currentStep);
+    const remainingSec = Math.floor(remainingMs / 1000);
+    let etaStr: string;
+    if (remainingSec < 60) etaStr = `~${remainingSec}s`;
+    else if (remainingSec < 3600) etaStr = `~${Math.ceil(remainingSec / 60)}m`;
+    else {
+      const h = Math.floor(remainingSec / 3600);
+      const m = Math.ceil((remainingSec % 3600) / 60);
+      etaStr = m > 0 ? `~${h}h ${m}m` : `~${h}h`;
+    }
+    items.push(
+      <span key="eta" className="flex items-center gap-1.5">
+        <span className="text-amber-500">ETA</span>
+        <span className="text-amber-400">{etaStr}</span>
       </span>
     );
   }

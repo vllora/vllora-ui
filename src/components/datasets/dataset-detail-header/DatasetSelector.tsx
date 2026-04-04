@@ -28,6 +28,8 @@ interface DatasetSelectorProps {
   onSelect: (workflowId: string) => void;
   /** Called when user clicks "Create new dataset" */
   onCreateNew?: () => void;
+  /** Called when dropdown opens — use to lazy-load record counts */
+  onOpen?: () => void;
   /** Optional className for the trigger button */
   className?: string;
 }
@@ -39,10 +41,11 @@ export function DatasetSelector({
   recordCounts,
   onSelect,
   onCreateNew,
+  onOpen,
   className,
 }: DatasetSelectorProps) {
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={(open) => { if (open && onOpen) onOpen(); }}>
       <DropdownMenuTrigger asChild>
         <button
           className={cn(

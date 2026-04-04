@@ -13,6 +13,7 @@ import {
   Download,
   Loader2,
   RefreshCw,
+  ChevronDown,
 } from "lucide-react";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { FinetuneJobStatusBadge } from "../../FinetuneJobStatusBadge";
@@ -52,12 +53,18 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
   const { latestVersion } = useEvaluatorVersions(job.workflow_id);
   const { getJobEvaluations, refreshJobEvaluations, loadJobs } = FinetuneJobsConsumer();
   const { jobs: evalJobs } = EvalJobsConsumer();
+  const isTrainingActive = job.status === "pending" || job.status === "running";
+  const [showRecords, setShowRecords] = useState(!isTrainingActive);
   const {
     data: evalResults,
     isLoading: isLoadingEvals,
     error: evalsError,
   } = getJobEvaluations(job.id);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [stepProgress, setStepProgress] = useState<{ current: number; max: number } | null>(null);
+  const handleStepProgress = useCallback((current: number, max: number) => {
+    setStepProgress({ current, max });
+  }, []);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
 
@@ -221,7 +228,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
           )}
 
           {/* ── Job Details ── */}
-          <FinetuneJobDetailsSection job={job} />
+          <FinetuneJobDetailsSection job={job} currentStep={stepProgress?.current} maxSteps={stepProgress?.max} />
 
           {/* ── Error ── */}
           {job.error_message && (
@@ -258,6 +265,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
                 workflowId={job.workflow_id}
                 baselineEvalId={baselineEvalId ?? undefined}
                 maxOutputTokens={job.inference_parameters?.max_output_tokens}
+                onStepProgress={handleStepProgress}
               />
             )
           ) : (
@@ -276,13 +284,24 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
           {/* Baseline comparison now lives inside FinetuneChartSelector ("vs Baseline" tab) */}
         </div>
 
-        {/* ── Results table ── */}
+        {/* ── Results table (collapsible — collapsed during training) ── */}
         {job.workflow_id && evalResults && evalResults.results.length > 0 && (
-          <div className="px-4 pb-4 [&_input]:!bg-[#141414] [&_input]:!border-[#262626] [&_button]:!border-[#262626] [&_button]:!text-slate-400 [&_button:hover]:!bg-white/5">
-            <PerRowDetailsSection
-              results={evalResults.results}
-              workflowId={job.workflow_id}
-            />
+          <div className="px-4 pb-4">
+            <button
+              onClick={() => setShowRecords((p) => !p)}
+              className="flex items-center gap-1.5 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors py-2"
+            >
+              <ChevronDown className={cn("h-3 w-3 transition-transform", showRecords && "rotate-180")} />
+              Per-Record Details ({evalResults.results.length} records)
+            </button>
+            {showRecords && (
+              <div className="[&_input]:!bg-[#141414] [&_input]:!border-[#262626] [&_button]:!border-[#262626] [&_button]:!text-slate-400 [&_button:hover]:!bg-white/5">
+                <PerRowDetailsSection
+                  results={evalResults.results}
+                  workflowId={job.workflow_id}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>

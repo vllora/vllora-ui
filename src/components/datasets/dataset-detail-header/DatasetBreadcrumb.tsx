@@ -17,6 +17,7 @@ export interface DatasetBreadcrumbProps {
   onBack: () => void;
   onSelectDataset?: (workflowId: string) => void;
   onCreateNew: () => void;
+  onDropdownOpen?: () => void;
 }
 
 export function DatasetBreadcrumb({
@@ -27,6 +28,7 @@ export function DatasetBreadcrumb({
   onBack,
   onSelectDataset,
   onCreateNew,
+  onDropdownOpen,
 }: DatasetBreadcrumbProps) {
   return (
     <nav className="flex items-center gap-2 text-sm mb-4">
@@ -46,6 +48,7 @@ export function DatasetBreadcrumb({
           recordCounts={datasetRecordCounts}
           onSelect={onSelectDataset}
           onCreateNew={onCreateNew}
+          onOpen={onDropdownOpen}
         />
       ) : (
         <span className="px-2.5 py-1 rounded-md bg-muted/50 text-foreground font-medium">
