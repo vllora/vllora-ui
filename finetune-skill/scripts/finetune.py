@@ -1064,6 +1064,10 @@ def cmd_log_step(args: argparse.Namespace) -> None:
             if e["id"] == args.triggered_by:
                 e["triggers_next"] = next_id
                 break
+    if args.duration:
+        entry["duration"] = args.duration
+    if args.agent:
+        entry["agent"] = args.agent
 
     # Parse optional JSON details and results
     if args.details:
@@ -1086,6 +1090,10 @@ def cmd_log_step(args: argparse.Namespace) -> None:
 
     log_entry = f"\n## {step_label} — {timestamp[:19].replace('T', ' ')}\n"
     log_entry += f"- **Status**: {status_label}\n"
+    if args.agent:
+        log_entry += f"- **Agent**: {args.agent}\n"
+    if args.duration:
+        log_entry += f"- **Duration**: {args.duration}\n"
     log_entry += f"- **Summary**: {args.summary}\n"
     if args.reason:
         log_entry += f"- **Reason**: {args.reason}\n"
@@ -4375,6 +4383,10 @@ def main() -> None:
                    help="Job type for UI display")
     p.add_argument("--model", default=None, help="Model used (e.g., gpt-4o-mini, Qwen3.5-4B)")
     p.add_argument("--triggered-by", type=int, default=None, help="Journal entry ID that caused this step")
+    p.add_argument("--duration", default=None, help="Duration string (e.g., '2 min', '45 sec', '1.5 hours')")
+    p.add_argument("--agent", default=None,
+                   help="Which agent executed this step (e.g., orchestrator, knowledge-extractor, "
+                        "relation-builder, training-monitor). For UI workflow diagram.")
     p.add_argument("--details", default=None, help="JSON string with step-specific details")
     p.add_argument("--results", default=None, help="JSON string with results/metrics")
 

@@ -164,27 +164,36 @@ The user should never look at the execution log and see nothing happening — if
 
 | Step | `--action` | Key `--summary` content |
 |------|-----------|------------------------|
-| 1 | `define_objective` | Workflow ID, objective, output format, source docs |
-| 2 | `extract_documents` | Per-doc: chunks → parts count. Validation result. Gateway verify. |
-| 3 | `build_topics` | Topic count (leaf). Difficulty breakdown. Relevance filter: included/excluded. Relations count. |
-| 4 | `generate_records` | Mode (relations/rag). WHY that records-per-topic count was chosen. Per-topic counts. Prompt types generated (application/analysis/edge-case). 2-3 sample records (question + GT). source_parts coverage. Dedup removed. Upload total. Agent's quality assessment: are prompts clear? Are GTs correct? Any concerns? |
-| 5 | `write_grader` | Template used + **WHY that template**. Criteria list with weights + **WHY those weights**. 10-15 sample records read for calibration — what edge cases were found. Gateway char count. |
-| 5.1 | `dry_run_grader` | Test 1 (hand-crafted): scores for perfect/partial/wrong/over-predict cases. Test 2 (live, 5+ samples): scores + model response summaries. Test 3 (adversarial): over-prediction, under-prediction, format gaming checks. Scoring distribution: does it produce spread (0.05-1.0) for GRPO? Any tests that failed + how fixed. |
-| 4.5 | `topic_balance_check` | Per-topic record counts. Any topic below 50% threshold. Action taken (regenerated N records for topic X). |
-| 5.5 | `data_quality_gate` | Per-gate results with detail: structural (record count, topic balance), diversity (avg distance, near-dupes), completion_length (GT P95, recommended_min, max_output_tokens decision). What warnings were raised and how they were addressed. |
-| 6 | `verify_gateway` | Records, topics, sources, relations, evaluator — all counts. Any mismatches found. |
-| 7 | `create_eval` | Job ID, model. (Auto-logged by script — agent adds `--reason` for WHY this eval was created.) |
-| 7 | `eval_completed` | Results: avg, perfect_rate, zero_rate, per-topic weakest. (Auto-logged by script.) |
-| 7c | `readiness_gate` | PASS/FAIL/WARN. Which hard checks failed. Which soft warnings raised. What the agent decided to fix. |
-| 7c+ | `difficulty_probe` | learnable%, trivial%, dead%, effective%. PASS/WARN/FAIL. Whether K or grader changes are needed. |
-| 7d | `headroom_diagnostic` | 4B score. Gate result. Diagnostic branch taken. 0.8B score if evaluated. Model chosen + WHY. |
-| 7d.5 | `coverage_audit` | Total parts. Easy-only parts. Type B gaps. New records generated. |
-| 7e | `create_training` | Job ID, model, full config (epochs, lr, K, max_output_tokens). (Auto-logged by script — agent adds `--reason`.) |
-| 7e | `training_completed` | Status, early_stop_reason, error. (Auto-logged by script.) |
-| 7e (monitoring) | `training_monitoring` | Progression table. Trigger check results. Per-record inspection findings. |
-| 8a | `per_record_inspection` | Bottom 20% + top 10-15% records read. Grader reason patterns. Response patterns. Reward hacking signals. What was found. |
-| 8b | `post_training_eval` | Trained model score vs base model score. Per-topic comparison. Per-record improved/degraded examples. WHY this eval was created (to measure training improvement). |
-| 8c | `training_analysis` | Per-topic breakdown. Training metrics summary. Improved/degraded records with examples. Recommendations. |
+**⚠️ Every `log-step` completion call MUST include `--duration` and `--agent`.** Without timing, you can't identify bottlenecks. Without agent, you can't trace which agent executed which step in the UI workflow diagram.
+
+- `--duration "2 min"` — how long the step took (calculate from start to completion)
+- `--agent "orchestrator"` — which agent ran this step
+
+Agent names: `orchestrator` (main agent), `knowledge-extractor` (document processing subagent), `relation-builder` (topic-relation subagent), `training-monitor` (training polling subagent), `nemo-data-generator` (NeMo subagent).
+
+| Step | `--action` | `--agent` | Key `--summary` content |
+|------|-----------|-----------|------------------------|
+| 1 | `define_objective` | orchestrator | Workflow ID, objective, output format, source docs |
+| 2 | `extract_documents` | knowledge-extractor | Per-doc: chunks → parts count. Validation result. Gateway verify. |
+| 3 | `build_topics` | orchestrator | Topic count (leaf). Difficulty breakdown. Relevance filter: included/excluded. Relations count. |
+| 4 | `generate_records` | orchestrator | Mode. WHY records-per-topic count. Per-topic counts. Prompt types. 2-3 sample records. source_parts coverage. Dedup. Upload total. Quality assessment. |
+| 4.5 | `topic_balance_check` | orchestrator | Per-topic record counts. Any topic below 50% threshold. Action taken. |
+| 5 | `write_grader` | orchestrator | Template + WHY. Criteria + WHY weights. 10-15 sample records read for calibration. Edge cases found. Gateway char count. |
+| 5.1 | `dry_run_grader` | orchestrator | Test 1 (hand-crafted scores). Test 2 (live 5+ samples). Test 3 (adversarial). Score spread assessment. Any fixes. |
+| 5.5 | `data_quality_gate` | orchestrator | Per-gate detail: structural, diversity, completion_length. Warnings + how addressed. |
+| 6 | `verify_gateway` | orchestrator | Records, topics, sources, relations, evaluator counts. Mismatches. |
+| 7 | `create_eval` | orchestrator | Job ID, model. (Auto-logged by script.) Agent adds `--reason`. |
+| 7 | `eval_completed` | orchestrator | avg, perfect_rate, zero_rate, per-topic weakest. (Auto-logged by script.) |
+| 7c | `readiness_gate` | orchestrator | PASS/FAIL/WARN. Which checks failed. What to fix. |
+| 7c+ | `difficulty_probe` | orchestrator | learnable%, trivial%, dead%, effective%. PASS/WARN/FAIL. |
+| 7d | `headroom_diagnostic` | orchestrator | 4B score. Gate result. Diagnostic branch. 0.8B score. Model chosen + WHY. |
+| 7d.5 | `coverage_audit` | orchestrator | Total parts. Easy-only parts. Type B gaps. New records generated. |
+| 7e | `create_training` | orchestrator | Job ID, model, config. (Auto-logged by script.) Agent adds `--reason`. |
+| 7e | `training_completed` | training-monitor | Status, early_stop_reason, error. (Auto-logged by script.) |
+| 7e (mon) | `training_monitoring` | training-monitor | Progression table. Trigger checks. Per-record inspection. |
+| 8a | `per_record_inspection` | orchestrator | Bottom 20% + top 10-15%. Grader reasons. Response patterns. Reward hacking signals. |
+| 8b | `post_training_eval` | orchestrator | Trained vs base score. Per-topic comparison. Improved/degraded examples. |
+| 8c | `training_analysis` | orchestrator | Per-topic breakdown. Metrics summary. Improved/degraded records. Recommendations. |
 | 9 | `fix_grader` / `fix_records` | What changed, WHY, dry-run before/after. |
 | 9 | `iteration_decision` | Deploy / iterate / escalate. **WHY** — what evidence supports this decision. If deploying: final model name + score. If iterating: what to fix next. If escalating: what's blocking. |
 
