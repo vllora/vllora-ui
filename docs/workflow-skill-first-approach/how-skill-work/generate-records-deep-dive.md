@@ -39,6 +39,8 @@ A training record is a **prompt** — a system message + user message that the m
 
 **Key insight**: This is **RFT (Reinforcement Fine-Tuning)** — no assistant messages are included. The model learns by generating responses and getting scored by the grader, not by copying reference answers.
 
+> **Sequential dependency**: Records must complete fully before grader creation (Step 5). The grader needs to analyze sample records to identify domain-specific scoring criteria. Do not run Steps 4 and 5 in parallel.
+
 **Note**: The system message is a **composed prompt** — it combines the root persona (`--system-prompt`), ancestor topic system_prompts, and the leaf topic's system_prompt. See [System Prompt Composition](#system-prompt-composition) below for details.
 
 ---
@@ -97,10 +99,11 @@ This means a topic with 5 prompt types completes in ~1 LLM call time, not 5x.
 │                        GENERATE RECORDS PIPELINE                            │
 │                     (generate_records.py — Step 4)                          │
 │                                                                             │
-│  3 key features:                                                            │
+│  4 key features:                                                            │
 │    1. Multi-call: 5 prompt types per topic (not 1 big call)                 │
 │    2. Equal distribution by default (--weight-by-source for proportional)    │
 │    3. Two-level parallelism: topics concurrent + calls-per-topic concurrent  │
+│    4. Two-stage GT for multi-label (--no-ground-truth + derive_ground_truth) │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -309,6 +312,35 @@ This means a topic with 5 prompt types completes in ~1 LLM call time, not 5x.
                            └───────────┬───────────┘
                                        │
                                        ▼
+  ┌──────────────────────────────────────────────────────────────────────┐
+  │            TWO-STAGE GT (for multi-label tasks)                      │
+  │                                                                      │
+  │  If --no-ground-truth was used in Stage 1:                          │
+  │                                                                      │
+  │  ┌──────────────────┐     ┌──────────────────────┐                  │
+  │  │ training.jsonl   │────►│ derive_ground_truth.py│                  │
+  │  │ (no GT field)    │     │ --gt-prompt "..."     │                  │
+  │  └──────────────────┘     │ --normalize           │                  │
+  │                           │                       │                  │
+  │                           │ For each record:      │                  │
+  │                           │ 1. Extract user msg   │                  │
+  │                           │ 2. Send to LLM with   │                  │
+  │                           │    topic-agnostic GT   │                  │
+  │                           │    prompt              │                  │
+  │                           │ 3. Write GT back       │                  │
+  │                           └──────────┬────────────┘                  │
+  │                                      │                               │
+  │                                      ▼                               │
+  │                           ┌──────────────────────┐                  │
+  │                           │ training.jsonl       │                  │
+  │                           │ (with complete GT)   │                  │
+  │                           └──────────────────────┘                  │
+  │                                                                      │
+  │  Why: Per-topic generation suppresses labels from other topics       │
+  │  (arXiv:2505.17510). Topic-agnostic GT derivation finds ALL labels. │
+  └──────────────────────────────────────────────────────────────────────┘
+                                       │
+                                       ▼
                            ┌──────────────────────┐
                            │ finetune.py           │
                            │ upload-records        │
@@ -329,6 +361,39 @@ This means a topic with 5 prompt types completes in ~1 LLM call time, not 5x.
                            │ output → {} (empty)   │
                            └──────────────────────┘
 ```
+
+---
+
+## Two-Stage Generation for Multi-Label Tasks
+
+For multi-label classification or structured-output tasks, a two-stage generation approach prevents single-label suppression (arXiv:2505.17510):
+
+**Stage 1: Generate records without ground truth**
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
+  --topics finetune-project/topics.json \
+  --relations finetune-project/relations.json \
+  --knowledge-dir finetune-project/knowledge \
+  --system-prompt "You are..." \
+  --output finetune-project/training.jsonl \
+  --no-ground-truth \
+  --records-per-topic 25
+```
+
+Stage 1 creates records per-topic, which controls difficulty distribution. The `--no-ground-truth` flag skips GT generation during this phase.
+
+**Stage 2: Derive ground truth topic-agnostically**
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/derive_ground_truth.py \
+  --input finetune-project/training.jsonl \
+  --output finetune-project/training.jsonl
+```
+
+`derive_ground_truth.py` derives complete ground truth labels without the topic context that would bias the LLM toward single-label answers. This is critical for multi-label tasks where per-topic generation naturally suppresses co-occurring labels.
+
+**When to use**: Any task where records can belong to multiple categories or require multi-label ground truth. For single-label tasks, the standard single-stage generation (with inline GT) works fine.
+
+**Research basis**: arXiv:2505.17510 shows that generating ground truth within a topic-specific context causes models to suppress labels from other topics, leading to incomplete multi-label annotations.
 
 ---
 

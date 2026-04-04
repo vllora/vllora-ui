@@ -296,6 +296,52 @@ This is when you stop.
 
 ---
 
+## Headroom: Why Base Model Score Matters
+
+**Headroom** = 1.0 - base_model_avg_score. It measures how much room GRPO has to create meaningful gradient signal.
+
+```
+EXAMPLE: Base model scores 0.82 avg on eval (K=1)
+
+  During training (K=8), all 8 completions tend to score similarly:
+    [0.79, 0.83, 0.81, 0.84, 0.80, 0.82, 0.83, 0.81]
+    std = 0.016 → advantages ≈ 0 → zero gradient → no learning
+
+  Headroom = 1.0 - 0.82 = 0.18 → INSUFFICIENT
+
+EXAMPLE: Base model scores 0.35 avg on eval (K=1)
+
+  During training (K=8), completions spread across quality levels:
+    [0.1, 0.2, 0.3, 0.5, 0.6, 0.7, 0.8, 0.4]
+    std = 0.22 → strong advantages → meaningful gradient → learning!
+
+  Headroom = 1.0 - 0.35 = 0.65 → GOOD
+```
+
+| Headroom | Base avg | Signal | Action |
+|---|---|---|---|
+| > 0.75 | < 0.25 | Strong but model is very weak | Normal — GRPO is designed for this (DeepSeek R1-Zero: 15.6% → 71%) |
+| **0.25-0.75** | **0.25-0.75** | **Optimal range** | Proceed with training |
+| < 0.25 | > 0.75 | Weak — model already too good | Eval a smaller model (e.g., 0.8B) for better headroom |
+
+### Eval-Driven Model Selection
+
+The pipeline evaluates models to find the best headroom:
+
+```
+1. Eval Qwen3.5-4B (default)
+   ├── avg score 0.25-0.75 → Good headroom → Train on 4B
+   └── avg score > 0.75   → Too easy for 4B → Continue to step 2
+
+2. Eval Qwen3.5-0.8B
+   ├── avg score 0.25-0.75 → Good headroom → Train on 0.8B
+   └── avg score > 0.75   → Task is trivially easy → Review grader/data
+```
+
+This ensures GRPO always has enough room between "bad" and "good" responses to generate meaningful gradient signal.
+
+---
+
 ## Key Parameters Explained
 
 ### G (response_candidates_count) vs Epochs
@@ -382,7 +428,7 @@ G=64 (very precise — research-grade):
 | **TRL default** | **8** | `num_generations: int = field(default=8)` — [trl/trainer/grpo_config.py](https://github.com/huggingface/trl/blob/main/trl/trainer/grpo_config.py) |
 | **"It Takes Two"** | **2** (viable) | "2-GRPO retains 98.1% of 16-GRPO performance" — [arXiv:2510.00977](https://arxiv.org/abs/2510.00977) |
 
-**Our default: G=8** — matches TRL and Dr. GRPO. Safe, well-tested, and cost-effective.
+**Our default: G=8** — matches TRL and Dr. GRPO. Safe, well-tested, and cost-effective. Previously G=16, changed to G=8 because EBPO (arXiv:2602.05165) shows K=16 can be worse due to diminishing returns — the extra 2x cost provides marginal signal improvement.
 
 ### Other Parameters (Quick Reference)
 
@@ -459,6 +505,8 @@ No truncation (good!) but:
 - Above 0.5 → **most responses are truncated** — increase max_output_tokens or the training signal is garbage
 
 > **⚠️ WARNING**: Setting max_output_tokens above 512 may cause training job failures on cloud infrastructure (OOM). Start with 512 and only increase if clipped_ratio is too high.
+
+> **Auto-adjust**: The `readiness-check` command automatically adjusts `max_output_tokens` based on ground truth token lengths: P95 + 30% headroom. It adjusts **upward** when GT lengths indicate truncation risk, and **downward** when excessive padding wastes compute or causes kl=nan issues from empty token sequences.
 
 ---
 

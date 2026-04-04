@@ -33,19 +33,28 @@ Step 3: Build Topic Hierarchy
     ├── 3d: Build topic-part relations (relation-builder subagent)
     └── 3e: Agent reads source material to verify topic coverage, overlap, balance, relations
     ↓ [Upload: topics + relations + relevance labels]
-    ├─→ Step 4: Generate Records (default — generate_records.py)
-    │     or Step 4B: NeMo Data Designer (optional — requires NeMo server)
     │
-    └─→ Step 5: Write Grader (can start in parallel with Step 4)
+    ↓ (SEQUENTIAL — Step 5 needs sample records from Step 4)
+    Step 4: Generate Records (default — generate_records.py)
+         or Step 4B: NeMo Data Designer (optional — requires NeMo server)
+    ↓
+    Step 5: Write Grader
               ↓ [GATE: dry-run hand-crafted + live (needs records uploaded)]
 Step 4e: Agent reads records from every topic to verify GT consistency, factual accuracy, vocabulary
 Step 5.5: validate_dataset.py [GATE]
-Step 5.5b: data_quality_gate.py [GATE]
+Step 5.5b: data_quality_gate.py [GATE: includes GT distribution diversity checks]
 Step 5.5c: Agent checks GT self-consistency (verdict matches evidence)
 Step 5.1 Test 3: Agent thinks through adversarial grader exploits
 Step 6: Verify
     ↓
-Step 7-9: Evaluate → Train → Iterate
+Step 7: Evaluate → Readiness Gate → Headroom Gate → Train
+    ├── 7b: Eval base model (4B default)
+    ├── 7c: Readiness gate (4 hard + soft checks)
+    ├── 7c+: Difficulty probe
+    ├── 7d: Headroom gate → if avg > 0.75: eval smaller model → choose best headroom → train
+    └── 7e: Training + monitor
+Step 8: Analyze Results
+Step 9: Iterate (If Needed)
 ```
 
 ### Data Flow: Relevance Filtering Through the Pipeline
@@ -64,6 +73,8 @@ Step 4B: NeMo → ⚠️ rag-retrieval does NOT filter by relevance (known limit
 ```
 
 > **GRPO research context**: The SKILL.md includes a "Research Context: This is GRPO, Not SFT" section near the top. GRPO (Group Relative Policy Optimization) has fundamentally different expectations from SFT — low base model scores are expected and desirable, dead-weight prompts are normal, and eval K=1 scores are lower bounds. See that section before interpreting any pipeline metrics.
+
+**Auto-journal**: Pipeline steps auto-log to `pipeline-journal.json` via `_auto_journal()` in `finetune.py`. Commands that auto-journal: `create-eval`, `poll-eval`, `create-training`, `poll-training`, `readiness-check`, `difficulty-probe`, `data-quality-gate`. Each entry records the command, timestamp, exit code, and key outputs — useful for debugging and iteration tracking.
 
 **Each step uploads to the gateway immediately** via `scripts/finetune.py` — the vLLora UI shows progress in real time. There is no final "push" step; Step 6 just verifies everything landed correctly.
 
@@ -141,14 +152,14 @@ All gateway API calls go through `scripts/finetune.py` — a single wrapper scri
 | `finetune.py upload-topics` | 3 | Uploads topic hierarchy |
 | `finetune.py upload-relations` | 3 | Uploads topic-to-part mappings |
 | `finetune.py upload-records` | 4 | Transforms JSONL → gateway format, uploads in batches |
-| `finetune.py upload-grader` | 5 | Uploads JavaScript grader script |
+| `finetune.py upload-grader` | 5 | Validates syntax, runs dry-run on sample records, then uploads JavaScript grader script |
 | `finetune.py verify` | 6 | Checks all data landed in gateway DB |
 | `finetune.py status` | any | Full workflow status: gateway data + checkpoint + jobs + next step |
 | `finetune.py create-eval` | 7b | Creates evaluation job, saves metadata locally |
 | `finetune.py poll-eval` | 7b | Polls eval job until complete, saves results |
 | `finetune.py readiness-check` | 7c | Checks if eval results pass pre-training readiness gate (4 hard + soft checks) |
 | `finetune.py create-training` | 7d | Creates training job, saves metadata locally |
-| `finetune.py poll-training` | 7e | Polls training job until complete, saves status + metrics |
+| `finetune.py poll-training` | 7e | Polls training job until complete, saves status + metrics. Auto-prints a progression table every 5 minutes showing epoch, metrics, and trends |
 | `finetune.py sync-jobs` | 8 | Syncs training + eval jobs from gateway to local tracking files |
 | `finetune.py diagnose-grader` | 9a/9c | Diagnose grader issues: score buckets, reason patterns, grader source, record context check. Classifies zeros into parsing failures / wrong answers / refusals — tells agent whether to fix GRADER or RECORDS. Also includes response pattern analysis (dominant model response patterns, over-prediction from reason fields) and **per-topic classification** (`DEAD_WEIGHT`, `AMBIGUOUS`, `WEAK`, `HARD_BUT_LEARNING`, `OK`) based on score variance. |
 | `finetune.py filter-records` | 9a | Remove bad records from local JSONL + gateway based on eval scores/reasons. Supports `--max-score`, `--reason-pattern`, `--topic` filters. |
@@ -497,6 +508,8 @@ finetune-project/
 
 Each topic's `system_prompt` is a **segment** that gets composed with its ancestors during record generation (Step 4). Write as behavioral instructions using When/For/Given + action verbs (assess, recommend, identify, compare). Each level adds only what the parent doesn't already say. Keep each segment to 1-2 sentences.
 
+> **Topic name sanitization**: Topic names must not contain slashes (`/`). The skill auto-sanitizes slashes to hyphens (`-`) to prevent path-related issues in file names and gateway identifiers.
+
 **`relations.json` structure**:
 ```json
 [
@@ -776,8 +789,8 @@ Adds Gate 3 (GT quality: LLM scores each ground truth for specificity/completene
 
 | Gate | Cost | What it catches | Research basis |
 |------|------|-----------------|----------------|
-| Structural | Free | Duplicate IDs, empty prompts, short GTs, topic imbalance | OpenAI RFT Guide |
-| Diversity | Free | Near-duplicate prompts, low diversity, per-topic redundancy | arXiv:2511.01490, arXiv:2506.19262 |
+| Structural | Free | Duplicate IDs, empty prompts, topic imbalance, topic balance hard fail (<50% median) | OpenAI RFT Guide |
+| Diversity | Free | Near-duplicate prompts, low diversity, per-topic redundancy, **GT distribution** (gt_dominance, label_skew, low_gt_uniqueness) | arXiv:2511.01490, arXiv:2506.19262, MO-GRPO arXiv:2509.22047 |
 | Completion Length | Free | Estimates if `max_output_tokens` is sufficient (GT length × task-complexity multiplier) | DAPO (arXiv:2503.14476), "Tricks or Traps" (arXiv:2508.08221) |
 | GT Quality | $ | Vague ground truths, non-specific policy statements | DeepSeek-R1 (arXiv:2501.12948) |
 | Alignment | $ | Prompt-GT misalignment, multi-part questions with partial answers | OpenAI RFT |
@@ -787,6 +800,8 @@ Adds Gate 3 (GT quality: LLM scores each ground truth for specificity/completene
 - Near-duplicates → run `deduplicate_records.py` or regenerate
 - Thin topics → regenerate with `generate_records.py --append`
 - Low per-topic diversity → regenerate with varied prompt types
+- Label skew → generate more records for underrepresented labels (check `fix` field in output)
+- GT dominance → add records with different GT values to rebalance
 
 **Relationship to readiness gate (Step 7c)**: The data quality gate checks data quality BEFORE eval. The readiness gate checks grader+data interaction AFTER eval. Both are needed — they catch different failure modes.
 
@@ -837,7 +852,14 @@ The UI at `http://localhost:5173/finetune` shows progress throughout the run —
 **Key insight**: Eval is fast (~45 min) and cheap. Training is slow (hours) and expensive.
 
 ```
-Eval → Readiness Gate → [FAIL] → Fix data/grader → Re-eval → ... → [PASS] → Train
+Eval 4B → Readiness Gate → [FAIL] → Fix data/grader → Re-eval → ... → [PASS]
+                                                                         ↓
+                                                                   Headroom Gate
+                                                                    avg > 0.75?
+                                                                   ├── YES → Eval 0.8B → choose best headroom
+                                                                   └── NO  → good headroom
+                                                                         ↓
+                                                                       Train
 ```
 
 **Time**: ~45 min per eval iteration + hours for training.
@@ -871,7 +893,9 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
   --file evaluations/eval-001.json
 ```
 
-The readiness gate runs **4 hard checks** (sample_count, score_std, avg_score, zero_score_frac < 10%) and **soft checks** (quality signals):
+The readiness gate runs **4 hard checks** (sample_count, score_std, avg_score, zero_score_frac < 10%) and **soft checks** (quality signals).
+
+> **max_output_tokens auto-adjust**: `readiness-check` auto-adjusts `max_output_tokens` based on ground truth token P95 + 30% headroom. It adjusts upward (to prevent truncation) and downward (to reduce padding waste and kl=nan risk).
 
 **Hard checks** (must ALL pass — these ask "is the grader working?", not "is the model good?"):
 | Check | Pass criteria | Research basis |
@@ -919,6 +943,15 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py difficulty-probe \
 
 **Research basis**: DOTS+RR (arXiv:2506.05316) proves gradient ∝ p(1-p), maximized at p=0.5. "Hard Examples Are All You Need" (arXiv:2508.14094) shows easy prompts maintain signal for only 2-9% of training. "No Prompt Left Behind" (arXiv:2509.21880) found 30-99% of prompts are zero-variance in standard GRPO. RGR-GRPO (arXiv:2511.12344) shows rubric grading dramatically improves signal density.
 
+### 7c++. Source-Part Coverage Audit (mandatory before training)
+
+**What happens**: Before starting training, the agent runs a mandatory coverage audit that checks all knowledge parts are tested by records with diverse difficulty levels. This ensures no source material is under-represented in the training data — preventing blind spots where the model never practices on certain extracted content.
+
+The audit verifies:
+- Every relevant knowledge part is referenced by at least one record
+- Records cover a mix of difficulty levels (not all easy or all hard)
+- No single topic monopolizes a knowledge source
+
 ### 7d. Start Training (only after readiness gate passes)
 
 ```bash
@@ -928,6 +961,10 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
   --output-model "project-v1" \
   --output-dir training-jobs
 ```
+
+**Headroom gate**: Step 7 includes a mandatory headroom check. Headroom = 1.0 - base_model_avg_score. If the base model avg score > 0.75 (headroom < 0.25), GRPO has insufficient gradient signal — all K=8 completions tend to score similarly, producing zero variance and zero gradient. The agent must eval a smaller model (e.g., 0.8B) instead.
+
+**Eval-driven model selection**: The default flow evaluates 4B first. If avg score > 0.75, the agent evals 0.8B. Training proceeds on whichever model has the best headroom (target: 0.25-0.75 avg score range). This ensures GRPO has enough room between "bad" and "good" responses to generate meaningful gradient signal.
 
 **Base model selection** (start with 4B — 9B OOMs with >100 records at K=8):
 | Model | Best for | Max records (K=8) | OOM risk |
@@ -941,7 +978,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 | Parameter | Default | Rationale |
 |-----------|---------|-----------|
 | `learning_rate` | **5e-6** | Between DeepSeek-R1's 3e-6 (arXiv:2501.12948) and gateway default 1e-5. Food-label E2E test showed 1e-6 too slow to converge. Do NOT use SFT rates (2e-5 to 5e-5). |
-| `response_candidates_count` | **8** (minimum) | GRPO needs multiple candidates for advantage estimation. Published work uses G=8 (Dr. GRPO, TRL) to G=64 (DeepSeekMath). |
+| `response_candidates_count` | **8** (default) | K=8 is the production default (changed from K=16). EBPO (arXiv:2602.05165) shows K=16 can be worse due to diminishing returns. Published work uses G=8 (Dr. GRPO, TRL) to G=64 (DeepSeekMath). |
 | `warmup_steps` | **20-50** | DAPO uses 20, "Tricks or Traps" uses 50. Linear warmup then constant LR. |
 
 **Epoch guidelines** (RFT ≠ SFT — fresh responses each epoch, no repetition risk. Published work: "Tricks or Traps" uses 50 epochs; OpenAI says "hundreds or thousands"). `finetune.py` auto-adjusts epochs based on dataset size when using defaults (no `--config`):

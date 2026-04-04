@@ -29,9 +29,9 @@ Validates data format and distribution without any API calls.
 | Empty user prompts | 0 | Hard | No training signal from empty prompts |
 | Short prompts | < 20 chars → warn | Soft | Trivially short prompts yield no useful signal |
 | Ground truth coverage | >= 70% of records | Soft | GTs enable grader calibration and quality assessment |
-| Short ground truths | < 30 chars → warn | Soft | GTs must be substantive for grading |
 | Topic count | >= 3 leaf topics | Soft | Diversity prevents distribution collapse (arXiv:2511.01490) |
 | Topic dominance | No topic > 40% | Soft | Balanced training data is standard ML practice |
+| Topic balance | No topic < 50% of median count | **Hard** | Severely underrepresented topics get zero GRPO signal |
 | Thin topics | >= 5 records per topic | Soft | GRPO needs enough examples per skill for stable batches |
 | Missing system prompts | 0 → warn | Soft | System prompts define the task context |
 | Orphan topics | 0 → warn | Soft | Records should reference valid topic IDs |
@@ -45,6 +45,11 @@ Analyzes prompt diversity without API calls. Uses character trigram Jaccard simi
 | Near-duplicate fraction | < 10% at 0.85 similarity | Soft | Redundant prompts waste training compute |
 | Average pairwise distance | >= 0.40 | Soft | "Synthetic Eggs in Many Baskets" (arXiv:2511.01490): low diversity causes distribution collapse |
 | Per-topic diversity | Avg distance >= 0.35 within topic | Soft | "What Matters in LLM-generated Data" (arXiv:2506.19262): diversity > quality > complexity |
+| GT dominance | Most common exact GT ≤ 25% of records | Soft | Prevents model over-learning one answer pattern |
+| Label skew | No single label > 40% of records | Soft | GRPO advantage bias toward dominant labels (MO-GRPO arXiv:2509.22047 Theorem 1) |
+| GT uniqueness | ≥ 10% unique GT values | Soft | Formulaic outputs prevent diverse answer learning |
+
+**GT distribution checks** analyze the ground truth answers themselves (not just prompts). For multi-label tasks, labels are split on comma. Each check includes a `fix` field with concrete next steps (e.g., which underrepresented labels to generate more records for).
 
 **Why trigrams instead of embeddings?** Zero dependencies, instant execution, and sufficient for catching obvious redundancy. Embedding-based diversity analysis can be added as a future enhancement but requires an embedding model call per record.
 
@@ -108,11 +113,12 @@ The multiplier accounts for model verbosity — base models produce chain-of-tho
 
 | Scenario | Gates | Command |
 |----------|-------|---------|
-| Quick check during iteration | structural, diversity | `--gate structural,diversity` (default) |
-| First pipeline pass | All 4 gates | `--all-gates` |
-| After regenerating records | structural, diversity | Default is sufficient |
-| After rewriting ground truths | All 4 gates | `--all-gates --sample 50` |
+| Quick check during iteration | structural, diversity, completion_length | Default (no flags needed) |
+| First pipeline pass | All gates | `--all-gates` |
+| After regenerating records | structural, diversity, completion_length | Default is sufficient |
+| After rewriting ground truths | All gates | `--all-gates --sample 50` |
 | Debugging grader issues | GT quality only | `--gate ground_truth_quality --sample 50` |
+| Checking label balance | diversity only | `--gate diversity` (includes GT distribution checks) |
 
 ## Relationship to Other Gates
 
@@ -124,9 +130,11 @@ Data Quality Gate (Step 5.5b)     Readiness Gate (Step 7c)         Difficulty Pr
   Fix: rewrite data                 Fix: adjust grader or data       Fix: grader rubric, K, SFT
   
   Structural → Diversity →          Sample Count → Score Variance →  Difficulty buckets →
-  GT Quality → Alignment            Concentration → Pass Rate → ...  Zero-var prediction →
-                                                                     Grader granularity →
+  GT Distribution → GT Quality →    Concentration → Pass Rate →      Zero-var prediction →
+  Alignment → Completion Length      Headroom Gate → Coverage Audit   Grader granularity →
                                                                      Per-topic signal
+
+  All three auto-journal results to pipeline-journal.json via _auto_journal().
 ```
 
 Three gates catch three different failure modes:
@@ -164,7 +172,26 @@ Issue: GT doesn't address "consumer understanding" aspect at all.
 
 **Fix**: Either narrow the prompt ("What is the relationship between RACC and serving size?") or expand the GT to cover all asked aspects.
 
-### Pattern 3: Low Diversity (Diversity gate)
+### Pattern 3: GT Distribution Skew (Diversity gate)
+
+**Symptom**: `label_skew` or `gt_dominance` warning. One label or GT value dominates the dataset.
+
+**Example**:
+```
+240 records, label "milk" appears in 52% of records.
+GT "milk" is the most common exact GT (30% of all records).
+Other labels: sesame (4%), shellfish (5%), fish (6%).
+```
+
+**Why it matters**: GRPO advantage is biased toward higher-variance reward components (MO-GRPO arXiv:2509.22047). If "milk" dominates, the model over-predicts milk and under-predicts rare labels.
+
+**Fix**:
+1. Generate more records for underrepresented labels (the `fix` field lists which ones)
+2. Add multi-label combinations (e.g., "milk, sesame" records) to increase rare label exposure
+3. For classification tasks: ensure each class has proportional representation
+4. Do NOT remove dominant-label records — just add more of the rare ones
+
+### Pattern 4: Low Diversity (Diversity gate)
 
 **Symptom**: Near-duplicate fraction > 10%, or average pairwise distance < 0.40.
 

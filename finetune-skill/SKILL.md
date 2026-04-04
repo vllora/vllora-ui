@@ -1240,11 +1240,24 @@ Log the coverage audit results in `execution-log.md`:
 
 **⚠️ HEADROOM GATE (MANDATORY — do NOT skip):**
 
-This is a HARD GATE. You MUST have a base model eval with avg score < 0.75 before proceeding to training. If the headroom gate fails (any model scores >0.75), follow the diagnostic tree below to identify the root cause and fix it.
+This is a HARD GATE with TWO bounds. You MUST have a base model eval with avg score between 0.05 and 0.75 before proceeding to training.
 
-**Why this gate exists**: Without it, the agent proceeds to training, wastes GPU time, and training early-stops due to score degradation. Catching high base model scores here saves hours of compute.
+- **Lower bound (< 0.05)**: Model has no latent capability — GRPO cannot create ability from scratch (arXiv:2504.03380: gradient vanishes at p=0; arXiv:2602.14868: Goldilocks RL confirms).
+- **Upper bound (> 0.75)**: Near-zero gradient — most K=8 groups have zero variance (arXiv:2508.14094: 3.7% learnable steps).
+- **Optimal zone (0.30-0.70)**: Maximum GRPO gradient signal. arXiv:2504.03380 Table 1 explicitly validated this range across 5 benchmarks.
 
-**Diagnostic tree when headroom gate fails (base model avg >0.75):**
+**Why this gate exists**: Without it, the agent proceeds to training, wastes GPU time, and training early-stops due to score degradation or flat reward. Catching extreme base model scores here saves hours of compute.
+
+**Diagnostic tree when capability gate fails (base model avg < 0.05):**
+
+The model has near-zero capability on this task. GRPO amplifies existing ability — it cannot create it.
+
+- **Option 1**: Try a larger model (e.g., if on 0.8B, try 4B). Larger models have more latent capability.
+- **Option 2**: Try an instruction-tuned variant (e.g., Qwen3.5-4B-Instruct). Instruction tuning gives the model a baseline to build from.
+- **Option 3**: SFT warmup — fine-tune on a small set of correct examples first, THEN run GRPO. DeepSeek-R1 (arXiv:2501.12948) used SFT cold-start before GRPO. **Note: our pipeline does not currently support SFT — this requires manual training outside the pipeline, then using the SFT checkpoint as the base model for GRPO.**
+- **Option 4**: Simplify the task — break it into sub-tasks the model can partially solve. A task the model cannot do at all is not suitable for GRPO.
+
+**Diagnostic tree when headroom gate fails (base model avg > 0.75):**
 
 There are three distinct root causes — each has a different fix. Diagnose before acting.
 
@@ -1255,7 +1268,8 @@ There are three distinct root causes — each has a different fix. Diagnose befo
 **Step B: Eval a smaller model (0.8B) on the same records.** This distinguishes "model too good" from "records too easy."
 - If **0.8B also scores >0.75**: the records are too easy — even a much weaker model aces them. The records test surface patterns, not domain knowledge. Fix: regenerate harder records that require inference, hidden knowledge, or edge-case reasoning (arXiv:2505.17063: LLM rewriting of easy examples into harder variants improves GRPO training). Also consider adding harder sub-topics that the current topic hierarchy missed.
 - If **0.8B scores 0.10-0.75**: the model is genuinely good at this task, but 0.8B has headroom. Fix: train 0.8B instead of 4B — natural headroom without changing data.
-- If **0.8B scores <0.10**: 0.8B can't do the task at all. Try 2B as middle ground, or accept that this task needs 4B and explore grader strictness.
+- If **0.8B scores <0.05**: 0.8B has no latent capability (capability gate FAIL). Do NOT train 0.8B with GRPO — it will waste compute. Instead: distill from 4B (SFT the 0.8B on 4B's correct outputs, per arXiv:2501.12948 §4), or accept that this task needs 4B and explore grader strictness.
+- If **0.8B scores 0.05-0.10**: 0.8B has marginal capability. Training may work but expect slow convergence and high compute cost per improvement. Consider distillation as a more efficient path.
 
 **Step C: If records are hard AND 0.8B has no headroom AND grader is strict** — the task itself may be too simple for GRPO at any model size. Report to user: the base model already meets requirements, or the task needs to be reframed to require skills the model lacks.
 
@@ -1276,8 +1290,8 @@ Training starts here — only reached when the readiness gate indicates data and
 
 | Model | When to use | Max records (K=8) | OOM risk |
 |-------|-------------|-------------------|----------|
-| `Qwen3.5-0.8B` | When 4B scores >0.75 and 0.8B scores 0.10-0.75 — best headroom for narrow tasks | ~1000 | Very low |
-| `Qwen3.5-2B` | Middle ground when 0.8B scores <0.10 (can't do task) and 4B scores >0.75 | ~800 | Low |
+| `Qwen3.5-0.8B` | When 4B scores >0.75 and 0.8B scores 0.05-0.75 — best headroom for narrow tasks | ~1000 | Very low |
+| `Qwen3.5-2B` | Middle ground when 0.8B scores <0.05 (no capability) and 4B scores >0.75 | ~800 | Low |
 | `Qwen3.5-4B` | When 4B scores <0.75 — default choice with good capacity and headroom | ~500 | Low |
 | `Qwen3.5-9B` | Only if 4B scores <0.10 and task requires complex reasoning (very rare) | ~100 | High with >100 records |
 

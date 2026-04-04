@@ -13,18 +13,21 @@ Step 2: Extract Documents
     ↓ (hard gate: extraction validated + gateway verified)
 Step 3: Build Topic Hierarchy
     ↓ (relevance filter applied, topics + relations uploaded)
-    ├─→ Step 4: Generate Records (default)
-    │   or Step 4B: NeMo (optional)
     │
-    └─→ Step 5: Write Grader        ← parallel with Step 4
+    ↓ (SEQUENTIAL — Step 5 needs sample records from Step 4)
+    Step 4: Generate Records (default)
+         or Step 4B: NeMo (optional)
+         optional: derive_ground_truth.py (two-stage GT for multi-label)
+    ↓
+    Step 5: Write Grader
             ↓
 Step 5.5: Validate Dataset
-Step 5.5b: Data Quality Gate
+Step 5.5b: Data Quality Gate (includes GT distribution diversity checks)
     ↓
-Step 7: Evaluate → Train → Iterate
+Step 7: Evaluate → Readiness Gate → Headroom Gate → Train → Iterate
 ```
 
-Steps 4 and 5 can run in parallel — both depend on Steps 2+3, not on each other.
+Step 5 (Write Grader) must run after Step 4 (Generate Records) — the grader needs sample records to identify domain-specific scoring criteria.
 
 ---
 
@@ -138,6 +141,19 @@ training.jsonl (200+ records)
          ↓
   deduplicate_records.py (threshold 0.85) ← MANDATORY
          ↓
+  ┌──────────────────────────────────────────────────────────────┐
+  │ TWO-STAGE GT (if --no-ground-truth was used in Stage 1):    │
+  │                                                              │
+  │  training.jsonl ──► derive_ground_truth.py                   │
+  │  (no GT field)      --gt-prompt "..." --normalize            │
+  │                           │                                  │
+  │                           ▼                                  │
+  │                     training.jsonl (with complete GT)         │
+  │                                                              │
+  │  Topic-agnostic GT derivation prevents single-label          │
+  │  suppression in multi-label tasks (arXiv:2505.17510)         │
+  └──────────────────────────────────────────────────────────────┘
+         ↓
   upload-records (incremental or batch)
          ↓
   ✓ Records on gateway
@@ -232,7 +248,9 @@ training.jsonl + topics.json + all-parts-index.json
          ↓
   validate_dataset.py ──── [HARD GATE: JSON, fields, RFT, references]
          ↓
-  data_quality_gate.py ─── [HARD/WARN GATE: diversity, duplicates, GT quality, alignment]
+  data_quality_gate.py ─── [HARD/WARN GATE: diversity, duplicates, GT quality, alignment,
+                            gt_dominance, label_skew, low_gt_uniqueness, topic balance hard fail,
+                            GT distribution diversity (label coverage, multi-label completeness)]
          ↓
   ✓ Ready for evaluation (Step 7)
 ```
@@ -291,6 +309,7 @@ UI:
 | 4B | `curated-seed.parquet` | `finetune-project/` | NeMo seed (one row per leaf topic) |
 | 4B | `nemo-dataset.json` | `finetune-project/` | Raw NeMo output rows |
 | 4B | `nemo-metadata.jsonl` | `finetune-project/` | Judge scores sidecar |
+| 4 | *(derive_ground_truth.py)* | *(updates training.jsonl in-place)* | Derives complete GT topic-agnostically for multi-label tasks (optional — Stage 2 of two-stage generation) |
 | 5 | `grader.js` | `finetune-project/` | JavaScript grader function |
 | 5.5b | `data-quality-report.json` | `finetune-project/` | Quality gate results |
 
@@ -307,4 +326,4 @@ UI:
 | Grader dry-run (hand-crafted) | 5.1 | Hard | Syntax errors, basic scoring logic | Fix grader code |
 | Grader dry-run (live) | 5.1 | Hard | Real model output compatibility | Fix extraction/parsing to handle actual formats |
 | `validate_dataset.py` | 5.5 | Hard | JSON validity, required fields, no assistant messages, topic/parts cross-references | Fix records |
-| `data_quality_gate.py` | 5.5b | Hard/Warn | Duplicate IDs, prompt length, diversity, GT quality, alignment | Fix data (regenerate, deduplicate, or adjust) |
+| `data_quality_gate.py` | 5.5b | Hard/Warn | Duplicate IDs, prompt length, diversity, GT quality, alignment, gt_dominance, label_skew, low_gt_uniqueness, topic balance (hard fail) | Fix data (regenerate, deduplicate, or adjust) |

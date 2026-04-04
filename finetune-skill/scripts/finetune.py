@@ -2104,30 +2104,56 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
             print(f"  ✓ All source parts have at least one hard record — no coverage gaps.", file=sys.stderr)
 
     # ── Headroom check (auto — tells agent what to do next) ──
+    # Research: GRPO gradient ∝ p(1-p), peaks at p=0.5, zero at p=0 and p=1.
+    # Optimal zone: 0.30-0.70 (arXiv:2504.03380 Table 1).
+    # Lower bound: <0.05 = model has no latent capability (arXiv:2602.14868).
+    # Upper bound: >0.75 = near-zero gradient (arXiv:2508.14094).
     print(f"\n── Headroom Check (auto) ──", file=sys.stderr)
-    if avg > 0.80:
+    if avg < 0.05:
+        print(f"  ✗ CAPABILITY GATE FAIL: avg={avg:.3f} (<0.05)", file=sys.stderr)
+        print(f"  Model has no latent capability on this task — GRPO cannot create", file=sys.stderr)
+        print(f"  ability from scratch (arXiv:2504.03380: gradient vanishes at p=0).", file=sys.stderr)
+        print(f"  DO NOT proceed to training with this model.", file=sys.stderr)
+        print(f"  → Try a larger model or instruction-tuned variant.", file=sys.stderr)
+        print(f"  → If no model scores >0.05: task may need SFT warmup first", file=sys.stderr)
+        print(f"    (DeepSeek arXiv:2501.12948: SFT cold-start before GRPO).", file=sys.stderr)
+    elif avg > 0.80:
         print(f"  ⚠ HEADROOM GATE FAIL: avg={avg:.3f} (>0.80)", file=sys.stderr)
         print(f"  GRPO will produce near-zero improvement (arXiv:2508.14094: 3.7% learnable steps).", file=sys.stderr)
         print(f"  DO NOT proceed to training with this model.", file=sys.stderr)
         print(f"  → Eval a smaller model (e.g., Qwen3.5-0.8B) to find better headroom.", file=sys.stderr)
-        print(f"  → If 0.8B also scores >0.75: records may be too easy — regenerate harder variants.", file=sys.stderr)
+        print(f"  → But first check 0.8B scores >0.05 — if not, it lacks capability", file=sys.stderr)
+        print(f"    and distillation from 4B is the right path (arXiv:2501.12948 §4).", file=sys.stderr)
+        print(f"  → If 0.8B also scores >0.75: data/grader too easy — make grader stricter.", file=sys.stderr)
     elif avg > 0.75:
         print(f"  ⚠ HEADROOM WARNING: avg={avg:.3f} (0.75-0.80 range)", file=sys.stderr)
         print(f"  GRPO efficiency reduced. Consider evaluating a smaller model for better headroom.", file=sys.stderr)
-        print(f"  → Eval Qwen3.5-0.8B to compare. If 0.8B scores 0.10-0.75, train 0.8B instead.", file=sys.stderr)
+        print(f"  → Eval Qwen3.5-0.8B to compare. If 0.8B scores 0.05-0.75, train 0.8B instead.", file=sys.stderr)
+    elif 0.30 <= avg <= 0.70:
+        print(f"  ✓ Headroom OPTIMAL: avg={avg:.3f} (0.30-0.70 sweet spot).", file=sys.stderr)
+        print(f"  Maximum GRPO gradient signal (arXiv:2504.03380). Proceed to training.", file=sys.stderr)
+    elif avg < 0.15:
+        print(f"  ✓ Headroom OK: avg={avg:.3f} (<0.75). Trainable but weak.", file=sys.stderr)
+        print(f"  Model can learn but expect slow convergence. Check per-prompt histogram —", file=sys.stderr)
+        print(f"  if many prompts score 0.0, only a few are driving learning.", file=sys.stderr)
     else:
         print(f"  ✓ Headroom OK: avg={avg:.3f} (<0.75). Proceed to training.", file=sys.stderr)
 
     # ── Mandatory next steps prompt ──
     print(f"\n── NEXT STEPS (mandatory) ──", file=sys.stderr)
-    if verdict == "FAIL":
+    if avg < 0.05:
+        print(f"  1. Log this eval: log-step --action capability_fail ...", file=sys.stderr)
+        print(f"  2. Try a larger/instruction-tuned model, or SFT warmup first", file=sys.stderr)
+        print(f"  3. Do NOT proceed to GRPO training with this model", file=sys.stderr)
+    elif verdict == "FAIL":
         print(f"  1. Fix the failed checks listed above", file=sys.stderr)
         print(f"  2. Re-run eval", file=sys.stderr)
         print(f"  3. Re-run readiness-check", file=sys.stderr)
     elif avg > 0.75:
         print(f"  1. Log this eval: log-step --action headroom_diagnostic ...", file=sys.stderr)
         print(f"  2. Eval smaller model: create-eval --model Qwen3.5-0.8B ...", file=sys.stderr)
-        print(f"  3. Compare headroom and choose training model", file=sys.stderr)
+        print(f"  3. Check 0.8B scores >0.05 (capability floor) before training", file=sys.stderr)
+        print(f"  4. Compare headroom and choose training model", file=sys.stderr)
     else:
         print(f"  1. Log this eval: log-step + log-iteration", file=sys.stderr)
         print(f"  2. Run difficulty-probe on this eval", file=sys.stderr)
@@ -3073,20 +3099,23 @@ def cmd_create_training(args: argparse.Namespace) -> None:
         "display_name": display_name,
     }
 
+    # Start with research-informed defaults, then merge user overrides.
+    # This ensures lr, lora_rank, epochs, batch_size are always present
+    # even when user only passes partial config (e.g., just max_output_tokens).
+    payload["training_config"] = {
+        "learning_rate": 0.000005,  # 5e-6: between DeepSeek-R1's 3e-6 (arXiv:2501.12948) and gateway default 1e-5.
+        "lora_rank": 8,
+        "gradient_accumulation_steps": 5,
+        "epochs": 8,  # Default; overridden below by adaptive logic
+        "batch_size": 5,
+    }
     if args.config:
         try:
-            payload["training_config"] = json.loads(args.config)
+            user_config = json.loads(args.config)
+            payload["training_config"].update(user_config)
         except json.JSONDecodeError:
             print(f"Error: Invalid JSON for --config", file=sys.stderr)
             sys.exit(1)
-    else:
-        payload["training_config"] = {
-            "learning_rate": 0.000005,  # 5e-6: between DeepSeek-R1's 3e-6 (arXiv:2501.12948) and gateway default 1e-5.
-            "lora_rank": 8,
-            "gradient_accumulation_steps": 5,
-            "epochs": 8,  # Default; overridden below by adaptive logic if user didn't set --config
-            "batch_size": 5,
-        }
 
     # Adaptive defaults based on dataset size and model choice.
     # Fetches the workflow once to get record_count, then adjusts epochs and
@@ -3128,11 +3157,12 @@ def cmd_create_training(args: argparse.Namespace) -> None:
         elif "9b" in model_lower and k_count > 8:
             print(f"  ⚠ WARNING: {base_model} with K={k_count} may OOM. Consider K=8 or use 4B model.", file=sys.stderr)
 
-    # Adaptive epochs (only when using defaults, not user --config)
+    # Adaptive epochs (unless user explicitly set epochs in --config)
     # Small datasets exhaust quickly and need more passes; large datasets plateau earlier.
     # Ref: DeepSeek-R1 (arXiv:2501.12948) used ~50k records with ~2 epochs;
     #       empirical testing showed plateau at epoch 3 with 225 records.
-    if not args.config and record_count > 0:
+    user_set_epochs = args.config and "epochs" in (args.config or "")
+    if not user_set_epochs and record_count > 0:
         if record_count < 50:
             payload["training_config"]["epochs"] = 15
         elif record_count < 200:
