@@ -7,15 +7,24 @@
  */
 
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { FinetuneEvalResultsResponse, FlatEvaluationResult } from "@/services/finetune-api";
 import {
   parseScoreBreakdown,
   getAllCriteriaNames,
 } from "@/utils/parse-score-breakdown";
+import { getScoreColorClass, formatScore } from "@/utils/parse-score-breakdown";
 import { ResultsTable } from "@/components/datasets/eval-dialog/ResultsTable";
 import { EpochScoresTable, type EpochScore } from "./EpochScoresTable";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { emitter } from "@/utils/eventEmitter";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
 
 interface PerRowDetailsSectionProps {
@@ -140,15 +149,54 @@ export function PerRowDetailsSection({ results, workflowId }: PerRowDetailsSecti
     return { flatResults: flat, epochDataMap: epochMap };
   }, [results]);
 
+  // Filter presets
+  type FilterPreset = "all" | "failing" | "improved" | "regressed" | "perfect";
+  const [activeFilter, setActiveFilter] = useState<FilterPreset>("all");
+
+  const filteredResults = useMemo(() => {
+    switch (activeFilter) {
+      case "failing": return flatResults.filter((r) => r.score != null && r.score < 0.5);
+      case "improved": return flatResults.filter((r) => r.trend != null && r.trend > 0);
+      case "regressed": return flatResults.filter((r) => r.trend != null && r.trend < 0);
+      case "perfect": return flatResults.filter((r) => r.score != null && r.score >= 1.0);
+      default: return flatResults;
+    }
+  }, [flatResults, activeFilter]);
+
+  // Row click → open side panel (toggle off if same row)
   const handleRowClick = useCallback((result: FlatEvaluationResult) => {
-    setExpandedRowId(prev => prev === result.dataset_row_id ? null : result.dataset_row_id);
+    setExpandedRowId((prev) => prev === result.dataset_row_id ? null : result.dataset_row_id);
   }, []);
 
-  const renderExpandedContent = useCallback((result: FlatEvaluationResult) => {
-    const data = epochDataMap.get(result.dataset_row_id);
-    if (!data || data.epochs.length === 0) return null;
-    return <EpochScoresTable epochs={data.epochs} criteriaNames={data.criteriaNames} />;
-  }, [epochDataMap]);
+  // Navigate prev/next in filtered list
+  const selectedResult = filteredResults.find((r) => r.dataset_row_id === expandedRowId);
+  const selectedIndex = selectedResult ? filteredResults.indexOf(selectedResult) : -1;
+  const handlePrev = useCallback(() => {
+    if (selectedIndex > 0) setExpandedRowId(filteredResults[selectedIndex - 1].dataset_row_id);
+  }, [selectedIndex, filteredResults]);
+  const handleNext = useCallback(() => {
+    if (selectedIndex < filteredResults.length - 1) setExpandedRowId(filteredResults[selectedIndex + 1].dataset_row_id);
+  }, [selectedIndex, filteredResults]);
+
+  // Keyboard nav
+  useEffect(() => {
+    if (!expandedRowId) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "ArrowUp") { e.preventDefault(); handlePrev(); }
+      else if (e.key === "ArrowDown") { e.preventDefault(); handleNext(); }
+      else if (e.key === "Escape") setExpandedRowId(null);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [expandedRowId, handlePrev, handleNext]);
+
+  const filterCounts = useMemo(() => ({
+    all: flatResults.length,
+    failing: flatResults.filter((r) => r.score != null && r.score < 0.5).length,
+    improved: flatResults.filter((r) => r.trend != null && r.trend > 0).length,
+    regressed: flatResults.filter((r) => r.trend != null && r.trend < 0).length,
+    perfect: flatResults.filter((r) => r.score != null && r.score >= 1.0).length,
+  }), [flatResults]);
 
   if (flatResults.length === 0) {
     return (
@@ -160,24 +208,159 @@ export function PerRowDetailsSection({ results, workflowId }: PerRowDetailsSecti
 
   const handleNavigateToRecord = useCallback((_cloudRowId: string, result: FlatEvaluationResult) => {
     const gatewayId = (result?.row?.id ?? _cloudRowId) as string;
-    const record = sortedRecords.find(r => r.id === gatewayId);
+    const record = sortedRecords.find((r) => r.id === gatewayId);
     if (record?.topic && workflowId) {
       window.dispatchEvent(new CustomEvent("vllora_navigate_to_job", {
         detail: { jobId: record.topic, type: "topic" },
       }));
     } else if (workflowId) {
-      emitter.emit('vllora_navigate_to_record', { workflowId, recordId: gatewayId });
+      emitter.emit("vllora_navigate_to_record", { workflowId, recordId: gatewayId });
     }
   }, [sortedRecords, workflowId]);
 
+  // Extract text from row data for the side panel
+  const getInputText = (row?: Record<string, unknown>): string => {
+    if (!row?.messages || !Array.isArray(row.messages)) return "—";
+    const userMsg = row.messages.find((m: unknown) => (m as Record<string, unknown>)?.role === "user") as Record<string, unknown> | undefined;
+    return (userMsg?.content as string)?.trim() ?? "—";
+  };
+  const getOutputText = (row?: Record<string, unknown>): string | null => {
+    if (!row?.messages || !Array.isArray(row.messages)) return null;
+    const msgs = row.messages.filter((m: unknown) => (m as Record<string, unknown>)?.role === "assistant") as Record<string, unknown>[];
+    return (msgs[msgs.length - 1]?.content as string)?.trim() ?? null;
+  };
+
+  const FILTER_BUTTONS: { key: FilterPreset; label: string; color?: string; tooltip: string }[] = [
+    { key: "all", label: "All", tooltip: "Show all records" },
+    { key: "failing", label: "Score < 0.5", color: "text-red-400", tooltip: "Records scoring below 0.5" },
+    { key: "improved", label: "Score ↑", color: "text-emerald-400", tooltip: "Records that scored higher than the previous evaluation" },
+    { key: "regressed", label: "Score ↓", color: "text-amber-400", tooltip: "Records that scored lower than the previous evaluation" },
+    { key: "perfect", label: "Score = 1.0", color: "text-emerald-300", tooltip: "Records with a perfect score" },
+  ];
+
+  // Side panel data
+  const panelEpochData = expandedRowId ? epochDataMap.get(expandedRowId) : null;
+
   return (
-    <ResultsTable
-      results={flatResults}
-      expandedRowId={expandedRowId}
-      onRowClick={handleRowClick}
-      renderExpandedContent={renderExpandedContent}
-      onNavigateToRecord={handleNavigateToRecord}
-      maxHeight={500}
-    />
+    <div className="relative">
+      {/* Table (always full width) */}
+      <div>
+        {/* Filter presets */}
+        <div className="flex items-center gap-1 mb-2">
+          {FILTER_BUTTONS.map(({ key, label, color, tooltip }) => {
+            const count = filterCounts[key];
+            if (key !== "all" && count === 0) return null;
+            return (
+              <button
+                key={key}
+                onClick={() => setActiveFilter(key)}
+                title={tooltip}
+                className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                  activeFilter === key
+                    ? "bg-zinc-700/80 text-zinc-200"
+                    : `text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/40 ${color ?? ""}`
+                }`}
+              >
+                {label} <span className="text-zinc-600 ml-0.5">{count}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <ResultsTable
+          results={filteredResults}
+          onRowClick={handleRowClick}
+          onNavigateToRecord={handleNavigateToRecord}
+          maxHeight={500}
+          hideChevron
+        />
+      </div>
+
+      {/* Record inspection drawer */}
+      <Sheet open={!!expandedRowId} onOpenChange={(open) => { if (!open) setExpandedRowId(null); }}>
+        <SheetContent side="right" className="w-[90vw] sm:w-[60vw] sm:max-w-[900px] bg-[#0a0a0a] border-zinc-800 p-0 flex flex-col">
+          {selectedResult && (
+            <>
+              {/* Header */}
+              <SheetHeader className="shrink-0 border-b border-zinc-800/60 px-5 py-3 space-y-0">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <SheetTitle className="text-[12px] font-medium text-zinc-400">
+                      Row {selectedResult.row_index}
+                    </SheetTitle>
+                    {selectedResult.score != null && (
+                      <span className={cn("font-mono text-lg font-bold", getScoreColorClass(selectedResult.score))}>
+                        {formatScore(selectedResult.score)}
+                      </span>
+                    )}
+                    {selectedResult.trend != null && selectedResult.trend !== 0 && (
+                      <span className={cn(
+                        "text-[11px] font-mono px-1.5 py-0.5 rounded",
+                        selectedResult.trend > 0 ? "text-emerald-400 bg-emerald-500/10" : "text-red-400 bg-red-500/10",
+                      )}>
+                        {selectedResult.trend > 0 ? "+" : ""}{selectedResult.trend.toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-0.5">
+                    <button onClick={handlePrev} disabled={selectedIndex <= 0} className="p-1.5 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 disabled:opacity-20 rounded transition-colors" title="Previous (↑)">
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                    </button>
+                    <span className="text-[10px] text-zinc-600 min-w-[40px] text-center">{selectedIndex + 1}/{filteredResults.length}</span>
+                    <button onClick={handleNext} disabled={selectedIndex >= filteredResults.length - 1} className="p-1.5 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 disabled:opacity-20 rounded transition-colors" title="Next (↓)">
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </SheetHeader>
+
+              {/* Sticky: Input + Output */}
+              <div className="shrink-0 border-b border-zinc-800/60 px-5 py-3 space-y-3">
+                {(() => {
+                  const input = getInputText(selectedResult.row as Record<string, unknown>);
+                  if (input === "—") return null;
+                  return (
+                    <section>
+                      <h4 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-1.5">Input</h4>
+                      <div className="text-[11px] text-zinc-300 leading-relaxed whitespace-pre-wrap bg-zinc-900/60 border border-zinc-800/40 rounded-md p-3 max-h-[120px] overflow-y-auto">
+                        {input}
+                      </div>
+                    </section>
+                  );
+                })()}
+                {(() => {
+                  const output = getOutputText(selectedResult.row as Record<string, unknown>);
+                  if (!output) return null;
+                  return (
+                    <section>
+                      <h4 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-1.5">Model Output</h4>
+                      <div className="text-[11px] text-zinc-300 leading-relaxed whitespace-pre-wrap bg-zinc-900/60 border border-zinc-800/40 rounded-md p-3 max-h-[120px] overflow-y-auto">
+                        {output}
+                      </div>
+                    </section>
+                  );
+                })()}
+              </div>
+
+              {/* Scrollable: Epoch score history */}
+              {panelEpochData && panelEpochData.epochs.length > 0 && (
+                <div className="flex-1 min-h-0 flex flex-col">
+                  <div className="shrink-0 px-5 pt-3 pb-1.5">
+                    <h4 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
+                      Score History ({panelEpochData.epochs.length} evaluations)
+                    </h4>
+                  </div>
+                  <div className="flex-1 overflow-y-auto px-5 pb-4">
+                    <div className="border border-zinc-800/40 rounded-md overflow-hidden">
+                      <EpochScoresTable epochs={panelEpochData.epochs} criteriaNames={panelEpochData.criteriaNames} compact />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+    </div>
   );
 }

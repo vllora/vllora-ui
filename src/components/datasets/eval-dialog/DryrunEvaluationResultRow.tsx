@@ -88,6 +88,8 @@ interface DryrunEvaluationResultRowProps {
   readonly showRolloutContent?: boolean;
   /** Whether to hide the status/reason column (hidden when external expand provides details) */
   readonly hideStatusColumn?: boolean;
+  /** Whether to hide the expand chevron (when using drawer instead of inline expand) */
+  readonly hideChevron?: boolean;
 }
 
 /** Format a list of scores as "0.94, 0.83" */
@@ -239,6 +241,7 @@ export function DryrunEvaluationResultRow({
   showTrend,
   showRolloutContent,
   hideStatusColumn,
+  hideChevron,
 }: DryrunEvaluationResultRowProps) {
   const isSuccess = result.status === "completed" && !result.error_message;
   const isFailed = result.status === "failed" || !!result.error_message;
@@ -267,14 +270,16 @@ export function DryrunEvaluationResultRow({
         onClick={onClick}
       >
         {/* Expand indicator */}
-        <div className="w-5 shrink-0 flex items-center justify-center">
-          {(reason || hideStatusColumn) && (
-            <ChevronRight className={cn(
-              "w-3 h-3 text-zinc-600 transition-transform",
-              isExpanded && "rotate-90 text-zinc-400",
-            )} />
-          )}
-        </div>
+        {!hideChevron && (
+          <div className="w-5 shrink-0 flex items-center justify-center">
+            {(reason || hideStatusColumn) && (
+              <ChevronRight className={cn(
+                "w-3 h-3 text-zinc-600 transition-transform",
+                isExpanded && "rotate-90 text-zinc-400",
+              )} />
+            )}
+          </div>
+        )}
 
         {/* # */}
         <div className="w-8 shrink-0 font-mono text-[11px] text-zinc-600 tabular-nums">

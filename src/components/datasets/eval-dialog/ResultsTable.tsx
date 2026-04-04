@@ -36,6 +36,8 @@ interface ResultsTableProps {
   readonly onNavigateToRecord?: (recordId: string, result: FlatEvaluationResult) => void;
   /** Job ID for CSV export filename */
   readonly jobId?: string;
+  /** Hide the expand chevron column (when using drawer instead of inline expand) */
+  readonly hideChevron?: boolean;
 }
 
 /** Escape a CSV field value — replace newlines with spaces, quote if needed */
@@ -94,6 +96,7 @@ export function ResultsTable({
   renderExpandedContent,
   onNavigateToRecord,
   jobId,
+  hideChevron = false,
 }: ResultsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [sortOption, setSortOption] = useState<SortOption>("index");
@@ -192,15 +195,16 @@ export function ResultsTable({
 
 
   const handleRowClick = useCallback((result: FlatEvaluationResult) => {
-    if (onRowClick && hasExternalExpand) {
+    if (onRowClick) {
+      // External handler (e.g., open drawer)
       onRowClick(result);
     } else {
-      // Toggle internal expand
+      // Internal expand/collapse
       setInternalExpandedId((prev) =>
         prev === result.dataset_row_id ? null : result.dataset_row_id,
       );
     }
-  }, [onRowClick, hasExternalExpand]);
+  }, [onRowClick]);
 
   if (results.length === 0) {
     return (
@@ -259,7 +263,7 @@ export function ResultsTable({
 
       {/* Table header */}
       <div className="flex items-center text-[10px] font-semibold uppercase tracking-wider text-zinc-500 border-b border-zinc-700/50 shrink-0">
-        <div className="w-5 shrink-0" /> {/* expand chevron */}
+        {!hideChevron && <div className="w-5 shrink-0" />} {/* expand chevron space */}
         <div className="w-8 shrink-0 py-2">#</div>
         {hasEpochData && <div className="w-[50px] shrink-0 text-center py-2">Eval</div>}
         <div className="flex-1 min-w-0 py-2">Input</div>
@@ -318,6 +322,7 @@ export function ResultsTable({
                     showTrend={hasTrendData}
                     showRolloutContent={false}
                     hideStatusColumn={hasExternalExpand}
+                    hideChevron={hideChevron}
                   />
                   {/* External expand content (e.g., from PerRowDetailsSection) */}
                   {isExpanded && hasExternalExpand && renderExpandedContent && (

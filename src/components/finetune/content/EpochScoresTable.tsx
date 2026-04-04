@@ -32,11 +32,14 @@ export interface EpochScore {
 interface EpochScoresTableProps {
   epochs: EpochScore[];
   criteriaNames: string[];
+  /** Compact mode — only shows Eval, Score, Δ columns. Used in the drawer panel. */
+  compact?: boolean;
 }
 
 export function EpochScoresTable({
   epochs = [],
   criteriaNames = [],
+  compact = false,
 }: EpochScoresTableProps) {
   const [selectedLogs, setSelectedLogs] = useState<{
     epoch: number;
@@ -51,16 +54,16 @@ export function EpochScoresTable({
         <table className="w-full">
           <thead>
             <tr className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
-              <th className="text-left py-1.5 pr-3 w-20" title="Evaluation checkpoint. In RFT, the model generates multiple response candidates per prompt — each is scored separately (a, b, ...). The training algorithm uses score differences between candidates as learning signal.">Eval</th>
-              {criteriaNames.map((c) => (
+              <th className="text-left py-1.5 pr-3 w-14" title="Evaluation checkpoint">Eval</th>
+              {!compact && criteriaNames.map((c) => (
                 <th key={c} className="text-left py-1.5 pr-3 w-16">
                   {c}
                 </th>
               ))}
               {hasRollout && <th className="text-left py-1.5 pr-3">Response</th>}
               <th className="text-left py-1.5 pr-2">Reasoning</th>
-              <th className="text-right py-1.5 pr-4">Score</th>
-              <th className="text-center py-1.5">{hasLogs ? "Logs" : ""}</th>
+              <th className="text-right py-1.5 pr-4 w-16">Score</th>
+              <th className="text-center py-1.5 w-8">{hasLogs ? "Logs" : ""}</th>
             </tr>
           </thead>
           <tbody>
@@ -94,7 +97,7 @@ export function EpochScoresTable({
                       </span>
                     )}
                   </td>
-                  {criteriaNames.map((c) => (
+                  {criteriaNames.length > 0 && !compact && criteriaNames.map((c) => (
                     <td
                       key={c}
                       className={cn(
@@ -110,7 +113,7 @@ export function EpochScoresTable({
                     </td>
                   ))}
                   {hasRollout && (
-                    <td className="py-1.5 pr-3 max-w-[200px]">
+                    <td className={cn("py-1.5 pr-3", compact ? "max-w-[150px]" : "max-w-[200px]")}>
                       {e.rolloutContent ? (
                         <TooltipProvider>
                           <Tooltip>
@@ -132,7 +135,7 @@ export function EpochScoresTable({
                       )}
                     </td>
                   )}
-                  <td className="py-1.5 pr-2 text-zinc-500 max-w-[320px]">
+                  <td className={cn("py-1.5 pr-2 text-zinc-500", compact ? "max-w-[200px]" : "max-w-[320px]")}>
                     {e.breakdown.reasoning ? (
                       <TooltipProvider>
                         <Tooltip>
@@ -187,7 +190,7 @@ export function EpochScoresTable({
                       )}
                     </span>
                   </td>
-                  <td className="py-1.5 text-center w-10">
+                  <td className="py-1.5 text-center w-8">
                     {hasRowLogs && (
                       <button
                         onClick={() =>
