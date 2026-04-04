@@ -531,6 +531,19 @@ def main():
 
     # Also update parts-index.json if it exists alongside
     index_path = input_path.parent / "parts-index.json"
+    # Derive source_doc: prefer source.name, fall back to part's source_document,
+    # then infer from the parent directory name (which is the doc slug).
+    source_name = source.get("name", "")
+    if not source_name:
+        # Try first part's source_document field (set by build_knowledge_parts.py)
+        for p in consolidated:
+            if p.get("source_document"):
+                source_name = p["source_document"]
+                break
+    if not source_name:
+        # Fall back to parent directory name (the doc slug)
+        source_name = input_path.parent.name
+
     if index_path.exists() or True:  # always produce index
         index = []
         for part in consolidated:
@@ -541,7 +554,7 @@ def main():
                 "extraction_path": part.get("extraction_path", ""),
                 "pages": part.get("extraction_metadata", {}).get("pages", []),
                 "content_preview": part.get("content", "")[:200],
-                "source_doc": source.get("name", ""),
+                "source_doc": part.get("source_document", source_name),
             })
         with open(index_path, "w", encoding="utf-8") as f:
             json.dump(index, f, indent=2, ensure_ascii=False)

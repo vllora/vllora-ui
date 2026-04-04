@@ -167,9 +167,9 @@ The user should never look at the execution log and see nothing happening — if
 | 1 | `define_objective` | Workflow ID, objective, output format, source docs |
 | 2 | `extract_documents` | Per-doc: chunks → parts count. Validation result. Gateway verify. |
 | 3 | `build_topics` | Topic count (leaf). Difficulty breakdown. Relevance filter: included/excluded. Relations count. |
-| 4 | `generate_records` | Mode. Records per topic. Per-topic counts. Dedup removed. Upload total. |
-| 5 | `write_grader` | Template used + WHY that template. Criteria list with weights. Dry-run scores. Gateway char count. |
-| 5.5 | `data_quality_gate` | Per-gate results: structural, diversity, completion_length. max_output_tokens decision. |
+| 4 | `generate_records` | Mode (relations/rag). WHY that records-per-topic count was chosen. Per-topic counts. Prompt types generated (application/analysis/edge-case). 2-3 sample records (question + GT). source_parts coverage. Dedup removed. Upload total. Agent's quality assessment: are prompts clear? Are GTs correct? Any concerns? |
+| 5 | `write_grader` | Template used + **WHY that template** (e.g., "multilabel because task outputs a set of labels"). Criteria list with weights + **WHY those weights** (e.g., "F0.5 because false positives are safety-critical for allergens"). 10-15 sample records read for calibration — what edge cases were found. Dry-run scores on 5 test cases. Scoring distribution assessment: does it produce spread for GRPO? Gateway char count. |
+| 5.5 | `data_quality_gate` | Per-gate results with detail: structural (record count, topic balance), diversity (avg distance, near-dupes), completion_length (GT P95, recommended_min, max_output_tokens decision). What warnings were raised and how they were addressed. |
 | 7 | `create_eval` | Job ID, model. Results: avg, perfect_rate, zero_rate, per-topic weakest. Readiness gate result. |
 | 7d | `headroom_diagnostic` | 4B score. Gate result. Diagnostic branch taken. 0.8B score if evaluated. Model chosen + WHY. |
 | 7d.5 | `coverage_audit` | Total parts. Easy-only parts. Type B gaps. New records generated. |
@@ -441,9 +441,17 @@ Filter extracted parts by relevance, design a skill-based topic hierarchy, build
 
 **3a. Filter parts by relevance to the objective.**
 
-Not all extracted content is relevant to the finetune goal. Read `knowledge/all-parts-index.json` and at least 2-3 per-document `knowledge_parts.json` files. For each part, ask: "does this content teach a skill the model needs for the stated objective?"
+Not all extracted content is relevant to the finetune goal. **Read the actual content of each part** — do NOT just pattern-match on titles. A title like "B.11 Raw agricultural commodities" might seem irrelevant but could contain allergen exemption rules that matter. A title like "D.15 Advisory statements" might seem relevant but could be about voluntary labeling that doesn't apply.
 
-Write the label back to `all-parts-index.json` — set `"relevant": true` for parts that contribute to the objective, `"relevant": false` for parts that don't. This persists the filtering decision so anyone looking at the index can see which parts were used. Log the summary (total/relevant/excluded + sample excluded titles) in `execution-log.md`.
+**For each part, read its content and assess:** "Does this content teach a skill or provide knowledge the model needs for the stated objective?" Consider:
+- Parts about the core task domain (allergen identification rules) → **relevant**
+- Parts about related context that affects the task (exemptions, thresholds, cross-contact rules) → **relevant** — these create the hard edge cases GRPO needs
+- Parts about unrelated regulatory topics (pet food, dietary supplements, airline food, drugs) → **irrelevant**
+- Parts about administrative process (Paperwork Reduction Act, penalties, how to contact FDA) → **irrelevant**
+
+**⚠️ Do NOT use hardcoded title matching to filter.** Read each part's content (at least the first 200 chars) before deciding. Title-only filtering misses relevant content with misleading titles and excludes edge-case content that creates the hard training records GRPO learns most from.
+
+Write the label back to `all-parts-index.json` — set `"relevant": true` for parts that contribute to the objective, `"relevant": false` for parts that don't. For each excluded part, add a `"exclude_reason"` field explaining why. This persists the filtering decision so anyone looking at the index can see which parts were used and why. Log the summary (total/relevant/excluded + 3-5 sample excluded titles with reasons) in `execution-log.md` via `log-step`.
 
 **Example** — IRS Pub 596 (120 parts) + Pub 501 (80 parts) for objective "EIC tax credit calculator":
 - Pub 596 parts about EIC rules, tables, worksheets → **relevant** (keep)
@@ -912,10 +920,20 @@ if [ "$RECORD_COUNT" -lt 1 ]; then
 fi
 ```
 
-Create eval job only — do NOT create a training job yet:
+**Eval directly on the base model (Qwen3.5-4B) — do NOT run a full gpt-4o-mini eval first.** The base model eval serves BOTH purposes: data/grader validation AND headroom check. A full gpt-4o-mini eval is redundant because:
+- Structural grader bugs are caught by the dry-run grader script (Step 5)
+- Data quality issues are caught by the data quality gate (Step 5.5)
+- gpt-4o-mini scores don't predict base model performance anyway
+- OpenAI's own RFT Cookbook uses spot-checks, not full strong-model evals (Ref: OpenAI RFT Cookbook)
+
+The grader spot-check from Step 5 (`--live-samples 10`) already validated the grader works on real model outputs. The 4B eval catches any remaining issues.
+
+Create eval job on the base model:
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
-  --workflow-id $WORKFLOW_ID --output-dir evaluations
+  --workflow-id $WORKFLOW_ID \
+  --model "Qwen3.5-4B" \
+  --output-dir evaluations
 ```
 
 > **Note on eval IDs**: The `POST /finetune/evaluations` response returns `evaluation_run_id` — use this for polling. The workflow's `eval_job_ids` field may show a different internal ID that returns 404. Always use the ID from the create response.
@@ -1034,21 +1052,13 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step difficulty-probe --
 
 **Why this matters**: GRPO learns from within-group reward variance. A model that scores too high has no variance (all completions correct → advantage ≈ 0 → no gradient). A model that scores too low can't produce any correct completions (also no useful variance). The sweet spot is where the model sometimes succeeds and sometimes fails — that's where GRPO learns fastest (arXiv:2508.14094: hard examples yield 34% improvement vs 3.5% for easy ones).
 
-**Step 1: Eval on Qwen3.5-4B** (always start here):
+**Step 1: Use the 4B eval from Step 7b.** Step 7b now evaluates directly on Qwen3.5-4B, so you already have the base model score. Use those results for the headroom check — do NOT create a separate eval.
 
-```bash
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
-  --workflow-id $WORKFLOW_ID \
-  --model "Qwen3.5-4B" \
-  --output-dir finetune-project/evaluations
+**Step 2: Run the source-part coverage audit (MANDATORY — do NOT skip).**
 
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval \
-  --file finetune-project/evaluations/eval-NNN.json
-```
+Before checking headroom, verify that the training records cover ALL the knowledge from the source documents. See the "Source-part coverage audit" section below for the full procedure and code. If coverage gaps are found, generate harder records for the gap parts BEFORE proceeding.
 
-**Do NOT run the readiness gate on this eval.** The base model may fail readiness checks — that's expected. Just log the baseline.
-
-**Step 2: Check the headroom table and decide:**
+**Step 3: Check the headroom table and decide:**
 
 | 4B avg score | Headroom | Action |
 |-------------|----------|--------|
@@ -1079,7 +1089,7 @@ Log the result and check headroom again:
 | **0.10 - 0.75** | ✓ **Train 0.8B.** This is the sweet spot — the model has enough capability to sometimes succeed but enough room for GRPO to improve it. |
 | **> 0.75** | The task is easy for all model sizes. Options: (1) make grader stricter (see caveats below), (2) don't train — base model is already good enough, (3) report to user. |
 
-**Step 4: Log the chosen model's baseline:**
+**Step 5: Log the chosen model's baseline:**
 
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
@@ -1089,7 +1099,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
   --change-type baseline --verdict PASS
 ```
 
-**Step 5: Source-part coverage audit (MANDATORY for knowledge-extraction tasks)**
+**Source-part coverage audit (MANDATORY for knowledge-extraction tasks) — referenced by Step 2 above**
 
 After the base model eval, check whether the training records cover ALL the knowledge from the source documents — not just the easy parts. This catches a gap that aggregate metrics miss: if 50%+ of records are "always perfect" (base model scores 1.0), those records provide zero GRPO gradient, and the knowledge parts they exclusively cover will never be written into model weights.
 

@@ -890,6 +890,120 @@ def cmd_log_iteration(args: argparse.Namespace) -> None:
     print(f"\nSaved to {iterations_file}")
 
 
+def _auto_journal(
+    project_dir: str | Path,
+    step: str,
+    action: str,
+    status: str,
+    summary: str,
+    reason: str | None = None,
+    analysis: str | None = None,
+    decision: str | None = None,
+    job_id: str | None = None,
+    job_type: str | None = None,
+    model: str | None = None,
+    results: dict | None = None,
+    details: dict | None = None,
+    triggered_by: int | None = None,
+) -> int:
+    """Auto-log a pipeline step to both execution-log.md and pipeline-journal.json.
+
+    Called internally by pipeline commands (create-eval, poll-eval, readiness-check,
+    create-training, poll-training, etc.) so the agent doesn't need to remember
+    to call log-step manually. The agent can still call log-step to add analysis
+    and decision context — auto-journal captures the facts, agent adds reasoning.
+
+    Returns the journal entry ID.
+    """
+    from datetime import datetime, timezone
+
+    project_dir = Path(project_dir)
+    journal_file = project_dir / "pipeline-journal.json"
+    log_file = project_dir / "execution-log.md"
+
+    if not project_dir.exists():
+        return 0
+
+    # Load or create journal
+    if journal_file.exists():
+        try:
+            journal = json.loads(journal_file.read_text())
+        except (json.JSONDecodeError, OSError):
+            journal = {"version": "1.0", "workflow_id": "", "entries": []}
+    else:
+        journal = {"version": "1.0", "workflow_id": "", "entries": []}
+
+    timestamp = datetime.now(timezone.utc).isoformat()
+    next_id = max((e["id"] for e in journal["entries"]), default=0) + 1
+
+    entry: dict = {
+        "id": next_id,
+        "timestamp": timestamp,
+        "step": step,
+        "action": action,
+        "status": status,
+        "summary": summary,
+        "auto_logged": True,
+    }
+    if reason:
+        entry["reason_created"] = reason
+    if analysis:
+        entry["analysis"] = analysis
+    if decision:
+        entry["decision"] = decision
+    if job_id:
+        entry["job_id"] = job_id
+    if job_type:
+        entry["job_type"] = job_type
+    if model:
+        entry["model"] = model
+    if results:
+        entry["results"] = results
+    if details:
+        entry["details"] = details
+    if triggered_by:
+        entry["triggered_by"] = triggered_by
+        for e in journal["entries"]:
+            if e["id"] == triggered_by:
+                e["triggers_next"] = next_id
+                break
+
+    journal["entries"].append(entry)
+    try:
+        journal_file.write_text(json.dumps(journal, indent=2))
+    except OSError:
+        pass
+
+    # Append to execution log
+    status_label = "IN PROGRESS" if status == "in_progress" else status
+    step_label = step.replace("_", " ").replace("step ", "Step ").title()
+    log_entry = f"\n## {step_label} — {timestamp[:19].replace('T', ' ')}\n"
+    log_entry += f"- **Status**: {status_label}\n"
+    log_entry += f"- **Summary**: {summary}\n"
+    if reason:
+        log_entry += f"- **Reason**: {reason}\n"
+    if analysis:
+        log_entry += f"- **Analysis**: {analysis}\n"
+    if decision:
+        log_entry += f"- **Decision**: {decision}\n"
+    if model:
+        log_entry += f"- **Model**: {model}\n"
+    if job_id:
+        log_entry += f"- **Job ID**: {job_id}\n"
+    if results:
+        for k, v in results.items():
+            log_entry += f"- **{k}**: {v}\n"
+
+    try:
+        with open(log_file, "a") as f:
+            f.write(log_entry)
+    except OSError:
+        pass
+
+    print(f"  [auto-journal #{next_id}] {action} ({status}): {summary}", file=sys.stderr)
+    return next_id
+
+
 def cmd_log_step(args: argparse.Namespace) -> None:
     """Log a pipeline step to both execution-log.md and pipeline-journal.json.
 
@@ -2361,6 +2475,18 @@ def cmd_create_eval(args: argparse.Namespace) -> None:
     out_file.write_text(json.dumps(metadata, indent=2))
     print(f"Saved: {out_file}")
 
+    # Auto-journal: eval created
+    _auto_journal(
+        project_dir=out_dir.parent,
+        step="step_7_eval",
+        action="create_eval",
+        status="in_progress",
+        summary=f"Eval created on {model} ({eval_id[:12]}...)",
+        job_id=eval_id,
+        job_type="eval",
+        model=model,
+    )
+
 
 def _update_eval_metadata(metadata: dict, result: dict) -> dict:
     """Update eval metadata dict from an API poll response. Returns new dict."""
@@ -2678,6 +2804,28 @@ def cmd_poll_eval(args: argparse.Namespace) -> None:
             metadata["completed_at"] = result.get("completed_at")
             eval_file.write_text(json.dumps(metadata, indent=2))
             print(f"Done: {status}. Saved to {eval_file}")
+
+            # Auto-journal: eval completed with results
+            eval_results = {}
+            if avg_score is not None:
+                eval_results["avg_score"] = round(avg_score, 4)
+            if zero_rate is not None:
+                eval_results["zero_rate"] = round(zero_rate, 4)
+            if perfect_rate is not None:
+                eval_results["perfect_rate"] = round(perfect_rate, 4)
+            eval_results["total_rows"] = total
+            _auto_journal(
+                project_dir=eval_file.parent.parent,
+                step="step_7_eval",
+                action="eval_completed",
+                status=status,
+                summary=f"Eval {status}: {metadata.get('model', '?')} avg={avg_score:.3f}, perfect={perfect_rate:.0%}, zeros={zero_rate:.0%} ({total} rows)" if avg_score is not None else f"Eval {status}",
+                job_id=eval_id,
+                job_type="eval",
+                model=metadata.get("model"),
+                results=eval_results,
+            )
+
             if status == "completed":
                 print(
                     f"\n⚠️  MANDATORY: Log this eval iteration before proceeding:\n"
@@ -2901,6 +3049,21 @@ def cmd_create_training(args: argparse.Namespace) -> None:
     }
     out_file.write_text(json.dumps(metadata, indent=2))
     print(f"Saved: {out_file}")
+
+    # Auto-journal: training created
+    config = payload.get("training_config", {})
+    inference = payload.get("inference_parameters", {})
+    _auto_journal(
+        project_dir=out_dir.parent,
+        step="step_7e_training",
+        action="create_training",
+        status="in_progress",
+        summary=f"Training created: {args.base_model}, epochs={config.get('epochs')}, lr={config.get('learning_rate')}, K={inference.get('response_candidates_count', 8)}, max_tokens={inference.get('max_output_tokens')}",
+        job_id=internal_id,
+        job_type="training",
+        model=args.base_model,
+        results={"config": config, "inference": inference},
+    )
 
 
 def _estimate_recommended_max_tokens(records: list[dict]) -> int:
@@ -3501,6 +3664,29 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
             metadata["error_message"] = result.get("error_message")
             job_file.write_text(json.dumps(metadata, indent=2))
             print(f"Done: {status}. Saved to {job_file}")
+
+            # Auto-journal: training completed
+            train_summary = f"Training {status}: {metadata.get('base_model', '?')}"
+            if metadata.get("early_stop_reason"):
+                train_summary += f" (early-stopped: {metadata['early_stop_reason'][:80]})"
+            if metadata.get("error_message"):
+                train_summary += f" (error: {metadata['error_message'][:80]})"
+            _auto_journal(
+                project_dir=job_file.parent.parent,
+                step="step_7e_training",
+                action="training_completed",
+                status=status,
+                summary=train_summary,
+                job_id=job_id,
+                job_type="training",
+                model=metadata.get("base_model"),
+                results={
+                    "fine_tuned_model": metadata.get("fine_tuned_model"),
+                    "early_stop_reason": metadata.get("early_stop_reason"),
+                    "error_message": metadata.get("error_message"),
+                },
+            )
+
             if status in ("succeeded", "completed"):
                 print(
                     f"\n⚠️  NEXT STEPS:\n"

@@ -454,7 +454,7 @@ def main():
     parser.add_argument("--output", "-o", help="Output path (single mode only)")
     parser.add_argument("--batch", action="store_true", help="Batch mode: args are pdf:output pairs")
     parser.add_argument("--submit-only", action="store_true", help="Submit all PDFs and return manifest JSON (don't wait)")
-    parser.add_argument("--poll-one", help="Poll a single task_id and fetch result if done. Requires --output.")
+    parser.add_argument("--poll-one", "--poll", help="Poll a single task_id and fetch result if done. Requires --output.")
     parser.add_argument("--docling-url", default="http://localhost:5001", help="Docling Serve URL")
     parser.add_argument("--max-tokens", type=int, default=8192, help="Max tokens per Docling chunk — safety ceiling, not target size (default: 8192)")
     parser.add_argument("--poll-interval", type=int, default=15, help="Poll interval in seconds (default: 15)")
