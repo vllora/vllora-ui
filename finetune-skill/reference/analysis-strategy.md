@@ -144,12 +144,17 @@ Identify:
 - **Under-represented topics**: < 5% of total records — needs more data
 - **Over-represented topics**: > 30% of total records — may dominate training
 
-**Step 4: Reason pattern analysis**
+**Step 4: Reason pattern analysis (BOTH low-scoring AND high-scoring)**
 
-From the bottom 20% of records (by score), extract and group `reason` fields:
+**Bottom 20%** (by score) — extract and group `reason` fields:
 - Count recurring phrases or themes
 - Identify the top 3-5 grader complaints
 - Check for contradictory reasons (indicates grader instability)
+
+**Top 10-15%** (by score) — verify high scores are earned, not gamed:
+- Read grader reasons: does the reason show the model genuinely answered well, or satisfied the grader via a shortcut (listing all options, padding with keywords, matching format without correct content)?
+- If many high-scoring reasons are shallow (e.g., "matches", "correct format") without checking substance → grader has exploitable weaknesses that GRPO WILL amplify during training
+- This step catches reward hacking before training starts — the cheapest possible detection point (Ref: OpenAI RFT Cookbook documented reward hacking found only by reading high-scoring outputs, not from metrics; MO-GRPO arXiv:2509.22047)
 
 **Step 5: Source part coverage analysis**
 
@@ -189,6 +194,20 @@ clipping_max = max clipped_ratio during training
 | Gradient instability | `grad_norm` spikes > 5x median | Warning | — |
 | No learning | `reward_delta` < 0.05 after full training | Info | — |
 
+**Step 2b: Trigger-based output sampling** (read individual records when metrics flag anomalies)
+
+Aggregate metrics are systematically blind to reward hacking — the model can satisfy the grader while violating the task intent, and all metrics look healthy (Ref: OpenAI RFT Cookbook; MO-GRPO arXiv:2509.22047; "Tricks or Traps" arXiv:2508.08221). When the following triggers fire, sample and read individual model completions + grader reasons before continuing:
+
+| Trigger | What to read | What you're looking for |
+|---------|-------------|----------------------|
+| KL rising while reward stagnates or rises | 5 high-reward completions | Grader exploitation — model found shortcut that scores well but violates task intent |
+| `mean_length` growing >30% while reward flat/declining | 5 longest completions | Verbosity padding, aimless continuation after correct answer (arXiv:2508.08221 Appendix B.2) |
+| `clipped_ratio` > 0.3 rising trend | 3 clipped completions | Distinguish "model needs more tokens" (fixable) from "model can't stop" (degenerate) |
+| Per-topic `reward_std` near zero + that topic's reward flat | 3 completions for that topic | Mode collapse on that topic — all outputs identical |
+| `entropy` dropped >50% from start | 5 completions across topics | Model becoming deterministic — precursor to reward hacking (DAPO arXiv:2503.14476 §4.3) |
+
+**Cost**: reading 5-20 records adds ~10 minutes. This is negligible compared to re-training costs if reward hacking corrupts the model.
+
 **Step 3: Per-epoch record trajectories** (from finetune-evaluations)
 
 Categorize every record:
@@ -202,6 +221,8 @@ Report:
 - Count and percentage in each category
 - Which topics have the most stagnant/degraded records
 - Whether degraded records share common characteristics (same topic, similar prompts, etc.)
+
+**Degradation early warning**: At each epoch eval during training (not just post-training), identify records that dropped >0.2 from previous epoch. If >15% of records are degrading by epoch 2, this is strong evidence of conflicting reward signals or grader exploitation — consider pausing training and inspecting outputs before continuing. (Ref: "Tricks or Traps" arXiv:2508.08221 on ostensible positives showing in per-record behavior before aggregate metrics detect it.)
 
 ### 2c. Cross-Analysis (both eval + training results)
 

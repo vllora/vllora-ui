@@ -141,8 +141,10 @@ Maintain `execution-log.md` as an **append-only** chronological record. Append a
 - **Step 4**: mode (relations/rag-only). Records per topic (default or custom). **Per-topic counts** (topic-name: N, ...). source_parts coverage: N/total with per-record tagging. Dedup: removed N. Upload: N records.
 - **Step 5**: template copied (exact filename). **Criteria list with weights** (e.g., "F1=0.40, hidden_bonus=0.20, conciseness=0.15"). Dry-run Test 1: score + reason summary. **Dry-run Test 2 (live): 3 sample scores** (e.g., "0.7, 0.3, 1.0"). If Test 2 fails, log the failure reason BEFORE the fix, then log the retry scores. Gateway verify: evaluator uploaded, char count.
 - **Step 7 (each eval)**: eval job ID, model name, **duration (minutes)**. Results: avg, std, zero_frac%, perfect_frac%, **score mode at frac%**. **Per-topic scores: topic-name=avg (weakest first).** Readiness gate: PASS/FAIL with hard check details.
+- **Step 7d (headroom diagnostic)**: 4B baseline avg score. Headroom gate result (PASS/FAIL). If FAIL: which diagnostic branch taken (per-topic check → 0.8B eval → root cause). 0.8B baseline avg if evaluated. Decision: which model chosen for training and why. **Score distribution**: N% perfect, N% zero, shape (bimodal/spread/uniform).
 - **Step 7e (training)**: job ID, base model, **full config: epochs, learning_rate, lora_rank, max_output_tokens, response_candidates_count (K), batch_size**. Note: `loss_type="dr_grpo"` is the default.
-- **Step 8 (analysis)**: per-topic breakdown (weakest topics). Dead-weight records: N scoring 0.0. Training metrics: final_reward, reward_delta, KL, clipping%. Recommendations.
+- **Step 7e (training monitoring — update every 1-2 epochs)**: Per-epoch avg reward vs baseline. Epoch eval avg + perfect_rate + zero_rate (compare with pre-training baseline). Score distribution changes. **Per-record inspection findings**: sample 3-5 records showing Best/Worst of K completions, grader reasons. Any trigger-based inspection results (KL anomaly, length growth, per-topic degradation). This is the primary artifact for catching reward hacking early.
+- **Step 8 (analysis)**: per-topic breakdown (weakest topics). Dead-weight records: N scoring 0.0. Training metrics: final_reward, reward_delta, KL, clipping%. **Per-record comparison**: 2-3 improved records (what changed in model output), 2-3 degraded records (what went wrong). Recommendations.
 - **Step 9 (each iteration)**: iteration number, what changed and why, change_type (grader/records/both/hyperparams). Re-eval results: avg=X (was Y), Δ=Z. Verdict.
 
 **⚠️ Log EVERY step, not just Step 1.** If the execution log has only Step 1 when Step 5 is complete, the log is useless for debugging.
@@ -218,8 +220,9 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py cancel-eval --workflow-id $WORKFL
 | Readiness gate PASS + no `training-jobs/` | Crashed before training start | Create training job (Step 7e) |
 | `training-jobs/` has a job file with status `running` | Training was in progress | Poll the existing job, don't create a new one |
 | `training-jobs/` has a job file with status `cancelled` | Job was cancelled (from UI or another agent) | Skip it. Analyze eval results. Start new job if needed (Step 9) |
+| `training-jobs/` has cancelled job + `iterations.json` shows base model avg >0.75 + early_stop_reason mentions "degradation" | Training early-stopped because base model had insufficient GRPO headroom | **Do NOT just retry training.** Read `iterations.json` for the base model score. Run the Step 7d headroom diagnostic tree: (1) check per-topic scores, (2) eval 0.8B on same records to distinguish "model too good" from "records too easy", (3) apply the targeted fix before retraining. See Step 7d "Diagnostic tree when headroom gate fails." |
 | `training-jobs/` has a job with `source: synced_from_gateway` | Job was created from the UI, not by this agent | Treat it like your own — poll it, analyze results when done |
-| `iterations.md` exists with iteration results | Previous iteration completed | Read findings, apply fixes (Step 9), continue iterating |
+| `iterations.json` exists with iteration results | Previous iteration completed | Read findings, apply fixes (Step 9), continue iterating |
 
 ### Step 1: Define the Objective
 
@@ -956,11 +959,13 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py difficulty-probe \
 uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step difficulty-probe --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
-#### 7d. Base Model Baseline Eval (after readiness passes, before training)
+#### 7d. Base Model Selection via Eval (after readiness passes, before training)
 
-**Default to Qwen3.5-4B.** The 4B model is the recommended starting point for all tasks. Do NOT try to predict base model performance from GPT-4o-mini eval scores — they are different models with different capabilities and do not correlate reliably on specific tasks. (Ref: emergent abilities research, arXiv:2206.07682 — capabilities appear at different scale thresholds per model family.)
+**The eval result determines which model to train — not the other way around.** Run eval on Qwen3.5-4B first. If it scores too high (>0.75), eval a smaller model. Pick the model with the best GRPO headroom. Do NOT default to 4B and hope for the best — use eval data to make an informed choice.
 
-**Run the baseline eval** on Qwen3.5-4B:
+**Why this matters**: GRPO learns from within-group reward variance. A model that scores too high has no variance (all completions correct → advantage ≈ 0 → no gradient). A model that scores too low can't produce any correct completions (also no useful variance). The sweet spot is where the model sometimes succeeds and sometimes fails — that's where GRPO learns fastest (arXiv:2508.14094: hard examples yield 34% improvement vs 3.5% for easy ones).
+
+**Step 1: Eval on Qwen3.5-4B** (always start here):
 
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
@@ -972,53 +977,93 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval \
   --file finetune-project/evaluations/eval-NNN.json
 ```
 
-**Why this matters:**
-- GPT-4o-mini eval avg=0.85 does NOT mean Qwen-4B will score 0.85 — base models typically score much lower
-- The base model baseline is the "before" in before/after comparison
-- Without it, you can't measure if training actually improved the model
-
 **Do NOT run the readiness gate on this eval.** The base model may fail readiness checks — that's expected. Just log the baseline.
 
-**⚠️ CRITICAL: Analyze the base model score before proceeding to training.**
+**Step 2: Check the headroom table and decide:**
 
-| Base model avg score | What it means | Action |
-|---------------------|---------------|--------|
-| **< 0.10** | Model can't do the task at all | ✓ Ideal for GRPO — maximum room to improve. Proceed. (DeepSeek-R1: 15.6%→71%, arXiv:2501.12948) |
-| **0.10 - 0.50** | Model has some knowledge but struggles | ✓ Good for GRPO — strong learning signal expected. Proceed. |
-| **0.50 - 0.75** | Model is mediocre to decent | ✓ GRPO can improve this. Proceed. |
-| **0.75 - 0.85** | Model is already good | ⚠️ **GRPO efficiency drops dramatically.** "Hard Examples Are All You Need" (arXiv:2508.14094) found easy prompts (>0.80 success rate) maintain learnable variance for only 3.7% of training steps — 96.3% of compute is wasted. Improvement IS possible but typically small (2-7%, e.g., AlphaMaze: 86%→93%, arXiv:2502.14669). Consider: (1) **Make the grader stricter** — add criteria so base model scores lower, creating more headroom. (2) **Proceed but set expectations** — improvement will be marginal. (3) **Don't train** if the base model already meets requirements. |
-| **> 0.85** | Model already excels | ⚠️ **GRPO will produce near-zero improvement for most prompts.** Options: (1) **Don't train** — base model may be good enough. (2) **Make grader much stricter** to create artificial headroom. (3) **Report to user** — the task may not benefit from GRPO training at this model size. |
+| 4B avg score | Headroom | Action |
+|-------------|----------|--------|
+| **< 0.10** | Maximum | ✓ Proceed to training with 4B. (DeepSeek-R1: 15.6%→71%, arXiv:2501.12948) |
+| **0.10 - 0.50** | High | ✓ Proceed to training with 4B. Strong learning signal expected. |
+| **0.50 - 0.75** | Moderate | ✓ Proceed to training with 4B. |
+| **0.75 - 0.80** | Low | ⚠️ **Do NOT train 4B.** Eval a smaller model (Step 3 below). |
+| **> 0.80** | Near-zero | ⚠️ **Do NOT train 4B.** Only 3.7% of training steps produce learnable variance (arXiv:2508.14094). Eval a smaller model (Step 3 below). |
 
-**Why this happens**: GRPO computes advantages by contrasting K completions per prompt. When the base model scores high, all completions score similarly → advantage ≈ 0 → no gradient. With continuous graders, even nonzero variance produces tiny advantages that drive negligible learning.
+**Step 3: If 4B scored >0.75 — eval a smaller model:**
 
-**Research basis**: DeepSeek-R1 (arXiv:2501.12948) started at 15.6% and reached 71% — canonical GRPO success from a low base. "Hard Examples" (arXiv:2508.14094): easy prompts yield 3.49% improvement vs 34.19% for hard prompts — a 10x difference. AlphaMaze (arXiv:2502.14669): GRPO improved 86%→93% — proving improvement IS possible from high baselines, just small.
+```bash
+# Try Qwen3.5-0.8B
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
+  --workflow-id $WORKFLOW_ID \
+  --model "Qwen3.5-0.8B" \
+  --output-dir finetune-project/evaluations
 
-**Note**: The "use a smaller base model" strategy is NOT well supported — DeepSeek found distillation from larger models outperforms direct RL on smaller models (arXiv:2501.12948 §4). Consider distillation instead if you need a smaller model.
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval \
+  --file finetune-project/evaluations/eval-NNN.json
+```
+
+Log the result and check headroom again:
+
+| 0.8B avg score | Action |
+|---------------|--------|
+| **< 0.10** | ⚠️ Too hard — 0.8B can't do the task. Try 2B as a middle ground, or accept 4B's marginal improvement. |
+| **0.10 - 0.75** | ✓ **Train 0.8B.** This is the sweet spot — the model has enough capability to sometimes succeed but enough room for GRPO to improve it. |
+| **> 0.75** | The task is easy for all model sizes. Options: (1) make grader stricter (see caveats below), (2) don't train — base model is already good enough, (3) report to user. |
+
+**Step 4: Log the chosen model's baseline:**
 
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
   --project-dir finetune-project \
   --eval-file finetune-project/evaluations/eval-NNN.json \
-  --changes "Base model (Qwen3.5-4B) baseline eval — pre-training" \
+  --changes "Base model (MODEL_NAME) baseline eval — pre-training. Chosen because [reason]." \
   --change-type baseline --verdict PASS
 ```
 
+**⚠️ HEADROOM GATE (MANDATORY — do NOT skip):**
+
+This is a HARD GATE. You MUST have a base model eval with avg score < 0.75 before proceeding to training. If the headroom gate fails (any model scores >0.75), follow the diagnostic tree below to identify the root cause and fix it.
+
+**Why this gate exists**: Without it, the agent proceeds to training, wastes GPU time, and training early-stops due to score degradation — exactly what happened with food-allergen-detector (Qwen3.5-4B scored 0.828, training degraded after epoch 1). Catching it here saves hours of compute.
+
+**Diagnostic tree when headroom gate fails (base model avg >0.75):**
+
+There are three distinct root causes — each has a different fix. Diagnose before acting.
+
+**Step A: Check per-topic scores.** Are ALL topics >0.75, or only some?
+- If **some topics score <0.5**: those topics have headroom. The problem is imbalanced difficulty. Fix: generate more records on the hard topics (rebalance dataset toward difficulty). Check if easy topics have a lenient grader — tighten criteria on those topics specifically.
+- If **ALL topics score >0.75**: proceed to Step B.
+
+**Step B: Eval a smaller model (0.8B) on the same records.** This distinguishes "model too good" from "records too easy."
+- If **0.8B also scores >0.75**: the records are too easy — even a much weaker model aces them. The records test surface patterns, not domain knowledge. Fix: regenerate harder records that require inference, hidden knowledge, or edge-case reasoning (arXiv:2505.17063: LLM rewriting of easy examples into harder variants improves GRPO training). Also consider adding harder sub-topics that the current topic hierarchy missed.
+- If **0.8B scores 0.10-0.75**: the model is genuinely good at this task, but 0.8B has headroom. Fix: train 0.8B instead of 4B — natural headroom without changing data.
+- If **0.8B scores <0.10**: 0.8B can't do the task at all. Try 2B as middle ground, or accept that this task needs 4B and explore grader strictness.
+
+**Step C: If records are hard AND 0.8B has no headroom AND grader is strict** — the task itself may be too simple for GRPO at any model size. Report to user: the base model already meets requirements, or the task needs to be reframed to require skills the model lacks.
+
+**Research basis for this diagnostic tree:**
+- "Records too easy" root cause: arXiv:2505.17063 ("Synthetic Data RL") — first paper to validate LLM rewriting of easy examples into harder variants for GRPO. 2.6pp improvement.
+- "Smaller model for headroom": When a 4B model scores 0.83, GRPO has no room — completions are all correct. A 0.8B model might score 0.35 — it knows some patterns but misses hard cases. GRPO can then teach the hard cases through reward signal. This is different from "training a smaller model instead of a larger one" for general capability (where DeepSeek found distillation outperforms direct RL, arXiv:2501.12948 §4). Here, the goal is specifically to find a model size where the task is challenging enough for GRPO to help.
+- Topic diversity: Kimi k1.5 paper confirms narrow datasets produce lower ceiling performance (interconnects.ai analysis). GRPO++ (Wolfe) states "too narrow coverage leads to lower plateau performance."
+- "More records" as a fix: only valid when some topics already have headroom and need rebalancing — NOT as a blanket fix. No paper recommends increasing dataset size as a primary remedy for high base model scores. The critical variable is difficulty distribution, not quantity (arXiv:2508.14094).
+- Grader strictness caveats: no paper or platform explicitly endorses making a grader stricter to manufacture headroom. The OpenAI RFT guide describes grader tightening to close reward-hacking loopholes — framed as fixing quality measurement, not headroom engineering. **Critical constraint**: stricter criteria must reflect genuine quality differences, not arbitrary requirements.
+
 After training completes, run another eval on the **trained** model and compare with this baseline using `log-iteration`.
 
-#### 7e. Start Training (only after readiness gate passes)
+#### 7e. Start Training (only after readiness gate AND headroom gate pass)
 
-Training starts here — only reached when the readiness gate indicates data and grader are solid.
+Training starts here — only reached when the readiness gate indicates data and grader are solid, AND the base model headroom check (Step 7d) confirms GRPO has room to improve.
 
-**Base model**: Default to **Qwen3.5-4B**. Only change after the base model eval (Step 7d) gives a concrete reason to.
+**Base model**: Use the model selected in Step 7d based on eval results. Do NOT override this choice.
 
 | Model | When to use | Max records (K=8) | OOM risk |
 |-------|-------------|-------------------|----------|
-| `Qwen3.5-0.8B` | Only after 4B training showed no improvement AND you want to test if a smaller model learns better on this narrow task | ~1000 | Very low |
-| `Qwen3.5-2B` | After 4B training showed no improvement, as intermediate test | ~800 | Low |
-| `Qwen3.5-4B` | **Always start here.** Best balance of capacity and speed. | ~500 | Low |
-| `Qwen3.5-9B` | Only if 4B training plateaued and task requires complex reasoning | ~100 | High with >100 records |
+| `Qwen3.5-0.8B` | When 4B scores >0.75 and 0.8B scores 0.10-0.75 — best headroom for narrow tasks | ~1000 | Very low |
+| `Qwen3.5-2B` | Middle ground when 0.8B scores <0.10 (can't do task) and 4B scores >0.75 | ~800 | Low |
+| `Qwen3.5-4B` | When 4B scores <0.75 — default choice with good capacity and headroom | ~500 | Low |
+| `Qwen3.5-9B` | Only if 4B scores <0.10 and task requires complex reasoning (very rare) | ~100 | High with >100 records |
 
-> **⚠️ Start with 4B.** The 9B model OOMs with >100 records and K=8 on standard GPU allocations. Use 9B only for small, complex datasets (<100 records). Use 0.8B/2B for quick prototyping or when training keeps failing on larger models. The `create-training` script warns if the model/dataset combination risks OOM.
+> **⚠️ The 9B model OOMs with >100 records and K=8 on standard GPU allocations.** Use 9B only for small, complex datasets (<100 records). The `create-training` script warns if the model/dataset combination risks OOM.
 
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
@@ -1042,7 +1087,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 | Parameter | Default | Rationale |
 |-----------|---------|-----------|
 | `learning_rate` | **5e-6** | Between DeepSeek-R1's 3e-6 (arXiv:2501.12948) and gateway default 1e-5. Food-label E2E test showed 1e-6 too slow to converge. Do NOT use SFT rates (2e-5 to 5e-5). |
-| `response_candidates_count` | **8** (minimum) | GRPO needs multiple candidates for advantage estimation. Published work uses G=8 (Dr. GRPO, TRL) to G=64 (DeepSeekMath). |
+| `response_candidates_count` | **8** (default, optimal) | K=8 is the standard choice: Dr. GRPO Table 6 (arXiv:2503.20783), "Hard Examples" Appendix B (arXiv:2508.14094), TRL default, DeepSeek-R1. **Do NOT default to K=16.** EBPO (Table 2, arXiv:2602.05165) shows K=16 averages 0.9 points *worse* than K=8 across 5 benchmarks; K=32 is 3.1 points worse. K=16 costs 2x compute for marginal-to-negative quality gain. Only consider K=16 when >40% of prompts are "easy" (p>0.8) AND grader/data are already fixed — in that case K=16 reduces easy-prompt zero-variance from 16-43% to 3-19%. For borderline prompts (p=0.3-0.4), K=8 already produces informative groups 96.6% of the time — K=16 adds only 3.3pp at 2x cost. DAPO uses K=16 but with dynamic sampling that discards zero-variance groups, making effective K≈8 — this is not evidence K=16 outperforms K=8. |
 | `warmup_ratio` | **configurable** | Uses `warmup_ratio` (not `warmup_steps`). The cloud applies cosine LR scheduler — LR decays after warmup, not constant. |
 
 > **Actual cloud training config** (set by the cloud worker, not user-configurable):
@@ -1090,6 +1135,23 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
 
 **Early stopping** is enabled by default — detects completion clipping, score plateau, score degradation, and length exploitation. Add `--no-early-stop` to disable. See [reference/training-metrics-guide.md](reference/training-metrics-guide.md) for signal details and thresholds.
 
+**⚠️ Monitor epoch evals during training — do NOT just watch aggregate metrics.**
+
+While `poll-training` runs, periodically fetch epoch evals and compare with the pre-training baseline. Aggregate metrics (reward, KL) are blind to reward hacking — per-record epoch evals catch issues that metrics miss (OpenAI RFT Cookbook; MO-GRPO arXiv:2509.22047). Check every 1-2 epochs:
+
+```bash
+# Fetch epoch evals (use PROVIDER job ID, not internal ID)
+PROVIDER_JOB_ID=$(python3 -c "import json; print(json.load(open('finetune-project/training-jobs/train-NNN.json'))['provider_job_id'])")
+curl -s "http://localhost:9090/finetune/workflows/$WORKFLOW_ID/finetune-evaluations?finetune_job_id=$PROVIDER_JOB_ID"
+```
+
+**Compare with pre-training baseline** (from `iterations.json`):
+1. **Score distribution**: Is perfect_rate growing? Is zero_rate shrinking? Compare with baseline perfect_rate/zero_rate from Step 7d.
+2. **Per-epoch avg**: Is it trending up from baseline? Flat = no learning. Declining after initial rise = possible entropy collapse or reward hacking.
+3. **Score shape**: Is the distribution bimodal (many 0.0 and 1.0, few middle)? This may be inherent to the task (classification) or may indicate grader issues. Compare with baseline distribution shape.
+
+**Trigger-based output inspection** (see [reference/analysis-strategy.md](reference/analysis-strategy.md) Step 2b): when metrics flag anomalies (KL rising + reward flat, mean_length growing, per-topic degradation), sample and read 5-10 individual model completions + grader reasons from the epoch evals before continuing. Do NOT wait until training finishes to inspect.
+
 When training completes (or is early-stopped), **immediately log the training iteration** before doing anything else:
 
 ```bash
@@ -1120,12 +1182,13 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py sync-jobs --workflow-id $WORKFLOW
 
 This runs during the eval-first loop (Step 7b→7c). Compute overall scores, per-topic breakdown (weakest first), low-scoring record reasons, and score concentration. Low topic scores are expected for base models — focus on whether the grader differentiates quality, not absolute scores. See [reference/analysis-strategy.md](reference/analysis-strategy.md) Part 1a for the full metrics table and formulas.
 
-**8a-agent. Read the actual model responses yourself.** After computing scores, **read the eval results thoroughly** — all low-scoring records, a sample of mid-range, and some high-scoring records across every topic. The eval result contains the grader's `reason` field which includes the parsed model output. Check:
+**8a-agent. Read actual model responses — BOTH low-scoring AND high-scoring.** This is critical for catching reward hacking, which is invisible in aggregate metrics. The OpenAI RFT Cookbook documents a production case where reward kept rising but the model had learned to pad answers with synonyms — only caught by reading outputs. MO-GRPO (arXiv:2509.22047) had a case where both metrics looked fine but the model stopped outputting Japanese entirely.
 
-- **Low-scoring records**: Read both the model's response AND the grader's reason. Is the model's response a reasonable attempt that the grader scored harshly, or genuinely bad? Does the reason explain the score correctly? If the reason says "parsing failed" or "could not extract" → grader bug (can't parse the response format). If the reason says "wrong answer" but the response looks correct → grader logic bug.
-- **High-scoring records**: Read the reason — what criteria did the grader use? Is the model genuinely good, or is the grader too lenient? If the reason just says "matches" without checking important criteria → grader needs more checks.
-- **Reason patterns**: Do many records share the same reason text? (e.g., 30 records all say "Model said 'none'" or all say "F1=0.10, R=1.00, FP=8") → systematic issue. The reason tells you the exact failure mode — use it to decide whether to fix the grader, the records, or the prompts.
-- **Response patterns**: Are many model outputs identical? (e.g., always says "none", always lists all options, always gives the same template) → dominant strategy that may exploit the grader.
+Read the eval results in three tiers:
+
+- **Bottom 20% (low-scoring records)**: Read the model's response AND grader reason. Is the response a reasonable attempt scored harshly, or genuinely bad? If reason says "parsing failed" or "could not extract" → grader bug. If reason says "wrong answer" but response looks correct → grader logic bug.
+- **Top 10-15% (high-scoring records)** ⚠️ **Do NOT skip this.** Read grader reasons for high-scoring records to verify they scored high for the right reasons. Check: is the model genuinely good, or is the grader too lenient / exploitable? If the reason just says "matches" without checking important criteria → grader needs more checks. If the reason shows the model satisfied the grader via a shortcut (e.g., listing all possible answers, padding with keywords) → grader has an exploit that GRPO WILL find and amplify during training. (Ref: OpenAI RFT Cookbook — reward hacking was found in high-scoring outputs, not low-scoring ones.)
+- **Reason patterns across ALL records**: Do many records share the same reason text? (e.g., 30 records all say "Model said 'none'" or all say "F1=0.10, R=1.00, FP=8") → systematic issue. Are many model outputs identical? (e.g., always says "none", always lists all options) → dominant strategy that may exploit the grader. "Tricks or Traps" (arXiv:2508.08221 Appendix B.2) documents models producing correct answers followed by aimless padding — these score reward=1.0 but introduce noise during training.
 - **Format compliance**: Does the model follow the output format from the system prompt? If not, does the reason show the grader handled it (e.g., LLM fallback extraction) or failed?
 
 The reason field is the most diagnostic — it tells you exactly what the grader checked and why it gave the score it did.
@@ -1182,7 +1245,10 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
   --change-type baseline --verdict PASS
 ```
 
-**Read the post-training eval responses** — apply the same 8a-agent analysis to this eval. Compare the trained model's responses with the base model's responses (from Step 7d eval). What changed? Is the trained model better, or did it learn an exploit? This comparison is more valuable than the score delta alone.
+**Read the post-training eval responses** — this is where you catch reward hacking that metrics miss. For each topic, sample 1-2 improved records AND 1-2 degraded records. Read the model response + grader reason for both the base model eval (Step 7d) and this post-training eval. Check:
+- **Improved records**: Did the model learn the right skill, or find a grader shortcut? If the reason changed from "wrong answer" to "correct answer with correct reasoning" → genuine improvement. If the reason changed to show the model gaming format/length/keywords → reward hacking.
+- **Degraded records**: What did the model learn that made it worse on these? Often reveals conflicting grader criteria between topics.
+- **This comparison is more valuable than the score delta alone** — a +0.10 improvement where all gains come from grader exploitation is worse than a +0.03 improvement from genuine skill learning. (Ref: OpenAI RFT Cookbook; MO-GRPO arXiv:2509.22047.)
 
 The `log-iteration` delta will show the improvement. Interpret the result:
 
@@ -1469,6 +1535,17 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 **If training failed**: Check the error message first. Common failure: `kl=nan` at an early step — this means `max_output_tokens` is too high for the task (the base model fills the budget, all completions get truncated, mask becomes all-zeros). The `create-training` command auto-adjusts `max_output_tokens` based on GT length, but if you overrode it with `--inference-params`, remove the override and let auto-adjustment work. For other failures: retry once (transient). If it fails again, see [reference/iteration-strategy.md](reference/iteration-strategy.md) for the full diagnosis table and escalation ladder (lower LR → lower max_output_tokens → smaller model → stop and report).
 
 **"cancelled" is a TERMINAL state — do NOT retry cancelled jobs.** Only retry on "failed" states. To cancel a running job: `uv run scripts/finetune.py cancel-training --workflow-id WF_ID --job-id JOB_ID`.
+
+**If training early-stopped due to score degradation**, diagnose the pattern first — reward decline has multiple causes (Ref: LLD arXiv:2512.04220, entropy collapse GTPO arXiv:2508.03772, reward hacking arXiv:2602.01103):
+
+**(A) Reward never rose meaningfully above baseline before declining** — insufficient headroom. The base model scores too high (>0.75), most prompt groups have zero within-group variance, advantages ≈ 0, model drifts. **This should have been caught at eval (Step 7d) — check the headroom table.** Actions (in order of preference):
+1. **Switch to a smaller base model** (e.g., 4B→0.8B) and retrain — creates natural headroom without changing the grader.
+2. **Regenerate harder records** — if records test surface patterns rather than domain knowledge (arXiv:2505.17063). Run 0.8B eval to distinguish "model too good" from "records too easy" (see Step 7d diagnostic tree).
+3. **Make grader stricter** — add criteria that reflect genuine quality differences (not arbitrary constraints). Target: base model avg below 0.80 (the threshold where learnable-step fraction drops sharply, arXiv:2508.14094). **Caveat**: no paper endorses this technique directly. Only add criteria where the model's completions actually differ in quality — a criterion that all completions fail equally recreates zero-variance in reverse.
+4. **Don't train** — if the base model already meets the user's requirements.
+5. **Do NOT increase K to 16 as a fix for this.** At p=0.35 (borderline), K=8 already produces informative groups 96.6% of the time. K=16 adds only 3.3pp at 2x compute cost. EBPO (Table 2, arXiv:2602.05165) shows K=16 averages worse than K=8 across 5 benchmarks.
+
+**(B) Reward rose for 1+ epochs then declined** — this is NOT a headroom problem. The model learned something then deteriorated. Likely causes: entropy collapse (policy becomes deterministic, arXiv:2508.03772), Lazy Likelihood Displacement (likelihood of correct and incorrect responses both decline, arXiv:2512.04220), or reward hacking (model exploits grader weaknesses, arXiv:2602.01103). Actions: reduce LR by 50%, optionally enable KL penalty (beta=0.001), inspect model outputs for format gaming or degenerate responses.
 
 #### 9c. Topic-level iteration (stalled topics after 2+ evals)
 
