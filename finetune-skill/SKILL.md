@@ -1145,12 +1145,26 @@ PROVIDER_JOB_ID=$(python3 -c "import json; print(json.load(open('finetune-projec
 curl -s "http://localhost:9090/finetune/workflows/$WORKFLOW_ID/finetune-evaluations?finetune_job_id=$PROVIDER_JOB_ID"
 ```
 
-**Compare with pre-training baseline** (from `iterations.json`):
-1. **Score distribution**: Is perfect_rate growing? Is zero_rate shrinking? Compare with baseline perfect_rate/zero_rate from Step 7d.
-2. **Per-epoch avg**: Is it trending up from baseline? Flat = no learning. Declining after initial rise = possible entropy collapse or reward hacking.
-3. **Score shape**: Is the distribution bimodal (many 0.0 and 1.0, few middle)? This may be inherent to the task (classification) or may indicate grader issues. Compare with baseline distribution shape.
+**Build a progression table** comparing every completed epoch with the pre-training baseline (from `iterations.json`). This is the most diagnostic view — it shows learning trajectory at a glance:
 
-**Trigger-based output inspection** (see [reference/analysis-strategy.md](reference/analysis-strategy.md) Step 2b): when metrics flag anomalies (KL rising + reward flat, mean_length growing, per-topic degradation), sample and read 5-10 individual model completions + grader reasons from the epoch evals before continuing. Do NOT wait until training finishes to inspect.
+```
+| Metric       | Baseline | Epoch 0 | Epoch 1 | Epoch 2 | Trend |
+|--------------|----------|---------|---------|---------|-------|
+| Avg score    | 0.540    | 0.647   | 0.790   | 0.841   | ↑     |
+| Perfect rate | 39%      | 47%     | 62%     | 61%     | ↑     |
+| Zero rate    | 0.5%     | 0%      | 0%      | 0%      | =     |
+| Avg reward   | —        | 0.584   | 0.762   | 0.847   | ↑     |
+```
+
+**⚠️ WRITE TO EXECUTION LOG IMMEDIATELY after each epoch eval check — do NOT wait until training completes.** The execution log is the persistent record. The transcript is ephemeral — if the agent crashes or is killed, findings in the transcript are lost. After each epoch eval fetch, append the updated progression table + any findings to `execution-log.md` right away. This takes 30 seconds and prevents hours of re-analysis if the agent is restarted.
+
+The progression table answers:
+- **Is the model learning?** Avg score rising from baseline = yes. Flat = no.
+- **Is it plateauing?** Perfect rate leveling off between epochs = approaching ceiling.
+- **Is it degrading?** Avg score declining after initial rise = entropy collapse or reward hacking (see Step 9b case B).
+- **How does it compare to the larger model?** If 0.8B trained score exceeds 4B baseline score, the training was successful — you got a smaller, faster model that matches the larger one.
+
+**Trigger-based output inspection** (see [reference/analysis-strategy.md](reference/analysis-strategy.md) Step 2b): when metrics flag anomalies (KL rising + reward flat, mean_length growing, per-topic degradation), sample and read 5-10 individual model completions + grader reasons from the epoch evals before continuing. Do NOT wait until training finishes to inspect. Write inspection findings to `execution-log.md` immediately.
 
 When training completes (or is early-stopped), **immediately log the training iteration** before doing anything else:
 
