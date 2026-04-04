@@ -308,7 +308,8 @@ The UI can use this to show the sequence of agent decisions alongside jobs, so u
 | `extract_documents` | Step 2 — document extraction | Per-doc: `pages`, `docling_chunks`, `knowledge_parts`, `extraction_issues` |
 | `build_topics` | Step 3 — topic hierarchy | `relevant_parts`, `excluded_parts`, `topic_count`, `difficulty_breakdown`, `topics` list |
 | `generate_records` | Step 4 — training data | `mode`, `records_per_topic`, `dedup_removed`, `per_topic_counts`, `data_quality_notes` |
-| `write_grader` | Step 5 — grader creation | `template` used + `template_reason`, `scoring` method, `criteria` list, `dry_run` results |
+| `write_grader` | Step 5 — grader creation | `template` used + `template_reason`, `scoring` method, `criteria` list |
+| `dry_run_grader` | Step 5.1 — grader validation | Test 1 (hand-crafted scores), Test 2 (live model scores), Test 3 (adversarial checks). Score distribution spread. |
 | `data_quality_gate` | Step 5.5 — quality checks | Per-gate results: `structural`, `diversity`, `completion_length` |
 | `create_eval` | Step 7 — any evaluation job | `job_id`, `model`, `results` (avg, perfect_rate, per_topic_weakest) |
 | `readiness_gate` | Step 7c — readiness check | Hard/soft check results, difficulty probe |

@@ -74,6 +74,12 @@ def build_live_row(record: dict, model: str, base_url: str) -> dict:
     generates a real LLM response, and returns the complete row for grading.
     """
     data = record.get("data", record)
+    # Gateway may return data as a JSON string — parse it
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except (json.JSONDecodeError, TypeError):
+            data = record
     messages = data.get("messages", data.get("input", {}).get("messages", []))
     ground_truth = data.get("ground_truth", "")
 

@@ -168,15 +168,25 @@ The user should never look at the execution log and see nothing happening — if
 | 2 | `extract_documents` | Per-doc: chunks → parts count. Validation result. Gateway verify. |
 | 3 | `build_topics` | Topic count (leaf). Difficulty breakdown. Relevance filter: included/excluded. Relations count. |
 | 4 | `generate_records` | Mode (relations/rag). WHY that records-per-topic count was chosen. Per-topic counts. Prompt types generated (application/analysis/edge-case). 2-3 sample records (question + GT). source_parts coverage. Dedup removed. Upload total. Agent's quality assessment: are prompts clear? Are GTs correct? Any concerns? |
-| 5 | `write_grader` | Template used + **WHY that template** (e.g., "multilabel because task outputs a set of labels"). Criteria list with weights + **WHY those weights** (e.g., "F0.5 because false positives are safety-critical for allergens"). 10-15 sample records read for calibration — what edge cases were found. Dry-run scores on 5 test cases. Scoring distribution assessment: does it produce spread for GRPO? Gateway char count. |
+| 5 | `write_grader` | Template used + **WHY that template**. Criteria list with weights + **WHY those weights**. 10-15 sample records read for calibration — what edge cases were found. Gateway char count. |
+| 5.1 | `dry_run_grader` | Test 1 (hand-crafted): scores for perfect/partial/wrong/over-predict cases. Test 2 (live, 5+ samples): scores + model response summaries. Test 3 (adversarial): over-prediction, under-prediction, format gaming checks. Scoring distribution: does it produce spread (0.05-1.0) for GRPO? Any tests that failed + how fixed. |
+| 4.5 | `topic_balance_check` | Per-topic record counts. Any topic below 50% threshold. Action taken (regenerated N records for topic X). |
 | 5.5 | `data_quality_gate` | Per-gate results with detail: structural (record count, topic balance), diversity (avg distance, near-dupes), completion_length (GT P95, recommended_min, max_output_tokens decision). What warnings were raised and how they were addressed. |
-| 7 | `create_eval` | Job ID, model. Results: avg, perfect_rate, zero_rate, per-topic weakest. Readiness gate result. |
+| 6 | `verify_gateway` | Records, topics, sources, relations, evaluator — all counts. Any mismatches found. |
+| 7 | `create_eval` | Job ID, model. (Auto-logged by script — agent adds `--reason` for WHY this eval was created.) |
+| 7 | `eval_completed` | Results: avg, perfect_rate, zero_rate, per-topic weakest. (Auto-logged by script.) |
+| 7c | `readiness_gate` | PASS/FAIL/WARN. Which hard checks failed. Which soft warnings raised. What the agent decided to fix. |
+| 7c+ | `difficulty_probe` | learnable%, trivial%, dead%, effective%. PASS/WARN/FAIL. Whether K or grader changes are needed. |
 | 7d | `headroom_diagnostic` | 4B score. Gate result. Diagnostic branch taken. 0.8B score if evaluated. Model chosen + WHY. |
 | 7d.5 | `coverage_audit` | Total parts. Easy-only parts. Type B gaps. New records generated. |
-| 7e | `create_training` | Job ID, model, full config (epochs, lr, K, max_output_tokens). |
+| 7e | `create_training` | Job ID, model, full config (epochs, lr, K, max_output_tokens). (Auto-logged by script — agent adds `--reason`.) |
+| 7e | `training_completed` | Status, early_stop_reason, error. (Auto-logged by script.) |
 | 7e (monitoring) | `training_monitoring` | Progression table. Trigger check results. Per-record inspection findings. |
-| 8 | `training_analysis` | Per-topic comparison. Improved/degraded records with examples. Recommendations. |
+| 8a | `per_record_inspection` | Bottom 20% + top 10-15% records read. Grader reason patterns. Response patterns. Reward hacking signals. What was found. |
+| 8b | `post_training_eval` | Trained model score vs base model score. Per-topic comparison. Per-record improved/degraded examples. WHY this eval was created (to measure training improvement). |
+| 8c | `training_analysis` | Per-topic breakdown. Training metrics summary. Improved/degraded records with examples. Recommendations. |
 | 9 | `fix_grader` / `fix_records` | What changed, WHY, dry-run before/after. |
+| 9 | `iteration_decision` | Deploy / iterate / escalate. **WHY** — what evidence supports this decision. If deploying: final model name + score. If iterating: what to fix next. If escalating: what's blocking. |
 
 **⚠️ Log EVERY step, not just Step 1.** If the journal has only steps 1-3 when Step 7 is running, the user can't understand the pipeline's progress.
 
@@ -587,9 +597,13 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
 
 Key flags: `--enrich-sources` (recommended: enriches source_parts traceability), `--append` (retry failed topics without overwriting), `--upload-incremental` (records appear in UI as each topic completes). Generate **200+ total records**, 15-25 per leaf topic.
 
-**`--ground-truth-format`** (recommended for structured-output tasks): Forces scenario-based prompts with specific answer format. **⚠️ Include exact valid vocabulary** — don't use placeholders:
-- ✗ Bad: `--ground-truth-format 'allergen1, allergen2 OR none'`
-- ✓ Good: `--ground-truth-format 'Comma-separated from ONLY: milk, eggs, fish, shellfish, tree nuts, peanuts, wheat, soybeans, sesame. If none: none'`
+**`--ground-truth-format`** (MANDATORY for structured-output tasks): Forces scenario-based prompts with specific answer format. Without this, `generate_records.py` generates open-ended questions about the domain (regulatory/conceptual) instead of task-specific prompts that the model needs to learn.
+
+**⚠️ Include BOTH the answer format AND the prompt format.** The GT format controls what the model should output. But you also need `--prompt-format` (or include format instructions in `--ground-truth-format`) to control what the INPUT looks like:
+
+- ✗ Bad: No format flag → generates "What happens if a manufacturer fails to label allergens?" (regulatory question, not the task)
+- ✗ Bad: `--ground-truth-format 'allergen1, allergen2 OR none'` (placeholders, not exact vocabulary)
+- ✓ Good: `--ground-truth-format 'Given an ingredient list, output ONLY the allergen names as comma-separated from: milk, eggs, fish, shellfish, tree nuts, peanuts, wheat, soybeans, sesame. If none: none. The user message MUST present a concrete ingredient list, NOT ask a regulatory question.'`
 
 **⚠️ ALWAYS deduplicate** after generation:
 ```bash
@@ -611,10 +625,11 @@ Spawn `nemo-data-generator` subagent with `PROJECT_DIR`, `WORKFLOW_ID`, `SYSTEM_
 **4e. Agent quality check — read and verify records yourself.**
 
 After generation, **read records from every topic** (at least 3-5 per topic, mix of easy and hard prompts) and check:
+- **GT vocabulary validation** ⚠️: For structured-output tasks, verify EVERY GT uses ONLY the exact vocabulary from `--ground-truth-format`. Common failure: GTs use ingredient names ("casein", "whey", "semolina") instead of allergen category names ("milk", "wheat"). If the grader expects category names but GTs contain ingredient names, the grader will score correct answers as wrong — creating reward noise that attenuates GRPO signal (arXiv:2510.18924). **Run a programmatic check**: extract all unique tokens from GTs and compare against the valid vocabulary. Flag any GT containing tokens not in the valid set.
 - **GT self-consistency**: Does the answer/verdict match the reasoning/evidence within the same GT? (e.g., "COMPLIANT" but explanation says "exceeds limit" = contradiction)
 - **GT factual accuracy**: Cross-reference 5-10 numeric values in GTs against the source parts. Do the numbers match? (e.g., if GT says "MCL for benzene is 0.005 mg/L", verify this appears in the source table)
-- **Prompt-GT alignment**: Does the GT actually answer the question asked? Does it use the correct format specified in the system prompt?
-- **Vocabulary consistency**: Are GTs using the exact vocabulary from `--ground-truth-format`? Any synonyms, abbreviations, or variants that would confuse the grader?
+- **GT completeness** ⚠️: For multi-label tasks, verify the GT lists ALL correct labels, not just the topic-specific one. Common failure: a record in the "hidden-wheat" topic has ingredients containing wheat AND milk, but the GT only says "wheat" because the generator focused on the topic's allergen. **Run a programmatic check**: for each record, independently derive the correct GT from the ingredient list and compare with the generated GT.
+- **Prompt format**: Does the user message match the expected input format? If the task expects ingredient lists but the prompt asks a regulatory question, the record is wrong.
 - **Duplicate patterns**: Are different prompts producing identical GTs? (>5 identical GTs = low diversity, wasted GRPO signal)
 
 If >10% of sampled records have issues, **fix before proceeding** — re-generate the bad records with `generate_records.py --append` (skips completed topics) or `filter-records` + regenerate.
@@ -624,9 +639,13 @@ If >10% of sampled records have issues, **fix before proceeding** — re-generat
 uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step generate-data --project-dir finetune-project --workflow-id $WORKFLOW_ID
 ```
 
-### Step 4.5: Generate Variants for Augmentation (OPTIONAL)
+### Step 4.5: Topic Balance Check + Augmentation
 
-If some topics are under-represented, use `chat_completion.py` to create variants:
+**⚠️ MANDATORY check after record generation.** Count records per topic. If any topic has less than **50% of the target records-per-topic** (e.g., target=20, threshold=10), regenerate records for that topic using `generate_records.py --append`. Do NOT proceed to grader writing with severely imbalanced topics — GRPO will under-learn the thin topics and over-learn the thick ones (Kimi k1.5: "well-balanced topics and difficulty" required for effective training).
+
+Example: if `edge-none` has 7 records but all other topics have 20, regenerate 13 more `edge-none` records before proceeding.
+
+If some topics are under-represented after the balance check, use `chat_completion.py` to create variants:
 
 1. Select seed records from under-represented topics
 2. Call the LLM with the seed prompt + instructions to vary scenario, specifics, tone, complexity
@@ -718,10 +737,12 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
 uv run ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
   --workflow-id $WORKFLOW_ID \
   --script grader.js \
-  --live
+  --live --live-samples 5
 ```
 
-The `--live` flag picks 3 random training records, sends each prompt to the LLM, and grades the real responses. If all live samples score 0.0, the grader is broken — fix the extraction/parsing logic to handle real model output formats before proceeding.
+The `--live` flag picks random training records FROM THE GATEWAY (not from local files), sends each prompt to the LLM, and grades the real responses. Use `--live-samples N` to control how many (default 3, recommend 5+). **Do NOT use `--training-file`** — that flag does not exist. Records must already be uploaded to the gateway before running `--live`.
+
+If all live samples score 0.0, the grader is broken — fix the extraction/parsing logic to handle real model output formats before proceeding.
 
 **Both tests must pass.** If Test 1 passes but Test 2 scores 0.0, the grader has format assumptions that real models don't satisfy. Fix and re-test. Do NOT proceed to upload until both pass. The sandbox does NOT support `console.log` — use the `reason` field for debug output.
 
