@@ -245,7 +245,7 @@ def gate_structural(records: list[dict], topics_data: list | None) -> dict:
                 "topic": max_topic,
             })
 
-    # Thin topics
+    # Thin topics (absolute minimum)
     thin_topics = {t: c for t, c in topic_counts.items() if c < THRESHOLDS["min_records_per_topic"]}
     if thin_topics:
         issues.append({
@@ -255,6 +255,28 @@ def gate_structural(records: list[dict], topics_data: list | None) -> dict:
             "value": len(thin_topics),
             "topics": dict(thin_topics),
         })
+
+    # Topic balance check: any topic with < 50% of the median count is imbalanced.
+    # GRPO will under-learn thin topics and over-learn thick ones.
+    if topic_counts and len(topic_counts) > 1:
+        counts = sorted(topic_counts.values())
+        median_count = counts[len(counts) // 2]
+        balance_threshold = max(median_count // 2, THRESHOLDS["min_records_per_topic"])
+        imbalanced = {t: c for t, c in topic_counts.items() if c < balance_threshold}
+        if imbalanced:
+            issues.append({
+                "severity": "hard",
+                "check": "topic_balance",
+                "message": (
+                    f"{len(imbalanced)} topic(s) have < 50% of median ({median_count}): "
+                    f"{', '.join(f'{t}={c}' for t, c in sorted(imbalanced.items(), key=lambda x: x[1]))}. "
+                    f"Regenerate records for these topics before training."
+                ),
+                "value": len(imbalanced),
+                "threshold": balance_threshold,
+                "topics": dict(imbalanced),
+                "median_count": median_count,
+            })
 
     # 6. Missing system prompts
     no_system = sum(1 for r in records if not extract_system_prompt(r).strip())

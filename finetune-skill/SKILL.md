@@ -481,6 +481,8 @@ Write the label back to `all-parts-index.json` — set `"relevant": true` for pa
 
 **3b. Design skill-based topics from relevant parts.**
 
+**⚠️ Topic naming: do NOT use `/` in topic names or IDs.** The UI uses `/` for path routing — a topic named "Hidden Milk/Dairy Sources" breaks navigation. Use `-` instead: "Hidden Milk-Dairy Sources". The `upload-topics` script auto-sanitizes `/` to `-`, but avoid it at generation time to keep names clean.
+
 From the relevant parts only, identify distinct skills the content teaches. Organize by **skill** (what the model learns to DO), not by document structure.
 
 ```

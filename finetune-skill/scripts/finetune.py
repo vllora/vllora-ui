@@ -259,6 +259,24 @@ def cmd_upload_topics(args: argparse.Namespace) -> None:
         if old_id and not _looks_like_uuid(old_id):
             id_remap[old_id] = str(_uuid.uuid4())
 
+    # Sanitize topic names and IDs: replace "/" with "-" to prevent
+    # UI path routing issues (the UI splits on "/" for navigation).
+    sanitized_count = 0
+    for t in raw_topics:
+        for field in ("name", "id", "reference_id"):
+            val = t.get(field)
+            if val and "/" in val:
+                t[field] = val.replace("/", "-")
+                sanitized_count += 1
+    if sanitized_count:
+        print(f"  Sanitized {sanitized_count} topic field(s): replaced '/' with '-'", file=sys.stderr)
+        # Save sanitized topics back to file so local copy is consistent
+        if isinstance(topics, list):
+            topics_path.write_text(json.dumps(raw_topics, indent=2))
+        elif isinstance(topics, dict) and "topics" in topics:
+            topics["topics"] = raw_topics
+            topics_path.write_text(json.dumps(topics, indent=2))
+
     transformed = []
     for t in raw_topics:
         topic = {**t}
@@ -1124,11 +1142,45 @@ def cmd_upload_grader(args: argparse.Namespace) -> None:
     The gateway expects multipart form data with the script in a 'file' field.
     It validates the script, wraps it as a JS evaluator config, and stores it
     in the workflow's eval_script column.
+
+    Automatically runs a basic dry-run validation before uploading to catch
+    syntax errors and obvious scoring bugs. Use --skip-dry-run to bypass.
     """
     grader_path = Path(args.file)
     if not grader_path.exists():
         print(f"Error: Grader file not found: {grader_path}", file=sys.stderr)
         sys.exit(1)
+
+    # Auto dry-run: basic syntax + scoring sanity check before upload
+    if not getattr(args, "skip_dry_run", False):
+        import subprocess
+        script_dir = Path(__file__).parent
+        dry_run_script = script_dir / "dry_run_grader.py"
+        if dry_run_script.exists():
+            print("Running pre-upload dry-run validation...", file=sys.stderr)
+            # Test with a minimal hand-crafted row
+            test_row = json.dumps({
+                "messages": [
+                    {"role": "system", "content": "Test system prompt"},
+                    {"role": "user", "content": "Test question"},
+                    {"role": "assistant", "content": "Test answer"},
+                ],
+                "ground_truth": "test",
+            })
+            result = subprocess.run(
+                [sys.executable, str(dry_run_script),
+                 "--workflow-id", args.workflow_id,
+                 "--script", str(grader_path),
+                 "--row", test_row],
+                capture_output=True, text=True,
+            )
+            if result.returncode != 0:
+                print(f"⚠ Dry-run FAILED — grader has errors:", file=sys.stderr)
+                print(result.stderr or result.stdout, file=sys.stderr)
+                print(f"Fix the grader before uploading. Use --skip-dry-run to bypass.", file=sys.stderr)
+                sys.exit(1)
+            else:
+                print(f"  ✓ Dry-run passed", file=sys.stderr)
 
     with grader_path.open("rb") as fh:
         files = {"file": (grader_path.name, fh, "application/javascript")}
@@ -1960,7 +2012,123 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
     else:
         result["recommendation"] = "All checks passed. Ready for training."
 
+    # ── Per-record inspection (auto — agent doesn't need to remember) ──
+    # Print top/bottom scoring records with grader reasons so the agent sees
+    # them and can identify grader exploits or data issues.
+    print("\n── Per-Record Inspection (auto) ──", file=sys.stderr)
+
+    bottom_records = sorted(
+        [(i, r) for i, r in enumerate(results) if r.get("score") is not None],
+        key=lambda x: x[1].get("score", 0),
+    )
+    top_records = sorted(
+        [(i, r) for i, r in enumerate(results) if r.get("score") is not None],
+        key=lambda x: x[1].get("score", 0),
+        reverse=True,
+    )
+
+    print("  Bottom 5 (lowest scores — check for grader bugs):", file=sys.stderr)
+    for idx, r in bottom_records[:5]:
+        score = r.get("score", 0)
+        reason = r.get("reason", "")[:120]
+        row = r.get("row", {})
+        topic = row.get("topic", "?")
+        rid = row.get("id", f"row-{idx}")
+        print(f"    [{rid}] topic={topic} score={score:.2f} reason: {reason}", file=sys.stderr)
+
+    print("  Top 5 (highest scores — check for grader exploits):", file=sys.stderr)
+    for idx, r in top_records[:5]:
+        score = r.get("score", 0)
+        reason = r.get("reason", "")[:120]
+        row = r.get("row", {})
+        topic = row.get("topic", "?")
+        rid = row.get("id", f"row-{idx}")
+        print(f"    [{rid}] topic={topic} score={score:.2f} reason: {reason}", file=sys.stderr)
+
+    # ── Source-part coverage audit (auto — agent doesn't need to remember) ──
+    # Check if any source_parts are only covered by high-scoring records.
+    part_scores: dict[str, list[float]] = {}
+    for r in results:
+        row = r.get("row", {})
+        score = r.get("score")
+        if score is None:
+            continue
+        # source_parts may be in the row data or input
+        source_parts = row.get("source_parts", [])
+        if isinstance(row.get("input"), dict):
+            source_parts = source_parts or row["input"].get("source_parts", [])
+        for sp in source_parts:
+            part_scores.setdefault(sp, []).append(score)
+
+    if part_scores:
+        easy_only = [
+            (sp, len(sc), sum(sc) / len(sc))
+            for sp, sc in part_scores.items()
+            if all(s > 0.9 for s in sc)
+        ]
+        print(f"\n── Source-Part Coverage Audit (auto) ──", file=sys.stderr)
+        print(f"  Total source parts referenced: {len(part_scores)}", file=sys.stderr)
+        print(f"  Parts with ONLY easy records (all scores >0.9): {len(easy_only)}", file=sys.stderr)
+        if easy_only:
+            print(f"  ⚠ COVERAGE GAP — these parts may not be learned by GRPO:", file=sys.stderr)
+            for sp, n, avg_s in sorted(easy_only)[:10]:
+                print(f"    {sp}: {n} records, avg={avg_s:.2f}", file=sys.stderr)
+            print(f"  Action: generate harder records for these parts (see SKILL.md Step 7d coverage audit)", file=sys.stderr)
+        else:
+            print(f"  ✓ All source parts have at least one hard record — no coverage gaps.", file=sys.stderr)
+
+    # ── Headroom check (auto — tells agent what to do next) ──
+    print(f"\n── Headroom Check (auto) ──", file=sys.stderr)
+    if avg > 0.80:
+        print(f"  ⚠ HEADROOM GATE FAIL: avg={avg:.3f} (>0.80)", file=sys.stderr)
+        print(f"  GRPO will produce near-zero improvement (arXiv:2508.14094: 3.7% learnable steps).", file=sys.stderr)
+        print(f"  DO NOT proceed to training with this model.", file=sys.stderr)
+        print(f"  → Eval a smaller model (e.g., Qwen3.5-0.8B) to find better headroom.", file=sys.stderr)
+        print(f"  → If 0.8B also scores >0.75: records may be too easy — regenerate harder variants.", file=sys.stderr)
+    elif avg > 0.75:
+        print(f"  ⚠ HEADROOM WARNING: avg={avg:.3f} (0.75-0.80 range)", file=sys.stderr)
+        print(f"  GRPO efficiency reduced. Consider evaluating a smaller model for better headroom.", file=sys.stderr)
+        print(f"  → Eval Qwen3.5-0.8B to compare. If 0.8B scores 0.10-0.75, train 0.8B instead.", file=sys.stderr)
+    else:
+        print(f"  ✓ Headroom OK: avg={avg:.3f} (<0.75). Proceed to training.", file=sys.stderr)
+
+    # ── Mandatory next steps prompt ──
+    print(f"\n── NEXT STEPS (mandatory) ──", file=sys.stderr)
+    if verdict == "FAIL":
+        print(f"  1. Fix the failed checks listed above", file=sys.stderr)
+        print(f"  2. Re-run eval", file=sys.stderr)
+        print(f"  3. Re-run readiness-check", file=sys.stderr)
+    elif avg > 0.75:
+        print(f"  1. Log this eval: log-step --action headroom_diagnostic ...", file=sys.stderr)
+        print(f"  2. Eval smaller model: create-eval --model Qwen3.5-0.8B ...", file=sys.stderr)
+        print(f"  3. Compare headroom and choose training model", file=sys.stderr)
+    else:
+        print(f"  1. Log this eval: log-step + log-iteration", file=sys.stderr)
+        print(f"  2. Run difficulty-probe on this eval", file=sys.stderr)
+        print(f"  3. Proceed to create-training", file=sys.stderr)
+
     print(json.dumps(result, indent=2))
+
+    # Auto-journal: readiness gate result
+    failed_names = ", ".join(hard_failed) if hard_failed else "none"
+    warned_names = ", ".join(soft_failed) if soft_failed else "none"
+    _auto_journal(
+        project_dir=eval_file.parent.parent,
+        step="step_7c_readiness",
+        action="readiness_gate",
+        status=verdict.lower(),
+        summary=f"Readiness gate: {verdict}. avg={avg:.3f}, std={std:.3f}, zeros={zero_frac:.0%}, perfect={perfect_frac:.0%}. Hard failed: {failed_names}. Soft warned: {warned_names}.",
+        results={
+            "verdict": verdict,
+            "avg": round(avg, 4),
+            "std": round(std, 4),
+            "zero_frac": round(zero_frac, 4),
+            "perfect_frac": round(perfect_frac, 4),
+            "hard_failed": hard_failed,
+            "soft_failed": soft_failed,
+            "recommendation": result.get("recommendation", ""),
+        },
+    )
 
     if verdict == "FAIL":
         sys.exit(1)
@@ -3696,16 +3864,59 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
             )
 
             if status in ("succeeded", "completed"):
+                # ── Final progression table ──
+                try:
+                    eval_params_final = (
+                        {"finetune_job_id": provider_job_id}
+                        if provider_job_id else {}
+                    )
+                    final_evals = _api(
+                        "GET",
+                        f"{args.base_url}/finetune/workflows/{wf_id}/finetune-evaluations",
+                        params=eval_params_final,
+                    )
+                    ep_results = final_evals.get("results", [])
+                    if ep_results:
+                        ep_scores: dict[str, list[float]] = {}
+                        for r in ep_results:
+                            for ek, items in r.get("epochs", {}).items():
+                                if not isinstance(items, list):
+                                    items = [items]
+                                for item in items:
+                                    s = item.get("score")
+                                    if s is not None:
+                                        ep_scores.setdefault(ek, []).append(s)
+                        if ep_scores:
+                            print(f"\n── Final Progression Table ──", file=sys.stderr)
+                            for ek in sorted(ep_scores.keys(), key=lambda x: float(x)):
+                                sc = ep_scores[ek]
+                                avg_s = sum(sc) / len(sc)
+                                perf = sum(1 for s in sc if s >= 0.99) / len(sc)
+                                print(f"  Epoch {ek}: avg={avg_s:.3f}, perfect={perf:.0%} ({len(sc)} scores)", file=sys.stderr)
+                            best_ep = max(ep_scores.items(), key=lambda x: sum(x[1]) / len(x[1]))
+                            best_avg = sum(best_ep[1]) / len(best_ep[1])
+                            print(f"  Best: epoch {best_ep[0]} (avg={best_avg:.3f})", file=sys.stderr)
+                except (SystemExit, Exception):
+                    pass
+
                 print(
-                    f"\n⚠️  NEXT STEPS:\n"
-                    f"   1. Run post-training eval (Step 8b):\n"
-                    f"      uv run ${{CLAUDE_SKILL_DIR}}/scripts/finetune.py create-eval \\\n"
-                    f"        --workflow-id $WORKFLOW_ID --model \"{metadata.get('fine_tuned_model', 'TRAINED_MODEL')}\" --output-dir finetune-project/evaluations\n"
-                    f"   2. Log this training iteration:\n"
+                    f"\n⚠️  MANDATORY NEXT STEPS (do ALL of these in order):\n"
+                    f"   1. Update execution-log.md with final progression table:\n"
+                    f"      uv run ${{CLAUDE_SKILL_DIR}}/scripts/finetune.py log-step --project-dir finetune-project \\\n"
+                    f"        --step step_7e_training --action training_completed --status completed \\\n"
+                    f"        --summary \"Training completed: [final avg] vs [baseline avg]\" \\\n"
+                    f"        --duration \"[total time]\" --agent training-monitor\n"
+                    f"   2. Log training iteration:\n"
                     f"      uv run ${{CLAUDE_SKILL_DIR}}/scripts/finetune.py log-iteration \\\n"
                     f"        --project-dir finetune-project --phase training \\\n"
                     f"        --training-file {job_file} \\\n"
-                    f"        --changes \"describe training config\" --change-type baseline --verdict PENDING"
+                    f"        --changes \"describe config + results\" --change-type baseline --verdict PASS\n"
+                    f"   3. Run post-training eval:\n"
+                    f"      uv run ${{CLAUDE_SKILL_DIR}}/scripts/finetune.py create-eval \\\n"
+                    f"        --workflow-id $WORKFLOW_ID --model \"{metadata.get('fine_tuned_model', 'TRAINED_MODEL')}\" --output-dir finetune-project/evaluations\n"
+                    f"   4. Compare trained vs base model per-record and decide:\n"
+                    f"      DEPLOY (trained model meets requirements) / ITERATE (fix grader/data) / ESCALATE (report to user)\n"
+                    f"      Log decision: log-step --action iteration_decision --summary \"[DEPLOY/ITERATE/ESCALATE]: [reason]\""
                 )
             if status == "failed":
                 sys.exit(1)
@@ -3769,6 +3980,40 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
         # 3. Length exploitation (Dr. GRPO, arXiv:2503.20783 — reward flat + length growing)
         if early_stop and status == "running" and (elapsed - last_plateau_check) > 300:
             last_plateau_check = elapsed
+
+            # ── Auto progression table (every 5 min) ──
+            # Fetches epoch evals and prints a progression summary so the
+            # agent (and execution log) can track learning trajectory.
+            try:
+                eval_params_prog = (
+                    {"finetune_job_id": provider_job_id}
+                    if provider_job_id else {}
+                )
+                epoch_evals = _api(
+                    "GET",
+                    f"{args.base_url}/finetune/workflows/{wf_id}/finetune-evaluations",
+                    params=eval_params_prog,
+                )
+                ep_results = epoch_evals.get("results", [])
+                if ep_results:
+                    ep_scores: dict[str, list[float]] = {}
+                    for r in ep_results:
+                        for ek, items in r.get("epochs", {}).items():
+                            if not isinstance(items, list):
+                                items = [items]
+                            for item in items:
+                                s = item.get("score")
+                                if s is not None:
+                                    ep_scores.setdefault(ek, []).append(s)
+                    if ep_scores:
+                        print(f"\n  ── Progression Table (auto, {int(elapsed)}s) ──", file=sys.stderr)
+                        for ek in sorted(ep_scores.keys(), key=lambda x: float(x)):
+                            sc = ep_scores[ek]
+                            avg_s = sum(sc) / len(sc)
+                            perf = sum(1 for s in sc if s >= 0.99) / len(sc)
+                            print(f"    Epoch {ek}: avg={avg_s:.3f}, perfect={perf:.0%} ({len(sc)} scores)", file=sys.stderr)
+            except (SystemExit, Exception):
+                pass  # Non-fatal — progression table is informational
 
             # Signal 1 & 2: Score plateau or degradation
             plateau = _check_score_plateau(
@@ -4208,7 +4453,45 @@ def cmd_difficulty_probe(args: argparse.Namespace) -> None:
     if args.compact:
         cmd.append("--compact")
 
-    result = subprocess.run(cmd)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    # Print the output (so agent sees it)
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr)
+
+    # Auto-journal: difficulty probe result
+    verdict = "pass" if result.returncode == 0 else "warn" if result.returncode == 2 else "fail"
+    # Try to parse JSON output for structured data
+    probe_results = {}
+    if args.output_json and result.stdout:
+        try:
+            probe_data = json.loads(result.stdout)
+            probe_results = {
+                "learnable_frac": probe_data.get("learnable_frac"),
+                "trivial_frac": probe_data.get("trivial_frac"),
+                "dead_frac": probe_data.get("dead_frac"),
+                "effective_frac": probe_data.get("effective_training_frac"),
+            }
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    _auto_journal(
+        project_dir=Path(args.file).parent.parent,
+        step="step_7c_difficulty",
+        action="difficulty_probe",
+        status=verdict,
+        summary=f"Difficulty probe: {verdict.upper()}. " + (
+            f"learnable={probe_results.get('learnable_frac', '?')}, "
+            f"trivial={probe_results.get('trivial_frac', '?')}, "
+            f"dead={probe_results.get('dead_frac', '?')}, "
+            f"effective={probe_results.get('effective_frac', '?')}"
+            if probe_results else "See output for details."
+        ),
+        results=probe_results if probe_results else None,
+    )
+
     sys.exit(result.returncode)
 
 
@@ -4415,9 +4698,10 @@ def main() -> None:
     p.add_argument("--verbose", action="store_true", help="Show sample removed records")
 
     # upload-grader
-    p = subparsers.add_parser("upload-grader", help="Upload grader/evaluator script")
+    p = subparsers.add_parser("upload-grader", help="Upload grader/evaluator script (auto dry-run before upload)")
     p.add_argument("--workflow-id", required=True, help="Workflow ID")
     p.add_argument("--file", required=True, help="Path to grader.js")
+    p.add_argument("--skip-dry-run", action="store_true", help="Skip pre-upload dry-run validation")
 
     # verify
     p = subparsers.add_parser("verify", help="Verify all data in gateway database")
