@@ -1,0 +1,398 @@
+/**
+ * Multi-Label Set-Comparison Grader
+ *
+ * For tasks where the model outputs a SET of labels from a defined vocabulary.
+ * Examples: allergen detection, ICD coding, topic tagging, entity extraction,
+ * multi-label classification, content moderation flags.
+ *
+ * Architecture: Regex parsing + LLM extraction fallback → set comparison
+ * with configurable F-beta scoring + over-prediction defense.
+ *
+ * ═══ GRPO-SPECIFIC DESIGN ═══
+ *
+ * Over-prediction exploit defense (MO-GRPO arXiv:2509.22047 Theorem 1):
+ *   GRPO advantage is biased toward higher-variance reward components. In
+ *   multi-label tasks, recall has structurally higher variance than precision
+ *   (the model can always increase recall by predicting more labels). Without
+ *   defense, GRPO learns to over-predict — listing extra labels because high
+ *   recall outscores missing labels in group comparisons.
+ *
+ *   Three-layer defense:
+ *   1. F-beta scoring (β configurable, default 0.5 = precision-heavy)
+ *   2. Per-FP graduated penalty (0.15 per false positive)
+ *   3. Precision floor hard cap (precision < 0.67 → cap score at 0.40)
+ *      Ref: CoRPO (arXiv:2511.04439) — without this, ~18% of failed
+ *      rollouts receive positive GRPO advantage.
+ *
+ * Stratified scoring (HERO arXiv:2510.07242):
+ *   Correct-tier (0.50-1.0) always exceeds wrong-tier (0.0-0.49).
+ *   Guarantees GRPO always prefers partially-correct over wrong-but-fluent.
+ *
+ * Nonzero floor for attempted answers:
+ *   Wrong-but-attempted = 0.05 (not 0.0). Keeps GRPO gradient nonzero
+ *   (DAPO arXiv:2503.14476). Only empty/refusal = 0.0.
+ *
+ * Label parsing (xFinder arXiv:2405.11874):
+ *   Regex extraction accuracy = 74%. LLM extraction = 93%.
+ *   This template uses regex-first + LLM fallback for reliability.
+ *
+ * ═══ CUSTOMIZATION ═══
+ *
+ * Required: Set VALID_LABELS array and LABEL_ALIASES map for your task.
+ * Optional: Adjust BETA, FP_PENALTY, PRECISION_FLOOR, BREVITY_BONUS_MAX_WORDS.
+ *
+ * Ref: MO-GRPO (arXiv:2509.22047), CoRPO (arXiv:2511.04439),
+ *      HERO (arXiv:2510.07242), xFinder (arXiv:2405.11874),
+ *      DRPO (arXiv:2510.04474), DAPO (arXiv:2503.14476)
+ */
+function evaluate(input) {
+    // ═══════════════════════════════════════════════════════
+    // CUSTOMIZE THESE FOR YOUR TASK
+    // ═══════════════════════════════════════════════════════
+
+    // Valid labels — the canonical label set for your task.
+    // Model outputs must map to these (via aliases below).
+    var VALID_LABELS = [
+        "label_1", "label_2", "label_3", "label_4", "label_5"
+        // Example (allergens): "milk", "eggs", "fish", "shellfish",
+        //   "tree nuts", "peanuts", "wheat", "soybeans", "sesame"
+        // Example (ICD codes): "J06.9", "J18.9", "R05", "R50.9"
+    ];
+
+    // Aliases — map common variants/synonyms to canonical labels.
+    // Keys are lowercase. Values must be in VALID_LABELS.
+    var LABEL_ALIASES = {
+        // Example (allergens):
+        // "soy": "soybeans", "soya": "soybeans", "edamame": "soybeans",
+        // "dairy": "milk", "whey": "milk", "casein": "milk", "lactose": "milk",
+        // "egg": "eggs", "albumin": "eggs",
+        // "peanut": "peanuts", "groundnut": "peanuts",
+        // "almond": "tree nuts", "walnut": "tree nuts", "cashew": "tree nuts",
+        // "semolina": "wheat", "spelt": "wheat", "durum": "wheat",
+        // "tahini": "sesame"
+    };
+
+    // F-beta parameter — controls precision vs recall tradeoff.
+    //   β=0.5: precision-heavy (1 FP costs as much as 4 FN). Use for
+    //          safety-critical tasks (allergens, medical, compliance).
+    //   β=1.0: balanced F1. Use for general tagging/NER.
+    //   β=2.0: recall-heavy. Use for screening/search.
+    // Ref: MO-GRPO (arXiv:2509.22047) — GRPO advantage biased toward
+    //   higher-variance components; β<1 counteracts recall's variance advantage.
+    var BETA = 0.5;
+
+    // Per-false-positive penalty — deducted from score for each FP.
+    // Creates smooth continuous cost that GRPO can optimize against.
+    // 0.15 = 2 FPs on a 4-label prediction drops score below 0.70.
+    var FP_PENALTY = 0.15;
+
+    // Precision floor — if precision drops below this, cap the total score.
+    // Prevents over-predicting completions from outranking correct ones in
+    // GRPO group comparisons.
+    // Ref: CoRPO (arXiv:2511.04439) — ~18% of failed rollouts get positive
+    //   GRPO advantage without this guard.
+    var PRECISION_FLOOR = 0.67;
+    var PRECISION_FLOOR_CAP = 0.40;
+
+    // Brevity bonus — reward concise correct answers.
+    // Set to 0 to disable. Set to expected max words for the task.
+    var BREVITY_BONUS_MAX_WORDS = 15;
+
+    // "None" label — what the model should output when no labels apply.
+    var NONE_KEYWORD = "none";
+
+    // ═══════════════════════════════════════════════════════
+    // END CUSTOMIZATION — code below is generic
+    // ═══════════════════════════════════════════════════════
+
+    // ─── Extract response and ground truth ───
+    var response = "";
+    if (input.response && typeof input.response === "string") {
+        response = input.response;
+    } else if (input.messages && Array.isArray(input.messages) && input.messages.length > 0) {
+        var lastMessage = input.messages[input.messages.length - 1];
+        if (lastMessage.content) response = lastMessage.content;
+    }
+
+    var groundTruth = (input.ground_truth && typeof input.ground_truth === "string")
+        ? input.ground_truth : "";
+    input.ground_truth = groundTruth;
+
+    // ─── Guard clauses ───
+    if (!response || response.trim().length === 0) {
+        return { score: 0, reason: "Response is empty" };
+    }
+    if (!groundTruth || groundTruth.trim().length === 0) {
+        return { score: 0, reason: "No ground truth provided" };
+    }
+
+    // ─── Parse ground truth labels ───
+    var gtLabels = parseLabels(groundTruth, VALID_LABELS, LABEL_ALIASES);
+    var gtIsNone = (gtLabels.length === 0);
+
+    // ─── Parse model response — regex first, LLM fallback ───
+    var modelLabels = parseLabels(response, VALID_LABELS, LABEL_ALIASES);
+    var modelSaysNone = isNoneResponse(response, NONE_KEYWORD);
+    var extractionMethod = "regex";
+
+    // LLM fallback if regex found nothing and response isn't "none"
+    if (modelLabels.length === 0 && !modelSaysNone && response.trim().length > 2) {
+        var llmResult = extractLabelsWithLLM(response, input, VALID_LABELS);
+        if (llmResult !== null) {
+            if (llmResult === NONE_KEYWORD) {
+                modelSaysNone = true;
+            } else {
+                modelLabels = parseLabels(llmResult, VALID_LABELS, LABEL_ALIASES);
+            }
+            extractionMethod = "llm";
+        }
+    }
+
+    // ─── Handle "none" cases ───
+
+    // GT=none, model=none → perfect
+    if (gtIsNone && modelSaysNone && modelLabels.length === 0) {
+        var noneScore = 0.95;
+        var wordCount = response.split(/\s+/).length;
+        if (BREVITY_BONUS_MAX_WORDS > 0 && wordCount <= BREVITY_BONUS_MAX_WORDS) {
+            noneScore = 1.0;
+        }
+        return {
+            score: noneScore,
+            reason: "Correct: no labels present, model said '" + NONE_KEYWORD + "'. Words=" + wordCount,
+            precision: 1.0, recall: 1.0, fbeta: 1.0,
+            tp: 0, fp: 0, fn: 0,
+            extraction_method: extractionMethod
+        };
+    }
+
+    // GT=none, model listed labels → false positives only
+    if (gtIsNone && modelLabels.length > 0) {
+        var fpOnlyScore = Math.max(0.02, 0.10 - (modelLabels.length * 0.02));
+        return {
+            score: fpOnlyScore,
+            reason: "Wrong: GT=" + NONE_KEYWORD + " but model listed " + modelLabels.length +
+                " label(s): " + modelLabels.join(", ") + ". All are false positives.",
+            precision: 0, recall: 1.0, fbeta: 0,
+            tp: 0, fp: modelLabels.length, fn: 0,
+            extraction_method: extractionMethod
+        };
+    }
+
+    // GT has labels, model=none → missed everything
+    if (!gtIsNone && modelSaysNone && modelLabels.length === 0) {
+        return {
+            score: 0.05,
+            reason: "Wrong: model said '" + NONE_KEYWORD + "' but GT=" +
+                gtLabels.join(", ") + ". Missed all " + gtLabels.length + " label(s).",
+            precision: 0, recall: 0, fbeta: 0,
+            tp: 0, fp: 0, fn: gtLabels.length,
+            extraction_method: extractionMethod
+        };
+    }
+
+    // ─── Compute set comparison ───
+    var tp = 0, fp = 0, fn = 0;
+    for (var i = 0; i < modelLabels.length; i++) {
+        if (gtLabels.indexOf(modelLabels[i]) !== -1) {
+            tp++;
+        } else {
+            fp++;
+        }
+    }
+    for (var j = 0; j < gtLabels.length; j++) {
+        if (modelLabels.indexOf(gtLabels[j]) === -1) {
+            fn++;
+        }
+    }
+
+    // ─── Compute F-beta ───
+    var precision = (tp + fp > 0) ? tp / (tp + fp) : 0;
+    var recall = (tp + fn > 0) ? tp / (tp + fn) : 0;
+    var betaSq = BETA * BETA;
+    var fbeta = (precision + recall > 0)
+        ? ((1 + betaSq) * precision * recall) / (betaSq * precision + recall)
+        : 0;
+
+    // ─── Stratified scoring (HERO arXiv:2510.07242) ───
+    // Map F-beta [0,1] into stratified tiers to ensure correct > wrong.
+    var baseScore;
+    if (fbeta >= 0.85) {
+        // Near-perfect tier: 0.80-0.95
+        baseScore = 0.80 + (fbeta - 0.85) * (0.15 / 0.15);
+    } else if (fbeta >= 0.40) {
+        // Partial tier: 0.50-0.79
+        baseScore = 0.50 + (fbeta - 0.40) * (0.29 / 0.45);
+    } else if (tp > 0) {
+        // Low tier: 0.20-0.49 (at least 1 TP)
+        baseScore = 0.20 + (fbeta / 0.40) * 0.29;
+    } else {
+        // Fail tier: 0.05 (no TPs but attempted)
+        baseScore = 0.05;
+    }
+
+    // ─── Per-FP graduated penalty ───
+    // Each false positive deducts FP_PENALTY from the score.
+    // Creates smooth continuous cost GRPO can optimize against.
+    if (fp > 0) {
+        baseScore = baseScore - (fp * FP_PENALTY);
+    }
+
+    // ─── Precision floor hard cap ───
+    // Prevents over-predicting completions from outranking correct ones
+    // in GRPO group comparisons.
+    // Ref: CoRPO (arXiv:2511.04439)
+    if (fp > 0 && precision < PRECISION_FLOOR) {
+        baseScore = Math.min(baseScore, PRECISION_FLOOR_CAP);
+    }
+
+    // ─── Brevity bonus (correct answers only, DRPO-safe) ───
+    // Only for perfect matches — no bonus on partial to avoid
+    // rewarding short wrong answers.
+    // Ref: DRPO (arXiv:2510.04474) — never penalize correct answers.
+    var wordCount = response.split(/\s+/).length;
+    var brevityNote = "";
+    if (fbeta >= 0.99 && BREVITY_BONUS_MAX_WORDS > 0 && wordCount <= BREVITY_BONUS_MAX_WORDS) {
+        baseScore = Math.min(1.0, baseScore + 0.05);
+        brevityNote = " Brevity bonus: +0.05 (" + wordCount + " words)";
+    }
+
+    // ─── Ensure nonzero floor for attempted answers ───
+    // GRPO needs nonzero scores for gradient signal (DAPO arXiv:2503.14476).
+    if (baseScore < 0.05 && modelLabels.length > 0) {
+        baseScore = 0.05;
+    }
+
+    // ─── Clamp and return ───
+    var finalScore = Math.max(0, Math.min(1.0, baseScore));
+    if (isNaN(finalScore)) finalScore = 0;
+
+    return {
+        score: finalScore,
+        reason: "Fbeta(" + BETA + ")=" + fbeta.toFixed(2) +
+            " P=" + precision.toFixed(2) +
+            " R=" + recall.toFixed(2) +
+            " | TP=" + tp + " FP=" + fp + " FN=" + fn +
+            " | Model: " + (modelLabels.length > 0 ? modelLabels.join(", ") : "(" + NONE_KEYWORD + ")") +
+            " | GT: " + gtLabels.join(", ") +
+            " | Extraction: " + extractionMethod + brevityNote,
+        precision: precision,
+        recall: recall,
+        fbeta: fbeta,
+        beta: BETA,
+        tp: tp, fp: fp, fn: fn,
+        extraction_method: extractionMethod
+    };
+}
+
+// ═══════════════════════════════════════════════════════
+// HELPER FUNCTIONS
+// ═══════════════════════════════════════════════════════
+
+/**
+ * Parse a text string into a deduplicated array of canonical labels.
+ * Handles: comma-separated, JSON arrays, bullet lists, plain text.
+ * Resolves aliases to canonical forms.
+ */
+function parseLabels(text, validLabels, aliases) {
+    if (!text) return [];
+    var lower = text.toLowerCase().trim();
+
+    // Handle explicit "none"
+    if (lower === "none" || lower === "none.") return [];
+
+    var found = [];
+
+    // Strategy 1: Match valid labels directly (word boundary)
+    for (var i = 0; i < validLabels.length; i++) {
+        var label = validLabels[i];
+        var pattern = new RegExp("\\b" + label.replace(/\s+/g, "\\s+") + "\\b", "i");
+        if (pattern.test(lower)) {
+            found.push(label);
+        }
+    }
+
+    // Strategy 2: Match aliases
+    var aliasKeys = Object.keys(aliases);
+    for (var j = 0; j < aliasKeys.length; j++) {
+        var alias = aliasKeys[j];
+        var canonical = aliases[alias];
+        if (found.indexOf(canonical) === -1) {
+            var aliasPattern = new RegExp("\\b" + alias.replace(/\s+/g, "\\s+") + "\\b", "i");
+            if (aliasPattern.test(lower)) {
+                found.push(canonical);
+            }
+        }
+    }
+
+    // Deduplicate
+    var unique = [];
+    for (var k = 0; k < found.length; k++) {
+        if (unique.indexOf(found[k]) === -1) {
+            unique.push(found[k]);
+        }
+    }
+
+    return unique;
+}
+
+/**
+ * Check if the response is a "none" / "no labels" response.
+ */
+function isNoneResponse(response, noneKeyword) {
+    var trimmed = response.trim().toLowerCase();
+    return trimmed === noneKeyword ||
+        trimmed === noneKeyword + "." ||
+        new RegExp("^" + noneKeyword + "\\.?$", "im").test(trimmed);
+}
+
+/**
+ * LLM-based label extraction fallback.
+ * Called when regex parsing found nothing but response isn't empty.
+ * Uses structured output to prevent LLM from hallucinating labels.
+ *
+ * Ref: xFinder (arXiv:2405.11874) — regex accuracy 74%, LLM 93%.
+ */
+function extractLabelsWithLLM(response, input, validLabels) {
+    var config = {
+        prompt_template: [
+            {
+                role: "system",
+                content: "You extract labels from text. Return ONLY labels from this valid set: " +
+                    validLabels.join(", ") +
+                    ". If no valid labels are mentioned, return 'none'. " +
+                    "Return as a comma-separated list. Do not add labels not in the valid set."
+            },
+            {
+                role: "user",
+                content: "Extract the labels from this model response:\n\n{{response}}\n\n" +
+                    "Return JSON:\n{\"labels\": \"comma-separated list or none\"}"
+            }
+        ],
+        output_schema: {
+            type: "object",
+            properties: {
+                labels: { type: "string" }
+            },
+            required: ["labels"],
+            additionalProperties: false
+        },
+        completion_params: {
+            model_name: "gpt-4.1-mini",
+            temperature: 0.0,
+            max_tokens: 100
+        }
+    };
+
+    input.response = response;
+
+    try {
+        var result = __langdb_call_llm_as_judge_obj(config, input);
+        if (result.error) return null;
+        var labels = (result.labels || "").trim();
+        if (labels) return labels;
+        return null;
+    } catch (e) {
+        return null;
+    }
+}

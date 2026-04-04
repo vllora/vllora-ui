@@ -6,6 +6,19 @@
  *
  * Customize: REQUIRED_FIELDS, FORMAT_PATTERN, HALLUCINATION_KEYWORDS
  *
+ * ⚠️ OVER-EXTRACTION / HALLUCINATION DEFENSE:
+ * GRPO can learn to over-extract (list extra fields/entities not in the source) because
+ * high recall outscores missing fields in group comparisons (MO-GRPO arXiv:2509.22047).
+ * For extraction tasks, precision (no hallucinated fields) is typically more important
+ * than recall (finding every field). Defenses:
+ *   - Use F0.5 scoring (β=0.5) instead of F1 for field-level comparison — weights
+ *     precision higher than recall. 1 hallucinated field costs as much as 2 missed fields.
+ *   - Add a precision floor: if precision < 0.75, cap score at 0.5. Prevents any
+ *     over-extracting completion from outranking a correct one in GRPO groups.
+ *   - Add explicit "hallucination penalty" as a separate scoring component — deduct
+ *     0.1-0.2 per hallucinated field not found in the source document.
+ * Ref: MO-GRPO (arXiv:2509.22047), CoRPO (arXiv:2511.04439)
+ *
  * GRPO LENGTH EXPLOITATION: Without conciseness control, GRPO models learn verbose
  * responses because longer = more content = higher scores. This template includes a
  * CONCISENESS criterion in the LLM judge to prevent this. Customize the weight for your task.

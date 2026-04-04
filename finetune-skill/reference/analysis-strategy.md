@@ -163,6 +163,35 @@ If records have `source_parts`, check:
 - Whether any knowledge source is systematically underperforming
 - Whether records with more source_parts score differently than those with fewer
 
+**Step 5b: Source-part coverage gap audit (knowledge-extraction tasks)**
+
+This is the most important coverage check for knowledge-extraction tasks (regulatory, medical, compliance). It catches a gap that aggregate metrics miss entirely.
+
+**Problem**: If 50%+ of records score >0.9 on the base model, those records provide zero GRPO gradient. If a knowledge part is ONLY covered by easy records, GRPO will never learn that knowledge — it's a coverage gap. This is different from compute efficiency (researched extensively in "Hard Examples" arXiv:2508.14094, "No Prompt Left Behind" arXiv:2509.21880). Those papers address gradient signal; this addresses knowledge breadth. No existing paper covers this gap — it is specific to knowledge-extraction fine-tuning.
+
+**Two types of easy records:**
+- **Type A (pre-training knowledge)**: Model already knows this from pre-training (e.g., "milk is an allergen"). No coverage gap — the knowledge exists in weights already.
+- **Type B (document-specific knowledge)**: Model scores high because the QUESTION is too easy, but the source knowledge part contains harder regulatory details that no record tests. **This is the real coverage gap.**
+
+**Audit steps:**
+1. Map each record to its `source_parts` field
+2. For each source part: compute the fraction of its records that score >0.9 on base model eval
+3. Parts where ALL records score >0.9 = "easy-only parts" — coverage gap candidates
+4. For easy-only parts: does the source part contain domain-specific knowledge the model wouldn't know from pre-training? (Check by testing the model on the content without document context)
+5. For confirmed Type B gaps: generate 2-5 harder records per part, targeting base model score 0.3-0.7
+
+**Report format:**
+```
+Source-part coverage audit:
+  Total parts: N
+  Parts with mixed difficulty: M (covered by both easy + hard records)
+  Parts with only easy records: K (coverage gap candidates)
+  Confirmed Type B gaps: J (need harder records)
+  Action: generated X new records for Y gap parts
+```
+
+See SKILL.md Step 7d Step 5 for the full audit procedure and code.
+
 ### 2b. Post-Training Analysis (training results only)
 
 Run this after a training job completes (or is cancelled due to anomaly).

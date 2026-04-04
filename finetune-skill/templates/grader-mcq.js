@@ -30,9 +30,18 @@
  *   - Correct answers: NO word-count penalty, only LLM conciseness criterion + brevity bonus
  *   - Wrong answers: soft multiplicative word-count penalty (max 25%)
  *
+ * ⚠️ GRPO "OSTENSIBLE POSITIVE" TRAP (arXiv:2508.08221 Appendix B.2):
+ * MCQ models can produce the correct answer followed by aimless continuation
+ * until hitting max_output_tokens. The grader scores 1.0 (correct answer) but
+ * the model learned degenerate behavior — padding after the answer. If your
+ * MCQ outputs are expected to be short (1-20 tokens), set max_output_tokens
+ * tightly (64-128) to prevent this. The brevity bonus in this template also
+ * helps by rewarding concise correct answers over verbose ones.
+ *
  * The algorithmic fix (loss_type="dr_grpo") is active by default in vLLora cloud.
  * Customize expectedMaxWords based on GT lengths. Set to 0 to disable.
- * Ref: Dr. GRPO (arXiv:2503.20783), DAPO (arXiv:2503.14476), DRPO (arXiv:2510.04474)
+ * Ref: Dr. GRPO (arXiv:2503.20783), DAPO (arXiv:2503.14476), DRPO (arXiv:2510.04474),
+ *      "Tricks or Traps" (arXiv:2508.08221)
  */
 function evaluate(input) {
     // ─── Extract response and context ───

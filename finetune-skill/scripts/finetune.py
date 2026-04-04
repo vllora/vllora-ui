@@ -890,6 +890,112 @@ def cmd_log_iteration(args: argparse.Namespace) -> None:
     print(f"\nSaved to {iterations_file}")
 
 
+def cmd_log_step(args: argparse.Namespace) -> None:
+    """Log a pipeline step to both execution-log.md and pipeline-journal.json.
+
+    Single command that writes to both files at once — the execution log
+    (human-readable narrative) and the pipeline journal (structured JSON
+    for the UI to show the reasoning chain behind each job).
+
+    Called at two points per step:
+    1. When a step STARTS: --status in_progress
+    2. When a step COMPLETES: --status completed (with results)
+    """
+    from datetime import datetime, timezone
+
+    project_dir = Path(args.project_dir)
+    journal_file = project_dir / "pipeline-journal.json"
+    log_file = project_dir / "execution-log.md"
+
+    # ── Load or create journal ──
+    if journal_file.exists():
+        journal = json.loads(journal_file.read_text())
+    else:
+        journal = {
+            "version": "1.0",
+            "workflow_id": args.workflow_id or "",
+            "objective": "",
+            "entries": [],
+        }
+
+    timestamp = datetime.now(timezone.utc).isoformat()
+    next_id = max((e["id"] for e in journal["entries"]), default=0) + 1
+
+    # ── Build journal entry ──
+    entry = {
+        "id": next_id,
+        "timestamp": timestamp,
+        "step": args.step,
+        "action": args.action,
+        "status": args.status,
+        "summary": args.summary,
+    }
+
+    if args.reason:
+        entry["reason_created"] = args.reason
+    if args.analysis:
+        entry["analysis"] = args.analysis
+    if args.decision:
+        entry["decision"] = args.decision
+    if args.job_id:
+        entry["job_id"] = args.job_id
+    if args.job_type:
+        entry["job_type"] = args.job_type
+    if args.model:
+        entry["model"] = args.model
+    if args.triggered_by:
+        entry["triggered_by"] = args.triggered_by
+        # Update the triggering entry's triggers_next
+        for e in journal["entries"]:
+            if e["id"] == args.triggered_by:
+                e["triggers_next"] = next_id
+                break
+
+    # Parse optional JSON details and results
+    if args.details:
+        try:
+            entry["details"] = json.loads(args.details)
+        except json.JSONDecodeError:
+            entry["details"] = {"raw": args.details}
+    if args.results:
+        try:
+            entry["results"] = json.loads(args.results)
+        except json.JSONDecodeError:
+            entry["results"] = {"raw": args.results}
+
+    journal["entries"].append(entry)
+    journal_file.write_text(json.dumps(journal, indent=2))
+
+    # ── Append to execution log ──
+    status_label = "IN PROGRESS" if args.status == "in_progress" else "completed"
+    step_label = args.step.replace("_", " ").replace("step ", "Step ").title()
+
+    log_entry = f"\n## {step_label} — {timestamp[:19].replace('T', ' ')}\n"
+    log_entry += f"- **Status**: {status_label}\n"
+    log_entry += f"- **Summary**: {args.summary}\n"
+    if args.reason:
+        log_entry += f"- **Reason**: {args.reason}\n"
+    if args.analysis:
+        log_entry += f"- **Analysis**: {args.analysis}\n"
+    if args.decision:
+        log_entry += f"- **Decision**: {args.decision}\n"
+    if args.model:
+        log_entry += f"- **Model**: {args.model}\n"
+    if args.job_id:
+        log_entry += f"- **Job ID**: {args.job_id}\n"
+
+    with open(log_file, "a") as f:
+        f.write(log_entry)
+
+    print(f"Journal entry #{next_id}: {args.action} ({args.status})")
+    print(f"  Summary: {args.summary}")
+    if args.reason:
+        print(f"  Reason: {args.reason}")
+    if args.decision:
+        print(f"  Decision: {args.decision}")
+    print(f"Saved to {journal_file} + {log_file}")
+
+
 def cmd_upload_grader(args: argparse.Namespace) -> None:
     """Upload a grader/evaluator script to a workflow.
 
@@ -4066,6 +4172,26 @@ def main() -> None:
     p.add_argument("--force", action="store_true", help="Delete all existing records before uploading")
     p.add_argument("--db", default=None, help="Path to vLLora SQLite database (default: ~/.vllora/vllora.db)")
 
+    # log-step — writes both execution-log.md and pipeline-journal.json
+    p = subparsers.add_parser("log-step", help="Log a pipeline step to execution-log.md + pipeline-journal.json")
+    p.add_argument("--project-dir", required=True, help="Path to finetune-project directory")
+    p.add_argument("--workflow-id", default=None, help="Workflow ID (for journal init)")
+    p.add_argument("--step", required=True, help="Step name (e.g., step_2_extraction, step_7_eval)")
+    p.add_argument("--action", required=True, help="Action type (e.g., extract_documents, create_eval, fix_grader)")
+    p.add_argument("--status", required=True, choices=["in_progress", "completed", "failed"],
+                   help="Status: in_progress (step started), completed, failed")
+    p.add_argument("--summary", required=True, help="One-line summary of what happened")
+    p.add_argument("--reason", default=None, help="Why this step/job was created (the reasoning chain)")
+    p.add_argument("--analysis", default=None, help="What was found after completion")
+    p.add_argument("--decision", default=None, help="What to do next based on findings")
+    p.add_argument("--job-id", default=None, help="Eval or training job ID (links to gateway)")
+    p.add_argument("--job-type", default=None, choices=["eval", "training"],
+                   help="Job type for UI display")
+    p.add_argument("--model", default=None, help="Model used (e.g., gpt-4o-mini, Qwen3.5-4B)")
+    p.add_argument("--triggered-by", type=int, default=None, help="Journal entry ID that caused this step")
+    p.add_argument("--details", default=None, help="JSON string with step-specific details")
+    p.add_argument("--results", default=None, help="JSON string with results/metrics")
+
     # log-iteration
     p = subparsers.add_parser("log-iteration", help="Log eval or training iteration to iterations.json")
     p.add_argument("--project-dir", required=True, help="Path to finetune-project directory")
@@ -4244,6 +4370,7 @@ def main() -> None:
         "upload-topics": cmd_upload_topics,
         "upload-relations": cmd_upload_relations,
         "upload-records": cmd_upload_records,
+        "log-step": cmd_log_step,
         "log-iteration": cmd_log_iteration,
         "filter-records": cmd_filter_records,
         "upload-grader": cmd_upload_grader,

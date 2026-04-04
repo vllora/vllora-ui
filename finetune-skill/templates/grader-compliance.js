@@ -7,6 +7,14 @@
  *
  * Customize: RULE_KEYWORDS, MIN_RULES_EXPECTED
  *
+ * ⚠️ GRPO OVER-CITATION EXPLOIT (MO-GRPO arXiv:2509.22047):
+ * Compliance tasks are vulnerable to the same over-prediction exploit as
+ * multi-label classification. The model may learn to cite MORE rules than
+ * necessary because high recall outscores missing rules in GRPO group
+ * comparisons. If your task checks rule recall, add a false-citation
+ * penalty: penalize citing rules that don't apply to the scenario.
+ * For multi-rule tasks, consider using grader-multilabel.js instead.
+ *
  * GRPO LENGTH EXPLOITATION: Without conciseness control, GRPO models learn verbose
  * responses because longer = more content = higher scores. This template includes a
  * CONCISENESS criterion in the LLM judge to prevent this. Customize the weight for your task.
@@ -16,7 +24,8 @@
  * answer can drop below wrong-answer scores, inverting its GRPO advantage. The LLM
  * conciseness criterion used here is safe (semantic, not raw token count).
  *
- * Ref: Dr. GRPO (arXiv:2503.20783), DAPO (arXiv:2503.14476), DRPO (arXiv:2510.04474)
+ * Ref: Dr. GRPO (arXiv:2503.20783), DAPO (arXiv:2503.14476), DRPO (arXiv:2510.04474),
+ *      MO-GRPO (arXiv:2509.22047)
  */
 function evaluate(input) {
     let response = "";

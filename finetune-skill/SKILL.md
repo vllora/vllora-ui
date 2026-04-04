@@ -57,7 +57,7 @@ Extract (Step 2) → Topics (Step 3) → ┬→ Generate Records (Step 4)
                                       └→ Write Grader (Step 5)      → Validate (Step 5.5)
 ```
 
-Steps 4 and 5 can run in parallel — both depend on extraction + topics, not on each other. But do NOT start topics before extraction finishes, and do NOT start records or grader before topics are complete. Do NOT "pre-draft" topics or graders while extraction is still running — you will produce blind guesses disconnected from the actual document content, leading to poor topic coverage and grader criteria that don't match the data.
+**Step 4 (records) MUST finish before Step 5 (grader) is finalized.** The grader needs to see actual records to calibrate against real GT format and edge cases. Rubrics designed without seeing reference data score 10.8% worse (RaR arXiv:2507.17746 Table 3). Grader *conceptual design* (choosing criteria, selecting template) can start while records generate, but grader *code finalization* must wait until `training.jsonl` exists so you can read 10-15 sample records to calibrate. Do NOT start topics before extraction finishes, and do NOT start records or grader before topics are complete. Do NOT "pre-draft" topics or graders while extraction is still running — you will produce blind guesses disconnected from the actual document content, leading to poor topic coverage and grader criteria that don't match the data.
 
 **Execute ALL steps (1-9).** Steps 1-6 prepare the dataset. Step 7 runs eval iterations until data/grader are validated. Only then does training start. Do NOT stop at Step 6 — always run evaluation at minimum.
 
@@ -109,7 +109,7 @@ Create a local directory for all artifacts:
 ```
 finetune-project/
 ├── training.jsonl, grader.js, topics.json, relations.json, config.json
-├── execution-log.md, iterations.md
+├── execution-log.md, iterations.md, pipeline-journal.json
 ├── knowledge/                  # Per-document subdirs (slugified filename)
 │   ├── {doc-slug}/             # {slug}.md, extract.py, knowledge_parts.json, parts-index.json
 │   └── all-parts-index.json   # Merged index across ALL documents
@@ -131,23 +131,89 @@ finetune-project/
 
 ### Execution Log
 
-Maintain `execution-log.md` as an **append-only** chronological record. Append a section IMMEDIATELY after EACH step completes — not retroactively. Never overwrite.
+Maintain `execution-log.md` as an **append-only** chronological record. Never overwrite.
 
-**Minimum required fields per step** (see [reference/execution-log-template.md](reference/execution-log-template.md) for full template). **ALL fields below are mandatory — not suggestions.** The execution log is the primary debugging artifact when something goes wrong in later steps. Skipping fields here costs hours of re-investigation later.
+**⚠️ ONLY use `log-step` to write to the execution log — do NOT write to it manually.** The `log-step` command writes both `execution-log.md` AND `pipeline-journal.json` in one call. Writing manually creates duplicates.
 
-- **Every step**: timestamp (ISO 8601 or `YYYY-MM-DD HH:MM`), duration (minutes or "< 1 min")
-- **Step 2**: per-document: Docling chunks → build_knowledge_parts count + table count. Reused existing: yes/no. Validation: PASS/FAIL. Gateway verify: N sources, M total parts.
-- **Step 3**: relevance filter: total/relevant/excluded + 2-3 sample excluded titles. Topic count: N total (M leaf). **Difficulty breakdown: N easy, N medium, N hard.** System prompt self-check: passed/failed. Relations: N total, per-topic range min-max. Upload counts: topics=N, relations=N, relevance labels=N.
-- **Step 4**: mode (relations/rag-only). Records per topic (default or custom). **Per-topic counts** (topic-name: N, ...). source_parts coverage: N/total with per-record tagging. Dedup: removed N. Upload: N records.
-- **Step 5**: template copied (exact filename). **Criteria list with weights** (e.g., "F1=0.40, hidden_bonus=0.20, conciseness=0.15"). Dry-run Test 1: score + reason summary. **Dry-run Test 2 (live): 3 sample scores** (e.g., "0.7, 0.3, 1.0"). If Test 2 fails, log the failure reason BEFORE the fix, then log the retry scores. Gateway verify: evaluator uploaded, char count.
-- **Step 7 (each eval)**: eval job ID, model name, **duration (minutes)**. Results: avg, std, zero_frac%, perfect_frac%, **score mode at frac%**. **Per-topic scores: topic-name=avg (weakest first).** Readiness gate: PASS/FAIL with hard check details.
-- **Step 7d (headroom diagnostic)**: 4B baseline avg score. Headroom gate result (PASS/FAIL). If FAIL: which diagnostic branch taken (per-topic check → 0.8B eval → root cause). 0.8B baseline avg if evaluated. Decision: which model chosen for training and why. **Score distribution**: N% perfect, N% zero, shape (bimodal/spread/uniform).
-- **Step 7e (training)**: job ID, base model, **full config: epochs, learning_rate, lora_rank, max_output_tokens, response_candidates_count (K), batch_size**. Note: `loss_type="dr_grpo"` is the default.
-- **Step 7e (training monitoring — update every 1-2 epochs)**: Per-epoch avg reward vs baseline. Epoch eval avg + perfect_rate + zero_rate (compare with pre-training baseline). Score distribution changes. **Per-record inspection findings**: sample 3-5 records showing Best/Worst of K completions, grader reasons. Any trigger-based inspection results (KL anomaly, length growth, per-topic degradation). This is the primary artifact for catching reward hacking early.
-- **Step 8 (analysis)**: per-topic breakdown (weakest topics). Dead-weight records: N scoring 0.0. Training metrics: final_reward, reward_delta, KL, clipping%. **Per-record comparison**: 2-3 improved records (what changed in model output), 2-3 degraded records (what went wrong). Recommendations.
-- **Step 9 (each iteration)**: iteration number, what changed and why, change_type (grader/records/both/hyperparams). Re-eval results: avg=X (was Y), Δ=Z. Verdict.
+**Call `log-step` at TWO points for each step:**
 
-**⚠️ Log EVERY step, not just Step 1.** If the execution log has only Step 1 when Step 5 is complete, the log is useless for debugging.
+1. **When a step STARTS** (for long-running steps: extraction, eval, training):
+   ```bash
+   uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-step \
+     --project-dir finetune-project \
+     --step step_2_extraction --action extract_documents --status in_progress \
+     --summary "Processing 1 PDF with Docling..."
+   ```
+
+2. **When the step COMPLETES** — with results, analysis, and decision:
+   ```bash
+   uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-step \
+     --project-dir finetune-project \
+     --step step_2_extraction --action extract_documents --status completed \
+     --summary "Extracted 68 knowledge parts from FDA FALCPA guide" \
+     --analysis "68 parts: 67 text, 1 table. Good coverage." \
+     --decision "Proceed to topic hierarchy" \
+     --triggered-by 1
+   ```
+
+The user should never look at the execution log and see nothing happening — if extraction takes 10 minutes, the log should show it started, not be blank until it finishes.
+
+**⚠️ Each step below MUST get its own `log-step` call — do NOT batch multiple steps into one entry.** Steps 4 (records), 5 (grader), and 5.5 (quality gate) are SEPARATE steps, not one combined entry. The UI needs each one individually to show the reasoning chain.
+
+**Required `log-step` calls (one per step, with these `--action` values):**
+
+| Step | `--action` | Key `--summary` content |
+|------|-----------|------------------------|
+| 1 | `define_objective` | Workflow ID, objective, output format, source docs |
+| 2 | `extract_documents` | Per-doc: chunks → parts count. Validation result. Gateway verify. |
+| 3 | `build_topics` | Topic count (leaf). Difficulty breakdown. Relevance filter: included/excluded. Relations count. |
+| 4 | `generate_records` | Mode. Records per topic. Per-topic counts. Dedup removed. Upload total. |
+| 5 | `write_grader` | Template used + WHY that template. Criteria list with weights. Dry-run scores. Gateway char count. |
+| 5.5 | `data_quality_gate` | Per-gate results: structural, diversity, completion_length. max_output_tokens decision. |
+| 7 | `create_eval` | Job ID, model. Results: avg, perfect_rate, zero_rate, per-topic weakest. Readiness gate result. |
+| 7d | `headroom_diagnostic` | 4B score. Gate result. Diagnostic branch taken. 0.8B score if evaluated. Model chosen + WHY. |
+| 7d.5 | `coverage_audit` | Total parts. Easy-only parts. Type B gaps. New records generated. |
+| 7e | `create_training` | Job ID, model, full config (epochs, lr, K, max_output_tokens). |
+| 7e (monitoring) | `training_monitoring` | Progression table. Trigger check results. Per-record inspection findings. |
+| 8 | `training_analysis` | Per-topic comparison. Improved/degraded records with examples. Recommendations. |
+| 9 | `fix_grader` / `fix_records` | What changed, WHY, dry-run before/after. |
+
+**⚠️ Log EVERY step, not just Step 1.** If the journal has only steps 1-3 when Step 7 is running, the user can't understand the pipeline's progress.
+
+### Pipeline Journal (`pipeline-journal.json`)
+
+**Use `log-step` to write both execution-log.md AND pipeline-journal.json in one call.** This captures the reasoning chain — why each job was created, what analysis triggered it, what decision was made. The UI uses this to show the agent's decision sequence alongside jobs.
+
+```bash
+# When a step STARTS (long-running steps: extraction, eval, training):
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-step \
+  --project-dir finetune-project \
+  --step step_2_extraction --action extract_documents --status in_progress \
+  --summary "Processing 1 PDF with Docling..." \
+  --reason "Step 2: extract knowledge from source documents"
+
+# When a step COMPLETES (with results and decision):
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-step \
+  --project-dir finetune-project \
+  --step step_7_eval --action create_eval --status completed \
+  --summary "GPT-4o-mini baseline eval: avg=0.598" \
+  --reason "Initial eval to validate data quality and grader" \
+  --analysis "55% perfect rate, 37% dead-weight records (conversational format)" \
+  --decision "Fix data: remove dead-weight records, regenerate with ingredient-list format" \
+  --job-id "eval-run-uuid" --job-type eval --model "gpt-4o-mini" \
+  --triggered-by 2 \
+  --results '{"avg_score": 0.598, "perfect_rate": 0.55}'
+```
+
+See [reference/pipeline-journal-schema.md](reference/pipeline-journal-schema.md) for the full schema and examples.
+
+**Key fields:**
+- `--reason`: **Why** this job/action exists — the reasoning chain
+- `--analysis`: What was found after completion
+- `--decision`: What to do next based on findings
+- `--triggered-by`: Which journal entry ID caused this step (creates arrows in UI timeline)
+
+**Every eval or training job MUST have a `log-step` call with `--reason`.** A job without reasoning context is useless to the user — they see "eval-003" in the UI but don't know why it exists. The journal explains: "Created because eval-002 showed grader FP exploit; grader was fixed; re-evaluating to verify fix."
 
 **⚠️ Per-topic scores are the most diagnostic field.** When eval avg is 0.68, knowing that "hidden-sesame=0.31, hidden-egg=0.42, explicit-allergens=0.95" tells you exactly where to focus. An avg alone tells you nothing actionable.
 
@@ -563,7 +629,7 @@ If some topics are under-represented, use `chat_completion.py` to create variant
 
 ### Step 5: Write the Grader
 
-> **PREREQUISITES:** Steps 2 + 3 complete. Grader *writing* can start in parallel with Step 4, but the **live dry-run** (Step 5.1 Test 2) requires records on the gateway — wait until Step 4 has uploaded at least some records before running `--live`.
+> **PREREQUISITES:** Steps 2 + 3 + 4 complete. **Step 4 (records) must finish before grader code is finalized** — you need to read 10-15 sample records to calibrate criteria against actual GT format and edge cases (see step 8 below). Grader *conceptual design* (choosing template, defining criteria) can start while records generate, but do NOT write the final JS until `training.jsonl` exists.
 
 Write a JavaScript grader function to `grader.js`. Scores model responses 0-1, runs server-side during evaluation and training.
 
@@ -575,7 +641,7 @@ Write a JavaScript grader function to `grader.js`. Scores model responses 0-1, r
 5. **Validate rubric quality** — check for 4 failure modes (RRD, arXiv:2602.05125): coverage gaps, conflated dimensions, misaligned direction, redundant criteria (correlation >0.7 → merge)
 6. **Use stratified scoring** — if a binary correctness check exists (even partial), use it as a gate: correct answers score 0.5-1.0, wrong answers score 0.02-0.5 (HERO, arXiv:2510.07242 — +9-11 points). This prevents "wrong but well-written" from outscoring "correct but terse"
 7. Then write the JS grader informed by this analysis. See [reference/grader-writing.md](reference/grader-writing.md) for the full rubric design guide.
-8. If `training.jsonl` already exists (Step 4 finished first), also read 10-15 sample rows to validate your criteria against real prompts
+8. **⚠️ MANDATORY: Read 10-15 sample records from `training.jsonl` before writing grader code.** Wait for Step 4 to finish if needed — do NOT finalize the grader without seeing actual records. Check: GT format matches your parsing assumptions, edge cases (GT="none", multi-label GTs, single-label GTs) are handled, scoring tiers are calibrated to actual difficulty distribution. Rubrics designed without reference data score 10.8% worse (RaR arXiv:2507.17746 Table 3).
 
 The grader function signature: `function evaluate(input) { ... return { score, reason }; }` where score is 0.0-1.0. The function can use `__langdb_call_llm_as_judge_obj(config, input)` for subjective quality assessment — `config` has `prompt_template` (message array with `{{history}}`/`{{response}}` template vars), `output_schema` (JSON Schema), and `completion_params` (`{model_name, temperature, max_tokens}`). Set `input.history` and `input.response` before calling. **Synchronous only** — no async/await.
 
@@ -617,8 +683,9 @@ See [reference/grader-writing.md](reference/grader-writing.md) for 3 patterns (p
 |----------|----------|-------------|
 | `templates/grader-template.js` | General-purpose (default) | accuracy, helpfulness, clarity, completeness, tone |
 | `templates/grader-mcq.js` | Multiple-choice / short-answer QA | answer correctness (LLM extraction fallback), reasoning quality, distractor analysis |
-| `templates/grader-classification.js` | Label assignment / categorization | label match (exact/partial/wrong), evidence, reasoning quality |
-| `templates/grader-extraction.js` | Structured data extraction (10-K metrics, medical coding) | field accuracy, hallucination rate, format compliance |
+| `templates/grader-classification.js` | Single-label classification (sentiment, intent, triage) | label match (exact/partial/wrong), evidence, reasoning quality |
+| `templates/grader-multilabel.js` | **Multi-label set comparison** (allergens, ICD codes, tags, entities) | F-beta scoring, over-prediction defense (MO-GRPO), precision floor (CoRPO), per-FP penalty, LLM extraction fallback. **Use this for any task where the output is a set of labels.** |
+| `templates/grader-extraction.js` | Structured data extraction (10-K metrics, fields) | field accuracy, hallucination rate, format compliance |
 | `templates/grader-compliance.js` | Rule application (FDA, tax, legal) | rule recall, false positives, citation accuracy |
 | `templates/grader-readability.js` | Simplification (contract→English, ELI5) | readability + Flesch-Kincaid, jargon elimination, accuracy preservation |
 
@@ -652,7 +719,7 @@ The `--live` flag picks 3 random training records, sends each prompt to the LLM,
 
 **Test 3: Adversarial robustness (agent thinks through edge cases).** Before uploading, **read your grader code and think about how it handles these adversarial model behaviors** — because GRPO WILL find these if they score higher:
 
-- **Over-prediction**: Model lists all possible answers (e.g., all 9 allergens, all contaminants). Does your grader penalize false positives hard enough, or does high recall + low precision still get a decent score?
+- **Over-prediction**: Model lists all possible answers (e.g., all 9 allergens, all contaminants). Does your grader penalize false positives hard enough, or does high recall + low precision still get a decent score? **⚠️ This is the #1 GRPO exploit for multi-label tasks.** MO-GRPO (arXiv:2509.22047 Theorem 1) proves GRPO advantage is biased toward higher-variance reward components — over-predicting has more variance than under-predicting, so GRPO reinforces it. **Fix: use F0.5 scoring (β=0.5) instead of F1 for precision-critical tasks** (allergen detection, medical coding, compliance). F0.5 makes 1 false positive cost as much as 2 false negatives. Also add a precision floor: `if (precision < 0.75) score = Math.min(score, 0.5)` — ensures no over-predicting completion outranks a correct one in GRPO groups (CoRPO arXiv:2511.04439).
 - **Under-prediction**: Model says "none" or gives empty/minimal response. Does your grader give 0.0, or does it give partial credit that rewards saying nothing?
 - **Length exploitation (MOST COMMON GRPO FAILURE)**: Model generates increasingly verbose responses because longer = more content = higher scores on F1/LLM-judge graders. GRPO reinforces this until completions hit max_output_tokens, causing clipping and training collapse. Check: if a correct 10-word answer and a correct 200-word answer both exist, does the grader score them the same? If yes, the model WILL learn to always write 200 words. Your grader must score "correct and concise" higher than "correct but padded" — see the 4 defenses in Step 5 above. Note: the algorithmic root cause (Dr. GRPO length bias) is already mitigated by the default training config. If length exploitation occurs, it's because the grader rewards verbosity. Also verify max_output_tokens is tight (Step 7a-i).
 - **Format gaming**: Model outputs the exact format template without correct content (e.g., "COMPLIANT. Per 40 CFR 141.XX: MCL for [contaminant] is [value]" with placeholders). Does your grader check actual values or just format?
@@ -1020,6 +1087,69 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
   --eval-file finetune-project/evaluations/eval-NNN.json \
   --changes "Base model (MODEL_NAME) baseline eval — pre-training. Chosen because [reason]." \
   --change-type baseline --verdict PASS
+```
+
+**Step 5: Source-part coverage audit (MANDATORY for knowledge-extraction tasks)**
+
+After the base model eval, check whether the training records cover ALL the knowledge from the source documents — not just the easy parts. This catches a gap that aggregate metrics miss: if 50%+ of records are "always perfect" (base model scores 1.0), those records provide zero GRPO gradient, and the knowledge parts they exclusively cover will never be written into model weights.
+
+**Why this matters**: GRPO learns by contrasting K completions per prompt. Records where all completions score 1.0 produce zero gradient — the model already knows the answer. If a knowledge part from your source document is ONLY tested by these easy records, GRPO will never learn that knowledge. This is a real coverage gap, not just a compute efficiency problem. (No existing paper addresses this — it is specific to knowledge-extraction fine-tuning from regulatory/domain documents.)
+
+**How to audit:**
+
+```python
+# Map each record to its source_parts, check per-part difficulty
+import json
+
+with open('finetune-project/training.jsonl') as f:
+    records = [json.loads(line) for line in f]
+
+# Load eval results for per-record scores
+with open('finetune-project/evaluations/eval-NNN.json') as f:
+    eval_data = json.load(f)
+scores_by_id = {}
+for r in eval_data.get('results', []):
+    rid = r.get('row', {}).get('id', '')
+    score = r.get('score', 0)
+    scores_by_id[rid] = score
+
+# Map source_parts to record difficulty
+part_records = {}  # part_slug -> list of (record_id, score)
+for rec in records:
+    rid = rec.get('id', '')
+    score = scores_by_id.get(rid, 0)
+    for part in rec.get('source_parts', []):
+        part_records.setdefault(part, []).append((rid, score))
+
+# Find coverage gaps: parts where ALL records score > 0.9
+easy_only_parts = []
+for part, recs in part_records.items():
+    scores = [s for _, s in recs]
+    if all(s > 0.9 for s in scores):
+        easy_only_parts.append((part, len(recs), sum(scores)/len(scores)))
+
+print(f"Total source parts: {len(part_records)}")
+print(f"Parts with ONLY easy records (all scores >0.9): {len(easy_only_parts)}")
+for part, n, avg in sorted(easy_only_parts):
+    print(f"  {part}: {n} records, avg={avg:.2f} — COVERAGE GAP RISK")
+```
+
+**Interpret the results:**
+
+| Finding | Meaning | Action |
+|---------|---------|--------|
+| 0 easy-only parts | All knowledge parts have at least one hard record | ✓ No coverage gap. Proceed to training. |
+| 1-5 easy-only parts | Small coverage gap | Generate 2-3 harder records per gap part. Target base model score 0.3-0.7 on the new records. |
+| >5 easy-only parts | Significant coverage gap — GRPO will miss this knowledge | Generate 3-5 harder records per gap part. Consider whether topics need restructuring to expose harder angles on these knowledge areas. |
+
+**How to generate harder records for gap parts**: The easy records test surface knowledge ("Is milk an allergen?" → yes). Harder records should test the same knowledge part from angles the model is less likely to know: regulatory thresholds, exceptions, cross-references, edge cases. Example: the same FDA milk section could generate "Under FALCPA, does ghee require a milk allergen declaration?" (hidden source knowledge the model may not have from pre-training).
+
+Log the coverage audit results in `execution-log.md`:
+```
+### Source-Part Coverage Audit
+- Total source parts: N
+- Parts with only easy records: M (list them)
+- Coverage gap action: [generated N new records / no gaps found]
 ```
 
 **⚠️ HEADROOM GATE (MANDATORY — do NOT skip):**

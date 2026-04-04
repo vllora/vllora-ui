@@ -16,7 +16,16 @@
  * answer can drop below wrong-answer scores, inverting its GRPO advantage. The LLM
  * conciseness criterion used here is safe (semantic, not raw token count).
  *
- * Ref: Dr. GRPO (arXiv:2503.20783), DAPO (arXiv:2503.14476), DRPO (arXiv:2510.04474)
+ * ⚠️ GRPO REWARD HACKING RISK (MO-GRPO arXiv:2509.22047):
+ * Readability graders with multiple criteria (readability + accuracy + completeness)
+ * are vulnerable to reward hacking: GRPO may optimize the highest-variance criterion
+ * (usually readability/simplicity) at the expense of accuracy. The model learns to
+ * simplify aggressively — dropping nuance and facts to maximize readability score.
+ * Defense: weight accuracy at least 40% of total score, and ensure the LLM judge
+ * penalizes factual omissions even if the text reads well.
+ *
+ * Ref: Dr. GRPO (arXiv:2503.20783), DAPO (arXiv:2503.14476), DRPO (arXiv:2510.04474),
+ *      MO-GRPO (arXiv:2509.22047)
  */
 function evaluate(input) {
     let response = "";

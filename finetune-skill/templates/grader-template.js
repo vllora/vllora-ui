@@ -19,10 +19,18 @@
  *
  * Must return: { score: <0-1>, reason: <string> }
  *
- * DRPO safety (arXiv:2510.04474):
- *   - Conciseness is a rubric criterion (semantic, not token count)
- *   - No additive length penalty (GR3 arXiv:2603.10535)
- *   - Stratified scoring prevents correct-but-verbose from scoring below wrong answers
+ * GRPO-specific design principles:
+ *   - Stratified scoring (HERO arXiv:2510.07242): correct tier (0.5-1.0) always
+ *     exceeds wrong tier (0.0-0.5). Prevents GRPO from preferring wrong-but-fluent
+ *     over partially-correct answers.
+ *   - Nonzero floor: wrong-but-attempted = 0.05 (not 0.0). Keeps GRPO gradient
+ *     alive (DAPO arXiv:2503.14476).
+ *   - Multi-criteria reward hacking risk (MO-GRPO arXiv:2509.22047): GRPO
+ *     advantage is biased toward higher-variance reward components. If one rubric
+ *     criterion has more variance than others, GRPO will over-optimize it. Ensure
+ *     criteria weights reflect their relative importance, not their variance.
+ *   - Conciseness is a rubric criterion (semantic, not token count) — DRPO-safe
+ *     (arXiv:2510.04474). No additive length penalty (GR3 arXiv:2603.10535).
  */
 function evaluate(input) {
     // 1. Extract response and history from input

@@ -1012,6 +1012,8 @@ This outputs alerts (CRITICAL/HIGH/WARNING) and a summary. Use the alerts to gui
 | completions/clipped_ratio > 0.5 | Most responses truncated at max_output_tokens | Increase max_output_tokens (512 → 1024). Watch cost: G × tokens |
 | clip_ratio/region_mean = 0 + KL exploding | Trust region not constraining updates | Reduce LR. If using custom epsilon, check it's not too large |
 | reward up but KL >10 + outputs degenerate | Reward hacking | Add quality-focused grader criteria, enable KL penalty (beta=0.04), manual output review |
+| Per-record inspection shows FP > FN in degraded records (multi-label tasks) | **Over-prediction exploit** — GRPO learned that high recall + some FP outscores missing labels in group comparisons. The grader's precision-recall balance favors recall. | **Fix the grader**: use F0.5 instead of F1 for precision-critical tasks (1 FP costs as much as 2 FN). Add precision floor: `if precision < 0.75, cap score at 0.5`. Do NOT reduce K — the root cause is grader asymmetry. Ref: MO-GRPO (arXiv:2509.22047 Theorem 1), CoRPO (arXiv:2511.04439). |
+| reward_std collapsing (>50% decline from start) + reward still rising | **Expected saturation** — model learning but running out of signal. Not a problem if reward is still rising. Epochs after std collapse have diminishing returns (~96% wasted compute per "Hard Examples" arXiv:2508.14094). | Monitor but do not intervene. Consider stopping 1-2 epochs earlier on next run. Cosine LR schedule contributes to std collapse in final epochs (near-zero LR → near-identical completions). Ref: AEnt (arXiv:2509.03493). |
 
 ### Step 3: The Hyperparameter Iteration Ladder
 

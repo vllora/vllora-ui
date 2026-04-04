@@ -3,7 +3,7 @@
  *
  * For models that assign labels, categories, or tags from a defined set.
  * Examples: sentiment analysis, intent detection, triage, topic tagging,
- * severity classification, document categorization.
+ * severity classification, document categorization, allergen detection.
  *
  * Architecture: LLM-based label extraction + fuzzy matching against ground truth
  * + LLM-as-judge for explanation quality.
@@ -15,6 +15,26 @@
  *   0.0     — Empty response, refusal, or completely wrong category
  *
  * Customize: VALID_LABELS, LABEL_ALIASES, DOMAIN
+ *
+ * ⚠️ MULTI-LABEL TASKS — PRECISION vs RECALL BALANCE:
+ * For multi-label classification (allergen detection, tag assignment, entity extraction),
+ * use F-beta scoring to control precision-recall tradeoff:
+ *   - F1 (β=1.0): Equal weight to precision and recall. DEFAULT but creates an
+ *     over-prediction exploit — GRPO learns to list extra labels because high recall
+ *     outscores missing labels in group comparisons (MO-GRPO arXiv:2509.22047 Theorem 1:
+ *     GRPO advantage is biased toward higher-variance reward components).
+ *   - F0.5 (β=0.5): Precision-heavy. Use when false positives are costly (allergens,
+ *     medical labels, compliance). 1 FP costs as much as 2 FN. Prevents over-prediction
+ *     exploit.
+ *   - F2 (β=2.0): Recall-heavy. Use when false negatives are costly (screening, search).
+ *
+ * Also add a PRECISION FLOOR for safety-critical multi-label tasks:
+ *   if (precision < 0.75) score = Math.min(score, 0.5);
+ * This ensures no over-predicting completion can outrank a correct one in GRPO group
+ * comparisons (CoRPO arXiv:2511.04439: 18% of failed rollouts receive positive advantage
+ * without this guard).
+ *
+ * Ref: MO-GRPO (arXiv:2509.22047), CoRPO (arXiv:2511.04439)
  *
  * GRPO LENGTH EXPLOITATION: Without conciseness control, GRPO models learn verbose
  * responses. This template includes a SOFT word-count penalty on WRONG/PARTIAL answers
