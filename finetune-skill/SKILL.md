@@ -202,12 +202,14 @@ This creates local tracking files for any jobs you don't already have and update
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py cancel-eval --workflow-id $WORKFLOW_ID --eval-id <EVAL_ID>
 ```
 5. **Pick up from the recommended step** — do NOT re-run completed steps
-6. Append to `execution-log.md` (never overwrite) with a "Resumed" entry:
+6. **Backfill the execution log** — check if the log is missing data that's available in side files. For example, if a training job completed but the execution log only shows epoch 3 (partial), fetch the final epoch evals and update the progression table with ALL epochs. The log is the persistent record — data in transcripts from previous agent runs is lost.
+7. Append to `execution-log.md` (never overwrite) with a "Resumed" entry:
    ```
    ## Resumed — [timestamp]
    - Status output: records=X, topics=Y, sources=Z, grader=YES/NO
    - Jobs: [list active/cancelled/done]
    - Picking up from Step M (per status recommendation)
+   - Backfill: [what was updated, e.g., "updated training progression table with epochs 4-5"]
    ```
 
 **Common resume scenarios:**
@@ -1164,21 +1166,57 @@ The progression table answers:
 - **Is it degrading?** Avg score declining after initial rise = entropy collapse or reward hacking (see Step 9b case B).
 - **How does it compare to the larger model?** If 0.8B trained score exceeds 4B baseline score, the training was successful — you got a smaller, faster model that matches the larger one.
 
-**Trigger-based output inspection** (see [reference/analysis-strategy.md](reference/analysis-strategy.md) Step 2b): when metrics flag anomalies (KL rising + reward flat, mean_length growing, per-topic degradation), sample and read 5-10 individual model completions + grader reasons from the epoch evals before continuing. Do NOT wait until training finishes to inspect. Write inspection findings to `execution-log.md` immediately.
+**Trigger-based output inspection — check these triggers EVERY time you fetch epoch evals:**
 
-When training completes (or is early-stopped), **immediately log the training iteration** before doing anything else:
+After each epoch eval fetch, run through this checklist. If ANY trigger fires, sample and read 5-10 individual `rollout_content` + `reason` fields from the epoch evals. Write findings to `execution-log.md` immediately.
+
+| Trigger | Check | If fires → read |
+|---------|-------|-----------------|
+| Reward flat | avg reward changed <0.01 from previous epoch | 5 records where score stayed the same across epochs — is the model stuck or are these genuinely hard? |
+| Score declining | epoch avg dropped >0.02 from previous epoch | 5 records that degraded — what changed in the model's output? |
+| Perfect rate spike | perfect rate jumped >15% in one epoch | 3 newly-perfect records — did the model learn the skill or find a grader shortcut? |
+| Length change | avg completion length changed >30% | 5 longest completions — padding/aimless continuation, or genuinely longer answers? |
+| Zero-std rising | frac_reward_zero_std rose >20% from previous epoch | 3 zero-std records — is the model saturating (all correct) or collapsing (all same wrong answer)? |
+
+If NO triggers fire, you can skip per-record inspection for that epoch — the aggregate metrics are sufficient.
+
+See [reference/analysis-strategy.md](reference/analysis-strategy.md) Step 2b for full trigger details and research citations.
+
+When training completes (or is early-stopped), do these **THREE things in order BEFORE post-training eval**:
+
+**1. Update `execution-log.md` with the FINAL progression table** — include ALL epochs, not just what was written during monitoring. This is the first thing you do because it's the fastest and most important. If you crash during post-training eval, the final training results are preserved.
+
+```markdown
+### Training 2 — Final Results (2026-04-04 HH:MM)
+- **Status**: succeeded / cancelled (early-stopped) / failed
+- **Final progression table**:
+
+  | Metric       | Baseline | Epoch 0 | Epoch 1 | Epoch 2 | ... | Trend |
+  |--------------|----------|---------|---------|---------|-----|-------|
+  | Avg score    | X.XXX    | ...     | ...     | ...     | ... | ↑/↓/= |
+  | Perfect rate | XX%      | ...     | ...     | ...     | ... | ↑/↓/= |
+  | Avg reward   | —        | ...     | ...     | ...     | ... | ↑/↓/= |
+  | Avg length   | —        | ...     | ...     | ...     | ... | ↑/↓/= |
+
+- **Best epoch**: N (avg=X.XXX)
+- **Comparison with 4B baseline**: trained 0.8B (X.XXX) vs untrained 4B (0.828) → beats/below
+```
+
+**2. Run `log-iteration`** to capture the training config and metrics into `iterations.json`:
 
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
   --project-dir finetune-project --phase training \
   --training-file training-jobs/train-NNN.json \
-  --changes "Training run: lr=5e-6, epochs=8, K=8, base=Qwen3.5-4B" \
+  --changes "Training run: lr=5e-6, epochs=5, K=8, base=Qwen3.5-0.8B. Final avg=X.XXX, best epoch=N." \
   --change-type baseline --verdict PASS
 ```
 
 > **⚠️ MANDATORY — do NOT skip.** This captures the training config, reward trajectory, KL, clipping ratio, and early-stop reason into `iterations.json`. Without this, you cannot compare training runs during iteration (Step 9b). If training was early-stopped, note the reason in `--changes` and set `--verdict WARN`. If training failed, set `--verdict FAIL`.
 
-If early-stopped, the best checkpoint is noted in the output — use that epoch's model. Proceed to **Step 8b (Post-Training Eval)**.
+**3. Then proceed to Step 8b (Post-Training Eval).**
+
+If early-stopped, the best checkpoint is noted in the output — use that epoch's model.
 
 ### Step 8: Analyze Results
 
