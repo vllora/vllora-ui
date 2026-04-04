@@ -70,6 +70,12 @@ THRESHOLDS = {
     "max_near_dup_frac": 0.10,          # < 10% near-duplicate prompts
     "near_dup_threshold": 0.85,         # trigram Jaccard threshold for duplication
     "min_avg_pairwise_distance": 0.40,  # mean (1 - similarity) across prompt pairs
+    # Gate 2b: GT distribution diversity
+    # "What Matters in LLM-generated Data" (arXiv:2506.19262): diversity > quality > complexity
+    # "Synthetic Eggs in Many Baskets" (arXiv:2511.01490): skewed label distributions → collapse
+    "max_single_label_frac": 0.40,      # No single GT label appears in > 40% of records
+    "min_gt_uniqueness_ratio": 0.10,    # At least 10% of records have unique GTs
+    "max_top1_gt_frac": 0.25,           # Most common exact GT value ≤ 25% of records
     # Gate 3: Ground Truth Quality (LLM-scored)
     "min_gt_quality_mean": 0.60,        # average GT quality score (0-1)
     "max_gt_low_quality_frac": 0.20,    # < 20% of GTs scoring below 0.4
@@ -278,6 +284,29 @@ def gate_structural(records: list[dict], topics_data: list | None) -> dict:
                 "median_count": median_count,
             })
 
+    # 5b. Source parts coverage — check how many knowledge parts are referenced
+    parts_referenced = set()
+    for r in records:
+        for sp in r.get("source_parts", []):
+            parts_referenced.add(sp)
+    if parts_referenced:
+        # If we have a knowledge dir, count total relevant parts
+        total_relevant = 0
+        if topics_data is not None:
+            # Count from topics_data — each topic has relations to parts
+            pass  # Can't easily count without all-parts-index
+        if len(parts_referenced) < 10:
+            issues.append({
+                "severity": "soft",
+                "check": "low_source_coverage",
+                "message": (
+                    f"Only {len(parts_referenced)} source parts referenced across all records. "
+                    f"Records may not cover all knowledge from the source documents. "
+                    f"Consider generating records for unreferenced knowledge parts."
+                ),
+                "value": len(parts_referenced),
+            })
+
     # 6. Missing system prompts
     no_system = sum(1 for r in records if not extract_system_prompt(r).strip())
     if no_system > 0:
@@ -451,6 +480,96 @@ def gate_diversity(records: list[dict]) -> dict:
     prompt_types = Counter(r.get("prompt_type", "unknown") for r in records)
     has_types = any(r.get("prompt_type") for r in records)
 
+    # ── GT distribution diversity ──
+    # Skewed GT distributions cause GRPO to over-learn dominant answers
+    # and under-learn rare ones (MO-GRPO arXiv:2509.22047 Theorem 1).
+    gt_values = [extract_ground_truth(r).strip().lower() for r in records]
+    gt_values = [g for g in gt_values if g]
+    gt_stats: dict = {}
+
+    if gt_values:
+        gt_counter = Counter(gt_values)
+        total_gt = len(gt_values)
+        unique_gts = len(gt_counter)
+
+        # Check 1: Most common exact GT value dominance
+        top1_gt, top1_count = gt_counter.most_common(1)[0]
+        top1_frac = top1_count / total_gt
+        if top1_frac > THRESHOLDS["max_top1_gt_frac"]:
+            issues.append({
+                "severity": "soft",
+                "check": "gt_dominance",
+                "message": f"Most common GT \"{top1_gt}\" appears in {top1_frac:.0%} of records "
+                           f"(threshold {THRESHOLDS['max_top1_gt_frac']:.0%}). "
+                           f"Model may over-predict this answer.",
+                "fix": f"Generate more records with different GT values. "
+                       f"If \"{top1_gt}\" is a legitimate common answer, add records for "
+                       f"underrepresented GTs to rebalance. Target: no single GT > 25% of dataset.",
+                "value": round(top1_frac, 3),
+                "threshold": THRESHOLDS["max_top1_gt_frac"],
+            })
+
+        # Check 2: Per-label frequency (for multi-label GTs, split on comma)
+        label_counter: Counter = Counter()
+        for gt in gt_values:
+            labels = [l.strip() for l in gt.split(",") if l.strip()]
+            for label in labels:
+                label_counter[label] += 1
+
+        dominant_labels = []
+        for label, count in label_counter.most_common():
+            label_frac = count / total_gt
+            if label_frac > THRESHOLDS["max_single_label_frac"]:
+                dominant_labels.append({"label": label, "count": count, "frac": round(label_frac, 3)})
+
+        if dominant_labels:
+            label_summary = ", ".join(
+                "{} ({:.0%})".format(d["label"], d["frac"]) for d in dominant_labels[:5]
+            )
+            underrep = [l for l, c in label_counter.most_common() if c / total_gt < 0.10]
+            issues.append({
+                "severity": "soft",
+                "check": "label_skew",
+                "message": f"{len(dominant_labels)} label(s) appear in "
+                           f">{THRESHOLDS['max_single_label_frac']:.0%} of records: {label_summary}. "
+                           f"GRPO advantage is biased toward higher-variance reward components "
+                           f"(MO-GRPO arXiv:2509.22047).",
+                "fix": "Generate more records for underrepresented labels"
+                       + (f": {', '.join(underrep[:5])}" if underrep else "")
+                       + ". Reduce dominant label frequency by adding multi-label combinations "
+                         "or generating records for rare-label topics.",
+                "value": len(dominant_labels),
+                "labels": dominant_labels[:10],
+            })
+
+        # Check 3: GT uniqueness ratio (how varied are the answers?)
+        uniqueness_ratio = unique_gts / total_gt
+        if uniqueness_ratio < THRESHOLDS["min_gt_uniqueness_ratio"]:
+            issues.append({
+                "severity": "soft",
+                "check": "low_gt_uniqueness",
+                "message": f"Only {unique_gts} unique GT values across {total_gt} records "
+                           f"({uniqueness_ratio:.0%} uniqueness). Records may be too formulaic "
+                           f"— model won't learn diverse output patterns.",
+                "fix": "Vary record inputs to produce different GT combinations. "
+                       "For multi-label tasks: generate records with 1, 2, 3+ labels. "
+                       "For classification: ensure each class has distinct input patterns. "
+                       "For extraction: use diverse source formats (lists, prose, tables).",
+                "value": round(uniqueness_ratio, 3),
+                "threshold": THRESHOLDS["min_gt_uniqueness_ratio"],
+            })
+
+        gt_stats = {
+            "unique_gt_values": unique_gts,
+            "gt_uniqueness_ratio": round(uniqueness_ratio, 3),
+            "top_5_gts": [{"gt": gt, "count": c, "frac": round(c / total_gt, 3)}
+                          for gt, c in gt_counter.most_common(5)],
+            "label_count": len(label_counter),
+            "top_5_labels": [{"label": l, "count": c, "frac": round(c / total_gt, 3)}
+                             for l, c in label_counter.most_common(5)],
+            "dominant_labels": len(dominant_labels),
+        }
+
     return {
         "gate": "diversity",
         "passed": len(issues) == 0,
@@ -462,6 +581,7 @@ def gate_diversity(records: list[dict]) -> dict:
             "avg_pairwise_distance": round(avg_distance, 3),
             "low_diversity_topics": len(low_diversity_topics),
             "prompt_type_distribution": dict(prompt_types) if has_types else None,
+            **gt_stats,
         },
         "issues": issues,
     }
@@ -1323,6 +1443,9 @@ def _prioritize_fixes(issues: list[dict]) -> list[dict]:
         "thin_topics": 15,
         "short_prompts": 16,
         "low_topic_diversity": 17,
+        "gt_dominance": 18,
+        "label_skew": 19,
+        "low_gt_uniqueness": 20,
     }
 
     sorted_issues = sorted(
@@ -1335,12 +1458,15 @@ def _prioritize_fixes(issues: list[dict]) -> list[dict]:
 
     priorities = []
     for i, issue in enumerate(sorted_issues[:10]):
-        priorities.append({
+        entry = {
             "priority": i + 1,
             "severity": issue["severity"],
             "check": issue["check"],
             "action": issue["message"],
-        })
+        }
+        if "fix" in issue:
+            entry["fix"] = issue["fix"]
+        priorities.append(entry)
     return priorities
 
 
@@ -1374,6 +1500,8 @@ def print_report(report: dict) -> None:
         for issue in gate.get("issues", []):
             sev = "🔴" if issue["severity"] == "hard" else "🟡"
             print(f"  {sev} {issue['message']}")
+            if "fix" in issue:
+                print(f"     Fix: {issue['fix']}")
             if "records" in issue:
                 print(f"     Records: {issue['records'][:5]}")
 

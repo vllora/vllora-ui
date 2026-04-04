@@ -65,7 +65,7 @@ THRESHOLDS = {
     "min_learnable_frac": 0.30,       # PASS: >= 30% in learnable band
     "warn_learnable_frac": 0.15,      # WARN: 15-30%, FAIL: < 15%
     "max_dead_frac": 0.30,            # WARN if > 30% dead prompts
-    "max_trivial_frac": 0.30,         # WARN if > 30% trivial prompts
+    "max_trivial_frac": 0.40,         # WARN if > 40% trivial (raised: K=1≠K=8, don't pre-filter)
 
     # Predicted zero-variance rate
     "max_predicted_zero_var": 0.70,   # WARN if > 70% predicted zero-var at K=8
@@ -425,10 +425,12 @@ def analyze_difficulty(eval_data: dict, k: int = 8) -> dict:
         issues.append({
             "severity": "soft",
             "check": "high_trivial_fraction",
-            "message": f"{trivial_frac:.0%} of prompts are trivial (score > {THRESHOLDS['trivial']}). "
-                       f"Model already knows these — they produce near-zero gradient. "
-                       f"Replace with harder variants or remove. "
-                       f"[Hard Examples arXiv:2508.14094: easy prompts maintain signal for only 2-9% of training]",
+            "message": f"{trivial_frac:.0%} of prompts are trivial (K=1 score > {THRESHOLDS['trivial']}). "
+                       f"These waste compute but do NOT harm training (zero-advantage = zero gradient). "
+                       f"Do NOT pre-filter — add harder variants instead. "
+                       f"Note: K=1 score=1.0 ≠ K=8 zero-variance (stochastic sampling may still produce gradient). "
+                       f"[arXiv:2504.03380: one-sided filtering underperforms plain GRPO; "
+                       f"arXiv:2509.21880: RL-ZVP extracts +8.6 pts from zero-variance prompts]",
             "value": round(trivial_frac, 3),
         })
 
@@ -522,17 +524,24 @@ def _generate_recommendations(
             "research": "DeepSeek-R1 (arXiv:2501.12948): SFT cold-start bootstraps into learnable range",
         })
 
-    # Trivial prompt fixes
-    if trivial_frac > 0.15:
+    # Trivial prompt guidance
+    # Research: do NOT pre-filter trivials (arXiv:2504.03380: one-sided filtering
+    # underperforms plain GRPO). GRPO handles them via zero-advantage naturally.
+    # Only flag if extreme (>40%) — suggest adding harder variants, not removing.
+    if trivial_frac > 0.40:
         priority += 1
         recs.append({
             "priority": priority,
-            "action": "Replace trivial prompts (score > 0.95) with harder variants",
+            "action": "Add harder variants to increase learnable fraction (do NOT remove trivials)",
             "impact": "medium",
             "cost": "medium",
-            "reason": f"{trivial_frac:.0%} of prompts are trivial — model already knows these. "
-                      f"They maintain learnable variance for only 2-9% of training steps.",
-            "research": "Hard Examples (arXiv:2508.14094): training on hardest 10% gives 47% gains",
+            "reason": f"{trivial_frac:.0%} of prompts are trivial (K=1). GRPO handles these via "
+                      f"zero-advantage (no gradient, no harm), but compute is wasted. "
+                      f"K=1 score=1.0 ≠ K=8 zero-variance — stochastic sampling at K=8 may "
+                      f"still produce useful gradient from some of these prompts.",
+            "research": "arXiv:2504.03380: one-sided filtering underperforms plain GRPO. "
+                        "arXiv:2509.21880 (ICLR 2026): RL-ZVP extracts +8.6 pts FROM zero-variance prompts. "
+                        "arXiv:2508.14094: adding harder examples yields 10x more improvement per sample.",
         })
 
     # K size
@@ -595,6 +604,14 @@ def print_report(report: dict) -> None:
     print(f"  Predicted zero-variance at K={k}: {ss['avg_predicted_zero_var']:.0%}")
     print(f"  Average gradient magnitude:       {ss['avg_gradient_magnitude']:.4f} (max=0.25 at p=0.5)")
     print(f"  Effective training samples:        {ss['effective_samples']}/{n} ({ss['effective_frac']:.0%})")
+
+    # K=1 vs K=8 interpretation note
+    print(f"\n  ⓘ  K=1 eval scores are conservative lower bounds. A prompt scoring 1.0 at")
+    print(f"     K=1 (greedy) may score 0.6-0.8 at K=8 (stochastic sampling), still")
+    print(f"     producing useful gradient. Do NOT pre-filter trivial prompts — GRPO")
+    print(f"     handles them via zero-advantage (no gradient, no harm).")
+    print(f"     Research: arXiv:2504.03380 (one-sided filtering underperforms plain GRPO),")
+    print(f"     arXiv:2509.21880 (RL-ZVP extracts +8.6 pts FROM zero-variance prompts).")
 
     ga = report["grader_granularity"]
     print(f"\nGrader Granularity:")

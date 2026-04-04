@@ -963,7 +963,7 @@ def main() -> None:
     )
     parser.add_argument("--upload-incremental", action="store_true",
                         help="Upload each topic's records to gateway immediately after generation")
-    parser.add_argument("--workflow-id", help="Workflow ID (required with --upload-incremental and --use-rag)")
+    parser.add_argument("--workflow-id", help="Workflow ID (required with --upload-incremental, --use-rag, and --enrich-sources)")
     parser.add_argument("--gateway-url", default="http://localhost:9090", help="Gateway URL for incremental upload")
     parser.add_argument("--use-rag", action="store_true",
                         help="Augment relations with RAG-retrieved knowledge parts via semantic search")

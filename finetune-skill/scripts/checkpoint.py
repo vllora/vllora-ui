@@ -39,6 +39,7 @@ FIXED_STEPS = [
     "relations",
     "generate-data",
     "grader",
+    "data-quality-gate",
     "validate",
     "upload-records",
     "upload-grader",

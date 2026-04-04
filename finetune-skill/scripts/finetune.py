@@ -377,15 +377,27 @@ def _resolve_identifiers_to_uuids(
     resolved = []
     skipped = 0
     for rel in relations:
-        topic_id = topic_map.get(rel["topic_identifier"])
-        part_id = part_map.get(rel["part_identifier"])
+        # Accept both key naming conventions: topic_identifier/part_identifier
+        # and topic_id/part_id (agents may generate either format)
+        topic_key = rel.get("topic_identifier") or rel.get("topic_id")
+        part_key = rel.get("part_identifier") or rel.get("part_id")
+        if not topic_key:
+            skipped += 1
+            print(f"  Warning: relation missing topic_identifier/topic_id — skipping", file=sys.stderr)
+            continue
+        if not part_key:
+            skipped += 1
+            print(f"  Warning: relation missing part_identifier/part_id — skipping", file=sys.stderr)
+            continue
+        topic_id = topic_map.get(topic_key)
+        part_id = part_map.get(part_key)
         if not topic_id:
             skipped += 1
-            print(f"  Warning: topic '{rel['topic_identifier']}' not found — skipping relation", file=sys.stderr)
+            print(f"  Warning: topic '{topic_key}' not found — skipping relation", file=sys.stderr)
             continue
         if not part_id:
             skipped += 1
-            print(f"  Warning: part '{rel['part_identifier']}' not found — skipping relation", file=sys.stderr)
+            print(f"  Warning: part '{part_key}' not found — skipping relation", file=sys.stderr)
             continue
         resolved.append({**rel, "topic_identifier": topic_id, "part_identifier": part_id})
 
@@ -2017,42 +2029,56 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
     # them and can identify grader exploits or data issues.
     print("\n── Per-Record Inspection (auto) ──", file=sys.stderr)
 
-    bottom_records = sorted(
-        [(i, r) for i, r in enumerate(results) if r.get("score") is not None],
-        key=lambda x: x[1].get("score", 0),
-    )
-    top_records = sorted(
-        [(i, r) for i, r in enumerate(results) if r.get("score") is not None],
-        key=lambda x: x[1].get("score", 0),
-        reverse=True,
-    )
+    # Extract per-record scores — handle both flat (score field) and
+    # nested (epochs dict) formats from the eval results.
+    scored_records: list[tuple[int, dict, float, str]] = []
+    for i, r in enumerate(results):
+        row = r.get("row", {})
+        rid = row.get("id", f"row-{i}")
+        topic = row.get("topic", "?")
+
+        # Try flat score field first
+        score = r.get("score")
+        reason = r.get("reason", "")
+
+        # Fall back to epochs structure (finetune eval format)
+        if score is None and "epochs" in r:
+            epochs = r.get("epochs", {})
+            # Get the latest epoch's scores
+            for ek in sorted(epochs.keys(), key=lambda x: float(x), reverse=True):
+                items = epochs[ek]
+                if not isinstance(items, list):
+                    items = [items]
+                if items:
+                    # Use the first (or best) score from this epoch
+                    best = max(items, key=lambda x: x.get("score", 0))
+                    score = best.get("score")
+                    reason = best.get("reason", "")
+                    break
+
+        if score is not None:
+            scored_records.append((i, row, score, reason))
+
+    bottom_records = sorted(scored_records, key=lambda x: x[2])
+    top_records = sorted(scored_records, key=lambda x: x[2], reverse=True)
 
     print("  Bottom 5 (lowest scores — check for grader bugs):", file=sys.stderr)
-    for idx, r in bottom_records[:5]:
-        score = r.get("score", 0)
-        reason = r.get("reason", "")[:120]
-        row = r.get("row", {})
+    for idx, row, score, reason in bottom_records[:5]:
         topic = row.get("topic", "?")
         rid = row.get("id", f"row-{idx}")
-        print(f"    [{rid}] topic={topic} score={score:.2f} reason: {reason}", file=sys.stderr)
+        print(f"    [{rid}] topic={topic} score={score:.2f} reason: {reason[:120]}", file=sys.stderr)
 
     print("  Top 5 (highest scores — check for grader exploits):", file=sys.stderr)
-    for idx, r in top_records[:5]:
-        score = r.get("score", 0)
-        reason = r.get("reason", "")[:120]
-        row = r.get("row", {})
+    for idx, row, score, reason in top_records[:5]:
         topic = row.get("topic", "?")
         rid = row.get("id", f"row-{idx}")
-        print(f"    [{rid}] topic={topic} score={score:.2f} reason: {reason}", file=sys.stderr)
+        print(f"    [{rid}] topic={topic} score={score:.2f} reason: {reason[:120]}", file=sys.stderr)
 
     # ── Source-part coverage audit (auto — agent doesn't need to remember) ──
     # Check if any source_parts are only covered by high-scoring records.
+    # Reuse scored_records from per-record inspection above.
     part_scores: dict[str, list[float]] = {}
-    for r in results:
-        row = r.get("row", {})
-        score = r.get("score")
-        if score is None:
-            continue
+    for idx, row, score, reason in scored_records:
         # source_parts may be in the row data or input
         source_parts = row.get("source_parts", [])
         if isinstance(row.get("input"), dict):
@@ -4443,7 +4469,13 @@ def cmd_difficulty_probe(args: argparse.Namespace) -> None:
         print(f"Error: probe_difficulty.py not found at {script}", file=sys.stderr)
         sys.exit(1)
 
-    cmd = [sys.executable, str(script), args.file]
+    # Always save JSON report to temp file for reliable journaling,
+    # regardless of whether agent passed --json or not
+    import tempfile
+    journal_json = tempfile.NamedTemporaryFile(suffix=".json", delete=False)
+    journal_json.close()
+
+    cmd = [sys.executable, str(script), args.file, "--save", journal_json.name]
     if args.k:
         cmd.extend(["--k", str(args.k)])
     if args.output_json:
@@ -4461,21 +4493,29 @@ def cmd_difficulty_probe(args: argparse.Namespace) -> None:
     if result.stderr:
         print(result.stderr, end="", file=sys.stderr)
 
-    # Auto-journal: difficulty probe result
+    # Auto-journal: read structured data from saved JSON
     verdict = "pass" if result.returncode == 0 else "warn" if result.returncode == 2 else "fail"
-    # Try to parse JSON output for structured data
     probe_results = {}
-    if args.output_json and result.stdout:
-        try:
-            probe_data = json.loads(result.stdout)
-            probe_results = {
-                "learnable_frac": probe_data.get("learnable_frac"),
-                "trivial_frac": probe_data.get("trivial_frac"),
-                "dead_frac": probe_data.get("dead_frac"),
-                "effective_frac": probe_data.get("effective_training_frac"),
-            }
-        except (json.JSONDecodeError, TypeError):
-            pass
+    try:
+        probe_data = json.loads(Path(journal_json.name).read_text())
+        dd = probe_data.get("difficulty_distribution", {})
+        ss = probe_data.get("signal_strength", {})
+        probe_results = {
+            "learnable_frac": dd.get("learnable", {}).get("frac"),
+            "trivial_frac": dd.get("trivial", {}).get("frac"),
+            "dead_frac": dd.get("dead", {}).get("frac"),
+            "hard_frac": dd.get("hard", {}).get("frac"),
+            "easy_frac": dd.get("easy", {}).get("frac"),
+            "effective_frac": ss.get("effective_frac"),
+            "predicted_zero_var": ss.get("avg_predicted_zero_var"),
+        }
+    except (json.JSONDecodeError, TypeError, FileNotFoundError):
+        pass
+    finally:
+        Path(journal_json.name).unlink(missing_ok=True)
+
+    def _fmt_pct(v: object) -> str:
+        return f"{v:.0%}" if isinstance(v, (int, float)) else "?"
 
     _auto_journal(
         project_dir=Path(args.file).parent.parent,
@@ -4483,10 +4523,11 @@ def cmd_difficulty_probe(args: argparse.Namespace) -> None:
         action="difficulty_probe",
         status=verdict,
         summary=f"Difficulty probe: {verdict.upper()}. " + (
-            f"learnable={probe_results.get('learnable_frac', '?')}, "
-            f"trivial={probe_results.get('trivial_frac', '?')}, "
-            f"dead={probe_results.get('dead_frac', '?')}, "
-            f"effective={probe_results.get('effective_frac', '?')}"
+            f"learnable={_fmt_pct(probe_results.get('learnable_frac'))}, "
+            f"trivial={_fmt_pct(probe_results.get('trivial_frac'))}, "
+            f"dead={_fmt_pct(probe_results.get('dead_frac'))}, "
+            f"effective={_fmt_pct(probe_results.get('effective_frac'))}, "
+            f"predicted_zero_var={_fmt_pct(probe_results.get('predicted_zero_var'))}"
             if probe_results else "See output for details."
         ),
         results=probe_results if probe_results else None,
@@ -4518,7 +4559,12 @@ def cmd_data_quality_gate(args: argparse.Namespace) -> None:
         print(f"Error: data_quality_gate.py not found at {script}", file=sys.stderr)
         sys.exit(1)
 
-    cmd = [sys.executable, str(script), args.file]
+    # Always save JSON report to temp file for reliable journaling
+    import tempfile
+    journal_json = tempfile.NamedTemporaryFile(suffix=".json", delete=False)
+    journal_json.close()
+
+    cmd = [sys.executable, str(script), args.file, "--save", journal_json.name]
 
     if args.topics:
         cmd.extend(["--topics", args.topics])
@@ -4541,7 +4587,68 @@ def cmd_data_quality_gate(args: argparse.Namespace) -> None:
     if args.save:
         cmd.extend(["--save", args.save])
 
-    result = subprocess.run(cmd)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    # Print output (so agent sees it)
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr)
+
+    # Auto-journal: data quality gate result
+    verdict = "pass" if result.returncode == 0 else "warn" if result.returncode == 2 else "fail"
+    gate_results: dict = {}
+    try:
+        report = json.loads(Path(journal_json.name).read_text())
+        gates = report.get("gates", {})
+        gate_summaries = []
+        for gate_name, gate_data in gates.items():
+            g_verdict = gate_data.get("verdict", "?")
+            n_issues = len(gate_data.get("issues", []))
+            gate_summaries.append(f"{gate_name}:{g_verdict}")
+            if n_issues > 0:
+                gate_summaries[-1] += f"({n_issues} issues)"
+
+        # Extract key stats for journal
+        structural = gates.get("structural", {}).get("stats", {})
+        diversity = gates.get("diversity", {}).get("stats", {})
+        gate_results = {
+            "verdict": report.get("verdict", verdict.upper()),
+            "gates": {g: gates[g].get("verdict") for g in gates},
+            "record_count": structural.get("record_count"),
+            "topic_count": structural.get("topic_count"),
+            "near_duplicates": diversity.get("near_duplicate_frac"),
+            "avg_pairwise_distance": diversity.get("avg_pairwise_distance"),
+            "unique_gt_values": diversity.get("unique_gt_values"),
+            "gt_uniqueness_ratio": diversity.get("gt_uniqueness_ratio"),
+            "dominant_labels": diversity.get("dominant_labels"),
+        }
+        # Collect all issue messages for summary
+        all_issues = []
+        for gate_data in gates.values():
+            for issue in gate_data.get("issues", []):
+                all_issues.append(issue.get("check", "unknown"))
+    except (json.JSONDecodeError, TypeError, FileNotFoundError):
+        gate_summaries = []
+        all_issues = []
+    finally:
+        Path(journal_json.name).unlink(missing_ok=True)
+
+    summary_parts = [f"Data quality gate: {verdict.upper()}."]
+    if gate_summaries:
+        summary_parts.append(" ".join(gate_summaries) + ".")
+    if all_issues:
+        summary_parts.append(f"Issues: {', '.join(all_issues[:5])}")
+
+    _auto_journal(
+        project_dir=Path(args.file).resolve().parent,
+        step="step_5_5_quality",
+        action="data_quality_gate",
+        status=verdict,
+        summary=" ".join(summary_parts),
+        results=gate_results if gate_results else None,
+    )
+
     sys.exit(result.returncode)
 
 

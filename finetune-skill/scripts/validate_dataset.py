@@ -122,13 +122,16 @@ def validate_record(line_num: int, line: str) -> list[str]:
     if "id" not in record:
         errors.append(f"Line {line_num}: Missing recommended field 'id'")
 
-    # Soft validation for ground_truth (optional field)
+    # Validate ground_truth type and emptiness only.
+    # Short GT length is NOT an error — classification tasks have short GTs
+    # by design (e.g., "fish" = 4 chars). Length checks are handled by
+    # data_quality_gate.py which has task-aware thresholds.
     gt = record.get("ground_truth")
     if gt is not None:
         if not isinstance(gt, str):
             errors.append(f"Line {line_num}: 'ground_truth' must be a string")
-        elif len(gt.strip()) < 10:
-            errors.append(f"Line {line_num}: 'ground_truth' is too short ({len(gt.strip())} chars) — should contain meaningful evaluation reference text")
+        elif len(gt.strip()) == 0:
+            errors.append(f"Line {line_num}: 'ground_truth' is empty")
 
     return errors
 

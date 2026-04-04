@@ -460,13 +460,13 @@ Filter extracted parts by relevance, design a skill-based topic hierarchy, build
 
 **3a. Filter parts by relevance to the objective.**
 
-Not all extracted content is relevant to the finetune goal. **Read the actual content of each part** — do NOT just pattern-match on titles. A title like "B.11 Raw agricultural commodities" might seem irrelevant but could contain allergen exemption rules that matter. A title like "D.15 Advisory statements" might seem relevant but could be about voluntary labeling that doesn't apply.
+Not all extracted content is relevant to the finetune goal. **Read the actual content of each part** — do NOT just pattern-match on titles. A title that seems irrelevant might contain exception rules that matter. A title that seems relevant might be about a different subtopic entirely.
 
 **For each part, read its content and assess:** "Does this content teach a skill or provide knowledge the model needs for the stated objective?" Consider:
-- Parts about the core task domain (allergen identification rules) → **relevant**
-- Parts about related context that affects the task (exemptions, thresholds, cross-contact rules) → **relevant** — these create the hard edge cases GRPO needs
-- Parts about unrelated regulatory topics (pet food, dietary supplements, airline food, drugs) → **irrelevant**
-- Parts about administrative process (Paperwork Reduction Act, penalties, how to contact FDA) → **irrelevant**
+- Parts about the core task domain → **relevant**
+- Parts about related context that affects the task (exceptions, thresholds, edge cases) → **relevant** — these create the hard training records GRPO learns most from
+- Parts about unrelated subtopics not covered by the objective → **irrelevant**
+- Parts about administrative/procedural content (paperwork, penalties, contact info) → **irrelevant**
 
 **⚠️ Do NOT use hardcoded title matching to filter.** Read each part's content (at least the first 200 chars) before deciding. Title-only filtering misses relevant content with misleading titles and excludes edge-case content that creates the hard training records GRPO learns most from.
 
@@ -616,6 +616,50 @@ Key flags: `--enrich-sources` (recommended: enriches source_parts traceability),
 - ✗ Bad: `--ground-truth-format 'allergen1, allergen2 OR none'` (placeholders, not exact vocabulary)
 - ✓ Good: `--ground-truth-format 'Given an ingredient list, output ONLY the allergen names as comma-separated from: milk, eggs, fish, shellfish, tree nuts, peanuts, wheat, soybeans, sesame. If none: none. The user message MUST present a concrete ingredient list, NOT ask a regulatory question.'`
 
+**⚠️ MULTI-LABEL GT COMPLETENESS (critical for set-output tasks):**
+
+LLMs exhibit **single-label suppression** when generating per-topic — they focus on the topic's label and drop others (arXiv:2505.17510). This corrupts GRPO training: a model that produces a correct multi-label output gets scored against an incomplete GT and receives a LOW score, inverting the gradient (arXiv:2510.18924).
+
+**Include this instruction in `--ground-truth-format` for ALL multi-label tasks:**
+
+> "IMPORTANT: ground_truth MUST list ALL [labels] present in the input, not just the ones related to this topic. Records are generated per-topic for difficulty control, but the GT must be complete across all categories. A GT that lists only the topic's label while other labels are present in the input is WRONG and will corrupt training."
+
+**Preferred approach for multi-label tasks: two-stage generation** (DUMP arXiv:2504.09710 validates per-topic difficulty control; arXiv:2505.17510 shows topic-agnostic GT derivation prevents single-label suppression):
+- Stage 1 (per-topic): `generate_records.py --no-ground-truth` — generates inputs using topic context for difficulty seeding, no GT.
+- Stage 2 (topic-agnostic): For each generated record, derive the complete GT by calling the LLM with the input only (no topic context): "List ALL [labels] in this input." Write the GT back to the record's `ground_truth` field.
+
+Stage 2 uses `derive_ground_truth.py`:
+
+```bash
+# Two-stage generation for multi-label tasks:
+
+# Stage 1: Generate inputs per-topic (no GT)
+# ⚠️ Use --ground-truth-format to control INPUT format even in --no-ground-truth mode.
+# Without it, the LLM generates conversational questions ("What happens if...")
+# instead of task-specific inputs (ingredient lists).
+uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
+  --topics finetune-project/topics.json --relations finetune-project/relations.json \
+  --knowledge-dir finetune-project/knowledge --no-ground-truth \
+  --ground-truth-format "The user message MUST present a concrete ingredient list for allergen analysis. Format: 'Identify all allergens in: [ingredient1], [ingredient2], ...' Do NOT generate regulatory questions, explanations, or hypothetical scenarios." \
+  --output finetune-project/training.jsonl --records-per-topic 25
+
+# Stage 2: Derive complete GTs topic-agnostically
+uv run ${CLAUDE_SKILL_DIR}/scripts/derive_ground_truth.py finetune-project/training.jsonl \
+  --gt-prompt "List ALL allergens present in these ingredients using ONLY: milk, eggs, fish, shellfish, tree nuts, peanuts, wheat, soybeans, sesame. If none: none. Comma-separated, nothing else." \
+  --overwrite
+
+# Validate: check for mismatches (optional sanity check)
+uv run ${CLAUDE_SKILL_DIR}/scripts/derive_ground_truth.py finetune-project/training.jsonl \
+  --gt-prompt "..." --validate-only
+```
+
+This structurally prevents single-label suppression in GTs while preserving per-topic difficulty control.
+
+**⚠️ Post Stage 2 validation:** After deriving GTs, check GT distribution per topic. Two-stage generation can cause topic-GT misalignment — e.g., "edge-none" records (intended to have GT="none") may get non-none GTs after Stage 2 finds allergens the Stage 1 inputs accidentally included. Check:
+- For "none/negative" topics: how many records still have the expected negative GT? If <50%, the Stage 1 inputs for that topic accidentally included positive cases — regenerate with cleaner inputs.
+- For per-category topics: do most GTs include the topic's target label? If a record generated for topic X has a GT that doesn't include X's label, the input didn't actually contain the target content — remove or regenerate.
+- **GT format consistency**: normalize all GTs to the same format (lowercase, comma-space-separated, sorted). Use `derive_ground_truth.py --validate-only` to check consistency.
+
 **⚠️ ALWAYS deduplicate** after generation:
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/deduplicate_records.py finetune-project/training.jsonl --threshold 0.85
@@ -639,7 +683,7 @@ After generation, **read records from every topic** (at least 3-5 per topic, mix
 - **GT vocabulary validation** ⚠️: For structured-output tasks, verify EVERY GT uses ONLY the exact vocabulary from `--ground-truth-format`. Common failure: GTs use ingredient names ("casein", "whey", "semolina") instead of allergen category names ("milk", "wheat"). If the grader expects category names but GTs contain ingredient names, the grader will score correct answers as wrong — creating reward noise that attenuates GRPO signal (arXiv:2510.18924). **Run a programmatic check**: extract all unique tokens from GTs and compare against the valid vocabulary. Flag any GT containing tokens not in the valid set.
 - **GT self-consistency**: Does the answer/verdict match the reasoning/evidence within the same GT? (e.g., "COMPLIANT" but explanation says "exceeds limit" = contradiction)
 - **GT factual accuracy**: Cross-reference 5-10 numeric values in GTs against the source parts. Do the numbers match? (e.g., if GT says "MCL for benzene is 0.005 mg/L", verify this appears in the source table)
-- **GT completeness** ⚠️: For multi-label tasks, verify the GT lists ALL correct labels, not just the topic-specific one. Common failure: a record in the "hidden-wheat" topic has ingredients containing wheat AND milk, but the GT only says "wheat" because the generator focused on the topic's allergen. **Run a programmatic check**: for each record, independently derive the correct GT from the ingredient list and compare with the generated GT.
+- **GT completeness** ⚠️ **MANDATORY for multi-label tasks — do NOT skip**: Verify the GT lists ALL correct labels, not just the topic-specific one. LLMs exhibit single-label suppression (arXiv:2505.17510) — they focus on the topic's label and drop others. This corrupts GRPO training by penalizing correct model outputs (arXiv:2510.18924). **Run a PROGRAMMATIC check on ALL records** (not just a sample): for each record, independently derive the correct GT from the input and compare with the generated GT. Fix any record where the generated GT is incomplete. Expect 30-50% of records to need fixing — this is a known LLM behavior, not an edge case.
 - **Prompt format**: Does the user message match the expected input format? If the task expects ingredient lists but the prompt asks a regulatory question, the record is wrong.
 - **Duplicate patterns**: Are different prompts producing identical GTs? (>5 identical GTs = low diversity, wasted GRPO signal)
 
@@ -1198,7 +1242,7 @@ Log the coverage audit results in `execution-log.md`:
 
 This is a HARD GATE. You MUST have a base model eval with avg score < 0.75 before proceeding to training. If the headroom gate fails (any model scores >0.75), follow the diagnostic tree below to identify the root cause and fix it.
 
-**Why this gate exists**: Without it, the agent proceeds to training, wastes GPU time, and training early-stops due to score degradation — exactly what happened with food-allergen-detector (Qwen3.5-4B scored 0.828, training degraded after epoch 1). Catching it here saves hours of compute.
+**Why this gate exists**: Without it, the agent proceeds to training, wastes GPU time, and training early-stops due to score degradation. Catching high base model scores here saves hours of compute.
 
 **Diagnostic tree when headroom gate fails (base model avg >0.75):**
 
@@ -1565,7 +1609,7 @@ Exits with code 1 if critical alerts found.
 - **Cross-reference regressions with improvements**: Are the records that improved the opposite pattern of those that regressed? (e.g., regressions are single-answer prompts that the model now over-predicts, improvements are multi-answer prompts that benefit from over-prediction) → this reveals the exploit strategy.
 - **Check the collapse epoch**: If the script reported `epoch_collapse`, read 5 records at the collapse boundary. What changed in the model's behavior between epoch N-1 (good) and epoch N (bad)?
 
-This is the most diagnostic step in the entire analysis. Score numbers tell you "something went wrong." Reading the actual responses tells you "the model started listing all 9 allergens at epoch 4" — which directly tells you the fix (add FP penalty, reduce epochs).
+This is the most diagnostic step in the entire analysis. Score numbers tell you "something went wrong." Reading the actual responses tells you the specific failure mode — which directly tells you the fix.
 
 **8c-research. Reason through the problem — don't just match patterns.** The diagnosis tables below are starting points, not answers. When you see unexpected metrics or epoch behavior, **think through it like a researcher**:
 
