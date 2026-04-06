@@ -269,7 +269,22 @@ for part, n, avg in sorted(easy_only_parts):
 
 ## Harden Trivial Records (Step 7c++)
 
-If the readiness summary shows `SIGNAL DENSITY LOW` (trivial > 40% AND learnable < 35%), the training data has too many records the base model already aces. Generate harder variants:
+### When to Harden
+
+Apply to the **chosen model's** eval only — a rejected model's trivial% is irrelevant after model selection.
+
+| Condition | Action | Rationale |
+|-----------|--------|-----------|
+| trivial > 40% AND learnable < 35% | **HARDEN** | Too many zero-gradient records, insufficient signal |
+| dead > 30% | **ADVISORY** | DAPO filters dead records from gradients (no harm), but inference compute wasted |
+| trivial > 40% BUT learnable > 35% | **No action** | Enough signal despite trivials — DAPO dynamic sampling handles them at batch time |
+| trivial < 40% | **No action** | Normal distribution |
+
+> **Threshold transparency:** The 40% trivial and 35% learnable thresholds are engineering heuristics inspired by arXiv:2508.14094 (easy-only=3.7% learnable steps, hard-only=34.1%), not directly stated thresholds in any paper. The conjunctive gate (both conditions must be true) avoids unnecessary hardening when learnable% is already sufficient.
+
+> **Why chosen model only?** Trivial/learnable is per-model (arXiv:2508.14094). A record trivial for a 4B model may still produce variance for a 0.8B. No paper studies cross-model trivial contamination.
+
+### How to Harden
 
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py harden-records \
@@ -280,6 +295,6 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py harden-records \
 
 This **adds** harder variants alongside the originals (originals kept as anchors). The LLM rewrites each trivial record's input to require deeper reasoning while keeping the same GT answer.
 
-After hardening: re-upload records (`upload-records`), re-eval (`create-eval`), re-check readiness. The trivial% should decrease and learnable% should increase.
+After hardening: re-upload records (`upload-records`), re-eval BOTH models (`create-eval`), re-check readiness, re-compare learnable_frac. Hardening changes the difficulty distribution, which may change which model is best.
 
 Research: arXiv:2505.17063 (Synthetic Data RL: +29.2% from generate-eval-rewrite). arXiv:2603.24202 (iterative teacher-student with pass-rate-conditional difficulty adjustment).

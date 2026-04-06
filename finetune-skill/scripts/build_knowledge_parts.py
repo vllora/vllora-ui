@@ -372,6 +372,14 @@ def main() -> None:
 
     print(f"Wrote {len(parts)} parts to {output_path} ({type_summary})")
     print(f"  Avg size: {avg_chars} chars, Total: {total_chars} chars")
+
+    # Auto-journal milestone
+    from pipeline_journal import find_project_dir, log_milestone
+    proj = find_project_dir(output_path)
+    if proj:
+        log_milestone(proj, "step_2_extraction", "build_parts", "completed",
+                       f"Built {len(parts)} knowledge parts ({type_summary}) from {len(chunks)} chunks. Avg {avg_chars} chars.",
+                       {"total_parts": len(parts), "type_counts": type_counts, "total_chars": total_chars, "slug": args.slug})
     print(f"  Index: {index_path} ({len(index)} entries)")
 
 

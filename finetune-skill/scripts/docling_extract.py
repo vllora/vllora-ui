@@ -435,6 +435,12 @@ def poll_one_task(
             size_mb = output_path.stat().st_size / (1024 * 1024)
             status_info.update({"status": "completed", "chunks": chunks, "size_mb": round(size_mb, 1)})
             _write_status(output_path, status_info)
+            # Auto-journal
+            from pipeline_journal import find_project_dir, log_milestone
+            proj = find_project_dir(output_path)
+            if proj:
+                log_milestone(proj, "step_2_extraction", "docling_complete", "completed",
+                               f"Docling extraction complete: {chunks} chunks, {size_mb:.1f} MB. Output: {output_path.name}")
             return status_info
         elif status in ("failed", "error"):
             error = data.get("error", data.get("detail", "unknown"))

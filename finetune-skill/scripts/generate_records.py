@@ -180,7 +180,7 @@ def load_topics(topics_path: Path) -> list[dict]:
     return data if isinstance(data, list) else data.get("topics", [])
 
 
-def load_relations(relations_path: Path) -> list[dict]:
+def load_relations(relations_path: Path, topics: list[dict] | None = None) -> list[dict]:
     data = json.loads(relations_path.read_text())
     relations = data if isinstance(data, list) else data.get("relations", [])
     # Normalize key names: accept both topic_id/part_id and topic_identifier/part_identifier.
@@ -190,6 +190,17 @@ def load_relations(relations_path: Path) -> list[dict]:
             r["topic_identifier"] = r.pop("topic_id")
         if "part_id" in r and "part_identifier" not in r:
             r["part_identifier"] = r.pop("part_id")
+
+    # Normalize topic_identifier: if relations use topic names instead of IDs,
+    # remap to IDs so downstream matching works. Agents may write either format
+    # (e.g., "Milk Detection" vs "milk-detection").
+    if topics:
+        name_to_id = {t["name"]: t["id"] for t in topics if "name" in t and "id" in t}
+        for r in relations:
+            tid = r.get("topic_identifier", "")
+            if tid and tid not in {t["id"] for t in topics} and tid in name_to_id:
+                r["topic_identifier"] = name_to_id[tid]
+
     return relations
 
 
@@ -743,6 +754,62 @@ Return JSON: {{"items": [{{"prompt": "the question", "ground_truth": "{'structur
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Inline record validation (deterministic quality checks)
+# ---------------------------------------------------------------------------
+
+# Patterns that indicate conversational/question format instead of plain input
+_CONVERSATIONAL_PREFIXES = (
+    "walk me through", "help me", "can you", "i want to", "i need to",
+    "given this situation", "explain", "what happens", "how do", "how can",
+    "is it possible", "tell me", "identify", "determine", "analyze",
+    "check if", "please", "let me know",
+)
+
+
+def _validate_record(
+    record: dict, topic: dict, ground_truth_format: str | None,
+) -> str | None:
+    """Validate a generated record. Returns rejection reason or None if valid.
+
+    Deterministic checks only — no LLM calls. Catches:
+    1. Conversational format (questions instead of plain input)
+    2. GT-topic consistency (e.g., allergen-free topic with allergen GT)
+    3. Empty/missing content
+    """
+    messages = record.get("messages", [])
+    user_msg = ""
+    for m in messages:
+        if m.get("role") == "user":
+            user_msg = m["content"].strip()
+            break
+
+    if not user_msg:
+        return "empty user message"
+
+    # Check 1: Conversational format detection
+    user_lower = user_msg.lower()
+    if "?" in user_msg:
+        return "contains question mark — likely conversational format"
+    for prefix in _CONVERSATIONAL_PREFIXES:
+        if user_lower.startswith(prefix):
+            return f"conversational prefix: '{prefix}...'"
+
+    # Check 2: GT-topic consistency for known topic patterns
+    gt = record.get("ground_truth", "")
+    topic_id = topic.get("id", "").lower()
+    topic_name = topic.get("name", "").lower()
+
+    # "No allergen" / "allergen-free" topics should have GT = "none"
+    if gt and ("no-allergen" in topic_id or "allergen-free" in topic_id
+               or "no allergen" in topic_name or "allergen-free" in topic_name):
+        gt_lower = gt.strip().lower()
+        if gt_lower != "none":
+            return f"topic expects no allergens but GT='{gt}'"
+
+    return None
+
+
 # Per-topic generation (multi-call with inner parallelism)
 # ---------------------------------------------------------------------------
 
@@ -875,6 +942,7 @@ def generate_for_topic(
     all_source_parts = part_ids + rag_part_ids
     records: list[dict] = []
     record_idx = 0
+    rejected_count = 0
 
     # Cache for --enrich-sources: avoid redundant gateway calls for similar questions
     # within the same topic. Key = frozenset of first 6 significant words, value = [part IDs].
@@ -936,7 +1004,20 @@ def generate_for_topic(
             }
             if include_ground_truth and ground_truth and ground_truth.strip():
                 record["ground_truth"] = ground_truth.strip()
+
+            # Inline validation: reject records that fail deterministic quality checks.
+            # Catches format violations before they reach training.jsonl.
+            rejection = _validate_record(record, topic, ground_truth_format)
+            if rejection:
+                rejected_count += 1
+                if rejected_count <= 10:
+                    print(f"    ⚠ Rejected record: {rejection} | user: {prompt_text[:60]}...", file=sys.stderr)
+                continue
+
             records.append(record)
+
+    if rejected_count:
+        print(f"  ℹ Rejected {rejected_count} record(s) inline (format/quality validation)", file=sys.stderr)
 
     # Trim to exact target (we over-requested by 20%).
     # If we still fell short, warn but return what we have.
@@ -1130,7 +1211,7 @@ def main() -> None:
 
     # Load data
     topics = load_topics(topics_path)
-    relations = load_relations(relations_path) if relations_path else []
+    relations = load_relations(relations_path, topics) if relations_path else []
     parts = load_all_parts(knowledge_dir) if knowledge_dir else {}
     leaves = find_leaf_topics(topics)
     topic_index = build_topic_index(topics)
@@ -1422,6 +1503,19 @@ def main() -> None:
         print(f"Uploaded: {uploaded_records} records to workflow {args.workflow_id}")
         if upload_failures:
             print(f"  Upload failed for {len(upload_failures)} topic(s): {upload_failures}")
+
+    # Auto-journal milestone
+    from pipeline_journal import find_project_dir, log_milestone
+    proj = find_project_dir(output_path)
+    if proj:
+        difficulty_mode = "hard" if args.difficulty == "hard" else ("adaptive" if args.difficulty == "adaptive" else "normal")
+        log_milestone(proj, "step_4_generation", "generate_stage1", "completed",
+                       f"Generated {total_records} records across {len(leaves) - len(failed_topics)}/{len(leaves)} topics. "
+                       f"Mode: {difficulty_mode}. Uploaded: {uploaded_records}.",
+                       {"total_records": total_records, "topics_succeeded": len(leaves) - len(failed_topics),
+                        "topics_failed": len(failed_topics), "uploaded": uploaded_records,
+                        "per_topic": topic_record_counts, "prompt_types": type_totals,
+                        "difficulty_mode": difficulty_mode})
 
     if failed_topics:
         print(f"\n{len(failed_topics)} topic(s) failed:")

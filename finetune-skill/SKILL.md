@@ -146,6 +146,20 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-step \
 
 Agent names: `orchestrator`, `knowledge-extractor`, `relation-builder`, `training-monitor`, `nemo-data-generator`.
 
+**Canonical step names** (use these exact strings in `--step`):
+
+| Step | `--step` value |
+|------|---------------|
+| Step 1: Objective | `step_1_objective` |
+| Step 2: Extraction | `step_2_extraction` |
+| Step 3: Topics | `step_3_topics` |
+| Step 4: Generation | `step_4_generation` |
+| Step 5: Grader | `step_5_grader` |
+| Step 5.5: Validate | `step_5_5_validate` |
+| Step 6: Verify | `step_6_verify` |
+| Step 7: Eval | `step_7_eval` |
+| Step 8: Training | `step_8_training` |
+
 See [reference/pipeline-journal-schema.md](reference/pipeline-journal-schema.md) for the full schema. Every eval or training job MUST have a `log-step` call with `--reason`.
 
 ---
@@ -308,7 +322,13 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --workflow-id $WORKFLOW_ID --upload-incremental --enrich-sources
 ```
 
-Generate **200+ total records**, 15-25 per leaf topic.
+> **WARNING: If regenerating records**, delete gateway records first to avoid duplicates:
+> ```bash
+> uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force --workflow-id $WORKFLOW_ID --file /dev/null 2>/dev/null || true
+> ```
+> `--upload-incremental` appends to gateway. Running generate twice without clearing = duplicate records on gateway.
+
+Generate **200+ total records**, minimum 25 per leaf topic.
 
 **Difficulty control** (reduces trivial records at generation time):
 - `--difficulty normal` (default): balanced prompt types for initial generation
@@ -352,13 +372,33 @@ Spawn `nemo-data-generator` subagent. If NeMo unavailable, fall back to Step 4A.
 - **Prompt format**: does the user message match expected input format?
 - **Duplicate patterns**: >5 identical GTs = low diversity
 
-If >10% of sampled records have issues, fix before proceeding.
+If >10% of sampled records have issues, fix the bad records (remove + regenerate replacements), then re-check.
 
 ### Step 4.5: Topic Balance Check
 
 **MANDATORY: minimum 25 records per leaf topic.** Always use `--records-per-topic 25` or higher. Do NOT reduce below 25 — fewer records per topic means insufficient difficulty coverage for GRPO to learn from.
 
-If any topic has <50% of target records-per-topic after generation, regenerate for that topic using `generate_records.py --append`. Use `chat_completion.py` for variants if needed.
+**After removing bad records, check topic counts:**
+```bash
+python3 -c "
+import json
+from collections import Counter
+records = [json.loads(l) for l in open('finetune-project/training.jsonl')]
+counts = Counter(r.get('topic','?') for r in records)
+print(f'Total: {len(records)}')
+for topic, count in sorted(counts.items()):
+    flag = ' ⚠ BELOW MIN' if count < 25 else ''
+    print(f'  {topic}: {count}{flag}')
+"
+```
+
+**If any topic is below 25 records:**
+1. **Diagnose first** — why were records removed? Bad prompt format? Wrong GT? Topic design issue?
+2. **Fix the root cause** — tighten `--ground-truth-format`, fix topic system_prompt, adjust generation constraints
+3. **Then regenerate** with `--append` using the improved prompt. Do NOT regenerate with the same prompt that produced bad records.
+4. **Re-check quality** on the new records before proceeding.
+
+**Do NOT proceed to Step 5 with any topic below 25 records.** The grader calibration and eval signal density depend on sufficient records per topic.
 
 ### Step 5: Write the Grader
 
@@ -581,9 +621,12 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py difficulty-probe \
 
 **Decision:** Exit 0 = PASS (>= 30% learnable), exit 2 = WARN (15-30%), exit 1 = FAIL (< 15%).
 
-#### 7c++. Harden Trivial Records (if signal density low)
+#### 7c++. Harden Trivial Records (if signal density low on CHOSEN model)
 
-If `SIGNAL DENSITY LOW` (trivial > 40% AND learnable < 35%):
+**Hardening trigger** (engineering heuristic inspired by arXiv:2508.14094 — not a direct paper threshold):
+- `trivial > 40% AND learnable < 35%` on the **chosen model's** eval → HARDEN
+- `dead > 30%` on chosen model → ADVISORY (DAPO filters dead records from gradients, but they waste inference compute)
+- Apply to the chosen model only — a rejected model's trivial% is irrelevant after model selection
 
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py harden-records \
@@ -592,6 +635,10 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py harden-records \
 ```
 
 After hardening: **re-upload → re-eval BOTH models → re-compare learnable_frac → re-choose model.** Hardening changes the difficulty distribution, which may change which model is best.
+
+> **Why chosen model only?** Trivial/learnable is per-model (arXiv:2508.14094). A record trivial for 4B may still produce variance for 0.8B. Cross-model trivial contamination is plausible but unverified by any paper.
+>
+> **Why not always harden?** With 50% learnable and 15% trivial, proactive hardening is not justified — no paper supports removing trivial records when learnable% is already strong. DAPO dynamic sampling (arXiv:2503.14476) handles the remaining trivials at batch time.
 
 > See [reference/readiness-gate.md](reference/readiness-gate.md) for harden-records details.
 

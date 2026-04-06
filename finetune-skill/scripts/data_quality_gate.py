@@ -1637,6 +1637,16 @@ def main() -> None:
         if not args.json:
             print(f"\nFull report saved to {save_path}")
 
+    # Auto-journal milestone
+    from pipeline_journal import find_project_dir, log_milestone
+    proj = find_project_dir(args.input)
+    if proj:
+        gate_summary = ", ".join(f"{g['gate']}={g['verdict']}" for g in report.get("gates", []))
+        log_milestone(proj, "step_5_5_validate", "data_quality_gate", report["verdict"].lower(),
+                       f"Data quality gate: {report['verdict']}. {gate_summary}. Records: {len(records)}.",
+                       {"verdict": report["verdict"], "gates_run": gates,
+                        "gate_results": {g["gate"]: g["verdict"] for g in report.get("gates", [])}})
+
     # Exit code
     if report["verdict"] == "FAIL":
         sys.exit(1)

@@ -300,9 +300,9 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
               <EvalJobVersionBadge workflowId={job.workflowId} jobCreatedAt={job.createdAt} />
             )}
 
-            {/* Right: time + actions */}
+            {/* Right: elapsed + ETA + time + actions */}
             <div className="flex items-center gap-2 ml-auto">
-              <span className="text-[10px] text-zinc-600">{formatTime(job.createdAt)}</span>
+              <EvalElapsedEta job={job} isRunning={isRunning} />
               {isRunning && onCancel && (
                 <button onClick={onCancel} className="flex items-center gap-1 px-2 py-0.5 text-[10px] text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors">
                   <StopCircle className="h-3 w-3" />Cancel
@@ -487,6 +487,65 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
       </div>
     </TooltipProvider>
   );
+}
+
+// ─── Elapsed Time + ETA ───
+
+function EvalElapsedEta({ job, isRunning }: { readonly job: EvalJob; readonly isRunning: boolean }) {
+  const [, setTick] = useState(0);
+
+  // Re-render every 10s while running to update elapsed time
+  useEffect(() => {
+    if (!isRunning) return;
+    const interval = setInterval(() => setTick(t => t + 1), 10_000);
+    return () => clearInterval(interval);
+  }, [isRunning]);
+
+  const startMs = job.createdAt;
+  const endMs = job.completedAt ?? (isRunning ? Date.now() : null);
+  if (!startMs || !endMs) {
+    return <span className="text-[10px] text-zinc-600">{formatTime(job.createdAt)}</span>;
+  }
+
+  const elapsedMs = endMs - startMs;
+  const elapsedStr = formatDuration(elapsedMs);
+
+  // ETA — based on completed/total rows
+  let etaStr: string | null = null;
+  if (isRunning) {
+    const total = getJobTotalRows(job);
+    const completed = getJobCompletedRows(job);
+    if (completed > 0 && completed < total) {
+      const msPerRow = elapsedMs / completed;
+      const remainingMs = msPerRow * (total - completed);
+      etaStr = `~${formatDuration(remainingMs)}`;
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="flex items-center gap-1 text-[10px]">
+        <span className="text-zinc-500">{isRunning ? "Elapsed" : "Duration"}</span>
+        <span className="text-zinc-400 tabular-nums">{elapsedStr}</span>
+      </span>
+      {etaStr && (
+        <span className="flex items-center gap-1 text-[10px]">
+          <span className="text-amber-500">ETA</span>
+          <span className="text-amber-400 tabular-nums">{etaStr}</span>
+        </span>
+      )}
+    </div>
+  );
+}
+
+function formatDuration(ms: number): string {
+  const totalSec = Math.floor(ms / 1000);
+  if (totalSec < 60) return `${totalSec}s`;
+  const totalMin = Math.floor(totalSec / 60);
+  if (totalMin < 60) return `${totalMin}m`;
+  const hours = Math.floor(totalMin / 60);
+  const mins = totalMin % 60;
+  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
 }
 
 export function DryRunActivityView({ workflowId, jobs, onCancelJob, initialSelectedId, onRunAgain, onRefresh, hideRunsSidebar = false }: EvalActivityViewProps) {

@@ -288,15 +288,26 @@ def main() -> None:
         if len(warnings) > 20:
             print(f"  ... and {len(warnings) - 20} more")
 
+    from pipeline_journal import find_project_dir, log_milestone
+    proj = find_project_dir(args.file)
+
     if all_errors:
         print(f"\n❌ {len(all_errors)} error(s) found:")
         for err in all_errors[:20]:
             print(f"  {err}")
         if len(all_errors) > 20:
             print(f"  ... and {len(all_errors) - 20} more")
+        if proj:
+            log_milestone(proj, "step_5_5_validate", "validate_dataset", "fail",
+                           f"Validation FAILED: {len(all_errors)} errors in {len(records)} records",
+                           {"total": len(records), "errors": len(all_errors)})
         sys.exit(1)
     else:
         print(f"\n✅ All records valid!")
+        if proj:
+            log_milestone(proj, "step_5_5_validate", "validate_dataset", "completed",
+                           f"Validation PASSED: {len(records)} records, {len(topic_counts)} topics, all valid",
+                           {"total": len(records), "topics": len(topic_counts), "topic_counts": dict(topic_counts)})
 
 
 if __name__ == "__main__":

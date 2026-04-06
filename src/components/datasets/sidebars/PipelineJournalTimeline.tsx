@@ -18,6 +18,7 @@ import {
   List,
   FileTextIcon,
   Upload,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
@@ -222,6 +223,108 @@ function TimelineEntry({
             {entry.analysis && <DetailToggle label="analysis" content={entry.analysis} />}
             {entry.decision && <DetailToggle label="decision" content={entry.decision} />}
             {entry.reason_created && <DetailToggle label="reason" content={entry.reason_created} />}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// Grouped Entry — merges consecutive same-step entries
+// =============================================================================
+
+function GroupedTimelineEntry({
+  group,
+  isLast,
+}: {
+  readonly group: { step: string; entries: PipelineJournalEntry[] };
+  readonly isLast: boolean;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const lastEntry = group.entries[group.entries.length - 1];
+  const phase = stepPhase(group.step);
+  const { Icon: StatusIcon, cls: statusCls } = statusIcon(lastEntry.status);
+  const results = lastEntry.results;
+
+  return (
+    <div className="flex gap-3 group">
+      {/* Timeline rail */}
+      <div className="flex flex-col items-center w-3 shrink-0">
+        <div className={cn("w-2.5 h-2.5 rounded-full mt-1 shrink-0 ring-2 ring-background", PHASE_DOT[phase])} />
+        {!isLast && <div className={cn("w-0.5 flex-1 mt-0.5", PHASE_LINE[phase])} />}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0 pb-4">
+        {/* Header */}
+        <div className="flex items-center gap-1.5 leading-none">
+          <span className="text-[12px] font-semibold text-foreground truncate">
+            {stepLabel(group.step)}
+          </span>
+          <StatusIcon className={cn("w-3.5 h-3.5 shrink-0", statusCls)} />
+          {lastEntry.duration && (
+            <span className="text-[10px] text-muted-foreground/50 tabular-nums shrink-0">{lastEntry.duration}</span>
+          )}
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="text-[9px] text-muted-foreground/40 hover:text-muted-foreground transition-colors ml-1 shrink-0"
+          >
+            {group.entries.length} steps {expanded ? "▾" : "▸"}
+          </button>
+          <span className="text-[10px] text-muted-foreground/40 tabular-nums shrink-0 ml-auto">
+            {formatTime(lastEntry.timestamp)}
+          </span>
+        </div>
+
+        {/* Last entry summary (always visible) */}
+        <p className="text-[11px] text-muted-foreground/80 leading-snug mt-1 line-clamp-2">
+          {lastEntry.summary}
+        </p>
+
+        {/* Scores */}
+        {isEvalResults(results) && (
+          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+            {results.avg_score != null && (
+              <span className="text-[10px] font-semibold tabular-nums px-1.5 py-px rounded bg-emerald-500/15 text-emerald-400">
+                {fmtPct(results.avg_score)}
+              </span>
+            )}
+            {results.perfect_rate != null && (
+              <span className="text-[10px] tabular-nums px-1.5 py-px rounded bg-muted/50 text-muted-foreground/70">
+                perfect {fmtPct(results.perfect_rate)}
+              </span>
+            )}
+          </div>
+        )}
+
+        {lastEntry.model && (
+          <span className="inline-block mt-1 text-[10px] px-1.5 py-px rounded bg-[rgb(var(--theme-500))]/10 text-[rgb(var(--theme-500))]">
+            {lastEntry.model}
+          </span>
+        )}
+
+        {/* Expanded: show all sub-entries */}
+        {expanded && (
+          <div className="mt-2 space-y-1.5 border-l border-border/30 pl-3 ml-0.5">
+            {group.entries.map((entry, i) => (
+              <div key={entry.id}>
+                <div className="flex items-center gap-1.5 text-muted-foreground/70">
+                  <span className="text-[10px] tabular-nums w-3 shrink-0 text-right text-muted-foreground/40">{i + 1}</span>
+                  <span className="text-[11px] flex-1">{entry.summary}</span>
+                  <span className="text-[10px] tabular-nums shrink-0 text-muted-foreground/40">{formatTime(entry.timestamp)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Details from last entry */}
+        {(lastEntry.analysis || lastEntry.decision || lastEntry.reason_created) && (
+          <div className="flex flex-wrap gap-x-3 gap-y-0 mt-1.5">
+            {lastEntry.analysis && <DetailToggle label="analysis" content={lastEntry.analysis} />}
+            {lastEntry.decision && <DetailToggle label="decision" content={lastEntry.decision} />}
+            {lastEntry.reason_created && <DetailToggle label="reason" content={lastEntry.reason_created} />}
           </div>
         )}
       </div>
@@ -450,6 +553,7 @@ interface PipelineJournalTimelineProps {
   readonly entries: readonly PipelineJournalEntry[];
   readonly isLoading?: boolean;
   readonly onDropJournal?: (journal: PipelineJournal) => void;
+  readonly onRefresh?: () => void;
   readonly isLocalPreview?: boolean;
   readonly onDismissPreview?: () => void;
 }
@@ -458,6 +562,7 @@ export function PipelineJournalTimeline({
   entries,
   isLoading = false,
   onDropJournal,
+  onRefresh,
 }: PipelineJournalTimelineProps) {
   const [viewMode, setViewMode] = useState<JournalViewMode>("timeline");
   const noopDrop = useCallback(() => {}, []);
@@ -470,20 +575,50 @@ export function PipelineJournalTimeline({
     return entries.filter((e) => !(e.status === "in_progress" && done.has(`${e.step}:${e.action}`)));
   }, [entries]);
 
-  // Group entries by date for date separators
-  const entriesWithDates = useMemo(() => {
-    const result: Array<{ type: "date"; date: string } | { type: "entry"; entry: PipelineJournalEntry; isLast: boolean }> = [];
+  // Group consecutive entries with the same step
+  type StepGroup = { step: string; entries: PipelineJournalEntry[] };
+  const stepGroups = useMemo(() => {
+    const groups: StepGroup[] = [];
+    for (const entry of dedupedEntries) {
+      const last = groups[groups.length - 1];
+      if (last && last.step === entry.step) {
+        last.entries.push(entry);
+      } else {
+        groups.push({ step: entry.step, entries: [entry] });
+      }
+    }
+    return groups;
+  }, [dedupedEntries]);
+
+  // Build display list: date headers + step groups (single or merged)
+  type DisplayItem =
+    | { type: "date"; date: string }
+    | { type: "entry"; entry: PipelineJournalEntry; isLast: boolean }
+    | { type: "group"; group: StepGroup; isLast: boolean };
+
+  const displayItems = useMemo(() => {
+    const result: DisplayItem[] = [];
     let lastDate = "";
-    dedupedEntries.forEach((entry, i) => {
-      const date = formatDate(entry.timestamp);
+    let globalIdx = 0;
+    const totalGroups = stepGroups.length;
+
+    stepGroups.forEach((group, gi) => {
+      const firstEntry = group.entries[0];
+      const date = formatDate(firstEntry.timestamp);
       if (date && date !== lastDate) {
         result.push({ type: "date", date });
         lastDate = date;
       }
-      result.push({ type: "entry", entry, isLast: i === dedupedEntries.length - 1 });
+      const isLast = gi === totalGroups - 1;
+      if (group.entries.length === 1) {
+        result.push({ type: "entry", entry: firstEntry, isLast });
+      } else {
+        result.push({ type: "group", group, isLast });
+      }
+      globalIdx += group.entries.length;
     });
     return result;
-  }, [dedupedEntries]);
+  }, [stepGroups]);
 
   if (isLoading) {
     return (
@@ -499,21 +634,34 @@ export function PipelineJournalTimeline({
       <div className="px-3 py-2">
         {/* Header */}
         <div className="flex items-center justify-between mb-2">
-          <span className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wider">
-            Pipeline Journal ({dedupedEntries.length})
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wider">
+              Pipeline Journal ({dedupedEntries.length})
+            </span>
+            {onRefresh && (
+              <button
+                onClick={onRefresh}
+                className="p-0.5 text-muted-foreground/30 hover:text-muted-foreground transition-colors rounded"
+                title="Refresh"
+              >
+                <RefreshCw className="w-3 h-3" />
+              </button>
+            )}
+          </div>
           <ViewToggle mode={viewMode} onToggle={setViewMode} />
         </div>
 
         {viewMode === "timeline" ? (
           <div>
-            {entriesWithDates.map((item, i) =>
-              item.type === "date" ? (
-                <DateHeader key={`date-${item.date}-${i}`} date={item.date} />
-              ) : (
-                <TimelineEntry key={item.entry.id} entry={item.entry} isLast={item.isLast} />
-              ),
-            )}
+            {displayItems.map((item, i) => {
+              if (item.type === "date") {
+                return <DateHeader key={`date-${item.date}-${i}`} date={item.date} />;
+              }
+              if (item.type === "group") {
+                return <GroupedTimelineEntry key={`group-${item.group.step}-${i}`} group={item.group} isLast={item.isLast} />;
+              }
+              return <TimelineEntry key={item.entry.id} entry={item.entry} isLast={item.isLast} />;
+            })}
           </div>
         ) : (
           <DocumentView entries={dedupedEntries} />

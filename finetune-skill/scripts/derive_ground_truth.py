@@ -222,6 +222,16 @@ def main():
         change_rate = changed / len(to_process) * 100
         print(f"Change rate: {change_rate:.1f}% ({changed}/{len(to_process)})")
 
+    # Auto-journal milestone
+    from pipeline_journal import find_project_dir, log_milestone
+    proj = find_project_dir(output_path)
+    if proj:
+        log_milestone(proj, "step_4_generation", "derive_ground_truth", "completed",
+                       f"GT derived for {len(records)} records: {changed} changed, {errors} errors. "
+                       f"Mode: {'overwrite' if args.overwrite else 'fill missing only'}.",
+                       {"total": len(records), "processed": len(to_process), "changed": changed,
+                        "errors": errors, "mode": "overwrite" if args.overwrite else "fill_missing"})
+
 
 def _normalize_gt(gt: str) -> str:
     """Normalize GT for comparison: lowercase, sort labels, strip whitespace."""

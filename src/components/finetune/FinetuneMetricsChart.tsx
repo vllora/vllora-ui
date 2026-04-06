@@ -757,8 +757,9 @@ export const FinetuneMetricsChart = memo(function FinetuneMetricsChart({
             </div>
           )}
           {isLive && (
-            <div className="flex items-center gap-2 bg-[#10b981]/10 border border-[#10b981]/20 px-3 py-1 rounded text-xs text-[#10b981] font-medium">
-              <span className="size-1.5 rounded-full bg-[#10b981] animate-pulse" />Live
+            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] text-emerald-400/70 font-medium">
+              <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Live
             </div>
           )}
         </div>

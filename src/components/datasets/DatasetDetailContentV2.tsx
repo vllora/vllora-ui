@@ -99,10 +99,10 @@ function JournalOrLogs() {
     [wfId, saveAndRefresh],
   );
 
-  if (isLoading) return <PipelineJournalTimeline entries={[]} isLoading onDropJournal={handleDrop} />;
-  if (hasJournal) return <PipelineJournalTimeline entries={entries} onDropJournal={handleDrop} />;
+  if (isLoading) return <PipelineJournalTimeline entries={[]} isLoading onDropJournal={handleDrop} onRefresh={refresh} />;
+  if (hasJournal) return <PipelineJournalTimeline entries={entries} onDropJournal={handleDrop} onRefresh={refresh} />;
 
-  return <PipelineJournalTimeline entries={[]} onDropJournal={handleDrop} />;
+  return <PipelineJournalTimeline entries={[]} onDropJournal={handleDrop} onRefresh={refresh} />;
 }
 import { IS_LUCY_ENABLED } from "@/lib/feature-flags";
 import { EvaluationConfigPanel } from "./evaluation-dialog/EvaluationConfigPanel";

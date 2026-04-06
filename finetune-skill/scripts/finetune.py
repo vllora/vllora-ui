@@ -560,7 +560,7 @@ def cmd_upload_records(args: argparse.Namespace) -> None:
 
     _auto_journal(
         project_dir=records_path.resolve().parent,
-        step="step_4_records",
+        step="step_4_generation",
         action="upload_records",
         status="completed",
         summary=f"Uploaded {total_uploaded} records. Topics: {topic_summary}",
@@ -703,7 +703,7 @@ def cmd_filter_records(args: argparse.Namespace) -> None:
     # Auto-journal: records filtered
     _auto_journal(
         project_dir=Path(args.training_file).resolve().parent if args.training_file else Path("finetune-project"),
-        step="step_8_filter",
+        step="step_8_training",
         action="filter_records",
         status="completed",
         summary=f"Filtered {len(remove_ids)} records"
@@ -2270,12 +2270,18 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
     top_records = sorted(scored_records, key=lambda x: x[2], reverse=True)
 
     # ── SUMMARY (printed first — must not be truncated by output buffer) ──
-    # Compute signal density from scored_records
-    _trivial_frac = sum(1 for _, _, s, _ in scored_records if s > 0.90) / max(len(scored_records), 1)
-    _learnable_frac = sum(1 for _, _, s, _ in scored_records if 0.20 <= s <= 0.65) / max(len(scored_records), 1)
-    _dead_frac = sum(1 for _, _, s, _ in scored_records if s < 0.05) / max(len(scored_records), 1)
+    # Compute display metrics from scored_records
+    _all_scores = [s for _, _, s, _ in scored_records]
+    _avg = sum(_all_scores) / max(len(_all_scores), 1)
+    _std = (sum((s - _avg) ** 2 for s in _all_scores) / max(len(_all_scores), 1)) ** 0.5
+    zero_frac = sum(1 for s in _all_scores if s < 0.01) / max(len(_all_scores), 1)
+    perfect_frac = sum(1 for s in _all_scores if s >= 0.99) / max(len(_all_scores), 1)
+    _trivial_frac = sum(1 for s in _all_scores if s > 0.90) / max(len(_all_scores), 1)
+    _learnable_frac = sum(1 for s in _all_scores if 0.20 <= s <= 0.65) / max(len(_all_scores), 1)
+    _dead_frac = sum(1 for s in _all_scores if s < 0.05) / max(len(_all_scores), 1)
+
     print(f"\n── READINESS SUMMARY (read this first) ──", file=sys.stderr)
-    print(f"  Verdict: {verdict} | avg={avg:.3f} | std={std:.3f} | zeros={zero_frac:.0%} | perfect={perfect_frac:.0%}", file=sys.stderr)
+    print(f"  Verdict: {verdict} | avg={_avg:.3f} | std={_std:.3f} | zeros={zero_frac:.0%} | perfect={perfect_frac:.0%}", file=sys.stderr)
     print(f"  Signal: trivial={_trivial_frac:.0%} | learnable={_learnable_frac:.0%} | dead={_dead_frac:.0%}", file=sys.stderr)
     if hard_failed:
         print(f"  ✗ HARD FAIL: {', '.join(hard_failed)} — fix before training", file=sys.stderr)
@@ -3519,16 +3525,17 @@ def cmd_estimate_training(args: argparse.Namespace) -> None:
     if max_duration:
         constraint_str += f" max_duration={max_duration}min"
 
+    estimate_summary = "Training estimates: " + ", ".join(
+        f"{e['model']}=${e['estimated_cost_usd']:.2f}/{e['estimated_duration_seconds'] // 60}m"
+        + ("" if e["within_constraints"] else " ✗")
+        for e in estimate_data
+    ) + (f". Constraints:{constraint_str}" if constraint_str else "")
     _auto_journal(
         project_dir=Path("finetune-project"),
         step="step_7b_estimate",
         action="estimate_training",
         status="completed",
-        summary=f"Training estimates: " + ", ".join(
-            f"{e['model']}=${e['estimated_cost_usd']:.2f}/{e['estimated_duration_seconds'] // 60}m"
-            + ("" if e["within_constraints"] else " ✗")
-            for e in estimate_data
-        ) + f".{constraint_str}" if constraint_str else "",
+        summary=estimate_summary,
         results={
             "estimates": estimate_data,
             "constraints": {"max_cost_usd": max_cost, "max_duration_minutes": max_duration},
@@ -5236,7 +5243,7 @@ def cmd_data_quality_gate(args: argparse.Namespace) -> None:
 
     _auto_journal(
         project_dir=Path(args.file).resolve().parent,
-        step="step_5_5_quality",
+        step="step_5_5_validate",
         action="data_quality_gate",
         status=verdict,
         summary=" ".join(summary_parts),
@@ -5424,7 +5431,7 @@ def cmd_test_grader(args: argparse.Namespace) -> None:
     # Auto-journal
     _auto_journal(
         project_dir=training_file.resolve().parent,
-        step="step_5_1_grader",
+        step="step_5_grader",
         action="adversarial_grader_test",
         status=verdict,
         summary=f"Adversarial grader test: {tested} tested, {lenient_count} lenient (>{0.40}). "

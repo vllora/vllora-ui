@@ -115,6 +115,11 @@ def main() -> None:
 
     if not duplicates:
         print(f"No duplicates found — all {len(records)} records are unique")
+        from pipeline_journal import find_project_dir, log_milestone
+        proj = find_project_dir(input_path)
+        if proj:
+            log_milestone(proj, "step_4_generation", "deduplicate", "completed",
+                           f"Dedup: 0 duplicates found — all {len(records)} records unique (threshold={args.threshold})")
         sys.exit(0)
 
     # Report duplicates
@@ -153,6 +158,14 @@ def main() -> None:
             f.write(json.dumps(record) + "\n")
 
     print(f"Wrote {len(kept)} records to {output_path}")
+
+    from pipeline_journal import find_project_dir, log_milestone
+    proj = find_project_dir(output_path)
+    if proj:
+        log_milestone(proj, "step_4_generation", "deduplicate", "completed",
+                       f"Dedup: {len(records)}→{len(kept)} records ({len(duplicates)} removed, threshold={args.threshold})",
+                       {"before": len(records), "after": len(kept), "removed": len(duplicates),
+                        "by_topic": topic_counts})
 
 
 if __name__ == "__main__":

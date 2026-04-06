@@ -5,9 +5,9 @@
  * Shown in the expanded row of the Per-Row results table.
  */
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { FileText } from "lucide-react";
+import { FileText, Copy, Check } from "lucide-react";
 import {
   getScoreColorClass,
   formatScore,
@@ -34,6 +34,38 @@ interface EpochScoresTableProps {
   criteriaNames: string[];
   /** Compact mode — only shows Eval, Score, Δ columns. Used in the drawer panel. */
   compact?: boolean;
+}
+
+function CopyableCell({ text, maxChars, className }: { readonly text: string; readonly maxChars?: number; readonly className?: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }, [text]);
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className={cn("flex items-center gap-1 group/copy cursor-help", className)}>
+            <span className="block truncate">{maxChars ? text.slice(0, maxChars) : text}</span>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); handleCopy(); }}
+              className="shrink-0 opacity-0 group-hover/copy:opacity-100 transition-opacity p-0.5 hover:bg-zinc-700/50 rounded"
+              title="Copy to clipboard"
+            >
+              {copied ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Copy className="w-2.5 h-2.5 text-zinc-500" />}
+            </button>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-md text-xs whitespace-pre-wrap bg-zinc-900 border-zinc-700/60">
+          {text}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 export function EpochScoresTable({
@@ -115,21 +147,7 @@ export function EpochScoresTable({
                   {hasRollout && (
                     <td className={cn("py-1.5 pr-3", compact ? "max-w-[150px]" : "max-w-[200px]")}>
                       {e.rolloutContent ? (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="block truncate text-zinc-400 cursor-help">
-                                {e.rolloutContent.slice(0, 80)}
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent
-                              side="top"
-                              className="max-w-md text-xs whitespace-pre-wrap bg-zinc-900 border-zinc-700/60"
-                            >
-                              {e.rolloutContent}
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+                        <CopyableCell text={e.rolloutContent} maxChars={80} className="text-zinc-400" />
                       ) : (
                         <span className="text-zinc-600">—</span>
                       )}
@@ -137,21 +155,7 @@ export function EpochScoresTable({
                   )}
                   <td className={cn("py-1.5 pr-2 text-zinc-500", compact ? "max-w-[200px]" : "max-w-[320px]")}>
                     {e.breakdown.reasoning ? (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="block truncate cursor-help">
-                              {e.breakdown.reasoning}
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent
-                            side="top"
-                            className="max-w-md text-xs whitespace-pre-wrap bg-zinc-900 border-zinc-700/60"
-                          >
-                            {e.breakdown.reasoning}
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                      <CopyableCell text={e.breakdown.reasoning} className="text-zinc-500" />
                     ) : (
                       <span className="text-zinc-600">-</span>
                     )}

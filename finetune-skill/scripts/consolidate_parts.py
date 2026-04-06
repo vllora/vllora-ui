@@ -573,6 +573,14 @@ def main():
             json.dump(index, f, indent=2, ensure_ascii=False)
         print(f"Wrote {len(index)} entries to {index_path}")
 
+    # Auto-journal milestone
+    from pipeline_journal import find_project_dir, log_milestone
+    proj = find_project_dir(input_path)
+    if proj:
+        log_milestone(proj, "step_2_extraction", "consolidate_parts", "completed",
+                       f"Consolidated {before_count}→{len(consolidated)} parts (dropped {dropped} short). Quality: {results['overall']}",
+                       {"before": before_count, "after": len(consolidated), "dropped": dropped, "quality": results["overall"]})
+
     sys.exit(0 if results["overall"] == "PASS" else 1)
 
 
