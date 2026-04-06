@@ -392,6 +392,18 @@ This shows git-style diffs between consecutive versions. Log version numbers in 
 
 ## Step 9: Train — In Depth
 
+### Estimate Training Cost
+
+Before committing to a training run, compare candidate models by cost and duration:
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py estimate-training \
+  --workflow-id $WORKFLOW_ID \
+  --models "Qwen3.5-4B,Qwen3.5-0.8B"
+```
+
+This calls `POST /finetune/workflows/{id}/jobs/estimate` for all listed models in one request. If `config.json` includes `constraints` (`max_cost_usd`, `max_duration_minutes`), models exceeding limits are flagged and the agent narrows its selection accordingly.
+
 ### Base Model Selection
 
 | Model | Parameters | Good For |
