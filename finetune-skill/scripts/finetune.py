@@ -3430,7 +3430,7 @@ def cmd_estimate_training(args: argparse.Namespace) -> None:
     configs = []
     models = [m.strip() for m in args.models.split(",")]
     for model in models:
-        config: dict = {"base_model": model}
+        config: dict = {"job_type": "provider_finetune", "base_model": model}
         if args.epochs:
             config["training_config"] = {"epochs": args.epochs}
         if args.max_output_tokens:
@@ -5002,11 +5002,17 @@ def cmd_update_part_relevance(args: argparse.Namespace) -> None:
             print(f"  Warning: No gateway source found for '{source_doc}', skipping {len(labeled_parts)} parts")
             continue
 
-        # Build batch update payload
+        # Build batch update payload, preserving existing extraction_metadata from gateway
+        gateway_parts = {
+            p.get("reference_id", p["id"]): p
+            for p in _api("GET", f"{wf_url}/{ks_id}/parts").get("parts", [])
+        }
+
         updates = []
         for part in labeled_parts:
-            # Merge relevant into existing extraction_metadata
-            existing_meta = {}
+            # Start with existing gateway metadata (preserves bboxes, etc.)
+            gw_part = gateway_parts.get(part["id"], {})
+            existing_meta = dict(gw_part.get("extraction_metadata") or {})
             if "pages" in part:
                 existing_meta["pages"] = part["pages"]
             existing_meta["relevant"] = part["relevant"]
