@@ -3572,30 +3572,37 @@ def cmd_create_training(args: argparse.Namespace) -> None:
     # even when user only passes partial config (e.g., just max_output_tokens).
     #
     # Key defaults changed based on GRPO research:
-    #   lr: 5e-6 → 1e-6 — standard GRPO recommendation (DeepSeekMath arXiv:2402.03300,
-    #       DAPO arXiv:2503.14476, Dr. GRPO arXiv:2503.20783). Higher LR (5e-6)
-    #       causes faster policy drift → forgetting spiral (arXiv:2509.07430: 15%
-    #       forgetting rate with reverse-KL). 1e-6 slows drift enough to prevent
-    #       randomly-not-sampled correct answers from falling off the distribution.
-    #   beta: 0 → 0.01 — KL penalty prevents catastrophic forgetting by constraining
-    #       how far the policy drifts from the reference model (arXiv:2509.07430).
-    #       DeepSeekMath original used β=0.04; 0.01 is conservative.
-    #   epochs: 8 → 5 — reduced to prevent over-optimization forgetting. Adaptive
-    #       logic below may reduce further based on dataset size. arXiv:2505.22257:
-    #       "training beyond ~80% of one epoch yields negligible reward gains."
+    # Model-size-aware defaults. Research shows different optimal configs for
+    # small (0.8B-2B) vs large (4B+) models:
+    #
+    # LR: 7B+ models use 1e-6 (DeepSeekMath arXiv:2402.03300, DAPO arXiv:2503.14476).
+    #     0.8B-2B models need faster updates — 5e-6 empirically works better.
+    #     Small models have shallower gradient landscapes, supporting higher LR.
+    #
+    # Beta (KL penalty): DAPO removes KL entirely (beta=0) for faster learning.
+    #     Small-model DAPO study (alexlavaee.me): KL "hurts" 0.5B model performance.
+    #     For short runs (3-5 epochs) on small models, beta=0 allows the model to
+    #     move far enough from the base distribution to learn.
+    #     4B+ may benefit from beta=0.01 on longer runs to prevent forgetting.
+    #
+    # scale_rewards: "Why GRPO Needs Normalization" (arXiv:2601.23135) shows group
+    #     normalization improves convergence by amplifying within-group differences.
+    #     Dr. GRPO (arXiv:2503.20783) removes it to avoid difficulty bias, but this
+    #     matters more for 7B+ models on diverse tasks. For small models with strict
+    #     graders producing low variance, group norm amplifies weak signal.
+    #     4B+ with diverse tasks: "none" avoids difficulty bias.
     payload["training_config"] = {
-        "learning_rate": 0.000001,  # 1e-6: standard GRPO LR (arXiv:2402.03300, arXiv:2503.14476)
         "lora_rank": 8,
         "gradient_accumulation_steps": 5,
         "epochs": 5,  # Default; overridden below by adaptive logic
         "batch_size": 5,
-        "beta": 0.01,  # KL penalty — prevents forgetting spiral (arXiv:2509.07430)
-        # New cloud-exposed params (commit 3707a41a):
-        # Unsloth Advanced RL docs: https://unsloth.ai/docs/get-started/reinforcement-learning-rl-guide/advanced-rl-documentation
-        "loss_type": "dr_grpo",  # Dr. GRPO (arXiv:2503.20783): removes length bias. TRL default is "dapo" but both are valid.
+        "loss_type": "dr_grpo",  # Dr. GRPO (arXiv:2503.20783): removes length bias. Confirmed good for small models too.
         "mask_truncated_completions": False,  # Unsloth: "we recommend to disable it" — prevents kl=nan crash (Unsloth #3006)
-        "scale_rewards": "none",  # Unsloth+Dr.GRPO: "recommends not scaling to avoid difficulty bias from std scaling". Gateway expects string enum, not boolean.
         "importance_sampling_level": "sequence",  # Unsloth: "GSPO shows sequence-level often gives more stable training"
+        # Model-size-dependent defaults (set below after model detection):
+        "learning_rate": 0.000005,  # 5e-6 default, adjusted below
+        "beta": 0,                  # No KL default, adjusted below
+        "scale_rewards": "group",   # Group norm default, adjusted below. Gateway expects string enum.
     }
     if args.config:
         try:
@@ -3631,6 +3638,42 @@ def cmd_create_training(args: argparse.Namespace) -> None:
             k_count = json.loads(args.inference_params).get("response_candidates_count", 8)
         except (json.JSONDecodeError, AttributeError):
             pass
+
+    # Model-size-dependent training config adjustments (unless user overrode via --config)
+    user_set_lr = args.config and "learning_rate" in (args.config or "")
+    user_set_beta = args.config and "beta" in (args.config or "")
+    user_set_scale = args.config and "scale_rewards" in (args.config or "")
+
+    if "4b" in model_lower:
+        # 4B: conservative settings — closer to 7B research defaults
+        if not user_set_lr:
+            payload["training_config"]["learning_rate"] = 0.000002  # 2e-6: moderate for 4B
+        if not user_set_beta:
+            payload["training_config"]["beta"] = 0.01  # KL penalty for larger model (arXiv:2509.07430)
+        if not user_set_scale:
+            payload["training_config"]["scale_rewards"] = "none"  # Avoid difficulty bias (Dr. GRPO)
+        print(f"  Config: 4B profile (lr=2e-6, beta=0.01, scale=none)")
+    elif "2b" in model_lower:
+        # 2B: middle ground
+        if not user_set_lr:
+            payload["training_config"]["learning_rate"] = 0.000003  # 3e-6
+        if not user_set_beta:
+            payload["training_config"]["beta"] = 0  # No KL for medium model
+        if not user_set_scale:
+            payload["training_config"]["scale_rewards"] = "group"  # Amplify signal
+        print(f"  Config: 2B profile (lr=3e-6, beta=0, scale=group)")
+    else:
+        # 0.8B (default): aggressive settings — small model needs fast updates
+        # Empirically validated: 0.8B food-allergen run with lr=5e-6, beta=0, scale=group
+        # achieved 0.646→0.864 over 5 epochs. Same task with lr=1e-6, beta=0.01, scale=none
+        # was flat (0.348→0.345).
+        if not user_set_lr:
+            payload["training_config"]["learning_rate"] = 0.000005  # 5e-6
+        if not user_set_beta:
+            payload["training_config"]["beta"] = 0
+        if not user_set_scale:
+            payload["training_config"]["scale_rewards"] = "group"
+        print(f"  Config: 0.8B profile (lr=5e-6, beta=0, scale=group)")
 
     if record_count > 0 and "4b" in model_lower and record_count > 800:
         print(f"  ⚠ WARNING: {base_model} with {record_count} records (K={k_count}) may risk OOM.", file=sys.stderr)

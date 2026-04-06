@@ -662,7 +662,13 @@ Use the model chosen in Step 7b based on learnable_frac comparison.
 
 These are the **only 3 base models** supported.
 
-**Do NOT pass `--config` on the first training run.** Defaults are research-optimized (lr=1e-6, β=0.01, adaptive epochs, K=8). Only override after a diagnosed failure. Use `--inference-params` for `max_output_tokens` only.
+**Do NOT pass `--config` on the first training run.** Defaults are model-size-aware and research-backed. Only override after a diagnosed failure. Use `--inference-params` for `max_output_tokens` only.
+
+| Model | LR | Beta | scale_rewards | Rationale |
+|-------|-----|------|---------------|-----------|
+| 0.8B | 5e-6 | 0 | group | Small model needs fast updates, no KL drag, amplified signal |
+| 2B | 3e-6 | 0 | group | Middle ground |
+| 4B | 2e-6 | 0.01 | none | Closer to 7B research defaults, KL prevents forgetting |
 
 > **K=8 is correct for most tasks.** K=4 is viable for short-output binary tasks; K=16 only for long-output hard tasks with dynamic sampling. Larger K does NOT reduce zero-variance collapse — it accelerates convergence then wastes compute. See [reference/training-metrics-guide.md](reference/training-metrics-guide.md) "K (Group Size) Selection Guide".
 

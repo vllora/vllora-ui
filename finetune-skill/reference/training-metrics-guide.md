@@ -329,8 +329,8 @@ These are the defaults used by `create-training` when no `--config` is passed.
 
 | Parameter | Default | Rationale |
 |-----------|---------|-----------|
-| `learning_rate` | **1e-6** | Standard GRPO LR (DeepSeekMath arXiv:2402.03300, DAPO arXiv:2503.14476, Dr. GRPO arXiv:2503.20783). Higher LR (5e-6) causes faster policy drift → forgetting spiral (arXiv:2509.07430). |
-| `beta` | **0.01** | KL penalty prevents catastrophic forgetting by constraining policy drift from reference model (arXiv:2509.07430: 15% forgetting rate without KL). DeepSeekMath used β=0.04; 0.01 is conservative. |
+| `learning_rate` | **model-dependent** | 0.8B: 5e-6, 2B: 3e-6, 4B: 2e-6. Research (DeepSeekMath arXiv:2402.03300, DAPO arXiv:2503.14476) uses 1e-6 for 7B-32B models. Small models (0.8B-2B) have shallower gradient landscapes and need faster updates. Empirically: 0.8B with 1e-6 was flat; same task with 5e-6 achieved 0.646→0.864. |
+| `beta` | **model-dependent** | 0.8B/2B: 0 (no KL), 4B: 0.01. DAPO removes KL entirely. Small-model DAPO study (alexlavaee.me): KL "hurts" 0.5B performance. Short runs (3-5 epochs) on small models need fast divergence from base distribution. 4B+ may benefit from beta=0.01 on longer runs (arXiv:2509.07430). |
 | `response_candidates_count` | **8** | K=8 is the standard choice (TRL default, DeepSeek-R1 arXiv:2501.12948, RL-ZVP arXiv:2509.21880 for ≤1.7B models). **Do NOT default to K=16** — for short-output tasks (<20 tokens), larger K accelerates convergence but then wastes compute on zero-variance steps. "No Prompt Left Behind" (arXiv:2509.21880): zero-variance prompts are 30-99% of batches regardless of K. "It Takes Two" (arXiv:2510.00977): K=2 matches K=16 for binary rewards at 1/8 cost. K=4 is viable for short-output classification if grader is binary; K=8 is better when grader has partial credit (our case). |
 | `epochs` | **adaptive** | Auto-set by dataset size: <50 records→8, <200→5, <500→3, 500+→2. Reduced to prevent forgetting spiral (arXiv:2505.22257: "training beyond ~80% of one epoch yields negligible gains"). |
 | `warmup_ratio` | **configurable** | Uses `warmup_ratio` (not `warmup_steps`). The cloud applies cosine LR scheduler. |
@@ -367,7 +367,7 @@ K determines how many completions GRPO generates per prompt. The model learns fr
 |-----------|---------|-------------|----------------|
 | `loss_type` | `"dr_grpo"` | GRPO variant. Removes length bias (arXiv:2503.20783). | Try `"dapo"` for TRL-standard normalization |
 | `mask_truncated_completions` | `false` | Unsloth recommends disabling — `true` causes kl=nan if all completions truncate (Unsloth #3006) | Set `true` only if truncation rate < 10% |
-| `scale_rewards` | `"none"` | `"none"` = raw advantages, no std normalization. `"group"` amplifies easy records (Dr. GRPO/Unsloth: avoids difficulty bias). Gateway expects string `"none"`, NOT boolean `false` (400 error). | Use `"none"` (default) |
+| `scale_rewards` | **model-dependent** | 0.8B/2B: `"group"` (amplifies weak signal from strict graders — arXiv:2601.23135). 4B: `"none"` (avoids difficulty bias — Dr. GRPO arXiv:2503.20783). Gateway expects string enum (`"group"` or `"none"`), NOT boolean. | Adjust if reward_std is very low |
 | `importance_sampling_level` | `"sequence"` | Sequence-level often gives more stable training for sequence-level rewards (GSPO). | Keep `"sequence"` |
 
 ### Cloud-Side Config (NOT User-Configurable)
