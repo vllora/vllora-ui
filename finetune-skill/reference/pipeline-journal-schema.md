@@ -266,18 +266,19 @@ The UI can use this to show the sequence of agent decisions alongside jobs, so u
         "K": 8,
         "max_output_tokens": 64
       },
+      "constraints": {"max_cost_usd": 2.00, "max_duration_minutes": 60},
       "results": {
         "final_avg": 0.918,
         "baseline_avg": 0.540,
         "improvement": 0.378,
         "best_epoch": 4,
-        "progression": {
-          "epoch_0": {"avg": 0.647, "perfect_rate": 0.47},
-          "epoch_1": {"avg": 0.790, "perfect_rate": 0.62},
-          "epoch_2": {"avg": 0.845, "perfect_rate": 0.69},
-          "epoch_3": {"avg": 0.865, "perfect_rate": 0.72},
-          "epoch_4": {"avg": 0.870, "perfect_rate": 0.73}
-        }
+        "epoch_progression": [
+          {"epoch": 0, "avg": 0.647, "perfect_rate": 0.47},
+          {"epoch": 1, "avg": 0.790, "perfect_rate": 0.62},
+          {"epoch": 2, "avg": 0.845, "perfect_rate": 0.69},
+          {"epoch": 3, "avg": 0.865, "perfect_rate": 0.72},
+          {"epoch": 4, "avg": 0.870, "perfect_rate": 0.73}
+        ]
       },
       "analysis": "0.8B trained model (0.918 best-of-K) surpasses untrained 4B (0.828) by +0.090. Hidden allergen detection improved +0.43 to +0.61 per topic. Weakest: complex-confusing (0.767). Over-prediction detected in 18 records (grader FP exploit) — fixable with F0.5 scoring.",
       "decision": "Training succeeded. Deploy trained 0.8B model. Next iteration: tighten FP penalty for complex-confusing topic.",
@@ -312,11 +313,12 @@ The UI can use this to show the sequence of agent decisions alongside jobs, so u
 | `dry_run_grader` | Step 5.1 — grader validation | Test 1 (hand-crafted scores), Test 2 (live model scores), Test 3 (adversarial checks). Score distribution spread. |
 | `data_quality_gate` | Step 5.5 — quality checks | Per-gate results: `structural`, `diversity`, `completion_length` |
 | `create_eval` | Step 7 — any evaluation job | `job_id`, `model`, `results` (avg, perfect_rate, per_topic_weakest) |
-| `readiness_gate` | Step 7c — readiness check | Hard/soft check results, difficulty probe |
+| `readiness_gate` | Step 7c — readiness check | Hard/soft check results, difficulty probe, `trivial_frac`, `learnable_frac`, `dead_frac`, `per_topic` breakdown |
+| `estimate_training` | Step 7b+ — cost/duration estimate | `models` compared, `constraints` from config.json, `viable_models` (models within limits), per-model `estimated_cost_usd` and `estimated_duration_seconds` |
 | `headroom_diagnostic` | Step 7d — model selection | `base_model_score`, `gate_result`, `diagnostic_branch`, `chosen_model` |
 | `coverage_audit` | Step 7d — source-part coverage | `total_parts`, `easy_only_parts`, `type_b_gaps`, `new_records_generated` |
-| `create_training` | Step 7e — training job | `job_id`, `model`, `config` (epochs, lr, K, max_output_tokens) |
-| `training_monitoring` | Step 7e — epoch updates | `progression_table`, `trigger_checks`, `per_record_inspection` |
+| `create_training` | Step 7e — training job | `job_id`, `model`, `config` (epochs, lr, K, max_output_tokens), `constraints` (from config.json, if present) |
+| `training_monitoring` | Step 7e — epoch updates | `progression_table`, `trigger_checks`, `per_record_inspection`, `epoch_progression` array |
 | `post_training_eval` | Step 8b — eval on trained model | `trained_model`, `trained_score`, `baseline_score`, `improvement` |
 | `training_analysis` | Step 8c — post-training analysis | `per_topic_comparison`, `improved_records`, `degraded_records` |
 | `fix_grader` | Step 9a — grader iteration | `what_changed`, `why`, `dry_run_before_after` |

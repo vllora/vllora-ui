@@ -2307,20 +2307,36 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
     # Auto-journal: readiness gate result
     failed_names = ", ".join(hard_failed) if hard_failed else "none"
     warned_names = ", ".join(soft_failed) if soft_failed else "none"
+    # Build per-topic summary for journal
+    per_topic_journal: dict[str, dict] = {}
+    for topic_name, scores_list in topic_scores.items():
+        t_avg = sum(scores_list) / len(scores_list) if scores_list else 0
+        per_topic_journal[topic_name] = {
+            "avg": round(t_avg, 3),
+            "count": len(scores_list),
+            "zone": "dead" if t_avg < 0.05 else ("weak" if t_avg < 0.15 else ("trivial" if t_avg > 0.85 else "learnable")),
+        }
+
     _auto_journal(
         project_dir=eval_file.parent.parent,
         step="step_7c_readiness",
         action="readiness_gate",
         status=verdict.lower(),
-        summary=f"Readiness gate: {verdict}. avg={avg:.3f}, std={std:.3f}, zeros={zero_frac:.0%}, perfect={perfect_frac:.0%}. Hard failed: {failed_names}. Soft warned: {warned_names}.",
+        summary=f"Readiness gate: {verdict}. avg={avg:.3f}, std={std:.3f}, zeros={zero_frac:.0%}, perfect={perfect_frac:.0%}. "
+                f"Signal: trivial={_trivial_frac:.0%}, learnable={_learnable_frac:.0%}, dead={_dead_frac:.0%}. "
+                f"Hard failed: {failed_names}. Soft warned: {warned_names}.",
         results={
             "verdict": verdict,
             "avg": round(avg, 4),
             "std": round(std, 4),
             "zero_frac": round(zero_frac, 4),
             "perfect_frac": round(perfect_frac, 4),
+            "trivial_frac": round(_trivial_frac, 3),
+            "learnable_frac": round(_learnable_frac, 3),
+            "dead_frac": round(_dead_frac, 3),
             "hard_failed": hard_failed,
             "soft_failed": soft_failed,
+            "per_topic": per_topic_journal,
             "recommendation": result.get("recommendation", ""),
         },
     )
@@ -3222,6 +3238,141 @@ def cmd_poll_eval(args: argparse.Namespace) -> None:
     sys.exit(1)
 
 
+def cmd_estimate_training(args: argparse.Namespace) -> None:
+    """Estimate training cost and duration for one or more model configurations.
+
+    Calls POST /finetune/workflows/{id}/jobs/estimate to get projected
+    duration and USD cost. Useful for:
+    1. Comparing cost across models during model selection (Step 7b)
+    2. Cost-gating before committing to training
+    3. Logging estimated vs actual cost in the pipeline journal
+    """
+    # Load user constraints from config.json if available
+    config_file = Path("finetune-project/config.json")
+    max_cost = args.max_cost
+    max_duration = args.max_duration
+    if config_file.exists() and (max_cost is None or max_duration is None):
+        try:
+            project_config = json.loads(config_file.read_text())
+            constraints = project_config.get("constraints", {})
+            if max_cost is None:
+                max_cost = constraints.get("max_cost_usd")
+            if max_duration is None:
+                max_duration = constraints.get("max_duration_minutes")
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    configs = []
+    models = [m.strip() for m in args.models.split(",")]
+    for model in models:
+        config: dict = {"base_model": model}
+        if args.epochs:
+            config["training_config"] = {"epochs": args.epochs}
+        if args.max_output_tokens:
+            config.setdefault("inference_parameters", {})["max_output_tokens"] = args.max_output_tokens
+        if args.k:
+            config.setdefault("inference_parameters", {})["response_candidates_count"] = args.k
+        configs.append(config)
+
+    try:
+        estimates = _api(
+            "POST",
+            f"{args.base_url}/finetune/workflows/{args.workflow_id}/jobs/estimate",
+            json=configs,
+        )
+    except SystemExit:
+        print("Error: Could not fetch estimates from gateway.", file=sys.stderr)
+        sys.exit(1)
+
+    if not isinstance(estimates, list):
+        estimates = [estimates]
+
+    # Print constraints if set
+    if max_cost or max_duration:
+        print(f"\n── User Constraints ──")
+        if max_cost:
+            print(f"  Max cost: ${max_cost:.2f}")
+        if max_duration:
+            print(f"  Max duration: {max_duration} min")
+
+    print(f"\n── Training Cost Estimates ──")
+    print(f"{'Model':20s} {'Records':>8s} {'Duration':>12s} {'Cost':>10s} {'Status':>12s}")
+    print(f"{'─' * 20} {'─' * 8} {'─' * 12} {'─' * 10} {'─' * 12}")
+
+    estimate_data = []
+    viable_models = []
+    for est_group in estimates:
+        for est in est_group.get("estimations", [est_group]):
+            model = est.get("base_model", "?")
+            rows = est.get("total_rows", "?")
+            dur_s = est.get("estimated_duration_seconds", 0)
+            cost = est.get("estimated_cost_usd", 0)
+            dur_min = dur_s / 60 if dur_s else 0
+            dur_str = f"{int(dur_min)}m {dur_s % 60}s" if dur_s else "?"
+
+            # Check constraints
+            over_cost = max_cost is not None and cost > max_cost
+            over_time = max_duration is not None and dur_min > max_duration
+            if over_cost and over_time:
+                status = "✗ OVER BOTH"
+            elif over_cost:
+                status = "✗ OVER COST"
+            elif over_time:
+                status = "✗ OVER TIME"
+            else:
+                status = "✓ OK"
+                viable_models.append(model)
+
+            print(f"{model:20s} {str(rows):>8s} {dur_str:>12s} ${cost:>8.2f} {status:>12s}")
+            estimate_data.append({
+                "model": model,
+                "total_rows": rows,
+                "estimated_duration_seconds": dur_s,
+                "estimated_cost_usd": cost,
+                "within_constraints": not over_cost and not over_time,
+            })
+
+    if len(estimate_data) > 1:
+        viable = [e for e in estimate_data if e["within_constraints"]]
+        if viable:
+            cheapest = min(viable, key=lambda x: x["estimated_cost_usd"])
+            fastest = min(viable, key=lambda x: x["estimated_duration_seconds"])
+            print(f"\n  Viable models: {', '.join(viable_models)}")
+            print(f"  Cheapest viable: {cheapest['model']} (${cheapest['estimated_cost_usd']:.2f})")
+            print(f"  Fastest viable:  {fastest['model']} ({fastest['estimated_duration_seconds'] // 60}m)")
+        elif max_cost or max_duration:
+            print(f"\n  ⚠ NO models fit within constraints. Consider:")
+            print(f"    → Reduce epochs or records to lower cost/time")
+            print(f"    → Increase budget/time constraints")
+
+    # Auto-journal
+    constraint_str = ""
+    if max_cost:
+        constraint_str += f" max_cost=${max_cost:.2f}"
+    if max_duration:
+        constraint_str += f" max_duration={max_duration}min"
+
+    _auto_journal(
+        project_dir=Path("finetune-project"),
+        step="step_7b_estimate",
+        action="estimate_training",
+        status="completed",
+        summary=f"Training estimates: " + ", ".join(
+            f"{e['model']}=${e['estimated_cost_usd']:.2f}/{e['estimated_duration_seconds'] // 60}m"
+            + ("" if e["within_constraints"] else " ✗")
+            for e in estimate_data
+        ) + f".{constraint_str}" if constraint_str else "",
+        results={
+            "estimates": estimate_data,
+            "constraints": {"max_cost_usd": max_cost, "max_duration_minutes": max_duration},
+            "viable_models": viable_models,
+        },
+    )
+
+    # Output JSON for programmatic use
+    print(json.dumps(estimate_data, indent=2))
+
+
 def cmd_create_training(args: argparse.Namespace) -> None:
     """Create a training job and save metadata locally.
 
@@ -3391,6 +3542,39 @@ def cmd_create_training(args: argparse.Namespace) -> None:
         # The data_quality_gate should have already caught this pre-training.
         print(f"  Note: Could not auto-adjust max_output_tokens (record fetch failed). "
               f"Using {current_max_tokens}.", file=sys.stderr)
+
+    # Pre-flight: check cost/time constraints from config.json
+    config_file = Path("finetune-project/config.json")
+    if config_file.exists():
+        try:
+            project_config = json.loads(config_file.read_text())
+            constraints = project_config.get("constraints", {})
+            c_max_cost = constraints.get("max_cost_usd")
+            c_max_dur = constraints.get("max_duration_minutes")
+            if c_max_cost or c_max_dur:
+                try:
+                    est = _api(
+                        "POST",
+                        f"{args.base_url}/finetune/workflows/{args.workflow_id}/jobs/estimate",
+                        json=[{"base_model": payload["base_model"],
+                               "training_config": payload.get("training_config"),
+                               "inference_parameters": payload.get("inference_parameters")}],
+                    )
+                    if isinstance(est, list) and est:
+                        e = est[0].get("estimations", [est[0]])[0]
+                        est_cost = e.get("estimated_cost_usd", 0)
+                        est_dur = e.get("estimated_duration_seconds", 0) / 60
+                        print(f"  Pre-flight estimate: ${est_cost:.2f}, {est_dur:.0f}min", file=sys.stderr)
+                        if c_max_cost and est_cost > c_max_cost:
+                            print(f"  ⚠ OVER BUDGET: estimated ${est_cost:.2f} > constraint ${c_max_cost:.2f}", file=sys.stderr)
+                            print(f"  → Use a smaller model, reduce epochs, or increase budget in config.json", file=sys.stderr)
+                        if c_max_dur and est_dur > c_max_dur:
+                            print(f"  ⚠ OVER TIME: estimated {est_dur:.0f}min > constraint {c_max_dur:.0f}min", file=sys.stderr)
+                            print(f"  → Use a smaller model, reduce epochs, or increase time limit in config.json", file=sys.stderr)
+                except (SystemExit, Exception):
+                    pass  # Non-fatal: estimate failure shouldn't block training
+        except (json.JSONDecodeError, OSError):
+            pass
 
     result = _api(
         "POST",
@@ -4052,30 +4236,9 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
             job_file.write_text(json.dumps(metadata, indent=2))
             print(f"Done: {status}. Saved to {job_file}")
 
-            # Auto-journal: training completed
-            train_summary = f"Training {status}: {metadata.get('base_model', '?')}"
-            if metadata.get("early_stop_reason"):
-                train_summary += f" (early-stopped: {metadata['early_stop_reason'][:80]})"
-            if metadata.get("error_message"):
-                train_summary += f" (error: {metadata['error_message'][:80]})"
-            _auto_journal(
-                project_dir=job_file.parent.parent,
-                step="step_7e_training",
-                action="training_completed",
-                status=status,
-                summary=train_summary,
-                job_id=job_id,
-                job_type="training",
-                model=metadata.get("base_model"),
-                results={
-                    "fine_tuned_model": metadata.get("fine_tuned_model"),
-                    "early_stop_reason": metadata.get("early_stop_reason"),
-                    "error_message": metadata.get("error_message"),
-                },
-            )
-
+            # ── Fetch epoch progression before journaling ──
+            epoch_progression: list[dict] = []
             if status in ("succeeded", "completed"):
-                # ── Final progression table ──
                 try:
                     eval_params_final = (
                         {"finetune_job_id": provider_job_id}
@@ -4104,12 +4267,49 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
                                 avg_s = sum(sc) / len(sc)
                                 perf = sum(1 for s in sc if s >= 0.99) / len(sc)
                                 print(f"  Epoch {ek}: avg={avg_s:.3f}, perfect={perf:.0%} ({len(sc)} scores)", file=sys.stderr)
+                                epoch_progression.append({
+                                    "epoch": ek,
+                                    "avg": round(avg_s, 4),
+                                    "perfect_rate": round(perf, 3),
+                                    "scores_count": len(sc),
+                                })
                             best_ep = max(ep_scores.items(), key=lambda x: sum(x[1]) / len(x[1]))
                             best_avg = sum(best_ep[1]) / len(best_ep[1])
                             print(f"  Best: epoch {best_ep[0]} (avg={best_avg:.3f})", file=sys.stderr)
                 except (SystemExit, Exception):
                     pass
 
+            # Auto-journal: training completed (with epoch progression)
+            train_summary = f"Training {status}: {metadata.get('base_model', '?')}"
+            if epoch_progression:
+                first = epoch_progression[0]
+                last = epoch_progression[-1]
+                best = max(epoch_progression, key=lambda x: x["avg"])
+                train_summary += f". Progression: epoch {first['epoch']} avg={first['avg']:.3f} → epoch {last['epoch']} avg={last['avg']:.3f}. Best: epoch {best['epoch']} avg={best['avg']:.3f}."
+            if metadata.get("early_stop_reason"):
+                train_summary += f" Early-stopped: {metadata['early_stop_reason'][:80]}"
+            if metadata.get("error_message"):
+                train_summary += f" Error: {metadata['error_message'][:80]}"
+            _auto_journal(
+                project_dir=job_file.parent.parent,
+                step="step_7e_training",
+                action="training_completed",
+                status=status,
+                summary=train_summary,
+                job_id=job_id,
+                job_type="training",
+                model=metadata.get("base_model"),
+                results={
+                    "fine_tuned_model": metadata.get("fine_tuned_model"),
+                    "early_stop_reason": metadata.get("early_stop_reason"),
+                    "error_message": metadata.get("error_message"),
+                    "config": metadata.get("config", metadata.get("training_config", {})),
+                    "epoch_progression": epoch_progression,
+                    "best_epoch": max(epoch_progression, key=lambda x: x["avg"])["epoch"] if epoch_progression else None,
+                },
+            )
+
+            if status in ("succeeded", "completed"):
                 print(
                     f"\n⚠️  MANDATORY NEXT STEPS (do ALL of these in order):\n"
                     f"   1. Update execution-log.md with final progression table:\n"
@@ -5309,6 +5509,21 @@ def main() -> None:
              "Base models routinely score 0 on 15-50%% of prompts (DeepSeek-R1, arXiv:2501.12948; "
              "'No Prompt Left Behind', arXiv:2509.21880). 10%% was too aggressive for first evals.")
 
+    # estimate-training
+    p = subparsers.add_parser("estimate-training", help="Estimate training cost and duration for model comparison")
+    p.add_argument("--workflow-id", required=True, help="Workflow ID")
+    p.add_argument("--models", required=True,
+                   help="Comma-separated model names to compare (e.g., 'Qwen3.5-4B,Qwen3.5-0.8B')")
+    p.add_argument("--epochs", type=float, default=None, help="Epochs (optional, uses estimate default)")
+    p.add_argument("--max-output-tokens", type=int, default=None, help="Max output tokens (optional)")
+    p.add_argument("--k", type=int, default=None, help="Response candidates count (optional)")
+    p.add_argument("--max-cost", type=float, default=None,
+                   help="Max training cost in USD. Models exceeding this are marked as over-budget. "
+                        "Also reads from config.json 'constraints.max_cost_usd' if not set.")
+    p.add_argument("--max-duration", type=float, default=None,
+                   help="Max training duration in minutes. Models exceeding this are marked as over-time. "
+                        "Also reads from config.json 'constraints.max_duration_minutes' if not set.")
+
     # create-training
     p = subparsers.add_parser("create-training", help="Create training job and save metadata locally")
     p.add_argument("--workflow-id", required=True, help="Workflow ID")
@@ -5439,6 +5654,7 @@ def main() -> None:
         "diagnose-grader": cmd_diagnose_grader,
         "create-eval": cmd_create_eval,
         "poll-eval": cmd_poll_eval,
+        "estimate-training": cmd_estimate_training,
         "create-training": cmd_create_training,
         "poll-training": cmd_poll_training,
         "search-knowledge": cmd_search_knowledge,

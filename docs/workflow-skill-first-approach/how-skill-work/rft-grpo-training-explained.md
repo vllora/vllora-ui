@@ -451,6 +451,18 @@ G=64 (very precise — research-grade):
 
 All set via `finetune.py create-training` — defaults are in the script, override with `--config` and `--inference-params`.
 
+### Cost & Duration Estimation
+
+Before committing to a training run, estimate cost and duration for candidate models:
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py estimate-training \
+  --workflow-id $WORKFLOW_ID \
+  --models "Qwen3.5-4B,Qwen3.5-0.8B"
+```
+
+This calls `POST /finetune/workflows/{id}/jobs/estimate` for all listed models in a single request. Results show estimated USD cost and duration per model. If `config.json` includes `constraints` (`max_cost_usd`, `max_duration_minutes`), models exceeding limits are flagged. Use this after the headroom gate to compare viable models before starting training.
+
 ---
 
 ### max_output_tokens — How Long Each Response Can Be

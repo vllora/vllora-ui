@@ -75,7 +75,7 @@ Step 4B: NeMo → ⚠️ rag-retrieval does NOT filter by relevance (known limit
 
 > **GRPO research context**: The SKILL.md includes a "Research Context: This is GRPO, Not SFT" section near the top. GRPO (Group Relative Policy Optimization) has fundamentally different expectations from SFT — low base model scores are expected and desirable, dead-weight prompts are normal, and eval K=1 scores are lower bounds. See that section before interpreting any pipeline metrics.
 
-**Auto-journal**: Pipeline steps auto-log to `pipeline-journal.json` via `_auto_journal()` in `finetune.py`. Commands that auto-journal: `create-eval`, `poll-eval`, `create-training`, `poll-training`, `readiness-check`, `difficulty-probe`, `data-quality-gate`. Each entry records the command, timestamp, exit code, and key outputs — useful for debugging and iteration tracking.
+**Auto-journal**: Pipeline steps auto-log to `pipeline-journal.json` via `_auto_journal()` in `finetune.py`. Commands that auto-journal: `create-eval`, `poll-eval`, `estimate-training`, `create-training`, `poll-training`, `readiness-check`, `difficulty-probe`, `data-quality-gate`. Each entry records the command, timestamp, exit code, and key outputs — useful for debugging and iteration tracking.
 
 **Each step uploads to the gateway immediately** via `scripts/finetune.py` — the vLLora UI shows progress in real time. There is no final "push" step; Step 6 just verifies everything landed correctly.
 
@@ -159,7 +159,8 @@ All gateway API calls go through `scripts/finetune.py` — a single wrapper scri
 | `finetune.py create-eval` | 7b | Creates evaluation job, saves metadata locally |
 | `finetune.py poll-eval` | 7b | Polls eval job until complete, saves results |
 | `finetune.py readiness-check` | 7c | Checks if eval results pass pre-training readiness gate (4 hard + soft checks) |
-| `finetune.py create-training` | 7d | Creates training job, saves metadata locally |
+| `finetune.py estimate-training` | 7b+ | Estimates cost/duration for multiple models in one call; flags models exceeding `config.json` constraints |
+| `finetune.py create-training` | 7d | Creates training job, saves metadata locally; pre-flight constraint check warns if limits exceeded |
 | `finetune.py poll-training` | 7e | Polls training job until complete, saves status + metrics. Auto-prints a progression table every 5 minutes showing epoch, metrics, and trends |
 | `finetune.py sync-jobs` | 8 | Syncs training + eval jobs from gateway to local tracking files |
 | `finetune.py diagnose-grader` | 9a/9c | Diagnose grader issues: score buckets, reason patterns, grader source, record context check. Classifies zeros into parsing failures / wrong answers / refusals — tells agent whether to fix GRADER or RECORDS. Also includes response pattern analysis (dominant model response patterns, over-prediction from reason fields) and **per-topic classification** (`DEAD_WEIGHT`, `AMBIGUOUS`, `WEAK`, `HARD_BUT_LEARNING`, `OK`) based on score variance. |
@@ -257,7 +258,13 @@ cat > finetune-project/config.json << EOF
 EOF
 ```
 
-**Files produced**: `finetune-project/config.json` (workflow ID + gateway URL). Data goes straight to the gateway DB.
+**User constraints** (optional): The user can add a `constraints` field to `config.json` to cap training cost and duration. `estimate-training` and `create-training` both read these constraints automatically.
+
+```json
+{"workflow_id": "...", "gateway_url": "http://localhost:9090", "constraints": {"max_cost_usd": 2.00, "max_duration_minutes": 60}}
+```
+
+**Files produced**: `finetune-project/config.json` (workflow ID, gateway URL, optional constraints). Data goes straight to the gateway DB.
 
 **How to verify progress**:
 ```bash
@@ -987,6 +994,18 @@ The audit verifies:
 - Records cover a mix of difficulty levels (not all easy or all hard)
 - No single topic monopolizes a knowledge source
 
+### 7b+. Estimate Training Cost (optional, before training)
+
+After model selection (7d headroom gate), compare candidate models by cost and duration:
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py estimate-training \
+  --workflow-id $WORKFLOW_ID \
+  --models "Qwen3.5-4B,Qwen3.5-0.8B"
+```
+
+Calls `POST /finetune/workflows/{id}/jobs/estimate` for all listed models in one request. If `config.json` contains `constraints` (`max_cost_usd`, `max_duration_minutes`), models exceeding limits are flagged. Results are auto-journaled with `constraints` and `viable_models`. The agent uses this to narrow model selection before creating a training job.
+
 ### 7d. Start Training (only after readiness gate passes)
 
 ```bash
@@ -996,6 +1015,8 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
   --output-model "project-v1" \
   --output-dir training-jobs
 ```
+
+**Pre-flight constraint check**: Before sending the training job to the cloud, `create-training` reads `constraints` from `config.json` and warns if the estimated cost or duration exceeds user limits. This is non-blocking (warning only, does not prevent training).
 
 **Headroom gate**: Step 7 includes a mandatory headroom check. Headroom = 1.0 - base_model_avg_score. If the base model avg score > 0.75 (headroom < 0.25), GRPO has insufficient gradient signal — all K=8 completions tend to score similarly, producing zero variance and zero gradient. The agent must eval a smaller model (e.g., 0.8B) instead.
 

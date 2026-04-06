@@ -31,17 +31,20 @@ Define Objective → Extract Docs → Build Topics → Generate Data → Write G
      ↓ upload         ↓ upload        ↓ upload       ↓ upload       ↓ upload
    (workflow)      (knowledge)      (topics)       (records)      (grader)
 
-                   ┌─────────────────────────────────────────────────────────┐
-                   │                                                         │
-Validate → Data Quality Gate → Verify → Evaluate                             │
-               ↓ FAIL                      ↓                                 │
-          Fix data (cheap)          ┌──────────────────────────────┐         │
-               ↓                    │   Eval-First Loop (fast)      │         │
-          Re-validate               │ Analyze → Readiness Gate ────→│── PASS ─→ Train → Analyze → Done
-                                    │      ↑         ↓ FAIL         │            ↓ bad
-                                    │      ├── Fix data/grader ─────┘        Iterate (back to Eval)
-                                    │      └── Fix topics (if stalled 2+ evals)
-                                    └──────────────────────────────┘
+                   ┌──────────────────────────────────────────────────────────────┐
+                   │                                                              │
+Validate → Quality Gate → Verify → Eval BOTH (4B + 0.8B)                          │
+               ↓ FAIL                     ↓                                       │
+          Fix data (cheap)       Compare learnable% → Choose best model            │
+               ↓                 ┌────────────────────────────────────┐            │
+          Re-validate            │  Readiness on chosen model          │            │
+                                 │  → Signal density check             │            │
+                                 │  → Harden if trivial% high          │── PASS ──→ Train → Analyze → Done
+                                 │  → Re-eval both if hardened         │              ↓ bad
+                                 │       ↑         ↓ FAIL              │          Iterate (back to Eval)
+                                 │       ├── Fix data/grader ──────────┘
+                                 │       └── Fix topics (if stalled 2+ evals)
+                                 └────────────────────────────────────┘
 ```
 
 **Hard rules:**
@@ -164,6 +167,18 @@ else
 EOF
 fi
 ```
+
+**If the user specifies budget or time constraints**, add them to config.json:
+```json
+{
+  "workflow_id": "...",
+  "constraints": {
+    "max_cost_usd": 2.00,
+    "max_duration_minutes": 60
+  }
+}
+```
+`estimate-training` and `create-training` read these constraints automatically — models exceeding limits are flagged, and a warning is shown before training starts.
 
 Merge `finetune-defaults.json` if it exists in the project root. The `use_nemo` flag controls Step 4 (default=false → `generate_records.py`; true → NeMo Data Designer).
 
@@ -407,141 +422,143 @@ All counts > 0 and evaluator = YES. Tell the user data is at `http://localhost:5
 
 ### Step 7: Evaluate & Validate Before Training
 
-**Eval first, train later.** Eval is ~45 min and cheap. Training is hours and expensive.
+**Eval first, train later.** Eval is ~10 min per model and cheap. Training is hours and expensive.
 
 ```
-Eval → Readiness Gate → [FAIL] → Fix → Re-eval → ... → [PASS] → Train
+Eval BOTH (4B + 0.8B) → Compare learnable% → Choose best model
+→ Readiness on chosen → Signal density → Harden if needed → Train
 ```
 
 Max 5 eval-only iterations before training.
 
 #### 7a. Pre-training validation
 
-**7a-i. Set max_output_tokens** based on ACTUAL expected output length. Do NOT default to 512.
+**Set max_output_tokens** based on ACTUAL expected output length. Do NOT default to 512.
 
 | Expected output | max_output_tokens |
 |----------------|-------------------|
-| Allergen list (3-15 tokens) | 128 |
-| Compliance verdict (30-60 tokens) | 256 |
-| Short answer (50-100 tokens) | 256-512 |
-| Explanation/reasoning (200+ tokens) | 512-1024 |
+| Short labels (3-15 tokens) | 128 |
+| Short answer (30-100 tokens) | 256 |
+| Explanation (200+ tokens) | 512-1024 |
 
-Run the `completion_length` gate to get the recommended value:
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py training.jsonl \
   --gate completion_length --max-output-tokens 512 --json
 ```
 
-**7a-ii. Validate grader score distribution** — dry-run on 3-5 samples, scores should spread across 0.2-0.9.
+#### 7b. Eval BOTH Models + Choose Best
 
-**7a-iii. Create validation set** — 80/20 split for reward hacking detection.
-
-#### 7b. Create eval job
-
-Eval directly on the base model (Qwen3.5-4B) — do NOT run gpt-4o-mini eval first.
+**Always eval both 4B and 0.8B.** Evals are cheap (~10 min each). Choosing the wrong model wastes hours of training. A model passing the headroom gate (avg < 0.75) doesn't mean it will improve much — what matters is **learnable fraction** (how many records produce GRPO gradient).
 
 ```bash
-RECORD_COUNT=$(curl -s "http://localhost:9090/finetune/workflows/$WORKFLOW_ID/records" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d))")
-echo "Records on gateway: $RECORD_COUNT"
+# Eval 4B + 0.8B (always eval both extremes)
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
+  --workflow-id $WORKFLOW_ID --model "Qwen3.5-4B" --output-dir finetune-project/evaluations
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval --file finetune-project/evaluations/eval-001.json
 
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
-  --workflow-id $WORKFLOW_ID --model "Qwen3.5-4B" --output-dir evaluations
-
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval --file evaluations/eval-001.json
+  --workflow-id $WORKFLOW_ID --model "Qwen3.5-0.8B" --output-dir finetune-project/evaluations
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval --file finetune-project/evaluations/eval-002.json
 ```
 
-The poller auto-diagnoses before deciding to cancel: parsing failures → cancel, legitimate wrong answers → continue.
+**Estimate training cost** (optional but recommended — helps model selection):
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py estimate-training \
+  --workflow-id $WORKFLOW_ID --models "Qwen3.5-4B,Qwen3.5-0.8B" --max-output-tokens 128
+```
 
-When eval completes, **immediately log the iteration:**
+**Run readiness-check on BOTH** to get signal density:
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check --file finetune-project/evaluations/eval-001.json
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check --file finetune-project/evaluations/eval-002.json
+```
+
+**If 0.8B avg < 0.05 (no capability), also eval 2B** as middle ground:
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
+  --workflow-id $WORKFLOW_ID --model "Qwen3.5-2B" --output-dir finetune-project/evaluations
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval --file finetune-project/evaluations/eval-003.json
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check --file finetune-project/evaluations/eval-003.json
+```
+
+The readiness summary shows `trivial% | learnable% | dead%` for each model. **Compare learnable_frac across all evaluated models and choose the best** (arXiv:2508.14094v3: R²=0.66 between learnable% and actual improvement across model sizes):
+
+| Situation | Choose | Why |
+|---|---|---|
+| One model has **50%+ learnable** | That model | Strong signal. If tied, prefer larger model for capacity. |
+| Both 30-50% learnable | Model with **higher learnable%** | More gradient signal outweighs capacity difference |
+| 4B < 30%, 0.8B > 40% | **0.8B** | 4B has too many trivials, 0.8B has real headroom |
+| All models < 30% learnable | **Harden first** (Step 7c++), then re-eval all |
+| 0.8B < 5% learnable | Skip 0.8B. **Eval 2B** if not already done. Compare 4B vs 2B. |
+| 0.8B < 5% AND 2B < 5% | **4B** (only viable model). Consider making grader stricter. |
+
+**When to eval 2B:**
+- 0.8B avg < 0.05 (no capability) — 2B is the middle ground
+- 4B and 0.8B both have < 30% learnable — 2B might hit the sweet spot
+
+**GATES (MANDATORY):** Chosen model avg must be between 0.05 and 0.75.
+
+Log the chosen model:
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
-  --project-dir finetune-project --eval-file evaluations/eval-NNN.json \
-  --changes "describe what changed" --change-type baseline --verdict PENDING
+  --project-dir finetune-project --eval-file finetune-project/evaluations/eval-NNN.json \
+  --changes "Chosen MODEL_NAME (avg=X.XX, learnable=XX%)" --change-type baseline --verdict PASS
 ```
 
-#### 7c. Pre-Training Readiness Gate
+> See [reference/readiness-gate.md](reference/readiness-gate.md) "Headroom Gate" for diagnostic trees when both models fail.
+
+#### 7c. Readiness Gate (on chosen model)
 
 ```bash
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check --file evaluations/eval-001.json
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check --file finetune-project/evaluations/eval-NNN.json
 ```
 
 **Hard checks** (must ALL pass): sample count >= 50, score std > 0.10, avg score > 0.05, zero_score_frac < 10%.
 
-**Decision:** Exit 0 = PASS → Step 7e. Exit 1 = FAIL → fix → Step 7b. Exit 2 = WARN → first eval: fix ALL warnings; subsequent: only fix `score_concentration` > 70%.
+**Decision:** Exit 0 = PASS → 7c+. Exit 1 = FAIL → fix → 7b. Exit 2 = WARN → fix warnings on first eval; subsequent: only fix `score_concentration` > 70%.
 
-Log iteration verdict after every readiness check. Read `iterations.json` before making changes to check if the previous change helped.
+> See [reference/readiness-gate.md](reference/readiness-gate.md) for full check tables.
 
-> See [reference/readiness-gate.md](reference/readiness-gate.md) for full check tables, WARN safety guide, and research citations.
-
-#### 7c+. Difficulty Probe
-
-**Run after readiness gate passes, before training.**
+#### 7c+. Difficulty Probe + Signal Density (on chosen model)
 
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py difficulty-probe \
-  --file evaluations/eval-001.json --save finetune-project/difficulty-report.json
+  --file finetune-project/evaluations/eval-NNN.json --save finetune-project/difficulty-report.json
 ```
 
-**Decision:** Exit 0 = PASS (>= 30% learnable), exit 1 = FAIL (< 15%), exit 2 = WARN (15-30%).
+**Decision:** Exit 0 = PASS (>= 30% learnable), exit 2 = WARN (15-30%), exit 1 = FAIL (< 15%).
 
-If `SIGNAL DENSITY LOW`, harden trivial records:
+#### 7c++. Harden Trivial Records (if signal density low)
+
+If `SIGNAL DENSITY LOW` (trivial > 40% AND learnable < 35%):
+
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py harden-records \
-  --eval-file evaluations/eval-001.json --training-file finetune-project/training.jsonl --min-score 0.85
+  --eval-file finetune-project/evaluations/eval-NNN.json \
+  --training-file finetune-project/training.jsonl --min-score 0.85
 ```
 
-> See [reference/readiness-gate.md](reference/readiness-gate.md) for difficulty probe details and harden-records.
+After hardening: **re-upload → re-eval BOTH models → re-compare learnable_frac → re-choose model.** Hardening changes the difficulty distribution, which may change which model is best.
 
-#### 7d. Base Model Selection via Eval
+> See [reference/readiness-gate.md](reference/readiness-gate.md) for harden-records details.
 
-**Step 1:** Use the 4B eval from Step 7b.
+#### 7d. Coverage Audit
 
-**Step 2: Run source-part coverage audit (MANDATORY).** Verify training records cover ALL knowledge parts, not just easy ones.
+**Run source-part coverage audit (MANDATORY).** Verify training records cover ALL knowledge parts.
 
-> See [reference/readiness-gate.md](reference/readiness-gate.md) "Source-Part Coverage Audit" for the audit code and interpretation tables.
-
-**Step 3: Check headroom and decide:**
-
-| 4B avg score | Action |
-|-------------|--------|
-| **< 0.75** | Proceed to training with 4B. |
-| **0.75 - 0.80** | Do NOT train 4B. Eval 0.8B. |
-| **> 0.80** | Do NOT train 4B. Eval 0.8B. |
-
-If 4B > 0.75, eval 0.8B:
-```bash
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
-  --workflow-id $WORKFLOW_ID --model "Qwen3.5-0.8B" --output-dir finetune-project/evaluations
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval --file finetune-project/evaluations/eval-NNN.json
-```
-
-| 0.8B avg | Action |
-|----------|--------|
-| **< 0.10** | Too hard. Try 2B, or accept 4B. |
-| **0.10 - 0.75** | **Train 0.8B.** |
-| **> 0.75** | Task too easy. Accept base model or make grader stricter. |
-
-> See [reference/readiness-gate.md](reference/readiness-gate.md) "Headroom Gate" for full diagnostic trees when the gate fails.
-
-**HEADROOM GATE (MANDATORY):** Base model avg must be between 0.05 and 0.75 before training.
-
-Log the chosen model's baseline:
-```bash
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
-  --project-dir finetune-project --eval-file evaluations/eval-NNN.json \
-  --changes "Base model (MODEL_NAME) baseline eval. Chosen because [reason]." \
-  --change-type baseline --verdict PASS
-```
+> See [reference/readiness-gate.md](reference/readiness-gate.md) "Source-Part Coverage Audit" for the audit code.
 
 #### 7e. Start Training
 
 **Only after readiness gate AND headroom gate pass.**
 
-| Model | When to use | Max records (K=8) |
-|-------|-------------|-------------------|
-| `Qwen3.5-4B` | **Default**. 4B scores <0.75 | ~500 |
-| `Qwen3.5-2B` | 4B >0.75, 0.8B <0.05 | ~800 |
-| `Qwen3.5-0.8B` | 4B >0.75, 0.8B 0.05-0.75 | ~1000 |
+Use the model chosen in Step 7b based on learnable_frac comparison.
+
+| Model | When chosen | Max records (K=8) |
+|-------|------------|-------------------|
+| `Qwen3.5-4B` | Highest learnable%, or tied with smaller model (capacity tiebreaker) | ~500 |
+| `Qwen3.5-2B` | Middle ground when 0.8B has no capability and 4B has too many trivials | ~800 |
+| `Qwen3.5-0.8B` | Higher learnable% than 4B on the same dataset | ~1000 |
 
 These are the **only 3 base models** supported.
 
