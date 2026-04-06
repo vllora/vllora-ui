@@ -397,6 +397,35 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/derive_ground_truth.py \
 
 ---
 
+## Post-Eval Hardening (Step 7c++)
+
+After initial generation and evaluation, the readiness gate may detect that too many records are **trivially easy** (score > 0.85) for the base model. Trivial records produce near-zero GRPO gradient because all K=8 completions score similarly. The `harden-records` command fixes this by generating harder variants.
+
+**Signal density fix flow:**
+```
+eval → readiness-check detects signal density warning
+  (trivial > 40% AND learnable < 35%)
+         ↓
+harden_records.py
+  → reads training.jsonl + eval results
+  → identifies trivial records (score > 0.85)
+  → LLM rewrites each trivial record's user input to be harder
+  → ADDS variants alongside originals (does not replace)
+         ↓
+re-upload records → re-eval → verify improved signal density
+```
+
+**How it works**:
+- **Domain-agnostic**: The LLM reads the original record + its eval score + the grader's reason, then rewrites the user input to be more challenging. No task-specific templates needed.
+- **Additive, not destructive**: Harder variants are added alongside the original records, preserving the original data distribution. The hardened variants get new IDs (e.g., `original-id-hard`).
+- **Targeted**: Only records scoring above the threshold (default 0.85) are hardened. Records in the learnable zone (0.30-0.70) are left untouched — they already provide good gradient signal.
+
+**Research basis**: arXiv:2505.17063 demonstrates +29.2% improvement from a generate-eval-rewrite loop. This is consistent with "Hard Examples Are All You Need" (arXiv:2508.14094) showing that hard examples yield 47% gains vs 3-15% for easy ones.
+
+**When to use**: When the readiness gate reports a signal density warning, or when the difficulty probe shows > 40% trivial records. This is an iterative process — harden, re-eval, check signal density again.
+
+---
+
 ## Data Flow: What Goes Where
 
 ```

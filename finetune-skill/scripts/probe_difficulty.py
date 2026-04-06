@@ -606,12 +606,18 @@ def print_report(report: dict) -> None:
     print(f"  Effective training samples:        {ss['effective_samples']}/{n} ({ss['effective_frac']:.0%})")
 
     # K=1 vs K=8 interpretation note
+    trivial_frac_val = dd.get("trivial", {}).get("frac", 0)
+    learnable_frac_val = dd.get("learnable", {}).get("frac", 0)
     print(f"\n  ⓘ  K=1 eval scores are conservative lower bounds. A prompt scoring 1.0 at")
     print(f"     K=1 (greedy) may score 0.6-0.8 at K=8 (stochastic sampling), still")
-    print(f"     producing useful gradient. Do NOT pre-filter trivial prompts — GRPO")
-    print(f"     handles them via zero-advantage (no gradient, no harm).")
-    print(f"     Research: arXiv:2504.03380 (one-sided filtering underperforms plain GRPO),")
-    print(f"     arXiv:2509.21880 (RL-ZVP extracts +8.6 pts FROM zero-variance prompts).")
+    print(f"     producing useful gradient. Trivial prompts waste compute but don't harm.")
+    if trivial_frac_val > 0.40 and learnable_frac_val < 0.35:
+        print(f"     ⚠ BUT: {trivial_frac_val:.0%} trivial + {learnable_frac_val:.0%} learnable = low signal density.")
+        print(f"     Consider: (1) filter records with score >0.75 from training data")
+        print(f"     (arXiv:2504.09696: GRPO-LEAD filters >75% accuracy), or")
+        print(f"     (2) eval a smaller model for fewer trivials. See readiness-check output.")
+    else:
+        print(f"     Signal density acceptable — no filtering needed.")
 
     ga = report["grader_granularity"]
     print(f"\nGrader Granularity:")

@@ -122,7 +122,7 @@ export function FinetuneJobDetailsSection({ job, currentStep, maxSteps }: Finetu
   if (job.training_config?.learning_rate != null) {
     items.push(
       <span key="lr" className="flex items-center gap-1.5">
-        <span className="text-slate-500">LR</span>
+        <span className="text-slate-500">Learning Rate</span>
         <span className="font-mono text-slate-300">{job.training_config.learning_rate}</span>
       </span>
     );
@@ -140,7 +140,7 @@ export function FinetuneJobDetailsSection({ job, currentStep, maxSteps }: Finetu
   if (job.training_config?.gradient_accumulation_steps != null) {
     items.push(
       <span key="gas" className="flex items-center gap-1.5">
-        <span className="text-slate-500">GAS</span>
+        <span className="text-slate-500">Grad. Accum. Steps</span>
         <span className="text-slate-300">{job.training_config.gradient_accumulation_steps}</span>
       </span>
     );
@@ -149,8 +149,26 @@ export function FinetuneJobDetailsSection({ job, currentStep, maxSteps }: Finetu
   if (job.inference_parameters?.response_candidates_count != null) {
     items.push(
       <span key="g" className="flex items-center gap-1.5">
-        <span className="text-slate-500">G</span>
+        <span className="text-slate-500">Generations</span>
         <span className="text-slate-300">{job.inference_parameters.response_candidates_count}</span>
+      </span>
+    );
+  }
+
+  if (job.training_config?.beta != null) {
+    items.push(
+      <span key="beta" className="flex items-center gap-1.5">
+        <span className="text-slate-500">Beta</span>
+        <span className="text-slate-300">{job.training_config.beta}</span>
+      </span>
+    );
+  }
+
+  if (job.inference_parameters?.max_output_tokens != null) {
+    items.push(
+      <span key="max-tokens" className="flex items-center gap-1.5">
+        <span className="text-slate-500">Max Tokens</span>
+        <span className="text-slate-300">{job.inference_parameters.max_output_tokens}</span>
       </span>
     );
   }
@@ -190,12 +208,14 @@ export function FinetuneJobDetailsSection({ job, currentStep, maxSteps }: Finetu
 
   const tooltipRows: Array<{ label: string; value: string; desc: string; sources?: Array<{ name: string; url: string }> }> = [];
   if (job.provider) tooltipRows.push({ label: "Provider", value: job.provider, desc: "Infrastructure provider running the training job" });
-  if (job.training_config?.batch_size != null) tooltipRows.push({ label: "Batch", value: String(job.training_config.batch_size), desc: "Prompts per micro-batch. Total sequences per step = Batch × G", sources: [{ name: "DeepSeek-R1", url: "https://arxiv.org/abs/2501.12948" }, { name: "DAPO", url: "https://arxiv.org/abs/2503.14476" }] });
-  if (job.training_config?.lora_rank != null) tooltipRows.push({ label: "LoRA", value: String(job.training_config.lora_rank), desc: "Low-Rank Adaptation rank. Higher = more capacity, more memory. Recommended: 16–64", sources: [{ name: "verl docs", url: "https://verl.readthedocs.io/en/latest/advance/ppo_lora.html" }] });
-  if (job.training_config?.learning_rate != null) tooltipRows.push({ label: "LR", value: String(job.training_config.learning_rate), desc: "Optimizer step size. GRPO uses 10–20× lower than SFT. Typical: 1e-6 to 5e-6", sources: [{ name: "Dr. GRPO", url: "https://arxiv.org/abs/2503.20783" }, { name: "DAPO", url: "https://arxiv.org/abs/2503.14476" }] });
-  if (job.training_config?.epochs != null) tooltipRows.push({ label: "Epochs", value: String(job.training_config.epochs), desc: "Passes over all prompts. Each pass re-samples fresh completions, so data is never exactly repeated", sources: [{ name: "OpenAI RFT", url: "https://platform.openai.com/docs/guides/reinforcement-fine-tuning" }] });
-  if (job.training_config?.gradient_accumulation_steps != null) tooltipRows.push({ label: "GAS", value: String(job.training_config.gradient_accumulation_steps), desc: "Mini-batches accumulated before each weight update. Effective batch = Batch × GAS × num_GPUs", sources: [{ name: "TRL", url: "https://huggingface.co/docs/trl/main/en/grpo_trainer" }, { name: "DAPO", url: "https://arxiv.org/abs/2503.14476" }] });
-  if (job.inference_parameters?.response_candidates_count != null) tooltipRows.push({ label: "G", value: String(job.inference_parameters.response_candidates_count), desc: "Completions sampled per prompt for group-relative advantage. Min: 2, typical: 8–16", sources: [{ name: "DeepSeek-R1", url: "https://arxiv.org/abs/2501.12948" }, { name: "TRL", url: "https://huggingface.co/docs/trl/main/en/grpo_trainer" }] });
+  if (job.training_config?.batch_size != null) tooltipRows.push({ label: "Batch Size", value: String(job.training_config.batch_size), desc: "Completions each GPU processes per step. Effective prompts per update = Batch \u00d7 Grad. Accum. Steps \u00d7 GPUs \u00f7 Generations. Must divide evenly by Generations", sources: [{ name: "TRL GRPOConfig", url: "https://huggingface.co/docs/trl/main/en/grpo_trainer" }, { name: "Unsloth", url: "https://unsloth.ai/docs/get-started/reinforcement-learning-rl-guide" }] });
+  if (job.training_config?.lora_rank != null) tooltipRows.push({ label: "LoRA Rank", value: String(job.training_config.lora_rank), desc: "Controls how many trainable parameters LoRA adds. Higher = more capacity to learn new behavior but more VRAM. Unsloth recommends \u226532 for GRPO to avoid slow convergence", sources: [{ name: "Unsloth LoRA Guide", url: "https://unsloth.ai/docs/get-started/fine-tuning-llms-guide/lora-hyperparameters-guide" }] });
+  if (job.training_config?.learning_rate != null) tooltipRows.push({ label: "Learning Rate", value: String(job.training_config.learning_rate), desc: "How large each weight update is. GRPO needs ~40\u00d7 lower than SFT \u2014 Unsloth recommends 5e-6. Above 1e-5 commonly causes reward collapse", sources: [{ name: "Unsloth RL Guide", url: "https://unsloth.ai/docs/get-started/reinforcement-learning-rl-guide" }, { name: "Unsloth LoRA Guide", url: "https://unsloth.ai/docs/get-started/fine-tuning-llms-guide/lora-hyperparameters-guide" }] });
+  if (job.training_config?.epochs != null) tooltipRows.push({ label: "Epochs", value: String(job.training_config.epochs), desc: "Full passes through all prompts. GRPO re-samples fresh completions each step, so no two passes see identical data. More epochs = more exploration but higher compute cost", sources: [{ name: "TRL GRPO Trainer", url: "https://huggingface.co/docs/trl/main/en/grpo_trainer" }, { name: "Unsloth RL Guide", url: "https://unsloth.ai/docs/get-started/reinforcement-learning-rl-guide" }] });
+  if (job.training_config?.gradient_accumulation_steps != null) tooltipRows.push({ label: "Grad. Accum. Steps", value: String(job.training_config.gradient_accumulation_steps), desc: "Mini-batches processed before one weight update. Multiplies effective batch size without increasing VRAM. Effective batch = Batch \u00d7 Grad. Accum. Steps \u00d7 GPUs", sources: [{ name: "TRL GRPOConfig", url: "https://huggingface.co/docs/trl/main/en/grpo_trainer" }, { name: "Unsloth", url: "https://unsloth.ai/blog/gradient" }] });
+  if (job.inference_parameters?.response_candidates_count != null) tooltipRows.push({ label: "Generations", value: String(job.inference_parameters.response_candidates_count), desc: "Candidate answers generated per prompt. GRPO compares these to compute which were better or worse (group-relative advantage). Min: 2, typical: 8. Higher = more stable training but linear compute cost", sources: [{ name: "TRL GRPOConfig", url: "https://huggingface.co/docs/trl/main/en/grpo_trainer" }, { name: "Unsloth RL Guide", url: "https://unsloth.ai/docs/get-started/reinforcement-learning-rl-guide" }] });
+  if (job.training_config?.beta != null) tooltipRows.push({ label: "Beta", value: String(job.training_config.beta), desc: "Penalty for drifting from the original model behavior (KL divergence weight). 0 = no penalty, no reference model loaded (saves VRAM). Standard for GRPO per DAPO and Dr. GRPO. Set >0 only if reward hacking is observed", sources: [{ name: "TRL GRPO Trainer", url: "https://huggingface.co/docs/trl/main/en/grpo_trainer" }, { name: "DAPO", url: "https://arxiv.org/abs/2503.14476" }] });
+  if (job.inference_parameters?.max_output_tokens != null) tooltipRows.push({ label: "Max Tokens", value: String(job.inference_parameters.max_output_tokens), desc: "Maximum tokens per generated completion. Truncated completions contribute zero gradient (wasted compute). Watch clipped_ratio metric \u2014 above ~0.2 means this value is too low", sources: [{ name: "TRL GRPOConfig", url: "https://github.com/huggingface/trl/blob/main/trl/trainer/grpo_config.py" }, { name: "Unsloth Advanced RL", url: "https://unsloth.ai/docs/get-started/reinforcement-learning-rl-guide/advanced-rl-documentation" }] });
 
   return (
     <TooltipProvider delayDuration={300}>

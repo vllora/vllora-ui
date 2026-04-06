@@ -44,6 +44,7 @@ FIXED_STEPS = [
     "upload-records",
     "upload-grader",
     "readiness-pass",
+    "difficulty-probe",
     "training",
     "analyze",
 ]

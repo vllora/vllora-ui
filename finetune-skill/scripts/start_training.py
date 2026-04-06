@@ -39,11 +39,16 @@ def start_training(
         "output_model": output_model,
         "display_name": display_name or f"Fine-tune {output_model}",
         "training_config": {
-            "learning_rate": 0.000005,  # 5e-6: between DeepSeek-R1's 3e-6 (arXiv:2501.12948) and gateway default 1e-5.
+            "learning_rate": 0.000001,  # 1e-6: standard GRPO LR (arXiv:2402.03300, arXiv:2503.14476). Higher causes forgetting spiral.
             "lora_rank": 8,
             "gradient_accumulation_steps": 5,
-            "epochs": 8,  # RFT/GRPO needs more epochs than SFT — fresh responses each epoch (no memorization risk). Ref: Interconnects.ai analysis of OpenAI RFT
+            "epochs": 5,  # Adaptive in finetune.py (8/5/3/2 by dataset size). Reduced to prevent forgetting (arXiv:2505.22257).
             "batch_size": 5,
+            "beta": 0.01,  # KL penalty — prevents catastrophic forgetting (arXiv:2509.07430)
+            "loss_type": "dr_grpo",  # No length bias (arXiv:2503.20783)
+            "mask_truncated_completions": False,  # Prevents kl=nan crash (Unsloth #3006)
+            "scale_rewards": "none",  # Dr. GRPO: no std normalization to avoid difficulty bias
+            "importance_sampling_level": "sequence",  # GSPO stable training
         },
         "inference_parameters": {
             "max_output_tokens": 512,  # Starting default — finetune.py auto-adjusts based on dataset content

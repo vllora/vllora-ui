@@ -49,6 +49,7 @@ export interface FinetuneTrainingConfig {
   gradient_accumulation_steps?: number;
   learning_rate_warmup_steps?: number;
   batch_size_samples?: number;
+  beta?: number;
 }
 
 export interface FinetuneInferenceParameters {

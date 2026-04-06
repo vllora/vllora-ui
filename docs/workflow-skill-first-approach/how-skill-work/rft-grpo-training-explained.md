@@ -288,9 +288,10 @@ This is when you stop.
 
 | Dataset size | Recommended epochs | Rationale |
 |---|---|---|
-| < 50 records | 10-15 | Fewer prompts need more passes to build signal |
-| 50-200 records | 5-10 | Our typical range — balanced signal and compute |
-| > 500 records | 3-5 | More data per epoch provides richer signal |
+| < 50 records | 8 | Fewer prompts need more passes to build signal |
+| 50-200 records | 5 | Our typical range — balanced signal and compute |
+| 200-500 records | 3 | More data per epoch provides richer signal |
+| > 500 records | 2 | Large datasets converge faster — avoid diminishing returns |
 
 **But there's a natural limit**: As the model gets better, more prompts produce all-high-scoring responses (all 8 completions score 0.9+). When that happens, std ≈ 0, advantages ≈ 0, and those prompts contribute zero gradient. The learning signal **fades naturally** as the model masters the training prompts. That's when you stop — not because of overfitting, but because the stone is as deep as this grader + data can carve it.
 
@@ -434,15 +435,19 @@ G=64 (very precise — research-grade):
 
 | Parameter | What | Our Default | API Field |
 |---|---|---|---|
-| `learning_rate` | How big each weight update is | 1e-6 | `training_config.learning_rate` |
-| `epochs` | Passes through all prompts | 8 | `training_config.epochs` |
+| `learning_rate` | How big each weight update is | 1e-6 | `training_config.learning_rate` — DeepSeekMath (arXiv:2402.03300), DAPO (arXiv:2503.14476) |
+| `epochs` | Passes through all prompts | 8/5/3/2 | `training_config.epochs` — reduced maximums by dataset size (<50/50-200/200-500/>500 records) |
 | `batch_size` | Prompts per mini-batch | 5 | `training_config.batch_size` |
 | `gradient_accumulation_steps` | Mini-batches before weight update | 5 | `training_config.gradient_accumulation_steps` |
 | `lora_rank` | Width of LoRA adapter matrices | 8 | `training_config.lora_rank` |
 | `max_output_tokens` | Max tokens per generated response | 512 | `inference_parameters.max_output_tokens` |
 | `response_candidates_count` | G — responses per prompt | 8 | `inference_parameters.response_candidates_count` |
 | `warmup_steps` | Steps of gradually increasing LR | 20-50 | `training_config.warmup_steps` |
-| `beta` (KL coefficient) | Penalty for diverging from base model | 0.0 | DAPO/TRL default. Clipping is the constraint instead |
+| `beta` (KL coefficient) | Penalty for diverging from base model | 0.01 | Light KL penalty (arXiv:2509.07430) stabilizes training. Changed from 0.0. |
+| `scale_rewards` | Reward normalization mode | "none" | Dr. GRPO + Unsloth recommendation. Gateway expects string, not boolean. |
+| `loss_type` | GRPO loss variant | dr_grpo | No length bias (Dr. GRPO, arXiv:2503.20783) |
+| `mask_truncated_completions` | Mask truncated completions in loss | false | Unsloth recommendation |
+| `importance_sampling_level` | Importance sampling granularity | sequence | GSPO stability — sequence-level importance sampling |
 
 All set via `finetune.py create-training` — defaults are in the script, override with `--config` and `--inference-params`.
 
@@ -707,12 +712,13 @@ The model learned to exploit the grader, not to genuinely improve.
 Common misconception: "KL > 5 means training is broken"
 
 Reality in GRPO:
-- beta = 0 (default in DAPO, TRL) → KL is NOT penalized
+- beta = 0.01 (light KL penalty, arXiv:2509.07430) — stabilizes training
 - The model MUST diverge from base to learn new behaviors
 - High KL with improving reward = NORMAL
 - High KL with degenerate outputs = PROBLEM
 
-The constraint in GRPO is CLIPPING (epsilon), not KL.
+The primary constraint in GRPO is CLIPPING (epsilon), not KL.
+beta=0.01 adds light stabilization but is not the main constraint.
 Only worry about KL if outputs become repetitive/degenerate.
 ```
 
@@ -873,9 +879,9 @@ KL divergence between the current policy (trained model) and the reference polic
 - **>10**: Significant drift — model may be "forgetting" base behaviors
 - **>100**: Extreme drift — likely training instability, not meaningful learning
 
-**Important GRPO context**: Many modern GRPO implementations set `beta=0` (no KL penalty), relying on clipping (epsilon) as the sole constraint. In this case, KL may drift higher than in PPO-style training, which is expected.
+**Important GRPO context**: Our default uses `beta=0.01` (light KL penalty, arXiv:2509.07430) for training stability. Many GRPO implementations use `beta=0` (no KL penalty), relying on clipping (epsilon) as the sole constraint. KL may still drift higher than in PPO-style training, which is expected.
 
-> Ref: DAPO (arXiv:2503.14476) — removes KL penalty entirely for long-CoT models. TRL default: beta=0.0. DeepSeekMath used beta=0.04
+> Ref: DAPO (arXiv:2503.14476) — removes KL penalty entirely for long-CoT models. DeepSeekMath used beta=0.04. We use beta=0.01 (arXiv:2509.07430) as a compromise for stability.
 
 ---
 

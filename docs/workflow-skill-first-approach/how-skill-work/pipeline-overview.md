@@ -49,8 +49,9 @@ Step 6: Verify
     ↓
 Step 7: Evaluate → Readiness Gate → Headroom Gate → Train
     ├── 7b: Eval base model (4B default)
-    ├── 7c: Readiness gate (4 hard + soft checks)
+    ├── 7c: Readiness gate (4 hard + soft checks, per-topic dead zone, signal density)
     ├── 7c+: Difficulty probe
+    ├── 7c++: Harden records (if signal density warning — generate harder variants of trivials)
     ├── 7d: Headroom gate → if avg > 0.75: eval smaller model → choose best headroom → train
     └── 7e: Training + monitor
 Step 8: Analyze Results
@@ -188,6 +189,7 @@ Other helper scripts:
 | `deduplicate_records.py` | 4 | Removes near-duplicate prompts across overlapping topics (threshold-based) |
 | `data_quality_gate.py` | 5.5b | Pre-eval data quality gate: structural checks, diversity analysis, completion length, **source accuracy** (GT values vs source parts), GT quality scoring, prompt-GT alignment |
 | `probe_difficulty.py` | 7c+ | Post-eval difficulty probe: difficulty buckets, K=8 zero-var prediction, grader granularity, per-topic signal |
+| `harden_records.py` | 7c++ | Post-eval: generates harder variants of trivial records (score > 0.85) via LLM rewrite. Adds alongside originals. Research: arXiv:2505.17063 |
 | `dry_run_grader.py` | 5 | Tests grader on one record via gateway sandbox |
 | `run_evaluation.py` | 7b | Legacy: Creates eval job, polls until complete. Prefer `finetune.py create-eval` + `poll-eval` |
 | `start_training.py` | 7d | Legacy: Starts training job, polls until complete. Prefer `finetune.py create-training` + `poll-training` |
@@ -893,9 +895,11 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
   --file evaluations/eval-001.json
 ```
 
-The readiness gate runs **4 hard checks** (sample_count, score_std, avg_score, zero_score_frac < 10%) and **soft checks** (quality signals).
+The readiness gate runs **4 hard checks** (sample_count, score_std, avg_score, zero_score_frac < 10%) and **soft checks** (quality signals). The summary is printed FIRST (before verbose per-record/per-topic details) to prevent truncation in long outputs.
 
 > **max_output_tokens auto-adjust**: `readiness-check` auto-adjusts `max_output_tokens` based on ground truth token P95 + 30% headroom. It adjusts upward (to prevent truncation) and downward (to reduce padding waste and kl=nan risk).
+
+> **Topic lookup**: Eval results don't include the topic field. Topic names are resolved from `training.jsonl` by matching record IDs.
 
 **Hard checks** (must ALL pass — these ask "is the grader working?", not "is the model good?"):
 | Check | Pass criteria | Research basis |
@@ -915,6 +919,15 @@ The readiness gate runs **4 hard checks** (sample_count, score_std, avg_score, z
 | Prompt learnability | > 30% prompts have varied scores | DAPO §2.2: dynamic sampling filters zero-variance groups |
 | Score-length correlation | < 0.3 | Dr. GRPO (arXiv:2503.20783) identifies length bias. Threshold is a heuristic. |
 | Topic balance | No single topic > 40% | Heuristic — balanced data is standard ML practice |
+| Per-topic dead zone | No topic with avg < 0.05 | Capability gate: avg < 0.05 means the model has no latent capability for that topic |
+| Signal density | trivial < 40% OR learnable > 35% | Warns when too many records are trivially easy (score > 0.85), reducing GRPO gradient signal |
+
+**Priority action chain** (when readiness gate fails or warns on signal density):
+1. Check `scale_rewards` is `"none"` (not `"group"` — Dr. GRPO recommendation)
+2. Check grader for leniency (scores too high = weak gradient)
+3. Run `harden-records` to generate harder variants of trivial records
+4. Eval a smaller base model for better headroom
+5. Use `filter-records --min-score` to remove trivially easy records
 
 **Decision:**
 - **Exit code 0 (PASS)** → All checks passed → proceed to Step 7d (Start Training)
@@ -943,7 +956,29 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py difficulty-probe \
 
 **Research basis**: DOTS+RR (arXiv:2506.05316) proves gradient ∝ p(1-p), maximized at p=0.5. "Hard Examples Are All You Need" (arXiv:2508.14094) shows easy prompts maintain signal for only 2-9% of training. "No Prompt Left Behind" (arXiv:2509.21880) found 30-99% of prompts are zero-variance in standard GRPO. RGR-GRPO (arXiv:2511.12344) shows rubric grading dramatically improves signal density.
 
-### 7c++. Source-Part Coverage Audit (mandatory before training)
+### 7c++. Harden Records (signal density fix — optional)
+
+**What happens**: When the readiness gate or difficulty probe detects too many trivial records (score > 0.85), the agent runs `harden-records` to generate harder variants. This is part of the signal density fix flow: eval → detect trivials → harden → re-upload → re-eval.
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/harden_records.py \
+  --training-file finetune-project/training.jsonl \
+  --eval-file evaluations/eval-001.json \
+  --threshold 0.85 \
+  --output finetune-project/training.jsonl
+```
+
+**How it works**:
+- Identifies records with eval score > 0.85 (trivially easy for the base model)
+- For each trivial record, the LLM reads the original record + score + grader reason and rewrites the user input to be harder
+- **Adds** harder variants alongside originals (does not replace) — preserving the original data distribution
+- Domain-agnostic: no task-specific templates needed
+
+**Research basis**: arXiv:2505.17063 demonstrates +29.2% improvement from a generate-eval-rewrite loop. Hard examples yield 47% gains vs 3-15% for easy ones (arXiv:2508.14094).
+
+After hardening, re-upload records and re-eval to verify improved signal density.
+
+### 7c+++. Source-Part Coverage Audit (mandatory before training)
 
 **What happens**: Before starting training, the agent runs a mandatory coverage audit that checks all knowledge parts are tested by records with diverse difficulty levels. This ensures no source material is under-represented in the training data — preventing blind spots where the model never practices on certain extracted content.
 
@@ -966,18 +1001,24 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 
 **Eval-driven model selection**: The default flow evaluates 4B first. If avg score > 0.75, the agent evals 0.8B. Training proceeds on whichever model has the best headroom (target: 0.25-0.75 avg score range). This ensures GRPO has enough room between "bad" and "good" responses to generate meaningful gradient signal.
 
-**Base model selection** (start with 4B — 9B OOMs with >100 records at K=8):
+**Base model selection** — only 3 models available (9B removed — doesn't exist in backend). Optimal zone: avg score 0.30-0.70 (arXiv:2504.03380). Lower bound capability gate: avg < 0.05 = model has no latent capability.
+
 | Model | Best for | Max records (K=8) | OOM risk |
 |-------|----------|-------------------|----------|
 | `Qwen3.5-0.8B` | Quick iteration, prototyping, very narrow tasks | ~1000 | Very low |
 | `Qwen3.5-2B` | Simple tasks, fast experiments | ~800 | Low |
 | `Qwen3.5-4B` | **Default choice.** Good balance of quality and speed | ~500 | Low |
-| `unsloth/Qwen3.5-9B` | Complex reasoning, broad domains | ~100 | High with >100 records |
 
 **GRPO training defaults** (research-validated):
 | Parameter | Default | Rationale |
 |-----------|---------|-----------|
-| `learning_rate` | **5e-6** | Between DeepSeek-R1's 3e-6 (arXiv:2501.12948) and gateway default 1e-5. Food-label E2E test showed 1e-6 too slow to converge. Do NOT use SFT rates (2e-5 to 5e-5). |
+| `learning_rate` | **1e-6** | DeepSeekMath (arXiv:2402.03300) uses 1e-6, DAPO (arXiv:2503.14476) confirms conservative LR for small models. Do NOT use SFT rates (2e-5 to 5e-5). |
+| `beta` | **0.01** | Light KL penalty (arXiv:2509.07430) stabilizes training. Changed from 0.0 (pure DAPO-style). |
+| `epochs` | **8/5/3/2** | Reduced maximums by dataset size: <50 records → 8, 50-200 → 5, 200-500 → 3, >500 → 2. |
+| `scale_rewards` | **"none"** | Dr. GRPO + Unsloth recommendation. Not `"group"`. Gateway expects a string, not a boolean. |
+| `loss_type` | **dr_grpo** | Default — no length bias (Dr. GRPO, arXiv:2503.20783). |
+| `mask_truncated_completions` | **false** | Unsloth recommendation. |
+| `importance_sampling_level` | **sequence** | GSPO stability — sequence-level importance sampling. |
 | `response_candidates_count` | **8** (default) | K=8 is the production default (changed from K=16). EBPO (arXiv:2602.05165) shows K=16 can be worse due to diminishing returns. Published work uses G=8 (Dr. GRPO, TRL) to G=64 (DeepSeekMath). |
 | `warmup_steps` | **20-50** | DAPO uses 20, "Tricks or Traps" uses 50. Linear warmup then constant LR. |
 
@@ -1137,7 +1178,7 @@ Return to Step 7b — create a new eval and re-run the readiness gate. ~45 min p
 
 1. **Only hyperparams need adjusting** — skip eval, go directly to Step 7d with new training config
 2. **Data or grader needs fixing** — apply fixes, return to Step 7b (re-eval first, then training)
-3. **Model too weak** — try a larger base model (2B → 4B → 9B). If training keeps failing (OOM/NaN), try smaller: `4B` → `2B` → `0.8B`.
+3. **Model too weak** — try a larger base model (0.8B → 2B → 4B). If training keeps failing (OOM/NaN), try smaller: `4B` → `2B` → `0.8B`.
 
 ### 9c. Topic-level iteration (stalled topics after 2+ evals)
 
@@ -1147,7 +1188,7 @@ When `diagnose-grader` per-topic output shows persistent `DEAD_WEIGHT` or `AMBIG
 
 - **Max 5 eval-only iterations** before training. If readiness gate never passes, escalate to user.
 - **Max 3 training iterations.**
-- **Base model escalation:** After 2 failed iterations: `Qwen3.5-4B` → `Qwen3.5-9B`. If training keeps failing (OOM/NaN), try smaller: `4B` → `2B` → `0.8B`.
+- **Base model escalation:** After 2 failed iterations: try smaller model for better headroom (`4B` → `2B` → `0.8B`). Only 3 models available: Qwen3.5-0.8B, 2B, 4B.
 - **When to stop:** User says satisfied, OR avg score > 0.8 AND training reward > 0.7, OR 3+ iterations with no improvement.
 - **Auto-iterate in non-interactive mode:** When running via `claude -p`, the orchestrator auto-applies the top-priority fix and re-evals without asking.
 

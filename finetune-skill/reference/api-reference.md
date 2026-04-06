@@ -34,9 +34,12 @@ All endpoints use JSON unless noted. Auth via `Authorization: Bearer <token>` he
 | 16 | DELETE | `/finetune/workflows/{id}/records/{record_id}` | Delete single record |
 | 17 | PATCH | `/finetune/workflows/{id}/records/{record_id}/data` | Update record data |
 | 18 | GET | `/finetune/workflows/{id}/records/scores` | List record scores |
+| **Pipeline Journal** (workflow-scoped) | | | |
+| 19a | GET | `/finetune/workflows/{id}/journal` | Get pipeline journal |
+| 19b | POST | `/finetune/workflows/{id}/journal/entries` | Append journal entries (atomic) |
 | **Logs** (workflow-scoped) | | | |
-| 19 | GET | `/finetune/workflows/{id}/logs` | List workflow logs |
-| 20 | POST | `/finetune/workflows/{id}/logs/bulk` | Create workflow logs (bulk) |
+| 20 | GET | `/finetune/workflows/{id}/logs` | List workflow logs |
+| 21 | POST | `/finetune/workflows/{id}/logs/bulk` | Create workflow logs (bulk) |
 | **Topics** (workflow-scoped) | | | |
 | 21 | GET | `/finetune/workflows/{id}/topics` | List topics |
 | 22 | POST | `/finetune/workflows/{id}/topics` | Create topics |
@@ -129,9 +132,73 @@ Get a single workflow by ID.
 
 Update a workflow.
 
+**Body** (all fields optional):
+```json
+{
+  "name": "string",
+  "objective": "string",
+  "eval_script": "string",
+  "state": "string",
+  "iteration_state": "string",
+  "pipeline_journal": "string (JSON-encoded PipelineJournal)"
+}
+```
+
+The `pipeline_journal` field stores the full pipeline journal as a JSON string. See `finetune-skill/reference/pipeline-journal-schema.md` for the schema. The skill writes this after each pipeline step to provide explainable evidence of the workflow execution.
+
 ### DELETE `/finetune/workflows/{workflow_id}`
 
 Soft delete a workflow.
+
+---
+
+## 1b. Pipeline Journal (workflow-scoped)
+
+The pipeline journal is the structured execution log of the finetune pipeline. It captures every decision, analysis, and job result as the skill runs. See `pipeline-journal-schema.md` for the full entry schema.
+
+### GET `/finetune/workflows/{workflow_id}/journal`
+
+Returns the pipeline journal for a workflow.
+
+**Response:**
+```json
+{
+  "workflow_id": "uuid",
+  "pipeline_journal": {
+    "version": "1.0",
+    "workflow_id": "uuid",
+    "objective": "...",
+    "entries": [...]
+  }
+}
+```
+
+`pipeline_journal` is `null` if no journal has been written yet.
+
+### POST `/finetune/workflows/{workflow_id}/journal/entries`
+
+Append entries to the pipeline journal. The server performs atomic read-modify-write so no entries are lost from concurrent calls during pipeline execution. If no journal exists yet, one is created automatically.
+
+**Body:**
+```json
+{
+  "entries": [
+    {
+      "id": 1,
+      "timestamp": "2026-04-05T15:04:58Z",
+      "step": "step_1_objective",
+      "action": "define_objective",
+      "status": "completed",
+      "summary": "Created workflow. Objective: ...",
+      "analysis": "optional",
+      "decision": "optional"
+    }
+  ],
+  "objective": "optional — set on first call, ignored after"
+}
+```
+
+**Response:** Same as GET — returns the full updated journal.
 
 ---
 
@@ -567,23 +634,23 @@ curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
     "output_model": "my-custom-model-1234567890",
     "display_name": "Customer Support Fine-tune",
     "training_config": {
-      "learning_rate": 0.00001,
+      "learning_rate": 0.000001,
       "lora_rank": 8,
       "gradient_accumulation_steps": 5,
-      "epochs": 2.0,
+      "epochs": 3,
       "batch_size": 5,
       "load_precision": "bf16",
-      "mask_truncated_completions": true,
+      "mask_truncated_completions": false,
       "loss_type": "dr_grpo",
-      "importance_sampling_level": "sentence",
+      "importance_sampling_level": "sequence",
       "scale_rewards": "none",
-      "beta": 0.0
+      "beta": 0.01
     },
     "inference_parameters": {
-      "max_output_tokens": 1000,
+      "max_output_tokens": 512,
       "temperature": 1.0,
       "top_p": 1.0,
-      "response_candidates_count": 2,
+      "response_candidates_count": 8,
       "enable_thinking": false,
       "reasoning_effort": "medium"
     },
@@ -635,17 +702,17 @@ curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
 **Training Config Defaults (gateway fallbacks if omitted):**
 | Parameter | Gateway Default | GRPO-Optimized (used by `finetune.py`) | Description |
 |-----------|----------------|----------------------------------------|-------------|
-| `learning_rate` | 0.00001 (1e-5) | **0.000005 (5e-6)** | Learning rate. 5e-6 balances DeepSeek-R1's 3e-6 (arXiv:2501.12948) and gateway default |
+| `learning_rate` | 0.00001 (1e-5) | **0.000001 (1e-6)** | Learning rate. Standard GRPO LR (arXiv:2402.03300, arXiv:2503.14476). Higher values cause forgetting spiral (arXiv:2509.07430). |
 | `lora_rank` | 8 | 8 | LoRA rank (higher = more parameters, slower) |
 | `gradient_accumulation_steps` | 5 | 5 | Steps before weight update |
-| `epochs` | 2.0 | **8** | Training epochs. RFT needs many more than SFT (5-15 typical) |
+| `epochs` | 2.0 | **adaptive (2-8)** | Auto-set by dataset size: <50→8, <200→5, <500→3, 500+→2. Reduced to prevent forgetting (arXiv:2505.22257). |
 | `batch_size` | 5 | 5 | Training batch size |
 | `load_precision` | `bf16` (omitted = bf16) | workload-dependent | Base model weights: `bf16` (full precision, default), `4bit` (QLoRA, lowest VRAM), `8bit` (middle ground). |
-| `mask_truncated_completions` | `true` | `true` (recommended) | Whether to zero out KL/reward for completions that were forcibly truncated. With all completions truncated, this can produce NaN KL — increase `max_output_tokens` if that happens. |
-| `loss_type` | `"dr_grpo"` | `"dr_grpo"` | TRL loss normalization mode: `dr_grpo`, `grpo`, `dapo`, or `bnpo`. See `training-metrics-guide.md` for scale differences. |
-| `importance_sampling_level` | `"token"` | `"token"` | Importance sampling granularity: `token` (per-token) or `sequence` (per-sequence). |
-| `scale_rewards` | `"none"` | `"none"` | Optional reward rescaling: `group`, `batch`, or `none`. |
-| `beta` | `0.0` | `0.0` | KL coefficient. `0.0` (modern default) disables KL penalty; set `>0` only when you explicitly want KL regularization. |
+| `mask_truncated_completions` | `true` | **`false`** | Unsloth: "we recommend to disable it." `true` causes kl=nan when all completions truncate (Unsloth #3006). |
+| `loss_type` | `"dr_grpo"` | `"dr_grpo"` | GRPO variant: `dr_grpo` (no length bias, arXiv:2503.20783), `dapo` (TRL default, also no length bias). Avoid `grpo` (length bias) and `bnpo` (TRL bug #3823 with sequence IS). |
+| `importance_sampling_level` | `"token"` | **`"sequence"`** | Unsloth: "GSPO shows sequence-level often gives more stable training." |
+| `scale_rewards` | `"group"` | **`false`** | Unsloth + Dr. GRPO: "recommends not scaling to avoid difficulty bias from std scaling." `false` = raw advantages, helps with bimodal distributions. |
+| `beta` | `0.0` | **`0.01`** | KL penalty prevents forgetting (arXiv:2509.07430: 15% forgetting without KL). Unsloth: 0.0 = "no reference model loaded (lower memory, faster)". We use 0.01 for stability. |
 
 **Inference Parameters (used during training rollouts):**
 | Parameter | Gateway Default | GRPO-Optimized (used by `finetune.py`) | Description |

@@ -1238,6 +1238,23 @@ Log the coverage audit results in `execution-log.md`:
 - Coverage gap action: [generated N new records / no gaps found]
 ```
 
+**Step 7c++: Harden trivial records (if signal density is low)**
+
+If the readiness summary shows `SIGNAL DENSITY LOW` (trivial > 40% AND learnable < 35%), the training data has too many records the base model already aces. Before training, generate harder variants:
+
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py harden-records \
+  --eval-file finetune-project/evaluations/eval-001.json \
+  --training-file finetune-project/training.jsonl \
+  --min-score 0.85
+```
+
+This **adds** harder variants alongside the originals (originals kept as anchors). The LLM rewrites each trivial record's input to require deeper reasoning while keeping the same GT answer. Domain-agnostic — works for any task type.
+
+After hardening: re-upload records (`upload-records`), re-eval (`create-eval`), re-check readiness. The trivial% should decrease and learnable% should increase.
+
+Research: arXiv:2505.17063 (Synthetic Data RL: +29.2% from generate-eval-rewrite). arXiv:2603.24202 (iterative teacher-student with pass-rate-conditional difficulty adjustment).
+
 **⚠️ HEADROOM GATE (MANDATORY — do NOT skip):**
 
 This is a HARD GATE with TWO bounds. You MUST have a base model eval with avg score between 0.05 and 0.75 before proceeding to training.
@@ -1290,27 +1307,28 @@ Training starts here — only reached when the readiness gate indicates data and
 
 | Model | When to use | Max records (K=8) | OOM risk |
 |-------|-------------|-------------------|----------|
+| `Qwen3.5-4B` | **Default**. When 4B scores <0.75 — best capacity + headroom balance | ~500 | Low |
+| `Qwen3.5-2B` | When 4B scores >0.75 and 0.8B scores <0.05 — middle ground | ~800 | Low |
 | `Qwen3.5-0.8B` | When 4B scores >0.75 and 0.8B scores 0.05-0.75 — best headroom for narrow tasks | ~1000 | Very low |
-| `Qwen3.5-2B` | Middle ground when 0.8B scores <0.05 (no capability) and 4B scores >0.75 | ~800 | Low |
-| `Qwen3.5-4B` | When 4B scores <0.75 — default choice with good capacity and headroom | ~500 | Low |
-| `Qwen3.5-9B` | Only if 4B scores <0.10 and task requires complex reasoning (very rare) | ~100 | High with >100 records |
 
-> **⚠️ The 9B model OOMs with >100 records and K=8 on standard GPU allocations.** Use 9B only for small, complex datasets (<100 records). The `create-training` script warns if the model/dataset combination risks OOM.
+These are the **only 3 base models** supported by the training backend. There is no 9B option.
+
+**⚠️ Do NOT pass `--config` on the first training run.** The defaults in `create-training` are research-optimized (lr=1e-6, β=0.01, adaptive epochs). Passing `--config` with explicit values REPLACES these defaults — only do this when retrying after a diagnosed failure (e.g., kl=nan → lower lr, forgetting → increase β). If you only need to set `max_output_tokens`, use `--inference-params` instead of `--config`.
 
 ```bash
+# First training run — use defaults (recommended):
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
   --workflow-id $WORKFLOW_ID \
   --base-model "Qwen3.5-4B" \
   --output-model "project-v1" \
   --output-dir training-jobs
 
-# To override defaults (e.g., after diagnosing issues from previous iterations):
+# Override ONLY after diagnosing a specific issue:
 # uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 #   --workflow-id $WORKFLOW_ID \
 #   --base-model "Qwen3.5-4B" \
 #   --output-model "project-v2" \
-#   --config '{"learning_rate": 0.0000005, "epochs": 5, "lora_rank": 16}' \
-#   --inference-params '{"response_candidates_count": 16, "max_output_tokens": 1024}' \
+#   --config '{"learning_rate": 0.0000005, "epochs": 3}' \
 #   --output-dir training-jobs
 ```
 
@@ -1318,25 +1336,33 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 
 | Parameter | Default | Rationale |
 |-----------|---------|-----------|
-| `learning_rate` | **5e-6** | Between DeepSeek-R1's 3e-6 (arXiv:2501.12948) and gateway default 1e-5. Food-label E2E test showed 1e-6 too slow to converge. Do NOT use SFT rates (2e-5 to 5e-5). |
+| `learning_rate` | **1e-6** | Standard GRPO LR (DeepSeekMath arXiv:2402.03300, DAPO arXiv:2503.14476, Dr. GRPO arXiv:2503.20783). Higher LR (5e-6) causes faster policy drift → forgetting spiral (arXiv:2509.07430). |
+| `beta` | **0.01** | KL penalty prevents catastrophic forgetting by constraining policy drift from reference model (arXiv:2509.07430: 15% forgetting rate without KL). DeepSeekMath used β=0.04; 0.01 is conservative. |
 | `response_candidates_count` | **8** (default, optimal) | K=8 is the standard choice: Dr. GRPO Table 6 (arXiv:2503.20783), "Hard Examples" Appendix B (arXiv:2508.14094), TRL default, DeepSeek-R1. **Do NOT default to K=16.** EBPO (Table 2, arXiv:2602.05165) shows K=16 averages 0.9 points *worse* than K=8 across 5 benchmarks; K=32 is 3.1 points worse. K=16 costs 2x compute for marginal-to-negative quality gain. Only consider K=16 when >40% of prompts are "easy" (p>0.8) AND grader/data are already fixed — in that case K=16 reduces easy-prompt zero-variance from 16-43% to 3-19%. For borderline prompts (p=0.3-0.4), K=8 already produces informative groups 96.6% of the time — K=16 adds only 3.3pp at 2x cost. DAPO uses K=16 but with dynamic sampling that discards zero-variance groups, making effective K≈8 — this is not evidence K=16 outperforms K=8. |
+| `epochs` | **adaptive** | Auto-set by `create-training` based on dataset size: <50 records→8, <200→5, <500→3, 500+→2. Reduced from previous higher values to prevent forgetting spiral (arXiv:2505.22257: "training beyond ~80% of one epoch yields negligible gains"; arXiv:2506.02355: instability at 4+ epochs). |
 | `warmup_ratio` | **configurable** | Uses `warmup_ratio` (not `warmup_steps`). The cloud applies cosine LR scheduler — LR decays after warmup, not constant. |
 
-> **Actual cloud training config** (set by the cloud worker, not user-configurable):
+> **Advanced training config** (now user-configurable via `--config`, defaults set by `create-training`):
+>
+> | Parameter | Default | What it does | When to change |
+> |-----------|---------|-------------|----------------|
+> | `loss_type` | `"dr_grpo"` | GRPO variant. `dr_grpo` removes length bias (arXiv:2503.20783). TRL default is `dapo`. Both valid. Avoid `bnpo` (TRL bug #3823). Avoid `grpo` (length bias). | Try `"dapo"` for TRL-standard normalization |
+> | `mask_truncated_completions` | `false` | Unsloth: "we recommend to disable it" — `true` causes kl=nan if all completions truncate (Unsloth #3006) | Set `true` only if truncation rate < 10% and max_output_tokens is well-sized |
+> | `scale_rewards` | `false` | Unsloth + Dr. GRPO: "recommends not scaling to avoid difficulty bias from std scaling." `false`/`"none"` = raw advantages. `"group"` amplifies easy records. | Use `false` (default). Helps with bimodal distributions. |
+> | `importance_sampling_level` | `"sequence"` | Unsloth: "GSPO shows sequence-level often gives more stable training for sequence-level rewards." TRL default is `"token"`. | Keep `"sequence"` for stability |
+>
+> **Cloud-side config** (NOT user-configurable — set by the training worker):
 >
 > | Parameter | Value | What it does |
 > |-----------|-------|-------------|
-> | `loss_type` | `"dr_grpo"` | Removes per-token `1/|o_i|` normalization — eliminates algorithmic length bias (Dr. GRPO, arXiv:2503.20783) |
-> | `mask_truncated_completions` | `True` | Truncated completions contribute zero gradient (DAPO, arXiv:2503.14476). Prevents NaN from all-truncated batches — but see `max_output_tokens` sizing |
-> | `repetition_penalty` | `1.1` | Generation-time penalty against repetitive tokens — discourages padding via repetition |
-> | `importance_sampling_level` | `"sequence"` | Sequence-level importance sampling (GSPO/Qwen approach) |
-> | `epsilon` / `epsilon_high` | `3e-4` / `4e-4` | Tight asymmetric clipping — very conservative policy updates per step |
+> | `repetition_penalty` | `1.1` | Generation-time penalty against repetitive tokens |
+> | `epsilon` / `epsilon_high` | `3e-4` / `4e-4` | Tight asymmetric clipping — very conservative policy updates |
 > | `lr_scheduler_type` | `"cosine"` | Cosine annealing after warmup — LR decays through training |
 > | `optim` | `"adamw_8bit"` | 8-bit AdamW for VRAM savings |
 > | `max_grad_norm` | `1.0` | Gradient clipping — prevents explosion |
 > | `weight_decay` | `0.01` | Standard regularization |
 >
-> **Implications for analysis**: (1) If length exploitation occurs, it's grader-side, not algorithmic — fix the grader. (2) The tight epsilon values mean `clip_ratio` should stay very low; high `clip_ratio` is a stronger signal than usual. (3) Cosine LR means reward may plateau in late training as LR approaches zero — this is expected, not a bug. (4) `mask_truncated_completions=True` means truncated completions are excluded from loss — if `clipped_ratio` is high, those samples are wasted compute.
+> **Implications for analysis**: (1) If length exploitation occurs, it's grader-side, not algorithmic — `dr_grpo` eliminates algorithmic length bias. Fix the grader. (2) The tight epsilon values mean `clip_ratio` should stay very low; high `clip_ratio` is a stronger signal than usual. (3) Cosine LR means reward may plateau in late training as LR approaches zero — this is expected, not a bug. (4) `mask_truncated_completions=false` (our default) means truncated completions DO contribute gradient — prevents kl=nan but may add noise if truncation rate is high.
 
 > **⚠️ RFT epochs ≠ SFT epochs.** In RFT/GRPO, the model generates **fresh responses each epoch** — there's no repetition risk. More epochs = more exploration. Published work uses high epoch counts: "Tricks or Traps" uses 50 epochs; OpenAI says RFT does "hundreds or thousands of epochs." Start conservatively and increase if reward is still improving.
 
@@ -1344,13 +1370,13 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 
 | Situation | Adjustment |
 |-----------|------------|
-| < 50 records | `epochs: 15` (small dataset needs more passes — OpenAI: "hundreds of epochs over the same few data points") |
-| 50-200 records | `epochs: 8` |
-| 200-500 records | `epochs: 5` |
-| > 500 records | `epochs: 3` (DeepSeek-R1 used ~50k records with ~2 epochs) |
+| < 50 records | `epochs: 8` (small dataset needs more passes) |
+| 50-200 records | `epochs: 5` |
+| 200-500 records | `epochs: 3` |
+| > 500 records | `epochs: 2` (DeepSeek-R1 used ~50k records with ~2 epochs) |
 | Complex task | `lora_rank: 16` |
-| High KL but training otherwise healthy | **Do NOT lower LR just for KL.** With β=0 (our backend default), KL divergence values are un-normalized and purely informational. Do NOT use KL values to make training decisions. |
-| Unstable training (NaN loss, reward collapse) | Lower `learning_rate` to 1e-6. Check for 100% completion truncation first. |
+| High KL but training otherwise healthy | With β=0.01, KL values are meaningful. If KL rises rapidly, increase β to 0.05. |
+| Unstable training (NaN loss, reward collapse) | Lower `learning_rate` to 5e-7. Check for 100% completion truncation first. |
 
 #### 7f. Monitor training
 
@@ -1438,7 +1464,7 @@ When training completes (or is early-stopped), do these **THREE things in order 
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
   --project-dir finetune-project --phase training \
   --training-file training-jobs/train-NNN.json \
-  --changes "Training run: lr=5e-6, epochs=5, K=8, base=Qwen3.5-0.8B. Final avg=X.XXX, best epoch=N." \
+  --changes "Training run: lr=1e-6, beta=0.01, epochs=N, K=8, base=Qwen3.5-4B. Final avg=X.XXX, best epoch=N." \
   --change-type baseline --verdict PASS
 ```
 
@@ -1792,7 +1818,7 @@ After training analysis (Step 8c), use the **training metrics → topics/records
    - **Check topic system prompt**: Does it include the domain rules the model needs? Update and re-generate records.
    - After fixing, return to **Step 7b** (re-eval with updated records, then retrain)
 3. **If grader needs fixing** (all topics score similarly, or grader too lenient/strict) — fix grader, return to **Step 7b**
-4. **If model is too weak** — try a larger base model (2B → 4B → 9B)
+4. **If model is too weak** — try a larger base model (0.8B → 2B → 4B)
 5. **If base model scored too high (>0.75) and training showed no improvement** — the task is too easy for this model. GRPO has limited headroom (see Step 7d analysis table). Options in priority order:
    - **Accept the base model** — if it already meets requirements, deploy without training. This is the simplest and often best option.
    - **Make grader stricter** → return to Step 5 (rewrite grader with harder criteria to lower base model scores), then re-eval + retrain
@@ -1889,7 +1915,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force \
 #### 9d. Iteration limits and escalation
 
 - **Max 5 iterations.** After 5, stop and report full diagnosis.
-- **Base model escalation:** After 2 failed iterations: `Qwen3.5-4B` → `Qwen3.5-9B`. If training keeps failing (OOM/NaN), try smaller: `4B` → `2B` → `0.8B`.
+- **Base model escalation:** If model too weak: `0.8B` → `2B` → `4B`. If training fails (OOM/NaN): `4B` → `2B` → `0.8B`. Only 3 models available: 0.8B, 2B, 4B.
 - **When to stop:** User satisfied, OR avg score > 0.8 AND training reward > 0.7, OR 3+ iterations with no improvement.
 
 ### Using the vLLora UI

@@ -214,20 +214,44 @@ function evaluate(input) {
         ? ((1 + betaSq) * precision * recall) / (betaSq * precision + recall)
         : 0;
 
-    // ─── Stratified scoring (HERO arXiv:2510.07242) ───
-    // Map F-beta [0,1] into stratified tiers to ensure correct > wrong.
+    // ─── Stratified scoring with recall completeness penalty ───
+    //
+    // GRPO needs wide reward gaps between partial and perfect answers.
+    // If 1-of-2 labels correct scores 0.78, and all K=8 completions
+    // produce the same partial answer, std(reward)=0 → zero gradient
+    // → the model never learns to find the missing label.
+    //
+    // Fix: score = F-beta × recall_completeness, where completeness
+    // penalizes missing labels proportionally. 1-of-2 correct = 0.50
+    // recall → completeness penalty makes score ~0.40 (not 0.78).
+    // This creates a 0.60 gap to perfect (1.0), large enough for
+    // GRPO to distinguish when even one completion finds both labels.
+    //
+    // Ref: arXiv:2511.04439 (ordinal reward trap in GRPO),
+    //      arXiv:2506.02355 (distribution sharpening on partial),
+    //      HERO arXiv:2510.07242 (stratified tiers: correct > wrong)
     var baseScore;
-    if (fbeta >= 0.85) {
-        // Near-perfect tier: 0.80-0.95
-        baseScore = 0.80 + (fbeta - 0.85) * (0.15 / 0.15);
-    } else if (fbeta >= 0.40) {
-        // Partial tier: 0.50-0.79
-        baseScore = 0.50 + (fbeta - 0.40) * (0.29 / 0.45);
+    var gtCount = gtLabels.length;
+    // Recall completeness: what fraction of GT labels did model find?
+    var completeness = (gtCount > 0) ? tp / gtCount : 1.0;
+
+    if (tp === gtCount && fp === 0) {
+        // Perfect match: 0.90-1.0 (brevity bonus can push to 1.0)
+        baseScore = 0.90 + (fbeta - 0.90) * 0.10;
+        if (baseScore < 0.90) baseScore = 0.90;
+    } else if (tp === gtCount && fp > 0) {
+        // All GT labels found but with extra FPs: 0.50-0.70
+        // Good recall but imprecise — FP penalty below will reduce further
+        baseScore = 0.50 + completeness * 0.20;
     } else if (tp > 0) {
-        // Low tier: 0.20-0.49 (at least 1 TP)
-        baseScore = 0.20 + (fbeta / 0.40) * 0.29;
+        // Partial match: score scales with completeness
+        // 1-of-2 correct (50% completeness) → 0.30
+        // 2-of-3 correct (67% completeness) → 0.40
+        // 1-of-4 correct (25% completeness) → 0.20
+        // Wide gap to perfect (0.90+) ensures GRPO gradient flows
+        baseScore = 0.10 + completeness * 0.50;
     } else {
-        // Fail tier: 0.05 (no TPs but attempted)
+        // No correct labels at all: 0.05 (nonzero for gradient)
         baseScore = 0.05;
     }
 

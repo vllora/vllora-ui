@@ -446,10 +446,11 @@ Continuation validation is mode-specific:
 
 > **Note:** RFT needs significantly more epochs than SFT. The model must see each prompt multiple times, generating diverse responses each time, to learn from the reward signal. "Overfitting" in the SFT sense (memorization) is less of a concern because the model generates its own responses.
 
-Adjust from the defaults (`finetune.py` uses lr=1e-6, epochs=8, candidates=8):
-- **Low data (<100 records)**: epochs 10-15 (more passes needed for the model to explore)
-- **Medium data (100-500 records)**: epochs 5-10 (default 8 is good)
-- **Large data (>500 records)**: epochs 3-5 (enough variety per epoch)
+Adjust from the defaults (`finetune.py` uses lr=1e-6, beta=0.01, K=8, scale_rewards=none, adaptive epochs):
+- **< 50 records**: epochs 8
+- **50-200 records**: epochs 5
+- **200-500 records**: epochs 3
+- **> 500 records**: epochs 2 (arXiv:2505.22257: beyond ~80% of one epoch yields negligible gains)
 - **Complex tasks**: Try `lora_rank: 16` for more model capacity
 - **Simple tasks**: `lora_rank: 4` is sufficient and faster
 

@@ -552,7 +552,7 @@ def main():
                 "type": part["type"],
                 "title": part.get("title", ""),
                 "extraction_path": part.get("extraction_path", ""),
-                "pages": part.get("extraction_metadata", {}).get("pages", []),
+                "pages": part.get("pages", []) or part.get("extraction_metadata", {}).get("pages", []),
                 "content_preview": part.get("content", "")[:200],
                 "source_doc": part.get("source_document", source_name),
             })

@@ -26,7 +26,43 @@ import { getTopicCounts } from "./topic-hierarchy-utils";
 import { RecordsAnalyticsDialog } from "./dataset-detail-header/detail-records-analytics-dialog";
 import { DatasetMainContent } from "./DatasetMainContent";
 import { DatasetNotFound } from "./DatasetNotFound";
-import { ExplorerSidebar, LucySidebar, TasksViewer, LogsViewer } from "./sidebars";
+import { ExplorerSidebar, LucySidebar, TasksViewer } from "./sidebars";
+import { PipelineJournalProvider, PipelineJournalConsumer } from "@/contexts/PipelineJournalContext";
+import { PipelineJournalTimeline } from "./sidebars/PipelineJournalTimeline";
+import type { PipelineJournal } from "@/types/pipeline-journal-types";
+
+/** Shows journal timeline if available, falls back to legacy LogsViewer.
+ *  Supports drag-and-drop of pipeline-journal.json for local preview. */
+function JournalOrLogs() {
+  const { entries, hasJournal, isLoading } = PipelineJournalConsumer();
+  const [localJournal, setLocalJournal] = useState<PipelineJournal | null>(null);
+
+  const handleDrop = useCallback((journal: PipelineJournal) => {
+    setLocalJournal(journal);
+  }, []);
+
+  const handleDismiss = useCallback(() => {
+    setLocalJournal(null);
+  }, []);
+
+  // Local preview takes priority
+  if (localJournal) {
+    return (
+      <PipelineJournalTimeline
+        entries={localJournal.entries}
+        onDropJournal={handleDrop}
+        isLocalPreview
+        onDismissPreview={handleDismiss}
+      />
+    );
+  }
+
+  if (isLoading) return <PipelineJournalTimeline entries={[]} isLoading onDropJournal={handleDrop} />;
+  if (hasJournal) return <PipelineJournalTimeline entries={entries} onDropJournal={handleDrop} />;
+
+  // No journal — show drop zone (empty state) with fallback to LogsViewer
+  return <PipelineJournalTimeline entries={[]} onDropJournal={handleDrop} />;
+}
 import { IS_LUCY_ENABLED } from "@/lib/feature-flags";
 import { EvaluationConfigPanel } from "./evaluation-dialog/EvaluationConfigPanel";
 import { EvalRunsOverview } from "./eval-dialog/EvalRunsOverview";
@@ -966,8 +1002,10 @@ export function DatasetDetailContentV2() {
             </div>
           )}
           {contentSection === "logs" && (
-            <div className="flex-1 flex flex-col overflow-hidden">
-              <LogsViewer />
+            <div className="flex-1 flex flex-col overflow-hidden overflow-y-auto">
+              <PipelineJournalProvider workflowId={workflowId}>
+                <JournalOrLogs />
+              </PipelineJournalProvider>
             </div>
           )}
           {contentSection === "skill" && (

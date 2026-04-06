@@ -652,7 +652,7 @@ uv run scripts/finetune.py log-iteration --project-dir finetune-project \
 # After each training analysis:
 uv run scripts/finetune.py log-iteration --project-dir finetune-project \
   --phase training --training-file training-jobs/train-001.json \
-  --changes "First training: lr=5e-6, epochs=8" --change-type baseline --verdict PASS
+  --changes "First training: lr=1e-6, beta=0.01, epochs=adaptive" --change-type baseline --verdict PASS
 ```
 
 The command auto-computes metrics and prints a delta comparison vs the previous same-phase iteration:

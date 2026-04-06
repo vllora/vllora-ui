@@ -24,7 +24,7 @@ Step 3: Build Topic Hierarchy
 Step 5.5: Validate Dataset
 Step 5.5b: Data Quality Gate (includes GT distribution diversity checks)
     ↓
-Step 7: Evaluate → Readiness Gate → Headroom Gate → Train → Iterate
+Step 7: Evaluate → Readiness Gate → [Harden Records] → Headroom Gate → Train → Iterate
 ```
 
 Step 5 (Write Grader) must run after Step 4 (Generate Records) — the grader needs sample records to identify domain-specific scoring criteria.
@@ -253,6 +253,28 @@ training.jsonl + topics.json + all-parts-index.json
                             GT distribution diversity (label coverage, multi-label completeness)]
          ↓
   ✓ Ready for evaluation (Step 7)
+```
+
+### Layer 6: Post-Eval Signal Density Fix (Step 7c++ — optional)
+
+```
+eval results (per-record scores)
+         ↓
+  readiness-check → detects signal density warning
+  (trivial > 40% AND learnable < 35%)
+         ↓
+  harden_records.py
+  ├── Reads training.jsonl + eval results
+  ├── Identifies trivial records (score > 0.85)
+  ├── For each trivial: LLM rewrites user input to be harder
+  ├── Domain-agnostic: reads record + score + grader reason
+  └── ADDS harder variants alongside originals (no replacement)
+         ↓
+  training.jsonl (original + hardened variants)
+         ↓
+  re-upload records → re-eval → verify improved signal density
+         ↓
+  ✓ Better GRPO gradient signal (arXiv:2505.17063: +29.2% from generate-eval-rewrite)
 ```
 
 ---

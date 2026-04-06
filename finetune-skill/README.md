@@ -74,7 +74,7 @@ your-project/
         └── finetune-skill/            # The skill itself
             ├── SKILL.md
             ├── reference/             # 14 reference docs (api-reference, analysis-strategy, topic-hierarchy, nemo-guide, etc.)
-            ├── scripts/               # 19 Python helpers (finetune.py has 25 subcommands)
+            ├── scripts/               # 20 Python helpers (finetune.py has 25+ subcommands)
             └── templates/             # Starter files
 ```
 
@@ -209,6 +209,7 @@ finetune-skill/
 │   ├── validate_extraction.py  # Cross-document extraction quality gate (+ table quality)
 │   ├── docling_extract.py      # Docling async extraction — fallback for scanned/complex PDFs
 │   ├── derive_ground_truth.py  # Stage 2 GT derivation for two-stage multi-label generation (topic-agnostic GT extraction)
+│   ├── harden_records.py       # Post-eval: generates harder variants of trivial records (score > 0.85)
 │   └── pdftotext_extract.py    # Last-resort extraction via pdftotext (no Python deps)
 │
 ├── templates/                  # Grader templates + recipe starters
@@ -568,6 +569,7 @@ All scripts use inline dependency declarations — run with `uv run script.py` (
 | `scripts/validate_extraction.py` | Cross-document extraction quality gate (parts/page, title diversity, avg length, **table column consistency**, **pipe-table page break artifact detection** — flags non-table lines + repeated headers inside pipe-delimited tables, FAIL on large tables >10K chars with artifacts) |
 | `scripts/docling_extract.py` | Submit PDF(s) to Docling Serve async API, poll until done, supports batch + submit-only mode |
 | `scripts/derive_ground_truth.py` | Stage 2 GT derivation for two-stage multi-label generation (topic-agnostic GT extraction) |
+| `scripts/harden_records.py` | Post-eval: generates harder variants of trivial records (score > 0.85) via LLM rewrite. Adds variants alongside originals. Domain-agnostic — reads record + score + grader reason, rewrites input to be harder. Research: arXiv:2505.17063 (+29.2% from generate-eval-rewrite). Part of signal density fix: eval → detect trivials → harden → re-upload → re-eval |
 | `scripts/pdftotext_extract.py` | Fallback PDF extraction via pdftotext (no Docker required), same output schema |
 | `scripts/convert_pdf_to_markdown.py` | PDF → Markdown via pymupdf4llm — utility script, not primary extraction |
 
@@ -769,6 +771,48 @@ those values in the next API call.
 
 **Fix applied**: Added `--poll` as an alias in `docling_extract.py` for polling Docling extraction status.
 
+### Issue 13: scale_rewards sent as Python bool instead of string
+
+**Symptom**: `create-training` with `scale_rewards: False` (Python boolean) was rejected by the gateway, which expects a string value.
+
+**Fix applied**: Changed `scale_rewards` from `False` to `"none"` (string). Dr. GRPO + Unsloth recommendation: no reward scaling.
+
+### Issue 14: _normalize_source_name crash on None reference_id
+
+**Symptom**: `_normalize_source_name` crashed when a knowledge source had `None` as its `reference_id`.
+
+**Fix applied**: Added null guard in `_normalize_source_name` to handle missing `reference_id`.
+
+### Issue 15: consolidate_parts.py pages field fix
+
+**Symptom**: Consolidated parts had incorrect or missing `pages` field after merging adjacent parts.
+
+**Fix applied**: Fixed pages field handling in `consolidate_parts.py`.
+
+### Issue 16: checkpoint.py missing difficulty-probe step
+
+**Symptom**: `checkpoint.py` rejected `difficulty-probe` as an invalid step name.
+
+**Fix applied**: Added `difficulty-probe` to the list of valid pipeline steps in `checkpoint.py`.
+
+### Issue 17: readiness-check topic lookup failure
+
+**Symptom**: Readiness check used `topic=?` placeholder instead of actual topic names from eval results (eval results don't include the topic field).
+
+**Fix applied**: Topic names are now looked up from `training.jsonl` by matching record IDs. Readiness summary is printed FIRST (before verbose per-record/per-topic details) to prevent truncation in long outputs.
+
+### Issue 18: generate_records.py key normalization
+
+**Symptom**: Records generated with `topic_id` key failed upload because gateway expected `topic_identifier`.
+
+**Fix applied**: Added key normalization in `generate_records.py` (`topic_id` → `topic_identifier`).
+
+### Issue 19: log-iteration rejects PENDING verdict
+
+**Symptom**: `finetune.py log-iteration --verdict PENDING` was rejected as an invalid verdict value.
+
+**Fix applied**: Added `PENDING` to the list of accepted verdict values in `log-iteration`.
+
 ---
 
 ## How to Test
@@ -968,8 +1012,9 @@ Both write through the same gateway API → same SQLite database. Workflows, rec
 **RFT/GRPO-specific (addressed but verify in practice):**
 - **Validation set** — train/validation split (80/20) added in Step 7a-iii. Gateway doesn't support separate validation upload, so the split is local only. Verify finetuned model against held-out prompts manually.
 - **Grader score distribution** — pre-training distribution check added in Step 7a-ii + readiness gate enforces spread. Verified working in eval-first flow.
-- **Epoch defaults** — fixed: RFT uses 10-30 epochs for small datasets, 5-10 for large (not SFT-style 1-4). Published work uses even higher: "Tricks or Traps" uses 50; OpenAI says "hundreds or thousands." Fresh responses each pass, no repetition risk.
-- **KL thresholds** — fixed: high KL is normal with beta=0 (GRPO default). KL alone is no longer diagnostic in training-metrics-guide.md.
+- **Epoch defaults** — fixed: reduced maximums based on dataset size (8/5/3/2 for <50/50-200/200-500/>500 records). Published work uses higher for tiny datasets: "Tricks or Traps" uses 50; OpenAI says "hundreds or thousands." Fresh responses each pass, no repetition risk.
+- **KL thresholds** — fixed: beta changed from 0 to 0.01 (arXiv:2509.07430 — light KL penalty stabilizes training). KL is now lightly penalized but high values are still expected.
+- **Training defaults** — updated: learning_rate 5e-6 → 1e-6 (arXiv:2402.03300, arXiv:2503.14476), scale_rewards "none" (Dr. GRPO + Unsloth), loss_type dr_grpo (no length bias), importance_sampling_level sequence (GSPO stability), mask_truncated_completions false (Unsloth).
 - **Citation accuracy** — fixed: removed incorrect Dr. GRPO attributions for `reward_std`/`frac_zero_std` thresholds (now marked as empirical heuristics), removed wrong "Tricks or Traps" attribution for reward hacking thresholds. Updated in `training-metrics-guide.md`, `analysis-strategy.md`, `iteration-strategy.md`, and UI (`training-metrics-insights.ts`). TRL `loss_type` table expanded from 4 to 8+ modes.
 
 **Infrastructure:**

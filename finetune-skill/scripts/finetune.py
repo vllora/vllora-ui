@@ -566,6 +566,7 @@ def cmd_filter_records(args: argparse.Namespace) -> None:
     remove_ids: set[str] = set()
     remove_reasons: dict[str, str] = {}
     max_score = args.max_score
+    min_score = getattr(args, "min_score", None)
     reason_pattern = args.reason_pattern
 
     for r in results:
@@ -585,8 +586,15 @@ def cmd_filter_records(args: argparse.Namespace) -> None:
 
                 should_remove = False
 
-                # Filter by score threshold
+                # Filter by score threshold (remove low-scoring records)
                 if max_score is not None and float(score) <= max_score:
+                    should_remove = True
+
+                # Filter by min-score threshold (remove trivially easy records)
+                # Used for signal density optimization: remove records the model
+                # already aces so GRPO gradient concentrates on learnable ones.
+                # Ref: arXiv:2504.09696 (GRPO-LEAD filters >75% accuracy)
+                if min_score is not None and float(score) >= min_score:
                     should_remove = True
 
                 # Filter by reason pattern
@@ -2024,18 +2032,52 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
     else:
         result["recommendation"] = "All checks passed. Ready for training."
 
-    # ── Per-record inspection (auto — agent doesn't need to remember) ──
-    # Print top/bottom scoring records with grader reasons so the agent sees
-    # them and can identify grader exploits or data issues.
-    print("\n── Per-Record Inspection (auto) ──", file=sys.stderr)
+    # ── Build topic lookup for per-topic analysis ──
+    # Eval results from the cloud don't include the "topic" field in row data.
+    # Build a mapping from record ID → topic using:
+    #   1. training.jsonl (if found near the eval file)
+    #   2. Record ID prefix as fallback (e.g., "hidden-fish-001-2293" → "hidden-fish")
+    topic_lookup: dict[str, str] = {}
+    training_file = eval_file.parent.parent / "training.jsonl"
+    if training_file.exists():
+        try:
+            with open(training_file) as tf:
+                for line in tf:
+                    line = line.strip()
+                    if line:
+                        rec = json.loads(line)
+                        rec_id = rec.get("id", "")
+                        rec_topic = rec.get("topic", "")
+                        if rec_id and rec_topic:
+                            topic_lookup[rec_id] = rec_topic
+            if topic_lookup:
+                print(f"  (Loaded {len(topic_lookup)} record→topic mappings from training.jsonl)", file=sys.stderr)
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    def _get_topic(row: dict) -> str:
+        """Get topic from row data, lookup table, or record ID prefix."""
+        topic = row.get("topic")
+        if topic:
+            return topic
+        rid = row.get("id", "")
+        if rid in topic_lookup:
+            return topic_lookup[rid]
+        # Fallback: extract topic from ID prefix (e.g., "hidden-fish-001-2293" → "hidden-fish")
+        # Pattern: topic-name-NNN-NNNN where last two parts are numeric
+        parts = rid.rsplit("-", 2)
+        if len(parts) >= 3 and parts[-1].isdigit() and parts[-2].isdigit():
+            return parts[0]
+        return "unknown"
 
     # Extract per-record scores — handle both flat (score field) and
     # nested (epochs dict) formats from the eval results.
+    # Built first (before printing) so signal density can be computed for summary.
     scored_records: list[tuple[int, dict, float, str]] = []
     for i, r in enumerate(results):
         row = r.get("row", {})
         rid = row.get("id", f"row-{i}")
-        topic = row.get("topic", "?")
+        topic = _get_topic(row)
 
         # Try flat score field first
         score = r.get("score")
@@ -2062,17 +2104,82 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
     bottom_records = sorted(scored_records, key=lambda x: x[2])
     top_records = sorted(scored_records, key=lambda x: x[2], reverse=True)
 
+    # ── SUMMARY (printed first — must not be truncated by output buffer) ──
+    # Compute signal density from scored_records
+    _trivial_frac = sum(1 for _, _, s, _ in scored_records if s > 0.90) / max(len(scored_records), 1)
+    _learnable_frac = sum(1 for _, _, s, _ in scored_records if 0.20 <= s <= 0.65) / max(len(scored_records), 1)
+    _dead_frac = sum(1 for _, _, s, _ in scored_records if s < 0.05) / max(len(scored_records), 1)
+    print(f"\n── READINESS SUMMARY (read this first) ──", file=sys.stderr)
+    print(f"  Verdict: {verdict} | avg={avg:.3f} | std={std:.3f} | zeros={zero_frac:.0%} | perfect={perfect_frac:.0%}", file=sys.stderr)
+    print(f"  Signal: trivial={_trivial_frac:.0%} | learnable={_learnable_frac:.0%} | dead={_dead_frac:.0%}", file=sys.stderr)
+    if hard_failed:
+        print(f"  ✗ HARD FAIL: {', '.join(hard_failed)} — fix before training", file=sys.stderr)
+    if avg < 0.05:
+        print(f"  ✗ CAPABILITY FAIL: model has no latent capability. Try larger model or SFT warmup.", file=sys.stderr)
+    elif avg > 0.75:
+        print(f"  ⚠ HEADROOM FAIL: avg > 0.75. Eval a smaller model.", file=sys.stderr)
+    elif _trivial_frac > 0.40 and _learnable_frac < 0.35:
+        print(f"  ⚠ SIGNAL DENSITY LOW: {_trivial_frac:.0%} trivial, {_learnable_frac:.0%} learnable.", file=sys.stderr)
+        print(f"    → Check grader → generate harder records → eval smaller model (in priority order)", file=sys.stderr)
+    else:
+        print(f"  ✓ Proceed to training.", file=sys.stderr)
+
+    # ── Per-Record Inspection (detail) ──
+    print(f"\n── Per-Record Inspection (detail) ──", file=sys.stderr)
     print("  Bottom 5 (lowest scores — check for grader bugs):", file=sys.stderr)
     for idx, row, score, reason in bottom_records[:5]:
-        topic = row.get("topic", "?")
+        topic = _get_topic(row)
         rid = row.get("id", f"row-{idx}")
         print(f"    [{rid}] topic={topic} score={score:.2f} reason: {reason[:120]}", file=sys.stderr)
 
     print("  Top 5 (highest scores — check for grader exploits):", file=sys.stderr)
     for idx, row, score, reason in top_records[:5]:
-        topic = row.get("topic", "?")
+        topic = _get_topic(row)
         rid = row.get("id", f"row-{idx}")
         print(f"    [{rid}] topic={topic} score={score:.2f} reason: {reason[:120]}", file=sys.stderr)
+
+    # ── Per-topic analysis (auto — catches dead zones BEFORE training) ──
+    # Groups scores by topic and flags topics where the model has no capability
+    # (avg < 0.05) or very weak capability (avg < 0.15). These topics will
+    # produce zero-variance groups in GRPO → zero gradient → no learning.
+    # Catching this here prevents wasting GPU time training on impossible topics.
+    # Research: arXiv:2504.03380 (gradient vanishes at p=0), arXiv:2602.14868.
+    topic_scores: dict[str, list[float]] = {}
+    for idx, row, score, reason in scored_records:
+        topic = _get_topic(row)
+        topic_scores.setdefault(topic, []).append(score)
+
+    if topic_scores:
+        print(f"\n── Per-Topic Analysis (auto) ──", file=sys.stderr)
+        dead_topics = []
+        weak_topics = []
+        strong_topics = []
+        for topic in sorted(topic_scores.keys()):
+            scores_list = topic_scores[topic]
+            t_avg = sum(scores_list) / len(scores_list)
+            t_perfect = sum(1 for s in scores_list if s >= 0.99) / len(scores_list)
+            if t_avg < 0.05:
+                dead_topics.append((topic, t_avg, len(scores_list)))
+                print(f"  ✗ {topic:35s} avg={t_avg:.3f} n={len(scores_list):3d}  DEAD ZONE — model has no capability", file=sys.stderr)
+            elif t_avg < 0.15:
+                weak_topics.append((topic, t_avg, len(scores_list)))
+                print(f"  ⚠ {topic:35s} avg={t_avg:.3f} n={len(scores_list):3d}  WEAK — marginal capability", file=sys.stderr)
+            elif t_avg > 0.85:
+                strong_topics.append((topic, t_avg, len(scores_list)))
+                print(f"  ● {topic:35s} avg={t_avg:.3f} n={len(scores_list):3d}  TRIVIAL — already solved", file=sys.stderr)
+            else:
+                print(f"  ✓ {topic:35s} avg={t_avg:.3f} n={len(scores_list):3d}  perfect={t_perfect:.0%}", file=sys.stderr)
+
+        if dead_topics:
+            print(f"\n  ⚠ {len(dead_topics)} DEAD ZONE topic(s) detected:", file=sys.stderr)
+            print(f"  GRPO CANNOT fix these — model lacks latent capability on these topics.", file=sys.stderr)
+            print(f"  Options:", file=sys.stderr)
+            print(f"    1. Add domain facts to the system prompt (converts knowledge→lookup task)", file=sys.stderr)
+            print(f"    2. Run targeted SFT on dead-zone records before GRPO (if pipeline supports SFT)", file=sys.stderr)
+            print(f"    3. Use a larger model that has the required knowledge", file=sys.stderr)
+            print(f"    4. Remove dead topics from training (they waste compute with zero gradient)", file=sys.stderr)
+        if weak_topics:
+            print(f"\n  ⚠ {len(weak_topics)} WEAK topic(s): training may work but expect slow convergence.", file=sys.stderr)
 
     # ── Source-part coverage audit (auto — agent doesn't need to remember) ──
     # Check if any source_parts are only covered by high-scoring records.
@@ -2103,12 +2210,27 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
         else:
             print(f"  ✓ All source parts have at least one hard record — no coverage gaps.", file=sys.stderr)
 
-    # ── Headroom check (auto — tells agent what to do next) ──
-    # Research: GRPO gradient ∝ p(1-p), peaks at p=0.5, zero at p=0 and p=1.
-    # Optimal zone: 0.30-0.70 (arXiv:2504.03380 Table 1).
-    # Lower bound: <0.05 = model has no latent capability (arXiv:2602.14868).
-    # Upper bound: >0.75 = near-zero gradient (arXiv:2508.14094).
-    print(f"\n── Headroom Check (auto) ──", file=sys.stderr)
+    # ── Headroom + Signal Density check (auto) ──
+    # Two dimensions matter for GRPO:
+    #   1. Headroom (avg score): is the model improvable? (arXiv:2504.03380)
+    #   2. Signal density (learnable fraction): how many records produce gradient?
+    #
+    # A bimodal distribution (e.g., 49% trivial at 0.96 + 51% hard at 0.20)
+    # can have avg=0.58 (looks optimal) but only 51% of records produce gradient.
+    # The avg alone is misleading — we need to check the distribution shape.
+    #
+    # Trivial fraction: records scoring > 0.90 (K=8 will likely all-pass → zero variance)
+    # Reuse signal density values computed in the summary section above
+    trivial_frac = _trivial_frac
+    learnable_frac = _learnable_frac
+    dead_frac = _dead_frac
+
+    print(f"\n── Headroom + Signal Density Check (detail) ──", file=sys.stderr)
+    print(f"  Avg score: {avg:.3f} | Trivial (>0.90): {trivial_frac:.0%} | Learnable (0.20-0.65): {learnable_frac:.0%} | Dead (<0.05): {dead_frac:.0%}", file=sys.stderr)
+
+    # Determine recommendation based on BOTH avg and distribution
+    recommend_smaller_model = False
+
     if avg < 0.05:
         print(f"  ✗ CAPABILITY GATE FAIL: avg={avg:.3f} (<0.05)", file=sys.stderr)
         print(f"  Model has no latent capability on this task — GRPO cannot create", file=sys.stderr)
@@ -2121,14 +2243,19 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
         print(f"  ⚠ HEADROOM GATE FAIL: avg={avg:.3f} (>0.80)", file=sys.stderr)
         print(f"  GRPO will produce near-zero improvement (arXiv:2508.14094: 3.7% learnable steps).", file=sys.stderr)
         print(f"  DO NOT proceed to training with this model.", file=sys.stderr)
-        print(f"  → Eval a smaller model (e.g., Qwen3.5-0.8B) to find better headroom.", file=sys.stderr)
-        print(f"  → But first check 0.8B scores >0.05 — if not, it lacks capability", file=sys.stderr)
-        print(f"    and distillation from 4B is the right path (arXiv:2501.12948 §4).", file=sys.stderr)
-        print(f"  → If 0.8B also scores >0.75: data/grader too easy — make grader stricter.", file=sys.stderr)
+        recommend_smaller_model = True
     elif avg > 0.75:
         print(f"  ⚠ HEADROOM WARNING: avg={avg:.3f} (0.75-0.80 range)", file=sys.stderr)
-        print(f"  GRPO efficiency reduced. Consider evaluating a smaller model for better headroom.", file=sys.stderr)
-        print(f"  → Eval Qwen3.5-0.8B to compare. If 0.8B scores 0.05-0.75, train 0.8B instead.", file=sys.stderr)
+        print(f"  GRPO efficiency reduced.", file=sys.stderr)
+        recommend_smaller_model = True
+    elif trivial_frac > 0.40 and learnable_frac < 0.35:
+        # Bimodal distribution: avg looks OK but too many trivial records.
+        # arXiv:2508.14094: easy prompts produce only 3.7% learnable steps.
+        # arXiv:2504.03380: 0.30-0.70 optimal range is per-prompt, not avg.
+        print(f"  ⚠ SIGNAL DENSITY WARNING: avg={avg:.3f} looks optimal but {trivial_frac:.0%} of", file=sys.stderr)
+        print(f"  records are trivial (>0.90) — only {learnable_frac:.0%} are in the learnable zone (0.20-0.65).", file=sys.stderr)
+        print(f"  Bimodal distribution: half trivial + half hard ≠ uniformly optimal.", file=sys.stderr)
+        recommend_smaller_model = True
     elif 0.30 <= avg <= 0.70:
         print(f"  ✓ Headroom OPTIMAL: avg={avg:.3f} (0.30-0.70 sweet spot).", file=sys.stderr)
         print(f"  Maximum GRPO gradient signal (arXiv:2504.03380). Proceed to training.", file=sys.stderr)
@@ -2138,6 +2265,22 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
         print(f"  if many prompts score 0.0, only a few are driving learning.", file=sys.stderr)
     else:
         print(f"  ✓ Headroom OK: avg={avg:.3f} (<0.75). Proceed to training.", file=sys.stderr)
+
+    if recommend_smaller_model:
+        print(f"  Actions (in priority order):", file=sys.stderr)
+        print(f"  → 1. scale_rewards=False is already set — trivial gradients are naturally", file=sys.stderr)
+        print(f"    down-weighted (Dr. GRPO arXiv:2503.20783). This is necessary but not sufficient.", file=sys.stderr)
+        print(f"  → 2. Check grader: is it too lenient? If trivials score >0.90 because the", file=sys.stderr)
+        print(f"    grader gives partial credit too generously, tighten it first.", file=sys.stderr)
+        print(f"  → 3. Generate harder variants of trivial records:", file=sys.stderr)
+        print(f"    finetune.py harden-records --eval-file <eval> --training-file training.jsonl", file=sys.stderr)
+        print(f"    Adds harder variants alongside originals (originals kept as anchors).", file=sys.stderr)
+        print(f"    Then re-upload + re-eval to verify trivial% decreased.", file=sys.stderr)
+        print(f"    (arXiv:2505.17063: +29.2% from generate-eval-rewrite approach).", file=sys.stderr)
+        print(f"  → 4. Eval a smaller model (e.g., Qwen3.5-0.8B) — fewer trivials,", file=sys.stderr)
+        print(f"    but risk: smaller model may lack domain knowledge. Check scores >0.05.", file=sys.stderr)
+        print(f"  → 5. Last resort: filter trivials (filter-records --min-score 0.75)", file=sys.stderr)
+        print(f"    — removes records the model already aces. Only if options 2-4 don't help.", file=sys.stderr)
 
     # ── Mandatory next steps prompt ──
     print(f"\n── NEXT STEPS (mandatory) ──", file=sys.stderr)
@@ -2149,11 +2292,11 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
         print(f"  1. Fix the failed checks listed above", file=sys.stderr)
         print(f"  2. Re-run eval", file=sys.stderr)
         print(f"  3. Re-run readiness-check", file=sys.stderr)
-    elif avg > 0.75:
-        print(f"  1. Log this eval: log-step --action headroom_diagnostic ...", file=sys.stderr)
-        print(f"  2. Eval smaller model: create-eval --model Qwen3.5-0.8B ...", file=sys.stderr)
-        print(f"  3. Check 0.8B scores >0.05 (capability floor) before training", file=sys.stderr)
-        print(f"  4. Compare headroom and choose training model", file=sys.stderr)
+    elif recommend_smaller_model:
+        print(f"  1. Log this eval: log-step --action signal_density_warning ...", file=sys.stderr)
+        print(f"  2. Follow the priority actions above (check grader → generate harder → eval smaller)", file=sys.stderr)
+        print(f"  3. If generating harder records: generate_records.py --append for weak topics", file=sys.stderr)
+        print(f"  4. If switching model: create-eval --model Qwen3.5-0.8B → compare learnable_frac", file=sys.stderr)
     else:
         print(f"  1. Log this eval: log-step + log-iteration", file=sys.stderr)
         print(f"  2. Run difficulty-probe on this eval", file=sys.stderr)
@@ -3102,12 +3245,32 @@ def cmd_create_training(args: argparse.Namespace) -> None:
     # Start with research-informed defaults, then merge user overrides.
     # This ensures lr, lora_rank, epochs, batch_size are always present
     # even when user only passes partial config (e.g., just max_output_tokens).
+    #
+    # Key defaults changed based on GRPO research:
+    #   lr: 5e-6 → 1e-6 — standard GRPO recommendation (DeepSeekMath arXiv:2402.03300,
+    #       DAPO arXiv:2503.14476, Dr. GRPO arXiv:2503.20783). Higher LR (5e-6)
+    #       causes faster policy drift → forgetting spiral (arXiv:2509.07430: 15%
+    #       forgetting rate with reverse-KL). 1e-6 slows drift enough to prevent
+    #       randomly-not-sampled correct answers from falling off the distribution.
+    #   beta: 0 → 0.01 — KL penalty prevents catastrophic forgetting by constraining
+    #       how far the policy drifts from the reference model (arXiv:2509.07430).
+    #       DeepSeekMath original used β=0.04; 0.01 is conservative.
+    #   epochs: 8 → 5 — reduced to prevent over-optimization forgetting. Adaptive
+    #       logic below may reduce further based on dataset size. arXiv:2505.22257:
+    #       "training beyond ~80% of one epoch yields negligible reward gains."
     payload["training_config"] = {
-        "learning_rate": 0.000005,  # 5e-6: between DeepSeek-R1's 3e-6 (arXiv:2501.12948) and gateway default 1e-5.
+        "learning_rate": 0.000001,  # 1e-6: standard GRPO LR (arXiv:2402.03300, arXiv:2503.14476)
         "lora_rank": 8,
         "gradient_accumulation_steps": 5,
-        "epochs": 8,  # Default; overridden below by adaptive logic
+        "epochs": 5,  # Default; overridden below by adaptive logic
         "batch_size": 5,
+        "beta": 0.01,  # KL penalty — prevents forgetting spiral (arXiv:2509.07430)
+        # New cloud-exposed params (commit 3707a41a):
+        # Unsloth Advanced RL docs: https://unsloth.ai/docs/get-started/reinforcement-learning-rl-guide/advanced-rl-documentation
+        "loss_type": "dr_grpo",  # Dr. GRPO (arXiv:2503.20783): removes length bias. TRL default is "dapo" but both are valid.
+        "mask_truncated_completions": False,  # Unsloth: "we recommend to disable it" — prevents kl=nan crash (Unsloth #3006)
+        "scale_rewards": "none",  # Unsloth+Dr.GRPO: "recommends not scaling to avoid difficulty bias from std scaling". Gateway expects string enum, not boolean.
+        "importance_sampling_level": "sequence",  # Unsloth: "GSPO shows sequence-level often gives more stable training"
     }
     if args.config:
         try:
@@ -3132,12 +3295,9 @@ def cmd_create_training(args: argparse.Namespace) -> None:
         pass  # Workflow fetch failed; skip adaptive logic
 
     # Model size pre-flight check.
-    # GRPO generates K completions per record per step. More records × larger K × bigger model = more VRAM.
-    # The cloud provider has fixed GPU allocations — 9B models OOM with larger datasets.
-    # Heuristic based on empirical testing:
-    #   - 9B: works reliably with <100 records (K=8). >150 records risks OOM.
-    #   - 4B: works reliably with <500 records (K=8). >800 records may need K=4.
-    #   - 1.5B/2B: works with any practical dataset size.
+    # Only 3 base models supported: Qwen3.5-0.8B, Qwen3.5-2B, Qwen3.5-4B.
+    # 4B with >800 records (K=8) may need K=4 to avoid OOM.
+    # 0.8B/2B: works with any practical dataset size.
     base_model = payload.get("base_model", "")
     model_lower = base_model.lower()
     k_count = 8  # default response_candidates_count
@@ -3147,30 +3307,25 @@ def cmd_create_training(args: argparse.Namespace) -> None:
         except (json.JSONDecodeError, AttributeError):
             pass
 
-    if record_count > 0:
-        if "9b" in model_lower and record_count > 100:
-            recommended = base_model.replace("9B", "4B").replace("9b", "4b")
-            print(f"  ⚠ WARNING: {base_model} with {record_count} records (K={k_count}) risks OOM.", file=sys.stderr)
-            print(f"    9B models work reliably with <100 records. You have {record_count}.", file=sys.stderr)
-            print(f"    Recommended: use {recommended} instead, or reduce response_candidates_count to 4.", file=sys.stderr)
-            print(f"    Proceeding anyway — if OOM occurs, retry with the smaller model.", file=sys.stderr)
-        elif "9b" in model_lower and k_count > 8:
-            print(f"  ⚠ WARNING: {base_model} with K={k_count} may OOM. Consider K=8 or use 4B model.", file=sys.stderr)
+    if record_count > 0 and "4b" in model_lower and record_count > 800:
+        print(f"  ⚠ WARNING: {base_model} with {record_count} records (K={k_count}) may risk OOM.", file=sys.stderr)
+        print(f"    Consider reducing to K=4 or using Qwen3.5-2B.", file=sys.stderr)
 
     # Adaptive epochs (unless user explicitly set epochs in --config)
-    # Small datasets exhaust quickly and need more passes; large datasets plateau earlier.
-    # Ref: DeepSeek-R1 (arXiv:2501.12948) used ~50k records with ~2 epochs;
-    #       empirical testing showed plateau at epoch 3 with 225 records.
+    # Reduced maximums to prevent forgetting spiral (arXiv:2509.07430).
+    # arXiv:2505.22257: "training beyond ~80% of one epoch yields negligible reward gains."
+    # arXiv:2506.02355: "training becomes unstable around 4 epochs."
+    # Small datasets still need more passes but capped at 8 (was 15).
     user_set_epochs = args.config and "epochs" in (args.config or "")
     if not user_set_epochs and record_count > 0:
         if record_count < 50:
-            payload["training_config"]["epochs"] = 15
-        elif record_count < 200:
             payload["training_config"]["epochs"] = 8
-        elif record_count < 500:
+        elif record_count < 200:
             payload["training_config"]["epochs"] = 5
-        else:
+        elif record_count < 500:
             payload["training_config"]["epochs"] = 3
+        else:
+            payload["training_config"]["epochs"] = 2
         print(f"Adaptive epochs: {payload['training_config']['epochs']} (based on {record_count} records)")
 
     if args.inference_params:
@@ -4434,11 +4589,24 @@ def cmd_update_part_relevance(args: argparse.Namespace) -> None:
     sources_list = sources_resp.get("knowledge_sources", [])
 
     total_updated = 0
+    def _normalize_source_name(name: object) -> str:
+        """Normalize source name for matching: lowercase, strip extension, strip path."""
+        import re
+        if not name or not isinstance(name, str):
+            return ""
+        name = name.strip().lower()
+        name = name.rsplit("/", 1)[-1]  # strip path
+        name = re.sub(r"\.(pdf|docx?|txt|md|html?)$", "", name)  # strip extension
+        return name
+
     for source_doc, labeled_parts in by_source.items():
-        # Find the gateway source by name match
+        # Find the gateway source by name match (fuzzy: case-insensitive, extension-stripped)
         ks_id = None
+        normalized_doc = _normalize_source_name(source_doc)
         for src in sources_list:
-            if src.get("name", "") == source_doc or src.get("reference_id", "") == source_doc:
+            src_name = _normalize_source_name(src.get("name", ""))
+            src_ref = _normalize_source_name(src.get("reference_id", ""))
+            if normalized_doc == src_name or normalized_doc == src_ref:
                 ks_id = src["id"]
                 break
 
@@ -4682,6 +4850,261 @@ def cmd_data_quality_gate(args: argparse.Namespace) -> None:
     sys.exit(result.returncode)
 
 
+def cmd_harden_records(args: argparse.Namespace) -> None:
+    """Rewrite trivial training records to be harder using LLM.
+
+    After base model eval, some records score too high (>0.85) — the model
+    already aces them, so they produce zero GRPO gradient. This command
+    rewrites the user message to require deeper reasoning while keeping
+    the same ground truth answer.
+
+    The hardening is domain-agnostic: the LLM reads the record, grader
+    reason, and score, then figures out what makes it easy and rewrites
+    it to be harder. Works for any task (allergen detection, contract
+    analysis, chess tactics, medical coding, etc.).
+
+    Research: arXiv:2505.17063 (Synthetic Data RL: generate-eval-rewrite
+    yields +29.2% improvement). arXiv:2603.24202 (iterative teacher-student
+    with pass-rate-conditional difficulty adjustment).
+
+    Usage:
+      finetune.py harden-records --eval-file eval-001.json \\
+        --training-file training.jsonl --min-score 0.85
+
+    Flow: eval → identify trivials → LLM rewrite → validate GT → output
+    """
+    import requests
+
+    eval_file = Path(args.eval_file)
+    training_file = Path(args.training_file)
+
+    if not eval_file.exists():
+        print(f"Error: Eval file not found: {eval_file}", file=sys.stderr)
+        sys.exit(1)
+    if not training_file.exists():
+        print(f"Error: Training file not found: {training_file}", file=sys.stderr)
+        sys.exit(1)
+
+    # Load eval results
+    eval_data = json.loads(eval_file.read_text())
+    results = eval_data.get("results", [])
+
+    # Build record_id → (score, reason) from eval
+    trivial_records: dict[str, dict] = {}
+    for r in results:
+        row = r.get("row", {})
+        rid = row.get("id", "")
+        if not rid:
+            continue
+
+        # Get score from epochs or output
+        score = None
+        reason = ""
+        epochs = r.get("epochs", {})
+        for ek in sorted(epochs.keys(), key=lambda x: float(x), reverse=True):
+            items = epochs[ek]
+            if isinstance(items, list) and items:
+                best = max(items, key=lambda x: x.get("score", 0))
+                score = best.get("score")
+                reason = best.get("reason", "")
+                break
+        if score is None:
+            out = r.get("output", {})
+            score = out.get("score")
+            reason = out.get("reason", "")
+
+        if score is not None and score >= args.min_score:
+            trivial_records[rid] = {"score": score, "reason": reason}
+
+    if not trivial_records:
+        print(f"No trivial records found (score >= {args.min_score}). Nothing to harden.")
+        sys.exit(0)
+
+    # Load training records
+    records = []
+    with open(training_file) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                records.append(json.loads(line))
+
+    total = len(records)
+    trivial_count = sum(1 for r in records if r.get("id", "") in trivial_records)
+    print(f"Records: {total} total, {trivial_count} trivial (score >= {args.min_score})")
+    print(f"Generating {trivial_count} harder variants (originals kept)...")
+
+    # Generate harder variants — ADD new records, don't replace originals.
+    # The originals stay in the dataset as anchors (arXiv:2603.24202: keeping
+    # some easy content prevents overfitting to hard tasks). The new harder
+    # variants dilute the trivial percentage and add learnable signal.
+    new_records: list[dict] = []
+    failed = 0
+    skipped = 0
+    gateway_url = args.base_url
+
+    for i, record in enumerate(records):
+        rid = record.get("id", "")
+        if rid not in trivial_records:
+            continue
+
+        info = trivial_records[rid]
+        messages = record.get("messages", [])
+        gt = record.get("ground_truth", "")
+
+        # Extract system + user messages
+        system_msg = ""
+        user_msg = ""
+        for m in messages:
+            if m.get("role") == "system":
+                system_msg = m.get("content", "")
+            elif m.get("role") == "user":
+                user_msg = m.get("content", "")
+
+        if not user_msg or not gt:
+            skipped += 1
+            continue
+
+        # LLM rewrite prompt — domain-agnostic
+        harden_prompt = (
+            f"You are creating a harder variant of a training record for an AI model.\n\n"
+            f"The model scored {info['score']:.2f} on this record — too easy (trivial).\n"
+            f"Grader analysis: {info['reason'][:200]}\n\n"
+            f"TASK CONTEXT (system prompt):\n{system_msg[:300]}\n\n"
+            f"CURRENT USER MESSAGE:\n{user_msg}\n\n"
+            f"GROUND TRUTH ANSWER: {gt}\n\n"
+            f"INSTRUCTIONS:\n"
+            f"1. Create a NEW, harder user message that tests the same skill\n"
+            f"2. The ground truth answer '{gt}' MUST still be correct for the new message\n"
+            f"3. Remove any shortcuts or explicit cues that make the answer obvious\n"
+            f"4. Require deeper reasoning, domain knowledge, or multi-step inference\n"
+            f"5. Keep the same format and style as the original\n"
+            f"6. Do NOT change the task — just make the same task harder\n\n"
+            f"Return ONLY the new user message, nothing else."
+        )
+
+        try:
+            resp = requests.post(
+                f"{gateway_url}/v1/chat/completions",
+                json={
+                    "model": "gpt-4.1-mini",
+                    "messages": [
+                        {"role": "system", "content": "You create harder variants of training questions while keeping the correct answer unchanged."},
+                        {"role": "user", "content": harden_prompt},
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 500,
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+            new_user_msg = resp.json()["choices"][0]["message"]["content"].strip()
+
+            if not new_user_msg or len(new_user_msg) < 10:
+                skipped += 1
+                continue
+
+            # GT validation: re-derive GT from hardened input to verify
+            # the rewrite didn't break the ground truth. If derived GT
+            # doesn't match original GT, discard this variant.
+            gt_valid = True
+            if gt and args.validate_gt:
+                try:
+                    gt_check_resp = requests.post(
+                        f"{gateway_url}/v1/chat/completions",
+                        json={
+                            "model": "gpt-4.1-mini",
+                            "messages": [
+                                {"role": "system", "content": system_msg},
+                                {"role": "user", "content": new_user_msg},
+                            ],
+                            "temperature": 0.0,
+                            "max_tokens": 200,
+                        },
+                        timeout=30,
+                    )
+                    gt_check_resp.raise_for_status()
+                    derived_gt = gt_check_resp.json()["choices"][0]["message"]["content"].strip().lower()
+                    original_gt = gt.strip().lower()
+
+                    # Normalize: sort comma-separated labels for comparison
+                    derived_labels = sorted(set(l.strip() for l in derived_gt.split(",") if l.strip()))
+                    original_labels = sorted(set(l.strip() for l in original_gt.split(",") if l.strip()))
+
+                    if derived_labels != original_labels:
+                        print(f"  ✗ GT mismatch for {rid}-hard: original={original_gt}, derived={derived_gt} — discarded", file=sys.stderr)
+                        gt_valid = False
+                        skipped += 1
+                except Exception:
+                    pass  # If validation fails, keep the record (conservative)
+
+            if not gt_valid:
+                continue
+
+            # Build new record as a variant (don't modify original)
+            new_record = {
+                "messages": [
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": new_user_msg},
+                ],
+                "id": f"{rid}-hard",
+                "topic": record.get("topic", ""),
+                "source_parts": record.get("source_parts", []),
+                "ground_truth": gt,
+                "hardened_from": rid,
+                "original_score": info["score"],
+            }
+            new_records.append(new_record)
+
+        except Exception as e:
+            print(f"  Warning: Failed to harden {rid}: {e}", file=sys.stderr)
+            failed += 1
+
+        # Progress
+        processed = len(new_records) + failed + skipped
+        if processed % 20 == 0:
+            print(f"  [{processed}/{trivial_count}] generated={len(new_records)}, failed={failed}, skipped={skipped}",
+                  file=sys.stderr)
+
+    # Append new records to output (originals + new harder variants)
+    output_file = Path(args.output) if args.output else training_file
+    all_records = records + new_records
+    with open(output_file, "w") as f:
+        for record in all_records:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+    new_total = len(all_records)
+    new_trivial_pct = trivial_count / new_total * 100 if new_total > 0 else 0
+    print(f"\nDone: {len(new_records)} harder variants added (originals kept)")
+    print(f"Dataset: {total} → {new_total} records")
+    print(f"Trivial%: {trivial_count / total * 100:.0f}% → ~{new_trivial_pct:.0f}% (before re-eval)")
+    print(f"Failed={failed}, skipped={skipped}")
+    print(f"Saved to {output_file}")
+    print(f"\nNext steps:")
+    print(f"  1. Re-upload records: finetune.py upload-records --workflow-id <wf> --file {output_file}")
+    print(f"  2. Re-eval: finetune.py create-eval --workflow-id <wf> --model <base-model>")
+    print(f"  3. Re-check readiness: finetune.py readiness-check --file <new-eval>")
+
+    # Auto-journal
+    _auto_journal(
+        project_dir=training_file.resolve().parent,
+        step="step_7c_harden",
+        action="harden_records",
+        status="completed",
+        summary=f"Added {len(new_records)} harder variants of {trivial_count} trivial records "
+                f"(score >= {args.min_score}). Dataset: {total} → {new_total}. "
+                f"Failed={failed}, skipped={skipped}. Re-upload and re-eval needed.",
+        results={
+            "total_records_before": total,
+            "total_records_after": new_total,
+            "trivial_count": trivial_count,
+            "hardened_added": len(new_records),
+            "failed": failed,
+            "skipped": skipped,
+            "min_score": args.min_score,
+        },
+    )
+
+
 def cmd_print_row_outputs(args: argparse.Namespace) -> None:
     """Print per-epoch rollout output + score + reason for one row."""
     result = _api(
@@ -4820,14 +5243,15 @@ def main() -> None:
     p.add_argument("--changes", required=True, help="What was changed in this iteration (free text)")
     p.add_argument("--change-type", required=True, choices=["baseline", "grader", "records", "both", "hyperparams"],
                    help="What type of change: baseline (first), grader, records, both, hyperparams")
-    p.add_argument("--verdict", required=True, choices=["PASS", "WARN", "FAIL"],
+    p.add_argument("--verdict", required=True, choices=["PASS", "WARN", "FAIL", "PENDING"],
                    help="Verdict: PASS (proceed), WARN (some issues), FAIL (must fix)")
 
     # filter-records
     p = subparsers.add_parser("filter-records", help="Remove bad records from JSONL and gateway based on eval results")
     p.add_argument("--file", required=True, help="Path to eval JSON file (e.g., evaluations/eval-001.json)")
     p.add_argument("--training-file", default=None, help="Path to training.jsonl (removes matching records from local file)")
-    p.add_argument("--max-score", type=float, default=None, help="Remove records with score <= this value (e.g., 0.0)")
+    p.add_argument("--max-score", type=float, default=None, help="Remove records with score <= this value (e.g., 0.0 to remove zeros)")
+    p.add_argument("--min-score", type=float, default=None, help="Remove records with score >= this value (e.g., 0.75 to remove trivials for signal density)")
     p.add_argument("--reason-pattern", default=None, help="Remove records whose reason contains this text (case-insensitive)")
     p.add_argument("--topic", default=None, help="Remove all records from this topic")
     p.add_argument("--workflow-id", default=None, help="Workflow ID (required with --sync-gateway)")
@@ -4966,6 +5390,22 @@ def main() -> None:
     p.add_argument("--output-json", action="store_true", help="Output JSON only")
     p.add_argument("--save", help="Save full report to file")
 
+    # harden-records
+    p = subparsers.add_parser(
+        "harden-records",
+        help="Generate harder variants of trivial records to improve GRPO signal density",
+    )
+    p.add_argument("--eval-file", required=True, help="Path to eval result JSON (identifies trivial records)")
+    p.add_argument("--training-file", required=True, help="Path to training.jsonl")
+    p.add_argument("--min-score", type=float, default=0.85,
+                   help="Score threshold for 'trivial' records (default: 0.85)")
+    p.add_argument("--output", default=None,
+                   help="Output file (default: overwrite training file with originals + harder variants)")
+    p.add_argument("--validate-gt", action="store_true", default=True,
+                   help="Validate GT by re-deriving from hardened input. Discards variants where GT doesn't match (default: True)")
+    p.add_argument("--no-validate-gt", dest="validate_gt", action="store_false",
+                   help="Skip GT validation (faster but risks incorrect records)")
+
     # print-row-outputs
     p = subparsers.add_parser(
         "print-row-outputs",
@@ -5009,6 +5449,7 @@ def main() -> None:
         "update-part-relevance": cmd_update_part_relevance,
         "difficulty-probe": cmd_difficulty_probe,
         "data-quality-gate": cmd_data_quality_gate,
+        "harden-records": cmd_harden_records,
         "print-row-outputs": cmd_print_row_outputs,
     }
     commands[args.command](args)

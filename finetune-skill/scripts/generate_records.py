@@ -112,7 +112,15 @@ def load_topics(topics_path: Path) -> list[dict]:
 
 def load_relations(relations_path: Path) -> list[dict]:
     data = json.loads(relations_path.read_text())
-    return data if isinstance(data, list) else data.get("relations", [])
+    relations = data if isinstance(data, list) else data.get("relations", [])
+    # Normalize key names: accept both topic_id/part_id and topic_identifier/part_identifier.
+    # Agents may generate either format depending on how they read the schema.
+    for r in relations:
+        if "topic_id" in r and "topic_identifier" not in r:
+            r["topic_identifier"] = r.pop("topic_id")
+        if "part_id" in r and "part_identifier" not in r:
+            r["part_identifier"] = r.pop("part_id")
+    return relations
 
 
 def load_all_parts(knowledge_dir: Path) -> dict[str, dict]:
