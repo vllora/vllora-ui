@@ -121,11 +121,55 @@ def split_large_chunk(text: str, max_chars: int) -> list[str]:
     return final if final else [text]
 
 
+def build_bbox_lookup(data: dict) -> dict[str, list[dict]]:
+    """Build a lookup from doc_item ref (e.g. '#/texts/2') to its prov bbox entries.
+
+    Returns: { ref_string: [{ page_no, bbox: {l, t, r, b, coord_origin} }] }
+    """
+    lookup: dict[str, list[dict]] = {}
+    documents = data.get("documents", [])
+    if isinstance(documents, dict):
+        documents = list(documents.values())
+    for doc in documents:
+        jc = doc.get("content", {}).get("json_content")
+        if not jc:
+            continue
+        if isinstance(jc, str):
+            jc = json.loads(jc)
+        for collection in ("texts", "tables", "pictures"):
+            for item in jc.get(collection, []):
+                ref = item.get("self_ref")
+                prov = item.get("prov")
+                if ref and prov:
+                    lookup[ref] = prov
+    return lookup
+
+
+def collect_bboxes(chunk: dict, bbox_lookup: dict[str, list[dict]]) -> list[dict]:
+    """Collect all bboxes for a chunk by resolving its doc_items refs."""
+    bboxes: list[dict] = []
+    for ref in chunk.get("doc_items", []):
+        for prov_entry in bbox_lookup.get(ref, []):
+            bbox = prov_entry.get("bbox")
+            page_no = prov_entry.get("page_no")
+            if bbox and page_no is not None:
+                bboxes.append({
+                    "page": page_no,
+                    "l": bbox.get("l", 0),
+                    "t": bbox.get("t", 0),
+                    "r": bbox.get("r", 0),
+                    "b": bbox.get("b", 0),
+                    "coord_origin": bbox.get("coord_origin", "BOTTOMLEFT"),
+                })
+    return bboxes
+
+
 def build_parts(
     chunks: list[dict],
     slug: str,
     min_chars: int,
     max_chars: int,
+    bbox_lookup: dict[str, list[dict]] | None = None,
 ) -> list[dict]:
     """Convert Docling chunks into knowledge parts."""
     raw_parts: list[dict] = []
@@ -143,6 +187,9 @@ def build_parts(
         pages = chunk.get("page_numbers", [])
         part_type = detect_type(chunk)
 
+        # Collect bboxes for this chunk (empty list if no docling data)
+        chunk_bboxes = collect_bboxes(chunk, bbox_lookup) if bbox_lookup else []
+
         # Split oversized chunks
         if len(text) > max_chars:
             segments = split_large_chunk(text, max_chars)
@@ -154,6 +201,7 @@ def build_parts(
                     "pages": pages,
                     "type": part_type,
                     "suffix": suffix,
+                    "bboxes": chunk_bboxes,
                 })
         else:
             raw_parts.append({
@@ -162,6 +210,7 @@ def build_parts(
                 "pages": pages,
                 "type": part_type,
                 "suffix": "",
+                "bboxes": chunk_bboxes,
             })
 
     # Merge undersized parts with neighbors
@@ -173,6 +222,7 @@ def build_parts(
                 **prev,
                 "text": f"{prev['text']}\n\n{part['text']}",
                 "pages": sorted(set(prev["pages"] + part["pages"])),
+                "bboxes": prev.get("bboxes", []) + part.get("bboxes", []),
             }
         else:
             merged.append(part)
@@ -191,6 +241,12 @@ def build_parts(
 
         extraction_path = f"{slug}/{heading_slug}" if heading else f"{slug}/section-{i + 1}"
 
+        # Build extraction_metadata with pages + bboxes (if available)
+        em: dict = {"pages": part["pages"]}
+        part_bboxes = part.get("bboxes", [])
+        if part_bboxes:
+            em["bboxes"] = part_bboxes
+
         parts.append({
             "id": part_id,
             "source_document": slug,
@@ -202,6 +258,7 @@ def build_parts(
             "type": part["type"],
             "title": heading or f"Section {i + 1}",
             "pages": part["pages"],
+            "extraction_metadata": em,
         })
 
     return parts
@@ -279,11 +336,15 @@ def main() -> None:
         ]
         print(f"Excluded {before - len(chunks)} chunks matching: {exclude}")
 
+    # Build bbox lookup from docling json_content (optional — not all PDFs use docling)
+    bbox_lookup = build_bbox_lookup(data) if data.get("documents") else None
+
     # Build parts
     parts = build_parts(
         chunks, args.slug,
         min_chars=args.min_part_size,
         max_chars=args.max_part_size,
+        bbox_lookup=bbox_lookup,
     )
 
     if not parts:

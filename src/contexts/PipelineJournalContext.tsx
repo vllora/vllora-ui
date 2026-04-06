@@ -17,6 +17,8 @@ import type { PipelineJournalEntry } from "@/types/pipeline-journal-types";
 
 export type PipelineJournalContextType = ReturnType<typeof usePipelineJournalLogic>;
 
+const POLL_INTERVAL_MS = 15_000;
+
 function usePipelineJournalLogic(workflowId: string | null) {
   const {
     data: journal,
@@ -30,6 +32,9 @@ function usePipelineJournalLogic(workflowId: string | null) {
     },
     {
       refreshDeps: [workflowId],
+      // Poll every 15s when the pipeline is actively running
+      pollingInterval: POLL_INTERVAL_MS,
+      pollingWhenHidden: false,
       onError: (err) => {
         toast.error(`Failed to load pipeline journal: ${err.message}`);
       },

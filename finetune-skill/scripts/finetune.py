@@ -136,11 +136,24 @@ def _extract_parts_array(data) -> list:
 
 
 def _transform_part(p: dict) -> dict:
-    """Transform a part: move 'id' to 'reference_id', remove 'source_id'."""
+    """Transform a part: move 'id' to 'reference_id', remove 'source_id',
+    ensure top-level 'pages' are copied into extraction_metadata."""
     part = {**p}
     if "id" in part:
         part["reference_id"] = part.pop("id")
     part.pop("source_id", None)
+
+    # Ensure pages are in extraction_metadata (UI reads from there)
+    top_pages = part.get("pages")
+    if top_pages and isinstance(top_pages, list) and len(top_pages) > 0:
+        em = part.get("extraction_metadata") or {}
+        if not isinstance(em, dict):
+            em = {}
+        existing = em.get("pages")
+        if not existing or (isinstance(existing, list) and len(existing) == 0):
+            em["pages"] = top_pages
+            part["extraction_metadata"] = em
+
     return part
 
 
@@ -542,6 +555,25 @@ def cmd_upload_records(args: argparse.Namespace) -> None:
 
     print(f"Records uploaded: {total_uploaded}")
 
+    # Auto-journal: include topic breakdown so the UI sees which topics are uploading
+    topic_counts: dict[str, int] = {}
+    for rec in records:
+        t = rec.get("topic", "unknown")
+        topic_counts[t] = topic_counts.get(t, 0) + 1
+    topic_summary = ", ".join(f"{t}={c}" for t, c in sorted(topic_counts.items())[:5])
+    if len(topic_counts) > 5:
+        topic_summary += f" (+{len(topic_counts) - 5} more)"
+
+    _auto_journal(
+        project_dir=records_path.resolve().parent,
+        step="step_4_records",
+        action="upload_records",
+        status="completed",
+        summary=f"Uploaded {total_uploaded} records. Topics: {topic_summary}",
+        results={"uploaded": total_uploaded, "topics": dict(topic_counts)},
+        workflow_id=args.workflow_id,
+    )
+
 
 def cmd_filter_records(args: argparse.Namespace) -> None:
     """Filter out bad records from local JSONL and gateway based on eval results.
@@ -673,6 +705,25 @@ def cmd_filter_records(args: argparse.Namespace) -> None:
         print("\nSample removed records:")
         for rid, reason in list(remove_reasons.items())[:10]:
             print(f"  {rid}: {reason}")
+
+    # Auto-journal: records filtered
+    _auto_journal(
+        project_dir=Path(args.training_file).resolve().parent if args.training_file else Path("finetune-project"),
+        step="step_8_filter",
+        action="filter_records",
+        status="completed",
+        summary=f"Filtered {len(remove_ids)} records"
+                + (f" (max_score<={args.max_score})" if args.max_score is not None else "")
+                + (f" (min_score>={args.min_score})" if getattr(args, "min_score", None) is not None else "")
+                + (f" (topic={args.topic})" if args.topic else "")
+                + f". Local: {local_removed} removed.",
+        results={
+            "removed_count": len(remove_ids),
+            "local_removed": local_removed,
+            "removed_by_topic": removed_topics if jsonl_path else {},
+        },
+        workflow_id=getattr(args, "workflow_id", None),
+    )
 
 
 def cmd_log_iteration(args: argparse.Namespace) -> None:
@@ -944,6 +995,7 @@ def _auto_journal(
     details: dict | None = None,
     triggered_by: int | None = None,
     workflow_id: str | None = None,
+    base_url: str | None = None,
 ) -> int:
     """Auto-log a pipeline step to both execution-log.md and pipeline-journal.json.
 
@@ -1070,11 +1122,15 @@ def _auto_journal(
                     pass
 
     if workflow_id:
+        gw_url = base_url or DEFAULT_BASE_URL
         try:
             import requests
-            requests.post(
-                f"http://localhost:9090/finetune/workflows/{workflow_id}/journal/entries",
-                json={"entries": [entry]},
+            # Full sync: PUT the entire local journal to gateway.
+            # This ensures local and gateway are always identical.
+            # The gateway expects pipeline_journal as a JSON string.
+            requests.put(
+                f"{gw_url}/finetune/workflows/{workflow_id}",
+                json={"pipeline_journal": json.dumps(journal)},
                 timeout=5,
             )
         except Exception:
@@ -1188,6 +1244,34 @@ def cmd_log_step(args: argparse.Namespace) -> None:
     with open(log_file, "a") as f:
         f.write(log_entry)
 
+    # Upload to gateway API (non-blocking — local file is source of truth)
+    wf_id = getattr(args, "workflow_id", None) or journal.get("workflow_id") or ""
+    if not wf_id:
+        for config_candidate in [
+            project_dir / "config.json",
+            project_dir.parent / "config.json",
+        ]:
+            if config_candidate.exists():
+                try:
+                    wf_id = json.loads(config_candidate.read_text()).get("workflow_id", "")
+                    if wf_id:
+                        break
+                except (json.JSONDecodeError, OSError):
+                    pass
+
+    if wf_id:
+        gw_url = getattr(args, "base_url", None) or DEFAULT_BASE_URL
+        try:
+            import requests
+            # Full sync: PUT the entire local journal to gateway
+            requests.put(
+                f"{gw_url}/finetune/workflows/{wf_id}",
+                json={"pipeline_journal": json.dumps(journal)},
+                timeout=5,
+            )
+        except Exception:
+            pass  # Non-fatal: local file already has the entry
+
     print(f"Journal entry #{next_id}: {args.action} ({args.status})")
     print(f"  Summary: {args.summary}")
     if args.reason:
@@ -1250,7 +1334,19 @@ def cmd_upload_grader(args: argparse.Namespace) -> None:
             f"{args.base_url}/finetune/workflows/{args.workflow_id}/evaluator",
             files=files,
         )
-    print(f"Grader uploaded: {grader_path.name}")
+    grader_size = grader_path.stat().st_size
+    print(f"Grader uploaded: {grader_path.name} ({grader_size} bytes)")
+
+    # Auto-journal: grader uploaded (timestamped at upload, not when agent logs)
+    _auto_journal(
+        project_dir=grader_path.resolve().parent,
+        step="step_5_grader",
+        action="upload_grader",
+        status="completed",
+        summary=f"Grader uploaded: {grader_path.name} ({grader_size} bytes). "
+                f"Dry-run: {'passed' if not getattr(args, 'skip_dry_run', False) else 'skipped'}.",
+        workflow_id=args.workflow_id,
+    )
 
 
 def cmd_verify(args: argparse.Namespace) -> None:
@@ -1302,10 +1398,36 @@ def cmd_verify(args: argparse.Namespace) -> None:
 
     conn.close()
 
+    # Build counts summary for journal
+    verify_counts = {}
+    for label, (query, params) in checks.items():
+        try:
+            verify_counts[label.lower()] = c.execute(query, params).fetchone()[0]
+        except sqlite3.OperationalError:
+            verify_counts[label.lower()] = 0
+
     if all_ok:
         print("\nAll checks passed. Ready for evaluation.")
+        _auto_journal(
+            project_dir=Path("finetune-project"),
+            step="step_6_verify",
+            action="verify_gateway",
+            status="completed",
+            summary=f"Gateway verified: {', '.join(f'{k}={v}' for k, v in verify_counts.items())}, evaluator={has_eval}. All checks passed.",
+            results=verify_counts,
+            workflow_id=wf_id,
+        )
     else:
         print("\nSome checks failed. Re-run the upload for missing items.", file=sys.stderr)
+        _auto_journal(
+            project_dir=Path("finetune-project"),
+            step="step_6_verify",
+            action="verify_gateway",
+            status="fail",
+            summary=f"Verify FAILED: {', '.join(f'{k}={v}' for k, v in verify_counts.items())}, evaluator={has_eval}.",
+            results=verify_counts,
+            workflow_id=wf_id,
+        )
         sys.exit(1)
 
 
@@ -4594,6 +4716,17 @@ def cmd_cancel_training(args: argparse.Namespace) -> None:
             job_file.write_text(json.dumps(metadata, indent=2))
             print(f"Updated local file: {job_file}")
 
+    _auto_journal(
+        project_dir=Path("finetune-project"),
+        step="step_7e_training",
+        action="cancel_training",
+        status="cancelled",
+        summary=f"Training cancelled: job {job_id}",
+        job_id=job_id,
+        job_type="training",
+        workflow_id=wf_id,
+    )
+
 
 def cmd_cancel_eval(args: argparse.Namespace) -> None:
     """Cancel a running evaluation.
@@ -4624,6 +4757,17 @@ def cmd_cancel_eval(args: argparse.Namespace) -> None:
             metadata["status"] = "cancelled"
             eval_file.write_text(json.dumps(metadata, indent=2))
             print(f"Updated local file: {eval_file}")
+
+    _auto_journal(
+        project_dir=Path("finetune-project"),
+        step="step_7_eval",
+        action="cancel_eval",
+        status="cancelled",
+        summary=f"Eval cancelled: {eval_id}",
+        job_id=eval_id,
+        job_type="eval",
+        workflow_id=wf_id,
+    )
 
 
 def cmd_sync_jobs(args: argparse.Namespace) -> None:

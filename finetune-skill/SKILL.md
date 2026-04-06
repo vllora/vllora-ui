@@ -272,6 +272,12 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
 
 Generate **200+ total records**, 15-25 per leaf topic.
 
+**Difficulty control** (reduces trivial records at generation time):
+- `--difficulty normal` (default): balanced prompt types for initial generation
+- `--difficulty hard`: Evol-Instruct operators — multi-step reasoning, indirect info, complex inputs, edge cases. Use when prior eval showed >40% trivial records.
+- `--difficulty adaptive --eval-scores evaluations/eval-001.json`: per-topic difficulty from eval scores — easy topics (>0.70) get hard mode, hard topics (<0.30) get normal mode.
+- `--probe-and-rewrite`: after generation, probes each record with Qwen3.5-4B (largest, conservative filter — if 4B aces it, trivial for all models). Rewrites trivials (>0.85) to be harder. Adds variants alongside originals. Override model with `--probe-model`. (arXiv:2505.17063: +2.6pp)
+
 **`--ground-truth-format` (MANDATORY for structured-output tasks):** Forces scenario-based prompts with specific answer format. Include BOTH the answer format AND the prompt format.
 
 **Multi-label GT completeness (critical for set-output tasks):** Use two-stage generation to prevent single-label suppression (arXiv:2505.17510):

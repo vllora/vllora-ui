@@ -42,7 +42,20 @@ from pathlib import Path
 # Weight determines the proportion of records allocated to each type.
 # Temperature varies per type to control creativity vs precision.
 # ---------------------------------------------------------------------------
-PROMPT_TYPES = [
+# ─────────────────────────────────────────────────────────────────────
+# Prompt types — normal and hard mode variants
+#
+# Normal mode: balanced mix for initial generation (unknown difficulty)
+# Hard mode: Evol-Instruct operators (arXiv:2304.12244) for generating
+#   harder records that target the learnable zone (0.20-0.65 pass rate).
+#   Reduces trivial records from ~60% to ~30% by:
+#   1. Adding constraints (2+ conditions per question)
+#   2. Requiring multi-step reasoning (not single fact recall)
+#   3. Using indirect/alias information (not explicit names)
+#   4. Increasing input complexity (more items, distractors)
+# ─────────────────────────────────────────────────────────────────────
+
+PROMPT_TYPES_NORMAL = [
     {
         "name": "explain",
         "weight": 0.25,
@@ -103,6 +116,63 @@ PROMPT_TYPES = [
         ),
     },
 ]
+
+PROMPT_TYPES_HARD = [
+    {
+        "name": "multi_step",
+        "weight": 0.30,
+        "temperature": 0.8,
+        "instruction": (
+            "Generate {n} user prompts that require MULTI-STEP REASONING. "
+            "Each question must require combining 2 or more rules, facts, or conditions "
+            "to arrive at the answer. The answer must NOT be obtainable from a single "
+            "fact lookup. Frame as: 'Given X and Y, what is the combined effect?', "
+            "'Does rule A still apply when condition B holds?', 'What changes when "
+            "both C and D are true?'. Use specific details, not abstract placeholders."
+        ),
+    },
+    {
+        "name": "indirect",
+        "weight": 0.25,
+        "temperature": 0.9,
+        "instruction": (
+            "Generate {n} user prompts that use INDIRECT or ALIAS information. "
+            "Do NOT use the obvious/common terms — use derived forms, trade names, "
+            "technical synonyms, or functional descriptions instead. The model must "
+            "know that the indirect term maps to the target concept. "
+            "Frame as realistic inputs where the indirect form appears naturally "
+            "(product labels, technical documents, recipes, specifications)."
+        ),
+    },
+    {
+        "name": "edge_case",
+        "weight": 0.25,
+        "temperature": 1.0,
+        "instruction": (
+            "Generate {n} user prompts covering EDGE CASES, EXCEPTIONS, and "
+            "BOUNDARY conditions. Target situations where a general rule breaks down "
+            "or where the answer is counterintuitive. Include: negation cases "
+            "('which does NOT apply?'), exemptions ('when is this rule overridden?'), "
+            "and confusable items ('is X actually a Y?'). These should be the hardest "
+            "questions that are still answerable from the source material."
+        ),
+    },
+    {
+        "name": "complex_input",
+        "weight": 0.20,
+        "temperature": 0.85,
+        "instruction": (
+            "Generate {n} user prompts with COMPLEX INPUTS containing many items, "
+            "distractors, and mixed signals. The input should have 10-20 items where "
+            "only some are relevant. Include red herrings (items that look relevant but "
+            "aren't) and buried targets (relevant items hidden among irrelevant ones). "
+            "The model must carefully parse the full input, not just spot the obvious items."
+        ),
+    },
+]
+
+# Default to normal mode; --difficulty flag switches to hard
+PROMPT_TYPES = PROMPT_TYPES_NORMAL
 
 
 def load_topics(topics_path: Path) -> list[dict]:
@@ -477,7 +547,7 @@ def compute_topic_record_counts(
 # Per-prompt-type distribution
 # ---------------------------------------------------------------------------
 
-def distribute_across_prompt_types(total: int) -> list[tuple[dict, int]]:
+def distribute_across_prompt_types(total: int, prompt_types: list[dict] | None = None) -> list[tuple[dict, int]]:
     """Distribute total records across prompt types by weight.
 
     Returns list of (prompt_type, count) with sum == total.
@@ -486,8 +556,9 @@ def distribute_across_prompt_types(total: int) -> list[tuple[dict, int]]:
     if total <= 0:
         return []
 
+    types_to_use = prompt_types if prompt_types is not None else PROMPT_TYPES
     # For very small counts, use fewer types to avoid many 1-item calls
-    active_types = PROMPT_TYPES if total >= 5 else PROMPT_TYPES[:max(2, total)]
+    active_types = types_to_use if total >= 5 else types_to_use[:max(2, total)]
 
     # Normalize weights for active types
     total_weight = sum(pt["weight"] for pt in active_types)
@@ -690,6 +761,7 @@ def generate_for_topic(
     rag_parts: list[dict] | None = None,
     workflow_id: str | None = None,
     enrich_sources: bool = False,
+    topic_prompt_types: list[dict] | None = None,
 ) -> list[dict]:
     """Generate records for a single leaf topic via multiple parallel LLM calls."""
     # Find parts linked to this topic
@@ -756,7 +828,7 @@ def generate_for_topic(
     # reliable than retry loops, with negligible extra cost at 1.2x.
     OVER_REQUEST_RATIO = 1.2
     request_count = math.ceil(records_per_topic * OVER_REQUEST_RATIO)
-    distribution = distribute_across_prompt_types(request_count)
+    distribution = distribute_across_prompt_types(request_count, prompt_types=topic_prompt_types)
 
     # Run all prompt-type calls in parallel (inner parallelism)
     all_items: list[tuple[str, list[dict]]] = []
@@ -982,6 +1054,17 @@ def main() -> None:
     parser.add_argument("--enrich-sources", action="store_true",
                         help="After generating each question, re-query the knowledge index with the question "
                              "text to enrich source_parts with question-specific matches (requires --workflow-id)")
+    parser.add_argument("--difficulty", choices=["normal", "hard", "adaptive"], default="normal",
+                        help="Difficulty mode for generation (default: normal). "
+                             "'hard': Evol-Instruct operators for harder records (arXiv:2304.12244). "
+                             "'adaptive': per-topic difficulty from --eval-scores (easy topics get hard mode).")
+    parser.add_argument("--probe-and-rewrite", action="store_true",
+                        help="After generation, run K=1 probe on base model and rewrite trivial records "
+                             "(score > 0.85) to be harder. Requires --workflow-id. (arXiv:2505.17063: +2.6pp)")
+    parser.add_argument("--probe-model", default=None,
+                        help="Base model for --probe-and-rewrite probing (default: Qwen3.5-4B). "
+                             "Defaults to 4B (largest) as conservative filter — if 4B aces a record, "
+                             "it's trivial for all models. Override with a specific model after Step 7b.")
     args = parser.parse_args()
 
     if args.upload_incremental and not args.workflow_id:
@@ -1006,6 +1089,26 @@ def main() -> None:
     if args.weight_by_difficulty and not args.eval_scores:
         print("Error: --eval-scores required with --weight-by-difficulty", file=sys.stderr)
         sys.exit(1)
+    if args.difficulty == "adaptive" and not args.eval_scores:
+        print("Error: --eval-scores required with --difficulty adaptive", file=sys.stderr)
+        sys.exit(1)
+    if args.probe_and_rewrite and not args.workflow_id:
+        print("Error: --workflow-id required with --probe-and-rewrite", file=sys.stderr)
+        sys.exit(1)
+
+    # Apply difficulty mode globally
+    # Priority 1: --difficulty flag controls prompt type selection
+    global PROMPT_TYPES
+    if args.difficulty == "hard":
+        PROMPT_TYPES = PROMPT_TYPES_HARD
+        print(f"Difficulty mode: HARD (Evol-Instruct operators, targeting learnable zone 0.20-0.65)")
+    elif args.difficulty == "adaptive":
+        # Will be applied per-topic below — default to normal, override per topic
+        PROMPT_TYPES = PROMPT_TYPES_NORMAL
+        print(f"Difficulty mode: ADAPTIVE (per-topic based on eval scores)")
+    else:
+        PROMPT_TYPES = PROMPT_TYPES_NORMAL
+        print(f"Difficulty mode: NORMAL")
 
     topics_path = Path(args.topics)
     relations_path = Path(args.relations) if args.relations else None
@@ -1182,6 +1285,31 @@ def main() -> None:
     if args.enrich_sources:
         common_kwargs["enrich_sources"] = True
 
+    # Priority 3: Per-topic difficulty targeting (adaptive mode)
+    # Easy topics (base model >0.70) get hard-mode prompts;
+    # hard topics (base model <0.30) get normal prompts;
+    # medium topics get normal with higher edge_case weight.
+    topic_difficulty_modes: dict[str, list[dict]] = {}
+    if args.difficulty == "adaptive" and eval_scores:
+        for leaf in leaves:
+            tid = leaf["id"]
+            score = eval_scores.get(tid, 0.5)
+            if score > 0.70:
+                topic_difficulty_modes[tid] = PROMPT_TYPES_HARD
+                print(f"  {tid}: HARD mode (base score={score:.2f} > 0.70)")
+            elif score < 0.30:
+                topic_difficulty_modes[tid] = PROMPT_TYPES_NORMAL
+                print(f"  {tid}: NORMAL mode (base score={score:.2f} < 0.30)")
+            else:
+                topic_difficulty_modes[tid] = PROMPT_TYPES_NORMAL
+                print(f"  {tid}: NORMAL mode (base score={score:.2f})")
+
+    # Pass per-topic prompt types into common_kwargs for generate_for_topic
+    def _get_topic_prompt_types(topic_id: str) -> list[dict] | None:
+        if args.difficulty == "adaptive" and topic_id in topic_difficulty_modes:
+            return topic_difficulty_modes[topic_id]
+        return None  # Use global PROMPT_TYPES
+
     if parallel <= 1:
         # Sequential mode (inner parallelism still active)
         for i, topic, ancestors, rpt in tasks:
@@ -1196,7 +1324,9 @@ def main() -> None:
 
             records = generate_for_topic(
                 topic=topic, ancestors=ancestors, records_per_topic=rpt,
-                rag_parts=topic_rag_parts, **common_kwargs,
+                rag_parts=topic_rag_parts,
+                topic_prompt_types=_get_topic_prompt_types(topic["id"]),
+                **common_kwargs,
             )
             if not records:
                 failed_topics.append(topic["id"])
@@ -1220,7 +1350,9 @@ def main() -> None:
             topic_rag_parts = _get_rag_parts(topic, ancestors)
             records = generate_for_topic(
                 topic=topic, ancestors=ancestors, records_per_topic=rpt,
-                rag_parts=topic_rag_parts, **common_kwargs,
+                rag_parts=topic_rag_parts,
+                topic_prompt_types=_get_topic_prompt_types(topic["id"]),
+                **common_kwargs,
             )
             return (idx, topic["id"], path_display, rpt, records)
 
@@ -1297,8 +1429,128 @@ def main() -> None:
             print(f"  - {t}")
         print("Re-run with --append to retry failed topics.")
         sys.exit(1)
-    else:
-        print(f"\nAll {len(leaves)} topics generated successfully!")
+
+    # Priority 2: Probe-and-rewrite — quick K=1 check + rewrite trivials before upload
+    # This is the pre-eval version of harden-records (arXiv:2505.17063: +2.6pp).
+    # Runs the base model on each record, rewrites those scoring >0.85.
+    if args.probe_and_rewrite and total_records > 0:
+        import requests as req_lib
+
+        print(f"\n── Probe-and-Rewrite (--probe-and-rewrite) ──")
+        print(f"Probing {total_records} records with base model (K=1)...")
+
+        # Load all generated records
+        all_records = []
+        with open(output_path) as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    all_records.append(json.loads(line))
+
+        trivials = []
+        for rec in all_records:
+            messages = rec.get("messages", [])
+            gt = rec.get("ground_truth", "")
+            if not messages or not gt:
+                continue
+
+            # Quick K=1 probe: send to base model, score with grader
+            system_msg = ""
+            user_msg = ""
+            for m in messages:
+                if m.get("role") == "system":
+                    system_msg = m.get("content", "")
+                elif m.get("role") == "user":
+                    user_msg = m.get("content", "")
+
+            try:
+                # Get base model response
+                probe_resp = req_lib.post(
+                    f"{args.base_url}/v1/chat/completions",
+                    json={
+                        "model": getattr(args, "probe_model", None) or "Qwen3.5-4B",
+                        "messages": [{"role": "system", "content": system_msg}, {"role": "user", "content": user_msg}],
+                        "temperature": 0.0,
+                        "max_tokens": 200,
+                    },
+                    timeout=30,
+                )
+                probe_resp.raise_for_status()
+                model_output = probe_resp.json()["choices"][0]["message"]["content"].strip()
+
+                # Score through grader
+                score_resp = req_lib.post(
+                    f"{args.base_url}/finetune/workflows/{args.workflow_id}/evaluate",
+                    json={"row": {
+                        "messages": messages + [{"role": "assistant", "content": model_output}],
+                        "ground_truth": gt,
+                    }},
+                    timeout=30,
+                )
+                score_resp.raise_for_status()
+                score_data = score_resp.json()
+                score = score_data.get("score", score_data.get("result", {}).get("score", 0))
+
+                if score is not None and score > 0.85:
+                    trivials.append(rec)
+            except Exception:
+                continue
+
+        print(f"  Probed: {len(all_records)} records, {len(trivials)} trivial (>{0.85})")
+
+        if trivials:
+            print(f"  Rewriting {len(trivials)} trivial records to be harder...")
+            rewritten = 0
+            for rec in trivials:
+                user_msg = ""
+                system_msg = ""
+                for m in rec.get("messages", []):
+                    if m.get("role") == "user":
+                        user_msg = m.get("content", "")
+                    elif m.get("role") == "system":
+                        system_msg = m.get("content", "")
+
+                gt = rec.get("ground_truth", "")
+                try:
+                    rewrite_resp = req_lib.post(
+                        f"{args.base_url}/v1/chat/completions",
+                        json={
+                            "model": "gpt-4.1-mini",
+                            "messages": [
+                                {"role": "system", "content": "Create a harder variant of this question. Keep the same correct answer but make the question require deeper reasoning or indirect knowledge."},
+                                {"role": "user", "content": f"Question: {user_msg}\nCorrect answer: {gt}\n\nCreate a harder variant. Return ONLY the new question."},
+                            ],
+                            "temperature": 0.7,
+                            "max_tokens": 500,
+                        },
+                        timeout=30,
+                    )
+                    rewrite_resp.raise_for_status()
+                    new_user_msg = rewrite_resp.json()["choices"][0]["message"]["content"].strip()
+                    if new_user_msg and len(new_user_msg) > 10:
+                        # Add as new variant (keep original)
+                        new_rec = {
+                            "messages": [{"role": "system", "content": system_msg}, {"role": "user", "content": new_user_msg}],
+                            "id": f"{rec.get('id', 'unknown')}-hard",
+                            "topic": rec.get("topic", ""),
+                            "source_parts": rec.get("source_parts", []),
+                            "ground_truth": gt,
+                            "hardened_from": rec.get("id", ""),
+                        }
+                        all_records.append(new_rec)
+                        rewritten += 1
+                except Exception:
+                    continue
+
+            # Write back with harder variants added
+            with open(output_path, "w") as f:
+                for rec in all_records:
+                    f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+            print(f"  Added {rewritten} harder variants. Total: {len(all_records)} records.")
+            print(f"  Trivial%: ~{len(trivials) / len(all_records) * 100:.0f}% → ~{len(trivials) / len(all_records) * 100 * len(trivials) / (len(trivials) + rewritten):.0f}% (estimated)")
+
+    print(f"\nAll {len(leaves)} topics generated successfully!")
 
 
 if __name__ == "__main__":

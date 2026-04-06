@@ -15,8 +15,9 @@
  */
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { FileText, Tags, ChevronRight, ChevronLeft, ArrowLeft, Search, Eye, BookOpen, Filter } from "lucide-react";
+import { FileText, Tags, ChevronRight, ChevronLeft, ArrowLeft, Search, Eye } from "lucide-react";
 import { extractPageRange, formatExtractionPath, countByRelevance } from "@/utils/knowledge-utils";
+import { PdfHighlightViewer } from "./PdfHighlightViewer";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
@@ -604,6 +605,8 @@ function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSour
   const [selectedPartId, setSelectedPartId] = useState<string | null>(focusPartId ?? null);
   const [searchQuery, setSearchQuery] = useState("");
   const [relevanceFilter, setRelevanceFilter] = useState<RelevanceFilter>("all");
+  const [showPdf, setShowPdf] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const outlineRef = useRef<HTMLDivElement>(null);
   const { dataset, records } = DatasetDetailConsumer();
 
@@ -699,12 +702,6 @@ function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSour
     };
   }, [linkedTopics, records]);
 
-  /** Get a 2-line preview snippet from the part content */
-  const getPreview = (part: KnowledgeSourcePart): string => {
-    const text = (part.content || "").replace(/\n+/g, " ").trim();
-    return text.length > 120 ? text.slice(0, 120) + "..." : text;
-  };
-
   const formatChars = (chars: number) =>
     chars >= 1000 ? `${(chars / 1000).toFixed(1)}K` : `${chars}`;
 
@@ -713,79 +710,61 @@ function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSour
       <div className="flex-1 grid grid-cols-2 overflow-hidden">
         {/* Left: Compact header + search + TOC with previews */}
         <div className="border-r border-border/50 flex flex-col overflow-hidden">
-          {/* Compact doc header with topic chips */}
-          <div className="shrink-0 px-4 py-3 border-b border-border/50">
+          {/* Header: doc name + stats */}
+          <div className="shrink-0 px-4 py-2.5 border-b border-border/50">
             <div className="flex items-center gap-2">
-              <FileText className="w-4 h-4 text-muted-foreground/50 shrink-0" />
               <div className="flex-1 min-w-0">
                 <h3 className="text-[13px] font-semibold text-foreground truncate">
                   {source.description || source.name}
                 </h3>
-                <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground/50">
+                <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground/40">
                   <span>{source.parts.length} parts</span>
                   <span>{formatChars(totalChars)} chars</span>
+                  {topicCoverage.length > 0 && <span>{topicCoverage.length} topics linked</span>}
+                  {relevanceCounts.relevant > 0 && <span>{relevanceCounts.relevant} relevant</span>}
                 </div>
               </div>
               <a
                 href={knowledgeSourceService.getFileUrl(source.workflowId, source.id)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/30 transition-colors shrink-0"
+                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/30 transition-colors shrink-0"
                 title="View original PDF"
               >
                 <Eye className="w-3 h-3" />
-                View PDF
+                PDF
               </a>
             </div>
-            {topicCoverage.length > 0 && (
-              <TopicCoverageChips topics={topicCoverage} />
-            )}
           </div>
 
-          {/* Search bar + relevance filter */}
-          <div className="shrink-0 px-3 py-2 border-b border-border/50 space-y-1.5">
-            <div className="relative">
+          {/* Search + filter row */}
+          <div className="shrink-0 px-3 py-1.5 border-b border-border/50 flex items-center gap-2">
+            <div className="relative flex-1">
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground/40" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search parts..."
-                className="w-full pl-7 pr-2 py-1.5 text-[11px] bg-background border border-border/50 rounded-md text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-[rgb(var(--theme-500))]"
+                className="w-full pl-7 pr-2 py-1 text-[11px] bg-background border border-border/50 rounded-md text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-[rgb(var(--theme-500))]"
               />
             </div>
-            {/* Relevance filter */}
-            <div className="flex items-center gap-0.5 p-0.5 rounded-md bg-muted/30">
-              <button
-                onClick={() => setRelevanceFilter("all")}
-                className={cn(
-                  "flex-1 px-2 py-0.5 rounded text-[10px] transition-colors text-center",
-                  relevanceFilter === "all" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground/60 hover:text-foreground",
-                )}
-              >
-                All ({source.parts.length})
-              </button>
-              <button
-                onClick={() => setRelevanceFilter("relevant")}
-                className={cn(
-                  "flex-1 px-2 py-0.5 rounded text-[10px] transition-colors text-center",
-                  relevanceFilter === "relevant" ? "bg-background text-emerald-400 shadow-sm" : "text-muted-foreground/60 hover:text-foreground",
-                )}
-              >
-                <BookOpen className="w-2.5 h-2.5 inline mr-0.5" />
-                Relevant ({relevanceCounts.relevant})
-              </button>
-              <button
-                onClick={() => setRelevanceFilter("excluded")}
-                className={cn(
-                  "flex-1 px-2 py-0.5 rounded text-[10px] transition-colors text-center",
-                  relevanceFilter === "excluded" ? "bg-background text-muted-foreground shadow-sm" : "text-muted-foreground/60 hover:text-foreground",
-                )}
-              >
-                <Filter className="w-2.5 h-2.5 inline mr-0.5" />
-                Excluded ({relevanceCounts.excluded})
-              </button>
-            </div>
+            {(relevanceCounts.relevant > 0 || relevanceCounts.excluded > 0) && (
+              <div className="flex items-center gap-0.5 shrink-0">
+                {(["all", "relevant", "excluded"] as const).map(f => (
+                  <button
+                    key={f}
+                    onClick={() => setRelevanceFilter(f)}
+                    className={cn(
+                      "px-1.5 py-0.5 rounded text-[9px] transition-colors capitalize",
+                      relevanceFilter === f ? "bg-muted text-foreground" : "text-muted-foreground/40 hover:text-muted-foreground",
+                    )}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* TOC list with previews + topic chips */}
@@ -794,17 +773,45 @@ function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSour
               partGroups.map(group => {
                 const visibleParts = group.parts.filter(matchesPart);
                 if (visibleParts.length === 0) return null;
+                const isCollapsed = collapsedSections.has(group.path);
+                const isSinglePart = visibleParts.length === 1;
+
+                // Skip section header when it only contains 1 part (header = duplicate of title)
+                if (isSinglePart) {
+                  const part = visibleParts[0];
+                  const globalIdx = source.parts.indexOf(part);
+                  return (
+                    <TocItem
+                      key={part.id}
+                      part={part}
+                      index={globalIdx}
+                      isSelected={selectedPart?.id === part.id}
+                      onSelect={setSelectedPartId}
+                      formatChars={formatChars}
+                    />
+                  );
+                }
+
                 return (
                   <div key={group.path}>
-                    <div className="px-4 py-1.5 mt-1 flex items-center gap-1.5">
-                      <span className="text-[10px] font-semibold tracking-wide text-muted-foreground/40">
+                    <button
+                      type="button"
+                      onClick={() => setCollapsedSections(prev => {
+                        const next = new Set(prev);
+                        if (next.has(group.path)) next.delete(group.path);
+                        else next.add(group.path);
+                        return next;
+                      })}
+                      className="w-full px-4 py-1.5 mt-0.5 flex items-center gap-1 hover:bg-muted/20 transition-colors"
+                    >
+                      <ChevronRight className={cn("w-3 h-3 text-muted-foreground/30 transition-transform shrink-0", !isCollapsed && "rotate-90")} />
+                      <span className="text-[10px] font-semibold tracking-wide text-muted-foreground/40 truncate">
                         {group.displayPath}
                       </span>
-                      <span className="text-[9px] text-muted-foreground/20 tabular-nums">{visibleParts.length}</span>
-                    </div>
-                    {visibleParts.map((part) => {
+                      <span className="text-[9px] text-muted-foreground/20 tabular-nums shrink-0">{visibleParts.length}</span>
+                    </button>
+                    {!isCollapsed && visibleParts.map((part) => {
                       const globalIdx = source.parts.indexOf(part);
-                      const topics = partTopicNames.get(part.id);
                       return (
                         <TocItem
                           key={part.id}
@@ -812,9 +819,8 @@ function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSour
                           index={globalIdx}
                           isSelected={selectedPart?.id === part.id}
                           onSelect={setSelectedPartId}
-                          preview={getPreview(part)}
-                          topics={topics}
                           formatChars={formatChars}
+                          isNested
                         />
                       );
                     })}
@@ -823,7 +829,6 @@ function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSour
               })
             ) : (
               source.parts.filter(matchesPart).map((part, idx) => {
-                const topics = partTopicNames.get(part.id);
                 return (
                   <TocItem
                     key={part.id}
@@ -831,8 +836,6 @@ function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSour
                     index={idx}
                     isSelected={selectedPart?.id === part.id}
                     onSelect={setSelectedPartId}
-                    preview={getPreview(part)}
-                    topics={topics}
                     formatChars={formatChars}
                   />
                 );
@@ -849,17 +852,26 @@ function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSour
         {/* Right: Reader panel */}
         <div className="overflow-y-auto bg-muted/20 flex flex-col">
           {selectedPart ? (
-            <PartViewer
-              part={selectedPart}
-              sourceName={source.name}
-              currentIndex={currentIndex}
-              totalParts={source.parts.length}
-              onNavigate={navigatePart}
-              linkedTopics={linkedTopics}
-              linkedRecordsCount={linkedRecordsStats.count}
-              linkedAvgScore={linkedRecordsStats.avgScore}
-              linkedRecords={linkedRecordsStats.records}
-            />
+            showPdf ? (
+              <PdfHighlightViewer
+                fileUrl={knowledgeSourceService.getFileUrl(source.workflowId, source.id)}
+                part={selectedPart}
+                onBack={() => setShowPdf(false)}
+              />
+            ) : (
+              <PartViewer
+                part={selectedPart}
+                sourceName={source.name}
+                currentIndex={currentIndex}
+                totalParts={source.parts.length}
+                onNavigate={navigatePart}
+                linkedTopics={linkedTopics}
+                linkedRecordsCount={linkedRecordsStats.count}
+                linkedAvgScore={linkedRecordsStats.avgScore}
+                linkedRecords={linkedRecordsStats.records}
+                onShowPdf={() => setShowPdf(true)}
+              />
+            )
           ) : (
             <div className="flex-1 flex items-center justify-center p-8 text-muted-foreground text-xs">
               Select a part to view
@@ -878,17 +890,15 @@ function TocItem({
   index,
   isSelected,
   onSelect,
-  preview,
-  topics,
   formatChars,
+  isNested = false,
 }: {
   readonly part: KnowledgeSourcePart;
   readonly index: number;
   readonly isSelected: boolean;
   readonly onSelect: (id: string) => void;
-  readonly preview: string;
-  readonly topics?: string[];
   readonly formatChars: (c: number) => string;
+  readonly isNested?: boolean;
 }) {
   const pageRange = extractPageRange(part);
   const isExcluded = part.relevant === false;
@@ -899,7 +909,8 @@ function TocItem({
       data-part-id={part.id}
       onClick={() => onSelect(part.id)}
       className={cn(
-        "w-full text-left px-4 py-2 transition-colors border-l-2",
+        "w-full text-left py-2 transition-colors border-l-2",
+        isNested ? "pl-8 pr-4" : "px-4",
         isSelected
           ? "border-l-[rgb(var(--theme-500))] bg-[rgba(var(--theme-500),0.05)]"
           : "border-l-transparent hover:bg-muted/20",
@@ -907,11 +918,8 @@ function TocItem({
       )}
     >
       {/* Title row */}
-      <div className="flex items-center gap-2">
-        {/* Relevance dot */}
-        {part.relevant === true && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />}
-        {part.relevant === false && <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30 shrink-0" />}
-        <span className="text-[9px] text-muted-foreground/30 w-4 shrink-0 font-medium tabular-nums text-right">{index + 1}</span>
+      <div className="flex items-center gap-1.5">
+        <span className="text-[9px] text-muted-foreground/25 w-4 shrink-0 font-medium tabular-nums text-right">{index + 1}</span>
         <span className={cn("flex-1 text-[11px] font-medium truncate", isSelected ? "text-[rgb(var(--theme-500))]" : "text-foreground/80")}>
           {part.title || `Part ${index + 1}`}
         </span>
@@ -922,80 +930,14 @@ function TocItem({
           <span className="text-[8px] px-1 py-px rounded bg-purple-500/10 text-purple-400 font-semibold uppercase tracking-wider shrink-0">image</span>
         )}
         {pageRange && (
-          <span className="text-[9px] px-1 py-px rounded bg-blue-500/10 text-blue-400/80 shrink-0 tabular-nums font-medium">{pageRange}</span>
+          <span className="text-[9px] text-muted-foreground/30 shrink-0 tabular-nums">{pageRange}</span>
         )}
-        <span className="text-[9px] text-muted-foreground/25 shrink-0 tabular-nums">{formatChars(part.content?.length ?? 0)}</span>
+        <span className="text-[9px] text-muted-foreground/20 shrink-0 tabular-nums">{formatChars(part.content?.length ?? 0)}</span>
       </div>
-      {/* Preview snippet */}
-      <p className="text-[10px] text-muted-foreground/40 leading-snug mt-1 pl-7 line-clamp-2">
-        {preview}
-      </p>
-      {/* Topic chips */}
-      {topics && topics.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-1.5 pl-7">
-          {topics.map(t => (
-            <span key={t} className="inline-flex items-center px-2 py-0.5 rounded-[10px] bg-[rgba(var(--theme-500),0.1)] text-[9px] font-medium text-[rgb(var(--theme-500))]">
-              {t}
-            </span>
-          ))}
-        </div>
-      )}
     </button>
   );
 }
 
-
-// ─── Topic Coverage Chips ───
-
-function TopicCoverageChips({ topics }: { readonly topics: Array<{ topicName: string; partCount: number; totalParts: number }> }) {
-  const [expanded, setExpanded] = useState(false);
-  const MAX_VISIBLE = 5;
-  const visible = expanded ? topics : topics.slice(0, MAX_VISIBLE);
-  const overflow = topics.length - MAX_VISIBLE;
-
-  return (
-    <TooltipProvider delayDuration={200}>
-      <div className="flex flex-wrap gap-1 mt-2">
-        {visible.map(({ topicName, partCount, totalParts }) => {
-          const pct = totalParts > 0 ? Math.round((partCount / totalParts) * 100) : 0;
-          return (
-            <Tooltip key={topicName}>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={() => {
-                    window.dispatchEvent(new CustomEvent("vllora_navigate_to_job", {
-                      detail: { jobId: topicName, type: "topic" },
-                    }));
-                  }}
-                  className="inline-flex items-center px-2 py-0.5 rounded-[10px] bg-[rgba(var(--theme-500),0.1)] text-[9px] font-medium text-[rgb(var(--theme-500))] hover:bg-[rgba(var(--theme-500),0.2)] transition-colors cursor-pointer"
-                >
-                  {topicName}
-                  <span className="ml-1 opacity-50">({partCount})</span>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="max-w-[240px]">
-                <p className="text-[11px]">
-                  <span className="font-semibold">{topicName}</span> — {partCount} of {totalParts} parts
-                  in this document are linked to this topic ({pct}% coverage).
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          );
-        })}
-        {overflow > 0 && (
-          <button
-            type="button"
-            onClick={() => setExpanded(!expanded)}
-            className="inline-flex items-center px-2 py-0.5 rounded-[10px] bg-muted/30 text-[9px] font-medium text-muted-foreground hover:bg-muted/50 transition-colors"
-          >
-            {expanded ? "Show less" : `+${overflow} more`}
-          </button>
-        )}
-      </div>
-    </TooltipProvider>
-  );
-}
 
 
 
@@ -1045,6 +987,8 @@ function preparePartContent(part: KnowledgeSourcePart): string {
   return [preamble, header, separator, tableRows].filter(Boolean).join("\n");
 }
 
+// ─── Part Viewer ───
+
 function PartViewer({
   part,
   sourceName,
@@ -1055,6 +999,7 @@ function PartViewer({
   linkedRecordsCount,
   linkedAvgScore,
   linkedRecords = [],
+  onShowPdf,
 }: {
   readonly part: KnowledgeSourcePart;
   readonly sourceName: string;
@@ -1065,6 +1010,7 @@ function PartViewer({
   readonly linkedRecordsCount: number;
   readonly linkedAvgScore?: number;
   readonly linkedRecords?: readonly DatasetRecord[];
+  readonly onShowPdf?: () => void;
 }) {
   const typeBadge = part.type === "table" ? "TABLE" : part.type === "image" ? "IMAGE" : "TEXT";
   const typeBadgeColor = part.type === "table"
@@ -1092,6 +1038,16 @@ function PartViewer({
             {typeBadge}
           </span>
           <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+            {onShowPdf && (
+              <button
+                type="button"
+                onClick={onShowPdf}
+                className="w-[22px] h-[22px] rounded-[5px] border border-border bg-muted/30 flex items-center justify-center transition-colors hover:bg-muted text-muted-foreground hover:text-foreground"
+                title="View PDF"
+              >
+                <Eye className="w-3 h-3" />
+              </button>
+            )}
             <span className="text-[11px] text-muted-foreground/50 tabular-nums">
               {currentIndex + 1} of {totalParts}
             </span>
@@ -1140,12 +1096,12 @@ function PartViewer({
           <span className="text-[10px] text-muted-foreground/60">
             {(part.content?.length ?? 0).toLocaleString()} chars
           </span>
-          {/* Relevance badge */}
+          {/* Relevance */}
           {part.relevant === true && (
-            <span className="text-[9px] px-1.5 py-px rounded-full bg-emerald-500/15 text-emerald-400 font-medium">Relevant</span>
+            <span className="text-[10px] text-emerald-400/60">Relevant</span>
           )}
           {part.relevant === false && (
-            <span className="text-[9px] px-1.5 py-px rounded-full bg-muted/50 text-muted-foreground/50 font-medium">Excluded</span>
+            <span className="text-[10px] text-muted-foreground/40">Excluded</span>
           )}
           {linkedTopics.length > 0 && (
             <span className="text-[10px] text-muted-foreground/60">{linkedTopics.length} topics</span>
@@ -1189,11 +1145,23 @@ function PartViewer({
             <TooltipProvider delayDuration={200}>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button type="button" className="text-[10px] text-muted-foreground shrink-0 hover:text-foreground transition-colors cursor-pointer">
+                  <button
+                    type="button"
+                    className="text-[10px] text-muted-foreground shrink-0 hover:text-foreground transition-colors cursor-pointer"
+                    onClick={() => {
+                      // Navigate to the first linked topic's records table
+                      if (linkedTopics.length > 0) {
+                        window.dispatchEvent(new CustomEvent("vllora_navigate_to_job", {
+                          detail: { jobId: linkedTopics[0], type: "topic" },
+                        }));
+                      }
+                    }}
+                  >
                     <span className="font-semibold text-[rgb(var(--theme-500))]">{linkedRecordsCount}</span> records
                     {linkedAvgScore != null && (
                       <> · avg <span className="font-semibold text-foreground">{linkedAvgScore.toFixed(2)}</span></>
                     )}
+                    <span className="ml-1 text-muted-foreground/40">→</span>
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="top" align="start" className="max-w-[400px] p-0">

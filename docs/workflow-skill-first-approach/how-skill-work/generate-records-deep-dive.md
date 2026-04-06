@@ -227,6 +227,23 @@ This means a topic with 5 prompt types completes in ~1 LLM call time, not 5x.
   │  │                                                      Total: 25   │  │
   │  │                                                                   │  │
   │  │  For small totals (<5): collapses to fewer types                  │  │
+  │  │                                                                   │  │
+  │  │  HARD MODE (--difficulty hard): Evol-Instruct operators           │  │
+  │  │  (arXiv:2304.12244) for harder records targeting 0.20-0.65 zone:  │  │
+  │  │                                                                   │  │
+  │  │    ┌──────────────┬────────┬──────┬───────────────────────────┐   │  │
+  │  │    │ Type         │ Weight │ Temp │ What it produces          │   │  │
+  │  │    ├──────────────┼────────┼──────┼───────────────────────────┤   │  │
+  │  │    │ multi_step   │  30%   │ 0.8  │ Combine 2+ rules/facts   │   │  │
+  │  │    │ indirect     │  25%   │ 0.9  │ Aliases, derived forms    │   │  │
+  │  │    │ edge_case    │  25%   │ 1.0  │ Exceptions, boundaries   │   │  │
+  │  │    │ complex_input│  20%   │ 0.85 │ 10-20 items, distractors │   │  │
+  │  │    └──────────────┴────────┴──────┴───────────────────────────┘   │  │
+  │  │                                                                   │  │
+  │  │  ADAPTIVE MODE (--difficulty adaptive --eval-scores):             │  │
+  │  │    Easy topics (base >0.70) → hard mode prompts                   │  │
+  │  │    Hard topics (base <0.30) → normal mode prompts                 │  │
+  │  │    Medium topics            → normal mode prompts                 │  │
   │  └───────────────────────────────────────────────────────────────────┘  │
   │                              │                                          │
   │                              ▼                                          │
@@ -394,6 +411,38 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/derive_ground_truth.py \
 **When to use**: Any task where records can belong to multiple categories or require multi-label ground truth. For single-label tasks, the standard single-stage generation (with inline GT) works fine.
 
 **Research basis**: arXiv:2505.17510 shows that generating ground truth within a topic-specific context causes models to suppress labels from other topics, leading to incomplete multi-label annotations.
+
+---
+
+## Difficulty Control
+
+Three mechanisms control record difficulty, each at a different stage:
+
+### At generation time: `--difficulty` flag
+
+| Mode | Flag | Effect |
+|------|------|--------|
+| Normal (default) | `--difficulty normal` | 5 balanced prompt types (explain/scenario/compare/edge_case/application) |
+| Hard | `--difficulty hard` | 4 Evol-Instruct prompt types targeting learnable zone (multi_step/indirect/edge_case/complex_input). Reduces trivial records from ~60% to ~30%. |
+| Adaptive | `--difficulty adaptive --eval-scores eval-001.json` | Per-topic: easy topics (base >0.70) get hard prompts, hard topics get normal. Requires prior eval. |
+
+Research: Evol-Instruct (arXiv:2304.12244) mutation operators; arXiv:2603.24202 (medium difficulty achieves best results); arXiv:2508.14094 (hard examples yield 10x more improvement).
+
+### Before upload: `--probe-and-rewrite`
+
+```bash
+python3 generate_records.py ... --probe-and-rewrite --workflow-id $WF
+```
+
+After generating all records, runs a K=1 probe on each record using the base model, scores through the grader, and rewrites trivial records (score > 0.85) to be harder. Adds harder variants alongside originals.
+
+Defaults to probing with **Qwen3.5-4B** (largest available model). This is a conservative filter — if the 4B model aces a record, it's trivial for ALL models. Override with `--probe-model Qwen3.5-0.8B` only after Step 7b when the training model is known.
+
+Research: arXiv:2505.17063 (Synthetic Data RL: +2.6pp from generate-eval-rewrite loop).
+
+### After eval: `harden-records` (Step 7c++)
+
+Post-eval hardening — see section below.
 
 ---
 

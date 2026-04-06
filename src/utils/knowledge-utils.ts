@@ -75,6 +75,30 @@ export function formatExtractionPath(
 }
 
 /**
+ * Extract quality indicators from a part's extraction metadata.
+ * Returns null if no quality data is available.
+ */
+export function extractQualityInfo(part: KnowledgeSourcePart): {
+  confidence?: number;
+  wordCount?: number;
+  charCount: number;
+  quality: "good" | "short" | "minimal";
+} | null {
+  const charCount = part.content?.length ?? 0;
+  if (charCount === 0) return null;
+
+  const meta = part.extractionMetadata as Record<string, unknown> | undefined;
+  const confidence = typeof meta?.confidence === "number" ? meta.confidence : undefined;
+  const wordCount = typeof meta?.word_count === "number" ? meta.word_count : undefined;
+
+  // Quality heuristic based on content length
+  const quality: "good" | "short" | "minimal" =
+    charCount >= 200 ? "good" : charCount >= 50 ? "short" : "minimal";
+
+  return { confidence, wordCount, charCount, quality };
+}
+
+/**
  * Count parts by relevance status.
  */
 export function countByRelevance(parts: readonly KnowledgeSourcePart[]): {
