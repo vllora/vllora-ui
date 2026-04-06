@@ -25,14 +25,12 @@ Exit codes:
 
 import argparse
 import json
-import sqlite3
 import sys
 from pathlib import Path
 
 import requests
 
 DEFAULT_BASE_URL = "http://localhost:9090"
-DEFAULT_DB_PATH = Path.home() / ".vllora" / "vllora.db"
 
 
 def _api(method: str, url: str, **kwargs) -> dict:
@@ -349,7 +347,7 @@ def _looks_like_uuid(s: str) -> bool:
 
 
 def _resolve_identifiers_to_uuids(
-    workflow_id: str, relations: list[dict], db_path: Path,
+    workflow_id: str, relations: list[dict], base_url: str,
 ) -> list[dict]:
     """Resolve reference_id-based identifiers to UUIDs scoped to this workflow.
 
@@ -358,34 +356,31 @@ def _resolve_identifiers_to_uuids(
     the lookup can match the wrong part and fail validation. Resolving to UUIDs here
     avoids the ambiguity.
     """
-    conn = sqlite3.connect(str(db_path))
-    c = conn.cursor()
-
-    # Build topic ref→uuid map for this workflow
-    topic_rows = c.execute(
-        "SELECT id, reference_id FROM workflow_topics WHERE workflow_id = ?",
-        (workflow_id,),
-    ).fetchall()
+    # Build topic ref→uuid map via REST API (matches by id, reference_id, or name)
+    topics_resp = _api("GET", f"{base_url}/finetune/workflows/{workflow_id}/topics")
+    topics_list = topics_resp if isinstance(topics_resp, list) else topics_resp.get("topics", [])
     topic_map: dict[str, str] = {}
-    for row_id, ref_id in topic_rows:
+    for t in topics_list:
+        row_id = t["id"]
         topic_map[row_id] = row_id
+        ref_id = t.get("reference_id")
         if ref_id:
             topic_map[ref_id] = row_id
+        name = t.get("name")
+        if name:
+            topic_map[name] = row_id
 
-    # Build part ref→uuid map scoped to this workflow's active knowledge sources
-    part_rows = c.execute(
-        "SELECT ksp.id, ksp.reference_id FROM knowledge_source_parts ksp "
-        "JOIN knowledge_sources ks ON ksp.source_id = ks.id "
-        "WHERE ks.workflow_id = ? AND ks.deleted_at IS NULL",
-        (workflow_id,),
-    ).fetchall()
+    # Build part ref→uuid map via REST API (scoped to this workflow's knowledge sources)
+    sources_resp = _api("GET", f"{base_url}/finetune/workflows/{workflow_id}/knowledge")
+    sources_list = sources_resp if isinstance(sources_resp, list) else sources_resp.get("knowledge_sources", sources_resp.get("sources", []))
     part_map: dict[str, str] = {}
-    for row_id, ref_id in part_rows:
-        part_map[row_id] = row_id
-        if ref_id:
-            part_map[ref_id] = row_id
-
-    conn.close()
+    for src in sources_list:
+        for p in src.get("part", src.get("parts", [])):
+            row_id = p["id"]
+            part_map[row_id] = row_id
+            ref_id = p.get("reference_id")
+            if ref_id:
+                part_map[ref_id] = row_id
 
     resolved = []
     skipped = 0
@@ -440,8 +435,7 @@ def cmd_upload_relations(args: argparse.Namespace) -> None:
         rel_list = [relations]
 
     # Resolve reference_ids to UUIDs scoped to this workflow
-    db_path = Path(args.db) if hasattr(args, "db") and args.db else DEFAULT_DB_PATH
-    resolved = _resolve_identifiers_to_uuids(args.workflow_id, rel_list, db_path)
+    resolved = _resolve_identifiers_to_uuids(args.workflow_id, rel_list, args.base_url)
 
     if not resolved:
         print("Error: No valid relations after resolving identifiers", file=sys.stderr)
@@ -474,22 +468,22 @@ def cmd_upload_records(args: argparse.Namespace) -> None:
         _api("DELETE", f"{args.base_url}/finetune/workflows/{args.workflow_id}/records")
         print("  Deleted all existing records")
 
-    # Build topic reference_id → UUID map (same pattern as upload-relations)
-    db_path = Path(args.db) if hasattr(args, "db") and args.db else DEFAULT_DB_PATH
+    # Build topic reference_id → UUID map via REST API (matches by id, reference_id, or name)
     topic_map: dict[str, str] = {}
     try:
-        conn = sqlite3.connect(str(db_path))
-        rows = conn.execute(
-            "SELECT id, reference_id FROM workflow_topics WHERE workflow_id = ?",
-            (args.workflow_id,),
-        ).fetchall()
-        for row_id, ref_id in rows:
+        topics_resp = _api("GET", f"{args.base_url}/finetune/workflows/{args.workflow_id}/topics")
+        topics_list = topics_resp if isinstance(topics_resp, list) else topics_resp.get("topics", [])
+        for t in topics_list:
+            row_id = t["id"]
             topic_map[row_id] = row_id
+            ref_id = t.get("reference_id")
             if ref_id:
                 topic_map[ref_id] = row_id
-        conn.close()
+            name = t.get("name")
+            if name:
+                topic_map[name] = row_id
     except Exception as e:
-        print(f"Warning: Could not load topic map from DB: {e}", file=sys.stderr)
+        print(f"Warning: Could not load topic map from API: {e}", file=sys.stderr)
         print("  Topics in records will be passed as-is (may fail if not UUIDs)", file=sys.stderr)
 
     records = []
@@ -1350,61 +1344,67 @@ def cmd_upload_grader(args: argparse.Namespace) -> None:
 
 
 def cmd_verify(args: argparse.Namespace) -> None:
-    """Verify all data landed in the gateway database."""
-    db_path = Path(args.db) if args.db else DEFAULT_DB_PATH
-    if not db_path.exists():
-        print(f"Error: Database not found: {db_path}", file=sys.stderr)
-        sys.exit(1)
-
+    """Verify all data landed in the gateway via REST API."""
     wf_id = args.workflow_id
-    conn = sqlite3.connect(str(db_path))
-    c = conn.cursor()
-
-    checks = {
-        "Records": ("SELECT COUNT(*) FROM workflow_records WHERE workflow_id = ?", (wf_id,)),
-        "Topics": ("SELECT COUNT(*) FROM workflow_topics WHERE workflow_id = ?", (wf_id,)),
-        "Sources": ("SELECT COUNT(*) FROM knowledge_sources WHERE workflow_id = ?", (wf_id,)),
-        "Parts": (
-            "SELECT COUNT(*) FROM knowledge_source_parts WHERE source_id IN "
-            "(SELECT id FROM knowledge_sources WHERE workflow_id = ?)",
-            (wf_id,),
-        ),
-        "Relations": ("SELECT COUNT(*) FROM workflow_topic_sources WHERE workflow_id = ?", (wf_id,)),
-    }
+    base_url = args.base_url
 
     print(f"Workflow: {wf_id}")
     all_ok = True
-    for label, (query, params) in checks.items():
-        try:
-            count = c.execute(query, params).fetchone()[0]
-        except sqlite3.OperationalError:
-            count = "ERROR"
+    verify_counts: dict[str, int] = {}
+
+    # Fetch workflow metadata (includes record count and eval_script)
+    try:
+        wf = _api("GET", f"{base_url}/finetune/workflows/{wf_id}")
+    except SystemExit:
+        print("  Error: Workflow not found or gateway unreachable!", file=sys.stderr)
+        sys.exit(1)
+
+    records_count = wf.get("records_count", wf.get("record_count", 0))
+    has_eval = "YES" if wf.get("eval_script") else "NO"
+
+    # Fetch topics
+    try:
+        topics_resp = _api("GET", f"{base_url}/finetune/workflows/{wf_id}/topics")
+        topics_list = topics_resp if isinstance(topics_resp, list) else topics_resp.get("topics", [])
+        topics_count = len(topics_list)
+    except SystemExit:
+        topics_count = 0
+
+    # Fetch knowledge sources and parts
+    try:
+        sources_resp = _api("GET", f"{base_url}/finetune/workflows/{wf_id}/knowledge")
+        sources_list = sources_resp if isinstance(sources_resp, list) else sources_resp.get("knowledge_sources", sources_resp.get("sources", []))
+        sources_count = len(sources_list)
+        parts_count = sum(len(s.get("part", s.get("parts", []))) for s in sources_list)
+    except SystemExit:
+        sources_count = 0
+        parts_count = 0
+
+    # Fetch relations
+    try:
+        relations_resp = _api("GET", f"{base_url}/finetune/workflows/{wf_id}/topics/relations")
+        relations_list = relations_resp if isinstance(relations_resp, list) else relations_resp.get("relations", [])
+        relations_count = len(relations_list)
+    except SystemExit:
+        relations_count = 0
+
+    checks = {
+        "Records": records_count,
+        "Topics": topics_count,
+        "Sources": sources_count,
+        "Parts": parts_count,
+        "Relations": relations_count,
+    }
+    for label, count in checks.items():
         status = "OK" if isinstance(count, int) and count > 0 else "MISSING"
         if status == "MISSING":
             all_ok = False
         print(f"  {label}: {count} [{status}]")
+        verify_counts[label.lower()] = count if isinstance(count, int) else 0
 
-    # Check evaluator (column is 'eval_script' in the workflows table)
-    try:
-        has_eval = c.execute(
-            "SELECT CASE WHEN eval_script IS NOT NULL THEN 'YES' ELSE 'NO' END FROM workflows WHERE id = ?",
-            (wf_id,),
-        ).fetchone()[0]
-    except sqlite3.OperationalError:
-        has_eval = "ERROR"
     if has_eval != "YES":
         all_ok = False
     print(f"  Evaluator: {has_eval}")
-
-    conn.close()
-
-    # Build counts summary for journal
-    verify_counts = {}
-    for label, (query, params) in checks.items():
-        try:
-            verify_counts[label.lower()] = c.execute(query, params).fetchone()[0]
-        except sqlite3.OperationalError:
-            verify_counts[label.lower()] = 0
 
     if all_ok:
         print("\nAll checks passed. Ready for evaluation.")
@@ -5783,7 +5783,6 @@ def main() -> None:
     p = subparsers.add_parser("upload-relations", help="Upload topic-source relations")
     p.add_argument("--workflow-id", required=True, help="Workflow ID")
     p.add_argument("--file", required=True, help="Path to relations.json")
-    p.add_argument("--db", help=f"Database path for identifier resolution (default: {DEFAULT_DB_PATH})")
 
     # upload-records
     p = subparsers.add_parser("upload-records", help="Upload training records from JSONL")
@@ -5791,7 +5790,6 @@ def main() -> None:
     p.add_argument("--file", required=True, help="Path to training.jsonl")
     p.add_argument("--batch-size", type=int, default=200, help="Records per API call (default: 200)")
     p.add_argument("--force", action="store_true", help="Delete all existing records before uploading")
-    p.add_argument("--db", default=None, help="Path to vLLora SQLite database (default: ~/.vllora/vllora.db)")
 
     # log-step — writes both execution-log.md and pipeline-journal.json
     p = subparsers.add_parser("log-step", help="Log a pipeline step to execution-log.md + pipeline-journal.json")
@@ -5849,9 +5847,8 @@ def main() -> None:
     p.add_argument("--skip-dry-run", action="store_true", help="Skip pre-upload dry-run validation")
 
     # verify
-    p = subparsers.add_parser("verify", help="Verify all data in gateway database")
+    p = subparsers.add_parser("verify", help="Verify all data in gateway via REST API")
     p.add_argument("--workflow-id", required=True, help="Workflow ID")
-    p.add_argument("--db", help=f"Database path (default: {DEFAULT_DB_PATH})")
 
     # status
     p = subparsers.add_parser("status", help="Show full workflow status: gateway data + checkpoint + jobs + next step")

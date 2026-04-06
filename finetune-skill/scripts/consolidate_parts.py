@@ -156,6 +156,7 @@ def _merge_repeated_title_sequences(parts: list[dict]) -> list[dict]:
             sub_titles = []
             all_pages: list = []
             all_chunks: list = []
+            all_bboxes: list = []
             for p in current_group:
                 t = p.get("title", "")
                 c = p.get("content", "")
@@ -168,6 +169,7 @@ def _merge_repeated_title_sequences(parts: list[dict]) -> list[dict]:
                         combined_content_parts.append(c)
                 all_pages.extend(p.get("extraction_metadata", {}).get("pages", []))
                 all_chunks.extend(p.get("extraction_metadata", {}).get("source_chunks", []))
+                all_bboxes.extend(p.get("extraction_metadata", {}).get("bboxes", []))
 
             title_suffix = f" + {', '.join(sub_titles)}" if sub_titles else ""
             result = {**current_group[0]}
@@ -179,6 +181,8 @@ def _merge_repeated_title_sequences(parts: list[dict]) -> list[dict]:
                 result.setdefault("extraction_metadata", {})["pages"] = sorted(set(all_pages))
             if all_chunks:
                 result.setdefault("extraction_metadata", {})["source_chunks"] = sorted(set(all_chunks))
+            if all_bboxes:
+                result.setdefault("extraction_metadata", {})["bboxes"] = all_bboxes
             merged.append(result)
 
     for part in parts:
@@ -299,12 +303,16 @@ def consolidate_parts(
             # Merge all substantial fragments into one combined table part
             combined = dict(substantial[0])
             combined["content"] = "\n\n".join(p.get("content", "") for p in substantial)
-            # Merge page ranges
+            # Merge page ranges and bboxes
             all_pages = []
+            all_bboxes = []
             for p in substantial:
                 all_pages.extend(p.get("extraction_metadata", {}).get("pages", []))
+                all_bboxes.extend(p.get("extraction_metadata", {}).get("bboxes", []))
             if all_pages:
                 combined.setdefault("extraction_metadata", {})["pages"] = sorted(set(all_pages))
+            if all_bboxes:
+                combined.setdefault("extraction_metadata", {})["bboxes"] = all_bboxes
             non_table_parts.append(combined)
             merged_tables += len(table_parts) - 1
 
@@ -348,6 +356,11 @@ def _merge_into_buffer(buffer: dict, part: dict) -> None:
     buffer.setdefault("extraction_metadata", {})["pages"] = sorted(
         set(buf_pages + new_pages)
     )
+    # Extend bboxes
+    buf_bboxes = buffer.get("extraction_metadata", {}).get("bboxes", [])
+    new_bboxes = part.get("extraction_metadata", {}).get("bboxes", [])
+    if new_bboxes:
+        buffer.setdefault("extraction_metadata", {})["bboxes"] = buf_bboxes + new_bboxes
 
 
 def reassign_ids(parts: list[dict], prefix: str) -> None:
