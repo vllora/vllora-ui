@@ -863,3 +863,30 @@ Verify across these scenarios:
 If your grader doesn't differentiate these scenarios, revise the criteria.
 
 **Note:** The sandbox does NOT support `console.log` — use the `reason` field for debug output.
+
+---
+
+## Preventing Length Exploitation (4 Defenses)
+
+GRPO's #1 failure mode is the model learning verbose responses because longer = more content = higher scores. This happens in almost every training run.
+
+**Defense 1 (algorithm — ACTIVE by default):** The vLLora cloud uses `loss_type="dr_grpo"` + `mask_truncated_completions=True` + `repetition_penalty=1.1` by default. Dr. GRPO (arXiv:2503.20783) removes the algorithmic root cause (per-sequence `1/|o_i|` normalization). Truncation masking (DAPO, arXiv:2503.14476) ensures truncated completions contribute zero gradient. **If length exploitation occurs despite these, the cause is reward-correlated (the grader rewards verbosity)** — focus on Defenses 2-4.
+
+**Defense 2 (max_output_tokens — set tight):** Set `max_output_tokens` close to expected output length. Allergen list → 128, compliance verdict → 256. The model can't be verbose if there's no room.
+
+**Defense 3 (grader — penalize verbosity as a quality issue):** Two approaches:
+- **Add a conciseness criterion to LLM-as-judge** (recommended): Include "Penalize responses that pad correct information with unnecessary repetition or explanation" in the judge prompt. Weight it 10-15%.
+- **Soft multiplicative threshold penalty** (acceptable for programmatic graders): No penalty below expected length, then gradual **multiplicative** penalty above it (`score *= (1 - penalty)`). Set threshold from GT P95 word count + 50% headroom. Cap max penalty at 15-25%. **NEVER use additive penalties** (`score -= λ * length`) — GR3 (arXiv:2603.10535) proves these cause "length collapse" for any λ.
+
+**Defense 4 (adversarial testing):** Before uploading, check if a correct 10-word answer and a correct 200-word answer both get the same score. If yes, the model WILL learn to always write 200 words.
+
+### DRPO Anti-Pattern (arXiv:2510.04474) — CRITICAL
+
+When adding a word-count penalty to a grader, **NEVER apply it uniformly to both correct and wrong answers.** GRPO computes advantages relative to the group mean. If a correct-but-verbose answer gets penalized (e.g., 0.8 × 0.75 = 0.60) and the group includes wrong answers at 0.0-0.10, the penalized correct answer may fall below the group mean — GRPO then assigns it **negative** advantage and actively discourages it. The model learns "verbose + correct is worse than wrong."
+
+**Safe patterns:**
+- Apply word-count penalties **only to wrong/partial answers** (correct answers rely on the LLM conciseness criterion)
+- Add a small **brevity bonus** (+0.03-0.05) for correct+concise answers
+- All 6 grader templates already implement this DRPO-safe pattern
+
+**Research basis**: Dr. GRPO (arXiv:2503.20783) identifies the algorithmic root cause. DAPO (arXiv:2503.14476) adds overlong filtering. GR3 (arXiv:2603.10535) proves additive length penalties collapse. GRPO-LEAD (arXiv:2504.09696) couples length control to task correctness. DRPO (arXiv:2510.04474) proves uniform length penalties can invert GRPO advantage. OpenAI RFT cookbook recommends rubric refinement, not explicit penalty terms.

@@ -30,37 +30,78 @@ import { ExplorerSidebar, LucySidebar, TasksViewer } from "./sidebars";
 import { PipelineJournalProvider, PipelineJournalConsumer } from "@/contexts/PipelineJournalContext";
 import { PipelineJournalTimeline } from "./sidebars/PipelineJournalTimeline";
 import type { PipelineJournal } from "@/types/pipeline-journal-types";
+import { savePipelineJournal } from "@/services/pipeline-journal-service";
 
-/** Shows journal timeline if available, falls back to legacy LogsViewer.
- *  Supports drag-and-drop of pipeline-journal.json for local preview. */
+/**
+ * Module-level store for uploaded journal.
+ * Persists across tab switches (JournalOrLogs unmounts when logs tab is inactive).
+ * The explorer sidebar writes here via window event before the logs tab opens.
+ */
+let pendingJournal: PipelineJournal | null = null;
+
+// Global listener — always active, captures uploads before tab mounts
+if (typeof window !== "undefined") {
+  window.addEventListener("vllora_journal_drop", (e: Event) => {
+    const journal = (e as CustomEvent).detail as PipelineJournal;
+    if (journal?.entries) {
+      pendingJournal = journal;
+    }
+  });
+}
+
+/** Shows journal timeline. On upload, saves to API then refreshes. */
 function JournalOrLogs() {
-  const { entries, hasJournal, isLoading } = PipelineJournalConsumer();
-  const [localJournal, setLocalJournal] = useState<PipelineJournal | null>(null);
+  const { entries, hasJournal, isLoading, refresh } = PipelineJournalConsumer();
 
-  const handleDrop = useCallback((journal: PipelineJournal) => {
-    setLocalJournal(journal);
-  }, []);
+  // Save uploaded journal to API and refresh context
+  const saveAndRefresh = useCallback(
+    async (journal: PipelineJournal, workflowId: string) => {
+      try {
+        await savePipelineJournal(workflowId, journal);
+        refresh();
+      } catch (err) {
+        toast.error(`Failed to save journal: ${err instanceof Error ? err.message : "Unknown error"}`);
+      }
+    },
+    [refresh],
+  );
 
-  const handleDismiss = useCallback(() => {
-    setLocalJournal(null);
-  }, []);
+  // On mount: if a pending journal was uploaded before this tab opened, save it now
+  const { dataset } = DatasetDetailConsumer();
+  const wfId = dataset?.id ?? null;
 
-  // Local preview takes priority
-  if (localJournal) {
-    return (
-      <PipelineJournalTimeline
-        entries={localJournal.entries}
-        onDropJournal={handleDrop}
-        isLocalPreview
-        onDismissPreview={handleDismiss}
-      />
-    );
-  }
+  useEffect(() => {
+    if (pendingJournal && wfId) {
+      const journal = pendingJournal;
+      pendingJournal = null;
+      saveAndRefresh(journal, wfId);
+    }
+  }, [wfId, saveAndRefresh]);
+
+  // Listen while mounted (for subsequent uploads / drag-and-drop)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const journal = (e as CustomEvent).detail as PipelineJournal;
+      if (journal?.entries && wfId) {
+        saveAndRefresh(journal, wfId);
+      }
+    };
+    window.addEventListener("vllora_journal_drop", handler);
+    return () => window.removeEventListener("vllora_journal_drop", handler);
+  }, [wfId, saveAndRefresh]);
+
+  const handleDrop = useCallback(
+    (journal: PipelineJournal) => {
+      if (wfId) {
+        saveAndRefresh(journal, wfId);
+      }
+    },
+    [wfId, saveAndRefresh],
+  );
 
   if (isLoading) return <PipelineJournalTimeline entries={[]} isLoading onDropJournal={handleDrop} />;
   if (hasJournal) return <PipelineJournalTimeline entries={entries} onDropJournal={handleDrop} />;
 
-  // No journal — show drop zone (empty state) with fallback to LogsViewer
   return <PipelineJournalTimeline entries={[]} onDropJournal={handleDrop} />;
 }
 import { IS_LUCY_ENABLED } from "@/lib/feature-flags";
@@ -797,6 +838,7 @@ export function DatasetDetailContentV2() {
   const contentSection: ContentSection = tabContentSection;
 
   return (
+    <PipelineJournalProvider workflowId={workflowId}>
     <EvalJobsProvider dataset={dataset}>
      <WorkspaceTabsProvider workflowId={workflowId} initialTabs={emptyDatasetInitialTabs}>
       {/* Bridge: syncs workspace tab state ↔ parent content section */}
@@ -1003,9 +1045,7 @@ export function DatasetDetailContentV2() {
           )}
           {contentSection === "logs" && (
             <div className="flex-1 flex flex-col overflow-hidden overflow-y-auto">
-              <PipelineJournalProvider workflowId={workflowId}>
-                <JournalOrLogs />
-              </PipelineJournalProvider>
+              <JournalOrLogs />
             </div>
           )}
           {contentSection === "skill" && (
@@ -1106,5 +1146,6 @@ export function DatasetDetailContentV2() {
       </div>
      </WorkspaceTabsProvider>
     </EvalJobsProvider>
+    </PipelineJournalProvider>
   );
 }

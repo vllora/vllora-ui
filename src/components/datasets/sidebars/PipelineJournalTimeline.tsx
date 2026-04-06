@@ -549,6 +549,8 @@ export function PipelineJournalTimeline({
   onDismissPreview,
 }: PipelineJournalTimelineProps) {
   const [viewMode, setViewMode] = useState<JournalViewMode>("timeline");
+  const noopDrop = useCallback(() => {}, []);
+  const handleDrop = onDropJournal ?? noopDrop;
 
   // Deduplicate: for same step, if there's a completed entry, skip the in_progress one
   const dedupedEntries = useMemo(() => {
@@ -574,9 +576,6 @@ export function PipelineJournalTimeline({
       </div>
     );
   }
-
-  const noopDrop = useCallback(() => {}, []);
-  const handleDrop = onDropJournal ?? noopDrop;
 
   return (
     <JournalDropZone onDrop={handleDrop} hasEntries={dedupedEntries.length > 0}>

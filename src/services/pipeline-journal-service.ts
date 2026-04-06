@@ -30,6 +30,20 @@ export async function fetchPipelineJournal(
 }
 
 /**
+ * Replace the entire pipeline journal for a workflow.
+ * Used when uploading a journal file.
+ */
+export async function savePipelineJournal(
+  workflowId: string,
+  journal: PipelineJournal,
+): Promise<void> {
+  const response = await api.put(`/finetune/workflows/${workflowId}`, {
+    pipeline_journal: JSON.stringify(journal),
+  });
+  await handleApiResponse<unknown>(response);
+}
+
+/**
  * Append entries to the pipeline journal.
  * Server performs atomic read-modify-write so no entries are lost
  * from concurrent calls during pipeline execution.

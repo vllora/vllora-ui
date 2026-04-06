@@ -323,6 +323,73 @@ After each eval + training cycle, check:
 
 Max 5 iterations before escalating (change base model or rethink approach).
 
+## GRPO Training Defaults (Research-Validated)
+
+These are the defaults used by `create-training` when no `--config` is passed.
+
+| Parameter | Default | Rationale |
+|-----------|---------|-----------|
+| `learning_rate` | **1e-6** | Standard GRPO LR (DeepSeekMath arXiv:2402.03300, DAPO arXiv:2503.14476, Dr. GRPO arXiv:2503.20783). Higher LR (5e-6) causes faster policy drift → forgetting spiral (arXiv:2509.07430). |
+| `beta` | **0.01** | KL penalty prevents catastrophic forgetting by constraining policy drift from reference model (arXiv:2509.07430: 15% forgetting rate without KL). DeepSeekMath used β=0.04; 0.01 is conservative. |
+| `response_candidates_count` | **8** | K=8 is the standard choice: Dr. GRPO Table 6 (arXiv:2503.20783), "Hard Examples" Appendix B (arXiv:2508.14094), TRL default, DeepSeek-R1. **Do NOT default to K=16.** EBPO (Table 2, arXiv:2602.05165) shows K=16 averages 0.9 points *worse* than K=8. K=16 costs 2x compute for marginal-to-negative quality gain. |
+| `epochs` | **adaptive** | Auto-set by dataset size: <50 records→8, <200→5, <500→3, 500+→2. Reduced to prevent forgetting spiral (arXiv:2505.22257: "training beyond ~80% of one epoch yields negligible gains"). |
+| `warmup_ratio` | **configurable** | Uses `warmup_ratio` (not `warmup_steps`). The cloud applies cosine LR scheduler. |
+
+### Adaptive Epochs Table
+
+| Dataset size | Epochs | Rationale |
+|-------------|--------|-----------|
+| < 50 records | 8 | Small dataset needs more passes |
+| 50-200 records | 5 | Standard |
+| 200-500 records | 3 | Sufficient exploration |
+| > 500 records | 2 | DeepSeek-R1 used ~50k records with ~2 epochs |
+
+> **RFT epochs ≠ SFT epochs.** In RFT/GRPO, the model generates **fresh responses each epoch** — there's no repetition risk. More epochs = more exploration.
+
+### Advanced Training Config (User-Configurable)
+
+| Parameter | Default | What it does | When to change |
+|-----------|---------|-------------|----------------|
+| `loss_type` | `"dr_grpo"` | GRPO variant. Removes length bias (arXiv:2503.20783). | Try `"dapo"` for TRL-standard normalization |
+| `mask_truncated_completions` | `false` | Unsloth recommends disabling — `true` causes kl=nan if all completions truncate (Unsloth #3006) | Set `true` only if truncation rate < 10% |
+| `scale_rewards` | `false` | `false` = raw advantages. `"group"` amplifies easy records. | Use `false` (default) |
+| `importance_sampling_level` | `"sequence"` | Sequence-level often gives more stable training for sequence-level rewards (GSPO). | Keep `"sequence"` |
+
+### Cloud-Side Config (NOT User-Configurable)
+
+| Parameter | Value | What it does |
+|-----------|-------|-------------|
+| `repetition_penalty` | `1.1` | Generation-time penalty against repetitive tokens |
+| `epsilon` / `epsilon_high` | `3e-4` / `4e-4` | Tight asymmetric clipping — very conservative policy updates |
+| `lr_scheduler_type` | `"cosine"` | Cosine annealing after warmup |
+| `optim` | `"adamw_8bit"` | 8-bit AdamW for VRAM savings |
+| `max_grad_norm` | `1.0` | Gradient clipping |
+| `weight_decay` | `0.01` | Standard regularization |
+
+**Implications for analysis**: (1) If length exploitation occurs, it's grader-side, not algorithmic — `dr_grpo` eliminates algorithmic length bias. (2) Tight epsilon means `clip_ratio` should stay very low; high `clip_ratio` is a stronger signal than usual. (3) Cosine LR means reward may plateau in late training — expected, not a bug. (4) `mask_truncated_completions=false` means truncated completions DO contribute gradient — may add noise if truncation rate is high.
+
+---
+
+## GRPO Research Context: Common Traps from SFT Intuition
+
+GRPO has counterintuitive properties that differ from SFT and generic ML:
+
+| SFT Intuition | GRPO Reality | Reference |
+|---------------|-------------|-----------|
+| "Loss should decrease" | GRPO loss starts at 0 and rises slightly (on-policy → off-policy divergence) | Expected behavior |
+| "More data is better" | Easy records (base model scores >0.8) provide almost no gradient. Hard records with zero base model score also provide nothing. | arXiv:2508.14094 |
+| "Low eval scores mean training will fail" | DeepSeek-R1 started at 15.6% and reached 71%. Low base scores = high GRPO headroom. | arXiv:2501.12948 |
+| "High zero-variance means broken training" | 30-99% zero-variance per batch is normal. Only a problem when reward is also flat. | arXiv:2509.21880 |
+| "Add a length penalty to fix verbose outputs" | **Additive** penalties cause "length collapse" for any λ (GR3). **Multiplicative** threshold penalties are safer. Best fix: semantic conciseness via LLM-judge or tight max_output_tokens. | GR3 arXiv:2603.10535, Dr. GRPO arXiv:2503.20783 |
+
+**When a fix isn't working — research before retrying.** Use GRPO-specific web search queries:
+- Bad: "model generating long responses" (generic, gets SFT advice)
+- Good: "GRPO length exploitation completions growing" (specific)
+
+Key sources: TRL GRPOTrainer docs, DeepSeek-R1 (arXiv:2501.12948), DAPO (arXiv:2503.14476), Dr. GRPO (arXiv:2503.20783), GR3 (arXiv:2603.10535), GRPO-LEAD (arXiv:2504.09696), "Hard Examples" (arXiv:2508.14094), "No Prompt Left Behind" (arXiv:2509.21880), OpenAI RFT Guide.
+
+---
+
 ## Sources & References
 
 The metric ranges, red flags, and recommendations in this guide are derived from:

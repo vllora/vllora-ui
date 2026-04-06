@@ -26,11 +26,14 @@ import {
   BookOpen,
   Database,
   FlaskConical,
+  ScrollText,
+  Upload,
 } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { EvalJobsConsumer } from "@/contexts/EvalJobsContext";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
+import { PipelineJournalConsumer } from "@/contexts/PipelineJournalContext";
 import { WorkspaceTabsConsumer } from "@/contexts/WorkspaceTabsContext";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -76,6 +79,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
   const { sources } = KnowledgeSourcesConsumer();
   const { jobs: dryRunJobs, startDryRun } = EvalJobsConsumer();
   const { filteredJobs: finetuneJobs, loadJobs: loadFinetuneJobs } = FinetuneJobsConsumer();
+  const { entries: journalEntries, hasJournal } = PipelineJournalConsumer();
   const { openTab } = WorkspaceTabsConsumer();
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -432,6 +436,61 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         })}
         {finetuneJobs.length === 0 && (
           <p className="px-6 py-2 text-[11px] text-muted-foreground/40 italic">No finetune jobs yet</p>
+        )}
+      </SidebarSection>
+
+      <SidebarDivider />
+
+      {/* ── Pipeline Journal ── */}
+      <SidebarSection
+        title="Pipeline Journal"
+        icon={<ScrollText className="w-3 h-3" />}
+        count={hasJournal ? journalEntries.length : undefined}
+        onTitleClick={() => handleSelect("logs.md")}
+        isTitleActive={selectedNodeId === "logs.md"}
+        action={{
+          icon: <Upload className="w-3 h-3" />,
+          title: "Upload pipeline-journal.json",
+          onClick: () => {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = ".json";
+            input.onchange = () => {
+              const file = input.files?.[0];
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = () => {
+                try {
+                  const parsed = JSON.parse(reader.result as string);
+                  if (!parsed.entries || !Array.isArray(parsed.entries)) {
+                    toast.error("Invalid journal: missing entries array");
+                    return;
+                  }
+                  toast.success(`Loaded ${parsed.entries.length} journal entries from ${file.name}`);
+                  window.dispatchEvent(new CustomEvent("vllora_journal_drop", { detail: parsed }));
+                  handleSelect("logs.md");
+                } catch {
+                  toast.error("Failed to parse journal file");
+                }
+              };
+              reader.readAsText(file);
+            };
+            input.click();
+          },
+        }}
+      >
+        {hasJournal ? (
+          <SidebarItem
+            icon={<ScrollText className="w-3.5 h-3.5" />}
+            label="pipeline-journal.json"
+            badge={<span className="text-[10px] text-muted-foreground tabular-nums">{journalEntries.length} entries</span>}
+            isActive={selectedNodeId === "logs.md"}
+            onClick={() => handleSelect("logs.md")}
+          />
+        ) : (
+          <p className="px-6 py-2 text-[11px] text-muted-foreground/40 italic">
+            No journal yet — upload a file
+          </p>
         )}
       </SidebarSection>
 
