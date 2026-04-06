@@ -1039,6 +1039,32 @@ def _auto_journal(
         pass
 
     print(f"  [auto-journal #{next_id}] {action} ({status}): {summary}", file=sys.stderr)
+
+    # Upload to gateway API (non-blocking — local file is the source of truth)
+    # The gateway provides atomic read-modify-write so concurrent calls are safe.
+    # This makes the journal visible in the UI and persisted in the database.
+    workflow_id = journal.get("workflow_id", "")
+    if not workflow_id:
+        # Try to read from config.json
+        config_path = project_dir / "config.json"
+        if config_path.exists():
+            try:
+                workflow_id = json.loads(config_path.read_text()).get("workflow_id", "")
+                journal["workflow_id"] = workflow_id
+            except (json.JSONDecodeError, OSError):
+                pass
+
+    if workflow_id:
+        try:
+            import requests
+            requests.post(
+                f"http://localhost:9090/finetune/workflows/{workflow_id}/journal/entries",
+                json={"entries": [entry]},
+                timeout=5,
+            )
+        except Exception:
+            pass  # Non-fatal: local file already has the entry
+
     return next_id
 
 
