@@ -15,7 +15,8 @@
  */
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { FileText, Tags, ChevronRight, ChevronLeft, ArrowLeft, Search, Eye } from "lucide-react";
+import { FileText, Tags, ChevronRight, ChevronLeft, ArrowLeft, Search, Eye, BookOpen, Filter } from "lucide-react";
+import { extractPageRange, formatExtractionPath, countByRelevance } from "@/utils/knowledge-utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
@@ -507,12 +508,15 @@ interface FlatTopicRow {
 // ─── Single Document View ───
 
 /** Group parts by extractionPath (I2) */
+type RelevanceFilter = "all" | "relevant" | "excluded";
+
 interface PartGroup {
   readonly path: string;
+  readonly displayPath: string;
   readonly parts: KnowledgeSourcePart[];
 }
 
-function groupPartsByExtractionPath(parts: readonly KnowledgeSourcePart[]): PartGroup[] {
+function groupPartsByExtractionPath(parts: readonly KnowledgeSourcePart[], docSlug?: string): PartGroup[] {
   const groups = new Map<string, KnowledgeSourcePart[]>();
   for (const part of parts) {
     const key = part.extractionPath || "Ungrouped";
@@ -525,6 +529,7 @@ function groupPartsByExtractionPath(parts: readonly KnowledgeSourcePart[]): Part
   }
   return Array.from(groups.entries()).map(([path, groupParts]) => ({
     path,
+    displayPath: path === "Ungrouped" ? path : formatExtractionPath(path, docSlug),
     parts: groupParts,
   }));
 }
@@ -598,6 +603,7 @@ function findTopicsForPart(
 function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSource; readonly focusPartId?: string | null }) {
   const [selectedPartId, setSelectedPartId] = useState<string | null>(focusPartId ?? null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [relevanceFilter, setRelevanceFilter] = useState<RelevanceFilter>("all");
   const outlineRef = useRef<HTMLDivElement>(null);
   const { dataset, records } = DatasetDetailConsumer();
 
@@ -650,22 +656,30 @@ function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSour
     return map;
   }, [source.parts, hierarchy]);
 
+  // Relevance counts for filter
+  const relevanceCounts = useMemo(() => countByRelevance(source.parts), [source.parts]);
+
   // Group parts by extractionPath
+  const docSlug = source.name?.replace(/\.pdf$/i, "").replace(/\s+/g, "-").toLowerCase();
   const partGroups = useMemo(
-    () => groupPartsByExtractionPath(source.parts),
-    [source.parts],
+    () => groupPartsByExtractionPath(source.parts, docSlug),
+    [source.parts, docSlug],
   );
   const hasMultipleGroups = partGroups.length > 1 || (partGroups.length === 1 && partGroups[0].path !== "Ungrouped");
 
-  // Filter parts by search query
+  // Filter parts by search query + relevance
   const queryLower = searchQuery.toLowerCase().trim();
   const matchesPart = useCallback((part: KnowledgeSourcePart) => {
+    // Relevance filter
+    if (relevanceFilter === "relevant" && part.relevant !== true) return false;
+    if (relevanceFilter === "excluded" && part.relevant !== false) return false;
+    // Text search
     if (!queryLower) return true;
     const title = (part.title || "").toLowerCase();
     const content = (part.content || "").toLowerCase();
     const topics = partTopicNames.get(part.id) ?? [];
     return title.includes(queryLower) || content.includes(queryLower) || topics.some(t => t.toLowerCase().includes(queryLower));
-  }, [queryLower, partTopicNames]);
+  }, [queryLower, partTopicNames, relevanceFilter]);
 
   // Topics linked to selected part + records count
   const linkedTopics = useMemo(
@@ -728,8 +742,8 @@ function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSour
             )}
           </div>
 
-          {/* Search bar */}
-          <div className="shrink-0 px-3 py-2 border-b border-border/50">
+          {/* Search bar + relevance filter */}
+          <div className="shrink-0 px-3 py-2 border-b border-border/50 space-y-1.5">
             <div className="relative">
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground/40" />
               <input
@@ -739,6 +753,38 @@ function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSour
                 placeholder="Search parts..."
                 className="w-full pl-7 pr-2 py-1.5 text-[11px] bg-background border border-border/50 rounded-md text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-[rgb(var(--theme-500))]"
               />
+            </div>
+            {/* Relevance filter */}
+            <div className="flex items-center gap-0.5 p-0.5 rounded-md bg-muted/30">
+              <button
+                onClick={() => setRelevanceFilter("all")}
+                className={cn(
+                  "flex-1 px-2 py-0.5 rounded text-[10px] transition-colors text-center",
+                  relevanceFilter === "all" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground/60 hover:text-foreground",
+                )}
+              >
+                All ({source.parts.length})
+              </button>
+              <button
+                onClick={() => setRelevanceFilter("relevant")}
+                className={cn(
+                  "flex-1 px-2 py-0.5 rounded text-[10px] transition-colors text-center",
+                  relevanceFilter === "relevant" ? "bg-background text-emerald-400 shadow-sm" : "text-muted-foreground/60 hover:text-foreground",
+                )}
+              >
+                <BookOpen className="w-2.5 h-2.5 inline mr-0.5" />
+                Relevant ({relevanceCounts.relevant})
+              </button>
+              <button
+                onClick={() => setRelevanceFilter("excluded")}
+                className={cn(
+                  "flex-1 px-2 py-0.5 rounded text-[10px] transition-colors text-center",
+                  relevanceFilter === "excluded" ? "bg-background text-muted-foreground shadow-sm" : "text-muted-foreground/60 hover:text-foreground",
+                )}
+              >
+                <Filter className="w-2.5 h-2.5 inline mr-0.5" />
+                Excluded ({relevanceCounts.excluded})
+              </button>
             </div>
           </div>
 
@@ -750,8 +796,11 @@ function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSour
                 if (visibleParts.length === 0) return null;
                 return (
                   <div key={group.path}>
-                    <div className="px-4 py-1.5 mt-1 text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/25">
-                      {group.path.replace(/^\["|"\]$/g, "").replace(/^"|"$/g, "")}
+                    <div className="px-4 py-1.5 mt-1 flex items-center gap-1.5">
+                      <span className="text-[10px] font-semibold tracking-wide text-muted-foreground/40">
+                        {group.displayPath}
+                      </span>
+                      <span className="text-[9px] text-muted-foreground/20 tabular-nums">{visibleParts.length}</span>
                     </div>
                     {visibleParts.map((part) => {
                       const globalIdx = source.parts.indexOf(part);
@@ -841,6 +890,9 @@ function TocItem({
   readonly topics?: string[];
   readonly formatChars: (c: number) => string;
 }) {
+  const pageRange = extractPageRange(part);
+  const isExcluded = part.relevant === false;
+
   return (
     <button
       type="button"
@@ -851,11 +903,15 @@ function TocItem({
         isSelected
           ? "border-l-[rgb(var(--theme-500))] bg-[rgba(var(--theme-500),0.05)]"
           : "border-l-transparent hover:bg-muted/20",
+        isExcluded && !isSelected && "opacity-40",
       )}
     >
       {/* Title row */}
       <div className="flex items-center gap-2">
-        <span className="text-[9px] text-muted-foreground/30 w-5 shrink-0 font-medium tabular-nums text-right">{index + 1}</span>
+        {/* Relevance dot */}
+        {part.relevant === true && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />}
+        {part.relevant === false && <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30 shrink-0" />}
+        <span className="text-[9px] text-muted-foreground/30 w-4 shrink-0 font-medium tabular-nums text-right">{index + 1}</span>
         <span className={cn("flex-1 text-[11px] font-medium truncate", isSelected ? "text-[rgb(var(--theme-500))]" : "text-foreground/80")}>
           {part.title || `Part ${index + 1}`}
         </span>
@@ -864,6 +920,9 @@ function TocItem({
         )}
         {part.type === "image" && (
           <span className="text-[8px] px-1 py-px rounded bg-purple-500/10 text-purple-400 font-semibold uppercase tracking-wider shrink-0">image</span>
+        )}
+        {pageRange && (
+          <span className="text-[9px] px-1 py-px rounded bg-blue-500/10 text-blue-400/80 shrink-0 tabular-nums font-medium">{pageRange}</span>
         )}
         <span className="text-[9px] text-muted-foreground/25 shrink-0 tabular-nums">{formatChars(part.content?.length ?? 0)}</span>
       </div>
@@ -889,10 +948,15 @@ function TocItem({
 // ─── Topic Coverage Chips ───
 
 function TopicCoverageChips({ topics }: { readonly topics: Array<{ topicName: string; partCount: number; totalParts: number }> }) {
+  const [expanded, setExpanded] = useState(false);
+  const MAX_VISIBLE = 5;
+  const visible = expanded ? topics : topics.slice(0, MAX_VISIBLE);
+  const overflow = topics.length - MAX_VISIBLE;
+
   return (
     <TooltipProvider delayDuration={200}>
       <div className="flex flex-wrap gap-1 mt-2">
-        {topics.map(({ topicName, partCount, totalParts }) => {
+        {visible.map(({ topicName, partCount, totalParts }) => {
           const pct = totalParts > 0 ? Math.round((partCount / totalParts) * 100) : 0;
           return (
             <Tooltip key={topicName}>
@@ -914,12 +978,20 @@ function TopicCoverageChips({ topics }: { readonly topics: Array<{ topicName: st
                 <p className="text-[11px]">
                   <span className="font-semibold">{topicName}</span> — {partCount} of {totalParts} parts
                   in this document are linked to this topic ({pct}% coverage).
-                  Click to navigate to the topic.
                 </p>
               </TooltipContent>
             </Tooltip>
           );
         })}
+        {overflow > 0 && (
+          <button
+            type="button"
+            onClick={() => setExpanded(!expanded)}
+            className="inline-flex items-center px-2 py-0.5 rounded-[10px] bg-muted/30 text-[9px] font-medium text-muted-foreground hover:bg-muted/50 transition-colors"
+          >
+            {expanded ? "Show less" : `+${overflow} more`}
+          </button>
+        )}
       </div>
     </TooltipProvider>
   );
@@ -1051,18 +1123,33 @@ function PartViewer({
         </div>
 
         {/* Meta row — tag-style elements */}
-        <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
           <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60">
             <FileText className="w-[11px] h-[11px] text-muted-foreground/40" /> {sourceName}
           </span>
           {part.extractionPath && (
             <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60">
-              <Tags className="w-[11px] h-[11px] text-muted-foreground/40" /> {part.extractionPath}
+              <Tags className="w-[11px] h-[11px] text-muted-foreground/40" /> {formatExtractionPath(part.extractionPath, sourceName)}
+            </span>
+          )}
+          {extractPageRange(part) && (
+            <span className="text-[10px] text-muted-foreground/60 tabular-nums">
+              {extractPageRange(part)}
             </span>
           )}
           <span className="text-[10px] text-muted-foreground/60">
             {(part.content?.length ?? 0).toLocaleString()} chars
           </span>
+          {/* Relevance badge */}
+          {part.relevant === true && (
+            <span className="text-[9px] px-1.5 py-px rounded-full bg-emerald-500/15 text-emerald-400 font-medium">Relevant</span>
+          )}
+          {part.relevant === false && (
+            <span className="text-[9px] px-1.5 py-px rounded-full bg-muted/50 text-muted-foreground/50 font-medium">Excluded</span>
+          )}
+          {linkedTopics.length > 0 && (
+            <span className="text-[10px] text-muted-foreground/60">{linkedTopics.length} topics</span>
+          )}
         </div>
       </div>
 

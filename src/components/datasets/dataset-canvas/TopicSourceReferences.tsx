@@ -12,6 +12,7 @@ import { KnowledgeSourcesConsumer } from '@/contexts/KnowledgeSourcesContext';
 import { resolveAndGroupBySource } from '@/lib/distri-finetune-tools/steps/shared/resolve-part-ref';
 import { emitter } from '@/utils/eventEmitter';
 import type { KnowledgeSourcePart } from '@/types/knowledge-types';
+import { extractPageRange } from '@/utils/knowledge-utils';
 
 interface TopicSourceReferencesProps {
   readonly sourceChunkRefs: readonly string[];
@@ -38,20 +39,6 @@ function partTypeBadge(type: KnowledgeSourcePart['type']) {
       {label}
     </span>
   );
-}
-
-function extractPageRange(part: KnowledgeSourcePart): string | null {
-  const meta = part.extractionMetadata as Record<string, unknown> | undefined;
-  if (!meta) return null;
-  const pages = meta.pages as string | number | undefined;
-  if (pages !== undefined) return `p.${pages}`;
-  const pageStart = meta.pageStart as number | undefined;
-  const pageEnd = meta.pageEnd as number | undefined;
-  if (pageStart !== undefined && pageEnd !== undefined && pageStart !== pageEnd) {
-    return `pp.${pageStart}-${pageEnd}`;
-  }
-  if (pageStart !== undefined) return `p.${pageStart}`;
-  return null;
 }
 
 export function TopicSourceReferences({ sourceChunkRefs, workflowId }: TopicSourceReferencesProps) {

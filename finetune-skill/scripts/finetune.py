@@ -943,6 +943,7 @@ def _auto_journal(
     results: dict | None = None,
     details: dict | None = None,
     triggered_by: int | None = None,
+    workflow_id: str | None = None,
 ) -> int:
     """Auto-log a pipeline step to both execution-log.md and pipeline-journal.json.
 
@@ -967,9 +968,13 @@ def _auto_journal(
         try:
             journal = json.loads(journal_file.read_text())
         except (json.JSONDecodeError, OSError):
-            journal = {"version": "1.0", "workflow_id": "", "entries": []}
+            journal = {"version": "1.0", "workflow_id": workflow_id or "", "entries": []}
     else:
-        journal = {"version": "1.0", "workflow_id": "", "entries": []}
+        journal = {"version": "1.0", "workflow_id": workflow_id or "", "entries": []}
+
+    # Set workflow_id if provided and not already set
+    if workflow_id and not journal.get("workflow_id"):
+        journal["workflow_id"] = workflow_id
 
     timestamp = datetime.now(timezone.utc).isoformat()
     next_id = max((e["id"] for e in journal["entries"]), default=0) + 1
@@ -1043,16 +1048,26 @@ def _auto_journal(
     # Upload to gateway API (non-blocking — local file is the source of truth)
     # The gateway provides atomic read-modify-write so concurrent calls are safe.
     # This makes the journal visible in the UI and persisted in the database.
-    workflow_id = journal.get("workflow_id", "")
+    workflow_id = journal.get("workflow_id") or ""
     if not workflow_id:
-        # Try to read from config.json
-        config_path = project_dir / "config.json"
-        if config_path.exists():
-            try:
-                workflow_id = json.loads(config_path.read_text()).get("workflow_id", "")
-                journal["workflow_id"] = workflow_id
-            except (json.JSONDecodeError, OSError):
-                pass
+        # Try to read from config.json — check same directory as journal file
+        for config_candidate in [
+            project_dir / "config.json",
+            project_dir.parent / "config.json",  # in case project_dir is a subdirectory
+        ]:
+            if config_candidate.exists():
+                try:
+                    workflow_id = json.loads(config_candidate.read_text()).get("workflow_id", "")
+                    if workflow_id:
+                        journal["workflow_id"] = workflow_id
+                        # Persist the workflow_id so subsequent calls don't need to re-read
+                        try:
+                            journal_file.write_text(json.dumps(journal, indent=2))
+                        except OSError:
+                            pass
+                        break
+                except (json.JSONDecodeError, OSError):
+                    pass
 
     if workflow_id:
         try:
@@ -2296,8 +2311,9 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
         print(f"  Actions (in priority order):", file=sys.stderr)
         print(f"  → 1. scale_rewards=False is already set — trivial gradients are naturally", file=sys.stderr)
         print(f"    down-weighted (Dr. GRPO arXiv:2503.20783). This is necessary but not sufficient.", file=sys.stderr)
-        print(f"  → 2. Check grader: is it too lenient? If trivials score >0.90 because the", file=sys.stderr)
-        print(f"    grader gives partial credit too generously, tighten it first.", file=sys.stderr)
+        print(f"  → 2. Check grader leniency: run test-grader to verify wrong answers", file=sys.stderr)
+        print(f"    score < 0.40. If they don't, the grader is too lenient — fix it first.", file=sys.stderr)
+        print(f"    (arXiv:2510.00915: LLM judges have 35-66% false positive rates)", file=sys.stderr)
         print(f"  → 3. Generate harder variants of trivial records:", file=sys.stderr)
         print(f"    finetune.py harden-records --eval-file <eval> --training-file training.jsonl", file=sys.stderr)
         print(f"    Adds harder variants alongside originals (originals kept as anchors).", file=sys.stderr)
@@ -2898,6 +2914,7 @@ def cmd_create_eval(args: argparse.Namespace) -> None:
         job_id=eval_id,
         job_type="eval",
         model=model,
+        workflow_id=args.workflow_id,
     )
 
 
@@ -3660,6 +3677,7 @@ def cmd_create_training(args: argparse.Namespace) -> None:
         job_type="training",
         model=args.base_model,
         results={"config": config, "inference": inference},
+        workflow_id=args.workflow_id,
     )
 
 
@@ -5076,6 +5094,202 @@ def cmd_data_quality_gate(args: argparse.Namespace) -> None:
     sys.exit(result.returncode)
 
 
+def cmd_test_grader(args: argparse.Namespace) -> None:
+    """Adversarial grader test — feeds deliberately wrong answers to detect leniency.
+
+    LLM-as-judge graders have 35-66% false positive rates under adversarial
+    conditions (arXiv:2510.00915). This test catches leniency BEFORE spending
+    45+ min on evaluation. If wrong answers score > 0.40, the grader is too
+    lenient for GRPO — fix it before proceeding.
+
+    How it works:
+    1. Reads sample records from training.jsonl
+    2. For each: generates a deliberately wrong answer via LLM
+    3. Scores the wrong answer through the grader (dry_run_grader.py)
+    4. Reports: any wrong answer scoring > 0.40 = grader leniency detected
+
+    Usage:
+      finetune.py test-grader --workflow-id WF --training-file training.jsonl --samples 10
+    """
+    import requests
+
+    training_file = Path(args.training_file)
+    if not training_file.exists():
+        print(f"Error: Training file not found: {training_file}", file=sys.stderr)
+        sys.exit(1)
+
+    # Load sample records
+    records = []
+    with open(training_file) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                records.append(json.loads(line))
+
+    if not records:
+        print("Error: No records in training file", file=sys.stderr)
+        sys.exit(1)
+
+    # Sample evenly across records
+    import random
+    random.seed(42)
+    sample_size = min(args.samples, len(records))
+    sample = random.sample(records, sample_size)
+
+    print(f"── Adversarial Grader Test ──")
+    print(f"Testing {sample_size} records with deliberately wrong answers...")
+    print(f"Threshold: wrong answers must score < 0.40 (grader is strict enough)")
+    print()
+
+    gateway_url = args.base_url
+    lenient_count = 0
+    tested = 0
+    results_list = []
+
+    for record in sample:
+        messages = record.get("messages", [])
+        gt = record.get("ground_truth", "")
+        rid = record.get("id", "?")
+
+        system_msg = ""
+        user_msg = ""
+        for m in messages:
+            if m.get("role") == "system":
+                system_msg = m.get("content", "")
+            elif m.get("role") == "user":
+                user_msg = m.get("content", "")
+
+        if not user_msg or not gt:
+            continue
+
+        # Generate a wrong answer via LLM
+        try:
+            wrong_resp = requests.post(
+                f"{gateway_url}/v1/chat/completions",
+                json={
+                    "model": "gpt-4.1-mini",
+                    "messages": [
+                        {"role": "system", "content": "Generate a WRONG answer that looks plausible but is incorrect."},
+                        {"role": "user", "content": (
+                            f"Task: {system_msg[:200]}\n"
+                            f"Question: {user_msg[:200]}\n"
+                            f"Correct answer: {gt}\n\n"
+                            f"Generate a WRONG answer that:\n"
+                            f"1. Has the same format as the correct answer\n"
+                            f"2. Sounds plausible\n"
+                            f"3. Is factually INCORRECT (different from '{gt}')\n"
+                            f"Return ONLY the wrong answer, nothing else."
+                        )},
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 200,
+                },
+                timeout=30,
+            )
+            wrong_resp.raise_for_status()
+            wrong_answer = wrong_resp.json()["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            print(f"  Skip {rid}: could not generate wrong answer ({e})", file=sys.stderr)
+            continue
+
+        # Score the wrong answer through the grader
+        test_row = {
+            "messages": [
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_msg},
+                {"role": "assistant", "content": wrong_answer},
+            ],
+            "ground_truth": gt,
+        }
+
+        try:
+            score_resp = requests.post(
+                f"{gateway_url}/finetune/workflows/{args.workflow_id}/evaluate",
+                json={"row": test_row},
+                timeout=30,
+            )
+            score_resp.raise_for_status()
+            score_data = score_resp.json()
+            score = score_data.get("score", score_data.get("result", {}).get("score", 0))
+            reason = score_data.get("reason", score_data.get("result", {}).get("reason", ""))
+        except Exception:
+            # Fallback: use dry_run_grader.py
+            try:
+                import subprocess
+                script_dir = Path(__file__).parent
+                grader_script = script_dir / "dry_run_grader.py"
+                cmd_result = subprocess.run(
+                    [sys.executable, str(grader_script),
+                     "--workflow-id", args.workflow_id,
+                     "--script", args.grader_file or "finetune-project/grader.js",
+                     "--row", json.dumps(test_row)],
+                    capture_output=True, text=True, timeout=30,
+                )
+                # Parse score from output
+                for out_line in cmd_result.stdout.split("\n"):
+                    if "score" in out_line.lower():
+                        import re
+                        m = re.search(r'"score":\s*([\d.]+)', out_line)
+                        if m:
+                            score = float(m.group(1))
+                            reason = out_line[:100]
+                            break
+                else:
+                    continue
+            except Exception:
+                continue
+
+        tested += 1
+        is_lenient = score > 0.40
+        if is_lenient:
+            lenient_count += 1
+
+        flag = "✗ LENIENT" if is_lenient else "✓ strict"
+        print(f"  {flag} [{rid}] wrong=\"{wrong_answer[:50]}\" score={score:.2f} (GT=\"{gt}\")")
+        results_list.append({
+            "record_id": rid,
+            "wrong_answer": wrong_answer[:100],
+            "ground_truth": gt,
+            "score": score,
+            "is_lenient": is_lenient,
+        })
+
+    # Summary
+    print(f"\n── Results ──")
+    print(f"  Tested: {tested}, Lenient: {lenient_count}, Strict: {tested - lenient_count}")
+
+    if lenient_count > 0:
+        pct = lenient_count / tested * 100
+        print(f"  ⚠ GRADER LENIENCY DETECTED: {pct:.0f}% of wrong answers scored > 0.40")
+        print(f"  Fix the grader BEFORE running eval. Wrong answers must score < 0.40.")
+        print(f"  Research: arXiv:2510.00915 — LLM judges have 35-66% FP rates by default.")
+        verdict = "fail"
+    else:
+        print(f"  ✓ Grader is strict — all wrong answers scored < 0.40")
+        print(f"  High trivial% (if observed at eval) is a data difficulty issue, not grader leniency.")
+        verdict = "pass"
+
+    # Auto-journal
+    _auto_journal(
+        project_dir=training_file.resolve().parent,
+        step="step_5_1_grader",
+        action="adversarial_grader_test",
+        status=verdict,
+        summary=f"Adversarial grader test: {tested} tested, {lenient_count} lenient (>{0.40}). "
+                + ("FIX GRADER before eval." if lenient_count > 0 else "Grader is strict."),
+        results={
+            "tested": tested,
+            "lenient_count": lenient_count,
+            "lenient_pct": round(lenient_count / max(tested, 1), 3),
+            "threshold": 0.40,
+            "details": results_list[:10],
+        },
+        workflow_id=args.workflow_id,
+    )
+
+    sys.exit(1 if lenient_count > 0 else 0)
+
+
 def cmd_harden_records(args: argparse.Namespace) -> None:
     """Rewrite trivial training records to be harder using LLM.
 
@@ -5631,6 +5845,16 @@ def main() -> None:
     p.add_argument("--output-json", action="store_true", help="Output JSON only")
     p.add_argument("--save", help="Save full report to file")
 
+    # test-grader
+    p = subparsers.add_parser(
+        "test-grader",
+        help="Adversarial grader test — feeds wrong answers to detect leniency before eval",
+    )
+    p.add_argument("--workflow-id", required=True, help="Workflow ID")
+    p.add_argument("--training-file", required=True, help="Path to training.jsonl")
+    p.add_argument("--grader-file", default=None, help="Path to grader.js (for fallback scoring)")
+    p.add_argument("--samples", type=int, default=10, help="Number of records to test (default: 10)")
+
     # harden-records
     p = subparsers.add_parser(
         "harden-records",
@@ -5691,6 +5915,7 @@ def main() -> None:
         "update-part-relevance": cmd_update_part_relevance,
         "difficulty-probe": cmd_difficulty_probe,
         "data-quality-gate": cmd_data_quality_gate,
+        "test-grader": cmd_test_grader,
         "harden-records": cmd_harden_records,
         "print-row-outputs": cmd_print_row_outputs,
     }

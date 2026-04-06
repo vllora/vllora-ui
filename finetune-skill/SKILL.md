@@ -360,7 +360,14 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
 
 Both tests must pass. If Test 1 passes but Test 2 scores 0.0, fix parsing logic.
 
-**Test 3: Adversarial robustness** — mentally trace through grader logic for: over-prediction, under-prediction, length exploitation, format gaming, prompt copying. If any adversarial response scores >0.3, fix the grader.
+**Test 3: Adversarial leniency test (MANDATORY)** — feeds wrong answers through the grader:
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py test-grader \
+  --workflow-id $WORKFLOW_ID --training-file finetune-project/training.jsonl --samples 10
+```
+Generates plausible-but-wrong answers for 10 records, scores them through the grader. If ANY wrong answer scores > 0.40, the grader is too lenient — fix it before eval. LLM judges have 35-66% false positive rates by default (arXiv:2510.00915).
+
+**Why this matters:** If the grader is lenient, high trivial% at eval doesn't mean records are easy — it means the grader can't tell right from wrong. Fixing the grader is cheaper than regenerating data.
 
 **Test 4: Grader Validation Protocol** — consistency (5 paraphrases, variance < ±0.15), discrimination (correct vs wrong mean diff > 0.4), exploitation (3 adversarial responses all < 0.4).
 
