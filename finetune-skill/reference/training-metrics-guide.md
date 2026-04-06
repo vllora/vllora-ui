@@ -331,7 +331,7 @@ These are the defaults used by `create-training` when no `--config` is passed.
 |-----------|---------|-----------|
 | `learning_rate` | **1e-6** | Standard GRPO LR (DeepSeekMath arXiv:2402.03300, DAPO arXiv:2503.14476, Dr. GRPO arXiv:2503.20783). Higher LR (5e-6) causes faster policy drift → forgetting spiral (arXiv:2509.07430). |
 | `beta` | **0.01** | KL penalty prevents catastrophic forgetting by constraining policy drift from reference model (arXiv:2509.07430: 15% forgetting rate without KL). DeepSeekMath used β=0.04; 0.01 is conservative. |
-| `response_candidates_count` | **8** | K=8 is the standard choice: Dr. GRPO Table 6 (arXiv:2503.20783), "Hard Examples" Appendix B (arXiv:2508.14094), TRL default, DeepSeek-R1. **Do NOT default to K=16.** EBPO (Table 2, arXiv:2602.05165) shows K=16 averages 0.9 points *worse* than K=8. K=16 costs 2x compute for marginal-to-negative quality gain. |
+| `response_candidates_count` | **8** | K=8 is the standard choice (TRL default, DeepSeek-R1 arXiv:2501.12948, RL-ZVP arXiv:2509.21880 for ≤1.7B models). **Do NOT default to K=16** — for short-output tasks (<20 tokens), larger K accelerates convergence but then wastes compute on zero-variance steps. "No Prompt Left Behind" (arXiv:2509.21880): zero-variance prompts are 30-99% of batches regardless of K. "It Takes Two" (arXiv:2510.00977): K=2 matches K=16 for binary rewards at 1/8 cost. K=4 is viable for short-output classification if grader is binary; K=8 is better when grader has partial credit (our case). |
 | `epochs` | **adaptive** | Auto-set by dataset size: <50 records→8, <200→5, <500→3, 500+→2. Reduced to prevent forgetting spiral (arXiv:2505.22257: "training beyond ~80% of one epoch yields negligible gains"). |
 | `warmup_ratio` | **configurable** | Uses `warmup_ratio` (not `warmup_steps`). The cloud applies cosine LR scheduler. |
 
@@ -346,13 +346,28 @@ These are the defaults used by `create-training` when no `--config` is passed.
 
 > **RFT epochs ≠ SFT epochs.** In RFT/GRPO, the model generates **fresh responses each epoch** — there's no repetition risk. More epochs = more exploration.
 
+### K (Group Size) Selection Guide
+
+K determines how many completions GRPO generates per prompt. The model learns from **variance within the group** — if all K completions score the same, gradient is zero.
+
+| Output length | Grader type | Base accuracy | Recommended K |
+|--------------|-------------|---------------|---------------|
+| Short (<20 tokens) | Binary (0/1) | >50% | **4** |
+| Short (<20 tokens) | Partial credit (0-1) | 20-50% | **8** (default) |
+| Medium (20-100 tokens) | Any | Any | **8** |
+| Long (>100 tokens) | Any | <20% | **16** |
+
+**Why not always K=16?** For short-output tasks, the completion space is narrow. Once the model converges, all K completions produce the same answer → zero variance → zero gradient. Larger K reaches this point faster, then wastes more compute per step on identical completions. "No Prompt Left Behind" (arXiv:2509.21880): zero-variance prompts are 30-99% of batches regardless of K. "It Takes Two" (arXiv:2510.00977): K=2 matches K=16 for binary rewards.
+
+**Zero-variance collapse is task mastery, not failure.** When `frac_reward_zero_std > 0.8` for 10+ consecutive steps, the model has learned the distribution. The fix is early stopping, not K tuning. DAPO (arXiv:2503.14476) dynamic sampling and F-GRPO (arXiv:2602.06717) difficulty weighting address this algorithmically.
+
 ### Advanced Training Config (User-Configurable)
 
 | Parameter | Default | What it does | When to change |
 |-----------|---------|-------------|----------------|
 | `loss_type` | `"dr_grpo"` | GRPO variant. Removes length bias (arXiv:2503.20783). | Try `"dapo"` for TRL-standard normalization |
 | `mask_truncated_completions` | `false` | Unsloth recommends disabling — `true` causes kl=nan if all completions truncate (Unsloth #3006) | Set `true` only if truncation rate < 10% |
-| `scale_rewards` | `false` | `false` = raw advantages. `"group"` amplifies easy records. | Use `false` (default) |
+| `scale_rewards` | `"none"` | `"none"` = raw advantages, no std normalization. `"group"` amplifies easy records (Dr. GRPO/Unsloth: avoids difficulty bias). Gateway expects string `"none"`, NOT boolean `false` (400 error). | Use `"none"` (default) |
 | `importance_sampling_level` | `"sequence"` | Sequence-level often gives more stable training for sequence-level rewards (GSPO). | Keep `"sequence"` |
 
 ### Cloud-Side Config (NOT User-Configurable)

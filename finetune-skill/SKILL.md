@@ -12,7 +12,7 @@ Run the full fine-tuning pipeline on the vLLora platform. You handle the entire 
 
 ## How vLLora Fine-Tuning Works
 
-vLLora uses **GRPO (Group Relative Policy Optimization)** — a reinforcement learning method, NOT supervised fine-tuning. The model generates K=8 completions per prompt, your grader scores each (0-1), and GRPO reinforces better completions while suppressing worse ones.
+vLLora uses **GRPO (Group Relative Policy Optimization)** — a reinforcement learning method, NOT supervised fine-tuning. The model generates K completions per prompt (default K=8), your grader scores each (0-1), and GRPO reinforces better completions while suppressing worse ones. Learning happens from **score variance within the group** — if all K completions score identically, the gradient is zero and no learning occurs.
 
 **The grader IS your training objective.** Whatever the grader rewards, the model learns to do.
 
@@ -576,6 +576,8 @@ Use the model chosen in Step 7b based on learnable_frac comparison.
 These are the **only 3 base models** supported.
 
 **Do NOT pass `--config` on the first training run.** Defaults are research-optimized (lr=1e-6, β=0.01, adaptive epochs, K=8). Only override after a diagnosed failure. Use `--inference-params` for `max_output_tokens` only.
+
+> **K=8 is correct for most tasks.** K=4 is viable for short-output binary tasks; K=16 only for long-output hard tasks with dynamic sampling. Larger K does NOT reduce zero-variance collapse — it accelerates convergence then wastes compute. See [reference/training-metrics-guide.md](reference/training-metrics-guide.md) "K (Group Size) Selection Guide".
 
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
