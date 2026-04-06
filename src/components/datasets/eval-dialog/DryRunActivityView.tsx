@@ -427,8 +427,24 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
               <RunningView
                 job={job}
                 progress={pct}
-                onRecordIdClick={(recordId) => {
-                  emitter.emit('vllora_navigate_to_record', { workflowId, recordId });
+                onNavigateToRecord={(recordId: string, result: { row?: Record<string, unknown> }) => {
+                  // Try to find the gateway record by: dataset_row_id, row.id, or row.row_id
+                  const rowData = result?.row as Record<string, unknown> | undefined;
+                  const candidateIds = [recordId, rowData?.id, rowData?.row_id].filter(Boolean) as string[];
+
+                  let record: { id: string; topic?: string } | undefined;
+                  for (const cid of candidateIds) {
+                    record = sortedRecords.find((r: { id: string }) => r.id === cid);
+                    if (record) break;
+                  }
+
+                  if (record?.topic) {
+                    window.dispatchEvent(new CustomEvent("vllora_navigate_to_job", {
+                      detail: { jobId: record.topic, type: "topic" },
+                    }));
+                  } else {
+                    emitter.emit('vllora_navigate_to_record', { workflowId, recordId });
+                  }
                 }}
               />
             </div>

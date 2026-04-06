@@ -8,8 +8,8 @@
  * to ensure consistent display with UnifiedRecordTable (All Topics view).
  */
 
-import { useState, useMemo } from "react";
-import { FileText, Sparkles } from "lucide-react";
+import { useState, useMemo, useCallback } from "react";
+import { FileText, Sparkles, ExternalLink } from "lucide-react";
 import { SimplePromptChain } from "./records-table/PromptChainCard";
 import type { PromptChainLink } from "./records-table/PromptChainCard";
 import { cn } from "@/lib/utils";
@@ -311,6 +311,19 @@ export function LinkedSourcesTabContent({
 }: {
   readonly groupedSources: Map<string, { source: { id: string; name: string }; parts: Array<{ id: string; title?: string; type: string; content?: string; extractionPath?: string }> }>;
 }) {
+  const navigateToPart = useCallback((sourceId: string, partId: string) => {
+    // Navigate to the source doc view focused on this part
+    window.dispatchEvent(new CustomEvent("vllora_switch_view", {
+      detail: { viewMode: "sources", sourceId },
+    }));
+    // After a tick, emit focus on the specific part
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("vllora_navigate_to_part", {
+        detail: { sourceId, partId },
+      }));
+    }, 100);
+  }, []);
+
   if (groupedSources.size === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full py-20 text-muted-foreground">
@@ -336,31 +349,46 @@ export function LinkedSourcesTabContent({
             </div>
             <div className="flex-1 min-w-0">
               <h4 className="text-[13px] font-semibold text-foreground truncate">{source.name}</h4>
-              <p className="text-[11px] text-muted-foreground/60 mt-0.5">
-                {parts.length > 1
-                  ? `${parts.map((_p, i) => `Part ${i + 1}`).join(", ")}`
-                  : `Part 1`}
-                {parts[0]?.extractionPath ? ` — ${parts[0].extractionPath}` : ""}
+              <p className="text-[11px] text-muted-foreground/40 mt-0.5">
+                {parts.length} {parts.length === 1 ? "part" : "parts"} linked
               </p>
             </div>
           </div>
 
-          {/* Parts with content preview */}
-          {parts.map(part => (
-            <div key={part.id} className="mb-3 last:mb-0">
-              {parts.length > 1 && (
-                <div className="text-[10px] font-medium text-muted-foreground/60 mb-1">
-                  {part.title || "Untitled"}
-                  {part.extractionPath ? ` · ${part.extractionPath}` : ""}
-                </div>
-              )}
-              {part.content && (
-                <p className="text-[12px] text-foreground/70 leading-relaxed line-clamp-4">
-                  {part.content.slice(0, 500)}
-                </p>
-              )}
-            </div>
-          ))}
+          {/* Parts list */}
+          <div className="space-y-2">
+            {parts.map(part => {
+              // Strip the title from content start to avoid duplication
+              const title = part.title || "Untitled";
+              const rawContent = part.content || "";
+              const contentWithoutTitle = rawContent.startsWith(title)
+                ? rawContent.slice(title.length).replace(/^\s*\n*/, "")
+                : rawContent;
+              const preview = contentWithoutTitle.slice(0, 300).replace(/\n+/g, " ").trim();
+
+              return (
+                <button
+                  key={part.id}
+                  type="button"
+                  onClick={() => navigateToPart(source.id, part.id)}
+                  className="w-full text-left pl-3 py-1.5 hover:bg-muted/20 transition-colors rounded group cursor-pointer"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[12px] font-medium text-foreground/80 group-hover:text-[rgb(var(--theme-500))] transition-colors">{title}</span>
+                    {part.type === "table" && (
+                      <span className="text-[8px] px-1 py-px rounded bg-amber-500/10 text-amber-400 font-semibold uppercase">table</span>
+                    )}
+                    <ExternalLink className="w-3 h-3 text-muted-foreground/0 group-hover:text-muted-foreground/40 transition-colors ml-auto shrink-0" />
+                  </div>
+                  {preview && (
+                    <p className="text-[11px] text-muted-foreground/50 leading-relaxed mt-0.5 line-clamp-2">
+                      {preview}
+                    </p>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
       ))}
     </div>

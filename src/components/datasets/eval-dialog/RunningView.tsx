@@ -14,7 +14,7 @@ import {
   getJobAverageScore,
   getJobPassedCount,
 } from "@/types/eval-job";
-import { flattenEvaluationResults } from "@/services/finetune-api";
+import { flattenEvaluationResults, type FlatEvaluationResult } from "@/services/finetune-api";
 import { ResultsTable } from "./ResultsTable";
 import {
   Tooltip,
@@ -28,9 +28,11 @@ interface RunningViewProps {
   progress: number;
   /** Callback when record ID is clicked — enables navigation to record */
   onRecordIdClick?: (recordId: string) => void;
+  /** Callback to navigate to a record in the data view */
+  onNavigateToRecord?: (recordId: string, result: FlatEvaluationResult) => void;
 }
 
-export function RunningView({ job, progress, onRecordIdClick }: RunningViewProps) {
+export function RunningView({ job, progress, onRecordIdClick, onNavigateToRecord }: RunningViewProps) {
   const totalRows = getJobTotalRows(job);
   const completedRows = getJobCompletedRows(job);
   const failedRows = getJobFailedRows(job);
@@ -115,6 +117,7 @@ export function RunningView({ job, progress, onRecordIdClick }: RunningViewProps
           totalRows={totalRows}
           fillHeight
           onRowClick={onRecordIdClick ? (r) => onRecordIdClick(r.dataset_row_id) : undefined}
+          onNavigateToRecord={onNavigateToRecord ? (recordId, result) => onNavigateToRecord(recordId, result) : undefined}
         />
       </div>
     </div>

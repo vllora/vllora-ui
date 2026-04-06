@@ -199,7 +199,8 @@ export function ResultsTable({
       // External handler (e.g., open drawer)
       onRowClick(result);
     } else {
-      // Internal expand/collapse
+      // Internal expand/collapse — only expand rows that have content to show
+      if (result.score == null && !result.reason && !result.rollout_content) return;
       setInternalExpandedId((prev) =>
         prev === result.dataset_row_id ? null : result.dataset_row_id,
       );
