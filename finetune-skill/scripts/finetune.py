@@ -1408,26 +1408,28 @@ def cmd_verify(args: argparse.Namespace) -> None:
 
     if all_ok:
         print("\nAll checks passed. Ready for evaluation.")
-        _auto_journal(
-            project_dir=Path("finetune-project"),
-            step="step_6_verify",
-            action="verify_gateway",
-            status="completed",
-            summary=f"Gateway verified: {', '.join(f'{k}={v}' for k, v in verify_counts.items())}, evaluator={has_eval}. All checks passed.",
-            results=verify_counts,
-            workflow_id=wf_id,
-        )
+        if not getattr(args, "no_journal", False):
+            _auto_journal(
+                project_dir=Path("finetune-project"),
+                step="step_6_verify",
+                action="verify_gateway",
+                status="completed",
+                summary=f"Gateway verified: {', '.join(f'{k}={v}' for k, v in verify_counts.items())}, evaluator={has_eval}. All checks passed.",
+                results=verify_counts,
+                workflow_id=wf_id,
+            )
     else:
         print("\nSome checks failed. Re-run the upload for missing items.", file=sys.stderr)
-        _auto_journal(
-            project_dir=Path("finetune-project"),
-            step="step_6_verify",
-            action="verify_gateway",
-            status="fail",
-            summary=f"Verify FAILED: {', '.join(f'{k}={v}' for k, v in verify_counts.items())}, evaluator={has_eval}.",
-            results=verify_counts,
-            workflow_id=wf_id,
-        )
+        if not getattr(args, "no_journal", False):
+            _auto_journal(
+                project_dir=Path("finetune-project"),
+                step="step_6_verify",
+                action="verify_gateway",
+                status="fail",
+                summary=f"Verify FAILED: {', '.join(f'{k}={v}' for k, v in verify_counts.items())}, evaluator={has_eval}.",
+                results=verify_counts,
+                workflow_id=wf_id,
+            )
         sys.exit(1)
 
 
@@ -5855,6 +5857,7 @@ def main() -> None:
     # verify
     p = subparsers.add_parser("verify", help="Verify all data in gateway via REST API")
     p.add_argument("--workflow-id", required=True, help="Workflow ID")
+    p.add_argument("--no-journal", action="store_true", help="Skip auto-journal (use when calling verify as a diagnostic check, not as Step 6)")
 
     # status
     p = subparsers.add_parser("status", help="Show full workflow status: gateway data + checkpoint + jobs + next step")

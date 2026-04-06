@@ -82,29 +82,67 @@ finetune-project/
 
 Maintain `execution-log.md` as an **append-only** chronological record.
 
-**Use `log-step` ONLY — do NOT write to the log manually.** Call at TWO points for each step:
+**Use `log-step` ONLY — do NOT write to the log manually.** Log at **sub-step granularity** — not just start/end of each major step, but every meaningful milestone within it. The journal should tell the story of what happened without reading the transcript.
 
-1. **When a step STARTS** (long-running steps):
-   ```bash
-   uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-step \
-     --project-dir finetune-project \
-     --step step_2_extraction --action extract_documents --status in_progress \
-     --summary "Processing 1 PDF with Docling..."
-   ```
+**Logging rules:**
+1. Log when a sub-task **starts** (status=in_progress)
+2. Log when a sub-task **completes** with concrete results in `--summary` (status=completed)
+3. Log **decisions** with rationale in `--analysis` and `--decision`
+4. Include **numbers** in every summary — never "Processing PDFs...", always "Processing 1 PDF (FDA-FALCPA.pdf) with Docling..."
 
-2. **When the step COMPLETES** — with results, analysis, decision, `--duration`, and `--agent`:
-   ```bash
-   uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-step \
-     --project-dir finetune-project \
-     --step step_2_extraction --action extract_documents --status completed \
-     --summary "Extracted 68 knowledge parts" \
-     --analysis "68 parts: 67 text, 1 table" \
-     --decision "Proceed to topic hierarchy" \
-     --duration "2 min" --agent "knowledge-extractor" \
-     --triggered-by 1
-   ```
+**Example: Step 2 (Extraction) should produce 4+ journal entries, not 2:**
+```bash
+# 2a. Submit to Docling
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-step \
+  --project-dir finetune-project \
+  --step step_2_extraction --action docling_submit --status in_progress \
+  --summary "Submitted 1 PDF (FDA-FALCPA.pdf) to Docling for extraction"
 
-**Each step gets its own `log-step` call.** Steps 4, 5, and 5.5 are SEPARATE entries.
+# 2b. Docling result
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-step \
+  --project-dir finetune-project \
+  --step step_2_extraction --action docling_complete --status completed \
+  --summary "Docling extracted 75 chunks from FDA-FALCPA.pdf"
+
+# 2c. Build knowledge parts
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-step \
+  --project-dir finetune-project \
+  --step step_2_extraction --action build_parts --status completed \
+  --summary "Built 68 knowledge parts (67 text, 1 table). Consolidation: 75→68 (merged 7 fragments)"
+
+# 2d. Upload + verify
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-step \
+  --project-dir finetune-project \
+  --step step_2_extraction --action upload_knowledge --status completed \
+  --summary "Uploaded 68 parts to gateway. Source ID: 079fe2a8. Validation: PASS" \
+  --decision "Proceed to topic hierarchy" \
+  --duration "2 min" --agent "knowledge-extractor"
+```
+
+**Use `--details` for structured data** (JSON string). This makes the journal machine-readable for the UI:
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-step \
+  --project-dir finetune-project \
+  --step step_7_eval --action model_selection --status completed \
+  --summary "Chose 0.8B: learnable=37% vs 4B learnable=25%" \
+  --analysis "4B avg=0.791 exceeds 0.75 headroom gate. 0.8B has 184 effective samples vs 105 for 4B." \
+  --decision "Train 0.8B" \
+  --details '{"4B": {"avg": 0.791, "learnable_frac": 0.25, "trivial_frac": 0.27, "zeros": 0.03}, "0.8B": {"avg": 0.509, "learnable_frac": 0.37, "trivial_frac": 0.10, "zeros": 0.13}, "chosen": "Qwen3.5-0.8B", "reason": "higher_learnable_frac"}'
+```
+
+**Sub-step milestones to log per major step:**
+
+| Step | Milestones to log |
+|------|-------------------|
+| Step 2: Extract | docling_submit, docling_complete, build_parts, consolidate, upload_knowledge |
+| Step 3: Topics | design_topics (with topic count + structure), upload_topics, build_relations, upload_relations |
+| Step 4: Generate | generate_stage1 (record count per topic), derive_gt (success/error count), dedup, validate_gt, upload_records |
+| Step 5: Grader | write_grader (scoring approach), test_grader (adversarial results), upload_grader |
+| Step 5.5: Validate | validate_dataset (record count, issues), data_quality_gate (pass/warn/fail per gate) |
+| Step 7: Eval | create_eval (model name), poll_eval (final scores), readiness_check (pass/fail with metrics), model_selection (comparison table + chosen model + rationale) |
+| Step 8: Train | estimate_training (cost/duration), create_training (config used), poll_training (epoch progression), post_training_eval (improvement delta) |
+
+**Each step gets its own `log-step` calls.** Steps 4, 5, and 5.5 are SEPARATE entries.
 
 Agent names: `orchestrator`, `knowledge-extractor`, `relation-builder`, `training-monitor`, `nemo-data-generator`.
 
@@ -214,7 +252,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/knowl
 
 **Hard gate.** If validation fails after `--fix`: fix the specific issues (you can read PDF pages directly with the `Read` tool to fix broken tables), re-validate. Do NOT silently proceed with FAIL status.
 
-**2e. Verify gateway upload** — `verify --workflow-id $WORKFLOW_ID`. Confirm source count matches PDFs. Delete duplicates if found.
+**2e. Verify gateway upload** — `verify --workflow-id $WORKFLOW_ID --no-journal`. Confirm source count matches PDFs. Delete duplicates if found. Use `--no-journal` here — this is a diagnostic check, not Step 6.
 
 ---
 
@@ -318,7 +356,9 @@ If >10% of sampled records have issues, fix before proceeding.
 
 ### Step 4.5: Topic Balance Check
 
-**MANDATORY after record generation.** If any topic has <50% of target records-per-topic, regenerate for that topic using `generate_records.py --append`. Use `chat_completion.py` for variants if needed.
+**MANDATORY: minimum 25 records per leaf topic.** Always use `--records-per-topic 25` or higher. Do NOT reduce below 25 — fewer records per topic means insufficient difficulty coverage for GRPO to learn from.
+
+If any topic has <50% of target records-per-topic after generation, regenerate for that topic using `generate_records.py --append`. Use `chat_completion.py` for variants if needed.
 
 ### Step 5: Write the Grader
 
@@ -629,10 +669,19 @@ Compute overall scores, per-topic breakdown, score concentration. Read actual mo
 
 Then run the readiness gate (Step 7c).
 
-#### 8a+. Filter Dead-Weight Records
+#### 8a+. Diagnose Zero-Scoring Records (Do NOT Remove Automatically)
 
-Find records where max score < 0.1, diagnose why, remove, and regenerate replacements if needed:
+> **CRITICAL: Do NOT filter zero-scoring records before training.** K=1 eval score of 0 does NOT mean K=8 training will also produce all zeros. With 8 attempts, the model may produce a correct answer, creating the variance GRPO needs. "Hard Examples Are All You Need" (arXiv:2508.14094): hard examples yield 47% gains vs 3-15% for easy ones. "No Prompt Left Behind" (arXiv:2509.21880): dead-weight prompts (30-99% per batch) are normal and handled by the algorithm.
+
+**Only filter if:** `difficulty-probe` with K=8 confirms ALL completions score 0 for a record, OR the record has a data quality issue (wrong GT, malformed input, grader bug). Use `--reason-pattern "refused"` to filter model refusals only — those are genuinely broken.
+
 ```bash
+# Diagnose zeros (DO NOT remove yet)
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py filter-records \
+  --file evaluations/eval-001.json --training-file finetune-project/training.jsonl \
+  --max-score 0.0 --workflow-id $WORKFLOW_ID --verbose --dry-run
+
+# Only filter confirmed model refusals
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py filter-records \
   --file evaluations/eval-001.json --training-file finetune-project/training.jsonl \
   --max-score 0.0 --reason-pattern "refused" --workflow-id $WORKFLOW_ID --sync-gateway --verbose
@@ -707,8 +756,9 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader --workflow-id $WORK
 uv run ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py --workflow-id $WORKFLOW_ID --script grader.js --live
 ```
 
-**Fix records:**
+**Fix records (only for diagnosed data issues, NOT for zero-score filtering):**
 ```bash
+# Only filter records with confirmed data issues (refusals, wrong GT, malformed input)
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py filter-records \
   --file evaluations/eval-001.json --training-file finetune-project/training.jsonl \
   --max-score 0.0 --reason-pattern "refused" --workflow-id $WORKFLOW_ID --sync-gateway --verbose

@@ -5,7 +5,7 @@
  * Uses the Context + ahooks useRequest pattern per project conventions.
  */
 
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useRef, type ReactNode } from "react";
 import { useRequest } from "ahooks";
 import { toast } from "sonner";
 import { fetchPipelineJournal } from "@/services/pipeline-journal-service";
@@ -20,9 +20,11 @@ export type PipelineJournalContextType = ReturnType<typeof usePipelineJournalLog
 const POLL_INTERVAL_MS = 15_000;
 
 function usePipelineJournalLogic(workflowId: string | null) {
+  const hasLoadedOnce = useRef(false);
+
   const {
     data: journal,
-    loading: isLoading,
+    loading: rawLoading,
     error,
     refresh,
   } = useRequest(
@@ -32,14 +34,19 @@ function usePipelineJournalLogic(workflowId: string | null) {
     },
     {
       refreshDeps: [workflowId],
-      // Poll every 15s when the pipeline is actively running
       pollingInterval: POLL_INTERVAL_MS,
       pollingWhenHidden: false,
+      onSuccess: () => { hasLoadedOnce.current = true; },
       onError: (err) => {
-        toast.error(`Failed to load pipeline journal: ${err.message}`);
+        if (!hasLoadedOnce.current) {
+          toast.error(`Failed to load pipeline journal: ${err.message}`);
+        }
       },
     },
   );
+
+  // Only show loading on the first fetch — not on poll refreshes
+  const isLoading = rawLoading && !hasLoadedOnce.current;
 
   const entries: readonly PipelineJournalEntry[] = journal?.entries ?? [];
   const hasJournal = entries.length > 0;
