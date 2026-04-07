@@ -33,7 +33,6 @@ import { DatasetsProvider } from "./contexts/DatasetsContext"
 import { NewDatasetAdvancedPage } from "./pages/datasets/new-advanced"
 import { SetupGuidePage } from "./pages/finetune/setup"
 import { OtelTracesPage } from "./pages/OtelTraces"
-import { OtelTraceDetailPage } from "./pages/OtelTraces/[id]"
 
 // Lazy load the models page
 const ModelsPage = lazy(() => import("./pages/models").then(module => ({ default: module.ModelsPage })))
@@ -109,7 +108,6 @@ function App() {
                 <Route path="finetune/:workflowId" element={<DatasetDetailPage />} />
                 <Route path="finetune" element={<DatasetsPage />} />
                 <Route path="otel-traces" element={<OtelTracesPage />} />
-                <Route path="otel-traces/:traceId" element={<OtelTraceDetailPage />} />
                 <Route path="settings" element={<SettingsPage />} />
               </Route>
             </Routes>

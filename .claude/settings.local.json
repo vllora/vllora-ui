@@ -722,7 +722,8 @@
       "Bash(git mv:*)",
       "WebFetch(domain:www.braintrust.dev)",
       "WebFetch(domain:vercel.com)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(npx --yes degit evilmartians/agent-prism/packages/ui/src/components src/components/agent-prism)"
     ],
     "deny": [],
     "ask": [],
