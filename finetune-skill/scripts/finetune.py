@@ -3819,7 +3819,6 @@ def cmd_create_training(args: argparse.Namespace) -> None:
             payload["training_config"]["epochs"] = 3 if is_small_model else 3
         print(f"Adaptive epochs: {payload['training_config']['epochs']} (based on {record_count} records, {'small' if is_small_model else 'large'} model)")
 
-    if args.inference_params:
     # K (response_candidates_count) is model-size-dependent.
     # Small models (0.8B-2B) with strict graders produce low within-group variance
     # at K=8 — frac_reward_zero_std reaches 80%. K=16 gives more diversity.
