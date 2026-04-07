@@ -1,12 +1,14 @@
 import { Routes, Route, BrowserRouter } from "react-router"
 import { Layout } from "./components/layout"
 import { HomePage } from "./pages/home"
-import { ThreadsAndTracesPage } from "./pages/chat"
+// ThreadsAndTracesPage / ExperimentPage routes hidden as part of the
+// skill-first pivot. Re-import here if /chat or /experiment is reinstated.
+// import { ThreadsAndTracesPage } from "./pages/chat"
 import { ProjectsPage } from "./pages/projects"
 import { AnalyticsPage } from "./pages/analytics"
 import { SettingsPage } from "./pages/settings"
 import { LoginPage } from "./pages/login"
-import { ExperimentPage } from "./pages/experiment"
+// import { ExperimentPage } from "./pages/experiment"
 import { DatasetsPage } from "./pages/datasets"
 import { NewDatasetPage } from "./pages/datasets/new"
 import { DatasetDetailPage } from "./pages/datasets/[id]"
@@ -22,7 +24,7 @@ import { AuthProvider } from "./contexts/AuthContext"
 import { ProtectedRoute } from "./components/ProtectedRoute"
 import { LocalModelsSkeletonLoader } from "./components/models/local/LocalModelsSkeletonLoader"
 import { AvailableApiKeysProvider, CurrentAppProvider, VirtualModelsProvider } from "./lib"
-import { ThreadAndTracesPageProvider } from "./contexts/ThreadAndTracesPageContext"
+// import { ThreadAndTracesPageProvider } from "./contexts/ThreadAndTracesPageContext"
 import { DistriProvider } from "./providers/DistriProvider"
 import { AgentPanelWrapper } from "./components/agent"
 import { IS_LUCY_ENABLED } from "./lib/feature-flags"
@@ -30,6 +32,8 @@ import { AgentPanelProvider } from "./contexts/AgentPanelContext"
 import { DatasetsProvider } from "./contexts/DatasetsContext"
 import { NewDatasetAdvancedPage } from "./pages/datasets/new-advanced"
 import { SetupGuidePage } from "./pages/finetune/setup"
+import { OtelTracesPage } from "./pages/OtelTraces"
+import { OtelTraceDetailPage } from "./pages/OtelTraces/[id]"
 
 // Lazy load the models page
 const ModelsPage = lazy(() => import("./pages/models").then(module => ({ default: module.ModelsPage })))
@@ -76,10 +80,12 @@ function App() {
               </ProtectedRoute>}>
                 {/* Project-scoped routes (now using query string ?project_id=...) */}
                 <Route index element={<HomePage />} />
+                {/* Old chat + experiment routes hidden — skill-first pivot.
+                    OTel GenAI traces now live at /traces. Re-enable here if needed.
                 <Route path="chat" element={<ThreadAndTracesPageProvider><ThreadsAndTracesPage /></ThreadAndTracesPageProvider>} />
-                <Route path="analytics" element={<AnalyticsPage />} />
-                {/* <Route path="experiments" element={<ExperimentsPage />} /> */}
                 <Route path="experiment" element={<ExperimentPage />} />
+                */}
+                <Route path="analytics" element={<AnalyticsPage />} />
                 <Route
                   path="models"
                   element={
@@ -102,6 +108,8 @@ function App() {
                 <Route path="finetune/new-advanced" element={<NewDatasetAdvancedPage />} />
                 <Route path="finetune/:workflowId" element={<DatasetDetailPage />} />
                 <Route path="finetune" element={<DatasetsPage />} />
+                <Route path="otel-traces" element={<OtelTracesPage />} />
+                <Route path="otel-traces/:traceId" element={<OtelTraceDetailPage />} />
                 <Route path="settings" element={<SettingsPage />} />
               </Route>
             </Routes>

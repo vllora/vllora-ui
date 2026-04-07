@@ -22,6 +22,7 @@ import { emitter } from "@/utils/eventEmitter";
 import { uploadKnowledgeSourceHandler } from "@/lib/distri-finetune-tools/steps/knowledge-sources";
 import type { KnowledgeSourceType } from "@/types/dataset-types";
 import { FinetuneHero } from "./FinetuneHero";
+import { WelcomeFlow, isOnboardingCompleted } from "@/components/onboarding/WelcomeFlow";
 
 type TabType = "objective" | "api";
 
@@ -127,10 +128,25 @@ export function EmptyDatasetsState() {
   }, []);
 
   const [isCreating, setIsCreating] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(() => !isOnboardingCompleted());
 
   const handleObjectiveChange = useCallback((value: string) => {
     setObjective(value);
   }, []);
+
+  if (showWelcome) {
+    return (
+      <WelcomeFlow
+        onComplete={() => setShowWelcome(false)}
+        onPickObjective={() => {
+          setSearchParams({ tab: "objective" }, { replace: true });
+        }}
+        onPickDocuments={() => {
+          setSearchParams({ tab: "objective" }, { replace: true });
+        }}
+      />
+    );
+  }
 
   // Update URL when tab changes
   const handleTabChange = useCallback((tab: TabType) => {

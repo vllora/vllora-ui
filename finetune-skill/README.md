@@ -561,6 +561,7 @@ All scripts use inline dependency declarations — run with `uv run script.py` (
 | `scripts/checkpoint.py` | Pipeline checkpoint — save/check/reset step progress for crash recovery |
 | `scripts/deduplicate_records.py` | Remove near-duplicate prompts via trigram similarity (mandatory after generation, threshold 0.85) |
 | `scripts/build_knowledge_parts.py` | Generic Docling→knowledge_parts.json converter (no LLM needed) |
+| `scripts/otel_extract.py` | **OTel GenAI trace ingestion** — parallel to document extraction. Reads `gen_ai.input.messages` / `gen_ai.output.messages` / `gen_ai.tool.*` from a JSON span list or OTLP-JSON document and writes the same `knowledge_parts.json` format the rest of the pipeline consumes. Use when cloning behavior of an existing LLM app. See [reference/otel-trace-ingestion.md](reference/otel-trace-ingestion.md). |
 | `scripts/run_evaluation.py` | Create eval job, poll until complete (~30 min timeout) — legacy, prefer `finetune.py create-eval` |
 | `scripts/start_training.py` | Start training job, poll until complete — legacy, prefer `finetune.py create-training` |
 | `scripts/consolidate_parts.py` | Merge adjacent text parts, drop short fragments, fix Unicode, regenerate parts-index |

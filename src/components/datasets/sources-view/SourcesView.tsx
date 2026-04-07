@@ -30,6 +30,16 @@ import {
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { knowledgeSourceService } from "@/services/service-registry";
+import { OtelTraceSourceViewer } from "./OtelTraceSourceViewer";
+
+/**
+ * Detect OTel trace sources. They are produced by `otel_extract.py` in the
+ * skill, which sets `metadata.kind === 'otel-trace'`. Falls back to a name
+ * prefix check for older mocks.
+ */
+function isOtelTraceSource(source: { name: string; metadata?: Record<string, unknown> }): boolean {
+  return source.metadata?.kind === "otel-trace" || source.name.startsWith("otel-");
+}
 // CoverageMatrix replaced by inline hierarchical matrix in AllSourcesView
 import type { KnowledgeSource, KnowledgeSourcePart } from "@/types/knowledge-types";
 import type { TopicHierarchyNode, DatasetRecord } from "@/types/dataset-types";
@@ -53,6 +63,13 @@ export function SourcesView({ selectedSourceId, focusPartId, backTo, onBackToRec
   const activeSource = selectedSourceId
     ? sources.find(s => s.id === selectedSourceId)
     : null;
+
+  // OTel trace sources render via the trace timeline component, not the
+  // PDF/document viewer. Branch early to keep the rest of this component
+  // focused on document sources.
+  if (activeSource && isOtelTraceSource(activeSource)) {
+    return <OtelTraceSourceViewer source={activeSource} />;
+  }
 
   // When a source is selected from the AllSourcesView cards/matrix,
   // notify parent so explorer sidebar can update its selection

@@ -1,0 +1,94 @@
+[
+  {
+    "trace_id": "trace-sample-0001",
+    "span_id": "span-0001",
+    "name": "chat gpt-4o",
+    "start_time": "2026-04-06T14:02:11.000Z",
+    "end_time": "2026-04-06T14:02:13.420Z",
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "openai",
+      "gen_ai.request.model": "gpt-4o",
+      "gen_ai.response.model": "gpt-4o-2024-11-20",
+      "gen_ai.usage.input_tokens": 84,
+      "gen_ai.usage.output_tokens": 142,
+      "gen_ai.conversation.id": "conv-chess-001",
+      "gen_ai.system_instructions": "You are a helpful chess tutor. Explain in plain language.",
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Why is the center of the board so important in the opening?"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "finish_reason": "stop",
+          "parts": [
+            {
+              "type": "text",
+              "content": "Controlling the center (e4, d4, e5, d5) gives your pieces more squares to move to and more options to attack on either side. A knight on e5 reaches eight squares; a knight on a1 reaches only two."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "trace_id": "trace-sample-0002",
+    "span_id": "span-0002",
+    "name": "chat gpt-4o-mini",
+    "start_time": "2026-04-06T15:10:00.000Z",
+    "end_time": "2026-04-06T15:10:01.310Z",
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.provider.name": "openai",
+      "gen_ai.request.model": "gpt-4o-mini",
+      "gen_ai.usage.input_tokens": 56,
+      "gen_ai.usage.output_tokens": 24,
+      "gen_ai.conversation.id": "conv-weather-001",
+      "gen_ai.input.messages": [
+        {
+          "role": "user",
+          "parts": [{ "type": "text", "content": "What's the weather in Tokyo right now?" }]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "finish_reason": "tool_calls",
+          "parts": [
+            {
+              "type": "tool_call",
+              "id": "call_weather_1",
+              "name": "get_current_weather",
+              "arguments": { "location": "Tokyo, Japan", "units": "celsius" }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "trace_id": "trace-sample-0002",
+    "span_id": "span-0003",
+    "parent_span_id": "span-0002",
+    "name": "execute_tool get_current_weather",
+    "start_time": "2026-04-06T15:10:01.320Z",
+    "end_time": "2026-04-06T15:10:01.480Z",
+    "attributes": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.conversation.id": "conv-weather-001",
+      "gen_ai.tool.name": "get_current_weather",
+      "gen_ai.tool.type": "function",
+      "gen_ai.tool.call.id": "call_weather_1",
+      "gen_ai.tool.call.arguments": { "location": "Tokyo, Japan", "units": "celsius" },
+      "gen_ai.tool.call.result": { "temperature": 19, "condition": "partly cloudy", "humidity": 64 }
+    }
+  }
+]

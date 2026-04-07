@@ -10,14 +10,28 @@ This repo contains **two products being actively developed**:
 ```
 finetune-skill/ (user's Claude Code)       UI (this repo's src/)
   → Extracts documents (PDF/images)          → Visualizes workflow data
+  → Extracts OTel GenAI traces (NEW)         → Browse traces (/traces) + select for finetune
   → Generates training data                  → Browse records, topics, evals
   → Creates topic hierarchies                → Inspect training metrics
   → Links topics ↔ sources                   → Navigate canvas/sources/table views
   → Runs evaluations & training              → Read-only — no pipeline orchestration
-  → Writes everything to Gateway API         → Reads from Gateway API
+  → Writes everything to vLLora              → Reads from gateway / OTel store / mocks
 ```
 
 **The skill drives the pipeline. The UI displays the results.** Both are under active development.
+
+> **Skill-first reframing (April 2026):** the gateway is now a **side-effect persistence + OTel ingest store**, not the orchestrator. It is one persistence backend among others — the skill is the source of truth for what runs. When designing or reviewing changes, do **not** anchor logic on the gateway being central. Treat input ingestion (documents *and* OTel traces) as the front door of the pipeline.
+
+### Input Ingredients (Step 2)
+
+The skill ingests two kinds of inputs into the **same** `knowledge_parts.json` format. Steps 3–7 don't care which extractor produced the parts.
+
+| Ingredient | Extractor | Reference | UI surface |
+|-----------|-----------|-----------|-----------|
+| Documents (PDFs, runbooks, markdown) | `finetune-skill/scripts/docling_extract.py` → `build_knowledge_parts.py` | `finetune-skill/reference/extraction-guide.md` | Sources view (PDF viewer) |
+| OpenTelemetry GenAI traces (LLM call logs) | `finetune-skill/scripts/otel_extract.py` | `finetune-skill/reference/otel-trace-ingestion.md` | `/traces` route, `src/components/traces/`, `OtelTraceSourceViewer.tsx` |
+
+OTel ingestion follows the [OpenTelemetry GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) (status: development as of v1.38.0). **Never** read deprecated `gen_ai.prompt` / `gen_ai.completion` — use `gen_ai.input.messages` / `gen_ai.output.messages`. Content attributes are opt-in and may be missing — degrade gracefully.
 
 ### The Finetune Skill (`finetune-skill/`) — USER-FACING PRODUCT
 
@@ -188,12 +202,15 @@ finetune-skill/                        # Claude Code skill (THE pipeline driver)
 src/
 ├── components/
 │   ├── datasets/          # Main finetune UI (44 components)
+│   ├── traces/            # OTel GenAI trace browser (TraceListView, TraceDetailView, TraceMessageTimeline, UseAsFinetuneInputSheet)
+│   ├── onboarding/        # First-time WelcomeFlow
 │   ├── agent/lucy-agent/  # Lucy AI assistant components (disabled by default)
 │   ├── chat/              # Chat/messaging UI
 │   ├── ui/                # shadcn/ui primitives (32 files)
 │   └── ...                # settings, models, traces, debug
-├── contexts/              # 27 React Contexts (all shared state lives here)
-├── services/              # 22 service modules (API adapters, polling, helpers)
+├── contexts/              # 27 React Contexts (all shared state lives here) — incl. OtelTracesContext
+├── mocks/otel-traces/     # In-memory OTel trace fixtures (until coworker's ingest API ships)
+├── services/              # 22 service modules (API adapters, polling, helpers) — otelTraceService is mock-backed
 ├── lib/
 │   ├── distri-finetune-tools/  # 70 finetune tool files (45 per-step)
 │   ├── distri-dataset-tools/   # Dataset analysis & validation
@@ -323,6 +340,18 @@ To investigate cloud endpoints (eval, training), start here:
 
 | File/Dir | Purpose |
 |----------|---------|
+| `src/components/traces/TraceListView.tsx` | OTel GenAI trace browser — Langfuse-style table with filter==selection |
+| `src/components/traces/TraceDetailView.tsx` | Single-trace viewer (header chips + timeline + raw span tree) |
+| `src/components/traces/TraceMessageTimeline.tsx` | Shared message bubble timeline (used by trace detail + dataset Sources view) |
+| `src/components/traces/UseAsFinetuneInputSheet.tsx` | "Hand traces to the skill as a finetune input" sheet |
+| `src/components/datasets/sources-view/OtelTraceSourceViewer.tsx` | Renders an OTel-trace `KnowledgeSource` inside the Sources view |
+| `src/components/onboarding/WelcomeFlow.tsx` | First-time 2-stage onboarding (skill mental model + pick first input) |
+| `src/contexts/OtelTracesContext.tsx` | OTel trace list state + filter management (mirrors KnowledgeSourcesContext pattern) |
+| `src/services/interfaces/otel-trace-service.ts` | Stable interface — swap mock for real adapter via service-registry |
+| `src/services/adapters/mock-otel-trace-adapter.ts` | In-memory mock; emits `vllora_knowledge_source_updated` on `useAsFinetuneInput` |
+| `src/types/otel-trace-types.ts` | Canonical OTel GenAI shape used everywhere — keep in sync with semconv |
+| `finetune-skill/scripts/otel_extract.py` | OTel ingestion → `knowledge_parts.json` (the skill side of the same feature) |
+| `finetune-skill/reference/otel-trace-ingestion.md` | Schema map, gotchas, run instructions |
 | `src/components/datasets/sidebars/LucySidebar.tsx` | Main Lucy sidebar (quick actions, chat) |
 | `src/components/agent/lucy-agent/LucyChat.tsx` | Lucy chat component (messages, input, tool rendering) |
 | `src/lib/distri-finetune-tools/index.ts` | Tool registry and exports |
@@ -520,7 +549,7 @@ Each team spawns 3 independent Claude sessions working in parallel. Teams cost 3
 
 2. **Vendored @distri packages**: These live in `vendor/` and are NOT editable in this repo. `Edit` and `Write` on `vendor/**` are **denied** in `.claude/settings.json`. To change them: edit in the distri repo → build → run `scripts/sync-distrijs.sh`.
 
-3. **Gateway API (SQLite) is the source of truth**: Datasets, workflows, records, evaluation jobs, and knowledge sources are all stored in the Gateway's SQLite database at `~/.vllora/vllora.db`. The UI fetches everything via API adapters in `src/services/adapters/`. IndexedDB is only used for ephemeral UI state (upload sessions in `upload-session-db.ts`, plan state in `proposed-plan-store.ts`). To inspect data directly: `sqlite3 ~/.vllora/vllora.db ".tables"`
+3. **Gateway is no longer the center**: As of April 2026 vLLora is **skill-first**. The gateway is a side-effect persistence + OTel ingest store, not the orchestrator. The skill is the source of truth for what runs. Datasets, records, knowledge sources, and eval jobs still live in `~/.vllora/vllora.db` and the UI still reads from API adapters in `src/services/adapters/` — but **don't** add UI logic that orchestrates the pipeline. Inspect: `sqlite3 ~/.vllora/vllora.db ".tables"`. IndexedDB is only used for ephemeral UI state.
 
 4. **Tools execute in the browser**: All 70 finetune tool files (45 per-step) run locally via the @distri/react tool execution pipeline. They are NOT server-side.
 
@@ -537,6 +566,14 @@ Each team spawns 3 independent Claude sessions working in parallel. Teams cost 3
 10. **Backend restart after agent md changes**: When you modify any agent definition file in `gateway/agents/finetune/` (e.g., `vllora-finetune-agent.md`, `finetune-workflow-agent.md`), the backend must be restarted to pick up changes. Run `scripts/restart-backend.sh` — this kills ports 8081/9090/9091, cleans the Distri cache, and restarts both the Distri server and vLLora gateway. Warn the user that a restart is needed after editing agent files.
 
 11. **Testing with Chrome MCP browser**: When verifying UI changes, use the **Claude in Chrome** MCP tools (`mcp__Claude_in_Chrome__*`) instead of Preview tools. The user's Chrome browser already has existing data (datasets, jobs, evaluations) which makes testing realistic. Use `tabs_context_mcp` first to get available tabs, then navigate to `localhost:5173` and use `computer` (screenshot), `read_page` (accessibility tree), `find` (element search), and `javascript_tool` (DOM inspection) to verify changes. Do NOT use `preview_*` tools for visual verification.
+
+13. **OTel GenAI semconv — never use deprecated attrs**: `gen_ai.prompt` and `gen_ai.completion` were removed in OpenTelemetry GenAI semconv v1.38.0. Always use `gen_ai.input.messages` / `gen_ai.output.messages`. The script `finetune-skill/scripts/otel_extract.py` enforces this — UI types in `src/types/otel-trace-types.ts` do not even define fields for the deprecated names.
+
+14. **OTel content attributes are opt-in**: `gen_ai.input.messages`, `gen_ai.output.messages`, and `gen_ai.system_instructions` may be missing if the producer didn't opt in (`OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true` or equivalent). The UI surfaces a hint when content is absent — never crash on missing content.
+
+15. **OTel adapter is mock-only**: `otelTraceService` in `src/services/service-registry.ts` currently points at `mock-otel-trace-adapter.ts` (in-memory fixtures from `src/mocks/otel-traces/`). When the coworker's OTel ingest API ships, swapping in the real adapter is one line. **Do not** add adapter-specific behavior to call sites — both adapters must satisfy the `OtelTraceService` interface.
+
+16. **First-time onboarding flag**: `EmptyDatasetsState` shows `WelcomeFlow` when `localStorage.vllora_onboarding_v2_completed !== '1'`. To re-test onboarding: `localStorage.removeItem('vllora_onboarding_v2_completed')` then reload.
 
 12. **Browser MCP context efficiency**: MCP browser tools return large responses that fill the context window fast. Follow these rules to stay efficient:
 

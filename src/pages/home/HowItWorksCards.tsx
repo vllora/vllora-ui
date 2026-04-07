@@ -41,8 +41,8 @@ const STEPS: StepDef[] = [
   {
     num: 2,
     icon: Terminal,
-    title: "Run the Pipeline",
-    description: "The skill extracts docs, builds topics, generates records, and writes a grader.",
+    title: "Pick an ingredient",
+    description: "Point the skill at PDFs or OTel traces. It extracts knowledge, builds topics, generates records, and writes a grader.",
     miniCodeCmd: "claude",
     miniCode: '"finetune doc.pdf"',
     badgeClass: "bg-[rgba(var(--theme-500),0.12)] text-[rgb(var(--theme-400))] border-[rgba(var(--theme-500),0.25)]",

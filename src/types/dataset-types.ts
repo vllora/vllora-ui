@@ -425,7 +425,7 @@ export interface DatasetWithRecords extends Dataset {
 // =============================================================================
 
 /** Type of knowledge source */
-export type KnowledgeSourceType = 'pdf' | 'image' | 'url' | 'text' | 'markdown';
+export type KnowledgeSourceType = 'pdf' | 'image' | 'url' | 'text' | 'markdown' | 'otel-trace';
 
 /** Classification of markdown file purpose */
 export type MarkdownPurpose = 'knowledge' | 'process';
