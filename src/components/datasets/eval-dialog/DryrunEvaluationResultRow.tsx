@@ -250,6 +250,13 @@ export function DryrunEvaluationResultRow({
   const inputText = getInputText(result.row);
   const outputText = getOutputText(result.row) ?? result.rollout_content ?? null;
   const topicName = getTopicName(result.row as Record<string, unknown> | undefined);
+  const groundTruthRaw = (result.row as Record<string, unknown> | undefined)?.ground_truth;
+  const groundTruthText =
+    groundTruthRaw == null
+      ? null
+      : typeof groundTruthRaw === "string"
+        ? groundTruthRaw
+        : JSON.stringify(groundTruthRaw);
   const reason = result.reason;
 
   // Truncated reason snippet for the table row (replaces Status when all same)
@@ -419,17 +426,16 @@ export function DryrunEvaluationResultRow({
       </div>
 
       {/* Expanded content: output + reason + criteria breakdown (only for non-finetune rows) */}
-      {isExpanded && (reason || outputText) && !hideStatusColumn && (
-        <ExpandedReasonPanel reason={reason} outputText={outputText} />
+      {isExpanded && (reason || outputText || groundTruthText) && !hideStatusColumn && (
+        <ExpandedReasonPanel reason={reason} outputText={outputText} groundTruth={groundTruthText} />
       )}
     </div>
   );
 }
 
 /** Expanded panel showing output + criteria breakdown + full reason text */
-function ExpandedReasonPanel({ reason, outputText }: { readonly reason?: string | null; readonly outputText?: string | null }) {
+function ExpandedReasonPanel({ reason, outputText, groundTruth }: { readonly reason?: string | null; readonly outputText?: string | null; readonly groundTruth?: string | null }) {
   const breakdown = reason ? parseScoreBreakdown(reason) : null;
-  const hasBoth = !!outputText && !!reason;
 
   return (
     <div className="bg-zinc-900/40 border-b border-zinc-800/40 px-8 py-3 space-y-2">
@@ -458,27 +464,43 @@ function ExpandedReasonPanel({ reason, outputText }: { readonly reason?: string 
         </div>
       )}
 
-      {/* Output + Reason: side-by-side when both exist, full-width otherwise */}
-      <div className={hasBoth ? "grid grid-cols-2 gap-4" : ""}>
-        {outputText && (
-          <div className={hasBoth ? "border-r border-zinc-800/40 pr-4" : ""}>
-            <div className="flex items-center gap-1.5 mb-1">
-              <p className="text-[9px] font-semibold uppercase tracking-wider text-zinc-600">Output</p>
-              <CopyButton text={outputText} />
-            </div>
-            <TruncatedText text={outputText} className="text-zinc-300" />
+      {/* Output + Ground Truth + Reason: dynamic columns based on what's present */}
+      {(() => {
+        const cols = [outputText, groundTruth, reason].filter(Boolean).length;
+        const gridClass =
+          cols >= 3 ? "grid grid-cols-3 gap-4" : cols === 2 ? "grid grid-cols-2 gap-4" : "";
+        return (
+          <div className={gridClass}>
+            {outputText && (
+              <div className={cols > 1 ? "border-r border-zinc-800/40 pr-4" : ""}>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <p className="text-[9px] font-semibold uppercase tracking-wider text-zinc-600">Output</p>
+                  <CopyButton text={outputText} />
+                </div>
+                <TruncatedText text={outputText} className="text-zinc-300" />
+              </div>
+            )}
+            {groundTruth && (
+              <div className={cols > 1 && reason ? "border-r border-zinc-800/40 pr-4" : ""}>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <p className="text-[9px] font-semibold uppercase tracking-wider text-zinc-600">Ground Truth</p>
+                  <CopyButton text={groundTruth} />
+                </div>
+                <TruncatedText text={groundTruth} className="text-emerald-300/80" />
+              </div>
+            )}
+            {reason && (
+              <div>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <p className="text-[9px] font-semibold uppercase tracking-wider text-zinc-600">Grader Reason</p>
+                  <CopyButton text={breakdown?.hasBreakdown ? breakdown.reasoning : reason} />
+                </div>
+                <TruncatedText text={breakdown?.hasBreakdown ? breakdown.reasoning : reason} className="text-zinc-400" />
+              </div>
+            )}
           </div>
-        )}
-        {reason && (
-          <div>
-            <div className="flex items-center gap-1.5 mb-1">
-              <p className="text-[9px] font-semibold uppercase tracking-wider text-zinc-600">Grader Reason</p>
-              <CopyButton text={breakdown?.hasBreakdown ? breakdown.reasoning : reason} />
-            </div>
-            <TruncatedText text={breakdown?.hasBreakdown ? breakdown.reasoning : reason} className="text-zinc-400" />
-          </div>
-        )}
-      </div>
+        );
+      })()}
     </div>
   );
 }

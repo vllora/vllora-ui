@@ -55,7 +55,19 @@ function exportResultsToCsv(
   jobId?: string,
 ): void {
   const hasRollout = results.some((r) => r.rollout_content != null && r.rollout_content !== "");
-  const header = ["#", "Input", ...(hasRollout ? ["Response"] : []), "Score", "Status", "Reason"];
+  const hasGroundTruth = results.some((r) => {
+    const gt = (r.row as Record<string, unknown> | undefined)?.ground_truth;
+    return gt != null && gt !== "";
+  });
+  const header = [
+    "#",
+    "Input",
+    ...(hasRollout ? ["Response"] : []),
+    ...(hasGroundTruth ? ["Ground Truth"] : []),
+    "Score",
+    "Status",
+    "Reason",
+  ];
   const rows = results.map((r) => {
     const inputMessages = r.row?.messages as unknown[] | undefined;
     const inputText = Array.isArray(inputMessages)
@@ -64,10 +76,13 @@ function exportResultsToCsv(
           .map((m) => String((m as Record<string, unknown>).content ?? ""))
           .join(" | ")
       : "";
+    const gtRaw = (r.row as Record<string, unknown> | undefined)?.ground_truth;
+    const gtText = gtRaw == null ? "" : typeof gtRaw === "string" ? gtRaw : JSON.stringify(gtRaw);
     return [
       String(r.row_index),
       escapeCsvField(inputText),
       ...(hasRollout ? [escapeCsvField(r.rollout_content ?? "")] : []),
+      ...(hasGroundTruth ? [escapeCsvField(gtText)] : []),
       r.score != null ? r.score.toFixed(3) : "",
       r.status,
       escapeCsvField(r.reason ?? r.error_message ?? ""),
@@ -191,6 +206,7 @@ export function ResultsTable({
       return row && (row.topic || row.topic_name || row.topicName);
     });
   }, [results]);
+
 
 
 

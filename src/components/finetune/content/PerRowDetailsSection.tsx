@@ -329,6 +329,19 @@ export function PerRowDetailsSection({ results, workflowId }: PerRowDetailsSecti
                   );
                 })()}
                 {(() => {
+                  const gtRaw = (selectedResult.row as Record<string, unknown> | undefined)?.ground_truth;
+                  if (gtRaw == null || gtRaw === "") return null;
+                  const gt = typeof gtRaw === "string" ? gtRaw : JSON.stringify(gtRaw);
+                  return (
+                    <section>
+                      <h4 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-1.5">Ground Truth</h4>
+                      <div className="text-[11px] text-emerald-300/80 leading-relaxed whitespace-pre-wrap bg-zinc-900/60 border border-zinc-800/40 rounded-md p-3 max-h-[120px] overflow-y-auto">
+                        {gt}
+                      </div>
+                    </section>
+                  );
+                })()}
+                {(() => {
                   const output = getOutputText(selectedResult.row as Record<string, unknown>);
                   if (!output) return null;
                   return (
