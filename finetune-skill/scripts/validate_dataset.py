@@ -289,7 +289,7 @@ def main() -> None:
             print(f"  ... and {len(warnings) - 20} more")
 
     from pipeline_journal import find_project_dir, log_milestone
-    proj = find_project_dir(args.file)
+    proj = find_project_dir(file_path)
 
     if all_errors:
         print(f"\n❌ {len(all_errors)} error(s) found:")

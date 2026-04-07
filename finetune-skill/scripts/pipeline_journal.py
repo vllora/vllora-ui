@@ -24,6 +24,10 @@ def log_milestone(
     Lightweight alternative to finetune.py's _auto_journal — used by
     standalone scripts (build_knowledge_parts, generate_records, etc.)
     to log progress without subprocess calls.
+
+    Deduplication: skips the log if the last entry has the same
+    (step, action, status, summary) — prevents duplicate entries when
+    a script is called multiple times (e.g., polling).
     """
     project_dir = Path(project_dir)
     journal_file = project_dir / "pipeline-journal.json"
@@ -36,8 +40,16 @@ def log_milestone(
     except (json.JSONDecodeError, OSError):
         return
 
+    # Deduplication: skip if the last entry is identical
+    entries = journal.get("entries", [])
+    if entries:
+        last = entries[-1]
+        if (last.get("step") == step and last.get("action") == action
+                and last.get("status") == status and last.get("summary") == summary):
+            return  # Duplicate — skip
+
     timestamp = datetime.now(timezone.utc).isoformat()
-    next_id = max((e["id"] for e in journal.get("entries", [])), default=0) + 1
+    next_id = max((e["id"] for e in entries), default=0) + 1
 
     entry: dict = {
         "id": next_id,
@@ -53,12 +65,49 @@ def log_milestone(
 
     journal.setdefault("entries", []).append(entry)
 
+    # Ensure workflow_id is set — read from config.json if missing
+    if not journal.get("workflow_id"):
+        for config_candidate in [project_dir / "config.json", project_dir.parent / "config.json"]:
+            if config_candidate.exists():
+                try:
+                    cfg = json.loads(config_candidate.read_text())
+                    wf_id = cfg.get("workflow_id", "")
+                    if wf_id:
+                        journal["workflow_id"] = wf_id
+                        break
+                except (json.JSONDecodeError, OSError):
+                    pass
+
     try:
         journal_file.write_text(json.dumps(journal, indent=2))
     except OSError:
         pass
 
     print(f"  [auto-journal #{next_id}] {action} ({status}): {summary}", file=sys.stderr)
+
+    # Sync to gateway if workflow_id is available (best-effort, non-blocking)
+    workflow_id = journal.get("workflow_id", "")
+    if workflow_id:
+        gateway_url = "http://localhost:9090"
+        # Allow override from config.json
+        for config_candidate in [project_dir / "config.json", project_dir.parent / "config.json"]:
+            if config_candidate.exists():
+                try:
+                    cfg = json.loads(config_candidate.read_text())
+                    gateway_url = cfg.get("gateway_url", gateway_url)
+                    break
+                except (json.JSONDecodeError, OSError):
+                    pass
+
+        try:
+            import requests
+            requests.put(
+                f"{gateway_url}/finetune/workflows/{workflow_id}",
+                json={"pipeline_journal": json.dumps(journal)},
+                timeout=5,
+            )
+        except Exception:
+            pass  # Non-fatal — local file is source of truth
 
 
 def find_project_dir(file_path: str | Path) -> Path | None:

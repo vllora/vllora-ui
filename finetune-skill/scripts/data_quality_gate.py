@@ -1649,11 +1649,14 @@ def main() -> None:
     from pipeline_journal import find_project_dir, log_milestone
     proj = find_project_dir(args.input)
     if proj:
-        gate_summary = ", ".join(f"{g['gate']}={g['verdict']}" for g in report.get("gates", []))
+        # report["gates"] is a dict: {gate_name: {verdict, ...}}
+        gates_dict = report.get("gates", {}) or {}
+        gate_summary = ", ".join(f"{name}={g.get('verdict','?')}" for name, g in gates_dict.items())
+        gate_results = {name: g.get("verdict", "?") for name, g in gates_dict.items()}
         log_milestone(proj, "step_5_5_validate", "data_quality_gate", report["verdict"].lower(),
                        f"Data quality gate: {report['verdict']}. {gate_summary}. Records: {len(records)}.",
                        {"verdict": report["verdict"], "gates_run": gates,
-                        "gate_results": {g["gate"]: g["verdict"] for g in report.get("gates", [])}})
+                        "gate_results": gate_results})
 
     # Exit code
     if report["verdict"] == "FAIL":

@@ -5344,13 +5344,14 @@ def cmd_update_part_relevance(args: argparse.Namespace) -> None:
     data = json.loads(index_path.read_text())
     parts = data.get("parts", data) if isinstance(data, dict) else data
 
-    # Group parts by source_doc, only those with relevant field set
+    # Group parts by source_doc, only those with relevant field set.
+    # Accept both `source_doc` (canonical) and `source_document` (alias).
     by_source: dict = {}
     for part in parts:
         rel = part.get("relevant")
         if rel is None:
             continue
-        source_doc = part.get("source_doc", "unknown")
+        source_doc = part.get("source_doc") or part.get("source_document") or "unknown"
         by_source.setdefault(source_doc, []).append(part)
 
     if not by_source:
@@ -5384,8 +5385,16 @@ def cmd_update_part_relevance(args: argparse.Namespace) -> None:
                 ks_id = src["id"]
                 break
 
+        # Fallback: if only 1 source exists on the gateway, use it.
+        # This handles the case where the agent's index file has "unknown" or
+        # mismatched source_doc but there's only one possible target.
+        if not ks_id and len(sources_list) == 1:
+            ks_id = sources_list[0]["id"]
+            print(f"  Note: No exact match for '{source_doc}', using only available source '{sources_list[0].get('name','?')}'")
+
         if not ks_id:
             print(f"  Warning: No gateway source found for '{source_doc}', skipping {len(labeled_parts)} parts")
+            print(f"    Available sources: {[s.get('name','?') for s in sources_list]}")
             continue
 
         # Build batch update payload, preserving existing extraction_metadata from gateway
@@ -5790,6 +5799,101 @@ def cmd_test_grader(args: argparse.Namespace) -> None:
             "is_lenient": is_lenient,
         })
 
+    # ─── Deterministic adversarial tests (DO NOT rely on LLM-generated wrong answers) ───
+    # These test specific grader bugs we've seen before:
+    # 1. Garbage response for GT=none → should score LOW (not treated as "correct none")
+    # 2. Garbage response for GT=real → should score LOW (not treated as correct)
+    # 3. Response that copies the input → should score LOW
+    deterministic_tests = []
+
+    # Find a record with GT=none and one with GT=real
+    none_record = next((r for r in records if (r.get("ground_truth", "") or "").strip().lower() in ("none", "")), None)
+    real_record = next((r for r in records if (r.get("ground_truth", "") or "").strip().lower() not in ("none", "")), None)
+
+    if none_record:
+        none_user = next((m["content"] for m in none_record.get("messages", []) if m.get("role") == "user"), "")
+        none_system = next((m["content"] for m in none_record.get("messages", []) if m.get("role") == "system"), "")
+        deterministic_tests.append({
+            "name": "garbage_for_gt_none",
+            "description": "Garbage response when GT=none (catches 'no labels = none' bug)",
+            "system": none_system, "user": none_user, "gt": "none",
+            "wrong": "sugarmix, rice, misc, unknown stuff, blah blah",
+        })
+        deterministic_tests.append({
+            "name": "input_echo_for_gt_none",
+            "description": "Response echoes input (should not be treated as 'none')",
+            "system": none_system, "user": none_user, "gt": "none",
+            "wrong": none_user[:100],
+        })
+
+    if real_record:
+        real_user = next((m["content"] for m in real_record.get("messages", []) if m.get("role") == "user"), "")
+        real_system = next((m["content"] for m in real_record.get("messages", []) if m.get("role") == "system"), "")
+        real_gt = real_record.get("ground_truth", "")
+        deterministic_tests.append({
+            "name": "garbage_for_gt_real",
+            "description": "Garbage response when GT has labels",
+            "system": real_system, "user": real_user, "gt": real_gt,
+            "wrong": "random words, unknown stuff, garbage",
+        })
+        deterministic_tests.append({
+            "name": "empty_for_gt_real",
+            "description": "Empty response when GT has labels",
+            "system": real_system, "user": real_user, "gt": real_gt,
+            "wrong": "",
+        })
+
+    # Run deterministic tests
+    print(f"\n── Deterministic Adversarial Tests ──")
+    det_failed = []
+    for test in deterministic_tests:
+        test_row = {
+            "messages": [
+                {"role": "system", "content": test["system"]},
+                {"role": "user", "content": test["user"]},
+                {"role": "assistant", "content": test["wrong"]},
+            ],
+            "ground_truth": test["gt"],
+        }
+        try:
+            score_resp = requests.post(
+                f"{gateway_url}/finetune/workflows/{args.workflow_id}/evaluate",
+                json={"row": test_row},
+                timeout=30,
+            )
+            score_resp.raise_for_status()
+            score_data = score_resp.json()
+            score = score_data.get("score", score_data.get("result", {}).get("score", 0))
+            reason = score_data.get("reason", score_data.get("result", {}).get("reason", ""))
+        except Exception as e:
+            print(f"  ✗ ERROR [{test['name']}]: {e}", file=sys.stderr)
+            det_failed.append(test["name"])
+            continue
+
+        is_lenient = score > 0.40
+        flag = "✗ LENIENT" if is_lenient else "✓ strict"
+        print(f"  {flag} [{test['name']}] score={score:.2f} — {test['description']}")
+        print(f"           wrong=\"{test['wrong'][:60]}\" gt=\"{test['gt']}\"")
+        print(f"           grader: {reason[:120]}")
+        if is_lenient:
+            lenient_count += 1
+            det_failed.append(test["name"])
+        tested += 1
+
+    # FAIL LOUDLY if nothing was tested
+    if tested == 0:
+        print(f"\n✗ TEST-GRADER FAILED: 0 records tested. This is a hard failure — not a pass.", file=sys.stderr)
+        print(f"  Check gateway /evaluate endpoint, grader upload, and training records.", file=sys.stderr)
+        _auto_journal(
+            project_dir=training_file.resolve().parent,
+            step="step_5_grader",
+            action="adversarial_grader_test",
+            status="fail",
+            summary="Adversarial grader test FAILED: 0 records could be tested. Check gateway/evaluate endpoint and grader.",
+            workflow_id=args.workflow_id,
+        )
+        sys.exit(1)
+
     # Summary
     print(f"\n── Results ──")
     print(f"  Tested: {tested}, Lenient: {lenient_count}, Strict: {tested - lenient_count}")
@@ -5799,6 +5903,8 @@ def cmd_test_grader(args: argparse.Namespace) -> None:
         print(f"  ⚠ GRADER LENIENCY DETECTED: {pct:.0f}% of wrong answers scored > 0.40")
         print(f"  Fix the grader BEFORE running eval. Wrong answers must score < 0.40.")
         print(f"  Research: arXiv:2510.00915 — LLM judges have 35-66% FP rates by default.")
+        if det_failed:
+            print(f"  Failed deterministic tests: {', '.join(det_failed)}")
         verdict = "fail"
     else:
         print(f"  ✓ Grader is strict — all wrong answers scored < 0.40")

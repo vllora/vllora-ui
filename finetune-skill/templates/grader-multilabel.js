@@ -150,17 +150,34 @@ function evaluate(input) {
     var modelSaysNone = isNoneResponse(response, NONE_KEYWORD);
     var extractionMethod = "regex";
 
-    // LLM fallback if regex found nothing and response isn't "none"
+    // LLM fallback if regex found nothing and response isn't "none".
+    // Distinguish 3 cases: valid labels / explicit none / garbage (off-topic).
+    // Garbage responses MUST NOT be treated as "model said none".
+    var isGarbage = false;
     if (modelLabels.length === 0 && !modelSaysNone && response.trim().length > 2) {
         var llmResult = extractLabelsWithLLM(response, input, VALID_LABELS);
         if (llmResult !== null) {
-            if (llmResult === NONE_KEYWORD) {
-                modelSaysNone = true;
-            } else {
-                modelLabels = parseLabels(llmResult, VALID_LABELS, LABEL_ALIASES);
-            }
             extractionMethod = "llm";
+            if (llmResult.category === "none") {
+                modelSaysNone = true;
+            } else if (llmResult.category === "valid" && llmResult.labels) {
+                modelLabels = parseLabels(llmResult.labels, VALID_LABELS, LABEL_ALIASES);
+            } else {
+                // category === "garbage" — off-topic response, NOT "none"
+                isGarbage = true;
+            }
         }
+    }
+
+    // Garbage response = wrong, regardless of GT. Nonzero floor for GRPO gradient.
+    if (isGarbage) {
+        return {
+            score: 0.05,
+            reason: "Garbage response (off-topic, no valid labels, not 'none'). Response: " + response.substring(0, 100),
+            precision: 0, recall: 0, fbeta: 0,
+            tp: 0, fp: 0, fn: gtLabels.length,
+            extraction_method: extractionMethod
+        };
     }
 
     // ─── Handle "none" cases ───
@@ -377,12 +394,38 @@ function parseLabels(text, validLabels, aliases) {
 
 /**
  * Check if the response is a "none" / "no labels" response.
+ * Recognizes common ways to express "no labels apply":
+ *   "none", "no", "nothing", "n/a", "nope", "no allergens", "no labels",
+ *   "no match", "none of the above", "not applicable", "nil"
+ * Also matches these as leading tokens: "none." "no, ..." "nothing found"
  */
 function isNoneResponse(response, noneKeyword) {
-    var trimmed = response.trim().toLowerCase();
-    return trimmed === noneKeyword ||
-        trimmed === noneKeyword + "." ||
-        new RegExp("^" + noneKeyword + "\\.?$", "im").test(trimmed);
+    var trimmed = response.trim().toLowerCase().replace(/[.!]+$/, "");
+    if (!trimmed) return false;
+
+    // Exact match on common none-variants
+    var noneVariants = [
+        noneKeyword, "none", "no", "nope", "nothing", "n/a", "na", "nil",
+        "no allergens", "no labels", "no match", "not applicable",
+        "nothing found", "no matches", "none of the above", "no results",
+        "no, none", "no.", "none found"
+    ];
+    for (var i = 0; i < noneVariants.length; i++) {
+        if (trimmed === noneVariants[i]) return true;
+    }
+
+    // Match "none" or "no" at the start of the response, followed by period/comma/end
+    if (/^(none|no|nothing|n\/a|nil)([.,;\s]|$)/.test(trimmed)) {
+        // Make sure the response doesn't ALSO contain something that looks like a label
+        // (e.g., "no milk" means "milk is absent" but "milk" is a label — handled by regex parsing)
+        // This function only returns true for pure "none" responses.
+        var rest = trimmed.replace(/^(none|no|nothing|n\/a|nil)[.,;\s]*/, "").trim();
+        if (rest.length === 0 || /^(allergens?|labels?|found|matches?|of the above|applicable|results?)[.,;\s]*$/.test(rest)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /**
@@ -397,23 +440,25 @@ function extractLabelsWithLLM(response, input, validLabels) {
         prompt_template: [
             {
                 role: "system",
-                content: "You extract labels from text. Return ONLY labels from this valid set: " +
-                    validLabels.join(", ") +
-                    ". If no valid labels are mentioned, return 'none'. " +
-                    "Return as a comma-separated list. Do not add labels not in the valid set."
+                content: "You classify a model response into one of three categories:\n" +
+                    "1. 'valid' — the response names one or more labels from this set: " + validLabels.join(", ") + "\n" +
+                    "2. 'none' — the response EXPLICITLY states no labels apply (e.g., 'none', 'no allergens', 'nothing', 'no match')\n" +
+                    "3. 'garbage' — the response is off-topic, repeats the input, or produces unrelated content\n\n" +
+                    "Do NOT treat 'response has no valid labels' as 'none'. A response is 'none' ONLY if the model explicitly indicates no labels apply. A response listing ingredients or random words is 'garbage', not 'none'."
             },
             {
                 role: "user",
-                content: "Extract the labels from this model response:\n\n{{response}}\n\n" +
-                    "Return JSON:\n{\"labels\": \"comma-separated list or none\"}"
+                content: "Model response:\n\n{{response}}\n\n" +
+                    "Return JSON: {\"category\": \"valid\" or \"none\" or \"garbage\", \"labels\": \"comma-separated list if valid, empty otherwise\"}"
             }
         ],
         output_schema: {
             type: "object",
             properties: {
+                category: { type: "string", enum: ["valid", "none", "garbage"] },
                 labels: { type: "string" }
             },
-            required: ["labels"],
+            required: ["category", "labels"],
             additionalProperties: false
         },
         completion_params: {
@@ -428,9 +473,10 @@ function extractLabelsWithLLM(response, input, validLabels) {
     try {
         var result = __langdb_call_llm_as_judge_obj(config, input);
         if (result.error) return null;
+        // Returns {category, labels} object
+        var category = (result.category || "garbage").trim();
         var labels = (result.labels || "").trim();
-        if (labels) return labels;
-        return null;
+        return { category: category, labels: labels };
     } catch (e) {
         return null;
     }
