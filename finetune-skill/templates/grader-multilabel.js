@@ -357,11 +357,43 @@ function parseLabels(text, validLabels, aliases) {
     // Handle explicit "none"
     if (lower === "none" || lower === "none.") return [];
 
+    // ─── Negation detection ───
+    // Build a set of negated labels: "no milk", "not milk", "without milk",
+    // "free from milk", "milk-free", "contains no milk", "no X, Y, or Z"
+    // Research: closed-vocabulary grading must handle negation or the model
+    // can trick the grader by saying "contains no milk" and scoring positive.
+    var negated = {};
+    var negationPrefix = "(?:no|not|without|excluding|free[\\s-]from|contains no|has no)";
+    for (var n = 0; n < validLabels.length; n++) {
+        var lbl = validLabels[n];
+        var lblEsc = lbl.replace(/\s+/g, "\\s+");
+        // Check "no <label>", "free from <label>", etc.
+        var negPattern = new RegExp("\\b" + negationPrefix + "\\s+" + lblEsc + "\\b", "i");
+        // Check "<label>-free"
+        var suffixPattern = new RegExp("\\b" + lblEsc + "[\\s-]free\\b", "i");
+        if (negPattern.test(lower) || suffixPattern.test(lower)) {
+            negated[lbl] = true;
+        }
+    }
+    // Also check aliases for negation
+    var aliasKeysNeg = Object.keys(aliases);
+    for (var na = 0; na < aliasKeysNeg.length; na++) {
+        var aliasNeg = aliasKeysNeg[na];
+        var canonicalNeg = aliases[aliasNeg];
+        if (negated[canonicalNeg]) continue;
+        var aliasEscNeg = aliasNeg.replace(/\s+/g, "\\s+");
+        var aliasNegPattern = new RegExp("\\b" + negationPrefix + "\\s+" + aliasEscNeg + "\\b", "i");
+        if (aliasNegPattern.test(lower)) {
+            negated[canonicalNeg] = true;
+        }
+    }
+
     var found = [];
 
     // Strategy 1: Match valid labels directly (word boundary)
     for (var i = 0; i < validLabels.length; i++) {
         var label = validLabels[i];
+        if (negated[label]) continue;  // Skip negated labels
         var pattern = new RegExp("\\b" + label.replace(/\s+/g, "\\s+") + "\\b", "i");
         if (pattern.test(lower)) {
             found.push(label);
@@ -373,6 +405,7 @@ function parseLabels(text, validLabels, aliases) {
     for (var j = 0; j < aliasKeys.length; j++) {
         var alias = aliasKeys[j];
         var canonical = aliases[alias];
+        if (negated[canonical]) continue;  // Skip negated canonical labels
         if (found.indexOf(canonical) === -1) {
             var aliasPattern = new RegExp("\\b" + alias.replace(/\s+/g, "\\s+") + "\\b", "i");
             if (aliasPattern.test(lower)) {
