@@ -3117,7 +3117,7 @@ def cmd_create_eval(args: argparse.Namespace) -> None:
 
     model = args.model or "gpt-4o-mini"
     payload = {
-        "dataset_id": args.workflow_id,
+        "workflow_id": args.workflow_id,
         "rollout_model_params": {
             "model": model,
             "temperature": 0.7,
@@ -5121,9 +5121,8 @@ def cmd_cancel_training(args: argparse.Namespace) -> None:
 def cmd_cancel_eval(args: argparse.Namespace) -> None:
     """Cancel a running evaluation.
 
-    Marks the eval as cancelled locally (gateway DB + tracking file)
-    so the agent stops waiting. The cloud eval may continue running
-    but results will be ignored.
+    Calls POST /finetune/workflows/{workflow_id}/jobs/{eval_id}/cancel
+    and updates the local eval tracking file if one exists.
     """
     wf_id = args.workflow_id
     eval_id = args.eval_id
@@ -5132,13 +5131,15 @@ def cmd_cancel_eval(args: argparse.Namespace) -> None:
 
     try:
         _api(
-            "PATCH",
-            f"{args.base_url}/finetune/workflows/{wf_id}/eval-jobs/{eval_id}",
-            json={"status": "cancelled"},
+            "POST",
+            f"{args.base_url}/finetune/workflows/{wf_id}/jobs/{eval_id}/cancel",
         )
-        print(f"Eval {eval_id} marked as cancelled in gateway.")
+        print(f"Cancel request sent for eval {eval_id}.")
     except SystemExit:
-        print(f"  Warning: Could not update gateway (eval may be cloud-only). Updating local file only.", file=sys.stderr)
+        print(
+            "  Warning: Could not cancel eval via gateway. Updating local file only.",
+            file=sys.stderr,
+        )
 
     if args.file:
         eval_file = Path(args.file)

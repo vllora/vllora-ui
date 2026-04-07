@@ -98,8 +98,6 @@ All endpoints use JSON unless noted. Auth via `Authorization: Bearer <token>` he
 | **Cross-Workflow Eval Jobs** | | | |
 | 67 | GET | `/finetune/eval-jobs` | List eval jobs by status (cross-workflow) |
 | 68 | GET | `/finetune/eval-jobs/{job_id}` | Get eval job by ID (cross-workflow) |
-| 69 | PATCH | `/finetune/eval-jobs/{job_id}` | Update eval job by ID (cross-workflow) |
-| 70 | DELETE | `/finetune/eval-jobs/{job_id}` | Delete eval job by ID (cross-workflow) |
 | **Analytics** (non-workflow-scoped) | | | |
 | 71 | POST | `/finetune/analytics/dry-run` | Dataset analytics dry run |
 | **Evaluations** (non-workflow-scoped, cloud) | | | |
@@ -539,7 +537,12 @@ Check the status of a running evaluator. Poll until complete.
 
 ## 7. Eval Jobs (workflow-scoped + cross-workflow)
 
-Track evaluation runs locally per workflow. These complement the cloud evaluation endpoints -- the cloud runs the eval, and these endpoints store the job metadata locally for history and comparison.
+Track evaluation runs locally per workflow. These endpoints store eval metadata/history in the gateway DB. They do **not** start or stop cloud evaluation execution by themselves.
+
+For actual run lifecycle:
+- Start eval run: `POST /finetune/evaluations`
+- Poll eval run: `GET /finetune/evaluations/{eval_id}`
+- Cancel eval run: `POST /finetune/workflows/{workflow_id}/jobs/{eval_id}/cancel`
 
 ### POST `/finetune/workflows/{workflow_id}/eval-jobs`
 
@@ -567,9 +570,8 @@ Delete all eval jobs for a workflow.
 
 Get a single eval job by ID.
 
-### PATCH `/finetune/workflows/{workflow_id}/eval-jobs/{job_id}`
-
-Update eval job status (e.g., `running` -> `completed`) and store results.
+> Use this endpoint for local tracking only. To cancel a real evaluation run, use:
+> `POST /finetune/workflows/{workflow_id}/jobs/{job_id}/cancel`
 
 ```bash
 curl -X PATCH http://localhost:9090/finetune/workflows/WORKFLOW_ID/eval-jobs/JOB_ID \
@@ -583,7 +585,7 @@ Delete a single eval job.
 
 ### Cross-Workflow Eval Job Endpoints
 
-These endpoints operate outside workflow scope, useful for dashboards and status checks.
+These endpoints operate outside workflow scope and are useful for dashboards/status views of local eval-job metadata.
 
 #### GET `/finetune/eval-jobs`
 
@@ -597,9 +599,6 @@ curl "http://localhost:9090/finetune/eval-jobs?status=running"
 
 Get an eval job by ID regardless of workflow.
 
-#### PATCH `/finetune/eval-jobs/{job_id}`
-
-Update an eval job by ID regardless of workflow.
 
 #### DELETE `/finetune/eval-jobs/{job_id}`
 

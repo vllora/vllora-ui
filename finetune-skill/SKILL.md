@@ -188,7 +188,7 @@ fi
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py status --workflow-id $WORKFLOW_ID
 ```
-Follow its recommendation. (3) Sync jobs: `sync-jobs --workflow-id $WORKFLOW_ID --output-dir finetune-project`. (4) Cancel broken eval jobs if `status` shows ~0.0 scores. (5) Resume from recommended step. (6) Backfill missing data in execution log.
+Follow its recommendation. (3) Sync jobs: `sync-jobs --workflow-id $WORKFLOW_ID --output-dir finetune-project`. (4) Cancel broken eval jobs if `status` shows ~0.0 scores (use `uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py cancel-eval --workflow-id $WORKFLOW_ID --eval-id <EVAL_ID>`). (5) Resume from recommended step. (6) Backfill missing data in execution log.
 
 **Reusing extractions across workflows:** Existing `knowledge/{slug}/docling-result.json` files can be reused even with a new workflow. Do NOT delete `knowledge/` when starting fresh from the same documents.
 
