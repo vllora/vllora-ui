@@ -333,10 +333,10 @@ function evaluate(input) {
     // Recall completeness: what fraction of GT labels did model find?
     var completeness = (gtCount > 0) ? tp / gtCount : 1.0;
 
-    if (tp === gtCount && fp === 0) {
-        // Perfect match: 0.90-1.0 (brevity bonus can push to 1.0)
-        baseScore = 0.90 + (fbeta - 0.90) * 0.10;
-        if (baseScore < 0.90) baseScore = 0.90;
+    if (tp === gtCount && fp === 0 && fn === 0) {
+        // Perfect match: base 0.95, brevity bonus can push to 1.0.
+        // (Was: 0.90 + (fbeta-0.90)*0.10 which capped at 0.91 — math error.)
+        baseScore = 0.95;
     } else if (tp === gtCount && fp > 0) {
         // All GT labels found but with extra FPs: 0.50-0.70
         // Good recall but imprecise — FP penalty below will reduce further

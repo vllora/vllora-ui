@@ -117,7 +117,11 @@ function evaluate(input) {
     // invert their GRPO advantage. Instead: brevity bonus for correct+concise, penalty
     // only on wrong answers. Multiplicative form (GR3 arXiv:2603.10535); additive collapses.
     var expectedMaxWords = 200; // TODO: Set from GT P95 word count + 50% headroom
-    var wordCount = response.split(/\s+/).length;
+    // Use MAX of (whitespace tokens, comma-delimited segments) so the model
+    // cannot game the brevity bonus by stripping spaces from list-style output.
+    var spaceWords = response.split(/\s+/).filter(function (w) { return w.length > 0; }).length;
+    var commaSegments = response.split(/[,;\n]+/).filter(function (w) { return w.trim().length > 0; }).length;
+    var wordCount = Math.max(spaceWords, commaSegments);
 
     // Penalty factor for wrong answers ONLY
     var wrongPenaltyFactor = 1.0;
