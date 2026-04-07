@@ -3820,26 +3820,31 @@ def cmd_create_training(args: argparse.Namespace) -> None:
         print(f"Adaptive epochs: {payload['training_config']['epochs']} (based on {record_count} records, {'small' if is_small_model else 'large'} model)")
 
     if args.inference_params:
+    # K (response_candidates_count) is model-size-dependent.
+    # Small models (0.8B-2B) with strict graders produce low within-group variance
+    # at K=8 — frac_reward_zero_std reaches 80%. K=16 gives more diversity.
+    # Evidence: 0.8B food-allergen with K=8 had frac_reward_zero_std=0.80, flat training.
+    # Same task with K=16 achieved 0.646→0.864. The old successful run used K=16.
+    # 4B models with higher baseline capability produce enough variance at K=8.
+    k_default = 16 if ("0.8b" in model_lower or "2b" in model_lower) else 8
+
+    # Build defaults first, then merge user overrides. This ensures K and other
+    # model-size-aware defaults aren't lost when user passes partial --inference-params
+    # (e.g., just max_output_tokens).
+    payload["inference_parameters"] = {
+        "max_output_tokens": 512,
+        "temperature": 1.0,
+        "top_p": 1.0,
+        "response_candidates_count": k_default,
+    }
+    if args.inference_params:
         try:
-            payload["inference_parameters"] = json.loads(args.inference_params)
+            user_inf = json.loads(args.inference_params)
+            payload["inference_parameters"].update(user_inf)
         except json.JSONDecodeError:
             print(f"Error: Invalid JSON for --inference-params", file=sys.stderr)
             sys.exit(1)
-    else:
-        # K (response_candidates_count) is model-size-dependent.
-        # Small models (0.8B-2B) with strict graders produce low within-group variance
-        # at K=8 — frac_reward_zero_std reaches 80%. K=16 gives more diversity.
-        # Evidence: 0.8B food-allergen with K=8 had frac_reward_zero_std=0.80, flat training.
-        # Same task with K=16 achieved 0.646→0.864. The old successful run used K=16.
-        # 4B models with higher baseline capability produce enough variance at K=8.
-        k_default = 16 if ("0.8b" in model_lower or "2b" in model_lower) else 8
-        payload["inference_parameters"] = {
-            "max_output_tokens": 512,
-            "temperature": 1.0,
-            "top_p": 1.0,
-            "response_candidates_count": k_default,
-        }
-        print(f"  Config: K={k_default} (response_candidates_count)")
+    print(f"  Config: K={payload['inference_parameters'].get('response_candidates_count', k_default)} (response_candidates_count)")
 
     # Auto-adjust max_output_tokens based on dataset content.
     # Mirrors the completion_length gate logic from data_quality_gate.py.

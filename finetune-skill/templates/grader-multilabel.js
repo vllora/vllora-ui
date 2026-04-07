@@ -473,16 +473,18 @@ function extractLabelsWithLLM(response, input, validLabels) {
         prompt_template: [
             {
                 role: "system",
-                content: "You classify a model response into one of three categories:\n" +
-                    "1. 'valid' — the response names one or more labels from this set: " + validLabels.join(", ") + "\n" +
-                    "2. 'none' — the response EXPLICITLY states no labels apply (e.g., 'none', 'no allergens', 'nothing', 'no match')\n" +
-                    "3. 'garbage' — the response is off-topic, repeats the input, or produces unrelated content\n\n" +
-                    "Do NOT treat 'response has no valid labels' as 'none'. A response is 'none' ONLY if the model explicitly indicates no labels apply. A response listing ingredients or random words is 'garbage', not 'none'."
+                content: "You classify a model response into one of three categories. The response was expected to output label(s) from this EXACT set: " + validLabels.join(", ") + "\n\n" +
+                    "CRITICAL: You must check if the response uses the EXACT label names above, possibly with minor formatting variations (case, punctuation, extra words). You must NOT infer or derive labels from domain knowledge — the model is being evaluated on FORMAT COMPLIANCE.\n\n" +
+                    "Categories:\n" +
+                    "1. 'valid' — the response EXPLICITLY contains one or more of the exact label names above. Acceptable: 'milk, eggs', 'Milk and eggs.', 'The allergens are milk and eggs'. NOT ACCEPTABLE: 'whey' (that's an ingredient, not the label 'milk'), 'anchovy extract' (ingredient, not 'fish'), 'sodium caseinate' (ingredient, not 'milk').\n" +
+                    "2. 'none' — the response EXPLICITLY states no labels apply (e.g., 'none', 'no allergens', 'nothing', 'no match').\n" +
+                    "3. 'garbage' — the response is off-topic, repeats the input, lists ingredients instead of labels, or produces unrelated content.\n\n" +
+                    "Do NOT treat 'response has no valid labels' as 'none'. Do NOT infer labels from ingredient names. A response listing ingredients (even if those ingredients imply certain labels) is 'garbage', not 'valid'."
             },
             {
                 role: "user",
                 content: "Model response:\n\n{{response}}\n\n" +
-                    "Return JSON: {\"category\": \"valid\" or \"none\" or \"garbage\", \"labels\": \"comma-separated list if valid, empty otherwise\"}"
+                    "Which EXACT labels from the valid set does this response explicitly contain? Return JSON: {\"category\": \"valid\" or \"none\" or \"garbage\", \"labels\": \"comma-separated list of exact matches from the valid set, empty otherwise\"}"
             }
         ],
         output_schema: {
