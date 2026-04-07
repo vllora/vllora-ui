@@ -297,6 +297,11 @@ export interface SampleTrainingConfig {
     lora_rank?: number;
     epochs?: number;
     batch_size?: number;
+    gradient_accumulation_steps?: number;
+    beta?: number;
+    loss_type?: string;
+    scale_rewards?: string;
+    mask_truncated_completions?: boolean;
   };
   inference_parameters?: {
     max_output_tokens?: number;

@@ -37,6 +37,14 @@ export function buildTrainingConfig(
   epochs: string,
   batchSize: string,
   loraRank: string,
+  extra?: {
+    beta?: string;
+    gradAccumSteps?: string;
+    lossType?: string;
+    scaleRewards?: string;
+    maskTruncated?: boolean;
+    responseCandidatesCount?: string;
+  },
 ): Partial<FinetuneTrainingConfig> {
   const config: Partial<FinetuneTrainingConfig> = {};
   const lr = parseFloat(learningRate);
@@ -54,6 +62,17 @@ export function buildTrainingConfig(
   const rank = parseInt(loraRank, 10);
   if (!isNaN(rank) && rank !== DEFAULT_TRAINING_CONFIG.lora_rank) {
     config.lora_rank = rank;
+  }
+  if (extra) {
+    const beta = parseFloat(extra.beta ?? "");
+    if (!isNaN(beta)) config.beta = beta;
+    const gas = parseInt(extra.gradAccumSteps ?? "", 10);
+    if (!isNaN(gas) && gas !== DEFAULT_TRAINING_CONFIG.gradient_accumulation_steps) {
+      config.gradient_accumulation_steps = gas;
+    }
+    if (extra.lossType && extra.lossType !== "dr_grpo") config.loss_type = extra.lossType;
+    if (extra.scaleRewards) config.scale_rewards = extra.scaleRewards;
+    if (extra.maskTruncated) config.mask_truncated_completions = true;
   }
   return config;
 }
@@ -172,14 +191,25 @@ interface AdvancedTrainingFieldsProps {
   readonly learningRate: string;
   readonly batchSize: string;
   readonly loraRank: string;
+  readonly beta: string;
+  readonly gradAccumSteps: string;
+  readonly lossType: string;
+  readonly scaleRewards: string;
+  readonly maskTruncated: boolean;
   readonly onLearningRateChange: (v: string) => void;
   readonly onBatchSizeChange: (v: string) => void;
   readonly onLoraRankChange: (v: string) => void;
+  readonly onBetaChange: (v: string) => void;
+  readonly onGradAccumStepsChange: (v: string) => void;
+  readonly onLossTypeChange: (v: string) => void;
+  readonly onScaleRewardsChange: (v: string) => void;
+  readonly onMaskTruncatedChange: (v: boolean) => void;
 }
 
 export function AdvancedTrainingFields({
-  learningRate, batchSize, loraRank,
-  onLearningRateChange, onBatchSizeChange, onLoraRankChange,
+  learningRate, batchSize, loraRank, beta, gradAccumSteps, lossType, scaleRewards, maskTruncated,
+  onLearningRateChange, onBatchSizeChange, onLoraRankChange, onBetaChange, onGradAccumStepsChange,
+  onLossTypeChange, onScaleRewardsChange, onMaskTruncatedChange,
 }: AdvancedTrainingFieldsProps) {
   return (
     <div className="space-y-2">
@@ -214,6 +244,60 @@ export function AdvancedTrainingFields({
             onChange={(e) => onLoraRankChange(e.target.value)}
             className={INPUT_CLS}
           />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[11px] text-muted-foreground">Beta (KL penalty)</label>
+          <Input
+            type="number"
+            step="0.001"
+            min="0"
+            value={beta}
+            onChange={(e) => onBetaChange(e.target.value)}
+            className={INPUT_CLS}
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[11px] text-muted-foreground">Grad. Accum. Steps</label>
+          <Input
+            type="number"
+            min="1"
+            value={gradAccumSteps}
+            onChange={(e) => onGradAccumStepsChange(e.target.value)}
+            className={INPUT_CLS}
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[11px] text-muted-foreground">Loss Type</label>
+          <select
+            value={lossType}
+            onChange={(e) => onLossTypeChange(e.target.value)}
+            className="h-8 w-full text-xs border border-border/50 bg-muted/30 rounded-md px-2 text-foreground"
+          >
+            <option value="dr_grpo">Dr. GRPO</option>
+            <option value="grpo">GRPO</option>
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-[11px] text-muted-foreground">Scale Rewards</label>
+          <select
+            value={scaleRewards}
+            onChange={(e) => onScaleRewardsChange(e.target.value)}
+            className="h-8 w-full text-xs border border-border/50 bg-muted/30 rounded-md px-2 text-foreground"
+          >
+            <option value="group">Group</option>
+            <option value="none">None</option>
+          </select>
+        </div>
+        <div className="space-y-1 flex items-end">
+          <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer">
+            <input
+              type="checkbox"
+              checked={maskTruncated}
+              onChange={(e) => onMaskTruncatedChange(e.target.checked)}
+              className="rounded border-border/50"
+            />
+            Mask Truncated
+          </label>
         </div>
       </div>
     </div>

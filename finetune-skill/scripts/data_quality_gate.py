@@ -65,7 +65,7 @@ THRESHOLDS = {
     "min_ground_truth_frac": 0.70,      # >= 70% of records should have ground_truth
     "max_topic_dominance": 0.40,        # No single topic > 40% of records
     "min_topics": 3,                    # At least 3 leaf topics for diversity
-    "min_records_per_topic": 5,         # Each topic needs enough examples
+    "min_records_per_topic": 25,        # Each leaf topic needs >= 25 records (HARD GATE) — see SKILL.md Step 4.5
     # Gate 2: Diversity
     "max_near_dup_frac": 0.10,          # < 10% near-duplicate prompts
     "near_dup_threshold": 0.85,         # trigram Jaccard threshold for duplication
@@ -251,15 +251,23 @@ def gate_structural(records: list[dict], topics_data: list | None) -> dict:
                 "topic": max_topic,
             })
 
-    # Thin topics (absolute minimum)
+    # Thin topics (absolute minimum) — HARD GATE per SKILL.md Step 4.5
+    # Topics below 25 records have insufficient difficulty coverage for GRPO to learn from.
     thin_topics = {t: c for t, c in topic_counts.items() if c < THRESHOLDS["min_records_per_topic"]}
     if thin_topics:
         issues.append({
-            "severity": "soft",
+            "severity": "hard",
             "check": "thin_topics",
-            "message": f"{len(thin_topics)} topic(s) with < {THRESHOLDS['min_records_per_topic']} records",
+            "message": (
+                f"{len(thin_topics)} topic(s) below minimum {THRESHOLDS['min_records_per_topic']} records: "
+                f"{', '.join(f'{t}={c}' for t, c in sorted(thin_topics.items(), key=lambda x: x[1]))}. "
+                f"Regenerate records for these topics with `generate_records.py --append --records-per-topic N` "
+                f"(where N covers the gap). See SKILL.md Step 4.5."
+            ),
             "value": len(thin_topics),
+            "threshold": THRESHOLDS["min_records_per_topic"],
             "topics": dict(thin_topics),
+            "fix": "Run generate_records.py --append for affected topics until each reaches 25+ records",
         })
 
     # Topic balance check: any topic with < 50% of the median count is imbalanced.

@@ -282,11 +282,26 @@ These patterns require comparing two metrics over time. They are checked in the 
 ### 100% Completion Clipping
 All completions are exactly max_output_tokens long. The model never produces EOS.
 
-**Causes**: max_output_tokens too low for the task, model never learned EOS during SFT, chat template misconfigured.
+**Consequences**: Rewards computed on incomplete outputs (noisy/wrong). If `mask_truncated_completions=True`, all masks become zero → NaN gradients. Training produces no useful signal. The skill auto-cancels training when `clipped_ratio >= 0.50` is sustained over 3 polls (or `>= 0.90` on the first poll).
 
-**Consequences**: Rewards computed on incomplete outputs (noisy/wrong). If mask_truncated_completions=True, all masks become zero → NaN gradients. Training produces no useful signal.
+**⚠ Do NOT reflex-raise `max_output_tokens`.** Clipping has three distinct causes and only one of them is fixed by raising the cap. Raising the cap to "make clipping go away" without diagnosing first guarantees length collapse (GR3 arXiv:2603.10535) — the model will keep growing outputs until it hits whatever new cap exists.
 
-**Fix**: Increase max_output_tokens to 1024-2048. Verify chat template. Consider SFT warm-up before GRPO.
+**Diagnose first** (run `finetune.py diagnose-clipping` after auto-cancel):
+
+| Diagnosis | Signal | Fix |
+|---|---|---|
+| **A. Config too tight** | `gt_p95_tokens > max_output_tokens` | Raise `max_output_tokens` to `gt_p95 × 1.5` and recreate training. The cap is genuinely below the natural answer length. |
+| **B. Grader rewards verbosity** | `gt_p95_tokens <= max_output_tokens` AND model `mean_length` >> `gt_p95` | Edit grader to add a **DRPO-safe conciseness penalty** (multiplicative, applied only to wrong/partial answers). See `grader-writing.md` §DRPO Anti-Pattern. Re-eval, then recreate training with the **same** `max_output_tokens`. |
+| **C. Spec mismatch** | `gt_p95_tokens >> objective_target_tokens` (e.g. user said "40-80 tokens" but GT averages 240) | Either regenerate ground truth to match the stated length, or update the objective. Do NOT proceed to training until resolved. Re-running with a higher cap will train a model that violates the user's spec. |
+
+**Other checks** (rule out before applying any fix):
+- Model never learned EOS during SFT — if `mean_terminated_length == 0` across all steps, the base model can't terminate at all. Switch base model.
+- Chat template misconfigured — verify the template emits EOS in the rendered prompt.
+
+**Research**:
+- GR3 (arXiv:2603.10535) — additive length penalties cause collapse; raising cap without grader fix is equivalent
+- DRPO (arXiv:2510.04474) — uniform length penalties on correct answers invert GRPO advantage
+- DAPO (arXiv:2503.14476) — overlong soft punishment is the algorithm-level mitigation; grader-side conciseness is the data-level mitigation
 
 ### Reward Hacking
 Reward increases while output quality degrades. The model exploits grader weaknesses instead of genuinely improving.
@@ -337,12 +352,12 @@ These are the defaults used by `create-training` when no `--config` is passed.
 
 ### Adaptive Epochs Table
 
-| Dataset size | Epochs | Rationale |
-|-------------|--------|-----------|
-| < 50 records | 8 | Small dataset needs more passes |
-| 50-200 records | 5 | Standard |
-| 200-500 records | 3 | Sufficient exploration |
-| > 500 records | 2 | DeepSeek-R1 used ~50k records with ~2 epochs |
+| Dataset size | 0.8B/2B Epochs | 4B Epochs | Rationale |
+|-------------|---------------|-----------|-----------|
+| < 50 records | 8 | 8 | Small dataset needs more passes |
+| 50-200 records | 5 | 5 | Standard |
+| 200-500 records | **5** | 3 | Small models with K=16 need more epochs to explore. Old successful 0.8B run: 384 records, 5 epochs. |
+| > 500 records | **3** | 2 | DeepSeek-R1 used ~50k records with ~2 epochs |
 
 > **RFT epochs ≠ SFT epochs.** In RFT/GRPO, the model generates **fresh responses each epoch** — there's no repetition risk. More epochs = more exploration.
 
@@ -350,16 +365,17 @@ These are the defaults used by `create-training` when no `--config` is passed.
 
 K determines how many completions GRPO generates per prompt. The model learns from **variance within the group** — if all K completions score the same, gradient is zero.
 
-| Output length | Grader type | Base accuracy | Recommended K |
-|--------------|-------------|---------------|---------------|
-| Short (<20 tokens) | Binary (0/1) | >50% | **4** |
-| Short (<20 tokens) | Partial credit (0-1) | 20-50% | **8** (default) |
-| Medium (20-100 tokens) | Any | Any | **8** |
-| Long (>100 tokens) | Any | <20% | **16** |
+**K is now model-size-dependent** (set automatically by `create-training`):
 
-**Why not always K=16?** For short-output tasks, the completion space is narrow. Once the model converges, all K completions produce the same answer → zero variance → zero gradient. Larger K reaches this point faster, then wastes more compute per step on identical completions. "No Prompt Left Behind" (arXiv:2509.21880): zero-variance prompts are 30-99% of batches regardless of K. "It Takes Two" (arXiv:2510.00977): K=2 matches K=16 for binary rewards.
+| Model | Default K | Rationale |
+|-------|-----------|-----------|
+| 0.8B | **16** | Weak base (avg ~0.35) produces low within-group variance at K=8. Evidence: 0.8B with K=8 had frac_reward_zero_std=0.80 (80% of steps wasted). Same task with K=16 achieved 0.646→0.864. |
+| 2B | **16** | Similar to 0.8B — needs more exploration for weak-to-moderate baselines |
+| 4B | **8** | Higher baseline capability produces enough variance at K=8 |
 
-**Zero-variance collapse is task mastery, not failure.** When `frac_reward_zero_std > 0.8` for 10+ consecutive steps, the model has learned the distribution. The fix is early stopping, not K tuning. DAPO (arXiv:2503.14476) dynamic sampling and F-GRPO (arXiv:2602.06717) difficulty weighting address this algorithmically.
+**When frac_reward_zero_std > 0.5 during training**, the K is too low for the model's capability level. The model's completions are too uniform — increase K or make the grader more granular.
+
+**Zero-variance collapse at end of training is task mastery, not failure.** When `frac_reward_zero_std > 0.8` after multiple epochs of improvement, the model has learned. The fix is early stopping. DAPO (arXiv:2503.14476) dynamic sampling and F-GRPO (arXiv:2602.06717) difficulty weighting address this algorithmically.
 
 ### Advanced Training Config (User-Configurable)
 

@@ -12,7 +12,14 @@
  *   0.8-1.0 — Correct label + good explanation
  *   0.6-0.7 — Correct label + weak/no explanation
  *   0.2-0.4 — Wrong label but related/adjacent category + reasoning shown
- *   0.0     — Empty response, refusal, or completely wrong category
+ *   0.05-0.20 — Wrong label (any attempted answer)
+ *   0.0     — Empty response or refusal ONLY (genuinely no output)
+ *
+ * ⚠️ CRITICAL: NEVER return 0.0 for an attempted-but-wrong answer.
+ * When all K=8 completions in a GRPO group return 0.0, within-group variance
+ * is zero → no gradient → no learning. Use 0.05 minimum for any non-empty
+ * response. Empirically validated: HARD GATE=0.0 caused 80% frac_reward_zero_std
+ * and flat training; HARD GATE=0.02-0.05 enabled +30% learning.
  *
  * Customize: VALID_LABELS, LABEL_ALIASES, DOMAIN
  *
@@ -172,9 +179,10 @@ function evaluate(input) {
         };
     }
 
-    // Wrong label: apply word-count penalty (verbose + wrong should be penalized more)
+    // Wrong label: apply word-count penalty (verbose + wrong should be penalized more).
+    // Floor at 0.05 to keep GRPO gradient nonzero (NEVER return 0.0 for attempted answers).
     var wrongScore = explanationScore * 0.2;
-    var wrongFinal = Math.min(0.2, wrongScore) * wrongPenaltyFactor;
+    var wrongFinal = Math.max(0.05, Math.min(0.2, wrongScore) * wrongPenaltyFactor);
     return {
         score: wrongFinal,
         reason: "Wrong label (model: " + modelLabel + ", correct: " + correctLabel + "). Explanation quality: " + explanationScore.toFixed(2) + "/1.0." + penaltyNote,

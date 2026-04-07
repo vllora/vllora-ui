@@ -889,4 +889,28 @@ When adding a word-count penalty to a grader, **NEVER apply it uniformly to both
 - Add a small **brevity bonus** (+0.03-0.05) for correct+concise answers
 - All 6 grader templates already implement this DRPO-safe pattern
 
+**When to add a conciseness penalty (Diagnosis B from clipping recovery):**
+
+If `finetune.py diagnose-clipping` returns **Diagnosis B (grader drift)** — meaning `gt_p95 <= max_output_tokens` but the model is generating much longer than the GT — the fix is grader-side, not config-side. Add the following to your grader (the pattern is multiplicative + correct-answer-safe per DRPO):
+
+```javascript
+// DRPO-safe conciseness penalty — applied only to wrong/partial answers.
+// Correct answers get a small brevity bonus instead.
+const targetTokens = 80;  // user spec or GT P95
+const actualTokens = Math.max(1, response.split(/\s+/).length);
+
+if (verdict === 'CORRECT') {
+  // Brevity bonus — small reward for staying concise
+  const brevityBonus = actualTokens <= targetTokens ? 0.03 : 0.0;
+  return Math.min(1.0, baseScore + brevityBonus);
+}
+
+// Wrong/partial: multiplicative length penalty
+// If response is 2× target, score is halved. Never below 0.02 hard floor.
+const lengthPenalty = Math.min(1.0, targetTokens / actualTokens);
+return Math.max(0.02, baseScore * lengthPenalty);
+```
+
+After adding this penalty: re-eval, then recreate training with the **same** `max_output_tokens` (do NOT raise it). See `training-metrics-guide.md` §100% Completion Clipping for the full recovery decision tree.
+
 **Research basis**: Dr. GRPO (arXiv:2503.20783) identifies the algorithmic root cause. DAPO (arXiv:2503.14476) adds overlong filtering. GR3 (arXiv:2603.10535) proves additive length penalties collapse. GRPO-LEAD (arXiv:2504.09696) couples length control to task correctness. DRPO (arXiv:2510.04474) proves uniform length penalties can invert GRPO advantage. OpenAI RFT cookbook recommends rubric refinement, not explicit penalty terms.

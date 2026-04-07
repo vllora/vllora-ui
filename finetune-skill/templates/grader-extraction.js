@@ -138,8 +138,10 @@ Answer in JSON format:
         // Weight: accuracy and hallucination matter most for extraction
         // Conciseness at 10% weight to prevent GRPO length exploitation (empirical; DRPO arXiv:2510.04474)
         const weighted = (fa * 0.30) + (hal * 0.27) + (comp * 0.23) + (fmt * 0.10) + (con * 0.10);
-        let finalScore = Math.max(0, Math.min(1, weighted / 5.0));
-        if (isNaN(finalScore)) finalScore = 0;
+        // Floor at 0.05 to keep GRPO gradient nonzero (NEVER return 0.0 for attempted answers).
+        // Only empty/refusal/error should return 0.0.
+        let finalScore = Math.max(0.05, Math.min(1, weighted / 5.0));
+        if (isNaN(finalScore)) finalScore = 0.05;
 
         return {
             score: finalScore,

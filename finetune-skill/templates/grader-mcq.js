@@ -159,9 +159,10 @@ function evaluate(input) {
         };
     }
 
-    // Wrong answer: apply word-count penalty (verbose + wrong should be penalized more)
+    // Wrong answer: apply word-count penalty (verbose + wrong should be penalized more).
+    // Floor at 0.05 to keep GRPO gradient nonzero (NEVER return 0.0 for attempted answers).
     var partialScore = reasoningScore * 0.4;
-    var finalScoreWrong = Math.min(0.4, partialScore) * wrongPenaltyFactor;
+    var finalScoreWrong = Math.max(0.05, Math.min(0.4, partialScore) * wrongPenaltyFactor);
     reasonParts.push("Incorrect (model: " + modelAnswer + ", correct: " + correctAnswer + "). Reasoning quality: " + reasoningScore.toFixed(2) + "/1.0. Extraction: " + extractionMethod + "." + penaltyNote);
 
     return {

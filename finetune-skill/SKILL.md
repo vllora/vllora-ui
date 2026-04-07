@@ -422,7 +422,8 @@ Write a JavaScript grader to `grader.js`. Scores model responses 0-1.
 
 **Hard rules:**
 - **NEVER return score 0.0 for parsing failures.** Use LLM extraction fallback.
-- **Wrong answers MUST get nonzero scores (0.01-0.10).** Zero scores = zero GRPO gradient = wasted prompts.
+- **NEVER add "HARD GATE" rules that return 0.0** for any attempted answer (even very wrong ones). Use 0.02 minimum. When all K=8 completions return 0.0, GRPO has zero variance → zero gradient → no learning. Empirically validated: HARD GATE=0.0 caused 80% frac_reward_zero_std and flat training; same grader with HARD GATE=0.02 enabled +30% learning.
+- **Wrong answers MUST get nonzero scores (0.02-0.10).** Zero scores = zero GRPO gradient = wasted prompts.
 - **NEVER remove partial credit** when fixing the grader in iteration.
 - **NEVER use programmatic checks as primary scoring.** Use LLM-as-judge for quality.
 - **Prevent length exploitation.** See [reference/grader-writing.md](reference/grader-writing.md) "Preventing Length Exploitation" for 4 defenses and the DRPO anti-pattern.
@@ -560,10 +561,17 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py estimate-training \
   --workflow-id $WORKFLOW_ID --models "Qwen3.5-4B,Qwen3.5-0.8B" --max-output-tokens 128
 ```
 
-**Run readiness-check on BOTH** to get signal density:
+**Run readiness-check on BOTH** to get signal density. **Always pass `--training-file` and `--objective-target-tokens`** — these enable the proactive length-drift checks (`spec_mismatch` + `length_drift_risk`) that catch grader-rewards-verbosity and spec-mismatch problems BEFORE training. Skipping them means clipping problems only get caught reactively during training, after compute is wasted:
 ```bash
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check --file finetune-project/evaluations/eval-001.json
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check --file finetune-project/evaluations/eval-002.json
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
+  --file finetune-project/evaluations/eval-001.json \
+  --training-file finetune-project/training.jsonl \
+  --objective-target-tokens <user spec, e.g. 80>
+
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
+  --file finetune-project/evaluations/eval-002.json \
+  --training-file finetune-project/training.jsonl \
+  --objective-target-tokens <user spec, e.g. 80>
 ```
 
 **If 0.8B avg < 0.05 (no capability), also eval 2B** as middle ground:
@@ -603,10 +611,17 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
 #### 7c. Readiness Gate (on chosen model)
 
 ```bash
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check --file finetune-project/evaluations/eval-NNN.json
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
+  --file finetune-project/evaluations/eval-NNN.json \
+  --training-file finetune-project/training.jsonl \
+  --objective-target-tokens <user spec>
 ```
 
-**Hard checks** (must ALL pass): sample count >= 50, score std > 0.10, avg score > 0.05, zero_score_frac < 10%.
+**Hard checks** (must ALL pass): sample count >= 50, score std > 0.10, avg score > 0.05, zero_score_frac < 10%, **`spec_mismatch` not flagged**, **`length_drift_risk` not flagged**.
+
+> **`spec_mismatch`** fails if `gt_p95 > objective_target × 2`. Means GT violates user's spec → regenerate GT or update objective. Do NOT train.
+>
+> **`length_drift_risk`** fails if `eval_response_p95 > gt_p95 × 2`. Means grader is rewarding verbosity at K=1 — training will amplify and trigger clipping. Add DRPO-safe conciseness penalty to grader BEFORE training.
 
 **Decision:** Exit 0 = PASS → 7c+. Exit 1 = FAIL → fix → 7b. Exit 2 = WARN → fix warnings on first eval; subsequent: only fix `score_concentration` > 70%.
 
@@ -664,11 +679,11 @@ These are the **only 3 base models** supported.
 
 **Do NOT pass `--config` on the first training run.** Defaults are model-size-aware and research-backed. Only override after a diagnosed failure. Use `--inference-params` for `max_output_tokens` only.
 
-| Model | LR | Beta | scale_rewards | Rationale |
-|-------|-----|------|---------------|-----------|
-| 0.8B | 5e-6 | 0 | group | Small model needs fast updates, no KL drag, amplified signal |
-| 2B | 3e-6 | 0 | group | Middle ground |
-| 4B | 2e-6 | 0.01 | none | Closer to 7B research defaults, KL prevents forgetting |
+| Model | LR | Beta | scale_rewards | K | Rationale |
+|-------|-----|------|---------------|---|-----------|
+| 0.8B | 5e-6 | 0 | group | 16 | Small model needs fast updates, no KL drag, amplified signal, more exploration |
+| 2B | 3e-6 | 0 | group | 16 | Middle ground |
+| 4B | 2e-6 | 0.01 | none | 8 | Higher baseline capability, enough variance at K=8 |
 
 > **K=8 is correct for most tasks.** K=4 is viable for short-output binary tasks; K=16 only for long-output hard tasks with dynamic sampling. Larger K does NOT reduce zero-variance collapse — it accelerates convergence then wastes compute. See [reference/training-metrics-guide.md](reference/training-metrics-guide.md) "K (Group Size) Selection Guide".
 
@@ -690,6 +705,8 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
 
 **Never use `sleep 300`** — always use `poll-training`.
 
+> **CRITICAL: --max-wait must be ≥ 1800s (30 min).** Training jobs queue on cloud GPU and may stay `pending` for several minutes before starting, then take 15-60 min to complete. If you pass `--max-wait 60`, the poll will timeout while the job is still pending and the script will exit with the wrong status. **Always use 7200 (2h)** unless you have a specific reason. The default is 7200.
+
 **Monitor epoch evals during training.** Build a progression table comparing each epoch with the pre-training baseline. Write to `execution-log.md` immediately after each epoch eval — do NOT wait until training completes.
 
 ```
@@ -702,6 +719,29 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
 **Check triggers EVERY epoch eval fetch:** reward flat, score declining, perfect rate spike, length change, zero-std rising. If any trigger fires, read 5-10 individual records.
 
 > See [reference/analysis-strategy.md](reference/analysis-strategy.md) Step 2b for trigger details.
+
+**When training is auto-cancelled for completion clipping:**
+
+Do NOT immediately recreate the job with a higher `max_output_tokens`. The skill auto-cancels when ≥50% of completions are truncated, but the *cause* of clipping has three flavors and only one is fixed by raising the cap. Reflex-raising guarantees length collapse (GR3 arXiv:2603.10535).
+
+Run the diagnostic first:
+
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py diagnose-clipping \
+  --job-file training-jobs/train-NNN.json \
+  --training-file finetune-project/training.jsonl \
+  --objective-target-tokens <user spec, e.g. 80>
+```
+
+Then apply the fix the diagnosis recommends:
+
+| Diagnosis | Fix |
+|---|---|
+| **A. Config too tight** (`gt_p95 > max_output_tokens`) | Raise `max_output_tokens` to `gt_p95 × 1.5`, recreate training |
+| **B. Grader drift** (`gt_p95 <= cap` but model verbose) | Edit grader to add a DRPO-safe conciseness penalty (see `grader-writing.md` §DRPO Anti-Pattern), re-eval, recreate training with the **same** cap |
+| **C. Spec mismatch** (`gt_p95 >> objective target`) | Regenerate GT to match the stated length OR update the objective. Do NOT proceed to training until resolved. |
+
+> See [reference/training-metrics-guide.md](reference/training-metrics-guide.md) §100% Completion Clipping for the full decision table.
 
 When training completes: (1) Write FINAL progression table to execution log, (2) Run `log-iteration --phase training`, (3) Proceed to Step 8b.
 

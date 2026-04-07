@@ -115,6 +115,21 @@ export function NewJobDialog({
   const [loraRank, setLoraRank] = useState(
     String(initialConfig?.training_config?.lora_rank ?? DEFAULT_TRAINING_CONFIG.lora_rank),
   );
+  const [beta, setBeta] = useState(
+    String(initialConfig?.training_config?.beta ?? 0),
+  );
+  const [gradAccumSteps, setGradAccumSteps] = useState(
+    String(initialConfig?.training_config?.gradient_accumulation_steps ?? DEFAULT_TRAINING_CONFIG.gradient_accumulation_steps),
+  );
+  const [lossType, setLossType] = useState(
+    initialConfig?.training_config?.loss_type ?? "dr_grpo",
+  );
+  const [scaleRewards, setScaleRewards] = useState(
+    initialConfig?.training_config?.scale_rewards ?? "group",
+  );
+  const [maskTruncated, setMaskTruncated] = useState(
+    initialConfig?.training_config?.mask_truncated_completions ?? false,
+  );
 
   // Inference parameters
   const [maxOutputTokens, setMaxOutputTokens] = useState(
@@ -136,7 +151,9 @@ export function NewJobDialog({
     setIsSubmitting(true);
 
     try {
-      const trainingConfig = buildTrainingConfig(learningRate, epochs, batchSize, loraRank);
+      const trainingConfig = buildTrainingConfig(learningRate, epochs, batchSize, loraRank, {
+        beta, gradAccumSteps, lossType, scaleRewards, maskTruncated,
+      });
       const inferenceParameters = buildInferenceParams(maxOutputTokens, temperature, responseCandidatesCount);
 
       const result = await quickFinetune({
@@ -166,6 +183,7 @@ export function NewJobDialog({
     }
   }, [
     workflowId, baseModel, learningRate, epochs, batchSize, loraRank,
+    beta, gradAccumSteps, lossType, scaleRewards, maskTruncated,
     maxOutputTokens, temperature, responseCandidatesCount,
     isSubmitting, onSuccess, onOpenChange,
   ]);
@@ -253,9 +271,19 @@ export function NewJobDialog({
               learningRate={learningRate}
               batchSize={batchSize}
               loraRank={loraRank}
+              beta={beta}
+              gradAccumSteps={gradAccumSteps}
+              lossType={lossType}
+              scaleRewards={scaleRewards}
+              maskTruncated={maskTruncated}
               onLearningRateChange={setLearningRate}
               onBatchSizeChange={setBatchSize}
               onLoraRankChange={setLoraRank}
+              onBetaChange={setBeta}
+              onGradAccumStepsChange={setGradAccumSteps}
+              onLossTypeChange={setLossType}
+              onScaleRewardsChange={setScaleRewards}
+              onMaskTruncatedChange={setMaskTruncated}
             />
             <AdvancedInferenceFields
               maxOutputTokens={maxOutputTokens}

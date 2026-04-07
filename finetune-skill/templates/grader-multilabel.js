@@ -32,6 +32,21 @@
  *   Wrong-but-attempted = 0.05 (not 0.0). Keeps GRPO gradient nonzero
  *   (DAPO arXiv:2503.14476). Only empty/refusal = 0.0.
  *
+ * ═══ CRITICAL: NEVER RETURN 0.0 FOR ATTEMPTED ANSWERS ═══
+ *
+ * Do NOT add "HARD GATE" rules that return score=0.0 for any attempted answer
+ * (even wrong ones). When all K=8 completions in a group return 0.0, GRPO has
+ * zero within-group variance → zero gradient → no learning. This was diagnosed
+ * empirically: a HARD GATE returning 0.0 caused 80% frac_reward_zero_std and
+ * flat training. Changing to 0.02 (still very harsh) restored gradient signal
+ * and enabled learning.
+ *
+ * If you want to strongly punish a failure mode:
+ *   - Use 0.02 instead of 0.0 (still 50x lower than baseline 1.0)
+ *   - Use a precision floor cap at 0.40 (allows some signal)
+ *   - Use stratified bands (0.0-0.10 for very wrong, 0.10-0.30 for partial)
+ * Only return 0.0 for empty/refusal/no-output cases.
+ *
  * Label parsing (xFinder arXiv:2405.11874):
  *   Regex extraction accuracy = 74%. LLM extraction = 93%.
  *   This template uses regex-first + LLM fallback for reliability.

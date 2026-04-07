@@ -4,8 +4,8 @@
 """Fetch and analyze training metrics from a finetune job.
 
 Usage:
-  uv run scripts/analyze_training.py --workflow-id WF_ID --job-id JOB_ID [--output-dir training-jobs]
-  uv run scripts/analyze_training.py --metrics-file training-jobs/job-v1-metrics.json  # Analyze saved file
+  uv run scripts/analyze_training.py --workflow-id WF_ID --job-id JOB_ID [--output-dir finetune-project/training-jobs]
+  uv run scripts/analyze_training.py --metrics-file finetune-project/training-jobs/job-v1-metrics.json  # Analyze saved file
 
 Fetches real-time metrics from the gateway API (or reads a saved file),
 computes derived diagnostics (reward trend, KL health, clipping ratio,
@@ -526,7 +526,7 @@ def main() -> None:
     parser.add_argument("--job-id", help="Job ID (for fetching from API)")
     parser.add_argument("--metrics-file", help="Path to saved metrics JSON (skip API fetch)")
     parser.add_argument("--epoch-evals-file", help="Path to saved epoch evals JSON (skip API fetch)")
-    parser.add_argument("--output-dir", default="training-jobs", help="Directory to save fetched data (default: training-jobs)")
+    parser.add_argument("--output-dir", default="finetune-project/training-jobs", help="Directory to save fetched data (default: finetune-project/training-jobs)")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL, help=f"Gateway base URL (default: {DEFAULT_BASE_URL})")
     parser.add_argument("--json", action="store_true", help="Output as JSON instead of human-readable text")
     parser.add_argument("--save", action="store_true", help="Save fetched data to output-dir")

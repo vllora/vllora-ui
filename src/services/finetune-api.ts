@@ -50,6 +50,10 @@ export interface FinetuneTrainingConfig {
   learning_rate_warmup_steps?: number;
   batch_size_samples?: number;
   beta?: number;
+  loss_type?: string;
+  mask_truncated_completions?: boolean;
+  importance_sampling_level?: string;
+  scale_rewards?: string;
 }
 
 export interface FinetuneInferenceParameters {

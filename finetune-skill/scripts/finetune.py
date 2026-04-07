@@ -2080,6 +2080,125 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
     # concise and GRPO encouraging longer chain-of-thought exploration.
     response_lengths = eval_data.get("response_token_lengths", [])
     max_output_tokens = getattr(args, "max_output_tokens", 512)
+
+    # ── Proactive length-drift check ──
+    # Compares (a) GT P95 from training.jsonl, (b) eval response P95, and
+    # (c) user's stated objective_target_tokens. Catches grader-rewards-verbosity
+    # and spec-mismatch BEFORE training. Reactive clipping detection in
+    # poll-training only fires after training has burned compute; this gate
+    # catches the same problems pre-train.
+    #
+    # Two failure patterns flagged:
+    #   - Grader drift early warning: eval_p95 > gt_p95 × 2 → grader is already
+    #     rewarding verbosity at K=1 eval. Training (K=8 GRPO exploration) will
+    #     amplify this and trigger completion clipping later. Fix grader now.
+    #   - Spec mismatch: gt_p95 > objective_target × 2 → training data violates
+    #     the user's stated output length. Training would produce a model that
+    #     ignores the spec. Regenerate GT, do not train.
+    training_file_path = getattr(args, "training_file", None)
+    objective_target = getattr(args, "objective_target_tokens", None)
+    if training_file_path:
+        try:
+            tf = Path(training_file_path)
+            if tf.exists():
+                gt_token_lens: list[int] = []
+                with tf.open() as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            rec = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        gt = rec.get("ground_truth", "")
+                        if gt and gt.strip():
+                            gt_token_lens.append(max(1, len(gt.strip()) // 4))
+
+                if gt_token_lens:
+                    sorted_gt = sorted(gt_token_lens)
+                    gt_p95_tok = sorted_gt[min(len(sorted_gt) - 1, int(len(sorted_gt) * 0.95))]
+
+                    # Check 1: spec mismatch (only if objective target provided)
+                    if objective_target and gt_p95_tok > objective_target * 2.0:
+                        checks["spec_mismatch"] = {
+                            "value": gt_p95_tok,
+                            "threshold": f"<= {int(objective_target * 2.0)} (objective_target × 2)",
+                            "pass": False,
+                            "fix": (
+                                f"Training data violates user spec: GT P95={gt_p95_tok} tok, "
+                                f"objective target={objective_target} tok ({gt_p95_tok/objective_target:.1f}× over). "
+                                f"Training will produce a model that ignores the user's stated output length. "
+                                f"FIX: Regenerate ground truth to target ~{objective_target} tokens, OR update "
+                                f"the objective. Do NOT train until resolved. "
+                                f"Ref: training-metrics-guide.md §100% Completion Clipping (Diagnosis C)."
+                            ),
+                            "hard": True,
+                            "detail": f"gt_p95={gt_p95_tok}, objective_target={objective_target}",
+                        }
+
+                    # Check 2: grader drift early warning.
+                    #
+                    # Two sub-signals (either fires the check):
+                    #   (a) drift_ratio = eval_p95 / gt_p95 > 1.5 — model is
+                    #       already verbose at K=1 greedy eval. Empirical
+                    #       observation: K=1 → K=8 amplification is ~3-4× for
+                    #       length drift, so 1.5× at K=1 → ~5× during training.
+                    #   (b) eval_p95 > objective_target × 1.0 — eval responses
+                    #       already exceed the user's stated output length even
+                    #       at greedy decoding. GRPO will only make this worse.
+                    #
+                    # Both signals indicate the grader is not penalizing length
+                    # and the model has no incentive to be concise. Fix the
+                    # grader BEFORE training, not after clipping wastes compute.
+                    if response_lengths and len(response_lengths) >= 10:
+                        eval_sorted = sorted(response_lengths)
+                        eval_p95_tok = eval_sorted[min(len(eval_sorted) - 1, int(len(eval_sorted) * 0.95))]
+                        drift_ratio = eval_p95_tok / max(gt_p95_tok, 1)
+
+                        drift_signal = drift_ratio > 1.5
+                        overshoot_signal = (
+                            objective_target is not None
+                            and eval_p95_tok > objective_target
+                        )
+
+                        if drift_signal or overshoot_signal:
+                            reasons = []
+                            if drift_signal:
+                                reasons.append(
+                                    f"eval P95 ({eval_p95_tok} tok) is {drift_ratio:.1f}× the GT P95 "
+                                    f"({gt_p95_tok} tok) — drift threshold 1.5×"
+                                )
+                            if overshoot_signal:
+                                reasons.append(
+                                    f"eval P95 ({eval_p95_tok} tok) already exceeds the user's "
+                                    f"objective target ({objective_target} tok) at K=1 greedy decoding"
+                                )
+
+                            checks["length_drift_risk"] = {
+                                "value": round(drift_ratio, 2),
+                                "threshold": "drift_ratio <= 1.5 AND eval_p95 <= objective_target",
+                                "pass": False,
+                                "fix": (
+                                    f"Grader is rewarding verbosity. Signals: {'; '.join(reasons)}. "
+                                    f"At K=1 greedy eval the model is already drifting; K=8 GRPO exploration "
+                                    f"will amplify this 3-4× and trigger completion clipping during training. "
+                                    f"FIX: Add a DRPO-safe conciseness penalty to the grader BEFORE training "
+                                    f"(see grader-writing.md §DRPO Anti-Pattern — copy-pasteable code template). "
+                                    f"Do NOT raise max_output_tokens. Re-eval after grader fix to confirm "
+                                    f"drift_ratio <= 1.5 AND eval_p95 <= objective_target. "
+                                    f"Ref: training-metrics-guide.md §100% Completion Clipping (Diagnosis B)."
+                                ),
+                                "hard": True,
+                                "detail": (
+                                    f"eval_p95={eval_p95_tok}, gt_p95={gt_p95_tok}, "
+                                    f"drift_ratio={drift_ratio:.2f}, "
+                                    f"objective_target={objective_target}"
+                                ),
+                            }
+        except (OSError, ValueError) as e:
+            print(f"Warning: length-drift check skipped ({e})", file=sys.stderr)
+
     if response_lengths and len(response_lengths) >= 10:
         sorted_lengths = sorted(response_lengths)
         eval_p50 = sorted_lengths[len(sorted_lengths) // 2]
@@ -3686,15 +3805,19 @@ def cmd_create_training(args: argparse.Namespace) -> None:
     # Small datasets still need more passes but capped at 8 (was 15).
     user_set_epochs = args.config and "epochs" in (args.config or "")
     if not user_set_epochs and record_count > 0:
+        # Model-size-aware epoch selection. Small models (0.8B/2B) with K=16
+        # need more epochs to explore — each epoch generates fresh K=16 rollouts.
+        # The old successful 0.8B run used 5 epochs with 384 records.
+        is_small_model = "0.8b" in model_lower or "2b" in model_lower
         if record_count < 50:
             payload["training_config"]["epochs"] = 8
         elif record_count < 200:
             payload["training_config"]["epochs"] = 5
         elif record_count < 500:
-            payload["training_config"]["epochs"] = 3
+            payload["training_config"]["epochs"] = 5 if is_small_model else 3
         else:
-            payload["training_config"]["epochs"] = 2
-        print(f"Adaptive epochs: {payload['training_config']['epochs']} (based on {record_count} records)")
+            payload["training_config"]["epochs"] = 3 if is_small_model else 3
+        print(f"Adaptive epochs: {payload['training_config']['epochs']} (based on {record_count} records, {'small' if is_small_model else 'large'} model)")
 
     if args.inference_params:
         try:
@@ -3703,12 +3826,20 @@ def cmd_create_training(args: argparse.Namespace) -> None:
             print(f"Error: Invalid JSON for --inference-params", file=sys.stderr)
             sys.exit(1)
     else:
+        # K (response_candidates_count) is model-size-dependent.
+        # Small models (0.8B-2B) with strict graders produce low within-group variance
+        # at K=8 — frac_reward_zero_std reaches 80%. K=16 gives more diversity.
+        # Evidence: 0.8B food-allergen with K=8 had frac_reward_zero_std=0.80, flat training.
+        # Same task with K=16 achieved 0.646→0.864. The old successful run used K=16.
+        # 4B models with higher baseline capability produce enough variance at K=8.
+        k_default = 16 if ("0.8b" in model_lower or "2b" in model_lower) else 8
         payload["inference_parameters"] = {
             "max_output_tokens": 512,
             "temperature": 1.0,
             "top_p": 1.0,
-            "response_candidates_count": 8,  # GRPO minimum: all published work uses G>=8 (DeepSeekMath G=64, DAPO G=16, TRL default G=8)
+            "response_candidates_count": k_default,
         }
+        print(f"  Config: K={k_default} (response_candidates_count)")
 
     # Auto-adjust max_output_tokens based on dataset content.
     # Mirrors the completion_length gate logic from data_quality_gate.py.
@@ -4576,12 +4707,29 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
                 else:
                     print(f"    No completions terminate naturally — model can't finish in the token budget", file=sys.stderr)
 
-                if recommended:
-                    print(f"    Recommended: set max_output_tokens >= {recommended}", file=sys.stderr)
-                else:
-                    print(f"    Recommended: at least double current max_output_tokens", file=sys.stderr)
-
-                print(f"    Ref: training-metrics-guide.md §100% Completion Clipping", file=sys.stderr)
+                # ⚠ DO NOT recommend a token cap directly here. Three different
+                # root causes (config too tight / grader drift / spec mismatch)
+                # need three different fixes. Force the agent through the
+                # diagnose-clipping CLI before any retry. See
+                # training-metrics-guide.md §100% Completion Clipping.
+                print(f"", file=sys.stderr)
+                print(f"    ⚠ DO NOT reflex-raise max_output_tokens.", file=sys.stderr)
+                print(f"    Clipping has 3 causes (config / grader drift / spec mismatch).", file=sys.stderr)
+                print(f"    Raising the cap without diagnosis guarantees length collapse (GR3 arXiv:2603.10535).", file=sys.stderr)
+                print(f"", file=sys.stderr)
+                print(f"    → Run diagnosis BEFORE recreating training:", file=sys.stderr)
+                print(f"        finetune.py diagnose-clipping \\", file=sys.stderr)
+                print(f"          --job-file <this job file> \\", file=sys.stderr)
+                print(f"          --training-file finetune-project/training.jsonl \\", file=sys.stderr)
+                print(f"          --objective-target-tokens <user spec>", file=sys.stderr)
+                print(f"", file=sys.stderr)
+                print(f"    Then apply the diagnosis-recommended fix:", file=sys.stderr)
+                print(f"      A. Config too tight  → raise max_output_tokens", file=sys.stderr)
+                print(f"      B. Grader drift      → add DRPO-safe conciseness penalty to grader", file=sys.stderr)
+                print(f"      C. Spec mismatch     → regenerate GT or update objective", file=sys.stderr)
+                print(f"", file=sys.stderr)
+                print(f"    Ref: SKILL.md §7f 'When training is auto-cancelled'", file=sys.stderr)
+                print(f"         training-metrics-guide.md §100% Completion Clipping", file=sys.stderr)
                 print(f"    → Auto-cancelling to save compute. Use --no-early-stop to override.", file=sys.stderr)
 
                 try:
@@ -4590,9 +4738,19 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
                     metadata["early_stop_reason"] = (
                         f"Completion clipping ({severity}): {ratio:.0%} of completions truncated "
                         f"at max_output_tokens={int(max_len) if max_len else '?'}. "
-                        f"{'Recommended: max_output_tokens >= ' + str(recommended) if recommended else 'Double max_output_tokens and retry'}. "
-                        f"Ref: training-metrics-guide.md"
+                        f"DO NOT reflex-raise max_output_tokens. Run `finetune.py diagnose-clipping` "
+                        f"to identify root cause (config / grader drift / spec mismatch), then apply "
+                        f"the diagnosis-recommended fix. "
+                        f"Ref: SKILL.md §7f, training-metrics-guide.md §100% Completion Clipping"
                     )
+                    metadata["clipping_info"] = {
+                        "severity": severity,
+                        "latest_clipped_ratio": ratio,
+                        "max_length": max_len,
+                        "mean_terminated_length": term_len,
+                        "ratios": clipping_info.get("ratios", []),
+                        "recommended_action": "run diagnose-clipping before retry",
+                    }
                     job_file.write_text(json.dumps(metadata, indent=2))
                     print(f"  Training cancelled (completion clipping).")
                 except SystemExit:
@@ -4741,6 +4899,182 @@ def cmd_search_knowledge(args: argparse.Namespace) -> None:
         content_preview = part.get("content", "")[:120].replace("\n", " ")
         print(f"  [{i + 1}] score={score:.4f}  id={part.get('id', '')}  title={title}")
         print(f"       {content_preview}...")
+
+
+def cmd_diagnose_clipping(args: argparse.Namespace) -> None:
+    """Diagnose the root cause of completion clipping after auto-cancel.
+
+    Three diagnoses are possible — only ONE is fixed by raising max_output_tokens.
+    Raising the cap without diagnosing first guarantees length collapse
+    (GR3 arXiv:2603.10535) and may train a model that violates the user's
+    output-length spec.
+
+      A. Config too tight   — gt_p95 > max_output_tokens (cap below natural length)
+                              → Raise max_output_tokens to gt_p95 × 1.5
+
+      B. Grader drift       — gt_p95 <= cap, but model mean_length >> gt_p95
+                              → Add DRPO-safe conciseness penalty to grader,
+                                re-eval, recreate training with SAME cap
+
+      C. Spec mismatch      — gt_p95 >> objective_target_tokens
+                              → Regenerate GT or update objective. Do NOT train.
+
+    Reads the job file (for max_output_tokens + clipping metadata written by
+    poll-training) and the training.jsonl (for ground-truth P95). The objective
+    target token count must be passed by the agent.
+    """
+    job_file = Path(args.job_file)
+    if not job_file.exists():
+        print(f"ERROR: job file not found: {job_file}", file=sys.stderr)
+        sys.exit(1)
+
+    metadata = json.loads(job_file.read_text())
+    clipping_info = metadata.get("clipping_info") or {}
+    if not clipping_info:
+        print(f"ERROR: no clipping_info in job file. Job was not cancelled for clipping.", file=sys.stderr)
+        print(f"  early_stop_reason: {metadata.get('early_stop_reason', 'N/A')}", file=sys.stderr)
+        sys.exit(1)
+
+    max_output_tokens = (
+        metadata.get("config", {}).get("max_output_tokens")
+        or metadata.get("inference_params", {}).get("max_output_tokens")
+        or clipping_info.get("max_length")
+    )
+    if not max_output_tokens:
+        print(f"ERROR: cannot determine max_output_tokens from job file.", file=sys.stderr)
+        sys.exit(1)
+    max_output_tokens = int(max_output_tokens)
+
+    mean_term_len = clipping_info.get("mean_terminated_length")
+    clipped_ratio = clipping_info.get("latest_clipped_ratio", 0.0)
+    severity = clipping_info.get("severity", "unknown")
+
+    # Compute GT P95 from training.jsonl using the same heuristic as
+    # _estimate_recommended_max_tokens (4 chars/token).
+    training_file = Path(args.training_file)
+    if not training_file.exists():
+        print(f"ERROR: training file not found: {training_file}", file=sys.stderr)
+        sys.exit(1)
+
+    gt_lengths: list[int] = []
+    with training_file.open() as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            gt = rec.get("ground_truth", "")
+            if gt and gt.strip():
+                gt_lengths.append(max(1, len(gt.strip()) // 4))
+
+    if not gt_lengths:
+        print(f"ERROR: no ground_truth fields found in {training_file}", file=sys.stderr)
+        print(f"  Cannot diagnose without GT P95. Add ground_truth to records.", file=sys.stderr)
+        sys.exit(1)
+
+    sorted_gt = sorted(gt_lengths)
+    gt_p95 = sorted_gt[min(len(sorted_gt) - 1, int(len(sorted_gt) * 0.95))]
+    gt_max = sorted_gt[-1]
+    gt_median = sorted_gt[len(sorted_gt) // 2]
+
+    objective_target = args.objective_target_tokens
+
+    # ── Diagnosis logic ──
+    # Order matters: spec mismatch is checked first because if the GT itself
+    # violates the user's spec, neither raising the cap nor fixing the grader
+    # is correct — the data is wrong.
+    diagnosis = None
+    fix = None
+    recommended_max_tokens = None
+
+    if objective_target and gt_p95 > objective_target * 2.0:
+        # Diagnosis C: GT P95 is more than 2× the user's stated target.
+        # The training data violates the spec. Raising the cap would train a
+        # model that ignores the user's output-length requirement.
+        diagnosis = "C_spec_mismatch"
+        fix = (
+            f"Spec mismatch: GT P95 ({gt_p95} tok) is {gt_p95/objective_target:.1f}× the objective "
+            f"target ({objective_target} tok). The training data violates the user's spec.\n"
+            f"  → Either regenerate ground truth to match {objective_target} tokens, OR update the "
+            f"objective to reflect actual GT length. Do NOT recreate training until resolved."
+        )
+    elif gt_p95 > max_output_tokens:
+        # Diagnosis A: cap is genuinely below natural answer length.
+        diagnosis = "A_config_too_tight"
+        recommended_max_tokens = int(gt_p95 * 1.5)
+        fix = (
+            f"Config too tight: GT P95 ({gt_p95} tok) > max_output_tokens ({max_output_tokens} tok).\n"
+            f"  → Raise max_output_tokens to {recommended_max_tokens} (gt_p95 × 1.5) and recreate training.\n"
+            f"  → Use --inference-params max_output_tokens={recommended_max_tokens} on create-training."
+        )
+    else:
+        # Diagnosis B: cap is sufficient for the GT, but the model is generating
+        # longer than the GT. The grader is rewarding verbosity.
+        ratio_str = f"{(mean_term_len/gt_p95):.1f}× GT P95" if mean_term_len else "unknown"
+        diagnosis = "B_grader_drift"
+        fix = (
+            f"Grader drift: GT P95 ({gt_p95} tok) <= max_output_tokens ({max_output_tokens} tok), "
+            f"but model is verbose (natural length: {ratio_str}).\n"
+            f"  → The grader is rewarding verbosity. Do NOT raise max_output_tokens.\n"
+            f"  → Edit grader: add a DRPO-safe conciseness penalty (multiplicative, applied only "
+            f"to wrong/partial answers). See grader-writing.md §DRPO Anti-Pattern.\n"
+            f"  → Re-eval the model with the updated grader, then recreate training with the "
+            f"SAME max_output_tokens ({max_output_tokens})."
+        )
+
+    result = {
+        "diagnosis": diagnosis,
+        "severity": severity,
+        "clipped_ratio": clipped_ratio,
+        "max_output_tokens": max_output_tokens,
+        "mean_terminated_length": mean_term_len,
+        "gt_token_stats": {
+            "p95": gt_p95,
+            "max": gt_max,
+            "median": gt_median,
+            "n_records": len(gt_lengths),
+        },
+        "objective_target_tokens": objective_target,
+        "recommended_max_output_tokens": recommended_max_tokens,
+        "fix": fix,
+    }
+
+    if args.json:
+        print(json.dumps(result, indent=2))
+        return
+
+    # Human-readable output
+    print(f"")
+    print(f"═══════════════════════════════════════════════════════════")
+    print(f"  Completion Clipping Diagnosis")
+    print(f"═══════════════════════════════════════════════════════════")
+    print(f"")
+    print(f"  Severity:              {severity}")
+    print(f"  Clipped ratio:         {clipped_ratio:.0%}")
+    print(f"  max_output_tokens:     {max_output_tokens}")
+    print(f"  Mean terminated len:   {mean_term_len if mean_term_len else 'N/A (nothing terminated)'}")
+    print(f"")
+    print(f"  GT token stats (4 chars/tok heuristic):")
+    print(f"    P95:    {gt_p95}")
+    print(f"    Max:    {gt_max}")
+    print(f"    Median: {gt_median}")
+    print(f"    Count:  {len(gt_lengths)}")
+    if objective_target:
+        print(f"  Objective target:      {objective_target} tokens")
+    else:
+        print(f"  Objective target:      (not provided — pass --objective-target-tokens for spec-mismatch check)")
+    print(f"")
+    print(f"  ═══ DIAGNOSIS: {diagnosis} ═══")
+    print(f"")
+    for line in fix.splitlines():
+        print(f"  {line}")
+    print(f"")
+    print(f"  Ref: training-metrics-guide.md §100% Completion Clipping")
+    print(f"       SKILL.md §7f 'When training is auto-cancelled'")
+    print(f"")
 
 
 def cmd_cancel_training(args: argparse.Namespace) -> None:
@@ -5921,6 +6255,13 @@ def main() -> None:
     p.add_argument("--max-output-tokens", type=int, default=512,
                    help="Planned max_output_tokens for training (default: 512). "
                         "Used to check if eval response lengths predict truncation risk.")
+    p.add_argument("--training-file", default=None,
+                   help="Path to training.jsonl. If provided, enables proactive length-drift checks "
+                        "(spec_mismatch + length_drift_risk) that catch grader-rewards-verbosity and "
+                        "spec-mismatch problems BEFORE training. Strongly recommended.")
+    p.add_argument("--objective-target-tokens", type=int, default=None,
+                   help="User's stated target output token count (e.g., 80 for '40-80 tokens'). "
+                        "Required for spec-mismatch detection. Pair with --training-file.")
 
     # diagnose-grader
     p = subparsers.add_parser("diagnose-grader", help="Diagnose grader issues from eval results — shows score buckets, reason patterns, and grader source")
@@ -5981,6 +6322,21 @@ def main() -> None:
     p.add_argument("--poll-interval", type=int, default=60, help="(Ignored — adaptive polling is used. Kept for backward compatibility)")
     p.add_argument("--max-wait", type=int, default=7200, help="Max wait in seconds (default: 7200 = 2h, matching SKILL.md recommendation)")
     p.add_argument("--no-early-stop", action="store_true", help="Disable automatic early stopping (EMA plateau, degradation, length exploitation)")
+
+    # diagnose-clipping
+    p = subparsers.add_parser(
+        "diagnose-clipping",
+        help="Diagnose root cause of completion clipping after auto-cancel (config / grader drift / spec mismatch)",
+    )
+    p.add_argument("--job-file", required=True, help="Path to train-NNN.json (cancelled for clipping)")
+    p.add_argument("--training-file", required=True, help="Path to training.jsonl (for GT P95 token estimation)")
+    p.add_argument(
+        "--objective-target-tokens",
+        type=int,
+        default=None,
+        help="User-specified target output token count (e.g. 80 for '40-80 tokens'). Required for spec-mismatch detection.",
+    )
+    p.add_argument("--json", action="store_true", help="Emit JSON instead of human-readable output")
 
     # cancel-training
     p = subparsers.add_parser("cancel-training", help="Cancel a running training job")
@@ -6108,6 +6464,7 @@ def main() -> None:
         "create-training": cmd_create_training,
         "poll-training": cmd_poll_training,
         "search-knowledge": cmd_search_knowledge,
+        "diagnose-clipping": cmd_diagnose_clipping,
         "cancel-training": cmd_cancel_training,
         "cancel-eval": cmd_cancel_eval,
         "sync-jobs": cmd_sync_jobs,
