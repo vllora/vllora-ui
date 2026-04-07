@@ -793,6 +793,62 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
 
 Read improved AND degraded records per topic. Check if gains come from genuine skill or grader exploitation.
 
+**MANDATORY Grader Sanity Checks** — run these for EVERY eval (baseline AND post-training):
+
+```bash
+# Sanity check 1: LLM fallback usage rate (should be <10%)
+# High rate = regex is missing normal outputs, or grader is too lenient
+python3 -c "
+import json, sys, requests
+eval_id = '<EVAL_RUN_ID>'
+r = requests.get(f'http://localhost:9090/finetune/evaluations/{eval_id}')
+results = r.json().get('results', [])
+llm_count = sum(1 for rec in results for e in rec.get('epochs',{}).get('0',[]) if 'llm' in e.get('reason','').lower())
+total = sum(1 for rec in results for e in rec.get('epochs',{}).get('0',[]) if e.get('score') is not None)
+print(f'LLM fallback: {llm_count}/{total} ({llm_count/max(total,1)*100:.1f}%)')
+print('⚠ HIGH — grader leaking' if llm_count/max(total,1) > 0.10 else '✓ OK')
+"
+
+# Sanity check 2: High-score response/GT mismatch check
+# Scan top 10 high-score records — does the RAW response literally contain the GT label?
+# If the model said "anchovy extract" and scored 0.96 for "fish", that's a grader bug.
+python3 -c "
+import json, requests
+eval_id = '<EVAL_RUN_ID>'
+r = requests.get(f'http://localhost:9090/finetune/evaluations/{eval_id}')
+results = r.json().get('results', [])
+flagged = 0
+for rec in results:
+    row = rec.get('row', {})
+    gt = (row.get('ground_truth') or '').lower()
+    if not gt or gt == 'none': continue
+    for ep in rec.get('epochs',{}).get('0',[]):
+        score = ep.get('score', 0)
+        if score < 0.8: continue
+        resp = (ep.get('rollout_content') or '').lower()
+        gt_labels = [x.strip() for x in gt.split(',')]
+        missing = [lbl for lbl in gt_labels if lbl not in resp]
+        if missing and flagged < 10:
+            print(f'  ⚠ score={score:.2f} GT={gt} response=\"{resp[:80]}\" missing={missing}')
+            flagged += 1
+print(f'Flagged {flagged} high-score records with missing GT labels in response')
+"
+
+# Sanity check 3: Partial + FPs ordinal check
+# Find records with 0 < score < 0.1 that have TP > 0 — bug indicator
+# If partial matches score same as completely wrong, FP penalty is too aggressive.
+
+# Sanity check 4: Manual inspection of 5-10 random records per score band
+# Score 0.0-0.2: should be genuine failures
+# Score 0.3-0.5: should be partial matches
+# Score 0.8-1.0: raw response should literally contain every GT label
+```
+
+**If any sanity check fails:**
+- Fix the grader BEFORE declaring training successful
+- Re-eval after grader fix
+- Document in iterations.json what was broken
+
 | Improvement (Δ) | Verdict | Action |
 |-----------------|---------|--------|
 | **> +0.15** | Strong | Deploy |

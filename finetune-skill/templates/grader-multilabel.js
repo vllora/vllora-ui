@@ -287,19 +287,73 @@ function evaluate(input) {
         baseScore = 0.05;
     }
 
-    // ─── Per-FP graduated penalty ───
-    // Each false positive deducts FP_PENALTY from the score.
-    // Creates smooth continuous cost GRPO can optimize against.
+    // ─── TP-tiered floor (CoRPO R_min_correct principle) ───
+    // Partial-correct records MUST score above completely-wrong records, or
+    // GRPO cannot distinguish "1 TP + 2 FP" from "0 TP + 0 FP" — both collapse
+    // to the same 0.05 floor and produce zero gradient between them.
+    //
+    // Floor scales with TP ratio so more-correct = higher minimum:
+    //   tp=0:       floor = 0.05 (wrong tier)
+    //   tp=1/4:     floor = 0.22 + 0.025 = 0.245
+    //   tp=1/2:     floor = 0.22 + 0.050 = 0.270
+    //   tp=2/3:     floor = 0.22 + 0.067 = 0.287
+    //   tp=1/1:     floor = 0.22 + 0.100 = 0.320
+    // This creates 3 non-overlapping tiers: wrong [0-0.20], partial [0.22-0.90], correct [0.90-1.0].
+    // Ref: CoRPO (arXiv:2511.04439) R_min_correct, HERO (arXiv:2510.07242) stratified tiers
+    var tpFloor = (tp > 0 && gtCount > 0) ? 0.22 + (tp / gtCount) * 0.10 : 0.05;
+
+    // ─── Proportional FP penalty ───
+    // Penalty grows with fpRate = fp/(tp+fp) = over-prediction fraction.
+    // Bounded by the room above tpFloor so FPs can NEVER erase TP credit
+    // below the tier boundary.
+    //
+    // Example: tp=1, fp=2, gtCount=2
+    //   baseScore = 0.35 (partial branch)
+    //   tpFloor   = 0.27
+    //   fpRate    = 2/3 = 0.667
+    //   maxPen    = min(0.30, 0.35 - 0.27 + 0.15) = min(0.30, 0.23) = 0.23
+    //   penalty   = 0.667 * 0.23 = 0.153
+    //   score     = max(0.27, 0.35 - 0.153) = max(0.27, 0.197) = 0.27
+    // Result: partial+FPs scores 0.27, not 0.05. GRPO can now rank it above wrong.
+    //
+    // Ref: MO-GRPO Theorem 1 (arXiv:2509.22047) — recall has higher variance than
+    //      precision, so we need precision pressure proportional to over-prediction.
     if (fp > 0) {
-        baseScore = baseScore - (fp * FP_PENALTY);
+        var fpRate = fp / Math.max(1, tp + fp);          // over-prediction fraction
+        var maxPenalty = Math.max(0, baseScore - tpFloor); // bounded by tier headroom
+        var fpPenalty = fpRate * Math.min(0.30, maxPenalty + 0.15);
+        baseScore = Math.max(tpFloor, baseScore - fpPenalty);
     }
 
-    // ─── Precision floor hard cap ───
-    // Prevents over-predicting completions from outranking correct ones
-    // in GRPO group comparisons.
+    // ─── Precision floor hard cap (safety net) ───
+    // Relaxed to 0.50 from 0.67 — the proportional FP penalty above now
+    // handles most cases. This remains as a safety net for extreme precision
+    // drops (e.g., precision < 0.25 with many FPs), capped at 0.40.
     // Ref: CoRPO (arXiv:2511.04439)
-    if (fp > 0 && precision < PRECISION_FLOOR) {
+    if (fp > 0 && precision < 0.50) {
         baseScore = Math.min(baseScore, PRECISION_FLOOR_CAP);
+    }
+
+    // ─── Over-prediction defense (dump-all-labels attack) ───
+    // Empirically observed: weak models dump all 9 Big 9 allergens to guarantee
+    // hitting TP. This gets precision=1/9 and F-beta near 0 but the tp-tiered
+    // floor was letting it score 0.27+. We need a harder cap when the model
+    // predicts significantly MORE labels than GT contains.
+    //
+    // Override tpFloor in extreme over-prediction: if precision < 0.30 AND the
+    // model predicted 3+ extra labels beyond GT, cap at 0.15 (above wrong tier
+    // 0.05 but below normal partial tier ~0.27).
+    // Ref: MO-GRPO Theorem 1 (arXiv:2509.22047)
+    var extraLabels = modelLabels.length - gtCount;
+    if (precision < 0.30 && extraLabels >= 3) {
+        baseScore = Math.min(baseScore, 0.15);
+        tpFloor = Math.min(tpFloor, 0.15);  // override the final guard too
+    }
+
+    // ─── Enforce TP-tier floor as final guard ───
+    // After any penalties, ensure partial-correct still scores above wrong tier.
+    if (tp > 0 && baseScore < tpFloor) {
+        baseScore = tpFloor;
     }
 
     // ─── Brevity bonus (correct answers only, DRPO-safe) ───
