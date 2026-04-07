@@ -150,6 +150,54 @@ function evaluate(input) {
     var modelSaysNone = isNoneResponse(response, NONE_KEYWORD);
     var extractionMethod = "regex";
 
+    // ─── Duplicate-emission count (multiset precision) ───
+    // Standard multilabel F1 semantics (scikit-learn): each predicted segment
+    // counts as a separate prediction.  If the model emits "peanuts, peanuts"
+    // and GT=["peanuts"], that's tp=1 + fp=1 (the second "peanuts" is wrong).
+    //
+    // Without this, parseLabels() dedupes silently, so the model can emit any
+    // label N times for free — a free reward surface.  Documented gaming case:
+    // "peanuts, wheat, soybeans, sesame, peanuts, wheat, soybeans, sesame"
+    // (4 labels emitted twice) currently scores identically to a clean
+    // 4-label response.
+    //
+    // Why count as fp (vs ratio penalty): feeds existing fp machinery →
+    // proportional FP penalty + precision floor + dump-all defense, no new
+    // tunables.  Honors DRPO (arXiv:2510.04474): tpFloor still protects
+    // partial-correct.  Honors CoRPO R_min_correct (arXiv:2511.04439).
+    //
+    // Note: this is in addition to OOV counting below.  Duplicates of OOV
+    // tokens are NOT double-counted — countDuplicateEmissions only counts
+    // duplicates of valid labels (which would otherwise dedupe to 1 fp).
+    var dupCount = (extractionMethod === "regex")
+        ? countDuplicateEmissions(response, VALID_LABELS, LABEL_ALIASES)
+        : 0;
+
+    // ─── OOV count: comma-delimited segments that don't resolve to any label ───
+    // Closed-vocabulary task contract: model must output ONLY canonical labels.
+    // Tokens emitted that resolve to neither a valid label nor a known alias are
+    // OOV predictions and count as false positives.
+    //
+    // Without this, the grader silently drops garbage tokens, creating a reward-
+    // hacking surface: the model can output "peanuts, soybeans, corn, sugars,
+    // beta-glucans" with GT="peanuts, soybeans" and score perfectly.
+    //
+    // Why count as fp (not a separate hard penalty):
+    // - Feeds the existing proportional FP penalty + precision floor + dump-all
+    //   defense — no new thresholds to calibrate.
+    // - Honors DRPO (arXiv:2510.04474): tpFloor still protects partial-correct
+    //   rows from collapsing into the wrong tier.
+    // - Honors CoRPO R_min_correct (arXiv:2511.04439): no hard zero gate.
+    // - MO-GRPO Theorem 1 (arXiv:2509.22047): equalizes precision/recall variance
+    //   so neither dominates the GRPO advantage; preventing recall-only collapse
+    //   to "dump everything" behavior.
+    //
+    // Scoping: only count segments from the regex path. The LLM fallback path
+    // already returns canonical labels only, so OOV doesn't apply.
+    var oovCount = (extractionMethod === "regex")
+        ? countOOVSegments(response, VALID_LABELS, LABEL_ALIASES, NONE_KEYWORD)
+        : 0;
+
     // LLM fallback if regex found nothing and response isn't "none".
     // Distinguish 3 cases: valid labels / explicit none / garbage (off-topic).
     // Garbage responses MUST NOT be treated as "model said none".
@@ -167,6 +215,13 @@ function evaluate(input) {
                 isGarbage = true;
             }
         }
+    }
+
+    // Recompute OOV/dup after LLM fallback — if fallback ran, the original
+    // response was prose/garbage and segment-based counting doesn't apply.
+    if (extractionMethod !== "regex") {
+        oovCount = 0;
+        dupCount = 0;
     }
 
     // Garbage response = wrong, regardless of GT. Nonzero floor for GRPO gradient.
@@ -198,15 +253,19 @@ function evaluate(input) {
         };
     }
 
-    // GT=none, model listed labels → false positives only
-    if (gtIsNone && modelLabels.length > 0) {
-        var fpOnlyScore = Math.max(0.02, 0.10 - (modelLabels.length * 0.02));
+    // GT=none, model listed labels OR emitted OOV tokens → false positives only.
+    // Both vocab-FPs and OOV tokens count as wrong predictions when the
+    // expected output is "none".
+    if (gtIsNone && (modelLabels.length > 0 || oovCount > 0)) {
+        var totalFp = modelLabels.length + oovCount;
+        var fpOnlyScore = Math.max(0.02, 0.10 - (totalFp * 0.02));
         return {
             score: fpOnlyScore,
-            reason: "Wrong: GT=" + NONE_KEYWORD + " but model listed " + modelLabels.length +
-                " label(s): " + modelLabels.join(", ") + ". All are false positives.",
+            reason: "Wrong: GT=" + NONE_KEYWORD + " but model emitted " + totalFp +
+                " token(s): " + (modelLabels.length > 0 ? modelLabels.join(", ") : "") +
+                (oovCount > 0 ? " (+" + oovCount + " OOV)" : "") + ". All false positives.",
             precision: 0, recall: 1.0, fbeta: 0,
-            tp: 0, fp: modelLabels.length, fn: 0,
+            tp: 0, fp: totalFp, fn: 0,
             extraction_method: extractionMethod
         };
     }
@@ -237,6 +296,13 @@ function evaluate(input) {
             fn++;
         }
     }
+
+    // ─── Add OOV + duplicate counts to fp ───
+    // Out-of-vocabulary segments are spec violations.
+    // Duplicate emissions of valid labels are spec violations (multiset semantics).
+    // Both contribute to fp so the existing precision/penalty machinery handles
+    // them with no new tunables.
+    fp += oovCount + dupCount;
 
     // ─── Compute F-beta ───
     var precision = (tp + fp > 0) ? tp / (tp + fp) : 0;
@@ -360,12 +426,40 @@ function evaluate(input) {
     // Only for perfect matches — no bonus on partial to avoid
     // rewarding short wrong answers.
     // Ref: DRPO (arXiv:2510.04474) — never penalize correct answers.
-    var wordCount = response.split(/\s+/).length;
+    //
+    // Use the MAX of (whitespace tokens, comma-delimited segments) so the
+    // model cannot game the bonus by stripping spaces.  Pure space-split
+    // counts "peanuts,soy,corn,sugars,beta-glucans" as 1 word and grants
+    // an unearned brevity bonus.
+    var spaceWords = response.split(/\s+/).filter(function (w) { return w.length > 0; }).length;
+    var commaSegments = response.split(/[,;\n]+/).filter(function (w) { return w.trim().length > 0; }).length;
+    var wordCount = Math.max(spaceWords, commaSegments);
     var brevityNote = "";
     if (fbeta >= 0.99 && BREVITY_BONUS_MAX_WORDS > 0 && wordCount <= BREVITY_BONUS_MAX_WORDS) {
         baseScore = Math.min(1.0, baseScore + 0.05);
-        brevityNote = " Brevity bonus: +0.05 (" + wordCount + " words)";
+        brevityNote = " Brevity bonus: +0.05 (" + wordCount + " units)";
     }
+
+    // ─── Length penalty (DRPO-safe, floor-aware) ───
+    // If your task has a strict word/token budget, enable this block.
+    // CRITICAL: any length penalty MUST clamp to `tpFloor` (not 0.05),
+    // otherwise verbose partial-correct answers collapse back into the
+    // wrong tier and re-introduce the ordinal collapse bug that the
+    // TP-tiered floor above exists to prevent.
+    //
+    // Ref: DRPO (arXiv:2510.04474) — never penalize correct answers below
+    //      their tier floor; CoRPO (arXiv:2511.04439) R_min_correct.
+    //
+    // Example (DO NOT REMOVE THE FLOOR CLAMP):
+    //   var MAX_WORDS = 6;
+    //   if (wordCount > MAX_WORDS) {
+    //       var overshoot = wordCount - MAX_WORDS;
+    //       var lengthPenalty = Math.min(0.30, overshoot * 0.03);
+    //       var lengthFloor = (tp > 0) ? tpFloor : 0.05;  // ← REQUIRED
+    //       baseScore = Math.max(lengthFloor, baseScore - lengthPenalty);
+    //       brevityNote += " Length penalty: -" + lengthPenalty.toFixed(2) +
+    //                      " (" + wordCount + " words > " + MAX_WORDS + ")";
+    //   }
 
     // ─── Ensure nonzero floor for attempted answers ───
     // GRPO needs nonzero scores for gradient signal (DAPO arXiv:2503.14476).
@@ -383,6 +477,7 @@ function evaluate(input) {
             " P=" + precision.toFixed(2) +
             " R=" + recall.toFixed(2) +
             " | TP=" + tp + " FP=" + fp + " FN=" + fn +
+            ((oovCount > 0 || dupCount > 0) ? " (OOV=" + oovCount + " DUP=" + dupCount + ")" : "") +
             " | Model: " + (modelLabels.length > 0 ? modelLabels.join(", ") : "(" + NONE_KEYWORD + ")") +
             " | GT: " + gtLabels.join(", ") +
             " | Extraction: " + extractionMethod + brevityNote,
@@ -398,6 +493,138 @@ function evaluate(input) {
 // ═══════════════════════════════════════════════════════
 // HELPER FUNCTIONS
 // ═══════════════════════════════════════════════════════
+
+/**
+ * Count duplicate emissions of valid labels in `text`.
+ *
+ * Standard multilabel F1 (scikit-learn convention) treats each predicted
+ * segment as a separate prediction. If the model emits "peanuts, peanuts",
+ * that's 2 predictions for 1 GT label → 1 tp + 1 fp. parseLabels() dedupes,
+ * so we lose that signal. This function returns the count of *extra*
+ * emissions of valid labels (after the first), which the caller adds to fp.
+ *
+ * Generic for any closed-vocab grader.
+ *
+ * Rules:
+ * - Operate on segments split by [,;\n/|]
+ * - For each segment, resolve to a canonical label via direct match or alias
+ * - Count how many times each canonical label is emitted
+ * - Return total - distinct = number of duplicate emissions
+ * - OOV segments are NOT counted here (countOOVSegments handles them)
+ */
+function countDuplicateEmissions(text, validLabels, aliases) {
+    if (!text) return 0;
+    var lower = text.toLowerCase().trim();
+    if (!lower) return 0;
+
+    // Build a lookup: alias/label → canonical
+    var canonicalMap = {};
+    for (var li = 0; li < validLabels.length; li++) {
+        canonicalMap[validLabels[li]] = validLabels[li];
+    }
+    var aliasKeys = Object.keys(aliases || {});
+    for (var ai = 0; ai < aliasKeys.length; ai++) {
+        canonicalMap[aliasKeys[ai]] = aliases[aliasKeys[ai]];
+    }
+
+    // For each segment, find which canonical label (if any) it resolves to.
+    var segments = lower.split(/[,;\n\/|]+/);
+    var labelCounts = {};
+    for (var s = 0; s < segments.length; s++) {
+        var seg = segments[s].trim()
+            .replace(/^[\s\-•*\(\[\{"'`.]+/, "")
+            .replace(/[\s\-•*\)\]\}"'`.!?]+$/, "");
+        if (!seg) continue;
+        // Find the longest matching token in this segment
+        var matched = null;
+        var keys = Object.keys(canonicalMap);
+        for (var k = 0; k < keys.length; k++) {
+            var token = keys[k];
+            var pattern = new RegExp("\\b" + token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+") + "\\b", "i");
+            if (pattern.test(seg)) {
+                var canon = canonicalMap[token];
+                if (!matched || canon.length > matched.length) matched = canon;
+            }
+        }
+        if (matched) {
+            labelCounts[matched] = (labelCounts[matched] || 0) + 1;
+        }
+    }
+
+    // Count duplicates: total emissions minus distinct labels
+    var totalEmissions = 0;
+    var distinctLabels = 0;
+    var lk = Object.keys(labelCounts);
+    for (var l = 0; l < lk.length; l++) {
+        totalEmissions += labelCounts[lk[l]];
+        distinctLabels += 1;
+    }
+    return totalEmissions - distinctLabels;
+}
+
+/**
+ * Count comma-delimited segments in `text` that do NOT resolve to any
+ * valid label or known alias.  Used to detect out-of-vocabulary (OOV)
+ * predictions in closed-vocabulary tasks.
+ *
+ * Generic for any closed-vocab grader: pass your VALID_LABELS + aliases.
+ *
+ * Rules:
+ * - Operate on segments split by [,;\n], NOT on whitespace tokens, so
+ *   prose words like "and"/"the" don't trigger when the response is a
+ *   prose sentence (those go through the LLM fallback path anyway).
+ * - Strip leading/trailing whitespace, brackets, quotes, punctuation
+ *   before comparison so "peanuts!" still resolves.
+ * - Skip empty segments and the configured none-keyword.
+ * - A segment counts as OOV iff NONE of these match:
+ *     1. The full normalized segment equals a valid label or alias.
+ *     2. The segment contains a valid label / alias as a sub-token
+ *        (e.g., "soy lecithin" contains "soy" → resolves to "soybeans").
+ *     3. The segment is the none-keyword.
+ *
+ * This is a conservative count — multi-word segments that contain at
+ * least one recognizable label sub-token are NOT counted as OOV. Only
+ * fully unrecognized segments count.
+ */
+function countOOVSegments(text, validLabels, aliases, noneKeyword) {
+    if (!text) return 0;
+    var lower = text.toLowerCase().trim();
+    if (!lower || lower === noneKeyword) return 0;
+
+    // Build a quick lookup of all recognized tokens (labels + aliases),
+    // each as a regex with word boundaries.
+    var allTokens = [];
+    for (var li = 0; li < validLabels.length; li++) {
+        allTokens.push(validLabels[li]);
+    }
+    var aliasKeys = Object.keys(aliases || {});
+    for (var ai = 0; ai < aliasKeys.length; ai++) {
+        allTokens.push(aliasKeys[ai]);
+    }
+    var tokenPatterns = allTokens.map(function (t) {
+        return new RegExp("\\b" + t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+") + "\\b", "i");
+    });
+
+    // Split into segments on commas / semicolons / newlines / "/" / pipes.
+    // We do NOT split on whitespace — multi-word labels stay intact.
+    var segments = lower.split(/[,;\n\/|]+/);
+    var oov = 0;
+    for (var s = 0; s < segments.length; s++) {
+        var seg = segments[s].trim()
+            .replace(/^[\s\-•*\(\[\{"'`.]+/, "")
+            .replace(/[\s\-•*\)\]\}"'`.!?]+$/, "");
+        if (!seg) continue;
+        if (seg === noneKeyword) continue;
+        // Skip pure connector words that are sometimes embedded mid-list.
+        if (/^(and|or|none|n\/a)$/i.test(seg)) continue;
+        var matched = false;
+        for (var p = 0; p < tokenPatterns.length; p++) {
+            if (tokenPatterns[p].test(seg)) { matched = true; break; }
+        }
+        if (!matched) oov++;
+    }
+    return oov;
+}
 
 /**
  * Parse a text string into a deduplicated array of canonical labels.

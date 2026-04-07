@@ -107,6 +107,21 @@ The script must use **only Python stdlib** (`urllib.request`, `json`, `math`, `t
    - `<OUTPUT_DIR>/<JOB_ID>-metrics.json` — the **unwrapped flat_metrics list** (overwritten)
    - `<OUTPUT_DIR>/<JOB_ID>-status.json` — latest job status object (overwritten)
 
+2b. **MANDATORY grader sanity check (per epoch):**
+   After every poll that produces a NEW epoch in `<OUTPUT_DIR>/<JOB_ID>-epoch-evals.json`,
+   you MUST run:
+   ```bash
+   uv run <SKILL_DIR>/scripts/finetune.py grader-sanity-check \
+     --eval-file <OUTPUT_DIR>/<JOB_ID>-epoch-evals.json
+   ```
+   The script iterates all epochs and exits non-zero if ANY epoch has:
+   - LLM fallback rate >10%, partial+FP collapse (TP>0 score≤0.10), dump-all gaming
+     (≥7 labels score>0.20), or LLM-inferred high scores (GT not in raw response).
+
+   On non-zero exit: STOP polling, write a `grader_sanity_failure` anomaly to
+   the report file, and return to the parent immediately. Do NOT let training
+   continue with a broken grader — every wasted epoch is wasted GPU time.
+
 3. **Rolling state and anomaly checks:**
 
    Use a single `state` dict to track rolling windows. ALL anomaly check functions receive

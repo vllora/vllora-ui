@@ -793,7 +793,29 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
 
 Read improved AND degraded records per topic. Check if gains come from genuine skill or grader exploitation.
 
-**MANDATORY Grader Sanity Checks** — run these for EVERY eval (baseline AND post-training):
+**MANDATORY Grader Sanity Checks** — run this command after EVERY eval AND after every training epoch checkpoint. It hard-fails (exit 1) if any check trips. You MUST NOT proceed if this fails.
+
+```bash
+# After each standalone eval
+uv run .claude/skills/finetune-skill/scripts/finetune.py grader-sanity-check \
+  --eval-file finetune-project/evaluations/eval-NNN.json
+
+# After each training epoch (training-monitor MUST run this on every poll
+# that produces a new epoch in the epoch-evals file)
+uv run .claude/skills/finetune-skill/scripts/finetune.py grader-sanity-check \
+  --eval-file finetune-project/training-jobs/<job-id>-epoch-evals.json
+```
+
+The check iterates ALL epochs present in the file and reports per-epoch pass/fail. If any epoch trips a check, the script exits non-zero — the training-monitor MUST stop polling and surface the failure to the orchestrator. Do not let training continue with a broken grader.
+
+Checks performed:
+- LLM fallback rate < 10% (else regex too narrow)
+- Partial+FP collapse: TP>0 but score≤0.10 (ordinal collapse — usually length penalty bypassing `tpFloor`)
+- Dump-all gaming: ≥7 labels in response with score >0.20 (over-prediction defense not firing)
+- LLM inference: high LLM scores where GT label not literally in raw response (grader inferring labels)
+- **Default-mode collapse**: top model response emitted ≥2x more than its GT frequency. Indicates the base model has a strong default prior (e.g., always answers "none") that GRPO will struggle to escape. **Reference: "Tricks or Traps" (arXiv:2508.08221) Section 4.2 entropy collapse.** When this fires you MUST: (1) rebalance training data to oversample non-default-mode records, AND (2) consider raising clip-higher epsilon_high to 0.28 if the backend supports it. Do NOT proceed to training without addressing the collapse — most K=8 groups will be all-default → zero variance → no gradient.
+
+Manual deep checks (run if the automated check passes but you suspect a bug):
 
 ```bash
 # Sanity check 1: LLM fallback usage rate (should be <10%)
@@ -837,6 +859,14 @@ print(f'Flagged {flagged} high-score records with missing GT labels in response'
 # Sanity check 3: Partial + FPs ordinal check
 # Find records with 0 < score < 0.1 that have TP > 0 — bug indicator
 # If partial matches score same as completely wrong, FP penalty is too aggressive.
+# COMMON ROOT CAUSE: a length/verbosity penalty added to the grader that
+# uses Math.max(0.05, baseScore - penalty) instead of Math.max(tpFloor, ...).
+# Any post-floor penalty MUST clamp to tpFloor when tp > 0, otherwise it
+# silently re-introduces the ordinal collapse the TP-tier floor exists to fix.
+
+# Sanity check 3b: Dump-all-labels (gaming) check
+# Count records where model emitted ≥7 labels (out of N valid). Should be capped
+# at 0.15 by the over-prediction defense. If any score >0.20, the cap is broken.
 
 # Sanity check 4: Manual inspection of 5-10 random records per score band
 # Score 0.0-0.2: should be genuine failures
