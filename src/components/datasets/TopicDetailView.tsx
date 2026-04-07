@@ -27,6 +27,9 @@ import {
   JobColumnHeader,
   SourcePartsCell,
   useResolvedSourceParts,
+  GroundTruthCell,
+  getRecordGroundTruth,
+  InputTextCell,
 } from "./records-table/shared-record-cells";
 
 type Tab = "records" | "linked-sources";
@@ -189,6 +192,10 @@ export function RecordsTabContent({
   readonly sources?: readonly KnowledgeSource[];
 }) {
   const hasJobColumns = jobColumns.length > 0;
+  const hasGroundTruth = useMemo(
+    () => records.some((r) => getRecordGroundTruth(r) != null),
+    [records],
+  );
 
   if (records.length === 0) {
     return (
@@ -210,6 +217,7 @@ export function RecordsTabContent({
         <tr className="border-b border-border/50 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50 bg-muted/30 sticky top-0 z-[2]">
           <th className="px-4 py-2.5 w-10">#</th>
           <th className="px-4 py-2.5">Input</th>
+          {hasGroundTruth && <th className="px-4 py-2.5 w-[160px]">Ground Truth</th>}
           {hasJobColumns ? (
             jobColumns.map((col, i) => {
               const needsSep = i > 0 && col.type === "finetune" && jobColumns[i - 1].type === "eval";
@@ -235,6 +243,7 @@ export function RecordsTabContent({
             jobColumns={jobColumns}
             getScoresForRecord={getScoresForRecord}
             sources={sources}
+            showGroundTruth={hasGroundTruth}
           />
         ))}
       </tbody>
@@ -249,6 +258,7 @@ function RecordTableRow({
   jobColumns = [],
   getScoresForRecord,
   sources = [],
+  showGroundTruth = false,
 }: {
   readonly record: DatasetRecord;
   readonly index: number;
@@ -256,9 +266,14 @@ function RecordTableRow({
   readonly jobColumns?: readonly JobColumn[];
   readonly getScoresForRecord?: (recordId: string) => ReadonlyMap<string, RecordJobScore>;
   readonly sources?: readonly KnowledgeSource[];
+  readonly showGroundTruth?: boolean;
 }) {
   const userText = useMemo(() => extractRecordUserText(record.data), [record.data]);
   const hasJobColumns = jobColumns.length > 0;
+  const groundTruthText = useMemo(
+    () => (showGroundTruth ? getRecordGroundTruth(record) : null),
+    [record, showGroundTruth],
+  );
   const scores = useMemo(
     () => getScoresForRecord?.(record.id),
     [getScoresForRecord, record.id],
@@ -274,11 +289,14 @@ function RecordTableRow({
       <td className="px-4 py-2.5 text-[11px] text-muted-foreground/50 tabular-nums align-top">
         {index}
       </td>
-      <td className="px-4 py-2.5 text-xs text-foreground/80 leading-relaxed align-top">
-        <span className="line-clamp-2">
-          {userText || <span className="text-muted-foreground/50 italic">No user message</span>}
-        </span>
+      <td className="px-4 py-2.5 align-top">
+        <InputTextCell text={userText} emptyLabel="No user message" />
       </td>
+      {showGroundTruth && (
+        <td className="px-4 py-2.5 align-top">
+          <GroundTruthCell text={groundTruthText} />
+        </td>
+      )}
       {hasJobColumns ? (
         jobColumns.map((col, i) => {
           const needsSep = i > 0 && col.type === "finetune" && jobColumns[i - 1].type === "eval";

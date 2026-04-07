@@ -24,6 +24,9 @@ import {
   JobColumnHeader,
   SourcePartsCell,
   useResolvedSourceParts,
+  GroundTruthCell,
+  getRecordGroundTruth,
+  InputTextCell,
 } from "./shared-record-cells";
 
 // ─── Types ───
@@ -86,8 +89,14 @@ export function UnifiedRecordTable({
   const hasEvalCols = jobColumns.some((c) => c.type === "eval");
   const hasFtCols = jobColumns.some((c) => c.type === "finetune");
   const hasSeparator = hasEvalCols && hasFtCols;
-  // # + Input + (N job columns + optional separator or 1 fallback score) + Source
-  const totalColumns = hasJobColumns ? 3 + jobColumns.length + (hasSeparator ? 1 : 0) : 4;
+  // Show Ground Truth column only if at least one record has it
+  const hasGroundTruth = useMemo(
+    () => records.some((r) => getRecordGroundTruth(r) != null),
+    [records],
+  );
+  // # + Input + (optional Ground Truth) + (N job columns + optional separator or 1 fallback score) + Source
+  const totalColumns =
+    (hasJobColumns ? 3 + jobColumns.length + (hasSeparator ? 1 : 0) : 4) + (hasGroundTruth ? 1 : 0);
 
   // Group records by topic
   const recordsByTopic = useMemo(() => {
@@ -312,6 +321,7 @@ export function UnifiedRecordTable({
         <tr className="border-b border-border/50 text-[10px] text-muted-foreground/60 tracking-wider">
           <th className="text-left px-3 py-2 w-8">#</th>
           <th className="text-left px-3 py-2">Input</th>
+          {hasGroundTruth && <th className="text-left px-3 py-2 w-[110px]">Ground Truth</th>}
           {hasJobColumns ? (
             jobColumns.map((col, i) => {
               const needsSep = hasSeparator && i > 0 && col.type === "finetune" && jobColumns[i - 1].type === "eval";
@@ -370,6 +380,7 @@ export function UnifiedRecordTable({
               jobColumns={jobColumns}
               getScoresForRecord={getScoresForRecord}
               sources={sources}
+              showGroundTruth={hasGroundTruth}
             />
           );
         })}
@@ -500,6 +511,7 @@ function RecordTableRow({
   jobColumns = [],
   getScoresForRecord,
   sources = [],
+  showGroundTruth = false,
 }: {
   readonly record: DatasetRecord;
   readonly depth: number;
@@ -509,7 +521,12 @@ function RecordTableRow({
   readonly jobColumns?: readonly JobColumn[];
   readonly getScoresForRecord?: (recordId: string) => ReadonlyMap<string, RecordJobScore>;
   readonly sources?: readonly KnowledgeSource[];
+  readonly showGroundTruth?: boolean;
 }) {
+  const groundTruthText = useMemo(
+    () => (showGroundTruth ? getRecordGroundTruth(record) : null),
+    [record, showGroundTruth],
+  );
   const { userText } = useMemo(() => extractRecordText(record), [record]);
   const paddingLeft = 12 + depth * 20;
   const hasJobColumns = jobColumns.length > 0;
@@ -533,8 +550,13 @@ function RecordTableRow({
         {index + 1}
       </td>
       <td className="px-3 py-2">
-        <p className="text-foreground/80 line-clamp-2 leading-relaxed">{userText || "—"}</p>
+        <InputTextCell text={userText} />
       </td>
+      {showGroundTruth && (
+        <td className="px-3 py-2">
+          <GroundTruthCell text={groundTruthText} />
+        </td>
+      )}
       {hasJobColumns ? (
         jobColumns.map((col, i) => {
           const jobScore = scores?.get(col.id);
