@@ -3819,27 +3819,31 @@ def cmd_create_training(args: argparse.Namespace) -> None:
             payload["training_config"]["epochs"] = 3 if is_small_model else 3
         print(f"Adaptive epochs: {payload['training_config']['epochs']} (based on {record_count} records, {'small' if is_small_model else 'large'} model)")
 
+    # K (response_candidates_count) is model-size-dependent.
+    # Small models (0.8B-2B) with strict graders produce low within-group variance
+    # at K=8 — frac_reward_zero_std reaches 80%. K=16 gives more diversity.
+    # Evidence: 0.8B food-allergen with K=8 had frac_reward_zero_std=0.80, flat training.
+    # Same task with K=16 achieved 0.646→0.864. The old successful run used K=16.
+    # 4B models with higher baseline capability produce enough variance at K=8.
+    k_default = 16 if ("0.8b" in model_lower or "2b" in model_lower) else 8
+
+    # Build defaults first, then merge user overrides. This ensures K and other
+    # model-size-aware defaults aren't lost when user passes partial --inference-params
+    # (e.g., just max_output_tokens).
+    payload["inference_parameters"] = {
+        "max_output_tokens": 512,
+        "temperature": 1.0,
+        "top_p": 1.0,
+        "response_candidates_count": k_default,
+    }
     if args.inference_params:
         try:
-            payload["inference_parameters"] = json.loads(args.inference_params)
+            user_inf = json.loads(args.inference_params)
+            payload["inference_parameters"].update(user_inf)
         except json.JSONDecodeError:
             print(f"Error: Invalid JSON for --inference-params", file=sys.stderr)
             sys.exit(1)
-    else:
-        # K (response_candidates_count) is model-size-dependent.
-        # Small models (0.8B-2B) with strict graders produce low within-group variance
-        # at K=8 — frac_reward_zero_std reaches 80%. K=16 gives more diversity.
-        # Evidence: 0.8B food-allergen with K=8 had frac_reward_zero_std=0.80, flat training.
-        # Same task with K=16 achieved 0.646→0.864. The old successful run used K=16.
-        # 4B models with higher baseline capability produce enough variance at K=8.
-        k_default = 16 if ("0.8b" in model_lower or "2b" in model_lower) else 8
-        payload["inference_parameters"] = {
-            "max_output_tokens": 512,
-            "temperature": 1.0,
-            "top_p": 1.0,
-            "response_candidates_count": k_default,
-        }
-        print(f"  Config: K={k_default} (response_candidates_count)")
+    print(f"  Config: K={payload['inference_parameters'].get('response_candidates_count', k_default)} (response_candidates_count)")
 
     # Auto-adjust max_output_tokens based on dataset content.
     # Mirrors the completion_length gate logic from data_quality_gate.py.
@@ -6187,6 +6191,157 @@ def cmd_harden_records(args: argparse.Namespace) -> None:
     )
 
 
+def cmd_grader_sanity_check(args: argparse.Namespace) -> None:
+    """Run mandatory grader sanity checks on an eval result.
+
+    Hard-fails (exit 1) if any check trips. Catches the bugs we keep finding
+    by manual inspection: ordinal collapse, dump-all gaming, LLM inference.
+    """
+    eval_file = Path(args.eval_file)
+    if not eval_file.exists():
+        print(f"Error: eval file not found: {eval_file}", file=sys.stderr)
+        sys.exit(1)
+    data = json.loads(eval_file.read_text())
+    results = data.get("results", [])
+    if not results:
+        print("Error: eval file has no results", file=sys.stderr)
+        sys.exit(1)
+
+    # Collect all epoch indices present
+    epoch_keys = set()
+    for rec in results:
+        for k in (rec.get("epochs", {}) or {}).keys():
+            epoch_keys.add(str(k))
+    epoch_list = sorted(epoch_keys, key=lambda x: int(x) if x.isdigit() else 0)
+    if not epoch_list:
+        print("Error: no epochs found in results", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"=== Grader sanity check: {eval_file.name} ===")
+    print(f"  rows: {len(results)}  epochs: {epoch_list}")
+
+    # Default-mode collapse detection (per-eval, not per-epoch).
+    # If the model emits its most common response > 2x more frequently than
+    # the most common GT, the base model has a strong default-mode prior that
+    # GRPO will struggle to escape. Reference: "Tricks or Traps" (arXiv:2508.08221)
+    # Section 4.2 entropy collapse; remediation is data rebalancing + clip-higher.
+    from collections import Counter as _Counter
+    resp_counts = _Counter()
+    gt_counts = _Counter()
+    for rec in results:
+        row = rec.get("row", {})
+        gt_counts[(row.get("ground_truth") or "").strip().lower()] += 1
+        for m in row.get("messages", []):
+            if m.get("role") == "assistant":
+                resp_counts[(m.get("content") or "").strip().lower()] += 1
+                break
+    if resp_counts and gt_counts:
+        top_resp, top_resp_n = resp_counts.most_common(1)[0]
+        top_gt, top_gt_n = gt_counts.most_common(1)[0]
+        # Match the top response to the GT distribution for the same string
+        gt_for_top_resp = gt_counts.get(top_resp, 0)
+        if gt_for_top_resp > 0 and top_resp_n / gt_for_top_resp >= 2.0:
+            ratio = top_resp_n / gt_for_top_resp
+            print(f"\n⚠️  Default-mode collapse detected:")
+            print(f"     Top response \"{top_resp[:60]}\" emitted {top_resp_n}x")
+            print(f"     GT for this label appears {gt_for_top_resp}x → ratio {ratio:.1f}x")
+            print(f"     Base model has a strong prior — GRPO will need data rebalancing")
+            print(f"     Recommended: oversample non-\"{top_resp[:30]}\" records, consider clip-higher epsilon_high=0.28")
+
+    any_failed = False
+    for ek in epoch_list:
+        n = 0
+        llm_count = 0
+        collapse_rows = []
+        dump_high = []
+        llm_high_mismatch = []
+        score_sum = 0.0
+        for i, rec in enumerate(results):
+            ep_lst = (rec.get("epochs", {}) or {}).get(ek) or (rec.get("epochs", {}) or {}).get(int(ek)) if ek.isdigit() else None
+            if not ep_lst:
+                # try int key
+                try:
+                    ep_lst = (rec.get("epochs", {}) or {}).get(int(ek))
+                except Exception:
+                    ep_lst = None
+            if not ep_lst:
+                continue
+            e = ep_lst[0]
+            score = e.get("score")
+            reason = e.get("reason", "") or ""
+            if not isinstance(score, (int, float)):
+                continue
+            n += 1
+            score_sum += score
+            if "extraction: llm" in reason.lower():
+                llm_count += 1
+            if "TP=" in reason:
+                try:
+                    tp = int(reason.split("TP=")[1].split()[0])
+                    if tp > 0 and score <= 0.10:
+                        collapse_rows.append((i, tp, score, reason[:100]))
+                except Exception:
+                    pass
+            # rollout content for this epoch (model output)
+            resp = e.get("rollout_content") or ""
+            if not resp:
+                # fallback to row.messages assistant (only valid for epoch 0)
+                row = rec.get("row", {})
+                for m in row.get("messages", []):
+                    if m.get("role") == "assistant":
+                        resp = m.get("content", "") or ""
+            n_labels = len([t for t in resp.split(",") if t.strip()])
+            if n_labels >= 7 and score > 0.20:
+                dump_high.append((i, n_labels, score, resp[:80]))
+            if "extraction: llm" in reason.lower() and score >= 0.85:
+                row = rec.get("row", {})
+                gt = (row.get("ground_truth") or "").lower()
+                if gt and gt != "none":
+                    gt_labels = [x.strip() for x in gt.split(",") if x.strip()]
+                    missing = [g for g in gt_labels if g not in resp.lower()]
+                    if missing:
+                        llm_high_mismatch.append((i, score, gt, missing, resp[:80]))
+
+        if n == 0:
+            continue
+        llm_rate = llm_count / n
+        collapse_rate = len(collapse_rows) / n
+        avg = score_sum / n
+
+        print(f"\n--- Epoch {ek} ---")
+        print(f"  scored: {n}  avg: {avg:.3f}")
+        print(f"  LLM fallback: {llm_rate*100:.1f}%  (threshold: <10%)")
+        print(f"  Partial+FP collapse: {len(collapse_rows)} ({collapse_rate*100:.1f}%)  (threshold: <1%)")
+        print(f"  Dump-all gaming: {len(dump_high)}  (threshold: 0)")
+        print(f"  LLM-inference high: {len(llm_high_mismatch)}  (threshold: 0)")
+
+        failed = []
+        if llm_rate > 0.10:
+            failed.append(f"LLM fallback {llm_rate*100:.1f}% > 10%")
+        if collapse_rate > 0.01:
+            failed.append(f"{len(collapse_rows)} collapse rows (length penalty bypassing tpFloor?)")
+            for ex in collapse_rows[:3]:
+                print(f"    COLLAPSE row{ex[0]} tp={ex[1]} score={ex[2]:.2f} | {ex[3]}")
+        if dump_high:
+            failed.append(f"{len(dump_high)} dump-all rows scored >0.20")
+            for ex in dump_high[:3]:
+                print(f"    DUMP row{ex[0]} n_labels={ex[1]} score={ex[2]:.2f} | {ex[3]}")
+        if llm_high_mismatch:
+            failed.append(f"{len(llm_high_mismatch)} LLM-inferred high scores")
+            for ex in llm_high_mismatch[:3]:
+                print(f"    LLM_INFER row{ex[0]} score={ex[1]:.2f} gt={ex[2]} missing={ex[3]} | {ex[4]}")
+        if failed:
+            any_failed = True
+            print(f"  ❌ epoch {ek} FAIL: " + "; ".join(failed))
+        else:
+            print(f"  ✅ epoch {ek} PASS")
+
+    if any_failed:
+        print("\n❌ FAIL — fix the grader before proceeding")
+        sys.exit(1)
+    print("\n✅ PASS — all epochs clean")
+
+
 def cmd_print_row_outputs(args: argparse.Namespace) -> None:
     """Print per-epoch rollout output + score + reason for one row."""
     result = _api(
@@ -6535,6 +6690,12 @@ def main() -> None:
 
     # print-row-outputs
     p = subparsers.add_parser(
+        "grader-sanity-check",
+        help="MANDATORY after every eval — hard-fail on collapse/gaming/inference bugs",
+    )
+    p.add_argument("--eval-file", required=True, help="Path to eval-NNN.json")
+
+    p = subparsers.add_parser(
         "print-row-outputs",
         help="Print epoch table for one row: rollout output, score, reason",
     )
@@ -6581,6 +6742,7 @@ def main() -> None:
         "test-grader": cmd_test_grader,
         "harden-records": cmd_harden_records,
         "print-row-outputs": cmd_print_row_outputs,
+        "grader-sanity-check": cmd_grader_sanity_check,
     }
     commands[args.command](args)
 
