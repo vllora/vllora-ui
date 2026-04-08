@@ -2397,7 +2397,10 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
     perfect_frac = sum(1 for s in _all_scores if s >= 0.99) / max(len(_all_scores), 1)
     _trivial_frac = sum(1 for s in _all_scores if s > 0.90) / max(len(_all_scores), 1)
     _learnable_frac = sum(1 for s in _all_scores if 0.20 <= s <= 0.65) / max(len(_all_scores), 1)
-    _dead_frac = sum(1 for s in _all_scores if s < 0.05) / max(len(_all_scores), 1)
+    # Dead band = wrong-tier floor. Modern graders use 0.05 as nonzero floor
+    # (not 0.0) to avoid frac_reward_zero_std collapse, so strict < 0.05 misses
+    # all dead records. Use <= 0.10 to capture the wrong-tier top.
+    _dead_frac = sum(1 for s in _all_scores if s <= 0.10) / max(len(_all_scores), 1)
 
     print(f"\n── READINESS SUMMARY (read this first) ──", file=sys.stderr)
     print(f"  Verdict: {verdict} | avg={_avg:.3f} | std={_std:.3f} | zeros={zero_frac:.0%} | perfect={perfect_frac:.0%}", file=sys.stderr)
@@ -2411,6 +2414,20 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
     elif _trivial_frac > 0.40 and _learnable_frac < 0.35:
         print(f"  ⚠ SIGNAL DENSITY LOW: {_trivial_frac:.0%} trivial, {_learnable_frac:.0%} learnable.", file=sys.stderr)
         print(f"    → Check grader → generate harder records → eval smaller model (in priority order)", file=sys.stderr)
+    elif _dead_frac > 0.20:
+        # Dead-band dominance: many records score near 0 at K=1. At K=16 these
+        # become zero-variance groups (all rollouts wrong) → zero gradient →
+        # wasted GPU time. Strongest remediation: rerun generation with tighter
+        # difficulty targeting, OR harden the dead records against the base
+        # model's current capability range.
+        # Reference: arXiv:2504.03380 (gradient vanishes at p=0)
+        print(f"  ⚠ DEAD BAND DOMINANT: {_dead_frac:.0%} of records score ≤ 0.10 at K=1.", file=sys.stderr)
+        print(f"    At K=16 most of these will become zero-variance groups (all rollouts wrong) →", file=sys.stderr)
+        print(f"    no gradient → wasted training. Before training:", file=sys.stderr)
+        print(f"      1. Run: finetune.py harden-records --eval-file <eval> --training-file <jsonl> --min-score 0.10", file=sys.stderr)
+        print(f"         (rewrites dead records with hints that bring them into the learnable band)", file=sys.stderr)
+        print(f"      2. If >30% remain dead after hardening, the task exceeds base model capability —", file=sys.stderr)
+        print(f"         use a larger base model or add a SFT warmup stage.", file=sys.stderr)
     else:
         print(f"  ✓ Proceed to training.", file=sys.stderr)
 
