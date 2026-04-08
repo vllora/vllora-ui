@@ -1021,6 +1021,8 @@ Calls `POST /finetune/workflows/{id}/jobs/estimate` for all listed models in one
 
 ### 7d. Start Training (only after readiness gate passes)
 
+**Do NOT pass `--no-early-stop` to `create-training`.** `create-training` only creates the cloud job; early stopping is controlled by `poll-training`.
+
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
   --workflow-id $WORKFLOW_ID \
@@ -1066,13 +1068,24 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 
 ### 7e. Monitor training
 
-Spawn the `training-monitor` subagent. It writes a Python monitoring script that polls metrics every 30s, detects 6 anomaly types, and saves metrics for post-training analysis. Returns immediately.
+Spawn the `training-monitor` subagent. Early stopping is a polling-side auto-cancel behavior: by default, `poll-training` may cancel a running job for completion clipping, EMA score plateau/degradation, or length exploitation while saving status and metrics for post-training analysis.
 
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
   --file training-jobs/train-001.json \
   --poll-interval 60 --max-wait 7200
 ```
+
+If you intentionally want the cloud job to continue even when rewards plateau, pass `--no-early-stop` to `poll-training`:
+
+```bash
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
+  --file training-jobs/train-001.json \
+  --max-wait 7200 \
+  --no-early-stop
+```
+
+Do not restart `create-training` just to change this behavior; restart the local `poll-training` command with the same `train-NNN.json` file.
 
 **Files produced**:
 ```

@@ -929,6 +929,8 @@ Get a signed download URL for trained model weights (only after `succeeded`).
 
 These endpoints create and poll cloud evaluation runs. The gateway auto-uploads the workflow dataset before running.
 
+**Evaluating a completed fine-tune:** set `rollout_model_params.model` to `finetuned/{provider_job_id}` where `provider_job_id` is the cloud/provider job ID from the completed training job. Do not use raw `fine_tuned_model` or raw `provider_job_id`; the eval service will not resolve those as loadable rollout models.
+
 ### POST `/finetune/evaluations`
 
 Create an evaluation run. The backend generates model responses for each row and scores them using the configured grader.

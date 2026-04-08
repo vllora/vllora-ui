@@ -620,7 +620,7 @@ Key fields to use for analysis:
 }
 ```
 
-Key fields: `status` (succeeded/failed), `fine_tuned_model` (model name for testing), `error_message` (if failed).
+Key fields: `status` (succeeded/failed), `provider_job_id` (cloud job ID), `error_message` (if failed). For post-training eval, test the final adapter as `finetuned/{provider_job_id}`; do not pass raw `fine_tuned_model` or raw `provider_job_id`.
 
 **Per-epoch training scores** — Save `GET /finetune/workflows/{id}/finetune-evaluations?finetune_job_id=JOB_ID` to `training-jobs/job-{N}-epochs.json`:
 ```json
