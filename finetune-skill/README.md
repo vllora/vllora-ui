@@ -73,8 +73,8 @@ your-project/
     └── skills/
         └── finetune-skill/            # The skill itself
             ├── SKILL.md
-            ├── reference/             # 14 reference docs (api-reference, analysis-strategy, topic-hierarchy, nemo-guide, etc.)
-            ├── scripts/               # 20 Python helpers (finetune.py has 25+ subcommands)
+            ├── reference/             # 16 reference docs + 1 JSON schema (api-reference, analysis-strategy, topic-hierarchy, nemo-guide, etc.)
+            ├── scripts/               # 25 Python helpers (finetune.py has 34 subcommands)
             └── templates/             # Starter files
 ```
 
@@ -209,7 +209,7 @@ finetune-skill/
 │   ├── validate_extraction.py  # Cross-document extraction quality gate (+ table quality)
 │   ├── docling_extract.py      # Docling async extraction — fallback for scanned/complex PDFs
 │   ├── derive_ground_truth.py  # Stage 2 GT derivation for two-stage multi-label generation (topic-agnostic GT extraction)
-│   ├── harden_records.py       # Post-eval: generates harder variants of trivial records (score > 0.85)
+│   ├── pipeline_journal.py     # Pipeline journal reader/writer (feeds log-step / log-iteration)
 │   └── pdftotext_extract.py    # Last-resort extraction via pdftotext (no Python deps)
 │
 ├── templates/                  # Grader templates + recipe starters
@@ -425,7 +425,7 @@ User: "finetune my tax deduction PDF"
 | `knowledge-extractor` | 2 | Sonnet | 1 per PDF | Each PDF needs Docling polling + `build_knowledge_parts.py` + `consolidate_parts.py`. Supports `--skip-existing` to reuse prior extractions | N agents process N PDFs in parallel. Total time = slowest PDF, not sum of all |
 | `relation-builder` | 3d | Sonnet | 1 | Cross-document matching of relevant parts (from Step 3a) to skill-based topics. Requires OBJECTIVE context. Max 15 relations per leaf topic | Fresh context for index matching, main stays clean |
 | `nemo-data-generator` | 4B | Sonnet | 1 | NeMo recipe design + API orchestration (seed upload, preview, full job, convert). Only spawned when `use_nemo: true` in config | NeMo context (600+ lines of reference docs) stays out of main agent. Falls back to Step 4A if NeMo is down |
-| `training-monitor` | 7c | Sonnet | 1 | Training runs 30-120 min — writes monitoring script with paper-backed thresholds from training-metrics-guide.md | Writes script, launches `nohup`, returns instantly. Distinguishes "no data yet" from actual NaN anomalies |
+| `training-monitor` | 7e | Sonnet | 1 | Training runs 30-120 min — writes monitoring script with paper-backed thresholds from training-metrics-guide.md | Writes script, launches `nohup`, returns instantly. Distinguishes "no data yet" from actual NaN anomalies |
 
 **User review checkpoints (🗣️):**
 
@@ -550,7 +550,7 @@ All scripts use inline dependency declarations — run with `uv run script.py` (
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/finetune.py` | Gateway API wrapper — ~25 subcommands including create-workflow, upload-knowledge/topics/relations/records/grader, verify, status, readiness-check, diagnose-grader (response pattern analysis), create-eval, poll-eval, **estimate-training** (compare models by cost/duration with optional constraints), create-training (pre-flight constraint check), poll-training, cancel-eval, cancel-training, search-knowledge, delete-knowledge, sync-jobs, update-part-relevance, difficulty-probe, data-quality-gate, print-row-outputs, **log-step** (writes to both `execution-log.md` and `pipeline-journal.json`), **log-iteration**, **filter-records**, **auto-journal** capabilities. `cancel-eval` now uses the real cancellation endpoint (`POST /finetune/workflows/{workflow_id}/jobs/{eval_id}/cancel`) rather than patching local eval-job status. |
+| `scripts/finetune.py` | Gateway API wrapper — 34 subcommands including create-workflow, upload-knowledge/topics/relations/records/grader, verify, status, readiness-check, diagnose-grader (response pattern analysis), create-eval, poll-eval, **estimate-training** (compare models by cost/duration with optional constraints), create-training (pre-flight constraint check), poll-training, cancel-eval, cancel-training, search-knowledge, delete-knowledge, sync-jobs, update-part-relevance, difficulty-probe, data-quality-gate, print-row-outputs, **log-step** (writes to both `execution-log.md` and `pipeline-journal.json`), **log-iteration**, **filter-records**, **auto-journal** capabilities. `cancel-eval` now uses the real cancellation endpoint (`POST /finetune/workflows/{workflow_id}/jobs/{eval_id}/cancel`) rather than patching local eval-job status. |
 | `scripts/generate_records.py` | Default record generation from topics + knowledge — calls LLM per leaf topic with 5 prompt types; supports `--enrich-sources` (recommended), `--weight-by-difficulty`, `--use-rag`, **`--ground-truth-format`** (structured output tasks) |
 | `scripts/convert_nemo_rows.py` | Convert NeMo DataDesigner output rows to vLLora training.jsonl; filters by judge scores; writes `nemo-metadata.jsonl` sidecar |
 | `scripts/analyze_training.py` | Post-training analysis: reward trend, KL health, clipping, loss stability, grad norm, per-topic learning. Uses `provider_job_id` for epoch eval fetch (matching UI behavior). Per-record analysis: top 5 regressions/improvements with input, model output, grader reason. Auto-detects 3 epoch patterns: `epoch_collapse` (score drops >8%), `over_prediction` (R=1.00 + low precision), `output_collapse` (identical outputs). Zero-std alerts conditional on reward being flat (30-99% normal per arXiv:2509.21880) |
@@ -570,7 +570,10 @@ All scripts use inline dependency declarations — run with `uv run script.py` (
 | `scripts/validate_extraction.py` | Cross-document extraction quality gate (parts/page, title diversity, avg length, **table column consistency**, **pipe-table page break artifact detection** — flags non-table lines + repeated headers inside pipe-delimited tables, FAIL on large tables >10K chars with artifacts) |
 | `scripts/docling_extract.py` | Submit PDF(s) to Docling Serve async API, poll until done, supports batch + submit-only mode |
 | `scripts/derive_ground_truth.py` | Stage 2 GT derivation for two-stage multi-label generation (topic-agnostic GT extraction) |
-| `scripts/harden_records.py` | Post-eval: generates harder variants of trivial records (score > 0.85) via LLM rewrite. Adds variants alongside originals. Domain-agnostic — reads record + score + grader reason, rewrites input to be harder. Research: arXiv:2505.17063 (+29.2% from generate-eval-rewrite). Part of signal density fix: eval → detect trivials → harden → re-upload → re-eval |
+| `finetune.py harden-records` (subcommand) | Post-eval: generates harder variants of trivial records (score > 0.85) via LLM rewrite. Adds variants alongside originals. Domain-agnostic — reads record + score + grader reason, rewrites input to be harder. Research: arXiv:2505.17063 (+29.2% from generate-eval-rewrite). Part of signal density fix: eval → detect trivials → harden → re-upload → re-eval |
+| `scripts/probe_difficulty.py` | Post-eval difficulty probe — signal prediction and grader granularity analysis (also exposed as `finetune.py difficulty-probe`) |
+| `scripts/data_quality_gate.py` | Pre-eval data quality gate — structural, diversity, GT quality, alignment checks (also exposed as `finetune.py data-quality-gate`) |
+| `scripts/pipeline_journal.py` | Pipeline journal reader/writer used by `finetune.py log-step` and `log-iteration` |
 | `scripts/pdftotext_extract.py` | Fallback PDF extraction via pdftotext (no Docker required), same output schema |
 | `scripts/convert_pdf_to_markdown.py` | PDF → Markdown via pymupdf4llm — utility script, not primary extraction |
 
@@ -583,6 +586,8 @@ These scripts solve the #1 testing issue (agents creating shell scripts instead 
 - `grader-compliance.js` — Rule/regulation application (rule recall, false positives, citations)
 - `grader-readability.js` — Simplification/plain-language (readability + Flesch-Kincaid, jargon-free)
 - `grader-multilabel.js` — Multi-label classification grader (F0.5 scoring, precision floor, per-FP penalty, GRPO exploit defense)
+- `grader-classification.js` — Single-label classification grader
+- `grader-mcq.js` — Multiple-choice question grader
 - `nemo-recipe-template.json` — NeMo Data Designer recipe starter (curated seed + rag-retrieval + 4 RAGAS scoring columns: AspectCritic, ResponseGroundedness, Tele-Specificity, ResponseRelevancy)
 - `nemo-recipe-structured-template.json` — NeMo recipe for structured documents (subcategory sampler + llm-structured field extraction + expression composer)
 

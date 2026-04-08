@@ -6410,6 +6410,45 @@ def cmd_reconcile_topics(args: argparse.Namespace) -> None:
         print(f"  {flag} {t}: {c}")
         if c < min_required:
             under.append((t, c, min_required - c))
+    # Auto-journal the reconciliation so the user can see what happened.
+    # Records: how many mismatches, how many reassigned, trim count, final
+    # per-topic counts, and whether min-per-topic passed.
+    try:
+        sys.path.insert(0, str(Path(__file__).parent))
+        from pipeline_journal import find_project_dir, log_milestone  # type: ignore
+        proj = find_project_dir(training_path)
+        if proj:
+            topic_summary = ", ".join(f"{t}={c}" for t, c in sorted(final_counts.items()))
+            under_summary = (
+                f" BELOW MIN: {', '.join(f'{t}={c}/{min_required}' for t,c,_ in under)}"
+                if under else ""
+            )
+            summary = (
+                f"Reconcile: {len(mismatches)} mismatches, "
+                f"{len(reassignments)} reassigned, {dropped} trimmed. "
+                f"Final: {topic_summary}.{under_summary}"
+            )
+            log_milestone(
+                proj,
+                "step_4_generation",
+                "reconcile_topics",
+                "fail" if under else "completed",
+                summary,
+                {
+                    "mismatches": len(mismatches),
+                    "reassigned": len(reassignments),
+                    "trimmed": dropped,
+                    "min_per_topic": min_required,
+                    "max_per_topic": args.max_per_topic,
+                    "final_counts": dict(final_counts),
+                    "topics_below_min": [
+                        {"topic": t, "count": c, "gap": gap} for t, c, gap in under
+                    ],
+                },
+            )
+    except Exception as _e:
+        pass  # journaling is best-effort
+
     if under:
         print(f"\n❌ {len(under)} topic(s) below minimum — regenerate the gap:")
         for t, c, gap in under:

@@ -620,6 +620,7 @@ def _call_llm_for_type(
     scripts_dir: Path,
     include_ground_truth: bool,
     ground_truth_format: str | None = None,
+    input_format: str | None = None,
 ) -> list[dict]:
     """Make one LLM call for a specific prompt type. Returns raw items.
 
@@ -638,14 +639,25 @@ def _call_llm_for_type(
 CRITICAL: The model is trained to output ONLY structured answers in this format:
   {ground_truth_format}
 Rules:
-1. Every prompt MUST be a concrete scenario with specific inputs (names, numbers, dates,
-   conditions) that can be answered in that exact format. Do NOT generate open-ended
-   questions like "Explain...", "Describe...", "Compare..." — frame as specific cases.
+1. Every user_input MUST be a concrete scenario with specific values (names, numbers,
+   dates, conditions) that can be answered in that exact format. Do NOT generate
+   open-ended questions like "Explain...", "Describe...", "Compare..." — frame as
+   specific cases.
 2. The ground truth MUST use ONLY the exact vocabulary/values specified in the format
    above. If the format lists specific valid values (e.g., category names, status codes),
-   use ONLY those values — never synonyms, ingredient names, or alternative phrasings.
+   use ONLY those values — never synonyms, alternative phrasings, or domain substitutes.
 3. Each item in the ground truth should appear exactly once — no duplicates.
 4. Do NOT use "OR" in the ground truth — pick the single correct answer.
+"""
+
+    input_constraint = ""
+    if input_format:
+        input_constraint = f"""
+USER INPUT SHAPE (CRITICAL — strictly enforced):
+  {input_format}
+Every user_input MUST match this shape exactly. Do NOT add framing, do NOT rephrase
+as a question unless the shape requires it, do NOT add narration unless the shape
+allows it. The user_input is the literal content the model will see at inference time.
 """
 
     prompt = f"""{type_instruction}
@@ -653,19 +665,19 @@ Rules:
 Topic: {topic['name']}
 Domain rules (from the topic's system prompt — these are critical constraints for the ground truth):
 {focus}
-{structured_constraint}
+{structured_constraint}{input_constraint}
 Source material (each section is numbered [1], [2], etc.):
 {chunk_text}
 
-Each prompt must be a realistic question/request grounded in the source material above.
-Do NOT generate generic questions — reference specific concepts, examples, or details from the source.
+Each user_input must be realistic and grounded in the source material above.
+Do NOT generate generic content — reference specific concepts, examples, or details from the source.
 The ground truth MUST be consistent with both the domain rules above AND the source material values.
 
-For each prompt, also provide:
-- "ground_truth": {f'Answer in this exact format: {ground_truth_format}. CRITICAL RULES for ground truth accuracy: (1) Every value (numbers, limits, thresholds, categories) MUST come directly from the source material — look them up, do NOT guess. If the source shows a special designation (like TT for treatment technique), use that exact designation. (2) COMPLETENESS: If the answer is a list (comma-separated items, multiple values), check EVERY input element independently. Do NOT stop after finding the first match — scan ALL inputs and include ALL matches. For example, if the input has 3 ingredients and 2 are allergens, list BOTH allergens, not just the first one found. (3) Do NOT include explanations or source excerpts — only the structured answer.' if ground_truth_format else 'a concise excerpt from the source material that contains the information needed to answer the question. Keep it focused — complete enough to verify a correct answer, but not the entire source.'}
-- "used_parts": an array of section numbers as strings (e.g., ["1", "3"]) — ONLY the specific sections from the source material above that this question is derived from. Most questions should use 1-3 sections, not all of them.
+For each item, also provide:
+- "ground_truth": {f'Answer in this exact format: {ground_truth_format}. CRITICAL RULES: (1) Every value (numbers, limits, thresholds, categories) MUST come directly from the source material — look them up, do NOT guess. If the source shows a special designation (like TT for treatment technique), use that exact designation. (2) COMPLETENESS: If the answer is a list, check EVERY input element independently. Do NOT stop after finding the first match. (3) Do NOT include explanations or source excerpts — only the structured answer.' if ground_truth_format else 'a concise excerpt from the source material that contains the information needed to answer. Keep it focused.'}
+- "used_parts": an array of section numbers as strings (e.g., ["1", "3"]) — ONLY the specific sections from the source material above that this item is derived from. Most items should use 1-3 sections, not all of them.
 
-Return JSON: {{"items": [{{"prompt": "the question", "ground_truth": "{'structured answer' if ground_truth_format else 'relevant source excerpt'}", "used_parts": ["1"]}}, ...]}}"""
+Return JSON: {{"items": [{{"user_input": "the literal user message content matching the required shape", "ground_truth": "{'structured answer' if ground_truth_format else 'relevant source excerpt'}", "used_parts": ["1"]}}, ...]}}"""
 
     request_data = json.dumps({
         "messages": [{"role": "user", "content": prompt}],
@@ -684,14 +696,18 @@ Return JSON: {{"items": [{{"prompt": "the question", "ground_truth": "{'structur
                             "items": {
                                 "type": "object",
                                 "properties": {
-                                    "prompt": {"type": "string"},
+                                    # "user_input" is the literal user message; the
+                                    # generator should respect --input-format. The
+                                    # old name "prompt" biased LLMs toward question
+                                    # shapes regardless of the task.
+                                    "user_input": {"type": "string"},
                                     "ground_truth": {"type": "string"},
                                     "used_parts": {
                                         "type": "array",
                                         "items": {"type": "string"},
                                     },
                                 },
-                                "required": ["prompt", "ground_truth", "used_parts"],
+                                "required": ["user_input", "ground_truth", "used_parts"],
                                 "additionalProperties": False,
                             },
                         },
@@ -740,11 +756,16 @@ Return JSON: {{"items": [{{"prompt": "the question", "ground_truth": "{'structur
             print(f"    [{prompt_type['name']}] {last_error} (no retries left)", file=sys.stderr)
             return []
 
-        # Success
+        # Success. Normalize legacy key names so downstream code has a single
+        # contract: each item has a "user_input" field.
         items = response.get("items", [])
         if not items:
             prompts = response.get("prompts", [])
-            items = [{"prompt": p, "ground_truth": ""} for p in prompts]
+            items = [{"user_input": p, "ground_truth": ""} for p in prompts]
+        # Back-compat: accept "prompt" from older generators / caches
+        for it in items:
+            if "user_input" not in it and "prompt" in it:
+                it["user_input"] = it.pop("prompt")
 
         if attempt > 1:
             print(f"    [{prompt_type['name']}] Succeeded on attempt {attempt}", file=sys.stderr)
@@ -765,17 +786,28 @@ Return JSON: {{"items": [{{"prompt": "the question", "ground_truth": "{'structur
 
 
 def _validate_record(
-    record: dict, topic: dict, ground_truth_format: str | None,
+    record: dict,
+    topic: dict,
+    ground_truth_format: str | None,
+    input_format: str | None = None,
 ) -> str | None:
     """Validate a generated record structurally. Returns rejection reason or None.
 
-    Only catches universal structural problems:
-    - missing user message
-    - empty user message
-    - malformed shape
+    Only universal checks — missing/empty user message, malformed shape.
 
-    Task-specific validation (format, vocabulary, topic↔GT consistency) is
-    the grader's job, not this function's.
+    Note: `input_format` is intentionally NOT enforced here. Its purpose is
+    to shape the generator's prompt (so it produces the right kind of
+    records), not to do post-hoc keyword filtering. Enforcement via keywords
+    is fragile and task-specific:
+    - "no questions" is wrong for QA tasks
+    - "contains the data" requires semantic understanding
+    - Phrasing diversity (question/statement/narrative with the same data)
+      is GOOD training signal and should NOT be filtered.
+
+    Records whose user message doesn't actually contain the data the GT
+    references will be caught by the grader at training time: the model
+    can't extract what isn't there, so those records score low and get
+    filtered or hardened by the downstream pipeline.
     """
     messages = record.get("messages", [])
     if not isinstance(messages, list) or not messages:
@@ -808,6 +840,7 @@ def generate_for_topic(
     scripts_dir: Path,
     include_ground_truth: bool = True,
     ground_truth_format: str | None = None,
+    input_format: str | None = None,
     rag_parts: list[dict] | None = None,
     workflow_id: str | None = None,
     enrich_sources: bool = False,
@@ -896,6 +929,7 @@ def generate_for_topic(
                 scripts_dir=scripts_dir,
                 include_ground_truth=include_ground_truth,
                 ground_truth_format=ground_truth_format,
+                input_format=input_format,
             ): pt["name"]
             for pt, count in distribution
         }
@@ -939,8 +973,9 @@ def generate_for_topic(
     for type_name, items in all_items:
         for item in items:
             if isinstance(item, str):
-                item = {"prompt": item, "ground_truth": "", "used_parts": []}
-            prompt_text = item.get("prompt", "")
+                item = {"user_input": item, "ground_truth": "", "used_parts": []}
+            # Back-compat: old items may still use "prompt"
+            prompt_text = item.get("user_input") or item.get("prompt", "")
             ground_truth = item.get("ground_truth", "")
             if not prompt_text or not prompt_text.strip():
                 continue
@@ -990,7 +1025,7 @@ def generate_for_topic(
 
             # Inline validation: reject records that fail deterministic quality checks.
             # Catches format violations before they reach training.jsonl.
-            rejection = _validate_record(record, topic, ground_truth_format)
+            rejection = _validate_record(record, topic, ground_truth_format, input_format)
             if rejection:
                 rejected_count += 1
                 if rejected_count <= 10:
@@ -1099,6 +1134,20 @@ def main() -> None:
         help="Override default ground_truth instruction. Describe the expected format, e.g. "
              "'Structured answer: Eligible. EIC: $[amount] or Not eligible. Reason: [rule]'. "
              "When set, ground truths are generated in this format instead of source excerpts.",
+    )
+    parser.add_argument(
+        "--input-format", default=None,
+        help="Describe the expected SHAPE of the user message (the training input). "
+             "Injected into the generator prompt so the LLM produces records that match "
+             "the task at inference time. Example for extraction tasks:\n"
+             "  'The user message MUST contain the literal data the model should extract "
+             "from (e.g. the ingredient list itself). The phrasing can be a raw list, a "
+             "question containing the list, or a narrative mentioning the list — any is "
+             "fine. Do NOT generate records that ask the model to recall/imagine data '\n"
+             "  'from world knowledge (e.g. \"what is in a cookie?\" is wrong because the "
+             "data isn't literally present).'\n"
+             "Shape is enforced via generator prompting, not post-hoc keyword filtering. "
+             "Records that still slip through are caught by the grader at training time.",
     )
     parser.add_argument(
         "--parallel", type=int, default=1,
@@ -1343,6 +1392,7 @@ def main() -> None:
         scripts_dir=scripts_dir,
         include_ground_truth=not args.no_ground_truth,
         ground_truth_format=getattr(args, 'ground_truth_format', None),
+        input_format=getattr(args, 'input_format', None),
     )
     if getattr(args, 'use_rag', False) or args.enrich_sources:
         common_kwargs["workflow_id"] = args.workflow_id

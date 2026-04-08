@@ -350,12 +350,15 @@ Generate **200+ total records**, minimum 25 per leaf topic.
 
 **`--ground-truth-format` (MANDATORY for structured-output tasks):** Forces scenario-based prompts with specific answer format. Include BOTH the answer format AND the prompt format.
 
+**`--input-format` (MANDATORY):** Describes the SHAPE of the user message so the generator produces records that match your inference task. Without this, the generator defaults to question-shaped prompts ("what is X?") which can produce records where the user message asks the model to imagine/recall data instead of containing the literal data the model should extract from. Write it as natural language — phrasing diversity (question / statement / narrative) is fine as long as the actual data is present in the user message.
+
 **Multi-label GT completeness (critical for set-output tasks):** Use two-stage generation to prevent single-label suppression (arXiv:2505.17510):
 ```bash
 # Stage 1: Generate inputs per-topic (no GT)
 uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --topics ... --relations ... --knowledge-dir ... --no-ground-truth \
   --ground-truth-format "The user message MUST present a concrete [input]..." \
+  --input-format "The user message MUST contain the literal data the model should process (e.g. the ingredient list / SQL schema / source text). The phrasing can be a raw dump, a question containing the data, or a narrative mentioning the data — any is fine. Do NOT produce records that reference the data indirectly or ask the model to recall it from world knowledge." \
   --output finetune-project/training.jsonl --records-per-topic 30
 
 # Stage 2: Derive complete GTs topic-agnostically
