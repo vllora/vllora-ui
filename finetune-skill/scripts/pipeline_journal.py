@@ -25,9 +25,13 @@ def log_milestone(
     standalone scripts (build_knowledge_parts, generate_records, etc.)
     to log progress without subprocess calls.
 
-    Deduplication: skips the log if the last entry has the same
-    (step, action, status, summary) — prevents duplicate entries when
-    a script is called multiple times (e.g., polling).
+    Smart deduplication + retry tracking:
+    - If the last entry is byte-identical → skip (polling duplicates).
+    - If a previous entry with the same (step, action) + status="completed"
+      exists → mark this as a RETRY and include attempt number in summary.
+    - If a previous entry with same (step, action) is "in_progress" →
+      close it (update status to "completed" via a new closing entry rather
+      than mutating history — append-only journal is user-friendly).
     """
     project_dir = Path(project_dir)
     journal_file = project_dir / "pipeline-journal.json"
@@ -40,16 +44,45 @@ def log_milestone(
     except (json.JSONDecodeError, OSError):
         return
 
-    # Deduplication: skip if the last entry is identical
     entries = journal.get("entries", [])
+
+    # Deduplication: skip if the last entry is byte-identical
     if entries:
         last = entries[-1]
         if (last.get("step") == step and last.get("action") == action
                 and last.get("status") == status and last.get("summary") == summary):
-            return  # Duplicate — skip
+            return  # exact duplicate — e.g., a polling loop re-logged
 
+    # Retry detection: count previous COMPLETED entries for this (step, action).
+    # If any exist and we're logging a new "completed" or "fail" status, this
+    # is a retry. Annotate the summary so the user can see the loop convergence.
+    prior_completed = [
+        e for e in entries
+        if e.get("step") == step and e.get("action") == action
+        and e.get("status") in ("completed", "fail")
+    ]
+    is_retry = len(prior_completed) > 0 and status in ("completed", "fail")
+    if is_retry:
+        attempt = len(prior_completed) + 1
+        summary = f"[retry {attempt}] {summary}"
+        if details is None:
+            details = {}
+        details = {**details, "retry_attempt": attempt}
+
+    # In-progress resolver: if there's an open "in_progress" entry for this
+    # same (step, action) and we're now logging a terminal status, that old
+    # entry is now stale. Mark it resolved by updating it in-place with a
+    # `resolved_by_id` pointer to the new entry. (We do NOT mutate the original
+    # summary — we only add a pointer so the history stays readable.)
     timestamp = datetime.now(timezone.utc).isoformat()
     next_id = max((e["id"] for e in entries), default=0) + 1
+
+    if status in ("completed", "fail"):
+        for e in entries:
+            if (e.get("step") == step and e.get("action") == action
+                    and e.get("status") == "in_progress"
+                    and "resolved_by_id" not in e):
+                e["resolved_by_id"] = next_id
 
     entry: dict = {
         "id": next_id,

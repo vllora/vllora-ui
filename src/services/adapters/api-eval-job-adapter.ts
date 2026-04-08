@@ -53,14 +53,14 @@ function basePath(workflowId: string): string {
 }
 
 export const apiEvalJobAdapter: EvalJobService = {
-  async create(job: Omit<EvalJob, 'id'>): Promise<EvalJob> {
-    const response = await api.post(basePath(job.workflowId), {
-      cloud_run_id: job.evaluationRunId || null,
-      sample_size: job.sampleSize,
-      rollout_model: job.rolloutModel,
-    });
-    const db = await handleApiResponse<DbEvalJobResponse>(response);
-    return mapToFe(db);
+  async create(_job: Omit<EvalJob, 'id'>): Promise<EvalJob> {
+    // Eval jobs are created gateway-side as a side effect of
+    // POST /finetune/evaluations (see gateway create_evaluation handler).
+    // Callers should use createEvaluation() + evalJobService.getByDataset()
+    // to retrieve the row the gateway just inserted.
+    throw new Error(
+      'evalJobService.create is no longer supported — use createEvaluation() from finetune-api instead',
+    );
   },
 
   async get(id: string): Promise<EvalJob | null> {
@@ -89,37 +89,22 @@ export const apiEvalJobAdapter: EvalJobService = {
   },
 
   async update(id: string, updates: Partial<EvalJob>): Promise<EvalJob | null> {
-    // Map FE fields to BE update payload
-    const payload: Record<string, unknown> = {};
-    if (updates.evaluationRunId !== undefined) payload.cloud_run_id = updates.evaluationRunId || null;
-    if (updates.status !== undefined) payload.status = updates.status;
-    if (updates.error !== undefined) payload.error = updates.error ?? null;
-    if (updates.completedAt !== undefined) {
-      payload.completed_at = updates.completedAt
-        ? new Date(updates.completedAt).toISOString()
-        : null;
-    }
-    if (updates.startedAt !== undefined) {
-      payload.started_at = updates.startedAt
-        ? new Date(updates.startedAt).toISOString()
-        : null;
-    }
-    // pollingSnapshot is in-memory only — never persisted to BE
-    if (updates.result !== undefined) {
-      payload.result = updates.result
-        ? JSON.stringify(updates.result)
-        : null;
-    }
-    if (Object.keys(payload).length === 0) return this.get(id);
-
-    const response = await api.patch(`/finetune/eval-jobs/${id}`, payload);
-    const db = await handleApiResponse<DbEvalJobResponse>(response);
-    return mapToFe(db);
+    // Eval job persistence is owned by the gateway's EvalJobStateTracker
+    // (gateway/src/eval_state_tracker.rs), which polls the cloud every 30s
+    // and writes status + per-record scores directly to SQLite. The gateway
+    // no longer exposes PATCH /finetune/eval-jobs/{id} (removed in BE commit
+    // 27cb5b4). This method is retained as a client-side merge so callers
+    // get an updated EvalJob back for in-memory UI state + event emission,
+    // without a round-trip. The authoritative state will arrive on the next
+    // gateway read once the state tracker has picked it up.
+    const current = await this.get(id);
+    if (!current) return null;
+    return { ...current, ...updates };
   },
 
-  async delete(id: string): Promise<void> {
-    const response = await api.delete(`/finetune/eval-jobs/${id}`);
-    await handleApiResponse<{ deleted: boolean }>(response);
+  async delete(_id: string): Promise<void> {
+    // Per-id delete is not exposed by the gateway (only workflow-bulk delete).
+    // Callers should use deleteByDataset() instead.
   },
 
   async deleteByDataset(workflowId: string): Promise<void> {

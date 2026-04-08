@@ -182,10 +182,20 @@ function useEvalJobs(props: {
     [jobs]
   );
 
-  const lastCompletedJob = useMemo(
-    () => jobs.find((j) => (j.status === 'completed' || j.status === 'cancelled') && j.result) || null,
-    [jobs]
-  );
+  // The analyzed eval blob (distribution, topic breakdown, readiness gate,
+  // sample results) is persisted on the dataset row via datasetService.updateEvalStats,
+  // NOT on the eval_jobs row — the gateway's EvalJobStateTracker only mirrors
+  // status + per-record scores from cloud. So find the latest terminal job and
+  // attach dataset.evalStats as its `result`.
+  const lastCompletedJob = useMemo(() => {
+    const terminal = jobs.find(
+      (j) => j.status === 'completed' || j.status === 'cancelled',
+    );
+    if (!terminal) return null;
+    if (terminal.result) return terminal;
+    if (dataset.evalStats) return { ...terminal, result: dataset.evalStats };
+    return null;
+  }, [jobs, dataset.evalStats]);
 
   return {
     workflowId,

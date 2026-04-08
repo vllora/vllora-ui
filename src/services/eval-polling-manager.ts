@@ -231,6 +231,16 @@ class EvalJobManager {
             samplePercentage,
             Object.keys(recordTopics).length > 0 ? recordTopics : undefined,
           );
+
+          // Persist the analyzed blob on the dataset row so it survives reload.
+          // Parity with handleJobComplete — the eval_jobs.result column is no
+          // longer written (gateway removed PATCH in 27cb5b4), so dataset.evalStats
+          // is the sole durable home for the analyzed blob.
+          try {
+            await datasetService.updateEvalStats(job.workflowId, partialResult);
+          } catch (e) {
+            console.warn('[eval-cancel] failed to persist partial evalStats:', e);
+          }
         }
       } catch {
         // Best-effort — if cloud is unreachable, cancel without partial results
