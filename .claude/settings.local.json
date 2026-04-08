@@ -723,7 +723,11 @@
       "WebFetch(domain:www.braintrust.dev)",
       "WebFetch(domain:vercel.com)",
       "Bash(git rm:*)",
-      "Bash(npx --yes degit evilmartians/agent-prism/packages/ui/src/components src/components/agent-prism)"
+      "Bash(npx --yes degit evilmartians/agent-prism/packages/ui/src/components src/components/agent-prism)",
+      "WebFetch(domain:sqlite.org)",
+      "WebFetch(domain:dev.manishsinha.me)",
+      "WebFetch(domain:clickhouse.com)",
+      "WebFetch(domain:arize.com)"
     ],
     "deny": [],
     "ask": [],

@@ -17,3 +17,4 @@ GEMINI.md
 docs/issue/*
 .claude/settings.local.json
 e2e-screenshots/
+.claude/settings.local.json
