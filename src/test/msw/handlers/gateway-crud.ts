@@ -1,7 +1,7 @@
 /**
  * MSW Handler: Gateway CRUD endpoints
  *
- * In-memory stores for /finetune/workflows, records, and eval-jobs.
+ * In-memory stores for /finetune/workflows, records, and evaluations metadata.
  * Used by integration tests (eval-analysis, training-analysis) whose
  * seed-helpers call the service adapters which hit these gateway endpoints.
  *
@@ -212,41 +212,11 @@ export const gatewayCrudHandlers = [
     },
   ),
 
-  // ─── Eval Jobs ──────────────────────────────────────────────────────────────
+  // ─── Evaluations Metadata ───────────────────────────────────────────────────
 
-  // POST /finetune/workflows/:workflowId/eval-jobs — Create eval job
-  http.post(
-    `${BASE}/finetune/workflows/:workflowId/eval-jobs`,
-    async ({ params, request }) => {
-      const workflowId = params.workflowId as string;
-      const body = (await request.json()) as Record<string, unknown>;
-      const id = crypto.randomUUID();
-      const now = nowIso();
-
-      const row: EvalJobRow = {
-        id,
-        workflow_id: workflowId,
-        cloud_run_id: (body.cloud_run_id as string) ?? null,
-        status: 'pending',
-        sample_size: (body.sample_size as number) ?? null,
-        rollout_model: (body.rollout_model as string) ?? null,
-        error: null,
-        completed_at: null,
-        started_at: null,
-        polling_snapshot: null,
-        result: null,
-        created_at: now,
-        updated_at: now,
-      };
-
-      evalJobs.set(id, row);
-      return HttpResponse.json(row);
-    },
-  ),
-
-  // GET /finetune/workflows/:workflowId/eval-jobs — List eval jobs for workflow
+  // GET /finetune/workflows/:workflowId/evaluations — List eval metadata for workflow
   http.get(
-    `${BASE}/finetune/workflows/:workflowId/eval-jobs`,
+    `${BASE}/finetune/workflows/:workflowId/evaluations`,
     ({ params }) => {
       const workflowId = params.workflowId as string;
       const jobs = [...evalJobs.values()].filter((j) => j.workflow_id === workflowId);
@@ -254,65 +224,20 @@ export const gatewayCrudHandlers = [
     },
   ),
 
-  // GET /finetune/eval-jobs/:id — Get single eval job (non-scoped)
-  http.get(
-    `${BASE}/finetune/eval-jobs/:id`,
-    ({ params }) => {
-      const id = params.id as string;
-      const row = evalJobs.get(id);
-      if (!row) {
-        return HttpResponse.json({ error: 'Not found' }, { status: 404 });
-      }
-      return HttpResponse.json(row);
-    },
-  ),
-
-  // PATCH /finetune/eval-jobs/:id — Update eval job
-  http.patch(
-    `${BASE}/finetune/eval-jobs/:id`,
-    async ({ params, request }) => {
-      const id = params.id as string;
-      const row = evalJobs.get(id);
-      if (!row) {
-        return HttpResponse.json({ error: 'Not found' }, { status: 404 });
-      }
-
-      const body = (await request.json()) as Record<string, unknown>;
-      const updated: EvalJobRow = { ...row, updated_at: nowIso() };
-
-      if ('status' in body) updated.status = body.status as string;
-      if ('error' in body) updated.error = body.error as string | null;
-      if ('completed_at' in body) updated.completed_at = body.completed_at as string | null;
-      if ('started_at' in body) updated.started_at = body.started_at as string | null;
-      if ('polling_snapshot' in body) updated.polling_snapshot = body.polling_snapshot as string | null;
-      if ('result' in body) updated.result = body.result as string | null;
-
-      evalJobs.set(id, updated);
-      return HttpResponse.json(updated);
-    },
-  ),
-
-  // GET /finetune/eval-jobs?status=... — List eval jobs by status (global)
-  http.get(`${BASE}/finetune/eval-jobs`, ({ request }) => {
-    const url = new URL(request.url);
-    const statusFilter = url.searchParams.get('status');
-    let jobs = [...evalJobs.values()];
-    if (statusFilter) {
-      jobs = jobs.filter((j) => j.status === statusFilter);
-    }
-    return HttpResponse.json({ jobs });
-  }),
-
-  // DELETE /finetune/eval-jobs/:id — Delete eval job
+  // DELETE /finetune/workflows/:workflowId/evaluations — Delete eval metadata for workflow
   http.delete(
-    `${BASE}/finetune/eval-jobs/:id`,
+    `${BASE}/finetune/workflows/:workflowId/evaluations`,
     ({ params }) => {
-      const id = params.id as string;
-      if (!evalJobs.has(id)) {
-        return HttpResponse.json({ error: 'Not found' }, { status: 404 });
+      const workflowId = params.workflowId as string;
+      let deleted = 0;
+      for (const [id, row] of evalJobs.entries()) {
+        if (row.workflow_id === workflowId) {
+          evalJobs.delete(id);
+          deleted += 1;
+        }
       }
-      evalJobs.delete(id);
-      return HttpResponse.json({ deleted: true });
+      return HttpResponse.json({ deleted });
     },
   ),
+
 ];

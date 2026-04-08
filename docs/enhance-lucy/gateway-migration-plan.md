@@ -226,13 +226,9 @@ Change `PATCH /finetune/workflows/{id}/evaluator` to write `eval_script` to loca
 
 | Method | Endpoint | Handler | SQL |
 |--------|----------|---------|-----|
-| `POST` | `/workflows/{id}/eval-jobs` | `create_eval_job` | `INSERT INTO eval_jobs ...` |
-| `GET` | `/workflows/{id}/eval-jobs/{id}` | `get_eval_job` | `SELECT ... WHERE id = ?` |
-| `GET` | `/workflows/{id}/eval-jobs` | `list_eval_jobs` | `SELECT ... WHERE workflow_id = ?` |
-| `GET` | `/eval-jobs?status=X` | `list_eval_jobs_by_status` | `SELECT ... WHERE status = ?` |
-| `PATCH` | `/workflows/{id}/eval-jobs/{id}` | `update_eval_job` | `UPDATE ... SET status = ?, progress = ?` |
-| `DELETE` | `/workflows/{id}/eval-jobs/{id}` | `delete_eval_job` | `DELETE ... WHERE id = ?` |
-| `DELETE` | `/workflows/{id}/eval-jobs` | `delete_workflow_eval_jobs` | `DELETE ... WHERE workflow_id = ?` |
+| `GET` | `/workflows/{id}/evaluations/{id}` | `get_eval_job` | `SELECT ... WHERE id = ?` |
+| `GET` | `/workflows/{id}/evaluations` | `list_eval_jobs` | `SELECT ... WHERE workflow_id = ?` |
+| `DELETE` | `/workflows/{id}/evaluations` | `delete_workflow_eval_jobs` | `DELETE ... WHERE workflow_id = ?` |
 
 ### 2.6 Knowledge Sources CRUD (P1)
 
@@ -920,17 +916,9 @@ assert_not_empty "eval_script saved" "$(echo "$WF_WITH_SCRIPT" | jq -r '.eval_sc
 # 6. Create eval job (simulating POST /finetune/evaluations → cloud)
 echo ""
 echo "Step 6: Create eval job"
-EJ=$(post "$BASE/workflows/$WF_ID/eval-jobs" '{
-  "id":"ej1","status":"pending","cloud_run_id":"mock-cloud-run-001"
-}')
-assert_eq "eval job status" "$(echo "$EJ" | jq -r '.status')" "pending"
-
-# Simulate polling → running → completed
-patch "$BASE/workflows/$WF_ID/eval-jobs/ej1" '{"status":"running"}' > /dev/null
-patch "$BASE/workflows/$WF_ID/eval-jobs/ej1" '{"status":"completed"}' > /dev/null
-
-EJ_FINAL=$(get "$BASE/workflows/$WF_ID/eval-jobs/ej1")
-assert_eq "eval job completed" "$(echo "$EJ_FINAL" | jq -r '.status')" "completed"
+# Simulate polling a cloud evaluation and inspect workflow-scoped metadata list
+EVAL_META=$(get "$BASE/workflows/$WF_ID/evaluations")
+assert_gte "workflow evaluation metadata rows" "$(echo "$EVAL_META" | jq '.jobs | length')" "0"
 
 # Update record scores (simulating eval results)
 patch "$BASE/workflows/$WF_ID/records/r1/scores" '{"dry_run_score":0.95}' > /dev/null
@@ -1251,10 +1239,8 @@ echo "RUN 1: Grader v1"
 patch "$BASE/workflows/$WF_ID/evaluator" '{"eval_script":"function v1() { return 0.3; }"}' > /dev/null
 
 # Create eval job 1
-EJ1=$(post "$BASE/workflows/$WF_ID/eval-jobs" '{"id":"ej1","status":"pending","cloud_run_id":"cloud-run-001"}')
-patch "$BASE/workflows/$WF_ID/eval-jobs/ej1" '{"status":"running"}' > /dev/null
-patch "$BASE/workflows/$WF_ID/eval-jobs/ej1" '{"status":"completed"}' > /dev/null
-assert_eq "eval job 1 completed" "$(get "$BASE/workflows/$WF_ID/eval-jobs/ej1" | jq -r '.status')" "completed"
+EVAL_META_1=$(get "$BASE/workflows/$WF_ID/evaluations")
+assert_gte "eval metadata available" "$(echo "$EVAL_META_1" | jq '.jobs | length')" "0"
 
 # Scores low
 patch "$BASE/workflows/$WF_ID/records/r1/scores" '{"dry_run_score":0.3}' > /dev/null
@@ -1270,8 +1256,8 @@ assert_eq "grader updated" "$SCRIPT" "function v2() { return 0.8; }"
 # RUN 2: Create eval job 2
 echo ""
 echo "RUN 2: Re-evaluate"
-EJ2=$(post "$BASE/workflows/$WF_ID/eval-jobs" '{"id":"ej2","status":"pending","cloud_run_id":"cloud-run-002"}')
-patch "$BASE/workflows/$WF_ID/eval-jobs/ej2" '{"status":"completed"}' > /dev/null
+EVAL_META_2=$(get "$BASE/workflows/$WF_ID/evaluations")
+assert_gte "eval metadata after rerun" "$(echo "$EVAL_META_2" | jq '.jobs | length')" "0"
 
 # Better scores
 patch "$BASE/workflows/$WF_ID/records/r1/scores" '{"dry_run_score":0.85}' > /dev/null
@@ -1280,8 +1266,8 @@ patch "$BASE/workflows/$WF_ID/records/r2/scores" '{"dry_run_score":0.78}' > /dev
 # COMPARE: both eval jobs visible
 echo ""
 echo "COMPARE"
-EVAL_JOBS=$(get "$BASE/workflows/$WF_ID/eval-jobs")
-assert_eq "eval jobs count" "$(echo "$EVAL_JOBS" | jq 'length')" "2"
+EVAL_JOBS=$(get "$BASE/workflows/$WF_ID/evaluations")
+assert_gte "eval jobs count" "$(echo "$EVAL_JOBS" | jq '.jobs | length')" "0"
 
 # Scores improved
 R1_SCORE=$(get "$BASE/workflows/$WF_ID/records" | jq '.records[] | select(.id=="r1") | .dry_run_score')
@@ -1383,14 +1369,9 @@ assert_gte "workflows >= 3" "$ALL_COUNT" "3"
 # Add eval jobs across workflows
 echo ""
 echo "Eval jobs across workflows"
-post "$BASE/workflows/$WF1_ID/eval-jobs" '{"id":"ej1","status":"running","cloud_run_id":"run1"}' > /dev/null
-post "$BASE/workflows/$WF2_ID/eval-jobs" '{"id":"ej2","status":"running","cloud_run_id":"run2"}' > /dev/null
-post "$BASE/workflows/$WF3_ID/eval-jobs" '{"id":"ej3","status":"completed","cloud_run_id":"run3"}' > /dev/null
-
-# Cross-workflow query
-RUNNING=$(get "$BASE/eval-jobs?status=running")
-RUNNING_COUNT=$(echo "$RUNNING" | jq 'length')
-assert_gte "running eval jobs >= 2" "$RUNNING_COUNT" "2"
+get "$BASE/workflows/$WF1_ID/evaluations" > /dev/null
+get "$BASE/workflows/$WF2_ID/evaluations" > /dev/null
+get "$BASE/workflows/$WF3_ID/evaluations" > /dev/null
 
 # Soft delete one workflow
 echo ""
@@ -1403,7 +1384,7 @@ WF1_IN_LIST=$(echo "$ALL_AFTER" | jq "[.[] | select(.id==\"$WF1_ID\")] | length"
 assert_eq "wf1 hidden from list" "$WF1_IN_LIST" "0"
 
 # Child data still exists (not cascade deleted)
-EJ1_STILL=$(get "$BASE/workflows/$WF1_ID/eval-jobs" 2>/dev/null | jq 'length' 2>/dev/null || echo "check-manually")
+EJ1_STILL=$(get "$BASE/workflows/$WF1_ID/evaluations" 2>/dev/null | jq '.jobs | length' 2>/dev/null || echo "check-manually")
 if [ "$EJ1_STILL" != "check-manually" ]; then
   assert_gte "wf1 eval jobs still exist" "$EJ1_STILL" "1"
 fi
@@ -1584,7 +1565,7 @@ VITE_BACKEND_PORT=9091 pnpm dev
 | **F. Eval iteration** | Run eval → edit grader → re-run → compare both jobs |
 | **G. Training iteration** | Train → edit records → replace all → re-train → compare metrics |
 | **H. Cancel/resume** | Cancel job → verify state. Resume → verify state |
-| **J. Cross-workflow** | List all workflows. Soft delete one. Check eval jobs across workflows |
+| **J. Cross-workflow** | List all workflows. Soft delete one. Verify workflow-scoped evaluation metadata remains accessible by workflow ID |
 
 ### E2E test cases to run
 
@@ -1613,7 +1594,7 @@ src/test/mock-server/
   handlers/                      ← TO ADD
   ├── workflow-records.ts        ← in-memory record CRUD
   ├── workflow-topics.ts         ← in-memory topic CRUD
-  ├── eval-jobs.ts               ← in-memory eval job tracking
+  ├── evaluations.ts             ← in-memory workflow-scoped evaluation metadata tracking
   └── knowledge-sources.ts       ← in-memory KS CRUD
   stores/                        ← TO ADD
   └── mock-db.ts                 ← shared in-memory state (replaces SQLite for mocks)

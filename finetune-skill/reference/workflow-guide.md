@@ -334,7 +334,7 @@ See `api-reference.md` for full endpoint documentation. Key workflow details:
 ### Evaluation Flow
 
 1. Create an evaluation run: `POST /finetune/evaluations`
-2. Track locally: `POST /finetune/workflows/{id}/eval-jobs` (for history)
+2. Track locally: `GET /finetune/workflows/{id}/evaluations` (history/metadata view)
 3. Poll for results every 2-3 seconds: `GET /finetune/evaluations/{id}`
 4. When `status` is `"completed"`, read per-record scores: `GET /finetune/workflows/{id}/records/scores`
 5. Cancel if needed: `POST /finetune/workflows/{id}/jobs/{eval_id}/cancel`

@@ -5444,7 +5444,7 @@ def cmd_sync_jobs(args: argparse.Namespace) -> None:
     synced_eval = 0
     try:
         eval_resp = _api("GET", f"{args.base_url}/finetune/workflows/{wf_id}/evaluations")
-        eval_list = eval_resp if isinstance(eval_resp, list) else eval_resp.get("evaluations", [])
+        eval_list = eval_resp if isinstance(eval_resp, list) else eval_resp.get("jobs", [])
         for ev in eval_list:
             eval_id = ev.get("evaluation_run_id", ev.get("id", ""))
             if eval_id in existing_eval_ids:

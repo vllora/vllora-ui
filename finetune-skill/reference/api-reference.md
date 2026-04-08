@@ -10,7 +10,7 @@ All endpoints use JSON unless noted. Auth via `Authorization: Bearer <token>` he
 
 ---
 
-## Quick Reference (77 endpoints)
+## Quick Reference (74 endpoints)
 
 | # | Method | Endpoint | Purpose |
 |---|--------|----------|---------|
@@ -41,39 +41,36 @@ All endpoints use JSON unless noted. Auth via `Authorization: Bearer <token>` he
 | 20 | GET | `/finetune/workflows/{id}/logs` | List workflow logs |
 | 21 | POST | `/finetune/workflows/{id}/logs/bulk` | Create workflow logs (bulk) |
 | **Topics** (workflow-scoped) | | | |
-| 21 | GET | `/finetune/workflows/{id}/topics` | List topics |
-| 22 | POST | `/finetune/workflows/{id}/topics` | Create topics |
-| 23 | PUT | `/finetune/workflows/{id}/topics` | Update topics |
-| 24 | DELETE | `/finetune/workflows/{id}/topics` | Delete topics |
-| 25 | GET | `/finetune/workflows/{id}/topics/relations` | List topic-source relations |
-| 26 | POST | `/finetune/workflows/{id}/topics/relations` | Create topic-source relations |
-| 27 | PUT | `/finetune/workflows/{id}/topics/relations` | Update topic-source relations |
-| 28 | DELETE | `/finetune/workflows/{id}/topics/relations` | Delete topic-source relations |
-| 29 | POST | `/finetune/workflows/{id}/topics/generate` | Generate topics for workflow |
+| 22 | GET | `/finetune/workflows/{id}/topics` | List topics |
+| 23 | POST | `/finetune/workflows/{id}/topics` | Create topics |
+| 24 | PUT | `/finetune/workflows/{id}/topics` | Update topics |
+| 25 | DELETE | `/finetune/workflows/{id}/topics` | Delete topics |
+| 26 | GET | `/finetune/workflows/{id}/topics/relations` | List topic-source relations |
+| 27 | POST | `/finetune/workflows/{id}/topics/relations` | Create topic-source relations |
+| 28 | PUT | `/finetune/workflows/{id}/topics/relations` | Update topic-source relations |
+| 29 | DELETE | `/finetune/workflows/{id}/topics/relations` | Delete topic-source relations |
+| 30 | POST | `/finetune/workflows/{id}/topics/generate` | Generate topics for workflow |
 | **Knowledge Sources** (workflow-scoped) | | | |
-| 30 | GET | `/finetune/workflows/{id}/knowledge` | List knowledge sources |
-| 31 | POST | `/finetune/workflows/{id}/knowledge` | Create knowledge source |
-| 32 | PUT | `/finetune/workflows/{id}/knowledge` | Upsert knowledge source |
-| 33 | DELETE | `/finetune/workflows/{id}/knowledge` | Soft delete all knowledge sources |
-| 34 | GET | `/finetune/workflows/{id}/knowledge/count` | Count knowledge sources |
-| 35 | POST | `/finetune/workflows/{id}/knowledge/chunk` | Chunk knowledge for extraction |
-| 36 | POST | `/finetune/workflows/{id}/knowledge/trace` | Create knowledge trace |
-| 37 | DELETE | `/finetune/workflows/{id}/knowledge/trace/{trace_id}` | Delete knowledge trace |
-| 38 | GET | `/finetune/workflows/{id}/knowledge/{ks_id}` | Get single knowledge source |
-| 39 | DELETE | `/finetune/workflows/{id}/knowledge/{ks_id}` | Soft delete single knowledge source |
-| 40 | GET | `/finetune/workflows/{id}/knowledge/{ks_id}/file` | Download knowledge source file |
-| 41 | POST | `/finetune/workflows/{id}/knowledge/{ks_id}/parts` | Add parts to knowledge source |
-| 42 | GET | `/finetune/workflows/{id}/knowledge/{ks_id}/parts` | List knowledge source parts |
-| 43 | DELETE | `/finetune/workflows/{id}/knowledge/{ks_id}/parts/{part_id}` | Delete single part |
-| 43b | PATCH | `/finetune/workflows/{id}/knowledge/{ks_id}/parts` | Batch update parts extraction_metadata |
-| 43a | POST | `/finetune/workflows/{id}/knowledge/search` | Semantic search top-k knowledge parts |
-| **Eval Jobs** (workflow-scoped) | | | |
-| 44 | GET | `/finetune/workflows/{id}/eval-jobs` | List eval jobs |
-| 45 | POST | `/finetune/workflows/{id}/eval-jobs` | Create eval job record |
-| 46 | DELETE | `/finetune/workflows/{id}/eval-jobs` | Delete all eval jobs for workflow |
-| 47 | GET | `/finetune/workflows/{id}/eval-jobs/{job_id}` | Get eval job |
-| 48 | PATCH | `/finetune/workflows/{id}/eval-jobs/{job_id}` | Update eval job status |
-| 49 | DELETE | `/finetune/workflows/{id}/eval-jobs/{job_id}` | Delete eval job |
+| 31 | GET | `/finetune/workflows/{id}/knowledge` | List knowledge sources |
+| 32 | POST | `/finetune/workflows/{id}/knowledge` | Create knowledge source |
+| 33 | PUT | `/finetune/workflows/{id}/knowledge` | Upsert knowledge source |
+| 34 | DELETE | `/finetune/workflows/{id}/knowledge` | Soft delete all knowledge sources |
+| 35 | GET | `/finetune/workflows/{id}/knowledge/count` | Count knowledge sources |
+| 36 | POST | `/finetune/workflows/{id}/knowledge/chunk` | Chunk knowledge for extraction |
+| 37 | POST | `/finetune/workflows/{id}/knowledge/trace` | Create knowledge trace |
+| 38 | DELETE | `/finetune/workflows/{id}/knowledge/trace/{trace_id}` | Delete knowledge trace |
+| 39 | GET | `/finetune/workflows/{id}/knowledge/{ks_id}` | Get single knowledge source |
+| 40 | DELETE | `/finetune/workflows/{id}/knowledge/{ks_id}` | Soft delete single knowledge source |
+| 41 | GET | `/finetune/workflows/{id}/knowledge/{ks_id}/file` | Download knowledge source file |
+| 42 | POST | `/finetune/workflows/{id}/knowledge/{ks_id}/parts` | Add parts to knowledge source |
+| 43 | GET | `/finetune/workflows/{id}/knowledge/{ks_id}/parts` | List knowledge source parts |
+| 44 | DELETE | `/finetune/workflows/{id}/knowledge/{ks_id}/parts/{part_id}` | Delete single part |
+| 45 | PATCH | `/finetune/workflows/{id}/knowledge/{ks_id}/parts` | Batch update parts extraction_metadata |
+| 46 | POST | `/finetune/workflows/{id}/knowledge/search` | Semantic search top-k knowledge parts |
+| **Evaluations (workflow-scoped metadata)** | | | |
+| 47 | GET | `/finetune/workflows/{id}/evaluations` | List evaluation metadata rows for workflow |
+| 48 | DELETE | `/finetune/workflows/{id}/evaluations` | Delete all evaluation metadata rows for workflow |
+| 49 | GET | `/finetune/workflows/{id}/evaluations/{job_id}` | Get evaluation metadata row by ID |
 | **Dataset** (workflow-scoped, cloud sync) | | | |
 | 50 | POST | `/finetune/workflows/{id}/dataset/generate` | Generate dataset JSONL from workflow |
 | 51 | POST | `/finetune/workflows/{id}/dataset/generate/status` | Check dataset generation status |
@@ -95,20 +92,17 @@ All endpoints use JSON unless noted. Auth via `Authorization: Bearer <token>` he
 | **Analytics & Evaluations** (workflow-scoped, read-only) | | | |
 | 65 | GET | `/finetune/workflows/{id}/analytics` | Get dataset analytics |
 | 66 | GET | `/finetune/workflows/{id}/finetune-evaluations` | Per-epoch training evaluations |
-| **Cross-Workflow Eval Jobs** | | | |
-| 67 | GET | `/finetune/eval-jobs` | List eval jobs by status (cross-workflow) |
-| 68 | GET | `/finetune/eval-jobs/{job_id}` | Get eval job by ID (cross-workflow) |
 | **Analytics** (non-workflow-scoped) | | | |
-| 71 | POST | `/finetune/analytics/dry-run` | Dataset analytics dry run |
+| 67 | POST | `/finetune/analytics/dry-run` | Dataset analytics dry run |
 | **Evaluations** (non-workflow-scoped, cloud) | | | |
-| 72 | POST | `/finetune/evaluations` | Create evaluation run |
-| 73 | GET | `/finetune/evaluations/{evaluation_run_id}` | Poll evaluation results |
+| 68 | POST | `/finetune/evaluations` | Create evaluation run |
+| 69 | GET | `/finetune/evaluations/{evaluation_run_id}` | Poll evaluation results |
 | **Deployments** | | | |
-| 74 | POST | `/finetune/deployments` | Deploy model |
-| 75 | DELETE | `/finetune/deployments/{deployment_id}` | Delete deployment |
+| 70 | POST | `/finetune/deployments` | Deploy model |
+| 71 | DELETE | `/finetune/deployments/{deployment_id}` | Delete deployment |
 | **Topic Hierarchy AI** | | | |
-| 76 | POST | `/finetune/topic-hierarchy/generate` | Generate topic hierarchy |
-| 77 | POST | `/finetune/topic-hierarchy/adjust` | Adjust topic hierarchy |
+| 72 | POST | `/finetune/topic-hierarchy/generate` | Generate topic hierarchy |
+| 73 | POST | `/finetune/topic-hierarchy/adjust` | Adjust topic hierarchy |
 
 ---
 
@@ -535,7 +529,7 @@ Check the status of a running evaluator. Poll until complete.
 
 ---
 
-## 7. Eval Jobs (workflow-scoped + cross-workflow)
+## 7. Evaluations Metadata (workflow-scoped + cross-workflow)
 
 Track evaluation runs locally per workflow. These endpoints store eval metadata/history in the gateway DB. They do **not** start or stop cloud evaluation execution by themselves.
 
@@ -544,65 +538,25 @@ For actual run lifecycle:
 - Poll eval run: `GET /finetune/evaluations/{eval_id}`
 - Cancel eval run: `POST /finetune/workflows/{workflow_id}/jobs/{eval_id}/cancel`
 
-### POST `/finetune/workflows/{workflow_id}/eval-jobs`
-
-Create a local eval job record to track a cloud evaluation run.
-
-```bash
-curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/eval-jobs \
-  -H "Content-Type: application/json" \
-  -d '{
-    "cloud_run_id": "eval_xyz789",
-    "sample_size": 50,
-    "rollout_model": "gpt-4o-mini"
-  }'
-```
-
-### GET `/finetune/workflows/{workflow_id}/eval-jobs`
+### GET `/finetune/workflows/{workflow_id}/evaluations`
 
 List all eval jobs for a workflow. Shows history of evaluation runs with their statuses.
 
-### DELETE `/finetune/workflows/{workflow_id}/eval-jobs`
+### DELETE `/finetune/workflows/{workflow_id}/evaluations`
 
 Delete all eval jobs for a workflow.
 
-### GET `/finetune/workflows/{workflow_id}/eval-jobs/{job_id}`
+### GET `/finetune/workflows/{workflow_id}/evaluations/{job_id}`
 
 Get a single eval job by ID.
 
 > Use this endpoint for local tracking only. To cancel a real evaluation run, use:
 > `POST /finetune/workflows/{workflow_id}/jobs/{job_id}/cancel`
 
-```bash
-curl -X PATCH http://localhost:9090/finetune/workflows/WORKFLOW_ID/eval-jobs/JOB_ID \
-  -H "Content-Type: application/json" \
-  -d '{"status": "completed", "results": {...}}'
-```
+### Scope
 
-### DELETE `/finetune/workflows/{workflow_id}/eval-jobs/{job_id}`
-
-Delete a single eval job.
-
-### Cross-Workflow Eval Job Endpoints
-
-These endpoints operate outside workflow scope and are useful for dashboards/status views of local eval-job metadata.
-
-#### GET `/finetune/eval-jobs`
-
-List eval jobs by status across all workflows.
-
-```bash
-curl "http://localhost:9090/finetune/eval-jobs?status=running"
-```
-
-#### GET `/finetune/eval-jobs/{job_id}`
-
-Get an eval job by ID regardless of workflow.
-
-
-#### DELETE `/finetune/eval-jobs/{job_id}`
-
-Delete an eval job by ID regardless of workflow.
+Evaluation metadata endpoints are workflow-scoped only. There are no cross-workflow
+evaluation metadata listing/get endpoints.
 
 ---
 

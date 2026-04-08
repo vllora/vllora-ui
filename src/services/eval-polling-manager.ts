@@ -107,26 +107,39 @@ class EvalJobManager {
    * Cleans up stale pending jobs. Does NOT auto-start polling —
    * polling is controlled by the view (EvalJobsContext) lifecycle.
    */
-  async initialize(): Promise<void> {
+  async initialize(workflowId?: string): Promise<void> {
     if (this.initialized) return;
     this.initialized = true;
 
     try {
-      const pendingJobs = await evalJobService.getPending();
+      if (!workflowId) return;
+      const pendingJobs = await evalJobService.getByDataset(workflowId);
 
       // Clean up stale pending jobs (>60s old with no evaluation started)
       for (const job of pendingJobs) {
-        if (Date.now() - job.createdAt > 60000) {
-          await evalJobService.update(job.id, {
-            status: 'failed',
-            error: 'Job was interrupted before evaluation started',
-            completedAt: Date.now(),
+        if (job.status === 'pending' && Date.now() - job.createdAt > 60000) {
+          emitter.emit('vllora_eval_job_update', {
+            jobId: job.id,
+            job: {
+              ...job,
+              status: 'failed',
+              error: 'Job was interrupted before evaluation started',
+              completedAt: Date.now(),
+            },
           });
         }
       }
     } catch (error) {
       console.error('[EvalJobManager] Failed to initialize:', error);
     }
+  }
+
+  private async getWorkflowJob(
+    workflowId: string,
+    jobId: string,
+  ): Promise<EvalJob | null> {
+    const jobs = await evalJobService.getByDataset(workflowId);
+    return jobs.find((job) => job.id === jobId) ?? null;
   }
 
   /**
@@ -185,11 +198,8 @@ class EvalJobManager {
    * Cancel a running evaluation.
    * Fetches the latest snapshot first so partial scores are preserved.
    */
-  async cancelEval(jobId: string): Promise<void> {
-    this.stopPolling(jobId);
-
-    // Fetch partial results before marking cancelled
-    const job = await evalJobService.get(jobId);
+  async cancelEval(job: EvalJob): Promise<void> {
+    this.stopPolling(job.id);
     let partialResult: EvalJob['result'] | undefined;
     let partialSnapshot: EvalJob['pollingSnapshot'] | undefined;
     let cloudCancelFailed = false;
@@ -247,19 +257,16 @@ class EvalJobManager {
       }
     }
 
-    const cancelledJob = await evalJobService.update(jobId, {
+    await cancelFinetuneJob(job.workflowId, job.id);
+
+    const cancelledJob: EvalJob = {
+      ...job,
       status: 'cancelled',
       completedAt: Date.now(),
       ...(partialResult ? { result: partialResult } : {}),
-    });
-
-    if (cancelledJob) {
-      const jobWithSnapshot = {
-        ...cancelledJob,
-        ...(partialSnapshot ? { pollingSnapshot: partialSnapshot } : {}),
-      };
-      emitter.emit('vllora_eval_job_update', { jobId, job: jobWithSnapshot });
-    }
+      ...(partialSnapshot ? { pollingSnapshot: partialSnapshot } : {}),
+    };
+    emitter.emit('vllora_eval_job_update', { jobId: job.id, job: cancelledJob });
 
     const hasPartial = (partialSnapshot?.completed_rows ?? 0) > 0;
     if (cloudCancelFailed) {
@@ -281,15 +288,14 @@ class EvalJobManager {
    * This is the ONLY place we need evalJobService.get() — for one-off refreshes
    * where the caller doesn't have the full job object.
    */
-  async refreshJob(jobId: string): Promise<void> {
-    const job = await evalJobService.get(jobId);
+  async refreshJob(job: EvalJob): Promise<void> {
     if (!job || !job.evaluationRunId) return;
 
     const result = await getEvaluationResult(job.evaluationRunId);
 
     // Emit in-memory snapshot for UI (no PATCH to BE)
     const jobWithSnapshot = { ...job, pollingSnapshot: result };
-    emitter.emit('vllora_eval_job_update', { jobId, job: jobWithSnapshot });
+    emitter.emit('vllora_eval_job_update', { jobId: job.id, job: jobWithSnapshot });
 
     if (
       (result.status === 'completed' || result.status === 'failed') &&
@@ -375,7 +381,7 @@ class EvalJobManager {
       // If cloud says done, process results
       if (result.status === 'completed' || result.status === 'failed') {
         // Fetch full job from BE for handleJobComplete (needs sampleSize, etc.)
-        const fullJob = await evalJobService.get(jobId);
+        const fullJob = await this.getWorkflowJob(workflowId, jobId);
         if (fullJob) {
           await this.handleJobComplete(fullJob, result);
         }
@@ -389,14 +395,18 @@ class EvalJobManager {
         console.warn(`[EvalJobManager] Eval run not found (${httpStatus}), stopping poll for ${jobId}`);
         this.stopPolling(jobId);
         const errorMsg = `Evaluation run not found on server (ID: ${evaluationRunId})`;
-        const failedJob = await evalJobService.update(jobId, {
+        const failedJob: EvalJob = {
+          id: jobId,
+          evaluationRunId,
+          workflowId,
+          sampleSize: jobInfo.sampleSize,
+          rolloutModel: jobInfo.rolloutModel,
           status: 'failed',
           error: errorMsg,
           completedAt: Date.now(),
-        });
-        if (failedJob) {
-          emitter.emit('vllora_eval_job_update', { jobId, job: failedJob });
-        }
+          createdAt: jobInfo.createdAt,
+        };
+        emitter.emit('vllora_eval_job_update', { jobId, job: failedJob });
         await this.markWorkflowStepFailed(workflowId);
         return;
       }
@@ -409,14 +419,18 @@ class EvalJobManager {
       if (errorCount >= MAX_CONSECUTIVE_ERRORS) {
         this.stopPolling(jobId);
         const errorMsg = `Unable to reach evaluation server after ${MAX_CONSECUTIVE_ERRORS} attempts: ${lastError}`;
-        const unreachableJob = await evalJobService.update(jobId, {
+        const unreachableJob: EvalJob = {
+          id: jobId,
+          evaluationRunId,
+          workflowId,
+          sampleSize: jobInfo.sampleSize,
+          rolloutModel: jobInfo.rolloutModel,
           status: 'failed',
           error: errorMsg,
           completedAt: Date.now(),
-        });
-        if (unreachableJob) {
-          emitter.emit('vllora_eval_job_update', { jobId, job: unreachableJob });
-        }
+          createdAt: jobInfo.createdAt,
+        };
+        emitter.emit('vllora_eval_job_update', { jobId, job: unreachableJob });
         await this.markWorkflowStepFailed(workflowId);
         toast.error(`Evaluation failed: ${errorMsg}`);
       }
@@ -445,14 +459,13 @@ class EvalJobManager {
             ? `${failedCount}/${totalCount} rows failed during evaluation`
             : 'Evaluation failed on the cloud server';
 
-        const failedJob = await evalJobService.update(job.id, {
+        const failedJob: EvalJob = {
+          ...job,
           status: 'failed',
           error: errorDetail,
           completedAt: Date.now(),
-        });
-        if (failedJob) {
-          emitter.emit('vllora_eval_job_update', { jobId: job.id, job: failedJob });
-        }
+        };
+        emitter.emit('vllora_eval_job_update', { jobId: job.id, job: failedJob });
         await this.markWorkflowStepFailed(job.workflowId);
         toast.error(`Evaluation failed: ${errorDetail}`);
         emitter.emit('vllora_eval_job_completed', {
@@ -483,17 +496,16 @@ class EvalJobManager {
 
       await datasetService.updateEvalStats(job.workflowId, evalStats);
 
-      const completedJob = await evalJobService.update(job.id, {
+      const completedJob: EvalJob = {
+        ...job,
         status: 'completed',
         completedAt: Date.now(),
         result: evalStats,
         error: undefined,
-      });
-      if (completedJob) {
-        // Attach cloud results so UI has per-record data immediately
-        const jobWithResults = { ...completedJob, pollingSnapshot: result };
-        emitter.emit('vllora_eval_job_update', { jobId: job.id, job: jobWithResults });
-      }
+      };
+      // Attach cloud results so UI has per-record data immediately
+      const jobWithResults = { ...completedJob, pollingSnapshot: result };
+      emitter.emit('vllora_eval_job_update', { jobId: job.id, job: jobWithResults });
 
       // Update workflow step data
       try {
@@ -541,14 +553,13 @@ class EvalJobManager {
     } catch (error) {
       console.error('[EvalJobManager] Failed to process results:', error);
       const friendly = friendlyEvalError(error);
-      const errorJob = await evalJobService.update(job.id, {
+      const errorJob: EvalJob = {
+        ...job,
         status: 'failed',
         error: friendly,
         completedAt: Date.now(),
-      });
-      if (errorJob) {
-        emitter.emit('vllora_eval_job_update', { jobId: job.id, job: errorJob });
-      }
+      };
+      emitter.emit('vllora_eval_job_update', { jobId: job.id, job: errorJob });
       await this.markWorkflowStepFailed(job.workflowId);
       toast.error('Failed to process evaluation results', { description: friendly });
     }

@@ -1,7 +1,7 @@
 /**
  * API adapter for EvalJobService (Evaluation Jobs).
  *
- * Calls gateway /finetune/workflows/{workflowId}/eval-jobs endpoints.
+ * Calls gateway /finetune/workflows/{workflowId}/evaluations endpoints.
  * Replaces IndexedDB adapter.
  *
  * Naming: FE uses "EvalJob" internally, BE uses "eval_jobs".
@@ -49,25 +49,23 @@ function mapToFe(db: DbEvalJobResponse): EvalJob {
 // ─── Adapter ──────────────────────────────────────────────────────────────────
 
 function basePath(workflowId: string): string {
-  return `/finetune/workflows/${workflowId}/eval-jobs`;
+  return `/finetune/workflows/${workflowId}/evaluations`;
 }
 
 export const apiEvalJobAdapter: EvalJobService = {
-  async create(_job: Omit<EvalJob, 'id'>): Promise<EvalJob> {
-    // Eval jobs are created gateway-side as a side effect of
-    // POST /finetune/evaluations (see gateway create_evaluation handler).
-    // Callers should use createEvaluation() + evalJobService.getByDataset()
-    // to retrieve the row the gateway just inserted.
+  async create(job: Omit<EvalJob, 'id'>): Promise<EvalJob> {
+    void job;
     throw new Error(
-      'evalJobService.create is no longer supported — use createEvaluation() from finetune-api instead',
+      'Creating evaluation metadata rows is no longer supported via gateway API. Create an evaluation with POST /finetune/evaluations instead.',
     );
   },
 
   async get(id: string): Promise<EvalJob | null> {
-    const response = await api.get(`/finetune/eval-jobs/${id}`);
-    if (!response.ok && response.status === 404) return null;
-    const db = await handleApiResponse<DbEvalJobResponse>(response);
-    return mapToFe(db);
+    console.warn(
+      '[apiEvalJobAdapter] get(id) requires workflow scope; returning null.',
+      id,
+    );
+    return null;
   },
 
   async getByDataset(workflowId: string): Promise<EvalJob[]> {
@@ -77,34 +75,33 @@ export const apiEvalJobAdapter: EvalJobService = {
   },
 
   async getRunning(): Promise<EvalJob[]> {
-    const response = await api.get('/finetune/eval-jobs?status=running');
-    const data = await handleApiResponse<{ jobs: DbEvalJobResponse[] }>(response);
-    return data.jobs.map(mapToFe);
+    console.warn(
+      '[apiEvalJobAdapter] getRunning() is cross-workflow and not supported; returning empty list.',
+    );
+    return [];
   },
 
   async getPending(): Promise<EvalJob[]> {
-    const response = await api.get('/finetune/eval-jobs?status=pending');
-    const data = await handleApiResponse<{ jobs: DbEvalJobResponse[] }>(response);
-    return data.jobs.map(mapToFe);
+    console.warn(
+      '[apiEvalJobAdapter] getPending() is cross-workflow and not supported; returning empty list.',
+    );
+    return [];
   },
 
   async update(id: string, updates: Partial<EvalJob>): Promise<EvalJob | null> {
-    // Eval job persistence is owned by the gateway's EvalJobStateTracker
-    // (gateway/src/eval_state_tracker.rs), which polls the cloud every 30s
-    // and writes status + per-record scores directly to SQLite. The gateway
-    // no longer exposes PATCH /finetune/eval-jobs/{id} (removed in BE commit
-    // 27cb5b4). This method is retained as a client-side merge so callers
-    // get an updated EvalJob back for in-memory UI state + event emission,
-    // without a round-trip. The authoritative state will arrive on the next
-    // gateway read once the state tracker has picked it up.
-    const current = await this.get(id);
-    if (!current) return null;
-    return { ...current, ...updates };
+    console.warn(
+      '[apiEvalJobAdapter] update(id, updates) is not supported by gateway metadata routes; returning null.',
+      id,
+      updates,
+    );
+    return null;
   },
 
-  async delete(_id: string): Promise<void> {
-    // Per-id delete is not exposed by the gateway (only workflow-bulk delete).
-    // Callers should use deleteByDataset() instead.
+  async delete(id: string): Promise<void> {
+    console.warn(
+      '[apiEvalJobAdapter] delete(id) is not supported by gateway metadata routes; ignoring.',
+      id,
+    );
   },
 
   async deleteByDataset(workflowId: string): Promise<void> {

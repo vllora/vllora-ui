@@ -73,9 +73,9 @@ function useEvalJobs(props: {
 
   // Initialize manager and load jobs on mount
   useEffect(() => {
-    evalPollingManager.initialize();
+    evalPollingManager.initialize(workflowId);
     loadJobs();
-  }, [loadJobs]);
+  }, [loadJobs, workflowId]);
 
   // Track which jobs we've started polling for (prevents restart loop)
   const pollingJobIdsRef = useRef<Set<string>>(new Set());
@@ -102,7 +102,7 @@ function useEvalJobs(props: {
       const needsSnapshot = isTerminal && !job.pollingSnapshot && job.evaluationRunId;
       if (needsSnapshot && !refreshedJobIdsRef.current.has(job.id)) {
         refreshedJobIdsRef.current.add(job.id);
-        evalPollingManager.refreshJob(job.id).catch(() => {
+        evalPollingManager.refreshJob(job).catch(() => {
           // Allow retry when user opens eval detail view
           refreshedJobIdsRef.current.delete(job.id);
         });
@@ -168,13 +168,17 @@ function useEvalJobs(props: {
 
   // Cancel an evaluation
   const cancelDryRun = useCallback(async (jobId: string): Promise<void> => {
-    await evalPollingManager.cancelEval(jobId);
-  }, []);
+    const job = jobs.find((j) => j.id === jobId);
+    if (!job) return;
+    await evalPollingManager.cancelEval(job);
+  }, [jobs]);
 
   // Refresh a single job's data from the cloud-proxy
   const refreshJob = useCallback(async (jobId: string): Promise<void> => {
-    await evalPollingManager.refreshJob(jobId);
-  }, []);
+    const job = jobs.find((j) => j.id === jobId);
+    if (!job) return;
+    await evalPollingManager.refreshJob(job);
+  }, [jobs]);
 
   // Computed state
   const runningJob = useMemo(
