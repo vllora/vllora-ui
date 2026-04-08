@@ -1156,8 +1156,46 @@ def _auto_journal(
     if workflow_id and not journal.get("workflow_id"):
         journal["workflow_id"] = workflow_id
 
+    entries_list = journal["entries"]
+
+    # Deduplication: skip if the last entry is byte-identical. Prevents
+    # double-logging when pollers like poll-eval invoke _auto_journal twice
+    # in a single call chain.
+    if entries_list:
+        _last = entries_list[-1]
+        if (_last.get("step") == step and _last.get("action") == action
+                and _last.get("status") == status and _last.get("summary") == summary):
+            return _last.get("id", 0)
+
     timestamp = datetime.now(timezone.utc).isoformat()
-    next_id = max((e["id"] for e in journal["entries"]), default=0) + 1
+    next_id = max((e["id"] for e in entries_list), default=0) + 1
+
+    # Retry detection: count prior completed/fail entries for this (step, action).
+    # If any exist and we're logging a new terminal status, annotate with
+    # [retry N] so the user can see loop convergence without reading the
+    # transcript. Mirrors the same logic in pipeline_journal.log_milestone.
+    prior_terminal = [
+        e for e in entries_list
+        if e.get("step") == step and e.get("action") == action
+        and e.get("status") in ("completed", "fail")
+    ]
+    if prior_terminal and status in ("completed", "fail"):
+        attempt = len(prior_terminal) + 1
+        if not summary.startswith("[retry "):
+            summary = f"[retry {attempt}] {summary}"
+        if details is None:
+            details = {}
+        details = {**details, "retry_attempt": attempt}
+
+    # In-progress resolver: point any open in_progress entry for the same
+    # (step, action) at this terminal entry so the journal closes the loop
+    # without mutating history.
+    if status in ("completed", "fail"):
+        for e in entries_list:
+            if (e.get("step") == step and e.get("action") == action
+                    and e.get("status") == "in_progress"
+                    and "resolved_by_id" not in e):
+                e["resolved_by_id"] = next_id
 
     entry: dict = {
         "id": next_id,
