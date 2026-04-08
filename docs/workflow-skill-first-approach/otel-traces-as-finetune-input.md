@@ -39,7 +39,7 @@ did, on customer phrasings it has never seen.
 
 The classic use case: **replace an expensive frontier model (GPT-4o,
 Claude) used as the "brain" of a tool-using agent with a small, cheap,
-fast open model (e.g. Qwen 2B/4B) — without losing the ability to pick the
+fast open model (Qwen3.5-4B by default; 0.8B/2B/8B available) — without losing the ability to pick the
 right tool with the right arguments.**
 
 That's what makes the trace pipeline worth building. PDFs can't teach a
@@ -301,6 +301,152 @@ participates in training.
 The skill is what decides which traces feed which workflow. There is **no
 global trace browser.** Users don't shop for traces from a giant list
 — the skill picks, the workflow owns.
+
+### Storage: a separate `trace_bundles` table, FK from `knowledge_sources`
+
+Earlier drafts of this doc said traces would live in the same
+`knowledge_sources` table as PDFs, with a `kind="otel-trace"` discriminator
+and a raw OTLP-JSONL blob column on the same row. **That was wrong, and
+research disproves it.** Verified against the actual schemas of every
+production trace platform we checked, the consensus is unambiguous:
+
+| Platform | How traces are stored | How datasets link to traces |
+|---|---|---|
+| **[Langfuse](https://github.com/langfuse/langfuse/blob/main/packages/shared/prisma/schema.prisma)** | Separate `traces` + `observations` tables (moved to ClickHouse in v3) | `dataset_items.sourceTraceId` / `sourceObservationId` — soft FK by ID string |
+| **[Arize Phoenix](https://github.com/Arize-ai/phoenix/blob/main/MIGRATION.md)** | Separate `spans` + `traces` tables (one row per span, attributes as JSON column) | `dataset_examples.span_rowid` — hard FK |
+| **[LangSmith](https://blog.langchain.com/dataset-schemas/)** | Separate `runs` (traces) and `datasets` | `DatasetExample.source_run_id` |
+| **OTel collectors** ([ClickHouse](https://clickhouse.com/blog/storing-traces-and-spans-open-telemetry-in-clickhouse), [wperron/sqliteexporter](https://github.com/wperron/sqliteexporter)) | Always one row per span, in dedicated trace tables | (not dataset stores) |
+
+**No production platform stores traces as a blob column on a documents
+row.** Doing so would be unique to vLLora in a way no prior art supports.
+The "escape hatch from same-table-with-blob to a real schema later"
+claim from the earlier draft is also wrong: that migration is
+substantially more expensive than starting clean, because every consumer
+of `knowledge_sources` that touches the blob has to be updated.
+
+The right schema, per the research:
+
+```sql
+CREATE TABLE trace_bundles (
+    id            TEXT PRIMARY KEY,
+    project_id    TEXT NOT NULL REFERENCES projects(id),
+    name          TEXT,
+    source_system TEXT,           -- "phoenix" / "langfuse" / "user-upload" / etc.
+    uploaded_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    span_count    INTEGER,
+    model_names   TEXT,           -- JSON array: ["gpt-4o", ...]
+    token_total   INTEGER,
+    raw_payload   BLOB            -- Full OTLP-JSONL, optionally compressed
+);
+
+ALTER TABLE knowledge_sources ADD COLUMN trace_bundle_id TEXT
+    REFERENCES trace_bundles(id);
+-- kind = "otel-trace"  ⇒  trace_bundle_id IS NOT NULL
+-- kind = "document"    ⇒  trace_bundle_id IS NULL
+```
+
+Three properties this gets right:
+
+1. **`knowledge_sources` keeps its document-shaped schema clean.** No
+   NULL columns for non-trace rows, no opaque blobs in the main table.
+   The FK is the seam between document-flavored metadata and
+   trace-flavored payloads.
+2. **Bundle-level metadata is queryable** without deserializing the
+   blob — `model_names`, `span_count`, `source_system` are all
+   first-class columns. The UI's summary chips read from `trace_bundles`
+   directly.
+3. **Future migration to a fully normalized `spans` table is one SQL
+   statement.** When/if we need per-span querying ("filter by
+   `model=gpt-4o`," "link `dataset_examples` to specific spans"),
+   SQLite's `json_each()` decomposes the blob in-place:
+   `INSERT INTO spans SELECT ... FROM trace_bundles, json_each(raw_payload)`.
+   Self-contained within the `trace_bundles` boundary; doesn't touch
+   `knowledge_sources` or any pipeline table.
+
+The pipeline (`otel_extract.py`) reads `trace_bundles.raw_payload` and
+writes the same `knowledge_parts.json` format documents produce. Steps
+3–7 of the pipeline are unchanged. The UI's `OtelTraceSourceViewer`
+reads `knowledge_sources` for metadata + `trace_bundles.raw_payload`
+only when the user opens the viewer — not on every page load.
+
+See the tooling survey
+([`otel-extractor-tooling-survey.md`](./otel-extractor-tooling-survey.md))
+for the full four-option trade-off analysis (a/b/c/d) and the
+verified-against-prior-art reasoning.
+
+### UI: Workflow → Knowledge node → trace bundle viewer
+
+The workflow's Knowledge node renders a trace bundle as a clickable
+source row alongside any PDFs. Clicking the trace bundle opens a tab
+that visualizes the OTel spans inside the bundle — span tree,
+timeline, message bubbles, tool calls — using
+**[evilmartians/agent-prism](https://github.com/evilmartians/agent-prism)**,
+a React component library purpose-built for visualizing agent
+execution traces.
+
+```
+Workflow > Knowledge node
+├── 📄 contracts.pdf            (existing — opens PdfSourceViewer)
+└── 📡 phoenix-shopping-traces  (new — opens AgentPrism TraceViewer)
+        │
+        │ click
+        ▼
+   Tab opens:
+   ├── Tree view       (span hierarchy, errors highlighted)
+   ├── Timeline (Gantt) (concurrency, duration, cost accumulation)
+   ├── Details panel    (selected span: input/output, cost, tokens)
+   └── Sequence diagram (step-by-step replay)
+```
+
+**Why agent-prism specifically:**
+
+1. **Built for this exact use case.** It's a React component library
+   for visualizing agent execution traces — not a standalone app, not
+   a CLI. The flagship component `<TraceViewer>` renders all four
+   visualizations side-by-side.
+2. **OTel adapter ships out of the box.**
+   `openTelemetrySpanAdapter.convertRawDocumentsToSpans(otlpData)`
+   takes our `trace_bundles.raw_payload` directly and produces
+   agent-prism's internal schema. It recognizes `gen_ai.*`, `llm.*`,
+   and `retrieval.*` semconv attributes — exactly what
+   `otel-trace-types.ts` defines.
+3. **Stack match.** Requires React 19 + Tailwind 3 + TypeScript +
+   Radix UI — all of which vLLora UI already has.
+4. **Same install pattern as shadcn/ui.** Components are copied into
+   the project via `npx degit`, plus two npm data packages
+   (`@evilmartians/agent-prism-data`, `@evilmartians/agent-prism-types`).
+   The team is already familiar with this pattern from the existing
+   shadcn/ui usage.
+
+**Caveats worth knowing:**
+
+1. **Alpha release** (322 stars, actively developed). Pin a specific
+   version and revisit when it reaches 1.0. APIs may change between
+   versions and require manual rebase.
+2. **Tailwind config update needed**: must add `agent-prism/**` to
+   `tailwind.config.content` paths or the utility classes won't
+   compile.
+3. **Theme integration effort**: agent-prism uses CSS variable theme
+   tokens that need to merge with vLLora's existing design tokens.
+4. **Verify the LICENSE file** before committing — the README says
+   open source but the specific license needs confirmation.
+
+**Data flow at runtime:**
+
+```
+1. User clicks the trace bundle node in the Knowledge UI
+2. UI fetches GET /trace_bundles/{id} → row + raw_payload blob
+3. Pass raw_payload through openTelemetrySpanAdapter
+4. Render <TraceViewer data={[{ traceRecord, spans }]} /> in a tab
+```
+
+The existing `OtelTraceSourceViewer.tsx` we built earlier becomes a
+thin wrapper around `<TraceViewer>` — most of yesterday's hand-rolled
+viewer code is replaced by the library, saving an estimated ~1000
+LOC of React work that the team would otherwise have to write
+(timeline / span tree / sequence diagram from scratch).
+
+See the tooling survey for the full agent-prism integration findings.
 
 ---
 
@@ -1302,14 +1448,43 @@ See the full workflow diagram above (Stage 6) for the gate criteria.
 > responsibility, not v1's. See `otel-extractor-tooling-survey.md`
 > for the local-vs-cloud scope split.
 
-**No BC warm-start stage.** The base model we finetune (Qwen 2B/4B,
-Llama-3.2, or equivalent) ships with tool-calling already baked in
-from its instruction-tuning phase. It already knows JSON tool-call
-syntax, how to parse a tool schema from a system prompt, how to emit
-valid arguments given parameter descriptions, and multi-turn
-conversation with tool results. Adding a supervised warm-start on top
-of that would re-teach things the base model already knows. See "Why
-we skip BC warm-start" below for the full rationale.
+**No BC warm-start stage.** The base model we finetune ships with
+tool-calling already baked in from its instruction-tuning phase. It
+already knows JSON tool-call syntax, how to parse a tool schema from
+a system prompt, how to emit valid arguments given parameter
+descriptions, and multi-turn conversation with tool results. Adding a
+supervised warm-start on top of that would re-teach things the base
+model already knows. See "Why we skip BC warm-start" below for the
+full rationale.
+
+**Recommended base model: [Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B)**
+(Apache 2.0). Verified against the model survey in the tooling
+companion doc:
+
+- vLLM tool-call parser: `--tool-call-parser qwen3_coder
+  --enable-auto-tool-choice` (mainline vLLM, JSON malformation bug
+  fixed in [PR #35347](https://github.com/vllm-project/vllm/pull/35347))
+- Unsloth GRPO: supported with `fast_inference=False`
+- FP8 GRPO VRAM: ~8–10 GB, fits comfortably on H100 80GB with K=8
+  rollout headroom
+- Apache 2.0 license, no commercial-use restrictions
+
+**Upgrade tier for complex routing: `Qwen3-8B`** — same Hermes
+parser, ~16 GB VRAM with FP8, demonstrated stable fine-tuning across
+benchmarks. Use when 4B's capacity isn't enough for the workflow's
+tool count or routing complexity.
+
+**Smaller tiers if VRAM is constrained:** `Qwen3.5-2B`,
+`Qwen3.5-0.8B` (existing vLLora model size options).
+
+**Earlier drafts said "Qwen 2B/4B or Llama-3.2 or equivalent."**
+That was vague and partly wrong: Llama 3.2 3B scores only **55.7% on
+BFCL v3** (vs the Qwen3 series at 70%+), uses prompt-engineering-
+dependent tool calling rather than a structured parser, and has more
+restrictive licensing. Drop "Llama-3.2 or equivalent" — Qwen3.5 is
+strictly better for our use case. The full per-model survey is in
+[`otel-extractor-tooling-survey.md`](./otel-extractor-tooling-survey.md)
+under "Base model survey for tool-routing fine-tuning."
 
 The cloud runs GRPO directly on the tool-capable base:
 
@@ -1552,8 +1727,9 @@ is what matters.**
 
 ## The honest goal statement
 
-> Run **GRPO directly on a tool-capable small open model** (Qwen 2B/4B,
-> Llama-3.2, or equivalent) using a partial-credit programmatic grader
+> Run **GRPO directly on a tool-capable small open model** (Qwen3.5-4B
+> default, Qwen3-8B for complex routing, Qwen3.5-2B/0.8B for tighter
+> VRAM budgets) using a partial-credit programmatic grader
 > derived from the workflow's tool schema, to specialize the base
 > model's general tool-calling ability to the specific schema and
 > customer phrasings in the trace bundle. **No BC warm-start stage** —
@@ -1576,9 +1752,14 @@ is what matters.**
 Almost nothing. The same workflow shell, the same Knowledge node, the same
 records page, the same grader page, the same training page. **A trace
 bundle appears in the Knowledge node alongside any PDF**, with a different
-icon and a different viewer (a message-bubble timeline instead of a PDF
-reader). Summary stats on the source row show span count, tool names,
-model name, and so on.
+icon and a different viewer. Clicking the trace bundle row opens a tab
+that mounts
+**[evilmartians/agent-prism](https://github.com/evilmartians/agent-prism)**'s
+`<TraceViewer>` component (span tree + Gantt timeline + per-span details
++ sequence diagram replay). Summary stats on the source row show span
+count, tool names, model name, and so on — read directly from
+`trace_bundles` columns without parsing the blob. See "UI: Workflow →
+Knowledge node → trace bundle viewer" above for the integration details.
 
 There is no separate "traces" route, no global browse-and-pick UI, no
 trace-specific workflow type. The trace is a knowledge source, the
@@ -1635,9 +1816,11 @@ list.
   [langfuse.com/docs/tracing-data-model](https://langfuse.com/docs/tracing-data-model)
 
 - **Langfuse — Datasets and Experiments** — how Langfuse separates the
-  raw-trace store from the curated-dataset store. Mirrors our
-  "knowledge_sources table holds the blob" separation at row
-  granularity.
+  raw-trace store (`traces` + `observations` tables) from the curated-
+  dataset store (`datasets` + `dataset_items`), with `dataset_items`
+  carrying a `sourceTraceId` / `sourceObservationId` soft FK. This is
+  the precedent for our `knowledge_sources` → `trace_bundles` FK split
+  (see "Storage" subsection under "How traces enter the system").
   [langfuse.com/docs/evaluation/experiments/datasets](https://langfuse.com/docs/evaluation/experiments/datasets)
 
 - **Arize Phoenix — Extract Data from Spans** — `span_kind`-based

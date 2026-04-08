@@ -292,6 +292,499 @@ docs, source code, and paper abstracts as of April 2026.
 
 ---
 
+# Storage decision: where trace bundles live in the gateway database
+
+> **Decision (2026-04-08, research-backed):** Trace bundles live in a
+> **separate `trace_bundles` table** with a foreign key from
+> `knowledge_sources`. **Do not** merge them into `knowledge_sources`
+> as a `kind="otel-trace"` row with a raw blob column. Earlier drafts
+> of the design doc proposed the merged approach; verified prior art
+> contradicted it.
+
+## Why this is in the tooling survey, not just the concept doc
+
+The concept doc (`otel-traces-as-finetune-input.md`) has the
+high-level "what + why." This section is where the schema details,
+the four-option trade-off, the migration cost analysis, and the
+comparison against prior art live. It's implementation-flavored, so
+it belongs here.
+
+## The four storage options we considered
+
+| | Approach | Verdict | Why |
+|---|---|---|---|
+| **(a)** | Same `knowledge_sources` table, `kind="otel-trace"`, raw OTLP-JSONL in a `raw_blob` column on the same row | ❌ **Worst** | Conflates two different row shapes (PDF vs trace) in one table. SQLite page cache degrades when rows swell to 100KB+. The "escape hatch to split later" claim is wrong: every consumer of `knowledge_sources` that touches the blob has to be updated when migrating, which is the **most expensive** migration path. |
+| **(b)** | Same `knowledge_sources` table, blob in a 1:1 child file table | 🟡 Better than (a), still wrong | Schema hygiene better but still opaque at span level. Migration to a real schema later still required. |
+| **(c)** | Full normalized: `trace_bundles` + `spans` tables + FK from `knowledge_sources` | 🟡 Eventually correct | Matches Phoenix / Langfuse / LangSmith exactly. Per-span querying works. But schema complexity is paid up-front and per-span queries are unused in v1. |
+| **(d)** | **`trace_bundles` table only** (one row per upload bundle, raw OTLP-JSONL in a `raw_payload` blob), FK from `knowledge_sources` | ✅ **Recommended** | One new table. Bundle-level metadata queryable. Raw payload isolated for cheap migration to (c). Matches the spirit of prior art without paying per-span normalization cost up front. |
+
+## How production platforms actually do this (verified)
+
+| Platform | Trace storage | Dataset linkage |
+|---|---|---|
+| **Langfuse** ([schema.prisma](https://github.com/langfuse/langfuse/blob/main/packages/shared/prisma/schema.prisma)) | Separate `traces` + `observations` tables. Moved to ClickHouse in v3. | `dataset_items.sourceTraceId` / `sourceObservationId` — soft FK by ID string |
+| **Arize Phoenix** ([MIGRATION.md](https://github.com/Arize-ai/phoenix/blob/main/MIGRATION.md), [DeepWiki](https://deepwiki.com/Arize-ai/phoenix/5.3-datasets-and-experiments)) | Separate `spans` + `traces` tables. One row per span; attributes stored as a JSON column (not a full-payload blob). | `dataset_examples.span_rowid` — hard FK |
+| **LangSmith** ([dataset schemas blog](https://blog.langchain.com/dataset-schemas/)) | Separate `runs` (traces) and `datasets` | `DatasetExample.source_run_id` |
+| **OTel ClickHouse exporter** ([blog post](https://clickhouse.com/blog/storing-traces-and-spans-open-telemetry-in-clickhouse)) | One row per span. `Map(String, String)` for resource and span attributes. | (not a dataset store) |
+| **`wperron/sqliteexporter`** ([GitHub](https://github.com/wperron/sqliteexporter)) | Three tables: `spans`, `events`, `links`. Span attributes as JSON string column. Resource metadata inlined. | (not a dataset store) |
+
+**No production platform stores traces in a documents-or-knowledge
+table.** Traces are always a separate first-class entity at storage
+layer. The "trace → dataset ingredient" join happens at the
+application layer, via FK references like `sourceTraceId` /
+`span_rowid` / `source_run_id`. Doing anything else would be unique
+to vLLora in a way no prior art supports.
+
+## The recommended schema
+
+```sql
+CREATE TABLE trace_bundles (
+    id            TEXT PRIMARY KEY,
+    project_id    TEXT NOT NULL REFERENCES projects(id),
+    name          TEXT,
+    source_system TEXT,           -- "phoenix" / "langfuse" / "user-upload" / etc.
+    uploaded_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    span_count    INTEGER,
+    model_names   TEXT,           -- JSON array: ["gpt-4o", ...]
+    token_total   INTEGER,
+    raw_payload   BLOB            -- Full OTLP-JSONL, optionally compressed
+);
+
+ALTER TABLE knowledge_sources ADD COLUMN trace_bundle_id TEXT
+    REFERENCES trace_bundles(id);
+-- kind = "otel-trace"  ⇒  trace_bundle_id IS NOT NULL
+-- kind = "document"    ⇒  trace_bundle_id IS NULL
+```
+
+**`trace_bundles.raw_payload`** holds the full OTLP-JSONL of all
+spans in the bundle. The bundle-level metadata columns
+(`span_count`, `model_names`, `token_total`) are populated at upload
+time by parsing the payload once. They are queryable without
+deserializing the blob.
+
+**`knowledge_sources.trace_bundle_id`** is a nullable FK. For
+document sources it's NULL; for trace sources it points at the
+matching `trace_bundles` row. The discriminator is `kind` on
+`knowledge_sources`, same as today.
+
+## Why this is the right call at our scale
+
+Recapping our scale: 50–500 traces per upload, 10–100 KB per trace as
+JSON, ~5–50 MB total per workflow, ~10–50 workflows in v1.
+
+1. **The blob is under 100 KB in most cases.** SQLite's [Internal vs
+   External BLOBs benchmark](https://sqlite.org/intern-v-extern-blob.html)
+   shows in-DB storage wins under ~100 KB. We're in the right range
+   to put `raw_payload` in `trace_bundles` directly without filesystem
+   spillover.
+2. **Bundle-level queries are fast.** Filtering workflows by
+   `model_names`, `span_count`, or `source_system` doesn't touch
+   the blob.
+3. **`knowledge_sources` page cache stays warm.** Queries against the
+   document-shaped table (which all PDFs and any future doc-flavored
+   sources hit) don't get pushed out of cache by 50 MB of trace data
+   sitting on the same pages.
+4. **Migration to (c) is one SQL statement.** When/if we need
+   per-span querying:
+   ```sql
+   INSERT INTO spans (span_id, trace_bundle_id, ...)
+   SELECT json_extract(value, '$.spanId'),
+          trace_bundles.id,
+          ...
+   FROM trace_bundles, json_each(trace_bundles.raw_payload);
+   ```
+   Self-contained within the `trace_bundles` schema boundary.
+   Doesn't touch `knowledge_sources`, `topics`, `records`, or any
+   pipeline table. Compare to a migration from option (a), which
+   would require updating every query that reads `knowledge_sources`
+   for trace data.
+
+## Migration path if we need to revisit (option d → option c)
+
+When per-span querying becomes necessary (likely use cases:
+"filter training data by spans where `model=X`", "link
+`dataset_examples` to specific spans like Phoenix does"), the
+migration is:
+
+1. **Add a `spans` table** with columns from the
+   [`wperron/sqliteexporter`](https://github.com/wperron/sqliteexporter)
+   reference: `span_id`, `trace_bundle_id` (FK), `trace_id`,
+   `parent_span_id`, `name`, `kind`, `start_time`, `end_time`,
+   `status_code`, `attributes` (TEXT/JSONB), `events` (TEXT/JSONB).
+2. **Backfill in one pass** using `json_each()` on
+   `trace_bundles.raw_payload`.
+3. **Add `dataset_items.span_id` FK** matching the Langfuse
+   `sourceObservationId` / Phoenix `span_rowid` pattern.
+4. **`trace_bundles.raw_payload` can be nulled out** (archival) or
+   retained — either is fine since the data is now denormalized into
+   `spans`.
+
+The migration is self-contained within the `trace_bundles` /
+`spans` schema boundary and does not require touching any other
+pipeline table. **That isolation is exactly why option (d) is worth
+adopting now rather than option (a).**
+
+## Sources
+
+- [Langfuse Data Model](https://langfuse.com/docs/observability/data-model)
+- [Langfuse Architecture (Handbook)](https://langfuse.com/handbook/product-engineering/architecture)
+- [Langfuse `schema.prisma`](https://github.com/langfuse/langfuse/blob/main/packages/shared/prisma/schema.prisma)
+- [Langfuse: Remove Prisma traces references (PR #5672)](https://github.com/langfuse/langfuse/pull/5672)
+- [Langfuse Database Overview (DeepWiki)](https://deepwiki.com/langfuse/langfuse/3.1-database-overview)
+- [Arize Phoenix MIGRATION.md](https://github.com/Arize-ai/phoenix/blob/main/MIGRATION.md)
+- [Phoenix Datasets & Experiments (DeepWiki)](https://deepwiki.com/Arize-ai/phoenix/5.3-datasets-and-experiments)
+- [Phoenix Persistence (SQLite)](https://docs.arize.com/phoenix/deployment/persistence)
+- [LangSmith Dataset Schemas](https://blog.langchain.com/dataset-schemas/)
+- [LangSmith Fine-tune on Chat Runs (cookbook)](https://github.com/langchain-ai/langsmith-cookbook/blob/main/fine-tuning-examples/export-to-openai/fine-tuning-on-chat-runs.ipynb)
+- [ClickHouse: Storing OTel Traces and Spans](https://clickhouse.com/blog/storing-traces-and-spans-open-telemetry-in-clickhouse)
+- [`wperron/sqliteexporter`: SQLite OTel Exporter](https://github.com/wperron/sqliteexporter)
+- [SQLite: Internal vs External BLOBs benchmark](https://sqlite.org/intern-v-extern-blob.html)
+- [SQLite JSONB (3.45.0)](https://sqlite.org/forum/forumpost/fa6f64e3dc1a5d97)
+- [Lightweight SQLite OTel Collector](https://dev.manishsinha.me/sqlite-otel/)
+- [`RedShiftVelocity/sqlite-otel`](https://github.com/RedShiftVelocity/sqlite-otel)
+
+---
+
+# UI tooling: trace visualization
+
+> **Decision (2026-04-08, research-backed):** Use
+> **[evilmartians/agent-prism](https://github.com/evilmartians/agent-prism)**
+> for the workflow trace bundle viewer. It is a React component
+> library purpose-built for visualizing agent execution traces with
+> a native OTel adapter, and it matches vLLora UI's tech stack
+> (React 19, Tailwind 3, TypeScript, Radix UI) directly.
+
+## What agent-prism is
+
+A **React component library** — not a standalone app, not a CLI.
+The flagship `<TraceViewer>` component renders four visualizations
+side-by-side from a single OTel trace input:
+
+| View | What it shows |
+|---|---|
+| **Tree view** | Hierarchical span parent/child structure with collapsed-summary nodes for repetitive sequences and red highlights for errors |
+| **Timeline / Gantt** | Execution concurrency, bottlenecks, color-coded status, accumulated cost |
+| **Details panel** | Per-span: input/output content, cost, duration, tokens |
+| **Sequence diagram** | Step-by-step replay with play/pause for decision chains |
+
+**Stars / activity:** 322 GitHub stars, 376 commits on main, actively
+developed by Evil Martians. Alpha release — APIs may change between
+versions.
+
+## OTel adapter ships out of the box
+
+Two adapters are provided in `@evilmartians/agent-prism-data`:
+
+- **`openTelemetrySpanAdapter`** — converts OTLP JSON to agent-prism's
+  internal schema. Recognizes `gen_ai.*`, `llm.*`, `retrieval.*`
+  semantic conventions. **This is the direct path for our
+  `trace_bundles.raw_payload`.**
+- **`langfuseSpanAdapter`** — converts Langfuse observation format
+
+The data flow at runtime:
+
+```
+1. UI fetches GET /trace_bundles/{id} → row + raw_payload blob
+2. Pass raw_payload through openTelemetrySpanAdapter:
+   convertRawDocumentsToSpans(otlpData)
+3. Render <TraceViewer data={[{ traceRecord, spans }]} /> in a tab
+```
+
+## Stack compatibility
+
+| Requirement | agent-prism needs | vLLora UI has |
+|---|---|---|
+| React | 19+ | 19 ✓ |
+| Tailwind CSS | 3 | 3.4 ✓ |
+| TypeScript | yes | 5.9 ✓ |
+| Radix UI | `@radix-ui/react-collapsible`, `@radix-ui/react-tabs` | yes ✓ |
+| Vite | compatible | yes ✓ |
+
+Direct match on every dimension. Same tech stack as the existing
+shadcn/ui usage.
+
+## Installation model — shadcn-style, not pure npm
+
+```bash
+# Copy components into your project (you own the source)
+npx degit evilmartians/agent-prism/packages/ui/src/components \
+  src/components/agent-prism
+
+# Install the data and types packages from npm
+npm install @evilmartians/agent-prism-data @evilmartians/agent-prism-types
+```
+
+This is the same pattern vLLora UI already uses for shadcn/ui — the
+team is familiar with it. Implications:
+
+1. **You own the component source.** Customizing styling = editing
+   the files in your repo, not subclassing or theme overrides.
+2. **Tailwind config update needed.** Add `agent-prism/**` to
+   `tailwind.config.content` paths or the utility classes won't
+   compile.
+3. **Theme integration effort.** agent-prism uses CSS variable theme
+   tokens that need to merge with vLLora's existing design tokens.
+4. **Updates require manual rebase.** When agent-prism ships a new
+   version, re-run `npx degit` and reconcile against any local edits.
+
+## Caveats and watchouts
+
+1. **Alpha API stability.** Pin a specific version. Revisit when
+   agent-prism reaches 1.0. There's an open issue (#48) about a
+   missing filter component, so the feature set is still growing.
+2. **License verification.** The README says open source but the
+   specific license needs confirmation against the LICENSE file
+   before commit.
+3. **Per-span filtering** — agent-prism doesn't currently ship a
+   filter UI (issue #48). If we need "show me only execute_tool spans
+   in this bundle" filtering, we either wait for upstream or build
+   it ourselves.
+
+## What this saves us
+
+**Estimated ~1000 LOC of React work** that the team would otherwise
+have to write from scratch: timeline / Gantt component, span tree
+component, sequence diagram replay, details panel, parent-child
+navigation. The existing `OtelTraceSourceViewer.tsx` we built earlier
+becomes a thin wrapper around `<TraceViewer>`.
+
+## Sources
+
+- [evilmartians/agent-prism GitHub](https://github.com/evilmartians/agent-prism)
+- [AgentPrism Evil Martians blog post](https://evilmartians.com/chronicles/debug-ai-fast-agent-prism-open-source-library-visualize-agent-traces)
+- [@evilmartians/agent-prism-data on npm](https://www.npmjs.com/package/@evilmartians/agent-prism-data)
+
+---
+
+# Base model survey for tool-routing fine-tuning
+
+> **Decision (2026-04-08, research-backed):**
+> **`Qwen/Qwen3.5-4B`** is the recommended default base model for v1.
+> **`Qwen/Qwen3-8B`** is the upgrade tier for complex routing.
+> Smaller tiers (`Qwen3.5-2B`, `Qwen3.5-0.8B`) are available for
+> tighter VRAM budgets. **Drop "Llama-3.2 or equivalent" from earlier
+> drafts** — it scores significantly lower on tool-calling benchmarks
+> and uses prompt-engineering-dependent parsing.
+
+## Per-model survey
+
+| Model | License | Tool-calling support | Unsloth GRPO | vLLM parser | BFCL-class | Verdict |
+|---|---|---|---|---|---|---|
+| **Qwen3.5-4B** ★ | Apache 2.0 | Native, Hermes-style | ✓ (`fast_inference=False`) | `--tool-call-parser qwen3_coder` ([PR #35347](https://github.com/vllm-project/vllm/pull/35347) fixed JSON malformation bug) | Top-tier (Qwen3 series at 70-76 BFCL v3) | **YES — recommended default** |
+| **Qwen3-8B** | Apache 2.0 | Native, Hermes-style | ✓ FP8 ~16 GB VRAM | `--tool-call-parser hermes` | Top-tier; "lowest standard deviation across benchmarks" in 12-model comparisons | **YES — upgrade for complex routing** |
+| **Qwen3-4B** | Apache 2.0 | Native, Hermes-style | ✓ ~8-10 GB FP8 | Same parser path | Top-tier (small-model class) | **YES — alternative to 3.5-4B** |
+| **Qwen3.5-2B / 0.8B** | Apache 2.0 | Native, Hermes-style | ✓ tight VRAM | Same parser path | Smaller-model class | **YES — for VRAM-constrained deployment** |
+| Qwen2.5-7B | Apache 2.0 | Hermes-style | ✓ | Same parser path | Lower than Qwen3 series | **NO — superseded by Qwen3+** |
+| Llama 3.2 3B Instruct | Llama 3.2 Community License (more restrictive) | JSON-mode, prompt-engineering dependent | ✓ | Less stable parser path | **BFCL v3: 55.7%** | **NO — significantly lower BFCL than Qwen3-class** |
+| Llama 3.1 8B Instruct | Llama license | Native | ✓ | parser support exists | BFCL ~76% on llm-stats snapshot (treat with skepticism — old benchmark) | **MAYBE** if Llama-family compat is required |
+| Phi-4 mini Instruct (3.8B) | MIT | Native, no special tokens | ✓ ([issue #2682](https://github.com/unslothai/unsloth/issues/2682)) | No confirmed dedicated vLLM parser; uses prompt-format calling | No published BFCL score | **MAYBE** if MIT-only is required |
+| Mistral Small 3.2 (24B) | Apache 2.0 | Native, 84.78% function calling accuracy (internal metric) | ✓ but tight | Native parser | Strong | **NO — too big for comfortable GRPO on single H100 (K=8 rollouts get tight)** |
+| Gemma 3 4B/9B | Gemma license | Native via 6 special tokens | ✓ | **vLLM parser support unclear** — integration risk | No published BFCL for these sizes | **MAYBE for 9B**, but parser risk |
+
+## Why Qwen3.5-4B specifically
+
+1. **Proven vLLM parser path.** `--tool-call-parser qwen3_coder
+   --enable-auto-tool-choice` is mainline vLLM with the JSON
+   malformation bug fixed in PR #35347. No prompt engineering, no
+   fragile regex parsing.
+2. **Proven Unsloth GRPO path.** Documented working configuration:
+   set `fast_inference=False` when loading the model. FP8 GRPO
+   supported.
+3. **Comfortable GPU budget on H100 80GB.** ~8–10 GB for the model
+   with Unsloth FP8, leaving headroom for K=8 GRPO rollouts, large
+   batch sizes, or scaling G beyond 8.
+4. **Apache 2.0 license** — no commercial-use restrictions, no
+   Llama-style licensing concerns.
+5. **Most complete integration** of any small model in the 1B-7B
+   range as of April 2026 — Unsloth + TRL + vLLM all have native
+   support.
+6. **Already the vLLora default.** This recommendation isn't asking
+   the team to adopt something new — it's putting the existing
+   default on a documented, evidence-backed footing.
+
+## Cloud handoff fields the local pipeline must include
+
+Based on the model recommendation, the cloud handoff payload should
+specify:
+
+```jsonc
+{
+  "records": "...",                  // JSONL training records
+  "grader": "...",                   // grader spec (Stage 4 output)
+  "system_prompt": "...",            // rewritten prompt (Stage 5)
+  "base_model": "Qwen/Qwen3.5-4B",   // ← default
+  "training_config": {
+    "tool_call_parser": "qwen3_coder",
+    "unsloth_fast_inference": false,
+    "use_fp8": true
+  }
+}
+```
+
+The cloud team should pin TRL `transformers >= 5.0` for tool-use
+support, and confirm Unsloth's Qwen3.5 chat template fix is in
+their environment. These are cloud-side concerns, not local.
+
+## Sources
+
+- [Qwen3.5-4B HuggingFace](https://huggingface.co/Qwen/Qwen3.5-4B)
+- [Qwen3-8B HuggingFace](https://huggingface.co/Qwen/Qwen3-8B)
+- [Qwen3 Technical Report (arXiv:2505.09388)](https://arxiv.org/html/2505.09388v1)
+- [Qwen3 blog](https://qwenlm.github.io/blog/qwen3/)
+- [Unsloth Qwen3 blog](https://unsloth.ai/blog/qwen3)
+- [Unsloth Qwen3.5 docs](https://unsloth.ai/docs/models/qwen3.5)
+- [vLLM PR #35347 — Qwen3.5 tool calling fix](https://github.com/vllm-project/vllm/pull/35347)
+- [vLLM issue #19056 — Hermes parser streaming bug](https://github.com/vllm-project/vllm/issues/19056)
+- [Berkeley Function Calling Leaderboard V4](https://gorilla.cs.berkeley.edu/leaderboard.html)
+- [BFCL v3 leaderboard — llm-stats.com](https://llm-stats.com/benchmarks/bfcl-v3)
+- [BFCL v3 leaderboard — pricepertoken.com](https://pricepertoken.com/leaderboards/benchmark/bfcl-v3)
+- [Unsloth GRPO for Phi-4 — Issue #2682](https://github.com/unslothai/unsloth/issues/2682)
+
+---
+
+# Training data: where to get a real dataset large enough for GRPO
+
+> **Honest finding (2026-04-08):** **No public OTel-format dataset
+> is large enough for real GRPO training.** The Phoenix asset bucket
+> maxes out at ~600 KB demo fixtures. The best path forward is
+> `lambda/hermes-agent-reasoning-traces` (14,701 trajectories,
+> Apache 2.0) with a ~150 LOC converter from ShareGPT format to
+> OpenInference Parquet shape.
+
+## Top candidate: `lambda/hermes-agent-reasoning-traces`
+
+- **URL:** [huggingface.co/datasets/lambda/hermes-agent-reasoning-traces](https://huggingface.co/datasets/lambda/hermes-agent-reasoning-traces)
+- **Size:** 14,701 rows total (7,646 kimi config + 7,055 glm-5.1
+  config), **1.62 GB Parquet**
+- **Format:** ShareGPT — `conversations` list of `{from, value}`
+  messages with `<think>`, `<tool_call>`, `<tool_response>` blocks.
+  Tool schema in `tools` column. **Not OTel/OpenInference — needs
+  conversion.**
+- **Content:** Real execution traces from Kimi-K2.5 and GLM-5.1
+  running the NousResearch Hermes agent framework. Real terminal
+  commands, real file edits, real browser navigation. Avg 24 turns
+  per trajectory (kimi), 19 turns (glm-5.1). **Total 174,550 tool
+  calls.**
+- **9 tool categories, 10+ distinct tools:** `terminal_tool`,
+  `execute_code`, `file_tools`, `web_tools`, `browser_tool`,
+  `delegate_tool`, `mcp_tool`, `todo_tool`, `memory_tool`
+- **License:** Apache 2.0
+- **Estimated training records after extraction:** ~7,000–14,000
+  (well above the 2,000+ ideal target). With 14,701 multi-turn
+  trajectories at ~22 turns each and 40-60% surviving quality
+  filters, this is the only public dataset that gets us above
+  plumbing-test scale.
+- **Quality-filtered subset:**
+  [`DJLougen/hermes-agent-traces-filtered`](https://huggingface.co/datasets/DJLougen/hermes-agent-traces-filtered)
+  (3,679 rows) — useful for faster iteration before processing the
+  full set.
+
+## Why every other candidate fails
+
+| Dataset | Why it fails |
+|---|---|
+| **Phoenix asset bucket fixtures** | All ~600 KB / hundreds of spans — demo-scale, not training-scale |
+| **PatronusAI/TRAIL** (148 traces, OTel format) | Too small (148 traces, 1,987 spans). Designed as eval benchmark with annotations — using as training would leak labels |
+| **smolagents/codeagent-traces** (98k rows) | No tool_call/tool_response separation; code execution embedded in assistant content. No license. |
+| **glaiveai/glaive-function-calling-v2** (113k rows) | Single-function-call conversations (1-2 turns). SFT-flavored, not multi-step agent. No reward variance for GRPO. |
+| **hypervariance/function-calling-sharegpt** (87k rows) | Same problem — short 1-2 turn conversations |
+| **nebius/SWE-rebench-openhands-trajectories** (67k trajectories) | Only 3 tools (`bash`, `str_replace_editor`, `bash_tools`). Topic distribution degenerate for general agent training. SWE-domain only. |
+| **nebius/SWE-agent-trajectories** (80k rows) | Actions embedded as text in shell session format — harder to parse than the OpenHands variant |
+| **`xlam-function-calling-60k`** | Function calling but without trajectory structure |
+
+## What the converter looks like
+
+The Hermes dataset uses ShareGPT-style messages with embedded
+`<tool_call>` / `<tool_response>` XML-like blocks. Converting to
+OpenInference Parquet shape (so `otel_extract.py` can process it)
+needs:
+
+1. **Parse each conversation** — extract `<tool_call>` and
+   `<tool_response>` blocks from the assistant turns
+2. **Build synthetic OTel spans** — one LLM span per assistant
+   turn, with `gen_ai.input.messages` / `gen_ai.output.messages`
+   populated from the conversation context up to that point. One
+   `execute_tool` span per `<tool_call>` block.
+3. **Assign trace_id and span_id** — UUID per conversation,
+   per-span IDs derived from position
+4. **Write to Parquet** in OpenInference column schema (matching the
+   Phoenix `agents-toolcalling-tracesv2.parquet` format we already
+   tested with)
+
+**Estimated converter size: ~150 LOC of Python.** The Hermes
+trajectories are well-structured (validated by NousResearch's
+training pipeline), so the conversion is mechanical — no LLM
+involvement, no fuzzy parsing.
+
+## Recommended download command
+
+```bash
+# Quality-filtered subset (3,679 rows) — recommended for first run
+huggingface-cli download DJLougen/hermes-agent-traces-filtered \
+  --repo-type dataset \
+  --local-dir ./hermes-traces-filtered
+
+# Full kimi config (7,646 rows, ~800 MB) — for production training
+huggingface-cli download lambda/hermes-agent-reasoning-traces \
+  --repo-type dataset \
+  --include "data/kimi-*" \
+  --local-dir ./hermes-traces
+
+# Or both configs (14,701 rows, ~1.62 GB)
+huggingface-cli download lambda/hermes-agent-reasoning-traces \
+  --repo-type dataset \
+  --local-dir ./hermes-traces
+```
+
+Or in Python:
+
+```python
+from datasets import load_dataset
+
+# Quality-filtered subset for fast iteration
+ds = load_dataset("DJLougen/hermes-agent-traces-filtered", split="train")
+
+# Full dataset
+from datasets import concatenate_datasets
+kimi = load_dataset("lambda/hermes-agent-reasoning-traces", "kimi", split="train")
+glm  = load_dataset("lambda/hermes-agent-reasoning-traces", "glm-5.1", split="train")
+full = concatenate_datasets([kimi, glm])
+```
+
+## Fallback paths (if Hermes doesn't work)
+
+1. **Generate synthetic traces** — run smolagents + Phoenix
+   instrumentation against the GAIA benchmark (466 questions, gated
+   HF access). Produces real OTel traces in Phoenix Parquet format.
+   Disadvantage: requires GPU time and produces traces in the
+   pattern of *your* agent, not the distribution of production
+   behaviors.
+2. **Combine all Phoenix demo fixtures** — merge the 13 agent
+   fixtures into one dataset. After dedup and quality filtering,
+   you might get 1,000-3,000 spans total. Better than the 609-span
+   baseline but still borderline. Not recommended as a primary
+   strategy.
+3. **Capture from a production agent** — instrument an existing
+   production agent with OTel tracing for a few weeks, accumulate
+   traces, use those. Highest quality but requires both an agent and
+   patience.
+
+## Sources
+
+- [lambda/hermes-agent-reasoning-traces](https://huggingface.co/datasets/lambda/hermes-agent-reasoning-traces)
+- [DJLougen/hermes-agent-traces-filtered](https://huggingface.co/datasets/DJLougen/hermes-agent-traces-filtered)
+- [NousResearch/hermes-agent GitHub](https://github.com/NousResearch/hermes-agent)
+- [PatronusAI/TRAIL](https://huggingface.co/datasets/PatronusAI/TRAIL)
+- [TRAIL paper (arXiv:2505.08638)](https://arxiv.org/html/2505.08638v1)
+- [smolagents/codeagent-traces](https://huggingface.co/datasets/smolagents/codeagent-traces)
+- [nebius/SWE-rebench-openhands-trajectories](https://huggingface.co/datasets/nebius/SWE-rebench-openhands-trajectories)
+- [nebius/SWE-agent-trajectories](https://huggingface.co/datasets/nebius/SWE-agent-trajectories)
+- [glaiveai/glaive-function-calling-v2](https://huggingface.co/datasets/glaiveai/glaive-function-calling-v2)
+- [Salesforce/xlam-function-calling-60k](https://huggingface.co/datasets/Salesforce/xlam-function-calling-60k)
+- [Trace and Evaluate your Agent with Arize Phoenix (HF Blog)](https://huggingface.co/blog/smolagents-phoenix)
+
+---
+
 # Stages 4–9: Pipeline tooling survey
 
 > **Added 2026-04-08 in a follow-up research pass.** Stages 1–3 are
