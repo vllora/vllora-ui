@@ -11,7 +11,7 @@ materialize_seed.py → curated parquet
     → Recipe: curated seed + rag-retrieval column + llm-text columns
     → Preview job → review → Full job
     → GET /jobs/{id}/dataset
-    → convert_nemo_rows.py → training.jsonl
+    → convert_nemo_rows.py → training.jsonl + relations.json
     → validate_dataset.py --nemo
     → finetune.py upload-records
 ```
@@ -128,10 +128,16 @@ The `rag-retrieval` plugin is a custom NeMo Data Designer column generator that 
 | `gateway_url` | `http://localhost:9090` | Gateway base URL |
 | `top_k` | `15` | Number of chunks to retrieve |
 | `query_field` | `topic_query` | Row field used as the search query |
+| `part_ids_field` | `<name>_part_ids` | Metadata column containing the ordered retrieved `part.id` values |
+| `matches_field` | `<name>_matches_json` | Metadata column containing compact retrieval match metadata |
 
 **Recommended `query_field`:** Use `"topic_path"` for curated seeds — it contains the full hierarchical path (e.g., `CSF Core Functions > GOVERN Function`) which gives a good search query.
 
-**What it does:** For each row, it POSTs `{"phrase": row[query_field], "top_k": top_k}` to `POST /finetune/workflows/{workflow_id}/knowledge/search` and writes the concatenated chunk content into the named column (separated by `\n\n---\n\n`).
+**What it does:** For each row, it POSTs `{"phrase": row[query_field], "top_k": top_k}` to `POST /finetune/workflows/{workflow_id}/knowledge/search` and writes:
+
+- the concatenated chunk content into the named column (separated by `\n\n---\n\n`)
+- the ordered retrieved part IDs into `<name>_part_ids`
+- compact retrieval metadata into `<name>_matches_json`
 
 **In the recipe:**
 ```json
@@ -141,11 +147,13 @@ The `rag-retrieval` plugin is a custom NeMo Data Designer column generator that 
   "workflow_id": "YOUR_WORKFLOW_ID",
   "gateway_url": "http://localhost:9090",
   "top_k": 15,
-  "query_field": "topic_path"
+  "query_field": "topic_path",
+  "part_ids_field": "retrieved_chunks_part_ids",
+  "matches_field": "retrieved_chunks_matches_json"
 }
 ```
 
-Downstream LLM columns reference `{{retrieved_chunks}}` in their prompts.
+Downstream LLM columns reference `{{retrieved_chunks}}` in their prompts. The metadata columns are for exact traceability and for exporting deterministic `relations.json` from topic-level retrieval.
 
 ---
 
@@ -362,12 +370,14 @@ curl -sS "http://localhost:8000/api/data-recipe/jobs/$JOB_ID/dataset?limit=200&o
 python3 ${CLAUDE_SKILL_DIR}/scripts/convert_nemo_rows.py \
   --input finetune-project/nemo-dataset-page-1.json \
   --output finetune-project/training.jsonl \
-  --ground-truth-field reference_answer
+  --ground-truth-field reference_answer \
+  --workflow-id $WORKFLOW_ID \
+  --relations-output finetune-project/relations.json
 ```
 
 Filter by RAGAS-aligned judge scores with `--min-answerable 1.0 --min-groundedness 0.5 --min-specificity 1.0 --min-relevancy 0.5`. The converter detects all `judge_*`/`score_*` columns dynamically — no hardcoded field lists. It writes `nemo-metadata.jsonl` alongside `training.jsonl` with reference_answer, judge scores, and source fields.
 
-The converter preserves top-level `topic` from the NeMo row so `upload-records` can resolve topic assignment on the workflow. Use `--ground-truth-field <column>` to map any NeMo text column into evaluator-side `ground_truth`; `--include-ground-truth` is retained as a shortcut for `reference_answer`.
+The converter preserves top-level `topic` from the NeMo row so `upload-records` can resolve topic assignment on the workflow. It prefers exact `question_chunks_*` retrieval metadata for per-record `source_parts`, falls back to `retrieved_chunks_*` when needed, and only re-queries the gateway for older NeMo datasets that lack these metadata columns. `--relations-output` writes flat `{topic_identifier, part_identifier}` pairs directly from `retrieved_chunks_*`.
 
 **Validate:**
 ```bash
@@ -396,6 +406,10 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
 | `user_message` | Yes → `messages[1]` | The RFT prompt |
 | `reference_answer` | No → metadata sidecar | For grader writing and offline review |
 | `retrieved_chunks` | No → metadata sidecar | Source material used during generation |
+| `retrieved_chunks_part_ids` | No → metadata sidecar | Exact topic-level retrieved part IDs; can be exported to `relations.json` |
+| `retrieved_chunks_matches_json` | No → metadata sidecar | Compact topic-level retrieval metadata |
+| `question_chunks_part_ids` | No → metadata sidecar | Exact question-level retrieved part IDs for `source_parts` |
+| `question_chunks_matches_json` | No → metadata sidecar | Compact question-level retrieval metadata |
 | `chunk_text` | No → metadata sidecar | Original seed chunk |
 | `topic_path` | No → metadata sidecar | Topic context |
 | `judge_answerable` | No → metadata sidecar | AspectCritic score (0/1) — filter: = 1 |
@@ -471,11 +485,11 @@ The `rag-retrieval` plugin queries the gateway search API which returns ALL matc
 
 **Impact:** Records may be grounded in irrelevant document sections (e.g., "How to Get Tax Help" in an EIC calculator pipeline).
 
-**Workaround:** The `convert_nemo_rows.py` script recovers `source_parts` via gateway search with relevance filtering (when `--workflow-id` is provided). However, the NeMo generation itself still sees irrelevant chunks. A proper fix requires the NeMo server's `rag-retrieval` plugin to check `extraction_metadata.relevant` and skip parts marked `false`.
+**Workaround:** The `convert_nemo_rows.py` script prefers exact `*_matches_json` metadata and filters out hits explicitly marked `relevant: false` when building `source_parts` or exporting `relations.json`. However, the NeMo generation itself still sees the full retrieved chunk text. A proper fix requires the NeMo server's `rag-retrieval` plugin to skip parts marked `false` before building the prompt context.
 
-### Source traceability is recovered, not native
+### Exact traceability requires updated retrieval metadata columns
 
-NeMo's `rag-retrieval` column concatenates chunk text and discards part IDs. The `source_parts` field on converted records is recovered by re-querying the gateway with the `user_message` — this is an approximation, not an exact record of which parts were used during generation. For precise per-record traceability, use `generate_records.py` (Step 4) instead.
+Current NeMo recipes rely on the `rag-retrieval` metadata columns (`*_part_ids`, `*_matches_json`) for exact traceability. If you convert an older NeMo dataset created before those columns existed, `convert_nemo_rows.py` falls back to re-querying the gateway with `user_message`. That fallback is approximate and should be treated as legacy compatibility behavior, not the preferred path.
 
 ### System prompt must come from seed parquet
 

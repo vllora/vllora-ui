@@ -407,7 +407,9 @@ Calls `POST /finetune/workflows/{workflow_id}/knowledge/search` for each row and
   "workflow_id": "YOUR_WORKFLOW_ID",
   "gateway_url": "http://localhost:9090",
   "top_k": 15,
-  "query_field": "topic_path"
+  "query_field": "topic_path",
+  "part_ids_field": "retrieved_chunks_part_ids",
+  "matches_field": "retrieved_chunks_matches_json"
 }
 ```
 
@@ -417,8 +419,13 @@ Calls `POST /finetune/workflows/{workflow_id}/knowledge/search` for each row and
 | `gateway_url` | string | `"http://localhost:9090"` | Gateway base URL |
 | `top_k` | int (1–100) | `15` | Number of chunks to retrieve |
 | `query_field` | string | `"topic_query"` | Seed column to use as search phrase. Use `"topic_path"` for curated seeds |
+| `part_ids_field` | string | `"<name>_part_ids"` | Metadata column storing the ordered retrieved `part.id` values |
+| `matches_field` | string | `"<name>_matches_json"` | Metadata column storing compact retrieval match metadata |
 
-**Output:** Chunks concatenated with `\n\n---\n\n` separator. Reference as `{{retrieved_chunks}}` in downstream columns.
+**Output:**
+- Main column: chunks concatenated with `\n\n---\n\n` separator. Reference as `{{retrieved_chunks}}` in downstream columns.
+- Side-effect column: `<name>_part_ids` list of exact gateway part IDs
+- Side-effect column: `<name>_matches_json` compact retrieval metadata for exact `source_parts` recovery and `relations.json` export
 
 **Required columns:** `[query_field]`
 

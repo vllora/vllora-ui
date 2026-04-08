@@ -15,7 +15,9 @@
         "workflow_id": "<REPLACE: workflow ID>",
         "gateway_url": "http://localhost:9090",
         "top_k": 15,
-        "query_field": "topic_path"
+        "query_field": "topic_path",
+        "part_ids_field": "retrieved_chunks_part_ids",
+        "matches_field": "retrieved_chunks_matches_json"
       },
       {
         "name": "topic_context",
@@ -41,6 +43,8 @@
         "gateway_url": "http://localhost:9090",
         "top_k": 10,
         "query_field": "raw_question",
+        "part_ids_field": "question_chunks_part_ids",
+        "matches_field": "question_chunks_matches_json",
         "drop": true
       },
       {

@@ -443,9 +443,9 @@ workflow records + grader (on gateway)
   (optional) finetune.py harden-records  — see Layer 6 below
          ↓
   finetune.py create-training --base-model <chosen>
-  finetune.py poll-training
+  finetune.py poll-training [--no-early-stop when intentionally disabling monitor auto-cancel]
   ├── training-monitor subagent watches epoch evals
-  └── auto-cancel on ≥50% clipping → diagnose-clipping
+  └── auto-cancel on clipping, EMA plateau/degradation, or length exploitation unless `--no-early-stop`
 ```
 
 ### Layer 6: Post-Eval Signal Density Fix (Step 7c++ — optional)

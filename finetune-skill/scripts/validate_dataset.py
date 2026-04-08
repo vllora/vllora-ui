@@ -31,14 +31,20 @@ from pathlib import Path
 _NEMO_METADATA_FIELDS = {
     "reference_answer",
     "retrieved_chunks",
+    "retrieved_chunks_part_ids",
+    "retrieved_chunks_matches_json",
+    "question_chunks_part_ids",
+    "question_chunks_matches_json",
     "chunk_text",
     "source_file",
     "topic_path",
     "judge_accuracy",
     "judge_completeness",
     "judge_groundedness",
+    "judge_specificity",
     "judge_quality",
     "judge_reason",
+    "score_relevancy",
 }
 
 

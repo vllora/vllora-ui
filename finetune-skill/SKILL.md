@@ -382,6 +382,18 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/deduplicate_records.py finetune-project/train
 
 Spawn `nemo-data-generator` subagent. If NeMo unavailable, fall back to Step 4A.
 
+NeMo is retrieval-backed by default: the `rag-retrieval` columns call the gateway search API at generation time and now preserve exact retrieved part IDs alongside the text context. After fetching the NeMo dataset, convert it with:
+
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/convert_nemo_rows.py \
+  --input finetune-project/nemo-job-dataset.json \
+  --output finetune-project/training.jsonl \
+  --workflow-id $WORKFLOW_ID \
+  --relations-output finetune-project/relations.json
+```
+
+This uses exact NeMo retrieval metadata for `source_parts` when available and writes `relations.json` directly from topic-level retrieval hits (`retrieved_chunks_*`). The gateway search fallback is only for older NeMo datasets that predate these metadata columns.
+
 ---
 
 **4e. Quality check** — read records from every topic (3-5 per topic) and check:
@@ -707,6 +719,8 @@ These are the **only 3 base models** supported.
 
 > **K=8 is correct for most tasks.** K=4 is viable for short-output binary tasks; K=16 only for long-output hard tasks with dynamic sampling. Larger K does NOT reduce zero-variance collapse — it accelerates convergence then wastes compute. See [reference/training-metrics-guide.md](reference/training-metrics-guide.md) "K (Group Size) Selection Guide".
 
+**Do NOT pass `--no-early-stop` to `create-training`.** `create-training` only creates the cloud job; early stopping is controlled by `poll-training`.
+
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
   --workflow-id $WORKFLOW_ID --base-model "Qwen3.5-4B" \
@@ -722,6 +736,18 @@ Spawn `training-monitor` subagent, then poll:
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
   --file training-jobs/train-001.json --max-wait 7200
 ```
+
+By default, `poll-training` may auto-cancel a running job for completion clipping, EMA score plateau/degradation, or length exploitation.
+
+If you intentionally want the cloud job to continue even when rewards plateau, pass `--no-early-stop` to `poll-training`:
+
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
+  --file training-jobs/train-001.json --max-wait 7200 \
+  --no-early-stop
+```
+
+Do not restart `create-training` just to change this behavior; restart the local `poll-training` command with the same `train-NNN.json` file.
 
 **Never use `sleep 300`** — always use `poll-training`.
 
@@ -802,14 +828,20 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py filter-records \
 
 #### 8b. Post-Training Eval
 
+Use the provider/cloud job ID from the completed training job and add the `finetuned/` prefix. Do **not** pass raw `fine_tuned_model` or raw `provider_job_id` to eval — those produce "Model not found" errors.
+
 ```bash
+PROVIDER_JOB_ID=$(python3 -c "import json; print(json.load(open('training-jobs/train-001.json'))['provider_job_id'])")
+TRAINED_MODEL="finetuned/${PROVIDER_JOB_ID}"
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
-  --workflow-id $WORKFLOW_ID --model "TRAINED_MODEL_NAME" --output-dir finetune-project/evaluations
+  --workflow-id $WORKFLOW_ID --model "$TRAINED_MODEL" --output-dir finetune-project/evaluations
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval --file finetune-project/evaluations/eval-NNN.json
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
   --project-dir finetune-project --eval-file evaluations/eval-NNN.json \
   --changes "Post-training eval" --change-type baseline --verdict PASS
 ```
+
+If `provider_job_id` is missing from the local file, run `sync-jobs --workflow-id $WORKFLOW_ID --output-dir finetune-project` or fetch the completed training job status, then retry with `finetuned/<provider_job_id>`.
 
 Read improved AND degraded records per topic. Check if gains come from genuine skill or grader exploitation.
 

@@ -5,6 +5,8 @@
 
 Reads NeMo dataset rows (JSONL or JSON API response), validates required fields,
 optionally filters by judge scores, and writes training.jsonl + metadata sidecar.
+When exact rag-retrieval metadata is present, it also preserves per-record
+source_parts without a second search pass and can export relations.json.
 
 Usage:
   uv run scripts/convert_nemo_rows.py \
@@ -15,7 +17,8 @@ Usage:
     --input finetune-project/nemo-job-dataset-page-1.json \
     --output finetune-project/training.jsonl \
     --min-answerable 1.0 --min-groundedness 0.5 --min-specificity 1.0 \
-    --ground-truth-field reference_answer
+    --ground-truth-field reference_answer \
+    --relations-output finetune-project/relations.json
 
   cat nemo-rows.jsonl | uv run scripts/convert_nemo_rows.py \
     --output finetune-project/training.jsonl
@@ -34,6 +37,11 @@ from pathlib import Path
 # Training fields that go into messages[] — passthrough record fields are handled separately
 TRAINING_FIELDS = {"id", "system_prompt", "user_message"}
 RECORD_PASSTHROUGH_FIELDS = {"topic"}
+DEFAULT_EXACT_SOURCE_FIELDS = (
+    ("question_chunks_matches_json", "question_chunks_part_ids"),
+    ("retrieved_chunks_matches_json", "retrieved_chunks_part_ids"),
+)
+DEFAULT_RELATION_FIELDS = ("retrieved_chunks_matches_json", "retrieved_chunks_part_ids")
 
 # Any column name that starts with these prefixes is a score/judge field → metadata sidecar
 _SCORE_PREFIXES = ("judge_", "score_")
@@ -152,9 +160,8 @@ def recover_source_parts(
 ) -> list[str]:
     """Recover source_parts by re-querying the gateway with the user_message.
 
-    NeMo's rag-retrieval concatenates chunk text and discards part IDs.
-    This re-queries the gateway search API with the question to recover
-    the most relevant part IDs for traceability.
+    Legacy fallback for older NeMo datasets that do not include exact
+    retrieval metadata columns.
     """
     import requests
 
@@ -179,6 +186,108 @@ def recover_source_parts(
         return part_ids
     except Exception:
         return []
+
+
+def _load_jsonish(value):
+    if value is None:
+        return None
+    if isinstance(value, (list, dict)):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return None
+    return None
+
+
+def _part_ids_from_matches(value) -> list[str] | None:
+    parsed = _load_jsonish(value)
+    if not isinstance(parsed, list):
+        return None
+
+    part_ids: list[str] = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            continue
+        if item.get("relevant") is False:
+            continue
+        part_id = item.get("part_id")
+        if isinstance(part_id, str) and part_id and part_id not in part_ids:
+            part_ids.append(part_id)
+    return part_ids
+
+
+def _part_ids_from_field(value) -> list[str]:
+    parsed = _load_jsonish(value)
+    if not isinstance(parsed, list):
+        return []
+
+    part_ids: list[str] = []
+    for item in parsed:
+        if isinstance(item, str) and item and item not in part_ids:
+            part_ids.append(item)
+    return part_ids
+
+
+def extract_exact_source_parts(
+    row: dict,
+    field_pairs: tuple[tuple[str, str], ...] = DEFAULT_EXACT_SOURCE_FIELDS,
+) -> list[str]:
+    """Extract exact retrieved source part IDs from NeMo metadata columns.
+
+    Prefers compact match metadata so we can filter parts explicitly marked
+    irrelevant. Falls back to plain part ID arrays when only those exist.
+    """
+    for matches_field, part_ids_field in field_pairs:
+        part_ids = _part_ids_from_matches(row.get(matches_field))
+        if part_ids is not None:
+            if part_ids:
+                return part_ids
+            continue
+
+        part_ids = _part_ids_from_field(row.get(part_ids_field))
+        if part_ids:
+            return part_ids
+
+    return []
+
+
+def build_relations(
+    rows: list[dict],
+    matches_field: str = DEFAULT_RELATION_FIELDS[0],
+    part_ids_field: str = DEFAULT_RELATION_FIELDS[1],
+) -> list[dict]:
+    """Build flat relations.json entries from exact NeMo retrieval metadata."""
+    seen: set[tuple[str, str]] = set()
+    relations: list[dict] = []
+
+    for row in rows:
+        topic = row.get("topic")
+        if not isinstance(topic, str) or not topic.strip():
+            continue
+
+        part_ids = _part_ids_from_matches(row.get(matches_field))
+        if part_ids is None:
+            part_ids = _part_ids_from_field(row.get(part_ids_field))
+
+        for part_id in part_ids:
+            key = (topic, part_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            relations.append(
+                {
+                    "topic_identifier": topic,
+                    "part_identifier": part_id,
+                }
+            )
+
+    relations.sort(key=lambda rel: (rel["topic_identifier"], rel["part_identifier"]))
+    return relations
 
 
 def convert_row(
@@ -300,6 +409,13 @@ def main() -> None:
         "--source-parts-top-k", type=int, default=5,
         help="Number of parts to recover per record via gateway search (default: 5)",
     )
+    parser.add_argument(
+        "--relations-output", type=Path, default=None,
+        help=(
+            "Optional path to write relations.json using exact NeMo retrieval metadata "
+            "(topic -> retrieved part IDs from retrieved_chunks_* columns)."
+        ),
+    )
     args = parser.parse_args()
 
     # Build filter thresholds — RAGAS flags take precedence over aliases
@@ -336,15 +452,21 @@ def main() -> None:
         print("Error: All rows filtered out — lower thresholds or check judge scores", file=sys.stderr)
         sys.exit(2)
 
-    # Recover source_parts via gateway search if workflow_id is provided
+    # Recover source_parts via gateway search only when exact NeMo metadata is absent.
     recover_parts = args.workflow_id is not None
     if recover_parts:
-        print(f"Source traceability: recovering source_parts via gateway search (top_k={args.source_parts_top_k})")
+        print(
+            "Source traceability: prefer exact NeMo retrieval metadata, "
+            f"fallback to gateway search (top_k={args.source_parts_top_k})"
+        )
 
     # Validate and convert
     all_errors: list[str] = []
     records: list[dict] = []
     metadata_rows: list[dict] = []
+    valid_rows: list[dict] = []
+    exact_source_count = 0
+    recovered_source_count = 0
 
     for i, row in enumerate(rows):
         errors = validate_nemo_row(row, i + 1, ground_truth_field=ground_truth_field)
@@ -352,14 +474,18 @@ def main() -> None:
             all_errors.extend(errors)
             continue
 
-        source_parts = None
-        if recover_parts:
+        source_parts = extract_exact_source_parts(row)
+        if source_parts:
+            exact_source_count += 1
+        elif recover_parts:
             source_parts = recover_source_parts(
                 user_message=row.get("user_message", ""),
                 workflow_id=args.workflow_id,
                 gateway_url=args.gateway_url,
                 top_k=args.source_parts_top_k,
             )
+            if source_parts:
+                recovered_source_count += 1
 
         records.append(convert_row(
             row, i,
@@ -367,6 +493,7 @@ def main() -> None:
             system_prompt_override=args.system_prompt_override,
             source_parts=source_parts,
         ))
+        valid_rows.append(row)
         metadata_rows.append(extract_metadata(row, i))
 
     # Write training.jsonl
@@ -383,6 +510,19 @@ def main() -> None:
                 f.write(json.dumps(meta) + "\n")
         print(f"Metadata: {len(metadata_rows)} rows → {meta_path}")
 
+    if args.relations_output is not None:
+        relations = build_relations(valid_rows)
+        if not relations:
+            print(
+                "Error: --relations-output requested but no exact NeMo retrieval metadata "
+                "was found in retrieved_chunks_part_ids/retrieved_chunks_matches_json",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        args.relations_output.parent.mkdir(parents=True, exist_ok=True)
+        args.relations_output.write_text(json.dumps(relations, indent=2) + "\n")
+        print(f"Relations:    {len(relations)} → {args.relations_output}")
+
     # Summary
     print(f"\n{'='*50}")
     print(f"Conversion complete")
@@ -394,6 +534,10 @@ def main() -> None:
     print(f"Output:        {args.output}")
     if ground_truth_field:
         print(f"Ground truth:  {ground_truth_field} -> ground_truth")
+    if exact_source_count:
+        print(f"Exact source_parts: {exact_source_count}")
+    if recovered_source_count:
+        print(f"Recovered source_parts: {recovered_source_count}")
 
     if all_errors:
         print(f"\n{len(all_errors)} validation error(s):", file=sys.stderr)

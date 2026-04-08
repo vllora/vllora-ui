@@ -130,7 +130,7 @@ The agent merges this into `config.json` when creating a new workflow. No skill 
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `use_nemo` | `false` | `false` → Step 4A: generate records via `generate_records.py` (default, no extra infrastructure). `true` → Step 4B: generate records via NeMo Data Designer (requires NeMo server at `localhost:8000` + OpenAI API key). |
+| `use_nemo` | `false` | `false` → Step 4A: generate records via `generate_records.py` (default, no extra infrastructure). `true` → Step 4B: retrieval-backed generation via NeMo Data Designer (requires NeMo server at `localhost:8000` + OpenAI API key). |
 
 #### NeMo Data Designer setup (when `use_nemo: true`)
 
@@ -552,7 +552,7 @@ All scripts use inline dependency declarations — run with `uv run script.py` (
 |--------|---------|
 | `scripts/finetune.py` | Gateway API wrapper — 34 subcommands including create-workflow, upload-knowledge/topics/relations/records/grader, verify, status, readiness-check, diagnose-grader (response pattern analysis), create-eval, poll-eval, **estimate-training** (compare models by cost/duration with optional constraints), create-training (pre-flight constraint check), poll-training, cancel-eval, cancel-training, search-knowledge, delete-knowledge, sync-jobs, update-part-relevance, difficulty-probe, data-quality-gate, print-row-outputs, **log-step** (writes to both `execution-log.md` and `pipeline-journal.json`), **log-iteration**, **filter-records**, **auto-journal** capabilities. `cancel-eval` now uses the real cancellation endpoint (`POST /finetune/workflows/{workflow_id}/jobs/{eval_id}/cancel`) rather than patching local eval-job status. |
 | `scripts/generate_records.py` | Default record generation from topics + knowledge — calls LLM per leaf topic with 5 prompt types; supports `--enrich-sources` (recommended), `--weight-by-difficulty`, `--use-rag`, **`--ground-truth-format`** (structured output tasks) |
-| `scripts/convert_nemo_rows.py` | Convert NeMo DataDesigner output rows to vLLora training.jsonl; filters by judge scores; writes `nemo-metadata.jsonl` sidecar |
+| `scripts/convert_nemo_rows.py` | Convert NeMo DataDesigner output rows to vLLora training.jsonl; prefers exact `question_chunks_*` retrieval metadata for `source_parts`, can export `relations.json` from `retrieved_chunks_*`, and falls back to gateway re-query only for older NeMo datasets |
 | `scripts/analyze_training.py` | Post-training analysis: reward trend, KL health, clipping, loss stability, grad norm, per-topic learning. Uses `provider_job_id` for epoch eval fetch (matching UI behavior). Per-record analysis: top 5 regressions/improvements with input, model output, grader reason. Auto-detects 3 epoch patterns: `epoch_collapse` (score drops >8%), `over_prediction` (R=1.00 + low precision), `output_collapse` (identical outputs). Zero-std alerts conditional on reward being flat (30-99% normal per arXiv:2509.21880) |
 | `scripts/print_metrics_table.py` | Print training metrics table (per-epoch or per-step) — human-readable format |
 | `scripts/chat_completion.py` | Call LLM via gateway — validates JSON output when `response_format` is `json_object` |
@@ -598,7 +598,7 @@ These scripts solve the #1 testing issue (agents creating shell scripts instead 
 vLLora uses reinforcement fine-tuning (RFT). The model generates its own responses during training and the grader scores them. Training data only needs system + user messages. We don't call it "RFT" in the skill — just "fine-tuning" to keep it simple.
 
 ### LLM-assisted data generation
-The skill uses `scripts/generate_records.py` to generate training records via LLM API calls. For each leaf topic, the script gathers curated source material from `relations.json` (built by the relation-builder subagent), then makes multiple LLM calls per topic — one per prompt type (explain, scenario, compare/analyze, edge-case, application) with different temperatures for diversity. Each record includes per-record `source_parts` traceability. With `--enrich-sources`, the script re-queries the gateway with each generated question to find additional matching parts. Optional NeMo Data Designer path available via `use_nemo: true` flag.
+The skill has two generation paths. `scripts/generate_records.py` is the non-NeMo path and starts from curated `relations.json`, then makes multiple LLM calls per topic with per-record `source_parts` traceability. The NeMo path (`use_nemo: true`) is retrieval-backed by default: `rag-retrieval` queries the gateway at generation time, preserves exact retrieved part IDs/metadata, and `convert_nemo_rows.py` can both recover exact `source_parts` and export `relations.json` from those retrieval hits. With `--enrich-sources`, the non-NeMo path can still re-query the gateway with each generated question to find additional matching parts.
 
 ### Only platform APIs documented
 The skill only covers endpoints the agent can't replicate locally: dataset upload, evaluation, training, model serving, and local workflow management. No Lucy chat completion endpoint, no IndexedDB, no browser-side tools.
@@ -616,7 +616,7 @@ The backend requires UUID-formatted dataset_id values. The skill includes `uuidg
 The skill requires `YYYY-MM-DD HH:MM:SS` format (not just date) so step durations are visible. Early tests showed agents using date-only timestamps, making it impossible to see how long each step took.
 
 ### Per-record source traceability
-Topics link to document parts via curated relations (Step 3d). Each generated record includes a `source_parts` array with the specific part IDs the LLM used to create that question. With `--enrich-sources`, the script re-queries the gateway with the generated question to find additional matching parts. This provides full traceability from a low-scoring record back to the exact source material.
+For the non-NeMo path, topics link to document parts via curated relations (Step 3d) and `--enrich-sources` can append question-specific matches. For the NeMo path, `rag-retrieval` now preserves exact retrieved part IDs and compact match metadata, so converted records can carry exact `source_parts` without a second search pass, and the same topic-level retrieval hits can be written back out as `relations.json`. This provides traceability from a low-scoring record back to the exact source material in either flow.
 
 ### Skill only talks to localhost:9090
 The skill ONLY communicates with the vLLora gateway at `localhost:9090`. It never calls cloud APIs directly. The gateway proxies cloud requests (eval, training, datasets) transparently. This simplifies the skill and keeps the gateway as the single integration point.

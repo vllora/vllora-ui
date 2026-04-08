@@ -98,7 +98,7 @@ Same structure as eval results but with multiple epochs:
 | Field | Path | What it tells you |
 |-------|------|-------------------|
 | Status | `status` | `pending`, `running`, `succeeded`, `failed`, `cancelled` |
-| Model name | `fine_tuned_model` | Output model identifier (after success) |
+| Eval model name | `finetuned/{provider_job_id}` | Model identifier for post-training eval; do not use raw `fine_tuned_model` |
 | Config | `training_config` | LR, LoRA rank, epochs, batch size used |
 | Error | `error_message` | What went wrong (if failed) |
 | Timing | `created_at`, `completed_at` | Duration — sanity check |

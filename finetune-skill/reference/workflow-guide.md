@@ -455,6 +455,18 @@ Continuation validation is mode-specific:
 - `finetuned/{cloud_job_id}`: source job must be successful (`succeeded`).
 - `checkpointed/{cloud_job_id}`: source job may be any terminal state (`succeeded`, `failed`, `cancelled`), which allows resuming from failed runs.
 
+### Evaluating a Completed Fine-Tune
+
+For post-training eval, use the same final-adapter model reference format:
+
+```bash
+TRAINED_MODEL="finetuned/${PROVIDER_JOB_ID}"
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
+  --workflow-id $WORKFLOW_ID --model "$TRAINED_MODEL" --output-dir finetune-project/evaluations
+```
+
+`PROVIDER_JOB_ID` is the training job's `provider_job_id` (the cloud-side job ID). Do not pass raw `fine_tuned_model` or raw `provider_job_id` as the eval model; use `finetuned/<provider_job_id>`.
+
 ### Training Config Guidance (RFT/GRPO)
 
 > **Note:** RFT needs significantly more epochs than SFT. The model must see each prompt multiple times, generating diverse responses each time, to learn from the reward signal. "Overfitting" in the SFT sense (memorization) is less of a concern because the model generates its own responses.

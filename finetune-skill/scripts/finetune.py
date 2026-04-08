@@ -31,6 +31,16 @@ from pathlib import Path
 import requests
 
 DEFAULT_BASE_URL = "http://localhost:9090"
+_EPOCH_CANDIDATE_FIELDS = (
+    "score",
+    "reason",
+    "status",
+    "rollout_content",
+    "rollout_output",
+    "completion",
+    "response",
+    "output",
+)
 
 
 def _api(method: str, url: str, **kwargs) -> dict:
@@ -49,6 +59,133 @@ def _api(method: str, url: str, **kwargs) -> dict:
         base = url.split("/finetune")[0]
         print(f"Error: Cannot connect to {base}. Is the gateway running?", file=sys.stderr)
         sys.exit(1)
+
+
+def _coerce_score(value: object) -> float | None:
+    """Parse numeric scores from gateway payloads that may return strings."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            return float(stripped)
+        except ValueError:
+            return None
+    return None
+
+
+def _epoch_sort_key(key: object) -> tuple[int, float | str]:
+    """Sort epoch keys numerically when possible, then lexically."""
+    try:
+        return (0, float(key))
+    except (TypeError, ValueError):
+        return (1, str(key))
+
+
+def _normalize_epoch_candidate_dict(item: dict) -> list[dict]:
+    """Normalize one candidate dict or dict-of-lists payload."""
+    field_values = {
+        field: item[field]
+        for field in _EPOCH_CANDIDATE_FIELDS
+        if field in item
+    }
+    if not field_values:
+        return []
+
+    has_sequence = any(
+        isinstance(value, (list, tuple))
+        for value in field_values.values()
+    )
+
+    def _build_candidate(source: dict[str, object]) -> dict:
+        candidate: dict = {}
+        score = _coerce_score(source.get("score"))
+        if score is not None:
+            candidate["score"] = score
+        for field, value in source.items():
+            if field == "score" or value is None:
+                continue
+            candidate[field] = value
+        return candidate
+
+    if not has_sequence:
+        candidate = _build_candidate(field_values)
+        return [candidate] if candidate else []
+
+    max_len = max(
+        len(value)
+        for value in field_values.values()
+        if isinstance(value, (list, tuple))
+    )
+    candidates: list[dict] = []
+    for idx in range(max_len):
+        source = {}
+        for field, value in field_values.items():
+            if isinstance(value, (list, tuple)):
+                source[field] = value[idx] if idx < len(value) else None
+            else:
+                source[field] = value
+        candidate = _build_candidate(source)
+        if candidate:
+            candidates.append(candidate)
+    return candidates
+
+
+def _normalize_epoch_candidates(raw: object) -> list[dict]:
+    """Flatten mixed gateway epoch payloads into candidate dicts."""
+    candidates: list[dict] = []
+
+    def _visit(value: object) -> None:
+        if value is None:
+            return
+        if isinstance(value, dict):
+            if any(field in value for field in _EPOCH_CANDIDATE_FIELDS):
+                normalized = _normalize_epoch_candidate_dict(value)
+                if normalized:
+                    candidates.extend(normalized)
+                    return
+            for nested in value.values():
+                _visit(nested)
+            return
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                _visit(item)
+            return
+
+        score = _coerce_score(value)
+        if score is not None:
+            candidates.append({"score": score})
+        elif isinstance(value, str):
+            candidates.append({"rollout_output": value})
+
+    _visit(raw)
+    return candidates
+
+
+def _iter_epoch_candidates(epochs: object, reverse: bool = False):
+    """Yield normalized candidates for each epoch in sorted order."""
+    if not isinstance(epochs, dict):
+        return
+    for epoch_key in sorted(epochs.keys(), key=_epoch_sort_key, reverse=reverse):
+        for candidate in _normalize_epoch_candidates(epochs.get(epoch_key)):
+            yield epoch_key, candidate
+
+
+def _best_epoch_candidate(items: object) -> dict | None:
+    """Return the highest-scoring candidate from one epoch payload."""
+    best_candidate = None
+    best_score = None
+    for candidate in _normalize_epoch_candidates(items):
+        score = candidate.get("score")
+        if score is not None:
+            if best_score is None or score > best_score:
+                best_candidate = candidate
+                best_score = score
+    return best_candidate
 
 
 def cmd_create_workflow(args: argparse.Namespace) -> None:
@@ -602,9 +739,7 @@ def cmd_filter_records(args: argparse.Namespace) -> None:
             continue
 
         for _epoch_key, candidates in r.get("epochs", {}).items():
-            if not isinstance(candidates, list):
-                continue
-            for c in candidates:
+            for c in _normalize_epoch_candidates(candidates):
                 score = c.get("score")
                 reason = c.get("reason", "")
                 if score is None:
@@ -775,14 +910,13 @@ def cmd_log_iteration(args: argparse.Namespace) -> None:
             if isinstance(row, dict):
                 topic = row.get("topic")
             for _ek, candidates in r.get("epochs", {}).items():
-                if isinstance(candidates, list):
-                    for c in candidates:
-                        s = c.get("score")
-                        if s is not None:
-                            score_val = float(s)
-                            scores.append(score_val)
-                            if topic:
-                                topic_scores[topic].append(score_val)
+                for c in _normalize_epoch_candidates(candidates):
+                    s = c.get("score")
+                    if s is not None:
+                        score_val = float(s)
+                        scores.append(score_val)
+                        if topic:
+                            topic_scores[topic].append(score_val)
 
         avg_score = sum(scores) / len(scores) if scores else 0
         zero_rate = sum(1 for s in scores if s < 0.01) / len(scores) if scores else 0
@@ -1601,10 +1735,9 @@ def cmd_status(args: argparse.Namespace) -> None:
                 epochs = r.get("epochs", {})
                 if isinstance(epochs, dict):
                     for _ek, cands in epochs.items():
-                        if isinstance(cands, list):
-                            for c in cands:
-                                if isinstance(c, dict) and c.get("score") is not None:
-                                    scores.append(float(c["score"]))
+                        for c in _normalize_epoch_candidates(cands):
+                            if c.get("score") is not None:
+                                scores.append(float(c["score"]))
             if scores:
                 import statistics
                 n = len(scores)
@@ -1763,10 +1896,8 @@ def _extract_eval_data(results: list[dict]) -> dict:
         epochs = r.get("epochs", {})
         if isinstance(epochs, dict):
             for _epoch_key, candidates in epochs.items():
-                if not isinstance(candidates, list):
-                    continue
-                for c in candidates:
-                    if not isinstance(c, dict) or c.get("score") is None:
+                for c in _normalize_epoch_candidates(candidates):
+                    if c.get("score") is None:
                         continue
                     score = float(c["score"])
                     prompt_scores.append(score)
@@ -2364,20 +2495,16 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
         topic = _get_topic(row)
 
         # Try flat score field first
-        score = r.get("score")
+        score = _coerce_score(r.get("score"))
         reason = r.get("reason", "")
 
         # Fall back to epochs structure (finetune eval format)
         if score is None and "epochs" in r:
             epochs = r.get("epochs", {})
             # Get the latest epoch's scores
-            for ek in sorted(epochs.keys(), key=lambda x: float(x), reverse=True):
-                items = epochs[ek]
-                if not isinstance(items, list):
-                    items = [items]
-                if items:
-                    # Use the first (or best) score from this epoch
-                    best = max(items, key=lambda x: x.get("score", 0))
+            for ek in sorted(epochs.keys(), key=_epoch_sort_key, reverse=True):
+                best = _best_epoch_candidate(epochs.get(ek))
+                if best:
                     score = best.get("score")
                     reason = best.get("reason", "")
                     break
@@ -2685,9 +2812,7 @@ def cmd_diagnose_grader(args: argparse.Namespace) -> None:
     for r in results:
         topic = r.get("row", {}).get("topic", "unknown")
         for _epoch_key, candidates in r.get("epochs", {}).items():
-            if not isinstance(candidates, list):
-                continue
-            for c in candidates:
+            for c in _normalize_epoch_candidates(candidates):
                 score = c.get("score")
                 if score is None:
                     continue
@@ -3215,13 +3340,10 @@ def _compute_eval_partial_score(result: dict) -> tuple:
     scores = []
     for row in rows:
         epochs = row.get("epochs", {})
-        for _epoch_key, items in epochs.items():
-            if not isinstance(items, list):
-                items = [items]
-            for item in items:
-                score = item.get("score")
-                if score is not None and isinstance(score, (int, float)):
-                    scores.append(score)
+        for _epoch_key, item in _iter_epoch_candidates(epochs):
+            score = item.get("score")
+            if score is not None:
+                scores.append(score)
 
     if not scores:
         return None, 0, None, None
@@ -3253,9 +3375,7 @@ def _diagnose_and_decide(
     buckets: dict[float, list[str]] = defaultdict(list)
     for r in partial_results:
         for _epoch_key, candidates in r.get("epochs", {}).items():
-            if not isinstance(candidates, list):
-                continue
-            for c in candidates:
+            for c in _normalize_epoch_candidates(candidates):
                 score = c.get("score")
                 if score is not None:
                     buckets[round(float(score), 1)].append(
@@ -4420,13 +4540,10 @@ def _check_score_plateau(
     epoch_scores: dict[str, list[float]] = {}
     for row in results:
         epochs = row.get("epochs", {})
-        for epoch_key, items in epochs.items():
-            if not isinstance(items, list):
-                items = [items]
-            for item in items:
-                score = item.get("score")
-                if score is not None and isinstance(score, (int, float)):
-                    epoch_scores.setdefault(epoch_key, []).append(score)
+        for epoch_key, item in _iter_epoch_candidates(epochs):
+            score = item.get("score")
+            if score is not None:
+                epoch_scores.setdefault(epoch_key, []).append(score)
 
     # Warm-up guard: don't check until we have enough epochs.
     # GRPO's slow-start phase (arXiv:2507.18014) means early epochs may
@@ -4435,13 +4552,7 @@ def _check_score_plateau(
         return None
 
     # Sort epochs numerically and compute averages
-    def _sort_key(k: str):
-        try:
-            return float(k)
-        except (TypeError, ValueError):
-            return float("inf")
-
-    sorted_epochs = sorted(epoch_scores.keys(), key=_sort_key)
+    sorted_epochs = sorted(epoch_scores.keys(), key=_epoch_sort_key)
     epoch_avgs = [
         (k, sum(epoch_scores[k]) / len(epoch_scores[k]))
         for k in sorted_epochs
@@ -4623,16 +4734,13 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
                     if ep_results:
                         ep_scores: dict[str, list[float]] = {}
                         for r in ep_results:
-                            for ek, items in r.get("epochs", {}).items():
-                                if not isinstance(items, list):
-                                    items = [items]
-                                for item in items:
-                                    s = item.get("score")
-                                    if s is not None:
-                                        ep_scores.setdefault(ek, []).append(s)
+                            for ek, item in _iter_epoch_candidates(r.get("epochs", {})):
+                                s = item.get("score")
+                                if s is not None:
+                                    ep_scores.setdefault(ek, []).append(s)
                         if ep_scores:
                             print(f"\n── Final Progression Table ──", file=sys.stderr)
-                            for ek in sorted(ep_scores.keys(), key=lambda x: float(x)):
+                            for ek in sorted(ep_scores.keys(), key=_epoch_sort_key):
                                 sc = ep_scores[ek]
                                 avg_s = sum(sc) / len(sc)
                                 perf = sum(1 for s in sc if s >= 0.99) / len(sc)
@@ -4680,6 +4788,20 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
             )
 
             if status in ("succeeded", "completed"):
+                trained_eval_model = (
+                    f"finetuned/{provider_job_id}"
+                    if provider_job_id
+                    else "finetuned/<provider_job_id>"
+                )
+                provider_job_note = (
+                    ""
+                    if provider_job_id
+                    else (
+                        "\n"
+                        "      WARNING: provider_job_id was not found in the local training metadata. "
+                        "Run sync-jobs or fetch the training job status, then replace <provider_job_id> before eval."
+                    )
+                )
                 print(
                     f"\n⚠️  MANDATORY NEXT STEPS (do ALL of these in order):\n"
                     f"   1. Update execution-log.md with final progression table:\n"
@@ -4694,7 +4816,8 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
                     f"        --changes \"describe config + results\" --change-type baseline --verdict PASS\n"
                     f"   3. Run post-training eval:\n"
                     f"      uv run ${{CLAUDE_SKILL_DIR}}/scripts/finetune.py create-eval \\\n"
-                    f"        --workflow-id $WORKFLOW_ID --model \"{metadata.get('fine_tuned_model', 'TRAINED_MODEL')}\" --output-dir finetune-project/evaluations\n"
+                    f"        --workflow-id $WORKFLOW_ID --model \"{trained_eval_model}\" --output-dir finetune-project/evaluations\n"
+                    f"      NOTE: eval requires finetuned/<provider_job_id>; do not use raw fine_tuned_model or raw provider_job_id.{provider_job_note}\n"
                     f"   4. Compare trained vs base model per-record and decide:\n"
                     f"      DEPLOY (trained model meets requirements) / ITERATE (fix grader/data) / ESCALATE (report to user)\n"
                     f"      Log decision: log-step --action iteration_decision --summary \"[DEPLOY/ITERATE/ESCALATE]: [reason]\""
@@ -4806,16 +4929,13 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
                 if ep_results:
                     ep_scores: dict[str, list[float]] = {}
                     for r in ep_results:
-                        for ek, items in r.get("epochs", {}).items():
-                            if not isinstance(items, list):
-                                items = [items]
-                            for item in items:
-                                s = item.get("score")
-                                if s is not None:
-                                    ep_scores.setdefault(ek, []).append(s)
+                        for ek, item in _iter_epoch_candidates(r.get("epochs", {})):
+                            s = item.get("score")
+                            if s is not None:
+                                ep_scores.setdefault(ek, []).append(s)
                     if ep_scores:
                         print(f"\n  ── Progression Table (auto, {int(elapsed)}s) ──", file=sys.stderr)
-                        for ek in sorted(ep_scores.keys(), key=lambda x: float(x)):
+                        for ek in sorted(ep_scores.keys(), key=_epoch_sort_key):
                             sc = ep_scores[ek]
                             avg_s = sum(sc) / len(sc)
                             perf = sum(1 for s in sc if s >= 0.99) / len(sc)
@@ -6005,16 +6125,15 @@ def cmd_harden_records(args: argparse.Namespace) -> None:
         score = None
         reason = ""
         epochs = r.get("epochs", {})
-        for ek in sorted(epochs.keys(), key=lambda x: float(x), reverse=True):
-            items = epochs[ek]
-            if isinstance(items, list) and items:
-                best = max(items, key=lambda x: x.get("score", 0))
+        for ek in sorted(epochs.keys(), key=_epoch_sort_key, reverse=True):
+            best = _best_epoch_candidate(epochs.get(ek))
+            if best:
                 score = best.get("score")
                 reason = best.get("reason", "")
                 break
         if score is None:
             out = r.get("output", {})
-            score = out.get("score")
+            score = _coerce_score(out.get("score"))
             reason = out.get("reason", "")
 
         if score is not None and score >= args.min_score:
@@ -6645,17 +6764,9 @@ def cmd_print_row_outputs(args: argparse.Namespace) -> None:
         )
         sys.exit(1)
 
-    def _epoch_sort_key(k: str):
-        try:
-            return (0, float(k))
-        except (TypeError, ValueError):
-            return (1, str(k))
-
     print("epoch | rollout_output | score | reason")
     for epoch_key in sorted(epochs.keys(), key=_epoch_sort_key):
-        epoch_items = epochs.get(epoch_key) or []
-        if not isinstance(epoch_items, list):
-            epoch_items = [epoch_items]
+        epoch_items = _normalize_epoch_candidates(epochs.get(epoch_key))
         if not epoch_items:
             print(f"{epoch_key} |  |  | ")
             continue
