@@ -948,34 +948,86 @@ need to pick them up later.
 
 The grader checks two things: did the model pick the right tool(s), and
 did it produce the right argument values? Both are **mechanical checks**
-— string match on tool names, JSON-shape match on arguments.
+— string match on tool names, Jaccard overlap on argument keys and
+values. There is **no LLM judge.** No rubric, no scoring dimensions,
+no second model deciding "was this good."
 
-There is **no LLM judge.** No rubric, no scoring dimensions, no second
-model deciding "was this good." The grader is a deterministic verifier
-derived from the same tool schema the topics came from.
+The grader is a deterministic verifier derived from the same tool
+schema the topics came from. **The scoring formula is published:**
+[ToolRL (arXiv:2504.13958)](https://arxiv.org/abs/2504.13958) is the
+first systematic study of reward design for tool-use GRPO training,
+and its ablation (Table 7) shows fine-grained Jaccard decomposition
+beats coarse exact-match by **+1.58 points on Qwen2.5-3B** — "finer-
+grained reward decomposition provides richer learning signals."
 
-**Single tool call output** (Patterns A, B, and each step of C): score =
-tool name match + argument match. Wrong tool → floor (`0.02`). Right
-tool → `0.2` base + up to `0.8` partial credit proportional to matched
-arguments.
+#### The scoring formula (ToolRL-grounded)
 
-**Set output** (Pattern D — parallel tool calls): score = **set match**.
-The model's output is a set of tool calls; the ground truth is also a
-set. Score is the per-call average, with a penalty for missing or extra
-calls. Concretely: if ground truth has `K` tool calls and the model
-emits `M` calls, compute single-call scores for each matched pair by
-tool name, average them, and multiply by `min(K, M) / max(K, M)` so
-emitting too few or too many calls both hurt. Order does not matter
-inside a parallel set.
+For a single tool call:
 
-The set-match grader is exercised by the fixture — the "Compare the
-dishwasher and the toaster" trace has a parallel `[product_search,
-product_search]` output that any grader has to handle as a set or lose
-real signal.
+```
+r_name  = 1 if name(pred) == name(gt) else 0
+r_param = |keys(gt) ∩ keys(pred)| / |keys(gt) ∪ keys(pred)|   # Jaccard on arg keys
+r_value = Σ 𝟙[gt[k] == pred[k] for k in keys(gt) ∩ keys(pred)]
 
-This is why traces are a much cleaner training source than documents in
-one specific way: the reward is fully verifiable, with zero ambiguity
-and zero risk of grader gaming.
+S_raw = r_name + r_param + r_value
+S_max = 1 + len(gt_args)                     # one for the name, one per arg key
+score = max(0.02, S_raw / S_max)             # floor = 0.02, ceiling = 1.0
+```
+
+Concrete mapping: wrong tool → `0.02` floor. Right tool + no arg
+match → ~`(1 / (1 + n))`. Right tool + all args match →
+`(1 + n + n) / (1 + n) = (1 + 2n) / (1 + n)` which converges to 2.0
+for large n; we clamp at 1.0 on the output side. Partial arg matches
+fall proportionally.
+
+**Why the 0.02 floor (not 0.0)** — per our memory rule
+`feedback_grader_no_zero_hard_gate`, a grader returning 0.0 for
+attempted-but-wrong answers causes 80% zero-variance and flat training.
+The floor ensures wrong-tool rollouts still contribute a non-zero
+gradient. ToolRL's rescaled range `[-3, 4]` works because negative
+advantages are still gradient-bearing; our `[0.02, 1.0]` range is the
+equivalent for a non-negative reward formulation.
+
+#### Parallel tool calls (Pattern D) — set-match formula
+
+```python
+def grade_parallel(pred_calls, gt_calls) -> float:
+    per_call = [grade(p, best_match(p, gt_calls)) for p in pred_calls]
+    coverage = min(len(pred_calls), len(gt_calls)) / max(len(pred_calls), len(gt_calls))
+    return max(0.02, mean(per_call) * coverage)
+```
+
+The coverage penalty handles "too few" and "too many" calls
+symmetrically. BFCL's all-or-nothing parallel matching is **correct
+for benchmarking but wrong for GRPO training** — it produces too many
+zero-variance batches. The coverage-penalized average is what ToolRL's
+set-level Jaccard computation implicitly produces and is consistent
+with the single-call Jaccard formula applied element-wise.
+
+#### Edge-case handling (grounded in BFCL + ToolRL)
+
+| Case | Rule | Source |
+|---|---|---|
+| Extra arguments the model emitted | Include in the Jaccard `keys(∪)` denominator — shrinks `r_param`. **Don't ignore silently** (matches memory rule `feedback_oov_counts_as_fp`) | BFCL rejects entirely; our Jaccard penalizes proportionally |
+| Missing required arguments | Reduces `r_param` and `r_value` proportionally via Jaccard — no special case needed | — |
+| Int vs float (type lenient) | `int(1) == float(1.0)` passes; `str("1") != int(1)` fails | BFCL convention |
+| Nested dict values | Recurse one level, count leaf matches toward `r_value` | ToolRL |
+| Null / None values | Predicted `null` on required arg = miss; GT `null` matched by `null` = match | Standard |
+| Enum case differences | Case-insensitive string match | BFCL convention |
+| Float tolerance | **Exact equality** — no published grader uses epsilon tolerance | BFCL, ToolRL |
+
+See [`trace-grader-reference.md`](./trace-grader-reference.md) for
+the full Python implementation with unit tests for every edge case.
+
+#### Why this matters for our pipeline specifically
+
+Traces are a much cleaner training source than documents in one
+specific way: the reward is fully verifiable, with zero ambiguity
+and zero risk of grader gaming. This is the one area where the
+trace pipeline is strictly better than the document pipeline — and
+ToolRL confirms this advantage was **empirically measured**, not
+theoretical: fine-grained programmatic grading consistently beat
+holistic LLM-judge grading on tool routing.
 
 ### System prompt — extract structurally, then rewrite (don't lift verbatim)
 
@@ -1418,21 +1470,50 @@ What the probe does, conceptually:
      GRPO actually learns.
    - **Impossible:** zero rollouts succeeded. The model has no foothold.
 
-If the **learnable bucket is too small** (we propose `< 30%` of records),
-training is **blocked** with an explicit message: "this dataset is too
-easy or too hard for GRPO to learn from — add harder examples, add easier
-examples, or expand with paraphrase synthesis."
+**Three gates for tool-routing-specific probing** (adjusted from the
+PDF defaults based on tool-routing research):
 
-If a single tool's records are **mostly trivial** (e.g. `> 70% trivial`
-for `product_search`), training is **blocked or warned** with a
-default-mode-collapse message: the base model already prefers this tool
-too strongly and GRPO will just reinforce that prior.
+1. **`learnable_frac ≥ 25%`** — lower than the PDF `≥ 30%` threshold
+   because tool routing has a smaller discrete output space, so
+   zero-variance groups are more frequent even on good datasets. ToolRL
+   (arXiv:2504.13958) and IRC (arXiv:2604.02869) both train successfully
+   at K=4 with significant trivial mass, confirming that 25% is realistic
+   for this task class.
+2. **`trivial_wrong_frac ≤ 10%`** — a new trace-specific gate. Unlike
+   PDF records, tool routing can have two kinds of trivial records:
+   - **Trivial-correct**: all K rollouts score 1.0 (model knows this
+     cold — no gradient signal but not a failure)
+   - **Trivial-wrong**: all K rollouts score 0.02 (model locked onto a
+     wrong tool — actively harmful to training, indicates the base
+     model has a miscalibrated prior)
+   The PDF pipeline lumps these together; the trace pipeline tracks
+   them separately. If `trivial_wrong_frac > 10%`, the base model has
+   a pre-existing bias we need to address with contrastive data
+   (rather than hoping GRPO unlearns it).
+3. **No single tool > 70% trivial** — grouped by `gt_tool_name`, not
+   by topic. If one tool dominates the trivial-correct bucket, GRPO
+   will reinforce the base model's existing preference for that tool
+   and silently collapse (per `feedback_default_mode_collapse`). Drop
+   those records from training or add contrastive examples where
+   similar-looking requests should pick a different tool.
 
-Trivial records are **not deleted** — they stay in the dataset. Filtering
-them out is exactly the wrong move (their ground truth still anchors the
-loss). The probe is a gate, not a filter.
+**Plus one new check that doesn't exist in the PDF pipeline:**
 
-The output of this stage is a go/no-go decision. If go, training proceeds.
+4. **`refusal_frac ≥ 10%`** (if the workflow supports refusal as an
+   output). Trace bundles that contain zero refusal records will train
+   a model that never learns to refuse and will hallucinate tool calls
+   on every input. If the workflow's tool schema has a "no tool fits"
+   fallback path, the training set needs ≥10% refusal records to teach
+   it. PDFs don't have this concept because Q/A has no "refuse to
+   answer" equivalent.
+
+Trivial records are **not deleted** — they stay in the dataset.
+Filtering them out is exactly the wrong move (their ground truth still
+anchors the loss). The probe is a gate, not a filter.
+
+The output of this stage is a go/no-go decision. If all four gates
+pass, training proceeds. If any gate fails, the pipeline blocks with
+an actionable message explaining which gate failed and what to fix.
 See the full workflow diagram above (Stage 6) for the gate criteria.
 
 ### Stage 7 — Training (GRPO directly on a tool-capable base)
@@ -1508,32 +1589,133 @@ would otherwise create. We avoid compounding error by **not cloning in
 the first place**, not by cloning and then fixing it.
 
 From here on, the trace pipeline and the document pipeline are
-identical. GRPO sees a flat list of records and a programmatic
+almost identical. GRPO sees a flat list of records and a programmatic
 grader, and it doesn't know or care that the records came from a
 trace. See the full workflow diagram above (Stage 7) for one record's
 K=8 rollout spread and how it becomes a gradient update.
+
+#### Hyperparameter deltas from the PDF default
+
+The PDF pipeline defaults (`lr=1e-6`, `β=0`, `loss_type=dr_grpo`,
+`G=8`, `temperature=0.9`, `max_output_tokens` = GT P95 × 1.5,
+adaptive epochs) were tuned for document Q&A. Research on
+tool-routing-specific GRPO
+([ToolRL arXiv:2504.13958](https://arxiv.org/abs/2504.13958),
+[IRC arXiv:2604.02869](https://arxiv.org/abs/2604.02869),
+[Bespoke Labs](https://www.bespokelabs.ai/blog/improving-multi-turn-tool-use-with-reinforcement-learning),
+[RC-GRPO arXiv:2602.03025](https://arxiv.org/abs/2602.03025))
+confirms most of those defaults carry over, with **three recommended
+adjustments** and **one conditional escalation**:
+
+| Parameter | PDF default | Tool-routing | Rationale |
+|---|---|---|---|
+| `learning_rate` | `1e-6` | **Same** | Bespoke Labs uses 1e-6 for tool RL; IRC uses 2e-6 to 5e-7. Do NOT use the math-reasoning value (1e-5). |
+| `loss_type` | `dr_grpo` | **Same** | Eliminates length bias at algorithm level — relevant for tool routing since longer JSON shouldn't get artificial advantage. |
+| `β` (KL coefficient) | `0` | **Same as default, but escalate to `0.001` + ref model refresh every 100 steps if length blowup is observed** | Bespoke Labs explicitly found beta=0 + tool calling → completion length blowup. Their stable config: `β=0.001` with periodic ref model refresh. Conditional, not default. |
+| `G` (K rollouts) | `8` | **Keep 8; drop to `4` if `frac_reward_zero_std > 50%`** | ToolRL and IRC both use K=4 for tool routing. Short discrete outputs → harder to achieve diversity at K=8. Monitor early (step 50) and reduce if needed. |
+| `temperature` (train) | `0.9` | **Change to `1.0`** | ToolRL uses 1.0 explicitly "to encourage broader policy exploration." Tool routing's smaller output space needs the extra diversity. Eval stays at 0.0 (greedy). |
+| `max_output_tokens` | GT P95 × 1.5 | **Change to GT P95 × 1.3** | Tool calls are short (50-200 tokens for JSON). Bespoke Labs' main failure mode was length blowup → tighter cap prevents it. Typical tool-routing cap: 256-512 tokens. |
+| `epsilon` (clipping) | asymmetric `(3e-4, 4e-4)` | **Same** | No tool-routing-specific evidence recommends different values. DAPO asymmetric rationale still applies. |
+| Epochs | 10-30 (small), 5-10 (large) | **Same** | ToolRL uses 15 epochs on ~4K examples. Same range as PDF. |
+
+**Two tool-routing-specific watch conditions** during training:
+
+1. **Check `frac_reward_zero_std` at step 50.** If >70%, the policy
+   has collapsed to single-tool output — the "paradox of perfection"
+   from RC-GRPO. The small tool-call output space + already-tool-
+   capable base model means policy entropy can collapse faster than
+   in reasoning tasks. Defenses in order: (a) reduce K to 4, (b)
+   enable `β=0.001` with ref model refresh, (c) add more contrastive
+   training data for the dominant tool.
+2. **Check `mean_length` growth.** If it grows >30% without a
+   corresponding reward increase, length blowup is starting. Defense:
+   tighten `max_output_tokens` further, or enable `β=0.001`.
+
+**Hyperparameters NOT in this table** — if you don't see a parameter
+here, it means the tool-routing literature doesn't recommend changing
+it from the PDF default. Carry those values over verbatim.
 
 ### Stage 8 — Evaluation against unseen paraphrases
 
 The eval set is **not** a held-out slice of the training records. It's a
 **different set of customer phrasings asking for the same intents** —
 either captured from production traffic the agent saw later, or generated
-synthetically (e.g. "rephrase 'find me a tablet' 5 ways without changing
-the intent").
+synthetically.
 
 The eval grader is the same programmatic verifier from Stage 4. The
-metrics that matter:
+metrics split into three tiers — Tier 1 is always reported, Tier 2 is
+computed after every training iteration for diagnostics, Tier 3 is
+implemented only if training stalls after 2+ iterations.
 
-- **Tool-name accuracy:** what fraction of held-out paraphrases got the
-  right tool?
-- **Argument-match rate:** for the right-tool subset, what fraction of
-  ground-truth arguments did the model reproduce?
-- **Refusal precision/recall:** for held-out paraphrases that have no
-  matching tool, did the model correctly refuse?
+#### Tier 1 — required metrics
 
-These three numbers, on **never-before-seen phrasings**, are the real
-test. The training-set numbers are diagnostic only — they tell you
-whether the pipeline ran, not whether the model is useful.
+| Metric | Formula | Target |
+|---|---|---|
+| **Tool-name accuracy** | fraction where `pred.name == gt.name` | > 0.80 before training, > 0.92 after |
+| **Argument-match rate** | fraction where score = 1.0 on the right-tool subset | > 0.70 after |
+| **Overall grader mean** | `mean(scores)` over eval set | > 0.70 after |
+| **Per-tool grader score** | `mean(scores) grouped by gt_tool_name` | No tool below 0.50 after |
+| **Refusal precision / recall** | standard P/R on "no tool call" GT records | > 0.80 both |
+
+These metrics are computed on **never-before-seen customer phrasings**.
+The training-set numbers are diagnostic only — they tell you whether
+the pipeline ran, not whether the model is useful.
+
+#### Tier 2 — diagnostic metrics (compute after every iteration)
+
+| Metric | What it reveals |
+|---|---|
+| **Tool confusion matrix** (predicted × GT) | Which tool pairs are confused → drives contrastive data addition |
+| **Argument-type error breakdown** | Wrong value vs wrong key vs missing key vs extra key — diagnoses grader calibration |
+| **Parallel-call set-accuracy** vs single-call accuracy | Whether Pattern D is harder than Pattern A for this workflow |
+| **Refusal vs tool-call confusion** | Model called a tool when it should have refused, or vice versa |
+| **Trivial% per tool** | Which tools the model already knows cold — can be removed from training or used only for validation |
+
+#### Tier 3 — advanced (implement if training stalls after 2+ iterations)
+
+**Discriminative power analysis** from [IRC (arXiv:2604.02869)](https://arxiv.org/abs/2604.02869):
+for each reward component (tool name, param keys, param values),
+compute point-biserial correlation between that component's score and
+overall task success. Components with near-zero or negative correlation
+are noise — reduce their weight in the grader. This is the
+tool-routing equivalent of the PDF pipeline's per-criterion LLM-judge
+audit.
+
+#### Weak-tool identification workflow (translates the PDF per-topic flow)
+
+```
+1. After each eval run, group records by gt_tool_name.
+2. Compute mean grader score per tool.
+3. Tools with mean score < 0.50 are WEAK.
+4. For each weak tool, inspect the tool confusion matrix row:
+   • Is the model confusing it with a semantically similar tool?
+     → Add contrastive examples (same-sounding inputs, different
+       correct tools)
+   • Is the confusion random (many different wrong tools)?
+     → Tool is underrepresented → add more records for it
+   • Is tool name correct but args wrong?
+     → Argument schema is ambiguous → simplify it in the system
+       prompt or add worked examples
+5. Re-run eval; if still weak after 3 data iterations, escalate to
+   hyperparameters (reduce K, enable β=0.001, tighten max tokens).
+```
+
+This is a direct translation of the document pipeline's
+`analysis-strategy.md` per-topic flow, with "topic" → "tool" and
+"subject" → "argument schema." Grader iteration rarely helps because
+the deterministic Jaccard grader doesn't have the LLM-judge failure
+modes that dominate PDF iteration; data iteration usually does.
+
+#### No published canonical dashboard
+
+**None of Phoenix, Langfuse, or LangSmith ships a canonical
+"tool-routing eval dashboard"** that visualizes per-tool confusion
+matrices, argument-error breakdowns, or discriminative-power analysis.
+They provide trace-level observability but not GRPO-iteration-specific
+analysis. We need to build this as a post-eval script that reads from
+the vLLora evaluation results API and produces the per-tool breakdown.
+One new script — an extension of the existing `analysis-strategy.md`
+pattern, not a replacement.
 
 **Stage 9 — Deploy** is **deferred for v1.** The existing vLLora
 gateway already serves vLLM-based inference for the production stack,
@@ -1706,22 +1888,55 @@ is what matters.**
 
 ### Known risks of GRPO training (each with a defense)
 
+**General GRPO risks (same as PDF pipeline):**
+
 - **Most prompts will be reward-flat** ("Find me a tablet" is trivial —
   K rollouts will all succeed). Defense: the Stage 6 learnable-fraction
-  gate blocks training if less than 30% of records are learnable.
+  gate blocks training if less than 25% of records are learnable (tool
+  routing has a lower threshold than PDF's 30% because smaller discrete
+  output spaces produce more zero-variance groups).
 - **Variance lives only in edge cases.** Defense: don't filter the
   trivial prompts; rely on early stopping, not selection.
-- **Default-mode collapse on the dominant tool.** Defense: balance
-  check before training, possibly clip-higher.
 - **Grader returning hard 0.0 kills variance instantly.** Defense:
-  tpFloor pattern — wrong tool is `0.02`, partial-arg-match is
-  `0.2 + 0.8 × matched_fraction`.
+  the 0.02 floor in the Jaccard grader (see the Grader section above).
+
+**Tool-routing-specific risks (evidence-backed):**
+
+- **"Paradox of perfection" — policy entropy collapses.** Small
+  discrete output space + already-tool-capable base model → policy
+  can peak quickly → within-group reward variance collapses →
+  advantages vanish → training stops working.
+  ([RC-GRPO, arXiv:2602.03025](https://arxiv.org/abs/2602.03025)).
+  **Defense**: check `frac_reward_zero_std` at step 50. If >70%,
+  reduce K to 4, enable `β=0.001` with ref model refresh every 100
+  steps, or use RC-GRPO's reward-conditioned sampling.
+- **Completion length blowup under β=0.**
+  [Bespoke Labs](https://www.bespokelabs.ai/blog/improving-multi-turn-tool-use-with-reinforcement-learning)
+  explicitly measured this: β=0 + tool calling can drift the policy
+  to produce runaway JSON or gibberish after the tool call closes.
+  **Defense**: watch `mean_length` growth. If it grows >30% without
+  a corresponding reward increase, enable `β=0.001` with periodic
+  ref model refresh. `mask_truncated_completions=True` (default in
+  vLLora) prevents the worst case but doesn't stop the underlying
+  drift.
+- **Default-mode collapse on the dominant tool.** Base model has
+  an existing bias toward one tool (e.g. always `product_search`),
+  GRPO reinforces it, other tools never get gradient signal. Defense:
+  Stage 6 probe's `no single tool > 70% trivial` gate + contrastive
+  training data where similar-sounding inputs should pick a
+  different tool. Also monitor the tool confusion matrix in Tier 2
+  eval metrics.
 - **Dataset is likely too small.** A typical real trace bundle is on
-  the order of dozens to low hundreds of decisions. GRPO usually wants
-  more. Defense: paraphrase synthesis to expand, not pre-filtering to
-  shrink. **Rejection-Sampling Fine-Tuning (RFT)** — pre-filtering
-  the GRPO record set with the same verifier the grader uses — is
-  the most natural v2 addition.
+  the order of dozens to low hundreds of decisions. GRPO usually
+  wants more. Defense: paraphrase synthesis to expand (not
+  pre-filtering to shrink). **Rejection-Sampling Fine-Tuning (RFT)**
+  — pre-filtering the GRPO record set with the same verifier the
+  grader uses — is the most natural v2 addition.
+- **Confusion between semantically similar tools.** A common failure
+  mode is the model picking `search_one_way_flight` when the GT is
+  `search_round_trip`. Defense: Tier 2 eval computes the tool
+  confusion matrix; tool pairs with high confusion get contrastive
+  training data.
 
 ---
 
@@ -2209,6 +2424,72 @@ expansion to small workflows.
   style tokens, not new capability. Relevant if we LoRA-finetune with
   augmented data.
   [arxiv.org/html/2402.05119v5](https://arxiv.org/html/2402.05119v5)
+
+### Research — tool-routing-specific GRPO (grader, hyperparameters, eval)
+
+These are the primary sources for the Grader section (Jaccard
+formula), the Stage 7 hyperparameter deltas, and the Stage 8 Tier 2/3
+eval metrics. Earlier drafts inferred these from the PDF pipeline;
+these papers replace inference with measured evidence specifically
+for tool-routing GRPO.
+
+- **ToolRL: Reward is All Tool Learning Needs (arXiv:2504.13958)** —
+  the first systematic study of reward design for tool-use GRPO
+  training. Fine-grained Jaccard decomposition (name/param-key/
+  param-value) beats coarse exact-match by +1.58 points on Qwen2.5-3B
+  in Table 7. **Primary source for our grader scoring formula.** Also
+  the source for `temperature=1.0` (vs PDF default 0.9) and `K=4`
+  (vs PDF default 8).
+  [arxiv.org/abs/2504.13958](https://arxiv.org/abs/2504.13958)
+
+- **Iterative Reward Calibration for Multi-Turn Tool-Calling Agents
+  (arXiv:2604.02869)** — "IRC." Source for the Tier 3 eval metric
+  (point-biserial correlation discriminative power analysis) and for
+  the tool-routing learning rate range (2e-6 to 5e-7). Also uses
+  `K=4` rollouts. Confirms the weak-tool-per-group analysis pattern.
+  [arxiv.org/abs/2604.02869](https://arxiv.org/abs/2604.02869)
+
+- **RC-GRPO: Reward-Conditioned GRPO for Multi-Turn Tool Calling
+  (arXiv:2602.03025)** — identifies the "paradox of perfection"
+  failure mode: after strong initialization, policy peaks quickly,
+  within-group reward variance collapses, advantages vanish. Source
+  for the `frac_reward_zero_std` step-50 check and for the
+  reward-conditioned sampling mitigation (an advanced v2+ option).
+  [arxiv.org/abs/2602.03025](https://arxiv.org/abs/2602.03025)
+
+- **Bespoke Labs — Improving Multi-Turn Tool Use with RL** — the
+  blog post that explicitly measured completion length blowup under
+  `β=0` + tool calling, and documented the stable config (`β=0.001`
+  with periodic reference model refresh every 100 steps). **Primary
+  source** for the "escalate to β=0.001 if length blowup is
+  observed" guidance in Stage 7.
+  [bespokelabs.ai/blog/improving-multi-turn-tool-use-with-reinforcement-learning](https://www.bespokelabs.ai/blog/improving-multi-turn-tool-use-with-reinforcement-learning)
+
+- **Fission-GRPO: Robust Tool Use via Error Recovery
+  (arXiv:2601.15625)** — error-recovery training methodology
+  referenced in the Pattern B treatment. Not directly cited in the
+  v1 rule because Pattern B uses the simpler SCoRe-style extraction,
+  but worth knowing about for v2 refinements.
+  [arxiv.org/abs/2601.15625](https://arxiv.org/abs/2601.15625)
+
+- **OTC: Optimal Tool Calls via RL (arXiv:2504.14870)** — strategies
+  for choosing when and how many tools to call; tangential to v1
+  (which assumes one tool call per decision point) but relevant for
+  future Pattern D (parallel) refinements.
+  [arxiv.org/abs/2504.14870](https://arxiv.org/abs/2504.14870)
+
+- **Berkeley Function Calling Leaderboard V4 (BFCL)** — source for
+  the edge-case rules in the Grader section (case-insensitive enum
+  match, int/float type leniency, no float epsilon tolerance). Also
+  the source for the "all-or-nothing parallel matching is wrong for
+  training" finding: BFCL uses it for benchmarking, we use
+  coverage-penalized averages for training because BFCL's rule
+  produces excessive zero-variance batches.
+  [gorilla.cs.berkeley.edu/leaderboard.html](https://gorilla.cs.berkeley.edu/leaderboard.html)
+
+- **BFCL ICML 2025 paper** — peer-reviewed version of the BFCL
+  methodology.
+  [proceedings.mlr.press/v267/patil25a.html](https://proceedings.mlr.press/v267/patil25a.html)
 
 ### Research — pre-training data hygiene (platform precedent)
 
