@@ -13,6 +13,7 @@
 import type { EvalJob, StartEvalParams } from '@/types/eval-job';
 import { evalJobService } from './service-registry';
 import {
+  cancelFinetuneJob,
   createEvaluation,
   getEvaluationResult,
 } from './finetune-api';
@@ -191,6 +192,21 @@ class EvalJobManager {
     const job = await evalJobService.get(jobId);
     let partialResult: EvalJob['result'] | undefined;
     let partialSnapshot: EvalJob['pollingSnapshot'] | undefined;
+    let cloudCancelFailed = false;
+
+    if (job?.evaluationRunId && job?.workflowId) {
+      // Tell the cloud to actually stop the eval. Without this we only
+      // mark the local job cancelled — the cloud worker keeps consuming
+      // compute until it finishes naturally. The unified cancel endpoint
+      // routes eval IDs (job_type=evaluation_run) to the eval cancel path.
+      try {
+        const result = await cancelFinetuneJob(job.workflowId, job.evaluationRunId);
+        cloudCancelFailed = !!result.cloudCancelFailed;
+      } catch (error) {
+        cloudCancelFailed = true;
+        console.warn('[eval-cancel] cloud cancel failed:', error);
+      }
+    }
 
     if (job?.evaluationRunId) {
       try {
@@ -236,9 +252,17 @@ class EvalJobManager {
     }
 
     const hasPartial = (partialSnapshot?.completed_rows ?? 0) > 0;
-    toast.info(
-      hasPartial ? 'Evaluation cancelled — partial results preserved' : 'Evaluation cancelled',
-    );
+    if (cloudCancelFailed) {
+      toast.warning(
+        hasPartial
+          ? 'Marked cancelled locally — cloud cancel failed, partial results preserved'
+          : 'Marked cancelled locally — cloud cancel failed, eval may still be running',
+      );
+    } else {
+      toast.info(
+        hasPartial ? 'Evaluation cancelled — partial results preserved' : 'Evaluation cancelled',
+      );
+    }
   }
 
   /**

@@ -6503,7 +6503,14 @@ def cmd_grader_sanity_check(args: argparse.Namespace) -> None:
                     if m.get("role") == "assistant":
                         resp = m.get("content", "") or ""
             n_labels = len([t for t in resp.split(",") if t.strip()])
-            if n_labels >= 7 and score > 0.20:
+            # Dump-all gaming: many labels emitted AND low precision. Parse
+            # precision from the reason string to avoid false positives on
+            # genuine high-recall cases where GT itself has many labels.
+            try:
+                prec_val = float(reason.split("P=")[1].split()[0]) if "P=" in reason else 1.0
+            except Exception:
+                prec_val = 1.0
+            if n_labels >= 7 and score > 0.20 and prec_val < 0.50:
                 dump_high.append((i, n_labels, score, resp[:80]))
             if "extraction: llm" in reason.lower() and score >= 0.85:
                 row = rec.get("row", {})
