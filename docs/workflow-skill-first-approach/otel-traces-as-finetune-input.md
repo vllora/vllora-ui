@@ -5,11 +5,72 @@
 > Backed by inspection of a real Phoenix shopping-agent fixture
 > (`agents-toolcalling-tracesv2.parquet`, 609 spans, 6 tools, GPT-4o).
 >
-> **Companion doc**: [`otel-extractor-tooling-survey.md`](./otel-extractor-tooling-survey.md)
-> records what existing libraries (Phoenix, LangSmith, Langfuse,
-> LiteLLM, OpenAI Cookbook) can and cannot do for the extraction
-> step, and what we have to build ourselves. Read it before writing
-> any extractor code.
+> ---
+>
+> ### Scope: this doc specifies `finetune-skill-otel/`, a new skill separate from `finetune-skill/`
+>
+> **This doc specifies a new, architecturally separate skill** —
+> `finetune-skill-otel/` — that lives alongside the existing
+> `finetune-skill/` (PDF pipeline). The two skills share the UI,
+> gateway, storage layer, training JSONL format, and cloud handoff
+> API — **but they share no pipeline code.** The existing PDF skill
+> is never modified by trace-skill work. See the "Two skills, shared
+> surfaces" section below for the architectural split and
+> [`trace-pipeline-isolation.md`](./trace-pipeline-isolation.md) for
+> the engineering contract.
+>
+> The motivation is risk minimization: the existing PDF pipeline is
+> already working and has been validated against real test samples
+> (Chess Tactics, medical-qa, etc.). Adding trace support by
+> extending the existing skill would create shared-code breakage
+> vectors that are hard to defend against. Creating a new parallel
+> skill **physically eliminates** the risk — trace-skill code
+> literally cannot reach PDF-skill code.
+>
+> ---
+>
+> **Companion docs:**
+> - [`otel-extractor-tooling-survey.md`](./otel-extractor-tooling-survey.md)
+>   — library/platform decisions (storage, UI, base model, extractor tooling)
+> - [`trace-grader-reference.md`](./trace-grader-reference.md)
+>   — grader formula implementation reference with unit tests
+> - [`trace-pipeline-isolation.md`](./trace-pipeline-isolation.md)
+>   — engineering contract for the split (files owned by each skill)
+> - [`trace-pipeline-testing.md`](./trace-pipeline-testing.md)
+>   — five-level testing ladder, pass criteria, CI vs cloud split
+>
+> ---
+>
+> ### Parallel development
+>
+> **This design is intentionally structured so the backend
+> (gateway schema + endpoints), frontend (trace source viewer +
+> eval analysis), and OTel skill (`finetune-skill-otel/`) can be
+> built by separate engineers in parallel.** Three JSON contracts
+> lock the interfaces between them:
+>
+> 1. **`trace_bundles` row shape + `POST /trace_bundles` endpoint**
+>    (specified in the "Storage" subsection under "How traces
+>    enter the system" in this doc, and in the "Storage decision"
+>    section of the tooling survey)
+> 2. **`knowledge_sources.content_metadata.kind` discriminator**
+>    (`"document"` vs `"otel-trace"`) for UI dispatching
+>    (specified throughout this doc and the tooling survey)
+> 3. **Cloud handoff payload JSON** with the `source_kind` field
+>    and tool-routing `training_config` block (specified in the
+>    Stage 7 section of this doc and the base-model section of
+>    the tooling survey)
+>
+> As long as all three tracks agree on these contracts, **none
+> blocks the others**. Week 1 is unblocked for all three tracks
+> from the moment this doc set freezes. Week 2 ends with a
+> contract-review sync. Week 4 ends with an integration dry run.
+> Week 6 ends with the first L4 training validation (see
+> `trace-pipeline-testing.md` for the acceptance criteria).
+>
+> The cloud team (Stage 7 training) is a fourth track that needs
+> to be looped in at week 0 with the handoff spec so they can
+> prepare the ingestion side. It is not in this repo.
 
 ## Core idea
 
@@ -1982,28 +2043,220 @@ workflow is a workflow, the pipeline is the pipeline.
 
 ---
 
-## The one open conceptual question
+## Two skills, shared surfaces
 
-A workflow can in principle have both trace sources and document sources.
-**What is such a workflow training, conceptually?**
+The trace pipeline ships as a **new, parallel skill** —
+`finetune-skill-otel/` — that lives alongside the existing
+`finetune-skill/` (PDF pipeline). Each skill owns its own pipeline
+code. The two share everything above and below the pipeline layer
+(UI, gateway, storage, training format, cloud handoff) but **no
+pipeline code crosses the boundary.**
 
-Two possible answers:
+### Directory layout
 
-| Answer | Implication |
-|---|---|
-| **(a)** It trains a tool-using agent that also knows things. Tools are the skill, documents are reference material the agent consults at inference time. One model, two roles. | Trace sources dominate the workflow's identity. Documents become inference-time RAG context, not training-time system prompt content. |
-| **(b)** Two different models, two different training runs, one workflow. | Conceptually weird and probably wrong — workflows are supposed to produce one trained model. |
+```
+~/Documents/GitHub/vllora/ui/
+├── finetune-skill/                   ← EXISTING (PDF pipeline)
+│   │                                   unchanged, backward-compat
+│   ├── SKILL.md                        preserved, users keep current
+│   ├── scripts/                        integration
+│   │   ├── docling_extract.py
+│   │   ├── generate_records.py
+│   │   ├── finetune.py                 (orchestrator)
+│   │   └── ...
+│   ├── reference/
+│   │   ├── grader-writing.md           (LLM judge rubric)
+│   │   ├── training-metrics-guide.md
+│   │   ├── analysis-strategy.md        (per-topic analysis)
+│   │   ├── iteration-strategy.md
+│   │   └── ... (all existing docs)
+│   └── templates/
+│
+└── finetune-skill-otel/                ← NEW (OTel trace pipeline)
+    │                                    parallel, independent
+    ├── SKILL.md                         (copy + modify from finetune-skill/)
+    ├── scripts/
+    │   ├── openinference_to_semconv.py  (moved from finetune-skill/)
+    │   ├── otel_extract.py              (moved from finetune-skill/)
+    │   ├── otel_distill.py              (new — Stage 3 extraction)
+    │   ├── trace_grader_builder.py      (new — Stage 4 Jaccard grader)
+    │   ├── trace_hparams.py             (new — Stage 7 delta table)
+    │   ├── trace_probe_gates.py         (new — Stage 6 4 gates)
+    │   ├── analyze_eval_trace.py        (new — Stage 8 per-tool)
+    │   └── finetune-otel.py             (new — orchestrator, parallel to finetune.py)
+    └── reference/
+        ├── trace-grader-reference.md    (moved from docs/)
+        ├── otel-trace-ingestion.md      (moved from finetune-skill/)
+        ├── trace-hyperparameters.md     (new, consolidated)
+        ├── trace-analysis-strategy.md   (new, per-tool workflow)
+        └── trace-iteration-strategy.md  (new, data-focused iteration)
+```
 
-The honest answer is **(a)**, with the rule: **a workflow with any trace
-source is fundamentally a behavior workflow. Documents inside it become
-inference-time reference material, not training-time system prompt
-content.** This mirrors how real agents work in production — they have
-tools and a knowledge base, and the knowledge base is queried at inference
-rather than baked into model weights.
+### What's shared (doesn't live in either skill)
 
-This is the only conceptual question this doc leaves open. It needs to be
-resolved before any workflow ever has both kinds of source at the same
-time.
+| Shared surface | Lives where | Change type |
+|---|---|---|
+| **UI** — workflow shell, Knowledge node, records/grader/training pages | `vllora/ui/src/` | **Additive only** — existing PDF components untouched, new trace components added alongside (dispatch at render time on `content_metadata.kind`) |
+| **Gateway API** (`POST /knowledge-sources`, `POST /workflows`, etc.) | `vllora/gateway/` | **Additive only** — `kind="otel-trace"` is a new enum variant; existing `kind="document"` paths unchanged |
+| **`knowledge_sources` table** | Gateway SQLite | **Additive migration** — new nullable `trace_bundle_id` FK column; existing rows get NULL automatically |
+| **`trace_bundles` table** | Gateway SQLite | **New table** — zero impact on any PDF-related query |
+| **Training JSONL format** | OpenAI chat-completion format | **Same for both skills** — no schema change |
+| **Cloud handoff API** | LangDB Cloud server | **Extended** with new `source_kind` and `grader.type` variants; existing PDF payloads unchanged |
+| **Base model choice** | Qwen3.5-4B default for both | **Same** — per-workflow configurable |
+| **Deployment** (Stage 9) | vLLora gateway + vLLM | **Deferred v1, same for both when it ships** |
+
+**Every shared-surface change is additive.** No existing PDF-related
+code, column, or API path is modified. The trace skill adds new
+variants, new components, new columns, new endpoints — it never
+replaces or reshapes existing ones.
+
+### What's NOT shared (lives in exactly one skill)
+
+| Concept | Lives in | Why not shared |
+|---|---|---|
+| Stage 1: input inspection | Both (separately) | Docling vs span-tree walk — different code paths |
+| Stage 2: topics | Both (separately) | LLM clustering vs tool-schema lifting |
+| Stage 3: records | Both (separately) | LLM-generated Q/A vs extracted decisions |
+| Stage 4: grader | Both (separately) | LLM judge vs Jaccard verifier |
+| Stage 5: system prompt | Both (separately) | Built from topics vs lifted+rewritten |
+| Stage 6: probe thresholds | Both (separately) | Different gates and thresholds (see Stage 6 section above) |
+| Stage 7: hyperparameters | Both (separately) | Different deltas (see Stage 7 section above) |
+| Stage 8: analysis | Both (separately) | Per-topic vs per-tool + confusion matrix |
+| Reference docs (grader, analysis, iteration) | Both (separately) | Each skill has its own |
+| Test samples | Both (separately) | PDF uses `~/test-samples/chess-tactics/`; trace uses `~/test-samples/otel-phoenix/` |
+
+### Sub-agents: the trace skill is architecturally lighter
+
+The PDF skill delegates to **four Claude Code sub-agents**
+(`knowledge-extractor`, `relation-builder`, `nemo-data-generator`,
+`training-monitor`). Each exists because its corresponding pipeline
+stage is **LLM-heavy or long-running**, and sub-agent delegation
+isolates that work from the main skill's context.
+
+**The trace skill has zero required sub-agents for v1.** Its
+equivalent stages are mechanical, not LLM-heavy:
+
+| Sub-agent role | PDF skill needs it because... | Trace skill equivalent |
+|---|---|---|
+| Content extraction | Docling runs for minutes on a large PDF | ❌ Not needed — span-tree walk is fast deterministic Python |
+| Part-to-topic matching | LLM-based N×M clustering of passages to topic leaves | ❌ Not needed — topics lifted directly from tool schema, no clustering |
+| Training data generation | LLM-based Q/A synthesis via NeMo Data Designer | ❌ Not needed — records extracted from trace spans, no generation |
+| Cloud job monitoring | Training runs for hours; needs persistent background process | 🟡 **Optional** — `trace-job-monitor` may be added if inline polling of Stages 6/7/8 proves insufficient. Not in v1 by default. |
+
+**The trace skill's entire pipeline has exactly one LLM call**: the
+Stage 5 system prompt rewrite, which is a one-shot at workflow-
+creation time. One LLM call doesn't justify a sub-agent — it runs
+inline in the main skill.
+
+This difference in sub-agent count is **evidence of the architectural
+split**, not a gap. The PDF skill has four sub-agents because its
+workload needs them; the trace skill has zero because its workload
+doesn't. Forcing the trace skill into the PDF skill's sub-agent
+shape would add complexity without benefit.
+
+**One open question**: is the PDF skill's `training-monitor` sub-
+agent genuinely load-bearing (PDF skill would be broken without it),
+or is it a nice-to-have that could be replaced with inline polling?
+If it's essential for PDF, the trace skill should add a minimal
+`trace-job-monitor` for consistency. If it's optional, the trace
+skill can skip it. Defer this decision until the trace skill is
+actually being implemented — whichever pattern the cloud handoff
+ends up needing, adopt it for both skills.
+
+### Duplication honestly acknowledged
+
+Two skills means some code is copied. Concretely:
+
+- **`SKILL.md`** — copy + modify (~one-time cost, ~200 lines)
+- **Pipeline orchestrator** (`finetune-otel.py`) — copy of `finetune.py` with Stage 3–8 dispatch pointing at trace scripts (~one-time cost, ~300 lines)
+- **Stage 1 workflow creation helpers** — nearly identical between skills (~50 LOC each)
+- **Shared utilities** for POSTing to the cloud handoff API — should be factored into a small shared helper library both skills depend on (`shared-finetune-utils/`), but v1 can live with a local copy in each skill
+
+**Ongoing maintenance burden is small** because the divergent logic
+is divergent by design — bug fixes rarely apply to both. The
+exception is shared utilities, which should be extracted into a
+tiny common library when we notice we're fixing the same bug in two
+places.
+
+### Existing files that move from `finetune-skill/` to `finetune-skill-otel/`
+
+Four files we've already added to `finetune-skill/` during this
+design work actually belong in the new trace skill:
+
+| Current location | New location | Reason |
+|---|---|---|
+| `finetune-skill/scripts/openinference_to_semconv.py` | `finetune-skill-otel/scripts/openinference_to_semconv.py` | Trace-specific format adapter |
+| `finetune-skill/scripts/otel_extract.py` | `finetune-skill-otel/scripts/otel_extract.py` | Trace-specific Stage 2 extractor |
+| `finetune-skill/reference/otel-trace-ingestion.md` | `finetune-skill-otel/reference/otel-trace-ingestion.md` | Trace-specific reference doc |
+| `docs/workflow-skill-first-approach/trace-grader-reference.md` | `finetune-skill-otel/reference/trace-grader-reference.md` | Trace-specific grader ref |
+
+These moves happen when `finetune-skill-otel/` is created. Until
+then, they remain in their current locations — the moves are
+forward-looking, not retroactive.
+
+### The engineering contract
+
+The rules that make the split safe, enforced by
+[`trace-pipeline-isolation.md`](./trace-pipeline-isolation.md):
+
+1. **Trace-skill work never modifies files inside `finetune-skill/`.**
+   Any PR that touches `finetune-skill/` as part of trace work is
+   rejected at review.
+2. **Trace-skill work never modifies the existing `grader-writing.md`,
+   `analysis-strategy.md`, `iteration-strategy.md`, or any existing
+   reference doc in `finetune-skill/`.** The trace skill writes its
+   own parallel reference docs.
+3. **Shared-surface changes (UI, gateway, DB) must be additive only.**
+   No existing column is dropped, renamed, or semantically changed.
+   No existing UI component is refactored as part of trace work. No
+   existing gateway endpoint signature is changed.
+4. **Golden tests run on every PR.** Two independent golden-path
+   tests — one for PDF, one for trace — verify the pipeline each
+   skill drives produces expected output for its reference fixture.
+   Any PR that breaks either test is blocked by CI.
+5. **The existing `finetune-skill/` SKILL.md is frozen** until the
+   trace skill has shipped and stabilized. After that, the two
+   skills can evolve independently at their own pace.
+
+See [`trace-pipeline-isolation.md`](./trace-pipeline-isolation.md)
+for the full file-level contract (which files each skill owns,
+which are shared, which are forbidden).
+
+---
+
+## The one open conceptual question (resolved)
+
+**Earlier drafts left this open:** "A workflow can in principle have
+both trace sources and document sources. What is such a workflow
+training?"
+
+**Resolved by the two-skills architecture:**
+
+> **A workflow uses exactly one skill.** If you want to train on both
+> PDFs and traces, you run two separate workflows — one PDF-skill
+> workflow on your documents, one trace-skill workflow on your traces
+> — and combine at the **inference layer**, not the training layer.
+> Serve the two fine-tuned LoRA adapters as independent modules that
+> the deployment endpoint composes.
+
+This is actually how production tool-using agents with RAG knowledge
+work: the tool-router model is one specialized adapter (from the
+trace skill), and the knowledge-QA model is another specialized
+adapter (from the PDF skill). Inference-time composition, not
+training-time mixing.
+
+**Why this is better than the earlier "documents become
+inference-time RAG context" answer:** that framing implied one
+trained model with two roles, which (a) required the two skills to
+cooperate during training (complicated), (b) gave up the independent
+iteration loops each skill needs, and (c) didn't match how real
+production agents compose capabilities. Two specialized adapters +
+composition at inference is the cleaner architecture and matches
+industry practice.
+
+This is no longer an open question — the two-skills split makes the
+answer trivial: **workflows don't mix kinds. Models can be composed
+after training.**
 
 ---
 

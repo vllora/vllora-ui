@@ -292,6 +292,116 @@ docs, source code, and paper abstracts as of April 2026.
 
 ---
 
+# Architecture: two skills, shared surfaces
+
+> **Decision (2026-04-08):** The trace pipeline ships as a new,
+> parallel skill — **`finetune-skill-otel/`** — that lives alongside
+> the existing `finetune-skill/` (PDF pipeline). The two skills
+> share the UI, gateway, storage layer, training JSONL format, and
+> cloud handoff API — but **no pipeline code crosses the boundary.**
+
+This is the most important architectural decision in the trace
+pipeline, and it's motivated purely by risk minimization: the
+existing PDF skill is already working and has been validated against
+real test samples. Extending it to handle traces would create
+shared-code breakage vectors that are hard to defend against.
+Creating a new parallel skill **physically eliminates** the risk —
+trace-skill code literally cannot reach PDF-skill code.
+
+## What each skill owns
+
+| Concern | `finetune-skill/` (PDF) | `finetune-skill-otel/` (OTel) |
+|---|---|---|
+| SKILL.md | existing, frozen | new, copy + modify |
+| Pipeline orchestrator | `finetune.py` (existing) | `finetune-otel.py` (new, parallel) |
+| Stage 1 inspection | `docling_extract.py` | span-tree walk (new) |
+| Stage 2 topics | `relation-builder` agent (LLM clustering) | `trace_topics.py` (tool-schema lifting, no LLM) |
+| Stage 3 records | `generate_records.py` (LLM-generated Q/A) | `otel_distill.py` (extracted decisions, no LLM) |
+| Stage 4 grader | `grader-writing.md` (LLM judge rubric) | `trace_grader_builder.py` (Jaccard verifier) |
+| Stage 5 system prompt | built from topics | `system_prompt_rewriter.py` (lift + rewrite) |
+| Stage 6 probe thresholds | 3 gates (learnable, topic-trivial, sanity) | 4 gates (plus trivial_wrong, per-tool, refusal) |
+| Stage 7 training config | PDF defaults | tool-routing deltas |
+| Stage 8 analysis | `analysis-strategy.md` (per-topic + LLM critique) | `analyze_eval_trace.py` (per-tool + confusion matrix) |
+| Reference docs | existing: grader-writing.md, iteration-strategy.md, analysis-strategy.md, etc. | new: trace-grader-reference.md, trace-hyperparameters.md, trace-analysis-strategy.md |
+| Test samples | `~/test-samples/chess-tactics/` etc. | `~/test-samples/otel-phoenix/` |
+| **Sub-agents** | **4** (`knowledge-extractor`, `relation-builder`, `nemo-data-generator`, `training-monitor`) — each exists because its stage is LLM-heavy or long-running | **0 in v1** — trace work is mechanical extraction, not LLM-heavy. Optional `trace-job-monitor` deferred pending `training-monitor` usefulness verification in PDF skill. See the concept doc's "Sub-agents: the trace skill is architecturally lighter" section. |
+
+**Every row is either existing-in-PDF or new-in-trace.** No row is
+"modified in PDF as part of trace work." That's the point.
+
+## What's shared (lives in neither skill)
+
+| Shared surface | Lives where | Change type |
+|---|---|---|
+| **UI** — workflow shell, Knowledge node, records/grader/training pages | `vllora/ui/src/` | **Additive only** — existing PDF components untouched, new trace components added alongside, dispatch at render time on `content_metadata.kind` |
+| **Gateway API** (`POST /knowledge-sources`, `POST /workflows`, etc.) | `vllora/gateway/` | **Additive only** — `kind="otel-trace"` is a new enum variant; existing `kind="document"` paths unchanged |
+| **`knowledge_sources` table** | Gateway SQLite | **Additive migration** — new nullable `trace_bundle_id` FK column; existing rows get NULL automatically |
+| **`trace_bundles` table** | Gateway SQLite | **New table** — zero impact on PDF queries |
+| **Training JSONL format** | OpenAI chat-completion format | **Same for both skills** — no schema change |
+| **Cloud handoff API** | LangDB Cloud server | **Extended** with new `source_kind` and `grader.type` variants; existing PDF payloads unchanged |
+| **Base model choice** | Qwen3.5-4B default for both | **Same** — per-workflow configurable |
+| **Deployment** (Stage 9) | vLLora gateway + vLLM | **Deferred v1, same for both when it ships** |
+
+## Why not "one skill with careful isolation patterns"?
+
+An earlier version of this decision proposed keeping one skill with
+a "fork at dispatcher" pattern — source kind determines which code
+path runs, but both paths live in the same skill directory. That
+approach has one fundamental weakness: it keeps both pipelines in
+the same codebase, and a developer can still accidentally touch
+shared code.
+
+**The only way to guarantee the PDF skill can't be broken by trace
+work is to make it physically impossible.** Two separate skills
+achieve that; one skill with isolation patterns doesn't.
+
+| Property | Fork-at-dispatcher | Two separate skills |
+|---|---|---|
+| PDF skill can be broken by trace work | Possible (shared code) | **Physically impossible** |
+| Parallel development velocity | Blocked by regression tests | Unblocked |
+| Version independence | Monolithic | PDF at v1.2, trace at v0.3-alpha |
+| Claude Code skill discovery | Bloated (both paths in one skill) | Users install the one they need |
+| Matches skill-first architecture | Violates it (one skill, two data shapes) | Honors it |
+
+The duplication cost (~500 LOC of one-time copy + parallel reference
+docs) is worth the physical isolation guarantee.
+
+## Engineering contract
+
+The rules that make the split safe are enforced by
+[`trace-pipeline-isolation.md`](./trace-pipeline-isolation.md):
+
+1. **Trace-skill work never modifies files inside `finetune-skill/`.**
+   Any PR that touches `finetune-skill/` as part of trace work is
+   rejected at review.
+2. **Shared-surface changes (UI, gateway, DB) must be additive
+   only.** No existing column is dropped, renamed, or semantically
+   changed. No existing UI component is refactored as part of trace
+   work. No existing gateway endpoint signature is changed.
+3. **Golden tests run on every PR** — one per skill, independent.
+4. **The existing `finetune-skill/` SKILL.md is frozen** until the
+   trace skill has shipped and stabilized.
+
+See that doc for the full file-level contract.
+
+## Existing files that move during the split
+
+Four files currently live in `finetune-skill/` from earlier design
+work but actually belong in the new trace skill:
+
+| Current location | New location |
+|---|---|
+| `finetune-skill/scripts/openinference_to_semconv.py` | `finetune-skill-otel/scripts/openinference_to_semconv.py` |
+| `finetune-skill/scripts/otel_extract.py` | `finetune-skill-otel/scripts/otel_extract.py` |
+| `finetune-skill/reference/otel-trace-ingestion.md` | `finetune-skill-otel/reference/otel-trace-ingestion.md` |
+| `docs/workflow-skill-first-approach/trace-grader-reference.md` | `finetune-skill-otel/reference/trace-grader-reference.md` |
+
+These moves happen when `finetune-skill-otel/` is created. Until
+then, they remain in their current locations — the moves are
+forward-looking.
+
+---
+
 # Storage decision: where trace bundles live in the gateway database
 
 > **Decision (2026-04-08, research-backed):** Trace bundles live in a
