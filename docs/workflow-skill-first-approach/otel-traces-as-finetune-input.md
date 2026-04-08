@@ -1158,43 +1158,59 @@ with what conceptual output.
                                             │
                                             │  GO
                                             ▼
+                          ┌─────────────────────────────────┐
+                          │     HANDOFF TO CLOUD SERVER     │
+                          │     (LangDB Cloud)              │
+                          │                                 │
+                          │  Local pipeline ships:          │
+                          │    • records (JSONL)            │
+                          │    • grader (callable / spec)   │
+                          │    • rewritten system prompt    │
+                          │    • base model choice          │
+                          │    • probe report               │
+                          └─────────────────────────────────┘
+                                            │
+                                            ▼
         ╔════════════════════════════════════════════════════════════════════╗
-        ║  STAGE 7 — Training  (GRPO on tool-capable base, no BC warm-start) ║
+        ║  STAGE 7 — Training  (handled by CLOUD SERVER, not local code)     ║
         ║  ─────────────────                                                 ║
         ║                                                                    ║
-        ║   base model = Qwen 2B/4B (or equiv.) — already tool-capable       ║
-        ║   from instruction tuning, so no SFT warm-start is needed          ║
+        ║   The cloud runs GRPO on a tool-capable base model.                ║
+        ║   No BC warm-start: the base (Qwen 2B/4B etc.) already knows       ║
+        ║   tool-calling from its instruction-tuning phase.                  ║
         ║                                                                    ║
-        ║   for each record:                                                 ║
+        ║   Per record (cloud-side):                                         ║
         ║     base model emits K=8 rollouts at temperature                   ║
         ║     grader scores each rollout                                     ║
         ║                                                                    ║
-        ║     example spread across 8 rollouts for one record:               ║
+        ║     example rollout spread for one record:                         ║
         ║       [1.00, 0.47, 0.02, 1.00, 0.47, 1.00, 0.02, 1.00]             ║
         ║         ↑perfect ↑partial ↑wrong-tool  group_mean = 0.625          ║
         ║                                                                    ║
         ║     advantage = score − group_mean                                 ║
         ║     PPO-style clipped policy update                                ║
-        ║     (push toward +advantage, away from −advantage)                 ║
         ║                                                                    ║
-        ║   on-policy sampling = no compounding error in the first place     ║
-        ║   (we don't clone, so there's no cloned error to correct)          ║
+        ║   On-policy sampling = no compounding error in the first place.   ║
         ║                                                                    ║
-        ║   early stop on eval-set LEARNABLE_FRAC (NOT avg reward —          ║
-        ║   trivial records dominate the average and will plateau early)    ║
+        ║   Early stop on eval-set LEARNABLE_FRAC (NOT avg reward).         ║
+        ║                                                                    ║
+        ║   ─── Local pipeline doesn't implement any of this ───             ║
+        ║   The cloud team chooses the trainer (likely TRL+Unsloth),         ║
+        ║   handles TRL #5366 / #4543, and produces a fine-tuned             ║
+        ║   adapter. Local pipeline waits for the result.                    ║
         ╚════════════════════════════════════════════════════════════════════╝
                                             │
                                             ▼
         ╔════════════════════════════════════════════════════════════════════╗
-        ║  STAGE 8 — Eval on UNSEEN paraphrases                              ║
+        ║  STAGE 8 — Eval on UNSEEN paraphrases  (orchestrated locally)      ║
         ║  ─────────────────────────────────                                 ║
-        ║   held-out customer phrasings the model has NEVER seen             ║
-        ║   (NOT a slice of the training records — different sentences,      ║
-        ║    same intents)                                                   ║
+        ║   Local pipeline drives eval against the cloud-served model.       ║
+        ║   Held-out customer phrasings the model has NEVER seen.            ║
+        ║   (NOT a slice of training — different sentences, same intents.)   ║
         ║                                                                    ║
-        ║   same programmatic grader from Stage 4                            ║
+        ║   Same programmatic grader from Stage 4.                           ║
         ║                                                                    ║
-        ║   metrics that matter:                                             ║
+        ║   Metrics that matter:                                             ║
         ║     • tool-name accuracy                                           ║
         ║     • argument-match rate (right-tool subset)                      ║
         ║     • refusal precision / recall                                   ║
@@ -1202,7 +1218,10 @@ with what conceptual output.
                                             │
                                             ▼
         ╔════════════════════════════════════════════════════════════════════╗
-        ║  STAGE 9 — Deploy  (identical to document pipeline)                ║
+        ║  STAGE 9 — Deploy  (DEFERRED for v1)                               ║
+        ║                                                                    ║
+        ║   Existing vLLora gateway already serves vLLM-based inference.    ║
+        ║   Revisit when we have a fine-tuned adapter to actually serve.    ║
         ╚════════════════════════════════════════════════════════════════════╝
                                             │
                                             ▼
@@ -1272,6 +1291,17 @@ See the full workflow diagram above (Stage 6) for the gate criteria.
 
 ### Stage 7 — Training (GRPO directly on a tool-capable base)
 
+> **Where it runs:** **Stage 7 is owned by the cloud server (LangDB
+> Cloud), not the local pipeline.** Our local pipeline produces the
+> training artifacts in Stages 1–5, runs the difficulty probe in
+> Stage 6, and hands the artifacts to the cloud via the existing
+> finetune API. The cloud runs the actual GRPO training. The
+> conceptual description below applies to *what training does* — the
+> mechanics of the trainer, the choice of TRL/Unsloth, and the
+> handling of TRL issues #5366 / #4543 are the cloud team's
+> responsibility, not v1's. See `otel-extractor-tooling-survey.md`
+> for the local-vs-cloud scope split.
+
 **No BC warm-start stage.** The base model we finetune (Qwen 2B/4B,
 Llama-3.2, or equivalent) ships with tool-calling already baked in
 from its instruction-tuning phase. It already knows JSON tool-call
@@ -1281,7 +1311,7 @@ conversation with tool results. Adding a supervised warm-start on top
 of that would re-teach things the base model already knows. See "Why
 we skip BC warm-start" below for the full rationale.
 
-The pipeline runs GRPO directly on the tool-capable base:
+The cloud runs GRPO directly on the tool-capable base:
 
 1. For each extracted record, the base model generates K=8 rollouts at
    temperature.
@@ -1330,8 +1360,12 @@ These three numbers, on **never-before-seen phrasings**, are the real
 test. The training-set numbers are diagnostic only — they tell you
 whether the pipeline ran, not whether the model is useful.
 
-**Stage 9 — Deploy** is identical to the document pipeline and worth no
-further words.
+**Stage 9 — Deploy** is **deferred for v1.** The existing vLLora
+gateway already serves vLLM-based inference for the production stack,
+so deployment isn't blocking the trace finetune pipeline. We'll
+revisit Stage 9 once the cloud has trained at least one fine-tuned
+adapter from our handoff and there's an actual artifact to serve. See
+the tooling survey for the deferred deployment landscape.
 
 ---
 
@@ -1351,16 +1385,19 @@ demo-only capability claims, fits the student's context budget), and
 applies that one rewritten prompt identically across every record.
 Before training starts, it probes the base model to check there are
 enough learnable records under GRPO; if not, it blocks. If go, the
-pipeline runs **GRPO directly on the tool-capable base model** — no
-BC warm-start, because the base already has tool-calling from its
-instruction-tuning phase and BC would re-teach things it already
-knows. On-policy sampling prevents compounding error structurally.
-Evaluation is against unseen customer paraphrases, not a held-out
-slice. Deployment is identical to the document pipeline. **The whole
-flow is mechanical extraction plus one rewrite step plus one go/no-go
-probe — no LLM is called between bundle arrival and training start
-(except optionally to rewrite the system prompt once at the workflow
-level).**
+local pipeline **hands the artifacts to the cloud server (LangDB
+Cloud)** — records, grader, rewritten system prompt, base model
+choice, probe report — and the cloud runs **GRPO directly on the
+tool-capable base model**. No BC warm-start, because the base already
+has tool-calling from its instruction-tuning phase and BC would
+re-teach things it already knows. On-policy sampling prevents
+compounding error structurally. Once training completes, the local
+pipeline drives evaluation against the cloud-served model using
+unseen customer paraphrases, not a held-out slice. **Deployment is
+deferred for v1** — the existing vLLora gateway already serves
+inference. **The local pipeline owns Stages 1–6 and 8 (extract,
+grader, prompt rewrite, probe, eval); the cloud owns Stage 7
+(training); Stage 9 (deploy) is deferred.**
 
 ---
 

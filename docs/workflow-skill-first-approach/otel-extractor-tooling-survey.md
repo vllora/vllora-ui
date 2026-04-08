@@ -1,13 +1,47 @@
-# OTel Trace Extractor — Tooling Survey
+# Pipeline Tooling Survey
 
 > **Status:** Tooling reference (2026-04-08). Companion to
 > `otel-traces-as-finetune-input.md`. This doc records what existing
-> libraries can and cannot do for the extraction step, so we don't
-> reinvent code that already exists and don't expect libraries to
-> handle work that nobody has shipped. Updated as the landscape
-> evolves.
+> libraries can and cannot do for **every stage of the trace
+> finetune pipeline**, so we don't reinvent code that already exists
+> and don't expect libraries to handle work nobody has shipped.
+> Updated as the landscape evolves.
+>
+> Original scope was extraction only (Stages 1–3). Stages 4–9 were
+> added in a follow-up research pass — see "Stages 4–9: Pipeline
+> tooling survey" further down.
 
-## TL;DR
+## TL;DR — entire pipeline
+
+**Scope split as of 2026-04-08:** the cloud server (LangDB Cloud)
+handles GRPO training (Stage 7). Deployment (Stage 9) is deferred.
+**Our local v1 pipeline owns Stages 1–6 and 8** — extract from
+traces, derive a grader, rewrite the system prompt, run the
+difficulty probe, hand the artifacts to the cloud, then evaluate the
+trained model.
+
+| Stages | Owner | What library / framework / platform | Reuse % | Notes |
+|---|---|---|---|---|
+| **1–3 — Trace ingestion + extraction** | Local pipeline | Phoenix `get_spans_dataframe` (read), LangSmith `LangSmithRunChatLoader` (read), LiteLLM (port tool-call normalization), OpenAI Cookbook validator (copy) | ~30% | Trajectory explosion is the novel piece nobody has shipped |
+| **4 — Tool-call grader** | Local pipeline | `jsonschema` + ported BFCL set-match logic | ~45% | Partial-credit scoring math is custom |
+| **5 — System prompt rewrite** | Local pipeline | LLM API call + `jinja2` template | ~20% | Meta-prompt for Qwen canonicalization is custom |
+| **6 — Difficulty probe** | Local pipeline | vLLM `LLM.generate(n=8)` + custom bucketing | ~20% | Bucketing rules are custom. (Probe runs locally against the base model **before** handing artifacts to the cloud — gates whether training is worth running at all.) |
+| **7 — GRPO training** | **Cloud server (LangDB Cloud)** | Cloud team's stack (presumed TRL + Unsloth or equivalent) | **N/A — not our code** | We hand off records + grader + rewritten system prompt + base model choice. The TRL #5366 pin (`transformers >= 5.0`) and other GRPO concerns belong to the cloud team, not us. |
+| **8 — Held-out eval** | Local pipeline (model lives on cloud, eval orchestration is local) | `inspect-ai` + custom eval loop + `deepeval ToolCorrectnessMetric` scorer | ~50% | τ-bench domain definition is ~2 days of engineering. May run inference against the cloud-served model. |
+| **9 — Deployment** | **Deferred** | (deferred) | — | Out of scope for v1 of this doc. Existing vLLora gateway likely handles it; revisit when we get there. |
+
+**Net for our local pipeline (Stages 1–6 and 8):** Stages 1–6 are
+majority-custom; Stage 8 is ~50/50. The custom code lives in
+trajectory explosion (Stage 3), grader scoring math (Stage 4),
+system-prompt meta-prompt (Stage 5), difficulty bucketing (Stage 6),
+and held-out eval orchestration (Stage 8). **Total v1 pipeline code
+estimate: ~600 LOC (extraction) + ~240 LOC (grader) + ~100 LOC
+(prompt rewrite) + ~50 LOC (probe) + ~150 LOC (eval orchestration) ≈
+1,140 LOC.** Plus the cloud handoff format spec.
+
+---
+
+## TL;DR — extraction only (original scope)
 
 **No single library does "OTel agent trace → fine-tuning JSONL"
 end-to-end.** Phoenix covers reading; LangSmith covers single-LLM-call
@@ -255,3 +289,597 @@ docs, source code, and paper abstracts as of April 2026.
 - [OpenAI Fine-tuning for Function Calling Cookbook](https://cookbook.openai.com/examples/fine_tuning_for_function_calling)
 - [OpenAI Supervised Fine-Tuning Guide](https://platform.openai.com/docs/guides/supervised-fine-tuning)
 - [openai-fine-tuning-validate (community CLI)](https://github.com/gh640/openai-fine-tuning-validate)
+
+---
+
+# Stages 4–9: Pipeline tooling survey
+
+> **Added 2026-04-08 in a follow-up research pass.** Stages 1–3 are
+> covered above; this section covers grader, system prompt rewriting,
+> difficulty probe, GRPO training, eval, and deployment. Each stage
+> has its own per-library findings and a verdict at the end.
+
+## Stage 4 — Programmatic grader / verifier for tool calls
+
+We need a deterministic verifier: `(predicted_tool_call,
+ground_truth_tool_call) → score in [0.02, 1.0]`. Wrong tool name → 0.02
+floor. Right tool + correct args → 1.0. Partial arg match →
+proportional score. Set-match for parallel tool calls.
+
+### `jsonschema` (Python)
+
+- **URL**: [github.com/python-jsonschema/jsonschema](https://github.com/python-jsonschema/jsonschema)
+- **What it does**: validates a JSON object against a JSON Schema draft
+  spec. `validate()` raises `ValidationError`; `iter_errors()`
+  enumerates all violations. Gives binary "valid / invalid" per
+  argument key.
+- **What it does NOT do**: no notion of "fraction of args correct" —
+  the partial-credit arithmetic is custom. No tool-name matching, no
+  parallel-call set-matching, no 0.02 floor.
+- **License**: Apache 2.0
+- **Maturity**: 4k+ stars, ubiquitous Python dep
+- **Verdict**: **PARTIALLY USEFUL.** Use for arg schema validation
+  inside the grader. Saves ~30 LOC of type-checking code.
+
+### BFCL / `bfcl-eval`
+
+- **URL**: [github.com/ShishirPatil/gorilla](https://github.com/ShishirPatil/gorilla/blob/main/berkeley-function-call-leaderboard/README.md), [pypi.org/project/bfcl-eval](https://pypi.org/project/bfcl-eval/)
+- **What it does**: AST substring matching between predicted and GT
+  function calls. Scores parallel calls as a set. Handles Python,
+  Java, SQL, REST. V4 adds agentic multi-step evaluation.
+- **What it does NOT do**: tightly coupled to BFCL's fixed 2000-function
+  dataset and its own tool schema format. No `from bfcl import
+  ToolCallMatcher` public API. Custom tools require `BFCL_PROJECT_ROOT`
+  env var. Parallel-call set-matching logic is embedded in
+  `checker/ast_checker.py` with BFCL-specific branching.
+- **License**: Apache 2.0
+- **Verdict**: **PARTIALLY USEFUL.** **Port** the parallel-set-match
+  logic (~80 LOC from `checker/ast_checker.py`), don't import as a
+  runtime dep. The AST substring matching idea is directly applicable.
+
+### DeepEval `ToolCorrectnessMetric` + `ArgumentCorrectnessMetric`
+
+- **URL**: [github.com/confident-ai/deepeval](https://github.com/confident-ai/deepeval), [deepeval.com/docs/metrics-tool-correctness](https://deepeval.com/docs/metrics-tool-correctness)
+- **What it does**: `ToolCorrectnessMetric` is deterministic — score =
+  (correctly used tools) / (total tools called). Supports
+  `should_consider_ordering`, `should_exact_match`, and
+  `evaluation_params=[ToolCallParams.INPUT_PARAMETERS]`. Can produce
+  partial credit at the **per-call** level (not per-argument within a
+  call).
+- **What it does NOT do**: per-arg partial credit within a single call.
+  No 0.02 floor for wrong tool name (returns 0). `ArgumentCorrectnessMetric`
+  uses an LLM judge — non-deterministic and adds per-sample latency,
+  unsuitable as the live GRPO reward function.
+- **License**: Apache 2.0
+- **Maturity**: ~7k stars
+- **Verdict**: **PARTIALLY USEFUL** for Stage 8 offline eval (cross-check
+  scorer). **NOT FIT** as the live GRPO reward function in Stage 7.
+
+### TRL `RewardConfig`
+
+- **URL**: [huggingface.co/docs/trl/main/grpo_trainer](https://huggingface.co/docs/trl/main/grpo_trainer)
+- **What it does**: TRL ships **no** tool-call grader. `GRPOConfig`
+  accepts a `reward_funcs` parameter for user-supplied callables. This
+  is the hook for plugging your custom grader in.
+- **Verdict**: **NOT FIT** as a grader. Use it as the integration point
+  for the custom grader.
+
+### τ-bench evaluation code
+
+- Grades by comparing final database state against annotated goal
+  state. Black-box task-completion metric, not a per-tool-call
+  partial-credit function.
+- **Verdict**: **NOT FIT** for Stage 4. Relevant only in Stage 8.
+
+### Stage 4 best stack
+
+- `jsonschema` for arg type validation
+- Ported BFCL set-match logic (~80 LOC)
+- Custom: tool-name match → branch (wrong = 0.02 floor), per-arg
+  partial credit ratio, parallel call set scoring wrapper
+
+**Total grader: ~240 LOC, ~110 LOC reused/ported, ~130 LOC custom.**
+Net build vs. reuse: ~55% custom, ~45% reused.
+
+---
+
+## Stage 5 — System prompt rewriting / canonicalization
+
+We need a one-shot rewrite of the demonstrator's system prompt: drop
+dynamic context (dates, user IDs), drop demo-only capability claims,
+fit student context budget, normalize tool catalog formatting.
+
+### Anthropic Prompt Improver
+
+- **URL**: [docs.anthropic.com/en/api/prompt-tools-improve](https://docs.anthropic.com/en/api/prompt-tools-improve)
+- **What it does**: rewrites prompts via XML standardization, example
+  enrichment with CoT, structural rewriting. Available as REST endpoint
+  `POST /api/v0/prompt_tools/improve`.
+- **What it does NOT do**: optimizes for **Claude**, not Qwen. Adds
+  XML-heavy structure that's counterproductive for the student. Not
+  callable as a Python library; requires Anthropic API key. **Does not
+  reduce context length or drop capability claims.**
+- **Verdict**: **NOT FIT.** Wrong optimization target.
+
+### DSPy `MIPROv2` / `BootstrapFinetune`
+
+- **URL**: [dspy.ai/learn/optimization/optimizers](https://dspy.ai/learn/optimization/optimizers/), [github.com/stanfordnlp/dspy](https://github.com/stanfordnlp/dspy)
+- **What it does**: `MIPROv2` iteratively rewrites and samples
+  instructions, using bootstrapped traces to propose better instruction
+  text. `BootstrapFinetune` distills a prompt-based program into weight
+  updates.
+- **What it does NOT do**: requires a training set with labels to
+  evaluate candidate prompts — can't run on a single system prompt
+  without an eval loop. High setup cost for one-shot rewrite.
+- **License**: MIT
+- **Maturity**: 23k+ stars
+- **Verdict**: **NOT FIT** for one-shot use. Useful later if we want
+  automated prompt search over a dev set.
+
+### `jinja2` / `mako` template engines
+
+- **What they do**: text templating with variables, filters, loops.
+  Useful for the **formatting** side — constructing the tool catalog
+  section of the prompt from a structured tool-definition dict.
+- **What they don't do**: no semantic rewriting; can't drop capability
+  claims or summarize.
+- **Verdict**: **PARTIALLY USEFUL** for the mechanical formatting step
+  (tool catalog → consistent YAML/JSON block).
+
+### Langfuse prompt management
+
+- **URL**: [langfuse.com/docs/prompt-management/overview](https://langfuse.com/docs/prompt-management/overview)
+- **What it does**: versioned prompt storage, A/B labels, SDK-level
+  `get_prompt()` with caching.
+- **What it does NOT do**: no rewriting capability — registry, not
+  transformer.
+- **Verdict**: **NOT FIT** for rewriting. Useful later for storing the
+  canonicalized prompt with version history.
+
+### Stage 5 best stack
+
+- **One LLM call** with a purpose-written meta-prompt targeting Qwen's
+  instruction format (use Claude Haiku or GPT-4o-mini for cost) — ~20
+  LOC wrapping the SDK
+- **`jinja2`** for tool catalog formatting
+
+**Total: ~100 LOC.** Net build vs. reuse: ~80% custom logic, ~20%
+jinja2 template rendering.
+
+---
+
+## Stage 6 — Pre-training probe (K-rollout difficulty distribution)
+
+Run the untrained base model with K=8 rollouts on each record, score
+each rollout with the grader, bucket records as trivial / learnable /
+impossible.
+
+### vLLM offline inference
+
+- **URL**: [docs.vllm.ai/en/latest/serving/offline_inference](https://docs.vllm.ai/en/latest/serving/offline_inference/)
+- **What it does**: `LLM.generate(prompts, SamplingParams(n=8,
+  temperature=0.9))` runs exactly K=8 rollouts per prompt in a single
+  batched call. Returns `RequestOutput` with `outputs[0..7]` — each
+  has `.text` and `.token_ids`. Precisely the API the probe needs.
+- **Caveat**: vLLM must be installed separately from the training
+  environment (GPU dependency conflict with the Unsloth training
+  container). Run probe before training, then deallocate before
+  spinning up the trainer. Sequential on a single GPU; two jobs on
+  cloud.
+- **License**: Apache 2.0
+- **Maturity**: 43k+ stars, in production at vLLora
+- **Verdict**: **USE.** This is the right tool. Already in production.
+
+### `lm-evaluation-harness` (EleutherAI)
+
+- **What it does**: evaluates models on 60+ fixed academic benchmarks
+  with automatic batching.
+- **What it does NOT do**: no K-sample probing API. `generate_until`
+  task type calls the model once per sample. Multi-sample sampling is
+  not configurable. No bucketing logic.
+- **Verdict**: **NOT FIT** for difficulty probing.
+
+### TRL `GRPOTrainer` dry-run mode
+
+- **What it does**: nothing — TRL has no "probe" or "dry run" mode.
+  Loading the full trainer machinery (LoRA init, optimizer, ref model)
+  is wasteful for probing.
+- **Verdict**: **NOT FIT.** Use vLLM directly.
+
+### `inspect-ai` (UK AISI)
+
+- **URL**: [github.com/UKGovernmentBEIS/inspect_ai](https://github.com/UKGovernmentBEIS/inspect_ai)
+- **What it does**: flexible eval framework. `@task` definitions with
+  custom solvers and scorers. Supports multi-sample trials via
+  `epochs` parameter. `AgentBridge` for plugging in external agents.
+- **Caveat**: `epochs` repeats the full task N times rather than
+  producing K candidates per prompt within one call. No native "sample
+  K, compute variance" API. Overhead is significant for a pure probe.
+- **Verdict**: **PARTIALLY USEFUL** for Stage 8 eval; overkill for
+  Stage 6 probe.
+
+### Stage 6 best stack
+
+- **vLLM `LLM.generate(n=8)`** — direct, fast, already in production
+- **Custom bucketing** (~40 LOC): trivial = all 8 scores ≥ 0.9;
+  impossible = all 8 ≤ 0.1; learnable = anything in between
+
+Net build vs. reuse: ~20% vLLM wrapper, ~80% custom bucketing +
+orchestration.
+
+---
+
+## Stage 7 — GRPO training (handled by cloud server, not our code)
+
+> **Scope note:** **Stage 7 is owned by the cloud server (LangDB
+> Cloud), not the local v1 pipeline.** Our local pipeline produces
+> the artifacts the cloud needs (records, grader, rewritten system
+> prompt, base model choice), uploads them via the existing
+> finetune API, and the cloud runs training. The library survey
+> below is **informational reference only** — it describes what the
+> cloud team is most likely using, so we know what their constraints
+> are and what handoff format they expect. **None of the code in
+> this section is something the local pipeline implements.**
+
+### What the local pipeline owes the cloud
+
+The cloud needs:
+
+1. **Training records** as JSONL — one full conversation per line
+   per the OpenAI fine-tuning format (see Stage 3 in the concept
+   doc). Includes `messages` array, `tools` array, optional
+   `tool_choice`. **All records share the same `tools` array** (the
+   v1 consistency rule).
+2. **Grader** as a programmatic function or schema-based config
+   that takes `(predicted_tool_call, ground_truth_tool_call) →
+   score in [0.02, 1.0]`. Format depends on what the cloud team
+   accepts: a Python callable shipped as a file, or a declarative
+   spec (preferred — easier to validate at the cloud boundary).
+3. **System prompt** — the one rewritten prompt the local pipeline
+   produced in Stage 5, applied identically to every record.
+4. **Base model choice** — Qwen 2B/4B / Llama-3.2 / etc., per
+   workflow.
+5. **Difficulty probe results** (optional but recommended) — if the
+   local probe (Stage 6) ran and the bucket distribution looks
+   trainable, ship the probe report so the cloud doesn't re-do the
+   work or proceed when it shouldn't.
+
+The handoff format itself should be specified in a separate doc
+(`docs/workflow-skill-first-approach/cloud-finetune-handoff.md`,
+TBD).
+
+### Reference: what the cloud most likely uses internally
+
+The following library notes are **for context only**. The cloud team
+chooses these; the local pipeline doesn't import them.
+
+### TRL `GRPOTrainer` (HuggingFace)
+
+- **URL**: [huggingface.co/docs/trl/main/grpo_trainer](https://huggingface.co/docs/trl/main/grpo_trainer)
+- **What it does**: implements GRPO with configurable loss types
+  (`dr_grpo`, `dapo`, `grpo`, `bnpo`, `cispo`, `sapo`, `luspo`,
+  `vespo`). Online generation via vLLM backend, advantage estimation,
+  clipping, logging. Our production stack.
+- **Known issues** (each verified against the TRL issue tracker):
+  - **#5366** — GRPOTrainer with Qwen tool-calling format does not
+    generate tool calls during training unless `transformers >= 5.0`
+    AND the system prompt explicitly gates tool use. Workarounds: use
+    hermes-style tool tags in system prompt; avoid `try/except` in
+    reward function.
+  - **#4543** — multi-step agent training loses per-step prefixes
+    when using vLLM server mode; importance sampling computes against
+    the wrong behavior policy. Affects our trajectory-exploded
+    records.
+  - **#3881** — model deterioration with `accelerate` multi-GPU.
+    Fixed in later releases but requires `unsloth_train()` instead
+    of native `train()`.
+  - **#3520** — BOS token bug, affects Gemma-family. Qwen unaffected.
+- **License**: Apache 2.0
+- **Maturity**: 12k+ stars
+- **Verdict**: **USE** (already in production). Pin `transformers >=
+  5.0`. Use `unsloth_train()` instead of native `train()`. Investigate
+  #4543 before relying on multi-step trajectory training.
+
+### Unsloth
+
+- **URL**: [github.com/unslothai/unsloth](https://github.com/unslothai/unsloth), [unsloth.ai/docs/get-started/reinforcement-learning-rl-guide](https://unsloth.ai/docs/get-started/reinforcement-learning-rl-guide)
+- **What it adds over TRL**: 90% VRAM reduction via optimized attention
+  kernels, gradient checkpointing, custom triton kernels.
+  `unsloth_train()` fixes the gradient accumulation normalization bug
+  in vanilla TRL. FP8 GRPO support (1.4× faster, 60% less VRAM).
+  Long-context GRPO up to 380K tokens. Supports `dr_grpo`, `dapo`,
+  `bnpo` loss types natively.
+- **Caveat**: Unsloth's tool-calling improvements (30-80% claimed in
+  changelog) are at **inference time** (Studio), not in the GRPO
+  training loop. The TRL #5366 training-loop issues still apply.
+- **License**: Apache 2.0
+- **Maturity**: 28k+ stars
+- **Verdict**: **USE** (already in production). TRL + Unsloth is the
+  right stack.
+
+### Axolotl
+
+- **URL**: [docs.axolotl.ai/docs/grpo.html](https://docs.axolotl.ai/docs/grpo.html)
+- **What it does**: configuration-driven fine-tuning with YAML configs.
+  Added GRPO support Feb 2025. vLLM as generation backend.
+- **Caveat**: config-driven design makes injecting custom reward
+  functions harder than writing Python directly against TRL. No
+  specific tool-call training improvements over raw TRL.
+- **Verdict**: **NOT FIT** as a replacement. Possibly useful as a
+  reference for vLLM-accelerated rollout config.
+
+### OpenRLHF
+
+- **URL**: [github.com/OpenRLHF/OpenRLHF](https://github.com/OpenRLHF/OpenRLHF), [arxiv.org/html/2501.03262v4](https://arxiv.org/html/2501.03262v4)
+- **What it does**: Ray-based distributed GRPO/PPO. 3.1× faster than
+  TRL on 1-epoch GSM8K benchmark. Multi-node large-model training.
+- **Caveat**: overkill for Qwen 2B/4B on a single or few GPUs. Ray
+  cluster overhead negates the speedup at small scale. No Unsloth VRAM
+  optimization integration.
+- **Verdict**: **NOT FIT** for our scale. Revisit if scaling to 70B+.
+
+### verl
+
+- **URL**: [github.com/verl-project/verl](https://github.com/verl-project/verl)
+- **What it does**: single-controller Ray actor managing GRPO, PPO,
+  DAPO, DrGRPO. Scales to 671B with expert parallelism. FSDP +
+  DeepSpeed + Megatron backends.
+- **Caveat**: built for multi-node scale, minimum useful size ~30B+.
+  Documentation targets A100/H100 clusters.
+- **Verdict**: **NOT FIT** for our scale.
+
+### NeMo RL
+
+- **URL**: [docs.nvidia.com/nemo/rl/latest/guides/grpo-deepscaler.html](https://docs.nvidia.com/nemo/rl/latest/guides/grpo-deepscaler.html)
+- **Status note**: NeMo-Aligner is **deprecated as of May 2025**.
+  Successor NeMo RL supports GRPO with Qwen 2.5 up to 32B. Built on
+  Ray + Megatron Core.
+- **Caveat**: heavy NVIDIA-stack dependency (NeMo Core, Megatron). Not
+  compatible with Unsloth or LoRA-based training. Massive overkill for
+  Qwen 2B/4B on a single GPU.
+- **Verdict**: **NOT FIT** for our stack.
+
+### Stage 7 best stack — for our local pipeline
+
+**Nothing.** Stage 7 is owned by the cloud server. Our pipeline's
+job is to produce a clean handoff — records + grader + rewritten
+system prompt + base model choice — and upload them via the existing
+finetune API. The cloud team owns the trainer choice, the
+TRL/Unsloth pin, the multi-step trajectory issue (#4543), and
+everything else under "Reference: what the cloud most likely uses
+internally."
+
+**The only Stage 7 concern that survives on our side** is the
+handoff format spec: what shape do records take, what shape does
+the grader take, what metadata does the cloud need. This is a
+separate doc (`cloud-finetune-handoff.md`, TBD).
+
+If the cloud team asks "what should we use," the survey above is
+the answer: TRL `GRPOTrainer` + Unsloth + `transformers >= 5.0` +
+`unsloth_train()` instead of native `train()`. But that's their
+call, not ours.
+
+---
+
+## Stage 8 — Eval framework (held-out paraphrases / held-out tasks)
+
+Evaluate the trained model on held-out customer phrasings and tasks
+the model has never seen.
+
+### BFCL / `bfcl-eval`
+
+- **What it does**: evaluates tool-call accuracy on a fixed
+  2000-function dataset across simple, multiple, parallel, nested, and
+  irrelevance categories. V4 adds multi-turn agentic eval.
+- **Caveat**: does NOT support custom tool definitions without
+  rewriting BFCL's internal schema and `eval_runner.py`. No documented
+  "bring your own tools" API.
+- **Verdict**: **PARTIALLY USEFUL** for benchmarking overall
+  function-calling quality post-training. **Not directly usable** for
+  domain-specific (shopping agent) eval without significant forking.
+
+### τ-bench
+
+- **URL**: [github.com/sierra-research/tau-bench](https://github.com/sierra-research/tau-bench), [github.com/sierra-research/tau2-bench](https://github.com/sierra-research/tau2-bench), [arxiv.org/abs/2406.12045](https://arxiv.org/abs/2406.12045)
+- **What it does**: evaluates tool-using agents on multi-turn
+  conversations with a simulated user. Grades by final database state
+  vs. goal state. Measures pass^k. Modular codebase.
+- **Caveat**: only **retail + airline domains** shipped OOTB. "Easy to
+  add new domains" per readme, but in practice requires writing a full
+  policy document, task database, and simulated-user prompt — roughly
+  **2-4 days of domain engineering** for the shopping agent.
+  τ²-Bench (2025) adds dual-control scenarios.
+- **Verdict**: **PARTIALLY USEFUL.** The evaluation harness is
+  reusable. Running it on a custom shopping agent requires the
+  domain-definition effort.
+
+### `inspect-ai` (UK AISI)
+
+- **URL**: [github.com/UKGovernmentBEIS/inspect_ai](https://github.com/UKGovernmentBEIS/inspect_ai), [inspect.aisi.org.uk/agent-custom.html](https://inspect.aisi.org.uk/agent-custom.html)
+- **What it does**: composable eval framework with `@task`, `@solver`,
+  `@scorer` decorators. Multi-sample `epochs`, tool calling via
+  `use_tools()`, `AgentBridge` for external agents (OpenAI SDK,
+  LangChain, PydanticAI). BFCL plugin via `inspect_evals`.
+- **Caveat**: BFCL integration uses the same fixed dataset. Wrapping
+  our agent as an `inspect-ai` `Agent` adds 50-100 LOC of adapter.
+- **License**: MIT
+- **Maturity**: 3k+ stars, v0.3.130
+- **Verdict**: **PARTIALLY USEFUL** as an eval harness. Best use: wrap
+  vLLM-served fine-tuned model as an inspect-ai solver, run held-out
+  paraphrase tasks, use `ToolCorrectnessMetric`-style scorer.
+
+### `lm-evaluation-harness`
+
+- No agent eval or tool-call accuracy metrics.
+- **Verdict**: **NOT FIT** for Stage 8.
+
+### DeepEval `ToolCorrectnessMetric` (offline use)
+
+- Deterministic, partial credit per tool call. Skip
+  `ArgumentCorrectnessMetric` to avoid the LLM judge.
+- **Verdict**: **PARTIALLY USEFUL** as a scorer inside any eval
+  harness.
+
+### LLM-as-judge paraphrase eval (fallback)
+
+- Generate paraphrases of training prompts using GPT-4o-mini, run the
+  fine-tuned model, score with the Stage 4 grader. No new library
+  needed beyond the vLLM offline inference from Stage 6.
+- **Verdict**: This is the **pragmatic v1 path** for domain-specific
+  eval until a τ-bench domain is written.
+
+### Stage 8 best stack
+
+- **Custom eval loop** (vLLM offline inference + Stage 4 grader) for
+  paraphrase eval — pragmatic v1
+- **`inspect-ai` + τ-bench domain definition** for task-level eval —
+  v2 when domain engineering effort is justified
+- **DeepEval `ToolCorrectnessMetric`** as a cross-check scorer
+
+Net build vs. reuse: ~50% reuse (`inspect-ai` harness, deepeval
+scorer), ~50% custom (τ-bench domain definition, paraphrase generation,
+result aggregation).
+
+---
+
+## Stage 9 — Deployment (deferred)
+
+> **Scope note:** **Stage 9 is deferred for v1.** The existing
+> vLLora gateway already serves vLLM-based inference for the
+> production stack, so deployment is not blocking the trace
+> finetune pipeline. We'll revisit Stage 9 when:
+>
+> 1. The local pipeline (Stages 1–6, 8) is producing artifacts that
+>    the cloud has trained on at least once
+> 2. There is a fine-tuned LoRA adapter to actually serve
+> 3. The handoff between cloud-trained adapter and the local
+>    deployment endpoint becomes a real question
+>
+> The library survey below is **informational reference only** —
+> kept so when we get to Stage 9, the landscape is already mapped.
+> **None of this is in v1 scope.**
+
+### vLLM
+
+- **URL**: [docs.vllm.ai/en/latest/features/tool_calling](https://docs.vllm.ai/en/latest/features/tool_calling/)
+- **What it does**: serves models with `--enable-auto-tool-choice
+  --tool-call-parser hermes` for Qwen tool calling. The `hermes`
+  parser extracts `<tool_call>` tags from Qwen2.5/Qwen3 output and
+  returns structured `tool_calls` arrays in OpenAI response format.
+  Supports LoRA adapter hot-loading via `--enable-lora`.
+- **Known issue**: Qwen2.5-**Coder** models don't follow hermes
+  format ([#29192](https://github.com/vllm-project/vllm/issues/29192))
+  — they output JSON code blocks. Standard Qwen2.5/Qwen3 **Instruct**
+  models work. Fine-tuned models that alter the tool-call token
+  pattern may break the parser.
+- **License**: Apache 2.0
+- **Maturity**: 43k+ stars, in production
+- **Verdict**: **USE** (already in production). Required flags:
+  `--enable-auto-tool-choice --tool-call-parser hermes`. For LoRA
+  fine-tune: add `--enable-lora --lora-modules
+  ft-adapter=/path/to/lora`.
+
+### SGLang
+
+- **URL**: [github.com/sgl-project/sglang](https://github.com/sgl-project/sglang), [docs.sglang.io/advanced_features/structured_outputs.html](https://docs.sglang.io/advanced_features/structured_outputs.html)
+- **What it does**: RadixAttention for KV cache reuse (faster
+  multi-turn), compressed FSM for structured-output decoding with
+  near-zero overhead. OpenAI-compatible API. Tool calling via
+  constrained decoding with JSON schema.
+- **Advantage over vLLM**: structured output (JSON-schema-constrained
+  generation) at up to **4× higher throughput** for short-output tasks.
+  For tool calls with a known JSON schema, SGLang's FSM constrained
+  decoding can guarantee valid JSON and eliminate parser fragility.
+- **Caveat**: smaller community than vLLM; Qwen3 hermes-tag-based
+  parsing path is less battle-tested.
+- **Verdict**: **PARTIALLY USEFUL.** Worth benchmarking for throughput
+  on the tool-call workload. Consider as a production swap if vLLM
+  throughput is insufficient.
+
+### TGI (HuggingFace text-generation-inference)
+
+- Tool calling via grammar-based constrained generation. **No Unsloth
+  LoRA adapter loading support.** Less active community for
+  Qwen-specific issues than vLLM.
+- **Verdict**: **NOT FIT** for our stack (Unsloth LoRA, Qwen-specific).
+
+### Ollama
+
+- Local CPU/GPU serving. No production scalability, no multi-GPU, no
+  LoRA hot-loading.
+- **Verdict**: **NOT FIT** for production. Useful for local dev only.
+
+### llama.cpp server
+
+- CPU-focused. No batched serving. Tool-calling support is
+  experimental (GGUF quantized models only).
+- **Verdict**: **NOT FIT** for production.
+
+### Managed platforms (HF Inference Endpoints, Modal, Together, Fireworks)
+
+- Together AI and Fireworks support OpenAI-compatible tool calling
+  with fine-tuned model uploads. HF Endpoints support custom Docker
+  containers (you can ship your vLLM container).
+- **Caveat**: vendor lock-in, egress costs. **Fine-tuned LoRA adapter
+  serving on managed platforms requires merging the LoRA weights into
+  the base model first** (no hot-loading).
+- **Verdict**: **PARTIALLY USEFUL** as fallback if vLLora gateway is
+  not self-hosted.
+
+### Stage 9 best stack — deferred
+
+**Out of scope for v1.** When we get to Stage 9, the most likely
+answer is `vLLM --tool-call-parser hermes` + LoRA merge-or-load via
+the existing vLLora gateway. ~50 LOC of deployment config and
+gateway routing. But that's a v1.5+ decision, not now.
+
+---
+
+## Sources (Stages 4–9)
+
+### Tool-call grader / verifier
+- [python-jsonschema GitHub](https://github.com/python-jsonschema/jsonschema)
+- [Berkeley BFCL GitHub](https://github.com/ShishirPatil/gorilla/blob/main/berkeley-function-call-leaderboard/README.md)
+- [bfcl-eval on PyPI](https://pypi.org/project/bfcl-eval/)
+- [DeepEval GitHub](https://github.com/confident-ai/deepeval)
+- [DeepEval Tool Correctness docs](https://deepeval.com/docs/metrics-tool-correctness)
+- [DeepEval Argument Correctness docs](https://deepeval.com/docs/metrics-argument-correctness)
+
+### System prompt rewriting
+- [Anthropic prompt improver API](https://docs.anthropic.com/en/api/prompt-tools-improve)
+- [DSPy optimizers](https://dspy.ai/learn/optimization/optimizers/)
+- [DSPy GitHub](https://github.com/stanfordnlp/dspy)
+- [Langfuse prompt management](https://langfuse.com/docs/prompt-management/overview)
+
+### Difficulty probe
+- [vLLM offline inference docs](https://docs.vllm.ai/en/latest/serving/offline_inference/)
+- [vLLM GitHub](https://github.com/vllm-project/vllm)
+- [inspect-ai GitHub](https://github.com/UKGovernmentBEIS/inspect_ai)
+
+### GRPO training
+- [TRL GRPOTrainer docs](https://huggingface.co/docs/trl/main/grpo_trainer)
+- [TRL issue #5366 — GRPO with tool use](https://github.com/huggingface/trl/issues/5366)
+- [TRL issue #4543 — multi-step agent training](https://github.com/huggingface/trl/issues/4543)
+- [TRL issue #3881 — model deterioration with accelerate](https://github.com/huggingface/trl/issues/3881)
+- [TRL issue #3520 — BOS token garbage output](https://github.com/huggingface/trl/issues/3520)
+- [Unsloth RL guide](https://unsloth.ai/docs/get-started/reinforcement-learning-rl-guide)
+- [Unsloth GitHub](https://github.com/unslothai/unsloth)
+- [Axolotl GRPO docs](https://docs.axolotl.ai/docs/grpo.html)
+- [OpenRLHF arXiv](https://arxiv.org/html/2501.03262v4)
+- [verl GitHub](https://github.com/verl-project/verl)
+- [NeMo RL GRPO guide](https://docs.nvidia.com/nemo/rl/latest/guides/grpo-deepscaler.html)
+- [Anyscale open-source RL libraries comparison](https://www.anyscale.com/blog/open-source-rl-libraries-for-llms)
+
+### Eval frameworks
+- [BFCL on inspect_evals](https://ukgovernmentbeis.github.io/inspect_evals/evals/assistants/bfcl/)
+- [τ-bench GitHub](https://github.com/sierra-research/tau-bench)
+- [τ²-bench GitHub](https://github.com/sierra-research/tau2-bench)
+- [τ-bench arXiv](https://arxiv.org/abs/2406.12045)
+- [inspect-ai custom agents docs](https://inspect.aisi.org.uk/agent-custom.html)
+
+### Deployment
+- [vLLM tool calling docs](https://docs.vllm.ai/en/latest/features/tool_calling/)
+- [vLLM issue #29192 — Qwen2.5-Coder parser failure](https://github.com/vllm-project/vllm/issues/29192)
+- [SGLang GitHub](https://github.com/sgl-project/sglang)
+- [SGLang structured outputs docs](https://docs.sglang.io/advanced_features/structured_outputs.html)
+- [Qwen function calling docs](https://qwen.readthedocs.io/en/latest/framework/function_call.html)
