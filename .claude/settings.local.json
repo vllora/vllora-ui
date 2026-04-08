@@ -489,7 +489,8 @@
       "Bash(echo \"  ❌ $key\")",
       "Bash(cp /Users/anhthuduong/Documents/GitHub/vllora/ui/agents/training-monitor.md /Users/anhthuduong/Documents/GitHub/test-samples/tax-deduction-analyzer/.claude/agents/training-monitor.md)",
       "Bash(cp /Users/anhthuduong/Documents/GitHub/vllora/ui/agents/relation-builder.md /Users/anhthuduong/Documents/GitHub/test-samples/tax-deduction-analyzer/.claude/agents/relation-builder.md)",
-      "WebFetch(domain:www.interconnects.ai)"
+      "WebFetch(domain:www.interconnects.ai)",
+      "Bash(bash:*)"
     ],
     "deny": [],
     "ask": [],

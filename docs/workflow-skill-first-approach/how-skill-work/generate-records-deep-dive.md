@@ -455,7 +455,7 @@ After initial generation and evaluation, the readiness gate may detect that too 
 eval → readiness-check detects signal density warning
   (trivial > 40% AND learnable < 35%)
          ↓
-harden_records.py
+finetune.py harden-records
   → reads training.jsonl + eval results
   → identifies trivial records (score > 0.85)
   → LLM rewrites each trivial record's user input to be harder

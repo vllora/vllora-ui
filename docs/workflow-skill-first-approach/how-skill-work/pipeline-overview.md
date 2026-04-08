@@ -171,6 +171,18 @@ All gateway API calls go through `scripts/finetune.py` — a single wrapper scri
 | `finetune.py cancel-training` | 7e | Cancel a running training job |
 | `finetune.py delete-knowledge` | — | Delete knowledge source(s) from a workflow |
 | `finetune.py print-row-outputs` | 8 | Print epoch table for one row: rollout output, score, reason |
+| `finetune.py log-step` | any | Log a pipeline step to `execution-log.md` + `pipeline-journal.json` |
+| `finetune.py upload-knowledge` | 2 | Upload a knowledge source + parts (listed above) |
+| `finetune.py test-grader` | 5 | Adversarial grader test — feeds wrong answers to detect leniency before eval |
+| `finetune.py harden-records` | 7c++ | Generate harder variants of trivial records (score > 0.85) to improve GRPO signal density |
+| `finetune.py reconcile-topics` | 4+ | Detect and fix topic↔GT mismatches after GT derivation (`--apply` to write) |
+| `finetune.py grader-sanity-check` | 7b+/8 | MANDATORY after every eval — hard-fail on collapse/gaming/inference bugs |
+| `finetune.py diagnose-clipping` | 8 | Diagnose root cause of completion clipping after auto-cancel (config / grader drift / spec mismatch) |
+| `finetune.py cancel-eval` | 7b | Cancel a running evaluation |
+| `finetune.py search-knowledge` | any | Semantic search over knowledge parts |
+| `finetune.py update-part-relevance` | 3 | Update parts with relevance labels from `all-parts-index.json` |
+
+There are **34 subcommands total** — run `finetune.py --help` for the full list.
 
 Other helper scripts:
 
@@ -190,7 +202,7 @@ Other helper scripts:
 | `deduplicate_records.py` | 4 | Removes near-duplicate prompts across overlapping topics (threshold-based) |
 | `data_quality_gate.py` | 5.5b | Pre-eval data quality gate: structural checks, diversity analysis, completion length, **source accuracy** (GT values vs source parts), GT quality scoring, prompt-GT alignment |
 | `probe_difficulty.py` | 7c+ | Post-eval difficulty probe: difficulty buckets, K=8 zero-var prediction, grader granularity, per-topic signal |
-| `harden_records.py` | 7c++ | Post-eval: generates harder variants of trivial records (score > 0.85) via LLM rewrite. Adds alongside originals. Research: arXiv:2505.17063 |
+| `finetune.py harden-records` | 7c++ | Post-eval: generates harder variants of trivial records (score > 0.85) via LLM rewrite. Adds alongside originals. Research: arXiv:2505.17063 |
 | `dry_run_grader.py` | 5 | Tests grader on one record via gateway sandbox |
 | `run_evaluation.py` | 7b | Legacy: Creates eval job, polls until complete. Prefer `finetune.py create-eval` + `poll-eval` |
 | `start_training.py` | 7d | Legacy: Starts training job, polls until complete. Prefer `finetune.py create-training` + `poll-training` |
@@ -202,12 +214,13 @@ All scripts use PEP 723 inline dependencies. Run with `python3` (requires `reque
 
 ## Subagents
 
-The skill uses 3 subagents to handle context-heavy, long-running, or repetitive work in isolated contexts:
+The skill uses 4 subagents (in `agents/`) to handle context-heavy, long-running, or repetitive work in isolated contexts:
 
 | Subagent | Invoked at | What it does | Input | Output |
 |----------|-----------|-------------|-------|--------|
 | `knowledge-extractor` | Step 2b (parallel, 1 per PDF) | Extracts knowledge from ONE document: polls Docling, builds parts, post-processes, uploads | SKILL_DIR, WORKFLOW_ID, DOC_PATH, DOC_SLUG, DOC_DIR, TASK_ID | `knowledge_parts.json`, `parts-index.json`, gateway upload |
 | `relation-builder` | Step 3b | Matches knowledge parts to leaf topics (max 15 per topic) | `all-parts-index.json` + `topics.json` via PROJECT_DIR | `relations.json` |
+| `nemo-data-generator` | Step 4B (when `use_nemo=true`) | Generates training records via NeMo Data Designer server. Takes topics + system prompt, produces `training.jsonl` | topics, system prompt, workflow ID | `training.jsonl`, `nemo-metadata.jsonl` |
 | `training-monitor` | Step 7e (background) | Polls training metrics every 30s, detects anomalies (NaN loss, KL divergence, overfitting), saves metrics data for post-training analysis | Gateway URL, WORKFLOW_ID, JOB_ID, OUTPUT_DIR | `{JOB_ID}-metrics.json`, `{JOB_ID}-monitor-report.json` |
 
 The main agent delegates to subagents explicitly. Each subagent starts with a fresh context, reads only the files it needs, and returns a structured summary. The `knowledge-extractor` runs in parallel (1 per document) during Step 2. The `training-monitor` runs in the background during Step 7e — it writes a Python script, launches it via `nohup`, and returns immediately.
@@ -968,7 +981,7 @@ python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py difficulty-probe \
 **What happens**: When the readiness gate or difficulty probe detects too many trivial records (score > 0.85), the agent runs `harden-records` to generate harder variants. This is part of the signal density fix flow: eval → detect trivials → harden → re-upload → re-eval.
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/harden_records.py \
+python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py harden-records \
   --training-file finetune-project/training.jsonl \
   --eval-file evaluations/eval-001.json \
   --threshold 0.85 \
