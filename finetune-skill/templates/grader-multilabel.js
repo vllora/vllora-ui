@@ -333,10 +333,10 @@ function evaluate(input) {
     // Recall completeness: what fraction of GT labels did model find?
     var completeness = (gtCount > 0) ? tp / gtCount : 1.0;
 
-    if (tp === gtCount && fp === 0) {
-        // Perfect match: 0.90-1.0 (brevity bonus can push to 1.0)
-        baseScore = 0.90 + (fbeta - 0.90) * 0.10;
-        if (baseScore < 0.90) baseScore = 0.90;
+    if (tp === gtCount && fp === 0 && fn === 0) {
+        // Perfect match: base 0.95, brevity bonus can push to 1.0.
+        // (Was: 0.90 + (fbeta-0.90)*0.10 which capped at 0.91 — math error.)
+        baseScore = 0.95;
     } else if (tp === gtCount && fp > 0) {
         // All GT labels found but with extra FPs: 0.50-0.70
         // Good recall but imprecise — FP penalty below will reduce further
@@ -410,7 +410,13 @@ function evaluate(input) {
     // model predicted 3+ extra labels beyond GT, cap at 0.15 (above wrong tier
     // 0.05 but below normal partial tier ~0.27).
     // Ref: MO-GRPO Theorem 1 (arXiv:2509.22047)
-    var extraLabels = modelLabels.length - gtCount;
+    // Count TOTAL emissions (resolved labels + OOV + duplicates), not just
+    // canonical labels. A response with 1 correct label + 20 OOV tokens has
+    // canonical-extraLabels = 0 but is obviously over-predicting — the
+    // defense must fire on those, otherwise a "fish, blah, blah, blah, ..."
+    // dump escapes capping and lands in the partial tier instead of wrong.
+    var totalEmissions = modelLabels.length + oovCount + dupCount;
+    var extraLabels = totalEmissions - gtCount;
     if (precision < 0.30 && extraLabels >= 3) {
         baseScore = Math.min(baseScore, 0.15);
         tpFloor = Math.min(tpFloor, 0.15);  // override the final guard too

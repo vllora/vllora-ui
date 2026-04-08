@@ -2397,7 +2397,10 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
     perfect_frac = sum(1 for s in _all_scores if s >= 0.99) / max(len(_all_scores), 1)
     _trivial_frac = sum(1 for s in _all_scores if s > 0.90) / max(len(_all_scores), 1)
     _learnable_frac = sum(1 for s in _all_scores if 0.20 <= s <= 0.65) / max(len(_all_scores), 1)
-    _dead_frac = sum(1 for s in _all_scores if s < 0.05) / max(len(_all_scores), 1)
+    # Dead band = wrong-tier floor. Modern graders use 0.05 as nonzero floor
+    # (not 0.0) to avoid frac_reward_zero_std collapse, so strict < 0.05 misses
+    # all dead records. Use <= 0.10 to capture the wrong-tier top.
+    _dead_frac = sum(1 for s in _all_scores if s <= 0.10) / max(len(_all_scores), 1)
 
     print(f"\n── READINESS SUMMARY (read this first) ──", file=sys.stderr)
     print(f"  Verdict: {verdict} | avg={_avg:.3f} | std={_std:.3f} | zeros={zero_frac:.0%} | perfect={perfect_frac:.0%}", file=sys.stderr)
@@ -2411,6 +2414,20 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
     elif _trivial_frac > 0.40 and _learnable_frac < 0.35:
         print(f"  ⚠ SIGNAL DENSITY LOW: {_trivial_frac:.0%} trivial, {_learnable_frac:.0%} learnable.", file=sys.stderr)
         print(f"    → Check grader → generate harder records → eval smaller model (in priority order)", file=sys.stderr)
+    elif _dead_frac > 0.20:
+        # Dead-band dominance: many records score near 0 at K=1. At K=16 these
+        # become zero-variance groups (all rollouts wrong) → zero gradient →
+        # wasted GPU time. Strongest remediation: rerun generation with tighter
+        # difficulty targeting, OR harden the dead records against the base
+        # model's current capability range.
+        # Reference: arXiv:2504.03380 (gradient vanishes at p=0)
+        print(f"  ⚠ DEAD BAND DOMINANT: {_dead_frac:.0%} of records score ≤ 0.10 at K=1.", file=sys.stderr)
+        print(f"    At K=16 most of these will become zero-variance groups (all rollouts wrong) →", file=sys.stderr)
+        print(f"    no gradient → wasted training. Before training:", file=sys.stderr)
+        print(f"      1. Run: finetune.py harden-records --eval-file <eval> --training-file <jsonl> --min-score 0.10", file=sys.stderr)
+        print(f"         (rewrites dead records with hints that bring them into the learnable band)", file=sys.stderr)
+        print(f"      2. If >30% remain dead after hardening, the task exceeds base model capability —", file=sys.stderr)
+        print(f"         use a larger base model or add a SFT warmup stage.", file=sys.stderr)
     else:
         print(f"  ✓ Proceed to training.", file=sys.stderr)
 
@@ -3117,7 +3134,7 @@ def cmd_create_eval(args: argparse.Namespace) -> None:
 
     model = args.model or "gpt-4o-mini"
     payload = {
-        "dataset_id": args.workflow_id,
+        "workflow_id": args.workflow_id,
         "rollout_model_params": {
             "model": model,
             "temperature": 0.7,
@@ -5121,9 +5138,8 @@ def cmd_cancel_training(args: argparse.Namespace) -> None:
 def cmd_cancel_eval(args: argparse.Namespace) -> None:
     """Cancel a running evaluation.
 
-    Marks the eval as cancelled locally (gateway DB + tracking file)
-    so the agent stops waiting. The cloud eval may continue running
-    but results will be ignored.
+    Calls POST /finetune/workflows/{workflow_id}/jobs/{eval_id}/cancel
+    and updates the local eval tracking file if one exists.
     """
     wf_id = args.workflow_id
     eval_id = args.eval_id
@@ -5132,13 +5148,15 @@ def cmd_cancel_eval(args: argparse.Namespace) -> None:
 
     try:
         _api(
-            "PATCH",
-            f"{args.base_url}/finetune/workflows/{wf_id}/eval-jobs/{eval_id}",
-            json={"status": "cancelled"},
+            "POST",
+            f"{args.base_url}/finetune/workflows/{wf_id}/jobs/{eval_id}/cancel",
         )
-        print(f"Eval {eval_id} marked as cancelled in gateway.")
+        print(f"Cancel request sent for eval {eval_id}.")
     except SystemExit:
-        print(f"  Warning: Could not update gateway (eval may be cloud-only). Updating local file only.", file=sys.stderr)
+        print(
+            "  Warning: Could not cancel eval via gateway. Updating local file only.",
+            file=sys.stderr,
+        )
 
     if args.file:
         eval_file = Path(args.file)
@@ -6191,6 +6209,217 @@ def cmd_harden_records(args: argparse.Namespace) -> None:
     )
 
 
+def cmd_reconcile_topics(args: argparse.Namespace) -> None:
+    """Reconcile record topic assignments with derived ground truth.
+
+    Generic for any closed-vocab classification finetune. Detects records where
+    the assigned topic conflicts with the GT label set, and (with --apply)
+    reassigns them to a topic that matches.
+
+    Stage 1 (generation) sets a record's topic from the prompt intent.
+    Stage 2 (derive_ground_truth) re-extracts the actual labels from the input
+    and may produce a GT that contradicts the generation-time topic. Without
+    reconciliation, the topic field becomes stale: the grader scores correctly
+    against the derived GT, but topic-stratified analysis (UI groups, per-topic
+    hardening, difficulty stratification) operates on the wrong assignments.
+
+    Heuristic mapping (no per-task config needed):
+    - Topics matching a single label name (e.g., "milk_sources", "wheat") →
+      expect GT to contain that label as primary
+    - Topics with prefixes "no_", "none", "negative", "non_" → expect GT="none"
+    - Topics with prefixes "multi_", "compound_", "complex_" → expect GT to
+      have 2+ labels
+    - Topics with prefix "tricky_" → mixed; only flagged, not reassigned
+
+    Without --apply: prints mismatches.  With --apply: rewrites the file.
+    """
+    from collections import Counter as _C
+    training_path = Path(args.training_file)
+    if not training_path.exists():
+        print(f"Error: training file not found: {training_path}", file=sys.stderr)
+        sys.exit(1)
+    records = [json.loads(l) for l in training_path.read_text().splitlines() if l.strip()]
+    if not records:
+        print("Error: training file is empty", file=sys.stderr)
+        sys.exit(1)
+
+    # Discover all topics and labels in use
+    all_topics = sorted({r.get("topic", "") for r in records if r.get("topic")})
+    label_universe: set[str] = set()
+    for r in records:
+        gt = (r.get("ground_truth") or "").lower().strip()
+        if gt and gt != "none":
+            for lbl in gt.split(","):
+                lbl = lbl.strip()
+                if lbl:
+                    label_universe.add(lbl)
+
+    print(f"Discovered: {len(all_topics)} topics, {len(label_universe)} labels")
+    print(f"  Topics: {all_topics}")
+    print(f"  Labels: {sorted(label_universe)}")
+
+    # Build topic → category classification
+    NONE_PREFIXES = ("no_", "none", "negative", "non_", "without_")
+    MULTI_PREFIXES = ("multi_", "compound_", "complex_", "combo_", "mixed_")
+    TRICKY_PREFIXES = ("tricky_", "edge_", "ambiguous_")
+
+    def _stem(s: str) -> str:
+        """Cheap stemming: lowercase, replace spaces/dashes with underscore, strip
+        plural 's' so 'eggs' ↔ 'egg', 'peanut_sources' ↔ 'peanuts'."""
+        s = s.lower().replace(" ", "_").replace("-", "_").rstrip("s")
+        return s
+
+    def topic_category(topic: str) -> str:
+        """Classify topic intent: 'none', 'multi', 'tricky', 'single:<label>', or 'unknown'.
+
+        Normalizes dashes to underscores, then matches each category by
+        checking if any of its keyword stems appears as a token in the topic
+        name. This handles arbitrary topic naming conventions:
+        "no-allergens-present", "no_default_label", "multi_compound_complex",
+        "hidden-tricky-edges", etc.
+        """
+        t = topic.lower().replace("-", "_")
+        tokens = set(t.split("_"))
+        # Stem each prefix list to bare keywords for token matching
+        none_keywords = {p.rstrip("_") for p in NONE_PREFIXES}
+        multi_keywords = {p.rstrip("_") for p in MULTI_PREFIXES}
+        tricky_keywords = {p.rstrip("_") for p in TRICKY_PREFIXES}
+        if tokens & tricky_keywords:
+            return "tricky"
+        if tokens & none_keywords:
+            return "none"
+        if tokens & multi_keywords:
+            return "multi"
+        # Single-label: stemmed topic contains stemmed label
+        t_stem = _stem(t)
+        # Try longer labels first (e.g., "tree nuts" before "nuts")
+        for lbl in sorted(label_universe, key=len, reverse=True):
+            lbl_stem = _stem(lbl)
+            if lbl_stem and lbl_stem in t_stem:
+                return f"single:{lbl}"
+        return "unknown"
+
+    topic_categories = {t: topic_category(t) for t in all_topics}
+    print("\nTopic categories:")
+    for t, c in topic_categories.items():
+        print(f"  {t} → {c}")
+
+    # For "none" reassignment we need a fallback target
+    none_topics = [t for t, c in topic_categories.items() if c == "none"]
+    multi_topics = [t for t, c in topic_categories.items() if c == "multi"]
+    single_topic_for_label: dict[str, str] = {}
+    for t, c in topic_categories.items():
+        if c.startswith("single:"):
+            single_topic_for_label.setdefault(c.split(":", 1)[1], t)
+
+    mismatches = []
+    reassignments = []
+    for i, r in enumerate(records):
+        topic = r.get("topic", "")
+        gt = (r.get("ground_truth") or "").lower().strip()
+        gt_labels = [l.strip() for l in gt.split(",") if l.strip() and l.strip() != "none"]
+        cat = topic_categories.get(topic, "unknown")
+
+        target = None
+        reason = None
+        if cat == "none":
+            if gt_labels:
+                # Topic says none but GT has labels — reassign
+                if len(gt_labels) >= 2 and multi_topics:
+                    target = multi_topics[0]
+                elif len(gt_labels) == 1 and gt_labels[0] in single_topic_for_label:
+                    target = single_topic_for_label[gt_labels[0]]
+                reason = f"topic=none but GT={gt}"
+        elif cat.startswith("single:"):
+            expected = cat.split(":", 1)[1]
+            if not gt_labels:
+                # Topic says single-label but GT=none — reassign to none topic
+                if none_topics:
+                    target = none_topics[0]
+                reason = f"topic={topic} (expects {expected}) but GT=none"
+            elif expected not in gt_labels:
+                # Topic single-label but GT doesn't contain it
+                if len(gt_labels) >= 2 and multi_topics:
+                    target = multi_topics[0]
+                elif len(gt_labels) == 1 and gt_labels[0] in single_topic_for_label:
+                    target = single_topic_for_label[gt_labels[0]]
+                reason = f"topic={topic} (expects {expected}) but GT={gt}"
+        elif cat == "multi":
+            if len(gt_labels) < 2:
+                # Multi topic but GT has 0 or 1 labels — reassign
+                if not gt_labels and none_topics:
+                    target = none_topics[0]
+                elif len(gt_labels) == 1 and gt_labels[0] in single_topic_for_label:
+                    target = single_topic_for_label[gt_labels[0]]
+                reason = f"topic={topic} (expects multi) but GT has {len(gt_labels)} labels"
+        # tricky: skip — could be either none or single-label
+
+        if reason:
+            mismatches.append((i, topic, gt, reason))
+            if target and target != topic:
+                reassignments.append((i, topic, target))
+
+    print(f"\n{len(mismatches)} mismatches found:")
+    for ex in mismatches[:15]:
+        print(f"  row{ex[0]}: {ex[3]}")
+    if len(mismatches) > 15:
+        print(f"  ... and {len(mismatches) - 15} more")
+    print(f"\n{len(reassignments)} can be auto-reassigned (others have no clear target)")
+
+    if not args.apply:
+        print("\n(dry-run — pass --apply to write changes)")
+        sys.exit(0 if not mismatches else 2)
+
+    # Apply reassignments
+    for idx, _old, new in reassignments:
+        records[idx]["topic"] = new
+
+    # Optional trim: cap each topic at --max-per-topic. Drops the most recently
+    # added records of each over-full topic, preserving older / "intent-matched"
+    # ones first. Without trimming, reconcile can leave the multi/single
+    # destination topics bloated while the source topics are starved.
+    dropped = 0
+    if args.max_per_topic and args.max_per_topic > 0:
+        # Group indices by topic, preserve insertion order
+        topic_indices: dict[str, list[int]] = {}
+        for i, r in enumerate(records):
+            topic_indices.setdefault(r.get("topic", ""), []).append(i)
+        keep = set()
+        for t, idxs in topic_indices.items():
+            for i in idxs[: args.max_per_topic]:
+                keep.add(i)
+        before = len(records)
+        records = [r for i, r in enumerate(records) if i in keep]
+        dropped = before - len(records)
+        if dropped:
+            print(f"  Trimmed {dropped} records (cap = {args.max_per_topic} per topic)")
+
+    with training_path.open("w") as f:
+        for r in records:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    print(f"\n✓ Wrote {len(reassignments)} reassignments + {dropped} trimmed → {training_path}")
+
+    # Final per-topic count + min-records check
+    final_counts = _C(r.get("topic", "") for r in records)
+    min_required = args.min_per_topic
+    print(f"\nFinal per-topic counts (min required: {min_required}):")
+    under = []
+    for t in sorted(final_counts):
+        c = final_counts[t]
+        flag = "  ❌" if c < min_required else "  ✓ "
+        print(f"  {flag} {t}: {c}")
+        if c < min_required:
+            under.append((t, c, min_required - c))
+    if under:
+        print(f"\n❌ {len(under)} topic(s) below minimum — regenerate the gap:")
+        for t, c, gap in under:
+            print(f"   generate_records.py --append --topic {t} --count {gap}")
+        print("\nThen re-run: derive_ground_truth.py → reconcile-topics --apply")
+        sys.exit(1)
+    print("\n✓ All topics meet the minimum")
+    print("  Note: re-upload records to gateway with `upload-records --replace`")
+
+
 def cmd_grader_sanity_check(args: argparse.Namespace) -> None:
     """Run mandatory grader sanity checks on an eval result.
 
@@ -6291,7 +6520,14 @@ def cmd_grader_sanity_check(args: argparse.Namespace) -> None:
                     if m.get("role") == "assistant":
                         resp = m.get("content", "") or ""
             n_labels = len([t for t in resp.split(",") if t.strip()])
-            if n_labels >= 7 and score > 0.20:
+            # Dump-all gaming: many labels emitted AND low precision. Parse
+            # precision from the reason string to avoid false positives on
+            # genuine high-recall cases where GT itself has many labels.
+            try:
+                prec_val = float(reason.split("P=")[1].split()[0]) if "P=" in reason else 1.0
+            except Exception:
+                prec_val = 1.0
+            if n_labels >= 7 and score > 0.20 and prec_val < 0.50:
                 dump_high.append((i, n_labels, score, resp[:80]))
             if "extraction: llm" in reason.lower() and score >= 0.85:
                 row = rec.get("row", {})
@@ -6690,6 +6926,18 @@ def main() -> None:
 
     # print-row-outputs
     p = subparsers.add_parser(
+        "reconcile-topics",
+        help="Detect and fix topic↔GT mismatches after GT derivation",
+    )
+    p.add_argument("--training-file", required=True, help="Path to training.jsonl")
+    p.add_argument("--apply", action="store_true",
+                   help="Actually rewrite the file (default: dry-run report only)")
+    p.add_argument("--min-per-topic", type=int, default=25,
+                   help="Hard-fail if any topic has fewer than N records after reconcile (default: 25)")
+    p.add_argument("--max-per-topic", type=int, default=0,
+                   help="Trim each topic to at most N records after reconcile (0 = no trim)")
+
+    p = subparsers.add_parser(
         "grader-sanity-check",
         help="MANDATORY after every eval — hard-fail on collapse/gaming/inference bugs",
     )
@@ -6743,6 +6991,7 @@ def main() -> None:
         "harden-records": cmd_harden_records,
         "print-row-outputs": cmd_print_row_outputs,
         "grader-sanity-check": cmd_grader_sanity_check,
+        "reconcile-topics": cmd_reconcile_topics,
     }
     commands[args.command](args)
 

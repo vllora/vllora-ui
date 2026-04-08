@@ -188,7 +188,7 @@ fi
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py status --workflow-id $WORKFLOW_ID
 ```
-Follow its recommendation. (3) Sync jobs: `sync-jobs --workflow-id $WORKFLOW_ID --output-dir finetune-project`. (4) Cancel broken eval jobs if `status` shows ~0.0 scores. (5) Resume from recommended step. (6) Backfill missing data in execution log.
+Follow its recommendation. (3) Sync jobs: `sync-jobs --workflow-id $WORKFLOW_ID --output-dir finetune-project`. (4) Cancel broken eval jobs if `status` shows ~0.0 scores (use `uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py cancel-eval --workflow-id $WORKFLOW_ID --eval-id <EVAL_ID>`). (5) Resume from recommended step. (6) Backfill missing data in execution log.
 
 **Reusing extractions across workflows:** Existing `knowledge/{slug}/docling-result.json` files can be reused even with a new workflow. Do NOT delete `knowledge/` when starting fresh from the same documents.
 
@@ -330,7 +330,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --knowledge-dir finetune-project/knowledge \
   --system-prompt "You are an expert..." \
   --output finetune-project/training.jsonl \
-  --records-per-topic 25 --parallel 4 \
+  --records-per-topic 30 --parallel 4 \
   --workflow-id $WORKFLOW_ID --upload-incremental --enrich-sources
 ```
 
@@ -356,11 +356,28 @@ Generate **200+ total records**, minimum 25 per leaf topic.
 uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --topics ... --relations ... --knowledge-dir ... --no-ground-truth \
   --ground-truth-format "The user message MUST present a concrete [input]..." \
-  --output finetune-project/training.jsonl --records-per-topic 25
+  --output finetune-project/training.jsonl --records-per-topic 30
 
 # Stage 2: Derive complete GTs topic-agnostically
 uv run ${CLAUDE_SKILL_DIR}/scripts/derive_ground_truth.py finetune-project/training.jsonl \
   --gt-prompt "List ALL [items]..." --overwrite
+
+# Stage 2b: MANDATORY topic↔GT reconciliation. Stage 1 sets a record's topic
+# at generation time based on the prompt intent, but Stage 2 may derive a GT
+# that contradicts that topic. Without reconciling, the topic field becomes
+# stale — UI groups, topic-stratified eval analysis, and per-topic hardening
+# all operate on incorrect assignments.
+#
+# --max-per-topic 30 trims overflow so reconciled-into topics don't bloat.
+# --min-per-topic 25 hard-fails if any topic dropped below the floor; the
+# error message includes exact regen commands for the gap.
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py reconcile-topics \
+  --training-file finetune-project/training.jsonl \
+  --apply --max-per-topic 30 --min-per-topic 25
+
+# If reconcile exits non-zero, regenerate the gap topics (commands printed
+# in the error), then re-run derive_ground_truth + reconcile-topics. At most
+# 1-2 retry rounds in practice.
 ```
 
 > See [reference/data-format.md](reference/data-format.md) for full options, weighting modes, RAG mode, and upload details.
@@ -388,7 +405,7 @@ If >10% of sampled records have issues, fix the bad records (remove + regenerate
 
 ### Step 4.5: Topic Balance Check
 
-**MANDATORY: minimum 25 records per leaf topic.** Always use `--records-per-topic 25` or higher. Do NOT reduce below 25 — fewer records per topic means insufficient difficulty coverage for GRPO to learn from.
+**MANDATORY: minimum 25 records per leaf topic AFTER reconciliation.** Generate with `--records-per-topic 30` (20% buffer) so that after `derive_ground_truth` + `reconcile-topics` move drift records between topics, every topic still ends ≥ 25. Drift typically removes 5-10% of records per topic; the buffer absorbs it. Do NOT generate at exactly 25 — reconciliation will drop several topics below the floor.
 
 **After removing bad records, check topic counts:**
 ```bash

@@ -754,58 +754,41 @@ Return JSON: {{"items": [{{"prompt": "the question", "ground_truth": "{'structur
 
 
 # ---------------------------------------------------------------------------
+# Inline record validation (task-agnostic structural checks)
 # ---------------------------------------------------------------------------
-# Inline record validation (deterministic quality checks)
-# ---------------------------------------------------------------------------
-
-# Patterns that indicate conversational/question format instead of plain input
-_CONVERSATIONAL_PREFIXES = (
-    "walk me through", "help me", "can you", "i want to", "i need to",
-    "given this situation", "explain", "what happens", "how do", "how can",
-    "is it possible", "tell me", "identify", "determine", "analyze",
-    "check if", "please", "let me know",
-)
+#
+# This script is generic across finetune tasks (classification, extraction,
+# QA, SQL generation, code completion, ...). The ONLY safe deterministic
+# checks here are structural: empty messages, missing roles, malformed shape.
+# Anything task-specific (format, vocabulary, label consistency, question vs
+# narrative) must be enforced by the task's grader — not by this generator.
 
 
 def _validate_record(
     record: dict, topic: dict, ground_truth_format: str | None,
 ) -> str | None:
-    """Validate a generated record. Returns rejection reason or None if valid.
+    """Validate a generated record structurally. Returns rejection reason or None.
 
-    Deterministic checks only — no LLM calls. Catches:
-    1. Conversational format (questions instead of plain input)
-    2. GT-topic consistency (e.g., allergen-free topic with allergen GT)
-    3. Empty/missing content
+    Only catches universal structural problems:
+    - missing user message
+    - empty user message
+    - malformed shape
+
+    Task-specific validation (format, vocabulary, topic↔GT consistency) is
+    the grader's job, not this function's.
     """
     messages = record.get("messages", [])
+    if not isinstance(messages, list) or not messages:
+        return "no messages"
+
     user_msg = ""
     for m in messages:
-        if m.get("role") == "user":
-            user_msg = m["content"].strip()
+        if isinstance(m, dict) and m.get("role") == "user":
+            user_msg = (m.get("content") or "").strip()
             break
 
     if not user_msg:
         return "empty user message"
-
-    # Check 1: Conversational format detection
-    user_lower = user_msg.lower()
-    if "?" in user_msg:
-        return "contains question mark — likely conversational format"
-    for prefix in _CONVERSATIONAL_PREFIXES:
-        if user_lower.startswith(prefix):
-            return f"conversational prefix: '{prefix}...'"
-
-    # Check 2: GT-topic consistency for known topic patterns
-    gt = record.get("ground_truth", "")
-    topic_id = topic.get("id", "").lower()
-    topic_name = topic.get("name", "").lower()
-
-    # "No allergen" / "allergen-free" topics should have GT = "none"
-    if gt and ("no-allergen" in topic_id or "allergen-free" in topic_id
-               or "no allergen" in topic_name or "allergen-free" in topic_name):
-        gt_lower = gt.strip().lower()
-        if gt_lower != "none":
-            return f"topic expects no allergens but GT='{gt}'"
 
     return None
 

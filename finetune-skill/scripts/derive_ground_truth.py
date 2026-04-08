@@ -242,13 +242,21 @@ def _normalize_gt(gt: str) -> str:
 
 
 def _format_gt(gt: str) -> str:
-    """Format GT for consistency: lowercase, comma-space-separated, sorted, deduplicated."""
+    """Format GT for consistency: lowercase, comma-space-separated, sorted, deduplicated.
+
+    Normalizes whitespace (collapses any \\n \\t \\r and double spaces) so the LLM
+    output can't introduce embedded newlines like "sesame\\nmilk" that would
+    later be parsed as a single bogus label.
+    """
+    import re as _re
     if not gt:
         return ""
-    gt_lower = gt.strip().lower()
-    if gt_lower == "none" or gt_lower == "none.":
+    # Normalize all whitespace (newlines, tabs, multi-spaces) to single space
+    gt_clean = _re.sub(r"\s+", " ", gt).strip().lower()
+    if gt_clean in ("none", "none."):
         return "none"
-    labels = [l.strip().lower() for l in gt.split(",") if l.strip()]
+    # Split on commas AND newlines (in case LLM used either as separator)
+    labels = [l.strip() for l in _re.split(r"[,;\n]+", gt_clean) if l.strip()]
     return ", ".join(sorted(set(labels)))
 
 

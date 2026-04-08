@@ -6,8 +6,8 @@
  * SourcePartsCell, and getRecordSourceParts.
  */
 
-import { useMemo } from "react";
-import { FileText } from "lucide-react";
+import { useMemo, useState } from "react";
+import { FileText, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { resolvePartRef } from "@/lib/distri-finetune-tools/steps/shared/resolve-part-ref";
 import type { KnowledgeSource } from "@/types/knowledge-types";
@@ -135,6 +135,97 @@ function ScoreTooltipContent({ score, trend, reason }: {
           <p className="text-[11px] text-muted-foreground leading-snug whitespace-pre-wrap line-clamp-6">{reason}</p>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Ground Truth Cell ───
+
+/** Extract ground_truth from a record's data, returning a string or null. */
+export function getRecordGroundTruth(record: DatasetRecord): string | null {
+  const gt = (record.data as Record<string, unknown> | null | undefined)?.ground_truth;
+  if (gt == null || gt === "") return null;
+  return typeof gt === "string" ? gt : JSON.stringify(gt);
+}
+
+/** Single-line ground-truth cell with hover tooltip and copy button. */
+export function GroundTruthCell({ text }: { readonly text: string | null }) {
+  const [copied, setCopied] = useState(false);
+  if (!text) {
+    return <span className="text-muted-foreground/40">—</span>;
+  }
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <div className="group/gt flex items-center gap-1.5 min-w-0">
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="text-emerald-300/80 truncate flex-1 min-w-0 cursor-help">
+              {text}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-[420px] whitespace-pre-wrap break-words text-[11px]">
+            {text}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="shrink-0 p-0.5 rounded text-muted-foreground/50 hover:text-foreground transition-opacity opacity-0 group-hover/gt:opacity-100"
+        title="Copy ground truth"
+      >
+        {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+      </button>
+    </div>
+  );
+}
+
+/** Two-line clamped input cell with hover tooltip and copy button. */
+export function InputTextCell({
+  text,
+  emptyLabel = "—",
+}: {
+  readonly text: string;
+  readonly emptyLabel?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  if (!text) {
+    return <span className="text-muted-foreground/50 italic">{emptyLabel}</span>;
+  }
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <div className="group/in flex items-start gap-1.5 min-w-0">
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <p className="text-foreground/80 line-clamp-2 leading-relaxed flex-1 min-w-0 cursor-help">
+              {text}
+            </p>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-[480px] whitespace-pre-wrap break-words text-[11px]">
+            {text}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="shrink-0 mt-0.5 p-0.5 rounded text-muted-foreground/50 hover:text-foreground transition-opacity opacity-0 group-hover/in:opacity-100"
+        title="Copy input"
+      >
+        {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+      </button>
     </div>
   );
 }
