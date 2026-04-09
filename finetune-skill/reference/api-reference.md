@@ -581,7 +581,7 @@ Create a fine-tuning job.
 curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
   -H "Content-Type: application/json" \
   -d '{
-    "job_type": "provider_finetune",
+    "job_type": "finetune",
     "dataset": "ds_abc123",
     "base_model": "Qwen3.5-4B",
     "output_model": "my-custom-model-1234567890",
@@ -630,7 +630,7 @@ Example (`finetuned`):
 curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
   -H "Content-Type: application/json" \
   -d '{
-    "job_type": "provider_finetune",
+    "job_type": "finetune",
     "base_model": "finetuned/2b08db0e-6a5e-4d62-b89f-8d2e8b246d44",
     "output_model": "my-model-v2"
   }'
@@ -641,7 +641,7 @@ Example (`checkpointed` + full-state):
 curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
   -H "Content-Type: application/json" \
   -d '{
-    "job_type": "provider_finetune",
+    "job_type": "finetune",
     "base_model": "checkpointed/2b08db0e-6a5e-4d62-b89f-8d2e8b246d44",
     "resume_mode": "full-state",
     "output_model": "my-model-v3"
@@ -883,7 +883,7 @@ Get a signed download URL for trained model weights (only after `succeeded`).
 
 These endpoints create and poll cloud evaluation runs. The gateway auto-uploads the workflow dataset before running.
 
-**Evaluating a completed fine-tune:** set `rollout_model_params.model` to `finetuned/{provider_job_id}` where `provider_job_id` is the cloud/provider job ID from the completed training job. Do not use raw `fine_tuned_model` or raw `provider_job_id`; the eval service will not resolve those as loadable rollout models.
+**Evaluating finetuned or checkpointed models:** set `rollout_model_params.model` to `finetuned/{provider_job_id}` for final adapter weights, or `checkpointed/{provider_job_id}` for the latest checkpoint from that job. To target a specific checkpoint step, use `checkpointed/{provider_job_id}:{step}` (for example `checkpointed/job_f7e174ac6e4c453da89b095c7053fe76:70`). Do not use raw `fine_tuned_model` or raw `provider_job_id`; the eval service will not resolve those as loadable rollout models.
 
 ### POST `/finetune/evaluations`
 
@@ -893,7 +893,7 @@ Create an evaluation run. The backend generates model responses for each row and
 curl -X POST http://localhost:9090/finetune/evaluations \
   -H "Content-Type: application/json" \
   -d '{
-    "dataset_id": "ds_abc123",
+    "workflow_id": "ds_abc123",
     "rollout_model_params": {
       "model": "gpt-4o-mini",
       "temperature": 0.7
