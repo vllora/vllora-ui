@@ -289,8 +289,9 @@ def _gateway_post(gateway: str, path: str, payload: dict) -> dict:
         raise RuntimeError(f"gateway request failed: {url} → {exc}") from exc
 
 
-def _gateway_post_multipart(
+def _gateway_multipart_method(
     gateway: str, path: str, fields: dict[str, str],
+    method: str = "POST",
 ) -> dict:
     """POST multipart/form-data to the gateway (for knowledge source creation)."""
     import urllib.request
@@ -311,7 +312,7 @@ def _gateway_post_multipart(
     req = urllib.request.Request(
         url, data=body,
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
-        method="POST",
+        method=method,
     )
     try:
         with urllib.request.urlopen(req) as resp:
@@ -362,14 +363,19 @@ def publish_to_gateway(
     spans: list,
     name: str,
     objective: str | None = None,
+    artifacts_dir: Path | None = None,
 ) -> dict:
-    """Create workflow + upload trace bundle + register knowledge source.
+    """Create workflow + upload trace bundle + register knowledge source +
+    upload records, topics, and grader if `artifacts_dir` is provided.
 
-    Returns a dict with `workflow_id`, `bundle_id`, `knowledge_source_id`.
+    Returns a dict with `workflow_id`, `bundle_id`, `knowledge_source_id`,
+    plus `records_uploaded` and `topics_uploaded` counts.
     Raises RuntimeError on gateway failures (caller should catch + degrade).
     """
+    total_steps = 6 if artifacts_dir else 3
+
     # Step 1: create workflow
-    print("[publish 1/3] Creating workflow...")
+    print(f"[publish 1/{total_steps}] Creating workflow...")
     wf = _gateway_post(gateway, "/finetune/workflows", {
         "name": name,
         "objective": objective or f"OTel trace finetune: {name}",
@@ -378,7 +384,7 @@ def publish_to_gateway(
     print(f"  workflow: {workflow_id} ({wf['name']})")
 
     # Step 2: upload trace bundle
-    print("[publish 2/3] Uploading trace bundle...")
+    print(f"[publish 2/{total_steps}] Uploading trace bundle...")
     bundle = _gateway_post(
         gateway,
         f"/finetune/workflows/{workflow_id}/trace-bundles",
@@ -393,10 +399,10 @@ def publish_to_gateway(
     )
 
     # Step 3: register knowledge source
-    print("[publish 3/3] Registering knowledge source...")
+    print(f"[publish 3/{total_steps}] Registering knowledge source...")
     ks_id = None
     try:
-        ks = _gateway_post_multipart(
+        ks = _gateway_multipart_method(
             gateway,
             f"/finetune/workflows/{workflow_id}/knowledge",
             {
@@ -410,20 +416,171 @@ def publish_to_gateway(
     except RuntimeError as exc:
         print(f"  ⚠ knowledge source registration failed: {exc}")
 
+    records_uploaded = 0
+    topics_uploaded = 0
+
+    if artifacts_dir:
+        # Step 4: upload training records
+        # Step 4: upload topics FIRST (so we have IDs for record assignment)
+        topic_name_to_id: dict[str, str] = {}
+        topics_file = artifacts_dir / "topics.json"
+        records_file_for_topics = artifacts_dir / "training.jsonl"
+        if topics_file.exists():
+            print(f"[publish 4/{total_steps}] Uploading topics...")
+
+            # Collect ALL tool names from the actual records (not just the schema)
+            # so every record can be assigned to its tool's topic
+            all_tool_names: set[str] = set()
+            topics_data = _load_json(topics_file)
+            for leaf in topics_data.get("hierarchy", {}).get("leaves", []):
+                name = leaf.get("name")
+                if name:
+                    all_tool_names.add(name)
+
+            if records_file_for_topics.exists():
+                for rec in _load_jsonl(records_file_for_topics):
+                    for m in reversed(rec.get("messages") or []):
+                        if m.get("role") != "assistant":
+                            continue
+                        for tc in m.get("tool_calls") or []:
+                            fn_name = tc.get("function", {}).get("name")
+                            if fn_name:
+                                all_tool_names.add(fn_name)
+                        break
+
+            if all_tool_names:
+                topic_payload = [
+                    {"name": tn, "parent_id": None}
+                    for tn in sorted(all_tool_names)
+                ]
+                _gateway_post(
+                    gateway,
+                    f"/finetune/workflows/{workflow_id}/topics",
+                    {"topics": topic_payload},
+                )
+                topics_uploaded = len(topic_payload)
+                print(f"  uploaded {topics_uploaded} topics")
+
+                # Fetch back to get the generated IDs
+                try:
+                    import urllib.request as _urlreq2
+                    with _urlreq2.urlopen(
+                        f"{gateway}/finetune/workflows/{workflow_id}/topics"
+                    ) as resp:
+                        for t in json.loads(resp.read()).get("topics", []):
+                            topic_name_to_id[t["name"]] = t["id"]
+                    print(f"  mapped {len(topic_name_to_id)} topic name→id")
+                except Exception:
+                    pass
+        else:
+            print(f"[publish 4/{total_steps}] skipped (no topics.json)")
+
+        # Step 5: upload training records (with topic assignment)
+        records_file = artifacts_dir / "training.jsonl"
+        if records_file.exists():
+            print(f"[publish 5/{total_steps}] Uploading training records...")
+            raw_records = _load_jsonl(records_file)
+            if raw_records:
+                import uuid as _uuid
+
+                # Fetch topic IDs from gateway (created in step 5)
+                # to assign each record to its tool's topic
+                try:
+                    import urllib.request as _urlreq
+                    with _urlreq.urlopen(
+                        f"{gateway}/finetune/workflows/{workflow_id}/topics"
+                    ) as resp:
+                        topics_resp = json.loads(resp.read())
+                    for t in topics_resp.get("topics", []):
+                        topic_name_to_id[t["name"]] = t["id"]
+                except Exception:
+                    pass  # topic assignment will be skipped
+
+                def _record_tool_name(rec: dict) -> str | None:
+                    msgs = rec.get("messages") or []
+                    for m in reversed(msgs):
+                        if m.get("role") != "assistant":
+                            continue
+                        tcs = m.get("tool_calls") or []
+                        if tcs:
+                            return tcs[0].get("function", {}).get("name")
+                    return None
+
+                gateway_records = []
+                assigned = 0
+                for rec in raw_records:
+                    tool = _record_tool_name(rec)
+                    topic_id = topic_name_to_id.get(tool) if tool else None
+                    if topic_id:
+                        assigned += 1
+                    gateway_records.append({
+                        "id": _uuid.uuid4().hex[:12],
+                        "data": rec,
+                        "topic_id": topic_id,
+                    })
+
+                batch_size = 500
+                for i in range(0, len(gateway_records), batch_size):
+                    batch = gateway_records[i : i + batch_size]
+                    _gateway_post(
+                        gateway,
+                        f"/finetune/workflows/{workflow_id}/records",
+                        {"records": batch},
+                    )
+                    records_uploaded += len(batch)
+                print(
+                    f"  uploaded {records_uploaded} records "
+                    f"({assigned} assigned to topics)"
+                )
+        else:
+            print(f"[publish 4/{total_steps}] skipped (no training.jsonl)")
+
+        # Step 6: upload grader
+        grader_file = artifacts_dir / "grader.json"
+        if grader_file.exists():
+            print(f"[publish 6/{total_steps}] Uploading grader...")
+            grader_config = _load_json(grader_file)
+            # The gateway expects the grader as a JS file via multipart.
+            # Convert our JSON grader config into a JS evaluator script
+            # that the gateway's evaluator system can execute.
+            grader_js = (
+                "// Auto-generated from trace pipeline grader.json\n"
+                "// Type: programmatic_tool_call, Version: "
+                f"{grader_config.get('formula_version', 'v1')}\n"
+                f"const GRADER_CONFIG = {json.dumps(grader_config, indent=2)};\n\n"
+                "function grade(predicted, expected) {\n"
+                "  // Programmatic tool-call grader — server-side implementation\n"
+                "  // uses GRADER_CONFIG.tool_schema and .wrong_tool_floor\n"
+                "  return { score: 0, reason: 'server-side grading' };\n"
+                "}\n"
+            )
+            _gateway_multipart_method(
+                gateway,
+                f"/finetune/workflows/{workflow_id}/evaluator",
+                {"file": grader_js},
+                method="PATCH",
+            )
+            print(f"  uploaded grader (formula_version={grader_config.get('formula_version')})")
+        else:
+            print(f"[publish 6/{total_steps}] skipped (no grader.json)")
+
     print(
         f"\n✅ Published to gateway\n"
         f"  workflow:    {workflow_id}\n"
         f"  bundle:      {bundle_id}\n"
         f"  knowledge:   {ks_id or 'manual linking needed'}\n"
+        f"  records:     {records_uploaded}\n"
+        f"  topics:      {topics_uploaded}\n"
         f"  gateway:     {gateway}\n"
         f"\n"
-        f"Open the UI at http://localhost:5173 → navigate to the dataset → Sources tab\n"
-        f"to see the traces rendered in the TraceViewer."
+        f"Open the UI at http://localhost:5173/finetune/{workflow_id}\n"
     )
     return {
         "workflow_id": workflow_id,
         "bundle_id": bundle_id,
         "knowledge_source_id": ks_id,
+        "records_uploaded": records_uploaded,
+        "topics_uploaded": topics_uploaded,
     }
 
 
@@ -512,7 +669,9 @@ def cmd_all(args: argparse.Namespace) -> int:
             )
 
         try:
-            result = publish_to_gateway(args.gateway, upload_spans, name)
+            result = publish_to_gateway(
+                args.gateway, upload_spans, name, artifacts_dir=out_dir,
+            )
             _write_json(out_dir / "publish_result.json", result)
         except RuntimeError as exc:
             print(f"[6/6] ⚠ gateway publish failed: {exc}")
