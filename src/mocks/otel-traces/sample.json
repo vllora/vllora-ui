@@ -1,0 +1,127 @@
+[
+  {
+    "trace_id": "0aa5716f23d4dadd7c18ce961cca2bc0",
+    "span_id": "a6d5244017e95bf7",
+    "parent_span_id": "68eda7a719e3fc55",
+    "start_time": "2025-04-28 00:03:41.997064+00:00",
+    "end_time": "2025-04-28 00:03:43.055361+00:00",
+    "status_code": "OK",
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.request.model": "gpt-4o",
+      "gen_ai.response.model": "gpt-4o",
+      "gen_ai.input.messages": [
+        {
+          "role": "system",
+          "parts": [{ "type": "text", "content": "You are a helpful assistant" }]
+        },
+        {
+          "role": "user",
+          "parts": [{ "type": "text", "content": "Find me a tablet for entertainment" }]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "tool_call",
+              "id": "tc-0",
+              "name": "product_search",
+              "arguments": {
+                "query": "tablet",
+                "category": "electronics",
+                "page_size": 5
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "trace_id": "0aa5716f23d4dadd7c18ce961cca2bc0",
+    "span_id": "dfa911359e0e0ee4",
+    "parent_span_id": "7930aab7fdc2c6db",
+    "start_time": "2025-04-28 00:03:43.171395+00:00",
+    "end_time": "2025-04-28 00:03:43.175802+00:00",
+    "status_code": "OK",
+    "attributes": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.name": "product_search",
+      "gen_ai.tool.call.arguments": "{'query': 'tablet', 'category': 'electronics', 'page_size': 5}",
+      "gen_ai.tool.call.result": {
+        "output": {
+          "results": [
+            {
+              "product_id": 2,
+              "name": "Tablet",
+              "description": "Lightweight tablet for entertainment and productivity",
+              "category": "Electronics",
+              "price": 114.5
+            }
+          ],
+          "pagination": { "total": 1, "page": 1, "page_size": 5 }
+        }
+      }
+    }
+  },
+  {
+    "trace_id": "0aa5716f23d4dadd7c18ce961cca2bc0",
+    "span_id": "d667f32656bebd31",
+    "parent_span_id": "404e0bf5d0b55191",
+    "start_time": "2025-04-28 00:03:43.380288+00:00",
+    "end_time": "2025-04-28 00:03:44.835365+00:00",
+    "status_code": "OK",
+    "attributes": {
+      "gen_ai.operation.name": "chat",
+      "gen_ai.request.model": "gpt-4o",
+      "gen_ai.response.model": "gpt-4o",
+      "gen_ai.input.messages": [
+        {
+          "role": "system",
+          "parts": [{ "type": "text", "content": "You are a helpful assistant" }]
+        },
+        {
+          "role": "user",
+          "parts": [{ "type": "text", "content": "Find me a tablet for entertainment" }]
+        },
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "tool_call",
+              "id": "tc-0",
+              "name": "product_search",
+              "arguments": {
+                "query": "tablet",
+                "category": "electronics",
+                "page_size": 5
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "parts": [
+            {
+              "type": "text",
+              "content": "{\"results\": [{\"product_id\": 2, \"name\": \"Tablet\", \"description\": \"Lightweight tablet for entertainment and productivity\", \"category\": \"Electronics\", \"price\": 114.5}], \"pagination\": {\"total\": 1, \"page\": 1, \"page_size\": 5}}"
+            }
+          ]
+        }
+      ],
+      "gen_ai.output.messages": [
+        {
+          "role": "assistant",
+          "parts": [
+            {
+              "type": "text",
+              "content": "I found a tablet for you:\n\n- **Name**: Tablet\n- **Description**: Lightweight tablet for entertainment and productivity\n- **Category**: Electronics\n- **Price**: $114.50\n\nIf you need more options or further details, let me know!"
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

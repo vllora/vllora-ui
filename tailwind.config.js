@@ -6,6 +6,7 @@ export default {
   content: [
     "./index.html",
     "./src/**/*.{ts,tsx,js,jsx}",
+    "./src/components/agent-prism/**/*.{ts,tsx}",
   ],
   safelist: [
     // Safelist theme colors to ensure they're always available
