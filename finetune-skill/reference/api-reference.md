@@ -86,9 +86,10 @@ All endpoints use JSON unless noted. Auth via `Authorization: Bearer <token>` he
 | 59 | GET | `/finetune/workflows/{id}/jobs` | List training jobs |
 | 60 | GET | `/finetune/workflows/{id}/jobs/{job_id}/status` | Get job status |
 | 61 | GET | `/finetune/workflows/{id}/jobs/{job_id}/metrics` | Get training metrics |
-| 62 | POST | `/finetune/workflows/{id}/jobs/{job_id}/cancel` | Cancel job |
-| 63 | POST | `/finetune/workflows/{id}/jobs/{job_id}/resume` | Resume cancelled job |
-| 64 | GET | `/finetune/workflows/{id}/jobs/{job_id}/weights/url` | Download weights URL |
+| 62 | GET | `/finetune/workflows/{id}/jobs/{job_id}/models` | List rollout model aliases (checkpointed + finetuned) |
+| 63 | POST | `/finetune/workflows/{id}/jobs/{job_id}/cancel` | Cancel job |
+| 64 | POST | `/finetune/workflows/{id}/jobs/{job_id}/resume` | Resume cancelled job |
+| 65 | GET | `/finetune/workflows/{id}/jobs/{job_id}/weights/url` | Download weights URL |
 | **Analytics & Evaluations** (workflow-scoped, read-only) | | | |
 | 65 | GET | `/finetune/workflows/{id}/analytics` | Get dataset analytics |
 | 66 | GET | `/finetune/workflows/{id}/finetune-evaluations` | Per-epoch training evaluations |
@@ -857,6 +858,26 @@ curl -s "http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs/JOB_ID/metric
 | `grad_norm` spikes > 3x median | Warning | Instability -- may need gradient clipping |
 | `frac_reward_zero_std` > 0.60 | Warning | Weak training signal -- grader not differentiating |
 | `reward_std` < 0.05 | Info | Collapsed diversity -- model converging on single pattern |
+
+### GET `/finetune/workflows/{workflow_id}/jobs/{job_id}/models`
+
+List all rollout-ready model aliases for a training job:
+- `checkpointed/{provider_job_id}:{step}` for each discovered checkpoint.
+- `checkpointed/{provider_job_id}` as the latest-checkpoint alias (when checkpoints exist).
+- `finetuned/{provider_job_id}` when the final adapter exists (job succeeded).
+
+```json
+{
+  "provider_job_id": "2f90adcc-9ff4-4c3c-a8f6-734d7f920bf9",
+  "checkpoints": [
+    "checkpointed/2f90adcc-9ff4-4c3c-a8f6-734d7f920bf9:10",
+    "checkpointed/2f90adcc-9ff4-4c3c-a8f6-734d7f920bf9:20",
+    "checkpointed/2f90adcc-9ff4-4c3c-a8f6-734d7f920bf9:30"
+  ],
+  "latest_checkpoint_model": "checkpointed/2f90adcc-9ff4-4c3c-a8f6-734d7f920bf9",
+  "finetuned_model": "finetuned/2f90adcc-9ff4-4c3c-a8f6-734d7f920bf9"
+}
+```
 
 ### POST `/finetune/workflows/{workflow_id}/jobs/{job_id}/cancel`
 

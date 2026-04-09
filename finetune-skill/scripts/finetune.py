@@ -14,6 +14,7 @@ Usage:
   uv run scripts/finetune.py upload-records --workflow-id WF_ID --file training.jsonl
   uv run scripts/finetune.py upload-grader --workflow-id WF_ID --file grader.js
   uv run scripts/finetune.py verify --workflow-id WF_ID
+  uv run scripts/finetune.py list-models --workflow-id WF_ID --job-id JOB_ID
   uv run scripts/finetune.py cancel-training --workflow-id WF_ID --job-id JOB_ID
   uv run scripts/finetune.py cancel-eval --workflow-id WF_ID --eval-id EVAL_ID
 
@@ -1970,6 +1971,33 @@ def _extract_eval_data(results: list[dict]) -> dict:
         "has_topics": has_topics,
         "response_token_lengths": response_token_lengths,
     }
+
+
+def cmd_list_models(args: argparse.Namespace) -> None:
+    """List rollout model aliases for a finetune job."""
+    result = _api(
+        "GET",
+        f"{args.base_url}/finetune/workflows/{args.workflow_id}/jobs/{args.job_id}/models",
+    )
+
+    checkpoints = result.get("checkpoints", []) if isinstance(result, dict) else []
+    latest_checkpoint = result.get("latest_checkpoint_model") if isinstance(result, dict) else None
+    finetuned_model = result.get("finetuned_model") if isinstance(result, dict) else None
+
+    print("Available rollout models:")
+    if checkpoints:
+        print("  Checkpoints:")
+        for model in checkpoints:
+            print(f"    - {model}")
+    else:
+        print("  Checkpoints: none found")
+
+    if latest_checkpoint:
+        print(f"  Latest checkpoint alias: {latest_checkpoint}")
+    if finetuned_model:
+        print(f"  Finetuned model: {finetuned_model}")
+
+    print(json.dumps(result, indent=2))
 
 
 def cmd_readiness_check(args: argparse.Namespace) -> None:
@@ -6933,6 +6961,11 @@ def main() -> None:
     p.add_argument("--workflow-id", required=True, help="Workflow ID")
     p.add_argument("--project-dir", default="finetune-project", help="Project directory (default: finetune-project/)")
 
+    # list-models
+    p = subparsers.add_parser("list-models", help="List checkpointed/finetuned model aliases for a training job")
+    p.add_argument("--workflow-id", required=True, help="Workflow ID")
+    p.add_argument("--job-id", required=True, help="Training job ID")
+
     # readiness-check
     p = subparsers.add_parser("readiness-check", help="Check if eval results pass pre-training readiness gate")
     p.add_argument("--file", required=True, help="Path to eval result JSON (from poll-eval)")
@@ -7159,6 +7192,7 @@ def main() -> None:
         "upload-grader": cmd_upload_grader,
         "verify": cmd_verify,
         "status": cmd_status,
+        "list-models": cmd_list_models,
         "readiness-check": cmd_readiness_check,
         "diagnose-grader": cmd_diagnose_grader,
         "create-eval": cmd_create_eval,
