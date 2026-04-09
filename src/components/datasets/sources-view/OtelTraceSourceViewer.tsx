@@ -10,16 +10,18 @@
  */
 
 import { OtelTraceMessageTimeline } from '@/components/OtelTraces/OtelTraceMessageTimeline';
-import { TraceViewer } from '@/components/agent-prism/TraceViewer/TraceViewer';
+import { TraceViewer, type TraceViewerData } from '@/components/agent-prism/TraceViewer/TraceViewer';
+import '@/components/agent-prism/theme/theme.css';
+import './agent-prism-dark.css';
 import { Badge } from '@/components/ui/badge';
-import { openTelemetrySpanAdapter } from '@evilmartians/agent-prism-data';
+import { useMemo } from 'react';
 import type {
-  OpenTelemetryDocument,
-  OpenTelemetrySpan,
-  OpenTelemetryStatusCode,
   TraceRecord,
+  TraceSpan,
   TraceSpanAttribute,
   TraceSpanAttributeValue,
+  TraceSpanCategory,
+  TraceSpanStatus,
 } from '@evilmartians/agent-prism-types';
 import { MessageSquare } from 'lucide-react';
 import type { KnowledgeSource } from '@/types/knowledge-types';
@@ -134,16 +136,12 @@ function sourceToTrace(source: KnowledgeSource): OtelTrace | null {
   };
 }
 
-/**
- * Convert a plain `Record<string, unknown>` attribute map (the shape our
- * skill's `otel_extract.py` emits) into OTLP-style `TraceSpanAttribute[]`
- * (what agent-prism's OpenTelemetry adapter expects).
- *
- * agent-prism's `openTelemetrySpanAdapter.convertRawDocumentsToSpans`
- * takes a full OTLP envelope (`resourceSpans → scopeSpans → spans`),
- * so we wrap our flat span list in a synthetic single-resource
- * envelope below.
- */
+// ─── Semconv → OTLP conversion ──────────────────────────────────────────
+//
+// agent-prism's adapter expects the full OTLP envelope shape and reads
+// `input.value` / `output.value` attributes (OpenInference convention)
+// for span content — NOT `gen_ai.input.messages`. We inject both.
+
 function attrsToOtlp(attrs: Record<string, unknown>): TraceSpanAttribute[] {
   return Object.entries(attrs).map(([key, raw]) => {
     const value: TraceSpanAttributeValue = {};
@@ -160,92 +158,194 @@ function attrsToOtlp(attrs: Record<string, unknown>): TraceSpanAttribute[] {
   });
 }
 
-function isoToUnixNano(iso: string | undefined): string {
-  if (!iso) return '0';
-  const ms = Date.parse(iso);
-  if (Number.isNaN(ms)) return '0';
-  return String(BigInt(ms) * 1_000_000n);
+/** Stringify semconv messages into a human-readable block for agent-prism. */
+function messagesToText(messages: unknown): string {
+  if (!Array.isArray(messages)) return '';
+  const lines: string[] = [];
+  for (const msg of messages) {
+    if (typeof msg !== 'object' || !msg) continue;
+    const m = msg as Record<string, unknown>;
+    const role = String(m.role ?? '');
+    const parts = Array.isArray(m.parts) ? m.parts : [];
+    for (const p of parts) {
+      if (typeof p !== 'object' || !p) continue;
+      const part = p as Record<string, unknown>;
+      if (part.type === 'text' && typeof part.content === 'string') {
+        lines.push(`[${role}] ${part.content}`);
+      } else if (part.type === 'tool_call') {
+        const args = typeof part.arguments === 'string'
+          ? part.arguments
+          : JSON.stringify(part.arguments ?? {});
+        lines.push(`[${role}] → ${part.name}(${args})`);
+      }
+    }
+  }
+  return lines.join('\n');
 }
 
-function mapStatusCode(code: string | undefined): OpenTelemetryStatusCode {
-  if (code === 'ERROR') return 'STATUS_CODE_ERROR';
-  if (code === 'OK') return 'STATUS_CODE_OK';
-  return 'STATUS_CODE_UNSET';
+/** Parse a timestamp to epoch milliseconds. */
+function toEpochMs(ts: string | undefined): number | undefined {
+  if (!ts) return undefined;
+  if (/^\d{16,}$/.test(ts)) return Math.floor(Number(BigInt(ts) / 1_000_000n));
+  const ms = Date.parse(ts);
+  return Number.isNaN(ms) ? undefined : ms;
 }
 
-function toOtlpSpan(span: OtelSemconvSpan): OpenTelemetrySpan {
+// ─── Semconv → agent-prism TraceSpan (direct, no OTLP envelope) ─────────
+
+function mapCategory(opName: string): TraceSpanCategory {
+  switch (opName) {
+    case 'chat': case 'text_completion': return 'llm_call';
+    case 'execute_tool': return 'tool_execution';
+    case 'invoke_agent': return 'agent_invocation';
+    case 'embeddings': return 'embedding';
+    default: return 'span';
+  }
+}
+
+function mapStatus(code: string | undefined): TraceSpanStatus {
+  return code === 'ERROR' ? 'error' : 'success';
+}
+
+function semconvToTraceSpan(
+  span: OtelSemconvSpan,
+  childrenByParent: Map<string, OtelSemconvSpan[]>,
+): TraceSpan {
   const attrs = span.attributes ?? {};
   const opName = String(attrs['gen_ai.operation.name'] ?? 'span');
   const toolName = attrs['gen_ai.tool.name'];
-  const name =
-    opName === 'execute_tool' && typeof toolName === 'string'
-      ? `execute_tool ${toolName}`
-      : opName;
+  const agentName = attrs['agent.name'];
+  const model = attrs['gen_ai.request.model'];
+
+  // Title for the span tree
+  let title = opName;
+  if (opName === 'execute_tool' && typeof toolName === 'string') title = toolName;
+  else if (opName === 'invoke_agent' && typeof agentName === 'string') title = agentName;
+  else if (opName === 'chat' && typeof model === 'string') title = model;
+  else if (opName === 'chat') title = 'ChatCompletion';
+
+  const startMs = toEpochMs(span.start_time) ?? 0;
+  const endMs = toEpochMs(span.end_time) ?? startMs;
+  const start = new Date(startMs);
+  const end = new Date(endMs);
+
+  // Build input/output strings for the DetailsView
+  const inputText = opName === 'execute_tool'
+    ? (attrs['gen_ai.tool.call.arguments'] != null
+        ? (typeof attrs['gen_ai.tool.call.arguments'] === 'string'
+            ? attrs['gen_ai.tool.call.arguments'] as string
+            : JSON.stringify(attrs['gen_ai.tool.call.arguments'], null, 2))
+        : undefined)
+    : messagesToText(attrs['gen_ai.input.messages']) || undefined;
+
+  const outputText = opName === 'execute_tool'
+    ? (attrs['gen_ai.tool.call.result'] != null
+        ? (typeof attrs['gen_ai.tool.call.result'] === 'string'
+            ? attrs['gen_ai.tool.call.result'] as string
+            : JSON.stringify(attrs['gen_ai.tool.call.result'], null, 2))
+        : undefined)
+    : messagesToText(attrs['gen_ai.output.messages']) || undefined;
+
+  // Build attributes for the Attributes tab
+  const prismAttrs: TraceSpanAttribute[] = attrsToOtlp(attrs);
+
+  // Recurse children
+  const children = (childrenByParent.get(span.span_id) ?? [])
+    .map((c) => semconvToTraceSpan(c, childrenByParent));
+
   return {
-    traceId: span.trace_id,
-    spanId: span.span_id,
-    parentSpanId: span.parent_span_id,
-    name,
-    kind: 'SPAN_KIND_INTERNAL',
-    startTimeUnixNano: isoToUnixNano(span.start_time),
-    endTimeUnixNano: isoToUnixNano(span.end_time),
-    attributes: attrsToOtlp(attrs),
-    status: { code: mapStatusCode(span.status_code) },
-    flags: 0,
+    id: span.span_id,
+    title,
+    startTime: start,
+    endTime: end,
+    duration: endMs - startMs,
+    type: mapCategory(opName),
+    raw: JSON.stringify(span, null, 2),
+    attributes: prismAttrs,
+    children: children.length > 0 ? children : undefined,
+    status: mapStatus(span.status_code),
+    input: inputText,
+    output: outputText,
   };
 }
 
-function toOtlpDocument(spans: readonly OtelSemconvSpan[]): OpenTelemetryDocument {
-  return {
-    resourceSpans: [
-      {
-        resource: { attributes: [] },
-        scopeSpans: [
-          {
-            scope: { name: 'vllora-otel-skill' },
-            spans: spans.map(toOtlpSpan),
-          },
-        ],
-      },
-    ],
-  };
-}
-
-function toTraceRecord(spans: readonly OtelSemconvSpan[]): TraceRecord {
-  const traceId = spans[0]?.trace_id ?? 'unknown';
-  const first = spans[0];
-  const startMs = first?.start_time ? Date.parse(first.start_time) : undefined;
-  let endMs = startMs;
+/** Group semconv spans by trace_id, build trees, return per-trace data. */
+function buildTraceSpanTrees(spans: readonly OtelSemconvSpan[]): Map<string, TraceSpan[]> {
+  // Group by trace
+  const byTrace = new Map<string, OtelSemconvSpan[]>();
   for (const s of spans) {
-    if (!s.end_time) continue;
-    const ms = Date.parse(s.end_time);
-    if (!Number.isNaN(ms) && (endMs === undefined || ms > endMs)) endMs = ms;
+    const tid = s.trace_id;
+    const arr = byTrace.get(tid);
+    if (arr) arr.push(s);
+    else byTrace.set(tid, [s]);
   }
-  const durationMs =
-    startMs !== undefined && endMs !== undefined ? Math.max(0, endMs - startMs) : 0;
-  return {
-    id: traceId,
-    name: `Trace ${traceId.slice(0, 8)}`,
-    spansCount: spans.length,
-    durationMs,
-    agentDescription: 'OTel trace',
-    startTime: startMs,
-  };
+
+  const result = new Map<string, TraceSpan[]>();
+  for (const [traceId, traceSpans] of byTrace) {
+    // Group children by parent
+    const childrenByParent = new Map<string, OtelSemconvSpan[]>();
+    const allSpanIds = new Set(traceSpans.map((s) => s.span_id));
+    for (const s of traceSpans) {
+      if (s.parent_span_id && allSpanIds.has(s.parent_span_id)) {
+        const arr = childrenByParent.get(s.parent_span_id);
+        if (arr) arr.push(s);
+        else childrenByParent.set(s.parent_span_id, [s]);
+      }
+    }
+    // Root spans = no parent or parent not in this trace
+    const roots = traceSpans.filter(
+      (s) => !s.parent_span_id || !allSpanIds.has(s.parent_span_id),
+    );
+    result.set(traceId, roots.map((r) => semconvToTraceSpan(r, childrenByParent)));
+  }
+  return result;
+}
+
+function countSpans(s: TraceSpan): number {
+  return 1 + (s.children ?? []).reduce((acc, c) => acc + countSpans(c), 0);
 }
 
 function AgentPrismTraceView({ spans }: { readonly spans: readonly OtelSemconvSpan[] }) {
-  const converted = openTelemetrySpanAdapter.convertRawDocumentsToSpans(
-    toOtlpDocument(spans),
-  );
+  const data: TraceViewerData[] = useMemo(() => {
+    const trees = buildTraceSpanTrees(spans);
+
+    return Array.from(trees.entries()).map(([traceId, traceSpans]) => {
+      const totalSpans = traceSpans.reduce((acc, s) => acc + countSpans(s), 0);
+      const firstStart = traceSpans[0]?.startTime?.getTime() ?? 0;
+      let maxEnd = firstStart;
+      const walkEnd = (s: TraceSpan) => {
+        const e = s.endTime?.getTime() ?? 0;
+        if (e > maxEnd) maxEnd = e;
+        (s.children ?? []).forEach(walkEnd);
+      };
+      traceSpans.forEach(walkEnd);
+
+      const tools = new Set<string>();
+      const walkTools = (s: TraceSpan) => {
+        if (s.type === 'tool_execution') tools.add(s.title);
+        (s.children ?? []).forEach(walkTools);
+      };
+      traceSpans.forEach(walkTools);
+
+      const traceRecord: TraceRecord = {
+        id: traceId,
+        name: `Trace ${traceId.slice(0, 8)}`,
+        spansCount: totalSpans,
+        durationMs: Math.max(0, maxEnd - firstStart),
+        agentDescription: tools.size > 0
+          ? `Tools: ${Array.from(tools).join(', ')}`
+          : 'OTel trace',
+        startTime: firstStart || undefined,
+      };
+
+      return { traceRecord, spans: traceSpans };
+    });
+  }, [spans]);
+
   return (
-    <TraceViewer
-      data={[
-        {
-          traceRecord: toTraceRecord(spans),
-          spans: converted,
-        },
-      ]}
-    />
+    <div className="agent-prism-wrapper">
+      <TraceViewer data={data} />
+    </div>
   );
 }
 

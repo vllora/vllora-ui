@@ -22,10 +22,16 @@ export const knowledgeSourceService = apiKnowledgeSourceAdapter;
 export const workflowService = apiWorkflowAdapter;
 export const iterationStateService = apiIterationAdapter;
 
-// OTel GenAI traces — currently mock-only. Swap to a real API adapter once
-// the coworker's OTel ingest endpoint ships. The interface lives in
-// src/services/interfaces/otel-trace-service.ts.
+// OTel GenAI traces — mock adapter powers the /traces browser. The full
+// OtelTraceService interface will swap to a real gateway adapter once the
+// coworker's OTel ingest endpoint ships.
 export const otelTraceService = mockOtelTraceAdapter;
+
+// Trace bundle spans — fetches from the gateway's GET /trace-bundles/{id}
+// endpoint. Used by the Sources view to render stored bundles via
+// agent-prism's <TraceViewer>. Returns null if the gateway is unreachable
+// (graceful fallback to the mock adapter's source-parts rendering).
+export { fetchTraceBundleSpans } from '@/services/adapters/gateway-otel-trace-adapter';
 
 // Backward-compatible alias (old name -> new name)
 /** @deprecated Use evalJobService instead */

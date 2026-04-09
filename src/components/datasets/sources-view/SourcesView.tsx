@@ -31,6 +31,7 @@ import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { knowledgeSourceService } from "@/services/service-registry";
 import { OtelTraceSourceViewer } from "./OtelTraceSourceViewer";
+import { OtelTraceBundleLoader } from "./OtelTraceBundleLoader";
 
 /**
  * Detect OTel trace sources. They are produced by `otel_extract.py` in the
@@ -68,7 +69,12 @@ export function SourcesView({ selectedSourceId, focusPartId, backTo, onBackToRec
   // PDF/document viewer. Branch early to keep the rest of this component
   // focused on document sources.
   if (activeSource && isOtelTraceSource(activeSource)) {
-    return <OtelTraceSourceViewer source={activeSource} />;
+    // When the source has a linked trace bundle, load spans from the
+    // gateway and render via agent-prism's TraceViewer. Otherwise fall
+    // back to the source-parts-based timeline.
+    return activeSource.traceBundleId
+      ? <OtelTraceBundleLoader source={activeSource} />
+      : <OtelTraceSourceViewer source={activeSource} />;
   }
 
   // When a source is selected from the AllSourcesView cards/matrix,

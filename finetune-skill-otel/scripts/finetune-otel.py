@@ -267,15 +267,193 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     return 0
 
 
+# ─── Gateway helpers ───────────────────────────────────────────────────────
+
+
+def _gateway_post(gateway: str, path: str, payload: dict) -> dict:
+    """POST JSON to the gateway and return the parsed response."""
+    import urllib.request
+    import urllib.error
+
+    url = f"{gateway}{path}"
+    body = json.dumps(payload, ensure_ascii=False).encode()
+    req = urllib.request.Request(
+        url, data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read())
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"gateway request failed: {url} → {exc}") from exc
+
+
+def _gateway_post_multipart(
+    gateway: str, path: str, fields: dict[str, str],
+) -> dict:
+    """POST multipart/form-data to the gateway (for knowledge source creation)."""
+    import urllib.request
+    import urllib.error
+
+    boundary = "----vllora-otel-boundary"
+    body_parts: list[bytes] = []
+    for key, value in fields.items():
+        body_parts.append(
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="{key}"\r\n\r\n'
+            f"{value}\r\n".encode()
+        )
+    body_parts.append(f"--{boundary}--\r\n".encode())
+    body = b"".join(body_parts)
+
+    url = f"{gateway}{path}"
+    req = urllib.request.Request(
+        url, data=body,
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read())
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"gateway request failed: {url} → {exc}") from exc
+
+
+# ─── Upload to gateway ─────────────────────────────────────────────────────
+
+
+def cmd_upload(args: argparse.Namespace) -> int:
+    """Upload semconv spans to the gateway as a trace bundle."""
+    spans = _load_json(args.spans)
+    if not isinstance(spans, list):
+        print("error: spans must be a JSON array", file=sys.stderr)
+        return 2
+
+    payload = {"name": args.name, "semconv_spans": spans}
+    if args.dataset_id:
+        payload["dataset_id"] = args.dataset_id
+
+    try:
+        result = _gateway_post(
+            args.gateway,
+            f"/finetune/workflows/{args.workflow_id}/trace-bundles",
+            payload,
+        )
+    except RuntimeError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    bundle_id = result.get("id", "?")
+    print(
+        f"uploaded trace bundle → {bundle_id}\n"
+        f"  spans: {result.get('span_count')}, "
+        f"tools: {result.get('tool_names', [])}, "
+        f"models: {result.get('model_names', [])}"
+    )
+    return 0
+
+
+# ─── Publish to gateway (create workflow + upload + register) ──────────────
+
+
+def publish_to_gateway(
+    gateway: str,
+    spans: list,
+    name: str,
+    objective: str | None = None,
+) -> dict:
+    """Create workflow + upload trace bundle + register knowledge source.
+
+    Returns a dict with `workflow_id`, `bundle_id`, `knowledge_source_id`.
+    Raises RuntimeError on gateway failures (caller should catch + degrade).
+    """
+    # Step 1: create workflow
+    print("[publish 1/3] Creating workflow...")
+    wf = _gateway_post(gateway, "/finetune/workflows", {
+        "name": name,
+        "objective": objective or f"OTel trace finetune: {name}",
+    })
+    workflow_id = wf["id"]
+    print(f"  workflow: {workflow_id} ({wf['name']})")
+
+    # Step 2: upload trace bundle
+    print("[publish 2/3] Uploading trace bundle...")
+    bundle = _gateway_post(
+        gateway,
+        f"/finetune/workflows/{workflow_id}/trace-bundles",
+        {"name": name, "semconv_spans": spans},
+    )
+    bundle_id = bundle["id"]
+    print(
+        f"  bundle: {bundle_id} "
+        f"({bundle.get('span_count', '?')} spans, "
+        f"tools={bundle.get('tool_names', [])}, "
+        f"models={bundle.get('model_names', [])})"
+    )
+
+    # Step 3: register knowledge source
+    print("[publish 3/3] Registering knowledge source...")
+    ks_id = None
+    try:
+        ks = _gateway_post_multipart(
+            gateway,
+            f"/finetune/workflows/{workflow_id}/knowledge",
+            {
+                "name": name,
+                "kind": "otel-trace",
+                "trace_bundle_id": bundle_id,
+            },
+        )
+        ks_id = ks.get("id", "?")
+        print(f"  knowledge source: {ks_id}")
+    except RuntimeError as exc:
+        print(f"  ⚠ knowledge source registration failed: {exc}")
+
+    print(
+        f"\n✅ Published to gateway\n"
+        f"  workflow:    {workflow_id}\n"
+        f"  bundle:      {bundle_id}\n"
+        f"  knowledge:   {ks_id or 'manual linking needed'}\n"
+        f"  gateway:     {gateway}\n"
+        f"\n"
+        f"Open the UI at http://localhost:5173 → navigate to the dataset → Sources tab\n"
+        f"to see the traces rendered in the TraceViewer."
+    )
+    return {
+        "workflow_id": workflow_id,
+        "bundle_id": bundle_id,
+        "knowledge_source_id": ks_id,
+    }
+
+
+def cmd_publish(args: argparse.Namespace) -> int:
+    """Standalone publish: create workflow + upload + register."""
+    spans = _load_json(args.spans)
+    if not isinstance(spans, list):
+        print("error: spans must be a JSON array", file=sys.stderr)
+        return 2
+    try:
+        publish_to_gateway(args.gateway, spans, args.name, args.objective)
+    except RuntimeError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
 # ─── Convenience: all ──────────────────────────────────────────────────────
 
 
 def cmd_all(args: argparse.Namespace) -> int:
-    """Run distill → topics → grader → prompt → hparams in sequence.
+    """Run distill → topics → grader → prompt → hparams → publish.
 
     Probe and analyze are intentionally excluded — they require
     rollout scores and eval results that aren't available until the
     base model has been run against the records.
+
+    By default, publishes to the gateway after local stages complete
+    (creates workflow, uploads trace bundle, registers knowledge source).
+    Use `--no-publish` to skip gateway integration and run local-only.
     """
     spans = _load_json(args.spans)
     out_dir = args.out_dir
@@ -284,37 +462,66 @@ def cmd_all(args: argparse.Namespace) -> int:
     tool_schema = extract_tool_schema_from_spans(spans)
     _write_jsonl(out_dir / "training.jsonl", records)
     _write_json(out_dir / "per_record_tools.json", tool_schema)
-    print(f"[1/5] distilled {len(records)} records")
+    print(f"[1/6] distilled {len(records)} records")
 
     hierarchy, per_record = build_both(tool_schema, records)
     _write_json(
         out_dir / "topics.json",
         {"hierarchy": hierarchy, "per_record_tools": per_record},
     )
-    print(f"[2/5] built topics ({len(hierarchy.get('leaves', []))} tools)")
+    print(f"[2/6] built topics ({len(hierarchy.get('leaves', []))} tools)")
 
     grader = build_grader_config(tool_schema)
     _write_json(out_dir / "grader.json", grader)
-    print(f"[3/5] built grader config")
+    print(f"[3/6] built grader config")
 
     try:
         prompt = build_system_prompt(
             records, tool_schema, _identity_rewrite, fallback=args.fallback
         )
     except ValueError as exc:
-        print(f"[4/5] prompt skipped: {exc}", file=sys.stderr)
+        print(f"[4/6] prompt skipped: {exc}", file=sys.stderr)
         prompt = ""
     if prompt:
         (out_dir / "system_prompt.txt").write_text(prompt)
-        print(f"[4/5] wrote system prompt ({len(prompt)} chars)")
+        print(f"[4/6] wrote system prompt ({len(prompt)} chars)")
 
     training_config = build_training_config(records)
     _write_json(out_dir / "training_config.json", training_config)
-    print(f"[5/5] wrote training config")
+    print(f"[5/6] wrote training config")
+
+    # Publish to gateway (create workflow + upload bundle + register source)
+    # Large bundles (>10MB JSON) cause broken-pipe errors on the gateway.
+    # Auto-subsample to MAX_UPLOAD_TRACES to stay within limits.
+    MAX_UPLOAD_TRACES = 500
+    if not args.no_publish:
+        print(f"[6/6] publishing to gateway ({args.gateway})...")
+        name = args.name or Path(args.spans).stem
+
+        # Subsample if the full bundle is too large
+        upload_spans = spans
+        by_trace: dict[str, list] = {}
+        for s in spans:
+            by_trace.setdefault(s.get("trace_id", ""), []).append(s)
+        if len(by_trace) > MAX_UPLOAD_TRACES:
+            subset_traces = dict(list(by_trace.items())[:MAX_UPLOAD_TRACES])
+            upload_spans = [s for tspans in subset_traces.values() for s in tspans]
+            print(
+                f"  subsampled {len(by_trace)} traces → {MAX_UPLOAD_TRACES} "
+                f"({len(upload_spans)} spans) for gateway upload"
+            )
+
+        try:
+            result = publish_to_gateway(args.gateway, upload_spans, name)
+            _write_json(out_dir / "publish_result.json", result)
+        except RuntimeError as exc:
+            print(f"[6/6] ⚠ gateway publish failed: {exc}")
+            print("  local artifacts are fine — publish manually later with:")
+            print(f"  finetune-otel.py publish {args.spans} --name '{name}'")
+    else:
+        print(f"[6/6] skipped (--no-publish)")
 
     print(f"\nall stages complete → {out_dir}/")
-    print("next: run base-model rollouts against training.jsonl,")
-    print("      then `finetune-otel.py probe training.jsonl rollouts.json`")
     return 0
 
 
@@ -377,10 +584,49 @@ def _build_parser() -> argparse.ArgumentParser:
     p_an.add_argument("--weak-tool-threshold", type=float, default=0.50)
     p_an.set_defaults(func=cmd_analyze)
 
-    p_all = sub.add_parser("all", help="Run distill → topics → grader → prompt → hparams")
+    p_up = sub.add_parser("upload", help="Upload semconv spans to gateway as trace bundle")
+    p_up.add_argument("spans", type=Path, help="Semconv spans JSON")
+    p_up.add_argument("--workflow-id", type=str, required=True)
+    p_up.add_argument("--name", type=str, required=True, help="Bundle display name")
+    p_up.add_argument("--dataset-id", type=str, default=None)
+    p_up.add_argument(
+        "--gateway", type=str, default="http://localhost:9090",
+        help="Gateway URL (default: http://localhost:9090)",
+    )
+    p_up.set_defaults(func=cmd_upload)
+
+    p_pub = sub.add_parser(
+        "publish",
+        help="Create workflow + upload bundle + register source (all-in-one gateway integration)",
+    )
+    p_pub.add_argument("spans", type=Path, help="Semconv spans JSON")
+    p_pub.add_argument("--name", type=str, required=True, help="Workflow + bundle name")
+    p_pub.add_argument("--objective", type=str, default=None, help="Workflow objective")
+    p_pub.add_argument(
+        "--gateway", type=str, default="http://localhost:9090",
+        help="Gateway URL (default: http://localhost:9090)",
+    )
+    p_pub.set_defaults(func=cmd_publish)
+
+    p_all = sub.add_parser(
+        "all",
+        help="Run distill → topics → grader → prompt → hparams → publish to gateway",
+    )
     p_all.add_argument("spans", type=Path)
     p_all.add_argument("--out-dir", type=Path, required=True)
     p_all.add_argument("--fallback", type=str, default=None)
+    p_all.add_argument(
+        "--name", type=str, default=None,
+        help="Workflow name for gateway publish (default: spans filename stem)",
+    )
+    p_all.add_argument(
+        "--gateway", type=str, default="http://localhost:9090",
+        help="Gateway URL (default: http://localhost:9090)",
+    )
+    p_all.add_argument(
+        "--no-publish", action="store_true",
+        help="Skip gateway publish (local-only mode)",
+    )
     p_all.set_defaults(func=cmd_all)
 
     return parser

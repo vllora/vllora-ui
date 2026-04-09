@@ -145,11 +145,12 @@ All under `scripts/`:
 - **`trace_topics.py`** — (TODO) Stage 2: lift topic hierarchy from tool schema
 - **`trace_grader_builder.py`** — (TODO) Stage 4: generate programmatic Jaccard grader
 - **`trace_grader.py`** — (TODO) the grader function itself (scored against `trace-grader-reference.md`)
-- **`system_prompt_rewriter.py`** — (TODO) Stage 5: extract + rewrite the demonstrator's system prompt
-- **`trace_probe_gates.py`** — (TODO) Stage 6: 4-gate pre-training probe
-- **`trace_hparams.py`** — (TODO) Stage 7: tool-routing hyperparameter delta
-- **`analyze_eval_trace.py`** — (TODO) Stage 8: per-tool confusion matrix + weak-tool identification
-- **`finetune-otel.py`** — (TODO) orchestrator (parallel to `finetune-skill/scripts/finetune.py`)
+- **`system_prompt_rewriter.py`** — Stage 5: extract + rewrite the demonstrator's system prompt
+- **`trace_probe_gates.py`** — Stage 6: 4-gate pre-training probe
+- **`trace_hparams.py`** — Stage 7: tool-routing hyperparameter delta
+- **`analyze_eval_trace.py`** — Stage 8: per-tool confusion matrix + weak-tool identification
+- **`finetune-otel.py`** — orchestrator. `all` subcommand runs stages 1–5/7 then auto-publishes to the gateway (creates workflow + uploads trace bundle + registers knowledge source). Use `--no-publish` for local-only. Also: `publish`, `upload`, `handoff`, and per-stage subcommands.
+- **`nemotron_to_semconv.py`** — adapter: converts `nvidia/Nemotron-Agentic-v1` OpenAI chat-completion format to OTel-semconv spans (with injected system prompt templates for Stage 5 testing)
 
 ## Sub-agents
 

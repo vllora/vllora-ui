@@ -1,9 +1,12 @@
 # vLLora UI
 
-This repo contains **two products being actively developed**:
+This repo contains **three products being actively developed**:
 
-1. **`finetune-skill/`** — A user-facing Claude Code skill (the pipeline driver). Users plug this into their project to finetune models via CLI. **Currently in active development (v1-v9 testing).**
-2. **`src/`** — A React/TypeScript UI that visualizes finetune workflow data (the presentation layer).
+1. **`finetune-skill/`** — User-facing Claude Code skill for the **document** finetune pipeline (PDFs → training data → GRPO). Frozen while the trace skill is in active development.
+2. **`finetune-skill-otel/`** — User-facing Claude Code skill for the **OTel GenAI trace** finetune pipeline (trace bundles → tool-routing training data → GRPO on Qwen3.5-4B). Second user-facing product, architecturally isolated from `finetune-skill/` per `docs/workflow-skill-first-approach/trace-pipeline-isolation.md`. **Actively developed.**
+3. **`src/`** — A React/TypeScript UI that visualizes workflow data for both pipelines (the presentation layer).
+
+> **Two-skills isolation rule**: `finetune-skill-otel/` NEVER modifies files inside `finetune-skill/`. Any PR that touches `finetune-skill/` as part of trace-skill work is rejected at review. Invoke `/otel-finetune-context` for the full trace pipeline context (8 stages, probe gates, hyperparameter deltas, gateway `trace_bundles`, agent-prism wiring, gotchas). Design docs live under `docs/workflow-skill-first-approach/` — start with `trace-pipeline-implementation-plan.md`.
 
 ## How It Works: Skill-First Architecture
 
@@ -29,7 +32,7 @@ The skill ingests two kinds of inputs into the **same** `knowledge_parts.json` f
 | Ingredient | Extractor | Reference | UI surface |
 |-----------|-----------|-----------|-----------|
 | Documents (PDFs, runbooks, markdown) | `finetune-skill/scripts/docling_extract.py` → `build_knowledge_parts.py` | `finetune-skill/reference/extraction-guide.md` | Sources view (PDF viewer) |
-| OpenTelemetry GenAI traces (LLM call logs) | `finetune-skill/scripts/otel_extract.py` | `finetune-skill/reference/otel-trace-ingestion.md` | `/traces` route, `src/components/traces/`, `OtelTraceSourceViewer.tsx` |
+| OpenTelemetry GenAI traces (LLM call logs) | `finetune-skill-otel/scripts/otel_extract.py` (also `openinference_to_semconv.py`, `otel_distill.py`) | `docs/workflow-skill-first-approach/otel-traces-as-finetune-input.md` + `finetune-skill-otel/reference/otel-trace-ingestion.md` | `/traces` route, `src/components/traces/`, `OtelTraceSourceViewer.tsx` (renders agent-prism `<TraceViewer>` via `toOtlpDocument`) |
 
 OTel ingestion follows the [OpenTelemetry GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) (status: development as of v1.38.0). **Never** read deprecated `gen_ai.prompt` / `gen_ai.completion` — use `gen_ai.input.messages` / `gen_ai.output.messages`. Content attributes are opt-in and may be missing — degrade gracefully.
 
