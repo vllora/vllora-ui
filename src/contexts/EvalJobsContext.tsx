@@ -47,6 +47,10 @@ function useEvalJobs(props: {
   // Preserve per-record results (pollingSnapshot) across loadJobs re-fetches.
   // pollingSnapshot is in-memory only — the API never returns it.
   const snapshotsRef = useRef<Map<string, EvalJob['pollingSnapshot']>>(new Map());
+  // Jobs whose cloud snapshot has been explicitly loaded by the UI (lazy per-job fetch).
+  const loadedSnapshotJobIdsRef = useRef<Set<string>>(new Set());
+  // Deduplicate in-flight lazy loads by job id.
+  const loadingSnapshotJobIdsRef = useRef<Set<string>>(new Set());
 
   // SSE reconnect detection (re-fetch jobs after gateway restart)
   const { isConnected } = ProjectEventsConsumer();
@@ -80,32 +84,17 @@ function useEvalJobs(props: {
   // Track which jobs we've started polling for (prevents restart loop)
   const pollingJobIdsRef = useRef<Set<string>>(new Set());
 
-  // Track which completed jobs we've already refreshed (catch-up for race condition)
-  const refreshedJobIdsRef = useRef<Set<string>>(new Set());
-
   // Start/stop polling based on job status (view-scoped via provider lifecycle)
   useEffect(() => {
     for (const job of jobs) {
       const isActive = job.status === 'running';
-      if (isActive && job.evaluationRunId && !pollingJobIdsRef.current.has(job.id)) {
+      const isLoaded = loadedSnapshotJobIdsRef.current.has(job.id);
+      if (isActive && isLoaded && job.evaluationRunId && !pollingJobIdsRef.current.has(job.id)) {
         pollingJobIdsRef.current.add(job.id);
         evalPollingManager.startPolling(job);
       } else if (!isActive && pollingJobIdsRef.current.has(job.id)) {
         pollingJobIdsRef.current.delete(job.id);
         evalPollingManager.stopPolling(job.id);
-      }
-
-      // Catch-up: fetch per-record results from cloud for completed jobs.
-      // pollingSnapshot is in-memory only, so after page reload it's gone.
-      // Single attempt here; the eval detail view auto-retries when opened.
-      const isTerminal = job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled';
-      const needsSnapshot = isTerminal && !job.pollingSnapshot && job.evaluationRunId;
-      if (needsSnapshot && !refreshedJobIdsRef.current.has(job.id)) {
-        refreshedJobIdsRef.current.add(job.id);
-        evalPollingManager.refreshJob(job).catch(() => {
-          // Allow retry when user opens eval detail view
-          refreshedJobIdsRef.current.delete(job.id);
-        });
       }
     }
   }, [jobs, loadJobs]);
@@ -177,7 +166,26 @@ function useEvalJobs(props: {
   const refreshJob = useCallback(async (jobId: string): Promise<void> => {
     const job = jobs.find((j) => j.id === jobId);
     if (!job) return;
+    loadedSnapshotJobIdsRef.current.add(job.id);
     await evalPollingManager.refreshJob(job);
+  }, [jobs]);
+
+  // Lazy loader for per-job cloud snapshot, called when eval job tab opens.
+  const ensureJobSnapshotLoaded = useCallback(async (jobId: string): Promise<void> => {
+    const job = jobs.find((j) => j.id === jobId);
+    if (!job || !job.evaluationRunId) return;
+    if (loadedSnapshotJobIdsRef.current.has(job.id)) return;
+    if (loadingSnapshotJobIdsRef.current.has(job.id)) return;
+
+    loadingSnapshotJobIdsRef.current.add(job.id);
+    try {
+      await evalPollingManager.refreshJob(job);
+      loadedSnapshotJobIdsRef.current.add(job.id);
+    } catch {
+      // Keep it retryable on next tab open.
+    } finally {
+      loadingSnapshotJobIdsRef.current.delete(job.id);
+    }
   }, [jobs]);
 
   // Computed state
@@ -211,6 +219,7 @@ function useEvalJobs(props: {
     cancelDryRun,
     refreshJobs: loadJobs,
     refreshJob,
+    ensureJobSnapshotLoaded,
   };
 }
 

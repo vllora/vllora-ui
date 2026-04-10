@@ -822,6 +822,36 @@ curl -s "http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs?include_metri
 ]
 ```
 
+### GET `/finetune/workflows/{workflow_id}/evaluations/metrics`
+
+Bulk summary metrics for all evaluation runs in a workflow.
+
+Use this for overview tables/charts to avoid one-by-one calls to
+`GET /finetune/evaluations/{evaluation_run_id}`.
+
+```bash
+curl -s "http://localhost:9090/finetune/workflows/WORKFLOW_ID/evaluations/metrics"
+```
+
+**Response excerpt:**
+```json
+[
+  {
+    "evaluation_run_id": "7f9b5d3d-8e31-4d1c-b9bf-8bb0d2d44945",
+    "status": "completed",
+    "total_rows": 200,
+    "completed_rows": 200,
+    "failed_rows": 0,
+    "average_score": 0.712,
+    "score_stddev": 0.118,
+    "min_score": 0.09,
+    "max_score": 0.98,
+    "scored_count": 200,
+    "passed_count": 151
+  }
+]
+```
+
 ### GET `/finetune/workflows/{workflow_id}/jobs/{job_id}/status`
 
 Check training job status.

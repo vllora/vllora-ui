@@ -110,7 +110,7 @@ import { EvalRunsOverview } from "./eval-dialog/EvalRunsOverview";
 import { FinetuneConfigPanel } from "@/components/finetune/content/FinetuneConfigPanel";
 import { FinetuneJobsOverview } from "@/components/finetune/content/FinetuneJobsOverview";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
-import { EvalJobsProvider } from "@/contexts/EvalJobsContext";
+import { EvalJobsConsumer, EvalJobsProvider } from "@/contexts/EvalJobsContext";
 import { PlanPreview } from "./PlanPreview";
 import { DatasetTitleBar, DatasetBreadcrumbBar } from "./DatasetBreadcrumbBar";
 import { useDatasetReadme } from "@/hooks/useDatasetReadme";
@@ -166,6 +166,17 @@ function WorkspaceTabBridge({ openTabRef, onSectionChange, onActivePathChange }:
     onSectionChange(activeTabPath ? mapTabPathToSection(activeTabPath) : null);
     onActivePathChange(activeTabPath);
   }, [activeTabPath, onSectionChange, onActivePathChange]);
+
+  return null;
+}
+
+function EvalJobSnapshotBridge({ selectedDryRunJobId }: { selectedDryRunJobId: string | null }) {
+  const { ensureJobSnapshotLoaded } = EvalJobsConsumer();
+
+  useEffect(() => {
+    if (!selectedDryRunJobId) return;
+    ensureJobSnapshotLoaded(selectedDryRunJobId);
+  }, [selectedDryRunJobId, ensureJobSnapshotLoaded]);
 
   return null;
 }
@@ -846,6 +857,7 @@ export function DatasetDetailContentV2() {
   return (
     <PipelineJournalProvider workflowId={workflowId}>
     <EvalJobsProvider dataset={dataset}>
+     <EvalJobSnapshotBridge selectedDryRunJobId={selectedDryRunJobId} />
      <WorkspaceTabsProvider workflowId={workflowId} initialTabs={emptyDatasetInitialTabs}>
       {/* Bridge: syncs workspace tab state ↔ parent content section */}
       <WorkspaceTabBridge openTabRef={openTabRef} onSectionChange={setTabContentSection} onActivePathChange={setActiveTabPath} />

@@ -5,13 +5,14 @@
  * summary table of runs, and aggregated per-topic breakdown.
  */
 
-import { useMemo, useContext } from "react";
+import { useMemo, useContext, useEffect, useState } from "react";
 import { BarChart3, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EvalJobsContext } from "@/contexts/EvalJobsContext";
 import { EvalComparisonChart } from "./EvalComparisonChart";
 import { evalJobDisplayName } from "@/lib/job-display-name";
 import type { EvalJob } from "@/types/eval-job";
+import { getWorkflowEvaluationMetrics, type EvaluationRunMetrics } from "@/services/finetune-api";
 import { useEvaluatorVersions } from "@/hooks/useEvaluatorVersions";
 import { EvaluatorVersionBadge } from "@/components/shared/EvaluatorVersionBadge";
 import {
@@ -36,6 +37,7 @@ function normalizeStatus(status: string): string {
 export function EvalRunsOverview({ workflowId }: EvalRunsOverviewProps) {
   const evalCtx = useContext(EvalJobsContext);
   const jobs = evalCtx?.jobs ?? [];
+  const [metricsByRunId, setMetricsByRunId] = useState<Record<string, EvaluationRunMetrics>>({});
   const { latestVersion, inferVersionForTimestamp } = useEvaluatorVersions(workflowId);
 
   const sortedJobs = useMemo(
@@ -43,9 +45,32 @@ export function EvalRunsOverview({ workflowId }: EvalRunsOverviewProps) {
     [jobs],
   );
 
-  const completedJobs = sortedJobs.filter(
-    (j) => (j.status === "completed" || j.status === "cancelled") && j.result,
-  );
+  const completedJobs = sortedJobs.filter((j) => {
+    const metric = metricsByRunId[j.evaluationRunId];
+    return (j.status === "completed" || j.status === "cancelled") && (!!j.result || !!metric);
+  });
+
+  // Bulk-load eval run metrics once per workflow for overview table/chart.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const rows = await getWorkflowEvaluationMetrics(workflowId);
+        if (cancelled) return;
+        const map: Record<string, EvaluationRunMetrics> = {};
+        for (const row of rows) {
+          map[row.evaluation_run_id] = row;
+        }
+        setMetricsByRunId(map);
+      } catch {
+        if (!cancelled) setMetricsByRunId({});
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [workflowId]);
 
   if (jobs.length === 0) {
     return (
@@ -100,7 +125,13 @@ export function EvalRunsOverview({ workflowId }: EvalRunsOverviewProps) {
             </thead>
             <tbody>
               {sortedJobs.map((job) => (
-                <RunRow key={job.id} job={job} latestVersion={latestVersion} inferVersion={inferVersionForTimestamp} />
+                <RunRow
+                  key={job.id}
+                  job={job}
+                  metric={metricsByRunId[job.evaluationRunId]}
+                  latestVersion={latestVersion}
+                  inferVersion={inferVersionForTimestamp}
+                />
               ))}
             </tbody>
           </table>
@@ -128,13 +159,53 @@ function ThWithInfo({ label, tip, align = "left" }: { readonly label: string; re
   );
 }
 
-function RunRow({ job, latestVersion, inferVersion }: {
+function RunRow({ job, metric, latestVersion, inferVersion }: {
   readonly job: EvalJob;
+  readonly metric?: EvaluationRunMetrics;
   readonly latestVersion: number | null;
   readonly inferVersion: (createdAtMs: number) => number | null;
 }) {
   const status = normalizeStatus(job.status);
-  const stats = job.result?.statistics;
+  const stats = useMemo(() => {
+    if (metric) {
+      const hasAny =
+        metric.average_score != null ||
+        metric.score_stddev != null ||
+        metric.min_score != null ||
+        metric.max_score != null;
+      if (hasAny) {
+        return {
+          mean: metric.average_score,
+          std: metric.score_stddev,
+          min: metric.min_score,
+          max: metric.max_score,
+        };
+      }
+    }
+    if (job.result?.statistics) return job.result.statistics;
+
+    const scoreValues: number[] = [];
+    const snapshotResults = job.pollingSnapshot?.results ?? [];
+    for (const row of snapshotResults) {
+      for (const candidates of Object.values(row.epochs ?? {})) {
+        for (const candidate of candidates ?? []) {
+          const score = candidate?.score;
+          if (typeof score === "number" && Number.isFinite(score)) {
+            scoreValues.push(score);
+          }
+        }
+      }
+    }
+    if (scoreValues.length === 0) return undefined;
+
+    const mean = scoreValues.reduce((acc, value) => acc + value, 0) / scoreValues.length;
+    const variance =
+      scoreValues.reduce((acc, value) => acc + (value - mean) ** 2, 0) / scoreValues.length;
+    const std = Math.sqrt(variance);
+    const min = Math.min(...scoreValues);
+    const max = Math.max(...scoreValues);
+    return { mean, std, min, max };
+  }, [metric, job.result?.statistics, job.pollingSnapshot?.results]);
   const verdict = job.result?.diagnosis?.verdict;
   const displayName = evalJobDisplayName(job.id);
   const jobVersion = inferVersion(job.createdAt);
@@ -185,19 +256,19 @@ function RunRow({ job, latestVersion, inferVersion }: {
         )}
       </td>
       <td className="px-3 py-2 text-right font-mono text-zinc-400">
-        {job.result?.samplesEvaluated ?? job.sampleSize ?? "—"}
+        {metric?.scored_count ?? job.result?.samplesEvaluated ?? job.pollingSnapshot?.completed_rows ?? job.sampleSize ?? "—"}
       </td>
       <td className="px-3 py-2 text-right font-mono text-zinc-300">
-        {stats ? stats.mean.toFixed(3) : "—"}
+        {stats?.mean != null ? stats.mean.toFixed(3) : "—"}
       </td>
       <td className="px-3 py-2 text-right font-mono text-zinc-500">
-        {stats ? stats.std.toFixed(3) : "—"}
+        {stats?.std != null ? stats.std.toFixed(3) : "—"}
       </td>
       <td className="px-3 py-2 text-right font-mono text-zinc-500">
-        {stats ? stats.min.toFixed(2) : "—"}
+        {stats?.min != null ? stats.min.toFixed(2) : "—"}
       </td>
       <td className="px-3 py-2 text-right font-mono text-zinc-500">
-        {stats ? stats.max.toFixed(2) : "—"}
+        {stats?.max != null ? stats.max.toFixed(2) : "—"}
       </td>
       <td className="px-3 py-2">
         <span className={cn("font-semibold", verdictColor)}>

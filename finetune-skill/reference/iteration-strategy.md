@@ -629,6 +629,12 @@ For a quick cross-job snapshot, call:
 
 This returns `eval_metrics` per job (when available): `latest_epoch_with_score` (1-based), overall average score, `avg_score_by_epoch` as an ascending list of `{epoch, avg_score}`, and distinct rows with any eval score. Use it to quickly compare multiple jobs before deeper per-row analysis.
 
+For evaluation-run overviews (mean/std/min/max across many runs), use:
+`GET /finetune/workflows/{workflow_id}/evaluations/metrics`
+
+This returns bulk metrics per `evaluation_run_id` and avoids N calls to
+`GET /finetune/evaluations/{evaluation_run_id}` when rendering eval-run tables.
+
 **Per-epoch training scores** — Save `GET /finetune/workflows/{id}/finetune-evaluations?finetune_job_id=JOB_ID` to `training-jobs/job-{N}-epochs.json`. On cloud, each request returns `row_index` in `[offset, offset + limit)` (default `limit` 20). Merge pages by increasing `offset`, or use one large `limit` for a full snapshot if payload size allows.
 ```json
 {

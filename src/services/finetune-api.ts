@@ -308,6 +308,20 @@ export interface EvaluationResultResponse {
   summary: EvaluationSummary | null;
 }
 
+export interface EvaluationRunMetrics {
+  evaluation_run_id: string;
+  status: string;
+  total_rows: number;
+  completed_rows: number;
+  failed_rows: number;
+  average_score?: number;
+  score_stddev?: number;
+  min_score?: number;
+  max_score?: number;
+  scored_count: number;
+  passed_count: number;
+}
+
 /** Flattened evaluation result for UI consumption (one entry per row) */
 export interface FlatEvaluationResult {
   dataset_row_id: string;
@@ -724,6 +738,15 @@ export async function getEvaluationResult(
     throw new Error(`Evaluation run ${evaluationRunId} not found (${response.status})`);
   }
   return handleApiResponse<EvaluationResultResponse>(response);
+}
+
+export async function getWorkflowEvaluationMetrics(
+  workflowId: string,
+): Promise<EvaluationRunMetrics[]> {
+  const response = await apiClient(`/finetune/workflows/${workflowId}/evaluations/metrics`, {
+    method: "GET",
+  });
+  return handleApiResponse<EvaluationRunMetrics[]>(response);
 }
 
 /**

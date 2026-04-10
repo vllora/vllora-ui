@@ -110,28 +110,7 @@ class EvalJobManager {
   async initialize(workflowId?: string): Promise<void> {
     if (this.initialized) return;
     this.initialized = true;
-
-    try {
-      if (!workflowId) return;
-      const pendingJobs = await evalJobService.getByDataset(workflowId);
-
-      // Clean up stale pending jobs (>60s old with no evaluation started)
-      for (const job of pendingJobs) {
-        if (job.status === 'pending' && Date.now() - job.createdAt > 60000) {
-          emitter.emit('vllora_eval_job_update', {
-            jobId: job.id,
-            job: {
-              ...job,
-              status: 'failed',
-              error: 'Job was interrupted before evaluation started',
-              completedAt: Date.now(),
-            },
-          });
-        }
-      }
-    } catch (error) {
-      console.error('[EvalJobManager] Failed to initialize:', error);
-    }
+    void workflowId;
   }
 
   private async getWorkflowJob(

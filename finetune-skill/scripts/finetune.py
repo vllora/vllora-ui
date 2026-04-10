@@ -1689,6 +1689,17 @@ def cmd_status(args: argparse.Namespace) -> None:
 
     # ── Eval jobs (from local tracking files) ──
     print("\n── Eval Jobs ──")
+    eval_metrics_by_run = {}
+    try:
+        metrics_rows = _api("GET", f"{base_url}/finetune/workflows/{wf_id}/evaluations/metrics")
+        if isinstance(metrics_rows, list):
+            for row in metrics_rows:
+                run_id = row.get("evaluation_run_id")
+                if run_id:
+                    eval_metrics_by_run[str(run_id)] = row
+    except SystemExit:
+        eval_metrics_by_run = {}
+
     eval_dir = project_dir / "evaluations"
     eval_jobs_shown = []
     if eval_dir.exists():
@@ -1732,6 +1743,17 @@ def cmd_status(args: argparse.Namespace) -> None:
                         score_str = ""
                 else:
                     score_str = ""
+                    metric = eval_metrics_by_run.get(ed.get("evaluation_run_id", ""))
+                    if metric:
+                        avg = metric.get("average_score")
+                        std = metric.get("score_stddev")
+                        scored = metric.get("scored_count")
+                        if avg is not None:
+                            score_str += f"  avg_score={float(avg):.3f}"
+                        if std is not None:
+                            score_str += f"  std={float(std):.3f}"
+                        if scored is not None:
+                            score_str += f"  scored={int(scored)}"
 
                 cancel_hint = ""
                 if estatus == "running":
