@@ -783,7 +783,44 @@ curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs/estimate 
 
 ### GET `/finetune/workflows/{workflow_id}/jobs`
 
-List training jobs for a workflow. Optional query params: `limit`, `after` (pagination), `dataset_id` (filter).
+List training jobs for a workflow.
+
+Optional query params:
+- `limit`, `after` (pagination)
+- `dataset_id` (filter)
+- `include_metrics` (boolean, default `false`)
+
+When `include_metrics=true`, each job may include an `eval_metrics` block computed from cloud finetune-evaluations:
+- `latest_epoch_with_score` - latest epoch containing any score (1-based)
+- `avg_score` - average score across all scored candidates for that job
+- `avg_score_by_epoch` - ascending list of epoch averages: `[{ "epoch": 1, "avg_score": ... }, ...]`
+- `distinct_rows_with_eval` - number of distinct rows that have at least one scored candidate
+
+```bash
+curl -s "http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs?include_metrics=true"
+```
+
+**Response excerpt (`include_metrics=true`):**
+```json
+[
+  {
+    "id": "ft_job_001",
+    "provider_job_id": "ftjob-abc123",
+    "status": "running",
+    "base_model": "Qwen3.5-4B",
+    "eval_metrics": {
+      "latest_epoch_with_score": 2,
+      "avg_score": 0.6714,
+      "avg_score_by_epoch": [
+        {"epoch": 1, "avg_score": 0.52},
+        {"epoch": 2, "avg_score": 0.68},
+        {"epoch": 3, "avg_score": 0.81}
+      ],
+      "distinct_rows_with_eval": 187
+    }
+  }
+]
+```
 
 ### GET `/finetune/workflows/{workflow_id}/jobs/{job_id}/status`
 

@@ -624,6 +624,11 @@ Key fields to use for analysis:
 
 Key fields: `status` (succeeded/failed), `provider_job_id` (cloud job ID), `error_message` (if failed). For post-training eval, test the final adapter as `finetuned/{provider_job_id}`; do not pass raw `fine_tuned_model` or raw `provider_job_id`. To inspect available checkpoint aliases for the same job, call `GET /finetune/workflows/{workflow_id}/jobs/{job_id}/models` and use the returned `checkpointed/{provider_job_id}:{step}` values.
 
+For a quick cross-job snapshot, call:
+`GET /finetune/workflows/{workflow_id}/jobs?include_metrics=true`
+
+This returns `eval_metrics` per job (when available): `latest_epoch_with_score` (1-based), overall average score, `avg_score_by_epoch` as an ascending list of `{epoch, avg_score}`, and distinct rows with any eval score. Use it to quickly compare multiple jobs before deeper per-row analysis.
+
 **Per-epoch training scores** — Save `GET /finetune/workflows/{id}/finetune-evaluations?finetune_job_id=JOB_ID` to `training-jobs/job-{N}-epochs.json`. On cloud, each request returns `row_index` in `[offset, offset + limit)` (default `limit` 20). Merge pages by increasing `offset`, or use one large `limit` for a full snapshot if payload size allows.
 ```json
 {

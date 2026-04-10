@@ -1661,7 +1661,7 @@ def cmd_status(args: argparse.Namespace) -> None:
     print("\n── Finetune Jobs ──")
     job_list = []
     try:
-        jobs = _api("GET", f"{base_url}/finetune/workflows/{wf_id}/jobs")
+        jobs = _api("GET", f"{base_url}/finetune/workflows/{wf_id}/jobs?include_metrics=true")
         job_list = jobs if isinstance(jobs, list) else jobs.get("jobs", [])
         if not job_list:
             print("  No finetune jobs")
@@ -1669,7 +1669,25 @@ def cmd_status(args: argparse.Namespace) -> None:
             model = j.get("base_model", "?")
             status = j.get("status", "?")
             jid = j.get("id", "?")[:12]
-            print(f"  {jid}...  {status}  ({model})")
+            eval_metrics = j.get("eval_metrics") or {}
+            avg_score = eval_metrics.get("avg_score")
+            latest_epoch = eval_metrics.get("latest_epoch_with_score")
+            rows_with_eval = eval_metrics.get("distinct_rows_with_eval")
+            by_epoch = eval_metrics.get("avg_score_by_epoch") or []
+            if isinstance(by_epoch, dict):
+                # Backward compatibility: older API shape used map epoch -> avg score.
+                by_epoch = [{"epoch": int(k), "avg_score": v} for k, v in by_epoch.items() if str(k).lstrip("-").isdigit()]
+                by_epoch = sorted(by_epoch, key=lambda item: item.get("epoch", 0))
+            metrics_suffix = ""
+            if avg_score is not None:
+                metrics_suffix += f" avg={avg_score:.3f}"
+            if latest_epoch is not None:
+                metrics_suffix += f" latest_epoch={latest_epoch}"
+            if rows_with_eval is not None:
+                metrics_suffix += f" rows={rows_with_eval}"
+            if by_epoch:
+                metrics_suffix += f" epochs={len(by_epoch)}"
+            print(f"  {jid}...  {status}  ({model}){metrics_suffix}")
     except SystemExit:
         print("  Could not fetch jobs from gateway")
 
@@ -4269,7 +4287,7 @@ class _JobNotFoundError(Exception):
 
 def _poll_training_once(base_url: str, wf_id: str, job_id: str) -> dict:
     """Fetch training job status from the jobs list (single-job endpoint is broken)."""
-    jobs = _api("GET", f"{base_url}/finetune/workflows/{wf_id}/jobs")
+    jobs = _api("GET", f"{base_url}/finetune/workflows/{wf_id}/jobs?include_metrics=true")
     job_list = jobs if isinstance(jobs, list) else jobs.get("jobs", [])
     for job in job_list:
         if job.get("id") == job_id:
@@ -5383,7 +5401,10 @@ def cmd_sync_jobs(args: argparse.Namespace) -> None:
     training_dir = output_dir / "training-jobs"
     training_dir.mkdir(parents=True, exist_ok=True)
 
-    jobs = _api("GET", f"{args.base_url}/finetune/workflows/{wf_id}/jobs")
+    jobs = _api(
+        "GET",
+        f"{args.base_url}/finetune/workflows/{wf_id}/jobs?include_metrics=true",
+    )
     job_list = jobs if isinstance(jobs, list) else jobs.get("jobs", [])
 
     # Index existing local files by job_id
