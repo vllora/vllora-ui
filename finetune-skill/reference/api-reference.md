@@ -92,7 +92,7 @@ All endpoints use JSON unless noted. Auth via `Authorization: Bearer <token>` he
 | 65 | GET | `/finetune/workflows/{id}/jobs/{job_id}/weights/url` | Download weights URL |
 | **Analytics & Evaluations** (workflow-scoped, read-only) | | | |
 | 65 | GET | `/finetune/workflows/{id}/analytics` | Get dataset analytics |
-| 66 | GET | `/finetune/workflows/{id}/finetune-evaluations` | Per-epoch training evaluations |
+| 66 | GET | `/finetune/workflows/{id}/finetune-evaluations` | Per-epoch training evaluations (`limit`/`offset` = `row_index` range) |
 | **Analytics** (non-workflow-scoped) | | | |
 | 67 | POST | `/finetune/analytics/dry-run` | Dataset analytics dry run |
 | **Evaluations** (non-workflow-scoped, cloud) | | | |
@@ -1018,11 +1018,32 @@ Run quality analytics on a dataset without persisting results.
 
 Get per-epoch evaluation results showing how the model improves during training.
 
+**LangDB Cloud** paginates by **numeric `row_index` range** (half-open interval): traces are filtered with `row_index >= offset` and `row_index < offset + limit`. This matches datasets whose rows are numbered **contiguously** `0 .. N-1` without gaps. If your row indices are sparse or non-zero-based, adjust queries or use **`row_index`** for a single row. If you omit `limit`, the default page size is **20** rows (`row_index` in `[0, 20)`). If you pass **`row_index`**, only that row is returned and **`limit` / `offset` are ignored**.
+
 ```bash
-curl "http://localhost:9090/finetune/workflows/WORKFLOW_ID/finetune-evaluations?finetune_job_id=ftjob-abc123&epoch=1"
+# First page: row_index in [0, 20) (default limit 20, offset 0)
+curl "http://localhost:9090/finetune/workflows/WORKFLOW_ID/finetune-evaluations?finetune_job_id=JOB_UUID"
+
+# Next page: row_index in [20, 40)
+curl "http://localhost:9090/finetune/workflows/WORKFLOW_ID/finetune-evaluations?finetune_job_id=JOB_UUID&limit=20&offset=20"
+
+# Single row only
+curl "http://localhost:9090/finetune/workflows/WORKFLOW_ID/finetune-evaluations?finetune_job_id=JOB_UUID&row_index=5"
+
+# Optional: include assistant rollout text in each result (larger payload)
+curl "http://localhost:9090/finetune/workflows/WORKFLOW_ID/finetune-evaluations?finetune_job_id=JOB_UUID&include_rollout_content=true&epoch=1"
 ```
 
-**Query params:** `finetune_job_id`, `row_index`, `epoch`, `include_rollout_content` (all optional filters)
+**Query params (all optional):**
+
+| Param | Meaning |
+|-------|--------|
+| `finetune_job_id` | Restrict to traces for this training job (UUID). |
+| `row_index` | Return results for exactly this dataset row; disables `limit`/`offset` paging. |
+| `epoch` | Restrict traces to this training epoch. |
+| `include_rollout_content` | When `true`, include rollout text in each epoch entry (omitted or `false` for smaller responses). |
+| `limit` | Page width: include traces with `row_index < offset + limit` (default **20** if omitted; ignored when `row_index` is set). |
+| `offset` | Range start: include traces with `row_index >= offset` (default **0**; ignored when `row_index` is set). |
 
 **Response:**
 ```json

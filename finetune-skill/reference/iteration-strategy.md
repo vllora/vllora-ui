@@ -233,6 +233,8 @@ If any check fails, do not continue training from that source job. Fix/re-run th
 
 During training, use `GET /finetune/workflows/{id}/finetune-evaluations?finetune_job_id=JOB_ID` to see how the model improves across epochs.
 
+On **LangDB Cloud**, `limit` and `offset` define a **half-open range** on numeric `row_index`: `[offset, offset + limit)` (default `limit` is 20). This assumes workflow rows are numbered contiguously starting at 0; if not, use `row_index` for one row at a time. To scan all rows, step `offset` by `limit` until a page returns no rows (or use one large `limit`). For a **single row** across all epochs, use `row_index=N` (pagination params are ignored). See `reference/api-reference.md` (section **GET `/finetune/workflows/{workflow_id}/finetune-evaluations`**) for the full parameter table.
+
 ```json
 {
   "results": [{
@@ -278,7 +280,7 @@ Use `--mode epoch` when deciding if the run trend is improving or degrading over
 
 If aggregate `reward` drops between epochs or across recent steps, do not only look at summary metrics. Drill into row-level behavior:
 
-1. Pull per-epoch row results (`/finetune-evaluations?finetune_job_id=...`).
+1. Pull per-epoch row results (`/finetune-evaluations?finetune_job_id=...`), paging with `limit`/`offset` as `row_index` ranges if the dataset is large (or set `row_index` for one row).
 2. Identify rows with the largest score drops (for example: epoch 0/1 score > 0.7 but latest epoch < 0.4).
 3. For each dropped row, compare outputs across epochs (not just scores):
    - Did the model become shorter, vague, or generic?
@@ -622,7 +624,7 @@ Key fields to use for analysis:
 
 Key fields: `status` (succeeded/failed), `provider_job_id` (cloud job ID), `error_message` (if failed). For post-training eval, test the final adapter as `finetuned/{provider_job_id}`; do not pass raw `fine_tuned_model` or raw `provider_job_id`. To inspect available checkpoint aliases for the same job, call `GET /finetune/workflows/{workflow_id}/jobs/{job_id}/models` and use the returned `checkpointed/{provider_job_id}:{step}` values.
 
-**Per-epoch training scores** — Save `GET /finetune/workflows/{id}/finetune-evaluations?finetune_job_id=JOB_ID` to `training-jobs/job-{N}-epochs.json`:
+**Per-epoch training scores** — Save `GET /finetune/workflows/{id}/finetune-evaluations?finetune_job_id=JOB_ID` to `training-jobs/job-{N}-epochs.json`. On cloud, each request returns `row_index` in `[offset, offset + limit)` (default `limit` 20). Merge pages by increasing `offset`, or use one large `limit` for a full snapshot if payload size allows.
 ```json
 {
   "results": [{
