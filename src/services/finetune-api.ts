@@ -64,6 +64,18 @@ export interface FinetuneInferenceParameters {
   response_candidates_count?: number;
 }
 
+export interface FinetuneEpochScore {
+  epoch: number;
+  avg_score: number;
+}
+
+export interface FinetuneJobEvalMetrics {
+  latest_epoch_with_score?: number;
+  avg_score?: number;
+  avg_score_by_epoch?: FinetuneEpochScore[];
+  distinct_rows_with_eval?: number;
+}
+
 /** Unified job type for the POST /jobs endpoint */
 export type JobType = "provider_finetune" | "evaluation_run";
 
@@ -195,6 +207,8 @@ export interface FinetuneJob {
   completed_at?: string;
   /** Evaluator version used for this job (extracted from request blob) */
   evaluator_version?: number;
+  /** Optional aggregated eval metrics when list endpoint uses include_metrics=true */
+  eval_metrics?: FinetuneJobEvalMetrics;
 }
 
 
@@ -465,10 +479,12 @@ export async function listFinetuneJobs(
   workflowId: string,
   limit?: number,
   after?: string,
+  includeMetrics?: boolean,
 ): Promise<FinetuneJob[]> {
   const params = new URLSearchParams();
   if (limit) params.set("limit", String(limit));
   if (after) params.set("after", after);
+  if (includeMetrics) params.set("include_metrics", "true");
 
   const queryString = params.toString();
   const base = `/finetune/workflows/${workflowId}/jobs`;

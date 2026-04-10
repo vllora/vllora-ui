@@ -22,7 +22,7 @@ import {
 } from "recharts";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { finetuneJobDisplayName } from "@/lib/job-display-name";
-import { getModelDisplayName, computeTrainingSummary } from "./utils";
+import { getModelDisplayName } from "./utils";
 import { useEvaluatorVersions } from "@/hooks/useEvaluatorVersions";
 import { EvaluatorVersionBadge } from "@/components/shared/EvaluatorVersionBadge";
 import type { FinetuneJob } from "@/services/finetune-api";
@@ -32,7 +32,7 @@ interface FinetuneJobsOverviewProps {
 }
 
 export function FinetuneJobsOverview({ workflowId }: FinetuneJobsOverviewProps) {
-  const { jobs, getJobEvaluations } = FinetuneJobsConsumer();
+  const { jobs } = FinetuneJobsConsumer();
   const { latestVersion } = useEvaluatorVersions(workflowId);
 
   const sortedJobs = useMemo(
@@ -55,16 +55,15 @@ export function FinetuneJobsOverview({ workflowId }: FinetuneJobsOverviewProps) 
     // Oldest first for chart (left to right = chronological)
     const chronological = [...sortedJobs].reverse();
     return chronological.map((job) => {
-      const { data: evalResults } = getJobEvaluations(job.id);
-      const summary = evalResults?.results ? computeTrainingSummary(evalResults.results) : null;
+      const avgScore = job.eval_metrics?.avg_score ?? null;
       return {
         name: finetuneJobDisplayName(job.id, job.suffix),
-        score: summary?.latestAvgScore ?? null,
+        score: avgScore,
         status: job.status,
         jobId: job.id,
       };
     }).filter((d) => d.score != null);
-  }, [sortedJobs, getJobEvaluations]);
+  }, [sortedJobs]);
 
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-5">
@@ -152,7 +151,7 @@ export function FinetuneJobsOverview({ workflowId }: FinetuneJobsOverviewProps) 
             </thead>
             <tbody>
               {sortedJobs.map((job) => (
-                <JobRow key={job.id} job={job} getJobEvaluations={getJobEvaluations} latestVersion={latestVersion} />
+                <JobRow key={job.id} job={job} latestVersion={latestVersion} />
               ))}
             </tbody>
           </table>
@@ -164,22 +163,14 @@ export function FinetuneJobsOverview({ workflowId }: FinetuneJobsOverviewProps) 
 
 function JobRow({
   job,
-  getJobEvaluations,
   latestVersion,
 }: {
   readonly job: FinetuneJob;
-  readonly getJobEvaluations: (jobId: string) => { data: { results: Array<{ row_index: number; epochs: Record<string, Array<{ score?: number | null }>> }> } | null };
   readonly latestVersion: number | null;
 }) {
   const displayName = finetuneJobDisplayName(job.id, job.suffix);
   const totalEpochs = job.training_config?.epochs ?? null;
-
-  // Get eval data for score summary
-  const { data: evalResults } = getJobEvaluations(job.id);
-  const summary = useMemo(() => {
-    if (!evalResults?.results) return null;
-    return computeTrainingSummary(evalResults.results);
-  }, [evalResults]);
+  const metrics = job.eval_metrics;
 
   const statusBadge = job.status === "succeeded"
     ? "bg-emerald-500/15 text-emerald-400"
@@ -214,15 +205,15 @@ function JobRow({
         {getModelDisplayName(job.base_model)}
       </td>
       <td className="px-3 py-2 text-right font-mono text-zinc-400">
-        {summary?.latestEpoch != null && totalEpochs != null
-          ? `${Math.min(summary.latestEpoch + 1, totalEpochs)}/${totalEpochs}`
+        {metrics?.latest_epoch_with_score != null && totalEpochs != null
+          ? `${Math.min(metrics.latest_epoch_with_score, totalEpochs)}/${totalEpochs}`
           : totalEpochs ?? "—"}
       </td>
       <td className="px-3 py-2 text-right font-mono text-zinc-300">
-        {summary?.latestAvgScore != null ? summary.latestAvgScore.toFixed(3) : "—"}
+        {metrics?.avg_score != null ? metrics.avg_score.toFixed(3) : "—"}
       </td>
       <td className="px-3 py-2 text-right font-mono text-zinc-500">
-        {summary?.totalRows ?? "—"}
+        {metrics?.distinct_rows_with_eval ?? "—"}
       </td>
       <td className="px-3 py-2 text-zinc-500">
         {job.provider}

@@ -284,7 +284,7 @@ export function DatasetDetailContentV2() {
   );
 
   // Finetune jobs sidebar
-  const { setCurrentDatasetId } = FinetuneJobsConsumer();
+  const { setCurrentDatasetId, ensureJobEvaluationsLoaded } = FinetuneJobsConsumer();
 
   // Set the dataset ID for filtering jobs when dataset changes
   useEffect(() => {
@@ -297,6 +297,12 @@ export function DatasetDetailContentV2() {
       setCurrentDatasetId(null);
     };
   }, [dataset?.id, setCurrentDatasetId]);
+
+  // Lazy-load training eval payload only when a specific finetune job tab is opened.
+  useEffect(() => {
+    if (!selectedFinetuneJobId) return;
+    ensureJobEvaluationsLoaded(selectedFinetuneJobId);
+  }, [selectedFinetuneJobId, ensureJobEvaluationsLoaded]);
 
   // Dialog state for records analytics
   const [analyticsDialogOpen, setAnalyticsDialogOpen] = useState(false);

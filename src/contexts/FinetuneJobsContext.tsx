@@ -61,6 +61,8 @@ function useFinetuneJobsLogic() {
 
   // Job evaluations state - keyed by job ID
   const [jobEvaluations, setJobEvaluations] = useState<Record<string, JobEvaluationState>>({});
+  // Track jobs whose eval payload was explicitly requested (lazy per job tab).
+  const loadedEvalJobIdsRef = useRef<Set<string>>(new Set());
   /** Active polling intervals for finetune evaluations, keyed by job ID */
   const evalPollIntervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
@@ -87,6 +89,9 @@ function useFinetuneJobsLogic() {
 
       return listFinetuneJobs(
         filterDatasetId, // workflowId (scopes the listing)
+        undefined,
+        undefined,
+        true,
       );
     },
     {
@@ -152,8 +157,18 @@ function useFinetuneJobsLogic() {
   const refreshJobEvaluations = useCallback((jobId: string) => {
     const job = jobsRef.current.find((j) => j.id === jobId);
     if (job) {
+      loadedEvalJobIdsRef.current.add(job.id);
       fetchJobEvaluations(job, false);
     }
+  }, [fetchJobEvaluations]);
+
+  // Lazy loader: fetch evaluations only when explicitly requested by UI (job tab open).
+  const ensureJobEvaluationsLoaded = useCallback((jobId: string) => {
+    const job = jobsRef.current.find((j) => j.id === jobId);
+    if (!job) return;
+    if (loadedEvalJobIdsRef.current.has(jobId)) return;
+    loadedEvalJobIdsRef.current.add(jobId);
+    fetchJobEvaluations(job, true);
   }, [fetchJobEvaluations]);
 
   const stopEvalPolling = useCallback((jobId: string) => {
@@ -186,7 +201,8 @@ function useFinetuneJobsLogic() {
       const isActive = job.status === 'pending' || job.status === 'running';
       const isPolling = !!evalPollIntervalsRef.current[job.id];
 
-      if (isActive && job.workflow_id && !isPolling) {
+      const shouldPoll = loadedEvalJobIdsRef.current.has(job.id);
+      if (isActive && shouldPoll && job.workflow_id && !isPolling) {
         startEvalPolling(job);
       } else if (!isActive && isPolling) {
         stopEvalPolling(job.id);
@@ -221,7 +237,7 @@ function useFinetuneJobsLogic() {
       if (!hasActiveJobsRef.current) return;
 
       try {
-        const freshJobs = await listFinetuneJobs(currentDatasetId);
+        const freshJobs = await listFinetuneJobs(currentDatasetId, undefined, undefined, true);
         const prevStatuses = prevStatusesRef.current;
 
         // Detect completion transitions
@@ -300,19 +316,6 @@ function useFinetuneJobsLogic() {
     )[0];
   }, [filteredJobs]);
 
-  // Track jobs whose evaluations have already been fetched (by job ID)
-  const evalsFetchedRef = useRef<Set<string>>(new Set());
-
-  // Fetch evaluations once per job on mount/change (active + completed)
-  useEffect(() => {
-    for (const job of filteredJobs) {
-      if (!job.workflow_id || evalsFetchedRef.current.has(job.id)) continue;
-
-      evalsFetchedRef.current.add(job.id);
-      fetchJobEvaluations(job, true);
-    }
-  }, [filteredJobs, fetchJobEvaluations]);
-
   // Re-fetch jobs on reconnect (covers BE restart gap)
   useEffect(() => {
     if (isConnected && !wasConnectedRef.current) {
@@ -335,6 +338,7 @@ function useFinetuneJobsLogic() {
     latestJob,
     getJobEvaluations,
     refreshJobEvaluations,
+    ensureJobEvaluationsLoaded,
   };
 }
 
