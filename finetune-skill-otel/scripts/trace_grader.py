@@ -213,6 +213,35 @@ def grade_parallel(pred: dict, gt: dict) -> float:
 # ─── Mandatory grader sanity check ──────────────────────────────────────────
 
 
+def _extract_tool_call_from_record(record: dict) -> dict | None:
+    """Extract the GT tool call from a training record.
+
+    Training records from otel_distill.py have shape:
+      {"messages": [..., {role: "assistant", tool_calls: [...]}], "tools": [...]}
+
+    Legacy test records may have {"output": {name, arguments}}.
+    """
+    # New format: messages-based
+    for msg in reversed(record.get("messages") or []):
+        if msg.get("role") != "assistant":
+            continue
+        tcs = msg.get("tool_calls") or []
+        if tcs:
+            fn = tcs[0].get("function", {})
+            args = fn.get("arguments")
+            if isinstance(args, str):
+                try:
+                    import json as _json
+                    args = _json.loads(args)
+                except Exception:
+                    args = {}
+            return {"name": fn.get("name", ""), "arguments": args or {}}
+    # Legacy format: output dict
+    if "output" in record:
+        return record["output"]
+    return None
+
+
 def sanity_check(gt_record: dict) -> None:
     """
     Run the mandatory grader sanity check against a real training record.
@@ -222,11 +251,20 @@ def sanity_check(gt_record: dict) -> None:
       2. Wrong tool scores the 0.02 floor
       3. Partial args (half of GT keys) score in [0.2, 0.8]
 
+    Accepts both formats:
+      - New: {"messages": [...], "tools": [...]} (from otel_distill.py)
+      - Legacy: {"output": {"name": ..., "arguments": {...}}}
+
     Raises AssertionError if any property fails. A failing sanity check
     indicates a grader bug (case sensitivity, normalization error) that
     would silently degrade training.
     """
-    output = gt_record["output"]
+    output = _extract_tool_call_from_record(gt_record)
+    if output is None:
+        raise ValueError(
+            "sanity_check: cannot extract tool call from record — "
+            "expected 'messages' with assistant tool_calls or legacy 'output' key"
+        )
 
     # 1. Self-match
     self_score = grade(output, output)

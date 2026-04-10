@@ -376,7 +376,13 @@ def extract_records_from_trace(
         if not tool_calls:
             continue  # not a decision point (response writer or refusal)
 
-        if not all_tool_calls_succeeded(tool_calls, tool_exec_index, name_fallback):
+        # Deep-copy name_fallback before each call — it mutates (pops)
+        # the queue as matches are consumed, so reusing the same dict
+        # across sequential LLM spans in a trace would cause later spans
+        # to see a partially-consumed index and silently drop records.
+        import copy
+        fb_copy = copy.deepcopy(name_fallback) if name_fallback else None
+        if not all_tool_calls_succeeded(tool_calls, tool_exec_index, fb_copy):
             continue  # Pattern B failed attempt — skip, recovery span handles it
 
         # Build the training record:

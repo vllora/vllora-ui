@@ -71,10 +71,10 @@ Topics   Records  Grader + System prompt
   HANDOFF TO CLOUD SERVER (LangDB Cloud)
           │
           ▼
-  Stage 7 — GRPO training (handled by cloud, not this skill)
+  Stage 7 — Eval (cloud: scores records with the grader)
           │
           ▼
-  Stage 8 — Evaluation against unseen paraphrases
+  Stage 8 — GRPO training (cloud: trains the model)
           │
           ▼
      TRAINED MODEL
@@ -83,8 +83,37 @@ Topics   Records  Grader + System prompt
 
 **Only Stage 5 makes an LLM call** (a one-shot system prompt rewrite at
 workflow-creation time). Every other local stage is mechanical extraction,
-deterministic computation, or polling. Stage 7 runs on the cloud; Stage 9
-is deferred.
+deterministic computation, or polling. Stages 7-8 run on the cloud via
+`finetune-otel.py eval` and `finetune-otel.py train`. Stage 9 is deferred.
+
+## Execution flow
+
+The orchestrator `scripts/finetune-otel.py` handles the entire pipeline.
+Run stages in this order:
+
+```bash
+# 1. Run all local stages + publish to gateway (creates workflow,
+#    uploads records, topics, grader, trace bundle)
+finetune-otel.py all <traces.json> --out-dir ./finetune-project --name "my-agent"
+
+# 2. Run evaluation on the cloud (scores records using the grader)
+finetune-otel.py eval --workflow-id <wf> --poll
+
+# 3. Run GRPO training on the cloud
+finetune-otel.py train --workflow-id <wf> \
+  --config-file ./finetune-project/training_config.json
+
+# 4. Analyze results (optional, after eval completes)
+finetune-otel.py analyze <eval-results.json> --output report.json
+```
+
+The `all` subcommand automatically publishes to the gateway (creates
+workflow, uploads trace bundle, records with topic assignment, grader).
+The workflow ID is saved in `finetune-project/publish_result.json`.
+
+After `all` completes, use the workflow ID to run eval and training.
+The eval and train subcommands call the same cloud API as the PDF skill —
+the cloud doesn't know whether records came from PDFs or OTel traces.
 
 ## Base model
 

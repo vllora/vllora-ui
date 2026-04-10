@@ -267,6 +267,174 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     return 0
 
 
+# ─── Eval + Training (reuses existing cloud API, same as PDF skill) ────────
+
+
+def cmd_eval(args: argparse.Namespace) -> int:
+    """Create an evaluation run on the cloud.
+
+    Same endpoint and flow as the PDF skill's `finetune.py create-eval`.
+    The cloud evaluates the records using the grader and returns scores.
+    """
+    import time
+
+    payload = {
+        "workflow_id": args.workflow_id,
+        "rollout_model_params": {
+            "model": args.model,
+            "temperature": 0.7,
+        },
+    }
+
+    print(f"Creating eval run (model={args.model})...")
+    try:
+        result = _gateway_post(args.gateway, "/finetune/evaluations", payload)
+    except RuntimeError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    eval_id = result.get("evaluation_run_id", result.get("id", "unknown"))
+    print(f"Eval created: {eval_id}")
+
+    # Save metadata
+    if args.output_dir:
+        out_dir = Path(args.output_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        meta = {
+            "evaluation_run_id": eval_id,
+            "workflow_id": args.workflow_id,
+            "model": args.model,
+            "status": "running",
+        }
+        _write_json(out_dir / f"eval-{eval_id[:8]}.json", meta)
+
+    # Poll if requested
+    if args.poll:
+        print(f"Polling every {args.poll_interval}s...")
+        elapsed = 0
+        while elapsed < args.max_wait:
+            try:
+                import urllib.request
+                with urllib.request.urlopen(
+                    f"{args.gateway}/finetune/evaluations/{eval_id}"
+                ) as resp:
+                    poll = json.loads(resp.read())
+            except Exception:
+                print(f"  [{elapsed}s] API error — retrying...")
+                time.sleep(args.poll_interval)
+                elapsed += args.poll_interval
+                continue
+
+            status = poll.get("status", "unknown")
+            completed = poll.get("completed_rows", "?")
+            total = poll.get("total_rows", "?")
+            print(f"  [{elapsed}s] {status} ({completed}/{total} rows)")
+
+            if status in ("completed", "failed", "cancelled"):
+                print(f"\nEval {status}.")
+                if args.output_dir:
+                    _write_json(
+                        Path(args.output_dir) / f"eval-{eval_id[:8]}.json",
+                        {**meta, "status": status, "results": poll.get("results")},
+                    )
+                return 0 if status == "completed" else 1
+
+            time.sleep(args.poll_interval)
+            elapsed += args.poll_interval
+
+        print(f"Timed out after {args.max_wait}s. Eval still running: {eval_id}")
+
+    return 0
+
+
+def cmd_train(args: argparse.Namespace) -> int:
+    """Create a training job on the cloud.
+
+    Same endpoint as the PDF skill's `finetune.py create-training`.
+    Uses GRPO with model-size-aware defaults from trace_hparams.py.
+    """
+    # Load the training config produced by Stage 7
+    training_config = {}
+    if args.config_file and args.config_file.exists():
+        training_config = _load_json(args.config_file)
+
+    base_model = args.base_model or "Qwen/Qwen3.5-4B"
+    output_model = args.output_model or "trace-finetune-v1"
+
+    payload = {
+        "job_type": "provider_finetune",
+        "dataset": args.workflow_id,
+        "base_model": base_model,
+        "output_model": output_model,
+        "display_name": args.display_name or f"Trace finetune {output_model}",
+        # Training config comes from trace_hparams.py (Stage 7) which
+        # includes all PDF defaults + trace deltas. Read everything from
+        # the config file so lora_rank, scale_rewards, etc. are not
+        # hardcoded here.
+        "training_config": {
+            "lora_rank": training_config.get("lora_rank", 16),
+            "gradient_accumulation_steps": training_config.get("gradient_accumulation_steps", 5),
+            "epochs": training_config.get("epochs", 5),
+            "batch_size": training_config.get("batch_size", 5),
+            "loss_type": training_config.get("loss_type", "dr_grpo"),
+            "learning_rate": training_config.get("learning_rate", 1e-6),
+            "beta": training_config.get("beta", 0),
+            "temperature": training_config.get("temperature", 1.0),
+            "num_generations": training_config.get("num_generations", 8),
+            "max_output_tokens": training_config.get("max_output_tokens", 512),
+            "mask_truncated_completions": training_config.get("mask_truncated_completions", True),
+            "importance_sampling_level": training_config.get("importance_sampling_level", "sequence"),
+            "scale_rewards": training_config.get("scale_rewards", "none"),
+            "epsilon": training_config.get("epsilon", 3e-4),
+            "epsilon_high": training_config.get("epsilon_high", 4e-4),
+        },
+    }
+
+    # Merge user overrides
+    if args.config_overrides:
+        try:
+            overrides = json.loads(args.config_overrides)
+            payload["training_config"].update(overrides)
+        except Exception as exc:
+            print(f"warning: ignoring --config-overrides: {exc}", file=sys.stderr)
+
+    print(f"Creating training job (base={base_model}, model={output_model})...")
+    try:
+        result = _gateway_post(
+            args.gateway,
+            f"/finetune/workflows/{args.workflow_id}/jobs",
+            payload,
+        )
+    except RuntimeError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    job_id = result.get("id", result.get("provider_job_id", "unknown"))
+    print(f"Training job created: {job_id}")
+    print(f"  base_model:   {base_model}")
+    print(f"  output_model: {output_model}")
+    print(f"  loss_type:    {payload['training_config']['loss_type']}")
+    print(f"  lr:           {payload['training_config']['learning_rate']}")
+    print(f"  beta:         {payload['training_config']['beta']}")
+    print(f"  temperature:  {payload['training_config']['temperature']}")
+    print(f"  K:            {payload['training_config']['num_generations']}")
+    print(f"\nMonitor in UI: http://localhost:5173/finetune/{args.workflow_id}")
+
+    if args.output_dir:
+        out_dir = Path(args.output_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        _write_json(out_dir / f"training-{job_id[:8]}.json", {
+            "job_id": job_id,
+            "workflow_id": args.workflow_id,
+            "base_model": base_model,
+            "output_model": output_model,
+            "config": payload["training_config"],
+            "status": "created",
+        })
+
+    return 0
+
+
 # ─── Gateway helpers ───────────────────────────────────────────────────────
 
 
@@ -420,38 +588,21 @@ def publish_to_gateway(
     topics_uploaded = 0
 
     if artifacts_dir:
-        # Step 4: upload training records
-        # Step 4: upload topics FIRST (so we have IDs for record assignment)
+        # Step 4: upload topics from SCHEMA only (not from all record tool names).
+        # In production, all traces come from one agent = one schema, so schema
+        # topics match the records. For multi-agent datasets (Nemotron), creating
+        # a topic per distinct tool name produces thousands of 1-record topics.
         topic_name_to_id: dict[str, str] = {}
         topics_file = artifacts_dir / "topics.json"
-        records_file_for_topics = artifacts_dir / "training.jsonl"
         if topics_file.exists():
             print(f"[publish 4/{total_steps}] Uploading topics...")
-
-            # Collect ALL tool names from the actual records (not just the schema)
-            # so every record can be assigned to its tool's topic
-            all_tool_names: set[str] = set()
             topics_data = _load_json(topics_file)
-            for leaf in topics_data.get("hierarchy", {}).get("leaves", []):
-                name = leaf.get("name")
-                if name:
-                    all_tool_names.add(name)
+            leaves = topics_data.get("hierarchy", {}).get("leaves", [])
 
-            if records_file_for_topics.exists():
-                for rec in _load_jsonl(records_file_for_topics):
-                    for m in reversed(rec.get("messages") or []):
-                        if m.get("role") != "assistant":
-                            continue
-                        for tc in m.get("tool_calls") or []:
-                            fn_name = tc.get("function", {}).get("name")
-                            if fn_name:
-                                all_tool_names.add(fn_name)
-                        break
-
-            if all_tool_names:
+            if leaves:
                 topic_payload = [
-                    {"name": tn, "parent_id": None}
-                    for tn in sorted(all_tool_names)
+                    {"name": leaf.get("name", "Unknown"), "parent_id": None}
+                    for leaf in leaves
                 ]
                 _gateway_post(
                     gateway,
@@ -483,19 +634,6 @@ def publish_to_gateway(
             if raw_records:
                 import uuid as _uuid
 
-                # Fetch topic IDs from gateway (created in step 5)
-                # to assign each record to its tool's topic
-                try:
-                    import urllib.request as _urlreq
-                    with _urlreq.urlopen(
-                        f"{gateway}/finetune/workflows/{workflow_id}/topics"
-                    ) as resp:
-                        topics_resp = json.loads(resp.read())
-                    for t in topics_resp.get("topics", []):
-                        topic_name_to_id[t["name"]] = t["id"]
-                except Exception:
-                    pass  # topic assignment will be skipped
-
                 def _record_tool_name(rec: dict) -> str | None:
                     msgs = rec.get("messages") or []
                     for m in reversed(msgs):
@@ -506,6 +644,9 @@ def publish_to_gateway(
                             return tcs[0].get("function", {}).get("name")
                     return None
 
+                # Records from training.jsonl already have normalized system
+                # prompts (done in cmd_all before writing). Topic IDs were
+                # fetched in step 4 above.
                 gateway_records = []
                 assigned = 0
                 for rec in raw_records:
@@ -541,18 +682,22 @@ def publish_to_gateway(
             print(f"[publish 6/{total_steps}] Uploading grader...")
             grader_config = _load_json(grader_file)
             # The gateway expects the grader as a JS file via multipart.
-            # Convert our JSON grader config into a JS evaluator script
-            # that the gateway's evaluator system can execute.
+            # Read the real JS grader implementation and embed the config
+            # at the top so the cloud evaluator has everything it needs.
+            grader_js_path = Path(__file__).parent / "trace_grader.js"
+            if not grader_js_path.exists():
+                raise RuntimeError(f"trace_grader.js not found at {grader_js_path}")
+            grader_js_template = grader_js_path.read_text()
+            # Inject the concrete GRADER_CONFIG before the grader code.
+            # The JS file references `typeof GRADER_CONFIG !== "undefined"`
+            # and falls back to an empty object — by declaring it first, the
+            # real config takes precedence.
             grader_js = (
-                "// Auto-generated from trace pipeline grader.json\n"
+                "// Auto-generated: GRADER_CONFIG embedded by finetune-otel.py publish\n"
                 "// Type: programmatic_tool_call, Version: "
                 f"{grader_config.get('formula_version', 'v1')}\n"
                 f"const GRADER_CONFIG = {json.dumps(grader_config, indent=2)};\n\n"
-                "function grade(predicted, expected) {\n"
-                "  // Programmatic tool-call grader — server-side implementation\n"
-                "  // uses GRADER_CONFIG.tool_schema and .wrong_tool_floor\n"
-                "  return { score: 0, reason: 'server-side grading' };\n"
-                "}\n"
+                + grader_js_template
             )
             _gateway_multipart_method(
                 gateway,
@@ -615,37 +760,62 @@ def cmd_all(args: argparse.Namespace) -> int:
     spans = _load_json(args.spans)
     out_dir = args.out_dir
 
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     records = extract_records(spans)
     tool_schema = extract_tool_schema_from_spans(spans)
+    print(f"[1/6] distilled {len(records)} records")
+
+    # Extract + rewrite system prompt BEFORE writing records,
+    # then normalize all records to use the ONE canonical prompt.
+    # OpenAI best practice: "Make sure all of your training examples
+    # are in the same format expected for inference." Varying system
+    # prompts across training records breaks anchoring.
+    try:
+        prompt = build_system_prompt(
+            records, tool_schema, _identity_rewrite, fallback=args.fallback
+        )
+    except ValueError as exc:
+        print(f"[2/6] prompt skipped: {exc}", file=sys.stderr)
+        prompt = ""
+    if prompt:
+        (out_dir / "system_prompt.txt").write_text(prompt)
+
+        # Normalize: replace every record's system prompt with the canonical one
+        normalized = 0
+        for rec in records:
+            for m in rec.get("messages") or []:
+                if m.get("role") == "system":
+                    m["content"] = prompt
+                    normalized += 1
+                    break
+        print(f"[2/6] wrote system prompt ({len(prompt)} chars, normalized {normalized} records)")
+        print(
+            "  ⚠ Using identity rewrite (pass-through). For production,\n"
+            "    inject a real LLM rewrite_fn to strip dynamic context\n"
+            "    (dates, user IDs, capability claims) from the prompt."
+        )
+    else:
+        print(f"[2/6] no system prompt extracted")
+
+    # NOW write records (with normalized prompts)
     _write_jsonl(out_dir / "training.jsonl", records)
     _write_json(out_dir / "per_record_tools.json", tool_schema)
-    print(f"[1/6] distilled {len(records)} records")
 
     hierarchy, per_record = build_both(tool_schema, records)
     _write_json(
         out_dir / "topics.json",
         {"hierarchy": hierarchy, "per_record_tools": per_record},
     )
-    print(f"[2/6] built topics ({len(hierarchy.get('leaves', []))} tools)")
+    print(f"[3/6] built topics ({len(hierarchy.get('leaves', []))} tools)")
 
     grader = build_grader_config(tool_schema)
     _write_json(out_dir / "grader.json", grader)
-    print(f"[3/6] built grader config")
-
-    try:
-        prompt = build_system_prompt(
-            records, tool_schema, _identity_rewrite, fallback=args.fallback
-        )
-    except ValueError as exc:
-        print(f"[4/6] prompt skipped: {exc}", file=sys.stderr)
-        prompt = ""
-    if prompt:
-        (out_dir / "system_prompt.txt").write_text(prompt)
-        print(f"[4/6] wrote system prompt ({len(prompt)} chars)")
+    print(f"[4/6] built grader config")
 
     training_config = build_training_config(records)
     _write_json(out_dir / "training_config.json", training_config)
-    print(f"[5/6] wrote training config")
+    print(f"[5/6] wrote training config (temp={training_config['temperature']}, K={training_config['num_generations']})")
 
     # Publish to gateway (create workflow + upload bundle + register source)
     # Large bundles (>10MB JSON) cause broken-pipe errors on the gateway.
@@ -787,6 +957,33 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Skip gateway publish (local-only mode)",
     )
     p_all.set_defaults(func=cmd_all)
+
+    # ── Eval ──
+    p_eval = sub.add_parser("eval", help="Create an evaluation run on the cloud")
+    p_eval.add_argument("--workflow-id", type=str, required=True)
+    p_eval.add_argument("--model", type=str, default="gpt-4o-mini", help="Rollout model")
+    p_eval.add_argument("--poll", action="store_true", help="Poll until complete")
+    p_eval.add_argument("--poll-interval", type=int, default=30)
+    p_eval.add_argument("--max-wait", type=int, default=1800)
+    p_eval.add_argument("--output-dir", type=Path, default=None)
+    p_eval.add_argument(
+        "--gateway", type=str, default="http://localhost:9090",
+    )
+    p_eval.set_defaults(func=cmd_eval)
+
+    # ── Train ──
+    p_train = sub.add_parser("train", help="Create a GRPO training job on the cloud")
+    p_train.add_argument("--workflow-id", type=str, required=True)
+    p_train.add_argument("--base-model", type=str, default=None, help="Base model (default: Qwen/Qwen3.5-4B)")
+    p_train.add_argument("--output-model", type=str, default=None, help="Output model name")
+    p_train.add_argument("--display-name", type=str, default=None)
+    p_train.add_argument("--config-file", type=Path, default=None, help="training_config.json from Stage 7")
+    p_train.add_argument("--config-overrides", type=str, default=None, help="JSON overrides for training config")
+    p_train.add_argument("--output-dir", type=Path, default=None)
+    p_train.add_argument(
+        "--gateway", type=str, default="http://localhost:9090",
+    )
+    p_train.set_defaults(func=cmd_train)
 
     return parser
 

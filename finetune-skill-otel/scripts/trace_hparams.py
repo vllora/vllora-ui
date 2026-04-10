@@ -66,6 +66,14 @@ PDF_DEFAULTS: dict[str, Any] = {
     "epsilon_high": 4e-4,
     "mask_truncated_completions": True,
     "importance_sampling_level": "sequence",
+    "lora_rank": 16,  # Qwen3.5-4B needs rank≥16 for tool routing (discrete
+                       # action space). rank=8 underfits on 4B models. The PDF
+                       # pipeline uses 8 for 0.8B/2B but 16 for 4B.
+    "gradient_accumulation_steps": 5,
+    "epochs": 5,
+    "batch_size": 5,
+    "scale_rewards": "none",  # Dr. GRPO (arXiv:2503.20783) removes group norm
+                               # to avoid difficulty bias on 4B+ models.
     # The PDF pipeline auto-tunes max_output_tokens to GT_P95 × 1.5.
     # We override the multiplier below.
 }
