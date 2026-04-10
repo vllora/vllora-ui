@@ -1674,10 +1674,6 @@ def cmd_status(args: argparse.Namespace) -> None:
             latest_epoch = eval_metrics.get("latest_epoch_with_score")
             rows_with_eval = eval_metrics.get("distinct_rows_with_eval")
             by_epoch = eval_metrics.get("avg_score_by_epoch") or []
-            if isinstance(by_epoch, dict):
-                # Backward compatibility: older API shape used map epoch -> avg score.
-                by_epoch = [{"epoch": int(k), "avg_score": v} for k, v in by_epoch.items() if str(k).lstrip("-").isdigit()]
-                by_epoch = sorted(by_epoch, key=lambda item: item.get("epoch", 0))
             metrics_suffix = ""
             if avg_score is not None:
                 metrics_suffix += f" avg={avg_score:.3f}"
