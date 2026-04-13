@@ -5,7 +5,7 @@
  * tax deductions, legal clause analysis, medical coding).
  * Scores on: rule recall, false positives, citation accuracy, explanation.
  *
- * Customize: RULE_KEYWORDS, MIN_RULES_EXPECTED
+ * Customize: TARGET_WORDS, ALPHA, CORRECT_THRESHOLD (length control)
  *
  * ⚠️ GRPO OVER-CITATION EXPLOIT (MO-GRPO arXiv:2509.22047):
  * Compliance tasks are vulnerable to the same over-prediction exploit as
@@ -16,18 +16,43 @@
  * For multi-rule tasks, consider using grader-multilabel.js instead.
  *
  * GRPO LENGTH EXPLOITATION: Without conciseness control, GRPO models learn verbose
- * responses because longer = more content = higher scores. This template includes a
- * CONCISENESS criterion in the LLM judge to prevent this. Customize the weight for your task.
+ * responses because longer = more content = higher scores. This template uses TWO
+ * length-control mechanisms:
+ *   1. LLM-as-judge CONCISENESS criterion (10% weight) — semantic signal
+ *   2. GR3-style multiplicative length penalty — programmatic, applied only to
+ *      wrong/partial answers via a binary correctness gate
  *
- * ⚠️ DRPO ANTI-PATTERN (arXiv:2510.04474): If you add programmatic word-count penalties,
- * NEVER apply them uniformly to correct AND wrong answers. A penalized correct-but-verbose
- * answer can drop below wrong-answer scores, inverting its GRPO advantage. The LLM
- * conciseness criterion used here is safe (semantic, not raw token count).
+ * ⚠️ DRPO ANTI-PATTERN (arXiv:2510.04474, §3): Uniform length penalties invert GRPO
+ * advantage — a penalized correct-but-verbose answer can drop below the group mean
+ * (which includes zero-reward wrong answers), giving it NEGATIVE advantage. The fix:
+ * gate the penalty on correctness. This template penalizes only wrong/partial answers.
+ *
+ * ⚠️ GR3 ADDITIVE COLLAPSE (arXiv:2603.10535, Prop 3.1): Additive shaping
+ * R_hat = R + λ*S collapses for ANY λ — length gradient dominates advantage.
+ * MUST use multiplicative form: R * scale_factor (Eq. 6, Prop 3.2).
+ *
+ * Customize: TARGET_WORDS — set to your ground-truth P95 word count. If unknown,
+ * the readiness gate will report eval P95 and GT P95 after first eval run.
  *
  * Ref: Dr. GRPO (arXiv:2503.20783), DAPO (arXiv:2503.14476), DRPO (arXiv:2510.04474),
- *      MO-GRPO (arXiv:2509.22047)
+ *      GR3 (arXiv:2603.10535), GRPO-LEAD (arXiv:2504.09696), MO-GRPO (arXiv:2509.22047)
  */
 function evaluate(input) {
+    // ─── Customize these for your task ───
+    // TARGET_WORDS: Set to ground-truth P95 word count. The readiness gate reports
+    // this after first eval. If unknown, use 250 as a conservative default for
+    // compliance tasks. GT P95 is the safest fixed target when group-relative
+    // statistics are unavailable (GRPO-LEAD arXiv:2504.09696, §3.1).
+    var TARGET_WORDS = 250;
+    // ALPHA: GR3 penalty strength (arXiv:2603.10535, Eq. 6). Higher = stricter.
+    // 0.5 gives ~33% penalty at 2× target length. 1.0 gives ~50% at 2× target.
+    var ALPHA = 0.5;
+    // CORRECT_THRESHOLD: Score above which a response is considered "correct"
+    // and exempt from length penalty (DRPO binary gate analogue).
+    // All papers use binary gates (arXiv:2510.04474, arXiv:2504.09696);
+    // 0.60 is the continuous-score analogue for "majority correct".
+    var CORRECT_THRESHOLD = 0.60;
+
     let response = "";
     let history = "";
 
@@ -46,20 +71,6 @@ function evaluate(input) {
     if (!response || response.trim().length < 10) {
         return { score: 0, reason: "Response is empty or too short" };
     }
-
-    // ─── Programmatic Checks ───
-
-    // TODO: Check for citation/reference patterns
-    // const hasCitations = /\b(Section|§|Publication|Rule|Article|Clause)\s+\d/i.test(response);
-    // if (!hasCitations) {
-    //     // Flag but don't zero — might still identify correct rules
-    // }
-
-    // TODO: Check minimum number of rules/findings identified
-    // const bulletCount = (response.match(/^[-•*]\s/gm) || []).length;
-    // if (bulletCount < 2) {
-    //     // Likely missed findings
-    // }
 
     // ─── LLM-as-Judge: Rule Application Quality ───
 
@@ -135,19 +146,64 @@ Answer in JSON format:
         const comp = typeof result.completeness === 'number' ? result.completeness : 0;
         const con = typeof result.conciseness === 'number' ? result.conciseness : 0;
 
-        // Weight: recall and false positives matter most for compliance
-        // Conciseness at 10% weight to prevent GRPO length exploitation (empirical; DRPO arXiv:2510.04474)
+        // Weight: recall and false positives matter most for compliance.
+        // Conciseness at 10% — consistent with OpenAI RFT Cookbook practice (10-15%).
+        // The LLM criterion provides semantic signal; the programmatic GR3 penalty
+        // below provides the hard gradient. Raising LLM weight beyond 10% adds noise
+        // without improving signal quality (OpenAI RFT Cookbook: "start small, adjust").
         const weighted = (rr * 0.27) + (fp * 0.22) + (ca * 0.18) + (ex * 0.13) + (comp * 0.10) + (con * 0.10);
+
         // Floor at 0.05 to keep GRPO gradient nonzero (NEVER return 0.0 for attempted answers).
         // Only empty/refusal/error should return 0.0.
-        let finalScore = Math.max(0.05, Math.min(1, weighted / 5.0));
+        let baseScore = Math.max(0.05, Math.min(1, weighted / 5.0));
+        if (isNaN(baseScore)) baseScore = 0.05;
+
+        // ─── GR3-style multiplicative length penalty (arXiv:2603.10535, Eq. 6) ───
+        // Formula: R_hat = R * 1 / (1 + α * ℓ_i / ℓ_bar)
+        // where ℓ_i = actual words, ℓ_bar = TARGET_WORDS, α = penalty strength.
+        //
+        // Why multiplicative, not additive: GR3 Prop 3.1 proves additive shaping
+        // R + λ*S collapses for ANY λ — length gradient dominates advantage.
+        // Multiplicative form (Prop 3.2) gates length signal by task reward:
+        // contribution scales as R*(S - μ_S), so low-reward responses suppress
+        // the length signal automatically.
+        //
+        // Binary correctness gate (DRPO arXiv:2510.04474, §3; GRPO-LEAD
+        // arXiv:2504.09696, §3.1): All papers gate length penalty on correctness.
+        // Correct answers get a small brevity bonus instead. This prevents the
+        // DRPO anti-pattern where penalized correct answers drop below the group
+        // mean and receive negative advantage.
+        //
+        // Note: DAPO overlong punishment (arXiv:2503.14476, Eq. 13) is a
+        // training-algorithm-level signal, NOT a grader-side penalty. Do not
+        // conflate the two — grader penalties are conflated with correctness
+        // before group normalization, which is why the DRPO gate matters here.
+        var actualWords = Math.max(1, response.split(/\s+/).length);
+        var isCorrect = baseScore >= CORRECT_THRESHOLD;
+
+        var finalScore;
+        if (isCorrect) {
+            // Correct answers: small brevity bonus, no penalty.
+            // Keeps GRPO advantage positive for correct-but-verbose answers.
+            var brevityBonus = actualWords <= TARGET_WORDS ? 0.02 : 0.0;
+            finalScore = Math.min(1.0, baseScore + brevityBonus);
+        } else {
+            // Wrong/partial: GR3 multiplicative penalty.
+            // At 2× target with α=0.5: factor = 1/(1+0.5*2) = 0.50 (halved).
+            // At 1× target: factor = 1/(1+0.5*1) = 0.67 (mild).
+            // At 0.5× target: factor = 1/(1+0.5*0.5) = 0.80 (minimal).
+            var lengthRatio = actualWords / TARGET_WORDS;
+            var scaleFactor = 1.0 / (1.0 + ALPHA * lengthRatio);
+            finalScore = Math.max(0.05, baseScore * scaleFactor);
+        }
         if (isNaN(finalScore)) finalScore = 0.05;
 
         return {
             score: finalScore,
             reason: result.reasoning || "No reasoning",
             rule_recall: rr, false_positives: fp, citation_accuracy: ca,
-            explanation: ex, completeness: comp, conciseness: con
+            explanation: ex, completeness: comp, conciseness: con,
+            length_words: actualWords, length_penalized: !isCorrect
         };
     } catch (error) {
         return { score: 0, reason: "Error: " + (error.message || "Unknown") };

@@ -314,7 +314,7 @@ def cmd_eval(args: argparse.Namespace) -> int:
     print(f"Eval created: {eval_id}")
 
     # Journal entry for eval creation
-    _journal_log(Path("."), "eval", "create_eval", "in_progress",
+    _journal_log(Path("finetune-project"), "eval", "create_eval", "in_progress",
                  f"Eval {eval_id[:8]} started (model={args.model})",
                  details={"eval_id": eval_id, "model": args.model},
                  workflow_id=args.workflow_id)
@@ -358,7 +358,7 @@ def cmd_eval(args: argparse.Namespace) -> int:
                     out_dir / f"eval-{eval_id[:8]}.json",
                     {**meta, "status": status, "results": poll.get("results")},
                 )
-                _journal_log(Path("."), "eval", "eval_complete", status,
+                _journal_log(Path("finetune-project"), "eval", "eval_complete", status,
                              f"Eval {eval_id[:8]} {status} ({completed}/{total} rows)",
                              details={"eval_id": eval_id, "completed": completed, "total": total},
                              workflow_id=args.workflow_id)
@@ -455,7 +455,7 @@ def cmd_train(args: argparse.Namespace) -> int:
         "config": payload["training_config"],
         "status": "created",
     })
-    _journal_log(Path("."), "training", "create_training_job", "in_progress",
+    _journal_log(Path("finetune-project"), "training", "create_training_job", "in_progress",
                  f"Training job {job_id[:8]} created (model={base_model}, lr={payload['training_config']['learning_rate']})",
                  details={"job_id": job_id, "base_model": base_model, "output_model": output_model},
                  workflow_id=args.workflow_id)
@@ -1137,8 +1137,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p_eval.add_argument("--poll", action="store_true", help="Poll until complete")
     p_eval.add_argument("--poll-interval", type=int, default=30)
     p_eval.add_argument("--max-wait", type=int, default=1800)
-    p_eval.add_argument("--output-dir", type=Path, default="evaluations",
-                        help="Directory for eval metadata (default: evaluations/)")
+    p_eval.add_argument("--output-dir", type=Path, default="finetune-project/evaluations",
+                        help="Directory for eval metadata (default: finetune-project/evaluations/)")
     p_eval.add_argument(
         "--gateway", type=str, default="http://localhost:9090",
     )
@@ -1152,8 +1152,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p_train.add_argument("--display-name", type=str, default=None)
     p_train.add_argument("--config-file", type=Path, default=None, help="training_config.json from Stage 7")
     p_train.add_argument("--config-overrides", type=str, default=None, help="JSON overrides for training config")
-    p_train.add_argument("--output-dir", type=Path, default="training-jobs",
-                        help="Directory for training job metadata (default: training-jobs/)")
+    p_train.add_argument("--output-dir", type=Path, default="finetune-project/training-jobs",
+                        help="Directory for training job metadata (default: finetune-project/training-jobs/)")
     p_train.add_argument(
         "--gateway", type=str, default="http://localhost:9090",
     )
