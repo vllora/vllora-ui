@@ -155,16 +155,15 @@ def load_jsonl(path: Path) -> list[dict]:
 
 
 def _identity_rewrite(original: str, tool_schema: list[dict]) -> str:
-    """CLI fallback rewrite: pass-through with a tool list header.
+    """CLI fallback rewrite: pass-through without modification.
 
-    The CLI is a thin wrapper for local smoke tests. Real rewrites
-    happen via the Python API with an injected LLM-backed rewrite_fn.
+    Tool definitions already live in each record's `tools` array —
+    appending tool names to the system prompt text is redundant,
+    inflates system_prompt.txt (e.g., 174KB vs 1KB), and can confuse
+    the student model during training. Real rewrites happen via the
+    Python API with an injected LLM-backed rewrite_fn.
     """
-    tool_names = ", ".join(
-        (t.get("function") or {}).get("name") or t.get("name", "?")
-        for t in tool_schema
-    )
-    return f"{original.strip()}\n\n[Tools available: {tool_names}]"
+    return original.strip()
 
 
 def main() -> int:

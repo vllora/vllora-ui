@@ -41,10 +41,20 @@ export interface TopicDetailViewProps {
   readonly ancestorNodes?: TopicHierarchyNode[];
   /** Records assigned to this topic and its descendants */
   readonly records: DatasetRecord[];
+  /** Total record count from server (may exceed records.length due to pagination) */
+  readonly totalRecords?: number;
   /** Called when a record row is clicked */
   readonly onSelectRecord?: (recordId: string) => void;
   /** LLM-normalized "You are ..." role sentence (root prompt) */
   readonly normalizedObjective?: string;
+  /** Current page (0-indexed) */
+  readonly page?: number;
+  /** Total number of pages */
+  readonly totalPages?: number;
+  /** Callback to change page */
+  readonly onPageChange?: (page: number) => void;
+  /** Whether a page is currently loading */
+  readonly isLoadingPage?: boolean;
 }
 
 /** Collect all sourceChunkRefs from a node and its descendants */
@@ -62,9 +72,15 @@ export function TopicDetailView({
   topicNode,
   ancestorNodes = [],
   records,
+  totalRecords,
   onSelectRecord,
   normalizedObjective,
+  page = 0,
+  totalPages = 1,
+  onPageChange,
+  isLoadingPage = false,
 }: TopicDetailViewProps) {
+  const displayTotal = totalRecords ?? records.length;
   const [activeTab, setActiveTab] = useState<Tab>("records");
   const { sources } = KnowledgeSourcesConsumer();
 
@@ -119,6 +135,8 @@ export function TopicDetailView({
     return chain;
   }, [normalizedObjective, ancestorNodes, topicNode, recordSystemPrompt]);
 
+  const hasPagination = totalPages > 1 && onPageChange;
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Tabs + prompt toggle */}
@@ -126,7 +144,7 @@ export function TopicDetailView({
         <div className="flex items-center gap-0">
           <TabButton
             active={activeTab === "records"}
-            label={`Records (${records.length})`}
+            label={`Records (${displayTotal})`}
             onClick={() => setActiveTab("records")}
           />
           <TabButton
@@ -143,7 +161,12 @@ export function TopicDetailView({
       )}
 
       {/* Tab content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto relative">
+        {isLoadingPage && (
+          <div className="absolute inset-0 bg-background/60 z-10 flex items-center justify-center">
+            <div className="text-xs text-muted-foreground animate-pulse">Loading...</div>
+          </div>
+        )}
         {activeTab === "records" ? (
           <RecordsTabContent
             records={records}
@@ -156,6 +179,52 @@ export function TopicDetailView({
           <LinkedSourcesTabContent groupedSources={groupedSources} />
         )}
       </div>
+
+      {/* Pagination controls */}
+      {hasPagination && activeTab === "records" && (
+        <div className="px-4 py-2 border-t border-border shrink-0 flex items-center justify-between text-xs text-muted-foreground bg-background">
+          <span className="tabular-nums">
+            Page {page + 1} of {totalPages} ({displayTotal} records)
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              disabled={page === 0}
+              onClick={() => onPageChange(page - 1)}
+              className="px-2.5 py-1 rounded border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Previous
+            </button>
+            {generatePageNumbers(page, totalPages).map((p, i) =>
+              p === "..." ? (
+                <span key={`ellipsis-${i}`} className="px-1">...</span>
+              ) : (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => onPageChange(p as number)}
+                  className={cn(
+                    "w-7 h-7 rounded border transition-colors tabular-nums",
+                    p === page
+                      ? "border-[rgb(var(--theme-500))] bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]"
+                      : "border-border hover:bg-muted",
+                  )}
+                >
+                  {(p as number) + 1}
+                </button>
+              ),
+            )}
+            <button
+              type="button"
+              disabled={page >= totalPages - 1}
+              onClick={() => onPageChange(page + 1)}
+              className="px-2.5 py-1 rounded border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -428,6 +497,19 @@ function PromptChainPanel({
 }
 
 // ─── Shared UI Components ───
+
+/** Generate page numbers with ellipsis for compact pagination */
+function generatePageNumbers(current: number, total: number): (number | "...")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i);
+  const pages: (number | "...")[] = [0];
+  const start = Math.max(1, current - 1);
+  const end = Math.min(total - 2, current + 1);
+  if (start > 1) pages.push("...");
+  for (let i = start; i <= end; i++) pages.push(i);
+  if (end < total - 2) pages.push("...");
+  pages.push(total - 1);
+  return pages;
+}
 
 function TabButton({
   active,

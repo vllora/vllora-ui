@@ -9,7 +9,7 @@
 
 import { api, handleApiResponse, parseUtcTimestamp } from '@/lib/api-client';
 import { extractDataInfoFromSpan } from '@/utils/modelUtils';
-import type { RecordService, NewRecord, PaginatedRecords, RecordsSummary } from '@/services/interfaces/record-service';
+import type { RecordService, NewRecord, PaginatedRecords, RecordsSummary, TopicRecordCount } from '@/services/interfaces/record-service';
 import type { DatasetRecord, Dataset } from '@/types/dataset-types';
 import type { Span } from '@/types/common-type';
 
@@ -174,9 +174,10 @@ export const apiRecordAdapter: RecordService = {
     return records.sort((a, b) => b.createdAt - a.createdAt);
   },
 
-  async getByDatasetIdPaged(workflowId: string, offset: number, limit: number): Promise<PaginatedRecords> {
+  async getByDatasetIdPaged(workflowId: string, offset: number, limit: number, topicId?: string): Promise<PaginatedRecords> {
+    const topicParam = topicId ? `&topic_id=${encodeURIComponent(topicId)}` : '';
     const [pagedResponse, scoresData, topicMaps] = await Promise.all([
-      api.get(`${basePath(workflowId)}?limit=${limit}&offset=${offset}`),
+      api.get(`${basePath(workflowId)}?limit=${limit}&offset=${offset}${topicParam}`),
       api.get(`${basePath(workflowId)}/scores`)
         .then(r => handleApiResponse<{ scores: DbWorkflowRecordScoreResponse[] }>(r))
         .catch(() => ({ scores: [] as DbWorkflowRecordScoreResponse[] })),
@@ -204,6 +205,17 @@ export const apiRecordAdapter: RecordService = {
     const response = await api.get(`${basePath(workflowId)}/summary`);
     const data = await handleApiResponse<{ total: number; with_topic: number; generated: number }>(response);
     return { total: data.total, withTopic: data.with_topic, generated: data.generated };
+  },
+
+  async getCountsByTopic(workflowId: string): Promise<TopicRecordCount[]> {
+    const response = await api.get(`${basePath(workflowId)}/counts-by-topic`);
+    const data = await handleApiResponse<{ counts: { topic_id: string; count: number }[] }>(response);
+    // Translate topic UUIDs → topic names for the UI
+    const { idToName } = await getTopicMaps(workflowId);
+    return data.counts.map((c) => ({
+      topic_id: idToName.get(c.topic_id) ?? c.topic_id,
+      count: c.count,
+    }));
   },
 
   async getTopicCoverageStats(workflowId: string): Promise<{ total: number; withTopic: number }> {

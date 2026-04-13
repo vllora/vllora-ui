@@ -1025,7 +1025,7 @@ def _build_parser() -> argparse.ArgumentParser:
     # ── Eval ──
     p_eval = sub.add_parser("eval", help="Create an evaluation run on the cloud")
     p_eval.add_argument("--workflow-id", type=str, required=True)
-    p_eval.add_argument("--model", type=str, default="gpt-4o-mini", help="Rollout model")
+    p_eval.add_argument("--model", type=str, default="Qwen/Qwen3.5-4B", help="Rollout model (base model for eval)")
     p_eval.add_argument("--poll", action="store_true", help="Poll until complete")
     p_eval.add_argument("--poll-interval", type=int, default=30)
     p_eval.add_argument("--max-wait", type=int, default=1800)

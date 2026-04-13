@@ -13,6 +13,7 @@ import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import type { AvailableTopic } from "./record-utils";
 import { cn } from "@/lib/utils";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
+import { recordService } from "@/services/service-registry";
 import { resolveAndGroupBySource } from "@/lib/distri-finetune-tools/steps/shared/resolve-part-ref";
 import { RecordsSectionHeader } from "./dataset-detail-header/RecordsSectionHeader";
 import { TopicHierarchyCanvas } from "./dataset-canvas/TopicHierarchyCanvas";
@@ -170,6 +171,19 @@ export function DatasetMainContent({
   const finetuneCtx = FinetuneJobsConsumer();
   const { columns: jobColumns, getScoresForRecord } = useJobScoreColumns(finetuneCtx);
 
+  // Server-side topic record counts (accurate, not limited by client pagination)
+  const [topicServerCounts, setTopicServerCounts] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    if (!workflowId) return;
+    recordService.getCountsByTopic(workflowId).then((counts) => {
+      const map = new Map<string, number>();
+      for (const c of counts) {
+        map.set(c.topic_id, c.count);
+      }
+      setTopicServerCounts(map);
+    }).catch(() => { /* fallback to client counts */ });
+  }, [workflowId, totalRecordsFromServer]);
+
   // Keyboard shortcuts: 1/2/3 switch views, Esc closes record detail
   useKeyboardShortcuts({
     onViewModeChange,
@@ -272,6 +286,41 @@ export function DatasetMainContent({
       return false;
     });
   }, [records, topicFilter, topicHierarchy]);
+
+  // Server-side pagination for topic detail view
+  const TOPIC_PAGE_SIZE = 50;
+  const [topicPage, setTopicPage] = useState(0);
+  const [topicPageRecords, setTopicPageRecords] = useState<DatasetRecord[]>([]);
+  const [topicPageTotal, setTopicPageTotal] = useState(0);
+  const [isLoadingTopicPage, setIsLoadingTopicPage] = useState(false);
+
+  // Reset page when topic changes
+  useEffect(() => { setTopicPage(0); }, [topicFilter]);
+
+  // Fetch the current page of records for the selected topic from the server
+  useEffect(() => {
+    if (!topicFilter || !topicHierarchy || !workflowId) {
+      setTopicPageRecords([]);
+      setTopicPageTotal(0);
+      return;
+    }
+    const match = findTopicByName(topicHierarchy, topicFilter);
+    if (!match?.node.id) return;
+
+    let cancelled = false;
+    setIsLoadingTopicPage(true);
+    recordService
+      .getByDatasetIdPaged(workflowId, topicPage * TOPIC_PAGE_SIZE, TOPIC_PAGE_SIZE, match.node.id)
+      .then((page) => {
+        if (cancelled) return;
+        setTopicPageRecords(page.records);
+        setTopicPageTotal(page.pagination.total);
+      })
+      .catch(() => { /* fall back to client-filtered records */ })
+      .finally(() => { if (!cancelled) setIsLoadingTopicPage(false); });
+
+    return () => { cancelled = true; };
+  }, [topicFilter, topicHierarchy, workflowId, topicPage]);
 
   // Apply stat filter, role filter, and search to records
   const filteredRecords = useMemo(() => {
@@ -409,6 +458,18 @@ export function DatasetMainContent({
   // Parent topics (with children) fall through to the "All Topics" tabbed layout
   // which already scopes displayHierarchy and filteredRecords to the selected subtree.
   const isLeafTopic = topicDetail && (!topicDetail.node.children || topicDetail.node.children.length === 0);
+  // Use server-paginated records for leaf topic, fall back to client-filtered
+  const topicRecordsToShow = isLeafTopic && topicPageRecords.length > 0 ? topicPageRecords : filteredRecords;
+  const topicTotalCount = isLeafTopic ? (topicPageTotal || topicServerCounts.get(topicDetail?.node.name ?? "") || filteredRecords.length) : filteredRecords.length;
+  const topicTotalPages = Math.max(1, Math.ceil(topicTotalCount / TOPIC_PAGE_SIZE));
+
+  // For leaf topics with server-paginated records, resolve selectedRecord from the current page
+  const topicSelectedRecord = useMemo(() => {
+    if (!selectedRecordId) return null;
+    // Try context record first, then fall back to server-paginated page
+    return selectedRecord ?? topicRecordsToShow.find(r => r.id === selectedRecordId) ?? null;
+  }, [selectedRecord, selectedRecordId, topicRecordsToShow]);
+
   if (isLeafTopic) {
     return (
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -417,7 +478,7 @@ export function DatasetMainContent({
             viewMode={viewMode}
             onViewModeChange={onViewModeChange}
             onExport={onExport}
-            records={topicFilteredRecords}
+            records={topicRecordsToShow}
             workflowId={workflowId}
             activeStatFilter={activeStatFilter}
             onStatFilterChange={setActiveStatFilter}
@@ -426,23 +487,28 @@ export function DatasetMainContent({
             sourceDocumentFilterName={sourceDocumentFilterName}
             onClearSourceDocumentFilter={onClearSourceDocumentFilter}
             hideViewToggle
-            totalRecordsFromServer={totalRecordsFromServer}
-            hasMore={hasMore}
-            isLoadingMore={isLoadingMore}
-            onLoadMore={onLoadMore}
+            totalRecordsFromServer={topicTotalCount}
+            hasMore={false}
+            isLoadingMore={isLoadingTopicPage}
+            onLoadMore={undefined}
           />
         </div>
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
           <TopicDetailView
             topicNode={topicDetail.node}
             ancestorNodes={topicDetail.nodePath}
-            records={filteredRecords}
+            records={topicRecordsToShow}
+            totalRecords={topicTotalCount}
             onSelectRecord={onSelectRecordId}
             normalizedObjective={normalizedObjective}
+            page={topicPage}
+            totalPages={topicTotalPages}
+            onPageChange={setTopicPage}
+            isLoadingPage={isLoadingTopicPage}
           />
         </div>
         <RecordDetailSidebar
-          record={selectedRecord}
+          record={topicSelectedRecord}
           onClose={() => onSelectRecordId(null)}
           availableTopics={availableTopics}
           onUpdateTopic={onUpdateRecordTopic}
@@ -451,7 +517,7 @@ export function DatasetMainContent({
             onSelectRecordId(null);
           }}
           onSave={onSaveRecord}
-          records={filteredRecords}
+          records={topicRecordsToShow}
           onNavigate={onSelectRecordId}
           jobColumns={jobColumns}
           getScoresForRecord={getScoresForRecord}

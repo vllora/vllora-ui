@@ -304,6 +304,38 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
     }
   }, [workflowId, records, isLoadingMore, hasMore]);
 
+  // Load ALL records for a specific topic (by topic UUID) and merge into loaded records.
+  // Paginates through all pages so the topic detail view shows the full set.
+  const loadRecordsForTopic = useCallback(async (topicId: string) => {
+    if (isLoadingMore) return;
+    setIsLoadingMore(true);
+    try {
+      const allTopicRecords: DatasetRecord[] = [];
+      let offset = 0;
+      let total = Infinity;
+      while (offset < total) {
+        const page = await recordService.getByDatasetIdPaged(
+          workflowId, offset, RECORDS_PAGE_SIZE, topicId,
+        );
+        allTopicRecords.push(...page.records);
+        total = page.pagination.total;
+        offset += page.records.length;
+        if (page.records.length === 0) break;
+      }
+      if (allTopicRecords.length === 0) return;
+      // Merge: add only records not already loaded (avoid duplicates)
+      setRecords(prev => {
+        const existingIds = new Set(prev.map(r => r.id));
+        const newRecords = allTopicRecords.filter(r => !existingIds.has(r.id));
+        return newRecords.length > 0 ? [...prev, ...newRecords] : prev;
+      });
+    } catch (err) {
+      console.error("Failed to load topic records:", err);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [workflowId, isLoadingMore]);
+
   // Refresh dataset silently (no loading indicator - for background syncs)
   const refreshDataset = useCallback(async () => {
     if (isLoadingRef.current) return; // Skip if a load is already in progress
@@ -1471,6 +1503,7 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
     hasMore,
     isLoadingMore,
     loadMoreRecords,
+    loadRecordsForTopic,
 
     // Loading states
     isGeneratingTopics,

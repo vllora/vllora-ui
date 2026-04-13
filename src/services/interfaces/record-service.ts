@@ -27,12 +27,18 @@ export interface RecordsSummary {
   readonly generated: number;
 }
 
+export interface TopicRecordCount {
+  readonly topic_id: string;
+  readonly count: number;
+}
+
 export interface RecordService {
   // Queries
   getByDatasetId(workflowId: string, recordIds?: string[]): Promise<DatasetRecord[]>;
-  getByDatasetIdPaged(workflowId: string, offset: number, limit: number): Promise<PaginatedRecords>;
+  getByDatasetIdPaged(workflowId: string, offset: number, limit: number, topicId?: string): Promise<PaginatedRecords>;
   getCount(workflowId: string): Promise<number>;
   getSummary(workflowId: string): Promise<RecordsSummary>;
+  getCountsByTopic(workflowId: string): Promise<TopicRecordCount[]>;
   getTopicCoverageStats(workflowId: string): Promise<{ total: number; withTopic: number }>;
   spanExists(workflowId: string, spanId: string): Promise<boolean>;
   getDatasetsBySpanId(spanId: string): Promise<Dataset[]>;
