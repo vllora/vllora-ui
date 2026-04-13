@@ -12,17 +12,20 @@ export interface RecordsTableFooterProps {
   records: DatasetRecord[];
   selectedCount?: number;
   workflowId?: string;
+  /** Total records on server (may exceed records.length when paginated) */
+  totalRecordsFromServer?: number;
 }
 
 export function RecordsTableFooter({
   records,
   selectedCount = 0,
   workflowId,
+  totalRecordsFromServer,
 }: RecordsTableFooterProps) {
   const [copied, setCopied] = useState(false);
 
   // Calculate summary stats
-  const totalRecords = records.length;
+  const totalRecords = totalRecordsFromServer ?? records.length;
   const fromSpans = records.filter((r) => r.spanId).length;
   const withTopic = records.filter((r) => r.topic).length;
   const withEvaluation = records.filter((r) => r.evaluation?.score !== undefined).length;

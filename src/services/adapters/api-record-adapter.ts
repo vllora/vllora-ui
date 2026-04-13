@@ -9,7 +9,7 @@
 
 import { api, handleApiResponse, parseUtcTimestamp } from '@/lib/api-client';
 import { extractDataInfoFromSpan } from '@/utils/modelUtils';
-import type { RecordService, NewRecord } from '@/services/interfaces/record-service';
+import type { RecordService, NewRecord, PaginatedRecords, RecordsSummary } from '@/services/interfaces/record-service';
 import type { DatasetRecord, Dataset } from '@/types/dataset-types';
 import type { Span } from '@/types/common-type';
 
@@ -84,13 +84,26 @@ interface DbWorkflowRecordScoreResponse {
   readonly created_at: string;
 }
 
+/** Build a lookup map from record_id → scores for O(1) access per record. */
+function buildScoreMap(
+  scores: readonly DbWorkflowRecordScoreResponse[],
+): Map<string, DbWorkflowRecordScoreResponse[]> {
+  const map = new Map<string, DbWorkflowRecordScoreResponse[]>();
+  for (const s of scores) {
+    const existing = map.get(s.record_id);
+    if (existing) existing.push(s);
+    else map.set(s.record_id, [s]);
+  }
+  return map;
+}
+
 function mapToFe(
   db: DbWorkflowRecordResponse,
-  scores: readonly DbWorkflowRecordScoreResponse[],
+  scoresByRecordId: Map<string, DbWorkflowRecordScoreResponse[]>,
   idToName?: Map<string, string>,
 ): DatasetRecord {
   const createdAt = parseUtcTimestamp(db.created_at);
-  const recordScores = scores.filter(s => s.record_id === db.id);
+  const recordScores = scoresByRecordId.get(db.id) ?? [];
   const topicName = db.topic_id && idToName ? idToName.get(db.topic_id) : undefined;
   return {
     id: db.id,
@@ -150,7 +163,8 @@ export const apiRecordAdapter: RecordService = {
     ]);
     const recordsData = await handleApiResponse<{ records: DbWorkflowRecordResponse[] }>(recordsResponse);
 
-    let records = recordsData.records.map(db => mapToFe(db, scoresData.scores, topicMaps.idToName));
+    const scoresByRecordId = buildScoreMap(scoresData.scores);
+    let records = recordsData.records.map(db => mapToFe(db, scoresByRecordId, topicMaps.idToName));
 
     if (recordIds && recordIds.length > 0) {
       const idSet = new Set(recordIds);
@@ -160,24 +174,49 @@ export const apiRecordAdapter: RecordService = {
     return records.sort((a, b) => b.createdAt - a.createdAt);
   },
 
+  async getByDatasetIdPaged(workflowId: string, offset: number, limit: number): Promise<PaginatedRecords> {
+    const [pagedResponse, scoresData, topicMaps] = await Promise.all([
+      api.get(`${basePath(workflowId)}?limit=${limit}&offset=${offset}`),
+      api.get(`${basePath(workflowId)}/scores`)
+        .then(r => handleApiResponse<{ scores: DbWorkflowRecordScoreResponse[] }>(r))
+        .catch(() => ({ scores: [] as DbWorkflowRecordScoreResponse[] })),
+      getTopicMaps(workflowId),
+    ]);
+
+    const data = await handleApiResponse<{
+      data: DbWorkflowRecordResponse[];
+      pagination: { offset: number; limit: number; total: number };
+    }>(pagedResponse);
+
+    const scoresByRecordId = buildScoreMap(scoresData.scores);
+    const records = data.data.map(db => mapToFe(db, scoresByRecordId, topicMaps.idToName));
+
+    return { records, pagination: data.pagination };
+  },
+
   async getCount(workflowId: string): Promise<number> {
     const response = await api.get(`${basePath(workflowId)}/count`);
     const data = await handleApiResponse<{ count: number }>(response);
     return data.count;
   },
 
+  async getSummary(workflowId: string): Promise<RecordsSummary> {
+    const response = await api.get(`${basePath(workflowId)}/summary`);
+    const data = await handleApiResponse<{ total: number; with_topic: number; generated: number }>(response);
+    return { total: data.total, withTopic: data.with_topic, generated: data.generated };
+  },
+
   async getTopicCoverageStats(workflowId: string): Promise<{ total: number; withTopic: number }> {
-    const response = await api.get(basePath(workflowId));
-    const data = await handleApiResponse<{ records: DbWorkflowRecordResponse[] }>(response);
-    const total = data.records.length;
-    const withTopic = data.records.filter(r => r.topic_id != null && r.topic_id !== '').length;
-    return { total, withTopic };
+    const summary = await this.getSummary(workflowId);
+    return { total: summary.total, withTopic: summary.withTopic };
   },
 
   async spanExists(workflowId: string, spanId: string): Promise<boolean> {
-    const response = await api.get(basePath(workflowId));
-    const data = await handleApiResponse<{ records: DbWorkflowRecordResponse[] }>(response);
-    return data.records.some(r => r.span_id === spanId);
+    const response = await api.get(
+      `${basePath(workflowId)}/exists?span_id=${encodeURIComponent(spanId)}`,
+    );
+    const data = await handleApiResponse<{ exists: boolean }>(response);
+    return data.exists;
   },
 
   async getDatasetsBySpanId(_spanId: string): Promise<Dataset[]> {

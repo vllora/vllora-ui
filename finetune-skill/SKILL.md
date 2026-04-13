@@ -234,9 +234,21 @@ fi
 
 Merge `finetune-defaults.json` if it exists in the project root. The `use_nemo` flag controls Step 4 (default=false → `generate_records.py`; true → NeMo Data Designer).
 
-### Step 2: Extract Documents
+### Step 2: Extract Inputs
 
 > **PREREQUISITES:** Step 1 complete.
+
+The skill supports two parallel input ingredients. Run whichever applies — or both. Steps 3–7 don't care which extractor produced the parts.
+
+- **2A. Documents (PDFs, markdown, images)** — extract via `docling_extract.py` / `build_knowledge_parts.py`. The document path below.
+- **2B. OTel GenAI traces (LLM call logs)** — extract via `otel_extract.py`. Mirrors 2A but reads OpenTelemetry GenAI spans (`gen_ai.input.messages`, `gen_ai.output.messages`, `gen_ai.tool.*`) and writes the same `knowledge_parts.json` format. See [reference/otel-trace-ingestion.md](reference/otel-trace-ingestion.md). Use this when the user wants to clone the behavior of an existing LLM app rather than teach the model new knowledge.
+
+  ```bash
+  uv run ${CLAUDE_SKILL_DIR}/scripts/otel_extract.py traces.json \
+      --out-dir finetune-project/knowledge
+  ```
+
+#### 2A. Documents
 
 Extract knowledge from all documents. Each document processed by a `knowledge-extractor` subagent.
 

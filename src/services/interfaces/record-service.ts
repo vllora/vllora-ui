@@ -16,10 +16,23 @@ export interface NewRecord {
   readonly evaluation?: DatasetEvaluation;
 }
 
+export interface PaginatedRecords {
+  readonly records: DatasetRecord[];
+  readonly pagination: { readonly offset: number; readonly limit: number; readonly total: number };
+}
+
+export interface RecordsSummary {
+  readonly total: number;
+  readonly withTopic: number;
+  readonly generated: number;
+}
+
 export interface RecordService {
   // Queries
   getByDatasetId(workflowId: string, recordIds?: string[]): Promise<DatasetRecord[]>;
+  getByDatasetIdPaged(workflowId: string, offset: number, limit: number): Promise<PaginatedRecords>;
   getCount(workflowId: string): Promise<number>;
+  getSummary(workflowId: string): Promise<RecordsSummary>;
   getTopicCoverageStats(workflowId: string): Promise<{ total: number; withTopic: number }>;
   spanExists(workflowId: string, spanId: string): Promise<boolean>;
   getDatasetsBySpanId(spanId: string): Promise<Dataset[]>;

@@ -75,7 +75,7 @@ interface DatasetExplorerProps {
 }
 
 export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
-  const { dataset, records, isGeneratingTraces } = DatasetDetailConsumer();
+  const { dataset, records, isGeneratingTraces, totalRecords } = DatasetDetailConsumer();
   const { sources } = KnowledgeSourcesConsumer();
   const { jobs: dryRunJobs, startDryRun } = EvalJobsConsumer();
   const { filteredJobs: finetuneJobs, loadJobs: loadFinetuneJobs } = FinetuneJobsConsumer();
@@ -309,14 +309,14 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       <SidebarSection
         title="Training Data"
         icon={<Database className="w-3 h-3" />}
-        count={records.length}
+        count={totalRecords || records.length}
         isLoading={isGeneratingTraces}
       >
         {/* All Topics item */}
         <SidebarItem
           icon={<Library className="w-3.5 h-3.5" />}
           label="All Topics"
-          badge={<CountBadge count={records.length} />}
+          badge={<CountBadge count={totalRecords || records.length} />}
           isActive={selectedNodeId === "data"}
           onClick={() => handleSelect("data")}
         />

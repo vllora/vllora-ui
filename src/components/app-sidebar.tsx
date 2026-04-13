@@ -2,7 +2,7 @@ import { useState, useMemo } from "react"
 import { Link, useLocation, useNavigate } from "react-router"
 import {
   Home,
-  MessageSquare,
+  Waypoints,
   Settings,
   Menu,
   FlaskConical,
@@ -19,8 +19,10 @@ import {
 
 const mainMenuItems = [
   { id: "home", label: "Home", icon: Home, path: "/" },
-  { id: "chat", label: "Chat", icon: MessageSquare, path: "/chat" },
+  // Old chat / spans-trace route hidden — vLLora is skill-first now. The
+  // OTel GenAI trace browser lives at /traces (see src/pages/traces/).
   { id: "finetune", label: "Finetune", icon: FlaskConical, path: "/finetune" },
+  { id: "otel-traces", label: "OTel Traces", icon: Waypoints, path: "/otel-traces" },
 ]
 
 const bottomMenuItems = [

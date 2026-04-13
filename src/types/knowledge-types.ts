@@ -30,4 +30,6 @@ export interface KnowledgeSource {
   readonly metadata?: Record<string, unknown>;
   readonly parts: KnowledgeSourcePart[];
   readonly createdAt: string;
+  /** FK to `trace_bundles.id` — populated when `kind === "otel-trace"`. */
+  readonly traceBundleId?: string;
 }

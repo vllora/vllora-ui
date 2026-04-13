@@ -114,6 +114,15 @@ export interface DatasetMainContentProps {
   evalStats?: EvalStats;
   /** Knowledge coverage stats (for coverage drilldown in Metrics tab) */
   knowledgeCoverageStats?: KnowledgeCoverageStats;
+
+  /** Total record count from server (may exceed loaded records.length) */
+  totalRecords?: number;
+  /** Whether more records can be loaded */
+  hasMore?: boolean;
+  /** Whether a page is currently being fetched */
+  isLoadingMore?: boolean;
+  /** Callback to load next page of records */
+  onLoadMore?: () => void;
 }
 
 export function DatasetMainContent({
@@ -152,6 +161,10 @@ export function DatasetMainContent({
   topicQualityScores,
   evalStats,
   knowledgeCoverageStats,
+  totalRecords: totalRecordsFromServer,
+  hasMore,
+  isLoadingMore,
+  onLoadMore,
 }: DatasetMainContentProps) {
   // Job score columns for record detail sidebar
   const finetuneCtx = FinetuneJobsConsumer();
@@ -413,6 +426,10 @@ export function DatasetMainContent({
             sourceDocumentFilterName={sourceDocumentFilterName}
             onClearSourceDocumentFilter={onClearSourceDocumentFilter}
             hideViewToggle
+            totalRecordsFromServer={totalRecordsFromServer}
+            hasMore={hasMore}
+            isLoadingMore={isLoadingMore}
+            onLoadMore={onLoadMore}
           />
         </div>
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
@@ -462,6 +479,10 @@ export function DatasetMainContent({
           sourceDocumentFilterName={sourceDocumentFilterName}
           onClearSourceDocumentFilter={onClearSourceDocumentFilter}
           hideViewToggle
+          totalRecordsFromServer={totalRecordsFromServer}
+          hasMore={hasMore}
+          isLoadingMore={isLoadingMore}
+          onLoadMore={onLoadMore}
         />
       </div>
 
@@ -540,6 +561,10 @@ export function DatasetMainContent({
               onRoleFilterChange={() => {}}
               datasetObjective={datasetObjective}
               normalizedObjective={normalizedObjective}
+              hasMore={hasMore}
+              isLoadingMore={isLoadingMore}
+              onLoadMore={onLoadMore}
+              totalRecordsFromServer={totalRecordsFromServer}
             />
           </div>
         )}
