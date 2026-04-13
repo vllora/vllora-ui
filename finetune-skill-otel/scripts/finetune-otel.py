@@ -313,6 +313,12 @@ def cmd_eval(args: argparse.Namespace) -> int:
     eval_id = result.get("evaluation_run_id", result.get("id", "unknown"))
     print(f"Eval created: {eval_id}")
 
+    # Journal entry for eval creation
+    _journal_log(Path("."), "eval", "create_eval", "in_progress",
+                 f"Eval {eval_id[:8]} started (model={args.model})",
+                 details={"eval_id": eval_id, "model": args.model},
+                 workflow_id=args.workflow_id)
+
     # Save metadata to evaluations/ directory (matches PDF skill convention)
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -321,8 +327,8 @@ def cmd_eval(args: argparse.Namespace) -> int:
         "workflow_id": args.workflow_id,
         "model": args.model,
         "status": "running",
-        }
-        _write_json(out_dir / f"eval-{eval_id[:8]}.json", meta)
+    }
+    _write_json(out_dir / f"eval-{eval_id[:8]}.json", meta)
 
     # Poll if requested
     if args.poll:
@@ -352,6 +358,10 @@ def cmd_eval(args: argparse.Namespace) -> int:
                     out_dir / f"eval-{eval_id[:8]}.json",
                     {**meta, "status": status, "results": poll.get("results")},
                 )
+                _journal_log(Path("."), "eval", "eval_complete", status,
+                             f"Eval {eval_id[:8]} {status} ({completed}/{total} rows)",
+                             details={"eval_id": eval_id, "completed": completed, "total": total},
+                             workflow_id=args.workflow_id)
                 return 0 if status == "completed" else 1
 
             time.sleep(args.poll_interval)
@@ -445,6 +455,10 @@ def cmd_train(args: argparse.Namespace) -> int:
         "config": payload["training_config"],
         "status": "created",
     })
+    _journal_log(Path("."), "training", "create_training_job", "in_progress",
+                 f"Training job {job_id[:8]} created (model={base_model}, lr={payload['training_config']['learning_rate']})",
+                 details={"job_id": job_id, "base_model": base_model, "output_model": output_model},
+                 workflow_id=args.workflow_id)
 
     return 0
 
@@ -800,6 +814,71 @@ def cmd_publish(args: argparse.Namespace) -> int:
     return 0
 
 
+# ─── Pipeline journal + execution log ──────────────────────────────────────
+
+
+def _journal_log(
+    out_dir: Path,
+    step: str,
+    action: str,
+    status: str,
+    summary: str,
+    details: dict | None = None,
+    *,
+    workflow_id: str | None = None,
+) -> None:
+    """Append an entry to pipeline-journal.json and execution-log.md.
+
+    Mirrors the PDF skill's dual-write pattern so the UI Pipeline Journal
+    tab can display OTel pipeline runs identically.
+    """
+    from datetime import datetime, timezone
+
+    ts = datetime.now(timezone.utc).isoformat()
+
+    # ── pipeline-journal.json ──
+    journal_path = out_dir / "pipeline-journal.json"
+    if journal_path.exists():
+        journal = json.loads(journal_path.read_text())
+    else:
+        journal = {
+            "version": "1.0",
+            "workflow_id": workflow_id or "",
+            "objective": "OTel trace finetune",
+            "entries": [],
+        }
+    entry_id = len(journal["entries"]) + 1
+    entry = {
+        "id": entry_id,
+        "timestamp": ts,
+        "step": step,
+        "action": action,
+        "status": status,
+        "summary": summary,
+        "auto_logged": True,
+    }
+    if details:
+        entry["details"] = details
+    if workflow_id and not journal.get("workflow_id"):
+        journal["workflow_id"] = workflow_id
+    journal["entries"].append(entry)
+    _write_json(journal_path, journal)
+
+    # ── execution-log.md ──
+    log_path = out_dir / "execution-log.md"
+    short_ts = ts[:19].replace("T", " ")
+    lines = [f"## {step} — {short_ts}"]
+    lines.append(f"- **Action**: {action}")
+    lines.append(f"- **Status**: {status}")
+    lines.append(f"- **Summary**: {summary}")
+    if details:
+        for k, v in details.items():
+            lines.append(f"- **{k}**: {v}")
+    lines.append("")
+    with open(log_path, "a") as f:
+        f.write("\n".join(lines) + "\n")
+
+
 # ─── Convenience: all ──────────────────────────────────────────────────────
 
 
@@ -821,6 +900,10 @@ def cmd_all(args: argparse.Namespace) -> int:
     # Per-trace tool schema extraction (multi-agent safe).
     # Each record gets the tools from its own trace. The union of all
     # per-trace schemas is used for topics, grader, and hparams.
+    jlog = lambda step, action, status, summary, **kw: _journal_log(
+        out_dir, step, action, status, summary, **kw,
+    )
+
     records = extract_records(spans)
     by_trace = group_by_trace_id(spans)
     per_trace_schemas = extract_tool_schema_per_trace(by_trace)
@@ -829,6 +912,9 @@ def cmd_all(args: argparse.Namespace) -> int:
         f"[1/6] distilled {len(records)} records, "
         f"{len(tool_schema)} tools (union of {len(per_trace_schemas)} traces)"
     )
+    jlog("stage_1_distill", "extract_records", "completed",
+         f"Extracted {len(records)} records from {len(per_trace_schemas)} traces, {len(tool_schema)} unique tools",
+         details={"records": len(records), "traces": len(per_trace_schemas), "tools": len(tool_schema)})
 
     # Extract + rewrite system prompt BEFORE writing records,
     # then normalize all records to use the ONE canonical prompt.
@@ -866,8 +952,12 @@ def cmd_all(args: argparse.Namespace) -> int:
             "    inject a real LLM rewrite_fn to strip dynamic context\n"
             "    (dates, user IDs, capability claims) from the prompt."
         )
+        jlog("stage_2_prompt", "rewrite_system_prompt", "completed",
+             f"System prompt: {len(prompt)} chars, normalized {normalized} records",
+             details={"prompt_chars": len(prompt), "normalized": normalized})
     else:
         print(f"[2/6] no system prompt extracted")
+        jlog("stage_2_prompt", "rewrite_system_prompt", "skipped", "No system prompt found in traces")
 
     # NOW write records (with normalized prompts)
     _write_jsonl(out_dir / "training.jsonl", records)
@@ -884,14 +974,22 @@ def cmd_all(args: argparse.Namespace) -> int:
         for a in hierarchy.get("children", [])
     )
     print(f"[3/6] built topics ({agent_count} agents, {leaf_count} patterns)")
+    jlog("stage_3_topics", "build_topic_hierarchy", "completed",
+         f"{agent_count} agents, {leaf_count} tool patterns",
+         details={"agents": agent_count, "patterns": leaf_count})
 
     grader = build_grader_config(tool_schema)
     _write_json(out_dir / "grader.json", grader)
     print(f"[4/6] built grader config")
+    jlog("stage_4_grader", "build_grader_config", "completed",
+         f"Jaccard grader with {len(tool_schema)} tool schemas")
 
     training_config = build_training_config(records)
     _write_json(out_dir / "training_config.json", training_config)
     print(f"[5/6] wrote training config (temp={training_config['temperature']}, K={training_config['num_generations']})")
+    jlog("stage_5_hparams", "build_training_config", "completed",
+         f"temp={training_config['temperature']}, K={training_config['num_generations']}, max_output_tokens={training_config.get('max_output_tokens', '?')}",
+         details=training_config)
 
     # Publish to gateway (create workflow + upload bundle + register source)
     # Large bundles (>10MB JSON) cause broken-pipe errors on the gateway.
@@ -918,10 +1016,16 @@ def cmd_all(args: argparse.Namespace) -> int:
             args.gateway, upload_spans, name, artifacts_dir=out_dir,
         )
         _write_json(out_dir / "config.json", result)
+        workflow_id = result.get("workflow_id", "")
+        jlog("stage_6_publish", "publish_to_gateway", "completed",
+             f"Published to gateway: workflow {workflow_id}",
+             details=result, workflow_id=workflow_id)
     except RuntimeError as exc:
         print(f"[6/6] ⚠ gateway publish failed: {exc}")
         print("  local artifacts are fine — publish manually later with:")
         print(f"  finetune-otel.py publish {args.spans} --name '{name}'")
+        jlog("stage_6_publish", "publish_to_gateway", "failed",
+             f"Gateway publish failed: {exc}")
 
     print(f"\nall stages complete → {out_dir}/")
     return 0
