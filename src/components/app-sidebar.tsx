@@ -22,7 +22,7 @@ const mainMenuItems = [
   // Old chat / spans-trace route hidden — vLLora is skill-first now. The
   // OTel GenAI trace browser lives at /traces (see src/pages/traces/).
   { id: "finetune", label: "Finetune", icon: FlaskConical, path: "/finetune" },
-  { id: "otel-traces", label: "OTel Traces", icon: Waypoints, path: "/otel-traces" },
+  // { id: "otel-traces", label: "OTel Traces", icon: Waypoints, path: "/otel-traces" },
 ]
 
 const bottomMenuItems = [
