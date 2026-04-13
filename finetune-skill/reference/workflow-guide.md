@@ -486,7 +486,7 @@ Poll `GET /finetune/workflows/{workflow_id}/jobs/{job_id}/status`. Watch for:
 - `status: "succeeded"` → Model is ready to use
 - `status: "failed"` → Check `error_message` field
 
-You can also check per-epoch scores via `GET /finetune/workflows/{workflow_id}/finetune-evaluations` to see if the model is improving across training epochs.
+You can also check per-epoch scores via `GET /finetune/workflows/{workflow_id}/finetune-evaluations` to see if the model is improving across training epochs. This endpoint paginates (default limit=20). Use the `_fetch_all_finetune_evals` Python helper to fetch all rows, or pass `&limit=100&offset=0` and increment `offset` to page manually.
 
 ### Monitoring Training Metrics
 

@@ -2,7 +2,6 @@ import { useState, useMemo } from "react"
 import { Link, useLocation, useNavigate } from "react-router"
 import {
   Home,
-  Waypoints,
   Settings,
   Menu,
   FlaskConical,

@@ -51,7 +51,7 @@ import {
 
 export function JobDetailPanel({ job }: { job: FinetuneJob }) {
   const { latestVersion } = useEvaluatorVersions(job.workflow_id);
-  const { getJobEvaluations, refreshJobEvaluations, loadJobs } = FinetuneJobsConsumer();
+  const { getJobEvaluations, refreshJobEvaluations, loadJobs, setEvalPage } = FinetuneJobsConsumer();
   const { jobs: evalJobs } = EvalJobsConsumer();
   const isTrainingActive = job.status === "pending" || job.status === "running";
   const [showRecords, setShowRecords] = useState(!isTrainingActive);
@@ -59,6 +59,7 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
     data: evalResults,
     isLoading: isLoadingEvals,
     error: evalsError,
+    pagination: evalPagination,
   } = getJobEvaluations(job.id);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [stepProgress, setStepProgress] = useState<{ current: number; max: number } | null>(null);
@@ -292,13 +293,20 @@ export function JobDetailPanel({ job }: { job: FinetuneJob }) {
               className="flex items-center gap-1.5 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors py-2"
             >
               <ChevronDown className={cn("h-3 w-3 transition-transform", showRecords && "rotate-180")} />
-              Per-Record Details ({evalResults.results.length} records)
+              Per-Record Details ({evalPagination.totalRows ?? evalResults.results.length} records)
             </button>
             {showRecords && (
               <div className="[&_input]:!bg-[#141414] [&_input]:!border-[#262626] [&_button]:!border-[#262626] [&_button]:!text-slate-400 [&_button:hover]:!bg-white/5">
                 <PerRowDetailsSection
                   results={evalResults.results}
                   workflowId={job.workflow_id}
+                  pagination={{
+                    offset: evalPagination.offset,
+                    pageSize: evalPagination.pageSize,
+                    totalRows: evalPagination.totalRows,
+                    onPageChange: (page) => setEvalPage(job.id, page),
+                    isLoading: isLoadingEvals,
+                  }}
                 />
               </div>
             )}

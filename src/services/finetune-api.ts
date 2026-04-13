@@ -804,26 +804,32 @@ export interface FinetuneEvalResultsResponse {
 }
 
 /**
- * Get finetune evaluation results for a dataset/job
- * Shows how the model performs on each row across training epochs
+ * Get finetune evaluation results for a dataset/job (paginated).
+ * Backend defaults limit=20 when row_index is not specified.
  * @param workflowId - The backend dataset ID
  * @param finetuneJobId - Optional job ID to filter results
- * @param rowIndex - Optional row index to filter
+ * @param rowIndex - Optional row index to filter (bypasses pagination)
  * @param epoch - Optional epoch to filter
+ * @param limit - Page size (default 20 on backend)
+ * @param offset - Number of rows to skip
  */
 export async function getFinetuneEvaluations(
   workflowId: string,
   finetuneJobId?: string,
   rowIndex?: number,
   epoch?: number,
+  limit?: number,
+  offset?: number,
 ): Promise<FinetuneEvalResultsResponse> {
   const params = new URLSearchParams();
 
   params.set("include_rollout_content", "true");
-  
+
   if (finetuneJobId) params.set("finetune_job_id", finetuneJobId);
   if (rowIndex !== undefined) params.set("row_index", String(rowIndex));
   if (epoch !== undefined) params.set("epoch", String(epoch));
+  if (limit !== undefined) params.set("limit", String(limit));
+  if (offset !== undefined) params.set("offset", String(offset));
 
   const queryString = params.toString();
   const endpoint = queryString
@@ -832,6 +838,39 @@ export async function getFinetuneEvaluations(
 
   const response = await apiClient(endpoint, { method: "GET" });
   return handleApiResponse<FinetuneEvalResultsResponse>(response);
+}
+
+/** Default page size for finetune evaluations */
+export const FINETUNE_EVAL_PAGE_SIZE = 20;
+
+/**
+ * Fetch ALL finetune evaluation results by paginating through all pages.
+ * Use sparingly — prefer paginated access for UI display.
+ * Needed for analysis tools that require the complete dataset.
+ */
+export async function getAllFinetuneEvaluations(
+  workflowId: string,
+  finetuneJobId?: string,
+  totalRows?: number,
+): Promise<FinetuneEvalResultsResponse> {
+  const pageSize = 100; // larger pages for bulk fetch
+  const allResults: RowEpochResults[] = [];
+  let currentOffset = 0;
+
+  // If we know total, pre-calculate; otherwise paginate until empty
+  const maxRows = totalRows ?? Infinity;
+
+  while (currentOffset < maxRows) {
+    const page = await getFinetuneEvaluations(
+      workflowId, finetuneJobId, undefined, undefined, pageSize, currentOffset,
+    );
+    if (page.results.length === 0) break;
+    allResults.push(...page.results);
+    currentOffset += page.results.length;
+    if (page.results.length < pageSize) break;
+  }
+
+  return { results: allResults };
 }
 
 // ============================================================================

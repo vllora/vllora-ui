@@ -62,6 +62,35 @@ def _api(method: str, url: str, **kwargs) -> dict:
         sys.exit(1)
 
 
+def _fetch_all_finetune_evals(base_url: str, wf_id: str, provider_job_id: str | None = None) -> dict:
+    """Fetch ALL finetune evaluation rows by paginating through all pages.
+
+    Backend defaults limit=20 when row_index is not specified.
+    This helper pages with limit=100 until all rows are fetched.
+    """
+    url = f"{base_url}/finetune/workflows/{wf_id}/finetune-evaluations"
+    params: dict[str, str] = {}
+    if provider_job_id:
+        params["finetune_job_id"] = provider_job_id
+
+    all_results: list = []
+    page_size = 100
+    offset = 0
+
+    while True:
+        page_params = {**params, "limit": str(page_size), "offset": str(offset)}
+        page = _api("GET", url, params=page_params)
+        results = page.get("results", [])
+        if not results:
+            break
+        all_results.extend(results)
+        if len(results) < page_size:
+            break
+        offset += len(results)
+
+    return {"results": all_results}
+
+
 def _coerce_score(value: object) -> float | None:
     """Parse numeric scores from gateway payloads that may return strings."""
     if isinstance(value, bool):
@@ -4331,19 +4360,8 @@ def _save_training_side_files(
         print(f"  Warning: Could not fetch metrics", file=sys.stderr)
 
     evals_file = output_dir / f"{job_id}-epoch-evals.json"
-    # finetune-evaluations endpoint requires provider_job_id, not internal ID.
-    # Fall back to no filter if provider_job_id is unavailable.
-    eval_params = (
-        {"finetune_job_id": provider_job_id}
-        if provider_job_id
-        else {}
-    )
     try:
-        evals = _api(
-            "GET",
-            f"{base_url}/finetune/workflows/{wf_id}/finetune-evaluations",
-            params=eval_params,
-        )
+        evals = _fetch_all_finetune_evals(base_url, wf_id, provider_job_id)
         evals_file.write_text(json.dumps(evals, indent=2))
     except SystemExit:
         print(f"  Warning: Could not fetch epoch evals", file=sys.stderr)
@@ -4618,18 +4636,8 @@ def _check_score_plateau(
     225 records — score went 0.51→0.60 then +0.003 across 3 evals.
     Continued training for 7+ more hours with no improvement.
     """
-    # finetune-evaluations requires provider_job_id, not internal job_id.
-    eval_params = (
-        {"finetune_job_id": provider_job_id}
-        if provider_job_id
-        else {}
-    )
     try:
-        evals = _api(
-            "GET",
-            f"{base_url}/finetune/workflows/{wf_id}/finetune-evaluations",
-            params=eval_params,
-        )
+        evals = _fetch_all_finetune_evals(base_url, wf_id, provider_job_id)
     except SystemExit:
         return None
 
@@ -4823,15 +4831,7 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
             epoch_progression: list[dict] = []
             if status in ("succeeded", "completed"):
                 try:
-                    eval_params_final = (
-                        {"finetune_job_id": provider_job_id}
-                        if provider_job_id else {}
-                    )
-                    final_evals = _api(
-                        "GET",
-                        f"{args.base_url}/finetune/workflows/{wf_id}/finetune-evaluations",
-                        params=eval_params_final,
-                    )
+                    final_evals = _fetch_all_finetune_evals(args.base_url, wf_id, provider_job_id)
                     ep_results = final_evals.get("results", [])
                     if ep_results:
                         ep_scores: dict[str, list[float]] = {}
@@ -5018,15 +5018,7 @@ def cmd_poll_training(args: argparse.Namespace) -> None:
             # Fetches epoch evals and prints a progression summary so the
             # agent (and execution log) can track learning trajectory.
             try:
-                eval_params_prog = (
-                    {"finetune_job_id": provider_job_id}
-                    if provider_job_id else {}
-                )
-                epoch_evals = _api(
-                    "GET",
-                    f"{args.base_url}/finetune/workflows/{wf_id}/finetune-evaluations",
-                    params=eval_params_prog,
-                )
+                epoch_evals = _fetch_all_finetune_evals(args.base_url, wf_id, provider_job_id)
                 ep_results = epoch_evals.get("results", [])
                 if ep_results:
                     ep_scores: dict[str, list[float]] = {}

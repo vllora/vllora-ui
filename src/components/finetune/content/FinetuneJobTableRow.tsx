@@ -44,12 +44,13 @@ export function FinetuneJobTableRow({ job, onJobAction }: FinetuneJobTableRowPro
   const isActive = job.status === 'pending' || job.status === 'running';
 
   // Get evaluations from context (single polling instance)
-  const { getJobEvaluations, refreshJobEvaluations } = FinetuneJobsConsumer();
+  const { getJobEvaluations, refreshJobEvaluations, setEvalPage } = FinetuneJobsConsumer();
   const {
     data: evalResults,
     isLoading: isLoadingEvals,
     error: evalsError,
-  } = isExpanded ? getJobEvaluations(job.id) : { data: null, isLoading: false, error: null };
+    pagination: evalPagination,
+  } = isExpanded ? getJobEvaluations(job.id) : { data: null, isLoading: false, error: null, pagination: undefined };
 
   // Manual refresh handler with local refreshing state
   const handleRefreshMetrics = useCallback(() => {
@@ -240,6 +241,8 @@ export function FinetuneJobTableRow({ job, onJobAction }: FinetuneJobTableRowPro
           isRefreshingEvals={isRefreshingEvals}
           evalsError={evalsError}
           onRefreshMetrics={handleRefreshMetrics}
+          evalPagination={evalPagination}
+          onEvalPageChange={(page) => setEvalPage(job.id, page)}
         />
       )}
     </>

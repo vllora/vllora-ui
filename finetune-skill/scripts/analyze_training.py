@@ -48,19 +48,36 @@ def fetch_job_status(base_url: str, workflow_id: str, job_id: str) -> dict:
 
 
 def fetch_epoch_evals(base_url: str, workflow_id: str, provider_job_id: str) -> dict:
-    """Fetch per-epoch per-record evaluations from the gateway API.
+    """Fetch ALL per-epoch per-record evaluations from the gateway API.
 
     NOTE: The finetune-evaluations endpoint requires the PROVIDER job ID
     (not the internal job ID). The UI uses job.provider_job_id for this call.
     Pass include_rollout_content=true to get actual model outputs per epoch.
+    Backend defaults limit=20; we paginate through all rows.
     """
     url = f"{base_url}/finetune/workflows/{workflow_id}/finetune-evaluations"
-    resp = requests.get(url, params={
-        "finetune_job_id": provider_job_id,
-        "include_rollout_content": "true",
-    }, timeout=60)
-    resp.raise_for_status()
-    return resp.json()
+    all_results = []
+    page_size = 100
+    offset = 0
+
+    while True:
+        resp = requests.get(url, params={
+            "finetune_job_id": provider_job_id,
+            "include_rollout_content": "true",
+            "limit": str(page_size),
+            "offset": str(offset),
+        }, timeout=60)
+        resp.raise_for_status()
+        page = resp.json()
+        results = page.get("results", [])
+        if not results:
+            break
+        all_results.extend(results)
+        if len(results) < page_size:
+            break
+        offset += len(results)
+
+    return {"results": all_results}
 
 
 def _parse_metrics_list(data) -> list[dict]:

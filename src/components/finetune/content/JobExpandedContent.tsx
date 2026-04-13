@@ -13,6 +13,12 @@ import { FinetuneJobDetailsSection } from "./finetune-job-detail/FinetuneJobDeta
 import { PerRowDetailsSection } from "./PerRowDetailsSection";
 import { TrainingMetricsSection } from "./TrainingMetricsSection";
 
+interface JobEvalPagination {
+  offset: number;
+  pageSize: number;
+  totalRows: number | null;
+}
+
 interface JobExpandedContentProps {
   job: FinetuneJob;
   evalResults: FinetuneEvalResultsResponse | null;
@@ -20,6 +26,8 @@ interface JobExpandedContentProps {
   isRefreshingEvals: boolean;
   evalsError: string | null;
   onRefreshMetrics: () => void;
+  evalPagination?: JobEvalPagination;
+  onEvalPageChange?: (page: number) => void;
 }
 
 export function JobExpandedContent({
@@ -29,6 +37,8 @@ export function JobExpandedContent({
   isRefreshingEvals,
   evalsError,
   onRefreshMetrics,
+  evalPagination,
+  onEvalPageChange,
 }: JobExpandedContentProps) {
 
   return (
@@ -85,7 +95,16 @@ export function JobExpandedContent({
 
                     <TabsContent value="rows" className="mt-3">
                       {hasEvalData ? (
-                        <PerRowDetailsSection results={evalResults.results} />
+                        <PerRowDetailsSection
+                          results={evalResults.results}
+                          pagination={evalPagination && onEvalPageChange ? {
+                            offset: evalPagination.offset,
+                            pageSize: evalPagination.pageSize,
+                            totalRows: evalPagination.totalRows,
+                            onPageChange: onEvalPageChange,
+                            isLoading: isLoadingEvals,
+                          } : undefined}
+                        />
                       ) : (
                         <div className="text-xs text-muted-foreground py-2">
                           {isLoadingEvals ? "Loading..." : "Evaluation data will appear as training progresses"}

@@ -19,7 +19,7 @@ import type {
   TopicEpochProgression,
 } from '../types';
 import {
-  getFinetuneEvaluations,
+  getAllFinetuneEvaluations,
   getFinetuneJobStatus,
   getFinetuneJobMetrics,
   getEvaluatorVersions,
@@ -497,7 +497,7 @@ export const analyzeTrainingHandler: ToolHandler = async (params) => {
     }
 
     // 2. Fetch per-epoch evaluation results
-    const evalResponse = await getFinetuneEvaluations(workflowId, job.provider_job_id);
+    const evalResponse = await getAllFinetuneEvaluations(workflowId, job.provider_job_id);
     const results = evalResponse.results;
 
     if (results.length === 0) {

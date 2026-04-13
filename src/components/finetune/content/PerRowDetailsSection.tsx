@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FinetuneEvalResultsResponse, FlatEvaluationResult } from "@/services/finetune-api";
 import {
@@ -27,10 +27,20 @@ import {
 } from "@/components/ui/sheet";
 
 
+interface EvalPaginationProps {
+  offset: number;
+  pageSize: number;
+  totalRows: number | null;
+  onPageChange: (page: number) => void;
+  isLoading?: boolean;
+}
+
 interface PerRowDetailsSectionProps {
   results: FinetuneEvalResultsResponse["results"];
   /** Dataset ID for navigation (click record ID → switch to Records tab) */
   workflowId?: string;
+  /** Server-side pagination controls */
+  pagination?: EvalPaginationProps;
 }
 
 interface RowEpochData {
@@ -69,7 +79,61 @@ function computeEpochTrend(
   };
 }
 
-export function PerRowDetailsSection({ results, workflowId }: PerRowDetailsSectionProps) {
+function PaginationControls({ offset, pageSize, totalRows, onPageChange, isLoading }: EvalPaginationProps) {
+  if (totalRows == null || totalRows <= pageSize) return null;
+
+  const currentPage = Math.floor(offset / pageSize);
+  const totalPages = Math.ceil(totalRows / pageSize);
+  const isFirstPage = currentPage === 0;
+  const isLastPage = currentPage >= totalPages - 1;
+
+  return (
+    <div className="flex items-center justify-between pt-2 border-t border-zinc-800/50 mt-2">
+      <span className="text-[10px] text-zinc-500">
+        Rows {offset + 1}–{Math.min(offset + pageSize, totalRows)} of {totalRows}
+      </span>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onPageChange(0)}
+          disabled={isFirstPage || isLoading}
+          className="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/40 disabled:opacity-30 disabled:cursor-not-allowed"
+          title="First page"
+        >
+          <ChevronsLeft className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={isFirstPage || isLoading}
+          className="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/40 disabled:opacity-30 disabled:cursor-not-allowed"
+          title="Previous page"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" />
+        </button>
+        <span className="text-[10px] text-zinc-400 px-2 min-w-[60px] text-center">
+          {isLoading ? "…" : `${currentPage + 1} / ${totalPages}`}
+        </span>
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={isLastPage || isLoading}
+          className="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/40 disabled:opacity-30 disabled:cursor-not-allowed"
+          title="Next page"
+        >
+          <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={() => onPageChange(totalPages - 1)}
+          disabled={isLastPage || isLoading}
+          className="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/40 disabled:opacity-30 disabled:cursor-not-allowed"
+          title="Last page"
+        >
+          <ChevronsRight className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function PerRowDetailsSection({ results, workflowId, pagination }: PerRowDetailsSectionProps) {
   const { sortedRecords } = DatasetDetailConsumer();
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
 
@@ -273,7 +337,13 @@ export function PerRowDetailsSection({ results, workflowId }: PerRowDetailsSecti
           onNavigateToRecord={handleNavigateToRecord}
           maxHeight={500}
           hideChevron
+          totalRows={pagination?.totalRows ?? undefined}
         />
+
+        {/* Server-side pagination controls */}
+        {pagination && pagination.totalRows != null && pagination.totalRows > pagination.pageSize && (
+          <PaginationControls {...pagination} />
+        )}
       </div>
 
       {/* Record inspection drawer */}
