@@ -32,6 +32,7 @@ import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { knowledgeSourceService } from "@/services/service-registry";
 import { OtelTraceSourceViewer } from "./OtelTraceSourceViewer";
 import { OtelTraceBundleLoader } from "./OtelTraceBundleLoader";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 /**
  * Detect OTel trace sources. They are produced by `otel_extract.py` in the
@@ -65,23 +66,31 @@ export function SourcesView({ selectedSourceId, focusPartId, backTo, onBackToRec
     ? sources.find(s => s.id === selectedSourceId)
     : null;
 
+  // Hooks must be called unconditionally — before any early returns
+  const handleSelectSource = useCallback((sourceId: string) => {
+    onSelectSource?.(sourceId);
+  }, [onSelectSource]);
+
   // OTel trace sources render via the trace timeline component, not the
   // PDF/document viewer. Branch early to keep the rest of this component
   // focused on document sources.
   if (activeSource && isOtelTraceSource(activeSource)) {
-    // When the source has a linked trace bundle, load spans from the
-    // gateway and render via agent-prism's TraceViewer. Otherwise fall
-    // back to the source-parts-based timeline.
-    return activeSource.traceBundleId
-      ? <OtelTraceBundleLoader source={activeSource} />
-      : <OtelTraceSourceViewer source={activeSource} />;
+    const fallback = (
+      <div className="flex-1 flex items-center justify-center p-8">
+        <div className="text-center space-y-2">
+          <p className="text-sm font-medium text-foreground/70">Failed to render trace</p>
+          <p className="text-xs text-muted-foreground/50">The trace data may be malformed. Try reloading the page.</p>
+        </div>
+      </div>
+    );
+    return (
+      <ErrorBoundary fallback={fallback}>
+        {activeSource.traceBundleId
+          ? <OtelTraceBundleLoader source={activeSource} />
+          : <OtelTraceSourceViewer source={activeSource} />}
+      </ErrorBoundary>
+    );
   }
-
-  // When a source is selected from the AllSourcesView cards/matrix,
-  // notify parent so explorer sidebar can update its selection
-  const handleSelectSource = useCallback((sourceId: string) => {
-    onSelectSource?.(sourceId);
-  }, [onSelectSource]);
 
   if (count === 0) {
     return <SourcesEmptyState />;

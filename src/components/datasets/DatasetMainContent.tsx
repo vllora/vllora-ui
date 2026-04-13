@@ -14,6 +14,7 @@ import type { AvailableTopic } from "./record-utils";
 import { cn } from "@/lib/utils";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { recordService } from "@/services/service-registry";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { resolveAndGroupBySource } from "@/lib/distri-finetune-tools/steps/shared/resolve-part-ref";
 import { RecordsSectionHeader } from "./dataset-detail-header/RecordsSectionHeader";
 import { TopicHierarchyCanvas } from "./dataset-canvas/TopicHierarchyCanvas";
@@ -393,27 +394,50 @@ export function DatasetMainContent({
     }
   }, [topicDetail, onViewModeChange]);
 
+  // Hooks that must run unconditionally (before any early return).
+  // topicSelectedRecord resolves the clicked record from server-paginated data.
+  const isLeafTopic = topicDetail && (!topicDetail.node.children || topicDetail.node.children.length === 0);
+  const topicRecordsToShow = isLeafTopic && topicPageRecords.length > 0 ? topicPageRecords : filteredRecords;
+  const topicTotalCount = isLeafTopic ? (topicPageTotal || topicServerCounts.get(topicDetail?.node.name ?? "") || filteredRecords.length) : filteredRecords.length;
+  const topicTotalPages = Math.max(1, Math.ceil(topicTotalCount / TOPIC_PAGE_SIZE));
+
+  const topicSelectedRecord = useMemo(() => {
+    if (!selectedRecordId) return null;
+    return selectedRecord ?? topicRecordsToShow.find(r => r.id === selectedRecordId) ?? null;
+  }, [selectedRecord, selectedRecordId, topicRecordsToShow]);
+
   // Sources view takes priority — always render when viewMode is "sources",
   // even if records/topics are empty (sources exist independently of records).
+  const sectionFallback = (
+    <div className="flex-1 flex items-center justify-center p-8">
+      <div className="text-center space-y-2">
+        <p className="text-sm font-medium text-foreground/70">Something went wrong</p>
+        <p className="text-xs text-muted-foreground/50">This section failed to render. Try switching views or reloading.</p>
+      </div>
+    </div>
+  );
+
   if (viewMode === "sources") {
     return (
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-          <SourcesView
-            selectedSourceId={selectedSourceId}
-            focusPartId={focusPartId}
-            backTo={backTo}
-            onBackToRecord={handleBackToRecord}
-            onSelectSource={(sourceId) => {
-              setSelectedSourceId(sourceId);
-              setFocusPartId(null);
-              setBackTo(null);
-              window.dispatchEvent(new CustomEvent("vllora_switch_view", {
-                detail: { viewMode: "sources", sourceId },
-              }));
-            }}
-          />
-        </div>
+        <ErrorBoundary fallback={sectionFallback}>
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <SourcesView
+              selectedSourceId={selectedSourceId}
+              focusPartId={focusPartId}
+              backTo={backTo}
+              onBackToRecord={handleBackToRecord}
+              onSelectSource={(sourceId) => {
+                setSelectedSourceId(sourceId);
+                setFocusPartId(null);
+                setBackTo(null);
+                window.dispatchEvent(new CustomEvent("vllora_switch_view", {
+                  detail: { viewMode: "sources", sourceId },
+                }));
+              }}
+            />
+          </div>
+        </ErrorBoundary>
         <RecordDetailSidebar
           record={selectedRecord}
           onClose={() => onSelectRecordId(null)}
@@ -457,56 +481,45 @@ export function DatasetMainContent({
   // ── Leaf topic detail view (existing TopicDetailView) ──
   // Parent topics (with children) fall through to the "All Topics" tabbed layout
   // which already scopes displayHierarchy and filteredRecords to the selected subtree.
-  const isLeafTopic = topicDetail && (!topicDetail.node.children || topicDetail.node.children.length === 0);
-  // Use server-paginated records for leaf topic, fall back to client-filtered
-  const topicRecordsToShow = isLeafTopic && topicPageRecords.length > 0 ? topicPageRecords : filteredRecords;
-  const topicTotalCount = isLeafTopic ? (topicPageTotal || topicServerCounts.get(topicDetail?.node.name ?? "") || filteredRecords.length) : filteredRecords.length;
-  const topicTotalPages = Math.max(1, Math.ceil(topicTotalCount / TOPIC_PAGE_SIZE));
-
-  // For leaf topics with server-paginated records, resolve selectedRecord from the current page
-  const topicSelectedRecord = useMemo(() => {
-    if (!selectedRecordId) return null;
-    // Try context record first, then fall back to server-paginated page
-    return selectedRecord ?? topicRecordsToShow.find(r => r.id === selectedRecordId) ?? null;
-  }, [selectedRecord, selectedRecordId, topicRecordsToShow]);
-
   if (isLeafTopic) {
     return (
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="px-4 py-2 border-b border-border shrink-0 bg-background">
-          <RecordsSectionHeader
-            viewMode={viewMode}
-            onViewModeChange={onViewModeChange}
-            onExport={onExport}
-            records={topicRecordsToShow}
-            workflowId={workflowId}
-            activeStatFilter={activeStatFilter}
-            onStatFilterChange={setActiveStatFilter}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            sourceDocumentFilterName={sourceDocumentFilterName}
-            onClearSourceDocumentFilter={onClearSourceDocumentFilter}
-            hideViewToggle
-            totalRecordsFromServer={topicTotalCount}
-            hasMore={false}
-            isLoadingMore={isLoadingTopicPage}
-            onLoadMore={undefined}
-          />
-        </div>
-        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-          <TopicDetailView
-            topicNode={topicDetail.node}
-            ancestorNodes={topicDetail.nodePath}
-            records={topicRecordsToShow}
-            totalRecords={topicTotalCount}
-            onSelectRecord={onSelectRecordId}
-            normalizedObjective={normalizedObjective}
-            page={topicPage}
-            totalPages={topicTotalPages}
-            onPageChange={setTopicPage}
-            isLoadingPage={isLoadingTopicPage}
-          />
-        </div>
+        <ErrorBoundary fallback={sectionFallback}>
+          <div className="px-4 py-2 border-b border-border shrink-0 bg-background">
+            <RecordsSectionHeader
+              viewMode={viewMode}
+              onViewModeChange={onViewModeChange}
+              onExport={onExport}
+              records={topicRecordsToShow}
+              workflowId={workflowId}
+              activeStatFilter={activeStatFilter}
+              onStatFilterChange={setActiveStatFilter}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              sourceDocumentFilterName={sourceDocumentFilterName}
+              onClearSourceDocumentFilter={onClearSourceDocumentFilter}
+              hideViewToggle
+              totalRecordsFromServer={topicTotalCount}
+              hasMore={false}
+              isLoadingMore={isLoadingTopicPage}
+              onLoadMore={undefined}
+            />
+          </div>
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <TopicDetailView
+              topicNode={topicDetail.node}
+              ancestorNodes={topicDetail.nodePath}
+              records={topicRecordsToShow}
+              totalRecords={topicTotalCount}
+              onSelectRecord={onSelectRecordId}
+              normalizedObjective={normalizedObjective}
+              page={topicPage}
+              totalPages={topicTotalPages}
+              onPageChange={setTopicPage}
+              isLoadingPage={isLoadingTopicPage}
+            />
+          </div>
+        </ErrorBoundary>
         <RecordDetailSidebar
           record={topicSelectedRecord}
           onClose={() => onSelectRecordId(null)}

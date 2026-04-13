@@ -113,10 +113,14 @@ function normalizeValue(v) {
     return `__arr__:[${items.join(",")}]`;
   }
   if (typeof v === "object") {
-    // Order-independent — sort by key
+    // Order-independent — sort by key.
+    // Keys are normalized as bare trimmed strings (matching Python's
+    // `normalize_value(k)` on dict keys, which are always strings and return
+    // just `.strip()` — not the full type-prefixed path). Values still go
+    // through the full normalizeValue pipeline.
     const entries = Object.keys(v)
       .sort()
-      .map((k) => `${normalizeValue(k)}=${normalizeValue(v[k])}`);
+      .map((k) => `${k.trim()}=${normalizeValue(v[k])}`);
     return `__obj__:{${entries.join(",")}}`;
   }
   return `__other__:${String(v)}`;

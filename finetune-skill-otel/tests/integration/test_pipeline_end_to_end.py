@@ -79,11 +79,11 @@ def test_distilled_records_are_wellformed(tmp_path):
         assert "messages" in rec
         msgs = rec["messages"]
         assert isinstance(msgs, list) and len(msgs) >= 2
-        # Last message must be assistant (the decision point)
-        assert msgs[-1]["role"] == "assistant"
-        # Assistant either has content (refusal) or tool_calls
-        last = msgs[-1]
-        assert last.get("content") is not None or last.get("tool_calls")
+        # GRPO format: messages are the prompt only (end with user/tool turn).
+        # Ground truth tool call is stored separately.
+        assert msgs[-1]["role"] != "assistant", \
+            "messages should end with user/tool turn, not assistant"
+        assert "ground_truth" in rec, "record must have ground_truth field"
 
 
 def test_grader_config_matches_tool_schema(tmp_path):

@@ -119,37 +119,46 @@ def _record_system_prompt(record: dict) -> str:
     return ""
 
 
+def _extract_gt_tool_calls(record: dict) -> list[dict]:
+    """Extract ground-truth tool calls from a record.
+
+    Checks `ground_truth` field first (GRPO format: GT stored separately,
+    messages end with user turn), falls back to last assistant message (legacy).
+    """
+    import json as _json
+    gt_raw = record.get("ground_truth")
+    if gt_raw is not None:
+        parsed = _json.loads(gt_raw) if isinstance(gt_raw, str) else gt_raw
+        return parsed if isinstance(parsed, list) else []
+    for msg in reversed(record.get("messages") or []):
+        if msg.get("role") != "assistant":
+            continue
+        return msg.get("tool_calls") or []
+    return []
+
+
 def _record_tool_pattern(record: dict) -> str:
     """Extract the tool-call pattern from a training record.
 
-    Returns the sorted, comma-separated tool names from the last
-    assistant message's tool_calls. Single-tool records return just
-    the tool name; parallel-call records return "tool_a, tool_b".
+    Returns the sorted, comma-separated tool names from the ground truth
+    tool calls. Single-tool records return just the tool name;
+    parallel-call records return "tool_a, tool_b".
     """
-    messages = record.get("messages") or []
-    for msg in reversed(messages):
-        if msg.get("role") != "assistant":
-            continue
-        tool_calls = msg.get("tool_calls") or []
-        names = sorted(
-            tc.get("function", {}).get("name", "?") for tc in tool_calls
-        )
-        return ", ".join(names) if names else ""
-    return ""
+    tool_calls = _extract_gt_tool_calls(record)
+    names = sorted(
+        tc.get("function", {}).get("name", "?") for tc in tool_calls
+    )
+    return ", ".join(names) if names else ""
 
 
 def _record_first_tool_name(record: dict) -> str | None:
-    """First tool_call name from the last assistant message.
+    """First tool_call name from the ground truth.
 
-    Used for backwards-compatible topic assignment in the publish flow.
+    Used for topic assignment in the publish flow.
     """
-    messages = record.get("messages") or []
-    for msg in reversed(messages):
-        if msg.get("role") != "assistant":
-            continue
-        tool_calls = msg.get("tool_calls") or []
-        if tool_calls:
-            return tool_calls[0].get("function", {}).get("name")
+    tool_calls = _extract_gt_tool_calls(record)
+    if tool_calls:
+        return tool_calls[0].get("function", {}).get("name")
     return None
 
 
@@ -436,15 +445,8 @@ def count_records_per_tool(records: list[dict]) -> dict[str, int]:
     """
     counts: dict[str, int] = {}
     for record in records:
-        messages = record.get("messages") or []
-        last_assistant = None
-        for msg in reversed(messages):
-            if msg.get("role") == "assistant":
-                last_assistant = msg
-                break
-        if not last_assistant:
-            continue
-        for tc in last_assistant.get("tool_calls") or []:
+        tool_calls = _extract_gt_tool_calls(record)
+        for tc in tool_calls:
             fn = tc.get("function") or {}
             name = fn.get("name")
             if name:

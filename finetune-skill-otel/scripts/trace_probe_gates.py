@@ -172,24 +172,37 @@ def compute_bucket_fractions(bucketed: list[tuple[dict, str]]) -> dict[str, floa
     }
 
 
-def _record_tool_name(record: dict) -> str | None:
-    """Extract the tool name from a record's last assistant message.
+def _extract_gt_tool_calls(record: dict) -> list[dict]:
+    """Extract ground-truth tool calls from a record.
 
-    Returns None if the record is a refusal (no tool calls) or malformed.
-    For parallel calls (Pattern D), returns the first tool's name (the
-    per-tool trivial gate considers all-parallel-from-same-tool as that
-    tool's bucket).
+    Checks the `ground_truth` field first (new GRPO-correct format where
+    messages end with user turn and GT is stored separately), then falls
+    back to scanning messages for the last assistant tool call (legacy).
     """
-    messages = record.get("messages") or []
-    for msg in reversed(messages):
+    import json as _json
+    gt_raw = record.get("ground_truth")
+    if gt_raw is not None:
+        parsed = _json.loads(gt_raw) if isinstance(gt_raw, str) else gt_raw
+        return parsed if isinstance(parsed, list) else []
+    # Legacy fallback: last assistant message in messages array
+    for msg in reversed(record.get("messages") or []):
         if msg.get("role") != "assistant":
             continue
-        tool_calls = msg.get("tool_calls") or []
-        if not tool_calls:
-            return None
-        fn = tool_calls[0].get("function") or {}
-        return fn.get("name")
-    return None
+        return msg.get("tool_calls") or []
+    return []
+
+
+def _record_tool_name(record: dict) -> str | None:
+    """Extract the tool name from a record's ground truth.
+
+    Returns None if the record is a refusal (no tool calls) or malformed.
+    For parallel calls (Pattern D), returns the first tool's name.
+    """
+    tool_calls = _extract_gt_tool_calls(record)
+    if not tool_calls:
+        return None
+    fn = tool_calls[0].get("function") or {}
+    return fn.get("name")
 
 
 def compute_per_tool_trivial(

@@ -174,7 +174,10 @@ def all_tool_calls_succeeded(
     Missing everywhere → False. Non-OK status → False.
 
     NOTE: name_fallback is mutated (spans are popped as they're
-    matched). Callers that need to re-check should deep-copy first.
+    matched). This is intentional — sequential calls across multiple
+    LLM spans advance the queue so each span accounts for its own
+    exec entry. Callers that need an isolated re-check must deep-copy
+    name_fallback before calling.
     """
     for tc in tool_calls:
         tc_id = str(tc.get("id") or "")
@@ -229,7 +232,7 @@ def semconv_msg_to_openai(msg: dict) -> dict:
                 continue
             t = p.get("type")
             if t == "tool_result":
-                tool_call_id = tool_call_id or p.get("id") or p.get("tool_call_id")
+                tool_call_id = tool_call_id or p.get("id") or p.get("tool_call_id") or p.get("toolCallId")
                 result = p.get("result")
                 content_buf.append(
                     result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
@@ -432,6 +435,8 @@ def extract_records_from_trace(
     for span in sorted_spans:
         if not is_llm_chat_span(span):
             continue
+        if not span_status_ok(span):
+            continue
 
         attrs = _attrs(span)
         output_messages = attrs.get("gen_ai.output.messages") or []
@@ -441,26 +446,39 @@ def extract_records_from_trace(
         if not tool_calls:
             continue  # not a decision point (response writer or refusal)
 
-        # Deep-copy name_fallback before each call — it mutates (pops)
-        # the queue as matches are consumed, so reusing the same dict
-        # across sequential LLM spans in a trace would cause later spans
-        # to see a partially-consumed index and silently drop records.
-        import copy
-        fb_copy = copy.deepcopy(name_fallback) if name_fallback else None
-        if not all_tool_calls_succeeded(tool_calls, tool_exec_index, fb_copy):
+        # Pass name_fallback directly (intentional mutation). The queue
+        # tracks "which execute_tool spans have been accounted for" across
+        # all LLM spans in the trace. When a failed-attempt span causes
+        # all_tool_calls_succeeded to return False, its matched exec span
+        # has already been popped from the queue — the next (recovery) span
+        # will correctly see the queue advanced past that failed entry and
+        # match the subsequent OK exec span. Deep-copying here would reset
+        # the queue each time, causing Pattern B recovery spans to re-match
+        # the same failed exec entry and be silently dropped (bug).
+        if not all_tool_calls_succeeded(tool_calls, tool_exec_index, name_fallback):
             continue  # Pattern B failed attempt — skip, recovery span handles it
 
         # Build the training record:
-        # messages = input_messages (as-is from the provider, which include
-        #            all prior tool results for sequential ReAct) + the
-        #            assistant's tool_call output
+        # messages = input_messages only (the prompt — what the model sees).
+        # ground_truth = the demonstrated tool call (what the grader scores
+        #                the model's K completions against).
+        #
+        # GRPO format: messages end with the last user/tool turn. The
+        # assistant's tool call is NOT appended to messages — it's stored
+        # separately so the trainer uses messages as the prompt and the
+        # grader accesses ground_truth via reward function kwargs.
+        # (Consistent with TRL GRPOTrainer, OpenAI RFT, ToolRL, and the
+        # PDF finetune pipeline's generate_records.py.)
         messages = [semconv_msg_to_openai(m) for m in input_messages]
-        messages.append(build_assistant_tool_call_message(tool_calls))
+        gt_message = build_assistant_tool_call_message(tool_calls)
 
         records.append(
             {
                 "messages": messages,
                 "tools": tool_schema,
+                "ground_truth": json.dumps(
+                    gt_message["tool_calls"], ensure_ascii=False
+                ),
             }
         )
 

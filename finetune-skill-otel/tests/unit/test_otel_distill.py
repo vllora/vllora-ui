@@ -287,11 +287,16 @@ def test_pattern_a_single_shot_emits_one_record():
     records = extract_records(spans, tool_schema=[])
     assert len(records) == 1
     record = records[0]
-    assert len(record["messages"]) == 3  # system, user, assistant
+    # GRPO format: messages = prompt only (no assistant turn)
+    assert len(record["messages"]) == 2  # system, user
     assert record["messages"][0]["role"] == "system"
     assert record["messages"][1]["role"] == "user"
-    assert record["messages"][2]["role"] == "assistant"
-    assert record["messages"][2]["tool_calls"][0]["function"]["name"] == "product_search"
+    assert record["messages"][-1]["role"] != "assistant"
+    # Ground truth holds the demonstrated tool call
+    assert "ground_truth" in record
+    gt = json.loads(record["ground_truth"])
+    assert isinstance(gt, list) and len(gt) > 0
+    assert gt[0]["function"]["name"] == "product_search"
 
 
 # ─── Pattern B: Error recovery ─────────────────────────────────────────────
@@ -383,14 +388,103 @@ def test_pattern_b_error_recovery_skips_failed_attempt():
     # which is the SCoRe correction signal.
     assert len(records) == 1
     record = records[0]
-    # The messages should include the failed attempt + error as context
-    assert len(record["messages"]) == 5  # system, user, assistant(failed), tool(error), assistant(corrected)
-    # The last assistant message is the corrected one
-    assert record["messages"][-1]["tool_calls"][0]["function"]["name"] == "product_search"
+    # GRPO format: messages = prompt only (ends with tool error turn, not assistant)
+    # system, user, assistant(failed), tool(error) = 4 messages
+    assert len(record["messages"]) == 4
+    assert record["messages"][-1]["role"] != "assistant"
+    assert record["messages"][-1]["role"] == "tool"
     # The prior assistant message is the failed attempt (context)
-    failed_assistant = record["messages"][-3]
+    failed_assistant = record["messages"][-2]
     assert failed_assistant["role"] == "assistant"
     assert failed_assistant["tool_calls"][0]["function"]["name"] == "product_details"
+    # Ground truth holds the corrected tool call
+    assert "ground_truth" in record
+    gt = json.loads(record["ground_truth"])
+    assert isinstance(gt, list) and len(gt) > 0
+    assert gt[0]["function"]["name"] == "product_search"
+
+
+def test_pattern_b_error_recovery_no_tool_call_id():
+    """
+    Pattern B with producers that omit gen_ai.tool.call.id on execute_tool
+    spans (Phoenix/OpenInference sources pre-semconv-adoption).
+
+    Regression test for the deep-copy bug: previously name_fallback was
+    deep-copied before each span's success check and the copy discarded on
+    failure, so the original queue was never advanced. The recovery span
+    would re-pop the same ERROR entry and also fail, silently dropping the
+    record.
+
+    After the fix (direct mutation), the failed-attempt span pops the ERROR
+    exec entry from the shared queue. The recovery span then pops the OK
+    exec entry and correctly becomes a training record.
+    """
+
+    def _exec_no_id(tool_name, start_time, status_code="OK", result=None):
+        """execute_tool span with gen_ai.tool.call.id intentionally absent."""
+        return {
+            "trace_id": "trace_1",
+            "span_id": f"exec_{tool_name}_{start_time}",
+            "parent_span_id": None,
+            "start_time": start_time,
+            "end_time": start_time,
+            "status_code": status_code,
+            "attributes": {
+                "gen_ai.operation.name": "execute_tool",
+                "gen_ai.tool.name": tool_name,
+                "gen_ai.tool.call.result": result,
+            },
+        }
+
+    spans = [
+        # Failed first attempt — LLM calls "search", exec fails
+        _llm_span(
+            "llm1",
+            start_time="2025-01-01T00:00:00Z",
+            inputs=[
+                _msg("system", text="You are a search assistant."),
+                _msg("user", text="Find me a laptop"),
+            ],
+            outputs=[
+                _msg(
+                    "assistant",
+                    tool_calls=[{"id": "", "name": "search", "arguments": {"q": "laptop"}}],
+                )
+            ],
+        ),
+        _exec_no_id("search", "2025-01-01T00:00:01Z", status_code="ERROR", result={"error": "timeout"}),
+        # Recovery span — LLM calls "search" again with refined query, exec succeeds
+        _llm_span(
+            "llm2",
+            start_time="2025-01-01T00:00:02Z",
+            inputs=[
+                _msg("system", text="You are a search assistant."),
+                _msg("user", text="Find me a laptop"),
+                _msg("assistant", tool_calls=[{"id": "", "name": "search", "arguments": {"q": "laptop"}}]),
+                _msg("tool", tool_result={"error": "timeout"}, tool_call_id=""),
+            ],
+            outputs=[
+                _msg(
+                    "assistant",
+                    tool_calls=[{"id": "", "name": "search", "arguments": {"q": "laptop computer"}}],
+                )
+            ],
+        ),
+        _exec_no_id("search", "2025-01-01T00:00:03Z", status_code="OK", result={"results": ["ThinkPad"]}),
+    ]
+
+    records = extract_records(spans, tool_schema=[])
+    # Without the fix: 0 records (recovery span re-matched ERROR entry, also failed).
+    # With the fix: 1 record from the recovery span only.
+    assert len(records) == 1
+    record = records[0]
+    # messages = system, user, assistant(failed), tool(error) — 4 turns as context
+    assert len(record["messages"]) == 4
+    assert record["messages"][-1]["role"] == "tool"
+    # Ground truth is the corrected search call
+    gt = json.loads(record["ground_truth"])
+    assert gt[0]["function"]["name"] == "search"
+    assert gt[0]["function"]["arguments"]["q"] == "laptop computer"
 
 
 # ─── Pattern C: Sequential ReAct ────────────────────────────────────────────
@@ -492,17 +586,26 @@ def test_pattern_c_sequential_react_emits_n_records():
     records = extract_records(spans, tool_schema=[])
     assert len(records) == 3
 
-    # Record 1: 2 messages (system + user) + 1 assistant = 3
-    assert len(records[0]["messages"]) == 3
-    assert records[0]["messages"][-1]["tool_calls"][0]["function"]["name"] == "product_search"
+    # Record 1: GRPO format — messages = prompt only: system + user (2 items)
+    assert len(records[0]["messages"]) == 2
+    assert records[0]["messages"][-1]["role"] == "user"
+    assert "ground_truth" in records[0]
+    gt0 = json.loads(records[0]["ground_truth"])
+    assert gt0[0]["function"]["name"] == "product_search"
 
-    # Record 2: 4 messages (system + user + assistant + tool) + 1 assistant = 5
-    assert len(records[1]["messages"]) == 5
-    assert records[1]["messages"][-1]["tool_calls"][0]["function"]["name"] == "product_search"
+    # Record 2: prompt ends with tool result: system + user + assistant + tool (4 items)
+    assert len(records[1]["messages"]) == 4
+    assert records[1]["messages"][-1]["role"] == "tool"
+    assert "ground_truth" in records[1]
+    gt1 = json.loads(records[1]["ground_truth"])
+    assert gt1[0]["function"]["name"] == "product_search"
 
-    # Record 3: 6 messages (system + user + assistant + tool + assistant + tool) + 1 assistant = 7
-    assert len(records[2]["messages"]) == 7
-    assert records[2]["messages"][-1]["tool_calls"][0]["function"]["name"] == "product_comparison"
+    # Record 3: prompt ends with second tool result: system + user + assistant + tool + assistant + tool (6 items)
+    assert len(records[2]["messages"]) == 6
+    assert records[2]["messages"][-1]["role"] == "tool"
+    assert "ground_truth" in records[2]
+    gt2 = json.loads(records[2]["ground_truth"])
+    assert gt2[0]["function"]["name"] == "product_comparison"
 
 
 # ─── Pattern D: Parallel tool calls ─────────────────────────────────────────
@@ -534,10 +637,13 @@ def test_pattern_d_parallel_calls_emits_one_record_with_set():
     records = extract_records(spans, tool_schema=[])
     assert len(records) == 1
     record = records[0]
-    assistant_msg = record["messages"][-1]
-    assert len(assistant_msg["tool_calls"]) == 2
-    names = [tc["function"]["name"] for tc in assistant_msg["tool_calls"]]
-    queries = [json.loads(tc["function"]["arguments"])["q"] for tc in assistant_msg["tool_calls"]]
+    # GRPO format: messages end with user turn (no assistant), ground_truth holds parallel calls
+    assert record["messages"][-1]["role"] != "assistant"
+    assert "ground_truth" in record
+    gt = json.loads(record["ground_truth"])
+    assert len(gt) == 2
+    names = [tc["function"]["name"] for tc in gt]
+    queries = [json.loads(tc["function"]["arguments"])["q"] for tc in gt]
     assert names == ["product_search", "product_search"]
     assert set(queries) == {"dishwasher", "toaster"}
 
@@ -643,8 +749,9 @@ def test_spans_grouped_by_trace_id():
     records = extract_records(spans, tool_schema=[])
     assert len(records) == 2
     # Each record is independent — no cross-trace context bleed
+    # GRPO format: tool call is in ground_truth, not the last message
     names = sorted(
-        r["messages"][-1]["tool_calls"][0]["function"]["name"] for r in records
+        json.loads(r["ground_truth"])[0]["function"]["name"] for r in records
     )
     assert names == ["product_search", "track_package"]
 

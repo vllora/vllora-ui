@@ -7,7 +7,7 @@
  */
 
 import { useMemo, useState } from "react";
-import { Trash2, ChevronLeft, ChevronRight, Pencil, FileText, Coins, MessageSquare, Info, Copy, Check } from "lucide-react";
+import { Trash2, ChevronLeft, ChevronRight, Pencil, FileText, Wrench, MessageSquare, Info, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -672,7 +672,7 @@ function ToolCallCard({ name, args }: { readonly name: string; readonly args: st
   return (
     <div className="rounded-md bg-background/60 border border-border/40 overflow-hidden">
       <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-muted/30 border-b border-border/30">
-        <Coins className="w-3 h-3 text-amber-400" />
+        <Wrench className="w-3 h-3 text-amber-400" />
         <span className="text-[11px] font-mono font-semibold text-foreground/90">{name}</span>
       </div>
       <pre className="px-2.5 py-2 text-[10px] leading-relaxed text-muted-foreground font-mono overflow-x-auto max-h-32 overflow-y-auto">
@@ -733,40 +733,109 @@ function ToolResultBubble({ toolName, content }: { readonly toolName?: string; r
 
 // ─── Tool Definitions Section ───
 
-function ToolDefinitionsSection({ tools }: { readonly tools: readonly Record<string, unknown>[] }) {
-  const [expanded, setExpanded] = useState(false);
-  const toolNames = tools.map((t) => {
-    const fn = t.function as Record<string, unknown> | undefined;
-    return String(fn?.name ?? t.name ?? "?");
+interface ParsedToolDef {
+  readonly name: string;
+  readonly description: string;
+  readonly params: readonly { name: string; type: string; description: string; required: boolean }[];
+}
+
+function parseToolDefs(tools: readonly Record<string, unknown>[]): ParsedToolDef[] {
+  return tools.map((t) => {
+    const fn = (t.function ?? t) as Record<string, unknown>;
+    const name = String(fn.name ?? "?");
+    const description = String(fn.description ?? "");
+    const parameters = (fn.parameters ?? {}) as Record<string, unknown>;
+    const properties = (parameters.properties ?? {}) as Record<string, Record<string, unknown>>;
+    const requiredSet = new Set(Array.isArray(parameters.required) ? parameters.required as string[] : []);
+
+    const params = Object.entries(properties).map(([pName, pDef]) => ({
+      name: pName,
+      type: String(pDef.type ?? pDef.enum ? "enum" : "any"),
+      description: String(pDef.description ?? ""),
+      required: requiredSet.has(pName),
+    }));
+
+    return { name, description, params };
   });
+}
+
+function ToolDefinitionsSection({ tools }: { readonly tools: readonly Record<string, unknown>[] }) {
+  const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
+  const parsed = useMemo(() => parseToolDefs(tools), [tools]);
+  const copyText = useMemo(() => JSON.stringify(tools, null, 2), [tools]);
+
+  const toggle = (name: string) =>
+    setExpandedTools((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+
+  const expandAll = () => setExpandedTools(new Set(parsed.map(t => t.name)));
+  const collapseAll = () => setExpandedTools(new Set());
+  const allExpanded = expandedTools.size === parsed.length;
 
   return (
     <div className="px-5 py-4 border-b border-border/50">
       <div className="flex items-center justify-between">
         <SectionLabel title={`Tools (${tools.length})`} />
-        <button
-          type="button"
-          onClick={() => setExpanded(!expanded)}
-          className="text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-        >
-          {expanded ? "Collapse" : "Expand"}
-        </button>
-      </div>
-      <div className="mt-2 flex flex-wrap gap-1">
-        {toolNames.map((name) => (
-          <span
-            key={name}
-            className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400/80 border border-amber-500/15"
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={allExpanded ? collapseAll : expandAll}
+            className="text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
           >
-            {name}
-          </span>
-        ))}
+            {allExpanded ? "Collapse all" : "Expand all"}
+          </button>
+          <CopyButton text={copyText} />
+        </div>
       </div>
-      {expanded && (
-        <pre className="mt-2 text-[10px] leading-relaxed text-muted-foreground/60 font-mono bg-muted/20 rounded-md p-2.5 max-h-64 overflow-y-auto">
-          {JSON.stringify(tools, null, 2)}
-        </pre>
-      )}
+      <div className="mt-2 space-y-px rounded-md border border-border/40 overflow-hidden">
+        {parsed.map((tool, idx) => {
+          const isOpen = expandedTools.has(tool.name);
+          return (
+            <div key={`${tool.name}-${idx}`} className={idx > 0 ? "border-t border-border/20" : ""}>
+              <button
+                type="button"
+                onClick={() => toggle(tool.name)}
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left hover:bg-muted/20 transition-colors"
+              >
+                <Wrench className="w-3 h-3 text-amber-400/70 shrink-0" />
+                <span className="text-[11px] font-mono font-medium text-foreground/80">{tool.name}</span>
+                <span className="text-[9px] text-muted-foreground/30 ml-auto tabular-nums shrink-0">
+                  {tool.params.length}p
+                </span>
+              </button>
+              {isOpen && (
+                <div className="px-2.5 pb-2 bg-muted/10">
+                  {tool.description && (
+                    <p className="text-[10px] text-muted-foreground/50 mb-1.5 leading-relaxed italic">
+                      {tool.description}
+                    </p>
+                  )}
+                  {tool.params.length > 0 && (
+                    <table className="w-full text-[10px]">
+                      <tbody>
+                        {tool.params.map((p) => (
+                          <tr key={p.name} className="border-t border-border/10">
+                            <td className="py-0.5 pr-2 font-mono text-foreground/70 whitespace-nowrap align-top">
+                              {p.name}
+                              {p.required && <span className="text-red-400/50 ml-0.5">*</span>}
+                            </td>
+                            <td className="py-0.5 pr-2 text-muted-foreground/30 whitespace-nowrap align-top">{p.type}</td>
+                            <td className="py-0.5 text-muted-foreground/40 align-top">{p.description}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -787,7 +856,7 @@ function DetailsGrid({
     <div className="px-5 py-4">
       <SectionLabel title="Details" />
       <div className="mt-3 grid grid-cols-3 gap-2">
-        <DetailCard icon={<Coins className="w-3 h-3 text-muted-foreground" />} value={tokens.toLocaleString()} label="Tokens" />
+        <DetailCard icon={<Wrench className="w-3 h-3 text-muted-foreground" />} value={tokens.toLocaleString()} label="Tokens" />
         <DetailCard
           icon={<FileText className="w-3 h-3 text-muted-foreground" />}
           value={sourceCount > 0 ? `${sourceCount}` : "—"}

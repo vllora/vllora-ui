@@ -160,10 +160,11 @@ Per `trace-pipeline-isolation.md`:
 
 **OpenAI chat-completion format**, one full conversation per line. The `otel_distill.py` test file has concrete examples. Key points:
 
-- `messages` array is the full conversation prefix ending with the assistant's tool_call (the training target)
+- `messages` array is the prompt only — ends with the last user or tool turn (GRPO format, consistent with TRL GRPOTrainer / OpenAI RFT)
+- `ground_truth` field stores the demonstrated tool call(s) as a JSON string, separate from messages — the grader accesses this via reward function kwargs
 - `tools` array is the tool schema **from the record's own trace** (per-trace, not global — supports multi-agent datasets)
-- Parallel tool calls: single assistant message with `tool_calls` array of length K
-- Tool results: `{role: "tool", tool_call_id: "...", content: "..."}` per OpenAI convention
+- Parallel tool calls: ground_truth contains a `tool_calls` array of length K
+- Tool results in context: `{role: "tool", tool_call_id: "...", content: "..."}` per OpenAI convention
 
 ### Status code preservation
 

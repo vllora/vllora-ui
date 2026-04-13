@@ -763,45 +763,47 @@ fine-tuning](https://developers.openai.com/api/docs/guides/supervised-fine-tunin
 is **one full conversation per JSONL line**:
 
 ```jsonc
-// One JSONL line = one full conversation up to the decision being trained on
+// One JSONL line = prompt (messages) + ground truth (separate field)
+// GRPO format: messages end with user/tool turn, ground_truth stores
+// the demonstrated tool call separately (consistent with TRL GRPOTrainer,
+// OpenAI RFT, and ToolRL arXiv:2504.13958).
 {"messages": [
   {"role": "system", "content": "You are a shopping assistant ..."},
   {"role": "user", "content": "Compare the dishwasher and the toaster"},
-  {"role": "assistant", "tool_calls": [{"id": "c02", "function": {"name": "product_search", "arguments": "..."}}, {"id": "c03", ...}]},
+  {"role": "assistant", "tool_calls": [{"id": "c02", ...}, {"id": "c03", ...}]},
   {"role": "tool", "tool_call_id": "c02", "content": "..."},
-  {"role": "tool", "tool_call_id": "c03", "content": "..."},
-  // ↑ context up to this point ↑
-  {"role": "assistant", "tool_calls": [{"id": "c04", "function": {"name": "product_search", "arguments": "{...page=2...}"}}]}
-  // ↑ this is the assistant turn the model is trained to predict ↑
+  {"role": "tool", "tool_call_id": "c03", "content": "..."}
+  // ↑ prompt ends here — model generates from this point ↑
 ],
- "tools": [...full schema...]}
+ "tools": [...full schema...],
+ "ground_truth": "[{\"id\": \"c04\", \"function\": {\"name\": \"product_search\", \"arguments\": \"{...page=2...}\"}}]"
+ // ↑ grader compares model's K completions against this ↑
+}
 ```
 
 **Multi-step ReAct trajectories produce N JSONL lines per turn**, not
 one. The "Compare the dishwasher and the toaster" turn (3 decision
 points) becomes **3 separate JSONL lines**:
 
-| Line # | `messages` content (the conversation prefix) | What the model is trained to predict |
+| Line # | `messages` content (the prompt) | `ground_truth` (what grader scores against) |
 |---|---|---|
 | 1 | `[system, user]` | The two parallel `product_search` calls |
 | 2 | `[system, user, assistant#1, tool_result_c02, tool_result_c03]` | The pagination `product_search(page=2)` call |
 | 3 | `[system, user, assistant#1, tools, assistant#2, tool_c04]` | The final `product_comparison(8, 7)` call |
 
-Each line is a **complete conversation** (system + user + all prior
-assistant/tool turns) ending right before the assistant turn the model
-should learn to produce. The "growing context prefix" pattern from the
-walkthrough is what produces this — same `(prefix, predicted_action)`
-shape, just rendered as the OpenAI chat-completion format the trainer
-expects. This matches the [planner fine-tuning approach on synthetic
-trajectories](http://krasserm.github.io/2024/05/31/planner-fine-tuning/),
+Each line is a **complete conversation prompt** (system + user + all prior
+assistant/tool turns) ending with the last user or tool turn. The ground
+truth tool call is stored in a separate `ground_truth` field — during GRPO
+training, the model generates K completions from the prompt and the grader
+scores each against the ground truth. This matches the [planner fine-tuning
+approach on synthetic trajectories](http://krasserm.github.io/2024/05/31/planner-fine-tuning/),
 which is the canonical reference for "explode a trajectory into N
 training examples, one per step."
 
-> **Earlier drafts framed "one record per decision point" as if it
-> meant one JSONL line per tool call.** It doesn't. One *training
-> example* per decision point, yes — but each example is rendered as
-> a full conversation in JSONL format. The trainer learns from the
-> last assistant turn in each line; the prior turns are context.
+> **Format note:** The `ground_truth` field stores the demonstrated
+> tool calls as a JSON string (array of tool_call objects). The grader
+> accesses it via reward function kwargs (TRL) or `{{ item.ground_truth }}`
+> (OpenAI RFT). The model never sees the ground truth during generation.
 
 #### Span trees and turn boundaries
 

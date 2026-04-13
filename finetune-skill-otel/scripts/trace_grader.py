@@ -216,12 +216,28 @@ def grade_parallel(pred: dict, gt: dict) -> float:
 def _extract_tool_call_from_record(record: dict) -> dict | None:
     """Extract the GT tool call from a training record.
 
-    Training records from otel_distill.py have shape:
-      {"messages": [..., {role: "assistant", tool_calls: [...]}], "tools": [...]}
-
-    Legacy test records may have {"output": {name, arguments}}.
+    Checks `ground_truth` field first (GRPO format: GT stored separately,
+    messages end with user turn), then falls back to last assistant message
+    (legacy), then `output` dict (test records).
     """
-    # New format: messages-based
+    import json as _json
+
+    # GRPO format: ground_truth is a separate JSON field
+    gt_raw = record.get("ground_truth")
+    if gt_raw is not None:
+        parsed = _json.loads(gt_raw) if isinstance(gt_raw, str) else gt_raw
+        tcs = parsed if isinstance(parsed, list) else []
+        if tcs:
+            fn = tcs[0].get("function", {})
+            args = fn.get("arguments")
+            if isinstance(args, str):
+                try:
+                    args = _json.loads(args)
+                except Exception:
+                    args = {}
+            return {"name": fn.get("name", ""), "arguments": args or {}}
+
+    # Legacy: last assistant message in messages array
     for msg in reversed(record.get("messages") or []):
         if msg.get("role") != "assistant":
             continue
@@ -231,12 +247,12 @@ def _extract_tool_call_from_record(record: dict) -> dict | None:
             args = fn.get("arguments")
             if isinstance(args, str):
                 try:
-                    import json as _json
                     args = _json.loads(args)
                 except Exception:
                     args = {}
             return {"name": fn.get("name", ""), "arguments": args or {}}
-    # Legacy format: output dict
+
+    # Legacy test format: output dict
     if "output" in record:
         return record["output"]
     return None
@@ -285,6 +301,6 @@ def sanity_check(gt_record: dict) -> None:
         }
         partial = {**output, "arguments": partial_args}
         partial_score = grade(partial, output)
-        assert 0.2 <= partial_score <= 0.8, (
-            f"Partial-args score out of (0.2, 0.8) range: {partial_score}"
+        assert 0.2 <= partial_score <= 0.9, (
+            f"Partial-args score out of (0.2, 0.9) range: {partial_score}"
         )

@@ -93,26 +93,38 @@ TRACE_MAX_OUTPUT_TOKENS_CEILING = 2048  # defense against pathologically long GT
 # ─── Token length estimation ───────────────────────────────────────────────
 
 
-def _record_output_token_estimate(record: dict) -> int:
-    """Rough token estimate for the assistant's tool_call output.
+def _extract_gt_tool_calls(record: dict) -> list[dict]:
+    """Extract ground-truth tool calls from a record.
 
-    Serializes the last assistant message's tool_calls as JSON and
-    divides length by 4 (approximate chars-per-token for JSON text).
-    Returns 0 for refusal records (no tool_calls).
+    Checks `ground_truth` field first (GRPO format), falls back to
+    last assistant message (legacy).
     """
-    messages = record.get("messages") or []
-    for msg in reversed(messages):
+    gt_raw = record.get("ground_truth")
+    if gt_raw is not None:
+        parsed = json.loads(gt_raw) if isinstance(gt_raw, str) else gt_raw
+        return parsed if isinstance(parsed, list) else []
+    for msg in reversed(record.get("messages") or []):
         if msg.get("role") != "assistant":
             continue
-        tool_calls = msg.get("tool_calls") or []
-        if not tool_calls:
-            return 0
-        try:
-            serialized = json.dumps(tool_calls, ensure_ascii=False)
-        except (TypeError, ValueError):
-            return 0
-        return max(1, len(serialized) // 4)
-    return 0
+        return msg.get("tool_calls") or []
+    return []
+
+
+def _record_output_token_estimate(record: dict) -> int:
+    """Rough token estimate for the ground truth tool_call output.
+
+    Serializes the tool_calls as JSON and divides length by 4
+    (approximate chars-per-token for JSON text).
+    Returns 0 for refusal records (no tool_calls).
+    """
+    tool_calls = _extract_gt_tool_calls(record)
+    if not tool_calls:
+        return 0
+    try:
+        serialized = json.dumps(tool_calls, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return 0
+    return max(1, len(serialized) // 4)
 
 
 def compute_gt_token_lengths(records: list[dict]) -> list[int]:

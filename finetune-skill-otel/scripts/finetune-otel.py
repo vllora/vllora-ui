@@ -299,7 +299,7 @@ def cmd_eval(args: argparse.Namespace) -> int:
         "workflow_id": args.workflow_id,
         "rollout_model_params": {
             "model": args.model,
-            "temperature": 0.7,
+            "temperature": 1.0,
         },
     }
 
@@ -313,15 +313,14 @@ def cmd_eval(args: argparse.Namespace) -> int:
     eval_id = result.get("evaluation_run_id", result.get("id", "unknown"))
     print(f"Eval created: {eval_id}")
 
-    # Save metadata
-    if args.output_dir:
-        out_dir = Path(args.output_dir)
-        out_dir.mkdir(parents=True, exist_ok=True)
-        meta = {
-            "evaluation_run_id": eval_id,
-            "workflow_id": args.workflow_id,
-            "model": args.model,
-            "status": "running",
+    # Save metadata to evaluations/ directory (matches PDF skill convention)
+    out_dir = Path(args.output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    meta = {
+        "evaluation_run_id": eval_id,
+        "workflow_id": args.workflow_id,
+        "model": args.model,
+        "status": "running",
         }
         _write_json(out_dir / f"eval-{eval_id[:8]}.json", meta)
 
@@ -349,11 +348,10 @@ def cmd_eval(args: argparse.Namespace) -> int:
 
             if status in ("completed", "failed", "cancelled"):
                 print(f"\nEval {status}.")
-                if args.output_dir:
-                    _write_json(
-                        Path(args.output_dir) / f"eval-{eval_id[:8]}.json",
-                        {**meta, "status": status, "results": poll.get("results")},
-                    )
+                _write_json(
+                    out_dir / f"eval-{eval_id[:8]}.json",
+                    {**meta, "status": status, "results": poll.get("results")},
+                )
                 return 0 if status == "completed" else 1
 
             time.sleep(args.poll_interval)
@@ -375,7 +373,7 @@ def cmd_train(args: argparse.Namespace) -> int:
     if args.config_file and args.config_file.exists():
         training_config = _load_json(args.config_file)
 
-    base_model = args.base_model or "Qwen/Qwen3.5-4B"
+    base_model = args.base_model or "Qwen3.5-4B"
     output_model = args.output_model or "trace-finetune-v1"
 
     payload = {
@@ -437,17 +435,16 @@ def cmd_train(args: argparse.Namespace) -> int:
     print(f"  K:            {payload['training_config']['num_generations']}")
     print(f"\nMonitor in UI: http://localhost:5173/finetune/{args.workflow_id}")
 
-    if args.output_dir:
-        out_dir = Path(args.output_dir)
-        out_dir.mkdir(parents=True, exist_ok=True)
-        _write_json(out_dir / f"training-{job_id[:8]}.json", {
-            "job_id": job_id,
-            "workflow_id": args.workflow_id,
-            "base_model": base_model,
-            "output_model": output_model,
-            "config": payload["training_config"],
-            "status": "created",
-        })
+    out_dir = Path(args.output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    _write_json(out_dir / f"training-{job_id[:8]}.json", {
+        "job_id": job_id,
+        "workflow_id": args.workflow_id,
+        "base_model": base_model,
+        "output_model": output_model,
+        "config": payload["training_config"],
+        "status": "created",
+    })
 
     return 0
 
@@ -628,9 +625,9 @@ def publish_to_gateway(
                 )
 
                 # Fetch back root IDs
+                import urllib.request as _urlreq2
                 root_name_to_id: dict[str, str] = {}
                 try:
-                    import urllib.request as _urlreq2
                     with _urlreq2.urlopen(
                         f"{gateway}/finetune/workflows/{workflow_id}/topics"
                     ) as resp:
@@ -848,14 +845,21 @@ def cmd_all(args: argparse.Namespace) -> int:
     if prompt:
         (out_dir / "system_prompt.txt").write_text(prompt)
 
-        # Normalize: replace every record's system prompt with the canonical one
+        # Normalize: replace every record's system prompt with the canonical one.
+        # Records that have no system message at all get one injected at the front.
         normalized = 0
         for rec in records:
-            for m in rec.get("messages") or []:
-                if m.get("role") == "system":
-                    m["content"] = prompt
-                    normalized += 1
-                    break
+            msgs = rec.get("messages") or []
+            has_system = any(m.get("role") == "system" for m in msgs)
+            if has_system:
+                for m in msgs:
+                    if m.get("role") == "system":
+                        m["content"] = prompt
+                        normalized += 1
+                        break
+            else:
+                rec["messages"] = [{"role": "system", "content": prompt}] + msgs
+                normalized += 1
         print(f"[2/6] wrote system prompt ({len(prompt)} chars, normalized {normalized} records)")
         print(
             "  ⚠ Using identity rewrite (pass-through). For production,\n"
@@ -1025,11 +1029,12 @@ def _build_parser() -> argparse.ArgumentParser:
     # ── Eval ──
     p_eval = sub.add_parser("eval", help="Create an evaluation run on the cloud")
     p_eval.add_argument("--workflow-id", type=str, required=True)
-    p_eval.add_argument("--model", type=str, default="Qwen/Qwen3.5-4B", help="Rollout model (base model for eval)")
+    p_eval.add_argument("--model", type=str, default="Qwen3.5-4B", help="Rollout model (base model for eval)")
     p_eval.add_argument("--poll", action="store_true", help="Poll until complete")
     p_eval.add_argument("--poll-interval", type=int, default=30)
     p_eval.add_argument("--max-wait", type=int, default=1800)
-    p_eval.add_argument("--output-dir", type=Path, default=None)
+    p_eval.add_argument("--output-dir", type=Path, default="evaluations",
+                        help="Directory for eval metadata (default: evaluations/)")
     p_eval.add_argument(
         "--gateway", type=str, default="http://localhost:9090",
     )
@@ -1038,12 +1043,13 @@ def _build_parser() -> argparse.ArgumentParser:
     # ── Train ──
     p_train = sub.add_parser("train", help="Create a GRPO training job on the cloud")
     p_train.add_argument("--workflow-id", type=str, required=True)
-    p_train.add_argument("--base-model", type=str, default=None, help="Base model (default: Qwen/Qwen3.5-4B)")
+    p_train.add_argument("--base-model", type=str, default=None, help="Base model (default: Qwen3.5-4B)")
     p_train.add_argument("--output-model", type=str, default=None, help="Output model name")
     p_train.add_argument("--display-name", type=str, default=None)
     p_train.add_argument("--config-file", type=Path, default=None, help="training_config.json from Stage 7")
     p_train.add_argument("--config-overrides", type=str, default=None, help="JSON overrides for training config")
-    p_train.add_argument("--output-dir", type=Path, default=None)
+    p_train.add_argument("--output-dir", type=Path, default="training-jobs",
+                        help="Directory for training job metadata (default: training-jobs/)")
     p_train.add_argument(
         "--gateway", type=str, default="http://localhost:9090",
     )
