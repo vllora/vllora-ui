@@ -294,6 +294,8 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/knowl
 
 **3b. Design skill-based topics.** Organize by **skill** (what the model learns to DO), not document structure. Two-level hierarchy: Domain → Skill. Target 15-25 records per leaf topic, 5-40 leaf topics. Do NOT use `/` in topic names (breaks UI routing).
 
+**MANDATORY: declare `category` on every leaf topic.** Each topic in `topics.json` must have a `"category"` field declaring the expected GT pattern. Valid values: `"none"` (GT should be "none"/empty), `"single:<label>"` (GT should contain this label), `"multi"` (GT should have 2+ labels). This is used by `reconcile-topics` to detect records whose derived GT contradicts the topic intent. Without it, the reconciler falls back to brittle name heuristics and may miss mismatches. You designed the topics — you know the intent — write it down.
+
 **Granularity rule:** When source material enumerates distinct items (9 allergens, 14 tax forms), prefer one leaf topic per item to expose per-item difficulty to GRPO.
 
 > See [reference/topic-hierarchy.md](reference/topic-hierarchy.md) for full guidelines, JSON format, and examples.
@@ -381,6 +383,14 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py reconcile-topics \
 # If reconcile exits non-zero, regenerate the gap topics (commands printed
 # in the error), then re-run derive_ground_truth + reconcile-topics. At most
 # 1-2 retry rounds in practice.
+#
+# MANDATORY: after reconcile, verify results:
+# 1. Check the output for "unknown" topic categories — these mean the reconciler
+#    could not determine the topic's intent. Fix by adding "category" to topics.json.
+# 2. Spot-check contradiction: for each "none"-intent topic, verify no records
+#    have non-"none" GTs. For each "single:<label>" topic, verify GTs contain
+#    that label. The reconciler should have moved contradictions, but if the
+#    category was "unknown" it would have skipped them.
 ```
 
 > See [reference/data-format.md](reference/data-format.md) for full options, weighting modes, RAG mode, and upload details.

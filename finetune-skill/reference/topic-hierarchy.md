@@ -120,6 +120,7 @@ Measure difficulty *after* running the base model evaluation (eval-first approac
   "name": "Human-Readable Name",
   "parent_id": null,
   "system_prompt": "Focus on...",
+  "category": "single:milk",
   "expected_difficulty": "medium",
   "reference_id": "optional-external-ref"
 }
@@ -131,6 +132,7 @@ Measure difficulty *after* running the base model evaluation (eval-first approac
 | `name` | Yes | Display name — should describe the **skill**, not the source section |
 | `parent_id` | No | Parent topic ID (null for root topics) |
 | `system_prompt` | No | System prompt **segment** — a behavioral instruction that adds ONLY what's new beyond the parent. Describe what the model should DO (action verbs: assess, recommend, identify, compare), not a list of keywords. Start with a situational trigger ("When...", "For...", "Given..."). Do NOT repeat the root persona ("You are...") or list nouns without context. |
+| `category` | **Yes** (leaf) | Declares the expected GT pattern for `reconcile-topics`. Values: `"none"` (GT should be "none"/empty — e.g., allergen-free products), `"single:<label>"` (GT should contain this label — e.g., `"single:milk"`), `"multi"` (GT should have 2+ labels). Without this, reconciliation falls back to brittle name-based heuristics and may miss topic↔GT contradictions. |
 | `expected_difficulty` | No | Initial difficulty estimate: `"easy"`, `"medium"`, or `"hard"`. Leaf topics only. Refined to actual pass-rate after difficulty probe. Used to weight record generation. |
 | `reference_id` | No | External reference ID for topic-source linking |
 

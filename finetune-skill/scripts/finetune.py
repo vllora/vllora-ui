@@ -6485,18 +6485,36 @@ def cmd_reconcile_topics(args: argparse.Namespace) -> None:
         s = s.lower().replace(" ", "_").replace("-", "_").rstrip("s")
         return s
 
+    # Load topics.json if available — topics may declare their category explicitly
+    # via a "category" field (e.g., "none", "single:milk", "multi").
+    # This is the most reliable approach: the agent knows the intent at design time.
+    topics_file = training_path.parent / "topics.json"
+    declared_categories: dict[str, str] = {}
+    if topics_file.exists():
+        try:
+            for t in json.loads(topics_file.read_text()):
+                tid = t.get("id", "")
+                cat = t.get("category", "")
+                if tid and cat:
+                    declared_categories[tid] = cat
+        except (json.JSONDecodeError, KeyError):
+            pass
+
     def topic_category(topic: str) -> str:
         """Classify topic intent: 'none', 'multi', 'tricky', 'single:<label>', or 'unknown'.
 
-        Normalizes dashes to underscores, then matches each category by
-        checking if any of its keyword stems appears as a token in the topic
-        name. This handles arbitrary topic naming conventions:
-        "no-allergens-present", "no_default_label", "multi_compound_complex",
-        "hidden-tricky-edges", etc.
+        Priority:
+        1. Explicit category from topics.json (most reliable — set by the agent)
+        2. Name-based heuristics for common keywords (no_, multi_, tricky_)
+        3. Label matching: check if topic name contains a known label
         """
+        # 1. Explicit declaration takes priority
+        if topic in declared_categories:
+            return declared_categories[topic]
+
+        # 2. Name heuristics
         t = topic.lower().replace("-", "_")
         tokens = set(t.split("_"))
-        # Stem each prefix list to bare keywords for token matching
         none_keywords = {p.rstrip("_") for p in NONE_PREFIXES}
         multi_keywords = {p.rstrip("_") for p in MULTI_PREFIXES}
         tricky_keywords = {p.rstrip("_") for p in TRICKY_PREFIXES}
@@ -6506,9 +6524,8 @@ def cmd_reconcile_topics(args: argparse.Namespace) -> None:
             return "none"
         if tokens & multi_keywords:
             return "multi"
-        # Single-label: stemmed topic contains stemmed label
+        # 3. Single-label: stemmed topic contains stemmed label
         t_stem = _stem(t)
-        # Try longer labels first (e.g., "tree nuts" before "nuts")
         for lbl in sorted(label_universe, key=len, reverse=True):
             lbl_stem = _stem(lbl)
             if lbl_stem and lbl_stem in t_stem:
