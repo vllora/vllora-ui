@@ -6,8 +6,29 @@ description: Finetune a small open model to imitate a tool-using agent from Open
 # vLLora Finetune Skill — OTel Trace Edition
 
 > **Status:** v0 scaffolding (2026-04-08). Implementation in progress.
-> See `docs/workflow-skill-first-approach/otel-traces-as-finetune-input.md`
+> See `docs/workflow-skill-first-approach/how-otel-finetune-flow-work/otel-traces-as-finetune-input.md`
 > in the vLLora UI repo for the full design rationale.
+
+## Quick start — DO THIS FIRST
+
+**Do NOT read every script before running.** The orchestrator handles everything. Just run:
+
+```bash
+python3 .claude/skills/finetune-skill-otel/scripts/finetune-otel.py \
+  all ./source_traces_semconv.json \
+  --out-dir ./finetune-project \
+  --name "my-agent" \
+  --fallback "You are a helpful agent. Use the available tools to assist the user."
+```
+
+This runs all local stages AND publishes to the gateway automatically.
+Then use the workflow ID from `./finetune-project/config.json` for eval and training.
+
+**Rules:**
+- ALWAYS use `--out-dir ./finetune-project` (no other path)
+- ALWAYS use `--out-dir ./finetune-project`
+- Do NOT read individual script files before running — the orchestrator calls them
+- If there's an error, THEN read the relevant script to debug
 
 ## What this skill does
 
@@ -37,7 +58,7 @@ at a fraction of the cost.
 - **Not a replacement for `finetune-skill/` (PDF pipeline).** This is a
   parallel, architecturally separate skill. It shares the UI, gateway,
   storage, and cloud handoff with the PDF skill — but no pipeline code.
-  See `docs/workflow-skill-first-approach/trace-pipeline-isolation.md`
+  See `docs/workflow-skill-first-approach/how-otel-finetune-flow-work/trace-pipeline-isolation.md`
   for the engineering contract.
 - **Not for long-horizon agentic tasks.** Defensible only for single-turn
   or shallow-horizon fixed-schema tool routing. Long-horizon (10+ turn)
@@ -89,6 +110,7 @@ deterministic computation, or polling. Stages 7-8 run on the cloud via
 ## Execution flow
 
 The orchestrator `scripts/finetune-otel.py` handles the entire pipeline.
+
 Run stages in this order:
 
 ```bash
@@ -109,7 +131,7 @@ finetune-otel.py analyze <eval-results.json> --output report.json
 
 The `all` subcommand automatically publishes to the gateway (creates
 workflow, uploads trace bundle, records with topic assignment, grader).
-The workflow ID is saved in `finetune-project/publish_result.json`.
+The workflow ID is saved in `finetune-project/config.json`.
 
 After `all` completes, use the workflow ID to run eval and training.
 The eval and train subcommands call the same cloud API as the PDF skill —
@@ -170,36 +192,37 @@ All under `scripts/`:
 
 - **`openinference_to_semconv.py`** — convert Phoenix / OpenInference traces to OTel GenAI semconv shape
 - **`otel_extract.py`** — extract `knowledge_parts.json` from OTLP-JSONL span files
-- **`otel_distill.py`** — (TODO) Stage 3: extract training records per LLM decision point
-- **`trace_topics.py`** — (TODO) Stage 2: lift topic hierarchy from tool schema
+- **`otel_distill.py`** — Stage 3: extract training records per LLM decision point (per-trace tool schemas, multi-agent safe)
+- **`trace_topics.py`** — Stage 2: two-level topic hierarchy (agent identity → tool-call pattern)
 - **`trace_grader_builder.py`** — (TODO) Stage 4: generate programmatic Jaccard grader
 - **`trace_grader.py`** — (TODO) the grader function itself (scored against `trace-grader-reference.md`)
 - **`system_prompt_rewriter.py`** — Stage 5: extract + rewrite the demonstrator's system prompt
 - **`trace_probe_gates.py`** — Stage 6: 4-gate pre-training probe
 - **`trace_hparams.py`** — Stage 7: tool-routing hyperparameter delta
 - **`analyze_eval_trace.py`** — Stage 8: per-tool confusion matrix + weak-tool identification
-- **`finetune-otel.py`** — orchestrator. `all` subcommand runs stages 1–5/7 then auto-publishes to the gateway (creates workflow + uploads trace bundle + registers knowledge source). Use `--no-publish` for local-only. Also: `publish`, `upload`, `handoff`, and per-stage subcommands.
+- **`finetune-otel.py`** — orchestrator. `all` subcommand runs stages 1–5/7 then auto-publishes to the gateway. Also: `publish`, `upload`, `handoff`, and per-stage subcommands.
 - **`nemotron_to_semconv.py`** — adapter: converts `nvidia/Nemotron-Agentic-v1` OpenAI chat-completion format to OTel-semconv spans (with injected system prompt templates for Stage 5 testing)
 
 ## Sub-agents
 
 **None in v1.** The trace skill's pipeline is mechanical extraction and
 doesn't need the sub-agent delegation pattern the PDF skill uses. See
-`docs/workflow-skill-first-approach/trace-pipeline-isolation.md` for
+`docs/workflow-skill-first-approach/how-otel-finetune-flow-work/trace-pipeline-isolation.md` for
 the rationale.
 
 ## Design docs (in the vLLora UI repo)
 
-The full design is in `docs/workflow-skill-first-approach/`:
+The full design is in `docs/workflow-skill-first-approach/how-otel-finetune-flow-work/`:
 
-1. **`otel-traces-as-finetune-input.md`** — concept doc (workflow,
-   stages, hyperparameters, eval metrics, failure modes)
+1. **`otel-traces-as-finetune-input.md`** — concept doc (2,829 lines: workflow,
+   stages, hyperparameters, eval metrics, failure modes, research citations)
 2. **`otel-extractor-tooling-survey.md`** — library/tooling decisions
-   (storage, UI, base model, dataset)
-3. **`trace-grader-reference.md`** — grader implementation reference
+   (1,488 lines: storage, UI, base model, dataset, reuse % per stage)
+3. **`trace-grader-reference.md`** — grader formula spec with edge cases
 4. **`trace-pipeline-isolation.md`** — engineering contract for the
    split from `finetune-skill/`
 5. **`trace-pipeline-testing.md`** — five-level testing ladder
+6. **`trace-pipeline-implementation-plan.md`** — current state + next actions
 
 **Read these before implementing any script in this skill.**
 
@@ -209,8 +232,8 @@ The full design is in `docs/workflow-skill-first-approach/`:
 - [x] Copied `otel_extract.py`, `otel-trace-ingestion.md`, `trace-grader-reference.md` from their current locations
 - [x] Wrote `openinference_to_semconv.py` for Phoenix/OpenInference → semconv conversion
 - [x] Wrote this SKILL.md
-- [ ] `otel_distill.py` — Stage 3 record extraction
-- [ ] `trace_topics.py` — Stage 2 topic hierarchy
+- [x] `otel_distill.py` — Stage 3 record extraction (per-trace tool schemas)
+- [x] `trace_topics.py` — Stage 2 topic hierarchy (two-level: agent → pattern)
 - [ ] `trace_grader.py` + `trace_grader_builder.py` — Stage 4 grader
 - [ ] `system_prompt_rewriter.py` — Stage 5 prompt rewrite
 - [ ] `trace_probe_gates.py` — Stage 6 probe

@@ -85,6 +85,11 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
   const [isLoading, setIsLoading] = useState(true);
   const [datasetRecordCounts, setDatasetRecordCounts] = useState<Record<string, number>>({});
 
+  // Pagination state: load-on-demand (infinite scroll)
+  const [totalRecords, setTotalRecords] = useState<number>(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
   // Filtering & sorting state
   const [searchQuery, setSearchQuery] = useState("");
   const [sortConfig, setSortConfig] = useState<SortConfig>({
@@ -230,26 +235,74 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
   const lastFetchAtRef = useRef<number>(0);
   const isLoadingRef = useRef(false);
 
-  // Load dataset and records (with loading indicator for initial load)
+  const RECORDS_PAGE_SIZE = 200;
+
+  // Load dataset metadata + total count (fast) — UI unblocks immediately.
+  // Records are fetched separately and don't block the shell.
   const loadDataset = useCallback(async () => {
-    if (isLoadingRef.current) return; // Prevent concurrent loads
+    if (isLoadingRef.current) return;
     isLoadingRef.current = true;
     setIsLoading(true);
+
     try {
-      const result = await getDatasetWithRecordsRef.current(workflowId);
-      if (result) {
-        setDataset(result);
-        setRecords(result.records);
+      // Step 1: dataset metadata + lightweight summary — both are fast (~20ms)
+      const [freshDataset, summary] = await Promise.all([
+        datasetService.getById(workflowId),
+        recordService.getSummary(workflowId),
+      ]);
+
+      if (!freshDataset) {
+        setIsLoading(false);
+        isLoadingRef.current = false;
+        return;
+      }
+
+      setDataset(freshDataset);
+      setTotalRecords(summary.total);
+      setHasMore(summary.total > 0);
+      setIsLoading(false); // UI shell renders immediately with counts
+      isLoadingRef.current = false;
+
+      // Step 2: fetch first page of records (non-blocking — UI is already visible)
+      setIsLoadingMore(true);
+      try {
+        const firstPage = await recordService.getByDatasetIdPaged(workflowId, 0, RECORDS_PAGE_SIZE);
+        setRecords(firstPage.records);
+        setHasMore(firstPage.records.length < firstPage.pagination.total);
         lastFetchAtRef.current = Date.now();
+      } catch (err) {
+        console.error("Failed to load records:", err);
+        toast.error("Failed to load records");
+      } finally {
+        setIsLoadingMore(false);
       }
     } catch (err) {
       console.error("Failed to load dataset:", err);
       toast.error("Failed to load workflow");
-    } finally {
       setIsLoading(false);
       isLoadingRef.current = false;
     }
   }, [workflowId]);
+
+  // Load next page of records (triggered by scroll / "Load more" button)
+  const loadMoreRecords = useCallback(async () => {
+    if (isLoadingMore || !hasMore) return;
+    setIsLoadingMore(true);
+    try {
+      const page = await recordService.getByDatasetIdPaged(
+        workflowId, records.length, RECORDS_PAGE_SIZE,
+      );
+      const merged = [...records, ...page.records];
+      setRecords(merged);
+      setHasMore(merged.length < page.pagination.total);
+      setTotalRecords(page.pagination.total);
+    } catch (err) {
+      console.error("Failed to load more records:", err);
+      toast.error("Failed to load more records");
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [workflowId, records, isLoadingMore, hasMore]);
 
   // Refresh dataset silently (no loading indicator - for background syncs)
   const refreshDataset = useCallback(async () => {
@@ -1412,6 +1465,12 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
     setGenerateDataDialog,
     sanitizeDataDialog,
     setSanitizeDataDialog,
+
+    // Pagination (infinite scroll)
+    totalRecords,
+    hasMore,
+    isLoadingMore,
+    loadMoreRecords,
 
     // Loading states
     isGeneratingTopics,

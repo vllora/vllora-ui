@@ -65,12 +65,17 @@ from typing import Any
 
 # Reuse the per-stage implementations directly — no re-implementation.
 from analyze_eval_trace import analyze
-from otel_distill import extract_records, extract_tool_schema_from_spans
+from otel_distill import (
+    extract_records,
+    extract_tool_schema_per_trace,
+    extract_union_tool_schema,
+    group_by_trace_id,
+)
 from system_prompt_rewriter import _identity_rewrite, build_system_prompt
 from trace_grader_builder import build_grader_config
 from trace_hparams import build_training_config
 from trace_probe_gates import run_probe
-from trace_topics import build_both
+from trace_topics import build_both, build_record_topic_index, flatten_hierarchy_leaves
 
 
 # ─── IO helpers ────────────────────────────────────────────────────────────
@@ -110,6 +115,10 @@ def cmd_distill(args: argparse.Namespace) -> int:
     The spans file is expected to already be in OTel-semconv shape
     (a list of spans with gen_ai.* attributes). Convert from
     OpenInference upstream via `openinference_to_semconv.py`.
+
+    Each record gets the tool schema from its own trace (multi-agent
+    safe). The union of all per-trace schemas is written as the
+    overall tool schema for downstream stages (topics, grader).
     """
     spans = _load_json(args.spans)
     if not isinstance(spans, list):
@@ -117,14 +126,18 @@ def cmd_distill(args: argparse.Namespace) -> int:
         return 2
 
     records = extract_records(spans)
-    tool_schema = extract_tool_schema_from_spans(spans)
+    by_trace = group_by_trace_id(spans)
+    per_trace_schemas = extract_tool_schema_per_trace(by_trace)
+    union_schema = extract_union_tool_schema(per_trace_schemas)
 
     out_dir = args.out_dir
     _write_jsonl(out_dir / "training.jsonl", records)
-    _write_json(out_dir / "per_record_tools.json", tool_schema)
+    _write_json(out_dir / "per_record_tools.json", union_schema)
 
     print(
-        f"distilled {len(records)} records, {len(tool_schema)} tools → {out_dir}/"
+        f"distilled {len(records)} records, "
+        f"{len(union_schema)} tools (union of {len(per_trace_schemas)} traces) "
+        f"→ {out_dir}/"
     )
     return 0
 
@@ -137,8 +150,12 @@ def cmd_topics(args: argparse.Namespace) -> int:
     tool_schema = _load_json(args.tool_schema)
     hierarchy, per_record = build_both(tool_schema, records)
     _write_json(args.output, {"hierarchy": hierarchy, "per_record_tools": per_record})
-    leaf_count = len(hierarchy.get("leaves", []))
-    print(f"wrote topics → {args.output} ({leaf_count} tools)")
+    agent_count = len(hierarchy.get("children", []))
+    leaf_count = sum(
+        len(a.get("children", []))
+        for a in hierarchy.get("children", [])
+    )
+    print(f"wrote topics → {args.output} ({agent_count} agents, {leaf_count} patterns)")
     return 0
 
 
@@ -500,8 +517,6 @@ def cmd_upload(args: argparse.Namespace) -> int:
         return 2
 
     payload = {"name": args.name, "semconv_spans": spans}
-    if args.dataset_id:
-        payload["dataset_id"] = args.dataset_id
 
     try:
         result = _gateway_post(
@@ -588,41 +603,83 @@ def publish_to_gateway(
     topics_uploaded = 0
 
     if artifacts_dir:
-        # Step 4: upload topics from SCHEMA only (not from all record tool names).
-        # In production, all traces come from one agent = one schema, so schema
-        # topics match the records. For multi-agent datasets (Nemotron), creating
-        # a topic per distinct tool name produces thousands of 1-record topics.
-        topic_name_to_id: dict[str, str] = {}
+        # Step 4: upload two-level topic hierarchy.
+        # Level 0 (roots): agent identity from normalized system prompt.
+        # Level 1 (leaves): tool-call pattern within each agent.
+        # Records are assigned to leaves via build_record_topic_index.
+        topic_fullpath_to_id: dict[str, str] = {}
         topics_file = artifacts_dir / "topics.json"
         if topics_file.exists():
             print(f"[publish 4/{total_steps}] Uploading topics...")
             topics_data = _load_json(topics_file)
-            leaves = topics_data.get("hierarchy", {}).get("leaves", [])
+            hierarchy = topics_data.get("hierarchy", {})
+            agents = hierarchy.get("children", [])
 
-            if leaves:
-                topic_payload = [
-                    {"name": leaf.get("name", "Unknown"), "parent_id": None}
-                    for leaf in leaves
+            if agents:
+                # Upload root topics (agents)
+                root_payload = [
+                    {"name": agent.get("name", "Agent"), "parent_id": None}
+                    for agent in agents
                 ]
                 _gateway_post(
                     gateway,
                     f"/finetune/workflows/{workflow_id}/topics",
-                    {"topics": topic_payload},
+                    {"topics": root_payload},
                 )
-                topics_uploaded = len(topic_payload)
-                print(f"  uploaded {topics_uploaded} topics")
 
-                # Fetch back to get the generated IDs
+                # Fetch back root IDs
+                root_name_to_id: dict[str, str] = {}
                 try:
                     import urllib.request as _urlreq2
                     with _urlreq2.urlopen(
                         f"{gateway}/finetune/workflows/{workflow_id}/topics"
                     ) as resp:
                         for t in json.loads(resp.read()).get("topics", []):
-                            topic_name_to_id[t["name"]] = t["id"]
-                    print(f"  mapped {len(topic_name_to_id)} topic name→id")
+                            root_name_to_id[t["name"]] = t["id"]
                 except Exception:
                     pass
+
+                # Upload leaf topics (patterns) under their parent root
+                leaf_payload = []
+                for agent in agents:
+                    parent_id = root_name_to_id.get(agent.get("name", ""))
+                    for child in agent.get("children", []):
+                        leaf_payload.append({
+                            "name": child.get("name", "?"),
+                            "parent_id": parent_id,
+                        })
+                if leaf_payload:
+                    _gateway_post(
+                        gateway,
+                        f"/finetune/workflows/{workflow_id}/topics",
+                        {"topics": leaf_payload},
+                    )
+
+                # Fetch all topics again to get leaf IDs
+                try:
+                    with _urlreq2.urlopen(
+                        f"{gateway}/finetune/workflows/{workflow_id}/topics"
+                    ) as resp:
+                        all_topics = json.loads(resp.read()).get("topics", [])
+                    # Build parent_id → parent_name lookup
+                    id_to_name: dict[str, str] = {}
+                    for t in all_topics:
+                        id_to_name[t["id"]] = t["name"]
+                    # Build full_path → id for leaves (topics with a parent)
+                    for t in all_topics:
+                        pid = t.get("parent_id")
+                        if pid and pid in id_to_name:
+                            full_path = f"{id_to_name[pid]} / {t['name']}"
+                            topic_fullpath_to_id[full_path] = t["id"]
+                except Exception:
+                    pass
+
+                topics_uploaded = len(root_payload) + len(leaf_payload)
+                print(
+                    f"  uploaded {len(root_payload)} roots + "
+                    f"{len(leaf_payload)} leaves = {topics_uploaded} topics"
+                )
+                print(f"  mapped {len(topic_fullpath_to_id)} leaf full_path→id")
         else:
             print(f"[publish 4/{total_steps}] skipped (no topics.json)")
 
@@ -634,24 +691,19 @@ def publish_to_gateway(
             if raw_records:
                 import uuid as _uuid
 
-                def _record_tool_name(rec: dict) -> str | None:
-                    msgs = rec.get("messages") or []
-                    for m in reversed(msgs):
-                        if m.get("role") != "assistant":
-                            continue
-                        tcs = m.get("tool_calls") or []
-                        if tcs:
-                            return tcs[0].get("function", {}).get("name")
-                    return None
+                # Build record → topic mapping using the same logic
+                # that built the hierarchy (prompt hash + tool pattern)
+                record_topic_map = build_record_topic_index(raw_records)
 
-                # Records from training.jsonl already have normalized system
-                # prompts (done in cmd_all before writing). Topic IDs were
-                # fetched in step 4 above.
                 gateway_records = []
                 assigned = 0
-                for rec in raw_records:
-                    tool = _record_tool_name(rec)
-                    topic_id = topic_name_to_id.get(tool) if tool else None
+                for i, rec in enumerate(raw_records):
+                    full_path = record_topic_map.get(i)
+                    topic_id = (
+                        topic_fullpath_to_id.get(full_path)
+                        if full_path
+                        else None
+                    )
                     if topic_id:
                         assigned += 1
                     gateway_records.append({
@@ -660,7 +712,15 @@ def publish_to_gateway(
                         "topic_id": topic_id,
                     })
 
-                batch_size = 500
+                # Adaptive batch size: estimate payload size and keep under 40MB
+                # (gateway limit is 50MB, leave headroom for JSON overhead).
+                MAX_BATCH_BYTES = 40 * 1024 * 1024
+                sample = json.dumps(gateway_records[:10], ensure_ascii=False)
+                avg_record_bytes = len(sample.encode()) / min(10, len(gateway_records))
+                batch_size = max(10, int(MAX_BATCH_BYTES / avg_record_bytes))
+                batch_size = min(batch_size, 500)  # cap at 500
+                print(f"  batch size: {batch_size} (avg record ~{avg_record_bytes/1024:.0f} KB)")
+
                 for i in range(0, len(gateway_records), batch_size):
                     batch = gateway_records[i : i + batch_size]
                     _gateway_post(
@@ -753,18 +813,25 @@ def cmd_all(args: argparse.Namespace) -> int:
     rollout scores and eval results that aren't available until the
     base model has been run against the records.
 
-    By default, publishes to the gateway after local stages complete
+    Publishes to the gateway after local stages complete
     (creates workflow, uploads trace bundle, registers knowledge source).
-    Use `--no-publish` to skip gateway integration and run local-only.
     """
     spans = _load_json(args.spans)
     out_dir = args.out_dir
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # Per-trace tool schema extraction (multi-agent safe).
+    # Each record gets the tools from its own trace. The union of all
+    # per-trace schemas is used for topics, grader, and hparams.
     records = extract_records(spans)
-    tool_schema = extract_tool_schema_from_spans(spans)
-    print(f"[1/6] distilled {len(records)} records")
+    by_trace = group_by_trace_id(spans)
+    per_trace_schemas = extract_tool_schema_per_trace(by_trace)
+    tool_schema = extract_union_tool_schema(per_trace_schemas)
+    print(
+        f"[1/6] distilled {len(records)} records, "
+        f"{len(tool_schema)} tools (union of {len(per_trace_schemas)} traces)"
+    )
 
     # Extract + rewrite system prompt BEFORE writing records,
     # then normalize all records to use the ONE canonical prompt.
@@ -807,7 +874,12 @@ def cmd_all(args: argparse.Namespace) -> int:
         out_dir / "topics.json",
         {"hierarchy": hierarchy, "per_record_tools": per_record},
     )
-    print(f"[3/6] built topics ({len(hierarchy.get('leaves', []))} tools)")
+    agent_count = len(hierarchy.get("children", []))
+    leaf_count = sum(
+        len(a.get("children", []))
+        for a in hierarchy.get("children", [])
+    )
+    print(f"[3/6] built topics ({agent_count} agents, {leaf_count} patterns)")
 
     grader = build_grader_config(tool_schema)
     _write_json(out_dir / "grader.json", grader)
@@ -821,34 +893,31 @@ def cmd_all(args: argparse.Namespace) -> int:
     # Large bundles (>10MB JSON) cause broken-pipe errors on the gateway.
     # Auto-subsample to MAX_UPLOAD_TRACES to stay within limits.
     MAX_UPLOAD_TRACES = 500
-    if not args.no_publish:
-        print(f"[6/6] publishing to gateway ({args.gateway})...")
-        name = args.name or Path(args.spans).stem
+    print(f"[6/6] publishing to gateway ({args.gateway})...")
+    name = args.name or Path(args.spans).stem
 
-        # Subsample if the full bundle is too large
-        upload_spans = spans
-        by_trace: dict[str, list] = {}
-        for s in spans:
-            by_trace.setdefault(s.get("trace_id", ""), []).append(s)
-        if len(by_trace) > MAX_UPLOAD_TRACES:
-            subset_traces = dict(list(by_trace.items())[:MAX_UPLOAD_TRACES])
-            upload_spans = [s for tspans in subset_traces.values() for s in tspans]
-            print(
-                f"  subsampled {len(by_trace)} traces → {MAX_UPLOAD_TRACES} "
-                f"({len(upload_spans)} spans) for gateway upload"
-            )
+    # Subsample if the full bundle is too large
+    upload_spans = spans
+    by_trace: dict[str, list] = {}
+    for s in spans:
+        by_trace.setdefault(s.get("trace_id", ""), []).append(s)
+    if len(by_trace) > MAX_UPLOAD_TRACES:
+        subset_traces = dict(list(by_trace.items())[:MAX_UPLOAD_TRACES])
+        upload_spans = [s for tspans in subset_traces.values() for s in tspans]
+        print(
+            f"  subsampled {len(by_trace)} traces → {MAX_UPLOAD_TRACES} "
+            f"({len(upload_spans)} spans) for gateway upload"
+        )
 
-        try:
-            result = publish_to_gateway(
-                args.gateway, upload_spans, name, artifacts_dir=out_dir,
-            )
-            _write_json(out_dir / "publish_result.json", result)
-        except RuntimeError as exc:
-            print(f"[6/6] ⚠ gateway publish failed: {exc}")
-            print("  local artifacts are fine — publish manually later with:")
-            print(f"  finetune-otel.py publish {args.spans} --name '{name}'")
-    else:
-        print(f"[6/6] skipped (--no-publish)")
+    try:
+        result = publish_to_gateway(
+            args.gateway, upload_spans, name, artifacts_dir=out_dir,
+        )
+        _write_json(out_dir / "config.json", result)
+    except RuntimeError as exc:
+        print(f"[6/6] ⚠ gateway publish failed: {exc}")
+        print("  local artifacts are fine — publish manually later with:")
+        print(f"  finetune-otel.py publish {args.spans} --name '{name}'")
 
     print(f"\nall stages complete → {out_dir}/")
     return 0
@@ -917,7 +986,6 @@ def _build_parser() -> argparse.ArgumentParser:
     p_up.add_argument("spans", type=Path, help="Semconv spans JSON")
     p_up.add_argument("--workflow-id", type=str, required=True)
     p_up.add_argument("--name", type=str, required=True, help="Bundle display name")
-    p_up.add_argument("--dataset-id", type=str, default=None)
     p_up.add_argument(
         "--gateway", type=str, default="http://localhost:9090",
         help="Gateway URL (default: http://localhost:9090)",
@@ -951,10 +1019,6 @@ def _build_parser() -> argparse.ArgumentParser:
     p_all.add_argument(
         "--gateway", type=str, default="http://localhost:9090",
         help="Gateway URL (default: http://localhost:9090)",
-    )
-    p_all.add_argument(
-        "--no-publish", action="store_true",
-        help="Skip gateway publish (local-only mode)",
     )
     p_all.set_defaults(func=cmd_all)
 

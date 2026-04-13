@@ -79,6 +79,14 @@ interface RecordsTableProps {
   normalizedObjective?: string;
   /** Handler for updating a topic's custom prompt template */
   onUpdatePromptTemplate?: (topicId: string, template: string | undefined) => void;
+  /** Whether more records can be loaded from the server */
+  hasMore?: boolean;
+  /** Whether a page is currently loading */
+  isLoadingMore?: boolean;
+  /** Callback to load the next page of records */
+  onLoadMore?: () => void;
+  /** Total records count from server */
+  totalRecordsFromServer?: number;
 }
 
 /** Represents a group of records by topic */
@@ -120,6 +128,10 @@ export function RecordsTable({
   datasetObjective: _datasetObjective,
   normalizedObjective,
   onUpdatePromptTemplate: _onUpdatePromptTemplate,
+  hasMore: hasMorePages,
+  isLoadingMore,
+  onLoadMore,
+  totalRecordsFromServer,
 }: RecordsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -305,6 +317,18 @@ export function RecordsTable({
     overscan: 5,
   });
   virtualizerRef.current = virtualizer;
+
+  // Infinite scroll: load more when user scrolls near the end
+  useEffect(() => {
+    if (!hasMorePages || isLoadingMore || !onLoadMore) return;
+    const items = virtualizer.getVirtualItems();
+    const lastItem = items[items.length - 1];
+    if (!lastItem) return;
+    // Trigger when within 5 rows of the end
+    if (lastItem.index >= displayRecords.length - 5) {
+      onLoadMore();
+    }
+  }, [virtualizer.getVirtualItems(), hasMorePages, isLoadingMore, onLoadMore, displayRecords.length]);
 
   // Selection handlers
   const handleSelectAll = useCallback((checked: boolean) => {
@@ -674,8 +698,21 @@ export function RecordsTable({
           })}
         </div>
       </div>
+      {isLoadingMore && (
+        <div className="px-4 py-3 text-sm text-muted-foreground flex items-center gap-2 justify-center">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Loading more records...
+        </div>
+      )}
       {hasMore && onSeeAll && <SeeAllLink onClick={onSeeAll} />}
-      {showFooter && <RecordsTableFooter records={displayRecords} selectedCount={selectedIds.size} workflowId={workflowId} />}
+      {showFooter && (
+        <RecordsTableFooter
+          records={displayRecords}
+          selectedCount={selectedIds.size}
+          workflowId={workflowId}
+          totalRecordsFromServer={totalRecordsFromServer}
+        />
+      )}
     </div>
   );
 }

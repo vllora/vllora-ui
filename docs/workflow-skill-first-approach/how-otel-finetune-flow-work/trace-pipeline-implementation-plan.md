@@ -41,7 +41,7 @@ finetune-skill-otel/
 │   ├── otel_extract.py                   ✓ copied (existing)
 │   ├── otel_distill.py                   ✓ IMPLEMENTED + TESTED (29 tests passing, 345 LOC)
 │   ├── trace_grader.py                   ✓ IMPLEMENTED + TESTED (31 tests passing, 245 LOC)
-│   ├── trace_topics.py                   🟡 stub — NEXT
+│   ├── trace_topics.py                   ✓ IMPLEMENTED (two-level: agent identity → tool-call pattern)
 │   ├── trace_grader_builder.py           🟡 stub
 │   ├── system_prompt_rewriter.py         🟡 stub
 │   ├── trace_probe_gates.py              🟡 stub
@@ -86,7 +86,7 @@ Needs (in `vllora/ui/src/`):
 
 ### Track C continuation (in priority order)
 
-1. **`trace_topics.py`** (NEXT — ~30-50 LOC) — lift topic hierarchy from tool schema. Input: tool schema JSON. Output: topic tree with one leaf per tool name. Keep empty topics in hierarchy. Per-record `tools` array uses only tools that were actually called. Unblocks Stage 6 probe (needs per-tool grouping).
+1. **`trace_topics.py`** ✅ DONE — two-level hierarchy: Level 0 = agent identity (from first sentence of system prompt), Level 1 = tool-call pattern. Per-trace tool schemas (multi-agent safe). Per-record `tools` array uses only tools actually called. 100% record→topic assignment on Nemotron 3k-trace dataset (was 0.03% with old flat approach).
 
 2. **`trace_grader_builder.py`** (~40 LOC) — takes a tool schema + the `trace_grader` module and produces a JSON config the cloud can use to instantiate the same grader server-side. Output: `grader.json` with `type="programmatic_tool_call"`, tool schema embedded, formula version string.
 
@@ -161,7 +161,7 @@ Per `trace-pipeline-isolation.md`:
 **OpenAI chat-completion format**, one full conversation per line. The `otel_distill.py` test file has concrete examples. Key points:
 
 - `messages` array is the full conversation prefix ending with the assistant's tool_call (the training target)
-- `tools` array is the full tool schema (same on every record in a workflow)
+- `tools` array is the tool schema **from the record's own trace** (per-trace, not global — supports multi-agent datasets)
 - Parallel tool calls: single assistant message with `tool_calls` array of length K
 - Tool results: `{role: "tool", tool_call_id: "...", content: "..."}` per OpenAI convention
 
@@ -255,7 +255,7 @@ Should produce ~30-40 training records from the 33-decision shopping-agent fixtu
 | Track C scaffolding | ✅ done | Directory structure + SKILL.md + copied files |
 | `trace_grader.py` + tests | ✅ done | 31 tests, 245 LOC |
 | `otel_distill.py` + tests | ✅ done | 29 tests, 345 LOC |
-| `trace_topics.py` | 🟡 next | |
+| `trace_topics.py` | ✅ done | Two-level hierarchy (agent → pattern), multi-agent safe |
 | `trace_grader_builder.py` | ⏳ | |
 | `trace_probe_gates.py` | ⏳ | |
 | `system_prompt_rewriter.py` | ⏳ | |

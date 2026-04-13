@@ -522,7 +522,7 @@ Documents                              Traces
 ─────────                              ──────
 content with no framing                behavior with framing baked in
         │                                  │
-        │ invent topics                    │ read topics from schema
+        │ invent topics                    │ derive topics from prompts + tools
         │ invent records                   │ extract records from spans
         │ invent grader                    │ derive grader from schema
         │ invent system prompt             │ extract system prompt
@@ -556,50 +556,82 @@ care which source produced which record.
 
 ### Topics
 
-Topics for traces are **the agent's tool capabilities, not extracted
-concepts.** Each tool the agent had access to is one skill the model
-needs to learn. The trace already lists them — there's nothing to
-discover. **Note this is our invention**: none of LangSmith, Langfuse,
-or Phoenix produces a topic hierarchy on fine-tuning export. Their
-exports are flat lists of records. The "topic hierarchy from a trace
-bundle" concept is a UI affordance we add on top of the trace data,
-not an industry-standard primitive.
+Topics for traces are **the agent's tool-calling scenarios, grouped by
+agent identity.** Unlike document-based pipelines (which discover topics
+via LLM clustering), trace topics are derived deterministically from the
+data itself — no LLM inference needed.
+
+**Note this is our invention**: none of LangSmith, Langfuse, or Phoenix
+produces a topic hierarchy on fine-tuning export. Their exports are flat
+lists of records. The "topic hierarchy from a trace bundle" concept is a
+UI affordance we add on top of the trace data, not an industry-standard
+primitive.
+
+#### Two-level hierarchy (agent → pattern)
+
+The topic hierarchy has two levels:
+
+**Level 0 — Agent identity (roots):** derived from the **first sentence**
+of each trace's system prompt. The first sentence is where agents declare
+their role ("You are a customer service agent for ShopSmart.") and is
+stable across sessions — everything after it (dates, user IDs, session
+tokens) is dynamic context injection. Numbers embedded in the role line
+are stripped for normalization (e.g., "employee count: 2,847" → grouping
+ignores the count). Traces with no system prompt fall back to an
+"Unknown Agent" root.
+
+**Level 1 — Tool-call pattern (leaves):** within each agent root,
+records are grouped by the tool(s) called at the decision point.
+Single-tool records produce a leaf named after the tool; parallel-call
+records (Pattern D) produce a leaf named after the sorted set of tools
+(e.g., "search, filter"). Each leaf has a `record_count`.
+
+This design is supported by recent research:
+- GRPO-LEAD (arXiv:2504.09696) proves difficulty-stratified data organization improves convergence — agent roots naturally separate easy agents (simple lookup) from hard ones (multi-step orchestration)
+- "No Prompt Left Behind" (ICLR 2026, arXiv:2509.21880) found 30-99% dead-weight prompts per batch — the hierarchy lets you identify *which agent* generates dead-weight, not just "some tool"
+- RC-GRPO (arXiv:2602.03025) confirms tool-calling scenarios have distinct difficulty profiles that benefit from structured grouping
+
+**Example from Nemotron 3k-trace dataset (6 agents, 7,226 records):**
+
+```
+Root
+├── Customer Service Agent (173 patterns, 198 records)
+│   ├── search_products (3 records)
+│   ├── track_order (2 records)
+│   └── ... 170 more patterns
+├── Technical Support Specialist (188 patterns, 211 records)
+├── Financial Advisor Assistant (157 patterns, 193 records)
+├── Travel Booking Assistant (156 patterns, 188 records)
+├── AI Ordering Assistant (170 patterns, 195 records)
+└── HR Operations Assistant (160 patterns, 192 records)
+```
 
 #### Topic hierarchy vs. per-record `tools` array — two different concepts
 
-Earlier drafts of this doc collapsed two distinct things into one
-"topics" idea. They are actually different and have different rules.
+These are two distinct outputs from `trace_topics.py`:
 
-**Topic hierarchy (UI concept):** the union of all tool names ever
-defined across all traces in the bundle, organized as a tree under the
-agent root. **Empty topics are kept** for visibility — a tool defined
-but never called in the available traces still represents a capability
-the agent is supposed to have, and future trace uploads might fill it
-in. The hierarchy exists for the user to browse what skills the
-workflow is training; it does not directly drive training.
+**Topic hierarchy (UI concept):** the two-level tree described above.
+Agent roots from system prompts, tool-pattern leaves from records.
+Every record maps to exactly one leaf. The hierarchy exists for the
+user to browse what scenarios the workflow is training.
 
-**Per-record `tools` array (training concept):** the list of tool
-schemas attached to every training record in the OpenAI fine-tuning
-JSONL. This has a **stricter** rule set, derived from the literature:
+**Per-record `tools` array (training concept):** each training record
+carries the tool schema **from its own trace** — not a global schema.
+This supports multi-agent datasets where different conversations have
+different tool sets. The union of all per-trace schemas is used for
+the topic hierarchy and grader config.
 
 | Rule | Why | Source |
 |---|---|---|
-| **Same `tools` array on every training record** | OpenAI's fine-tuning guide explicitly requires consistency: *"Make sure all of your training examples are in the same format expected for inference."* The cookbook demonstrates this with one `modified_function_list` used identically across every example. | [OpenAI Fine-tuning for Function Calling](https://developers.openai.com/cookbook/examples/fine_tuning_for_function_calling), [OpenAI Fine-Tuning Best Practices](https://platform.openai.com/docs/guides/fine-tuning-best-practices) |
-| **Union the tool name set across the bundle** (not intersection) | ToolBench precedent: different training records expose different tool subsets without global intersection. Intersection would destroy capability coverage on agents that grew their tool set mid-recording. | [ToolLLM (arXiv:2307.16789)](https://arxiv.org/html/2307.16789v2) |
-| **For description conflicts on the same tool name, use the most recent** | Developer intent evolved toward the latest description. Training on older descriptions teaches the model to call the tool the way the developer no longer intends. ToolBench has no explicit conflict resolution; this rule fills the gap. | (no direct precedent — derived from the developer-intent principle) |
-| **Exclude tools never called in any trace** from the per-record `tools` array (but keep them in the topic hierarchy) | Including dead-weight tools adds prompt tokens without gradient signal, and the model may learn to call them incorrectly by interpolating from similar tools it did see called. The OpenAI cookbook strips tool descriptions for similar token-budget reasons. | [OpenAI cookbook](https://developers.openai.com/cookbook/examples/fine_tuning_for_function_calling) |
-| **For parameter-shape drift on the same tool name (schema versioning), use the latest shape and filter out training records that use the old shape** | Mixing old and new parameter shapes in training produces a model that interpolates between calling conventions, which is worse than either alone. No documented industry solution; this is the least-bad option. Gorilla sidesteps this architecturally via runtime retrieval ([arXiv:2305.15334](https://ar5iv.labs.arxiv.org/html/2305.15334)), but that requires shipping a retrieval component we don't have. | (Gorilla's retrieval workaround doesn't apply to us) |
+| **Each record carries its own trace's tool schema** | Multi-agent systems have different tools per agent. A global schema forces irrelevant tools onto records, wasting tokens and confusing the model. Per-trace schemas match what the agent actually had available. | ToolBench (arXiv:2307.16789) uses per-API tool subsets |
+| **Union across traces for topics/grader** | The topic hierarchy and grader need to cover all tools across all agents. The union is computed by `extract_union_tool_schema()` from all per-trace schemas. | Same ToolBench precedent |
+| **For description conflicts on the same tool name, use the most recent** | Developer intent evolved toward the latest description. | (developer-intent principle) |
+| **Exclude tools never called in any trace** from the per-record `tools` array (but keep them in the topic hierarchy) | Including dead-weight tools adds prompt tokens without gradient signal. | [OpenAI cookbook](https://developers.openai.com/cookbook/examples/fine_tuning_for_function_calling) |
 
 **The two concepts can disagree.** The topic hierarchy might show 6
-tools (the developer defined `customer_support` even though it was
-never called); the per-record `tools` array would only contain the 4
-tools that were actually called. That's correct: the UI shows
-capability coverage, the trainer sees only what's demonstrated.
-
-The only thing the trace can't tell us is the **name of the agent
-itself** (the root topic label). That comes from the workflow name,
-or from a one-shot LLM inference over the tool list, or from a
-generic fallback. Cheap, deterministic, no real complexity.
+agents with 200 patterns; the per-record `tools` arrays vary per trace
+(3-91 tools depending on the conversation). That's correct: the UI
+shows the full landscape, each record sees only what its agent had.
 
 ### Records
 

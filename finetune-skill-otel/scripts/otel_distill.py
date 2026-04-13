@@ -304,43 +304,108 @@ def build_assistant_tool_call_message(tool_calls: list[dict]) -> dict:
 # ─── Tool schema extraction ─────────────────────────────────────────────────
 
 
-def extract_tool_schema_from_spans(spans: list[dict]) -> list[dict]:
-    """Pull a tool schema from any LLM span's request attributes.
+def _extract_tools_from_chat_span(span: dict) -> list[dict]:
+    """Extract tools from a single chat span's request attributes.
 
-    The tool schema is typically consistent across all LLM spans in a
-    workflow, so we return the first one we find. Checks several possible
-    locations:
-      - `gen_ai.request.tools` (OTel semconv)
-      - `llm.invocation_parameters` → `tools` key (OpenInference, may be
-        JSON-serialized)
-      - `llm.tools` (some OpenInference variants)
+    Checks several possible locations:
+      - ``gen_ai.request.tools`` (OTel semconv)
+      - ``llm.invocation_parameters`` → ``tools`` key (OpenInference,
+        may be JSON-serialized)
+      - ``llm.tools`` (some OpenInference variants)
 
-    Returns an empty list if no schema is found. Callers can override
-    with an explicit --tool-schema argument.
+    Returns an empty list if no tools found on this span.
     """
-    for span in spans:
-        attrs = _attrs(span)
-        if attrs.get("gen_ai.operation.name") != "chat":
-            continue
+    attrs = _attrs(span)
+    if attrs.get("gen_ai.operation.name") != "chat":
+        return []
 
-        tools = attrs.get("gen_ai.request.tools")
-        if tools:
-            return tools if isinstance(tools, list) else []
+    tools = attrs.get("gen_ai.request.tools")
+    if tools:
+        return tools if isinstance(tools, list) else []
 
-        params = attrs.get("llm.invocation_parameters")
-        if isinstance(params, str):
-            try:
-                params = json.loads(params)
-            except Exception:
-                params = None
-        if isinstance(params, dict) and isinstance(params.get("tools"), list):
-            return params["tools"]
+    params = attrs.get("llm.invocation_parameters")
+    if isinstance(params, str):
+        try:
+            params = json.loads(params)
+        except Exception:
+            params = None
+    if isinstance(params, dict) and isinstance(params.get("tools"), list):
+        return params["tools"]
 
-        llm_tools = attrs.get("llm.tools")
-        if isinstance(llm_tools, list):
-            return llm_tools
+    llm_tools = attrs.get("llm.tools")
+    if isinstance(llm_tools, list):
+        return llm_tools
 
     return []
+
+
+def _tool_key(tool: dict) -> str | None:
+    """Canonical name for deduplication."""
+    if isinstance(tool, dict):
+        if tool.get("type") == "function" and isinstance(tool.get("function"), dict):
+            return tool["function"].get("name")
+        return tool.get("name")
+    return None
+
+
+def extract_tool_schema_from_spans(spans: list[dict]) -> list[dict]:
+    """Pull a tool schema from the first LLM span that has one.
+
+    Legacy convenience wrapper — returns the first span's tools.
+    Prefer ``extract_union_tool_schema`` for multi-agent datasets.
+    """
+    for span in spans:
+        tools = _extract_tools_from_chat_span(span)
+        if tools:
+            return tools
+    return []
+
+
+def extract_tool_schema_per_trace(
+    by_trace: dict[str, list[dict]],
+) -> dict[str, list[dict]]:
+    """Extract tool schema for each trace.
+
+    Returns ``{trace_id: tool_schema}`` where ``tool_schema`` is the
+    tools list from the first chat span in that trace that carries one.
+    Traces with no tool schema map to ``[]``.
+    """
+    per_trace: dict[str, list[dict]] = {}
+    for trace_id, trace_spans in by_trace.items():
+        sorted_spans = sorted(
+            trace_spans, key=lambda s: str(s.get("start_time") or "")
+        )
+        schema: list[dict] = []
+        for span in sorted_spans:
+            found = _extract_tools_from_chat_span(span)
+            if found:
+                schema = found
+                break
+        per_trace[trace_id] = schema
+    return per_trace
+
+
+def extract_union_tool_schema(
+    per_trace_schemas: dict[str, list[dict]],
+) -> list[dict]:
+    """Build the union of all per-trace tool schemas.
+
+    De-duplicates by tool name (last occurrence wins for description/
+    params). Preserves first-seen order. Handles both OpenAI-style
+    ``{"type":"function","function":{"name":...}}`` and flat
+    ``{"name":...}`` shapes.
+    """
+    seen: dict[str, dict] = {}
+    order: list[str] = []
+    for schema in per_trace_schemas.values():
+        for tool in schema:
+            name = _tool_key(tool)
+            if not name:
+                continue
+            if name not in seen:
+                order.append(name)
+            seen[name] = tool
+    return [seen[n] for n in order]
 
 
 # ─── Per-trace extraction ──────────────────────────────────────────────────
@@ -411,16 +476,33 @@ def extract_records(
 ) -> list[dict]:
     """Extract training records from a flat list of semconv spans.
 
-    If `tool_schema` is None, lift it from the first LLM span's request
-    attributes. Returns a flat list of OpenAI chat-completion records.
-    """
-    if tool_schema is None:
-        tool_schema = extract_tool_schema_from_spans(spans)
+    When ``tool_schema`` is explicitly provided, every record uses that
+    single schema (single-agent assumption). When ``None`` (default),
+    each record gets the tool schema from **its own trace**, supporting
+    multi-agent datasets where different conversations have different
+    tool sets.
 
+    Returns a flat list of OpenAI chat-completion records.
+    """
     by_trace = group_by_trace_id(spans)
-    all_records: list[dict] = []
-    for _, trace_spans in by_trace.items():
-        all_records.extend(extract_records_from_trace(trace_spans, tool_schema))
+
+    if tool_schema is not None:
+        # Explicit override — use the same schema for all records
+        all_records: list[dict] = []
+        for _, trace_spans in by_trace.items():
+            all_records.extend(
+                extract_records_from_trace(trace_spans, tool_schema)
+            )
+        return all_records
+
+    # Per-trace schema extraction (multi-agent safe)
+    per_trace_schemas = extract_tool_schema_per_trace(by_trace)
+    all_records = []
+    for trace_id, trace_spans in by_trace.items():
+        schema = per_trace_schemas.get(trace_id, [])
+        all_records.extend(
+            extract_records_from_trace(trace_spans, schema)
+        )
     return all_records
 
 
@@ -466,7 +548,12 @@ def main() -> int:
         for r in records:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
-    tool_count = len(tool_schema) if tool_schema else len(extract_tool_schema_from_spans(data))
+    if tool_schema is not None:
+        tool_count = len(tool_schema)
+    else:
+        by_trace = group_by_trace_id(data)
+        per_trace = extract_tool_schema_per_trace(by_trace)
+        tool_count = len(extract_union_tool_schema(per_trace))
     print(
         f"wrote {len(records)} records → {args.output} "
         f"(tool schema: {tool_count} tools, "

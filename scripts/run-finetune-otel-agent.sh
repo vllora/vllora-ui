@@ -76,7 +76,7 @@ if ! command -v claude &>/dev/null; then
 fi
 
 echo "🔍 Checking gateway at $GATEWAY_URL..."
-if curl -s --connect-timeout 3 "$GATEWAY_URL/health" >/dev/null 2>&1; then
+if [[ "$(curl -s --connect-timeout 3 -o /dev/null -w '%{http_code}' "$GATEWAY_URL/finetune/workflows")" == "200" ]]; then
   echo "   ✓ Gateway is running"
 else
   echo "   ⚠ Gateway not reachable at $GATEWAY_URL"

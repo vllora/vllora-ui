@@ -91,13 +91,12 @@ def test_topics_subcommand(tmp_path):
     )
     assert result.returncode == 0, result.stderr
     topics = json.loads(out_path.read_text())
-    # Assert actual content, not just presence of keys — a previous
-    # arg-order bug in `cmd_topics` (build_both(records, tool_schema)
-    # instead of build_both(tool_schema, records)) silently produced
-    # empty hierarchies that the old shape-only assertions missed.
-    leaves = topics["hierarchy"]["leaves"]
-    assert len(leaves) == 1, f"expected 1 tool in hierarchy, got {leaves}"
-    assert leaves[0]["name"] == "search"
+    # Two-level hierarchy: agents → patterns
+    agents = topics["hierarchy"]["children"]
+    assert len(agents) == 1, f"expected 1 agent root, got {len(agents)}"
+    patterns = agents[0]["children"]
+    assert len(patterns) == 1, f"expected 1 pattern leaf, got {patterns}"
+    assert patterns[0]["name"] == "search"
     per_record = topics["per_record_tools"]
     assert len(per_record) == 1
     per_record_name = (

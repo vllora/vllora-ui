@@ -211,6 +211,12 @@ export function DatasetDetailContentV2() {
     importDialog,
     setImportDialog,
 
+    // Pagination (infinite scroll)
+    totalRecords,
+    hasMore,
+    isLoadingMore,
+    loadMoreRecords,
+
     // Loading states
     isGeneratingTraces,
     isGeneratingHierarchy,
@@ -937,6 +943,10 @@ export function DatasetDetailContentV2() {
               partCount={knowledgeSources.flatMap(s => s.parts).length}
               evalStats={dataset.evalStats}
               knowledgeCoverageStats={dataset.knowledgeCoverageStats}
+              totalRecords={totalRecords}
+              hasMore={hasMore}
+              isLoadingMore={isLoadingMore}
+              onLoadMore={loadMoreRecords}
             />
           )}
           {contentSection === "evaluator-script" && (

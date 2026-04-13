@@ -124,7 +124,7 @@ if $PASS; then
   echo ""
   echo "Next steps:"
   echo "  1. cd $TARGET"
-  echo "  2. Ensure gateway is running: curl -s http://localhost:9090/health"
+  echo "  2. Ensure gateway is running: curl -s http://localhost:9090/finetune/workflows"
   echo "  3. Start Claude Code: claude"
   echo "  4. Tell it: \"I want to finetune a tool-routing model on these OTel traces\""
 else
