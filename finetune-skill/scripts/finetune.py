@@ -1405,10 +1405,28 @@ def cmd_log_step(args: argparse.Namespace) -> None:
 
     if args.reason:
         entry["reason_created"] = args.reason
+
+    # Decision card fields (structured reasoning for UI + agent scaffolding)
+    if args.observation:
+        try:
+            entry["observation"] = json.loads(args.observation)
+        except json.JSONDecodeError:
+            entry["observation"] = args.observation
     if args.analysis:
-        entry["analysis"] = args.analysis
+        try:
+            entry["analysis"] = json.loads(args.analysis)
+        except json.JSONDecodeError:
+            entry["analysis"] = args.analysis
     if args.decision:
-        entry["decision"] = args.decision
+        try:
+            entry["decision"] = json.loads(args.decision)
+        except json.JSONDecodeError:
+            entry["decision"] = args.decision
+    if args.evidence:
+        try:
+            entry["evidence"] = json.loads(args.evidence)
+        except json.JSONDecodeError:
+            entry["evidence"] = {"raw": args.evidence}
     if args.job_id:
         entry["job_id"] = args.job_id
     if args.job_type:
@@ -1455,10 +1473,17 @@ def cmd_log_step(args: argparse.Namespace) -> None:
     log_entry += f"- **Summary**: {args.summary}\n"
     if args.reason:
         log_entry += f"- **Reason**: {args.reason}\n"
+    if args.observation:
+        obs_text = args.observation if isinstance(args.observation, str) else json.dumps(args.observation)
+        log_entry += f"- **Observation**: {obs_text}\n"
     if args.analysis:
-        log_entry += f"- **Analysis**: {args.analysis}\n"
+        analysis_text = args.analysis if isinstance(args.analysis, str) else json.dumps(args.analysis)
+        log_entry += f"- **Analysis**: {analysis_text}\n"
     if args.decision:
-        log_entry += f"- **Decision**: {args.decision}\n"
+        decision_text = args.decision if isinstance(args.decision, str) else json.dumps(args.decision)
+        log_entry += f"- **Decision**: {decision_text}\n"
+    if args.evidence:
+        log_entry += f"- **Evidence**: {args.evidence}\n"
     if args.model:
         log_entry += f"- **Model**: {args.model}\n"
     if args.job_id:
@@ -1756,7 +1781,7 @@ def cmd_status(args: argparse.Namespace) -> None:
     except SystemExit:
         eval_metrics_by_run = {}
 
-    eval_dir = project_dir / "evaluations"
+    eval_dir = project_dir / "test-runs"
     eval_jobs_shown = []
     if eval_dir.exists():
         eval_files = sorted(eval_dir.glob("eval-*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
@@ -1841,7 +1866,7 @@ def cmd_status(args: argparse.Namespace) -> None:
         return cp_steps.get(name, {}).get("status") == "completed"
 
     # ── Readiness gate (check latest eval if exists) ──
-    eval_dir = project_dir / "evaluations"
+    eval_dir = project_dir / "test-runs"
     latest_eval_file = None
     if eval_dir.exists():
         eval_files = sorted(eval_dir.glob("eval-*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
@@ -5435,7 +5460,7 @@ def cmd_sync_jobs(args: argparse.Namespace) -> None:
     output_dir = Path(args.output_dir)
 
     # ── Sync finetune jobs ──
-    training_dir = output_dir / "training-jobs"
+    training_dir = output_dir / "training"
     training_dir.mkdir(parents=True, exist_ok=True)
 
     jobs = _api(
@@ -5506,7 +5531,7 @@ def cmd_sync_jobs(args: argparse.Namespace) -> None:
         print(f"  Synced training job: {job_id[:8]}... → {out_file.name} (status={local_data['status']})")
 
     # ── Sync eval jobs ──
-    eval_dir = output_dir / "evaluations"
+    eval_dir = output_dir / "test-runs"
     eval_dir.mkdir(parents=True, exist_ok=True)
 
     existing_eval_ids = set()
@@ -5905,6 +5930,52 @@ def cmd_data_quality_gate(args: argparse.Namespace) -> None:
     sys.exit(result.returncode)
 
 
+def _resolve_grader_script_for_test(args: argparse.Namespace) -> str:
+    """Resolve the grader script used by `test-grader`.
+
+    Preference order:
+    1. Explicit local `--grader-file`
+    2. Latest uploaded evaluator version from the gateway
+    """
+    grader_file = getattr(args, "grader_file", None)
+    if grader_file:
+        return Path(grader_file).read_text()
+
+    resp = requests.get(
+        f"{args.base_url}/finetune/workflows/{args.workflow_id}/evaluator/versions",
+        timeout=10,
+    )
+    resp.raise_for_status()
+    versions = resp.json()
+    if isinstance(versions, list) and versions:
+        latest = versions[-1]
+        config = latest.get("config", {})
+        script = config.get("script") or config.get("config", {}).get("script")
+        if script:
+            return script
+
+    raise RuntimeError("No uploaded grader script available for dry-run scoring.")
+
+
+def _score_row_with_dry_run(
+    base_url: str,
+    workflow_id: str,
+    script: str,
+    row: dict,
+) -> dict:
+    """Score one row through the gateway's evaluator dry-run endpoint."""
+    resp = requests.post(
+        f"{base_url}/finetune/workflows/{workflow_id}/evaluator/dry-run",
+        json={"script": script, "row": row},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if isinstance(data, dict) and "result" in data and isinstance(data["result"], dict):
+        return data["result"]
+    return data
+
+
 def cmd_test_grader(args: argparse.Namespace) -> None:
     """Adversarial grader test — feeds deliberately wrong answers to detect leniency.
 
@@ -5922,8 +5993,6 @@ def cmd_test_grader(args: argparse.Namespace) -> None:
     Usage:
       finetune.py test-grader --workflow-id WF --training-file training.jsonl --samples 10
     """
-    import requests
-
     training_file = Path(args.training_file)
     if not training_file.exists():
         print(f"Error: Training file not found: {training_file}", file=sys.stderr)
@@ -5953,6 +6022,11 @@ def cmd_test_grader(args: argparse.Namespace) -> None:
     print()
 
     gateway_url = args.base_url
+    try:
+        grader_script = _resolve_grader_script_for_test(args)
+    except Exception as exc:
+        print(f"Error: could not load grader script for dry-run scoring: {exc}", file=sys.stderr)
+        sys.exit(1)
     lenient_count = 0
     tested = 0
     results_list = []
@@ -5993,7 +6067,7 @@ def cmd_test_grader(args: argparse.Namespace) -> None:
                         )},
                     ],
                     "temperature": 0.7,
-                    "max_tokens": 200,
+                    "max_tokens": getattr(args, "max_output_tokens", None) or 200,
                 },
                 timeout=30,
             )
@@ -6014,41 +6088,18 @@ def cmd_test_grader(args: argparse.Namespace) -> None:
         }
 
         try:
-            score_resp = requests.post(
-                f"{gateway_url}/finetune/workflows/{args.workflow_id}/evaluate",
-                json={"row": test_row},
-                timeout=30,
+            score_data = _score_row_with_dry_run(
+                gateway_url,
+                args.workflow_id,
+                grader_script,
+                test_row,
             )
-            score_resp.raise_for_status()
-            score_data = score_resp.json()
-            score = score_data.get("score", score_data.get("result", {}).get("score", 0))
-            reason = score_data.get("reason", score_data.get("result", {}).get("reason", ""))
-        except Exception:
-            # Fallback: use dry_run_grader.py
-            try:
-                import subprocess
-                script_dir = Path(__file__).parent
-                grader_script = script_dir / "dry_run_grader.py"
-                cmd_result = subprocess.run(
-                    [sys.executable, str(grader_script),
-                     "--workflow-id", args.workflow_id,
-                     "--script", args.grader_file or "finetune-project/grader.js",
-                     "--row", json.dumps(test_row)],
-                    capture_output=True, text=True, timeout=30,
-                )
-                # Parse score from output
-                for out_line in cmd_result.stdout.split("\n"):
-                    if "score" in out_line.lower():
-                        import re
-                        m = re.search(r'"score":\s*([\d.]+)', out_line)
-                        if m:
-                            score = float(m.group(1))
-                            reason = out_line[:100]
-                            break
-                else:
-                    continue
-            except Exception:
-                continue
+            score = score_data.get("score", 0)
+            reason = score_data.get("reason", "")
+        except Exception as exc:
+            print(f"Error: dry-run endpoint failed while scoring record {rid}: {exc}", file=sys.stderr)
+            print("Check the evaluator dry-run endpoint and the uploaded grader script.", file=sys.stderr)
+            sys.exit(1)
 
         tested += 1
         is_lenient = score > 0.40
@@ -6122,47 +6173,18 @@ def cmd_test_grader(args: argparse.Namespace) -> None:
             "ground_truth": test["gt"],
         }
         try:
-            score_resp = requests.post(
-                f"{gateway_url}/finetune/workflows/{args.workflow_id}/evaluate",
-                json={"row": test_row},
-                timeout=30,
+            score_data = _score_row_with_dry_run(
+                gateway_url,
+                args.workflow_id,
+                grader_script,
+                test_row,
             )
-            score_resp.raise_for_status()
-            score_data = score_resp.json()
-            score = score_data.get("score", score_data.get("result", {}).get("score", 0))
-            reason = score_data.get("reason", score_data.get("result", {}).get("reason", ""))
-        except Exception:
-            # Fallback: use dry_run_grader.py (the /evaluate endpoint is cloud-only
-            # and may not exist on local gateway)
-            try:
-                import subprocess
-                script_dir = Path(__file__).parent
-                grader_script = script_dir / "dry_run_grader.py"
-                cmd_result = subprocess.run(
-                    [sys.executable, str(grader_script),
-                     "--workflow-id", args.workflow_id,
-                     "--script", getattr(args, "grader_file", None) or "finetune-project/grader.js",
-                     "--row", json.dumps(test_row)],
-                    capture_output=True, text=True, timeout=30,
-                )
-                if cmd_result.returncode == 0:
-                    for out_line in cmd_result.stdout.strip().splitlines():
-                        if "score" in out_line.lower():
-                            import re as _re
-                            m = _re.search(r"score[=:]\s*([\d.]+)", out_line)
-                            if m:
-                                score = float(m.group(1))
-                                reason = out_line
-                                break
-                    else:
-                        score = 0.0
-                        reason = cmd_result.stdout[:200]
-                else:
-                    print(f"  ✗ SKIP [{test['name']}]: dry_run_grader fallback failed", file=sys.stderr)
-                    continue
-            except Exception as e2:
-                print(f"  ✗ SKIP [{test['name']}]: {e2}", file=sys.stderr)
-                continue
+            score = score_data.get("score", 0)
+            reason = score_data.get("reason", "")
+        except Exception as exc:
+            print(f"Error: dry-run endpoint failed during deterministic test {test['name']}: {exc}", file=sys.stderr)
+            print("Check the evaluator dry-run endpoint and the uploaded grader script.", file=sys.stderr)
+            sys.exit(1)
 
         is_lenient = score > 0.40
         flag = "✗ LENIENT" if is_lenient else "✓ strict"
@@ -6177,13 +6199,13 @@ def cmd_test_grader(args: argparse.Namespace) -> None:
     # FAIL LOUDLY if nothing was tested
     if tested == 0:
         print(f"\n✗ TEST-GRADER FAILED: 0 records tested. This is a hard failure — not a pass.", file=sys.stderr)
-        print(f"  Check gateway /evaluate endpoint, grader upload, and training records.", file=sys.stderr)
+        print(f"  Check the evaluator dry-run endpoint, grader upload, and training records.", file=sys.stderr)
         _auto_journal(
             project_dir=training_file.resolve().parent,
             step="step_5_grader",
             action="adversarial_grader_test",
             status="fail",
-            summary="Adversarial grader test FAILED: 0 records could be tested. Check gateway/evaluate endpoint and grader.",
+            summary="Adversarial grader test FAILED: 0 records could be tested. Check the evaluator dry-run endpoint and grader.",
             workflow_id=args.workflow_id,
         )
         sys.exit(1)
@@ -6954,6 +6976,90 @@ def cmd_print_row_outputs(args: argparse.Namespace) -> None:
             )
 
 
+def cmd_update_analysis(args: argparse.Namespace) -> None:
+    """Update per-section pipeline analysis in analysis.json.
+
+    This creates a shared analysis between the agent and the UI:
+    - Agent writes it after each pipeline step (forces structured thinking)
+    - UI displays it verbatim (user sees exactly what the agent thinks)
+    - Agent reads it back when resuming (gets full situational picture)
+    - Both agree on next_action (no divergence)
+
+    The analysis file is per-section (sources, training-data, evaluator, etc.),
+    not per-step. Each update overwrites the section's analysis — keeping it current.
+    """
+    from datetime import datetime, timezone
+
+    project_dir = Path(args.project_dir)
+    analysis_file = project_dir / "analysis.json"
+
+    # Load or create
+    if analysis_file.exists():
+        analysis = json.loads(analysis_file.read_text())
+    else:
+        # Read workflow_id from config if available
+        wf_id = ""
+        config_path = project_dir / "config.json"
+        if config_path.exists():
+            try:
+                wf_id = json.loads(config_path.read_text()).get("workflow_id", "")
+            except (json.JSONDecodeError, OSError):
+                pass
+        analysis = {"version": "1.0", "workflow_id": wf_id, "sections": {}}
+
+    # Parse optional JSON fields
+    metrics = {}
+    if args.metrics:
+        try:
+            metrics = json.loads(args.metrics)
+        except json.JSONDecodeError:
+            metrics = {"raw": args.metrics}
+
+    blockers: list[str] = []
+    if args.blockers:
+        try:
+            blockers = json.loads(args.blockers)
+        except json.JSONDecodeError:
+            blockers = [args.blockers]
+
+    # Update the section
+    analysis.setdefault("sections", {})[args.section] = {
+        "status": args.status,
+        "summary": args.summary,
+        "metrics": metrics,
+        "assessment": args.assessment,
+        "blockers": blockers,
+        "next_action": getattr(args, "next_action", ""),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    analysis_file.write_text(json.dumps(analysis, indent=2))
+    print(f"Updated analysis: {args.section} → {args.status}")
+    print(f"  Summary: {args.summary}")
+    if blockers:
+        print(f"  Blockers: {', '.join(blockers)}")
+
+    # Sync to gateway (best-effort)
+    wf_id = analysis.get("workflow_id", "")
+    if wf_id:
+        gateway_url = "http://localhost:9090"
+        config_path = project_dir / "config.json"
+        if config_path.exists():
+            try:
+                gateway_url = json.loads(config_path.read_text()).get("gateway_url", gateway_url)
+            except (json.JSONDecodeError, OSError):
+                pass
+        try:
+            import requests
+            requests.put(
+                f"{gateway_url}/finetune/workflows/{wf_id}",
+                json={"pipeline_analysis": json.dumps(analysis)},
+                timeout=5,
+            )
+        except Exception:
+            pass  # Non-fatal
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="vLLora gateway API wrapper for the finetune skill pipeline",
@@ -7009,8 +7115,18 @@ def main() -> None:
                    help="Status: in_progress (step started), completed, failed")
     p.add_argument("--summary", required=True, help="One-line summary of what happened")
     p.add_argument("--reason", default=None, help="Why this step/job was created (the reasoning chain)")
-    p.add_argument("--analysis", default=None, help="What was found after completion")
-    p.add_argument("--decision", default=None, help="What to do next based on findings")
+    p.add_argument("--observation", default=None,
+                   help="What was observed before making a decision (metrics, state, data). "
+                        "Plain text or JSON string. Part of the decision card.")
+    p.add_argument("--analysis", default=None,
+                   help="What the observations mean — comparison, pattern detection, diagnosis. "
+                        "Plain text or JSON string. Part of the decision card.")
+    p.add_argument("--decision", default=None,
+                   help="What action was taken and why. Include rationale. "
+                        "Plain text or JSON string. Part of the decision card.")
+    p.add_argument("--evidence", default=None,
+                   help="JSON string with before/after data or key metrics supporting the decision. "
+                        'Example: \'{"before": {"per_topic": 25}, "after": {"highest": 50, "lowest": 3}}\'.')
     p.add_argument("--job-id", default=None, help="Eval or training job ID (links to gateway)")
     p.add_argument("--job-type", default=None, choices=["eval", "training"],
                    help="Job type for UI display")
@@ -7093,7 +7209,7 @@ def main() -> None:
     p = subparsers.add_parser("create-eval", help="Create evaluation job and save metadata locally")
     p.add_argument("--workflow-id", required=True, help="Workflow ID (used as dataset_id)")
     p.add_argument("--model", default=None, help="Rollout model override")
-    p.add_argument("--output-dir", default="evaluations", help="Local directory for eval metadata (default: evaluations/)")
+    p.add_argument("--output-dir", default="test-runs", help="Local directory for eval metadata (default: test-runs/)")
 
     # poll-eval
     p = subparsers.add_parser("poll-eval", help="Poll eval job until complete, save results")
@@ -7134,7 +7250,7 @@ def main() -> None:
     p.add_argument("--display-name", default=None, help="Human-readable training job name")
     p.add_argument("--config", default=None, help="Training config JSON string")
     p.add_argument("--inference-params", default=None, help="Inference parameters JSON string")
-    p.add_argument("--output-dir", default="training-jobs", help="Local directory for job metadata (default: training-jobs/)")
+    p.add_argument("--output-dir", default="training", help="Local directory for job metadata (default: training/)")
 
     # poll-training
     p = subparsers.add_parser("poll-training", help="Poll training job until complete, save status and metrics")
@@ -7231,6 +7347,7 @@ def main() -> None:
     p.add_argument("--training-file", required=True, help="Path to training.jsonl")
     p.add_argument("--grader-file", default=None, help="Path to grader.js (for fallback scoring)")
     p.add_argument("--samples", type=int, default=10, help="Number of records to test (default: 10)")
+    p.add_argument("--max-output-tokens", type=int, default=None, help="Max tokens for generated wrong answers")
 
     # harden-records
     p = subparsers.add_parser(
@@ -7281,6 +7398,30 @@ def main() -> None:
         help="Max characters per text cell before truncation (default: 160)",
     )
 
+    # update-analysis — writes per-section analysis to analysis.json (shared between agent + UI)
+    p = subparsers.add_parser(
+        "update-analysis",
+        help="Update per-section pipeline analysis (shared between agent and UI). "
+             "Writes to analysis.json in the project directory.",
+    )
+    p.add_argument("--project-dir", required=True, help="Path to finetune-project directory")
+    p.add_argument("--section", required=True,
+                   choices=["sources", "trace-analysis", "training-data", "evaluator", "evaluation", "training"],
+                   help="Which pipeline section to update")
+    p.add_argument("--status", required=True,
+                   choices=["not-started", "in-progress", "ready", "needs-work", "blocked"],
+                   help="Current status of this section")
+    p.add_argument("--summary", required=True,
+                   help="One-line summary — the primary insight both agent and user see")
+    p.add_argument("--metrics", default=None,
+                   help="JSON string with key metrics (e.g., record counts, scores)")
+    p.add_argument("--assessment", default="",
+                   help="Plain-language assessment — interpretation of what the data means")
+    p.add_argument("--blockers", default=None,
+                   help="JSON array of blocking issues (e.g., '[\"grader too lenient\"]')")
+    p.add_argument("--next-action", default="",
+                   help="What should happen next — both agent and user agree on this")
+
     args = parser.parse_args()
 
     commands = {
@@ -7317,6 +7458,7 @@ def main() -> None:
         "print-row-outputs": cmd_print_row_outputs,
         "grader-sanity-check": cmd_grader_sanity_check,
         "reconcile-topics": cmd_reconcile_topics,
+        "update-analysis": cmd_update_analysis,
     }
     commands[args.command](args)
 

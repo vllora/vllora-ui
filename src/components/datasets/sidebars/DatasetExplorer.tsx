@@ -6,10 +6,12 @@
  * nested topic hierarchy under "Training Data".
  *
  * Sections:
- * - Source Documents (knowledge sources)
- * - Training Data (topics + "All Topics" nav)
- * - Eval Runs (evaluation jobs)
- * - Training Jobs (finetune jobs)
+ * - Source Materials (knowledge sources)
+ * - Teaching Examples (topics + "All Topics" nav)
+ * - Quality Checker (evaluator/grader)
+ * - Test Runs (evaluation jobs)
+ * - Training (finetune jobs)
+ * - Activity Log (pipeline journal)
  */
 
 import { useState, useMemo, useCallback, useEffect } from "react";
@@ -31,6 +33,8 @@ import {
 } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
+import { PipelineAnalysisConsumer } from "@/contexts/PipelineAnalysisContext";
+import { SectionInsight } from "./SectionInsight";
 import { EvalJobsConsumer } from "@/contexts/EvalJobsContext";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { PipelineJournalConsumer } from "@/contexts/PipelineJournalContext";
@@ -78,6 +82,8 @@ interface DatasetExplorerProps {
 export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
   const { dataset, records, isGeneratingTraces, totalRecords } = DatasetDetailConsumer();
   const { sources } = KnowledgeSourcesConsumer();
+  // TraceAnalysis is now displayed inside OTel source viewer tabs (not sidebar)
+  const { getSection } = PipelineAnalysisConsumer();
   const { jobs: dryRunJobs, startDryRun } = EvalJobsConsumer();
   const { filteredJobs: finetuneJobs, loadJobs: loadFinetuneJobs } = FinetuneJobsConsumer();
   const { entries: journalEntries, hasJournal } = PipelineJournalConsumer();
@@ -237,11 +243,11 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
     if (nodeId === "data") {
       tabLabel = "All Topics";
     } else if (nodeId === "evaluations/overview") {
-      tabLabel = "Eval Runs";
+      tabLabel = "Test Runs";
     } else if (nodeId.startsWith("evaluations/jobs/")) {
       tabLabel = evalJobDisplayName(nodeId.slice("evaluations/jobs/".length));
     } else if (nodeId === "finetune/overview") {
-      tabLabel = "Training Jobs";
+      tabLabel = "Training";
     } else if (nodeId.startsWith("finetune/")) {
       tabLabel = finetuneJobDisplayName(nodeId.slice("finetune/".length));
     }
@@ -298,7 +304,8 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
     <div className="flex flex-col h-full min-h-0 overflow-y-auto py-4">
       {/* ── Source Documents ── */}
       {sources.length > 0 && (
-        <SidebarSection title="Source Documents" icon={<BookOpen className="w-3 h-3" />} count={sources.length}>
+        <SidebarSection title="Source Materials" icon={<BookOpen className="w-3 h-3" />} count={sources.length}>
+          {getSection("sources") && <SectionInsight analysis={getSection("sources")!} />}
           <SidebarItem
             icon={<Library className="w-3.5 h-3.5" />}
             label="All Sources"
@@ -322,13 +329,16 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
       {sources.length > 0 && <SidebarDivider />}
 
+      {/* Trace Analysis is now inside the OTel Traces source viewer as tabs */}
+
       {/* ── Training Data ── */}
       <SidebarSection
-        title="Training Data"
+        title="Teaching Examples"
         icon={<Database className="w-3 h-3" />}
         count={totalRecords || records.length}
         isLoading={isGeneratingTraces}
       >
+        {getSection("training-data") && <SectionInsight analysis={getSection("training-data")!} />}
         {/* All Topics item */}
         <SidebarItem
           icon={<Library className="w-3.5 h-3.5" />}
@@ -358,7 +368,8 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       {/* ── Evaluator (Grader Script) ── */}
       <SidebarDivider />
 
-      <SidebarSection title="Evaluator" icon={<Code2 className="w-3 h-3" />}>
+      <SidebarSection title="Quality Checker" icon={<Code2 className="w-3 h-3" />}>
+        {getSection("evaluator") && <SectionInsight analysis={getSection("evaluator")!} />}
         <SidebarItem
           icon={<Code2 className="w-3.5 h-3.5" />}
           label="grader-script.js"
@@ -371,7 +382,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
       {/* ── Eval Runs ── */}
       <SidebarSection
-        title="Eval Runs"
+        title="Test Runs"
         icon={<FlaskConical className="w-3 h-3" />}
         count={dryRunJobs.length}
         onTitleClick={() => handleSelect("evaluations/overview")}
@@ -388,6 +399,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
           },
         }}
       >
+        {getSection("evaluation") && <SectionInsight analysis={getSection("evaluation")!} />}
         {dryRunJobs.map((job) => {
           const normalized = normalizeJobStatus(job.status);
           const isBase = isBaseModel(job.rolloutModel);
@@ -420,7 +432,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
       {/* ── Training Jobs ── */}
       <SidebarSection
-        title="Training Jobs"
+        title="Training"
         icon={<Brain className="w-3 h-3" />}
         count={finetuneJobs.length}
         onTitleClick={() => handleSelect("finetune/overview")}
@@ -437,6 +449,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
           },
         }}
       >
+        {getSection("training") && <SectionInsight analysis={getSection("training")!} />}
         {finetuneJobs.map((job) => {
           const normalized = normalizeJobStatus(job.status);
           const displayName = finetuneJobDisplayName(job.id, job.suffix);
@@ -460,11 +473,11 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
       {/* ── Pipeline Journal ── */}
       <SidebarSection
-        title="Pipeline Journal"
+        title="Activity Log"
         icon={<ScrollText className="w-3 h-3" />}
         count={hasJournal ? journalEntries.length : undefined}
-        onTitleClick={() => handleSelect("logs.md")}
-        isTitleActive={selectedNodeId === "logs.md"}
+        onTitleClick={() => handleSelect("pipeline-analysis")}
+        isTitleActive={selectedNodeId === "pipeline-analysis" || selectedNodeId === "logs.md"}
         action={{
           icon: <Upload className="w-3 h-3" />,
           title: "Upload pipeline-journal.json",
@@ -497,6 +510,13 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         }}
       >
         {hasJournal ? (
+          <>
+          <SidebarItem
+            icon={<Brain className="w-3.5 h-3.5" />}
+            label="Step Analysis"
+            isActive={selectedNodeId === "pipeline-analysis"}
+            onClick={() => handleSelect("pipeline-analysis")}
+          />
           <SidebarItem
             icon={<ScrollText className="w-3.5 h-3.5" />}
             label="pipeline-journal.json"
@@ -504,6 +524,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
             isActive={selectedNodeId === "logs.md"}
             onClick={() => handleSelect("logs.md")}
           />
+          </>
         ) : (
           <p className="px-6 py-2 text-[11px] text-muted-foreground/40 italic">
             No journal yet — upload a file

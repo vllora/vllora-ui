@@ -5,13 +5,14 @@ This document explains the full skill pipeline step by step, what happens at eac
 ## Pipeline at a Glance
 
 ```
-Step 1: Define Objective          (~1 min)    → workflow created on gateway       ↑ uploaded
-Step 2: Extract Documents         (~5-15 min) → per-document knowledge parts      ↑ uploaded
-Step 3: Build Topic Hierarchy     (~3-5 min)  → filter parts, topics, relations   ↑ uploaded
-Step 4: Generate Training Data    (~5-20 min) → training.jsonl (200+ records)     ↑ uploaded
-  or 4B: NeMo Data Designer      (optional)  → NeMo server + convert             ↑ uploaded
-Step 5: Write Grader              (~2-3 min)  → grader.js                         ↑ uploaded
-Step 5.5: Validate + Quality Gate (~1-3 min)  → pre-eval data validation          (local)
+Step 1: Define Objective          (~1 min)    → workflow created, input mode detected  ↑ uploaded
+Step 2A: Extract Documents        (~5-15 min) → per-document knowledge parts         ↑ uploaded
+Step 2C: Analyze Traces (combined)(~30 sec)   → trace-analysis/ (4 artifacts)        ↑ uploaded
+Step 3: Build Topic Hierarchy     (~3-5 min)  → filter parts, topics, relations      ↑ uploaded
+Step 4: Generate Training Data    (~5-20 min) → training.jsonl (trace-weighted)      ↑ uploaded
+  or 4B: NeMo Data Designer      (optional)  → NeMo server + convert                ↑ uploaded
+Step 5: Write Grader              (~2-3 min)  → quality-checker/grader.js            ↑ uploaded
+Step 5.5: Validate + Quality Gate (~1-3 min)  → pre-eval data validation             (local)
 Step 6: Verify & Hand Off         (~30 sec)   → confirm all data in gateway DB
 ─────────────────────────────────────────────────────────────────────────────────────────────
 Step 7: Eval → Readiness Gate → Train  (~30-90 min) → eval-first, then train   ↑ cloud
@@ -22,11 +23,13 @@ Step 9: Iterate (If Needed)       (~30-60 min)→ eval-only or post-training fix
 ### Dependency Graph
 
 ```
-Step 1: Define Objective
+Step 1: Define Objective + Detect Input Mode (PDF / traces / combined)
     ↓
-Step 2: Extract Documents (parallel subagents per PDF)
+Step 2A: Extract Documents (parallel subagents per PDF)
+Step 2C: Analyze Traces (combined mode — runs in parallel with 2A)
+         → trace-analysis/priority.json, topics.json, prompts.json, grader-hints.json
     ↓ [GATE: validate_extraction + verify gateway upload]
-Step 3: Build Topic Hierarchy
+Step 3: Build Topic Hierarchy (enriched with trace topics in combined mode)
     ├── 3a: Filter parts by relevance (relevant: true/false on each part)
     ├── 3b: Design skill-based topics (NOT document structure)
     ├── 3c: Write behavioral system prompt segments

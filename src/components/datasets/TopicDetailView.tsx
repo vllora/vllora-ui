@@ -274,19 +274,19 @@ export function RecordsTabContent({
         </div>
         <p className="text-sm font-medium text-foreground/70 mb-1">No records yet</p>
         <p className="text-xs text-muted-foreground/50 max-w-xs text-center">
-          Generate training data for this topic to see records here.
+          If this is a category, click a specific skill below to see its teaching examples.
         </p>
       </div>
     );
   }
 
   return (
-    <table className="w-full text-left border-collapse text-xs">
+    <table className="w-full text-left border-collapse text-xs table-fixed">
       <thead>
         <tr className="border-b border-border/50 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50 bg-muted/30 sticky top-0 z-[2]">
-          <th className="px-4 py-2.5 w-10">#</th>
-          <th className="px-4 py-2.5">Input</th>
-          {hasGroundTruth && <th className="px-4 py-2.5 w-[160px]">Ground Truth</th>}
+          <th className="px-4 py-2.5 w-8">#</th>
+          <th className="px-4 py-2.5 w-[35%]">Input</th>
+          {hasGroundTruth && <th className="px-4 py-2.5 w-[35%]">Ground Truth</th>}
           {hasJobColumns ? (
             jobColumns.map((col, i) => {
               const needsSep = i > 0 && col.type === "finetune" && jobColumns[i - 1].type === "eval";
@@ -358,11 +358,11 @@ function RecordTableRow({
       <td className="px-4 py-2.5 text-[11px] text-muted-foreground/50 tabular-nums align-top">
         {index}
       </td>
-      <td className="px-4 py-2.5 align-top">
+      <td className="px-4 py-2.5 align-top max-w-0">
         <InputTextCell text={userText} emptyLabel="No user message" />
       </td>
       {showGroundTruth && (
-        <td className="px-4 py-2.5 align-top">
+        <td className="px-4 py-2.5 align-top max-w-0">
           <GroundTruthCell text={groundTruthText} />
         </td>
       )}

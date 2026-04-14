@@ -131,8 +131,8 @@ ODL_SHORT_TEXT_EXEMPT_TYPES = {"caption", "list", "list_item"}
 
 
 def _odl_bbox(el: dict) -> dict | None:
-    """Translate ODL's `[l, b, r, t]` array into the Docling-style bbox object
-    that PdfHighlightViewer expects: `{page, l, t, r, b, coord_origin}`."""
+    """Translate ODL's `[l, b, r, t]` array into the bbox object that
+    PdfHighlightViewer expects: `{page, l, t, r, b, coord_origin}`."""
     page = el.get("page number")
     bbox_arr = el.get("bounding box")
     if page is None or not isinstance(bbox_arr, list) or len(bbox_arr) != 4:

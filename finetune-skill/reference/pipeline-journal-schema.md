@@ -33,13 +33,13 @@ The UI can use this to show the sequence of agent decisions alongside jobs, so u
       "step": "step_2_extraction",
       "action": "extract_documents",
       "status": "completed",
-      "summary": "Extracted 68 knowledge parts from FDA FALCPA guide (75 Docling chunks → 67 text + 1 table)",
+      "summary": "Extracted 68 knowledge parts from FDA FALCPA guide (75 extracted elements → 67 text + 1 table)",
       "details": {
         "documents": [
           {
             "name": "fda-allergen-labeling-falcpa",
             "pages": 24,
-            "docling_chunks": 75,
+            "extracted_elements": 75,
             "knowledge_parts": 68,
             "text_parts": 67,
             "table_parts": 1,
@@ -306,7 +306,7 @@ The UI can use this to show the sequence of agent decisions alongside jobs, so u
 | `action` value | When used | Key `details` fields |
 |---------------|-----------|---------------------|
 | `define_objective` | Step 1 — user objective | `output_format`, `source_documents` |
-| `extract_documents` | Step 2 — document extraction | Per-doc: `pages`, `docling_chunks`, `knowledge_parts`, `extraction_issues` |
+| `extract_documents` | Step 2 — document extraction | Per-doc: `pages`, `extracted_elements`, `knowledge_parts`, `extraction_issues` |
 | `build_topics` | Step 3 — topic hierarchy | `relevant_parts`, `excluded_parts`, `topic_count`, `difficulty_breakdown`, `topics` list |
 | `generate_records` | Step 4 — training data | `mode`, `records_per_topic`, `dedup_removed`, `per_topic_counts`, `data_quality_notes` |
 | `write_grader` | Step 5 — grader creation | `template` used + `template_reason`, `scoring` method, `criteria` list |

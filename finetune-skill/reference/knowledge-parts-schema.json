@@ -117,35 +117,35 @@
                 "items": { "type": "integer" },
                 "description": "Page numbers this part spans"
               },
-              "source_chunks": {
+              "bboxes": {
                 "type": "array",
-                "items": { "type": "integer" },
-                "description": "Docling chunk indices where this part's doc_item appeared"
-              },
-              "doc_item": {
-                "type": "string",
-                "pattern": "^#/(texts|tables|pictures)/\\d+$",
-                "description": "JSON pointer back to the DoclingDocument item"
-              },
-              "related": {
-                "type": "array",
-                "items": { "type": "string" },
-                "description": "Part IDs of co-occurring items (from the same Docling chunk)"
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "page": { "type": "integer" },
+                    "l": { "type": "number" },
+                    "t": { "type": "number" },
+                    "r": { "type": "number" },
+                    "b": { "type": "number" },
+                    "coord_origin": { "type": "string", "enum": ["BOTTOMLEFT"] }
+                  }
+                },
+                "description": "Bounding boxes translated from the ODL extraction output for PDF highlighting."
               },
               "semantic_type": {
                 "type": "string",
                 "enum": ["paragraph", "heading", "table", "list", "list_item", "caption", "image", "text_block", "text"],
-                "description": "ODL-derived semantic type of the source element. Present when backend=odl."
+                "description": "ODL-derived semantic type of the source element. Present for both `odl` and `odl_hybrid` extractions."
               },
               "heading_level": {
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 6,
-                "description": "Heading depth (1..6) when this part is a heading or was grouped under one. Present when backend=odl and structure tree was consumed."
+                "description": "Heading depth (1..6) when this part is a heading or was grouped under one. Present when the structure tree was consumed."
               },
               "parent_section": {
                 "type": "string",
-                "description": "Text of the nearest ancestor heading (breadcrumb). Present when backend=odl and a heading ancestor exists."
+                "description": "Text of the nearest ancestor heading (breadcrumb). Present when a heading ancestor exists."
               },
               "tag_source": {
                 "type": "string",

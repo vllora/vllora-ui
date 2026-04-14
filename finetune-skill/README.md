@@ -188,7 +188,7 @@ finetune-skill/
 │
 ├── scripts/                    # Helper scripts (run with `uv run`, PEP 723 inline deps)
 │   ├── finetune.py             # Gateway API wrapper (create workflow, upload, verify)
-│   ├── generate_records.py     # LLM-based training record generation (--parallel, --upload-incremental)
+│   ├── generate_records.py     # LLM-based training record generation (--parallel, --weight-by-trace-priority, few-shot seed examples)
 │   ├── convert_pdf_to_markdown.py  # PDF → Markdown via pymupdf4llm (utility, not primary extraction)
 │   ├── convert_nemo_rows.py    # Convert NeMo DataDesigner output to training.jsonl + metadata sidecar
 │   ├── chat_completion.py      # LLM chat completions (validates JSON output)
@@ -205,7 +205,6 @@ finetune-skill/
 │   ├── data_quality_gate.py    # Pre-eval data quality gate (structural, diversity, GT quality, alignment)
 │   ├── probe_difficulty.py     # Post-eval difficulty probe (signal prediction, grader granularity)
 │   ├── deduplicate_records.py  # Remove near-duplicate prompts (trigram similarity)
-│   ├── extract_tables.py       # Auxiliary table-upgrade utility for legacy workflows (not part of the primary ODL flow)
 │   ├── camelot_extract_tables.py # Table fallback — Camelot stream for complex tables
 │   ├── consolidate_parts.py    # Merge adjacent parts, drop fragments, fix Unicode
 │   ├── validate_extraction.py  # Cross-document extraction quality gate (+ table quality)
@@ -281,7 +280,7 @@ User: "finetune my tax deduction PDF"
 │  Step 1: Create workflow ──────► Bash: finetune.py      │
 │                                                         │
 │  Step 2: Extract documents (PARALLEL)                   │
-│    2a: Submit all PDFs to Docling (non-blocking)        │
+│    2a: Route all PDFs to ODL / ODL Hybrid               │
 │    2b: Spawn 1 agent per document:                      │
 │           │                                             │
 │    ┌──────┼──────┬──────┬──────┬── ... ──┐             │
@@ -292,7 +291,7 @@ User: "finetune my tax deduction PDF"
 │  └──┬─┘ └──┬─┘ └──┬─┘ └──┬─┘ └──┬─┘  └──┬─┘          │
 │     │      │      │      │      │       │              │
 │     ▼      ▼      ▼      ▼      ▼       ▼              │
-│   Each: poll Docling → extract.py → consolidate → upload│
+│   Each: extract → build parts → consolidate → upload    │
 │     │      │      │      │      │       │              │
 │     └──────┴──────┴──────┴──────┴───────┘              │
 │           │                                             │
@@ -423,7 +422,7 @@ User: "finetune my tax deduction PDF"
 
 | Subagent | Step | Model | Instances | Why delegate? | Benefit |
 |----------|------|-------|-----------|--------------|---------|
-| `knowledge-extractor` | 2 | Sonnet | 1 per PDF | Each PDF needs Docling polling + `build_knowledge_parts.py` + `consolidate_parts.py`. Supports `--skip-existing` to reuse prior extractions | N agents process N PDFs in parallel. Total time = slowest PDF, not sum of all |
+| `knowledge-extractor` | 2 | Sonnet | 1 per PDF | Each PDF needs routing, ODL/ODL Hybrid extraction, `build_knowledge_parts.py`, and `consolidate_parts.py`. Supports `--skip-existing` to reuse prior extractions | N agents process N PDFs in parallel. Total time = slowest PDF, not sum of all |
 | `relation-builder` | 3d | Sonnet | 1 | Cross-document matching of relevant parts (from Step 3a) to skill-based topics. Requires OBJECTIVE context. Max 15 relations per leaf topic | Fresh context for index matching, main stays clean |
 | `nemo-data-generator` | 4B | Sonnet | 1 | NeMo recipe design + API orchestration (seed upload, preview, full job, convert). Only spawned when `use_nemo: true` in config | NeMo context (600+ lines of reference docs) stays out of main agent. Falls back to Step 4A if NeMo is down |
 | `training-monitor` | 7e | Sonnet | 1 | Training runs 30-120 min — writes monitoring script with paper-backed thresholds from training-metrics-guide.md | Writes script, launches `nohup`, returns instantly. Distinguishes "no data yet" from actual NaN anomalies |
@@ -551,8 +550,8 @@ All scripts use inline dependency declarations — run with `uv run script.py` (
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/finetune.py` | Gateway API wrapper — 34 subcommands including create-workflow, upload-knowledge/topics/relations/records/grader, verify, status, readiness-check, diagnose-grader (response pattern analysis), create-eval, poll-eval, **estimate-training** (compare models by cost/duration with optional constraints), create-training (pre-flight constraint check), poll-training, cancel-eval, cancel-training, search-knowledge, delete-knowledge, sync-jobs, update-part-relevance, difficulty-probe, data-quality-gate, print-row-outputs, **log-step** (writes to both `execution-log.md` and `pipeline-journal.json`), **log-iteration**, **filter-records**, **auto-journal** capabilities. `cancel-eval` now uses the real cancellation endpoint (`POST /finetune/workflows/{workflow_id}/jobs/{eval_id}/cancel`) rather than patching local eval-job status. |
-| `scripts/generate_records.py` | Default record generation from topics + knowledge — calls LLM per leaf topic with 5 prompt types; supports `--enrich-sources` (recommended), `--weight-by-difficulty`, `--use-rag`, **`--ground-truth-format`** (structured output tasks) |
+| `scripts/finetune.py` | Gateway API wrapper — 35+ subcommands including create-workflow, upload-knowledge/topics/relations/records/grader, verify, status, readiness-check, diagnose-grader, create-eval, poll-eval, **estimate-training**, create-training, poll-training, cancel-eval, cancel-training, search-knowledge, delete-knowledge, sync-jobs, update-part-relevance, difficulty-probe, data-quality-gate, print-row-outputs, **log-step** (writes execution-log.md + pipeline-journal.json with decision card fields: `--observation`, `--analysis`, `--decision`, `--evidence`), **log-iteration**, **filter-records**, **update-analysis** (writes per-section shared analysis to `analysis.json` — used by both agent and UI), **auto-journal**. `upload-topics` auto-flattens nested `children` hierarchies. |
+| `scripts/generate_records.py` | Default record generation from topics + knowledge — calls LLM per leaf topic with 5 prompt types; supports `--enrich-sources` (recommended), `--weight-by-difficulty`, `--use-rag`, **`--ground-truth-format`** (structured output tasks), **`--weight-by-trace-priority`** + **`--trace-priority-file`** (trace-informed allocation), **`--trace-prompts-file`** + **`--seed-query-ratio`** (real user query injection, default 20%) |
 | `scripts/convert_nemo_rows.py` | Convert NeMo DataDesigner output rows to vLLora training.jsonl; prefers exact `question_chunks_*` retrieval metadata for `source_parts`, can export `relations.json` from `retrieved_chunks_*`, and falls back to gateway re-query only for older NeMo datasets |
 | `scripts/analyze_training.py` | Post-training analysis: reward trend, KL health, clipping, loss stability, grad norm, per-topic learning. Uses `provider_job_id` for epoch eval fetch (matching UI behavior). Per-record analysis: top 5 regressions/improvements with input, model output, grader reason. Auto-detects 3 epoch patterns: `epoch_collapse` (score drops >8%), `over_prediction` (R=1.00 + low precision), `output_collapse` (identical outputs). Zero-std alerts conditional on reward being flat (30-99% normal per arXiv:2509.21880) |
 | `scripts/print_metrics_table.py` | Print training metrics table (per-epoch or per-step) — human-readable format |
@@ -565,10 +564,12 @@ All scripts use inline dependency declarations — run with `uv run script.py` (
 | `scripts/extract_router.py` | Single extraction entry point — auto-routes digital PDFs to ODL and scanned PDFs to ODL Hybrid via `is_digital_pdf()`; can auto-manage `opendataloader-pdf-hybrid`, supports `--batch`, `--skip-existing`, `--force odl|odl_hybrid` |
 | `scripts/odl_extract.py` | OpenDataLoader PDF wrapper — local Java-based extractor (digital PDFs) + server-backed hybrid mode for scanned PDFs. Supports `hybrid_url`, `hybrid_mode`, backend autostart, tagged-PDF structure tree support (`--no-struct-tree` to force XY-Cut++), and batch mode via single JVM call. |
 | `scripts/otel_extract.py` | **OTel GenAI trace ingestion** — parallel to document extraction. Reads `gen_ai.input.messages` / `gen_ai.output.messages` / `gen_ai.tool.*` from a JSON span list or OTLP-JSON document and writes the same `knowledge_parts.json` format the rest of the pipeline consumes. Use when cloning behavior of an existing LLM app. See [reference/otel-trace-ingestion.md](reference/otel-trace-ingestion.md). |
+| `scripts/trace_analyze.py` | **Trace-informed curriculum** — analyzes OTel traces → 4 artifacts: `trace-analysis/priority.json` (frequency × failure per topic), `topics.json` (coverage gaps), `prompts.json` (system prompt + seed queries), `grader-hints.json` (failure dimensions + prompt rules). Auto-triggered in combined mode (PDF + traces). |
+| `scripts/grader_from_traces.py` | Auto-generate grader draft from `trace-analysis/grader-hints.json` — checklist rubric with trace-failure dimensions + prompt-rule criteria. Produces `quality-checker/grader-draft.js` for user review. |
+| `scripts/upload_trace_analysis.py` | Upload trace analysis to gateway — trace bundle (subsampled, 20 traces default), knowledge source registration, 4 analysis artifacts to `/trace-analysis` endpoint. |
 | `scripts/run_evaluation.py` | Create eval job, poll until complete (~30 min timeout) — legacy, prefer `finetune.py create-eval` |
 | `scripts/start_training.py` | Start training job, poll until complete — legacy, prefer `finetune.py create-training` |
 | `scripts/consolidate_parts.py` | Merge adjacent text parts, drop short fragments, fix Unicode, regenerate parts-index |
-| `scripts/extract_tables.py` | Auxiliary table-upgrade utility for legacy data; not part of the primary ODL pipeline |
 | `scripts/camelot_extract_tables.py` | **Table extraction fallback** — Camelot stream mode for complex tables that ODL may still garble. Multi-page stitching, 99%+ accuracy on regulatory tables. |
 | `scripts/validate_extraction.py` | Cross-document extraction quality gate (parts/page, title diversity, avg length, **table column consistency**, **pipe-table page break artifact detection** — flags non-table lines + repeated headers inside pipe-delimited tables, FAIL on large tables >10K chars with artifacts) |
 | `scripts/derive_ground_truth.py` | Stage 2 GT derivation for two-stage multi-label generation (topic-agnostic GT extraction) |
@@ -680,7 +681,7 @@ Tested with real chess PDF and live backend at localhost:9090.
 | Project | PDFs | Status | Notes |
 |---------|------|--------|-------|
 | `contract-translator` | 9 legal PDFs | Eval 84%, training KL explosion | 4 training attempts, persistent KL >1M — needs LR reduction |
-| `tax-deduction-analyzer` | 6 IRS publications | Extraction in progress | First multi-doc Docling test |
+| `tax-deduction-analyzer` | 6 IRS publications | Extraction in progress | First multi-doc ODL Hybrid test |
 | `chess-tactics` (original) | 1 chess PDF | v9 complete | Original test — eval + training working |
 | `financial-doc-analyzer` | TBD | Not started | Planned: 10-K extraction test |
 | `medical-icd-coder` | TBD | Not started | Planned: structured output test |
@@ -690,10 +691,10 @@ Tested with real chess PDF and live backend at localhost:9090.
 
 | Step | Status | Notes |
 |------|--------|-------|
-| PDF extraction (Docling) | ✅ Working | Parallel per-document via knowledge-extractor subagents |
-| PDF extraction (pdftotext fallback) | ✅ Working | Automatic fallback when Docling unavailable |
+| PDF extraction (ODL / ODL Hybrid) | ✅ Working | Parallel per-document via knowledge-extractor subagents |
+| PDF extraction (pdftotext fallback) | ✅ Working | Automatic fallback when ODL tooling is unavailable |
 | Topic hierarchy + relations | ✅ Working | relation-builder subagent, now capped at 15 per topic |
-| Data generation (100-200+ records) | ✅ Working | generate_records.py with --upload-incremental |
+| Data generation (100-200+ records) | ✅ Working | generate_records.py (upload separately with `upload-records --force`) |
 | Grader writing + dry-run | ✅ Working | 4 templates: general, extraction, compliance, readability |
 | Evaluation creation + polling | ✅ Working | finetune.py create-eval + poll-eval, avg 0.65-0.84 across tests |
 | Readiness gate | ✅ Working | finetune.py readiness-check, 4 hard + 8 soft checks |

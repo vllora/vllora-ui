@@ -112,7 +112,7 @@ Both the ODL (digital) and ODL Hybrid (scanned) paths emit the same `kids[]` tre
 
 Key fields (note the spaces in field names):
 - **`type`** — `"paragraph" | "heading" | "image" | "table" | "list_item" | "caption" | "header" | "footer"`
-- **`bounding box`** — `[l, b, r, t]` in PDF points, bottom-left origin. Translated to `{page, l, t, r, b, coord_origin: "BOTTOMLEFT"}` when written into `extraction_metadata.bboxes` so it matches the Docling format consumed by `PdfHighlightViewer`.
+- **`bounding box`** — `[l, b, r, t]` in PDF points, bottom-left origin. Translated to `{page, l, t, r, b, coord_origin: "BOTTOMLEFT"}` when written into `extraction_metadata.bboxes` so it matches the highlight-viewer format consumed by `PdfHighlightViewer`.
 - **`page number`** — integer page, 1-indexed
 - **`heading level`** — 1..6 when present (indicates ODL consumed the tagged-PDF structure tree; absent elements fell back to XY-Cut++ layout)
 - **`content`** — text (present on text-ish types)

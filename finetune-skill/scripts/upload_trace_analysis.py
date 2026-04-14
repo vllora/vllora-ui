@@ -197,10 +197,10 @@ def main() -> None:
     artifacts: dict = {}
 
     for field, filename in [
-        ("priority", "trace_priority.json"),
-        ("topics", "trace_topics.json"),
-        ("prompts", "trace_prompts.json"),
-        ("graderHints", "trace_grader_hints.json"),
+        ("priority", "trace-analysis/priority.json"),
+        ("topics", "trace-analysis/topics.json"),
+        ("prompts", "trace-analysis/prompts.json"),
+        ("graderHints", "trace-analysis/grader-hints.json"),
     ]:
         artifact_path = project_dir / filename
         if artifact_path.exists():
