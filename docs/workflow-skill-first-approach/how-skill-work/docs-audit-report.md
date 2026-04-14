@@ -1,5 +1,7 @@
 # Documentation Audit Report
 
+> **Historical note (as of 2026-04):** The primary PDF extractor is now OpenDataLoader PDF (`odl_extract.py`), routed via `extract_router.py`. Docling is retained only as the OCR fallback for scanned PDFs. This audit predates that migration — any "Docling" references below describe the pre-migration state. See `pipeline-overview.md` / `extraction-deep-dive.md` for current behavior.
+
 **Date**: 2026-03-19
 **Source of truth**: `finetune-skill/SKILL.md` + `finetune-skill/scripts/` + `finetune-skill/templates/`
 **Docs audited**: `docs/workflow-skill-first-approach/how-skill-work/` + `skill-testing-guide.md`

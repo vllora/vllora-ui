@@ -74,7 +74,7 @@ your-project/
         └── finetune-skill/            # The skill itself
             ├── SKILL.md
             ├── reference/             # 16 reference docs + 1 JSON schema (api-reference, analysis-strategy, topic-hierarchy, nemo-guide, etc.)
-            ├── scripts/               # 25 Python helpers (finetune.py has 34 subcommands)
+            ├── scripts/               # 27 Python helpers (finetune.py has 34 subcommands); new: extract_router.py + odl_extract.py
             └── templates/             # Starter files
 ```
 
@@ -198,7 +198,9 @@ finetune-skill/
 │   ├── start_training.py       # Start training, poll until complete
 │   ├── analyze_training.py     # Fetch + analyze training metrics, per-epoch evals, alerts
 │   ├── print_metrics_table.py  # Print training metrics table (per-epoch or per-step)
-│   ├── build_knowledge_parts.py # Docling→knowledge_parts.json (used in Docling fallback path)
+│   ├── extract_router.py       # Auto-routes PDFs: digital → ODL, scanned → Docling (single entry point)
+│   ├── odl_extract.py          # OpenDataLoader PDF extraction — local, deterministic, no Docker (digital PDFs)
+│   ├── build_knowledge_parts.py # ODL-or-Docling → knowledge_parts.json (sniffs input shape, heading-aware)
 │   ├── checkpoint.py           # Pipeline checkpointing (save/check/reset step progress)
 │   ├── data_quality_gate.py    # Pre-eval data quality gate (structural, diversity, GT quality, alignment)
 │   ├── probe_difficulty.py     # Post-eval difficulty probe (signal prediction, grader granularity)
@@ -207,7 +209,7 @@ finetune-skill/
 │   ├── camelot_extract_tables.py # Table fallback — Camelot stream for complex tables
 │   ├── consolidate_parts.py    # Merge adjacent parts, drop fragments, fix Unicode
 │   ├── validate_extraction.py  # Cross-document extraction quality gate (+ table quality)
-│   ├── docling_extract.py      # Docling async extraction — fallback for scanned/complex PDFs
+│   ├── docling_extract.py      # Docling Serve async extraction — OCR fallback for scanned PDFs (called by extract_router)
 │   ├── derive_ground_truth.py  # Stage 2 GT derivation for two-stage multi-label generation (topic-agnostic GT extraction)
 │   ├── pipeline_journal.py     # Pipeline journal reader/writer (feeds log-step / log-iteration)
 │   └── pdftotext_extract.py    # Last-resort extraction via pdftotext (no Python deps)
@@ -560,7 +562,9 @@ All scripts use inline dependency declarations — run with `uv run script.py` (
 | `scripts/validate_dataset.py` | Validate JSONL: format, fields, RFT compliance, cross-reference topics/parts; `--nemo` flag checks for metadata leakage |
 | `scripts/checkpoint.py` | Pipeline checkpoint — save/check/reset step progress for crash recovery |
 | `scripts/deduplicate_records.py` | Remove near-duplicate prompts via trigram similarity (mandatory after generation, threshold 0.85) |
-| `scripts/build_knowledge_parts.py` | Generic Docling→knowledge_parts.json converter (no LLM needed) |
+| `scripts/build_knowledge_parts.py` | Generic extraction→knowledge_parts.json converter (sniffs ODL `kids[]` vs Docling `chunks[]`, heading-aware, adds `semantic_type` / `heading_level` / `parent_section` / `tag_source` metadata; ODL tables are preserved as structured table parts, lists stay markdown text, captions stay linked text parts; no LLM needed) |
+| `scripts/extract_router.py` | Single extraction entry point — auto-routes digital PDFs to ODL and scanned PDFs to Docling via `is_digital_pdf()`; supports `--batch`, `--skip-existing`, `--force odl|docling` |
+| `scripts/odl_extract.py` | OpenDataLoader PDF wrapper — local Java-based extractor, deterministic output, tagged-PDF structure tree support (`--no-struct-tree` to force XY-Cut++), batch mode via single JVM call |
 | `scripts/otel_extract.py` | **OTel GenAI trace ingestion** — parallel to document extraction. Reads `gen_ai.input.messages` / `gen_ai.output.messages` / `gen_ai.tool.*` from a JSON span list or OTLP-JSON document and writes the same `knowledge_parts.json` format the rest of the pipeline consumes. Use when cloning behavior of an existing LLM app. See [reference/otel-trace-ingestion.md](reference/otel-trace-ingestion.md). |
 | `scripts/run_evaluation.py` | Create eval job, poll until complete (~30 min timeout) — legacy, prefer `finetune.py create-eval` |
 | `scripts/start_training.py` | Start training job, poll until complete — legacy, prefer `finetune.py create-training` |
@@ -568,7 +572,7 @@ All scripts use inline dependency declarations — run with `uv run script.py` (
 | `scripts/extract_tables.py` | Upgrade text parts to table parts using Docling table data |
 | `scripts/camelot_extract_tables.py` | **Table extraction fallback** — Camelot stream mode for complex tables that Docling garbles. Multi-page stitching, 99%+ accuracy on regulatory tables. |
 | `scripts/validate_extraction.py` | Cross-document extraction quality gate (parts/page, title diversity, avg length, **table column consistency**, **pipe-table page break artifact detection** — flags non-table lines + repeated headers inside pipe-delimited tables, FAIL on large tables >10K chars with artifacts) |
-| `scripts/docling_extract.py` | Submit PDF(s) to Docling Serve async API, poll until done, supports batch + submit-only mode |
+| `scripts/docling_extract.py` | Submit PDF(s) to Docling Serve async API, poll until done, supports batch + submit-only mode — invoked by `extract_router.py` for scanned PDFs; exposes `is_digital_pdf()` used for routing |
 | `scripts/derive_ground_truth.py` | Stage 2 GT derivation for two-stage multi-label generation (topic-agnostic GT extraction) |
 | `finetune.py harden-records` (subcommand) | Post-eval: generates harder variants of trivial records (score > 0.85) via LLM rewrite. Adds variants alongside originals. Domain-agnostic — reads record + score + grader reason, rewrites input to be harder. Research: arXiv:2505.17063 (+29.2% from generate-eval-rewrite). Part of signal density fix: eval → detect trivials → harden → re-upload → re-eval |
 | `scripts/probe_difficulty.py` | Post-eval difficulty probe — signal prediction and grader granularity analysis (also exposed as `finetune.py difficulty-probe`) |

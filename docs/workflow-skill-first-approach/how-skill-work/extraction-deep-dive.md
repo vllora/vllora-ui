@@ -9,85 +9,139 @@ The skill generates training data **grounded in source documents**. Without extr
 ## The Extraction Flow
 
 ```
-                     Docker available?
-                     ┌─── YES ──────────────────┐
-                     │                           │
-    PDF documents    │   ┌──────────────┐        │
-    ─────────────────┤   │ Docling Serve │        │
-                     │   │  async API    │        │
-                     │   └──────┬───────┘        │
-                     │          │                 │
-                     │   docling_extract.py       │
-                     │   (per document,            │
-                     │    process individually)    │
-                     │          │                 │
-                     │   docling-result.json       │
-                     │   (per document)            │
-                     │          │                 │
-                     │          ▼                 │
-                     │   Agent writes extraction  │
-                     │   script per document      │
-                     │          │                 │
-                     │   consolidate_parts.py     │
-                     │   content quality check    │
-                     │          │                 │
-                     └──── NO ──┤                 │
-                     │          │                 │
-                     │   pdftotext_extract.py     │
-                     │   (per document, or        │
-                     │    --batch if similar size) │
-                     │   (text only, no tables/   │
-                     │    images)                 │
-                     │          │                 │
-                     └──────────┤                 │
-                                ▼                 │
-                    knowledge_parts.json          │
-                    + parts-index.json            │
-                    (per document)                │
-                                │                 │
-                    validate_extraction.py         │
-                                │
-                    all-parts-index.json  (merged)
-                                │
-                    ┌───────────┼───────────┐
-                    ▼           ▼           ▼
-              Step 3:       Step 4:      Upload
-              Topic         Data         (incremental,
-              Design        Generation    after Step 2)
+                     PDF documents
+                          │
+                          ▼
+                   extract_router.py
+                   (is_digital_pdf ?)
+                          │
+                ┌─────────┴─────────┐
+                ▼                   ▼
+           (digital)            (scanned)
+                │                   │
+                ▼                   ▼
+        odl_extract.py      docling_extract.py
+        (local, Java-based, (Docker, async
+         deterministic)      submit/poll)
+                │                   │
+                └─────────┬─────────┘
+                          ▼
+              extraction-result.json
+              (ODL kids[] OR Docling chunks[])
+              extraction-status.json
+              (backend, used_struct_tree, pages)
+                          │
+                          ▼
+              build_knowledge_parts.py
+              (sniffs input shape, heading-aware
+               splitting, emits semantic_type /
+               heading_level / parent_section /
+               tag_source metadata)
+                          │
+                          ▼
+              consolidate_parts.py
+              content quality check
+                          │
+                          ▼
+              knowledge_parts.json
+              + parts-index.json
+              (per document)
+                          │
+                          ▼
+              validate_extraction.py
+                          │
+              all-parts-index.json  (merged)
+                          │
+                  ┌───────┼───────┐
+                  ▼       ▼       ▼
+              Step 3:  Step 4:  Upload
+              Topic    Data     (incremental,
+              Design   Generation after Step 2)
+
+(fallback: pdftotext_extract.py, when neither ODL nor Docling available —
+ writes knowledge_parts.json directly, loses tables/images/layout)
 ```
 
-> **Note on batch mode**: The default flow processes each PDF end-to-end individually (extract, process, upload) before moving to the next. This avoids blocking — a small PDF can be fully processed while Docling works on a larger one. Use `--batch` only if all documents are similar size.
+> **Note on batch mode**: `extract_router.py --batch` groups PDFs by backend and issues one ODL JVM call for all digital PDFs plus parallel Docling submissions for scanned ones. This is usually the fastest path. For mixed corpora where a single large scanned PDF would block the batch, you can process individually.
 
-## What Docling Does
+## What the router does
 
-Docling Serve is a local document processing service that:
-- **Auto-detects** digital vs scanned PDFs — skips OCR for digital PDFs (30-50% faster)
-- Runs OCR on scanned pages (when needed)
-- Detects and extracts table structure (rows, columns, headers)
-- Extracts embedded images
-- Splits text into semantic chunks with heading hierarchy
-- Produces a structured JSON response combining chunks + full document tree
+`extract_router.py` is the single entry point. It auto-routes each PDF by calling `is_digital_pdf()` (a cheap pdftotext sample) and dispatches:
 
-### OCR Auto-Detection
+- **Digital PDFs → OpenDataLoader (ODL)** — local Java-based extraction via `odl_extract.py`. Byte-identical reruns, no Docker, no async polling. Consumes the tagged-PDF structure tree when available (falls back to XY-Cut++ layout otherwise).
+- **Scanned PDFs → Docling Serve** — OCR-capable async service via `docling_extract.py`. Retained as the fallback path.
 
-`docling_extract.py` automatically detects whether a PDF is digital (has selectable text) or scanned (needs OCR). It uses `pdftotext` to sample a few content pages — if 50+ words are found, the PDF is digital and OCR is skipped. This gives a 30-50% speed improvement for digital PDFs without requiring the user to know their PDF type.
+The router writes `extraction-status.json` alongside every `extraction-result.json` recording which backend ran, whether the structure tree was consumed, page/element counts, and duration. Downstream scripts (notably `build_knowledge_parts.py`) sniff the result shape directly (`kids[]` → ODL, `chunks[]` → Docling) rather than reading the status file — it's there for humans and debugging.
 
-### Chunking Strategy
+### What ODL does (primary, digital-PDF path)
 
-The `chunking_max_tokens` parameter (default: 8192) is a **safety ceiling**, not a target size. Docling's HybridChunker splits on document structure boundaries (headings, paragraphs) first. The max_tokens only prevents runaway chunks for very long sections. The real chunking happens in the custom extraction script (`extract.py`), which groups content by semantic units based on the document's actual structure.
+OpenDataLoader PDF is a local Java-based extractor:
+- **Tagged-PDF aware** — consumes the PDF structure tree when `use_struct_tree=True` for semantic headings/lists/tables; falls back to XY-Cut++ visual layout analysis otherwise
+- **Deterministic** — same input → byte-identical output across runs (the key win over Docling's async pipeline)
+- **Table detection** — `table_method="cluster"` gives better accuracy than the default
+- **No OCR** — scanned PDFs must go to Docling instead (the router handles this automatically)
+- **No chunking** — ODL emits a flat `kids[]` tree in reading order; `build_knowledge_parts.py` owns the heading-aware chunking
 
-### Docling API Endpoints (internal to `docling_extract.py`)
+### What Docling does (OCR fallback, scanned-PDF path)
 
-The agent uses `scripts/docling_extract.py` — it must NOT call these endpoints directly via curl. The script handles the full async lifecycle (submit → poll → fetch → auto-detect OCR). Internally it calls:
+Docling Serve remains the fallback when `is_digital_pdf()` returns false:
+- **OCR on scanned pages**
+- **Auto-detects** digital vs scanned (also used by `is_digital_pdf()` internally)
+- **Detects and extracts table structure** (rows, columns, headers)
+- **Extracts embedded images**
+- **Produces `chunks[] + documents[0].content.json_content`** — the response schema documented below
+
+#### Docling API Endpoints (internal to `docling_extract.py`)
+
+The router calls `docling_extract.py` — agents must NOT call these endpoints directly via curl. The script handles the full async lifecycle (submit → poll → fetch → auto-detect OCR). Internally it calls:
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/health` | GET | Check if Docling is running (agent checks this before calling the script) |
+| `/health` | GET | Check if Docling is running (router checks this only when a scanned PDF is routed) |
 | `/v1/chunk/hybrid/file/async` | POST | Submit a document for processing (returns `task_id`). Uses `chunking_max_tokens=8192` as safety ceiling |
 | `/v1/status/poll/{task_id}` | GET | Check if processing is complete |
 | `/v1/result/{task_id}` | GET | Fetch the processed result |
 
-### Docling Response Structure
+### ODL Response Structure (primary path)
+
+For digital PDFs, `extraction-result.json` is a flat `kids[]` tree in reading order:
+
+```json
+{
+  "file name": "document.pdf",
+  "number of pages": 12,
+  "author": null,
+  "title": null,
+  "kids": [
+    {
+      "type": "heading",
+      "id": 1,
+      "page number": 1,
+      "bounding box": [72.0, 720.0, 523.0, 742.0],
+      "font": "Helvetica-Bold",
+      "font size": 14,
+      "content": "1 Introduction",
+      "heading level": 1
+    },
+    {
+      "type": "paragraph",
+      "id": 2,
+      "page number": 1,
+      "bounding box": [72.0, 600.0, 523.0, 715.0],
+      "content": "The dominant sequence transduction models are based on..."
+    }
+  ]
+}
+```
+
+Key points:
+- **Flat tree** — `kids[]` is already in XY-Cut++ reading order; no tree walk needed
+- **`type`** — `"paragraph" | "heading" | "image" | "table" | "list_item" | "caption" | "header" | "footer"` (headers/footers are filtered as noise)
+- **`bounding box`** — `[l, b, r, t]` in PDF points, bottom-left origin. `build_knowledge_parts.py` translates this into the `{page, l, t, r, b, coord_origin: "BOTTOMLEFT"}` shape consumed by `PdfHighlightViewer`.
+- **`heading level`** — 1..6 when present. Presence indicates the tagged-PDF structure tree was consumed (`tag_source: "structure_tree"`); absence means XY-Cut++ layout fallback (`tag_source: "xycut_fallback"`).
+- **Field names contain spaces** (e.g. `"page number"`, `"bounding box"`) — not a typo
+
+### Docling Response Structure (fallback path)
 
 The response from `/v1/result/{task_id}` is a large JSON object with two main sections:
 
@@ -131,27 +185,46 @@ A 100-page PDF can produce a 30-50MB Docling result because:
 
 This is why the agent can struggle with Step 2c — reading a 36MB JSON into its context window is expensive.
 
-## From Docling Result to Knowledge Parts
+## From Extraction Result to Knowledge Parts
 
-The extraction uses `build_knowledge_parts.py` — a **deterministic script** that transforms raw Docling output into structured, typed parts. The same input always produces the same output, eliminating the non-determinism that caused flaky extraction across runs.
+The extraction uses `build_knowledge_parts.py` — a **deterministic script** that sniffs the input shape (ODL `kids[]` vs Docling `chunks[]`) and transforms raw extraction output into structured, typed parts with provenance metadata. The same input always produces the same output, eliminating the non-determinism that caused flaky extraction across runs.
 
-> **History**: Previously, subagents wrote custom extract.py scripts per document, causing different output on every run. As of 2026-03-31, the default is `build_knowledge_parts.py` for all documents. Custom scripts are only written when the user provides explicit CUSTOM_INSTRUCTIONS or the deterministic script produces 0 parts.
+> **History**:
+> - **2026-03-31** — Previously, subagents wrote custom extract.py scripts per document, causing different output on every run. Default became `build_knowledge_parts.py` for all documents.
+> - **2026-04** — Docling HybridChunker replaced by OpenDataLoader (ODL) as the primary extractor. `build_knowledge_parts.py` now owns all chunking (heading-aware grouping). Docling kept as OCR fallback. Custom scripts are only written when the user provides explicit CUSTOM_INSTRUCTIONS or the deterministic script produces 0 parts.
 
 ### What `build_knowledge_parts.py` Does
 
 ```python
 # Deterministic pipeline — same input always produces same output
 
-1. Load docling-result.json (chunks[])
-2. Filter noise: TOC, copyright, blank pages, chunks <20 chars
-3. Classify each chunk by type:
-   - text: default (prose, explanations)
-   - table: >3 pipe lines or "table"/"schedule" in heading
-   - image: has captions
-4. Split oversized chunks (>3000 chars) at paragraph/sentence boundaries
-5. Merge undersized chunks (<100 chars) with neighbors
-6. Assign IDs: {doc-slug}-{heading-slug}[-partN]
-7. Write knowledge_parts.json + parts-index.json
+1. Load extraction-result.json
+2. Sniff input shape:
+   - "kids" in data and "chunks" not in data → ODL branch
+   - "chunks" in data                        → Docling branch
+
+ODL branch (primary):
+  3a. Iterate kids[] in order; filter header/footer noise
+  3b. Maintain heading stack; on each heading, close the current section
+      and open a new one (breadcrumb goes into parent_section)
+  3c. Within a section, group paragraphs/list_items/tables into parts
+      respecting MIN/TARGET/MAX_PART_CHARS budgets
+  3d. Tables emit as their own parts regardless of size; images as image parts
+  3e. Translate bboxes: [l, b, r, t] + page_number →
+      {page, l, t, r, b, coord_origin: "BOTTOMLEFT"}
+  3f. Attach metadata: semantic_type, heading_level, parent_section,
+      tag_source ("structure_tree" | "xycut_fallback")
+
+Docling branch (fallback):
+  3a. Filter noise (TOC, copyright, blank pages, chunks <20 chars)
+  3b. Classify chunks by type (text / table via pipe lines / image via captions)
+  3c. Split oversized chunks (>3000 chars) at paragraph/sentence boundaries
+  3d. Merge undersized chunks (<100 chars) with neighbors
+  3e. Resolve doc_item pointers for bboxes
+  3f. Attach metadata: tag_source ("docling")
+
+4. Assign IDs: {doc-slug}-{heading-slug}[-partN]
+5. Write knowledge_parts.json + parts-index.json
 ```
 
 ### When Custom Extraction Is Needed
@@ -266,7 +339,7 @@ uv run scripts/finetune.py upload-knowledge \
   --name "chess-tactics.pdf" \
   --force \
   --description "Source document: chess-tactics.pdf" \
-  --metadata '{"extraction_method":"docling_hybrid"}'
+  --metadata '{"extraction_method":"odl","tag_source":"structure_tree"}'
 ```
 
 The `--force` flag uses PUT upsert — it atomically replaces any existing source with the same name, making re-uploads safe after re-extraction. The `--description` and `--metadata` flags are optional but recommended for traceability.
@@ -288,9 +361,9 @@ In the UI:
 
 ## Debugging Extraction Issues
 
-### Docling not available (Docker not installed)
+### Neither ODL nor Docling available
 
-Use the `pdftotext_extract.py` fallback — same CLI pattern as `docling_extract.py` but zero dependencies:
+If Java 11+ isn't installed (blocks ODL) **and** Docker isn't available (blocks Docling), fall back to `pdftotext_extract.py` — zero dependencies, but loses tables/images/layout:
 
 Single document (recommended — process each individually):
 ```bash
