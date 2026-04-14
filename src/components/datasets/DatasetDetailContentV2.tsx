@@ -130,8 +130,10 @@ import {
   getSkillFileFromPath,
   getKnowledgeSourceIdFromPath,
   getKnowledgePartIdFromPath,
+  getTraceAnalysisTab,
   type ContentSection,
 } from "./TabContentRouter";
+import { TraceAnalysisView } from "./trace-analysis/TraceAnalysisView";
 import { InsightsPane } from "./InsightsPane";
 import { SkillFileViewer } from "./SkillFileViewer";
 import { KnowledgeSourceViewer } from "./KnowledgeSourceViewer";
@@ -1079,6 +1081,11 @@ export function DatasetDetailContentV2() {
           {contentSection === "skill" && (
             <div className="flex-1 flex flex-col overflow-hidden">
               <SkillFileViewer filePath={getSkillFileFromPath(activeTabPath) ?? "SKILL.md"} />
+            </div>
+          )}
+          {contentSection === "trace-analysis" && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <TraceAnalysisView initialTab={getTraceAnalysisTab(activeTabPath)} />
             </div>
           )}
         </div>

@@ -343,7 +343,7 @@ function AgentPrismTraceView({ spans }: { readonly spans: readonly OtelSemconvSp
   }, [spans]);
 
   return (
-    <div className="agent-prism-wrapper">
+    <div className="agent-prism-wrapper h-full">
       <TraceViewer data={data} />
     </div>
   );
@@ -380,7 +380,7 @@ export function OtelTraceSourceViewer({ source, semconvSpans }: OtelTraceSourceV
         </div>
       </header>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className={hasSpans ? "flex-1 min-h-0 overflow-hidden" : "flex-1 overflow-auto p-6"}>
         {hasSpans ? (
           <AgentPrismTraceView spans={semconvSpans} />
         ) : trace ? (

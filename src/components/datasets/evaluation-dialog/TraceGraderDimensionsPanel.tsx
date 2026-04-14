@@ -53,8 +53,8 @@ export function TraceGraderDimensionsPanel({
             From Trace Failures ({traceDimensions.length})
           </div>
           <div className="space-y-1.5">
-            {traceDimensions.map((dim) => (
-              <DimensionRow key={dim.name} dimension={dim} />
+            {traceDimensions.map((dim, i) => (
+              <DimensionRow key={`trace-${i}-${dim.name}`} dimension={dim} />
             ))}
           </div>
         </div>
@@ -68,8 +68,8 @@ export function TraceGraderDimensionsPanel({
             From Prompt Rules ({ruleDimensions.length})
           </div>
           <div className="space-y-1.5">
-            {ruleDimensions.slice(0, 10).map((dim) => (
-              <DimensionRow key={dim.name} dimension={dim} />
+            {ruleDimensions.slice(0, 10).map((dim, i) => (
+              <DimensionRow key={`rule-${i}-${dim.name}`} dimension={dim} />
             ))}
             {ruleDimensions.length > 10 && (
               <p className="text-xs text-muted-foreground pl-3">

@@ -26,6 +26,7 @@ export type ContentSection =
   | "logs"
   | "insights"
   | "skill"
+  | "trace-analysis"
   | null;
 
 /**
@@ -65,6 +66,8 @@ export function mapTabPathToSection(path: string | null): ContentSection {
   if (path.startsWith("knowledge/")) return "knowledge";
   if (path === "skill") return "skill";
   if (path.startsWith("skill/")) return "skill";
+  if (path === "trace-analysis") return "trace-analysis";
+  if (path.startsWith("trace-analysis/")) return "trace-analysis";
 
   return null;
 }
@@ -79,6 +82,16 @@ export function getInsightTypeFromPath(path: string | null): "coverage" | "balan
   if (path === "insights/balance.md") return "balance";
   if (path === "insights/quality-scores.md") return "quality-scores";
   return null;
+}
+
+/**
+ * Extract trace analysis tab from an explorer path like `trace-analysis/priority`.
+ * Returns the tab name or "priority" as default.
+ */
+export function getTraceAnalysisTab(path: string | null): "priority" | "grader-hints" | "seed-queries" {
+  if (path === "trace-analysis/grader-hints") return "grader-hints";
+  if (path === "trace-analysis/seed-queries") return "seed-queries";
+  return "priority";
 }
 
 /**

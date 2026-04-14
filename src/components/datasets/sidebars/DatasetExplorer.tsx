@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
+import { TraceAnalysisConsumer } from "@/contexts/TraceAnalysisContext";
 import { EvalJobsConsumer } from "@/contexts/EvalJobsContext";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { PipelineJournalConsumer } from "@/contexts/PipelineJournalContext";
@@ -78,6 +79,7 @@ interface DatasetExplorerProps {
 export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
   const { dataset, records, isGeneratingTraces, totalRecords } = DatasetDetailConsumer();
   const { sources } = KnowledgeSourcesConsumer();
+  const { hasTraces } = TraceAnalysisConsumer();
   const { jobs: dryRunJobs, startDryRun } = EvalJobsConsumer();
   const { filteredJobs: finetuneJobs, loadJobs: loadFinetuneJobs } = FinetuneJobsConsumer();
   const { entries: journalEntries, hasJournal } = PipelineJournalConsumer();
@@ -321,6 +323,33 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       )}
 
       {sources.length > 0 && <SidebarDivider />}
+
+      {/* ── Trace Analysis (only when trace data exists) ── */}
+      {hasTraces && (
+        <>
+          <SidebarSection title="Trace Analysis" icon={<BarChart3 className="w-3 h-3" />}>
+            <SidebarItem
+              icon={<BarChart3 className="w-3.5 h-3.5" />}
+              label="Priority & Coverage"
+              isActive={selectedNodeId === "trace-analysis/priority"}
+              onClick={() => handleSelect("trace-analysis/priority")}
+            />
+            <SidebarItem
+              icon={<Code2 className="w-3.5 h-3.5" />}
+              label="Grader Hints"
+              isActive={selectedNodeId === "trace-analysis/grader-hints"}
+              onClick={() => handleSelect("trace-analysis/grader-hints")}
+            />
+            <SidebarItem
+              icon={<FileText className="w-3.5 h-3.5" />}
+              label="Seed Queries"
+              isActive={selectedNodeId === "trace-analysis/seed-queries"}
+              onClick={() => handleSelect("trace-analysis/seed-queries")}
+            />
+          </SidebarSection>
+          <SidebarDivider />
+        </>
+      )}
 
       {/* ── Training Data ── */}
       <SidebarSection

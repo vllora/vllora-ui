@@ -1130,7 +1130,20 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force \
   --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl
 ```
 
-**Before re-running eval — verify your fix** addresses the diagnosed root cause.
+**Before re-running eval — cancel any running evals first** (they use the old grader/records):
+```bash
+# Cancel any running evals before re-evaluating with the fixed grader/records
+for eval_file in finetune-project/evaluations/eval-*.json; do
+  EVAL_ID=$(python3 -c "import json; print(json.load(open('$eval_file')).get('id',''))" 2>/dev/null)
+  EVAL_STATUS=$(python3 -c "import json; print(json.load(open('$eval_file')).get('status',''))" 2>/dev/null)
+  if [ "$EVAL_STATUS" = "running" ] && [ -n "$EVAL_ID" ]; then
+    uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py cancel-eval \
+      --workflow-id $WORKFLOW_ID --eval-id $EVAL_ID
+  fi
+done
+```
+
+**Then verify your fix** addresses the diagnosed root cause.
 
 **Return to Step 7b.**
 

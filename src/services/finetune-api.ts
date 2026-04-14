@@ -1004,7 +1004,58 @@ export async function getTraceAnalysis(
   if (response.status === 404) {
     return null;
   }
-  return handleApiResponse<TraceAnalysisResult>(response);
+  // Gateway returns snake_case fields; map to camelCase for UI types
+  const raw = await handleApiResponse<Record<string, unknown>>(response);
+  const rawTopics = (raw.topics ?? {}) as Record<string, unknown>;
+  const rawPrompts = (raw.prompts ?? {}) as Record<string, unknown>;
+  const rawHints = (raw.grader_hints ?? raw.graderHints ?? {}) as Record<string, unknown>;
+
+  // Map priority: snake_case → camelCase + compute priorityTier
+  const rawPriority = (raw.priority ?? {}) as Record<string, Record<string, unknown>>;
+  const mappedPriority: Record<string, TraceAnalysisResult["priority"][string]> = {};
+  const allScores = Object.values(rawPriority).map(
+    (v) => ((v.priority_score ?? v.priorityScore ?? 0) as number),
+  );
+  const sortedScores = [...allScores].sort((a, b) => b - a);
+  const highThreshold = sortedScores[Math.floor(sortedScores.length / 3)] ?? 0.05;
+  const lowThreshold = sortedScores[Math.floor((2 * sortedScores.length) / 3)] ?? 0.01;
+
+  for (const [topic, info] of Object.entries(rawPriority)) {
+    const score = (info.priority_score ?? info.priorityScore ?? 0) as number;
+    const tier = score >= highThreshold ? "high" : score >= lowThreshold ? "medium" : "low";
+    mappedPriority[topic] = {
+      frequency: (info.frequency ?? 0) as number,
+      traceCount: (info.trace_count ?? info.traceCount ?? 0) as number,
+      failureRate: (info.failure_rate ?? info.failureRate ?? 0) as number,
+      priorityScore: score,
+      priorityTier: tier,
+      source: "both",
+    };
+  }
+
+  return {
+    priority: mappedPriority,
+    topics: {
+      discoveredTopics: (rawTopics.discovered_topics ?? rawTopics.discoveredTopics ?? []) as readonly string[],
+      coverageGaps: (rawTopics.coverage_gaps ?? rawTopics.coverageGaps ?? []) as TraceAnalysisResult["topics"]["coverageGaps"],
+    },
+    prompts: {
+      systemPrompt: (rawPrompts.system_prompt ?? rawPrompts.systemPrompt ?? "") as string,
+      simplifiedPrompt: (rawPrompts.simplified_prompt ?? rawPrompts.simplifiedPrompt ?? "") as string,
+      seedQueries: (rawPrompts.seed_queries ?? rawPrompts.seedQueries ?? {}) as Record<string, readonly string[]>,
+      totalSeedQueries: (rawPrompts.total_seed_queries ?? rawPrompts.totalSeedQueries ?? 0) as number,
+    },
+    graderHints: {
+      dimensions: ((rawHints.dimensions ?? []) as Array<Record<string, unknown>>).map((d) => ({
+        name: (d.name ?? "") as string,
+        description: (d.description ?? "") as string,
+        failureRate: (d.failure_rate ?? d.failureRate ?? 0) as number,
+        source: (d.source ?? "trace_failure") as "trace_failure" | "prompt_rule",
+      })),
+      calibrationPairCount: (rawHints.calibration_pair_count ?? rawHints.calibrationPairCount ?? 0) as number,
+      promptRulesAsCriteria: (rawHints.prompt_rules_as_criteria ?? rawHints.promptRulesAsCriteria ?? []) as readonly string[],
+    },
+  };
 }
 
 /**
