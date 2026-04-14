@@ -35,6 +35,12 @@ importers:
       '@distri/react':
         specifier: file:./vendor/distri-react
         version: file:vendor/distri-react(@distri/core@file:vendor/distri-core)(@tiptap/core@2.27.2(@tiptap/pm@2.27.2))(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(immer@11.1.4)(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(tailwindcss@3.4.19(tsx@4.21.0))(use-sync-external-store@1.6.0(react@19.2.4))
+      '@evilmartians/agent-prism-data':
+        specifier: ^0.0.9
+        version: 0.0.9
+      '@evilmartians/agent-prism-types':
+        specifier: ^0.0.9
+        version: 0.0.9
       '@heroicons/react':
         specifier: ^2.2.0
         version: 2.2.0(react@19.2.4)
@@ -119,6 +125,9 @@ importers:
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
+      classnames:
+        specifier: ^2.5.1
+        version: 2.5.1
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -161,6 +170,9 @@ importers:
       react-error-boundary:
         specifier: ^6.0.0
         version: 6.1.1(react@19.2.4)
+      react-json-pretty:
+        specifier: ^2.2.0
+        version: 2.2.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       react-json-view:
         specifier: ^1.21.3
         version: 1.21.3(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -913,6 +925,12 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@evilmartians/agent-prism-data@0.0.9':
+    resolution: {integrity: sha512-CyFGIMfTfRRhr+6c/EB+6wT2irx0x6gAMK7cCnmvGJtq/Hs/EWXnxprMCMf1Ct9dErlcYXiF8Y5AZbQP82ICoA==}
+
+  '@evilmartians/agent-prism-types@0.0.9':
+    resolution: {integrity: sha512-rQW62z5XGF31oMnmdzNiGwzKTYJigsxKoPWWH/ZeVAxFi0c4bi+f8TndqgAebGBdHWcn5JRaFDZ76ywlNu4c6A==}
 
   '@exodus/bytes@1.14.1':
     resolution: {integrity: sha512-OhkBFWI6GcRMUroChZiopRiSp2iAMvEBK47NhJooDqz1RERO4QuZIZnjP63TXX8GAiLABkYmX+fuQsdJ1dd2QQ==}
@@ -2951,6 +2969,9 @@ packages:
   classcat@5.0.5:
     resolution: {integrity: sha512-JhZUT7JFcQy/EzW605k/ktHtncoo9vnyW/2GspNYwFlN1C/WmjuV/xtS04e9SOkL2sTdw0VAZ2UGCcQ9lR6p6w==}
 
+  classnames@2.5.1:
+    resolution: {integrity: sha512-saHYOzhIQs6wy2sVxTM6bUDsQO4F50V9RQ22qBpEdCW+I+/Wmke2HOl6lS6dTpdxVhb88/I6+Hs+438c3lfUow==}
+
   cli-width@4.1.0:
     resolution: {integrity: sha512-ouuZd4/dm2Sw5Gmqy6bGyNNNe1qt9RpmxveLSO7KcgsTnU7RXfsw+/bukWGo1abgBiMAic068rclZsO4IWmmxQ==}
     engines: {node: '>= 12'}
@@ -4508,6 +4529,12 @@ packages:
 
   react-is@17.0.2:
     resolution: {integrity: sha512-w2GsyukL62IJnlaff/nRegPQR94C/XXamvMWmSHRJ4y7Ts/4ocGRmTHvOs8PSE6pB3dWOrD/nueuU5sduBsQ4w==}
+
+  react-json-pretty@2.2.0:
+    resolution: {integrity: sha512-3UMzlAXkJ4R8S4vmkRKtvJHTewG4/rn1Q18n0zqdu/ipZbUPLVZD+QwC7uVcD/IAY3s8iNVHlgR2dMzIUS0n1A==}
+    peerDependencies:
+      react: '>=15.0'
+      react-dom: '>=15.0'
 
   react-json-view@1.21.3:
     resolution: {integrity: sha512-13p8IREj9/x/Ye4WI/JpjhoIwuzEgUAtgJZNBJckfzJt1qyh24BdTm6UQNGnyTq9dapQdrqvquZTo3dz1X6Cjw==}
@@ -6554,6 +6581,12 @@ snapshots:
 
   '@esbuild/win32-x64@0.27.3':
     optional: true
+
+  '@evilmartians/agent-prism-data@0.0.9':
+    dependencies:
+      '@evilmartians/agent-prism-types': 0.0.9
+
+  '@evilmartians/agent-prism-types@0.0.9': {}
 
   '@exodus/bytes@1.14.1': {}
 
@@ -8772,6 +8805,8 @@ snapshots:
 
   classcat@5.0.5: {}
 
+  classnames@2.5.1: {}
+
   cli-width@4.1.0: {}
 
   cliui@8.0.1:
@@ -10652,6 +10687,12 @@ snapshots:
   react-is@16.13.1: {}
 
   react-is@17.0.2: {}
+
+  react-json-pretty@2.2.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
+    dependencies:
+      prop-types: 15.8.1
+      react: 19.2.4
+      react-dom: 19.2.4(react@19.2.4)
 
   react-json-view@1.21.3(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
     dependencies:

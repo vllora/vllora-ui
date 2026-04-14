@@ -14,7 +14,7 @@ import { Loader2, AlertCircle, ArrowUp, ArrowDown } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import {
   getEvaluationResult,
-  getFinetuneEvaluations,
+  getAllFinetuneEvaluations,
 } from "@/services/finetune-api";
 import { cn } from "@/lib/utils";
 import {
@@ -63,7 +63,7 @@ export function BaselineComparisonPanel({
     () => getEvaluationResult(baselineEvalId), { refreshDeps: [baselineEvalId] },
   );
   const { data: finetuneData, loading: fL, error: fE } = useRequest(
-    () => getFinetuneEvaluations(workflowId, finetuneJobId), { refreshDeps: [workflowId, finetuneJobId] },
+    () => getAllFinetuneEvaluations(workflowId, finetuneJobId), { refreshDeps: [workflowId, finetuneJobId] },
   );
 
   const recordTopicMap = useMemo(() => buildRecordTopicMap(sortedRecords), [sortedRecords]);

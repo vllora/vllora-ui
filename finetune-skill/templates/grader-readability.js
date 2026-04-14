@@ -5,16 +5,26 @@
  * ELI5, contract-to-English, medical-to-patient).
  * Scores on: readability, accuracy preservation, jargon elimination, completeness.
  *
- * Customize: TARGET_GRADE_LEVEL, FORBIDDEN_JARGON
+ * Customize: TARGET_GRADE_LEVEL, FORBIDDEN_JARGON, TARGET_WORDS, ALPHA, CORRECT_THRESHOLD
  *
  * GRPO LENGTH EXPLOITATION: Without conciseness control, GRPO models learn verbose
- * responses because longer = more content = higher scores. This template includes a
- * CONCISENESS criterion in the LLM judge to prevent this. Customize the weight for your task.
+ * responses because longer = more content = higher scores. This template uses TWO
+ * length-control mechanisms:
+ *   1. LLM-as-judge CONCISENESS criterion (12% weight) — semantic signal
+ *   2. GR3-style multiplicative length penalty — programmatic, applied only to
+ *      wrong/partial answers via a binary correctness gate
  *
- * ⚠️ DRPO ANTI-PATTERN (arXiv:2510.04474): If you add programmatic word-count penalties,
- * NEVER apply them uniformly to correct AND wrong answers. A penalized correct-but-verbose
- * answer can drop below wrong-answer scores, inverting its GRPO advantage. The LLM
- * conciseness criterion used here is safe (semantic, not raw token count).
+ * ⚠️ DRPO ANTI-PATTERN (arXiv:2510.04474, §3): Uniform length penalties invert GRPO
+ * advantage — a penalized correct-but-verbose answer can drop below the group mean
+ * (which includes zero-reward wrong answers), giving it NEGATIVE advantage. The fix:
+ * gate the penalty on correctness. This template penalizes only wrong/partial answers.
+ *
+ * ⚠️ GR3 ADDITIVE COLLAPSE (arXiv:2603.10535, Prop 3.1): Additive shaping
+ * R_hat = R + λ*S collapses for ANY λ — length gradient dominates advantage.
+ * MUST use multiplicative form: R * scale_factor (Eq. 6, Prop 3.2).
+ *
+ * Customize: TARGET_WORDS — set to your ground-truth P95 word count. If unknown,
+ * the readiness gate will report eval P95 and GT P95 after first eval run.
  *
  * ⚠️ GRPO REWARD HACKING RISK (MO-GRPO arXiv:2509.22047):
  * Readability graders with multiple criteria (readability + accuracy + completeness)
@@ -25,9 +35,20 @@
  * penalizes factual omissions even if the text reads well.
  *
  * Ref: Dr. GRPO (arXiv:2503.20783), DAPO (arXiv:2503.14476), DRPO (arXiv:2510.04474),
- *      MO-GRPO (arXiv:2509.22047)
+ *      GR3 (arXiv:2603.10535), GRPO-LEAD (arXiv:2504.09696), MO-GRPO (arXiv:2509.22047)
  */
 function evaluate(input) {
+    // ─── Customize these for your task ───
+    // TARGET_WORDS: Set to ground-truth P95 word count. Readability/simplification
+    // tasks typically produce 100-300 word outputs. GT P95 is the safest fixed
+    // target (GRPO-LEAD arXiv:2504.09696, §3.1).
+    var TARGET_WORDS = 200;
+    // ALPHA: GR3 penalty strength (arXiv:2603.10535, Eq. 6). Higher = stricter.
+    var ALPHA = 0.5;
+    // CORRECT_THRESHOLD: Score above which a response is considered "correct"
+    // and exempt from length penalty (DRPO binary gate analogue).
+    var CORRECT_THRESHOLD = 0.60;
+
     let response = "";
     let history = "";
 
@@ -144,12 +165,35 @@ Answer in JSON format:
         const str = typeof result.structure === 'number' ? result.structure : 0;
         const con = typeof result.conciseness === 'number' ? result.conciseness : 0;
 
-        // Weight: readability and accuracy balanced — both matter equally
-        // Conciseness at 12% weight to prevent GRPO length exploitation (empirical; DRPO arXiv:2510.04474)
+        // Weight: readability and accuracy balanced — both matter equally.
+        // Conciseness at 12% — consistent with OpenAI RFT Cookbook practice (10-15%).
+        // The LLM criterion provides semantic signal; the programmatic GR3 penalty
+        // below provides the hard gradient.
         const weighted = (rd * 0.22) + (acc * 0.27) + (jf * 0.18) + (comp * 0.13) + (str * 0.08) + (con * 0.12);
+
         // Floor at 0.05 to keep GRPO gradient nonzero (NEVER return 0.0 for attempted answers).
         // Only empty/refusal/error should return 0.0.
-        let finalScore = Math.max(0.05, Math.min(1, weighted / 5.0));
+        let baseScore = Math.max(0.05, Math.min(1, weighted / 5.0));
+        if (isNaN(baseScore)) baseScore = 0.05;
+
+        // ─── GR3-style multiplicative length penalty (arXiv:2603.10535, Eq. 6) ───
+        // R_hat = R * 1 / (1 + α * ℓ_i / ℓ_bar)
+        // Multiplicative form gates length by task reward (Prop 3.2): low-reward
+        // responses suppress the length signal automatically.
+        // Binary correctness gate (DRPO arXiv:2510.04474, §3): only penalize
+        // wrong/partial answers. Correct answers get brevity bonus instead.
+        var actualWords = Math.max(1, response.split(/\s+/).length);
+        var isCorrect = baseScore >= CORRECT_THRESHOLD;
+
+        var finalScore;
+        if (isCorrect) {
+            var brevityBonus = actualWords <= TARGET_WORDS ? 0.02 : 0.0;
+            finalScore = Math.min(1.0, baseScore + brevityBonus);
+        } else {
+            var lengthRatio = actualWords / TARGET_WORDS;
+            var scaleFactor = 1.0 / (1.0 + ALPHA * lengthRatio);
+            finalScore = Math.max(0.05, baseScore * scaleFactor);
+        }
         if (isNaN(finalScore)) finalScore = 0.05;
 
         return {
@@ -157,7 +201,8 @@ Answer in JSON format:
             reason: result.reasoning || "No reasoning",
             readability: rd, accuracy: acc, jargon_free: jf,
             completeness: comp, structure: str, conciseness: con,
-            flesch_kincaid_grade: parseFloat(fleschKincaid.toFixed(1))
+            flesch_kincaid_grade: parseFloat(fleschKincaid.toFixed(1)),
+            length_words: actualWords, length_penalized: !isCorrect
         };
     } catch (error) {
         return { score: 0, reason: "Error: " + (error.message || "Unknown") };

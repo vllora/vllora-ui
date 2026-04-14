@@ -4,7 +4,7 @@
  * For models that extract specific data from documents (metrics, fields, entities).
  * Scores on: field accuracy, hallucination rate, completeness, format compliance.
  *
- * Customize: REQUIRED_FIELDS, FORMAT_PATTERN, HALLUCINATION_KEYWORDS
+ * Customize: REQUIRED_FIELDS, FORMAT_PATTERN, HALLUCINATION_KEYWORDS, TARGET_WORDS, ALPHA, CORRECT_THRESHOLD
  *
  * ⚠️ OVER-EXTRACTION / HALLUCINATION DEFENSE:
  * GRPO can learn to over-extract (list extra fields/entities not in the source) because
@@ -20,17 +20,42 @@
  * Ref: MO-GRPO (arXiv:2509.22047), CoRPO (arXiv:2511.04439)
  *
  * GRPO LENGTH EXPLOITATION: Without conciseness control, GRPO models learn verbose
- * responses because longer = more content = higher scores. This template includes a
- * CONCISENESS criterion in the LLM judge to prevent this. Customize the weight for your task.
+ * responses because longer = more content = higher scores. This template uses TWO
+ * length-control mechanisms:
+ *   1. LLM-as-judge CONCISENESS criterion (10% weight) — semantic signal
+ *   2. GR3-style multiplicative length penalty — programmatic, applied only to
+ *      wrong/partial answers via a binary correctness gate
  *
- * ⚠️ DRPO ANTI-PATTERN (arXiv:2510.04474): If you add programmatic word-count penalties,
- * NEVER apply them uniformly to correct AND wrong answers. A penalized correct-but-verbose
- * answer can drop below wrong-answer scores, inverting its GRPO advantage. The LLM
- * conciseness criterion used here is safe (semantic, not raw token count).
+ * ⚠️ DRPO ANTI-PATTERN (arXiv:2510.04474, §3): Uniform length penalties invert GRPO
+ * advantage — a penalized correct-but-verbose answer can drop below the group mean
+ * (which includes zero-reward wrong answers), giving it NEGATIVE advantage. The fix:
+ * gate the penalty on correctness. This template penalizes only wrong/partial answers.
  *
- * Ref: Dr. GRPO (arXiv:2503.20783), DAPO (arXiv:2503.14476), DRPO (arXiv:2510.04474)
+ * ⚠️ GR3 ADDITIVE COLLAPSE (arXiv:2603.10535, Prop 3.1): Additive shaping
+ * R_hat = R + λ*S collapses for ANY λ — length gradient dominates advantage.
+ * MUST use multiplicative form: R * scale_factor (Eq. 6, Prop 3.2).
+ *
+ * Customize: TARGET_WORDS — set to your ground-truth P95 word count. If unknown,
+ * the readiness gate will report eval P95 and GT P95 after first eval run.
+ *
+ * Ref: Dr. GRPO (arXiv:2503.20783), DAPO (arXiv:2503.14476), DRPO (arXiv:2510.04474),
+ *      GR3 (arXiv:2603.10535), GRPO-LEAD (arXiv:2504.09696)
  */
 function evaluate(input) {
+    // ─── Customize these for your task ───
+    // TARGET_WORDS: Set to ground-truth P95 word count. Extraction tasks are
+    // typically short (50-150 words). GT P95 is the safest fixed target when
+    // group-relative statistics are unavailable (GRPO-LEAD arXiv:2504.09696, §3.1).
+    var TARGET_WORDS = 150;
+    // ALPHA: GR3 penalty strength (arXiv:2603.10535, Eq. 6). Higher = stricter.
+    // 0.5 gives ~33% penalty at 2× target length. 1.0 gives ~50% at 2× target.
+    var ALPHA = 0.5;
+    // CORRECT_THRESHOLD: Score above which a response is considered "correct"
+    // and exempt from length penalty (DRPO binary gate analogue).
+    // All papers use binary gates (arXiv:2510.04474, arXiv:2504.09696);
+    // 0.60 is the continuous-score analogue for "majority correct".
+    var CORRECT_THRESHOLD = 0.60;
+
     let response = "";
     let history = "";
 
@@ -135,18 +160,43 @@ Answer in JSON format:
         const fmt = typeof result.format === 'number' ? result.format : 0;
         const con = typeof result.conciseness === 'number' ? result.conciseness : 0;
 
-        // Weight: accuracy and hallucination matter most for extraction
-        // Conciseness at 10% weight to prevent GRPO length exploitation (empirical; DRPO arXiv:2510.04474)
+        // Weight: accuracy and hallucination matter most for extraction.
+        // Conciseness at 10% — consistent with OpenAI RFT Cookbook practice (10-15%).
+        // The LLM criterion provides semantic signal; the programmatic GR3 penalty
+        // below provides the hard gradient.
         const weighted = (fa * 0.30) + (hal * 0.27) + (comp * 0.23) + (fmt * 0.10) + (con * 0.10);
+
         // Floor at 0.05 to keep GRPO gradient nonzero (NEVER return 0.0 for attempted answers).
         // Only empty/refusal/error should return 0.0.
-        let finalScore = Math.max(0.05, Math.min(1, weighted / 5.0));
+        let baseScore = Math.max(0.05, Math.min(1, weighted / 5.0));
+        if (isNaN(baseScore)) baseScore = 0.05;
+
+        // ─── GR3-style multiplicative length penalty (arXiv:2603.10535, Eq. 6) ───
+        // R_hat = R * 1 / (1 + α * ℓ_i / ℓ_bar)
+        // Multiplicative form gates length by task reward (Prop 3.2): low-reward
+        // responses suppress the length signal automatically.
+        // Binary correctness gate (DRPO arXiv:2510.04474, §3): only penalize
+        // wrong/partial answers. Correct answers get brevity bonus instead.
+        var actualWords = Math.max(1, response.split(/\s+/).length);
+        var isCorrect = baseScore >= CORRECT_THRESHOLD;
+
+        var finalScore;
+        if (isCorrect) {
+            var brevityBonus = actualWords <= TARGET_WORDS ? 0.02 : 0.0;
+            finalScore = Math.min(1.0, baseScore + brevityBonus);
+        } else {
+            var lengthRatio = actualWords / TARGET_WORDS;
+            var scaleFactor = 1.0 / (1.0 + ALPHA * lengthRatio);
+            finalScore = Math.max(0.05, baseScore * scaleFactor);
+        }
         if (isNaN(finalScore)) finalScore = 0.05;
 
         return {
             score: finalScore,
             reason: result.reasoning || "No reasoning",
-            field_accuracy: fa, hallucination: hal, completeness: comp, format: fmt, conciseness: con
+            field_accuracy: fa, hallucination: hal, completeness: comp,
+            format: fmt, conciseness: con,
+            length_words: actualWords, length_penalized: !isCorrect
         };
     } catch (error) {
         return { score: 0, reason: "Error: " + (error.message || "Unknown") };

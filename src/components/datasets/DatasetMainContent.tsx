@@ -13,6 +13,8 @@ import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import type { AvailableTopic } from "./record-utils";
 import { cn } from "@/lib/utils";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
+import { recordService } from "@/services/service-registry";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { resolveAndGroupBySource } from "@/lib/distri-finetune-tools/steps/shared/resolve-part-ref";
 import { RecordsSectionHeader } from "./dataset-detail-header/RecordsSectionHeader";
 import { TopicHierarchyCanvas } from "./dataset-canvas/TopicHierarchyCanvas";
@@ -114,6 +116,15 @@ export interface DatasetMainContentProps {
   evalStats?: EvalStats;
   /** Knowledge coverage stats (for coverage drilldown in Metrics tab) */
   knowledgeCoverageStats?: KnowledgeCoverageStats;
+
+  /** Total record count from server (may exceed loaded records.length) */
+  totalRecords?: number;
+  /** Whether more records can be loaded */
+  hasMore?: boolean;
+  /** Whether a page is currently being fetched */
+  isLoadingMore?: boolean;
+  /** Callback to load next page of records */
+  onLoadMore?: () => void;
 }
 
 export function DatasetMainContent({
@@ -152,10 +163,27 @@ export function DatasetMainContent({
   topicQualityScores,
   evalStats,
   knowledgeCoverageStats,
+  totalRecords: totalRecordsFromServer,
+  hasMore,
+  isLoadingMore,
+  onLoadMore,
 }: DatasetMainContentProps) {
   // Job score columns for record detail sidebar
   const finetuneCtx = FinetuneJobsConsumer();
   const { columns: jobColumns, getScoresForRecord } = useJobScoreColumns(finetuneCtx);
+
+  // Server-side topic record counts (accurate, not limited by client pagination)
+  const [topicServerCounts, setTopicServerCounts] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    if (!workflowId) return;
+    recordService.getCountsByTopic(workflowId).then((counts) => {
+      const map = new Map<string, number>();
+      for (const c of counts) {
+        map.set(c.topic_id, c.count);
+      }
+      setTopicServerCounts(map);
+    }).catch(() => { /* fallback to client counts */ });
+  }, [workflowId, totalRecordsFromServer]);
 
   // Keyboard shortcuts: 1/2/3 switch views, Esc closes record detail
   useKeyboardShortcuts({
@@ -260,6 +288,41 @@ export function DatasetMainContent({
     });
   }, [records, topicFilter, topicHierarchy]);
 
+  // Server-side pagination for topic detail view
+  const TOPIC_PAGE_SIZE = 50;
+  const [topicPage, setTopicPage] = useState(0);
+  const [topicPageRecords, setTopicPageRecords] = useState<DatasetRecord[]>([]);
+  const [topicPageTotal, setTopicPageTotal] = useState(0);
+  const [isLoadingTopicPage, setIsLoadingTopicPage] = useState(false);
+
+  // Reset page when topic changes
+  useEffect(() => { setTopicPage(0); }, [topicFilter]);
+
+  // Fetch the current page of records for the selected topic from the server
+  useEffect(() => {
+    if (!topicFilter || !topicHierarchy || !workflowId) {
+      setTopicPageRecords([]);
+      setTopicPageTotal(0);
+      return;
+    }
+    const match = findTopicByName(topicHierarchy, topicFilter);
+    if (!match?.node.id) return;
+
+    let cancelled = false;
+    setIsLoadingTopicPage(true);
+    recordService
+      .getByDatasetIdPaged(workflowId, topicPage * TOPIC_PAGE_SIZE, TOPIC_PAGE_SIZE, match.node.id)
+      .then((page) => {
+        if (cancelled) return;
+        setTopicPageRecords(page.records);
+        setTopicPageTotal(page.pagination.total);
+      })
+      .catch(() => { /* fall back to client-filtered records */ })
+      .finally(() => { if (!cancelled) setIsLoadingTopicPage(false); });
+
+    return () => { cancelled = true; };
+  }, [topicFilter, topicHierarchy, workflowId, topicPage]);
+
   // Apply stat filter, role filter, and search to records
   const filteredRecords = useMemo(() => {
     const hasStatFilter = activeStatFilter !== "all";
@@ -331,27 +394,50 @@ export function DatasetMainContent({
     }
   }, [topicDetail, onViewModeChange]);
 
+  // Hooks that must run unconditionally (before any early return).
+  // topicSelectedRecord resolves the clicked record from server-paginated data.
+  const isLeafTopic = topicDetail && (!topicDetail.node.children || topicDetail.node.children.length === 0);
+  const topicRecordsToShow = isLeafTopic && topicPageRecords.length > 0 ? topicPageRecords : filteredRecords;
+  const topicTotalCount = isLeafTopic ? (topicPageTotal || topicServerCounts.get(topicDetail?.node.name ?? "") || filteredRecords.length) : filteredRecords.length;
+  const topicTotalPages = Math.max(1, Math.ceil(topicTotalCount / TOPIC_PAGE_SIZE));
+
+  const topicSelectedRecord = useMemo(() => {
+    if (!selectedRecordId) return null;
+    return selectedRecord ?? topicRecordsToShow.find(r => r.id === selectedRecordId) ?? null;
+  }, [selectedRecord, selectedRecordId, topicRecordsToShow]);
+
   // Sources view takes priority — always render when viewMode is "sources",
   // even if records/topics are empty (sources exist independently of records).
+  const sectionFallback = (
+    <div className="flex-1 flex items-center justify-center p-8">
+      <div className="text-center space-y-2">
+        <p className="text-sm font-medium text-foreground/70">Something went wrong</p>
+        <p className="text-xs text-muted-foreground/50">This section failed to render. Try switching views or reloading.</p>
+      </div>
+    </div>
+  );
+
   if (viewMode === "sources") {
     return (
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-          <SourcesView
-            selectedSourceId={selectedSourceId}
-            focusPartId={focusPartId}
-            backTo={backTo}
-            onBackToRecord={handleBackToRecord}
-            onSelectSource={(sourceId) => {
-              setSelectedSourceId(sourceId);
-              setFocusPartId(null);
-              setBackTo(null);
-              window.dispatchEvent(new CustomEvent("vllora_switch_view", {
-                detail: { viewMode: "sources", sourceId },
-              }));
-            }}
-          />
-        </div>
+        <ErrorBoundary fallback={sectionFallback}>
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <SourcesView
+              selectedSourceId={selectedSourceId}
+              focusPartId={focusPartId}
+              backTo={backTo}
+              onBackToRecord={handleBackToRecord}
+              onSelectSource={(sourceId) => {
+                setSelectedSourceId(sourceId);
+                setFocusPartId(null);
+                setBackTo(null);
+                window.dispatchEvent(new CustomEvent("vllora_switch_view", {
+                  detail: { viewMode: "sources", sourceId },
+                }));
+              }}
+            />
+          </div>
+        </ErrorBoundary>
         <RecordDetailSidebar
           record={selectedRecord}
           onClose={() => onSelectRecordId(null)}
@@ -395,37 +481,47 @@ export function DatasetMainContent({
   // ── Leaf topic detail view (existing TopicDetailView) ──
   // Parent topics (with children) fall through to the "All Topics" tabbed layout
   // which already scopes displayHierarchy and filteredRecords to the selected subtree.
-  const isLeafTopic = topicDetail && (!topicDetail.node.children || topicDetail.node.children.length === 0);
   if (isLeafTopic) {
     return (
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="px-4 py-2 border-b border-border shrink-0 bg-background">
-          <RecordsSectionHeader
-            viewMode={viewMode}
-            onViewModeChange={onViewModeChange}
-            onExport={onExport}
-            records={topicFilteredRecords}
-            workflowId={workflowId}
-            activeStatFilter={activeStatFilter}
-            onStatFilterChange={setActiveStatFilter}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            sourceDocumentFilterName={sourceDocumentFilterName}
-            onClearSourceDocumentFilter={onClearSourceDocumentFilter}
-            hideViewToggle
-          />
-        </div>
-        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-          <TopicDetailView
-            topicNode={topicDetail.node}
-            ancestorNodes={topicDetail.nodePath}
-            records={filteredRecords}
-            onSelectRecord={onSelectRecordId}
-            normalizedObjective={normalizedObjective}
-          />
-        </div>
+        <ErrorBoundary fallback={sectionFallback}>
+          <div className="px-4 py-2 border-b border-border shrink-0 bg-background">
+            <RecordsSectionHeader
+              viewMode={viewMode}
+              onViewModeChange={onViewModeChange}
+              onExport={onExport}
+              records={topicRecordsToShow}
+              workflowId={workflowId}
+              activeStatFilter={activeStatFilter}
+              onStatFilterChange={setActiveStatFilter}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              sourceDocumentFilterName={sourceDocumentFilterName}
+              onClearSourceDocumentFilter={onClearSourceDocumentFilter}
+              hideViewToggle
+              totalRecordsFromServer={topicTotalCount}
+              hasMore={false}
+              isLoadingMore={isLoadingTopicPage}
+              onLoadMore={undefined}
+            />
+          </div>
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <TopicDetailView
+              topicNode={topicDetail.node}
+              ancestorNodes={topicDetail.nodePath}
+              records={topicRecordsToShow}
+              totalRecords={topicTotalCount}
+              onSelectRecord={onSelectRecordId}
+              normalizedObjective={normalizedObjective}
+              page={topicPage}
+              totalPages={topicTotalPages}
+              onPageChange={setTopicPage}
+              isLoadingPage={isLoadingTopicPage}
+            />
+          </div>
+        </ErrorBoundary>
         <RecordDetailSidebar
-          record={selectedRecord}
+          record={topicSelectedRecord}
           onClose={() => onSelectRecordId(null)}
           availableTopics={availableTopics}
           onUpdateTopic={onUpdateRecordTopic}
@@ -434,7 +530,7 @@ export function DatasetMainContent({
             onSelectRecordId(null);
           }}
           onSave={onSaveRecord}
-          records={filteredRecords}
+          records={topicRecordsToShow}
           onNavigate={onSelectRecordId}
           jobColumns={jobColumns}
           getScoresForRecord={getScoresForRecord}
@@ -462,6 +558,10 @@ export function DatasetMainContent({
           sourceDocumentFilterName={sourceDocumentFilterName}
           onClearSourceDocumentFilter={onClearSourceDocumentFilter}
           hideViewToggle
+          totalRecordsFromServer={totalRecordsFromServer}
+          hasMore={hasMore}
+          isLoadingMore={isLoadingMore}
+          onLoadMore={onLoadMore}
         />
       </div>
 
@@ -540,6 +640,10 @@ export function DatasetMainContent({
               onRoleFilterChange={() => {}}
               datasetObjective={datasetObjective}
               normalizedObjective={normalizedObjective}
+              hasMore={hasMore}
+              isLoadingMore={isLoadingMore}
+              onLoadMore={onLoadMore}
+              totalRecordsFromServer={totalRecordsFromServer}
             />
           </div>
         )}

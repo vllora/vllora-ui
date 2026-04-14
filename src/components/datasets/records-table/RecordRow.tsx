@@ -10,6 +10,7 @@
 
 import { useState, forwardRef, useCallback, useMemo } from "react";
 import { Sparkles, FileText } from "lucide-react";
+import { QueryOriginBadge, getQueryOrigin } from "./cells/QueryOriginBadge";
 import { DatasetRecord } from "@/types/dataset-types";
 import { cn } from "@/lib/utils";
 import { emitter } from "@/utils/eventEmitter";
@@ -233,6 +234,11 @@ export const RecordRow = forwardRef<HTMLDivElement, RecordRowProps>(function Rec
               <Sparkles className="w-2.5 h-2.5" />
               AI
             </span>
+          )}
+
+          {/* Query origin badge (seed from traces vs synthetic) */}
+          {typeof record.metadata?.prompt_type === "string" && (
+            <QueryOriginBadge origin={getQueryOrigin(record.metadata.prompt_type)} compact />
           )}
 
           {/* Source document badge with chunk ref count */}

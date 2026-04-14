@@ -6,8 +6,8 @@
  *         Conversation (system + user) → Source Context → Details grid.
  */
 
-import { useMemo } from "react";
-import { Trash2, ChevronLeft, ChevronRight, Pencil, FileText, Coins, MessageSquare, Info } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Trash2, ChevronLeft, ChevronRight, Pencil, FileText, Wrench, MessageSquare, Info, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -23,12 +23,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { DatasetRecord, DataInfo, TopicHierarchyNode } from "@/types/dataset-types";
+import { DatasetRecord, TopicHierarchyNode } from "@/types/dataset-types";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import type { AvailableTopic } from "../record-utils";
 import type { JobColumn, RecordJobScore } from "./job-score-columns";
 import { estimateTokens, countTurns } from "./cells/StatsBadge";
 import { SourcePartsCell, useResolvedSourceParts } from "./shared-record-cells";
+import { QueryOriginBadge, getQueryOrigin } from "./cells/QueryOriginBadge";
 
 // ─── Types ───
 
@@ -84,6 +85,12 @@ export function RecordDetailSidebar({
   const messages = useMemo(() => {
     if (!record) return [];
     return extractMessages(record.data);
+  }, [record]);
+
+  const toolDefinitions = useMemo(() => {
+    if (!record?.data || typeof record.data !== "object") return [];
+    const d = record.data as Record<string, unknown>;
+    return Array.isArray(d.tools) ? d.tools as Record<string, unknown>[] : [];
   }, [record]);
 
   // Build full system prompt by composing hierarchy chain into a single message
@@ -157,9 +164,22 @@ export function RecordDetailSidebar({
                 <ScoresSection columns={jobColumns} scores={scores} />
               )}
 
+              {/* Tools Section — show available tool definitions */}
+              {toolDefinitions.length > 0 && (
+                <ToolDefinitionsSection tools={toolDefinitions} />
+              )}
+
               {/* Conversation Section — uses composed system prompt when hierarchy available */}
               {composedMessages.length > 0 && (
                 <ConversationSection messages={composedMessages} />
+              )}
+
+              {/* Query Origin (trace-informed curriculum) */}
+              {typeof record.metadata?.prompt_type === "string" && (
+                <div className="px-5 py-3 border-b border-border/50 flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Query origin:</span>
+                  <QueryOriginBadge origin={getQueryOrigin(record.metadata.prompt_type)} />
+                </div>
               )}
 
               {/* Source Context Section */}
@@ -459,12 +479,20 @@ function ScoreBarRow({
 
 // ─── Conversation Section ───
 
+interface ToolCallInfo {
+  readonly name: string;
+  readonly arguments: string;
+}
+
 interface ExtractedMessage {
   readonly role: string;
   readonly content: string;
+  readonly toolCalls?: readonly ToolCallInfo[];
+  /** For tool-result messages: the name of the tool that produced this result */
+  readonly toolName?: string;
 }
 
-function extractMessageContent(msg: { role?: string; content?: unknown }): string {
+function extractTextContent(msg: Record<string, unknown>): string {
   if (typeof msg.content === "string") return msg.content;
   if (Array.isArray(msg.content)) {
     return msg.content.map((c: { text?: string }) => c.text || "").join("");
@@ -472,16 +500,51 @@ function extractMessageContent(msg: { role?: string; content?: unknown }): strin
   return "";
 }
 
+function extractToolCalls(msg: Record<string, unknown>): ToolCallInfo[] {
+  if (!Array.isArray(msg.tool_calls)) return [];
+  return msg.tool_calls.map((tc: Record<string, unknown>) => {
+    const fn = tc.function as Record<string, unknown> | undefined;
+    const name = String(fn?.name ?? tc.name ?? "tool_call");
+    const rawArgs = fn?.arguments ?? tc.arguments ?? "";
+    const argsStr = typeof rawArgs === "string" ? rawArgs : JSON.stringify(rawArgs);
+    return { name, arguments: argsStr };
+  });
+}
+
+/** Strip tool catalogue appended to system messages (e.g., "[Tools available: ...]") */
+function stripToolCatalogue(content: string): string {
+  const marker = content.lastIndexOf("[Tools available:");
+  if (marker === -1) return content;
+  return content.slice(0, marker).trimEnd();
+}
+
 function extractMessages(data: unknown): ExtractedMessage[] {
-  const dataInfo = data as DataInfo | undefined;
-  if (!dataInfo) return [];
+  if (!data || typeof data !== "object") return [];
+  const d = data as Record<string, unknown>;
 
   const result: ExtractedMessage[] = [];
 
-  // Input messages (system + user)
-  if (dataInfo.input?.messages && Array.isArray(dataInfo.input.messages)) {
-    for (const msg of dataInfo.input.messages) {
-      result.push({ role: msg.role || "user", content: extractMessageContent(msg) });
+  // OpenAI format: top-level messages array (used by OTel trace records)
+  const topLevelMsgs = Array.isArray(d.messages) ? d.messages : null;
+  // vLLora format: nested under input.messages
+  const inputMsgs = (d.input as Record<string, unknown> | undefined)?.messages;
+  const msgs = topLevelMsgs ?? (Array.isArray(inputMsgs) ? inputMsgs : null);
+
+  if (msgs) {
+    for (const msg of msgs) {
+      const m = msg as Record<string, unknown>;
+      let content = extractTextContent(m);
+      if ((m.role as string) === "system") {
+        content = stripToolCatalogue(content);
+      }
+      const toolCalls = extractToolCalls(m);
+      const toolName = (m.role === "tool") ? String(m.name ?? "") : undefined;
+      result.push({
+        role: (m.role as string) || "user",
+        content,
+        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+        toolName: toolName || undefined,
+      });
     }
   }
 
@@ -501,10 +564,16 @@ function ConversationSection({ messages }: { readonly messages: readonly Extract
   return (
     <div className="px-5 py-4 border-b border-border/50">
       <SectionLabel title="Conversation" />
-      <div className="mt-3 space-y-3">
-        {messages.map((msg, i) => (
-          <MessageBubble key={i} role={msg.role} content={msg.content} />
-        ))}
+      <div className="mt-3 space-y-2">
+        {messages.map((msg, i) => {
+          if (msg.toolCalls && msg.toolCalls.length > 0) {
+            return <ToolCallBubble key={i} content={msg.content} toolCalls={msg.toolCalls} />;
+          }
+          if (msg.role === "tool") {
+            return <ToolResultBubble key={i} toolName={msg.toolName} content={msg.content} />;
+          }
+          return <MessageBubble key={i} role={msg.role} content={msg.content} />;
+        })}
       </div>
     </div>
   );
@@ -531,17 +600,251 @@ const ROLE_STYLES: Record<string, { labelClass: string; borderClass: string; bgC
   },
 };
 
+function CopyButton({ text }: { readonly text: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="p-1 rounded hover:bg-muted/50 text-muted-foreground/30 hover:text-muted-foreground/70 transition-colors shrink-0"
+      title="Copy to clipboard"
+    >
+      {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+    </button>
+  );
+}
+
 function MessageBubble({ role, content }: { readonly role: string; readonly content: string }) {
   const style = ROLE_STYLES[role.toLowerCase()] ?? ROLE_STYLES.user;
 
   return (
-    <div className={cn("rounded-lg border p-3", style.borderClass, style.bgClass)}>
-      <span className={cn("text-[9px] font-semibold uppercase tracking-wider block mb-1.5", style.labelClass)}>
-        {role}
-      </span>
+    <div className={cn("rounded-lg border p-3 group/bubble", style.borderClass, style.bgClass)}>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className={cn("text-[9px] font-semibold uppercase tracking-wider", style.labelClass)}>
+          {role}
+        </span>
+        <span className="opacity-0 group-hover/bubble:opacity-100 transition-opacity">
+          <CopyButton text={content} />
+        </span>
+      </div>
       <p className={cn("text-xs leading-relaxed whitespace-pre-wrap", style.textClass)}>
         {content}
       </p>
+    </div>
+  );
+}
+
+function ToolCallBubble({ content, toolCalls }: { readonly content: string; readonly toolCalls: readonly ToolCallInfo[] }) {
+  const copyText = toolCalls.map(tc => {
+    try { return `${tc.name}(${JSON.stringify(JSON.parse(tc.arguments), null, 2)})`; }
+    catch { return `${tc.name}(${tc.arguments})`; }
+  }).join("\n");
+
+  return (
+    <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 group/bubble">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[9px] font-semibold uppercase tracking-wider text-amber-400/70">
+          Assistant → Tool Call
+        </span>
+        <span className="opacity-0 group-hover/bubble:opacity-100 transition-opacity">
+          <CopyButton text={copyText} />
+        </span>
+      </div>
+      {content && (
+        <p className="text-xs leading-relaxed text-foreground/90 mb-2">{content}</p>
+      )}
+      <div className="space-y-1.5">
+        {toolCalls.map((tc, i) => (
+          <ToolCallCard key={i} name={tc.name} args={tc.arguments} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ToolCallCard({ name, args }: { readonly name: string; readonly args: string }) {
+  // Pretty-print JSON args
+  let formattedArgs = args;
+  try {
+    const parsed = JSON.parse(args);
+    formattedArgs = JSON.stringify(parsed, null, 2);
+  } catch {
+    // keep raw string
+  }
+
+  return (
+    <div className="rounded-md bg-background/60 border border-border/40 overflow-hidden">
+      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-muted/30 border-b border-border/30">
+        <Wrench className="w-3 h-3 text-amber-400" />
+        <span className="text-[11px] font-mono font-semibold text-foreground/90">{name}</span>
+      </div>
+      <pre className="px-2.5 py-2 text-[10px] leading-relaxed text-muted-foreground font-mono overflow-x-auto max-h-32 overflow-y-auto">
+        {formattedArgs}
+      </pre>
+    </div>
+  );
+}
+
+function ToolResultBubble({ toolName, content }: { readonly toolName?: string; readonly content: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = content.length > 300;
+  const displayContent = isLong && !expanded ? content.slice(0, 300) + "…" : content;
+
+  // Try to pretty-print if it looks like JSON
+  let formatted = displayContent;
+  if (!isLong || expanded) {
+    try {
+      const parsed = JSON.parse(content);
+      formatted = JSON.stringify(parsed, null, 2);
+    } catch {
+      // keep raw
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 p-3 group/bubble">
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[9px] font-semibold uppercase tracking-wider text-purple-400/70">
+            Tool Result
+          </span>
+          {toolName && (
+            <span className="text-[10px] font-mono text-purple-300/60 bg-purple-500/10 px-1.5 py-0.5 rounded">
+              {toolName}
+            </span>
+          )}
+        </div>
+        <span className="opacity-0 group-hover/bubble:opacity-100 transition-opacity">
+          <CopyButton text={content} />
+        </span>
+      </div>
+      <pre className="text-[10px] leading-relaxed text-muted-foreground/80 font-mono whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
+        {formatted}
+      </pre>
+      {isLong && (
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          className="mt-1.5 text-[10px] text-purple-400/60 hover:text-purple-400 transition-colors"
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Tool Definitions Section ───
+
+interface ParsedToolDef {
+  readonly name: string;
+  readonly description: string;
+  readonly params: readonly { name: string; type: string; description: string; required: boolean }[];
+}
+
+function parseToolDefs(tools: readonly Record<string, unknown>[]): ParsedToolDef[] {
+  return tools.map((t) => {
+    const fn = (t.function ?? t) as Record<string, unknown>;
+    const name = String(fn.name ?? "?");
+    const description = String(fn.description ?? "");
+    const parameters = (fn.parameters ?? {}) as Record<string, unknown>;
+    const properties = (parameters.properties ?? {}) as Record<string, Record<string, unknown>>;
+    const requiredSet = new Set(Array.isArray(parameters.required) ? parameters.required as string[] : []);
+
+    const params = Object.entries(properties).map(([pName, pDef]) => ({
+      name: pName,
+      type: String(pDef.type ?? pDef.enum ? "enum" : "any"),
+      description: String(pDef.description ?? ""),
+      required: requiredSet.has(pName),
+    }));
+
+    return { name, description, params };
+  });
+}
+
+function ToolDefinitionsSection({ tools }: { readonly tools: readonly Record<string, unknown>[] }) {
+  const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
+  const parsed = useMemo(() => parseToolDefs(tools), [tools]);
+  const copyText = useMemo(() => JSON.stringify(tools, null, 2), [tools]);
+
+  const toggle = (name: string) =>
+    setExpandedTools((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+
+  const expandAll = () => setExpandedTools(new Set(parsed.map(t => t.name)));
+  const collapseAll = () => setExpandedTools(new Set());
+  const allExpanded = expandedTools.size === parsed.length;
+
+  return (
+    <div className="px-5 py-4 border-b border-border/50">
+      <div className="flex items-center justify-between">
+        <SectionLabel title={`Tools (${tools.length})`} />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={allExpanded ? collapseAll : expandAll}
+            className="text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+          >
+            {allExpanded ? "Collapse all" : "Expand all"}
+          </button>
+          <CopyButton text={copyText} />
+        </div>
+      </div>
+      <div className="mt-2 space-y-px rounded-md border border-border/40 overflow-hidden">
+        {parsed.map((tool, idx) => {
+          const isOpen = expandedTools.has(tool.name);
+          return (
+            <div key={`${tool.name}-${idx}`} className={idx > 0 ? "border-t border-border/20" : ""}>
+              <button
+                type="button"
+                onClick={() => toggle(tool.name)}
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left hover:bg-muted/20 transition-colors"
+              >
+                <Wrench className="w-3 h-3 text-amber-400/70 shrink-0" />
+                <span className="text-[11px] font-mono font-medium text-foreground/80">{tool.name}</span>
+                <span className="text-[9px] text-muted-foreground/30 ml-auto tabular-nums shrink-0">
+                  {tool.params.length}p
+                </span>
+              </button>
+              {isOpen && (
+                <div className="px-2.5 pb-2 bg-muted/10">
+                  {tool.description && (
+                    <p className="text-[10px] text-muted-foreground/50 mb-1.5 leading-relaxed italic">
+                      {tool.description}
+                    </p>
+                  )}
+                  {tool.params.length > 0 && (
+                    <table className="w-full text-[10px]">
+                      <tbody>
+                        {tool.params.map((p) => (
+                          <tr key={p.name} className="border-t border-border/10">
+                            <td className="py-0.5 pr-2 font-mono text-foreground/70 whitespace-nowrap align-top">
+                              {p.name}
+                              {p.required && <span className="text-red-400/50 ml-0.5">*</span>}
+                            </td>
+                            <td className="py-0.5 pr-2 text-muted-foreground/30 whitespace-nowrap align-top">{p.type}</td>
+                            <td className="py-0.5 text-muted-foreground/40 align-top">{p.description}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -562,7 +865,7 @@ function DetailsGrid({
     <div className="px-5 py-4">
       <SectionLabel title="Details" />
       <div className="mt-3 grid grid-cols-3 gap-2">
-        <DetailCard icon={<Coins className="w-3 h-3 text-muted-foreground" />} value={tokens.toLocaleString()} label="Tokens" />
+        <DetailCard icon={<Wrench className="w-3 h-3 text-muted-foreground" />} value={tokens.toLocaleString()} label="Tokens" />
         <DetailCard
           icon={<FileText className="w-3 h-3 text-muted-foreground" />}
           value={sourceCount > 0 ? `${sourceCount}` : "—"}

@@ -25,6 +25,7 @@ import {
   listFinetuneJobs,
   getFinetuneJobStatus,
   getFinetuneEvaluations,
+  FINETUNE_EVAL_PAGE_SIZE,
 } from "@/services/finetune-api";
 
 import { ProjectEventsConsumer } from "@/contexts/project-events";
@@ -34,10 +35,18 @@ import { emitter } from "@/utils/eventEmitter";
 // Types
 // ============================================================================
 
+interface JobEvalPagination {
+  offset: number;
+  pageSize: number;
+  /** Total rows with eval data (from job.eval_metrics.distinct_rows_with_eval) */
+  totalRows: number | null;
+}
+
 interface JobEvaluationState {
   data: FinetuneEvalResultsResponse | null;
   isLoading: boolean;
   error: string | null;
+  pagination: JobEvalPagination;
 }
 
 // Evaluation polling removed — SSE events trigger on-demand cloud-proxy fetches
@@ -114,23 +123,48 @@ function useFinetuneJobsLogic() {
     }
   }, [setJobs, currentDatasetId]);
 
+  const DEFAULT_PAGINATION: JobEvalPagination = {
+    offset: 0,
+    pageSize: FINETUNE_EVAL_PAGE_SIZE,
+    totalRows: null,
+  };
+
   // Fetch evaluations for a specific finetune job from the cloud API
-  const fetchJobEvaluations = useCallback(async (job: FinetuneJob, _isInitial = false) => {
+  const fetchJobEvaluations = useCallback(async (
+    job: FinetuneJob,
+    _isInitial = false,
+    paginationOverride?: Partial<JobEvalPagination>,
+  ) => {
     if (!job.workflow_id) return;
 
     const jobId = job.id;
+    const prevState = jobEvaluations[jobId];
+    const pagination: JobEvalPagination = {
+      ...DEFAULT_PAGINATION,
+      ...prevState?.pagination,
+      ...paginationOverride,
+      // Use eval_metrics total if available
+      totalRows: job.eval_metrics?.distinct_rows_with_eval ?? prevState?.pagination?.totalRows ?? null,
+    };
 
     setJobEvaluations((prev) => ({
       ...prev,
-      [jobId]: { data: prev[jobId]?.data ?? null, isLoading: true, error: null },
+      [jobId]: { data: prev[jobId]?.data ?? null, isLoading: true, error: null, pagination },
     }));
 
     try {
-      const results = await getFinetuneEvaluations(job.workflow_id, job.provider_job_id);
+      const results = await getFinetuneEvaluations(
+        job.workflow_id,
+        job.provider_job_id,
+        undefined,
+        undefined,
+        pagination.pageSize,
+        pagination.offset,
+      );
 
       setJobEvaluations((prev) => ({
         ...prev,
-        [jobId]: { data: results, isLoading: false, error: null },
+        [jobId]: { data: results, isLoading: false, error: null, pagination },
       }));
     } catch (err) {
       setJobEvaluations((prev) => ({
@@ -139,19 +173,33 @@ function useFinetuneJobsLogic() {
           data: prev[jobId]?.data ?? null,
           isLoading: false,
           error: err instanceof Error ? err.message : 'Failed to load evaluations',
+          pagination,
         },
       }));
     }
-  }, []);
+  }, [jobEvaluations]);
 
   // Use ref for jobs inside callbacks to avoid recreating them when jobs array changes
   const jobsRef = useRef(jobs);
   jobsRef.current = jobs;
 
   // Get evaluation state for a job
+  const defaultEvalState: JobEvaluationState = {
+    data: null, isLoading: false, error: null,
+    pagination: DEFAULT_PAGINATION,
+  };
   const getJobEvaluations = useCallback((jobId: string): JobEvaluationState => {
-    return jobEvaluations[jobId] ?? { data: null, isLoading: false, error: null };
+    return jobEvaluations[jobId] ?? defaultEvalState;
   }, [jobEvaluations]);
+
+  // Navigate to a specific page of eval results for a job
+  const setEvalPage = useCallback((jobId: string, page: number) => {
+    const job = jobsRef.current.find((j) => j.id === jobId);
+    if (!job) return;
+    const prevState = jobEvaluations[jobId];
+    const pageSize = prevState?.pagination?.pageSize ?? FINETUNE_EVAL_PAGE_SIZE;
+    fetchJobEvaluations(job, false, { offset: page * pageSize, pageSize });
+  }, [fetchJobEvaluations, jobEvaluations]);
 
   // Manual refresh evaluations for a job (on-demand cloud-proxy fetch)
   const refreshJobEvaluations = useCallback((jobId: string) => {
@@ -339,6 +387,7 @@ function useFinetuneJobsLogic() {
     getJobEvaluations,
     refreshJobEvaluations,
     ensureJobEvaluationsLoaded,
+    setEvalPage,
   };
 }
 

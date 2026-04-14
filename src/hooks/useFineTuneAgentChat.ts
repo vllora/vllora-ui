@@ -20,7 +20,7 @@ import type { ExecutionProgress } from '@/lib/distri-finetune-tools/steps/execut
 import { stockfishTools, isChessDataset } from '@/lib/distri-finetune-tools/steps';
 import { workflowService, datasetService, recordService, evalJobService, iterationStateService } from '@/services/service-registry';
 import type { FinetuneWorkflowState, FinetuneStep } from '@/types/workflow-types';
-import { getFinetuneJobStatus, getFinetuneEvaluations, getEvaluatorVersions } from '@/services/finetune-api';
+import { getFinetuneJobStatus, getAllFinetuneEvaluations, getEvaluatorVersions } from '@/services/finetune-api';
 import type { EvalJob } from '@/types/eval-job';
 import type { IterationState } from '@/types/iteration-types';
 import type { TopicEvalStats } from '@/types/dataset-types';
@@ -615,7 +615,7 @@ async function fetchTrainingEpochScores(
     ]);
     if (!dataset) return undefined;
 
-    const evalResponse = await getFinetuneEvaluations(dataset.id, providerJobId);
+    const evalResponse = await getAllFinetuneEvaluations(dataset.id, providerJobId);
     const results = evalResponse.results;
     if (results.length === 0) return undefined;
 

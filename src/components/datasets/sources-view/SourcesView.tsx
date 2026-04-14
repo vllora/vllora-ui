@@ -30,6 +30,18 @@ import {
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { knowledgeSourceService } from "@/services/service-registry";
+import { OtelTraceSourceViewer } from "./OtelTraceSourceViewer";
+import { OtelTraceBundleLoader } from "./OtelTraceBundleLoader";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+
+/**
+ * Detect OTel trace sources. They are produced by `otel_extract.py` in the
+ * skill, which sets `metadata.kind === 'otel-trace'`. Falls back to a name
+ * prefix check for older mocks.
+ */
+function isOtelTraceSource(source: { name: string; metadata?: Record<string, unknown> }): boolean {
+  return source.metadata?.kind === "otel-trace" || source.name.startsWith("otel-");
+}
 // CoverageMatrix replaced by inline hierarchical matrix in AllSourcesView
 import type { KnowledgeSource, KnowledgeSourcePart } from "@/types/knowledge-types";
 import type { TopicHierarchyNode, DatasetRecord } from "@/types/dataset-types";
@@ -54,11 +66,31 @@ export function SourcesView({ selectedSourceId, focusPartId, backTo, onBackToRec
     ? sources.find(s => s.id === selectedSourceId)
     : null;
 
-  // When a source is selected from the AllSourcesView cards/matrix,
-  // notify parent so explorer sidebar can update its selection
+  // Hooks must be called unconditionally — before any early returns
   const handleSelectSource = useCallback((sourceId: string) => {
     onSelectSource?.(sourceId);
   }, [onSelectSource]);
+
+  // OTel trace sources render via the trace timeline component, not the
+  // PDF/document viewer. Branch early to keep the rest of this component
+  // focused on document sources.
+  if (activeSource && isOtelTraceSource(activeSource)) {
+    const fallback = (
+      <div className="flex-1 flex items-center justify-center p-8">
+        <div className="text-center space-y-2">
+          <p className="text-sm font-medium text-foreground/70">Failed to render trace</p>
+          <p className="text-xs text-muted-foreground/50">The trace data may be malformed. Try reloading the page.</p>
+        </div>
+      </div>
+    );
+    return (
+      <ErrorBoundary fallback={fallback}>
+        {activeSource.traceBundleId
+          ? <OtelTraceBundleLoader source={activeSource} />
+          : <OtelTraceSourceViewer source={activeSource} />}
+      </ErrorBoundary>
+    );
+  }
 
   if (count === 0) {
     return <SourcesEmptyState />;

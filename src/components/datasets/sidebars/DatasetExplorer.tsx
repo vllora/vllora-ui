@@ -52,6 +52,7 @@ import { getJobAverageScore } from "@/types/eval-job";
 import type { TopicHierarchyNode } from "@/types/dataset-types";
 import { JobStatusBadge, normalizeJobStatus } from "@/components/datasets/shared/JobStatusBadge";
 import { evalJobDisplayName, finetuneJobDisplayName, isBaseModel } from "@/lib/job-display-name";
+import { recordService } from "@/services/service-registry";
 
 // ============================================================================
 // Types
@@ -75,7 +76,7 @@ interface DatasetExplorerProps {
 }
 
 export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
-  const { dataset, records, isGeneratingTraces } = DatasetDetailConsumer();
+  const { dataset, records, isGeneratingTraces, totalRecords } = DatasetDetailConsumer();
   const { sources } = KnowledgeSourcesConsumer();
   const { jobs: dryRunJobs, startDryRun } = EvalJobsConsumer();
   const { filteredJobs: finetuneJobs, loadJobs: loadFinetuneJobs } = FinetuneJobsConsumer();
@@ -181,8 +182,24 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
   const topicHierarchy = dataset?.topicHierarchy?.hierarchy;
 
-  // Build topic counts map from records
+  // Fetch server-side topic counts (not limited by client pagination)
+  const [serverTopicCounts, setServerTopicCounts] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    if (!dataset?.id) return;
+    recordService.getCountsByTopic(dataset.id).then((counts) => {
+      const map = new Map<string, number>();
+      for (const c of counts) {
+        map.set(c.topic_id, c.count);
+      }
+      setServerTopicCounts(map);
+    }).catch(() => {
+      // Fallback: count from loaded records if endpoint not available
+    });
+  }, [dataset?.id, totalRecords]);
+
+  // Use server counts when available, fall back to counting loaded records
   const topicCounts = useMemo(() => {
+    if (serverTopicCounts.size > 0) return serverTopicCounts;
     const counts = new Map<string, number>();
     for (const r of records) {
       if (r.topic) {
@@ -191,7 +208,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       }
     }
     return counts;
-  }, [records]);
+  }, [serverTopicCounts, records]);
 
   const handleSelect = useCallback((nodeId: string) => {
     setSelectedNodeId(nodeId);
@@ -309,14 +326,14 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       <SidebarSection
         title="Training Data"
         icon={<Database className="w-3 h-3" />}
-        count={records.length}
+        count={totalRecords || records.length}
         isLoading={isGeneratingTraces}
       >
         {/* All Topics item */}
         <SidebarItem
           icon={<Library className="w-3.5 h-3.5" />}
           label="All Topics"
-          badge={<CountBadge count={records.length} />}
+          badge={<CountBadge count={totalRecords || records.length} />}
           isActive={selectedNodeId === "data"}
           onClick={() => handleSelect("data")}
         />

@@ -968,8 +968,8 @@ EVAL_RESULT=$(curl -s http://localhost:9090/finetune/evaluations/$EVAL_ID)
 # 2. Fetch training metrics (time-series)
 METRICS=$(curl -s "http://localhost:9090/finetune/workflows/$WF_ID/jobs/$JOB_ID/metrics")
 
-# 3. Fetch per-epoch training evaluations
-EPOCH_EVALS=$(curl -s "http://localhost:9090/finetune/workflows/$WF_ID/finetune-evaluations?finetune_job_id=$JOB_ID")
+# 3. Fetch per-epoch training evaluations (first 20 rows; paginate with &limit=100&offset=N for more)
+EPOCH_EVALS=$(curl -s "http://localhost:9090/finetune/workflows/$WF_ID/finetune-evaluations?finetune_job_id=$JOB_ID&limit=1000")
 
 # 4. Fetch training job status
 JOB_STATUS=$(curl -s "http://localhost:9090/finetune/workflows/$WF_ID/jobs/$JOB_ID/status")

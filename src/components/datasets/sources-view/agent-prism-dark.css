@@ -1,0 +1,168 @@
+/**
+ * Agent-prism theme customization for vLLora.
+ *
+ * Uses agent-prism's CSS variable API to match vLLora's dark aesthetic.
+ * All agent-prism behavior is preserved — only colors/surfaces change.
+ *
+ * Design intent:
+ *   - Background matches vLLora's near-black (hsl 0 0% 3.9%)
+ *   - Surfaces use subtle elevation via lightness steps (5% → 8% → 11%)
+ *   - Borders are faint (8-12% lightness) for clean separation
+ *   - Agent-prism's span-type colors (violet LLM, orange TOOL, blue AGENT)
+ *     are preserved but slightly muted to reduce contrast against the
+ *     darker background
+ *   - Brand accent uses vLLora's emerald instead of agent-prism's violet
+ */
+
+.agent-prism-wrapper {
+  /* ── Surfaces — matched to vLLora's hsl(0 0% 3.9%) background ── */
+  --agentprism-background: 15% 0.005 260;              /* base: ~hsl(0 0% 3.9%) */
+  --agentprism-foreground: 93% 0.005 260;              /* text: ~hsl(0 0% 93%) */
+  --agentprism-primary: 93% 0.005 260;
+  --agentprism-primary-foreground: 15% 0.005 260;
+  --agentprism-secondary: 22% 0.008 260;               /* card/elevated surface */
+  --agentprism-secondary-foreground: 60% 0.01 260;
+  --agentprism-muted: 19% 0.006 260;                   /* inset/recessed */
+  --agentprism-muted-foreground: 65% 0.008 260;
+  --agentprism-accent: 22% 0.008 260;
+  --agentprism-accent-foreground: 93% 0.005 260;
+
+  /* ── Brand — vLLora's emerald instead of violet ── */
+  --agentprism-brand: 69.6% 0.17 162.48;               /* emerald-500 */
+  --agentprism-brand-foreground: 100% 0 0;
+  --agentprism-brand-secondary: 70.5% 0.213 47.604;    /* keep orange for contrast */
+  --agentprism-brand-secondary-foreground: 100% 0 0;
+
+  /* ── Borders — very subtle, matching vLLora's --border: 0 0% 14.9% ── */
+  --agentprism-border: 24% 0.006 260;
+  --agentprism-border-subtle: 20% 0.005 260;
+  --agentprism-border-strong: 32% 0.008 260;
+  --agentprism-border-inverse: 90% 0.005 260;
+
+  /* ── Status — keep functional colors, muted backgrounds ── */
+  --agentprism-success: 69.6% 0.17 162.48;             /* emerald */
+  --agentprism-success-muted: 20% 0.04 162;
+  --agentprism-success-muted-foreground: 82% 0.12 162;
+
+  --agentprism-error: 63.7% 0.237 25.331;
+  --agentprism-error-muted: 20% 0.06 25;
+  --agentprism-error-muted-foreground: 78% 0.11 20;
+
+  --agentprism-warning: 79.5% 0.184 86;
+  --agentprism-warning-muted: 22% 0.05 55;
+  --agentprism-warning-muted-foreground: 85% 0.14 86;
+
+  --agentprism-pending: 69.6% 0.17 162.48;             /* emerald for pending */
+  --agentprism-pending-muted: 20% 0.04 162;
+  --agentprism-pending-muted-foreground: 82% 0.12 162;
+
+  /* ── Code — complementary to emerald brand ── */
+  --agentprism-code-string: 69.6% 0.17 162.48;
+  --agentprism-code-number: 79.5% 0.15 86;
+  --agentprism-code-key: 68% 0.16 250;
+  --agentprism-code-base: 65% 0.008 260;
+
+  /* ── Badge default ── */
+  --agentprism-badge-default: 22% 0.008 260;
+  --agentprism-badge-default-foreground: 65% 0.008 260;
+
+  /* ── LLM — violet/purple (agent-prism signature, slightly softer) ── */
+  --agentprism-avatar-llm: 58% 0.22 292;
+  --agentprism-badge-llm: 24% 0.07 292;
+  --agentprism-badge-llm-foreground: 78% 0.14 292;
+  --agentprism-timeline-llm: 58% 0.22 292;
+
+  /* ── Agent — blue ── */
+  --agentprism-avatar-agent: 55% 0.20 262;
+  --agentprism-badge-agent: 23% 0.06 262;
+  --agentprism-badge-agent-foreground: 72% 0.14 255;
+  --agentprism-timeline-agent: 55% 0.20 262;
+
+  /* ── Tool — orange (warm contrast) ── */
+  --agentprism-avatar-tool: 70% 0.19 48;
+  --agentprism-badge-tool: 26% 0.06 42;
+  --agentprism-badge-tool-foreground: 84% 0.14 60;
+  --agentprism-timeline-tool: 70% 0.19 48;
+
+  /* ── Chain — teal ── */
+  --agentprism-avatar-chain: 70% 0.13 185;
+  --agentprism-badge-chain: 23% 0.04 192;
+  --agentprism-badge-chain-foreground: 82% 0.12 181;
+  --agentprism-timeline-chain: 70% 0.13 185;
+
+  /* ── Retrieval — sky ── */
+  --agentprism-avatar-retrieval: 66% 0.14 237;
+  --agentprism-badge-retrieval: 23% 0.04 248;
+  --agentprism-badge-retrieval-foreground: 80% 0.11 230;
+  --agentprism-timeline-retrieval: 66% 0.14 237;
+
+  /* ── Embedding — indigo ── */
+  --agentprism-avatar-embedding: 56% 0.20 277;
+  --agentprism-badge-embedding: 24% 0.07 286;
+  --agentprism-badge-embedding-foreground: 76% 0.13 275;
+  --agentprism-timeline-embedding: 56% 0.20 277;
+
+  /* ── Guardrail — yellow ── */
+  --agentprism-avatar-guardrail: 79.5% 0.184 86;
+  --agentprism-badge-guardrail: 22% 0.05 55;
+  --agentprism-badge-guardrail-foreground: 85% 0.14 86;
+  --agentprism-timeline-guardrail: 79.5% 0.184 86;
+
+  /* ── Create agent ── */
+  --agentprism-avatar-create-agent: 55% 0.20 262;
+  --agentprism-badge-create-agent: 23% 0.06 262;
+  --agentprism-badge-create-agent-foreground: 72% 0.14 255;
+  --agentprism-timeline-create-agent: 55% 0.20 262;
+
+  /* ── Span — neutral ── */
+  --agentprism-avatar-span: 45% 0.008 260;
+  --agentprism-badge-span: 22% 0.006 260;
+  --agentprism-badge-span-foreground: 60% 0.008 260;
+  --agentprism-timeline-span: 45% 0.008 260;
+
+  /* ── Event — pink ── */
+  --agentprism-avatar-event: 63% 0.22 354;
+  --agentprism-badge-event: 24% 0.07 354;
+  --agentprism-badge-event-foreground: 78% 0.13 0;
+  --agentprism-timeline-event: 63% 0.22 354;
+
+  /* ── Unknown — dim ── */
+  --agentprism-avatar-unknown: 38% 0.008 260;
+  --agentprism-badge-unknown: 22% 0.006 260;
+  --agentprism-badge-unknown-foreground: 50% 0.008 260;
+  --agentprism-timeline-unknown: 38% 0.008 260;
+
+  /* ── Layout ── */
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+
+  /* ── Glass effect on the wrapper ── */
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.03),
+    0 4px 24px rgba(0, 0, 0, 0.4),
+    0 1px 3px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.025) 0%,
+      transparent 40%
+    );
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* ── Inner surface glass tint — trace list panel ── */
+.agent-prism-wrapper > div > div:first-child,
+.agent-prism-wrapper > div > [class*="TraceList"] {
+  background: rgba(255, 255, 255, 0.015);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* ── Subtle top highlight on the header/search area ── */
+.agent-prism-wrapper > div > div:nth-child(2) > div:first-child {
+  background: rgba(255, 255, 255, 0.01);
+}

@@ -175,6 +175,60 @@ export interface TopicEvalStats {
   status: QualityRating;
 }
 
+// ─── Trace-Informed Curriculum Types ──────────────────────────────────────────
+
+/** Per-topic trace metrics from trace_priority.json (produced by trace_analyze.py). */
+export interface TopicTraceMetrics {
+  /** Fraction of traces touching this topic (0.0–1.0) */
+  readonly frequency: number;
+  /** Absolute trace count for this topic */
+  readonly traceCount: number;
+  /** Fraction of traces that failed on this topic (0.0–1.0) */
+  readonly failureRate: number;
+  /** Priority score = frequency × failureRate */
+  readonly priorityScore: number;
+  /** Priority tier derived from score */
+  readonly priorityTier: 'high' | 'medium' | 'low';
+  /** Where this topic was discovered */
+  readonly source: 'pdf' | 'trace' | 'both';
+}
+
+/** Auto-generated grader dimension from trace_grader_hints.json. */
+export interface GraderDimension {
+  /** Dimension identifier (e.g., "authentication_before_action") */
+  readonly name: string;
+  /** Human-readable description */
+  readonly description: string;
+  /** Failure rate from traces (0.0 for prompt-rule dimensions) */
+  readonly failureRate: number;
+  /** Where this dimension was derived from */
+  readonly source: 'trace_failure' | 'prompt_rule';
+}
+
+/** Combined trace analysis result (all 4 artifacts). */
+export interface TraceAnalysisResult {
+  readonly priority: Record<string, TopicTraceMetrics>;
+  readonly topics: {
+    readonly discoveredTopics: readonly string[];
+    readonly coverageGaps: readonly {
+      readonly topic: string;
+      readonly traceCount: number;
+      readonly frequency: number;
+    }[];
+  };
+  readonly prompts: {
+    readonly systemPrompt: string;
+    readonly simplifiedPrompt: string;
+    readonly seedQueries: Record<string, readonly string[]>;
+    readonly totalSeedQueries: number;
+  };
+  readonly graderHints: {
+    readonly dimensions: readonly GraderDimension[];
+    readonly calibrationPairCount: number;
+    readonly promptRulesAsCriteria: readonly string[];
+  };
+}
+
 // Score distribution buckets (0.0-0.2, 0.2-0.4, etc.)
 export interface ScoreDistribution {
   '0.0-0.2': number;
@@ -425,7 +479,7 @@ export interface DatasetWithRecords extends Dataset {
 // =============================================================================
 
 /** Type of knowledge source */
-export type KnowledgeSourceType = 'pdf' | 'image' | 'url' | 'text' | 'markdown';
+export type KnowledgeSourceType = 'pdf' | 'image' | 'url' | 'text' | 'markdown' | 'otel-trace';
 
 /** Classification of markdown file purpose */
 export type MarkdownPurpose = 'knowledge' | 'process';

@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import Editor, { DiffEditor } from "@monaco-editor/react";
 import { EvalJobsConsumer } from "@/contexts/EvalJobsContext";
+import { TraceAnalysisConsumer } from "@/contexts/TraceAnalysisContext";
+import { TraceGraderDimensionsPanel } from "./TraceGraderDimensionsPanel";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import {
   Tooltip,
@@ -202,6 +204,7 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
     selectedDryRunJobId,
     workflowId,
   }, ref) {
+  const { hasTraces, graderDimensions, traceAnalysis } = TraceAnalysisConsumer();
   const [script, setScript] = useState(evalScript || PLACEHOLDER_SCRIPT);
   const [isSaving, setIsSaving] = useState(false);
   const [isBottomCollapsed, setIsBottomCollapsed] = useState(false);
@@ -507,6 +510,14 @@ export const EvaluationConfigPanel = forwardRef<EvaluationConfigPanelRef, Evalua
         <ResizablePanel defaultSize={65} minSize={20}>
           <div className="flex flex-col h-full">
             {editorHeaderBar}
+            {hasTraces && graderDimensions.length > 0 && (
+              <div className="border-b border-border/50 max-h-48 overflow-y-auto">
+                <TraceGraderDimensionsPanel
+                  dimensions={graderDimensions}
+                  calibrationPairCount={traceAnalysis?.graderHints?.calibrationPairCount ?? 0}
+                />
+              </div>
+            )}
             {codeEditor}
           </div>
         </ResizablePanel>

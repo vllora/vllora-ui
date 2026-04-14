@@ -31,6 +31,7 @@ interface DbSourceResponse {
   readonly name: string;
   readonly description: string | null;
   readonly metadata: unknown | null;
+  readonly trace_bundle_id: string | null;
   readonly part: DbPartResponse[];
   readonly created_at?: string;
 }
@@ -52,13 +53,23 @@ function mapPart(db: DbPartResponse): KnowledgeSourcePart {
 }
 
 function mapSource(db: DbSourceResponse): KnowledgeSource {
+  // When trace_bundle_id is present, inject `kind: "otel-trace"` into
+  // metadata so the UI's isOtelTraceSource() recognizes it. The gateway
+  // stores `kind` and `trace_bundle_id` as separate columns, but the
+  // UI's routing logic checks `metadata.kind`.
+  const rawMeta = (db.metadata as Record<string, unknown>) ?? {};
+  const metadata = db.trace_bundle_id
+    ? { ...rawMeta, kind: 'otel-trace' }
+    : Object.keys(rawMeta).length > 0 ? rawMeta : undefined;
+
   return {
     id: db.id,
     referenceId: db.reference_id ?? undefined,
     workflowId: db.workflow_id,
     name: db.name,
     description: db.description ?? undefined,
-    metadata: (db.metadata as Record<string, unknown>) ?? undefined,
+    metadata,
+    traceBundleId: db.trace_bundle_id ?? undefined,
     parts: (db.part ?? []).map(mapPart),
     createdAt: db.created_at ?? '',
   };

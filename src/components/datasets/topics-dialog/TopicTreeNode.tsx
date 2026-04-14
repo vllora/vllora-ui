@@ -20,7 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import type { TopicHierarchyNode } from "@/types/dataset-types";
+import type { TopicHierarchyNode, TopicTraceMetrics } from "@/types/dataset-types";
 
 export interface TopicTreeNodeProps {
   node: TopicHierarchyNode;
@@ -32,6 +32,8 @@ export interface TopicTreeNodeProps {
   onAddChild: (parentId: string) => void;
   onDelete: (nodeId: string) => void;
   topicCounts?: Map<string, number>;
+  /** Trace metrics lookup: topic name → metrics (from TraceAnalysisContext) */
+  getTraceMetrics?: (topicId: string) => TopicTraceMetrics | null;
   isLast?: boolean;
 }
 
@@ -49,6 +51,7 @@ export function TopicTreeNode({
   onAddChild,
   onDelete,
   topicCounts,
+  getTraceMetrics,
   isLast = false,
 }: TopicTreeNodeProps) {
   const [isEditing, setIsEditing] = useState(false);
@@ -89,6 +92,9 @@ export function TopicTreeNode({
   };
 
   const totalRecords = getTotalRecords(node);
+
+  // Trace metrics for this topic (only available in combined mode)
+  const traceMetrics = getTraceMetrics?.(node.name) ?? null;
 
   // Get icon based on node type
   const getNodeIcon = () => {
@@ -203,6 +209,27 @@ export function TopicTreeNode({
                 </span>
               )}
 
+              {/* Trace priority badges (combined mode only) */}
+              {traceMetrics && !hasChildren && (
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 font-medium" title={`${traceMetrics.traceCount} traces (${(traceMetrics.frequency * 100).toFixed(1)}% of total)`}>
+                    {traceMetrics.traceCount} traces
+                  </span>
+                  {traceMetrics.failureRate > 0 && (
+                    <span className={cn(
+                      "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
+                      traceMetrics.failureRate > 0.4
+                        ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                        : traceMetrics.failureRate > 0.2
+                          ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                          : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                    )} title={`${(traceMetrics.failureRate * 100).toFixed(1)}% of traces failed on this topic`}>
+                      {(traceMetrics.failureRate * 100).toFixed(0)}% fail
+                    </span>
+                  )}
+                </div>
+              )}
+
               {/* Action buttons - visible on hover */}
               <div className={cn(
                 "flex items-center gap-0.5 transition-all duration-150",
@@ -273,6 +300,7 @@ export function TopicTreeNode({
                 onAddChild={onAddChild}
                 onDelete={onDelete}
                 topicCounts={topicCounts}
+                getTraceMetrics={getTraceMetrics}
                 isLast={index === node.children!.length - 1}
               />
             ))}

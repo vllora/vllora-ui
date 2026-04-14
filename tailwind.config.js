@@ -1,4 +1,5 @@
 import colors from 'tailwindcss/colors'
+import { agentPrismTailwindColors } from './src/components/agent-prism/theme/index.ts'
 
 /** @type {import('tailwindcss').Config} */
 export default {
@@ -6,6 +7,7 @@ export default {
   content: [
     "./index.html",
     "./src/**/*.{ts,tsx,js,jsx}",
+    "./src/components/agent-prism/**/*.{ts,tsx}",
   ],
   safelist: [
     // Safelist theme colors to ensure they're always available
@@ -21,6 +23,7 @@ export default {
   	},
   	extend: {
   		colors: {
+  			...agentPrismTailwindColors,
   			border: 'hsl(var(--border))',
   			input: 'hsl(var(--input))',
   			ring: 'hsl(var(--ring))',

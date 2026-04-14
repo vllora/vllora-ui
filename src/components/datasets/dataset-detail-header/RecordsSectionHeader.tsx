@@ -34,6 +34,14 @@ export interface RecordsSectionHeaderProps {
   onClearSourceDocumentFilter?: () => void;
   /** Hide the view mode toggle (e.g., when showing topic detail) */
   hideViewToggle?: boolean;
+  /** Total record count from server (may exceed records.length when paginated) */
+  totalRecordsFromServer?: number;
+  /** Whether more records can be loaded */
+  hasMore?: boolean;
+  /** Whether a page load is in progress */
+  isLoadingMore?: boolean;
+  /** Callback to load more records */
+  onLoadMore?: () => void;
 }
 
 export function RecordsSectionHeader({
@@ -49,6 +57,10 @@ export function RecordsSectionHeader({
   sourceDocumentFilterName,
   onClearSourceDocumentFilter,
   hideViewToggle = false,
+  totalRecordsFromServer,
+  hasMore,
+  isLoadingMore,
+  onLoadMore,
 }: RecordsSectionHeaderProps) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [generationProgress, setGenerationProgress] = useState<{
@@ -82,8 +94,8 @@ export function RecordsSectionHeader({
     };
   }, [workflowId]);
 
-  // Calculate summary stats (same as footer)
-  const totalRecords = records.length;
+  // Calculate summary stats — use server total for the main count
+  const totalRecords = totalRecordsFromServer ?? records.length;
   const fromSpans = records.filter((r) => r.spanId).length;
   const withTopic = records.filter((r) => r.topic).length;
   const withEvaluation = records.filter((r) => r.evaluation?.score !== undefined).length;
@@ -157,6 +169,23 @@ export function RecordsSectionHeader({
               clickable={!!onStatFilterChange}
               tooltip="Click to filter records with evaluation scores"
             />
+            {/* Pagination: load more trigger */}
+            {hasMore && (
+              <>
+                <span className="text-border">·</span>
+                <button
+                  onClick={onLoadMore}
+                  disabled={isLoadingMore}
+                  className="inline-flex items-center gap-1 text-xs text-[rgb(var(--theme-500))] hover:underline disabled:opacity-50"
+                >
+                  {isLoadingMore ? (
+                    <><Loader2 className="w-3 h-3 animate-spin" /> Loading more...</>
+                  ) : (
+                    <>Load more records</>
+                  )}
+                </button>
+              </>
+            )}
             {/* Source document filter chip */}
             {sourceDocumentFilterName && onClearSourceDocumentFilter && (
               <>
