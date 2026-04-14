@@ -48,11 +48,12 @@ Step 5 (Write Grader) must run after Step 4 (Generate Records) — the grader ne
 ```
 pdfs/doc-1.pdf    pdfs/doc-2.pdf    pdfs/doc-3.pdf
       ↓                 ↓                 ↓
-   Docling Serve (or pdftotext fallback)
+   extract_router.py  → digital → odl_extract.py (OpenDataLoader, local)
+                      → scanned → docling_extract.py (Docling Serve, OCR fallback)
       ↓                 ↓                 ↓
-   docling-result.json (per document)
+   extraction-result.json + extraction-status.json (per document)
       ↓                 ↓                 ↓
-   build_knowledge_parts.py (deterministic)
+   build_knowledge_parts.py (deterministic; sniffs ODL kids[] vs Docling chunks[])
       ↓                 ↓                 ↓
    knowledge_parts.json    parts-index.json     ← relevant: null at this stage
    (full content)          (lightweight index)
@@ -548,8 +549,9 @@ UI:
 
 | Step | File | Location | Description |
 |------|------|----------|-------------|
-| 2 | `docling-result.json` | `knowledge/{slug}/` | Raw Docling extraction output |
-| 2 | `knowledge_parts.json` | `knowledge/{slug}/` | Typed, linked parts (full content) |
+| 2 | `extraction-result.json` | `knowledge/{slug}/` | Raw extraction output (ODL `kids[]` or Docling `chunks[]`) |
+| 2 | `extraction-status.json` | `knowledge/{slug}/` | Per-doc provenance: backend, used_struct_tree, pages, duration |
+| 2 | `knowledge_parts.json` | `knowledge/{slug}/` | Typed, linked parts (full content), plus `semantic_type` / `heading_level` / `parent_section` / `tag_source` metadata |
 | 2 | `parts-index.json` | `knowledge/{slug}/` | Lightweight index (id, type, title, preview, relevant) |
 | 2 | `all-parts-index.json` | `knowledge/` | Merged index across all documents |
 | 3 | `all-parts-index.json` | `knowledge/` | Updated with `relevant: true/false` labels |

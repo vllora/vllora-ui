@@ -1,10 +1,12 @@
 # PDF Extraction Improvements Research
 
+> **Status: Implemented (2026-04)** — The Tiered Extraction architecture proposed in [Recommended Pipeline Changes](#recommended-pipeline-changes) shipped: `scripts/extract_router.py` routes digital PDFs to `scripts/odl_extract.py` (OpenDataLoader PDF, local, deterministic) and falls back to `scripts/docling_extract.py` only for scanned/OCR-needed PDFs. Chunking is now owned solely by `scripts/build_knowledge_parts.py` (heading-aware via ODL's semantic tree). The Docling Docker configuration appendix below is still accurate for the OCR-fallback path. The rest of this document is preserved as the research record that motivated the migration.
+
 Research into improving extraction quality for the vLLora finetune skill pipeline. Covers four problem areas: image extraction, content fragmentation, processing speed, and overall extraction quality.
 
 **Date**: 2026-03-19
 **Context**: Chess Tactics PDF (84 pages, 80+ board diagrams, text-based chess notation)
-**Current tool**: Docling Serve (CPU Docker, localhost:5001)
+**Current tool (at time of writing)**: Docling Serve (CPU Docker, localhost:5001). **Current primary (2026-04+):** OpenDataLoader PDF, with Docling retained as OCR fallback.
 
 ---
 
@@ -492,6 +494,8 @@ Parts with scores below a threshold can be flagged for LLM enrichment in Step 4.
 ## Recommended Pipeline Changes
 
 ### Architecture: Tiered Extraction
+
+> **Shipped 2026-04.** This section describes what was implemented: `extract_router.py` routes digital PDFs → `odl_extract.py` (OpenDataLoader) and falls back to `docling_extract.py` for scanned/OCR-needed PDFs. See `finetune-skill/reference/extraction-guide.md` for the current user-facing documentation.
 
 Replace the current "Docling or pdftotext" binary choice with a tiered approach:
 

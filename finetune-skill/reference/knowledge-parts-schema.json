@@ -36,8 +36,9 @@
           "description": "Extraction-level metadata. Stored as JSON string in DB, parsed as object in API responses.",
           "properties": {
             "total_pages": { "type": "integer", "description": "Total page count" },
-            "extraction_method": { "type": "string", "enum": ["docling_hybrid", "pdftotext"], "description": "How the document was extracted" },
-            "total_chunks": { "type": "integer", "description": "Number of Docling chunks processed" },
+            "extraction_method": { "type": "string", "enum": ["docling_hybrid", "odl", "pdftotext"], "description": "How the document was extracted" },
+            "total_chunks": { "type": "integer", "description": "Number of chunks/sections processed (Docling chunks or ODL heading-derived sections)" },
+            "tag_source": { "type": "string", "enum": ["structure_tree", "xycut_fallback", "docling"], "description": "Provenance of structural tags: ODL consumed the tagged-PDF tree (structure_tree), fell back to XY-Cut++ layout (xycut_fallback), or came via Docling HybridChunker (docling)" },
             "extracted_at": { "type": "string", "format": "date-time", "description": "When extraction was performed" }
           }
         }
@@ -130,6 +131,26 @@
                 "type": "array",
                 "items": { "type": "string" },
                 "description": "Part IDs of co-occurring items (from the same Docling chunk)"
+              },
+              "semantic_type": {
+                "type": "string",
+                "enum": ["paragraph", "heading", "table", "list", "list_item", "caption", "image", "text_block", "text"],
+                "description": "ODL-derived semantic type of the source element. Present when backend=odl."
+              },
+              "heading_level": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 6,
+                "description": "Heading depth (1..6) when this part is a heading or was grouped under one. Present when backend=odl and structure tree was consumed."
+              },
+              "parent_section": {
+                "type": "string",
+                "description": "Text of the nearest ancestor heading (breadcrumb). Present when backend=odl and a heading ancestor exists."
+              },
+              "tag_source": {
+                "type": "string",
+                "enum": ["structure_tree", "xycut_fallback", "docling"],
+                "description": "Per-part provenance of structural tags. Mirrors source.metadata.tag_source — duplicated here so individual parts remain self-describing."
               }
             }
           }

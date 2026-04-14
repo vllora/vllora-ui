@@ -19,6 +19,10 @@ from collections import Counter
 from pathlib import Path
 
 
+MERGEABLE_TEXT_SEMANTIC_TYPES = {"paragraph", "text", "text_block", None}
+SHORT_TEXT_EXEMPT_SEMANTIC_TYPES = {"caption", "list", "list_item"}
+
+
 def fix_unicode_escapes(text: str) -> str:
     """Decode any remaining \\uXXXX escape sequences in a string."""
     if not text:
@@ -252,7 +256,11 @@ def consolidate_parts(
         # Start new buffer or merge into existing
         if buffer is None:
             buffer = _start_buffer(part)
-        elif part.get("extraction_path") == buffer.get("extraction_path"):
+        elif (
+            part.get("extraction_path") == buffer.get("extraction_path")
+            and _is_mergeable_text_part(part)
+            and _is_mergeable_text_part(buffer)
+        ):
             _merge_into_buffer(buffer, part)
         else:
             merged.append(buffer)
@@ -327,7 +335,9 @@ def consolidate_parts(
     before_count = len(merged)
     consolidated = [
         p for p in merged
-        if p["type"] != "text" or len(p.get("content", "")) >= min_chars
+        if p["type"] != "text"
+        or len(p.get("content", "")) >= min_chars
+        or _is_short_text_exempt(p)
     ]
     dropped = before_count - len(consolidated)
 
@@ -342,6 +352,23 @@ def _start_buffer(part: dict) -> dict:
         part.get("extraction_metadata", {}).get("source_chunks", [])
     )
     return buf
+
+
+def _semantic_type(part: dict) -> str | None:
+    return part.get("extraction_metadata", {}).get("semantic_type")
+
+
+def _is_mergeable_text_part(part: dict) -> bool:
+    semantic = _semantic_type(part)
+    return semantic in MERGEABLE_TEXT_SEMANTIC_TYPES
+
+
+def _is_short_text_exempt(part: dict) -> bool:
+    semantic = _semantic_type(part)
+    if semantic in SHORT_TEXT_EXEMPT_SEMANTIC_TYPES:
+        return True
+    content_meta = part.get("content_metadata", {}) or {}
+    return "caption_for_part_id" in content_meta
 
 
 def _merge_into_buffer(buffer: dict, part: dict) -> None:

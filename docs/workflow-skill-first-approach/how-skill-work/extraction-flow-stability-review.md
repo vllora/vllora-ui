@@ -1,14 +1,23 @@
 # Extraction Flow — Stability Review & Recommended Approach
 
-**Date**: 2026-03-31
+**Date**: 2026-03-31 (original), 2026-04 (post-ODL migration banner)
 **Author**: Claude (research + codebase analysis)
-**Status**: P0 + P1 implemented (2026-03-31). P2/P3 pending.
+**Status**: P0 + P1 implemented (2026-03-31). ODL migration addressed several P2/P3 risks (see banner below).
+
+> **2026-04 migration banner.** Since this document was written, the primary PDF extractor changed from Docling Serve to OpenDataLoader (ODL) via a new `extract_router.py`. Several risks flagged below are now resolved or scoped smaller:
+>
+> - **"Docling Service Availability (CRITICAL)"** → Docker is only required when a scanned PDF is routed. All-digital corpora never touch Docling.
+> - **"Docling Polling Timeouts (HIGH)"** → Not on the digital-PDF path at all (ODL is synchronous, local, JVM-based).
+> - **"Docling Result Size & Agent Context (MEDIUM)"** → ODL output is smaller (no full-page PNGs by default), and `build_knowledge_parts.py` now owns all chunking — no agent-written custom scripts per doc.
+> - **"Non-deterministic custom scripts"** → `build_knowledge_parts.py` sniffs the input shape (ODL `kids[]` vs Docling `chunks[]`) and emits byte-identical output across reruns for the same input.
+>
+> Risks tied to Docling are now only active on the scanned-PDF fallback path. The document is preserved as a historical record of what the migration was meant to fix — do not delete.
 
 ---
 
 ## Executive Summary
 
-The current PDF extraction flow (Step 2) is the **most fragile step in the pipeline**. It depends on a Docker service (Docling Serve) that may or may not be running, spawns parallel subagents that can silently fail, produces non-deterministic output due to agent-written custom scripts, and has quality gates that don't block progression. This document maps the full flow, identifies every instability point, and proposes a hardened architecture based on industry research.
+**(Pre-migration, 2026-03-31.)** The current PDF extraction flow (Step 2) is the **most fragile step in the pipeline**. It depends on a Docker service (Docling Serve) that may or may not be running, spawns parallel subagents that can silently fail, produces non-deterministic output due to agent-written custom scripts, and has quality gates that don't block progression. This document maps the full flow, identifies every instability point, and proposes a hardened architecture based on industry research.
 
 ---
 
