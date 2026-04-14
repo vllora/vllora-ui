@@ -29,7 +29,8 @@ Most RAG frameworks treat visual PDF content as a hard problem with no universal
 | **Unstructured.io** | Partitions PDFs into elements (text, images, tables). Extracts embedded images but does not interpret them. For interpretation, you pipe images to a vision model. | Free (OSS) + vision cost | Medium |
 | **LangChain** | Multimodal RAG templates that convert pages to images and send to Gemini/GPT-4o for description. Explicitly designed around vision LLM costs. | Vision LLM cost | High |
 | **Pathway** | Unified page-level image + text embedding. Captures pages as images, runs through multimodal models. Claims 95% accuracy on chart queries vs 60-70% for text-only. | Vision LLM cost | High |
-| **Docling** (our current tool) | Extracts text, tables, and embedded images. Cannot interpret font-rendered diagrams. Layout model can detect figure regions but cannot understand them. | Free | Low for diagrams |
+| **OpenDataLoader PDF** (our current primary tool for digital PDFs, 2026-04+) | Local Java-based extractor. Tagged-PDF structure tree when available, XY-Cut++ visual layout otherwise. Deterministic. No OCR, no vision understanding. | Free | Low for diagrams |
+| **Docling** (our OCR fallback for scanned PDFs) | Dockerized service. Extracts text, tables, and embedded images. Cannot interpret font-rendered diagrams. Layout model can detect figure regions but cannot understand them. | Free | Low for diagrams |
 
 ### Key Insight
 

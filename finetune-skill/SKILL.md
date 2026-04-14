@@ -139,7 +139,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-step \
 
 | Step | Milestones to log |
 |------|-------------------|
-| Step 2: Extract | docling_submit, docling_complete, build_parts, consolidate, upload_knowledge |
+| Step 2: Extract | route_and_extract (backend per doc), build_parts, consolidate, upload_knowledge |
 | Step 3: Topics | design_topics (with topic count + structure), upload_topics, build_relations, upload_relations |
 | Step 4: Generate | generate_stage1 (record count per topic), derive_gt (success/error count), dedup, validate_gt, upload_records |
 | Step 5: Grader | write_grader (scoring approach), test_grader (adversarial results), upload_grader |
@@ -195,7 +195,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py status --workflow-id $WORKFLOW_ID
 ```
 Follow its recommendation. (3) Sync jobs: `sync-jobs --workflow-id $WORKFLOW_ID --output-dir finetune-project`. (4) Cancel broken eval jobs if `status` shows ~0.0 scores (use `uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py cancel-eval --workflow-id $WORKFLOW_ID --eval-id <EVAL_ID>`). (5) Resume from recommended step. (6) Backfill missing data in execution log.
 
-**Reusing extractions across workflows:** Existing `knowledge/{slug}/docling-result.json` files can be reused even with a new workflow. Do NOT delete `knowledge/` when starting fresh from the same documents.
+**Reusing extractions across workflows:** Existing `knowledge/{slug}/extraction-result.json` files (ODL or Docling) can be reused even with a new workflow. Do NOT delete `knowledge/` when starting fresh from the same documents. Legacy `docling-result.json` files from prior skill versions are still accepted.
 
 | State found | Action |
 |-------------|--------|
@@ -284,20 +284,20 @@ Extract knowledge from all documents. Each document processed by a `knowledge-ex
 
 **Outputs:** `knowledge/{slug}/knowledge_parts.json`, `knowledge/{slug}/parts-index.json`, `knowledge/all-parts-index.json` (merged)
 
-**2a. Check Docling** — `curl -sS --connect-timeout 5 http://127.0.0.1:5001/health`
+**2a. Check prerequisites** — `java -version` must report 11+ (for ODL, the digital-PDF path). The Docling Serve health check (`curl -sS --connect-timeout 5 http://127.0.0.1:5001/health`) is only required if any input PDF is scanned — the router auto-detects and falls back to Docling when needed. For all-digital corpora you can skip Docker entirely.
 
-**2b. Submit & extract** — Submit PDFs with `--skip-existing`. Spawn one `knowledge-extractor` subagent per document. Wait for ALL to complete.
+**2b. Extract via the router** — Run `extract_router.py` with `--skip-existing`. It auto-dispatches each PDF to ODL (digital) or Docling (scanned) and writes `extraction-result.json` plus a sibling `extraction-status.json` recording the backend used. Spawn one `knowledge-extractor` subagent per document to build parts. Wait for ALL to complete.
 
-> Subagents MUST use `build_knowledge_parts.py` as the default extraction script. Do NOT write custom extract.py unless explicitly requested or `build_knowledge_parts.py` produces 0 parts.
+> Subagents MUST use `build_knowledge_parts.py` as the default extraction script. It sniffs the result shape (ODL `kids[]` vs Docling `chunks[]`) and branches automatically. On the ODL branch, tables are preserved as structured table parts, lists remain markdown text parts, and captions remain separate linked text parts. Do NOT write custom extract.py unless explicitly requested or `build_knowledge_parts.py` produces 0 parts.
 
 > Subagents upload to the gateway. Do NOT re-upload yourself — creates duplicates.
 
 ```bash
-uv run ${CLAUDE_SKILL_DIR}/scripts/docling_extract.py --submit-only --skip-existing \
-  "pdfs/doc1.pdf:finetune-project/knowledge/doc1-slug/docling-result.json" ...
+uv run ${CLAUDE_SKILL_DIR}/scripts/extract_router.py --batch --skip-existing \
+  "pdfs/doc1.pdf:finetune-project/knowledge/doc1-slug/extraction-result.json" ...
 ```
 
-> See [reference/extraction-guide.md](reference/extraction-guide.md) for subagent parameters, retry logic, and merge script.
+> See [reference/extraction-guide.md](reference/extraction-guide.md) for subagent parameters, router flags, and the Docling fallback details.
 
 **2c. Merge indexes** — Merge all `parts-index.json` into `knowledge/all-parts-index.json`.
 

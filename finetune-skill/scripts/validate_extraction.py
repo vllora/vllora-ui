@@ -110,9 +110,65 @@ def validate_file(path: Path) -> dict:
             f"WARN: Only {len(paths)} unique extraction paths for {len(parts)} parts"
         )
 
-    # Check 9: Table quality — detect garbled table extractions
-    # Catches: inconsistent column counts, title/content mismatch, mixed content
     table_parts = [p for p in parts if p.get("type") == "table"]
+    caption_parts = [
+        p for p in text_parts
+        if (p.get("extraction_metadata", {}) or {}).get("semantic_type") == "caption"
+    ]
+
+    # Check 9: ODL-specific structural integrity
+    extraction_result_path = path.parent / "extraction-result.json"
+    raw_odl_tables = 0
+    if extraction_result_path.exists():
+        try:
+            with open(extraction_result_path, encoding="utf-8") as f:
+                raw_data = json.load(f)
+            if isinstance(raw_data, dict) and "kids" in raw_data and "chunks" not in raw_data:
+                raw_odl_tables = sum(
+                    1 for kid in raw_data.get("kids", [])
+                    if isinstance(kid, dict) and kid.get("type") == "table"
+                )
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    if raw_odl_tables > 0 and not table_parts:
+        issues.append(
+            f"FAIL: Raw ODL extraction contains {raw_odl_tables} table element(s) but 0 table parts were emitted."
+        )
+
+    unlinked_captions = [
+        p for p in caption_parts
+        if not (p.get("content_metadata", {}) or {}).get("caption_for_part_id")
+    ]
+    if unlinked_captions:
+        issues.append(
+            f"WARN: {len(unlinked_captions)} caption text part(s) have no linked table/image target."
+        )
+
+    malformed_tables = []
+    prose_as_tables = []
+    for tp in table_parts:
+        meta = tp.get("content_metadata", {}) or {}
+        semantic_type = (tp.get("extraction_metadata", {}) or {}).get("semantic_type")
+        if not all(key in meta for key in ("headers", "rows", "num_rows", "num_cols")):
+            malformed_tables.append(tp.get("title", "")[:40] or tp.get("id", "untitled"))
+        if semantic_type is not None and semantic_type != "table":
+            prose_as_tables.append(tp.get("title", "")[:40] or tp.get("id", "untitled"))
+
+    if malformed_tables:
+        issues.append(
+            f"FAIL: {len(malformed_tables)} table part(s) are missing structured metadata "
+            f"(headers/rows/num_rows/num_cols)."
+        )
+
+    if prose_as_tables:
+        issues.append(
+            f"FAIL: {len(prose_as_tables)} table part(s) have non-table semantic_type "
+            f"(expected 'table')."
+        )
+
+    # Check 10: Table quality — detect garbled table extractions
+    # Catches: inconsistent column counts, title/content mismatch, mixed content
     for tp in table_parts:
         content = tp.get("content", "")
         title = tp.get("title", "")

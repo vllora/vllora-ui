@@ -1,89 +1,137 @@
-# Document Extraction Guide (Docling Serve)
+# Document Extraction Guide
 
-Extract structured knowledge parts from PDFs using Docling Serve — a local Docker container that handles OCR, tables, images, and complex layouts.
+Extract structured knowledge parts from PDFs. The pipeline auto-routes each document to the right extractor:
 
-**Your deliverable is a `knowledge_parts.json` per document** (stored in `knowledge/{doc-slug}/knowledge_parts.json`, where `{doc-slug}` is the slugified filename) — a typed, linked parts file matching the schema in Section 3. Every text passage, table, and image becomes a `source_part` with a title, extraction path, and provenance metadata. Normalized chunks or raw Docling output are intermediate steps, NOT the final output.
+- **OpenDataLoader PDF (ODL)** — local, deterministic, no Docker. Used for digital PDFs (selectable text). Fast.
+- **Docling Serve** — Dockerized, OCR-capable. Used as a fallback for scanned PDFs.
 
-**Multi-document note**: When processing multiple documents, each gets its own subdirectory named by slugifying the filename (e.g., `knowledge/chess-tactics/`, `knowledge/strategy-guide/`). Submit all documents to Docling in parallel (async API), then process each result separately. Prefix part IDs with a document identifier (e.g., `chess-tactics-chapter-3`) to keep them unique across documents. See SKILL.md Step 2 for the full multi-document workflow.
+**Your deliverable is a `knowledge_parts.json` per document** (stored in `knowledge/{doc-slug}/knowledge_parts.json`, where `{doc-slug}` is the slugified filename) — a typed, linked parts file matching the schema in Section 3. Every text passage, table, and image becomes a `source_part` with a title, extraction path, and provenance metadata.
+
+**Multi-document note**: each document gets its own subdirectory named by slugifying the filename (e.g., `knowledge/chess-tactics/`). Prefix part IDs with a document identifier (e.g., `chess-tactics-chapter-3`) to keep them unique when merging. See SKILL.md Step 2 for the full workflow.
 
 ---
 
-## Section 1: Call Docling
+## Section 1: Run the extraction router
+
+The single entry point is `scripts/extract_router.py`. It auto-detects digital vs scanned PDFs and dispatches:
+
+```
+extract_router.py  →  is_digital_pdf(pdf)?
+                        ├── yes → odl_extract.py  (local ODL, deterministic)
+                        └── no  → docling_extract.py  (OCR via Docling Serve)
+```
 
 ### Prerequisites
 
-Check if Docling Serve is already running:
+**ODL path (digital PDFs):** Java 11+ and the Python wrapper.
 
 ```bash
-curl -sS http://127.0.0.1:5001/health
-# Expected: {"status":"ok"}
+java -version 2>&1 | grep -qE 'version "(1[1-9]|[2-9][0-9])' || echo "ERROR: Java 11+ required"
+uv tool install opendataloader-pdf
 ```
 
-If not running, start it:
+**Docling path (scanned PDFs only):** Docker + Docling Serve running on port 5001.
 
 ```bash
+curl -sS http://127.0.0.1:5001/health   # expect {"status":"ok"}
+# If not running:
 docker run -p 5001:5001 ghcr.io/docling-project/docling-serve-cpu:latest
 ```
 
-This pulls the CPU image (~2 GB on first run) and starts Docling on port 5001. Wait for startup to complete (watch for "Uvicorn running" in the output), then verify with the health check above.
+The Docling health check is only required when the router actually picks the Docling path for a given PDF. For all-digital corpora you can skip Docker entirely.
 
-If the container already exists but is stopped:
-
-```bash
-docker start docling-serve
-```
-
-### Submit a hybrid chunk task
-
-Use the `/v1/chunk/hybrid/file/async` endpoint. This returns BOTH `chunks[]` (text segments with headings and page numbers) AND `documents[]` (the full DoclingDocument with texts, tables, pictures, and body tree) in one response.
-
-**Always use these parameters** to get complete extraction with embedded images:
+### Single-file extraction
 
 ```bash
-TASK_RESPONSE=$(curl -sS -X POST "http://127.0.0.1:5001/v1/chunk/hybrid/file/async" \
-  -F "files=@document.pdf;type=application/pdf" \
-  -F "include_converted_doc=true" \
-  -F "convert_do_ocr=true" \
-  -F "convert_do_table_structure=true" \
-  -F "convert_include_images=true" \
-  -F "convert_image_export_mode=embedded" \
-  -F "chunking_merge_peers=true" \
-  -F "chunking_max_tokens=1024" \
-  -F "chunking_tokenizer=BAAI/bge-small-en-v1.5" \
-  -F "chunking_use_markdown_tables=true")
-
-TASK_ID=$(echo "$TASK_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['task_id'])")
-echo "Task ID: $TASK_ID"
+uv run scripts/extract_router.py document.pdf \
+  -o knowledge/{doc-slug}/extraction-result.json
 ```
 
-Key parameters:
-- `include_converted_doc=true` — includes the full DoclingDocument in the response (needed for tables, pictures, cross-references)
-- `convert_include_images=true` + `convert_image_export_mode=embedded` — images are base64-encoded in the response
-- `convert_do_table_structure=true` — extracts table cell structure (rows, columns, headers)
-- `chunking_merge_peers=true` — merges small adjacent chunks under the same heading
-- `chunking_max_tokens=1024` — maximum tokens per chunk. Set higher than the RAG default (512) because fine-tuning needs larger, more coherent knowledge parts — not retrieval-sized fragments
-- `chunking_tokenizer=BAAI/bge-small-en-v1.5` — tokenizer for chunk size counting (matches the embedding model used downstream; default `sentence-transformers/all-MiniLM-L6-v2` under-counts tokens for BGE embeddings)
+Output:
+- `extraction-result.json` — the backend's raw JSON (ODL `kids[]` tree OR Docling `chunks[] + documents[]`)
+- `extraction-status.json` (sibling file) — records `backend: "odl" | "docling"`, `used_struct_tree`, `pages`, `elements`, `duration_seconds`. Downstream scripts sniff this to know which parser branch to take.
 
-### Poll until complete
+### Batch mode
 
 ```bash
-while true; do
-  STATUS=$(curl -sS "http://127.0.0.1:5001/v1/status/poll/$TASK_ID")
-  TASK_STATUS=$(echo "$STATUS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('task_status',''))")
-  echo "Status: $TASK_STATUS"
-  if [ "$TASK_STATUS" = "success" ] || [ "$TASK_STATUS" = "failed" ]; then
-    break
-  fi
-  sleep 2
-done
+uv run scripts/extract_router.py --batch \
+  doc1.pdf:knowledge/doc1/extraction-result.json \
+  doc2.pdf:knowledge/doc2/extraction-result.json
 ```
 
-### Fetch and save the result
+ODL spawns one JVM per `convert()` call, so batching digital PDFs into a single call is much faster than per-file. The router groups by backend automatically.
 
-```bash
-curl -sS "http://127.0.0.1:5001/v1/result/$TASK_ID" > knowledge/docling-result.json
-echo "Saved $(wc -c < knowledge/docling-result.json) bytes"
+### Useful flags
+
+- `--force odl|docling` — bypass auto-detection (useful for testing the fallback on a digital PDF)
+- `--skip-existing` — reuse valid `extraction-result.json` from prior runs
+- `--no-struct-tree` — [ODL] disable tagged-PDF structure tree, force XY-Cut++ layout
+- `--table-method default|cluster` — [ODL] table detector (default: `cluster`, better accuracy)
+- `--docling-max-tokens 1024` — [Docling] max tokens per chunk
+- `--docling-url`, `--docling-poll-interval`, `--docling-max-wait` — [Docling] service tuning
+
+### ODL response shape (digital PDF path)
+
+ODL emits a flat `kids[]` tree in reading order. No tree walk is needed for simple docs:
+
+```json
+{
+  "file name": "document.pdf",
+  "number of pages": 12,
+  "author": null,
+  "title": null,
+  "kids": [
+    {
+      "type": "heading",
+      "id": 1,
+      "page number": 1,
+      "bounding box": [72.0, 720.0, 523.0, 742.0],
+      "font": "Helvetica-Bold",
+      "font size": 14,
+      "content": "1 Introduction",
+      "heading level": 1
+    },
+    {
+      "type": "paragraph",
+      "id": 2,
+      "page number": 1,
+      "bounding box": [72.0, 600.0, 523.0, 715.0],
+      "font": "Helvetica",
+      "font size": 11,
+      "content": "The dominant sequence transduction models are based on..."
+    }
+  ]
+}
 ```
+
+Key fields (note the spaces in field names):
+- **`type`** — `"paragraph" | "heading" | "image" | "table" | "list_item" | "caption" | "header" | "footer"`
+- **`bounding box`** — `[l, b, r, t]` in PDF points, bottom-left origin. Translated to `{page, l, t, r, b, coord_origin: "BOTTOMLEFT"}` when written into `extraction_metadata.bboxes` so it matches the Docling format consumed by `PdfHighlightViewer`.
+- **`page number`** — integer page, 1-indexed
+- **`heading level`** — 1..6 when present (indicates ODL consumed the tagged-PDF structure tree; absent elements fell back to XY-Cut++ layout)
+- **`content`** — text (present on text-ish types)
+- **`source` / `data` / `format`** — image payload, when `type == "image"`
+
+`build_knowledge_parts.py` auto-detects this shape (`"kids" in data`) and switches to the heading-aware parser. `header` and `footer` elements are filtered as noise; headings open new sections and the enclosed paragraphs/tables/lists are grouped under them with a breadcrumb into `extraction_metadata.parent_section`.
+
+### Docling response shape (OCR fallback path)
+
+Used only when `is_digital_pdf()` returns false. Same async submit/poll/result flow as before; the parser below handles it. Skip to Section 2 if you only need ODL.
+
+---
+
+## Section 1 (fallback): Docling Serve details
+
+Used only when the router dispatches to Docling. The submit parameters and polling loop match what `docling_extract.py` already does — you should not need to call Docling directly unless debugging.
+
+**Submit (for reference):** `POST /v1/chunk/hybrid/file/async` with `include_converted_doc=true`, `convert_do_ocr=true`, `convert_do_table_structure=true`, `convert_include_images=true`, `convert_image_export_mode=embedded`, `chunking_merge_peers=true`, `chunking_max_tokens=1024`, `chunking_tokenizer=BAAI/bge-small-en-v1.5`, `chunking_use_markdown_tables=true`.
+
+**Why these matter:**
+- `include_converted_doc=true` — includes the full DoclingDocument (texts/tables/pictures/body)
+- `convert_include_images=true` + `embedded` — base64-encoded images in the response
+- `chunking_max_tokens=1024` + BGE tokenizer — larger, more coherent chunks for fine-tuning (not RAG-sized fragments)
+
+The rest of the Docling response schema (chunks, DoclingDocument, TextItem/TableItem/PictureItem, JSON pointers, cross-references) is documented in Section 2.
 
 ---
 
@@ -113,9 +161,11 @@ Skip this step and you'll produce knowledge parts full of noise that hurt downst
 
 ---
 
-## Section 2: Understand the Response
+## Section 2: Understand the Docling Response (fallback path only)
 
-The response has two top-level arrays you'll use:
+*This section applies when the router picked Docling.* For ODL, the response shape is documented in Section 1 and `build_knowledge_parts.py` handles it directly — no manual parsing needed.
+
+The Docling response has two top-level arrays you'll use:
 
 ```
 result
@@ -449,18 +499,23 @@ The formal JSON Schema is at `reference/knowledge-parts-schema.json` — use it 
 
 > ⚠️ **Common mistake: flattening tables to text.** If a chunk references `#/tables/N` in its `doc_items`, you MUST create a table-typed part, not a text part. The structured cell data in `json_content.tables[N].data` is critical for programmatic graders that need to look up values (e.g., "chicken breast = 31g protein"). After writing your extraction script, run `python3 ${CLAUDE_SKILL_DIR}/scripts/extract_tables.py` to ensure all table parts have proper `type: "table"` and `content_metadata` with headers and rows.
 
-Write your own extraction script tailored to the document. There is no template — each document is different and may require domain-specific filtering or restructuring. Here's the general approach:
+**Default path (both backends): use `scripts/build_knowledge_parts.py`.** It sniffs the `extraction-result.json` shape (`kids[]` → ODL branch, `chunks[]` → Docling branch) and produces a conformant `knowledge_parts.json` with the new `semantic_type`, `heading_level`, `parent_section`, and `tag_source` metadata. On the ODL branch, tables are schema-driven (`rows/cells`, not `content`), lists are preserved as markdown text parts, and captions remain separate linked text parts. Only write a custom script when the document has domain-specific heading noise or cross-referencing logic the generic parser can't handle (e.g., chess move notation mistakenly promoted to headings).
 
 ### Step 1: Load the response
 
 ```python
 import json
 
-with open("knowledge/docling-result.json") as f:
+with open("knowledge/{doc-slug}/extraction-result.json") as f:
     result = json.load(f)
 
-chunks = result["chunks"]
-doc = result["documents"][0]["content"]["json_content"]
+if "kids" in result and "chunks" not in result:
+    # ODL branch — heading-aware, bboxes live directly on each element
+    kids = result["kids"]
+else:
+    # Docling fallback branch
+    chunks = result["chunks"]
+    doc = result["documents"][0]["content"]["json_content"]
 ```
 
 ### Step 2: Build lookup structures

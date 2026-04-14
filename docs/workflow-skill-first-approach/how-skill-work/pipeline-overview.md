@@ -188,10 +188,12 @@ Other helper scripts:
 
 | Script | Step | What it does |
 |--------|------|-------------|
-| `docling_extract.py` | 2a | Submits PDF(s) to Docling Serve async API, polls until done, supports batch mode |
-| `pdftotext_extract.py` | 2a | Fallback PDF extraction via pdftotext (no Docker required), same output schema |
-| `build_knowledge_parts.py` | 2c | Deterministic Docling→knowledge_parts.json converter — default extraction, no custom script needed |
-| `extract_tables.py` | 2b | Upgrades text parts to table parts using structured Docling table data (headers, rows, metadata) |
+| `extract_router.py` | 2a | **Primary extraction entry point.** Auto-routes each PDF via `is_digital_pdf()`: digital → `odl_extract.py`, scanned → `docling_extract.py`. Writes `extraction-result.json` + sibling `extraction-status.json` recording the backend used. Supports `--batch`, `--skip-existing`, `--force odl\|docling`. |
+| `odl_extract.py` | 2a | OpenDataLoader PDF wrapper (local Java-based, no Docker). Deterministic output, tagged-PDF structure tree support. Invoked by `extract_router.py` for digital PDFs. |
+| `docling_extract.py` | 2a | Docling Serve async API submitter — now the **OCR fallback** for scanned PDFs. Still exposes `is_digital_pdf()` used by the router for classification. |
+| `pdftotext_extract.py` | 2a | Last-resort extraction via pdftotext (no Docker required), same output schema — used only when both ODL and Docling are unavailable. |
+| `build_knowledge_parts.py` | 2c | Deterministic extraction→knowledge_parts.json converter — sniffs ODL `kids[]` vs Docling `chunks[]`, heading-aware splitting, emits new metadata (`semantic_type`, `heading_level`, `parent_section`, `tag_source`). Default; no custom script needed. |
+| `extract_tables.py` | 2b | Upgrades text parts to table parts using structured Docling table data (headers, rows, metadata) — Docling fallback path only; ODL emits table parts directly via `build_knowledge_parts.py`. |
 | `camelot_extract_tables.py` | 2d | **Table fallback** — re-extracts tables using Camelot stream mode when Docling produces garbled tables (inconsistent columns, mixed content). Multi-page stitching. Run when `validate_extraction.py` warns about table quality. |
 | `consolidate_parts.py` | 2c | Merges adjacent text parts, drops short fragments, fixes Unicode, validates quality |
 | `validate_extraction.py` | 2e | Cross-document extraction quality gate (parts/page, title diversity, avg length). Also detects page break artifacts in pipe tables (non-table lines + repeated headers) — FAIL for large tables with artifacts. |
@@ -218,7 +220,7 @@ The skill uses 4 subagents (in `agents/`) to handle context-heavy, long-running,
 
 | Subagent | Invoked at | What it does | Input | Output |
 |----------|-----------|-------------|-------|--------|
-| `knowledge-extractor` | Step 2b (parallel, 1 per PDF) | Extracts knowledge from ONE document: polls Docling, builds parts, post-processes, uploads | SKILL_DIR, WORKFLOW_ID, DOC_PATH, DOC_SLUG, DOC_DIR, TASK_ID | `knowledge_parts.json`, `parts-index.json`, gateway upload |
+| `knowledge-extractor` | Step 2b (parallel, 1 per PDF) | Extracts knowledge from ONE document: reads `extraction-result.json` (ODL or Docling), runs `build_knowledge_parts.py`, post-processes, uploads | SKILL_DIR, WORKFLOW_ID, DOC_PATH, DOC_SLUG, DOC_DIR | `knowledge_parts.json`, `parts-index.json`, gateway upload |
 | `relation-builder` | Step 3b | Matches knowledge parts to leaf topics (max 15 per topic) | `all-parts-index.json` + `topics.json` via PROJECT_DIR | `relations.json` |
 | `nemo-data-generator` | Step 4B (when `use_nemo=true`) | Generates training records via NeMo Data Designer server. Takes topics + system prompt, produces `training.jsonl` | topics, system prompt, workflow ID | `training.jsonl`, `nemo-metadata.jsonl` |
 | `training-monitor` | Step 7e (background) | Polls training metrics every 30s, detects anomalies (NaN loss, KL divergence, overfitting), saves metrics data for post-training analysis | Gateway URL, WORKFLOW_ID, JOB_ID, OUTPUT_DIR | `{JOB_ID}-metrics.json`, `{JOB_ID}-monitor-report.json` |
@@ -301,73 +303,83 @@ sqlite3 ~/.vllora/vllora.db "SELECT id, name FROM workflows ORDER BY created_at 
 
 This is the longest and most complex step. It has 4 sub-stages.
 
-### 2a-2b. Extract documents via Docling (or pdftotext fallback)
+### 2a-2b. Extract documents via the router
 
-**What happens**: The agent checks if Docling Serve is running on `localhost:5001`. If not, it starts the Docker container. Then it processes each PDF individually using `scripts/docling_extract.py` in single mode — extract, write custom script, consolidate, validate, and upload each document before moving to the next.
+**What happens**: The agent calls `scripts/extract_router.py`, a single entry point that auto-routes each PDF by `is_digital_pdf()`:
 
-**Why individual mode, not batch?** Batch mode (`--batch`) submits all PDFs in parallel but blocks until ALL complete. If one PDF is 84 pages (4 min) and another is 282 pages (15 min), the agent idles for 11 minutes waiting. Individual mode lets the agent fully process small PDFs while Docling works on larger ones.
+- **Digital PDFs → OpenDataLoader (ODL)** — local Java-based extractor via `scripts/odl_extract.py`. No Docker, no async polling, deterministic byte-identical reruns. Requires Java 11+ and `opendataloader-pdf` installed.
+- **Scanned PDFs → Docling Serve** — still handled via `scripts/docling_extract.py` (async submit/poll against `localhost:5001`). Docker is only needed when at least one input PDF is scanned.
 
-**Script call** (per document):
+**Script call** (batch, recommended):
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/docling_extract.py document.pdf \
-  --output finetune-project/knowledge/doc-slug/docling-result.json
+uv run ${CLAUDE_SKILL_DIR}/scripts/extract_router.py --batch --skip-existing \
+  pdfs/doc1.pdf:finetune-project/knowledge/doc1-slug/extraction-result.json \
+  pdfs/doc2.pdf:finetune-project/knowledge/doc2-slug/extraction-result.json
 ```
 
-The script auto-detects whether the PDF is digital or scanned — it skips OCR for digital PDFs (30-50% faster). No manual flags needed.
+For a single file:
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/extract_router.py document.pdf \
+  -o finetune-project/knowledge/doc-slug/extraction-result.json
+```
 
-> **IMPORTANT**: Always use `docling_extract.py` — it uses the async API with polling. Do NOT use curl to hit Docling endpoints directly, as the sync endpoint times out on large documents (>100 pages).
+**Sibling file**: `extraction-status.json` is written next to every `extraction-result.json` recording which backend ran (`"odl" | "docling"`), whether the tagged-PDF structure tree was consumed (`used_struct_tree`), page counts, and duration. Downstream scripts sniff this to know how to parse the result.
 
-**Internally**, the script calls these Docling endpoints (agents should NOT call these directly):
-- `POST /v1/chunk/hybrid/file/async` — submits each document (with `chunking_max_tokens=8192` as safety ceiling, OCR auto-detected)
-- `GET /v1/status/poll/{task_id}` — polls until `success` or `failed`
-- `GET /v1/result/{task_id}` — fetches the processed result
+> **IMPORTANT**: Always use `extract_router.py`. Do NOT call Docling endpoints directly via curl — the sync endpoint times out on large PDFs and the router handles retry/polling. Do NOT call `odl_extract.py` directly either — the router's routing logic is the contract downstream steps depend on.
+
+**Internal details** (agents should NOT call these directly):
+- ODL path: `opendataloader_pdf.convert(input_path=[...], output_dir=..., format="json", reading_order="xycut", use_struct_tree=True, table_method="cluster")` — one JVM per batch
+- Docling fallback path: `POST /v1/chunk/hybrid/file/async` → `GET /v1/status/poll/{task_id}` → `GET /v1/result/{task_id}`
 
 **What to watch for**:
-- Docker may need to pull the Docling image (~2GB) on first run
-- Batch mode means total time ≈ slowest PDF, not sum of all
-- For large PDFs (200+ pages), extraction can take 10-20 minutes
+- **All-digital corpus**: Docker is not required. The router will never touch Docling.
+- **Mixed corpus**: Docling needs `docker run -p 5001:5001 ghcr.io/docling-project/docling-serve-cpu:latest` for the scanned-PDF subset; ODL runs locally for the rest.
+- **Determinism**: ODL produces byte-identical output across runs (unlike Docling async). A good property to verify with `diff` between two runs on the same digital PDF.
+- **Large PDFs**: ODL digital extraction scales with JVM startup + page count; Docling OCR for scanned pages can take 10-20 min on 200+ pages.
 
-**Fallback — pdftotext** (when Docker is not available):
-
-Use `scripts/pdftotext_extract.py` — same CLI pattern, zero dependencies (just needs `pdftotext` installed). Outputs `knowledge_parts.json` directly (no `docling-result.json` step):
+**Last-resort fallback — pdftotext** (when neither ODL nor Docling is available):
 
 ```bash
-python3 ${CLAUDE_SKILL_DIR}/scripts/pdftotext_extract.py --batch \
+uv run ${CLAUDE_SKILL_DIR}/scripts/pdftotext_extract.py --batch \
   doc1.pdf:finetune-project/knowledge/doc1/knowledge_parts.json \
   doc2.pdf:finetune-project/knowledge/doc2/knowledge_parts.json
 ```
 
-Note: pdftotext loses tables, images, and complex layout. Then run `consolidate_parts.py` and `validate_extraction.py` on the output — same as the Docling path.
+pdftotext writes `knowledge_parts.json` directly (no `extraction-result.json` step). It loses tables, images, and layout — only use when both primary backends are unavailable. Then run `consolidate_parts.py` and `validate_extraction.py` on the output — same as the router path.
 
 **Files produced** (per document):
 ```
 finetune-project/knowledge/
-├── chess-tactics/              # Slugified filename (not doc-1/)
-│   └── docling-result.json    # Raw Docling output (can be 10-50MB+)
+├── chess-tactics/                 # Slugified filename (not doc-1/)
+│   ├── extraction-result.json     # ODL kids[] tree OR Docling chunks[] + documents[]
+│   └── extraction-status.json     # backend, used_struct_tree, pages, duration
 ├── strategy-guide/
-│   └── docling-result.json
+│   ├── extraction-result.json
+│   └── extraction-status.json
 └── endgame-manual/
-    └── docling-result.json
+    ├── extraction-result.json
+    └── extraction-status.json
 ```
 
 **How to verify progress**:
 ```bash
-# Check which documents have been extracted
-ls -lh finetune-project/knowledge/*/docling-result.json
+# Check which documents have been extracted and which backend ran
+ls -lh finetune-project/knowledge/*/extraction-result.json
+jq -r '"\(.pdf)\t\(.backend)\t\(.pages)"' finetune-project/knowledge/*/extraction-status.json
 ```
 
 ### 2c. Process each document into knowledge parts
 
 **What happens**: For each document, the agent:
-1. **Reads the Docling result** — examines chunks 0-9, then samples from middle and end to understand the document structure
-2. **Runs `build_knowledge_parts.py`** — deterministic extraction from `docling-result.json`, no custom script needed:
+1. **Reads the extraction result** — examines the first/middle/last chunks (Docling path) or `kids[]` elements (ODL path) to understand the document structure before trusting extraction blindly
+2. **Runs `build_knowledge_parts.py`** — deterministic converter that sniffs the input shape (ODL `kids[]` vs Docling `chunks[]`) and emits a conformant `knowledge_parts.json` with the new `semantic_type`, `heading_level`, `parent_section`, and `tag_source` metadata fields:
    ```bash
    python3 ${CLAUDE_SKILL_DIR}/scripts/build_knowledge_parts.py \
-     finetune-project/knowledge/{doc-slug}/docling-result.json \
+     finetune-project/knowledge/{doc-slug}/extraction-result.json \
      -o finetune-project/knowledge/{doc-slug}/knowledge_parts.json \
      --slug {doc-slug}
    ```
-   Only write a custom `extract.py` if: (a) `build_knowledge_parts.py` produces 0 parts, or (b) CUSTOM_INSTRUCTIONS were provided for this document. Custom scripts **must read from `docling-result.json`** — never from raw PDF text or regex-based splitting.
+   Only write a custom `extract.py` if: (a) `build_knowledge_parts.py` produces 0 parts, or (b) CUSTOM_INSTRUCTIONS were provided for this document. Custom scripts **must read from `extraction-result.json`** — never from raw PDF text or regex-based splitting.
 3. **Runs consolidation** — `scripts/consolidate_parts.py` merges adjacent text parts under the same heading, drops short fragments (<50 chars), fixes Unicode escape sequences, reassigns sequential IDs, and regenerates `parts-index.json`
 
 **Consolidation** (run after the extraction script):
@@ -380,7 +392,8 @@ This reduces part count (e.g., 1018 raw → 45 consolidated), improves title div
 **Files produced** (per document):
 ```
 finetune-project/knowledge/{doc-slug}/
-├── docling-result.json        # From step 2b (already exists)
+├── extraction-result.json     # From step 2b — ODL kids[] or Docling chunks[]
+├── extraction-status.json     # From step 2b — backend + provenance metadata
 ├── knowledge_parts.json       # Structured parts: text, table, image (consolidated)
 ├── parts-index.json           # Lightweight index for topic design (regenerated)
 └── extract.py                 # (optional) Custom script — only if build_knowledge_parts.py produces 0 parts
@@ -1245,9 +1258,10 @@ When `diagnose-grader` per-topic output shows persistent `DEAD_WEIGHT` or `AMBIG
 
 | Symptom | Likely cause | How to check |
 |---------|-------------|--------------|
-| Stuck after Step 1 | Docling not running or Docker pull in progress | `curl http://127.0.0.1:5001/health` and `docker ps` |
-| Only 1 of N `docling-result.json` files | Still polling or a task failed | Check Docling task status via the poll API |
-| `docling-result.json` exists but no `knowledge_parts.json` | Agent struggling to process large JSON (>30MB) | Check execution log for Python tracebacks |
+| Stuck after Step 1 (scanned PDFs in corpus) | Docling not running or Docker pull in progress | `curl http://127.0.0.1:5001/health` and `docker ps` — only required when `extraction-status.json` shows `backend: "docling"` |
+| Stuck after Step 1 (digital PDFs) | Java 11+ missing or `opendataloader-pdf` not installed | `java -version` and `uv tool list \| grep opendataloader` |
+| Only 1 of N `extraction-result.json` files | Docling task still polling or failed, or ODL convert crashed | `cat extraction-status.json` to see which backend ran and whether it succeeded |
+| `extraction-result.json` exists but no `knowledge_parts.json` | Agent struggling to process large JSON (>30MB), or `build_knowledge_parts.py` couldn't sniff the input shape | Check execution log for Python tracebacks and confirm the file starts with either `"kids"` (ODL) or `"chunks"` (Docling) |
 | Topics created but no `relations.json` | Relation-builder subagent hasn't run or failed | Check `execution-log.md` for "relation-builder" entries |
 | Few records in `training.jsonl` | LLM API rate limiting or key missing | Check if `OPENAI_API_KEY` is set; check agent output for errors |
 | `finetune.py` upload fails | Gateway not running or wrong endpoint | `curl http://localhost:9090/health` |
