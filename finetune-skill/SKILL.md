@@ -68,6 +68,11 @@ finetune-project/
 ├── knowledge/                  # Per-document subdirs
 │   ├── {doc-slug}/             # {slug}.md, extract.py, knowledge_parts.json, parts-index.json
 │   └── all-parts-index.json   # Merged index across ALL documents
+├── trace_priority.json         # (combined mode) Per-topic frequency + failure + priority
+├── trace_topics.json           # (combined mode) Coverage gaps vs PDF topics
+├── trace_prompts.json          # (combined mode) Production system prompt + seed queries
+├── trace_grader_hints.json     # (combined mode) Failure dimensions + grader criteria
+├── grader-draft.js             # (combined mode) Auto-generated grader from traces
 ├── evaluations/                # eval-001.json, eval-002.json, ...
 └── training-jobs/              # train-001.json, {JOB_ID}-metrics.json, ...
 ```
@@ -203,10 +208,35 @@ Follow its recommendation. (3) Sync jobs: `sync-jobs --workflow-id $WORKFLOW_ID 
 
 ---
 
-### Step 1: Define the Objective
+### Step 1: Define the Objective & Detect Inputs
 
 Ask the user what behaviors the model should learn. Produce an **objective statement** and a **system prompt** ("You are...") for Step 4.
 
+**Auto-detect input mode:** Check the user's project folder for available inputs:
+
+```bash
+# Detect inputs (uses find to avoid zsh nomatch errors with globs)
+HAS_PDFS=false
+HAS_TRACES=false
+[ -d pdfs ] && find pdfs -maxdepth 1 \( -name "*.pdf" -o -name "*.md" \) 2>/dev/null | grep -q . && HAS_PDFS=true
+find . -maxdepth 1 \( -name "source_traces_semconv.json" -o -name "*.traces.json" \) 2>/dev/null | grep -q . && HAS_TRACES=true
+
+if [ "$HAS_PDFS" = true ] && [ "$HAS_TRACES" = true ]; then
+  echo "Combined mode: PDFs + traces detected → trace-informed pipeline"
+elif [ "$HAS_PDFS" = true ]; then
+  echo "PDF-only mode: standard knowledge pipeline"
+elif [ "$HAS_TRACES" = true ]; then
+  echo "Trace-only mode: OTel tool-routing pipeline"
+fi
+```
+
+| Input detected | Mode | Behavior |
+|---|---|---|
+| `pdfs/` only | PDF-only | Standard knowledge pipeline (existing) |
+| `*.traces.json` only | Trace-only | OTel tool-routing pipeline (see `finetune-skill-otel/`) |
+| **Both PDFs + traces** | **Combined** | Run trace analysis (Step 2C) → enrich topics, weight records, auto-generate grader |
+
+Save the detected mode to `config.json`:
 ```bash
 if [ -f finetune-project/config.json ]; then
   WORKFLOW_ID=$(python3 -c "import json; print(json.load(open('finetune-project/config.json'))['workflow_id'])")
@@ -215,7 +245,7 @@ else
     --name "My Project" --objective "Train a model to..." | tail -1)
   mkdir -p finetune-project
   cat > finetune-project/config.json << EOF
-{"workflow_id": "$WORKFLOW_ID", "gateway_url": "http://localhost:9090", "use_nemo": false}
+{"workflow_id": "$WORKFLOW_ID", "gateway_url": "http://localhost:9090", "use_nemo": false, "input_mode": "combined"}
 EOF
 fi
 ```
@@ -280,6 +310,42 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/knowl
 
 **2e. Verify gateway upload** — `verify --workflow-id $WORKFLOW_ID --no-journal`. Confirm source count matches PDFs. Delete duplicates if found. Use `--no-journal` here — this is a diagnostic check, not Step 6.
 
+#### 2C. Trace Analysis (Combined Mode Only)
+
+> **Only runs when BOTH PDFs and traces are detected in Step 1.**
+> This step analyzes OTel traces to inform the rest of the pipeline — topics, record allocation, seed queries, and grader design.
+
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/trace_analyze.py \
+  source_traces_semconv.json \
+  --output-dir finetune-project/
+```
+
+**Produces 4 artifacts** (all visible to the user in `finetune-project/`):
+
+| Artifact | What it contains | Consumed by |
+|---|---|---|
+| `trace_priority.json` | Per-topic frequency + failure rate + priority score | Step 4 (record allocation) |
+| `trace_topics.json` | Topics found in traces, coverage gaps vs PDF topics | Step 3 (topic enrichment) |
+| `trace_prompts.json` | Production system prompt (simplified) + real user queries | Step 4 (seed prompts) |
+| `trace_grader_hints.json` | Failure dimensions + prompt rules + calibration pairs | Step 5 (grader draft) |
+
+**Upload trace data to gateway** (so the UI can display it):
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/upload_trace_analysis.py \
+  --workflow-id $WORKFLOW_ID \
+  --traces source_traces_semconv.json \
+  --project-dir finetune-project/ \
+  --name "OTel Traces"
+```
+This uploads: (1) the trace bundle as a knowledge source (appears in UI Sources view), (2) the 4 trace analysis artifacts to the trace-analysis endpoint (appears in UI Topics/Grader views).
+
+**Present the trace analysis summary to the user** before proceeding:
+- Show the priority table (top 5 high-priority and bottom 3 low-priority topics)
+- Flag any coverage gaps (topics in traces but not in PDFs)
+- Show the simplified production system prompt
+- Ask if the user wants to adjust priorities before proceeding
+
 ---
 
 ### Step 3: Build Topic Hierarchy
@@ -287,6 +353,13 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/knowl
 > **PREREQUISITES:** Step 2 fully complete. Do NOT start while extraction is running.
 
 **Outputs:** `topics.json`, `relations.json`, updated `all-parts-index.json`
+
+**Combined mode — trace topic enrichment:** If `finetune-project/trace_topics.json` exists (from Step 2C):
+1. Start with PDF-derived topics (comprehensive domain coverage)
+2. Check `trace_topics.json` for coverage gaps — topics that appear in traces but not in PDF topics
+3. **ADD** trace-discovered topics as new leaf topics (flag with `"source": "trace"` in metadata)
+4. **NEVER REMOVE** PDF-derived topics even if they have low trace frequency — rare topics may be critical
+5. Show the user which topics were added from traces vs which came from PDFs
 
 **Reuse existing topics:** If `topics.json` exists from a prior run, treat it as authoritative. Only add/remove topics if source material materially changed.
 
@@ -335,6 +408,26 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --records-per-topic 30 --parallel 4 \
   --workflow-id $WORKFLOW_ID --upload-incremental --enrich-sources
 ```
+
+**Combined mode — trace-informed generation:** If trace artifacts exist from Step 2C, add these flags:
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
+  --topics finetune-project/topics.json \
+  --relations finetune-project/relations.json \
+  --knowledge-dir finetune-project/knowledge \
+  --system-prompt "You are an expert..." \
+  --output finetune-project/training.jsonl \
+  --records-per-topic 30 --parallel 4 \
+  --weight-by-trace-priority \
+  --trace-priority-file finetune-project/trace_priority.json \
+  --trace-prompts-file finetune-project/trace_prompts.json \
+  --seed-query-ratio 0.20 \
+  --workflow-id $WORKFLOW_ID --upload-incremental --enrich-sources
+```
+
+This changes two things:
+1. **`--weight-by-trace-priority`**: Allocates more records to high-priority topics (frequent + high failure in traces). Low-priority topics get a minimum floor (3 records). Same total budget, distributed by real usage patterns.
+2. **`--trace-prompts-file` + `--seed-query-ratio`**: 20% of records per topic use real user queries from traces (as-is, no paraphrasing). Remaining 80% are LLM-generated. Real queries anchor the training distribution to production phrasing (DCLM arXiv:2406.11794).
 
 > **WARNING: If regenerating records**, delete gateway records first to avoid duplicates:
 > ```bash
@@ -462,10 +555,23 @@ Write a JavaScript grader to `grader.js`. Scores model responses 0-1.
 
 **Before writing:** (1) Read knowledge parts + topics to understand the domain, (2) Design a checklist rubric of 7-20 binary criteria (arXiv:2507.17746), (3) **Read 10-15 sample records** from `training.jsonl` to calibrate.
 
+**Combined mode — trace-informed grader:** If `finetune-project/trace_grader_hints.json` exists (from Step 2C), generate a grader draft first:
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/grader_from_traces.py \
+  --hints finetune-project/trace_grader_hints.json \
+  --output finetune-project/grader-draft.js
+```
+This auto-generates grader dimensions from:
+- **Trace failure patterns** (e.g., "15% of traces failed because auth was skipped" → Essential criterion)
+- **Production prompt rules** (e.g., "must authenticate before action" → Important criterion)
+
+**Review the draft with the user** — it's a starting point, not final. Adjust criteria, weights, and descriptions as needed. Then copy to `grader.js`.
+
 **Copy a template — do NOT write from scratch:**
 
 | Template | Best for |
 |----------|----------|
+| `grader-draft.js` (trace-generated) | **Combined mode: trace-informed (when available)** |
 | `templates/grader-template.js` | General-purpose (default) |
 | `templates/grader-mcq.js` | Multiple-choice / short-answer QA |
 | `templates/grader-classification.js` | Single-label classification |
@@ -1090,3 +1196,7 @@ The vLLora UI at **http://localhost:5173** provides score distributions, trainin
 ## Helper Scripts
 
 Run with `uv run ${CLAUDE_SKILL_DIR}/scripts/<script>`. Key ones: `finetune.py` (25 subcommands), `generate_records.py`, `analyze_training.py`, `validate_extraction.py`, `dry_run_grader.py`, `data_quality_gate.py`. Run any script with `--help` for usage.
+
+**Trace-informed scripts (combined mode only):**
+- `trace_analyze.py` — Analyze OTel traces → 4 artifacts (priority, topics, prompts, grader hints). Run in Step 2C.
+- `grader_from_traces.py` — Auto-generate grader draft from trace_grader_hints.json. Run in Step 5.

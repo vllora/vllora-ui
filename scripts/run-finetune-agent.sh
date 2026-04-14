@@ -90,7 +90,7 @@ else
 fi
 
 # Check PDFs exist
-PDF_COUNT=$(find "$PROJECT_DIR/pdfs" -name "*.pdf" 2>/dev/null | wc -l | tr -d ' ')
+PDF_COUNT=$(find "$PROJECT_DIR/pdfs" \( -name "*.pdf" -o -name "*.md" \) 2>/dev/null | wc -l | tr -d ' ')
 if [[ "$PDF_COUNT" -gt 0 ]]; then
   echo "   ✓ Found $PDF_COUNT PDF(s) in pdfs/"
 else

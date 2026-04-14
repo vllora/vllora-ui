@@ -29,6 +29,7 @@ import type { AvailableTopic } from "../record-utils";
 import type { JobColumn, RecordJobScore } from "./job-score-columns";
 import { estimateTokens, countTurns } from "./cells/StatsBadge";
 import { SourcePartsCell, useResolvedSourceParts } from "./shared-record-cells";
+import { QueryOriginBadge, getQueryOrigin } from "./cells/QueryOriginBadge";
 
 // ─── Types ───
 
@@ -171,6 +172,14 @@ export function RecordDetailSidebar({
               {/* Conversation Section — uses composed system prompt when hierarchy available */}
               {composedMessages.length > 0 && (
                 <ConversationSection messages={composedMessages} />
+              )}
+
+              {/* Query Origin (trace-informed curriculum) */}
+              {typeof record.metadata?.prompt_type === "string" && (
+                <div className="px-5 py-3 border-b border-border/50 flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Query origin:</span>
+                  <QueryOriginBadge origin={getQueryOrigin(record.metadata.prompt_type)} />
+                </div>
               )}
 
               {/* Source Context Section */}

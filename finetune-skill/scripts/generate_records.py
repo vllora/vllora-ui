@@ -464,6 +464,24 @@ DIFFICULTY_WEIGHTS = {
 }
 
 
+def load_trace_priority(trace_priority_path: Path) -> dict[str, float]:
+    """Load per-topic trace priority scores from trace_priority.json.
+
+    Expected format (from trace_analyze.py):
+        {"topic_name": {"priority_score": 0.08, "frequency": 0.2, ...}, ...}
+
+    Returns a flat dict: {"topic_name": priority_score, ...}.
+    """
+    data = json.loads(trace_priority_path.read_text())
+    result: dict[str, float] = {}
+    for topic, info in data.items():
+        if isinstance(info, dict):
+            result[topic] = info.get("priority_score", 0.0)
+        else:
+            result[topic] = float(info)
+    return result
+
+
 def compute_topic_record_counts(
     leaves: list[dict],
     relations: list[dict],
@@ -472,7 +490,9 @@ def compute_topic_record_counts(
     max_per_topic: int,
     weight_by_source: bool = False,
     weight_by_difficulty: bool = False,
+    weight_by_trace_priority: bool = False,
     eval_scores: dict[str, float] | None = None,
+    trace_priority_scores: dict[str, float] | None = None,
 ) -> dict[str, int]:
     """Compute per-topic record counts.
 
@@ -485,11 +505,56 @@ def compute_topic_record_counts(
     arXiv:2509.21880: 30-99% of easy prompts become zero-variance).
     Topics without eval scores default to "medium" difficulty.
 
+    With ``weight_by_trace_priority=True`` + ``trace_priority_scores``:
+    distributes based on trace-derived priority (frequency × failure rate).
+    Uses the same tier logic as difficulty weighting — high-priority topics
+    get 45% of records, medium 35%, low 20%. Topics not found in traces
+    default to "medium" priority. Based on trace-informed curriculum research
+    (GRPO-LEAD arXiv:2504.09696, Goldilocks arXiv:2602.14868).
+
     With ``weight_by_source=True``: proportional to linked source parts
     (legacy behaviour). Max imbalance ratio is clamped to 3:1.
 
     Results are always clamped to [min_per_topic, max_per_topic].
     """
+    if weight_by_trace_priority:
+        # Proportional allocation based on trace priority scores.
+        # Every topic gets at least min_per_topic (floor), then remaining
+        # budget is distributed proportional to priority_score.
+        #
+        # This is more precise than tier-based allocation for trace data
+        # because trace priorities are continuous scores, not categorical.
+        # GRPO-LEAD (arXiv:2504.09696) validates per-prompt priority weighting.
+        def _normalize(name: str) -> str:
+            return name.lower().replace("_", "-").strip()
+
+        normalized_scores = {
+            _normalize(k): v for k, v in (trace_priority_scores or {}).items()
+        }
+
+        # Look up priority score for each leaf (default 0.01 for unmapped)
+        DEFAULT_PRIORITY = 0.01
+        leaf_scores: dict[str, float] = {}
+        for leaf in leaves:
+            leaf_norm = _normalize(leaf["id"])
+            leaf_scores[leaf["id"]] = normalized_scores.get(leaf_norm, DEFAULT_PRIORITY)
+
+        # Total budget and floor allocation
+        total_budget = records_per_topic * len(leaves)
+        floor_total = min_per_topic * len(leaves)
+        remaining_budget = max(0, total_budget - floor_total)
+
+        # Distribute remaining budget proportional to priority score
+        total_score = sum(leaf_scores.values())
+        result: dict[str, int] = {}
+        for leaf in leaves:
+            score = leaf_scores[leaf["id"]]
+            proportional = round(remaining_budget * score / total_score) if total_score > 0 else 0
+            count = min_per_topic + proportional
+            result[leaf["id"]] = max(min_per_topic, min(count, max_per_topic))
+
+        return result
+
     if weight_by_difficulty:
         # Classify each topic by difficulty
         topic_difficulty: dict[str, str] = {}
@@ -845,8 +910,20 @@ def generate_for_topic(
     workflow_id: str | None = None,
     enrich_sources: bool = False,
     topic_prompt_types: list[dict] | None = None,
+    seed_queries: list[str] | None = None,
+    seed_query_ratio: float = 0.20,
 ) -> list[dict]:
-    """Generate records for a single leaf topic via multiple parallel LLM calls."""
+    """Generate records for a single leaf topic via multiple parallel LLM calls.
+
+    If ``seed_queries`` are provided (from trace_prompts.json), a fraction
+    of records (controlled by ``seed_query_ratio``, default 20%) use real
+    user queries as-is instead of LLM-generated prompts. This improves
+    training data realism (DCLM arXiv:2406.11794: 10-30% curated data in
+    synthetic-heavy mix optimizes generalization).
+
+    Seed queries are inserted as "scenario" prompt type records and
+    prioritized (placed first, never trimmed).
+    """
     # Find parts linked to this topic
     part_ids = [
         r["part_identifier"]
@@ -905,12 +982,45 @@ def generate_for_topic(
     # Compose hierarchical system prompt for this topic
     composed_prompt = compose_system_prompt(system_prompt, ancestors, topic)
 
+    # ── Seed query injection (trace-informed curriculum) ──
+    # Insert real user queries from traces as "seed" records before LLM generation.
+    # These get priority (placed first, never trimmed) and use authentic phrasing.
+    # Remaining budget goes to LLM-generated synthetic records.
+    seed_records: list[dict] = []
+    seed_budget = 0
+    if seed_queries:
+        seed_budget = min(
+            max(1, round(records_per_topic * seed_query_ratio)),
+            len(seed_queries),
+        )
+        all_source_parts_for_seeds = [
+            r["part_identifier"]
+            for r in relations
+            if r["topic_identifier"] == topic["id"]
+        ]
+        for i, query in enumerate(seed_queries[:seed_budget]):
+            seed_records.append({
+                "messages": [
+                    {"role": "system", "content": composed_prompt},
+                    {"role": "user", "content": query},
+                ],
+                "id": f"{topic['id']}-seed-{i+1:03d}-{hash(query) % 10000:04d}",
+                "topic": topic["id"],
+                "source_parts": list(all_source_parts_for_seeds),
+                "prompt_type": "seed_query",
+            })
+        if seed_records:
+            print(f"    Injected {len(seed_records)} seed queries (from traces)")
+
+    # Reduce LLM generation budget by seed count
+    synthetic_budget = max(0, records_per_topic - len(seed_records))
+
     # Over-request by 20% to compensate for LLM under-delivery and empty-prompt
     # filtering, then trim to exact target. This is the standard approach used by
     # Magpie (ICLR 2025) and NeMo — over-generate + trim is simpler and more
     # reliable than retry loops, with negligible extra cost at 1.2x.
     OVER_REQUEST_RATIO = 1.2
-    request_count = math.ceil(records_per_topic * OVER_REQUEST_RATIO)
+    request_count = math.ceil(synthetic_budget * OVER_REQUEST_RATIO) if synthetic_budget > 0 else 0
     distribution = distribute_across_prompt_types(request_count, prompt_types=topic_prompt_types)
 
     # Run all prompt-type calls in parallel (inner parallelism)
@@ -1037,6 +1147,9 @@ def generate_for_topic(
     if rejected_count:
         print(f"  ℹ Rejected {rejected_count} record(s) inline (format/quality validation)", file=sys.stderr)
 
+    # Prepend seed records (they get priority, never trimmed)
+    records = seed_records + records
+
     # Trim to exact target (we over-requested by 20%).
     # If we still fell short, warn but return what we have.
     if len(records) > records_per_topic:
@@ -1125,6 +1238,30 @@ def main() -> None:
         help="Weight record counts by number of linked source parts instead of equal distribution. "
              "Max imbalance ratio clamped to 3:1.",
     )
+    parser.add_argument(
+        "--weight-by-trace-priority", action="store_true",
+        help="Weight record counts by trace-derived priority scores (frequency × failure rate). "
+             "High-priority topics (frequent + high failure) get more records. "
+             "Requires --trace-priority-file. Based on trace-informed curriculum research.",
+    )
+    parser.add_argument(
+        "--trace-priority-file",
+        help="Path to trace_priority.json (from trace_analyze.py). "
+             'Format: {"topic_name": {"priority_score": 0.0-1.0, ...}, ...}.',
+    )
+    parser.add_argument(
+        "--trace-prompts-file",
+        help="Path to trace_prompts.json (from trace_analyze.py). "
+             "Contains real user queries grouped by topic, used as seed prompts. "
+             "15-25%% of records per topic will use these as-is (DCLM arXiv:2406.11794).",
+    )
+    parser.add_argument(
+        "--seed-query-ratio",
+        type=float,
+        default=0.20,
+        help="Fraction of records per topic to use seed queries (default: 0.20). "
+             "Only applies when --trace-prompts-file is set.",
+    )
     parser.add_argument("--model", default="gpt-4o-mini", help="LLM model for generation (default: gpt-4o-mini)")
     parser.add_argument("--base-url", default="http://localhost:9090", help="Gateway base URL")
     parser.add_argument("--append", action="store_true", help="Append to existing file instead of overwriting")
@@ -1202,6 +1339,9 @@ def main() -> None:
     if args.weight_by_difficulty and not args.eval_scores:
         print("Error: --eval-scores required with --weight-by-difficulty", file=sys.stderr)
         sys.exit(1)
+    if args.weight_by_trace_priority and not args.trace_priority_file:
+        print("Error: --trace-priority-file required with --weight-by-trace-priority", file=sys.stderr)
+        sys.exit(1)
     if args.difficulty == "adaptive" and not args.eval_scores:
         print("Error: --eval-scores required with --difficulty adaptive", file=sys.stderr)
         sys.exit(1)
@@ -1257,15 +1397,41 @@ def main() -> None:
             sys.exit(1)
         eval_scores = load_eval_scores(eval_scores_path)
 
+    # Load trace seed queries if provided
+    trace_seed_queries: dict[str, list[str]] | None = None
+    if getattr(args, 'trace_prompts_file', None):
+        trace_prompts_path = Path(args.trace_prompts_file)
+        if trace_prompts_path.exists():
+            trace_prompts_data = json.loads(trace_prompts_path.read_text())
+            trace_seed_queries = trace_prompts_data.get("seed_queries", {})
+            total_seeds = sum(len(v) for v in trace_seed_queries.values())
+            print(f"Loaded {total_seeds} trace seed queries across {len(trace_seed_queries)} topics")
+        else:
+            print(f"Warning: Trace prompts file not found: {trace_prompts_path}", file=sys.stderr)
+
+    # Load trace priority scores if trace-weighted distribution requested
+    trace_priority_scores: dict[str, float] | None = None
+    if args.trace_priority_file:
+        trace_priority_path = Path(args.trace_priority_file)
+        if not trace_priority_path.exists():
+            print(f"Error: Trace priority file not found: {trace_priority_path}", file=sys.stderr)
+            sys.exit(1)
+        trace_priority_scores = load_trace_priority(trace_priority_path)
+        print(f"Loaded trace priorities for {len(trace_priority_scores)} topics")
+
     # Compute record counts per topic
     topic_counts = compute_topic_record_counts(
         leaves, relations, args.records_per_topic, args.min_per_topic, args.max_per_topic,
         weight_by_source=args.weight_by_source,
         weight_by_difficulty=args.weight_by_difficulty,
+        weight_by_trace_priority=args.weight_by_trace_priority,
         eval_scores=eval_scores,
+        trace_priority_scores=trace_priority_scores,
     )
 
-    if args.weight_by_difficulty:
+    if args.weight_by_trace_priority:
+        strategy = "weighted by trace priority (high: 45%, medium: 35%, low: 20%)"
+    elif args.weight_by_difficulty:
         strategy = "weighted by difficulty (hard: 45%, medium: 35%, easy: 20%)"
     elif args.weight_by_source:
         strategy = "weighted by source parts (max 3:1 ratio)"
@@ -1418,6 +1584,23 @@ def main() -> None:
                 topic_difficulty_modes[tid] = PROMPT_TYPES_NORMAL
                 print(f"  {tid}: NORMAL mode (base score={score:.2f})")
 
+    # Look up seed queries for a topic from trace_prompts.json
+    def _get_seed_queries(topic_id: str) -> list[str] | None:
+        if not trace_seed_queries:
+            return None
+        # Normalize for matching (topic IDs may use underscores, traces use hyphens)
+        normalized = topic_id.lower().replace("_", "-").strip()
+        queries = trace_seed_queries.get(normalized)
+        if queries:
+            return queries
+        # Try matching by substring (e.g., topic "cancel" matches trace "cancel-pending-order")
+        for trace_topic, qs in trace_seed_queries.items():
+            if normalized in trace_topic or trace_topic in normalized:
+                return qs
+        return None
+
+    seed_ratio = getattr(args, 'seed_query_ratio', 0.20)
+
     # Pass per-topic prompt types into common_kwargs for generate_for_topic
     def _get_topic_prompt_types(topic_id: str) -> list[dict] | None:
         if args.difficulty == "adaptive" and topic_id in topic_difficulty_modes:
@@ -1440,6 +1623,8 @@ def main() -> None:
                 topic=topic, ancestors=ancestors, records_per_topic=rpt,
                 rag_parts=topic_rag_parts,
                 topic_prompt_types=_get_topic_prompt_types(topic["id"]),
+                seed_queries=_get_seed_queries(topic["id"]),
+                seed_query_ratio=seed_ratio,
                 **common_kwargs,
             )
             if not records:
@@ -1466,6 +1651,8 @@ def main() -> None:
                 topic=topic, ancestors=ancestors, records_per_topic=rpt,
                 rag_parts=topic_rag_parts,
                 topic_prompt_types=_get_topic_prompt_types(topic["id"]),
+                seed_queries=_get_seed_queries(topic["id"]),
+                seed_query_ratio=seed_ratio,
                 **common_kwargs,
             )
             return (idx, topic["id"], path_display, rpt, records)

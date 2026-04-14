@@ -3,6 +3,7 @@ import {
   DatasetWithRecords,
   DatasetRecord,
   DataInfo,
+  type TraceAnalysisResult,
 } from "@/types/dataset-types";
 
 
@@ -983,4 +984,43 @@ export async function getFinetuneJobMetrics(
     return { provider_job_id: jobId, metrics: [] };
   }
   return handleApiResponse<FinetuneJobMetricsResponse>(response);
+}
+
+// ============================================================================
+// Trace Analysis (trace-informed curriculum)
+// ============================================================================
+
+/**
+ * Fetch trace analysis results for a workflow.
+ * Returns null if no trace analysis exists (PDF-only mode).
+ */
+export async function getTraceAnalysis(
+  workflowId: string,
+): Promise<TraceAnalysisResult | null> {
+  const response = await apiClient(
+    `/finetune/workflows/${workflowId}/trace-analysis`,
+    { method: "GET" },
+  );
+  if (response.status === 404) {
+    return null;
+  }
+  return handleApiResponse<TraceAnalysisResult>(response);
+}
+
+/**
+ * Save trace analysis results for a workflow.
+ */
+export async function putTraceAnalysis(
+  workflowId: string,
+  data: TraceAnalysisResult,
+): Promise<void> {
+  const response = await apiClient(
+    `/finetune/workflows/${workflowId}/trace-analysis`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    },
+  );
+  await handleApiResponse(response);
 }

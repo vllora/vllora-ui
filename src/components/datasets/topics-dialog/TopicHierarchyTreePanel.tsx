@@ -10,6 +10,7 @@ import { Search, Plus, Sparkles, MessageSquare, ChevronDown } from "lucide-react
 import { TopicHierarchyNode } from "@/types/dataset-types";
 import { TopicTreeNode } from "./TopicTreeNode";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
+import { TraceAnalysisConsumer } from "@/contexts/TraceAnalysisContext";
 import { resolveTopicSystemPrompt } from "@/lib/distri-finetune-tools/steps/shared/topic-system-prompt";
 
 export interface TopicHierarchyTreePanelProps {
@@ -40,6 +41,7 @@ export function TopicHierarchyTreePanel({
   topicCounts,
 }: TopicHierarchyTreePanelProps) {
   const { dataset } = DatasetDetailConsumer();
+  const { getTopicMetrics } = TraceAnalysisConsumer();
   const datasetObjective = dataset?.datasetObjective || '';
   const normalizedObjective = dataset?.normalizedObjective;
   const [showPromptPreview, setShowPromptPreview] = useState(false);
@@ -125,6 +127,7 @@ export function TopicHierarchyTreePanel({
                 onAddChild={onAddChild}
                 onDelete={onDelete}
                 topicCounts={topicCounts}
+                getTraceMetrics={getTopicMetrics}
                 isLast={index === filteredHierarchy.length - 1}
               />
             ))}

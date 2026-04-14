@@ -9,6 +9,7 @@ import { DatasetDetailProvider } from "@/contexts/DatasetDetailContext";
 import { FinetuneJobsProvider } from "@/contexts/FinetuneJobsContext";
 import { KnowledgeSourcesProvider } from "@/contexts/KnowledgeSourcesContext";
 import { PlanProvider } from "@/contexts/PlanContext";
+import { TraceAnalysisProvider } from "@/contexts/TraceAnalysisContext";
 import { DatasetDetailContentV2 } from "./DatasetDetailContentV2";
 
 interface DatasetDetailViewProps {
@@ -25,13 +26,15 @@ export function DatasetDetailView({ workflowId, onBack, onSelectDataset }: Datas
       onBack={onBack}
       onSelectDataset={onSelectDataset}
     >
-      <FinetuneJobsProvider>
-        <KnowledgeSourcesProvider workflowId={workflowId}>
-          <PlanProvider workflowId={workflowId}>
-            <DatasetDetailContentV2 />
-          </PlanProvider>
-        </KnowledgeSourcesProvider>
-      </FinetuneJobsProvider>
+      <TraceAnalysisProvider workflowId={workflowId}>
+        <FinetuneJobsProvider>
+          <KnowledgeSourcesProvider workflowId={workflowId}>
+            <PlanProvider workflowId={workflowId}>
+              <DatasetDetailContentV2 />
+            </PlanProvider>
+          </KnowledgeSourcesProvider>
+        </FinetuneJobsProvider>
+      </TraceAnalysisProvider>
     </DatasetDetailProvider>
   );
 }
