@@ -29,6 +29,22 @@ import type { PipelineJournalEntry, JournalEntryStatus } from "@/types/pipeline-
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
+/** Accessible step labels — plain language, no jargon */
+const STEP_LABELS: Record<string, string> = {
+  step_1_objective: "Set Up Project",
+  step_2_extraction: "Read Source Materials",
+  step_2c_trace_analysis: "Analyze Real Conversations",
+  step_3_topics: "Organize Skills",
+  step_4_generation: "Create Teaching Examples",
+  step_5_grader: "Set Up Quality Checker",
+  step_5_5_validate: "Validate Examples",
+  step_6_verify: "Verify Everything",
+  step_7_eval: "Test Run",
+  step_8_training: "Train Your Model",
+  step_8_analyze: "Analyze Results",
+  step_9_iterate: "Improve & Retry",
+};
+
 /** Group journal entries into logical pipeline steps. */
 function groupEntriesIntoSteps(entries: readonly PipelineJournalEntry[]) {
   const steps: Array<{
@@ -63,12 +79,13 @@ function groupEntriesIntoSteps(entries: readonly PipelineJournalEntry[]) {
       (e) => e.observation || e.analysis || e.decision || e.evidence,
     );
 
-    // Human-readable label
-    const label = stepName
-      .replace(/^step_\d+_?/, "")
-      .replace(/_/g, " ")
-      .replace(/\b\w/g, (c) => c.toUpperCase())
-      || stepName;
+    // Human-readable label (accessible, non-jargon)
+    const label = STEP_LABELS[stepName]
+      ?? (stepName
+        .replace(/^step_\d+_?/, "")
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase())
+        || stepName);
 
     steps.push({
       stepName,

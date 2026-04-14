@@ -49,7 +49,7 @@ Users download/copy this skill into their own project, then use Claude Code (or 
 | `finetune-skill/SKILL.md` | Main skill definition (6-step pipeline, constraints, execution format) |
 | `finetune-skill/README.md` | **Read first** — architecture, 9 test iterations, known issues, debugging |
 | `finetune-skill/reference/` | 7 reference docs (API, extraction, graders, topics, iteration, workflow, data format) |
-| `finetune-skill/scripts/` | 6 Python helpers (eval, training, validation) |
+| `finetune-skill/scripts/` | 9 Python helpers (eval, training, validation, trace analysis, grader generation, upload) |
 | `finetune-skill/templates/` | Sample JSONL, project config, grader template |
 
 **Relationship to UI**: The skill writes data to the Gateway API → the UI reads and visualizes it. They are two halves of the same product.
@@ -204,21 +204,25 @@ finetune-skill/                        # Claude Code skill (THE pipeline driver)
 └── templates/                         # Sample data, configs, grader template
 src/
 ├── components/
-│   ├── datasets/          # Main finetune UI (44 components)
+│   ├── datasets/          # Main finetune UI (47+ components)
+│   │   ├── trace-analysis/       # TraceAnalysisView (inside OTel source viewer)
+│   │   ├── pipeline-analysis/    # PipelineAnalysisView (step analysis timeline)
+│   │   ├── sidebars/             # LucySidebar, SectionInsight (per-section insight display)
+│   │   └── records-table/cells/  # QueryOriginBadge (seed vs synthetic badge)
 │   ├── traces/            # OTel GenAI trace browser (TraceListView, TraceDetailView, TraceMessageTimeline, UseAsFinetuneInputSheet)
 │   ├── onboarding/        # First-time WelcomeFlow
 │   ├── agent/lucy-agent/  # Lucy AI assistant components (disabled by default)
 │   ├── chat/              # Chat/messaging UI
 │   ├── ui/                # shadcn/ui primitives (32 files)
 │   └── ...                # settings, models, traces, debug
-├── contexts/              # 27 React Contexts (all shared state lives here) — incl. OtelTracesContext
+├── contexts/              # 29 React Contexts (all shared state lives here) — incl. OtelTracesContext, TraceAnalysisContext, PipelineAnalysisContext
 ├── mocks/otel-traces/     # In-memory OTel trace fixtures (until coworker's ingest API ships)
 ├── services/              # 22 service modules (API adapters, polling, helpers) — otelTraceService is mock-backed
 ├── lib/
 │   ├── distri-finetune-tools/  # 70 finetune tool files (45 per-step)
 │   ├── distri-dataset-tools/   # Dataset analysis & validation
 │   └── distri-data-tools/      # Trace data fetching
-├── types/                 # 11 type definition files
+├── types/                 # 12 type definition files (incl. pipeline-analysis-types.ts)
 └── ...
 docs/
 ├── state-management-pattern.md     # MANDATORY: read before writing state code
@@ -247,6 +251,20 @@ Topics Config → Categorization → Coverage & Generation → Grader Config →
 > **Training stack**: GRPO via HuggingFace TRL `GRPOTrainer` + Unsloth (optimization wrapper, 90% VRAM reduction). Default base model: `Qwen3.5-4B`. Available models: 0.8B, 2B, 4B only. Defaults are model-size-aware: 0.8B (lr=5e-6, β=0, scale=group), 2B (lr=3e-6, β=0, scale=group), 4B (lr=2e-6, β=0.01, scale=none). loss_type=dr_grpo, adaptive epochs. Full details in `finetune-skill/reference/training-metrics-guide.md`.
 
 > **Naming note**: The "Evaluation" step is called "Dry Run" in internal code (variable names, file names, DB stores, internal identifiers like `dryRunPollingManager`). The tool name is `run_evaluation`. Only user-facing display text says "Evaluation".
+
+> **UI label mapping** (user-facing labels differ from internal/legacy names):
+> | Internal / Legacy | User-Facing Label |
+> |-------------------|-------------------|
+> | Source Documents | Source Materials |
+> | Training Data | Teaching Examples |
+> | Evaluator / Grader | Quality Checker |
+> | Eval Runs | Test Runs |
+> | Training Jobs | Training |
+> | Pipeline Journal | Activity Log |
+> | `evaluations/` folder | `test-runs/` folder |
+> | `training-jobs/` folder | `training/` folder |
+> | root-level `grader.js` | `quality-checker/grader.js` |
+> | root-level `trace_*.json` | `trace-analysis/` subfolder |
 
 ### Architecture (6 Layers, 3 Repos)
 
@@ -348,8 +366,18 @@ To investigate cloud endpoints (eval, training), start here:
 | `src/components/traces/TraceMessageTimeline.tsx` | Shared message bubble timeline (used by trace detail + dataset Sources view) |
 | `src/components/traces/UseAsFinetuneInputSheet.tsx` | "Hand traces to the skill as a finetune input" sheet |
 | `src/components/datasets/sources-view/OtelTraceSourceViewer.tsx` | Renders an OTel-trace `KnowledgeSource` inside the Sources view |
+| `src/components/datasets/trace-analysis/TraceAnalysisView.tsx` | Trace analysis view (priority, topics, prompts, grader hints from `trace_analyze.py`) |
+| `src/components/datasets/pipeline-analysis/PipelineAnalysisView.tsx` | Pipeline step analysis timeline (reads `analysis.json`) |
+| `src/components/datasets/sidebars/SectionInsight.tsx` | Per-section insight display (used by pipeline analysis) |
+| `src/components/datasets/records-table/cells/QueryOriginBadge.tsx` | Seed vs synthetic badge on records |
 | `src/components/onboarding/WelcomeFlow.tsx` | First-time 2-stage onboarding (skill mental model + pick first input) |
 | `src/contexts/OtelTracesContext.tsx` | OTel trace list state + filter management (mirrors KnowledgeSourcesContext pattern) |
+| `src/contexts/TraceAnalysisContext.tsx` | OTel trace analysis data (priority, topics, prompts, grader hints) |
+| `src/contexts/PipelineAnalysisContext.tsx` | Shared pipeline section analysis (`analysis.json`) |
+| `src/types/pipeline-analysis-types.ts` | Shared analysis types for trace-analysis and pipeline-analysis features |
+| `finetune-skill/scripts/trace_analyze.py` | Analyze OTel traces into 4 artifacts (priority, topics, seed prompts, grader hints) |
+| `finetune-skill/scripts/grader_from_traces.py` | Auto-generate grader from trace analysis |
+| `finetune-skill/scripts/upload_trace_analysis.py` | Upload trace analysis artifacts to gateway |
 | `src/services/interfaces/otel-trace-service.ts` | Stable interface — swap mock for real adapter via service-registry |
 | `src/services/adapters/mock-otel-trace-adapter.ts` | In-memory mock; emits `vllora_knowledge_source_updated` on `useAsFinetuneInput` |
 | `src/types/otel-trace-types.ts` | Canonical OTel GenAI shape used everywhere — keep in sync with semconv |
@@ -450,6 +478,8 @@ Every citation added to `finetune-skill/` code, comments, or docs must pass this
 | `PlanContext` | Finetune plan state |
 | `AgentPanelContext` | Lucy agent panel state |
 | `ProjectContext` | Current project |
+| `TraceAnalysisContext` | OTel trace analysis data (priority, topics, prompts, grader hints) |
+| `PipelineAnalysisContext` | Shared pipeline section analysis (`analysis.json`) |
 
 ### Code Rules
 
@@ -494,6 +524,8 @@ Hook scripts live in `.claude/hooks/`. Configuration is in `.claude/settings.jso
 | Event emitters added/changed | `docs/features/lucy-finetune-dataset/event-emitter-guide.md` |
 | Agent prompt/tools changed | The relevant agent md in `gateway/agents/finetune/` |
 | Skill packaging logic | `docs/features/skill-package/README.md`, `architecture.md`, or `data-flow.md` |
+| `trace_analyze.py` / `grader_from_traces.py` / `upload_trace_analysis.py` | `README.md` script table, `pipeline-overview.md` helper scripts table |
+| Trace analysis UI (`TraceAnalysisView`, `PipelineAnalysisView`) | `docs/workflow-skill-first-approach/implementation-status.md` |
 
 **To verify all docs are in sync**: run `/sync-docs` — it reads all source files, compares against docs, and auto-fixes gaps.
 
@@ -548,7 +580,7 @@ Each team spawns 3 independent Claude sessions working in parallel. Teams cost 3
 
 ## Common Gotchas
 
-1. **"Evaluation" vs "Dry Run"**: Display text says "Evaluation" but all internal code uses `dryRun` / `dry_run` naming (file names, variables, DB stores, tool names). Don't rename internal identifiers.
+1. **"Evaluation" vs "Dry Run" and other label mappings**: Display text says "Evaluation" but all internal code uses `dryRun` / `dry_run` naming (file names, variables, DB stores, tool names). Don't rename internal identifiers. Similarly, user-facing labels diverge from internal names: "Source Materials" (not "Source Documents"), "Teaching Examples" (not "Training Data"), "Quality Checker" (not "Evaluator"), "Test Runs" (not "Eval Runs"), "Training" (not "Training Jobs"), "Activity Log" (not "Pipeline Journal"). See the UI label mapping table in the Pipeline Architecture section.
 
 2. **Vendored @distri packages**: These live in `vendor/` and are NOT editable in this repo. `Edit` and `Write` on `vendor/**` are **denied** in `.claude/settings.json`. To change them: edit in the distri repo → build → run `scripts/sync-distrijs.sh`.
 
@@ -577,6 +609,10 @@ Each team spawns 3 independent Claude sessions working in parallel. Teams cost 3
 15. **OTel adapter is mock-only**: `otelTraceService` in `src/services/service-registry.ts` currently points at `mock-otel-trace-adapter.ts` (in-memory fixtures from `src/mocks/otel-traces/`). When the coworker's OTel ingest API ships, swapping in the real adapter is one line. **Do not** add adapter-specific behavior to call sites — both adapters must satisfy the `OtelTraceService` interface.
 
 16. **First-time onboarding flag**: `EmptyDatasetsState` shows `WelcomeFlow` when `localStorage.vllora_onboarding_v2_completed !== '1'`. To re-test onboarding: `localStorage.removeItem('vllora_onboarding_v2_completed')` then reload.
+
+17. **Finetune-project folder structure changed**: The skill now organizes artifacts into subfolders instead of root-level files. `trace_*.json` files live in `trace-analysis/`, `grader.js` lives in `quality-checker/`, eval results live in `test-runs/` (was `evaluations/`), training results live in `training/` (was `training-jobs/`). A new `analysis.json` at the project root stores shared analysis between agent and UI. Code reading these artifacts must use the new paths.
+
+18. **Gateway `trace_analyses` table**: The gateway now has a `trace_analyses` table (model + service + handler) for persisting trace analysis artifacts. The UI reads this via `TraceAnalysisContext`.
 
 12. **Browser MCP context efficiency**: MCP browser tools return large responses that fill the context window fast. Follow these rules to stay efficient:
 

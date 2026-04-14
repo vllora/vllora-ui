@@ -686,8 +686,14 @@ def _call_llm_for_type(
     include_ground_truth: bool,
     ground_truth_format: str | None = None,
     input_format: str | None = None,
+    seed_examples: list[str] | None = None,
 ) -> list[dict]:
     """Make one LLM call for a specific prompt type. Returns raw items.
+
+    If ``seed_examples`` are provided (real user queries from production traces),
+    they're included as style examples in the prompt. This produces more realistic
+    synthetic data that matches real user phrasing (arXiv:2308.12032: few-shot
+    generation with real examples produces significantly more diverse/natural output).
 
     Retries up to MAX_LLM_RETRIES times on transient failures (network errors,
     timeouts, invalid JSON). Each retry is logged to stderr.
@@ -725,12 +731,22 @@ as a question unless the shape requires it, do NOT add narration unless the shap
 allows it. The user_input is the literal content the model will see at inference time.
 """
 
+    # Few-shot style examples from production traces (arXiv:2308.12032)
+    style_block = ""
+    if seed_examples and len(seed_examples) > 0:
+        examples_text = "\n".join(f'  - "{ex}"' for ex in seed_examples[:5])
+        style_block = f"""
+REAL USER EXAMPLES (match this style — natural phrasing, specific details, varied tone):
+{examples_text}
+Your generated user_inputs should feel like these real examples — not generic or textbook.
+"""
+
     prompt = f"""{type_instruction}
 
 Topic: {topic['name']}
 Domain rules (from the topic's system prompt — these are critical constraints for the ground truth):
 {focus}
-{structured_constraint}{input_constraint}
+{structured_constraint}{input_constraint}{style_block}
 Source material (each section is numbered [1], [2], etc.):
 {chunk_text}
 
@@ -1040,6 +1056,7 @@ def generate_for_topic(
                 include_ground_truth=include_ground_truth,
                 ground_truth_format=ground_truth_format,
                 input_format=input_format,
+                seed_examples=seed_queries[:5] if seed_queries else None,
             ): pt["name"]
             for pt, count in distribution
         }

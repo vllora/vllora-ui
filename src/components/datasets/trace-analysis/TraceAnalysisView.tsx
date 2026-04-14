@@ -10,7 +10,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { BarChart3, Zap, MessageSquare, AlertTriangle, BookOpen, TrendingUp } from "lucide-react";
+import { BarChart3, Zap, MessageSquare, AlertTriangle, BookOpen, TrendingUp, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TraceAnalysisConsumer } from "@/contexts/TraceAnalysisContext";
 import type { TopicTraceMetrics, GraderDimension } from "@/types/dataset-types";
@@ -19,9 +19,11 @@ type Tab = "priority" | "grader-hints" | "seed-queries";
 
 interface TraceAnalysisViewProps {
   readonly initialTab?: Tab;
+  /** When true, skip the header and tab bar (parent provides them). Just render tab content. */
+  readonly contentOnly?: boolean;
 }
 
-export function TraceAnalysisView({ initialTab = "priority" }: TraceAnalysisViewProps) {
+export function TraceAnalysisView({ initialTab = "priority", contentOnly = false }: TraceAnalysisViewProps) {
   const { traceAnalysis, isLoading, hasTraces } = TraceAnalysisConsumer();
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
 
@@ -55,6 +57,17 @@ export function TraceAnalysisView({ initialTab = "priority" }: TraceAnalysisView
     { id: "grader-hints", label: "Grader Hints", icon: <Zap className="w-3.5 h-3.5" /> },
     { id: "seed-queries", label: "Seed Queries", icon: <MessageSquare className="w-3.5 h-3.5" /> },
   ];
+
+  // When contentOnly=true (embedded in OTel viewer), skip header + tabs — parent provides them
+  if (contentOnly) {
+    return (
+      <div className="flex-1 overflow-y-auto p-6">
+        {activeTab === "priority" && <PriorityTab priority={traceAnalysis.priority} topics={traceAnalysis.topics} />}
+        {activeTab === "grader-hints" && <GraderHintsTab graderHints={traceAnalysis.graderHints} />}
+        {activeTab === "seed-queries" && <SeedQueriesTab prompts={traceAnalysis.prompts} />}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -112,13 +125,50 @@ function PriorityTab({
   readonly topics: { readonly discoveredTopics: readonly string[]; readonly coverageGaps: readonly { readonly topic: string; readonly traceCount: number; readonly frequency: number }[] };
 }) {
   const sorted = Object.entries(priority).sort((a, b) => b[1].priorityScore - a[1].priorityScore);
+  const [showDetails, setShowDetails] = useState(false);
+
+  // Compute accessible summary
+  const topTopic = sorted[0];
+  const bottomTopic = sorted[sorted.length - 1];
+  const highFailureTopics = sorted.filter(([, m]) => m.failureRate > 0.4);
+  const totalTraces = sorted.reduce((sum, [, m]) => sum + m.traceCount, 0);
 
   return (
     <div className="space-y-6">
+      {/* Accessible summary (always visible) */}
+      <div className="bg-muted/20 border border-border/50 rounded-lg p-4">
+        <p className="text-sm leading-relaxed">
+          We analyzed <strong>{totalTraces} real conversations</strong> across{" "}
+          <strong>{sorted.length} skills</strong> your model needs to learn.
+        </p>
+        {topTopic && bottomTopic && (
+          <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+            Customers use <strong>{topTopic[0].replace(/-/g, " ")}</strong> most often
+            ({(topTopic[1].frequency * 100).toFixed(0)}% of conversations).
+            {highFailureTopics.length > 0 && (
+              <> They struggle most with{" "}
+              <strong>{highFailureTopics.map(([t]) => t.replace(/-/g, " ")).join(", ")}</strong>{" "}
+              (over 40% failure rate). We're focusing training there.</>
+            )}
+          </p>
+        )}
+      </div>
+
       <div>
-        <h3 className="text-sm font-semibold mb-1">Topic Priority</h3>
+        <button
+          onClick={() => setShowDetails(!showDetails)}
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+        >
+          {showDetails ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          {showDetails ? "Hide details" : "Show detailed breakdown"}
+        </button>
+      </div>
+
+      {showDetails && (
+      <div>
+        <h3 className="text-sm font-semibold mb-1">Detailed Breakdown</h3>
         <p className="text-xs text-muted-foreground mb-4">
-          Topics ranked by priority score (frequency x failure rate). Higher = more training records allocated.
+          Skills ranked by priority. Higher priority = more teaching examples allocated.
         </p>
 
         <div className="border border-border/50 rounded-lg overflow-hidden">
@@ -159,6 +209,7 @@ function PriorityTab({
           </table>
         </div>
       </div>
+      )}
 
       {/* Coverage Gaps */}
       {topics.coverageGaps.length > 0 && (

@@ -1781,7 +1781,7 @@ def cmd_status(args: argparse.Namespace) -> None:
     except SystemExit:
         eval_metrics_by_run = {}
 
-    eval_dir = project_dir / "evaluations"
+    eval_dir = project_dir / "test-runs"
     eval_jobs_shown = []
     if eval_dir.exists():
         eval_files = sorted(eval_dir.glob("eval-*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
@@ -1866,7 +1866,7 @@ def cmd_status(args: argparse.Namespace) -> None:
         return cp_steps.get(name, {}).get("status") == "completed"
 
     # ── Readiness gate (check latest eval if exists) ──
-    eval_dir = project_dir / "evaluations"
+    eval_dir = project_dir / "test-runs"
     latest_eval_file = None
     if eval_dir.exists():
         eval_files = sorted(eval_dir.glob("eval-*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
@@ -5460,7 +5460,7 @@ def cmd_sync_jobs(args: argparse.Namespace) -> None:
     output_dir = Path(args.output_dir)
 
     # ── Sync finetune jobs ──
-    training_dir = output_dir / "training-jobs"
+    training_dir = output_dir / "training"
     training_dir.mkdir(parents=True, exist_ok=True)
 
     jobs = _api(
@@ -5531,7 +5531,7 @@ def cmd_sync_jobs(args: argparse.Namespace) -> None:
         print(f"  Synced training job: {job_id[:8]}... → {out_file.name} (status={local_data['status']})")
 
     # ── Sync eval jobs ──
-    eval_dir = output_dir / "evaluations"
+    eval_dir = output_dir / "test-runs"
     eval_dir.mkdir(parents=True, exist_ok=True)
 
     existing_eval_ids = set()
@@ -6057,7 +6057,7 @@ def cmd_test_grader(args: argparse.Namespace) -> None:
                 cmd_result = subprocess.run(
                     [sys.executable, str(grader_script),
                      "--workflow-id", args.workflow_id,
-                     "--script", args.grader_file or "finetune-project/grader.js",
+                     "--script", args.grader_file or "finetune-project/quality-checker/grader.js",
                      "--row", json.dumps(test_row)],
                     capture_output=True, text=True, timeout=30,
                 )
@@ -6166,7 +6166,7 @@ def cmd_test_grader(args: argparse.Namespace) -> None:
                 cmd_result = subprocess.run(
                     [sys.executable, str(grader_script),
                      "--workflow-id", args.workflow_id,
-                     "--script", getattr(args, "grader_file", None) or "finetune-project/grader.js",
+                     "--script", getattr(args, "grader_file", None) or "finetune-project/quality-checker/grader.js",
                      "--row", json.dumps(test_row)],
                     capture_output=True, text=True, timeout=30,
                 )
@@ -7212,7 +7212,7 @@ def main() -> None:
     p = subparsers.add_parser("create-eval", help="Create evaluation job and save metadata locally")
     p.add_argument("--workflow-id", required=True, help="Workflow ID (used as dataset_id)")
     p.add_argument("--model", default=None, help="Rollout model override")
-    p.add_argument("--output-dir", default="evaluations", help="Local directory for eval metadata (default: evaluations/)")
+    p.add_argument("--output-dir", default="test-runs", help="Local directory for eval metadata (default: test-runs/)")
 
     # poll-eval
     p = subparsers.add_parser("poll-eval", help="Poll eval job until complete, save results")
@@ -7253,7 +7253,7 @@ def main() -> None:
     p.add_argument("--display-name", default=None, help="Human-readable training job name")
     p.add_argument("--config", default=None, help="Training config JSON string")
     p.add_argument("--inference-params", default=None, help="Inference parameters JSON string")
-    p.add_argument("--output-dir", default="training-jobs", help="Local directory for job metadata (default: training-jobs/)")
+    p.add_argument("--output-dir", default="training", help="Local directory for job metadata (default: training/)")
 
     # poll-training
     p = subparsers.add_parser("poll-training", help="Poll training job until complete, save status and metrics")

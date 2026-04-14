@@ -71,18 +71,21 @@ Validate → Quality Gate → Verify → Eval BOTH (4B + 0.8B)                  
 
 ```
 finetune-project/
-├── training.jsonl, grader.js, topics.json, relations.json, config.json
+├── training.jsonl, topics.json, relations.json, config.json
 ├── execution-log.md, iterations.md, pipeline-journal.json
 ├── knowledge/                  # Per-document subdirs
 │   ├── {doc-slug}/             # {slug}.md, extract.py, knowledge_parts.json, parts-index.json
 │   └── all-parts-index.json   # Merged index across ALL documents
-├── trace_priority.json         # (combined mode) Per-topic frequency + failure + priority
-├── trace_topics.json           # (combined mode) Coverage gaps vs PDF topics
-├── trace_prompts.json          # (combined mode) Production system prompt + seed queries
-├── trace_grader_hints.json     # (combined mode) Failure dimensions + grader criteria
-├── grader-draft.js             # (combined mode) Auto-generated grader from traces
-├── evaluations/                # eval-001.json, eval-002.json, ...
-└── training-jobs/              # train-001.json, {JOB_ID}-metrics.json, ...
+├── trace-analysis/             # (combined mode) Insights from OTel traces
+│   ├── priority.json           #   Per-topic frequency + failure + priority score
+│   ├── topics.json             #   Coverage gaps vs PDF topics
+│   ├── prompts.json            #   Production system prompt + seed queries
+│   └── grader-hints.json       #   Failure dimensions + grader criteria
+├── quality-checker/            # Grader scripts
+│   ├── grader.js               #   Active grader
+│   └── grader-draft.js         #   (combined mode) Auto-generated from traces
+├── test-runs/                  # Per-eval subfolders: eval-001/, eval-002/, ...
+└── training/              # train-001.json, {JOB_ID}-metrics.json, ...
 ```
 
 **Workflow ID comes from `config.json` ONLY.** If it exists, read `workflow_id` from it. If not, create a new workflow. Do NOT search the gateway API for workflows with the same name. Workflow names are not unique.
@@ -243,11 +246,11 @@ Follow its recommendation. (3) Sync jobs: `sync-jobs --workflow-id $WORKFLOW_ID 
 | State found | Action |
 |-------------|--------|
 | `config.json` + `knowledge/` + no `topics.json` | Resume from Step 3 |
-| Everything through `grader.js` + no `evaluations/` | Resume from Step 7b |
-| `evaluations/` + no readiness-pass checkpoint | Run `readiness-check` (Step 7c) |
-| Readiness gate PASS + no `training-jobs/` | Create training job (Step 7e) |
-| `training-jobs/` with status `running` | Poll the existing job |
-| `training-jobs/` with early_stop + base model avg >0.75 | Run Step 7d headroom diagnostic. See [reference/readiness-gate.md](reference/readiness-gate.md) |
+| Everything through `quality-checker/grader.js` + no `test-runs/` | Resume from Step 7b |
+| `test-runs/` + no readiness-pass checkpoint | Run `readiness-check` (Step 7c) |
+| Readiness gate PASS + no `training/` | Create training job (Step 7e) |
+| `training/` with status `running` | Poll the existing job |
+| `training/` with early_stop + base model avg >0.75 | Run Step 7d headroom diagnostic. See [reference/readiness-gate.md](reference/readiness-gate.md) |
 
 ---
 
@@ -368,10 +371,10 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/trace_analyze.py \
 
 | Artifact | What it contains | Consumed by |
 |---|---|---|
-| `trace_priority.json` | Per-topic frequency + failure rate + priority score | Step 4 (record allocation) |
-| `trace_topics.json` | Topics found in traces, coverage gaps vs PDF topics | Step 3 (topic enrichment) |
-| `trace_prompts.json` | Production system prompt (simplified) + real user queries | Step 4 (seed prompts) |
-| `trace_grader_hints.json` | Failure dimensions + prompt rules + calibration pairs | Step 5 (grader draft) |
+| `trace-analysis/priority.json` | Per-topic frequency + failure rate + priority score | Step 4 (record allocation) |
+| `trace-analysis/topics.json` | Topics found in traces, coverage gaps vs PDF topics | Step 3 (topic enrichment) |
+| `trace-analysis/prompts.json` | Production system prompt (simplified) + real user queries | Step 4 (seed prompts) |
+| `trace-analysis/grader-hints.json` | Failure dimensions + prompt rules + calibration pairs | Step 5 (grader draft) |
 
 **Upload trace data to gateway** (so the UI can display it):
 ```bash
@@ -397,9 +400,9 @@ This uploads: (1) the trace bundle as a knowledge source (appears in UI Sources 
 
 **Outputs:** `topics.json`, `relations.json`, updated `all-parts-index.json`
 
-**Combined mode — trace topic enrichment:** If `finetune-project/trace_topics.json` exists (from Step 2C):
+**Combined mode — trace topic enrichment:** If `finetune-project/trace-analysis/topics.json` exists (from Step 2C):
 1. Start with PDF-derived topics (comprehensive domain coverage)
-2. Check `trace_topics.json` for coverage gaps — topics that appear in traces but not in PDF topics
+2. Check `trace-analysis/topics.json` for coverage gaps — topics that appear in traces but not in PDF topics
 3. **ADD** trace-discovered topics as new leaf topics (flag with `"source": "trace"` in metadata)
 4. **NEVER REMOVE** PDF-derived topics even if they have low trace frequency — rare topics may be critical
 5. Show the user which topics were added from traces vs which came from PDFs
@@ -449,23 +452,37 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --system-prompt "You are an expert..." \
   --output finetune-project/training.jsonl \
   --records-per-topic 30 --parallel 4 \
-  --workflow-id $WORKFLOW_ID --upload-incremental --enrich-sources
+  --workflow-id $WORKFLOW_ID --enrich-sources
+
+# Upload records SEPARATELY after generation
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
+  --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl --force
 ```
 
-**Combined mode — trace-informed generation:** If trace artifacts exist from Step 2C, add these flags:
+**Combined mode — trace-informed generation:** If trace artifacts exist from Step 2C, add these flags.
+
+**CRITICAL: System prompt length.** The `--system-prompt` must be SHORT (100-300 chars) — just the role and key constraints. Do NOT paste the full production prompt or the full policy document. The knowledge lives in the source parts, not the system prompt. In combined mode, use the `simplified_prompt` from `trace-analysis/prompts.json` as the base, or write a concise one:
+
 ```bash
+# Read the simplified prompt from trace analysis
+SIMPLIFIED=$(python3 -c "import json; print(json.load(open('finetune-project/trace-analysis/prompts.json')).get('simplified_prompt','You are a customer service agent.'))")
+
 uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --topics finetune-project/topics.json \
   --relations finetune-project/relations.json \
   --knowledge-dir finetune-project/knowledge \
-  --system-prompt "You are an expert..." \
+  --system-prompt "$SIMPLIFIED" \
   --output finetune-project/training.jsonl \
   --records-per-topic 30 --parallel 4 \
   --weight-by-trace-priority \
-  --trace-priority-file finetune-project/trace_priority.json \
-  --trace-prompts-file finetune-project/trace_prompts.json \
+  --trace-priority-file finetune-project/trace-analysis/priority.json \
+  --trace-prompts-file finetune-project/trace-analysis/prompts.json \
   --seed-query-ratio 0.20 \
-  --workflow-id $WORKFLOW_ID --upload-incremental --enrich-sources
+  --workflow-id $WORKFLOW_ID --enrich-sources
+
+# Upload records SEPARATELY (more reliable than --upload-incremental which can fail on topic ID mismatch)
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
+  --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl --force
 ```
 
 This changes two things:
@@ -483,7 +500,7 @@ Generate **200+ total records**, minimum 25 per leaf topic.
 **Difficulty control** (reduces trivial records at generation time):
 - `--difficulty normal` (default): balanced prompt types for initial generation
 - `--difficulty hard`: Evol-Instruct operators — multi-step reasoning, indirect info, complex inputs, edge cases. Use when prior eval showed >40% trivial records.
-- `--difficulty adaptive --eval-scores evaluations/eval-001.json`: per-topic difficulty from eval scores — easy topics (>0.70) get hard mode, hard topics (<0.30) get normal mode.
+- `--difficulty adaptive --eval-scores test-runs/eval-001.json`: per-topic difficulty from eval scores — easy topics (>0.70) get hard mode, hard topics (<0.30) get normal mode.
 - `--probe-and-rewrite`: after generation, probes each record with Qwen3.5-4B (largest, conservative filter — if 4B aces it, trivial for all models). Rewrites trivials (>0.85) to be harder. Adds variants alongside originals. Override model with `--probe-model`. (arXiv:2505.17063: +2.6pp)
 
 **`--ground-truth-format` (MANDATORY for structured-output tasks):** Forces scenario-based prompts with specific answer format. Include BOTH the answer format AND the prompt format.
@@ -594,21 +611,21 @@ for topic, count in sorted(counts.items()):
 
 > **PREREQUISITES:** Steps 2 + 3 + 4 complete. Wait for `training.jsonl` to exist before finalizing.
 
-Write a JavaScript grader to `grader.js`. Scores model responses 0-1.
+Write a JavaScript grader to `quality-checker/grader.js`. Scores model responses 0-1.
 
 **Before writing:** (1) Read knowledge parts + topics to understand the domain, (2) Design a checklist rubric of 7-20 binary criteria (arXiv:2507.17746), (3) **Read 10-15 sample records** from `training.jsonl` to calibrate.
 
-**Combined mode — trace-informed grader:** If `finetune-project/trace_grader_hints.json` exists (from Step 2C), generate a grader draft first:
+**Combined mode — trace-informed grader:** If `finetune-project/trace-analysis/grader-hints.json` exists (from Step 2C), generate a grader draft first:
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/grader_from_traces.py \
-  --hints finetune-project/trace_grader_hints.json \
-  --output finetune-project/grader-draft.js
+  --hints finetune-project/trace-analysis/grader-hints.json \
+  --output finetune-project/quality-checker/grader-draft.js
 ```
 This auto-generates grader dimensions from:
 - **Trace failure patterns** (e.g., "15% of traces failed because auth was skipped" → Essential criterion)
 - **Production prompt rules** (e.g., "must authenticate before action" → Important criterion)
 
-**Review the draft with the user** — it's a starting point, not final. Adjust criteria, weights, and descriptions as needed. Then copy to `grader.js`.
+**Review the draft with the user** — it's a starting point, not final. Adjust criteria, weights, and descriptions as needed. Then copy to `quality-checker/grader.js`.
 
 **Copy a template — do NOT write from scratch:**
 
@@ -638,14 +655,14 @@ This auto-generates grader dimensions from:
 **Test 1: Hand-crafted row** — catches syntax errors:
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
-  --workflow-id $WORKFLOW_ID --script grader.js \
+  --workflow-id $WORKFLOW_ID --script quality-checker/grader.js \
   --row '{"messages": [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]}'
 ```
 
 **Test 2: Live model response (CRITICAL)** — catches format-assumption bugs:
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py \
-  --workflow-id $WORKFLOW_ID --script grader.js --live --live-samples 5
+  --workflow-id $WORKFLOW_ID --script quality-checker/grader.js --live --live-samples 5
 ```
 
 Both tests must pass. If Test 1 passes but Test 2 scores 0.0, fix parsing logic.
@@ -665,7 +682,7 @@ Generates plausible-but-wrong answers for 10 records, scores them through the gr
 
 **Upload + verify + checkpoint** — run ALL THREE:
 ```bash
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader --workflow-id $WORKFLOW_ID --file grader.js
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader --workflow-id $WORKFLOW_ID --file quality-checker/grader.js
 
 curl -s "http://localhost:9090/finetune/workflows/$WORKFLOW_ID" | python3 -c "
 import sys, json
@@ -750,12 +767,12 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py training.jsonl \
 ```bash
 # Eval 4B + 0.8B (always eval both extremes)
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
-  --workflow-id $WORKFLOW_ID --model "Qwen3.5-4B" --output-dir finetune-project/evaluations
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval --file finetune-project/evaluations/eval-001.json
+  --workflow-id $WORKFLOW_ID --model "Qwen3.5-4B" --output-dir finetune-project/test-runs
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval --file finetune-project/test-runs/eval-001.json
 
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
-  --workflow-id $WORKFLOW_ID --model "Qwen3.5-0.8B" --output-dir finetune-project/evaluations
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval --file finetune-project/evaluations/eval-002.json
+  --workflow-id $WORKFLOW_ID --model "Qwen3.5-0.8B" --output-dir finetune-project/test-runs
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval --file finetune-project/test-runs/eval-002.json
 ```
 
 **Estimate training cost** (optional but recommended — helps model selection):
@@ -779,12 +796,12 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py estimate-training \
 
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
-  --file finetune-project/evaluations/eval-001.json \
+  --file finetune-project/test-runs/eval-001.json \
   --training-file finetune-project/training.jsonl \
   --objective-target-tokens <see table above>
 
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
-  --file finetune-project/evaluations/eval-002.json \
+  --file finetune-project/test-runs/eval-002.json \
   --training-file finetune-project/training.jsonl \
   --objective-target-tokens <see table above>
 ```
@@ -792,9 +809,9 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
 **If 0.8B avg < 0.05 (no capability), also eval 2B** as middle ground:
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
-  --workflow-id $WORKFLOW_ID --model "Qwen3.5-2B" --output-dir finetune-project/evaluations
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval --file finetune-project/evaluations/eval-003.json
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check --file finetune-project/evaluations/eval-003.json
+  --workflow-id $WORKFLOW_ID --model "Qwen3.5-2B" --output-dir finetune-project/test-runs
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval --file finetune-project/test-runs/eval-003.json
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check --file finetune-project/test-runs/eval-003.json
 ```
 
 The readiness summary shows `trivial% | learnable% | dead%` for each model. **Compare learnable_frac across all evaluated models and choose the best** (arXiv:2508.14094v3: R²=0.66 between learnable% and actual improvement across model sizes):
@@ -817,7 +834,7 @@ The readiness summary shows `trivial% | learnable% | dead%` for each model. **Co
 Log the chosen model:
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
-  --project-dir finetune-project --eval-file finetune-project/evaluations/eval-NNN.json \
+  --project-dir finetune-project --eval-file finetune-project/test-runs/eval-NNN.json \
   --changes "Chosen MODEL_NAME (avg=X.XX, learnable=XX%)" --change-type baseline --verdict PASS
 ```
 
@@ -827,7 +844,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
 
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
-  --file finetune-project/evaluations/eval-NNN.json \
+  --file finetune-project/test-runs/eval-NNN.json \
   --training-file finetune-project/training.jsonl \
   --objective-target-tokens <user spec>
 ```
@@ -846,7 +863,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
 
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py difficulty-probe \
-  --file finetune-project/evaluations/eval-NNN.json --save finetune-project/difficulty-report.json
+  --file finetune-project/test-runs/eval-NNN.json --save finetune-project/difficulty-report.json
 ```
 
 **Decision:** Exit 0 = PASS (>= 30% learnable), exit 2 = WARN (15-30%), exit 1 = FAIL (< 15%).
@@ -860,7 +877,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py difficulty-probe \
 
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py harden-records \
-  --eval-file finetune-project/evaluations/eval-NNN.json \
+  --eval-file finetune-project/test-runs/eval-NNN.json \
   --training-file finetune-project/training.jsonl --min-score 0.85
 ```
 
@@ -907,7 +924,7 @@ These are the **only 3 base models** supported.
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
   --workflow-id $WORKFLOW_ID --base-model "Qwen3.5-4B" \
-  --output-model "project-v1" --output-dir training-jobs
+  --output-model "project-v1" --output-dir finetune-project/training
 ```
 
 > See [reference/training-metrics-guide.md](reference/training-metrics-guide.md) "GRPO Training Defaults" for all parameters, rationale, and advanced config.
@@ -917,7 +934,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
 Spawn `training-monitor` subagent, then poll:
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
-  --file training-jobs/train-001.json --max-wait 7200
+  --file training/train-001.json --max-wait 7200
 ```
 
 By default, `poll-training` may auto-cancel a running job for completion clipping, EMA score plateau/degradation, or length exploitation.
@@ -926,7 +943,7 @@ If you intentionally want the cloud job to continue even when rewards plateau, p
 
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \
-  --file training-jobs/train-001.json --max-wait 7200 \
+  --file training/train-001.json --max-wait 7200 \
   --no-early-stop
 ```
 
@@ -957,7 +974,7 @@ Run the diagnostic first:
 
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py diagnose-clipping \
-  --job-file training-jobs/train-NNN.json \
+  --job-file training/train-NNN.json \
   --training-file finetune-project/training.jsonl \
   --objective-target-tokens <user spec, e.g. 80>
 ```
@@ -1000,12 +1017,12 @@ Then run the readiness gate (Step 7c).
 ```bash
 # Diagnose zeros (DO NOT remove yet)
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py filter-records \
-  --file evaluations/eval-001.json --training-file finetune-project/training.jsonl \
+  --file test-runs/eval-001.json --training-file finetune-project/training.jsonl \
   --max-score 0.0 --workflow-id $WORKFLOW_ID --verbose --dry-run
 
 # Only filter confirmed model refusals
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py filter-records \
-  --file evaluations/eval-001.json --training-file finetune-project/training.jsonl \
+  --file test-runs/eval-001.json --training-file finetune-project/training.jsonl \
   --max-score 0.0 --reason-pattern "refused" --workflow-id $WORKFLOW_ID --sync-gateway --verbose
 ```
 
@@ -1014,13 +1031,13 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py filter-records \
 Use the provider/cloud job ID from the completed training job and add the `finetuned/` prefix. Do **not** pass raw `fine_tuned_model` or raw `provider_job_id` to eval — those produce "Model not found" errors.
 
 ```bash
-PROVIDER_JOB_ID=$(python3 -c "import json; print(json.load(open('training-jobs/train-001.json'))['provider_job_id'])")
+PROVIDER_JOB_ID=$(python3 -c "import json; print(json.load(open('training/train-001.json'))['provider_job_id'])")
 TRAINED_MODEL="finetuned/${PROVIDER_JOB_ID}"
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval \
-  --workflow-id $WORKFLOW_ID --model "$TRAINED_MODEL" --output-dir finetune-project/evaluations
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval --file finetune-project/evaluations/eval-NNN.json
+  --workflow-id $WORKFLOW_ID --model "$TRAINED_MODEL" --output-dir finetune-project/test-runs
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval --file finetune-project/test-runs/eval-NNN.json
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-iteration \
-  --project-dir finetune-project --eval-file evaluations/eval-NNN.json \
+  --project-dir finetune-project --eval-file test-runs/eval-NNN.json \
   --changes "Post-training eval" --change-type baseline --verdict PASS
 ```
 
@@ -1033,12 +1050,12 @@ Read improved AND degraded records per topic. Check if gains come from genuine s
 ```bash
 # After each standalone eval
 uv run .claude/skills/finetune-skill/scripts/finetune.py grader-sanity-check \
-  --eval-file finetune-project/evaluations/eval-NNN.json
+  --eval-file finetune-project/test-runs/eval-NNN.json
 
 # After each training epoch (training-monitor MUST run this on every poll
 # that produces a new epoch in the epoch-evals file)
 uv run .claude/skills/finetune-skill/scripts/finetune.py grader-sanity-check \
-  --eval-file finetune-project/training-jobs/<job-id>-epoch-evals.json
+  --eval-file finetune-project/training/<job-id>-epoch-evals.json
 ```
 
 The check iterates ALL epochs present in the file and reports per-epoch pass/fail. If any epoch trips a check, the script exits non-zero — the training-monitor MUST stop polling and surface the failure to the orchestrator. Do not let training continue with a broken grader.
@@ -1152,7 +1169,7 @@ Three iteration loops with different speeds and costs.
 **Diagnose:**
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py diagnose-grader \
-  --file evaluations/eval-001.json --workflow-id $WORKFLOW_ID
+  --file test-runs/eval-001.json --workflow-id $WORKFLOW_ID
 ```
 
 | Diagnosis | Fix |
@@ -1166,15 +1183,15 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py diagnose-grader \
 
 **Fix grader:**
 ```bash
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader --workflow-id $WORKFLOW_ID --file grader.js
-uv run ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py --workflow-id $WORKFLOW_ID --script grader.js --live
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-grader --workflow-id $WORKFLOW_ID --file quality-checker/grader.js
+uv run ${CLAUDE_SKILL_DIR}/scripts/dry_run_grader.py --workflow-id $WORKFLOW_ID --script quality-checker/grader.js --live
 ```
 
 **Fix records (only for diagnosed data issues, NOT for zero-score filtering):**
 ```bash
 # Only filter records with confirmed data issues (refusals, wrong GT, malformed input)
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py filter-records \
-  --file evaluations/eval-001.json --training-file finetune-project/training.jsonl \
+  --file test-runs/eval-001.json --training-file finetune-project/training.jsonl \
   --max-score 0.0 --reason-pattern "refused" --workflow-id $WORKFLOW_ID --sync-gateway --verbose
 
 uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
@@ -1188,7 +1205,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force \
 **Before re-running eval — cancel any running evals first** (they use the old grader/records):
 ```bash
 # Cancel any running evals before re-evaluating with the fixed grader/records
-for eval_file in finetune-project/evaluations/eval-*.json; do
+for eval_file in finetune-project/test-runs/eval-*.json; do
   EVAL_ID=$(python3 -c "import json; print(json.load(open('$eval_file')).get('id',''))" 2>/dev/null)
   EVAL_STATUS=$(python3 -c "import json; print(json.load(open('$eval_file')).get('status',''))" 2>/dev/null)
   if [ "$EVAL_STATUS" = "running" ] && [ -n "$EVAL_ID" ]; then
@@ -1207,7 +1224,7 @@ done
 **Before starting a new training job — cancel any running training/eval jobs first** (they use the old config):
 ```bash
 # Cancel running training jobs
-for train_file in finetune-project/training-jobs/train-*.json; do
+for train_file in finetune-project/training/train-*.json; do
   JOB_ID=$(python3 -c "import json; print(json.load(open('$train_file')).get('id',''))" 2>/dev/null)
   JOB_STATUS=$(python3 -c "import json; print(json.load(open('$train_file')).get('status',''))" 2>/dev/null)
   if [ "$JOB_STATUS" = "running" ] || [ "$JOB_STATUS" = "queued" ]; then
@@ -1288,32 +1305,41 @@ Run with `uv run ${CLAUDE_SKILL_DIR}/scripts/<script>`. Key ones: `finetune.py` 
 
 **Trace-informed scripts (combined mode only):**
 - `trace_analyze.py` — Analyze OTel traces → 4 artifacts (priority, topics, prompts, grader hints). Run in Step 2C.
-- `grader_from_traces.py` — Auto-generate grader draft from trace_grader_hints.json. Run in Step 5.
+- `grader_from_traces.py` — Auto-generate grader draft from `trace-analysis/grader-hints.json`. Run in Step 5.
 
-**Section analysis** (`update-analysis`) — update after each step. Examples:
+**Section analysis** (`update-analysis`) — update after each step. The `--summary` and `--assessment` fields are displayed directly to the user in the UI sidebar — **write them in plain language that a non-ML-expert can understand.** Use `--metrics` for the technical data you need for your own decisions.
+
+**Language rules for summaries:**
+- Never use: GRPO, learnable%, zero-variance, drift_ratio, K=8, epochs
+- Instead of "401 records, 12 topics, 76 seeds (19%)" → "401 teaching examples across 12 skills. 76 based on real customer conversations."
+- Instead of "FAIL: length_drift_risk" → "Not ready yet — responses are getting too long. Fixing automatically."
+- Instead of "Chose 0.8B (34% learnable)" → "Using the smaller model — it has more room to learn from your data."
+- Frame metrics as "so what": not "failure_rate: 42%" but "customers struggled with exchanges 42% of the time"
+
+**Examples:**
 
 ```bash
 # After Step 2 (extraction):
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py update-analysis \
   --project-dir finetune-project --section sources --status ready \
-  --summary "2 sources: retail-agent-policy.md (8 parts) + OTel Traces (460 traces, 39.6% failure)" \
-  --assessment "Combined mode. PDF provides knowledge rules, traces provide real usage patterns with 110x frequency skew across topics." \
+  --summary "Loaded your policy document (8 sections) and 460 real customer conversations." \
+  --assessment "We can see what customers actually ask about. Exchanges and returns are where they struggle most (42% failure). Payment changes are rarely needed (0.9%)." \
   --metrics '{"pdf_count": 1, "trace_count": 460, "parts": 8, "failure_rate": 0.396}' \
-  --next-action "Build topic hierarchy with trace enrichment."
+  --next-action "Create the skills your model needs to learn."
 
 # After Step 4 (generation):
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py update-analysis \
   --project-dir finetune-project --section training-data --status ready \
-  --summary "401 records, trace-weighted. Top: modify-items (50). Bottom: payment (3). 76 seeds (19%)." \
-  --assessment "Good distribution. Seed ratio within 15-25% target. All topics above 3-record floor." \
+  --summary "Created 401 teaching examples across 12 skills. 76 are based on real customer conversations." \
+  --assessment "More examples for skills customers use most (exchanges: 50 examples) and fewer for rarely-used ones (payment changes: 3). This focuses training where it matters." \
   --metrics '{"total": 401, "topics": 12, "seeds": 76, "seed_ratio": 0.19, "highest": 50, "lowest": 3}' \
-  --next-action "Write grader using trace-informed dimensions."
+  --next-action "Set up the quality checker to score model responses."
 
-# After Step 7 (eval iteration):
+# After Step 7 (eval):
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py update-analysis \
-  --project-dir finetune-project --section evaluation --status needs-work \
-  --summary "Iter 1: FAIL (length_drift). Fixed grader. Iter 2: PASS. Chose 0.8B (34% learnable)." \
-  --assessment "4B too easy (avg=0.73, 16% learnable). 0.8B optimal (avg=0.43, 34% learnable, good variance)." \
+  --project-dir finetune-project --section evaluation --status ready \
+  --summary "Test run complete. Using the smaller model — it has more room to learn from your data." \
+  --assessment "The larger model already knows too much (scores 73%) — not enough room to improve. The smaller model scores 43% with good room to grow on 34% of examples." \
   --metrics '{"iterations": 2, "chosen_model": "0.8B", "learnable": 0.34, "avg_score": 0.43}' \
-  --blockers '[]' --next-action "Start training with 0.8B."
+  --next-action "Start training your model."
 ```

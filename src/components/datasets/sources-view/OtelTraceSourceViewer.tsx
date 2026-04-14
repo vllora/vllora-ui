@@ -352,7 +352,7 @@ function AgentPrismTraceView({ spans }: { readonly spans: readonly OtelSemconvSp
   );
 }
 
-type OtelTab = "traces" | "analysis";
+type OtelTab = "traces" | "priority" | "grader-hints" | "seed-queries";
 
 export function OtelTraceSourceViewer({ source, semconvSpans }: OtelTraceSourceViewerProps) {
   const trace = source ? sourceToTrace(source) : null;
@@ -367,9 +367,14 @@ export function OtelTraceSourceViewer({ source, semconvSpans }: OtelTraceSourceV
       ? `${semconvSpans.length} spans`
       : 'empty';
 
+  // Flat tabs: Traces + analysis sub-views (no nested "Analysis" wrapper)
   const tabs: Array<{ id: OtelTab; label: string }> = [
     { id: "traces", label: "Traces" },
-    ...(hasTraceAnalysis ? [{ id: "analysis" as OtelTab, label: "Analysis" }] : []),
+    ...(hasTraceAnalysis ? [
+      { id: "priority" as OtelTab, label: "Priority" },
+      { id: "grader-hints" as OtelTab, label: "Grader Hints" },
+      { id: "seed-queries" as OtelTab, label: "Seed Queries" },
+    ] : []),
   ];
 
   return (
@@ -392,7 +397,7 @@ export function OtelTraceSourceViewer({ source, semconvSpans }: OtelTraceSourceV
         </div>
       </header>
 
-      {/* Tabs (only show when trace analysis exists) */}
+      {/* Flat tabs — one level only */}
       {tabs.length > 1 && (
         <div className="flex border-b border-border/60 px-6 shrink-0">
           {tabs.map((tab) => (
@@ -412,7 +417,7 @@ export function OtelTraceSourceViewer({ source, semconvSpans }: OtelTraceSourceV
         </div>
       )}
 
-      {/* Content */}
+      {/* Content — directly renders the view for each tab */}
       {activeTab === "traces" ? (
         <div className={hasSpans ? "flex-1 min-h-0 overflow-hidden" : "flex-1 overflow-auto p-6"}>
           {hasSpans ? (
@@ -425,7 +430,7 @@ export function OtelTraceSourceViewer({ source, semconvSpans }: OtelTraceSourceV
         </div>
       ) : (
         <div className="flex-1 min-h-0 overflow-hidden">
-          <TraceAnalysisView />
+          <TraceAnalysisView initialTab={activeTab} contentOnly />
         </div>
       )}
     </div>

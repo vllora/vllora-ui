@@ -6,10 +6,12 @@
  * nested topic hierarchy under "Training Data".
  *
  * Sections:
- * - Source Documents (knowledge sources)
- * - Training Data (topics + "All Topics" nav)
- * - Eval Runs (evaluation jobs)
- * - Training Jobs (finetune jobs)
+ * - Source Materials (knowledge sources)
+ * - Teaching Examples (topics + "All Topics" nav)
+ * - Quality Checker (evaluator/grader)
+ * - Test Runs (evaluation jobs)
+ * - Training (finetune jobs)
+ * - Activity Log (pipeline journal)
  */
 
 import { useState, useMemo, useCallback, useEffect } from "react";
@@ -241,11 +243,11 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
     if (nodeId === "data") {
       tabLabel = "All Topics";
     } else if (nodeId === "evaluations/overview") {
-      tabLabel = "Eval Runs";
+      tabLabel = "Test Runs";
     } else if (nodeId.startsWith("evaluations/jobs/")) {
       tabLabel = evalJobDisplayName(nodeId.slice("evaluations/jobs/".length));
     } else if (nodeId === "finetune/overview") {
-      tabLabel = "Training Jobs";
+      tabLabel = "Training";
     } else if (nodeId.startsWith("finetune/")) {
       tabLabel = finetuneJobDisplayName(nodeId.slice("finetune/".length));
     }
@@ -302,7 +304,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
     <div className="flex flex-col h-full min-h-0 overflow-y-auto py-4">
       {/* ── Source Documents ── */}
       {sources.length > 0 && (
-        <SidebarSection title="Source Documents" icon={<BookOpen className="w-3 h-3" />} count={sources.length}>
+        <SidebarSection title="Source Materials" icon={<BookOpen className="w-3 h-3" />} count={sources.length}>
           {getSection("sources") && <SectionInsight analysis={getSection("sources")!} />}
           <SidebarItem
             icon={<Library className="w-3.5 h-3.5" />}
@@ -331,7 +333,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
       {/* ── Training Data ── */}
       <SidebarSection
-        title="Training Data"
+        title="Teaching Examples"
         icon={<Database className="w-3 h-3" />}
         count={totalRecords || records.length}
         isLoading={isGeneratingTraces}
@@ -366,7 +368,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       {/* ── Evaluator (Grader Script) ── */}
       <SidebarDivider />
 
-      <SidebarSection title="Evaluator" icon={<Code2 className="w-3 h-3" />}>
+      <SidebarSection title="Quality Checker" icon={<Code2 className="w-3 h-3" />}>
         {getSection("evaluator") && <SectionInsight analysis={getSection("evaluator")!} />}
         <SidebarItem
           icon={<Code2 className="w-3.5 h-3.5" />}
@@ -380,7 +382,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
       {/* ── Eval Runs ── */}
       <SidebarSection
-        title="Eval Runs"
+        title="Test Runs"
         icon={<FlaskConical className="w-3 h-3" />}
         count={dryRunJobs.length}
         onTitleClick={() => handleSelect("evaluations/overview")}
@@ -430,7 +432,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
       {/* ── Training Jobs ── */}
       <SidebarSection
-        title="Training Jobs"
+        title="Training"
         icon={<Brain className="w-3 h-3" />}
         count={finetuneJobs.length}
         onTitleClick={() => handleSelect("finetune/overview")}
@@ -471,7 +473,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
       {/* ── Pipeline Journal ── */}
       <SidebarSection
-        title="Pipeline Journal"
+        title="Activity Log"
         icon={<ScrollText className="w-3 h-3" />}
         count={hasJournal ? journalEntries.length : undefined}
         onTitleClick={() => handleSelect("pipeline-analysis")}

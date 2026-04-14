@@ -365,12 +365,58 @@ def build_trace_topics(
 # ─── Artifact 3: trace_prompts.json ──────────────────────────────────────────
 
 
+def _similarity(a: str, b: str) -> float:
+    """Simple trigram similarity (0.0–1.0) for near-duplicate detection.
+
+    Good enough for ~300 queries. No external dependencies needed.
+    At production scale (>10K), use MinHash or embedding-based dedup.
+    """
+    def trigrams(s: str) -> set[str]:
+        s = s.lower().strip()
+        return {s[i:i+3] for i in range(max(0, len(s) - 2))}
+    ta, tb = trigrams(a), trigrams(b)
+    if not ta or not tb:
+        return 0.0
+    return len(ta & tb) / len(ta | tb)
+
+
+def _deduplicate_queries(queries: list[str], threshold: float = 0.85) -> list[str]:
+    """Remove near-duplicate queries using trigram similarity.
+
+    Keeps the longest query from each cluster (more complete phrasing).
+    Based on SemDeDup (arXiv:2303.09540): dedup at 0.85-0.90 threshold
+    improves per-token learning efficiency.
+    """
+    if len(queries) <= 1:
+        return queries
+
+    # Sort by length descending — prefer longer (more complete) queries
+    sorted_queries = sorted(queries, key=len, reverse=True)
+    kept: list[str] = []
+    for q in sorted_queries:
+        is_dupe = any(_similarity(q, k) > threshold for k in kept)
+        if not is_dupe:
+            kept.append(q)
+    return kept
+
+
 def build_trace_prompts(
     traces: dict[str, list[dict]],
     priority: dict[str, dict],
     max_seed_queries: int = 500,
 ) -> dict:
-    """Extract production system prompt and seed user queries from traces."""
+    """Extract production system prompt and seed user queries from traces.
+
+    Quality pipeline (research-backed):
+    1. Extract first user message per trace as the seed query
+    2. Assign to topic based on ACTION TAKEN (not stated intent) — standard
+       in task-oriented dialogue (DSTC, MultiWOZ). The model needs to learn
+       what action to take, not what the user thinks they want.
+    3. Deduplicate at 0.85 trigram similarity (SemDeDup, arXiv:2303.09540)
+    4. Multi-intent queries kept intact — valuable hard examples
+       (arXiv:2508.14094: hard examples yield 47% gains)
+    5. Store user_surface_intent metadata for grader context
+    """
     # Extract system prompt from the first trace
     system_prompt = ""
     for spans in traces.values():
@@ -378,31 +424,76 @@ def build_trace_prompts(
         if system_prompt:
             break
 
-    # Collect user queries grouped by topic
-    topic_queries: dict[str, list[str]] = defaultdict(list)
+    # Intent keywords for surface-intent detection
+    intent_keywords: dict[str, list[str]] = {
+        "cancel": ["cancel", "cancellation"],
+        "return": ["return", "refund", "send back"],
+        "exchange": ["exchange", "swap", "replace", "different"],
+        "modify": ["modify", "change", "update", "switch"],
+        "address": ["address", "shipping", "delivery"],
+        "payment": ["payment", "pay", "card", "gift card"],
+    }
+
+    def detect_surface_intent(query: str) -> list[str]:
+        """Detect user's stated intent from query text."""
+        q = query.lower()
+        intents = []
+        for intent, keywords in intent_keywords.items():
+            if any(kw in q for kw in keywords):
+                intents.append(intent)
+        return intents or ["general"]
+
+    # Collect user queries grouped by topic (action-based assignment)
+    topic_queries: dict[str, list[dict]] = defaultdict(list)
     for trace_id, spans in traces.items():
         topic = trace_primary_topic(spans)
         if not topic:
             continue
         queries = extract_user_queries(spans)
-        # Take only the first user message per trace (the initial request)
-        if queries:
-            topic_queries[topic].append(queries[0])
+        if not queries:
+            continue
+        query = queries[0]  # First user message
+        surface_intents = detect_surface_intent(query)
+        is_multi_intent = len(surface_intents) > 1
+        topic_queries[topic].append({
+            "query": query,
+            "surface_intents": surface_intents,
+            "is_multi_intent": is_multi_intent,
+        })
 
     # Deduplicate and cap per topic
     seed_queries: dict[str, list[str]] = {}
+    seed_metadata: dict[str, list[dict]] = {}
     total_seeds = 0
+    dedup_removed = 0
+
     for topic in sorted(topic_queries.keys()):
-        unique = list(dict.fromkeys(topic_queries[topic]))  # preserve order, dedup
+        raw_queries = [q["query"] for q in topic_queries[topic]]
+        metadata = {q["query"]: q for q in topic_queries[topic]}
+
+        # Step 1: Exact dedup (preserve order)
+        unique = list(dict.fromkeys(raw_queries))
+
+        # Step 2: Near-duplicate removal (trigram similarity >= 0.85)
+        before_dedup = len(unique)
+        deduped = _deduplicate_queries(unique, threshold=0.85)
+        dedup_removed += before_dedup - len(deduped)
+
+        # Step 3: Cap per topic
         per_topic_cap = max(10, max_seed_queries // max(len(topic_queries), 1))
-        seed_queries[topic] = unique[:per_topic_cap]
-        total_seeds += len(seed_queries[topic])
+        final = deduped[:per_topic_cap]
+
+        seed_queries[topic] = final
+        seed_metadata[topic] = [metadata.get(q, {}) for q in final]
+        total_seeds += len(final)
 
     return {
         "system_prompt": system_prompt,
         "simplified_prompt": simplify_system_prompt(system_prompt),
         "seed_queries": seed_queries,
+        "seed_metadata": seed_metadata,
         "total_seed_queries": total_seeds,
+        "near_duplicates_removed": dedup_removed,
         "topics_with_seeds": len(seed_queries),
     }
 
@@ -602,7 +693,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    output_dir = Path(args.output_dir)
+    output_dir = Path(args.output_dir) / "trace-analysis"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Load spans
@@ -622,7 +713,7 @@ def main() -> None:
     # Artifact 1: trace_priority.json
     print("\nBuilding trace_priority.json...")
     priority = build_trace_priority(traces)
-    priority_path = output_dir / "trace_priority.json"
+    priority_path = output_dir / "priority.json"
     with open(priority_path, "w") as f:
         json.dump(priority, f, indent=2)
     print(f"  {len(priority)} topics, written to {priority_path}")
@@ -642,7 +733,7 @@ def main() -> None:
             else:
                 pdf_topic_names.append(child.get("name", ""))
     trace_topics = build_trace_topics(priority, pdf_topic_names)
-    topics_path = output_dir / "trace_topics.json"
+    topics_path = output_dir / "topics.json"
     with open(topics_path, "w") as f:
         json.dump(trace_topics, f, indent=2)
     print(f"  {trace_topics['topic_count']} topics discovered, {trace_topics['coverage_gap_count']} coverage gaps")
@@ -650,7 +741,7 @@ def main() -> None:
     # Artifact 3: trace_prompts.json
     print("\nBuilding trace_prompts.json...")
     trace_prompts = build_trace_prompts(traces, priority, args.max_seed_queries)
-    prompts_path = output_dir / "trace_prompts.json"
+    prompts_path = output_dir / "prompts.json"
     with open(prompts_path, "w") as f:
         json.dump(trace_prompts, f, indent=2)
     prompt_preview = trace_prompts["simplified_prompt"][:80] + "..." if trace_prompts["simplified_prompt"] else "(none)"
@@ -662,7 +753,7 @@ def main() -> None:
     grader_hints = build_trace_grader_hints(
         traces, priority, trace_prompts["system_prompt"]
     )
-    hints_path = output_dir / "trace_grader_hints.json"
+    hints_path = output_dir / "grader-hints.json"
     with open(hints_path, "w") as f:
         json.dump(grader_hints, f, indent=2)
     print(f"  {grader_hints['dimension_count']} grader dimensions ({sum(1 for d in grader_hints['dimensions'] if d['source'] == 'trace_failure')} from traces, {sum(1 for d in grader_hints['dimensions'] if d['source'] == 'prompt_rule')} from prompt rules)")
