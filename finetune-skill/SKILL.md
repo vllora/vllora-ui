@@ -721,17 +721,29 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py estimate-training \
   --workflow-id $WORKFLOW_ID --models "Qwen3.5-4B,Qwen3.5-0.8B" --max-output-tokens 128
 ```
 
-**Run readiness-check on BOTH** to get signal density. **Always pass `--training-file` and `--objective-target-tokens`** — these enable the proactive length-drift checks (`spec_mismatch` + `length_drift_risk`) that catch grader-rewards-verbosity and spec-mismatch problems BEFORE training. Skipping them means clipping problems only get caught reactively during training, after compute is wasted:
+**Run readiness-check on BOTH** to get signal density. **Always pass `--training-file` and `--objective-target-tokens`** — these enable the proactive length-drift checks (`spec_mismatch` + `length_drift_risk`) that catch grader-rewards-verbosity and spec-mismatch problems BEFORE training. Skipping them means clipping problems only get caught reactively during training, after compute is wasted.
+
+**Choosing `--objective-target-tokens`** — set this to the expected P95 response length for your task:
+
+| Task type | Typical target | Why |
+|---|---|---|
+| Classification / extraction | 50-100 | Short structured output |
+| QA / factual lookup | 80-150 | Concise answers |
+| **Conversational agent** | **200-400** | Multi-turn requires explaining steps, confirming details, listing actions |
+| Summarization / analysis | 200-500 | Long-form output |
+
+**Do NOT use low values (< 100) for conversational agents.** Customer service, chatbots, and tool-routing agents naturally produce longer responses. Using `--objective-target-tokens 80` for a conversational agent will trigger false `length_drift_risk` failures because eval responses are longer than 80 tokens by design.
+
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
   --file finetune-project/evaluations/eval-001.json \
   --training-file finetune-project/training.jsonl \
-  --objective-target-tokens <user spec, e.g. 80>
+  --objective-target-tokens <see table above>
 
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
   --file finetune-project/evaluations/eval-002.json \
   --training-file finetune-project/training.jsonl \
-  --objective-target-tokens <user spec, e.g. 80>
+  --objective-target-tokens <see table above>
 ```
 
 **If 0.8B avg < 0.05 (no capability), also eval 2B** as middle ground:
@@ -1149,6 +1161,19 @@ done
 
 #### 9b. Post-training iteration
 
+**Before starting a new training job — cancel any running training/eval jobs first** (they use the old config):
+```bash
+# Cancel running training jobs
+for train_file in finetune-project/training-jobs/train-*.json; do
+  JOB_ID=$(python3 -c "import json; print(json.load(open('$train_file')).get('id',''))" 2>/dev/null)
+  JOB_STATUS=$(python3 -c "import json; print(json.load(open('$train_file')).get('status',''))" 2>/dev/null)
+  if [ "$JOB_STATUS" = "running" ] || [ "$JOB_STATUS" = "queued" ]; then
+    [ -n "$JOB_ID" ] && uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py cancel-training \
+      --workflow-id $WORKFLOW_ID --job-id $JOB_ID
+  fi
+done
+```
+
 Use the **training metrics → diagnosis table** in [reference/analysis-strategy.md](reference/analysis-strategy.md) Part 2d to determine whether to fix hyperparams, grader, or data.
 
 1. **Hyperparams only** → skip pre-training eval, go to Step 7e with new config
@@ -1160,6 +1185,14 @@ Use the **training metrics → diagnosis table** in [reference/analysis-strategy
 > See [reference/iteration-strategy.md](reference/iteration-strategy.md) Part 10 for the full hyperparameter iteration ladder and post-training diagnosis.
 
 **Max iterations:** 5 eval-only + 3 training before escalating to user.
+
+**CRITICAL: When `length_drift_risk` fires repeatedly, do NOT keep reducing `max_output_tokens`.**
+
+The `length_drift_risk` check compares eval responses against GT and `objective_target_tokens`. Before iterating:
+
+1. **Check if `objective_target_tokens` is appropriate for your task type** (see table in Step 7c). Conversational agents need 200-400, not 80-100. If too low, fix the target and re-check — do NOT reduce max_tokens.
+2. **Distinguish eval model verbosity from base model verbosity.** The readiness check uses the eval model (gpt-4o-mini) responses, NOT the base model. If eval model is verbose but the task is conversational, the drift may be expected — raise the objective target.
+3. **Do NOT create more than 2 training jobs for the same readiness issue.** If the same check fails after 2 training iterations, **escalate to the user** with the specific failure, your diagnosis, and ask whether the target is appropriate.
 
 **If training early-stopped due to score degradation**, distinguish: (A) reward never rose → headroom issue (see Step 7d), (B) reward rose then declined → entropy collapse or reward hacking. See [reference/iteration-strategy.md](reference/iteration-strategy.md) Part 8 for detailed symptom-based diagnosis.
 
