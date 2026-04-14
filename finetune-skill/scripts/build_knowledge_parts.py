@@ -2,14 +2,14 @@
 # requires-python = ">=3.10"
 # ///
 """
-Generic extraction: Docling chunks → knowledge_parts.json + parts-index.json
+Generic extraction: OpenDataLoader `kids[]` → knowledge_parts.json + parts-index.json
 
-Handles 90% of documents without LLM reasoning. Groups chunks by section
-headings, splits oversized chunks, merges undersized ones, and produces
+Handles 90% of documents without LLM reasoning. Walks the OpenDataLoader tree,
+merges undersized fragments, splits oversized sections, and produces
 structured parts with typed content (text, table, image).
 
 Usage:
-    python3 build_knowledge_parts.py docling-result.json -o knowledge_parts.json --slug doc-slug
+    python3 build_knowledge_parts.py extraction-result.json -o knowledge_parts.json --slug doc-slug
 
 For unusual documents, the knowledge-extractor agent falls back to writing
 a custom extract.py instead of using this script.
@@ -120,49 +120,6 @@ def split_large_chunk(text: str, max_chars: int) -> list[str]:
                 final.append(current.strip())
 
     return final if final else [text]
-
-
-def build_bbox_lookup(data: dict) -> dict[str, list[dict]]:
-    """Build a lookup from doc_item ref (e.g. '#/texts/2') to its prov bbox entries.
-
-    Returns: { ref_string: [{ page_no, bbox: {l, t, r, b, coord_origin} }] }
-    """
-    lookup: dict[str, list[dict]] = {}
-    documents = data.get("documents", [])
-    if isinstance(documents, dict):
-        documents = list(documents.values())
-    for doc in documents:
-        jc = doc.get("content", {}).get("json_content")
-        if not jc:
-            continue
-        if isinstance(jc, str):
-            jc = json.loads(jc)
-        for collection in ("texts", "tables", "pictures"):
-            for item in jc.get(collection, []):
-                ref = item.get("self_ref")
-                prov = item.get("prov")
-                if ref and prov:
-                    lookup[ref] = prov
-    return lookup
-
-
-def collect_bboxes(chunk: dict, bbox_lookup: dict[str, list[dict]]) -> list[dict]:
-    """Collect all bboxes for a chunk by resolving its doc_items refs."""
-    bboxes: list[dict] = []
-    for ref in chunk.get("doc_items", []):
-        for prov_entry in bbox_lookup.get(ref, []):
-            bbox = prov_entry.get("bbox")
-            page_no = prov_entry.get("page_no")
-            if bbox and page_no is not None:
-                bboxes.append({
-                    "page": page_no,
-                    "l": bbox.get("l", 0),
-                    "t": bbox.get("t", 0),
-                    "r": bbox.get("r", 0),
-                    "b": bbox.get("b", 0),
-                    "coord_origin": bbox.get("coord_origin", "BOTTOMLEFT"),
-                })
-    return bboxes
 
 
 # ─── OpenDataLoader path ────────────────────────────────────────────────────────
@@ -794,144 +751,6 @@ def build_odl_parts(
     return parts, tag_source
 
 
-def build_parts(
-    chunks: list[dict],
-    slug: str,
-    min_chars: int,
-    max_chars: int,
-    bbox_lookup: dict[str, list[dict]] | None = None,
-    tag_source: str | None = None,
-) -> list[dict]:
-    """Convert chunks into knowledge parts.
-
-    This generic path is used for Docling-native `chunks[]`. ODL now has a
-    dedicated schema-driven builder (`build_odl_parts`) and does not flow
-    through this chunk adapter. `tag_source` is attached to every part's
-    extraction_metadata.
-    """
-    raw_parts: list[dict] = []
-
-    for chunk in chunks:
-        if is_noise(chunk):
-            continue
-
-        text = (chunk.get("text", "") or "").strip()
-        if not text:
-            continue
-
-        headings = chunk.get("headings", [])
-        heading = headings[0] if headings else ""
-        pages = chunk.get("page_numbers", [])
-        part_type = detect_type(chunk)
-
-        # ODL chunks carry pre-computed bboxes directly; Docling chunks require
-        # ref resolution through the document-wide bbox_lookup.
-        pre_bboxes = chunk.get("bboxes")
-        if pre_bboxes is not None:
-            chunk_bboxes = pre_bboxes
-        else:
-            chunk_bboxes = collect_bboxes(chunk, bbox_lookup) if bbox_lookup else []
-
-        # ODL enrichment (absent for Docling chunks)
-        odl_semantic = chunk.get("_odl_semantic_type")
-        odl_level = chunk.get("_odl_heading_level")
-        odl_parent = chunk.get("_odl_parent_section")
-
-        # Prefer the chunk's declared semantic type over the heuristic detect_type
-        # for ODL tables where the type is authoritative from the structure tree.
-        if odl_semantic == "table":
-            part_type = "table"
-
-        # Split oversized chunks
-        if len(text) > max_chars:
-            segments = split_large_chunk(text, max_chars)
-            for j, seg in enumerate(segments):
-                suffix = f"-part{j + 1}" if len(segments) > 1 else ""
-                raw_parts.append({
-                    "heading": heading,
-                    "text": seg,
-                    "pages": pages,
-                    "type": part_type,
-                    "suffix": suffix,
-                    "bboxes": chunk_bboxes,
-                    "_odl_semantic_type": odl_semantic,
-                    "_odl_heading_level": odl_level,
-                    "_odl_parent_section": odl_parent,
-                })
-        else:
-            raw_parts.append({
-                "heading": heading,
-                "text": text,
-                "pages": pages,
-                "type": part_type,
-                "suffix": "",
-                "bboxes": chunk_bboxes,
-                "_odl_semantic_type": odl_semantic,
-                "_odl_heading_level": odl_level,
-                "_odl_parent_section": odl_parent,
-            })
-
-    # Merge undersized parts with neighbors
-    merged: list[dict] = []
-    for part in raw_parts:
-        if merged and len(part["text"]) < min_chars and len(merged[-1]["text"]) < max_chars:
-            prev = merged[-1]
-            merged[-1] = {
-                **prev,
-                "text": f"{prev['text']}\n\n{part['text']}",
-                "pages": sorted(set(prev["pages"] + part["pages"])),
-                "bboxes": prev.get("bboxes", []) + part.get("bboxes", []),
-            }
-        else:
-            merged.append(part)
-
-    # Build final parts with IDs
-    parts: list[dict] = []
-    for i, part in enumerate(merged):
-        heading = part["heading"]
-        heading_slug = slugify(heading) if heading else f"section-{i + 1}"
-        part_id = f"{slug}-{heading_slug}{part['suffix']}"
-
-        # Deduplicate IDs
-        existing_ids = {p["id"] for p in parts}
-        if part_id in existing_ids:
-            part_id = f"{part_id}-{i}"
-
-        extraction_path = f"{slug}/{heading_slug}" if heading else f"{slug}/section-{i + 1}"
-
-        # Build extraction_metadata with pages + bboxes (if available)
-        em: dict = {"pages": part["pages"]}
-        part_bboxes = part.get("bboxes", [])
-        if part_bboxes:
-            em["bboxes"] = part_bboxes
-
-        # ODL enrichment — additive, only written when present
-        if part.get("_odl_semantic_type") is not None:
-            em["semantic_type"] = part["_odl_semantic_type"]
-        if part.get("_odl_heading_level") is not None:
-            em["heading_level"] = part["_odl_heading_level"]
-        if part.get("_odl_parent_section") is not None:
-            em["parent_section"] = part["_odl_parent_section"]
-        if tag_source:
-            em["tag_source"] = tag_source
-
-        parts.append({
-            "id": part_id,
-            "source_document": slug,
-            "extraction_path": extraction_path,
-            "heading": heading,
-            "content": part["text"],
-            "char_count": len(part["text"]),
-            "word_count": len(part["text"].split()),
-            "type": part["type"],
-            "title": heading or f"Section {i + 1}",
-            "pages": part["pages"],
-            "extraction_metadata": em,
-        })
-
-    return parts
-
-
 def build_index(parts: list[dict]) -> list[dict]:
     """Build a lightweight parts-index from full parts."""
     return [
@@ -950,10 +769,10 @@ def build_index(parts: list[dict]) -> list[dict]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Convert extractor output (Docling or OpenDataLoader) to knowledge_parts.json"
+        description="Convert OpenDataLoader extraction output to knowledge_parts.json"
     )
     parser.add_argument("extraction_result",
-                        help="Path to docling-result.json or odl-result.json (auto-detected by structure)")
+                        help="Path to OpenDataLoader extraction-result.json")
     parser.add_argument("-o", "--output", required=True, help="Output knowledge_parts.json path")
     parser.add_argument("--slug", required=True, help="Document slug for part IDs")
     parser.add_argument("--min-part-size", type=int, default=MIN_PART_CHARS,
@@ -973,79 +792,22 @@ def main() -> None:
 
     data = json.loads(input_path.read_text())
 
-    # Sniff the format:
-    #   Docling: top-level `chunks[]` + `documents[]`
-    #   ODL:     top-level `kids[]` + `file name`/`number of pages`
-    is_odl = "kids" in data and "chunks" not in data
-    is_docling = "chunks" in data
-
-    if not (is_odl or is_docling):
-        print("Error: Input is neither Docling nor OpenDataLoader format "
-              "(expected `chunks[]` or `kids[]` at top level)", file=sys.stderr)
+    if "kids" not in data:
+        print("Error: Expected OpenDataLoader extraction output with top-level `kids[]`", file=sys.stderr)
         sys.exit(1)
 
-    bbox_lookup: dict[str, list[dict]] | None = None
-    tag_source: str
-    source_unit_count: int
-
-    if is_odl:
-        source_unit_count = len(data.get("kids", []))
-        parts, tag_source = build_odl_parts(
-            data,
-            args.slug,
-            min_chars=args.min_part_size,
-            max_chars=args.max_part_size,
-            asset_base_dir=input_path.parent,
-        )
-        print(
-            f"Detected OpenDataLoader input: {source_unit_count} elements "
-            f"(tag_source={tag_source})"
-        )
-    else:
-        chunks = data.get("chunks", [])
-        if not chunks:
-            print("Error: No chunks found in Docling result", file=sys.stderr)
-            sys.exit(1)
-        bbox_lookup = build_bbox_lookup(data) if data.get("documents") else None
-        tag_source = "docling"
-        source_unit_count = len(chunks)
-        print(f"Detected Docling input: {len(chunks)} chunks")
-
-    # Apply section filters (Docling chunks only; ODL builder currently walks raw
-    # elements in document order and preserves heading context internally.)
-    if not is_odl and args.include_sections:
-        include = [s.strip().lower() for s in args.include_sections.split(",")]
-        chunks = [
-            c for c in chunks
-            if any(
-                inc in h.lower()
-                for h in c.get("headings", [""])
-                for inc in include
-            )
-        ]
-        print(f"Filtered to {len(chunks)} chunks matching: {include}")
-
-    if not is_odl and args.exclude_sections:
-        exclude = [s.strip().lower() for s in args.exclude_sections.split(",")]
-        before = len(chunks)
-        chunks = [
-            c for c in chunks
-            if not any(
-                exc in h.lower()
-                for h in c.get("headings", [""])
-                for exc in exclude
-            )
-        ]
-        print(f"Excluded {before - len(chunks)} chunks matching: {exclude}")
-
-    if not is_odl:
-        parts = build_parts(
-            chunks, args.slug,
-            min_chars=args.min_part_size,
-            max_chars=args.max_part_size,
-            bbox_lookup=bbox_lookup,
-            tag_source=tag_source,
-        )
+    source_unit_count = len(data.get("kids", []))
+    parts, tag_source = build_odl_parts(
+        data,
+        args.slug,
+        min_chars=args.min_part_size,
+        max_chars=args.max_part_size,
+        asset_base_dir=input_path.parent,
+    )
+    print(
+        f"Detected OpenDataLoader input: {source_unit_count} elements "
+        f"(tag_source={tag_source})"
+    )
 
     if not parts:
         print("Error: Produced 0 parts — document may need custom extraction", file=sys.stderr)
@@ -1078,7 +840,7 @@ def main() -> None:
     proj = find_project_dir(output_path)
     if proj:
         log_milestone(proj, "step_2_extraction", "build_parts", "completed",
-                       f"Built {len(parts)} knowledge parts ({type_summary}) from {source_unit_count} {'elements' if is_odl else 'chunks'}. Avg {avg_chars} chars.",
+                       f"Built {len(parts)} knowledge parts ({type_summary}) from {source_unit_count} elements. Avg {avg_chars} chars.",
                        {"total_parts": len(parts), "type_counts": type_counts, "total_chars": total_chars, "slug": args.slug})
     print(f"  Index: {index_path} ({len(index)} entries)")
 

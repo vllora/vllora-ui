@@ -10,13 +10,12 @@ You extract knowledge from ONE source document for the vLLora finetune pipeline.
 
 ## Your Job
 
-1. **Wait for Docling** extraction to complete (poll task_id) — this is MANDATORY
-2. **Save** the Docling result to `docling-result.json` — this file MUST exist before proceeding
-3. **Build** knowledge parts using `build_knowledge_parts.py` (deterministic — ALWAYS use this first)
-4. **Post-process**: extract tables, consolidate parts
-5. **Validate**: run `validate_extraction.py` on this document — MUST PASS
-6. **Upload** to the gateway
-7. Return a summary
+1. **Extract** the document via OpenDataLoader (synchronous — digital or hybrid OCR)
+2. **Build** knowledge parts using `build_knowledge_parts.py` (deterministic — ALWAYS use this first)
+3. **Post-process**: extract tables, consolidate parts
+4. **Validate**: run `validate_extraction.py` on this document — MUST PASS
+5. **Upload** to the gateway
+6. Return a summary
 
 You work ONLY on extraction of your ONE document. Do NOT design topics, generate data, or merge indexes.
 
@@ -30,7 +29,6 @@ The parent agent provides these as plain text in the prompt. **Use the actual va
 - **DOC_PATH** — absolute path to the PDF to extract
 - **DOC_SLUG** — the slug for this document (e.g., `irs-publication-525`)
 - **DOC_DIR** — absolute path to the output directory (e.g., `.../knowledge/irs-publication-525`)
-- **TASK_ID** — the Docling async task ID (already submitted by orchestrator). If empty, you must submit yourself.
 - **CUSTOM_INSTRUCTIONS** — (optional) user-specified extraction preferences for this document
 
 ## Algorithm
@@ -41,68 +39,71 @@ The parent agent provides these as plain text in the prompt. **Use the actual va
 mkdir -p <DOC_DIR>
 ```
 
-### 2. Get Docling result (MANDATORY — do NOT skip)
+### 2. Extract document (MANDATORY — do NOT skip)
 
-⚠️ **CRITICAL**: You MUST obtain the Docling result and save it as `<DOC_DIR>/docling-result.json`. Do NOT proceed to step 3 until this file exists and contains valid data. Do NOT write custom extraction scripts that bypass Docling.
+⚠️ **CRITICAL**: You MUST obtain the extraction result and save it as `<DOC_DIR>/extraction-result.json`. Do NOT proceed to step 3 until this file exists and contains valid data. Do NOT write custom extraction scripts that bypass the extraction pipeline.
 
-**Check for existing result first** — if `<DOC_DIR>/docling-result.json` already exists with valid data, reuse it (skip re-extraction). This avoids re-processing when creating a new workflow from previously extracted documents:
+**Check for existing result first** — if `<DOC_DIR>/extraction-result.json` already exists with valid data, reuse it (skip re-extraction). This avoids re-processing when creating a new workflow from previously extracted documents:
 ```bash
-if [ -f "<DOC_DIR>/docling-result.json" ]; then
+if [ -f "<DOC_DIR>/extraction-result.json" ]; then
   python3 -c "
 import json, sys
-d = json.load(open('<DOC_DIR>/docling-result.json'))
+d = json.load(open('<DOC_DIR>/extraction-result.json'))
+# Primary format: ODL kids[]
+if 'kids' in d and len(d.get('kids', [])) > 0:
+    print(f'Reusing existing extraction: {len(d[\"kids\"])} elements (ODL format)')
+    sys.exit(0)
+# Legacy format: Docling chunks[]
 chunks = d if isinstance(d, list) else d.get('chunks', d.get('results', []))
 if chunks:
-    print(f'Reusing existing extraction: {len(chunks)} chunks')
+    print(f'Reusing existing extraction: {len(chunks)} chunks (legacy Docling format)')
     sys.exit(0)
 sys.exit(1)
-" && echo "SKIP_DOCLING=true" || echo "Existing file invalid — re-extracting"
+" && echo "SKIP_EXTRACT=true" || echo "Existing file invalid — re-extracting"
 fi
 ```
 
-**If existing result is valid, skip to Step 3.** Otherwise continue:
-
-**If TASK_ID was provided** (orchestrator already submitted):
-
-Poll until complete. Large documents (100+ pages) can take 3-5 minutes. **Be patient — poll up to 20 times with 30s sleep between polls.**
-
+Also check for legacy `docling-result.json` from prior skill versions:
 ```bash
-python3 <SKILL_DIR>/scripts/docling_extract.py \
-  --poll-one <TASK_ID> --output "<DOC_DIR>/docling-result.json"
+if [ ! -f "<DOC_DIR>/extraction-result.json" ] && [ -f "<DOC_DIR>/docling-result.json" ]; then
+  cp "<DOC_DIR>/docling-result.json" "<DOC_DIR>/extraction-result.json"
+  echo "Copied legacy docling-result.json to extraction-result.json"
+fi
 ```
 
-If status is `processing` or `pending`, sleep 30s and poll again:
+**If existing result is valid, skip to Step 3.** Otherwise extract:
+
+**Run the extraction router** — it auto-detects digital vs scanned PDFs and routes to the right backend (OpenDataLoader Java-only for digital, ODL Hybrid with in-process OCR for scanned). Extraction is synchronous — no polling needed.
+
 ```bash
-sleep 30
-python3 <SKILL_DIR>/scripts/docling_extract.py \
-  --poll-one <TASK_ID> --output "<DOC_DIR>/docling-result.json"
+uv run <SKILL_DIR>/scripts/extract_router.py "<DOC_PATH>" \
+  -o "<DOC_DIR>/extraction-result.json" \
+  --skip-existing
 ```
 
-Repeat this poll loop. Do NOT give up early. Maximum 20 polls (10 minutes total). Only stop if status is `success` or `failed`.
-
-**If NO TASK_ID was provided** (fallback — submit yourself):
-```bash
-uv run <SKILL_DIR>/scripts/docling_extract.py "<DOC_PATH>" \
-  --output "<DOC_DIR>/docling-result.json"
-```
-
-### 2b. VALIDATE Docling result exists
+### 2b. VALIDATE extraction result exists
 
 **HARD GATE — do not proceed without this check passing:**
 
 ```bash
-if [ ! -f "<DOC_DIR>/docling-result.json" ]; then
-  echo "FATAL: docling-result.json missing — cannot proceed"
+if [ ! -f "<DOC_DIR>/extraction-result.json" ]; then
+  echo "FATAL: extraction-result.json missing — cannot proceed"
   exit 1
 fi
 python3 -c "
 import json, sys
-d = json.load(open('<DOC_DIR>/docling-result.json'))
+d = json.load(open('<DOC_DIR>/extraction-result.json'))
+# Primary format: ODL kids[]
+if 'kids' in d and len(d.get('kids', [])) > 0:
+    print(f'OK: {len(d[\"kids\"])} elements in extraction-result.json')
+    sys.exit(0)
+# Legacy format: Docling chunks[]
 chunks = d if isinstance(d, list) else d.get('chunks', d.get('results', []))
-if not chunks:
-    print('FATAL: docling-result.json has 0 chunks')
-    sys.exit(1)
-print(f'OK: {len(chunks)} chunks in docling-result.json')
+if chunks:
+    print(f'OK (legacy Docling format): {len(chunks)} chunks in extraction-result.json')
+    sys.exit(0)
+print('FATAL: extraction-result.json has 0 elements')
+sys.exit(1)
 "
 ```
 
@@ -134,7 +135,7 @@ fi
 
 ```bash
 uv run <SKILL_DIR>/scripts/build_knowledge_parts.py \
-  "<DOC_DIR>/docling-result.json" \
+  "<DOC_DIR>/extraction-result.json" \
   -o "<DOC_DIR>/knowledge_parts.json" \
   --slug "<DOC_SLUG>"
 ```
@@ -148,11 +149,11 @@ If the script succeeds and produces ≥1 parts, go to Step 4. Do NOT write custo
 
 **Step 3b — Only if `build_knowledge_parts.py` produces 0 parts AND CUSTOM_INSTRUCTIONS were provided:**
 
-Write a custom `<DOC_DIR>/extract.py` tailored to this document. **The script MUST read from `docling-result.json`** — never from raw PDF text or regex-based text splitting.
+Write a custom `<DOC_DIR>/extract.py` tailored to this document. **The script MUST read from `extraction-result.json`** — never from raw PDF text or regex-based text splitting.
 
 Your custom extract.py must:
-1. **Load `docling-result.json`** as its input (NOT knowledge_parts.json, NOT raw text)
-2. Read chunks to understand the document's structure
+1. **Load `extraction-result.json`** as its input (NOT knowledge_parts.json, NOT raw text)
+2. Read elements/chunks to understand the document's structure
 3. Follow CUSTOM_INSTRUCTIONS if provided
 4. Group content by semantic units (section heading + content = one part)
 5. Target 200-2000 chars per part
@@ -292,6 +293,21 @@ If validation reports FAIL for this document after `--fix`:
 
 ### 6. Upload to gateway
 
+Determine the extraction method from `extraction-status.json`:
+```bash
+python3 -c "
+import json, sys, os
+status_path = '<DOC_DIR>/extraction-status.json'
+if os.path.exists(status_path):
+    s = json.load(open(status_path))
+    method = s.get('backend', 'odl')
+    print(method)
+else:
+    print('odl')
+"
+```
+
+Use the detected method in the upload:
 ```bash
 uv run <SKILL_DIR>/scripts/finetune.py upload-knowledge \
   --workflow-id <WORKFLOW_ID> \
@@ -300,21 +316,18 @@ uv run <SKILL_DIR>/scripts/finetune.py upload-knowledge \
   --name "$(basename '<DOC_PATH>')" \
   --force \
   --description "Source document: $(basename '<DOC_PATH>')" \
-  --metadata '{"extraction_method":"docling_deterministic"}'
+  --metadata '{"extraction_method":"<METHOD_FROM_STATUS>"}'
 ```
 
 **⚠️ CRITICAL: `--file` MUST be the original PDF path (e.g., `pdfs/document.pdf`), NOT the knowledge_parts.json file.** Passing the wrong file creates a source named "knowledge_parts.json" with 0 parts — all downstream steps (topics, relations, records) will have broken references.
 
 **Post-upload verify**: After upload, confirm the output says the correct source name and a non-zero parts count. If it says `Parts uploaded: 0` or the source name doesn't match the PDF filename, something went wrong — delete and re-upload.
 
-### Fallback (Docling genuinely unavailable or failed)
+### Fallback (extraction failed)
 
-**Only use this if**: Docling health check fails (`curl http://127.0.0.1:5001/health` returns error) OR Docling task status is `failed` after polling. Do NOT use this fallback just because polling is slow.
+**Only use this if**: The extraction router fails (ODL not installed, Java not available, or hybrid backend errors with fallback disabled). Do NOT use this fallback just because extraction is slow.
 
 ```bash
-# Verify Docling is truly down
-curl -sS http://127.0.0.1:5001/health || echo "Docling unavailable — using pdftotext fallback"
-
 # Convert PDF to markdown via pdftotext
 uv run <SKILL_DIR>/scripts/convert_pdf_to_markdown.py \
   "<DOC_PATH>" "<DOC_DIR>/<DOC_SLUG>.md"
@@ -329,9 +342,9 @@ uv run <SKILL_DIR>/scripts/build_knowledge_parts.py \
 uv run <SKILL_DIR>/scripts/consolidate_parts.py "<DOC_DIR>/knowledge_parts.json"
 ```
 
-Then skip step 5 (no docling-result.json for table extraction) and go to step 6 (upload).
+Then skip step 5 (no structured extraction for table extraction) and go to step 6 (upload).
 
-**Report `extraction_method: pdftotext`** in the upload metadata and in your summary so the orchestrator knows Docling was not used.
+**Report `extraction_method: pdftotext`** in the upload metadata and in your summary so the orchestrator knows the full pipeline was not used.
 
 ## What To Report
 
@@ -341,10 +354,10 @@ Return a structured summary to the parent agent:
 Document: <filename>
 Slug: <doc-slug>
 Parts extracted: N (N text, N table, N image)
-Extraction method: docling_deterministic | docling_custom | pdftotext
+Extraction method: odl | odl_hybrid | pdftotext
 Extraction script: build_knowledge_parts.py | custom extract.py (reason)
 Validation: PASS | WARN (details) | FAIL (details)
-docling-result.json: exists (N chunks) | missing (reason)
+extraction-result.json: exists (N elements) | missing (reason)
 Uploaded: yes | no (error details)
 Issues: any warnings or problems
 ```
@@ -353,10 +366,9 @@ Issues: any warnings or problems
 
 - You handle exactly ONE document — the one specified in your prompt
 - **ALWAYS use `build_knowledge_parts.py` first** — do NOT write custom extract.py unless it produces 0 parts or CUSTOM_INSTRUCTIONS require it
-- **NEVER write extraction scripts that bypass Docling** — all extraction MUST start from `docling-result.json`
+- **NEVER write extraction scripts that bypass the extraction pipeline** — all extraction MUST start from `extraction-result.json`
 - **NEVER fabricate parts or content** — extract only what exists in the document
-- **NEVER give up on Docling polling early** — large documents take minutes, poll up to 20 times
-- `docling-result.json` MUST exist in DOC_DIR when you finish — do not delete intermediate files
+- `extraction-result.json` MUST exist in DOC_DIR when you finish — do not delete intermediate files
 - Always run consolidate after extraction
 - Always run validate after consolidation and report the result
 - If extraction fails, report the error clearly — do not retry indefinitely

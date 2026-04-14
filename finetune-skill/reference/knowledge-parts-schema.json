@@ -36,9 +36,9 @@
           "description": "Extraction-level metadata. Stored as JSON string in DB, parsed as object in API responses.",
           "properties": {
             "total_pages": { "type": "integer", "description": "Total page count" },
-            "extraction_method": { "type": "string", "enum": ["docling_hybrid", "odl", "pdftotext"], "description": "How the document was extracted" },
-            "total_chunks": { "type": "integer", "description": "Number of chunks/sections processed (Docling chunks or ODL heading-derived sections)" },
-            "tag_source": { "type": "string", "enum": ["structure_tree", "xycut_fallback", "docling"], "description": "Provenance of structural tags: ODL consumed the tagged-PDF tree (structure_tree), fell back to XY-Cut++ layout (xycut_fallback), or came via Docling HybridChunker (docling)" },
+            "extraction_method": { "type": "string", "enum": ["odl", "odl_hybrid", "pdftotext"], "description": "How the document was extracted. odl = Java-only (digital PDFs), odl_hybrid = ODL using the hybrid backend server (scanned PDFs / complex pages), pdftotext = degraded text-only fallback" },
+            "total_chunks": { "type": "integer", "description": "Number of elements/sections processed from the extraction output" },
+            "tag_source": { "type": "string", "enum": ["structure_tree", "xycut_fallback"], "description": "Provenance of structural tags: ODL consumed the tagged-PDF tree (structure_tree) or fell back to XY-Cut++ layout (xycut_fallback)" },
             "extracted_at": { "type": "string", "format": "date-time", "description": "When extraction was performed" }
           }
         }
@@ -149,7 +149,7 @@
               },
               "tag_source": {
                 "type": "string",
-                "enum": ["structure_tree", "xycut_fallback", "docling"],
+                "enum": ["structure_tree", "xycut_fallback"],
                 "description": "Per-part provenance of structural tags. Mirrors source.metadata.tag_source — duplicated here so individual parts remain self-describing."
               }
             }
