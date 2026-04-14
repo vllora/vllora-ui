@@ -18,6 +18,10 @@ def log_milestone(
     status: str,
     summary: str,
     details: dict | None = None,
+    observation: str | dict | None = None,
+    analysis: str | dict | None = None,
+    decision: str | dict | None = None,
+    evidence: dict | None = None,
 ) -> None:
     """Append a milestone entry to pipeline-journal.json.
 
@@ -95,6 +99,14 @@ def log_milestone(
     }
     if details:
         entry["details"] = details
+    if observation:
+        entry["observation"] = observation
+    if analysis:
+        entry["analysis"] = analysis
+    if decision:
+        entry["decision"] = decision
+    if evidence:
+        entry["evidence"] = evidence
 
     journal.setdefault("entries", []).append(entry)
 

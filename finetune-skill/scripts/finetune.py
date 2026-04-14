@@ -1405,10 +1405,28 @@ def cmd_log_step(args: argparse.Namespace) -> None:
 
     if args.reason:
         entry["reason_created"] = args.reason
+
+    # Decision card fields (structured reasoning for UI + agent scaffolding)
+    if args.observation:
+        try:
+            entry["observation"] = json.loads(args.observation)
+        except json.JSONDecodeError:
+            entry["observation"] = args.observation
     if args.analysis:
-        entry["analysis"] = args.analysis
+        try:
+            entry["analysis"] = json.loads(args.analysis)
+        except json.JSONDecodeError:
+            entry["analysis"] = args.analysis
     if args.decision:
-        entry["decision"] = args.decision
+        try:
+            entry["decision"] = json.loads(args.decision)
+        except json.JSONDecodeError:
+            entry["decision"] = args.decision
+    if args.evidence:
+        try:
+            entry["evidence"] = json.loads(args.evidence)
+        except json.JSONDecodeError:
+            entry["evidence"] = {"raw": args.evidence}
     if args.job_id:
         entry["job_id"] = args.job_id
     if args.job_type:
@@ -1455,10 +1473,17 @@ def cmd_log_step(args: argparse.Namespace) -> None:
     log_entry += f"- **Summary**: {args.summary}\n"
     if args.reason:
         log_entry += f"- **Reason**: {args.reason}\n"
+    if args.observation:
+        obs_text = args.observation if isinstance(args.observation, str) else json.dumps(args.observation)
+        log_entry += f"- **Observation**: {obs_text}\n"
     if args.analysis:
-        log_entry += f"- **Analysis**: {args.analysis}\n"
+        analysis_text = args.analysis if isinstance(args.analysis, str) else json.dumps(args.analysis)
+        log_entry += f"- **Analysis**: {analysis_text}\n"
     if args.decision:
-        log_entry += f"- **Decision**: {args.decision}\n"
+        decision_text = args.decision if isinstance(args.decision, str) else json.dumps(args.decision)
+        log_entry += f"- **Decision**: {decision_text}\n"
+    if args.evidence:
+        log_entry += f"- **Evidence**: {args.evidence}\n"
     if args.model:
         log_entry += f"- **Model**: {args.model}\n"
     if args.job_id:
@@ -6954,6 +6979,90 @@ def cmd_print_row_outputs(args: argparse.Namespace) -> None:
             )
 
 
+def cmd_update_analysis(args: argparse.Namespace) -> None:
+    """Update per-section pipeline analysis in analysis.json.
+
+    This creates a shared analysis between the agent and the UI:
+    - Agent writes it after each pipeline step (forces structured thinking)
+    - UI displays it verbatim (user sees exactly what the agent thinks)
+    - Agent reads it back when resuming (gets full situational picture)
+    - Both agree on next_action (no divergence)
+
+    The analysis file is per-section (sources, training-data, evaluator, etc.),
+    not per-step. Each update overwrites the section's analysis — keeping it current.
+    """
+    from datetime import datetime, timezone
+
+    project_dir = Path(args.project_dir)
+    analysis_file = project_dir / "analysis.json"
+
+    # Load or create
+    if analysis_file.exists():
+        analysis = json.loads(analysis_file.read_text())
+    else:
+        # Read workflow_id from config if available
+        wf_id = ""
+        config_path = project_dir / "config.json"
+        if config_path.exists():
+            try:
+                wf_id = json.loads(config_path.read_text()).get("workflow_id", "")
+            except (json.JSONDecodeError, OSError):
+                pass
+        analysis = {"version": "1.0", "workflow_id": wf_id, "sections": {}}
+
+    # Parse optional JSON fields
+    metrics = {}
+    if args.metrics:
+        try:
+            metrics = json.loads(args.metrics)
+        except json.JSONDecodeError:
+            metrics = {"raw": args.metrics}
+
+    blockers: list[str] = []
+    if args.blockers:
+        try:
+            blockers = json.loads(args.blockers)
+        except json.JSONDecodeError:
+            blockers = [args.blockers]
+
+    # Update the section
+    analysis.setdefault("sections", {})[args.section] = {
+        "status": args.status,
+        "summary": args.summary,
+        "metrics": metrics,
+        "assessment": args.assessment,
+        "blockers": blockers,
+        "next_action": getattr(args, "next_action", ""),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    analysis_file.write_text(json.dumps(analysis, indent=2))
+    print(f"Updated analysis: {args.section} → {args.status}")
+    print(f"  Summary: {args.summary}")
+    if blockers:
+        print(f"  Blockers: {', '.join(blockers)}")
+
+    # Sync to gateway (best-effort)
+    wf_id = analysis.get("workflow_id", "")
+    if wf_id:
+        gateway_url = "http://localhost:9090"
+        config_path = project_dir / "config.json"
+        if config_path.exists():
+            try:
+                gateway_url = json.loads(config_path.read_text()).get("gateway_url", gateway_url)
+            except (json.JSONDecodeError, OSError):
+                pass
+        try:
+            import requests
+            requests.put(
+                f"{gateway_url}/finetune/workflows/{wf_id}",
+                json={"pipeline_analysis": json.dumps(analysis)},
+                timeout=5,
+            )
+        except Exception:
+            pass  # Non-fatal
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="vLLora gateway API wrapper for the finetune skill pipeline",
@@ -7009,8 +7118,18 @@ def main() -> None:
                    help="Status: in_progress (step started), completed, failed")
     p.add_argument("--summary", required=True, help="One-line summary of what happened")
     p.add_argument("--reason", default=None, help="Why this step/job was created (the reasoning chain)")
-    p.add_argument("--analysis", default=None, help="What was found after completion")
-    p.add_argument("--decision", default=None, help="What to do next based on findings")
+    p.add_argument("--observation", default=None,
+                   help="What was observed before making a decision (metrics, state, data). "
+                        "Plain text or JSON string. Part of the decision card.")
+    p.add_argument("--analysis", default=None,
+                   help="What the observations mean — comparison, pattern detection, diagnosis. "
+                        "Plain text or JSON string. Part of the decision card.")
+    p.add_argument("--decision", default=None,
+                   help="What action was taken and why. Include rationale. "
+                        "Plain text or JSON string. Part of the decision card.")
+    p.add_argument("--evidence", default=None,
+                   help="JSON string with before/after data or key metrics supporting the decision. "
+                        'Example: \'{"before": {"per_topic": 25}, "after": {"highest": 50, "lowest": 3}}\'.')
     p.add_argument("--job-id", default=None, help="Eval or training job ID (links to gateway)")
     p.add_argument("--job-type", default=None, choices=["eval", "training"],
                    help="Job type for UI display")
@@ -7281,6 +7400,30 @@ def main() -> None:
         help="Max characters per text cell before truncation (default: 160)",
     )
 
+    # update-analysis — writes per-section analysis to analysis.json (shared between agent + UI)
+    p = subparsers.add_parser(
+        "update-analysis",
+        help="Update per-section pipeline analysis (shared between agent and UI). "
+             "Writes to analysis.json in the project directory.",
+    )
+    p.add_argument("--project-dir", required=True, help="Path to finetune-project directory")
+    p.add_argument("--section", required=True,
+                   choices=["sources", "trace-analysis", "training-data", "evaluator", "evaluation", "training"],
+                   help="Which pipeline section to update")
+    p.add_argument("--status", required=True,
+                   choices=["not-started", "in-progress", "ready", "needs-work", "blocked"],
+                   help="Current status of this section")
+    p.add_argument("--summary", required=True,
+                   help="One-line summary — the primary insight both agent and user see")
+    p.add_argument("--metrics", default=None,
+                   help="JSON string with key metrics (e.g., record counts, scores)")
+    p.add_argument("--assessment", default="",
+                   help="Plain-language assessment — interpretation of what the data means")
+    p.add_argument("--blockers", default=None,
+                   help="JSON array of blocking issues (e.g., '[\"grader too lenient\"]')")
+    p.add_argument("--next-action", default="",
+                   help="What should happen next — both agent and user agree on this")
+
     args = parser.parse_args()
 
     commands = {
@@ -7317,6 +7460,7 @@ def main() -> None:
         "print-row-outputs": cmd_print_row_outputs,
         "grader-sanity-check": cmd_grader_sanity_check,
         "reconcile-topics": cmd_reconcile_topics,
+        "update-analysis": cmd_update_analysis,
     }
     commands[args.command](args)
 

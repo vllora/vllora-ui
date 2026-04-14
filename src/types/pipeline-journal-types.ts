@@ -45,8 +45,14 @@ export interface PipelineJournalEntry {
   readonly action: string;
   readonly status: JournalEntryStatus;
   readonly summary: string;
-  readonly analysis?: string;
-  readonly decision?: string;
+  /** Decision card: what was observed before making a decision */
+  readonly observation?: string | Record<string, unknown>;
+  /** Decision card: what the observations mean (comparison, diagnosis) */
+  readonly analysis?: string | Record<string, unknown>;
+  /** Decision card: what action was taken and why */
+  readonly decision?: string | Record<string, unknown>;
+  /** Decision card: before/after data or key metrics supporting the decision */
+  readonly evidence?: Record<string, unknown>;
   readonly reason_created?: string;
   readonly duration?: string;
   readonly agent?: string;

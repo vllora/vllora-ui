@@ -14,7 +14,10 @@ import { TraceViewer, type TraceViewerData } from '@/components/agent-prism/Trac
 import '@/components/agent-prism/theme/theme.css';
 import './agent-prism-dark.css';
 import { Badge } from '@/components/ui/badge';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { cn } from '@/lib/utils';
+import { TraceAnalysisConsumer } from '@/contexts/TraceAnalysisContext';
+import { TraceAnalysisView } from '@/components/datasets/trace-analysis/TraceAnalysisView';
 import type {
   TraceRecord,
   TraceSpan,
@@ -349,9 +352,13 @@ function AgentPrismTraceView({ spans }: { readonly spans: readonly OtelSemconvSp
   );
 }
 
+type OtelTab = "traces" | "analysis";
+
 export function OtelTraceSourceViewer({ source, semconvSpans }: OtelTraceSourceViewerProps) {
   const trace = source ? sourceToTrace(source) : null;
   const hasSpans = semconvSpans && semconvSpans.length > 0;
+  const { hasTraces: hasTraceAnalysis } = TraceAnalysisConsumer();
+  const [activeTab, setActiveTab] = useState<OtelTab>("traces");
 
   const headerName = source?.name ?? (hasSpans ? `Trace ${semconvSpans[0]!.trace_id}` : 'OTel trace');
   const headerSubtitle = source
@@ -359,6 +366,11 @@ export function OtelTraceSourceViewer({ source, semconvSpans }: OtelTraceSourceV
     : hasSpans
       ? `${semconvSpans.length} spans`
       : 'empty';
+
+  const tabs: Array<{ id: OtelTab; label: string }> = [
+    { id: "traces", label: "Traces" },
+    ...(hasTraceAnalysis ? [{ id: "analysis" as OtelTab, label: "Analysis" }] : []),
+  ];
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -380,15 +392,42 @@ export function OtelTraceSourceViewer({ source, semconvSpans }: OtelTraceSourceV
         </div>
       </header>
 
-      <div className={hasSpans ? "flex-1 min-h-0 overflow-hidden" : "flex-1 overflow-auto p-6"}>
-        {hasSpans ? (
-          <AgentPrismTraceView spans={semconvSpans} />
-        ) : trace ? (
-          <OtelTraceMessageTimeline trace={trace} />
-        ) : (
-          <p className="text-sm text-muted-foreground">This trace source has no parts.</p>
-        )}
-      </div>
+      {/* Tabs (only show when trace analysis exists) */}
+      {tabs.length > 1 && (
+        <div className="flex border-b border-border/60 px-6 shrink-0">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "px-3 py-2 text-xs font-medium border-b-2 transition-colors",
+                activeTab === tab.id
+                  ? "border-emerald-500 text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Content */}
+      {activeTab === "traces" ? (
+        <div className={hasSpans ? "flex-1 min-h-0 overflow-hidden" : "flex-1 overflow-auto p-6"}>
+          {hasSpans ? (
+            <AgentPrismTraceView spans={semconvSpans} />
+          ) : trace ? (
+            <OtelTraceMessageTimeline trace={trace} />
+          ) : (
+            <p className="text-sm text-muted-foreground">This trace source has no parts.</p>
+          )}
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <TraceAnalysisView />
+        </div>
+      )}
     </div>
   );
 }

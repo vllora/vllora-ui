@@ -27,6 +27,7 @@ export type ContentSection =
   | "insights"
   | "skill"
   | "trace-analysis"
+  | "pipeline-analysis"
   | null;
 
 /**
@@ -68,6 +69,8 @@ export function mapTabPathToSection(path: string | null): ContentSection {
   if (path.startsWith("skill/")) return "skill";
   if (path === "trace-analysis") return "trace-analysis";
   if (path.startsWith("trace-analysis/")) return "trace-analysis";
+  if (path === "pipeline-analysis") return "pipeline-analysis";
+  if (path.startsWith("pipeline-analysis/")) return "pipeline-analysis";
 
   return null;
 }

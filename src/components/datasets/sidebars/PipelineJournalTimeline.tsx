@@ -125,8 +125,14 @@ function fmtPct(n: number): string {
 // Collapsible inline detail
 // =============================================================================
 
-function DetailToggle({ label, content }: { readonly label: string; readonly content: string }) {
+function formatCardField(content: string | Record<string, unknown>): string {
+  if (typeof content === "string") return content;
+  return JSON.stringify(content, null, 2);
+}
+
+function DetailToggle({ label, content }: { readonly label: string; readonly content: string | Record<string, unknown> }) {
   const [open, setOpen] = useState(false);
+  const displayText = formatCardField(content);
   return (
     <div>
       <button
@@ -137,8 +143,8 @@ function DetailToggle({ label, content }: { readonly label: string; readonly con
         <span className="uppercase tracking-wider font-medium">{label}</span>
       </button>
       {open && (
-        <p className="text-[11px] text-muted-foreground/70 leading-relaxed mt-0.5 pl-3 border-l border-border/30">
-          {content}
+        <p className="text-[11px] text-muted-foreground/70 leading-relaxed mt-0.5 pl-3 border-l border-border/30 whitespace-pre-wrap">
+          {displayText}
         </p>
       )}
     </div>
@@ -369,11 +375,12 @@ function statusText(status: JournalEntryStatus): { label: string; cls: string } 
   }
 }
 
-function DocField({ label, value }: { readonly label: string; readonly value: string }) {
+function DocField({ label, value }: { readonly label: string; readonly value: string | Record<string, unknown> }) {
+  const displayText = formatCardField(value);
   return (
     <div className="flex gap-2 text-[11px] leading-relaxed">
       <span className="text-muted-foreground/50 shrink-0 w-16 text-right">{label}</span>
-      <span className="text-muted-foreground/80">{value}</span>
+      <span className="text-muted-foreground/80 whitespace-pre-wrap">{displayText}</span>
     </div>
   );
 }

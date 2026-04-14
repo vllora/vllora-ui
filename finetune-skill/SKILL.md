@@ -53,6 +53,14 @@ Validate → Quality Gate → Verify → Eval BOTH (4B + 0.8B)                  
 - **Eval first, train later.** Run eval, check readiness gate, fix issues, re-eval. Only train after readiness gate passes.
 - **Wait for training to complete.** Poll until done, run post-training eval, compare with baseline.
 - **Auto-iterate when non-interactive.** Max 5 eval-only auto-iterations, max 3 training auto-iterations.
+- **Update section analysis after each step** (shared with the UI — user sees exactly what you think):
+  ```bash
+  uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py update-analysis \
+    --project-dir finetune-project --section <section> --status <status> \
+    --summary "One-line insight" --assessment "What it means" \
+    --metrics '{"key": value}' --blockers '[]' --next-action "What to do next"
+  ```
+  Sections: `sources`, `trace-analysis`, `training-data`, `evaluator`, `evaluation`, `training`. This writes to `analysis.json` — the UI displays it, and you read it back when resuming. Both you and the user see the same insight.
 - **Checkpoint after each step:**
   ```bash
   uv run ${CLAUDE_SKILL_DIR}/scripts/checkpoint.py done --step <STEP_NAME> --project-dir finetune-project --workflow-id $WORKFLOW_ID
@@ -92,18 +100,53 @@ Maintain `execution-log.md` as an **append-only** chronological record.
 **Logging rules:**
 1. Log when a sub-task **starts** (status=in_progress)
 2. Log when a sub-task **completes** with concrete results in `--summary` (status=completed)
-3. Log **decisions** with rationale in `--analysis` and `--decision`
+3. **MANDATORY: Write a decision card** at every completed step using `--observation`, `--analysis`, `--decision`, `--evidence`
 4. Include **numbers** in every summary — never "Processing PDFs...", always "Processing 1 PDF (FDA-FALCPA.pdf) with Docling..."
 
-**Example: Step 2 (Extraction) should produce 4+ journal entries, not 2:**
+**Decision cards** capture your reasoning at each step. This is mandatory because:
+- It helps the user understand WHY you made each choice (transparency)
+- It helps YOU make better decisions — structured reflection improves agent reasoning (arXiv:2405.06682)
+- It produces data for the UI's Pipeline Analysis view
+
+**Decision card fields:**
+- `--observation` — What you saw (metrics, data state, results). Be specific with numbers.
+- `--analysis` — What it means (comparison, pattern detection, diagnosis). Connect observations to implications.
+- `--decision` — What you chose to do and WHY. Reference the analysis.
+- `--evidence` — JSON with before/after data or key metrics supporting the decision.
+
+**Example: Step 4 (Generation) with decision card:**
 ```bash
-# 2a. Submit to Docling
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-step \
+  --project-dir finetune-project \
+  --step step_4_generation --action generate_records --status completed \
+  --summary "Generated 401 trace-weighted records with 76 seed queries (19%)" \
+  --observation "12 topics, trace priority range 0.0000-0.0848. modify-pending-order-items: 20% freq, 42% failure. modify-pending-order-payment: 0.9% freq, 0% failure." \
+  --analysis "Equal allocation (25/topic) wastes budget on rarely-used procedures. 110x frequency difference between highest and lowest topics." \
+  --decision "Trace-weighted allocation: proportional to priority_score. 20% seed queries from real traces." \
+  --evidence '{"before": {"strategy": "equal", "per_topic": 25}, "after": {"strategy": "trace-weighted", "highest": 50, "lowest": 3, "seeds": 76, "total": 401}}'
+```
+
+**Example: Step 7 (Readiness iteration) with decision card:**
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-step \
+  --project-dir finetune-project \
+  --step step_7_eval --action readiness_iteration --status completed \
+  --summary "Readiness FAIL → fixed grader (added conciseness) → re-eval → PASS. Chose 0.8B." \
+  --observation "4B: avg=0.731, learnable=16%. 0.8B: avg=0.429, learnable=34%. length_drift_risk fired on both." \
+  --analysis "4B too easy (avg>0.7, only 16% learnable). 0.8B has better training signal (34% learnable, good variance). length_drift was from missing conciseness penalty in grader." \
+  --decision "Chose 0.8B (2x more learnable). Fixed grader with DRPO-safe conciseness criterion. Set objective_target_tokens=300 for conversational agent." \
+  --evidence '{"model_comparison": {"4B": {"avg": 0.731, "learnable": "16%"}, "0.8B": {"avg": 0.429, "learnable": "34%"}}, "grader_fix": "added conciseness criterion", "iterations": 2}'
+```
+
+**Older example format (still valid but add decision card fields):**
+```bash
+# 2a. Submit to extraction
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-step \
   --project-dir finetune-project \
   --step step_2_extraction --action docling_submit --status in_progress \
   --summary "Submitted 1 PDF (FDA-FALCPA.pdf) to Docling for extraction"
 
-# 2b. Docling result
+# 2b. Extraction result
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-step \
   --project-dir finetune-project \
   --step step_2_extraction --action docling_complete --status completed \
@@ -1246,3 +1289,31 @@ Run with `uv run ${CLAUDE_SKILL_DIR}/scripts/<script>`. Key ones: `finetune.py` 
 **Trace-informed scripts (combined mode only):**
 - `trace_analyze.py` — Analyze OTel traces → 4 artifacts (priority, topics, prompts, grader hints). Run in Step 2C.
 - `grader_from_traces.py` — Auto-generate grader draft from trace_grader_hints.json. Run in Step 5.
+
+**Section analysis** (`update-analysis`) — update after each step. Examples:
+
+```bash
+# After Step 2 (extraction):
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py update-analysis \
+  --project-dir finetune-project --section sources --status ready \
+  --summary "2 sources: retail-agent-policy.md (8 parts) + OTel Traces (460 traces, 39.6% failure)" \
+  --assessment "Combined mode. PDF provides knowledge rules, traces provide real usage patterns with 110x frequency skew across topics." \
+  --metrics '{"pdf_count": 1, "trace_count": 460, "parts": 8, "failure_rate": 0.396}' \
+  --next-action "Build topic hierarchy with trace enrichment."
+
+# After Step 4 (generation):
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py update-analysis \
+  --project-dir finetune-project --section training-data --status ready \
+  --summary "401 records, trace-weighted. Top: modify-items (50). Bottom: payment (3). 76 seeds (19%)." \
+  --assessment "Good distribution. Seed ratio within 15-25% target. All topics above 3-record floor." \
+  --metrics '{"total": 401, "topics": 12, "seeds": 76, "seed_ratio": 0.19, "highest": 50, "lowest": 3}' \
+  --next-action "Write grader using trace-informed dimensions."
+
+# After Step 7 (eval iteration):
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py update-analysis \
+  --project-dir finetune-project --section evaluation --status needs-work \
+  --summary "Iter 1: FAIL (length_drift). Fixed grader. Iter 2: PASS. Chose 0.8B (34% learnable)." \
+  --assessment "4B too easy (avg=0.73, 16% learnable). 0.8B optimal (avg=0.43, 34% learnable, good variance)." \
+  --metrics '{"iterations": 2, "chosen_model": "0.8B", "learnable": 0.34, "avg_score": 0.43}' \
+  --blockers '[]' --next-action "Start training with 0.8B."
+```

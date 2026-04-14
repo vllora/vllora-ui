@@ -31,7 +31,8 @@ import {
 } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
-import { TraceAnalysisConsumer } from "@/contexts/TraceAnalysisContext";
+import { PipelineAnalysisConsumer } from "@/contexts/PipelineAnalysisContext";
+import { SectionInsight } from "./SectionInsight";
 import { EvalJobsConsumer } from "@/contexts/EvalJobsContext";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { PipelineJournalConsumer } from "@/contexts/PipelineJournalContext";
@@ -79,7 +80,8 @@ interface DatasetExplorerProps {
 export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
   const { dataset, records, isGeneratingTraces, totalRecords } = DatasetDetailConsumer();
   const { sources } = KnowledgeSourcesConsumer();
-  const { hasTraces } = TraceAnalysisConsumer();
+  // TraceAnalysis is now displayed inside OTel source viewer tabs (not sidebar)
+  const { getSection } = PipelineAnalysisConsumer();
   const { jobs: dryRunJobs, startDryRun } = EvalJobsConsumer();
   const { filteredJobs: finetuneJobs, loadJobs: loadFinetuneJobs } = FinetuneJobsConsumer();
   const { entries: journalEntries, hasJournal } = PipelineJournalConsumer();
@@ -301,6 +303,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       {/* ── Source Documents ── */}
       {sources.length > 0 && (
         <SidebarSection title="Source Documents" icon={<BookOpen className="w-3 h-3" />} count={sources.length}>
+          {getSection("sources") && <SectionInsight analysis={getSection("sources")!} />}
           <SidebarItem
             icon={<Library className="w-3.5 h-3.5" />}
             label="All Sources"
@@ -324,32 +327,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
       {sources.length > 0 && <SidebarDivider />}
 
-      {/* ── Trace Analysis (only when trace data exists) ── */}
-      {hasTraces && (
-        <>
-          <SidebarSection title="Trace Analysis" icon={<BarChart3 className="w-3 h-3" />}>
-            <SidebarItem
-              icon={<BarChart3 className="w-3.5 h-3.5" />}
-              label="Priority & Coverage"
-              isActive={selectedNodeId === "trace-analysis/priority"}
-              onClick={() => handleSelect("trace-analysis/priority")}
-            />
-            <SidebarItem
-              icon={<Code2 className="w-3.5 h-3.5" />}
-              label="Grader Hints"
-              isActive={selectedNodeId === "trace-analysis/grader-hints"}
-              onClick={() => handleSelect("trace-analysis/grader-hints")}
-            />
-            <SidebarItem
-              icon={<FileText className="w-3.5 h-3.5" />}
-              label="Seed Queries"
-              isActive={selectedNodeId === "trace-analysis/seed-queries"}
-              onClick={() => handleSelect("trace-analysis/seed-queries")}
-            />
-          </SidebarSection>
-          <SidebarDivider />
-        </>
-      )}
+      {/* Trace Analysis is now inside the OTel Traces source viewer as tabs */}
 
       {/* ── Training Data ── */}
       <SidebarSection
@@ -358,6 +336,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         count={totalRecords || records.length}
         isLoading={isGeneratingTraces}
       >
+        {getSection("training-data") && <SectionInsight analysis={getSection("training-data")!} />}
         {/* All Topics item */}
         <SidebarItem
           icon={<Library className="w-3.5 h-3.5" />}
@@ -388,6 +367,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       <SidebarDivider />
 
       <SidebarSection title="Evaluator" icon={<Code2 className="w-3 h-3" />}>
+        {getSection("evaluator") && <SectionInsight analysis={getSection("evaluator")!} />}
         <SidebarItem
           icon={<Code2 className="w-3.5 h-3.5" />}
           label="grader-script.js"
@@ -417,6 +397,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
           },
         }}
       >
+        {getSection("evaluation") && <SectionInsight analysis={getSection("evaluation")!} />}
         {dryRunJobs.map((job) => {
           const normalized = normalizeJobStatus(job.status);
           const isBase = isBaseModel(job.rolloutModel);
@@ -466,6 +447,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
           },
         }}
       >
+        {getSection("training") && <SectionInsight analysis={getSection("training")!} />}
         {finetuneJobs.map((job) => {
           const normalized = normalizeJobStatus(job.status);
           const displayName = finetuneJobDisplayName(job.id, job.suffix);
@@ -492,8 +474,8 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         title="Pipeline Journal"
         icon={<ScrollText className="w-3 h-3" />}
         count={hasJournal ? journalEntries.length : undefined}
-        onTitleClick={() => handleSelect("logs.md")}
-        isTitleActive={selectedNodeId === "logs.md"}
+        onTitleClick={() => handleSelect("pipeline-analysis")}
+        isTitleActive={selectedNodeId === "pipeline-analysis" || selectedNodeId === "logs.md"}
         action={{
           icon: <Upload className="w-3 h-3" />,
           title: "Upload pipeline-journal.json",
@@ -526,6 +508,13 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
         }}
       >
         {hasJournal ? (
+          <>
+          <SidebarItem
+            icon={<Brain className="w-3.5 h-3.5" />}
+            label="Step Analysis"
+            isActive={selectedNodeId === "pipeline-analysis"}
+            onClick={() => handleSelect("pipeline-analysis")}
+          />
           <SidebarItem
             icon={<ScrollText className="w-3.5 h-3.5" />}
             label="pipeline-journal.json"
@@ -533,6 +522,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
             isActive={selectedNodeId === "logs.md"}
             onClick={() => handleSelect("logs.md")}
           />
+          </>
         ) : (
           <p className="px-6 py-2 text-[11px] text-muted-foreground/40 italic">
             No journal yet — upload a file
