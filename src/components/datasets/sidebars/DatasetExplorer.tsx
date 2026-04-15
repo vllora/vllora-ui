@@ -858,6 +858,9 @@ function TopicTreeItems({
   }
 
   // Leaf node — clickable, indented
+  // Topics with 0 records and no children are likely category labels
+  // that lost their hierarchy (flat upload). Show them dimmer.
+  const isEmptyCategory = count === 0;
   return (
     <button
       type="button"
@@ -866,17 +869,19 @@ function TopicTreeItems({
         "w-full flex items-center gap-2 text-[13px] py-1.5 pr-4 transition-colors text-left",
         selectedNodeId === nodeId
           ? "bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]"
-          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+          : isEmptyCategory
+            ? "text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/20"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground",
       )}
       style={{ paddingLeft: paddingLeft + 14 }}
     >
       <TooltipProvider delayDuration={400}>
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="flex-1 truncate min-w-0">{node.name}</span>
+            <span className={cn("flex-1 truncate min-w-0", isEmptyCategory && "italic")}>{node.name}</span>
           </TooltipTrigger>
           <TooltipContent side="right" className="max-w-xs">
-            {node.name}
+            {isEmptyCategory ? `${node.name} (category — no records)` : node.name}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>

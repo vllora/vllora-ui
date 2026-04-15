@@ -369,60 +369,9 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/validate_extraction.py finetune-project/knowl
 #### 2C. Trace Analysis (Combined Mode Only)
 
 > **Only runs when BOTH PDFs and traces are detected in Step 1.**
-> This step analyzes OTel traces to inform the rest of the pipeline — topics, record allocation, seed queries, and grader design.
+> See [reference/trace-combined-mode.md](reference/trace-combined-mode.md) for full details, commands, and checklist.
 
-```bash
-uv run ${CLAUDE_SKILL_DIR}/scripts/trace_analyze.py \
-  source_traces_semconv.json \
-  --output-dir finetune-project/
-```
-
-**Produces 4 artifacts** (all visible to the user in `finetune-project/`):
-
-| Artifact | What it contains | Consumed by |
-|---|---|---|
-| `trace-analysis/priority.json` | Per-topic frequency + failure rate + priority score | Step 4 (record allocation) |
-| `trace-analysis/topics.json` | Topics found in traces, coverage gaps vs PDF topics | Step 3 (topic enrichment) |
-| `trace-analysis/prompts.json` | Production system prompt (simplified) + real user queries | Step 4 (seed prompts) |
-| `trace-analysis/grader-hints.json` | Failure dimensions + prompt rules + calibration pairs | Step 5 (grader draft) |
-
-**Upload trace data to gateway** (so the UI can display it):
-```bash
-uv run ${CLAUDE_SKILL_DIR}/scripts/upload_trace_analysis.py \
-  --workflow-id $WORKFLOW_ID \
-  --traces source_traces_semconv.json \
-  --project-dir finetune-project/ \
-  --name "OTel Traces"
-```
-This uploads: (1) the trace bundle as a knowledge source (appears in UI Sources view), (2) the 4 trace analysis artifacts to the trace-analysis endpoint (appears in UI Topics/Grader views).
-
-**MANDATORY: Write trace influence summary to analysis.json** (users see this in the Training Impact view). Do NOT skip this step — the UI shows empty Training Impact without it:
-```bash
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py update-analysis \
-  --project-dir finetune-project --section trace-influence --status ready \
-  --summary "Production traces shaped your training in 5 ways." \
-  --assessment "1. System prompt: using the actual production prompt (not a custom one). 2. Topics: N topics from traces, M from documents. 3. Record allocation: high-failure topics get more examples (e.g., address-modify gets 50 vs payment-modify gets 25). 4. Seed queries: N real customer questions injected. 5. Grader: N failure dimensions from production errors." \
-  --metrics '{"trace_count": N, "system_prompt_source": "trace", "topics_from_traces": N, "seed_queries": N, "grader_dimensions_from_traces": N, "high_failure_topics": ["topic1", "topic2"]}'
-```
-
-**Update the workflow objective** with trace findings (Step 1 used a placeholder):
-```bash
-TOP_FAILURES=$(python3 -c "import json; p=json.load(open('finetune-project/trace-analysis/priority.json')); items=sorted(p.items(),key=lambda x:x[1].get('failure_rate',0),reverse=True)[:3]; print(', '.join(f'{t} ({int(v[\"failure_rate\"]*100)}% failure)' for t,v in items))")
-echo "High-failure areas: $TOP_FAILURES"
-```
-
-**Present the trace analysis summary to the user** before proceeding:
-- Show the priority table (top 5 high-priority and bottom 3 low-priority topics)
-- Flag any coverage gaps (topics in traces but not in PDFs)
-- Show the simplified production system prompt
-- Ask if the user wants to adjust priorities before proceeding
-
-**Step 2C completion checklist** (all must be done before Step 3):
-- [ ] 4 trace analysis artifacts in `trace-analysis/`
-- [ ] Trace data uploaded to gateway
-- [ ] `analysis.json` has `trace-influence` section (MANDATORY)
-- [ ] Objective updated with trace failure rates
-- [ ] Summary presented to user
+Run `trace_analyze.py`, upload results, write trace-influence to `analysis.json` (MANDATORY — UI shows empty Training Impact without it), update objective with failure rates, present summary to user. **All items in the Step 2C checklist must pass before Step 3.**
 
 ---
 
@@ -432,12 +381,7 @@ echo "High-failure areas: $TOP_FAILURES"
 
 **Outputs:** `topics.json`, `relations.json`, updated `all-parts-index.json`
 
-**Combined mode — trace topic enrichment:** If `finetune-project/trace-analysis/topics.json` exists (from Step 2C):
-1. Start with PDF-derived topics (comprehensive domain coverage)
-2. Check `trace-analysis/topics.json` for coverage gaps — topics that appear in traces but not in PDF topics
-3. **ADD** trace-discovered topics as new leaf topics (flag with `"source": "trace"` in metadata)
-4. **NEVER REMOVE** PDF-derived topics even if they have low trace frequency — rare topics may be critical
-5. Show the user which topics were added from traces vs which came from PDFs
+**Combined mode — trace topic enrichment:** If trace analysis exists, enrich topics with trace-discovered topics and failure-informed prompts. See [reference/trace-combined-mode.md](reference/trace-combined-mode.md) § Step 3.
 
 **Reuse existing topics:** If `topics.json` exists from a prior run, treat it as authoritative. Only add/remove topics if source material materially changed.
 
@@ -464,7 +408,7 @@ Target 15-25 records per leaf topic, 5-40 leaf topics. Do NOT use `/` in topic n
 
 **3c. Write behavioral system prompt segments.** Root persona → Domain context → Leaf focus. Each level adds ONLY what the parent doesn't say. Use action verbs (assess, recommend, identify), not keyword lists.
 
-**Combined mode — trace-informed topic prompts:** In combined mode, per-topic system prompts MUST incorporate trace failure patterns. Read `trace-analysis/priority.json` for each topic's failure rate. For high-failure topics (>30%), the system prompt segment should specifically address the failure patterns — emphasize the exact procedures that fail in production. For example, if `modify-pending-order-address` has 59% failure rate, its prompt should explicitly state the validation steps, required fields, and common error conditions that cause failures. Read `trace-analysis/grader-hints.json` for specific failure dimensions to address.
+**Combined mode — trace-informed topic prompts:** High-failure topics (>30%) must address failure patterns. See [reference/trace-combined-mode.md](reference/trace-combined-mode.md) § Step 3.
 
 **3d. Build topic-part relations.** Delegate to `relation-builder` subagent. Upload:
 ```bash
@@ -504,41 +448,11 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
   --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl --force
 ```
 
-**Combined mode — trace-informed generation:** If trace artifacts exist from Step 2C, add these flags.
+**Combined mode — trace-informed generation:** Use the production system prompt and trace-weighted allocation. See [reference/trace-combined-mode.md](reference/trace-combined-mode.md) § Step 4 for the full command with all trace flags (`--weight-by-trace-priority`, `--trace-prompts-file`, `--seed-query-ratio`). The system prompt MUST come from `trace-analysis/prompts.json` — `generate_records.py` auto-overrides when `--trace-prompts-file` is provided.
 
-**CRITICAL: System prompt MUST match production.** In combined mode, the `--system-prompt` MUST be the `simplified_prompt` from `trace-analysis/prompts.json` — this is the actual production prompt the model will see at inference time. Do NOT write your own prompt. Using a different prompt creates distribution shift: the model learns behaviors keyed to training-time instructions that won't match inference. In PDF-only mode (no traces), write a concise prompt (100-300 chars).
-
-```bash
-# Read the simplified prompt from trace analysis
-SIMPLIFIED=$(python3 -c "import json; print(json.load(open('finetune-project/trace-analysis/prompts.json')).get('simplified_prompt','You are a customer service agent.'))")
-
-uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
-  --topics finetune-project/topics.json \
-  --relations finetune-project/relations.json \
-  --knowledge-dir finetune-project/knowledge \
-  --system-prompt "$SIMPLIFIED" \
-  --output finetune-project/training.jsonl \
-  --records-per-topic 30 --parallel 4 \
-  --weight-by-trace-priority \
-  --trace-priority-file finetune-project/trace-analysis/priority.json \
-  --trace-prompts-file finetune-project/trace-analysis/prompts.json \
-  --seed-query-ratio 0.20 \
-  --workflow-id $WORKFLOW_ID --enrich-sources
-
-# Upload records SEPARATELY (more reliable than --upload-incremental which can fail on topic ID mismatch)
+# Upload records SEPARATELY (more reliable than --upload-incremental)
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
   --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl --force
-```
-
-This changes two things:
-1. **`--weight-by-trace-priority`**: Allocates more records to high-priority topics (frequent + high failure in traces). Low-priority topics get a minimum floor (3 records). Same total budget, distributed by real usage patterns.
-2. **`--trace-prompts-file` + `--seed-query-ratio`**: 20% of records per topic use real user queries from traces (as-is, no paraphrasing). Remaining 80% are LLM-generated. Real queries anchor the training distribution to production phrasing (DCLM arXiv:2406.11794).
-
-> **WARNING: If regenerating records**, delete gateway records first to avoid duplicates:
-> ```bash
-> uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records --force --workflow-id $WORKFLOW_ID --file /dev/null 2>/dev/null || true
-> ```
-> `--upload-incremental` appends to gateway. Running generate twice without clearing = duplicate records on gateway.
 
 Generate **200+ total records**, minimum 25 per leaf topic.
 

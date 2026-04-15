@@ -531,6 +531,42 @@ def cmd_upload_topics(args: argparse.Namespace) -> None:
 
     print(f"Topics uploaded: {total_created}")
 
+    # Write back full hierarchy to topics.json so local file is the complete
+    # source of truth. The gateway has parent_id links that may not be in the
+    # original file (e.g., agent created parents via API). Without write-back,
+    # anyone reading topics.json sees an incomplete picture.
+    try:
+        gw_topics = _api("GET", f"{args.base_url}/finetune/workflows/{args.workflow_id}/topics")
+        gw_list = gw_topics if isinstance(gw_topics, list) else gw_topics.get("topics", [])
+        if gw_list:
+            # Build nested hierarchy from flat gateway response
+            node_map: dict[str, dict] = {}
+            for t in gw_list:
+                node_map[t["id"]] = {
+                    "id": t.get("reference_id", t["id"]),
+                    "name": t["name"],
+                    **({"system_prompt": t["system_prompt"]} if t.get("system_prompt") else {}),
+                    **({"category": t["category"]} if t.get("category") else {}),
+                    **({"expected_difficulty": t["expected_difficulty"]} if t.get("expected_difficulty") else {}),
+                    **({"description": t["description"]} if t.get("description") else {}),
+                }
+
+            roots: list[dict] = []
+            for t in gw_list:
+                node = node_map[t["id"]]
+                if t.get("parent_id") and t["parent_id"] in node_map:
+                    parent = node_map[t["parent_id"]]
+                    if "children" not in parent:
+                        parent["children"] = []
+                    parent["children"].append(node)
+                else:
+                    roots.append(node)
+
+            topics_path.write_text(json.dumps(roots, indent=2, ensure_ascii=False))
+            print(f"  Wrote back full hierarchy to {topics_path} ({len(gw_list)} topics, {len(roots)} root(s))")
+    except Exception as e:
+        print(f"  Warning: could not write back hierarchy: {e}", file=sys.stderr)
+
 
 def _looks_like_uuid(s: str) -> bool:
     """Check if a string looks like a UUID (8-4-4-4-12 hex pattern)."""

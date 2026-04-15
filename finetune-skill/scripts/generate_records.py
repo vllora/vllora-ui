@@ -956,6 +956,7 @@ Source material (each section is numbered [1], [2], etc.):
 Each user_input must be realistic and grounded in the source material above.
 Do NOT generate generic content — reference specific concepts, examples, or details from the source.
 The ground truth MUST be consistent with both the domain rules above AND the source material values.
+CRITICAL: Each ground_truth must be SPECIFIC to its user_input. Do NOT write generic policy statements as ground truth (e.g., "An order may only be modified if pending" is too generic). Instead, reference the specific details from the user's scenario (e.g., "Order #W123 is pending, so items can be modified. The new item must be the same product type.").
 
 For each item, also provide:
 - "ground_truth": {f'Answer in this exact format: {ground_truth_format}. CRITICAL RULES: (1) Every value (numbers, limits, thresholds, categories) MUST come directly from the source material — look them up, do NOT guess. If the source shows a special designation (like TT for treatment technique), use that exact designation. (2) COMPLETENESS: If the answer is a list, check EVERY input element independently. Do NOT stop after finding the first match. (3) Do NOT include explanations or source excerpts — only the structured answer.' if ground_truth_format else 'a concise excerpt from the source material that contains the information needed to answer. Keep it focused.'}
