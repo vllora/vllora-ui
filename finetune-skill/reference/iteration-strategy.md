@@ -52,6 +52,16 @@ Set `training_config.load_precision` when creating a provider finetune job (`bf1
 | `4bit` | Tight GPU memory or larger base models; classic QLoRA-style loading. |
 | `8bit` | Middle ground between memory and stability. |
 
+### Infrastructure metrics (use when OOM or GPU pressure is suspected)
+
+Training metrics (`GET .../jobs/{job_id}/metrics`) show GRPO loss, reward, and clipping — they do **not** show whether the accelerator ran out of memory. When a job **fails with OOM / CUDA out of memory**, **CUDA allocation errors**, or **sudden worker restarts**, call **`GET /finetune/workflows/{workflow_id}/jobs/{job_id}/infra-metrics`** (see [api-reference.md](api-reference.md) §Training Jobs) **before** only changing hyperparameters.
+
+**What to look for:**
+- **`GPU_MEMORY`** (or equivalent) high near the failure time → reduce VRAM pressure: lower `load_precision` to `4bit` or `8bit`, reduce `response_candidates_count` (K), reduce `max_output_tokens`, or use a smaller `base_model`.
+- **`GPU_UTIL`** consistently low while the job is slow → may be I/O or scheduling; less often the root cause of OOM.
+
+**Order of operations after OOM:** (1) Inspect infra-metrics if available. (2) Apply the [load precision](#load-precision-phase-2-training) table and the hyperparameter ladder in [Part 10](#part-10-post-training-iteration-training-metrics-diagnosis) (`max_output_tokens`, K, batching). (3) Retry with **one** change at a time so you can attribute the fix.
+
 ---
 
 ## Part 1: Analyzing Evaluation Results
@@ -1015,6 +1025,7 @@ This outputs alerts (CRITICAL/HIGH/WARNING) and a summary. Use the alerts to gui
 
 | What You See | Likely Cause | What to Change |
 |---|---|---|
+| OOM / CUDA OOM / container killed mid-step | VRAM exceeded (long completions × K, large model, or high `load_precision`) | **Call `GET .../jobs/{job_id}/infra-metrics`** (see [api-reference.md](api-reference.md)); confirm `GPU_MEMORY` near limits if series exist. Then reduce **one of**: `response_candidates_count` (K), `max_output_tokens`, `load_precision` → `4bit`/`8bit`, or `base_model` size. See [§Infrastructure metrics](#infrastructure-metrics-use-when-oom-or-gpu-pressure-is-suspected). |
 | KL explodes from step 1 (>1000) | Learning rate too high for this model/task | Halve LR: `1e-6` → `5e-7` → `2.5e-7` |
 | grad_norm NaN or Inf | Numerical overflow — often from zero-length completions or bad chat template | Check completions/min_length. If 0 → fix chat template or increase max_output_tokens |
 | Loss stuck at exactly 0.0 | All advantages are zero (reward_std ≈ 0) | Grader is too lenient — all responses score the same. Make grader harder (see Part 5) |
@@ -1054,7 +1065,7 @@ Default: 512
 If clipped_ratio > 0.3: increase → 1024
 If clipped_ratio > 0.5: increase → 1536 or 2048
 ⚠️ Cost scales linearly: 1024 = 2× cost of 512 (G=8 × 1024 tokens per prompt)
-⚠️ May cause OOM on cloud infra above 1024
+⚠️ May cause OOM on cloud infra above 1024 — if OOM happens, use `GET .../jobs/{job_id}/infra-metrics` first (see §Infrastructure metrics above), then reduce K, `load_precision`, or tokens before retrying.
 ```
 
 **Level 3: Epochs**

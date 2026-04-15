@@ -10,7 +10,7 @@ All endpoints use JSON unless noted. Auth via `Authorization: Bearer <token>` he
 
 ---
 
-## Quick Reference (74 endpoints)
+## Quick Reference (75 endpoints)
 
 | # | Method | Endpoint | Purpose |
 |---|--------|----------|---------|
@@ -86,24 +86,25 @@ All endpoints use JSON unless noted. Auth via `Authorization: Bearer <token>` he
 | 59 | GET | `/finetune/workflows/{id}/jobs` | List training jobs |
 | 60 | GET | `/finetune/workflows/{id}/jobs/{job_id}/status` | Get job status |
 | 61 | GET | `/finetune/workflows/{id}/jobs/{job_id}/metrics` | Get training metrics |
-| 62 | GET | `/finetune/workflows/{id}/jobs/{job_id}/models` | List rollout model aliases (checkpointed + finetuned) |
-| 63 | POST | `/finetune/workflows/{id}/jobs/{job_id}/cancel` | Cancel job |
-| 64 | POST | `/finetune/workflows/{id}/jobs/{job_id}/resume` | Resume cancelled job |
-| 65 | GET | `/finetune/workflows/{id}/jobs/{job_id}/weights/url` | Download weights URL |
+| 62 | GET | `/finetune/workflows/{id}/jobs/{job_id}/infra-metrics` | Provider infra metrics (GPU util, accelerator memory; cloud) |
+| 63 | GET | `/finetune/workflows/{id}/jobs/{job_id}/models` | List rollout model aliases (checkpointed + finetuned) |
+| 64 | POST | `/finetune/workflows/{id}/jobs/{job_id}/cancel` | Cancel job |
+| 65 | POST | `/finetune/workflows/{id}/jobs/{job_id}/resume` | Resume cancelled job |
+| 66 | GET | `/finetune/workflows/{id}/jobs/{job_id}/weights/url` | Download weights URL |
 | **Analytics & Evaluations** (workflow-scoped, read-only) | | | |
-| 65 | GET | `/finetune/workflows/{id}/analytics` | Get dataset analytics |
-| 66 | GET | `/finetune/workflows/{id}/finetune-evaluations` | Per-epoch training evaluations (`limit`/`offset` = `row_index` range) |
+| 67 | GET | `/finetune/workflows/{id}/analytics` | Get dataset analytics |
+| 68 | GET | `/finetune/workflows/{id}/finetune-evaluations` | Per-epoch training evaluations (`limit`/`offset` = `row_index` range) |
 | **Analytics** (non-workflow-scoped) | | | |
-| 67 | POST | `/finetune/analytics/dry-run` | Dataset analytics dry run |
+| 69 | POST | `/finetune/analytics/dry-run` | Dataset analytics dry run |
 | **Evaluations** (non-workflow-scoped, cloud) | | | |
-| 68 | POST | `/finetune/evaluations` | Create evaluation run |
-| 69 | GET | `/finetune/evaluations/{evaluation_run_id}` | Poll evaluation results |
+| 70 | POST | `/finetune/evaluations` | Create evaluation run |
+| 71 | GET | `/finetune/evaluations/{evaluation_run_id}` | Poll evaluation results |
 | **Deployments** | | | |
-| 70 | POST | `/finetune/deployments` | Deploy model |
-| 71 | DELETE | `/finetune/deployments/{deployment_id}` | Delete deployment |
+| 72 | POST | `/finetune/deployments` | Deploy model |
+| 73 | DELETE | `/finetune/deployments/{deployment_id}` | Delete deployment |
 | **Topic Hierarchy AI** | | | |
-| 72 | POST | `/finetune/topic-hierarchy/generate` | Generate topic hierarchy |
-| 73 | POST | `/finetune/topic-hierarchy/adjust` | Adjust topic hierarchy |
+| 74 | POST | `/finetune/topic-hierarchy/generate` | Generate topic hierarchy |
+| 75 | POST | `/finetune/topic-hierarchy/adjust` | Adjust topic hierarchy |
 
 ---
 
@@ -925,6 +926,47 @@ curl -s "http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs/JOB_ID/metric
 | `grad_norm` spikes > 3x median | Warning | Instability -- may need gradient clipping |
 | `frac_reward_zero_std` > 0.60 | Warning | Weak training signal -- grader not differentiating |
 | `reward_std` < 0.05 | Info | Collapsed diversity -- model converging on single pattern |
+
+### GET `/finetune/workflows/{workflow_id}/jobs/{job_id}/infra-metrics`
+
+**Infrastructure (provider) metrics** — separate from training metrics above. Use this to see whether the cloud training worker was GPU- or memory-bound (for example after **OOM**, preemption, or unstable performance).
+
+The gateway resolves the local SQLite `job_id` to the provider job ID and proxies to LangDB Cloud, which stores time series from the provider’s monitoring (for Vertex AI: Cloud Monitoring samples such as accelerator utilization and memory).
+
+```bash
+curl -s "http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs/JOB_ID/infra-metrics"
+```
+
+**Response:**
+```json
+{
+  "provider_job_id": "2f90adcc-9ff4-4c3c-a8f6-734d7f920bf9",
+  "metrics": [
+    {
+      "metric_type": "GPU_UTIL",
+      "metric_time": "2026-04-15T10:00:00Z",
+      "metric_value": 0.82,
+      "unit": "1"
+    },
+    {
+      "metric_type": "GPU_MEMORY",
+      "metric_time": "2026-04-15T10:00:00Z",
+      "metric_value": 0.91,
+      "unit": "1"
+    }
+  ]
+}
+```
+
+**Semantics:**
+| Field | Meaning |
+|-------|--------|
+| `metric_type` | Normalized label (e.g. `GPU_UTIL`, `GPU_MEMORY` on Vertex) |
+| `metric_time` | Sample timestamp (UTC) |
+| `metric_value` | Scalar value; utilization/memory are typically fractions 0–1 |
+| `unit` | Optional (provider-specific; often `1` for ratios) |
+
+**When empty or errors:** The provider may not expose series yet, polling may not have started, or cloud IAM may block Monitoring API access. Infra metrics do not replace training metrics (`/metrics`) — they complement them for capacity and OOM diagnosis.
 
 ### GET `/finetune/workflows/{workflow_id}/jobs/{job_id}/models`
 
