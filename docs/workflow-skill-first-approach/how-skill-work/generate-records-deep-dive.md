@@ -113,8 +113,9 @@ This means a topic with 5 prompt types completes in ~1 LLM call time, not 5x.
   ┌──────────────┐   ┌──────────────────┐   ┌─────────────────────────────┐
   │ topics.json  │   │ relations.json   │   │ knowledge/{slug}/           │
   │              │   │                  │   │   knowledge_parts.json      │
-  │ [{id, name,  │   │ [{topic_id,      │   │                             │
-  │   parent_id, │   │   part_id}, ...] │   │ [{id, type, title, content, │
+  │ [{id (slug), │   │ [{topic_id       │   │                             │
+  │   name,      │   │   (slug),        │   │ [{id, type, title, content, │
+  │   parent_id, │   │   part_id}, ...] │   │
   │   system_    │   │                  │   │   content_metadata}, ...]   │
   │   prompt}]   │   │                  │   │                             │
   └──────┬───────┘   └────────┬─────────┘   └──────────────┬──────────────┘
@@ -135,7 +136,7 @@ This means a topic with 5 prompt types completes in ~1 LLM call time, not 5x.
   │                                                                      │
   │  leaves: [topic, ...]     (only leaf topics — no children)           │
   │  topic_index: {id → topic}  (all topics for hierarchy lookup)        │
-  │  relations: [{topic_id, part_id}, ...]                               │
+  │  relations: [{topic_id (slug), part_id}, ...]                         │
   │  parts: {part_id → {id, type, title, content, content_metadata}}     │
   └──────────────────────────────────────────────────────────────────────┘
                               │

@@ -43,9 +43,13 @@ else
   check "Dev server not running — start with: npm run dev" warn
 fi
 
-# 3. Test folder clean?
-if [ -d "$SCENARIO_DIR/finetune-project" ]; then
-  check "Previous run data exists — clean with: rm -rf $SCENARIO_DIR/{finetune-project,finetune-runs,.claude}" warn
+# 3. Test folder clean? (check ALL leftover dirs — .claude can also contain stale skill copies)
+LEFTOVER=""
+[ -d "$SCENARIO_DIR/finetune-project" ] && LEFTOVER="${LEFTOVER}finetune-project "
+[ -d "$SCENARIO_DIR/finetune-runs" ] && LEFTOVER="${LEFTOVER}finetune-runs "
+[ -d "$SCENARIO_DIR/.claude" ] && LEFTOVER="${LEFTOVER}.claude "
+if [ -n "$LEFTOVER" ]; then
+  check "Previous run data exists ($LEFTOVER) — clean with: rm -rf $SCENARIO_DIR/{finetune-project,finetune-runs,.claude}" warn
 else
   check "Test folder clean (no previous data)" pass
 fi

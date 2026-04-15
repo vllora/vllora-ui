@@ -772,7 +772,7 @@ those values in the next API call.
 
 **Symptom**: `finetune.py upload-relations` failed when relations used `topic_identifier` instead of `topic_id`.
 
-**Fix applied**: `upload-relations` now accepts both `topic_id` and `topic_identifier` keys.
+**Fix applied**: `upload-relations` now accepts both `topic_id` and `topic_identifier` keys. As of the slug-based ID migration, all local files use human-readable slugs as topic IDs. The upload boundary (`finetune.py upload-relations/upload-records`) maps slugs to gateway UUIDs.
 
 ### Issue 11: checkpoint.py missing data-quality-gate step
 
@@ -814,11 +814,11 @@ those values in the next API call.
 
 **Fix applied**: Topic names are now looked up from `training.jsonl` by matching record IDs. Readiness summary is printed FIRST (before verbose per-record/per-topic details) to prevent truncation in long outputs.
 
-### Issue 18: generate_records.py key normalization
+### Issue 18: generate_records.py key normalization (superseded by slug ID migration)
 
-**Symptom**: Records generated with `topic_id` key failed upload because gateway expected `topic_identifier`.
+**Symptom**: Records generated with `topic_id` key failed upload because gateway expected `topic_identifier`. Root cause: topic IDs were UUIDs in some files and names in others, causing mismatches everywhere.
 
-**Fix applied**: Added key normalization in `generate_records.py` (`topic_id` → `topic_identifier`).
+**Fix applied**: Migrated to slug-based topic IDs. All local files (`topics.json`, `relations.json`, `training.jsonl`, `priority.json`) now use human-readable slugs as the canonical topic identifier. UUID assignment happens only at the gateway upload boundary (`finetune.py upload-topics/upload-records/upload-relations`). Key normalization (`topic_id` → `topic_identifier`) is retained for backward compatibility.
 
 ### Issue 19: log-iteration rejects PENDING verdict
 

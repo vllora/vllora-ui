@@ -180,10 +180,18 @@ function PriorityTab({
                 <th className="text-right py-2 px-3 font-medium text-muted-foreground">Frequency</th>
                 <th className="text-right py-2 px-3 font-medium text-muted-foreground">Failure</th>
                 <th className="text-right py-2 px-3 font-medium text-muted-foreground">Priority</th>
+                <th className="text-center py-2 px-3 font-medium text-muted-foreground">Training Focus</th>
               </tr>
             </thead>
             <tbody>
-              {sorted.map(([topic, metrics]) => (
+              {sorted.map(([topic, metrics]) => {
+                // Adaptive threshold: top 1/3 by failure rate get harder prompts
+                const sortedRates = sorted.map(([, m]) => m.failureRate).sort((a, b) => b - a);
+                const cutoffIdx = Math.max(1, Math.floor(sortedRates.length / 3));
+                const threshold = Math.max(sortedRates[Math.min(cutoffIdx, sortedRates.length - 1)] ?? 0.3, 0.1);
+                const isHardFocus = metrics.failureRate >= threshold;
+
+                return (
                 <tr key={topic} className="border-b border-border/30 last:border-0 hover:bg-muted/20">
                   <td className="py-2 px-3 font-mono">{topic}</td>
                   <td className="py-2 px-3 text-right">{metrics.traceCount}</td>
@@ -203,8 +211,19 @@ function PriorityTab({
                   <td className="py-2 px-3 text-right font-medium">
                     {metrics.priorityScore.toFixed(4)}
                   </td>
+                  <td className="py-2 px-3 text-center">
+                    <span className={cn(
+                      "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
+                      isHardFocus
+                        ? "bg-orange-500/10 text-orange-500"
+                        : "bg-zinc-500/10 text-zinc-400"
+                    )}>
+                      {isHardFocus ? "Harder prompts" : "Standard"}
+                    </span>
+                  </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

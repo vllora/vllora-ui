@@ -79,14 +79,14 @@ Step 6: Package and Upload
 
 ## Key Identifier Mapping
 
-| Entity | ID (internal) | Reference ID (external) | Used in relations via |
-|--------|--------------|------------------------|----------------------|
-| Knowledge Source | UUID (server) | e.g., "doc-001" | -- |
-| Source Part | UUID (server) | e.g., "p-001" (original skill id) | `part_identifier` |
-| Topic | UUID (server) | e.g., "billing" (original skill id) | `topic_identifier` |
-| Record | custom (e.g., "billing-001") | -- | `topic` field |
+| Entity | Local ID (in skill files) | Gateway ID (in DB) | Used in relations via |
+|--------|--------------------------|-------------------|----------------------|
+| Knowledge Source | -- | UUID (server-assigned) | -- |
+| Source Part | slug (e.g., "doc-p-001") | UUID (server-assigned) | `part_identifier` |
+| Topic | **slug** (e.g., "cancel-pending-order") | UUID (server-assigned) | `topic_identifier` |
+| Record | slug-based (e.g., "cancel-pending-order-001") | -- | `topic` field (slug) |
 
-Important: When the skill uploads parts, the original `id` becomes `reference_id` on the server (server assigns UUIDs). Relations use either id or reference_id for lookup.
+**Topic ID design principle:** All local files (`topics.json`, `relations.json`, `training.jsonl`, `priority.json`) use human-readable slugs as topic IDs. UUIDs only exist at the gateway DB layer. The upload boundary (`finetune.py upload-topics/upload-records/upload-relations`) maps slugs to gateway UUIDs — this is the only place the mapping happens. This follows the Terraform pattern: config files use human names, state files use system IDs.
 
 ## UI Visualization Status
 

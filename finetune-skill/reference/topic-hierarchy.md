@@ -116,25 +116,23 @@ Measure difficulty *after* running the base model evaluation (eval-first approac
 
 ```json
 {
-  "id": "unique-path-id",
+  "id": "human-readable-slug",
   "name": "Human-Readable Name",
   "parent_id": null,
   "system_prompt": "Focus on...",
   "category": "single:milk",
-  "expected_difficulty": "medium",
-  "reference_id": "optional-external-ref"
+  "expected_difficulty": "medium"
 }
 ```
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `id` | No | Topic identifier (auto-generated UUID if omitted) |
-| `name` | Yes | Display name — should describe the **skill**, not the source section |
-| `parent_id` | No | Parent topic ID (null for root topics) |
+| `id` | Yes | Human-readable slug (e.g., `"cancel-pending-order"`). Must be unique within the workflow. Do NOT use UUIDs — the gateway assigns UUIDs at upload time. Use lowercase with hyphens, no `/` characters. |
+| `name` | Yes | Display name — should describe the **skill**, not the source section. Often identical to `id` but can be more readable (e.g., id=`"cancel-pending-order"`, name=`"Cancel Pending Order"`). |
+| `parent_id` | No | Parent topic's slug ID (null for root topics) |
 | `system_prompt` | No | System prompt **segment** — a behavioral instruction that adds ONLY what's new beyond the parent. Describe what the model should DO (action verbs: assess, recommend, identify, compare), not a list of keywords. Start with a situational trigger ("When...", "For...", "Given..."). Do NOT repeat the root persona ("You are...") or list nouns without context. |
 | `category` | **Yes** (leaf) | Declares the expected GT pattern for `reconcile-topics`. Values: `"none"` (GT should be "none"/empty — e.g., allergen-free products), `"single:<label>"` (GT should contain this label — e.g., `"single:milk"`), `"multi"` (GT should have 2+ labels). Without this, reconciliation falls back to brittle name-based heuristics and may miss topic↔GT contradictions. |
 | `expected_difficulty` | No | Initial difficulty estimate: `"easy"`, `"medium"`, or `"hard"`. Leaf topics only. Refined to actual pass-rate after difficulty probe. Used to weight record generation. |
-| `reference_id` | No | External reference ID for topic-source linking |
 
 ---
 
@@ -315,12 +313,14 @@ For records, encode the topic in the ID (e.g., `fork-detection-basic-001`) so yo
 
 ### ID Format
 
-Use slug-based IDs matching the 2-level hierarchy. Keep IDs lowercase with hyphens:
+**Topic IDs are human-readable slugs** — the same slug is used as `"id"` in `topics.json`, `"topic_identifier"` in `relations.json`, `"topic"` in `training.jsonl`, and as keys in `priority.json` / `prompts.json`. This keeps all local files self-consistent and debuggable.
 
-- Good: `"fork-detection"`, `"pin-recognition"`, `"payment-troubleshooting"`
-- Bad: `"Chapter 3/Section 3.1/Forks"`, `"tactics/fork-detection/fork-detection-complex"`
+UUIDs only exist at the gateway DB layer. `finetune.py upload-topics` sends slugs to the gateway, which assigns UUIDs for cross-workflow uniqueness. `finetune.py upload-records` and `upload-relations` map slugs to gateway UUIDs at the upload boundary.
 
-Note: `finetune.py upload-topics` auto-converts slugs to UUIDs for the gateway. Use the same slug as `topic_identifier` in `relations.json`.
+Keep IDs lowercase with hyphens:
+
+- Good: `"fork-detection"`, `"pin-recognition"`, `"cancel-pending-order"`
+- Bad: `"Chapter 3/Section 3.1/Forks"`, `"e5c895d1-17ae-..."` (UUID), `"Fork Detection"` (spaces)
 
 ### Common Mistakes
 

@@ -413,6 +413,8 @@ This uploads: (1) the trace bundle as a knowledge source (appears in UI Sources 
 
 **3b. Design skill-based topics.** Organize by **skill** (what the model learns to DO), not document structure. Two-level hierarchy: Domain → Skill. Target 15-25 records per leaf topic, 5-40 leaf topics. Do NOT use `/` in topic names (breaks UI routing).
 
+**Topic ID format: human-readable slugs.** Use the slug as the `"id"` field in `topics.json` (e.g., `"cancel-pending-order"`, `"fork-detection"`). Do NOT generate UUIDs — the gateway assigns UUIDs at upload time. All local files (`topics.json`, `relations.json`, `training.jsonl`, `priority.json`) use the same slug as the topic identifier. This keeps files self-consistent and human-debuggable. The slug must be unique within a workflow.
+
 **MANDATORY: declare `category` on every leaf topic.** Each topic in `topics.json` must have a `"category"` field declaring the expected GT pattern. Valid values: `"none"` (GT should be "none"/empty), `"single:<label>"` (GT should contain this label), `"multi"` (GT should have 2+ labels). This is used by `reconcile-topics` to detect records whose derived GT contradicts the topic intent. Without it, the reconciler falls back to brittle name heuristics and may miss mismatches. You designed the topics — you know the intent — write it down.
 
 **Granularity rule:** When source material enumerates distinct items (9 allergens, 14 tax forms), prefer one leaf topic per item to expose per-item difficulty to GRPO.
@@ -721,6 +723,20 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py finetune-project/trainin
 ```
 
 **Decision:** Exit 0 = PASS, exit 1 = FAIL (must fix), exit 2 = WARN (review).
+
+**What the gate checks** (key checks that catch data quality issues before wasting GPU hours):
+- **Seed topic alignment**: Do seed queries' surface intent match their assigned topic? <60% alignment = FAIL. This catches misassigned real user queries that would teach the model wrong behavior.
+- **GT coverage**: Are >90% of records with ground truth? Seeds without GT become zero-variance prompts in GRPO (arXiv:2509.21880).
+- **GT duplication**: Are ground truths unique per record? >3 copies of identical GT cause reward collapse (DRA-GRPO, arXiv:2505.09655).
+- **Topic balance, diversity, thin topics**: Standard structural checks.
+
+**After the gate, write results to analysis.json** so users see the quality insights in the UI:
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py update-analysis \
+  --project-dir finetune-project --section data-quality --status <pass|warn|fail> \
+  --summary "<user-friendly summary of quality check results>" \
+  --metrics '{"seed_alignment_pct": N, "gt_coverage_pct": N, "duplicated_gt_records": N}'
+```
 
 > See [reference/data-quality-gate.md](reference/data-quality-gate.md) for gate details and thresholds.
 

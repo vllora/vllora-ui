@@ -537,14 +537,13 @@ def _looks_like_uuid(s: str) -> bool:
 def _resolve_identifiers_to_uuids(
     workflow_id: str, relations: list[dict], base_url: str,
 ) -> list[dict]:
-    """Resolve reference_id-based identifiers to UUIDs scoped to this workflow.
+    """Resolve slug-based identifiers to gateway UUIDs scoped to this workflow.
 
-    The gateway's create_relations endpoint looks up parts globally (not scoped to
-    the workflow). If the same reference_id exists in parts from old/deleted workflows,
-    the lookup can match the wrong part and fail validation. Resolving to UUIDs here
-    avoids the ambiguity.
+    Local files (relations.json) use human-readable slugs for topic IDs (e.g.,
+    "cancel-pending-order"). The gateway uses UUIDs. This function maps slugs to
+    UUIDs at the upload boundary — the ONLY place where this mapping happens.
     """
-    # Build topic ref→uuid map via REST API (matches by id, reference_id, or name)
+    # Build topic slug→UUID map via REST API (matches by id, name, or reference_id)
     topics_resp = _api("GET", f"{base_url}/finetune/workflows/{workflow_id}/topics")
     topics_list = topics_resp if isinstance(topics_resp, list) else topics_resp.get("topics", [])
     topic_map: dict[str, str] = {}
@@ -643,8 +642,9 @@ def cmd_upload_records(args: argparse.Namespace) -> None:
     """Upload training records from a JSONL file to a workflow.
 
     Transforms from skill format (top-level messages) to gateway format
-    (nested data.input.messages). Resolves topic reference_ids to UUIDs.
-    Uploads in batches.
+    (nested data.input.messages). Records use human-readable slug IDs for
+    topics (e.g., "cancel-pending-order"); this function resolves them to
+    gateway UUIDs at the upload boundary. Uploads in batches.
     """
     records_path = Path(args.file)
     if not records_path.exists():
@@ -656,20 +656,22 @@ def cmd_upload_records(args: argparse.Namespace) -> None:
         _api("DELETE", f"{args.base_url}/finetune/workflows/{args.workflow_id}/records")
         print("  Deleted all existing records")
 
-    # Build topic reference_id → UUID map via REST API (matches by id, reference_id, or name)
+    # Build slug → gateway-UUID map. Records use human-readable slugs as topic IDs
+    # (e.g., "cancel-pending-order"). The gateway assigns UUIDs at upload time.
+    # This is the ONLY place where slug→UUID mapping happens.
     topic_map: dict[str, str] = {}
     try:
         topics_resp = _api("GET", f"{args.base_url}/finetune/workflows/{args.workflow_id}/topics")
         topics_list = topics_resp if isinstance(topics_resp, list) else topics_resp.get("topics", [])
         for t in topics_list:
             row_id = t["id"]
-            topic_map[row_id] = row_id
+            topic_map[row_id] = row_id  # UUID→UUID (for already-resolved IDs)
+            name = t.get("name")
+            if name:
+                topic_map[name] = row_id  # slug→UUID (primary lookup path)
             ref_id = t.get("reference_id")
             if ref_id:
                 topic_map[ref_id] = row_id
-            name = t.get("name")
-            if name:
-                topic_map[name] = row_id
     except Exception as e:
         print(f"Warning: Could not load topic map from API: {e}", file=sys.stderr)
         print("  Topics in records will be passed as-is (may fail if not UUIDs)", file=sys.stderr)

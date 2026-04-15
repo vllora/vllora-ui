@@ -614,6 +614,8 @@ Each team spawns 3 independent Claude sessions working in parallel. Teams cost 3
 
 18. **Gateway `trace_analyses` table**: The gateway now has a `trace_analyses` table (model + service + handler) for persisting trace analysis artifacts. The UI reads this via `TraceAnalysisContext`.
 
+19. **Topic IDs are human-readable slugs, not UUIDs**: All local files (`topics.json`, `relations.json`, `training.jsonl`, `priority.json`, `prompts.json`) use slug-format topic IDs (e.g., `"cancel-pending-order"`). UUIDs only exist at the gateway DB layer for cross-workflow uniqueness. The upload boundary (`finetune.py upload-topics/upload-records/upload-relations`) is the **only** place where slug→UUID mapping happens. Never generate UUIDs for topic IDs in skill code or local files. This follows the Terraform pattern: config = human names, state = system IDs.
+
 12. **Browser MCP context efficiency**: MCP browser tools return large responses that fill the context window fast. Follow these rules to stay efficient:
 
     **Prefer lightweight tools first** (ordered by context cost):

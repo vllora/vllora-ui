@@ -127,9 +127,9 @@ Steps 1-6 (data pipeline) worked well after our fixes to `finetune.py` (topic UU
 
 | Issue | Fix | Status |
 |-------|-----|--------|
-| Topic ID collision | `finetune.py` auto-generates UUIDs, user IDs → reference_id | ✅ Done |
+| Topic ID collision | Superseded: local files now use slug IDs, gateway assigns UUIDs at upload boundary | ✅ Done |
 | Topological topic upload | `finetune.py` uploads roots first, then children | ✅ Done |
-| Record topic resolution | `finetune.py upload-records` resolves ref_ids → UUIDs via SQLite | ✅ Done |
+| Record topic resolution | `finetune.py upload-records` resolves slug IDs → gateway UUIDs via API | ✅ Done |
 | Consolidation ID rewrite warning | Added warning to SKILL.md | ✅ Done |
 
 ## Priority Order for Remaining Fixes

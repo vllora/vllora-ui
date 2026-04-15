@@ -338,6 +338,97 @@ def gate_structural(records: list[dict], topics_data: list | None) -> dict:
                 "topics": list(orphan_topics)[:10],
             })
 
+    # 7. Duplicated ground truths — identical GTs cause reward collapse
+    # (DRA-GRPO, arXiv:2505.09655: identical rewards → diversity-quality inconsistency)
+    gt_counter: Counter = Counter()
+    for r in records:
+        gt = extract_ground_truth(r).strip()
+        if gt:
+            gt_counter[gt] += 1
+    duplicated_gts = {gt: count for gt, count in gt_counter.items() if count > 3}
+    duplicated_record_count = sum(c for c in duplicated_gts.values())
+    if duplicated_gts:
+        issues.append({
+            "severity": "soft",
+            "check": "duplicated_ground_truths",
+            "message": (
+                f"{duplicated_record_count} records share {len(duplicated_gts)} duplicated GTs "
+                f"(>3 copies each). Identical GTs cause reward collapse in GRPO. "
+                f"Derive specific GTs from each record's context."
+            ),
+            "value": duplicated_record_count,
+            "top_duplicates": [
+                {"gt": gt[:100], "count": c}
+                for gt, c in sorted(duplicated_gts.items(), key=lambda x: -x[1])[:5]
+            ],
+        })
+
+    # 8. Seed query topic-content alignment
+    # Check if seed queries' surface intent matches their assigned topic
+    seed_records = [r for r in records if r.get("prompt_type") == "seed_query"]
+    if seed_records:
+        topic_intent_keywords: dict[str, list[str]] = {
+            "cancel": ["cancel", "cancellation"],
+            "return": ["return", "refund", "send back"],
+            "exchange": ["exchange", "swap size", "different size"],
+            "modify": ["change", "modify", "update", "switch"],
+            "address": ["address", "shipping", "delivery"],
+            "payment": ["payment", "credit card", "gift card", "pay"],
+            "product": ["product", "price", "specification", "feature"],
+            "transfer": ["human", "agent", "supervisor", "escalat"],
+            "order": ["order status", "track", "where is my order"],
+            "email": ["email"],
+        }
+
+        misaligned_count = 0
+        misaligned_by_topic: dict[str, int] = {}
+        for r in seed_records:
+            topic = r.get("topic", "")
+            user_msg = ""
+            for m in r.get("messages", []):
+                if m.get("role") == "user":
+                    user_msg = m.get("content", "").lower()
+                    break
+            if not user_msg:
+                continue
+
+            # Check: does user message contain ANY keyword related to this topic?
+            topic_lower = topic.lower()
+            matches_own_topic = False
+            for intent, keywords in topic_intent_keywords.items():
+                if intent in topic_lower and any(kw in user_msg for kw in keywords):
+                    matches_own_topic = True
+                    break
+
+            if not matches_own_topic:
+                # Check if it matches a DIFFERENT topic
+                matches_other = any(
+                    any(kw in user_msg for kw in kws)
+                    for intent, kws in topic_intent_keywords.items()
+                    if intent not in topic_lower
+                )
+                if matches_other:
+                    misaligned_count += 1
+                    misaligned_by_topic[topic] = misaligned_by_topic.get(topic, 0) + 1
+
+        if misaligned_count > 0:
+            alignment_pct = (len(seed_records) - misaligned_count) * 100 // len(seed_records)
+            severity = "hard" if alignment_pct < 60 else "soft"
+            worst = sorted(misaligned_by_topic.items(), key=lambda x: -x[1])[:5]
+            issues.append({
+                "severity": severity,
+                "check": "seed_topic_alignment",
+                "message": (
+                    f"{misaligned_count}/{len(seed_records)} seed queries ({100 - alignment_pct}%) "
+                    f"don't match their assigned topic by surface intent. "
+                    f"Worst: {', '.join(f'{t} ({c} misaligned)' for t, c in worst)}. "
+                    f"Fix: reassign seeds by first action tool or filter by surface intent."
+                ),
+                "value": misaligned_count,
+                "alignment_pct": alignment_pct,
+                "worst_topics": dict(worst),
+            })
+
     hard_fails = [i for i in issues if i["severity"] == "hard"]
     soft_warns = [i for i in issues if i["severity"] == "soft"]
 
@@ -350,6 +441,9 @@ def gate_structural(records: list[dict], topics_data: list | None) -> dict:
             "ground_truth_coverage": round(gt_frac, 3),
             "topic_count": num_topics,
             "topic_distribution": dict(topic_counts.most_common()),
+            "seed_count": len(seed_records) if seed_records else 0,
+            "seed_alignment_pct": (len(seed_records) - misaligned_count) * 100 // max(len(seed_records), 1) if seed_records else None,
+            "duplicated_gt_records": duplicated_record_count,
         },
         "issues": issues,
     }

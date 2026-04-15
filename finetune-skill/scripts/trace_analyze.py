@@ -127,6 +127,66 @@ def extract_tool_calls_from_span(span: dict) -> list[str]:
     return tool_names
 
 
+def extract_trace_ground_truth(trace_spans: list[dict]) -> str | None:
+    """Derive a concise ground truth from a trace's tool calls and outcomes.
+
+    For GRPO, seed records need GT so the grader can score them. Without GT,
+    seeds become zero-variance prompts (arXiv:2509.21880 "No Prompt Left Behind").
+
+    GT format: "Action: <tool_name>. <key constraints from the trace>."
+    This is concise enough for grader scoring but specific to the trace.
+    """
+    action_tools: list[str] = []
+    tool_args: dict[str, dict] = {}
+
+    for span in trace_spans:
+        if not is_llm_chat_span(span):
+            continue
+        output_msgs = _attrs(span).get("gen_ai.output.messages") or []
+        for msg in output_msgs:
+            if not isinstance(msg, dict):
+                continue
+            for part in msg.get("parts") or []:
+                if not isinstance(part, dict) or part.get("type") != "tool_call":
+                    continue
+                name = part.get("name", "")
+                if not name or _classify_tool(name) != "action":
+                    continue
+                action_tools.append(name)
+                args = part.get("arguments") or part.get("args")
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args)
+                    except (json.JSONDecodeError, TypeError):
+                        args = {}
+                if isinstance(args, dict):
+                    tool_args[name] = args
+
+    if not action_tools:
+        return None
+
+    # Build GT from first action (matches topic assignment)
+    primary = action_tools[0]
+    gt_parts = [f"Action: {primary.replace('_', ' ')}"]
+
+    # Add key arguments as constraints (skip IDs, keep semantic params)
+    args = tool_args.get(primary, {})
+    semantic_keys = {"reason", "payment_method", "address", "item_ids", "new_item_ids"}
+    for key in sorted(args.keys()):
+        if key in semantic_keys and args[key]:
+            val = args[key]
+            if isinstance(val, list):
+                val = ", ".join(str(v) for v in val)
+            gt_parts.append(f"{key.replace('_', ' ')}: {val}")
+
+    # Add success/failure from trace
+    reward = get_trace_reward(trace_spans)
+    if reward is not None:
+        gt_parts.append("outcome: success" if reward >= 0.5 else "outcome: failed")
+
+    return ". ".join(gt_parts) + "."
+
+
 # ─── Trace reward / success detection ────────────────────────────────────────
 
 
@@ -168,35 +228,65 @@ def tool_name_to_topic(tool_name: str) -> str:
     return tool_name.lower().replace("_", "-")
 
 
-def trace_primary_topic(trace_spans: list[dict]) -> str | None:
-    """Determine the primary topic of a trace by its most "consequential" tool.
+def _classify_tool(tool_name: str) -> str:
+    """Classify a tool as 'action', 'lookup', or 'utility'."""
+    lower = tool_name.lower()
+    if any(lower.startswith(p) for p in ("get_", "find_", "list_", "search_")):
+        return "lookup"
+    if lower in ("think", "calculate"):
+        return "utility"
+    return "action"
 
-    Skips lookup/auth tools (get_*, find_*, list_*) and picks the first
-    action tool. Falls back to the most-called tool if no action tool found.
+
+def trace_primary_topic(trace_spans: list[dict]) -> str | None:
+    """Determine the primary topic of a trace by its FIRST action tool.
+
+    Uses the first action tool (not the last) because that reflects the
+    agent's response to the user's opening request. The last tool often
+    reflects conversation drift or follow-up requests, causing 45% of
+    seed queries to be misassigned (MINT-CL, arXiv:2411.14252).
+
+    Falls back to the most-called tool if no action tool found.
     """
-    tool_counts: Counter = Counter()
     action_tools: list[str] = []
+    fallback_tool: str | None = None
 
     for span in trace_spans:
         if not is_llm_chat_span(span):
             continue
         tools = extract_tool_calls_from_span(span)
         for t in tools:
-            tool_counts[t] += 1
-            lower = t.lower()
-            is_lookup = any(lower.startswith(p) for p in (
-                "get_", "find_", "list_", "search_",
-            ))
-            is_utility = lower in ("think", "calculate")
-            if not is_lookup and not is_utility:
+            if fallback_tool is None:
+                fallback_tool = t
+            if _classify_tool(t) == "action":
                 action_tools.append(t)
 
     if action_tools:
-        # Pick the last action tool (most consequential in the workflow)
-        return tool_name_to_topic(action_tools[-1])
-    if tool_counts:
-        return tool_name_to_topic(tool_counts.most_common(1)[0][0])
+        return tool_name_to_topic(action_tools[0])
+    if fallback_tool:
+        return tool_name_to_topic(fallback_tool)
     return None
+
+
+def trace_all_topics(trace_spans: list[dict]) -> list[str]:
+    """Extract ALL distinct action topics from a trace.
+
+    For multi-intent traces (user asks about return AND cancellation),
+    returns all action topics in order. Used to split multi-intent
+    traces into separate training examples.
+    """
+    seen: set[str] = set()
+    topics: list[str] = []
+    for span in trace_spans:
+        if not is_llm_chat_span(span):
+            continue
+        for t in extract_tool_calls_from_span(span):
+            if _classify_tool(t) == "action":
+                topic = tool_name_to_topic(t)
+                if topic not in seen:
+                    seen.add(topic)
+                    topics.append(topic)
+    return topics
 
 
 # ─── System prompt rule extraction ───────────────────────────────────────────
@@ -409,13 +499,14 @@ def build_trace_prompts(
 
     Quality pipeline (research-backed):
     1. Extract first user message per trace as the seed query
-    2. Assign to topic based on ACTION TAKEN (not stated intent) — standard
-       in task-oriented dialogue (DSTC, MultiWOZ). The model needs to learn
-       what action to take, not what the user thinks they want.
-    3. Deduplicate at 0.85 trigram similarity (SemDeDup, arXiv:2303.09540)
-    4. Multi-intent queries kept intact — valuable hard examples
-       (arXiv:2508.14094: hard examples yield 47% gains)
-    5. Store user_surface_intent metadata for grader context
+    2. Assign to topic based on FIRST ACTION TOOL (not last) — the first
+       action reflects the agent's response to the user's opening request.
+       Last-action assignment causes 45% misalignment (MINT-CL, arXiv:2411.14252).
+    3. Surface-intent validation: filter seeds where the user's stated intent
+       clearly doesn't match the assigned topic (prevents cross-topic pollution)
+    4. Deduplicate at 0.85 trigram similarity (SemDeDup, arXiv:2303.09540)
+    5. Extract GT from trace agent response for reward signal
+       ("No Prompt Left Behind", arXiv:2509.21880 — zero-GT wastes compute)
     """
     # Extract system prompt from the first trace
     system_prompt = ""
@@ -424,27 +515,61 @@ def build_trace_prompts(
         if system_prompt:
             break
 
-    # Intent keywords for surface-intent detection
-    intent_keywords: dict[str, list[str]] = {
-        "cancel": ["cancel", "cancellation"],
-        "return": ["return", "refund", "send back"],
-        "exchange": ["exchange", "swap", "replace", "different"],
-        "modify": ["modify", "change", "update", "switch"],
-        "address": ["address", "shipping", "delivery"],
-        "payment": ["payment", "pay", "card", "gift card"],
+    # Topic-keyword mapping for surface-intent validation.
+    # Seeds where user intent clearly contradicts assigned topic are filtered.
+    topic_intent_keywords: dict[str, list[str]] = {
+        "cancel-pending-order": ["cancel", "cancellation", "don't want"],
+        "return-delivered-order-items": ["return", "refund", "send back"],
+        "exchange-delivered-order-items": ["exchange", "swap size", "different size", "different color"],
+        "modify-pending-order-items": ["change item", "modify item", "swap item", "replace item"],
+        "modify-pending-order-address": ["address", "shipping address", "delivery address"],
+        "modify-pending-order-payment": ["payment", "credit card", "gift card", "pay with"],
+        "modify-user-address": ["default address", "home address", "update address"],
+        "find-user-id-by-email": ["email"],
+        "find-user-id-by-name-zip": ["name", "zip"],
+        "get-order-details": ["order status", "where is my order", "track"],
+        "get-product-details": ["product", "price", "specification", "feature"],
+        "transfer-to-human-agents": ["human", "agent", "supervisor", "escalat", "transfer", "speak to"],
     }
+
+    def _intent_matches_topic(query: str, topic: str) -> bool:
+        """Check if user query's surface intent is compatible with topic.
+
+        Returns True if: (a) we have no keywords for this topic (unknown topic),
+        (b) the query mentions keywords for this topic, or (c) the query is
+        generic ("help", "hi") with no specific intent signal.
+        """
+        keywords = topic_intent_keywords.get(topic)
+        if not keywords:
+            return True  # Unknown topic — don't filter
+        q = query.lower()
+        # Check if query matches THIS topic's keywords
+        if any(kw in q for kw in keywords):
+            return True
+        # Check if query matches ANY other topic's keywords
+        matches_other = False
+        for other_topic, other_kws in topic_intent_keywords.items():
+            if other_topic != topic and any(kw in q for kw in other_kws):
+                matches_other = True
+                break
+        # If query matches another topic clearly, it's misassigned
+        if matches_other:
+            return False
+        # Generic query (no specific intent detected) — keep it
+        return True
 
     def detect_surface_intent(query: str) -> list[str]:
         """Detect user's stated intent from query text."""
         q = query.lower()
-        intents = []
-        for intent, keywords in intent_keywords.items():
+        intents: list[str] = []
+        for intent, keywords in topic_intent_keywords.items():
             if any(kw in q for kw in keywords):
                 intents.append(intent)
         return intents or ["general"]
 
-    # Collect user queries grouped by topic (action-based assignment)
+    # Collect user queries grouped by topic (first-action-based assignment)
     topic_queries: dict[str, list[dict]] = defaultdict(list)
+    intent_filtered = 0
     for trace_id, spans in traces.items():
         topic = trace_primary_topic(spans)
         if not topic:
@@ -453,13 +578,26 @@ def build_trace_prompts(
         if not queries:
             continue
         query = queries[0]  # First user message
+
+        # Surface-intent validation: filter seeds that clearly don't match
+        if not _intent_matches_topic(query, topic):
+            intent_filtered += 1
+            continue
+
+        # Extract GT from trace (arXiv:2509.21880 — seeds without GT waste compute)
+        ground_truth = extract_trace_ground_truth(spans)
+
         surface_intents = detect_surface_intent(query)
         is_multi_intent = len(surface_intents) > 1
         topic_queries[topic].append({
             "query": query,
             "surface_intents": surface_intents,
             "is_multi_intent": is_multi_intent,
+            "ground_truth": ground_truth,
         })
+
+    if intent_filtered:
+        print(f"  Filtered {intent_filtered} seeds where surface intent contradicts assigned topic")
 
     # Deduplicate and cap per topic
     seed_queries: dict[str, list[str]] = {}
@@ -494,6 +632,7 @@ def build_trace_prompts(
         "seed_metadata": seed_metadata,
         "total_seed_queries": total_seeds,
         "near_duplicates_removed": dedup_removed,
+        "intent_filtered": intent_filtered,
         "topics_with_seeds": len(seed_queries),
     }
 

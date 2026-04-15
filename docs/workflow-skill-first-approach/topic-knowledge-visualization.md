@@ -105,7 +105,7 @@ function mergeRelationsIntoHierarchy(
 
 **Important detail on ref format:**
 - Lucy path stores refs as `"sourceId:chunkId"` (composite string)
-- Relations bridge table stores `topic_id` and `source_part_id` separately (both are UUIDs)
+- Relations bridge table stores `topic_id` and `source_part_id` separately (both are gateway UUIDs; skill files use slugs that are mapped to UUIDs at the upload boundary)
 - The merge function needs to handle both formats, or we standardize on one
 - Simplest: store just `partId` from relations, and resolve the `sourceId` at render time by scanning `KnowledgeSourcesContext.sources` (each source has `.parts[]` with `.id`)
 
