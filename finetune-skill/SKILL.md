@@ -443,7 +443,16 @@ echo "High-failure areas: $TOP_FAILURES"
 
 **3a. Filter parts by relevance.** Read content of each part — do NOT pattern-match on titles alone. Label `"relevant": true/false` in `all-parts-index.json`.
 
-**3b. Design skill-based topics.** Organize by **skill** (what the model learns to DO), not document structure. Two-level hierarchy: Domain → Skill. Target 15-25 records per leaf topic, 5-40 leaf topics. Do NOT use `/` in topic names (breaks UI routing).
+**3b. Design skill-based topics.** Organize by **skill** (what the model learns to DO), not document structure. **MANDATORY: Use nested JSON with `"children"` arrays** — the UI needs the hierarchy for collapsible groups. Write at least one parent group containing leaf skills. Do NOT write a flat list of topics.
+
+```json
+[{"id": "order-management", "name": "Order Management", "children": [
+  {"id": "cancel-pending-order", "name": "Cancel Pending Order", "category": "single:cancel"},
+  {"id": "modify-order-items", "name": "Modify Order Items", "category": "single:modify"}
+]}]
+```
+
+Target 15-25 records per leaf topic, 5-40 leaf topics. Do NOT use `/` in topic names (breaks UI routing).
 
 **Topic ID format: human-readable slugs.** Use the slug as the `"id"` field in `topics.json` (e.g., `"cancel-pending-order"`, `"fork-detection"`). Do NOT generate UUIDs — the gateway assigns UUIDs at upload time. All local files (`topics.json`, `relations.json`, `training.jsonl`, `priority.json`) use the same slug as the topic identifier. This keeps files self-consistent and human-debuggable. The slug must be unique within a workflow.
 

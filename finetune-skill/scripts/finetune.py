@@ -344,9 +344,16 @@ def cmd_upload_knowledge(args: argparse.Namespace) -> None:
     # Always check for existing sources with same name to prevent duplicates.
     # The gateway's knowledge source endpoint does plain INSERT (no upsert),
     # so retrying without this check creates duplicate sources.
+    # Match by name with or without file extension (agents inconsistently use both).
     existing = _api("GET", f"{args.base_url}/finetune/workflows/{args.workflow_id}/knowledge")
     existing_sources = existing if isinstance(existing, list) else existing.get("knowledge_sources", existing.get("sources", []))
-    matching = [s for s in existing_sources if s.get("name") == source_name]
+    source_stem = Path(source_name).stem  # "doc.pdf" → "doc"
+    matching = [
+        s for s in existing_sources
+        if s.get("name") == source_name
+        or s.get("name") == source_stem
+        or Path(s.get("name", "")).stem == source_stem
+    ]
 
     if matching and args.force:
         deleted = _delete_existing_knowledge_by_name(

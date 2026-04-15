@@ -291,11 +291,24 @@ def load_all_parts(knowledge_dir: Path) -> dict[str, dict]:
         try:
             index_data = json.loads(index_path.read_text())
             index_parts = index_data.get("parts", index_data) if isinstance(index_data, dict) else index_data
+            # Normalize relevance values: agents may write bool, int, float, or string.
+            # Treat as irrelevant: False, 0, "false", "no", scores < 0.5
+            def _is_relevant(val: object) -> bool:
+                if val is None:
+                    return True  # No label = assume relevant
+                if isinstance(val, bool):
+                    return val
+                if isinstance(val, (int, float)):
+                    return val >= 0.5
+                if isinstance(val, str):
+                    return val.lower() not in ("false", "no", "0", "irrelevant")
+                return True
+
             relevance_map = {p["id"]: p.get("relevant") for p in index_parts if "id" in p}
 
             # Filter out irrelevant parts
             before_count = len(parts)
-            parts = {pid: p for pid, p in parts.items() if relevance_map.get(pid) is not False}
+            parts = {pid: p for pid, p in parts.items() if _is_relevant(relevance_map.get(pid))}
             excluded = before_count - len(parts)
             if excluded > 0:
                 print(f"  Filtered out {excluded} irrelevant parts (relevant=false in all-parts-index.json)")
