@@ -135,6 +135,7 @@ import {
 } from "./TabContentRouter";
 import { TraceAnalysisView } from "./trace-analysis/TraceAnalysisView";
 import { PipelineAnalysisView } from "./pipeline-analysis/PipelineAnalysisView";
+import { TraceInfluenceView } from "./trace-influence/TraceInfluenceView";
 import { InsightsPane } from "./InsightsPane";
 import { SkillFileViewer } from "./SkillFileViewer";
 import { KnowledgeSourceViewer } from "./KnowledgeSourceViewer";
@@ -1087,6 +1088,11 @@ export function DatasetDetailContentV2() {
           {contentSection === "trace-analysis" && (
             <div className="flex-1 flex flex-col overflow-hidden">
               <TraceAnalysisView initialTab={getTraceAnalysisTab(activeTabPath)} />
+            </div>
+          )}
+          {contentSection === "trace-influence" && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <TraceInfluenceView />
             </div>
           )}
           {contentSection === "pipeline-analysis" && (

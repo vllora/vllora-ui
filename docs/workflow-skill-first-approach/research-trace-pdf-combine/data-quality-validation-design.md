@@ -1,8 +1,25 @@
 # Data Quality Validation Design
 
 > **Purpose**: Automated semantic quality validation for generated training data.
-> **Problem**: Structural checks (counts, format) pass but 45% of seed queries are assigned to wrong topics, 17% of records have no GT, and GTs are duplicated. These issues were only caught by manual inspection.
+> **Problem**: Structural checks (counts, format) pass but 45% of seed queries are assigned to wrong topics, 17% of records have no GT, GTs are duplicated, and the system prompt/objective/topic-prompts were not influenced by traces. These issues were only caught by manual inspection.
 > **Date**: 2026-04-15
+> **Updated**: 2026-04-15 — added trace-influence requirements for system prompt, objective, and topic prompts
+
+## Trace Influence Requirements (Combined Mode)
+
+In combined mode (PDFs + OTel traces), traces are production truth. ALL pipeline components must be influenced by traces:
+
+| Component | Must be trace-influenced? | How |
+|-----------|--------------------------|-----|
+| **Objective** | YES | Reference trace failure rates and high-frequency actions |
+| **System prompt** | YES (MANDATORY) | Use `simplified_prompt` from `prompts.json` — the actual production prompt |
+| **Per-topic prompts** | YES | High-failure topics (>30%) must address failure patterns from `grader-hints.json` |
+| **Topic hierarchy** | YES (already done) | Topics discovered from traces + PDF coverage |
+| **Record allocation** | YES (already done) | `--weight-by-trace-priority` |
+| **Seed queries** | YES (already done) | First-action assignment + surface-intent filter |
+| **Grader** | YES (already done) | `grader_from_traces.py` uses failure dimensions |
+
+**Why the system prompt must match production:** Using a different system prompt creates distribution shift. The model learns behaviors keyed to training-time instructions that won't match inference-time instructions. This is the same problem as training on one tokenizer and deploying with another — the mapping breaks.
 
 ## Research Summary
 

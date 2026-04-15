@@ -258,6 +258,16 @@ Follow its recommendation. (3) Sync jobs: `sync-jobs --workflow-id $WORKFLOW_ID 
 
 Ask the user what behaviors the model should learn. Produce an **objective statement** and a **system prompt** ("You are...") for Step 4.
 
+**Combined mode — trace-informed objective:** In Step 1, use a placeholder objective (e.g., "Train a retail CS agent"). After Step 2C (trace analysis), **UPDATE the objective** with trace findings by reading `trace-analysis/priority.json` and running:
+```bash
+# Update objective with trace insights (after Step 2C)
+TOP_FAILURES=$(python3 -c "import json; p=json.load(open('finetune-project/trace-analysis/priority.json')); items=sorted(p.items(),key=lambda x:x[1].get('failure_rate',0),reverse=True)[:3]; print(', '.join(f'{t} ({int(v[\"failure_rate\"]*100)}% failure)' for t,v in items))")
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-workflow \
+  --workflow-id $WORKFLOW_ID \
+  --objective "Train a model focusing on high-failure areas: $TOP_FAILURES — the highest-failure actions in production traces."
+```
+The objective should reference: (1) what actions users actually perform, (2) which actions fail most, (3) what the model needs to improve.
+
 **Auto-detect input mode:** Check the user's project folder for available inputs:
 
 ```bash
@@ -386,11 +396,33 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/upload_trace_analysis.py \
 ```
 This uploads: (1) the trace bundle as a knowledge source (appears in UI Sources view), (2) the 4 trace analysis artifacts to the trace-analysis endpoint (appears in UI Topics/Grader views).
 
+**MANDATORY: Write trace influence summary to analysis.json** (users see this in the Training Impact view). Do NOT skip this step — the UI shows empty Training Impact without it:
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py update-analysis \
+  --project-dir finetune-project --section trace-influence --status ready \
+  --summary "Production traces shaped your training in 5 ways." \
+  --assessment "1. System prompt: using the actual production prompt (not a custom one). 2. Topics: N topics from traces, M from documents. 3. Record allocation: high-failure topics get more examples (e.g., address-modify gets 50 vs payment-modify gets 25). 4. Seed queries: N real customer questions injected. 5. Grader: N failure dimensions from production errors." \
+  --metrics '{"trace_count": N, "system_prompt_source": "trace", "topics_from_traces": N, "seed_queries": N, "grader_dimensions_from_traces": N, "high_failure_topics": ["topic1", "topic2"]}'
+```
+
+**Update the workflow objective** with trace findings (Step 1 used a placeholder):
+```bash
+TOP_FAILURES=$(python3 -c "import json; p=json.load(open('finetune-project/trace-analysis/priority.json')); items=sorted(p.items(),key=lambda x:x[1].get('failure_rate',0),reverse=True)[:3]; print(', '.join(f'{t} ({int(v[\"failure_rate\"]*100)}% failure)' for t,v in items))")
+echo "High-failure areas: $TOP_FAILURES"
+```
+
 **Present the trace analysis summary to the user** before proceeding:
 - Show the priority table (top 5 high-priority and bottom 3 low-priority topics)
 - Flag any coverage gaps (topics in traces but not in PDFs)
 - Show the simplified production system prompt
 - Ask if the user wants to adjust priorities before proceeding
+
+**Step 2C completion checklist** (all must be done before Step 3):
+- [ ] 4 trace analysis artifacts in `trace-analysis/`
+- [ ] Trace data uploaded to gateway
+- [ ] `analysis.json` has `trace-influence` section (MANDATORY)
+- [ ] Objective updated with trace failure rates
+- [ ] Summary presented to user
 
 ---
 
@@ -422,6 +454,8 @@ This uploads: (1) the trace bundle as a knowledge source (appears in UI Sources 
 > See [reference/topic-hierarchy.md](reference/topic-hierarchy.md) for full guidelines, JSON format, and examples.
 
 **3c. Write behavioral system prompt segments.** Root persona → Domain context → Leaf focus. Each level adds ONLY what the parent doesn't say. Use action verbs (assess, recommend, identify), not keyword lists.
+
+**Combined mode — trace-informed topic prompts:** In combined mode, per-topic system prompts MUST incorporate trace failure patterns. Read `trace-analysis/priority.json` for each topic's failure rate. For high-failure topics (>30%), the system prompt segment should specifically address the failure patterns — emphasize the exact procedures that fail in production. For example, if `modify-pending-order-address` has 59% failure rate, its prompt should explicitly state the validation steps, required fields, and common error conditions that cause failures. Read `trace-analysis/grader-hints.json` for specific failure dimensions to address.
 
 **3d. Build topic-part relations.** Delegate to `relation-builder` subagent. Upload:
 ```bash
@@ -463,7 +497,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
 
 **Combined mode — trace-informed generation:** If trace artifacts exist from Step 2C, add these flags.
 
-**CRITICAL: System prompt length.** The `--system-prompt` must be SHORT (100-300 chars) — just the role and key constraints. Do NOT paste the full production prompt or the full policy document. The knowledge lives in the source parts, not the system prompt. In combined mode, use the `simplified_prompt` from `trace-analysis/prompts.json` as the base, or write a concise one:
+**CRITICAL: System prompt MUST match production.** In combined mode, the `--system-prompt` MUST be the `simplified_prompt` from `trace-analysis/prompts.json` — this is the actual production prompt the model will see at inference time. Do NOT write your own prompt. Using a different prompt creates distribution shift: the model learns behaviors keyed to training-time instructions that won't match inference. In PDF-only mode (no traces), write a concise prompt (100-300 chars).
 
 ```bash
 # Read the simplified prompt from trace analysis

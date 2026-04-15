@@ -172,6 +172,59 @@ PROMPT_TYPES_HARD = [
     },
 ]
 
+# Prompt types biased toward hard scenarios — used automatically for topics
+# with high failure rates (>0.3) when trace priority data is available.
+# Research: arXiv:2508.14094 ("Hard Examples Are All You Need") — training
+# on hard examples yields 47% improvement. GRPO learns most from prompts
+# where the model succeeds 20-60% of the time (high variance).
+PROMPT_TYPES_HIGH_FAILURE = [
+    {
+        "name": "scenario",
+        "weight": 0.35,
+        "temperature": 0.9,
+        "instruction": (
+            "Generate {n} user prompts that present REALISTIC SCENARIOS or "
+            "situations requiring advice. Frame as: \"I'm dealing with...\", "
+            "\"My situation is...\", \"I need to...\". Include specific details "
+            "(names, numbers, dates, conditions) to make them concrete. "
+            "Vary the user's emotion: neutral, confused, frustrated, curious."
+        ),
+    },
+    {
+        "name": "edge_case",
+        "weight": 0.30,
+        "temperature": 1.0,
+        "instruction": (
+            "Generate {n} user prompts covering EDGE CASES, exceptions, and "
+            "unusual situations. These test the model's depth: \"What happens if...\", "
+            "\"Is it possible to...\", \"What's the exception when...\", "
+            "\"How do you handle the case where...\". Target uncommon but valid "
+            "scenarios from the source material."
+        ),
+    },
+    {
+        "name": "application",
+        "weight": 0.20,
+        "temperature": 0.85,
+        "instruction": (
+            "Generate {n} user prompts that require APPLYING knowledge to solve "
+            "a problem or complete a task. Frame as step-by-step requests: "
+            "\"Walk me through how to...\", \"Help me figure out...\", "
+            "\"Given this situation, what should I do?\". Make them multi-step."
+        ),
+    },
+    {
+        "name": "explain",
+        "weight": 0.15,
+        "temperature": 0.7,
+        "instruction": (
+            "Generate {n} user prompts that ask the model to EXPLAIN concepts "
+            "or processes. Foundational questions: \"What is...\", \"How does...\", "
+            "\"Explain the concept of...\". Vary difficulty from beginner to advanced."
+        ),
+    },
+]
+
 # Default to normal mode; --difficulty flag switches to hard
 PROMPT_TYPES = PROMPT_TYPES_NORMAL
 
@@ -185,22 +238,33 @@ def load_relations(relations_path: Path, topics: list[dict] | None = None) -> li
     data = json.loads(relations_path.read_text())
     relations = data if isinstance(data, list) else data.get("relations", [])
     # Normalize key names: accept both topic_id/part_id and topic_identifier/part_identifier.
-    # Agents may generate either format depending on how they read the schema.
     for r in relations:
         if "topic_id" in r and "topic_identifier" not in r:
             r["topic_identifier"] = r.pop("topic_id")
         if "part_id" in r and "part_identifier" not in r:
             r["part_identifier"] = r.pop("part_id")
 
-    # Normalize topic_identifier: if relations use topic names instead of IDs,
-    # remap to IDs so downstream matching works. Agents may write either format
-    # (e.g., "Milk Detection" vs "milk-detection").
+    # Topic IDs in local files are human-readable slugs (e.g., "cancel-pending-order").
+    # UUIDs only exist at the gateway layer. If an agent accidentally writes a UUID or
+    # variant format, try to remap to the slug from topics.json.
     if topics:
+        valid_ids = {t["id"] for t in topics if "id" in t}
         name_to_id = {t["name"]: t["id"] for t in topics if "name" in t and "id" in t}
+        orphaned = 0
         for r in relations:
             tid = r.get("topic_identifier", "")
-            if tid and tid not in {t["id"] for t in topics} and tid in name_to_id:
+            if not tid or tid in valid_ids:
+                continue
+            if tid in name_to_id:
                 r["topic_identifier"] = name_to_id[tid]
+            else:
+                orphaned += 1
+        if orphaned:
+            print(
+                f"Warning: {orphaned} relations reference topic IDs not in topics.json "
+                f"(could not remap). These relations will be ignored.",
+                file=sys.stderr,
+            )
 
     return relations
 
@@ -1053,6 +1117,7 @@ def generate_for_topic(
     enrich_sources: bool = False,
     topic_prompt_types: list[dict] | None = None,
     seed_queries: list[str] | None = None,
+    seed_metadata: list[dict] | None = None,
     seed_query_ratio: float = 0.20,
 ) -> list[dict]:
     """Generate records for a single leaf topic via multiple parallel LLM calls.
@@ -1062,6 +1127,9 @@ def generate_for_topic(
     user queries as-is instead of LLM-generated prompts. This improves
     training data realism (DCLM arXiv:2406.11794: 10-30% curated data in
     synthetic-heavy mix optimizes generalization).
+
+    If ``seed_metadata`` is provided, each seed's ground_truth is extracted
+    from the original trace (arXiv:2509.21880: zero-GT wastes GRPO compute).
 
     Seed queries are inserted as "scenario" prompt type records and
     prioritized (placed first, never trimmed).
@@ -1084,9 +1152,20 @@ def generate_for_topic(
     # produces hallucinated questions — the same problem as blind-question-first
     # (arXiv:2509.25736). Better to skip and warn than produce bad data.
     if not chunks:
+        # Diagnostic: check if relations exist but reference different topic IDs
+        all_rel_tids = {r["topic_identifier"] for r in relations}
+        hint = ""
+        if all_rel_tids and topic["id"] not in all_rel_tids:
+            sample = list(all_rel_tids)[:3]
+            hint = (
+                f" Relations use IDs like {sample} but this topic is "
+                f"'{topic['id']}' — ID mismatch. Ensure relations.json "
+                f"uses the same slug IDs as topics.json."
+            )
         print(
-            f"  ⚠ SKIPPED topic '{topic.get('name', topic['id'])}': "
-            f"no source parts found (0 relations, 0 RAG parts). "
+            f"  ⚠ SKIPPED topic '{topic['id']}': "
+            f"no source parts found ({len(part_ids)} relations, "
+            f"{len(rag_part_ids)} RAG parts).{hint} "
             f"Add relations via relation-builder or use --use-rag.",
             file=sys.stderr,
         )
@@ -1141,7 +1220,7 @@ def generate_for_topic(
             if r["topic_identifier"] == topic["id"]
         ]
         for i, query in enumerate(seed_queries[:seed_budget]):
-            seed_records.append({
+            record = {
                 "messages": [
                     {"role": "system", "content": composed_prompt},
                     {"role": "user", "content": query},
@@ -1150,7 +1229,14 @@ def generate_for_topic(
                 "topic": topic["id"],
                 "source_parts": list(all_source_parts_for_seeds),
                 "prompt_type": "seed_query",
-            })
+            }
+            # Add ground truth from trace metadata if available
+            # (arXiv:2509.21880: seeds without GT become zero-variance prompts)
+            if seed_metadata and i < len(seed_metadata):
+                meta = seed_metadata[i]
+                if isinstance(meta, dict) and meta.get("ground_truth"):
+                    record["ground_truth"] = meta["ground_truth"]
+            seed_records.append(record)
         if seed_records:
             print(f"    Injected {len(seed_records)} seed queries (from traces)")
 
@@ -1358,8 +1444,8 @@ def main() -> None:
         help="Target records per leaf topic (default: 25). Equal across all topics unless --weight-by-source is set.",
     )
     parser.add_argument(
-        "--min-per-topic", type=int, default=10,
-        help="Minimum records per topic regardless of weighting (default: 10)",
+        "--min-per-topic", type=int, default=25,
+        help="Minimum records per topic regardless of weighting (default: 25, matches quality gate threshold)",
     )
     parser.add_argument(
         "--max-per-topic", type=int, default=50,
@@ -1540,15 +1626,37 @@ def main() -> None:
             sys.exit(1)
         eval_scores = load_eval_scores(eval_scores_path)
 
-    # Load trace seed queries if provided
+    # Load trace seed queries + metadata (including ground truth from traces)
     trace_seed_queries: dict[str, list[str]] | None = None
+    trace_seed_metadata: dict[str, list[dict]] | None = None
     if getattr(args, 'trace_prompts_file', None):
         trace_prompts_path = Path(args.trace_prompts_file)
         if trace_prompts_path.exists():
             trace_prompts_data = json.loads(trace_prompts_path.read_text())
             trace_seed_queries = trace_prompts_data.get("seed_queries", {})
+            trace_seed_metadata = trace_prompts_data.get("seed_metadata", {})
             total_seeds = sum(len(v) for v in trace_seed_queries.values())
+            seeds_with_gt = sum(
+                1 for metas in (trace_seed_metadata or {}).values()
+                for m in metas if isinstance(m, dict) and m.get("ground_truth")
+            )
             print(f"Loaded {total_seeds} trace seed queries across {len(trace_seed_queries)} topics")
+            if seeds_with_gt:
+                print(f"  {seeds_with_gt} seeds have trace-derived ground truth")
+
+            # Enforce trace production prompt as system prompt.
+            # Using a different prompt creates distribution shift between training
+            # and inference — the model learns behaviors keyed to instructions it
+            # won't see in production.
+            trace_simplified = trace_prompts_data.get("simplified_prompt", "")
+            if trace_simplified:
+                if args.system_prompt != trace_simplified:
+                    print(
+                        f"  ⚠ OVERRIDING --system-prompt with trace production prompt "
+                        f"({len(trace_simplified)} chars). Training must use the same "
+                        f"prompt the model will see at inference time.",
+                    )
+                    args.system_prompt = trace_simplified
         else:
             print(f"Warning: Trace prompts file not found: {trace_prompts_path}", file=sys.stderr)
 
@@ -1727,27 +1835,68 @@ def main() -> None:
                 topic_difficulty_modes[tid] = PROMPT_TYPES_NORMAL
                 print(f"  {tid}: NORMAL mode (base score={score:.2f})")
 
-    # Look up seed queries for a topic from trace_prompts.json
-    def _get_seed_queries(topic_id: str) -> list[str] | None:
+    # Look up seed queries + metadata for a topic from trace_prompts.json.
+    # Topic IDs are human-readable slugs (e.g., "cancel-pending-order") that match
+    # trace data keys directly — no UUID↔name mapping needed.
+    def _get_seed_queries(topic_id: str) -> tuple[list[str] | None, list[dict] | None]:
+        """Returns (queries, metadata) tuple. Metadata includes ground_truth from traces."""
         if not trace_seed_queries:
-            return None
-        # Normalize for matching (topic IDs may use underscores, traces use hyphens)
+            return None, None
         normalized = topic_id.lower().replace("_", "-").strip()
         queries = trace_seed_queries.get(normalized)
+        metadata = (trace_seed_metadata or {}).get(normalized) if trace_seed_metadata else None
         if queries:
-            return queries
+            return queries, metadata
         # Try matching by substring (e.g., topic "cancel" matches trace "cancel-pending-order")
         for trace_topic, qs in trace_seed_queries.items():
             if normalized in trace_topic or trace_topic in normalized:
-                return qs
-        return None
+                meta = (trace_seed_metadata or {}).get(trace_topic) if trace_seed_metadata else None
+                return qs, meta
+        return None, None
 
     seed_ratio = getattr(args, 'seed_query_ratio', 0.20)
+
+    # Build failure rate lookup from trace priority (for prompt type biasing)
+    topic_failure_rates: dict[str, float] = {}
+    if trace_priority_scores:
+        # trace_priority_scores is {topic: priority_score} but we need failure_rate
+        # Re-read the full priority file for failure rates
+        if getattr(args, 'trace_priority_file', None):
+            try:
+                full_priority = json.loads(Path(args.trace_priority_file).read_text())
+                for topic, info in full_priority.items():
+                    if isinstance(info, dict):
+                        normalized = topic.lower().replace("_", "-").strip()
+                        topic_failure_rates[normalized] = info.get("failure_rate", 0.0)
+            except (json.JSONDecodeError, OSError):
+                pass
+
+    # Adaptive failure threshold: top 1/3 of topics by failure rate get harder prompts.
+    # This works for any dataset, not just retail (which happens to have 0.3+ for most topics).
+    failure_threshold = 0.3  # default
+    if topic_failure_rates:
+        sorted_rates = sorted(topic_failure_rates.values(), reverse=True)
+        if sorted_rates:
+            # Top 1/3 cutoff — at least the top third get harder prompts
+            cutoff_idx = max(1, len(sorted_rates) // 3)
+            failure_threshold = sorted_rates[min(cutoff_idx, len(sorted_rates) - 1)]
+            failure_threshold = max(failure_threshold, 0.1)  # minimum 10% to avoid everything being "hard"
+            print(f"Trace-informed prompt types: failure_threshold={failure_threshold:.2f} "
+                  f"({sum(1 for r in sorted_rates if r >= failure_threshold)}/{len(sorted_rates)} topics get harder prompts)")
 
     # Pass per-topic prompt types into common_kwargs for generate_for_topic
     def _get_topic_prompt_types(topic_id: str) -> list[dict] | None:
         if args.difficulty == "adaptive" and topic_id in topic_difficulty_modes:
             return topic_difficulty_modes[topic_id]
+        # Trace-informed: high-failure topics get more edge_case/scenario prompts
+        # Research: arXiv:2508.14094 — hard examples yield 47% gains
+        # Threshold is adaptive: top 1/3 of topics by failure rate get harder prompts
+        # This works for any dataset, not just our retail demo
+        if topic_failure_rates:
+            normalized = topic_id.lower().replace("_", "-").strip()
+            failure_rate = topic_failure_rates.get(normalized, 0.0)
+            if failure_rate > failure_threshold:
+                return PROMPT_TYPES_HIGH_FAILURE
         return None  # Use global PROMPT_TYPES
 
     if parallel <= 1:
@@ -1762,11 +1911,13 @@ def main() -> None:
             if topic_rag_parts:
                 print(f"(RAG: +{len(topic_rag_parts)} parts) ", end="", flush=True)
 
+            topic_seeds, topic_seed_meta = _get_seed_queries(topic["id"])
             records = generate_for_topic(
                 topic=topic, ancestors=ancestors, records_per_topic=rpt,
                 rag_parts=topic_rag_parts,
                 topic_prompt_types=_get_topic_prompt_types(topic["id"]),
-                seed_queries=_get_seed_queries(topic["id"]),
+                seed_queries=topic_seeds,
+                seed_metadata=topic_seed_meta,
                 seed_query_ratio=seed_ratio,
                 **common_kwargs,
             )
@@ -1790,11 +1941,13 @@ def main() -> None:
             ancestor_path = " > ".join(a["name"] for a in ancestors)
             path_display = f"{ancestor_path} > {topic['name']}" if ancestors else topic["name"]
             topic_rag_parts = _get_rag_parts(topic, ancestors)
+            topic_seeds, topic_seed_meta = _get_seed_queries(topic["id"])
             records = generate_for_topic(
                 topic=topic, ancestors=ancestors, records_per_topic=rpt,
                 rag_parts=topic_rag_parts,
                 topic_prompt_types=_get_topic_prompt_types(topic["id"]),
-                seed_queries=_get_seed_queries(topic["id"]),
+                seed_queries=topic_seeds,
+                seed_metadata=topic_seed_meta,
                 seed_query_ratio=seed_ratio,
                 **common_kwargs,
             )

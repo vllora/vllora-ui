@@ -28,12 +28,17 @@ import {
   BookOpen,
   Database,
   FlaskConical,
+  Layers,
+  MessageSquare,
   ScrollText,
+  TrendingUp,
   Upload,
+  Zap,
 } from "lucide-react";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { PipelineAnalysisConsumer } from "@/contexts/PipelineAnalysisContext";
+import { TraceAnalysisConsumer } from "@/contexts/TraceAnalysisContext";
 import { SectionInsight } from "./SectionInsight";
 import { EvalJobsConsumer } from "@/contexts/EvalJobsContext";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
@@ -82,7 +87,7 @@ interface DatasetExplorerProps {
 export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
   const { dataset, records, isGeneratingTraces, totalRecords } = DatasetDetailConsumer();
   const { sources } = KnowledgeSourcesConsumer();
-  // TraceAnalysis is now displayed inside OTel source viewer tabs (not sidebar)
+  const { hasTraces } = TraceAnalysisConsumer();
   const { getSection } = PipelineAnalysisConsumer();
   const { jobs: dryRunJobs, startDryRun } = EvalJobsConsumer();
   const { filteredJobs: finetuneJobs, loadJobs: loadFinetuneJobs } = FinetuneJobsConsumer();
@@ -302,7 +307,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
   return (
     <div className="flex flex-col h-full min-h-0 overflow-y-auto py-4">
-      {/* ── Source Documents ── */}
+      {/* ── Source Materials — grouped by type ── */}
       {sources.length > 0 && (
         <SidebarSection title="Source Materials" icon={<BookOpen className="w-3 h-3" />} count={sources.length}>
           {getSection("sources") && <SectionInsight analysis={getSection("sources")!} />}
@@ -313,23 +318,100 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
             isActive={selectedNodeId === "knowledge/all-sources"}
             onClick={() => handleSelect("knowledge/all-sources")}
           />
-          {sources.map((src) => (
-            <SidebarItem
-              key={src.id}
-              icon={<FileText className="w-3.5 h-3.5" />}
-              label={src.name}
-              badge={<CountBadge count={src.parts.length} />}
-              isActive={selectedNodeId === `knowledge/${src.id}`}
-              isNested
-              onClick={() => handleSelect(`knowledge/${src.id}`)}
-            />
-          ))}
+          {(() => {
+            const docSources = sources.filter((s) => !s.traceBundleId);
+            const traceSources = sources.filter((s) => !!s.traceBundleId);
+            const showDocHeader = docSources.length > 1;
+            const showTraceHeader = traceSources.length > 1;
+            let traceChildrenRendered = false;
+
+            // Trace analysis child items (only for trace sources)
+            const traceChildren = [
+              { id: "trace-influence", label: "Training Impact", icon: <Layers className="w-3 h-3 shrink-0" /> },
+              { id: "trace-analysis/priority", label: "Priority & Coverage", icon: <TrendingUp className="w-3 h-3 shrink-0" /> },
+              { id: "trace-analysis/grader-hints", label: "Grader Hints", icon: <Zap className="w-3 h-3 shrink-0" /> },
+              { id: "trace-analysis/seed-queries", label: "Seed Queries", icon: <MessageSquare className="w-3 h-3 shrink-0" /> },
+            ];
+
+            const renderTraceChildren = () => {
+              if (traceChildrenRendered || !hasTraces) return null;
+              traceChildrenRendered = true;
+              return traceChildren.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={cn(
+                    "flex items-center gap-2 w-full text-left text-[13px] py-1.5 pr-4 transition-colors",
+                    showTraceHeader ? "pl-[72px]" : "pl-14",
+                    selectedNodeId === item.id
+                      ? "bg-[rgba(var(--theme-500),0.1)] text-[rgb(var(--theme-500))]"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                  )}
+                  onClick={() => handleSelect(item.id)}
+                >
+                  {item.icon}
+                  <span className="truncate">{item.label}</span>
+                </button>
+              ));
+            };
+
+            return (
+              <>
+                {/* Document sources */}
+                {docSources.length > 0 && (
+                  <>
+                    {showDocHeader && (
+                      <div className="px-6 pt-3 pb-1">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          Documents
+                        </span>
+                      </div>
+                    )}
+                    {docSources.map((src) => (
+                      <SidebarItem
+                        key={src.id}
+                        icon={<FileText className="w-3.5 h-3.5" />}
+                        label={src.name}
+                        badge={<CountBadge count={src.parts.length} />}
+                        isActive={selectedNodeId === `knowledge/${src.id}`}
+                        isNested
+                        onClick={() => handleSelect(`knowledge/${src.id}`)}
+                      />
+                    ))}
+                  </>
+                )}
+
+                {/* Trace sources */}
+                {traceSources.length > 0 && (
+                  <>
+                    {showTraceHeader && (
+                      <div className="px-6 pt-3 pb-1">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          Production Traces
+                        </span>
+                      </div>
+                    )}
+                    {traceSources.map((src) => (
+                      <div key={src.id}>
+                        <SidebarItem
+                          icon={<FileText className="w-3.5 h-3.5" />}
+                          label={src.name.toLowerCase().includes("otel") ? "Production Traces" : src.name}
+                          isActive={selectedNodeId === `knowledge/${src.id}`}
+                          isNested
+                          onClick={() => handleSelect(`knowledge/${src.id}`)}
+                        />
+                        {renderTraceChildren()}
+                      </div>
+                    ))}
+                  </>
+                )}
+              </>
+            );
+          })()}
         </SidebarSection>
       )}
 
       {sources.length > 0 && <SidebarDivider />}
-
-      {/* Trace Analysis is now inside the OTel Traces source viewer as tabs */}
 
       {/* ── Training Data ── */}
       <SidebarSection

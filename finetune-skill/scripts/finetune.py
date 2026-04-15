@@ -469,12 +469,9 @@ def cmd_upload_topics(args: argparse.Namespace) -> None:
                 sanitized_count += 1
     if sanitized_count:
         print(f"  Sanitized {sanitized_count} topic field(s): replaced '/' with '-'", file=sys.stderr)
-        # Save sanitized topics back to file so local copy is consistent
-        if isinstance(topics, list):
-            topics_path.write_text(json.dumps(raw_topics, indent=2))
-        elif isinstance(topics, dict) and "topics" in topics:
-            topics["topics"] = raw_topics
-            topics_path.write_text(json.dumps(topics, indent=2))
+        # NOTE: Do NOT write flattened topics back to topics.json — that destroys
+        # the nested hierarchy that the UI needs for display. Sanitization is
+        # only applied to the in-memory upload payload.
 
     transformed = []
     for t in raw_topics:
