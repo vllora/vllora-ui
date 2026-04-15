@@ -104,7 +104,7 @@ Maintain `execution-log.md` as an **append-only** chronological record.
 1. Log when a sub-task **starts** (status=in_progress)
 2. Log when a sub-task **completes** with concrete results in `--summary` (status=completed)
 3. **MANDATORY: Write a decision card** at every completed step using `--observation`, `--analysis`, `--decision`, `--evidence`
-4. Include **numbers** in every summary — never "Processing PDFs...", always "Processing 1 PDF (FDA-FALCPA.pdf) with Docling..."
+4. Include **numbers** in every summary — never "Processing PDFs...", always "Processing 1 PDF (FDA-FALCPA.pdf) via OpenDataLoader..."
 
 **Decision cards** capture your reasoning at each step. This is mandatory because:
 - It helps the user understand WHY you made each choice (transparency)
@@ -146,14 +146,14 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-step \
 # 2a. Submit to extraction
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-step \
   --project-dir finetune-project \
-  --step step_2_extraction --action docling_submit --status in_progress \
-  --summary "Submitted 1 PDF (FDA-FALCPA.pdf) to Docling for extraction"
+  --step step_2_extraction --action extraction_start --status in_progress \
+  --summary "Extracting 1 PDF (FDA-FALCPA.pdf) via OpenDataLoader"
 
 # 2b. Extraction result
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-step \
   --project-dir finetune-project \
-  --step step_2_extraction --action docling_complete --status completed \
-  --summary "Docling extracted 75 chunks from FDA-FALCPA.pdf"
+  --step step_2_extraction --action extraction_complete --status completed \
+  --summary "Extracted 142 elements from FDA-FALCPA.pdf via ODL (digital PDF)"
 
 # 2c. Build knowledge parts
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-step \
@@ -241,7 +241,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py status --workflow-id $WORKFLOW_ID
 ```
 Follow its recommendation. (3) Sync jobs: `sync-jobs --workflow-id $WORKFLOW_ID --output-dir finetune-project`. (4) Cancel broken eval jobs if `status` shows ~0.0 scores (use `uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py cancel-eval --workflow-id $WORKFLOW_ID --eval-id <EVAL_ID>`). (5) Resume from recommended step. (6) Backfill missing data in execution log.
 
-**Reusing extractions across workflows:** Existing `knowledge/{slug}/extraction-result.json` files (ODL or Docling) can be reused even with a new workflow. Do NOT delete `knowledge/` when starting fresh from the same documents. Legacy `docling-result.json` files from prior skill versions are still accepted.
+**Reusing extractions across workflows:** Existing `knowledge/{slug}/extraction-result.json` files (ODL or ODL Hybrid) can be reused even with a new workflow. Do NOT delete `knowledge/` when starting fresh from the same documents. If an older project only has pre-ODL extraction outputs, re-run extraction with the current ODL router.
 
 | State found | Action |
 |-------------|--------|
@@ -316,7 +316,7 @@ Merge `finetune-defaults.json` if it exists in the project root. The `use_nemo` 
 
 The skill supports two parallel input ingredients. Run whichever applies — or both. Steps 3–7 don't care which extractor produced the parts.
 
-- **2A. Documents (PDFs, markdown, images)** — extract via `docling_extract.py` / `build_knowledge_parts.py`. The document path below.
+- **2A. Documents (PDFs, markdown, images)** — extract via `extract_router.py` / `build_knowledge_parts.py`. The document path below.
 - **2B. OTel GenAI traces (LLM call logs)** — extract via `otel_extract.py`. Mirrors 2A but reads OpenTelemetry GenAI spans (`gen_ai.input.messages`, `gen_ai.output.messages`, `gen_ai.tool.*`) and writes the same `knowledge_parts.json` format. See [reference/otel-trace-ingestion.md](reference/otel-trace-ingestion.md). Use this when the user wants to clone the behavior of an existing LLM app rather than teach the model new knowledge.
 
   ```bash
@@ -330,11 +330,11 @@ Extract knowledge from all documents. Each document processed by a `knowledge-ex
 
 **Outputs:** `knowledge/{slug}/knowledge_parts.json`, `knowledge/{slug}/parts-index.json`, `knowledge/all-parts-index.json` (merged)
 
-**2a. Check prerequisites** — `java -version` must report 11+ (for ODL, the digital-PDF path). The Docling Serve health check (`curl -sS --connect-timeout 5 http://127.0.0.1:5001/health`) is only required if any input PDF is scanned — the router auto-detects and falls back to Docling when needed. For all-digital corpora you can skip Docker entirely.
+**2a. Check prerequisites** — `java -version` must report 11+ (for ODL). Ensure `opendataloader-pdf[hybrid]` is installed (`pip install -U "opendataloader-pdf[hybrid]"`). Hybrid mode uses the `opendataloader-pdf-hybrid` backend server. The router auto-manages a local backend on `http://127.0.0.1:5002` for scanned PDFs unless `--hybrid-url` points to an existing server.
 
-**2b. Extract via the router** — Run `extract_router.py` with `--skip-existing`. It auto-dispatches each PDF to ODL (digital) or Docling (scanned) and writes `extraction-result.json` plus a sibling `extraction-status.json` recording the backend used. Spawn one `knowledge-extractor` subagent per document to build parts. Wait for ALL to complete.
+**2b. Extract via the router** — Run `extract_router.py` with `--skip-existing`. It auto-dispatches each PDF to ODL (digital, fast Java-only) or ODL Hybrid (scanned, server-backed OCR + table recognition) and writes `extraction-result.json` plus a sibling `extraction-status.json` recording the backend used. Spawn one `knowledge-extractor` subagent per document to build parts. Wait for ALL to complete.
 
-> Subagents MUST use `build_knowledge_parts.py` as the default extraction script. It sniffs the result shape (ODL `kids[]` vs Docling `chunks[]`) and branches automatically. On the ODL branch, tables are preserved as structured table parts, lists remain markdown text parts, and captions remain separate linked text parts. Do NOT write custom extract.py unless explicitly requested or `build_knowledge_parts.py` produces 0 parts.
+> Subagents MUST use `build_knowledge_parts.py` as the default extraction script. All extractions produce ODL `kids[]` format, which the script handles via the ODL branch. Tables are preserved as structured table parts, lists remain markdown text parts, and captions remain separate linked text parts. Do NOT write custom extract.py unless explicitly requested or `build_knowledge_parts.py` produces 0 parts.
 
 > Subagents upload to the gateway. Do NOT re-upload yourself — creates duplicates.
 
@@ -343,7 +343,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/extract_router.py --batch --skip-existing \
   "pdfs/doc1.pdf:finetune-project/knowledge/doc1-slug/extraction-result.json" ...
 ```
 
-> See [reference/extraction-guide.md](reference/extraction-guide.md) for subagent parameters, router flags, and the Docling fallback details.
+> See [reference/extraction-guide.md](reference/extraction-guide.md) for subagent parameters and router flags.
 
 **2c. Merge indexes** — Merge all `parts-index.json` into `knowledge/all-parts-index.json`.
 
@@ -1307,7 +1307,7 @@ The vLLora UI at **http://localhost:5173** provides score distributions, trainin
 |------|-------------|
 | `reference/api-reference.md` | Making API calls — all gateway endpoints |
 | `reference/data-format.md` | Generating JSONL — format, options, upload |
-| `reference/extraction-guide.md` | Extraction details — Docling, subagent params, merge script |
+| `reference/extraction-guide.md` | Extraction details — ODL/ODL Hybrid, subagent params, merge script |
 | `reference/grader-writing.md` | Writing graders — patterns, guidelines, length exploitation defenses |
 | `reference/topic-hierarchy.md` | Designing topics — structure, JSON format, balance |
 | `reference/readiness-gate.md` | Readiness gate, difficulty probe, headroom gate, coverage audit |

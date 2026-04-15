@@ -36,19 +36,19 @@ Pick the right tool for the job:
 
 | Situation | Method | Why |
 |-----------|--------|-----|
-| Docker available, PDF has tables/images/complex layout | **Docling Serve** (hybrid chunk API) | Best quality — typed parts with tables, images, cross-references |
+| Scanned PDF or complex tables, no external service required | **OpenDataLoader Hybrid** | Server-backed OCR/tables via `opendataloader-pdf-hybrid`, same `kids[]` output as ODL |
 | No Docker, simple text-based PDF | **pdftotext** | Fast, no dependencies beyond poppler |
 | Document is already markdown/text | **Skip extraction** | Read the file directly, proceed to topic building |
 
-**Decision flow**: Check `curl -s http://127.0.0.1:5001/health` first. If Docling is running, use it. If not, and you have Docker, start it. If no Docker at all, fall back to pdftotext.
+**Decision flow**: Prefer ODL for digital PDFs and ODL Hybrid for scanned PDFs. The router will auto-manage `opendataloader-pdf-hybrid` locally on port `5002` unless you provide `--hybrid-url`. Fall back to pdftotext only when ODL tooling is unavailable.
 
-See `extraction-guide.md` for the complete Docling workflow — curl commands, response structure, knowledge_parts.json schema, and troubleshooting.
+See `extraction-guide.md` for the complete ODL workflow — router usage, backend setup, response structure, knowledge_parts.json schema, and troubleshooting.
 
 ### Document Processing Strategy
 
 When the user provides documents:
 
-1. **Call Docling hybrid chunk API** — with `include_images=true` and `image_export_mode=embedded` to get complete extraction
+1. **Call the extraction router** — let it pick ODL vs ODL Hybrid
 2. **Read the document** — before writing any code, read the first 5-10 chunks to understand the document title, content type (textbook? reference? game collection?), heading patterns, and key entities. Then sample chunks from the middle and end. Note what the real section headings are vs noise (e.g., chess moves like "31... Rxd5" are NOT headings). Note domain-specific patterns that need special handling (game notation, formulas, multi-column layouts). This understanding is critical for writing a good extraction script.
 3. **Write an extraction script** — dynamically create `knowledge_parts.json` from the response, tailored to the document. Use insights from step 2 to add domain-specific heading filters, noise removal, and the right image sourcing strategy (pictures[] vs pages{} fallback).
 4. **Review the parts** — check that tables have headers/rows, images have base64 data, captions are linked
@@ -84,7 +84,7 @@ Keep extracted knowledge organized so you can reference it while generating data
 ```
 knowledge/
 ├── chess-tactics/              # Per-document subdirectory (slugified filename)
-│   ├── docling-result.json    # Raw Docling response
+│   ├── extraction-result.json # Raw ODL/ODL Hybrid response
 │   ├── knowledge_parts.json   # Typed parts for this document
 │   └── parts-index.json       # Part index for this document
 ├── strategy-guide/             # Second document

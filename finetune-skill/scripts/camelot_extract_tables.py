@@ -7,10 +7,10 @@ Camelot-based table extraction fallback for PDFs with complex tables.
 
 Activates when validate_extraction.py detects table quality issues (inconsistent
 columns, mixed content, missing metadata). Uses Camelot's stream mode which handles
-multi-column regulatory tables that Docling's TableFormer struggles with.
+multi-column regulatory tables that the default extractor may still garble.
 
 Proven 99.1-99.7% accuracy on EPA Drinking Water Standards tables (12 columns,
-12 pages, multi-row headers) where Docling produced shifted columns.
+12 pages, multi-row headers) where ODL output produced shifted columns.
 
 Usage:
     # Extract tables from PDF and replace broken parts in knowledge_parts.json
@@ -427,7 +427,7 @@ def replace_table_parts(
             replaced_count += 1
 
     # Apply replacements and remove old fragments of the same table.
-    # When Docling splits a multi-page table across chunks, multiple parts
+    # When the extractor splits a multi-page table across chunks, multiple parts
     # share the same title (e.g., 13 parts all titled "ABBREVIATIONS").
     # The Camelot replacement is the stitched whole — remove the fragments.
     replaced_titles: set[str] = set()

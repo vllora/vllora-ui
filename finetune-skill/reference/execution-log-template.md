@@ -16,9 +16,9 @@ This is a **reference** for what to log at each step — NOT a skeleton to copy 
 - Documents: <list of PDFs>
 
 ## Step 2: Extract Documents
-- [timestamp] Docling status: available/unavailable (fallback used: yes/no)
+- [timestamp] Extraction backend: ODL / ODL Hybrid / pdftotext fallback
 - Per document:
-  - <doc-name>: <N> chunks from Docling, <M> parts after build_knowledge_parts, <K> tables
+  - <doc-name>: <N> extracted elements, <M> parts after build_knowledge_parts, <K> tables
   - Reused existing: yes/no
 - Merge: <total> parts from <N> documents
 - Validation: PASS/FAIL (issues: <details if FAIL>)

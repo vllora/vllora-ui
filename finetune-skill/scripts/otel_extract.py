@@ -4,7 +4,7 @@
 """
 otel_extract.py — turn OTel GenAI traces into knowledge_parts.json
 
-Sibling of `docling_extract.py` / `build_knowledge_parts.py`. Reads a file of
+Sibling of `extract_router.py` / `build_knowledge_parts.py`. Reads a file of
 OpenTelemetry GenAI spans and emits the same `knowledge_parts.json` format the
 rest of the pipeline already understands. Once written, `consolidate_parts.py`
 picks the file up automatically — no other pipeline step changes.

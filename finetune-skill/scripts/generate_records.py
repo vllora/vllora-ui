@@ -30,6 +30,7 @@ Exit codes:
 import glob
 import json
 import math
+import requests
 import subprocess
 import sys
 import tempfile
@@ -238,6 +239,131 @@ def load_all_parts(knowledge_dir: Path) -> dict[str, dict]:
             print(f"Warning: Failed to load relevance labels from {index_path}: {e}", file=sys.stderr)
 
     return parts
+
+
+def _fetch_latest_grader_script(base_url: str, workflow_id: str) -> str | None:
+    """Return the latest uploaded grader script, if one exists."""
+    try:
+        resp = requests.get(
+            f"{base_url}/finetune/workflows/{workflow_id}/evaluator/versions",
+            timeout=10,
+        )
+        resp.raise_for_status()
+    except Exception:
+        return None
+
+    versions = resp.json()
+    if not isinstance(versions, list) or not versions:
+        return None
+
+    latest = versions[-1]
+    config = latest.get("config", {})
+    return config.get("script") or config.get("config", {}).get("script")
+
+
+def _score_row_with_dry_run(
+    base_url: str,
+    workflow_id: str,
+    script: str,
+    row: dict,
+) -> dict:
+    """Score one row through the evaluator dry-run endpoint."""
+    resp = requests.post(
+        f"{base_url}/finetune/workflows/{workflow_id}/evaluator/dry-run",
+        json={"script": script, "row": row},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if isinstance(data, dict) and "result" in data and isinstance(data["result"], dict):
+        return data["result"]
+    return data
+
+
+def _probe_records_for_triviality(
+    records: list[dict],
+    base_url: str,
+    workflow_id: str,
+    probe_model: str,
+    grader_script: str,
+    threshold: float = 0.85,
+) -> list[dict]:
+    """Probe records with the base model and return those already scoring too high."""
+    trivials: list[dict] = []
+
+    for rec in records:
+        messages = rec.get("messages", [])
+        gt = rec.get("ground_truth", "")
+        if not messages or not gt:
+            continue
+
+        system_msg = ""
+        user_msg = ""
+        for m in messages:
+            if m.get("role") == "system":
+                system_msg = m.get("content", "")
+            elif m.get("role") == "user":
+                user_msg = m.get("content", "")
+
+        if not user_msg:
+            continue
+
+        try:
+            probe_resp = requests.post(
+                f"{base_url}/v1/chat/completions",
+                json={
+                    "model": probe_model,
+                    "messages": [
+                        {"role": "system", "content": system_msg},
+                        {"role": "user", "content": user_msg},
+                    ],
+                    "temperature": 0.0,
+                    "max_tokens": 200,
+                },
+                timeout=30,
+            )
+            probe_resp.raise_for_status()
+            model_output = probe_resp.json()["choices"][0]["message"]["content"].strip()
+            score_data = _score_row_with_dry_run(
+                base_url,
+                workflow_id,
+                grader_script,
+                {
+                    "messages": messages + [{"role": "assistant", "content": model_output}],
+                    "ground_truth": gt,
+                },
+            )
+            score = score_data.get("score", 0)
+            if score is not None and score > threshold:
+                trivials.append(rec)
+        except Exception:
+            continue
+
+    return trivials
+
+
+def _maybe_probe_trivial_records(
+    records: list[dict],
+    args,
+    threshold: float = 0.85,
+) -> list[dict]:
+    """Fetch the grader once and probe for trivially easy records."""
+    grader_script = _fetch_latest_grader_script(args.base_url, args.workflow_id)
+    if not grader_script:
+        print(
+            "Probe-and-rewrite skipped: no uploaded grader available for dry-run scoring.",
+            file=sys.stderr,
+        )
+        return []
+
+    return _probe_records_for_triviality(
+        records,
+        args.base_url,
+        args.workflow_id,
+        getattr(args, "probe_model", None) or "Qwen3.5-4B",
+        grader_script,
+        threshold=threshold,
+    )
 
 
 def find_leaf_topics(topics: list[dict]) -> list[dict]:
@@ -1765,8 +1891,6 @@ def main() -> None:
     # This is the pre-eval version of harden-records (arXiv:2505.17063: +2.6pp).
     # Runs the base model on each record, rewrites those scoring >0.85.
     if args.probe_and_rewrite and total_records > 0:
-        import requests as req_lib
-
         print(f"\n── Probe-and-Rewrite (--probe-and-rewrite) ──")
         print(f"Probing {total_records} records with base model (K=1)...")
 
@@ -1778,54 +1902,7 @@ def main() -> None:
                 if line:
                     all_records.append(json.loads(line))
 
-        trivials = []
-        for rec in all_records:
-            messages = rec.get("messages", [])
-            gt = rec.get("ground_truth", "")
-            if not messages or not gt:
-                continue
-
-            # Quick K=1 probe: send to base model, score with grader
-            system_msg = ""
-            user_msg = ""
-            for m in messages:
-                if m.get("role") == "system":
-                    system_msg = m.get("content", "")
-                elif m.get("role") == "user":
-                    user_msg = m.get("content", "")
-
-            try:
-                # Get base model response
-                probe_resp = req_lib.post(
-                    f"{args.base_url}/v1/chat/completions",
-                    json={
-                        "model": getattr(args, "probe_model", None) or "Qwen3.5-4B",
-                        "messages": [{"role": "system", "content": system_msg}, {"role": "user", "content": user_msg}],
-                        "temperature": 0.0,
-                        "max_tokens": 200,
-                    },
-                    timeout=30,
-                )
-                probe_resp.raise_for_status()
-                model_output = probe_resp.json()["choices"][0]["message"]["content"].strip()
-
-                # Score through grader
-                score_resp = req_lib.post(
-                    f"{args.base_url}/finetune/workflows/{args.workflow_id}/evaluate",
-                    json={"row": {
-                        "messages": messages + [{"role": "assistant", "content": model_output}],
-                        "ground_truth": gt,
-                    }},
-                    timeout=30,
-                )
-                score_resp.raise_for_status()
-                score_data = score_resp.json()
-                score = score_data.get("score", score_data.get("result", {}).get("score", 0))
-
-                if score is not None and score > 0.85:
-                    trivials.append(rec)
-            except Exception:
-                continue
+        trivials = _maybe_probe_trivial_records(all_records, args, threshold=0.85)
 
         print(f"  Probed: {len(all_records)} records, {len(trivials)} trivial (>{0.85})")
 
@@ -1843,7 +1920,7 @@ def main() -> None:
 
                 gt = rec.get("ground_truth", "")
                 try:
-                    rewrite_resp = req_lib.post(
+                    rewrite_resp = requests.post(
                         f"{args.base_url}/v1/chat/completions",
                         json={
                             "model": "gpt-4.1-mini",

@@ -3,10 +3,10 @@
 # dependencies = []
 # ///
 """
-Fallback PDF extraction when Docling Serve (Docker) is not available.
+Fallback PDF extraction when OpenDataLoader tooling is not available.
 
 Converts PDF → text via pdftotext, splits on markdown-style headings,
-and outputs knowledge_parts.json in the same schema as Docling extraction.
+and outputs knowledge_parts.json in the same schema as the ODL-based extraction flow.
 Text-only — no tables, images, or layout structure.
 
 Single file:

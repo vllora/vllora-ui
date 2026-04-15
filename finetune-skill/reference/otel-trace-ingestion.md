@@ -1,7 +1,7 @@
 # OTel Trace Ingestion
 
-`otel_extract.py` is a parallel ingestion path to the document extractors
-(`docling_extract.py`, `pdftotext_extract.py`, `build_knowledge_parts.py`).
+`otel_extract.py` is a parallel ingestion path to the document extraction flow
+(`extract_router.py`, `pdftotext_extract.py`, `build_knowledge_parts.py`).
 It turns OpenTelemetry GenAI traces into the same `knowledge_parts.json`
 format the rest of the pipeline already consumes — so once parts are
 written, **steps 3–7 (topics → records → grader → eval → train) are
@@ -16,7 +16,7 @@ existing LLM app, not just teach the model new knowledge from documents.
 
 | You have… | Use… |
 |-----------|------|
-| PDFs, manuals, runbooks | `docling_extract.py` |
+| PDFs, manuals, runbooks | `extract_router.py` |
 | Production LLM call logs | `otel_extract.py` (this) |
 | Both | Run both — `consolidate_parts.py` merges them |
 

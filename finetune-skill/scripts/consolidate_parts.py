@@ -64,7 +64,7 @@ def _looks_like_false_heading(title: str) -> bool:
 def _fix_false_headings(parts: list[dict]) -> list[dict]:
     """Re-parent parts with false heading titles to the previous real heading.
 
-    When Docling marks bold/italic text as section headers, the extraction
+    When the extractor marks bold/italic text as section headers, the extraction
     script creates separate parts for them. This merges them back by
     changing their extraction_path to match the previous real-headed part.
     """
@@ -107,7 +107,7 @@ def _merge_repeated_title_sequences(parts: list[dict]) -> list[dict]:
     """Merge sequences of parts with generic repeated titles into paired parts.
 
     Academic papers (especially clinical guidelines) repeat section headings
-    like "Recommendation" and "Rationale" for every topic. Docling creates
+    like "Recommendation" and "Rationale" for every topic. The extractor creates
     separate parts for each, losing the recommendation↔rationale association.
 
     This function detects repeated generic titles and merges each instance
@@ -276,7 +276,7 @@ def consolidate_parts(
             p.setdefault("extraction_metadata", {})["source_chunks"] = sorted(set(chunks))
 
     # Consolidate table fragments with the same title.
-    # Docling splits multi-page tables (e.g., EIC lookup table) into many fragments
+    # The extractor splits multi-page tables (e.g., EIC lookup table) into many fragments
     # per page, all with the same title. These are NOT duplicates — each contains
     # a different portion of the table (different income ranges, etc.).
     # Strategy: merge all fragments with the same title into one combined table part,
