@@ -611,7 +611,7 @@ async function fetchTrainingEpochScores(
   try {
     const [dataset, records] = await Promise.all([
       datasetService.getById(workflowId),
-      recordService.getByDatasetId(workflowId),
+      recordService.getAllRecordsPaginated(workflowId),
     ]);
     if (!dataset) return undefined;
 

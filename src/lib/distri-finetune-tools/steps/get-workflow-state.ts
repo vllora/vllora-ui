@@ -217,7 +217,7 @@ export const getDatasetStateHandler: ToolHandler = async (params) => {
 
     // Fetch records, workflow, plan state, and knowledge sources in parallel
     const [records, workflow, storedPlan, knowledgeSources] = await Promise.all([
-      recordService.getByDatasetId(workflow_id),
+      recordService.getAllRecordsPaginated(workflow_id),
       workflowService.getByDataset(workflow_id),
       getStoredPlan(workflow_id).catch(() => null),
       knowledgeSourceService.list(workflow_id).catch(() => [] as Awaited<ReturnType<typeof knowledgeSourceService.list>>),

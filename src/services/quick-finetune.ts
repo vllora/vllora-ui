@@ -175,8 +175,8 @@ export async function quickFinetune(options: QuickFinetuneOptions): Promise<Quic
     }
 
     // Check records exist
-    const records = await recordService.getByDatasetId(workflowId);
-    if (records.length === 0) {
+    const recordCount = await recordService.getCount(workflowId);
+    if (recordCount === 0) {
       return { success: false, error: 'Dataset has no records' };
     }
 

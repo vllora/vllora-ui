@@ -362,7 +362,7 @@ export async function calculateAndSaveCoverageStats(
 ): Promise<CoverageStats> {
   // Fetch dataset and records
   const dataset = await datasetService.getById(workflowId);
-  const records = await recordService.getByDatasetId(workflowId);
+  const records = await recordService.getAllRecordsPaginated(workflowId);
 
 
   const coverageStats = computeCoverageStats({records, topic_hierarchy: dataset?.topicHierarchy});

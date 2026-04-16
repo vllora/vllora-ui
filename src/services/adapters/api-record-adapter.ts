@@ -195,6 +195,21 @@ export const apiRecordAdapter: RecordService = {
     return { records, pagination: data.pagination };
   },
 
+  async getAllRecordsPaginated(workflowId: string): Promise<DatasetRecord[]> {
+    const PAGE_SIZE = 200;
+    const allRecords: DatasetRecord[] = [];
+    let offset = 0;
+
+    for (;;) {
+      const page = await this.getByDatasetIdPaged(workflowId, offset, PAGE_SIZE);
+      allRecords.push(...page.records);
+      if (allRecords.length >= page.pagination.total) break;
+      offset += PAGE_SIZE;
+    }
+
+    return allRecords.sort((a, b) => b.createdAt - a.createdAt);
+  },
+
   async getCount(workflowId: string): Promise<number> {
     const response = await api.get(`${basePath(workflowId)}/count`);
     const data = await handleApiResponse<{ count: number }>(response);

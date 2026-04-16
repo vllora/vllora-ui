@@ -1028,19 +1028,20 @@ curl -X POST http://localhost:9090/finetune/evaluations \
       "model": "gpt-4o-mini",
       "temperature": 0.7
     },
-    "offset": 0,
-    "limit": 50
+    "limit": 2073
   }'
 ```
 
 **Parameters:**
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `dataset_id` | string | Yes | Backend dataset ID |
+| `workflow_id` | string | Yes | Workflow/dataset ID |
 | `rollout_model_params` | object | Yes | Model config for generating responses to evaluate |
 | `rollout_model_params.model` | string | Yes | Which model generates the responses being evaluated |
-| `offset` | number | No | Start row index (for partial evaluation) |
-| `limit` | number | No | Max rows to evaluate |
+| `offset` | number | No | Start record index — evaluate records starting from this index. Default 0. |
+| `limit` | number | No | Max records to evaluate. Pass total record count to evaluate ALL (cloud defaults to 1000). |
+
+**Important:** Always pass `limit=total_records` when creating evals. The cloud defaults to 1000 — without an explicit limit, datasets with >1000 records will be partially evaluated.
 
 **Response:**
 ```json
@@ -1059,22 +1060,28 @@ Poll for evaluation results. Call every 2-3 seconds until `status` is `completed
 curl http://localhost:9090/finetune/evaluations/eval_xyz789
 ```
 
-Optional query params let you sort and trim returned row results without changing the run itself:
+Optional query params let you sort and paginate returned row results without changing the run itself.
+The `summary` is always computed from ALL results regardless of `limit`/`offset`.
 
 | Query param | Type | Description |
 |-------------|------|-------------|
-| `limit` | number | Maximum number of rows to return in `results` |
+| `limit` | number | Maximum number of rows to return in `results`. Use `0` to get summary only (no results array). |
+| `offset` | number | Skip this many rows before returning results. Pairs with `limit` for pagination. |
 | `sort` | string | Sort key. Currently supported: `score` |
 | `order` | string | Sort direction for `sort`: `asc` (lowest first) or `desc` (highest first) |
 
 Examples:
 
 ```bash
+# Summary only (no results — cheapest poll for progress tracking)
+curl "http://localhost:9090/finetune/evaluations/eval_xyz789?limit=0"
+
 # Lowest-scoring 20 rows (best for failure analysis)
 curl "http://localhost:9090/finetune/evaluations/eval_xyz789?sort=score&order=asc&limit=20"
 
-# Highest-scoring 10 rows
-curl "http://localhost:9090/finetune/evaluations/eval_xyz789?sort=score&order=desc&limit=10"
+# Page through results
+curl "http://localhost:9090/finetune/evaluations/eval_xyz789?limit=100&offset=0"
+curl "http://localhost:9090/finetune/evaluations/eval_xyz789?limit=100&offset=100"
 ```
 
 **Response:**
@@ -1106,10 +1113,24 @@ curl "http://localhost:9090/finetune/evaluations/eval_xyz789?sort=score&order=de
   "summary": {
     "average_score": 0.72,
     "passed_count": 40,
-    "failed_count": 10
+    "failed_count": 10,
+    "scored_count": 48,
+    "zero_score_count": 3,
+    "perfect_score_count": 12
   }
 }
 ```
+
+**Summary fields** (always computed from ALL results, even when `limit` is set):
+
+| Field | Description |
+|-------|-------------|
+| `average_score` | Mean score across all scored rows |
+| `passed_count` | Rows with score > 0.5 |
+| `failed_count` | Rows with status "failed" |
+| `scored_count` | Total rows that received a score (scored_count ≤ completed_rows) |
+| `zero_score_count` | Rows with score < 0.01 — indicates broken grader or model can't parse task |
+| `perfect_score_count` | Rows with score ≥ 0.99 — indicates overly lenient grader |
 
 ---
 

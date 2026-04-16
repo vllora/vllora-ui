@@ -50,7 +50,7 @@ export const generateSyntheticDataHandler: ToolHandler = async (params): Promise
 
 
     // Get current coverage
-    const records = await recordService.getByDatasetId(workflow.workflowId);
+    const records = await recordService.getAllRecordsPaginated(workflow.workflowId);
 
     const dataset = await datasetService.getById(workflow.workflowId);
 

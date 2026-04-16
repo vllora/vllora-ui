@@ -63,7 +63,7 @@ export const checkViabilityHandler: ToolHandler = async (params) => {
     } satisfies CheckViabilityResult;
   }
 
-  const records = await recordService.getByDatasetId(workflow.workflowId);
+  const records = await recordService.getAllRecordsPaginated(workflow.workflowId);
   if (records.length === 0) {
     return { success: false, error: 'Dataset has no records' } satisfies CheckViabilityResult;
   }

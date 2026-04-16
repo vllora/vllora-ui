@@ -62,7 +62,7 @@ function useDatasets() {
       const dataset = await datasetService.getById(workflowId);
       if (!dataset) return null;
 
-      const records = await recordService.getByDatasetId(workflowId);
+      const records = await recordService.getAllRecordsPaginated(workflowId);
       return { ...dataset, records };
     } catch (err) {
       console.error('Failed to get dataset with records:', err);

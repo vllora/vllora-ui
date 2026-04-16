@@ -82,8 +82,15 @@ function basePath(workflowId: string): string {
 }
 
 export const apiKnowledgeSourceAdapter: KnowledgeSourceService = {
-  async list(workflowId: string): Promise<KnowledgeSource[]> {
-    const response = await api.get(basePath(workflowId));
+  async list(workflowId: string, pagination?: { limit: number; offset: number }): Promise<KnowledgeSource[]> {
+    const params = new URLSearchParams();
+    if (pagination) {
+      params.set("limit", String(pagination.limit));
+      params.set("offset", String(pagination.offset));
+    }
+    const qs = params.toString();
+    const url = `${basePath(workflowId)}${qs ? `?${qs}` : ""}`;
+    const response = await api.get(url);
     const data = await handleApiResponse<{ knowledge_sources: DbSourceResponse[] }>(response);
     return data.knowledge_sources.map(mapSource);
   },

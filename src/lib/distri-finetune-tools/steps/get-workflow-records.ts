@@ -17,7 +17,7 @@ export const getDatasetRecordsHandler: ToolHandler = async (params) => {
     }
 
     // Get records
-    let records = await recordService.getByDatasetId(workflow_id);
+    let records = await recordService.getAllRecordsPaginated(workflow_id);
 
     // Apply topic filter if provided
     if (topic_filter && typeof topic_filter === 'string') {

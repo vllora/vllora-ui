@@ -283,7 +283,7 @@ export async function analyzeRecordsForTopics(params: Record<string, unknown>): 
       return { success: false, error: `Dataset ${targetDatasetId} not found` };
     }
 
-    const allRecords = await recordService.getByDatasetId(targetDatasetId);
+    const allRecords = await recordService.getAllRecordsPaginated(targetDatasetId);
 
     let selectedRecords = allRecords;
     if (recordIds && Array.isArray(recordIds) && recordIds.length > 0) {

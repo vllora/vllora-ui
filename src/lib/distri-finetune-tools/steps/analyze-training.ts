@@ -109,7 +109,7 @@ async function resolveTrainingJob(
 // =============================================================================
 
 async function buildTopicMap(workflowId: string): Promise<Map<string, string>> {
-  const records = await recordService.getByDatasetId(workflowId);
+  const records = await recordService.getAllRecordsPaginated(workflowId);
   const topicMap = new Map<string, string>();
   for (const record of records) {
     topicMap.set(record.id, record.topic ?? 'uncategorized');

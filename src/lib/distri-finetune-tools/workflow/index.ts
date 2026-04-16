@@ -172,7 +172,7 @@ export const startFinetuneWorkflowHandler: ToolHandler = async (params): Promise
     }
 
     // Get and validate records
-    const records = await recordService.getByDatasetId(workflow_id);
+    const records = await recordService.getAllRecordsPaginated(workflow_id);
     const validationErrors: ValidationError[] = [];
 
     // Basic validation: check records have input/output

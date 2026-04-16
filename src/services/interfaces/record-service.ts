@@ -36,6 +36,8 @@ export interface RecordService {
   // Queries
   getByDatasetId(workflowId: string, recordIds?: string[]): Promise<DatasetRecord[]>;
   getByDatasetIdPaged(workflowId: string, offset: number, limit: number, topicId?: string): Promise<PaginatedRecords>;
+  /** Fetch all records via pagination (200 per page). Avoids loading the entire table in one gateway response. */
+  getAllRecordsPaginated(workflowId: string): Promise<DatasetRecord[]>;
   getCount(workflowId: string): Promise<number>;
   getSummary(workflowId: string): Promise<RecordsSummary>;
   getCountsByTopic(workflowId: string): Promise<TopicRecordCount[]>;

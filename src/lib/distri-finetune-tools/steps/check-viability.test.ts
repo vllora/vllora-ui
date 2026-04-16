@@ -27,7 +27,7 @@ vi.mock('@/services/service-registry', () => ({
     get: (...args: unknown[]) => mockGetWorkflow(...args),
   },
   recordService: {
-    getByDatasetId: (...args: unknown[]) => mockGetRecords(...args),
+    getAllRecordsPaginated: (...args: unknown[]) => mockGetRecords(...args),
   },
 }));
 

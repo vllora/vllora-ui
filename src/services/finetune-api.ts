@@ -297,6 +297,12 @@ export interface EvaluationSummary {
   average_score?: number | null;
   passed_count: number;
   failed_count: number;
+  /** Number of rows with a non-null score */
+  scored_count?: number;
+  /** Rows with score < 0.01 — detects broken graders */
+  zero_score_count?: number;
+  /** Rows with score >= 0.99 — detects overly lenient graders */
+  perfect_score_count?: number;
 }
 
 export interface EvaluationResultResponse {
@@ -724,15 +730,20 @@ export async function createEvaluation(
 }
 
 /**
- * Get evaluation results for a given evaluation run
- * @param evaluationRunId - The evaluation run ID
+ * Get evaluation results for a given evaluation run.
+ * Supports optional pagination via limit/offset query params.
  */
 export async function getEvaluationResult(
   evaluationRunId: string,
+  query?: { limit?: number; offset?: number },
 ): Promise<EvaluationResultResponse> {
-  const response = await apiClient(`/finetune/evaluations/${evaluationRunId}`, {
-    method: "GET",
-  });
+  const params = new URLSearchParams();
+  if (query?.limit != null) params.set("limit", String(query.limit));
+  if (query?.offset != null) params.set("offset", String(query.offset));
+  const qs = params.toString();
+  const url = `/finetune/evaluations/${evaluationRunId}${qs ? `?${qs}` : ""}`;
+
+  const response = await apiClient(url, { method: "GET" });
   // 404/410 = eval run expired or was deleted on cloud — throw typed error
   // so callers (eval-polling-manager) can handle gracefully without retrying
   if (response.status === 404 || response.status === 410) {

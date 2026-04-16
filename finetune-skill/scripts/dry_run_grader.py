@@ -45,15 +45,27 @@ def dry_run_grader(
 
 
 def fetch_random_record(workflow_id: str, base_url: str) -> dict:
-    """Fetch a random record from the workflow."""
-    resp = requests.get(f"{base_url}/finetune/workflows/{workflow_id}/records")
+    """Fetch a random record from the workflow using paginated sampling."""
+    # First get the total count
+    count_resp = requests.get(f"{base_url}/finetune/workflows/{workflow_id}/records/count")
+    count_resp.raise_for_status()
+    total = count_resp.json().get("count", 0)
+    if total == 0:
+        print("Error: No records found in workflow", file=sys.stderr)
+        sys.exit(1)
+    # Pick a random offset and fetch 1 record
+    offset = random.randint(0, max(0, total - 1))
+    resp = requests.get(
+        f"{base_url}/finetune/workflows/{workflow_id}/records",
+        params={"limit": 1, "offset": offset},
+    )
     resp.raise_for_status()
     data = resp.json()
-    records = data.get("records", data) if isinstance(data, dict) else data
+    records = data.get("data", data.get("records", data)) if isinstance(data, dict) else data
     if not records:
         print("Error: No records found in workflow", file=sys.stderr)
         sys.exit(1)
-    return random.choice(records)
+    return records[0]
 
 
 def generate_llm_response(messages: list, model: str, base_url: str) -> str:

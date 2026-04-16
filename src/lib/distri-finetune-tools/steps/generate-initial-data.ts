@@ -541,7 +541,7 @@ export const generateInitialDataHandler: ToolHandler = async (
     const [dataset, workflow, existingRecords, allKnowledgeSources] = await Promise.all([
       datasetService.getById(workflow_id),
       workflowService.getByDataset(workflow_id),
-      recordService.getByDatasetId(workflow_id),
+      recordService.getAllRecordsPaginated(workflow_id),
       knowledgeSourceService.list(workflow_id),
     ]);
 

@@ -38,7 +38,7 @@ export const categorizeRecordsHandler: ToolHandler = async (params): Promise<Cat
 
     console.log('===== dataset?.topicHierarchy?.hierarchy', JSON.stringify(dataset?.topicHierarchy?.hierarchy))
     // Get all records to classify
-    const records = await recordService.getByDatasetId(workflow.workflowId);
+    const records = await recordService.getAllRecordsPaginated(workflow.workflowId);
     if (records.length === 0) {
       return { success: false, error: 'No records found in dataset' };
     }
@@ -78,7 +78,7 @@ export const categorizeRecordsHandler: ToolHandler = async (params): Promise<Cat
     });
 
     // Get topic distribution after classification
-    const updatedRecords = await recordService.getByDatasetId(workflow.workflowId);
+    const updatedRecords = await recordService.getAllRecordsPaginated(workflow.workflowId);
     const byTopic: Record<string, { count: number; avg_confidence: number }> = {};
 
     for (const record of updatedRecords) {

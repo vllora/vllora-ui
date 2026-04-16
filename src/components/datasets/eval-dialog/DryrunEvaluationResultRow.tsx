@@ -391,7 +391,21 @@ export function DryrunEvaluationResultRow({
             ) : isSuccess ? (
               <span className="text-[12px] text-emerald-400">✓</span>
             ) : isFailed ? (
-              <span className="text-[12px] text-red-400">✗ Error</span>
+              result.error_message ? (
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-[12px] text-red-400 cursor-help">✗ Error</span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-xs text-xs bg-zinc-900 border-zinc-700">
+                      <p className="font-medium text-red-400 mb-1">Error</p>
+                      <p className="text-zinc-300 break-words">{result.error_message}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : (
+                <span className="text-[12px] text-red-400">✗ Error</span>
+              )
             ) : isPending ? (
               <span className="text-[12px] text-zinc-600">…</span>
             ) : null}

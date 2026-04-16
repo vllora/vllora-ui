@@ -686,7 +686,7 @@ export async function assembleSkillPackageFiles(
   const dataset = await datasetService.getById(workflowId);
   if (!dataset) return null;
 
-  const records = await recordService.getByDatasetId(workflowId);
+  const records = await recordService.getAllRecordsPaginated(workflowId);
   if (records.length === 0) return null;
 
   const knowledgeSources = await knowledgeSourceService.list(workflowId);

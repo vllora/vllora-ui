@@ -46,7 +46,7 @@ export const analyzeCoverageHandler: ToolHandler = async (params): Promise<Analy
     }
 
     // Get full coverage report for response (includes distribution details)
-    const records = await recordService.getByDatasetId(workflow.workflowId);
+    const records = await recordService.getAllRecordsPaginated(workflow.workflowId);
     const dataset = await datasetService.getById(workflow.workflowId);
     const coverageReport = existingAnalyzeCoverage({records, hierarchy: dataset?.topicHierarchy || undefined});
 

@@ -30,7 +30,7 @@ export const updateRecordHandler: ToolHandler = async (params) => {
     }
 
     // Get existing record
-    const records = await recordService.getByDatasetId(workflow.workflowId);
+    const records = await recordService.getAllRecordsPaginated(workflow.workflowId);
     const record = records.find((r) => r.id === record_id);
 
     if (!record) {
@@ -59,7 +59,7 @@ export const updateRecordHandler: ToolHandler = async (params) => {
     }
 
     // Get updated record
-    const updatedRecords = await recordService.getByDatasetId(workflow.workflowId);
+    const updatedRecords = await recordService.getAllRecordsPaginated(workflow.workflowId);
     const updatedRecord = updatedRecords.find(r => r.id === record_id);
     const updatedData = updatedRecord?.data as { input?: { messages?: unknown[] } } | null;
 

@@ -79,7 +79,7 @@ export const getEvaluationDetailsHandler: ToolHandler = async (params) => {
     const flatResults = flattenEvaluationResults(targetJob.pollingSnapshot.results);
 
     // Load dataset records for topic mapping
-    const records = await recordService.getByDatasetId(workflow_id);
+    const records = await recordService.getAllRecordsPaginated(workflow_id);
     const recordTopicMap = new Map<string, string>();
     for (const record of records) {
       recordTopicMap.set(record.id, record.topic ?? 'Uncategorized');

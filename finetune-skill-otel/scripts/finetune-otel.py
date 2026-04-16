@@ -295,15 +295,26 @@ def cmd_eval(args: argparse.Namespace) -> int:
     """
     import time
 
+    # Get total record count so we evaluate ALL records (cloud defaults to 1000)
+    try:
+        import urllib.request
+        with urllib.request.urlopen(
+            f"{args.gateway}/finetune/workflows/{args.workflow_id}/records/count"
+        ) as resp:
+            total_records = json.loads(resp.read()).get("count", 10000)
+    except Exception:
+        total_records = 10000  # Safe upper bound
+
     payload = {
         "workflow_id": args.workflow_id,
         "rollout_model_params": {
             "model": args.model,
             "temperature": 1.0,
         },
+        "limit": total_records,
     }
 
-    print(f"Creating eval run (model={args.model})...")
+    print(f"Creating eval run (model={args.model}, records={total_records})...")
     try:
         result = _gateway_post(args.gateway, "/finetune/evaluations", payload)
     except RuntimeError as exc:

@@ -204,7 +204,7 @@ class EvalJobManager {
 
         // Analyze partial results if any rows completed
         if ((result.completed_rows ?? 0) > 0) {
-          const records = await recordService.getByDatasetId(job.workflowId);
+          const records = await recordService.getAllRecordsPaginated(job.workflowId);
           const recordTopics: Record<number, string> = {};
           for (let i = 0; i < records.length; i++) {
             if (records[i].topic) {
@@ -331,8 +331,10 @@ class EvalJobManager {
     const { jobId, evaluationRunId, workflowId } = jobInfo;
 
     try {
-      // Single call: fetch progress from cloud via gateway proxy
-      const result = await getEvaluationResult(evaluationRunId);
+      // During polling, fetch a page of results for the live results table.
+      // Full result set is fetched once on completion for readiness gate analysis.
+      const POLL_PAGE_SIZE = 200;
+      const result = await getEvaluationResult(evaluationRunId, { limit: POLL_PAGE_SIZE });
 
       this.consecutiveErrors.set(jobId, 0);
 
@@ -357,12 +359,12 @@ class EvalJobManager {
         });
       }
 
-      // If cloud says done, process results
+      // If cloud says done, fetch FULL results for readiness gate analysis
       if (result.status === 'completed' || result.status === 'failed') {
-        // Fetch full job from BE for handleJobComplete (needs sampleSize, etc.)
+        const fullResult = await getEvaluationResult(evaluationRunId);
         const fullJob = await this.getWorkflowJob(workflowId, jobId);
         if (fullJob) {
-          await this.handleJobComplete(fullJob, result);
+          await this.handleJobComplete(fullJob, fullResult);
         }
       }
     } catch (error) {
@@ -456,7 +458,7 @@ class EvalJobManager {
       }
 
       // Build record topics mapping
-      const records = await recordService.getByDatasetId(job.workflowId);
+      const records = await recordService.getAllRecordsPaginated(job.workflowId);
       const recordTopics: Record<number, string> = {};
       for (let i = 0; i < records.length; i++) {
         const record = records[i];

@@ -322,6 +322,16 @@ export function analyzeEvalResults(
 ): EvalStats {
   const results: FlatEvaluationResult[] = flattenEvaluationResults(evaluationResult.results);
 
+  // Safety guard: warn if results appear truncated (pagination without full fetch).
+  // Readiness gate statistics on partial data produce wrong verdicts.
+  const completedRows = evaluationResult.completed_rows ?? 0;
+  if (completedRows > 0 && results.length < completedRows * 0.9) {
+    console.warn(
+      `[analyzeEvalResults] Partial data: ${results.length} results but ${completedRows} completed rows. ` +
+      `Statistics may be inaccurate. Ensure full result set is fetched before running readiness gate.`
+    );
+  }
+
   // Only include results that have actual scores (filter out failed/pending)
   const scoredResults = results.filter((r) => r.score != null);
   const scores = scoredResults.map((r) => r.score!);

@@ -51,7 +51,7 @@ export async function analyzeKnowledgeCoverage(
 
   // Count chunk usage across all records
   const chunkUsageCounts: Record<string, number> = {};
-  const records = await recordService.getByDatasetId(workflowId);
+  const records = await recordService.getAllRecordsPaginated(workflowId);
 
   // Pass 1: Direct lineage from record metadata (Phase 1 records)
   for (const record of records) {

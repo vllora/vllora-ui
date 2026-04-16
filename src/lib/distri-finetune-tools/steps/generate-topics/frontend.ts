@@ -403,7 +403,7 @@ export async function generateTopicsViaFrontend(
 ): Promise<GenerateTopicsResult> {
   try {
     // Get records for context
-    const records = await recordService.getByDatasetId(workflowId);
+    const records = await recordService.getAllRecordsPaginated(workflowId);
 
     // Build rich knowledge context using shared module
     const knowledgeCtx = await buildKnowledgeContext(workflowId);

@@ -465,6 +465,7 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
             <div className="flex-1 min-h-0">
               <ResultsTable
                 results={evaluationResults}
+                totalRows={job.pollingSnapshot?.total_rows ?? job.sampleSize}
                 fillHeight
                 onNavigateToRecord={(_cloudRowId, result) => {
                   // Use the original gateway record ID to find the record's topic

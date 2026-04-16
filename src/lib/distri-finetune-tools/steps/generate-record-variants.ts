@@ -339,7 +339,7 @@ export const generateRecordVariantsHandler: ToolHandler = async (
     }
 
     // Get the source record
-    const records = await recordService.getByDatasetId(workflow_id);
+    const records = await recordService.getAllRecordsPaginated(workflow_id);
     const sourceRecord = records.find((r) => r.id === record_id);
 
     if (!sourceRecord) {

@@ -121,7 +121,7 @@ async function generateTopicsCore(
   focusValue?: string,
 ): Promise<{ success: boolean; hierarchy?: TopicHierarchyNode[]; error?: string }> {
   if (USE_BACKEND_TOPIC_GENERATION) {
-    const records = await recordService.getByDatasetId(workflowId);
+    const records = await recordService.getAllRecordsPaginated(workflowId);
     if (records.length === 0) {
       // For suggest mode (plan creation), empty records is fine
       // Fall through to frontend generation
@@ -341,7 +341,7 @@ export const generateTopicsHandler: ToolHandler = async (params) => {
     // The hierarchy is returned in the result so the agent can include it in the plan.
 
     // Get record counts for categorization info
-    const allRecords = await recordService.getByDatasetId(workflow.workflowId);
+    const allRecords = await recordService.getAllRecordsPaginated(workflow.workflowId);
     const uncategorizedCount = allRecords.filter((r) => !r.topic).length;
 
     return {

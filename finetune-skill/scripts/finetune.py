@@ -88,6 +88,23 @@ def _api(method: str, url: str, **kwargs) -> dict:
         sys.exit(1)
 
 
+def _fetch_all_records(base_url: str, workflow_id: str, page_size: int = 1000) -> list[dict]:
+    """Fetch ALL records by paginating through all pages."""
+    all_records: list[dict] = []
+    offset = 0
+    while True:
+        resp = _api("GET", f"{base_url}/finetune/workflows/{workflow_id}/records?limit={page_size}&offset={offset}")
+        data = resp.get("data", resp.get("records", []))
+        if not data:
+            break
+        all_records.extend(data)
+        total = resp.get("pagination", {}).get("total")
+        if total and offset + len(data) >= total:
+            break
+        offset += len(data)
+    return all_records
+
+
 def _fetch_all_finetune_evals(base_url: str, wf_id: str, provider_job_id: str | None = None) -> dict:
     """Fetch ALL finetune evaluation rows by paginating through all pages.
 
@@ -3287,14 +3304,15 @@ def cmd_diagnose_grader(args: argparse.Namespace) -> None:
         try:
             resp = requests.get(
                 f"{args.base_url}/finetune/workflows/{args.workflow_id}/records",
+                params={"limit": 50},
                 timeout=15,
             )
             if resp.status_code == 200:
                 records_data = resp.json()
-                recs = records_data.get("records", records_data) if isinstance(records_data, dict) else records_data
+                recs = records_data.get("data", records_data.get("records", records_data)) if isinstance(records_data, dict) else records_data
                 if isinstance(recs, list) and recs:
                     msg_lengths = []
-                    for rec in recs[:50]:  # sample first 50
+                    for rec in recs:  # already limited to 50 by query
                         rd = rec.get("data", {})
                         if isinstance(rd, str):
                             rd = json.loads(rd)
@@ -3574,12 +3592,21 @@ def cmd_create_eval(args: argparse.Namespace) -> None:
     from datetime import datetime, timezone
 
     model = args.model or "gpt-4o-mini"
+
+    # Get total record count so we evaluate ALL records (cloud defaults to 1000)
+    try:
+        records_resp = _api("GET", f"{args.base_url}/finetune/workflows/{args.workflow_id}/records?limit=1")
+        total_records = records_resp.get("pagination", {}).get("total", 1000)
+    except Exception:
+        total_records = 10000  # Safe upper bound if count fails
+
     payload = {
         "workflow_id": args.workflow_id,
         "rollout_model_params": {
             "model": model,
             "temperature": 0.7,
         },
+        "limit": total_records,
     }
 
     result = _api(
@@ -3638,19 +3665,33 @@ def _update_eval_metadata(metadata: dict, result: dict) -> dict:
 
 
 def _compute_eval_partial_score(result: dict) -> tuple:
-    """Extract average score, zero-rate, and perfect-rate from partial eval results.
+    """Extract average score, zero-rate, and perfect-rate from eval results.
 
     Returns (average_score, num_scored_rows, zero_rate, perfect_rate).
-    zero_rate is the fraction of scores < 0.01.
-    perfect_rate is the fraction of scores >= 0.99.
+
+    Prefers the summary object (computed from ALL results by the cloud)
+    over scanning the results array (which may be a paginated subset).
+    Falls back to scanning results only when summary lacks the needed fields.
     """
+    summary = result.get("summary")
+
+    # Use summary when it has the extended fields (scored_count, zero_score_count, etc.)
+    # These are computed from ALL results by the cloud, regardless of limit.
+    if summary and summary.get("scored_count", 0) > 0:
+        scored = summary["scored_count"]
+        avg = summary.get("average_score")
+        zero_rate = summary["zero_score_count"] / scored if scored > 0 else None
+        perfect_rate = summary["perfect_score_count"] / scored if scored > 0 else None
+        return avg, scored, zero_rate, perfect_rate
+
+    # Legacy summary (only avg_score + passed/failed — no zero/perfect counts)
+    if summary and summary.get("average_score") is not None:
+        completed = result.get("completed_rows", 0)
+        return summary["average_score"], completed, None, None
+
+    # Last resort: scan the results array (may be a paginated subset)
     rows = result.get("results", [])
     if not rows:
-        # Fall back to summary if no row-level data
-        summary = result.get("summary")
-        if summary and summary.get("average_score") is not None:
-            completed = result.get("completed_rows", 0)
-            return summary["average_score"], completed, None, None
         return None, 0, None, None
 
     scores = []
@@ -3836,6 +3877,11 @@ def cmd_poll_eval(args: argparse.Namespace) -> None:
 
     elapsed = 0
     status = "unknown"
+    # Skill fetches FULL results on every poll — the agent needs to see actual
+    # model responses, errors, and per-topic patterns for quality analysis.
+    # This is a CLI tool (not a browser), so 1-2MB per poll is fine.
+    # The cloud summary (scored_count, zero/perfect counts) is used as a fast
+    # fallback when results array is empty (e.g., eval just started).
     while elapsed < max_wait:
         try:
             result = _api("GET", f"{args.base_url}/finetune/evaluations/{eval_id}")
@@ -3898,7 +3944,8 @@ def cmd_poll_eval(args: argparse.Namespace) -> None:
                     file=sys.stderr,
                 )
 
-                # Diagnose FIRST — decide whether to cancel based on root cause
+                # Diagnose FIRST — decide whether to cancel based on root cause.
+                # Full results are already available from the poll (no extra fetch needed).
                 partial_results = metadata.get("results", [])
                 is_grader_broken = True  # default: cancel unless diagnosis says otherwise
                 if partial_results:
@@ -3933,7 +3980,16 @@ def cmd_poll_eval(args: argparse.Namespace) -> None:
                     early_cancel = False  # disable further checks for this eval
 
         if status in ("completed", "failed", "error", "cancelled"):
-            metadata["completed_at"] = result.get("completed_at")
+            # Final fetch to ensure we have the complete result set for readiness-check.
+            # Polling already fetches full results, so this is a safety confirmation.
+            final_result = result
+            try:
+                final_result = _api("GET", f"{args.base_url}/finetune/evaluations/{eval_id}")
+                avg_score, scored_rows, zero_rate, perfect_rate = _compute_eval_partial_score(final_result)
+            except SystemExit:
+                print("  Warning: could not fetch final results — using last poll data", file=sys.stderr)
+            metadata = _update_eval_metadata(metadata, final_result)
+            metadata["completed_at"] = final_result.get("completed_at")
             eval_file.write_text(json.dumps(metadata, indent=2))
             print(f"Done: {status}. Saved to {eval_file}")
 
@@ -4319,10 +4375,11 @@ def cmd_create_training(args: argparse.Namespace) -> None:
     # soft-punishment zone, arXiv:2503.14476 — not a direct DAPO parameter).
     current_max_tokens = payload["inference_parameters"].get("max_output_tokens", 512)
     try:
-        records = _api(
+        records_resp = _api(
             "GET",
-            f"{args.base_url}/finetune/workflows/{args.workflow_id}/records",
+            f"{args.base_url}/finetune/workflows/{args.workflow_id}/records?limit=100",
         )
+        records = records_resp.get("data", records_resp.get("records", records_resp)) if isinstance(records_resp, dict) else records_resp
         if isinstance(records, list) and len(records) > 0:
             recommended = _estimate_recommended_max_tokens(records)
             if recommended != current_max_tokens:
