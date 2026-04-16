@@ -246,18 +246,14 @@ def extract_decision_points(
 ) -> list[dict]:
     """Extract per-decision-point training records from OTel traces.
 
-    Each decision point = one tool call the agent made. The record contains:
-    - messages: conversation context up to (not including) the tool call
-    - tools: the tool schema available in THIS trace (per-span, not global).
-      Falls back to the global tool_schemas if per-span schemas aren't available.
-      This handles production systems where different conversations may have
-      different tool sets available.
-    - ground_truth: the tool call (name + arguments)
-    - topic: derived from the tool name
+    Only extracts decision points for ACTION tools (cancel, modify, return,
+    exchange, transfer). Skips lookup tools (get_*, find_*, list_*) and
+    utility tools (calculate, think) — these are called in every conversation
+    and would overwhelm the training data with non-skill decisions.
 
-    This produces records in the format GRPO needs for tool-calling training
-    (ToolRL, arXiv:2504.13958). Each record is a single choice the model
-    must learn to make given the conversation context.
+    Each decision point uses the span's input_msgs as context (which already
+    contains the full conversation history) rather than building context
+    incrementally. This avoids message duplication bugs.
 
     Returns empty list if no tool calls found (text-only agent).
     """
@@ -268,18 +264,100 @@ def extract_decision_points(
     record_idx = 0
 
     for trace_id, spans in traces.items():
-        # Build the full conversation from spans
-        conversation: list[dict] = []
-        if system_prompt:
-            conversation.append({"role": "system", "content": system_prompt})
-
         for span in spans:
             if not is_llm_chat_span(span):
                 continue
             attrs = _attrs(span)
 
-            # Extract per-span tool set (may differ across conversations).
-            # Falls back to global tool_schemas if not available in this span.
+            # Check output for tool calls (all types — action, lookup, utility)
+            # We keep all tool types because the model needs to learn the full
+            # reasoning chain (lookup → action). Subsampling happens after extraction
+            # to rebalance away from lookup dominance.
+            output_msgs = attrs.get("gen_ai.output.messages") or []
+            action_call = None
+            for msg in output_msgs:
+                if not isinstance(msg, dict):
+                    continue
+                for part in msg.get("parts") or []:
+                    if not isinstance(part, dict) or part.get("type") != "tool_call":
+                        continue
+                    name = part.get("name", "")
+                    if not name:
+                        continue
+                    args = part.get("arguments") or part.get("args")
+                    if isinstance(args, str):
+                        try:
+                            args = json.loads(args)
+                        except (json.JSONDecodeError, TypeError):
+                            args = {}
+                    action_call = {"name": name, "arguments": args if isinstance(args, dict) else {}}
+                    break
+                if action_call:
+                    break
+
+            if not action_call:
+                continue  # No action tool call in this span
+
+            # Build context from this span's input_msgs (already contains full history)
+            context: list[dict] = []
+            if system_prompt:
+                context.append({"role": "system", "content": system_prompt})
+
+            # Build context from span's input_msgs.
+            # CRITICAL: every tool message must have tool_call_id matching
+            # an assistant tool_call's id. Cloud eval validates this.
+            input_msgs = attrs.get("gen_ai.input.messages") or []
+            pending_tool_call_ids: list[str] = []  # IDs from most recent assistant tool_calls
+
+            for msg in input_msgs:
+                if not isinstance(msg, dict):
+                    continue
+                role = msg.get("role", "")
+                if role not in ("user", "assistant", "tool", "system"):
+                    continue
+                if role == "system":
+                    continue  # Already added system prompt above
+                parts = msg.get("parts") or []
+                text = _text_of_parts(parts) if parts else msg.get("content", "")
+                entry: dict = {"role": role}
+                if text:
+                    entry["content"] = text
+
+                # Assistant with tool_calls — generate IDs for matching
+                if role == "assistant" and not text:
+                    tc_parts = [p for p in parts if isinstance(p, dict) and p.get("type") == "tool_call"]
+                    if tc_parts:
+                        entry["content"] = None
+                        pending_tool_call_ids = []
+                        tool_calls_list = []
+                        for idx, p in enumerate(tc_parts):
+                            # Use trace's tool_call_id if available, else generate
+                            tc_id = p.get("tool_call_id") or f"call_{record_idx}_{idx}"
+                            pending_tool_call_ids.append(tc_id)
+                            tool_calls_list.append({
+                                "id": tc_id,
+                                "type": "function",
+                                "function": {
+                                    "name": p.get("name", ""),
+                                    "arguments": json.dumps(p.get("arguments", {})) if isinstance(p.get("arguments"), dict) else str(p.get("arguments", "")),
+                                },
+                            })
+                        entry["tool_calls"] = tool_calls_list
+                    elif not text:
+                        continue  # Skip empty assistant messages
+
+                # Tool result — must have matching tool_call_id
+                if role == "tool":
+                    tc_id = msg.get("tool_call_id")
+                    if not tc_id and pending_tool_call_ids:
+                        tc_id = pending_tool_call_ids.pop(0)
+                    elif not tc_id:
+                        tc_id = f"call_{record_idx}_auto"
+                    entry["tool_call_id"] = tc_id
+
+                context.append(entry)
+
+            # Extract per-span tool set
             span_tools = None
             raw_tools = attrs.get("gen_ai.request.tools")
             if isinstance(raw_tools, list) and raw_tools:
@@ -287,99 +365,39 @@ def extract_decision_points(
                     {"type": "function", "function": t.get("function", t)}
                     for t in raw_tools if isinstance(t, dict)
                 ]
-            if not span_tools:
-                inv = attrs.get("llm.invocation_parameters")
-                if isinstance(inv, str):
-                    try:
-                        inv = json.loads(inv)
-                    except (json.JSONDecodeError, TypeError):
-                        inv = None
-                if isinstance(inv, dict) and inv.get("tools"):
-                    span_tools = [
-                        {"type": "function", "function": t.get("function", t)}
-                        for t in inv["tools"] if isinstance(t, dict)
-                    ]
-            # Use per-span tools if found, else global fallback
             effective_tools = span_tools or tool_schemas
 
-            # Add user messages
-            input_msgs = attrs.get("gen_ai.input.messages") or []
-            for msg in input_msgs:
-                if not isinstance(msg, dict):
-                    continue
-                role = msg.get("role", "")
-                if role in ("user", "tool"):
-                    parts = msg.get("parts") or []
-                    text = _text_of_parts(parts) if parts else msg.get("content", "")
-                    if text:
-                        entry: dict = {"role": role, "content": text}
-                        if role == "tool" and msg.get("tool_call_id"):
-                            entry["tool_call_id"] = msg["tool_call_id"]
-                        conversation.append(entry)
+            topic = tool_name_to_topic(action_call["name"])
+            record_idx += 1
 
-            # Check output for tool calls — each is a decision point
-            output_msgs = attrs.get("gen_ai.output.messages") or []
-            for msg in output_msgs:
-                if not isinstance(msg, dict):
-                    continue
+            records.append({
+                "id": f"trace-{trace_id[:8]}-dp-{record_idx:04d}",
+                "messages": context,
+                "tools": effective_tools,
+                "ground_truth": action_call,
+                "topic": topic,
+                "prompt_type": "trace_decision_point",
+            })
+    # Subsample to rebalance: lookup tools (get_*, find_*, list_*) dominate
+    # (60%+) but action tools are the real training target. Cap lookup/utility
+    # at 2x the action tool count to prevent signal dilution while keeping
+    # the reasoning chain (ToolRL trains on all tools but with rebalancing).
+    if records:
+        import random as _dp_random
+        _dp_random.seed(42)
 
-                # Check for text response (assistant message)
-                for part in msg.get("parts") or []:
-                    if not isinstance(part, dict):
-                        continue
+        action_records = [r for r in records if _classify_tool(r["ground_truth"]["name"]) == "action"]
+        other_records = [r for r in records if _classify_tool(r["ground_truth"]["name"]) != "action"]
 
-                    if part.get("type") == "tool_call":
-                        name = part.get("name", "")
-                        if not name:
-                            continue
+        max_other = max(len(action_records) * 2, 200)  # At least 200 or 2x actions
+        if len(other_records) > max_other:
+            _dp_random.shuffle(other_records)
+            other_records = other_records[:max_other]
+            print(f"  Subsampled lookup/utility: {len(records) - len(action_records)} → {len(other_records)} "
+                  f"(capped at 2x action count={len(action_records)})")
 
-                        # Parse arguments
-                        args = part.get("arguments") or part.get("args")
-                        if isinstance(args, str):
-                            try:
-                                args = json.loads(args)
-                            except (json.JSONDecodeError, TypeError):
-                                args = {}
+        records = action_records + other_records
 
-                        # Create decision-point record
-                        # Context = conversation so far (BEFORE this tool call)
-                        context = [dict(m) for m in conversation]
-
-                        ground_truth = {
-                            "name": name,
-                            "arguments": args if isinstance(args, dict) else {},
-                        }
-
-                        topic = tool_name_to_topic(name)
-                        record_idx += 1
-
-                        records.append({
-                            "id": f"trace-{trace_id[:8]}-dp-{record_idx:04d}",
-                            "messages": context,
-                            "tools": effective_tools,
-                            "ground_truth": ground_truth,
-                            "topic": topic,
-                            "prompt_type": "trace_decision_point",
-                        })
-
-                        # Add this tool call to conversation context for next decision
-                        conversation.append({
-                            "role": "assistant",
-                            "content": None,
-                            "tool_calls": [{
-                                "type": "function",
-                                "function": {"name": name, "arguments": json.dumps(args) if isinstance(args, dict) else str(args)},
-                            }],
-                        })
-
-                    elif part.get("type") == "text" and part.get("content"):
-                        # Add assistant text response to context
-                        conversation.append({"role": "assistant", "content": part["content"]})
-
-    # NOTE: Do NOT cap per-topic. GRPO learns from natural distribution.
-    # Auth tools appear in every trace (high frequency) but that's real usage.
-    # Capping throws away learnable signal. Ensure rare action topics have
-    # at least ~25 synthetic records (generate_records.py handles this).
     return records
 
 

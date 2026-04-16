@@ -127,12 +127,14 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --workflow-id $WORKFLOW_ID --enrich-sources
 ```
 
-### What the trace flags do
+### Tool-calling vs text-only (IMPORTANT)
 
-- `--weight-by-trace-priority`: High-failure topics get more records (proportional to `frequency × failure_rate`)
-- `--trace-prompts-file`: Injects real user queries as seed records (17-20% of data) + overrides system prompt with production prompt
-- `--seed-query-ratio 0.20`: 20% of records per topic are real queries from traces
-- `--tools-file`: **(Only for tool-calling agents)** Includes tool function schemas in EVERY record (both tool-action and text-response topics). GT format varies by topic: tool-action topics get `{"name": "...", "arguments": {...}}` GT, text topics get text GT. This teaches the model both WHEN to call tools and WHEN to respond with text (ToolRL, arXiv:2504.13958 — without text examples, model becomes "tool-happy"). Auto-detected: if `trace-analysis/tool-schemas.json` exists, the agent is a tool-calling agent. Without this flag, records use text-only format (suitable for QA/chat tasks).
+**Tool-calling agents** (tool-schemas.json exists): Do NOT use `generate_records.py`. Use `decision-points.jsonl` directly as training data. These are multi-turn records with full conversation context — the correct format. Single-turn synthetics create distribution shift (model skips auth, predicts args from nowhere). See [tool-calling-training-design.md](../research-trace-pdf-combine/tool-calling-training-design.md).
+
+**Text-only agents** (no tool-schemas.json): Use `generate_records.py` with these flags:
+- `--weight-by-trace-priority`: High-failure topics get more records
+- `--trace-prompts-file`: Injects seed queries + overrides system prompt
+- `--seed-query-ratio 0.20`: 20% seeds from real traces
 
 ---
 

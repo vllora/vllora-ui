@@ -429,9 +429,39 @@ If the user provides existing training data, assign each record to a leaf topic.
 
 Check `config.json` for `use_nemo` flag. If `true`, skip to Step 4B (NeMo). Otherwise:
 
-#### Step 4A: Default — `generate_records.py`
+#### Step 4A: Generate Training Data
 
 **Outputs:** `training.jsonl`
+
+**Auto-detect data source based on agent type:**
+
+```bash
+if [ -f finetune-project/trace-analysis/tool-schemas.json ]; then
+  echo "TOOL-CALLING agent → use decision points as PRIMARY data"
+else
+  echo "TEXT-ONLY agent → use generate_records.py"
+fi
+```
+
+**A) Tool-calling agents** (tool-schemas.json exists):
+
+Decision points from traces are the PRIMARY training data. They are multi-turn (5-20+ messages of conversation context before each tool call) which matches production. Do NOT use single-turn synthetic records — they create distribution shift (model learns to skip authentication, predict args it hasn't seen).
+
+```bash
+# Decision points ARE the training data (multi-turn, from traces)
+cp finetune-project/trace-analysis/decision-points.jsonl finetune-project/training.jsonl
+echo "Training records: $(wc -l < finetune-project/training.jsonl) decision points"
+
+# Upload (one upload, no merge needed)
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
+  --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl --force
+```
+
+Research: Single-turn synthetic records HURT multi-turn agents (IRC arXiv:2604.02869, ToolRL arXiv:2504.13958). The model must see realistic conversation context (authenticate → lookup → action) to learn proper tool routing.
+
+**B) Text-only agents** (no tool-schemas.json):
+
+Use `generate_records.py` for synthetic record generation (single-turn is correct for QA/chat).
 
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
@@ -443,28 +473,12 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --records-per-topic 30 --parallel 4 \
   --workflow-id $WORKFLOW_ID --enrich-sources
 
-```
-
-**Combined mode — trace-informed generation:** Use the production system prompt and trace-weighted allocation. See [reference/trace-combined-mode.md](reference/trace-combined-mode.md) § Step 4 for the full command with all trace flags (`--weight-by-trace-priority`, `--trace-prompts-file`, `--seed-query-ratio`). The system prompt MUST come from `trace-analysis/prompts.json` — `generate_records.py` auto-overrides when `--trace-prompts-file` is provided.
-
-**Tool-calling agents:** If `trace-analysis/tool-schemas.json` exists (auto-detected from traces), add `--tools-file finetune-project/trace-analysis/tool-schemas.json`. This includes tool schemas in EVERY record (both tool-action and text-response topics). GT format auto-adapts per topic: tool-action topics get tool_call GT, text topics get text GT. The model learns both WHEN to call tools and WHEN to respond with text (without text examples, model becomes "tool-happy" — ToolRL, arXiv:2504.13958). Without `--tools-file`, records use text-only format (suitable for knowledge QA tasks).
-
-**After generation: merge decision points THEN upload (one upload only):**
-```bash
-# Merge trace decision points FIRST (tool-calling agents only)
-if [ -f finetune-project/trace-analysis/decision-points.jsonl ]; then
-  echo "Merging $(wc -l < finetune-project/trace-analysis/decision-points.jsonl) trace decision points..."
-  cat finetune-project/trace-analysis/decision-points.jsonl >> finetune-project/training.jsonl
-  echo "Total records: $(wc -l < finetune-project/training.jsonl)"
-fi
-
-# Upload ALL records (synthetic + decision points) in one upload
+# Upload
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
   --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl --force
 ```
-**Do NOT upload before merging decision points.** The gateway should have ALL records.
 
-Generate **200+ synthetic records**, minimum 25 per leaf topic. With decision points merged, total may be 3000+.
+**Combined mode (text-only with traces):** See [reference/trace-combined-mode.md](reference/trace-combined-mode.md) § Step 4 for trace flags.
 
 **CRITICAL: Do NOT rewrite training.jsonl with inline Python.** Never open training.jsonl with `open('training.jsonl', 'w')` and rewrite records. This strips fields (tools, ground_truth format) that `generate_records.py` carefully set. If you need to modify records, use the provided scripts (`deduplicate_records.py`, `harden-records`, `filter-records`). If no script exists for your modification, ask the user first.
 

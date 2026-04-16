@@ -28,6 +28,16 @@ from urllib.request import Request, urlopen
 from urllib.error import HTTPError
 
 
+def _gateway_get(gateway: str, path: str) -> dict | list:
+    """GET from gateway, return parsed response."""
+    req = Request(f"{gateway}{path}", method="GET")
+    try:
+        with urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read())
+    except Exception as e:
+        raise RuntimeError(f"GET {path} failed: {e}") from e
+
+
 def _gateway_post(gateway: str, path: str, body: dict, timeout: int = 60) -> dict:
     """POST JSON to gateway, return parsed response."""
     data = json.dumps(body).encode()
@@ -178,17 +188,25 @@ def main() -> None:
         print(f"  Warning: trace bundle upload failed: {e}", file=sys.stderr)
         bundle_id = None
 
-    # Step 2: Register as knowledge source
+    # Step 2: Register as knowledge source (check for existing first)
     if bundle_id:
         print("Step 2: Registering as knowledge source...")
+        # Check for existing trace source to avoid duplicates
         try:
-            ks = _gateway_multipart(gateway, f"{wf_path}/knowledge", {
-                "name": args.name,
-                "kind": "otel-trace",
-                "trace_bundle_id": bundle_id,
-            })
-            ks_id = ks.get("id", "?")
-            print(f"  Knowledge source: {ks_id}")
+            existing = _gateway_get(gateway, f"{wf_path}/knowledge")
+            existing_sources = existing if isinstance(existing, list) else existing.get("knowledge_sources", existing.get("sources", []))
+            existing_trace = [s for s in existing_sources if s.get("trace_bundle_id")]
+            if existing_trace:
+                print(f"  Trace source already exists ({existing_trace[0].get('name', '?')}) — skipping duplicate")
+                ks_id = existing_trace[0].get("id", "?")
+            else:
+                ks = _gateway_multipart(gateway, f"{wf_path}/knowledge", {
+                    "name": args.name,
+                    "kind": "otel-trace",
+                    "trace_bundle_id": bundle_id,
+                })
+                ks_id = ks.get("id", "?")
+                print(f"  Knowledge source: {ks_id}")
         except RuntimeError as e:
             print(f"  Warning: knowledge source registration failed: {e}", file=sys.stderr)
 
