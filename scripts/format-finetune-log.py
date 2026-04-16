@@ -136,8 +136,12 @@ def process_line(entry: dict, md_file, state: dict, tool_results_file=None):
         return
 
     if entry_type == "rate_limit_event":
-        md_file.write(f"\n> ⏳ Rate limited at {ts}\n\n")
-        md_file.flush()
+        info = entry.get("rate_limit_info", {})
+        status = info.get("status", "")
+        if status and status != "allowed":
+            window = info.get("rateLimitType", "")
+            md_file.write(f"\n> ⏳ Rate limit {status} ({window}) at {ts}\n\n")
+            md_file.flush()
         return
 
     # ── Result (final summary) ──

@@ -294,15 +294,15 @@ export function TraceInfluenceView() {
   const graderDimensions =
     traceAnalysis.graderHints?.dimensions?.length ?? 0;
 
-  // Record allocation comparison
-  const maxRecords = Math.max(
-    ...Object.values(priority).map((m) => m.priorityScore),
-  );
-  const minRecords = Math.min(
-    ...Object.values(priority).map((m) => m.priorityScore),
-  );
+  // Record allocation comparison — exclude zero-priority topics (no
+  // allocation) to avoid divide-by-zero when rare actions never fail.
+  const nonZeroPriorities = Object.values(priority)
+    .map((m) => m.priorityScore)
+    .filter((p) => p > 0);
   const allocationRatio =
-    minRecords > 0 ? `${(maxRecords / minRecords).toFixed(0)}x` : "N/A";
+    nonZeroPriorities.length >= 2
+      ? `${(Math.max(...nonZeroPriorities) / Math.min(...nonZeroPriorities)).toFixed(0)}x`
+      : "—";
 
   // ─── Hero Metrics ───────────────────────────────────────────────────────
 

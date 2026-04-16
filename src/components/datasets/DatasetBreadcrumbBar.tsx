@@ -91,6 +91,13 @@ export function DatasetTitleBar() {
 /*  DatasetBreadcrumbBar — subfolder path (only renders when needed)    */
 /* ------------------------------------------------------------------ */
 
+const TRACE_ANALYSIS_SEGMENT_LABEL: Record<string, string> = {
+  "trace-analysis": "Production Traces",
+  priority: "Priority & Coverage",
+  "grader-hints": "Quality Checks",
+  "seed-queries": "Real Customer Questions",
+};
+
 export function DatasetBreadcrumbBar() {
   const { activeTabPath } = WorkspaceTabsConsumer();
 
@@ -109,6 +116,10 @@ export function DatasetBreadcrumbBar() {
     // finetune/<jobId> → show ft-abc123 instead of UUID
     if (i === 1 && segments[0] === "finetune") {
       return finetuneJobDisplayName(segment);
+    }
+    // trace-analysis/<tab> → show "Production Traces > Priority & Coverage"
+    if (segments[0] === "trace-analysis" && TRACE_ANALYSIS_SEGMENT_LABEL[segment]) {
+      return TRACE_ANALYSIS_SEGMENT_LABEL[segment];
     }
     return segment;
   });

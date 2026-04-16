@@ -900,7 +900,7 @@ export function DatasetDetailContentV2() {
               <WorkspaceWelcome
                 datasetName={dataset.name || "Untitled Workflow"}
                 onOpenTab={handleOpenTab}
-                recordCount={sortedRecords.length}
+                recordCount={totalRecords || sortedRecords.length}
                 generatedCount={insights.generatedRecords}
                 originalCount={insights.originalRecords}
                 leafTopicCount={availableTopics.length}

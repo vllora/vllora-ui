@@ -94,7 +94,15 @@ export function WorkspaceWelcome(props: WorkspaceWelcomeProps) {
   const hasKnowledgeSources = knowledgeSourcesCount > 0;
 
   if (isWorkflowEmpty) {
-    return <EmptyWorkflowWelcome datasetName={props.datasetName} hasKnowledgeSources={hasKnowledgeSources} />;
+    return (
+      <EmptyWorkflowWelcome
+        datasetName={props.datasetName}
+        hasKnowledgeSources={hasKnowledgeSources}
+        hasTopics={leafTopicCount > 0}
+        hasRecords={recordCount > 0}
+        hasEvalScript={props.hasEvalScript}
+      />
+    );
   }
   return <PopulatedWorkflowWelcome {...props} />;
 }
@@ -103,14 +111,32 @@ export function WorkspaceWelcome(props: WorkspaceWelcomeProps) {
 // Empty state — skill-first onboarding
 // ---------------------------------------------------------------------------
 
-function EmptyWorkflowWelcome({ datasetName, hasKnowledgeSources }: { readonly datasetName: string; readonly hasKnowledgeSources: boolean }) {
-  const steps = [
+function EmptyWorkflowWelcome({
+  datasetName,
+  hasKnowledgeSources,
+  hasTopics,
+  hasRecords,
+  hasEvalScript,
+}: {
+  readonly datasetName: string;
+  readonly hasKnowledgeSources: boolean;
+  readonly hasTopics: boolean;
+  readonly hasRecords: boolean;
+  readonly hasEvalScript: boolean;
+}) {
+  // Active step = first incomplete step after the most recent done one.
+  const stepStates = [
     { label: "Documents uploaded", isDone: hasKnowledgeSources },
-    { label: "Extracting content", isDone: false, isActive: hasKnowledgeSources },
-    { label: "Building topic hierarchy", isDone: false },
-    { label: "Generating training records", isDone: false },
-    { label: "Writing grader", isDone: false },
+    { label: "Extracting content", isDone: hasKnowledgeSources && hasTopics },
+    { label: "Building topic hierarchy", isDone: hasTopics },
+    { label: "Generating training records", isDone: hasRecords },
+    { label: "Writing grader", isDone: hasEvalScript },
   ];
+  const activeIndex = stepStates.findIndex((s) => !s.isDone);
+  const steps = stepStates.map((s, i) => ({
+    ...s,
+    isActive: i === activeIndex && hasKnowledgeSources,
+  }));
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-8 overflow-y-auto">
@@ -244,7 +270,14 @@ function PopulatedWorkflowWelcome({
           <StatsCard
             label="Records" icon={Database}
             value={formatNumber(recordCount)}
-            detail={recordCount > 0 ? `${formatNumber(originalCount)} original · ${formatNumber(generatedCount)} gen` : "No data yet"}
+            detail={(() => {
+              if (recordCount === 0) return "No data yet";
+              const loaded = originalCount + generatedCount;
+              if (loaded > 0 && loaded < recordCount) {
+                return `${formatNumber(loaded)} of ${formatNumber(recordCount)} loaded`;
+              }
+              return `${formatNumber(originalCount)} original · ${formatNumber(generatedCount)} gen`;
+            })()}
             onClick={() => onOpenTab("data", "data", false)}
           />
           <StatsCard

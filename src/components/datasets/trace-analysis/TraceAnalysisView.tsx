@@ -9,7 +9,7 @@
  * Data comes from TraceAnalysisContext (loaded from gateway).
  */
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { BarChart3, Zap, MessageSquare, AlertTriangle, BookOpen, TrendingUp, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TraceAnalysisConsumer } from "@/contexts/TraceAnalysisContext";
@@ -19,18 +19,19 @@ type Tab = "priority" | "grader-hints" | "seed-queries";
 
 interface TraceAnalysisViewProps {
   readonly initialTab?: Tab;
-  /** When true, skip the header and tab bar (parent provides them). Just render tab content. */
+  /** When true, skip the header (parent provides its own chrome). Just render tab content. */
   readonly contentOnly?: boolean;
 }
 
+const TAB_META: Record<Tab, { label: string; icon: React.ReactNode }> = {
+  priority: { label: "Priority & Coverage", icon: <TrendingUp className="h-4 w-4" /> },
+  "grader-hints": { label: "Quality Checks", icon: <Zap className="h-4 w-4" /> },
+  "seed-queries": { label: "Real Customer Questions", icon: <MessageSquare className="h-4 w-4" /> },
+};
+
 export function TraceAnalysisView({ initialTab = "priority", contentOnly = false }: TraceAnalysisViewProps) {
   const { traceAnalysis, isLoading, hasTraces } = TraceAnalysisConsumer();
-  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
-
-  // Sync tab when navigating via sidebar (initialTab changes)
-  useEffect(() => {
-    setActiveTab(initialTab);
-  }, [initialTab]);
+  const activeTab: Tab = initialTab;
 
   if (isLoading) {
     return (
@@ -52,65 +53,64 @@ export function TraceAnalysisView({ initialTab = "priority", contentOnly = false
     );
   }
 
-  const tabs: Array<{ id: Tab; label: string; icon: React.ReactNode }> = [
-    { id: "priority", label: "Priority & Coverage", icon: <TrendingUp className="w-3.5 h-3.5" /> },
-    { id: "grader-hints", label: "Grader Hints", icon: <Zap className="w-3.5 h-3.5" /> },
-    { id: "seed-queries", label: "Seed Queries", icon: <MessageSquare className="w-3.5 h-3.5" /> },
-  ];
+  const tabContent = (
+    <>
+      {activeTab === "priority" && <PriorityTab priority={traceAnalysis.priority} topics={traceAnalysis.topics} />}
+      {activeTab === "grader-hints" && <GraderHintsTab graderHints={traceAnalysis.graderHints} />}
+      {activeTab === "seed-queries" && <SeedQueriesTab prompts={traceAnalysis.prompts} />}
+    </>
+  );
 
-  // When contentOnly=true (embedded in OTel viewer), skip header + tabs — parent provides them
   if (contentOnly) {
-    return (
-      <div className="flex-1 overflow-y-auto p-6">
-        {activeTab === "priority" && <PriorityTab priority={traceAnalysis.priority} topics={traceAnalysis.topics} />}
-        {activeTab === "grader-hints" && <GraderHintsTab graderHints={traceAnalysis.graderHints} />}
-        {activeTab === "seed-queries" && <SeedQueriesTab prompts={traceAnalysis.prompts} />}
-      </div>
-    );
+    return <div className="flex-1 overflow-y-auto p-6">{tabContent}</div>;
   }
+
+  const meta = TAB_META[activeTab];
+  const topicCount = Object.keys(traceAnalysis.priority).length;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Header */}
       <div className="border-b border-border/60 px-6 py-4 shrink-0">
         <div className="flex items-center gap-3">
           <div className="rounded-md bg-amber-500/15 p-2 text-amber-400">
-            <BarChart3 className="h-4 w-4" />
+            {meta.icon}
           </div>
           <div>
-            <h2 className="text-lg font-semibold">Trace Analysis</h2>
+            <h2 className="text-lg font-semibold">{meta.label}</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Insights from {Object.keys(traceAnalysis.priority).length} topics across production traces
+              Insights from {topicCount} topics across production traces
             </p>
           </div>
         </div>
       </div>
+      <div className="flex-1 overflow-y-auto p-6">{tabContent}</div>
+    </div>
+  );
+}
 
-      {/* Tabs */}
-      <div className="flex border-b border-border/60 px-6 shrink-0">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={cn(
-              "flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 transition-colors",
-              activeTab === tab.id
-                ? "border-emerald-500 text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {tab.icon}
-            {tab.label}
-          </button>
-        ))}
-      </div>
+// ─── Shared small card used in metric strips ─────────────────────────────────
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6">
-        {activeTab === "priority" && <PriorityTab priority={traceAnalysis.priority} topics={traceAnalysis.topics} />}
-        {activeTab === "grader-hints" && <GraderHintsTab graderHints={traceAnalysis.graderHints} />}
-        {activeTab === "seed-queries" && <SeedQueriesTab prompts={traceAnalysis.prompts} />}
+function MetricCard({
+  label,
+  value,
+  hint,
+  emphasize,
+}: {
+  readonly label: string;
+  readonly value: string;
+  readonly hint?: string;
+  readonly emphasize?: "warn";
+}) {
+  return (
+    <div className="rounded-lg border border-border/50 bg-muted/20 p-3">
+      <div className={cn(
+        "text-2xl font-semibold leading-tight",
+        emphasize === "warn" ? "text-amber-400" : "text-foreground"
+      )}>
+        {value}
       </div>
+      <div className="text-[11px] font-medium text-foreground/80 mt-1">{label}</div>
+      {hint && <div className="text-[10px] text-muted-foreground mt-0.5 truncate" title={hint}>{hint}</div>}
     </div>
   );
 }
@@ -125,16 +125,39 @@ function PriorityTab({
   readonly topics: { readonly discoveredTopics: readonly string[]; readonly coverageGaps: readonly { readonly topic: string; readonly traceCount: number; readonly frequency: number }[] };
 }) {
   const sorted = Object.entries(priority).sort((a, b) => b[1].priorityScore - a[1].priorityScore);
-  const [showDetails, setShowDetails] = useState(false);
+  const [showDetails, setShowDetails] = useState(true);
 
   // Compute accessible summary
   const topTopic = sorted[0];
   const bottomTopic = sorted[sorted.length - 1];
   const highFailureTopics = sorted.filter(([, m]) => m.failureRate > 0.4);
   const totalTraces = sorted.reduce((sum, [, m]) => sum + m.traceCount, 0);
+  const avgFailureRate = sorted.length > 0
+    ? sorted.reduce((sum, [, m]) => sum + m.failureRate, 0) / sorted.length
+    : 0;
+  const worstTopic = sorted.length > 0
+    ? sorted.reduce((worst, curr) => (curr[1].failureRate > worst[1].failureRate ? curr : worst), sorted[0])
+    : null;
 
   return (
     <div className="space-y-6">
+      {/* Metric strip */}
+      <div className="grid grid-cols-4 gap-3">
+        <MetricCard label="Conversations" value={totalTraces.toLocaleString()} hint="analyzed" />
+        <MetricCard label="Skills" value={sorted.length.toString()} hint="discovered" />
+        <MetricCard
+          label="High-failure skills"
+          value={highFailureTopics.length.toString()}
+          hint=">40% failure"
+          emphasize={highFailureTopics.length > 0 ? "warn" : undefined}
+        />
+        <MetricCard
+          label="Avg failure rate"
+          value={`${(avgFailureRate * 100).toFixed(0)}%`}
+          hint={worstTopic ? `worst: ${worstTopic[0].replace(/-/g, " ")}` : undefined}
+        />
+      </div>
+
       {/* Accessible summary (always visible) */}
       <div className="bg-muted/20 border border-border/50 rounded-lg p-4">
         <p className="text-sm leading-relaxed">
@@ -272,10 +295,10 @@ function GraderHintsTab({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold">Auto-Generated Grader Dimensions</h3>
+          <h3 className="text-sm font-semibold">What We Score For</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Dimensions derived from trace failure patterns and production prompt rules.
-            These informed the grader rubric.
+            Scoring criteria auto-derived from where your production agent failed and from the rules in your system prompt.
+            These become the quality checker's rubric.
           </p>
         </div>
         <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded">
@@ -369,13 +392,13 @@ function SeedQueriesTab({
         </pre>
       </div>
 
-      {/* Seed queries by topic */}
+      {/* Real customer questions by topic */}
       <div>
         <h3 className="text-sm font-semibold mb-1">
-          Seed Queries ({prompts.totalSeedQueries} total)
+          Real Customer Questions ({prompts.totalSeedQueries} total)
         </h3>
         <p className="text-xs text-muted-foreground mb-3">
-          Real user queries from production traces, grouped by topic. Used as-is (not paraphrased) to anchor training data distribution.
+          Verbatim questions pulled from your production traces, grouped by skill. Used as-is (not rephrased) so training data sounds like real customers.
         </p>
         <div className="space-y-1">
           {Object.entries(prompts.seedQueries)

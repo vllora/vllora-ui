@@ -1673,6 +1673,37 @@ def main() -> None:
                              "it's trivial for all models. Override with a specific model after Step 7b.")
     args = parser.parse_args()
 
+    # Tool-calling gate: if tool-schemas.json exists the records must carry a
+    # `tools` field. Without --tools-file the generated records will lack it —
+    # refuse and tell the caller to either pass --tools-file (for complementary
+    # text-routing synthetics) or copy decision-points.jsonl (for trace-derived
+    # tool-call records). See tool-calling-training-design.md for the 80/20 split.
+    topics_parent = Path(args.topics).resolve().parent
+    for d in (topics_parent, topics_parent / "trace-analysis"):
+        tool_schemas = d / "tool-schemas.json"
+        if not tool_schemas.exists():
+            continue
+        if not args.tools_file:
+            decision_points = d / "decision-points.jsonl"
+            print(
+                f"Error: tool-calling agent detected ({tool_schemas} exists) but "
+                "--tools-file was not provided. Without tool schemas attached, the "
+                "generated records will have no 'tools' field and cannot teach tool invocation.\n"
+                "\n"
+                "Common fix (trace-based tool-call records):\n"
+                f"  cp {decision_points} {args.output}\n"
+                "  # then: deduplicate_records.py + upload-records\n"
+                "\n"
+                "Alternative (synthetic text-routing complement, 20-30% of total):\n"
+                f"  generate_records.py ... --tools-file {tool_schemas}\n"
+                "\n"
+                "See finetune-skill/SKILL.md Step 4 and "
+                "docs/.../research-trace-pdf-combine/tool-calling-training-design.md.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        break
+
     if args.upload_incremental and not args.workflow_id:
         print("Error: --workflow-id required with --upload-incremental", file=sys.stderr)
         sys.exit(1)

@@ -279,7 +279,7 @@ export function DryrunEvaluationResultRow({
         {/* Expand indicator */}
         {!hideChevron && (
           <div className="w-5 shrink-0 flex items-center justify-center">
-            {(reason || hideStatusColumn) && (
+            {(reason || result.error_message || hideStatusColumn) && (
               <ChevronRight className={cn(
                 "w-3 h-3 text-zinc-600 transition-transform",
                 isExpanded && "rotate-90 text-zinc-400",
@@ -395,7 +395,15 @@ export function DryrunEvaluationResultRow({
                 <TooltipProvider delayDuration={200}>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="text-[12px] text-red-400 cursor-help">✗ Error</span>
+                      <span
+                        className="text-[10px] text-red-400 cursor-help flex items-center gap-1 truncate"
+                        title={result.error_message}
+                      >
+                        <span className="shrink-0">✗</span>
+                        <span className="truncate">
+                          {result.error_message.replace(/^Evaluation error:\s*/i, "").slice(0, 50)}
+                        </span>
+                      </span>
                     </TooltipTrigger>
                     <TooltipContent side="top" className="max-w-xs text-xs bg-zinc-900 border-zinc-700">
                       <p className="font-medium text-red-400 mb-1">Error</p>
@@ -440,19 +448,48 @@ export function DryrunEvaluationResultRow({
       </div>
 
       {/* Expanded content: output + reason + criteria breakdown (only for non-finetune rows) */}
-      {isExpanded && (reason || outputText || groundTruthText) && !hideStatusColumn && (
-        <ExpandedReasonPanel reason={reason} outputText={outputText} groundTruth={groundTruthText} />
+      {isExpanded && (reason || outputText || groundTruthText || result.error_message) && !hideStatusColumn && (
+        <ExpandedReasonPanel
+          reason={reason}
+          outputText={outputText}
+          groundTruth={groundTruthText}
+          errorMessage={result.error_message}
+        />
       )}
     </div>
   );
 }
 
 /** Expanded panel showing output + criteria breakdown + full reason text */
-function ExpandedReasonPanel({ reason, outputText, groundTruth }: { readonly reason?: string | null; readonly outputText?: string | null; readonly groundTruth?: string | null }) {
+function ExpandedReasonPanel({
+  reason,
+  outputText,
+  groundTruth,
+  errorMessage,
+}: {
+  readonly reason?: string | null;
+  readonly outputText?: string | null;
+  readonly groundTruth?: string | null;
+  readonly errorMessage?: string | null;
+}) {
   const breakdown = reason ? parseScoreBreakdown(reason) : null;
 
   return (
     <div className="bg-zinc-900/40 border-b border-zinc-800/40 px-8 py-3 space-y-2">
+      {/* Error banner — shown prominently for failed evaluations */}
+      {errorMessage && (
+        <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/30 rounded px-3 py-2">
+          <span className="text-[12px] text-red-400 font-semibold shrink-0">✗</span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <p className="text-[9px] font-semibold uppercase tracking-wider text-red-400">Evaluation Error</p>
+              <CopyButton text={errorMessage} />
+            </div>
+            <p className="text-[11px] text-red-100/90 break-words leading-relaxed">{errorMessage}</p>
+          </div>
+        </div>
+      )}
+
       {/* Criteria breakdown bars (full width, above the two-column layout) */}
       {breakdown?.hasBreakdown && Object.keys(breakdown.criteria).length > 0 && (
         <div className="flex flex-wrap gap-x-6 gap-y-1.5">

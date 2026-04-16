@@ -354,11 +354,22 @@ export function OtelTraceSourceViewer({ source, semconvSpans }: OtelTraceSourceV
   const hasSpans = semconvSpans && semconvSpans.length > 0;
 
   const headerName = source?.name ?? (hasSpans ? `Trace ${semconvSpans[0]!.trace_id}` : 'OTel trace');
-  const headerSubtitle = source
-    ? `${source.parts.length} parts`
-    : hasSpans
-      ? `${semconvSpans.length} spans`
-      : 'empty';
+  const distinctTraceCount = hasSpans
+    ? new Set(semconvSpans!.map((s) => s.trace_id)).size
+    : 0;
+  const isTraceBundle = !!source?.traceBundleId;
+  let headerSubtitle: string;
+  if (isTraceBundle) {
+    headerSubtitle = hasSpans
+      ? `${distinctTraceCount} trace${distinctTraceCount === 1 ? '' : 's'}`
+      : 'loading traces…';
+  } else if (source) {
+    headerSubtitle = `${source.parts.length} parts`;
+  } else if (hasSpans) {
+    headerSubtitle = `${semconvSpans!.length} spans`;
+  } else {
+    headerSubtitle = 'empty';
+  }
 
   return (
     <div className="flex h-full flex-col overflow-hidden">

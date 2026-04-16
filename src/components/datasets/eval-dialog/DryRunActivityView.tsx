@@ -18,7 +18,7 @@ import { flattenEvaluationResults } from "@/services/finetune-api";
 import { cn } from "@/lib/utils";
 import { emitter } from "@/utils/eventEmitter";
 import type { EvalJob } from "@/types/eval-job";
-import { getJobTotalRows, getJobCompletedRows } from "@/types/eval-job";
+import { getJobTotalRows, getJobCompletedRows, getJobFailedRows } from "@/types/eval-job";
 import { EvaluatorVersionBadge } from "@/components/shared/EvaluatorVersionBadge";
 import { useEvaluatorVersions } from "@/hooks/useEvaluatorVersions";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
@@ -154,6 +154,23 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
       (r) => r.status === "failed" || !!r.error_message
     ).length;
     return { errorCount: errors, totalCount: evaluationResults.length };
+  }, [evaluationResults]);
+
+  // Group identical error messages so 50 rows with the same error collapse
+  // into one banner ("50 rows failed: Tool call id not found in request").
+  const topErrorGroups = useMemo(() => {
+    if (!evaluationResults) return [];
+    const counts = new Map<string, number>();
+    for (const r of evaluationResults) {
+      const msg = r.error_message?.trim();
+      if (!msg) continue;
+      const normalized = msg.replace(/^Evaluation error:\s*/i, "");
+      counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 3)
+      .map(([message, count]) => ({ message, count }));
   }, [evaluationResults]);
 
   // Build a quick lookup from record ID to topic name
@@ -294,7 +311,7 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
               {job.rolloutModel || "gpt-4o-mini"}
             </span>
             <span className="text-[10px] text-zinc-500">
-              {(evaluationResults?.length || job.pollingSnapshot?.total_rows || job.sampleSize) ?? 0} records
+              {(job.pollingSnapshot?.total_rows || job.sampleSize || evaluationResults?.length) ?? 0} records
             </span>
             {job.workflowId && (
               <EvalJobVersionBadge workflowId={job.workflowId} jobCreatedAt={job.createdAt} />
@@ -331,6 +348,40 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
             </div>
           </div>
         )}
+
+        {/* Grouped per-row errors — collapses "50 rows failed with same error" into one banner */}
+        {topErrorGroups.length > 0 && (() => {
+          const snapshotFailed = getJobFailedRows(job);
+          const snapshotTotal = getJobTotalRows(job);
+          const failedTotal = snapshotFailed || errorCount;
+          const runTotal = snapshotTotal || totalCount;
+          const groupedTotal = topErrorGroups.reduce((sum, g) => sum + g.count, 0);
+          const isSample = failedTotal > groupedTotal;
+          return (
+            <div className="shrink-0 mx-3 mt-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 space-y-1.5">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 text-red-400 shrink-0" />
+                <p className="text-[11px] font-semibold text-red-400">
+                  {failedTotal} of {runTotal} evaluations failed
+                  {topErrorGroups.length > 1 ? ` (${topErrorGroups.length} distinct errors)` : ""}
+                </p>
+              </div>
+              <ul className="space-y-1 pl-5">
+                {topErrorGroups.map(({ message, count }) => (
+                  <li key={message} className="flex items-start gap-2 text-[11px]">
+                    <span className="font-mono tabular-nums text-red-300/80 shrink-0 w-10 text-right">×{count}</span>
+                    <span className="text-red-100/90 break-words leading-relaxed">{message}</span>
+                  </li>
+                ))}
+              </ul>
+              {isSample && (
+                <p className="text-[10px] text-red-300/70 pl-5">
+                  Showing breakdown from {groupedTotal} loaded failures (of {failedTotal} total).
+                </p>
+              )}
+            </div>
+          );
+        })()}
 
         {!isRunning && showErrorView ? (
           <div className="shrink-0 mx-3 mt-2 rounded-md border border-red-500/30 bg-red-500/10 px-2.5 py-1.5">

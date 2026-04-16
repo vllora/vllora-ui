@@ -255,6 +255,14 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       tabLabel = "Training";
     } else if (nodeId.startsWith("finetune/")) {
       tabLabel = finetuneJobDisplayName(nodeId.slice("finetune/".length));
+    } else if (nodeId === "trace-influence") {
+      tabLabel = "Training Impact";
+    } else if (nodeId === "trace-analysis/priority") {
+      tabLabel = "Priority & Coverage";
+    } else if (nodeId === "trace-analysis/grader-hints") {
+      tabLabel = "Quality Checks";
+    } else if (nodeId === "trace-analysis/seed-queries") {
+      tabLabel = "Real Customer Questions";
     }
     openTab(nodeId, tabLabel);
     // "All Topics" (nodeId === "data") → switch to canvas view
@@ -329,8 +337,8 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
             const traceChildren = [
               { id: "trace-influence", label: "Training Impact", icon: <Layers className="w-3 h-3 shrink-0" /> },
               { id: "trace-analysis/priority", label: "Priority & Coverage", icon: <TrendingUp className="w-3 h-3 shrink-0" /> },
-              { id: "trace-analysis/grader-hints", label: "Grader Hints", icon: <Zap className="w-3 h-3 shrink-0" /> },
-              { id: "trace-analysis/seed-queries", label: "Seed Queries", icon: <MessageSquare className="w-3 h-3 shrink-0" /> },
+              { id: "trace-analysis/grader-hints", label: "Quality Checks", icon: <Zap className="w-3 h-3 shrink-0" /> },
+              { id: "trace-analysis/seed-queries", label: "Real Customer Questions", icon: <MessageSquare className="w-3 h-3 shrink-0" /> },
             ];
 
             const renderTraceChildren = () => {
@@ -452,12 +460,18 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
       <SidebarSection title="Quality Checker" icon={<Code2 className="w-3 h-3" />}>
         {getSection("evaluator") && <SectionInsight analysis={getSection("evaluator")!} />}
-        <SidebarItem
-          icon={<Code2 className="w-3.5 h-3.5" />}
-          label="grader-script.js"
-          isActive={selectedNodeId === "evaluations/grader-script.ts"}
-          onClick={() => handleSelect("evaluations/grader-script.ts")}
-        />
+        {dataset?.evalScript ? (
+          <SidebarItem
+            icon={<Code2 className="w-3.5 h-3.5" />}
+            label="grader-script.js"
+            isActive={selectedNodeId === "evaluations/grader-script.ts"}
+            onClick={() => handleSelect("evaluations/grader-script.ts")}
+          />
+        ) : (
+          <div className="px-3 py-2 text-[10px] text-muted-foreground/70 italic">
+            Not yet generated
+          </div>
+        )}
       </SidebarSection>
 
       <SidebarDivider />

@@ -777,6 +777,46 @@ def cmd_upload_records(args: argparse.Namespace) -> None:
         print(f"Error: Records file not found: {records_path}", file=sys.stderr)
         sys.exit(1)
 
+    # Tool-calling gate: if the project has tool-schemas.json, every record must
+    # carry a `tools` field (the definitive wrong-format signal). Text-routing
+    # records legitimately have string GTs, so we do NOT require tool_call GT here
+    # — only the presence of tool schemas. Sample the first 10 non-empty records
+    # to catch the common case where one record leaks in without tools.
+    records_parent = records_path.resolve().parent
+    for d in (records_parent, records_parent / "trace-analysis", records_parent / "finetune-project" / "trace-analysis"):
+        tool_schemas = d / "tool-schemas.json"
+        if not tool_schemas.exists():
+            continue
+        sampled = []
+        for line in records_path.read_text().splitlines():
+            if not line.strip():
+                continue
+            try:
+                sampled.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+            if len(sampled) >= 10:
+                break
+        missing_tools = [i for i, r in enumerate(sampled, 1) if not r.get("tools")]
+        if sampled and missing_tools:
+            decision_points = d / "decision-points.jsonl"
+            print(
+                f"Error: tool-calling agent detected ({tool_schemas} exists) but "
+                f"{len(missing_tools)}/{len(sampled)} sampled records in {records_path} "
+                "are missing the 'tools' field. Uploading this will produce a model "
+                "that cannot invoke tools (inference-time tools have no training signal).\n"
+                "\n"
+                "Fix: use trace decision points as training data:\n"
+                f"  cp {decision_points} {records_path}\n"
+                f"  uv run deduplicate_records.py {records_path} --threshold 0.85\n"
+                f"  finetune.py upload-records --workflow-id {args.workflow_id} --file {records_path} --force\n"
+                "\n"
+                "See finetune-skill/SKILL.md Step 4 (Tool-calling branch).",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        break
+
     # If --force, delete existing records first
     if getattr(args, "force", False):
         _api("DELETE", f"{args.base_url}/finetune/workflows/{args.workflow_id}/records")
@@ -816,10 +856,10 @@ def cmd_upload_records(args: argparse.Namespace) -> None:
             continue
 
         data_obj: dict = {"input": {"messages": r["messages"]}, "output": {}}
-        # Include tool schemas in record data so the UI can display them
-        # and the training pipeline can pass them to the tokenizer.
+        # Include tool schemas in record data so the eval engine and
+        # training pipeline can see them alongside the conversation.
         if r.get("tools"):
-            data_obj["tools"] = r["tools"]
+            data_obj["input"]["tools"] = r["tools"]
         if r.get("ground_truth"):
             gt = r["ground_truth"]
             # Normalize: if GT is a JSON string containing a tool call, parse to dict.
@@ -7183,6 +7223,9 @@ def cmd_update_analysis(args: argparse.Namespace) -> None:
     project_dir = Path(args.project_dir)
     analysis_file = project_dir / "analysis.json"
 
+    # Normalize underscore aliases → canonical hyphen form
+    args.status = args.status.replace("_", "-")
+
     # Load or create
     if analysis_file.exists():
         analysis = json.loads(analysis_file.read_text())
@@ -7599,8 +7642,9 @@ def main() -> None:
                    choices=["sources", "trace-analysis", "training-data", "evaluator", "evaluation", "training"],
                    help="Which pipeline section to update")
     p.add_argument("--status", required=True,
-                   choices=["not-started", "in-progress", "ready", "needs-work", "blocked"],
-                   help="Current status of this section")
+                   choices=["not-started", "in-progress", "ready", "needs-work", "blocked",
+                            "not_started", "in_progress", "needs_work"],
+                   help="Current status of this section (underscores accepted as aliases)")
     p.add_argument("--summary", required=True,
                    help="One-line summary — the primary insight both agent and user see")
     p.add_argument("--metrics", default=None,

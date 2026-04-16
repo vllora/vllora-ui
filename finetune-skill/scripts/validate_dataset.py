@@ -305,15 +305,15 @@ def main() -> None:
             print(f"  ... and {len(all_errors) - 20} more")
         if proj:
             log_milestone(proj, "step_5_5_validate", "validate_dataset", "fail",
-                           f"Validation FAILED: {len(all_errors)} errors in {len(records)} records",
-                           {"total": len(records), "errors": len(all_errors)})
+                           f"Validation FAILED: {len(all_errors)} errors in {record_count} records",
+                           {"total": record_count, "errors": len(all_errors)})
         sys.exit(1)
     else:
         print(f"\n✅ All records valid!")
         if proj:
             log_milestone(proj, "step_5_5_validate", "validate_dataset", "completed",
-                           f"Validation PASSED: {len(records)} records, {len(topic_counts)} topics, all valid",
-                           {"total": len(records), "topics": len(topic_counts), "topic_counts": dict(topic_counts)})
+                           f"Validation PASSED: {record_count} records, {len(topic_counts)} topics, all valid",
+                           {"total": record_count, "topics": len(topic_counts), "topic_counts": dict(topic_counts)})
 
 
 if __name__ == "__main__":
