@@ -605,8 +605,8 @@ def main():
     proj = find_project_dir(input_path)
     if proj:
         log_milestone(proj, "step_2_extraction", "consolidate_parts", "completed",
-                       f"Consolidated {before_count}→{len(consolidated)} parts (dropped {dropped} short). Quality: {results['overall']}",
-                       {"before": before_count, "after": len(consolidated), "dropped": dropped, "quality": results["overall"]})
+                       f"Consolidated {original_count}→{len(consolidated)} parts (dropped {dropped} short). Quality: {results['overall']}",
+                       {"before": original_count, "after": len(consolidated), "dropped": dropped, "quality": results["overall"]})
 
     sys.exit(0 if results["overall"] == "PASS" else 1)
 
