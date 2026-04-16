@@ -306,8 +306,10 @@ def extract_decision_points(
             # Build context from span's input_msgs.
             # CRITICAL: every tool message must have tool_call_id matching
             # an assistant tool_call's id. Cloud eval validates this.
+            # Each tool_call_id must be UNIQUE within the conversation.
             input_msgs = attrs.get("gen_ai.input.messages") or []
             pending_tool_call_ids: list[str] = []  # IDs from most recent assistant tool_calls
+            tc_counter = 0  # Unique counter per record for tool_call_id generation
 
             for msg in input_msgs:
                 if not isinstance(msg, dict):
@@ -330,9 +332,10 @@ def extract_decision_points(
                         entry["content"] = None
                         pending_tool_call_ids = []
                         tool_calls_list = []
-                        for idx, p in enumerate(tc_parts):
-                            # Use trace's tool_call_id if available, else generate
-                            tc_id = p.get("tool_call_id") or f"call_{record_idx}_{idx}"
+                        for p in tc_parts:
+                            # Generate unique ID per tool call within this record
+                            tc_counter += 1
+                            tc_id = p.get("tool_call_id") or f"call_{record_idx}_{tc_counter}"
                             pending_tool_call_ids.append(tc_id)
                             tool_calls_list.append({
                                 "id": tc_id,
