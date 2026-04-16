@@ -128,8 +128,15 @@ def extract_system_prompt(record: dict) -> str:
 
 
 def extract_ground_truth(record: dict) -> str:
-    """Extract ground_truth from a record."""
-    return record.get("ground_truth", "")
+    """Extract ground_truth from a record as a string.
+
+    GT can be a string (text mode) or dict (tool-call mode).
+    Returns JSON string for dicts so callers can use .strip() safely.
+    """
+    gt = record.get("ground_truth", "")
+    if isinstance(gt, dict):
+        return json.dumps(gt)
+    return gt if isinstance(gt, str) else ""
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -208,6 +215,27 @@ def gate_structural(records: list[dict], topics_data: list | None) -> dict:
             "message": f"Only {gt_frac:.0%} of records have ground_truth (recommend >= {THRESHOLDS['min_ground_truth_frac']:.0%})",
             "value": round(gt_frac, 3),
             "threshold": THRESHOLDS["min_ground_truth_frac"],
+        })
+
+    # Garbage GT detection — malformed JSON fragments, single chars
+    garbage_gts = []
+    for i, r in enumerate(records):
+        raw_gt = r.get("ground_truth")
+        rid = r.get("id", f"record-{i}")
+        if isinstance(raw_gt, str) and raw_gt.strip():
+            gt_s = raw_gt.strip()
+            if len(gt_s) < 5 and not gt_s[0].isalpha():
+                garbage_gts.append(rid)
+    if garbage_gts:
+        issues.append({
+            "severity": "hard",
+            "check": "garbage_ground_truths",
+            "message": (
+                f"{len(garbage_gts)} record(s) have garbage ground truth (malformed JSON fragments like "
+                f"'{{' or ':{{' — likely LLM output truncation). These produce wrong training signal."
+            ),
+            "value": len(garbage_gts),
+            "records": garbage_gts[:10],
         })
 
     short_gts = []
@@ -428,6 +456,34 @@ def gate_structural(records: list[dict], topics_data: list | None) -> dict:
                 "alignment_pct": alignment_pct,
                 "worst_topics": dict(worst),
             })
+
+    # 9. Tool-calling format validation
+    # If records have "tools" field, they're for a tool-calling agent.
+    # GT must be a tool call (dict with "name"), not text.
+    records_with_tools = [r for r in records if r.get("tools")]
+    if records_with_tools:
+        tool_format_ok = 0
+        tool_format_bad = 0
+        for r in records_with_tools:
+            gt = r.get("ground_truth")
+            if isinstance(gt, dict) and gt.get("name"):
+                tool_format_ok += 1
+            elif isinstance(gt, str):
+                # Text GT on a tool-calling record — format mismatch
+                tool_format_bad += 1
+        total_tool = len(records_with_tools)
+        issues.append({
+            "severity": "soft" if tool_format_bad < total_tool * 0.3 else "hard",
+            "check": "tool_call_format",
+            "message": (
+                f"{tool_format_ok}/{total_tool} tool-calling records have correct GT format "
+                f"(dict with name+arguments). {tool_format_bad} have text GT instead — "
+                f"these won't produce reward signal for tool-calling GRPO."
+            ),
+            "value": tool_format_ok,
+            "total_tool_records": total_tool,
+            "text_gt_count": tool_format_bad,
+        })
 
     hard_fails = [i for i in issues if i["severity"] == "hard"]
     soft_warns = [i for i in issues if i["severity"] == "soft"]

@@ -240,6 +240,137 @@ function evaluate(input) {{
 """
 
 
+def generate_tool_call_grader_js(tool_schemas: list[dict]) -> str:
+    """Generate a Jaccard-based tool-call grader (ToolRL, arXiv:2504.13958).
+
+    Scoring: 0.4 * name_match + 0.3 * param_key_jaccard + 0.3 * param_value_match
+    This decomposition outperforms outcome-only rewards by 17% (ToolRL).
+    """
+    tool_names = [t.get("function", {}).get("name", "?") for t in tool_schemas]
+
+    return f"""/**
+ * Tool-Call Grader — Jaccard Scoring (auto-generated)
+ *
+ * Scores model tool calls against expected ground truth using:
+ *   - Tool name match (40% weight)
+ *   - Parameter key Jaccard similarity (30% weight)
+ *   - Parameter value match (30% weight)
+ *
+ * Research: ToolRL (arXiv:2504.13958) — fine-grained tool-call rewards
+ * beat outcome-only rewards by 17%.
+ *
+ * Valid tools: {', '.join(tool_names)}
+ */
+function evaluate(input) {{
+    var FLOOR = 0.02;  // Minimum score for any attempted answer
+
+    // Parse the model's response as a tool call
+    var modelCall = parseToolCall(input.response);
+    if (!modelCall || !modelCall.name) {{
+        return {{ score: FLOOR, reason: "No valid tool call in response" }};
+    }}
+
+    // Parse expected ground truth
+    var expected = input.ground_truth || input.expected;
+    if (typeof expected === "string") {{
+        try {{ expected = JSON.parse(expected); }} catch (e) {{ return {{ score: FLOOR }}; }}
+    }}
+    if (!expected || !expected.name) {{
+        return {{ score: 0.5, reason: "No expected tool call — cannot score" }};
+    }}
+
+    // 1. Tool name match (40%)
+    var nameScore = modelCall.name === expected.name ? 1.0 : 0.0;
+
+    // 2. Parameter key Jaccard (30%)
+    var modelKeys = Object.keys(modelCall.arguments || {{}});
+    var expectedKeys = Object.keys(expected.arguments || {{}});
+    var keyIntersection = modelKeys.filter(function(k) {{ return expectedKeys.indexOf(k) >= 0; }});
+    var keyUnion = modelKeys.concat(expectedKeys.filter(function(k) {{ return modelKeys.indexOf(k) < 0; }}));
+    var keyJaccard = keyUnion.length > 0 ? keyIntersection.length / keyUnion.length : 1.0;
+
+    // 3. Parameter value match (30%)
+    var valueMatches = 0;
+    var totalParams = expectedKeys.length || 1;
+    for (var i = 0; i < expectedKeys.length; i++) {{
+        var key = expectedKeys[i];
+        var modelVal = String(modelCall.arguments?.[key] || "");
+        var expectedVal = String(expected.arguments?.[key] || "");
+        if (modelVal === expectedVal) {{
+            valueMatches++;
+        }} else if (modelVal.toLowerCase() === expectedVal.toLowerCase()) {{
+            valueMatches += 0.8;  // Case-insensitive partial credit
+        }}
+    }}
+    var valueScore = valueMatches / totalParams;
+
+    // Composite score (ToolRL decomposition)
+    var score = 0.4 * nameScore + 0.3 * keyJaccard + 0.3 * valueScore;
+    score = Math.max(FLOOR, score);
+
+    return {{
+        score: score,
+        name_match: 1.0,
+        key_jaccard: keyJaccard,
+        value_match: valueScore,
+        model_tool: modelCall.name,
+        expected_tool: expected.name,
+    }};
+}}
+
+function parseToolCall(response) {{
+    if (!response) return null;
+
+    if (typeof response === "string") {{
+        // Format 1: Qwen3.5 XML — <function=name><parameter=key>value</parameter></function>
+        var xmlMatch = response.match(/<function=([^>]+)>(.*?)<\\/function>/s);
+        if (xmlMatch) {{
+            var fnName = xmlMatch[1];
+            var paramBlock = xmlMatch[2];
+            var args = {{}};
+            var paramRegex = /<parameter=([^>]+)>([^<]*)<\\/parameter>/g;
+            var m;
+            while ((m = paramRegex.exec(paramBlock)) !== null) {{
+                args[m[1]] = m[2];
+            }}
+            return {{ name: fnName, arguments: args }};
+        }}
+
+        // Format 2: Hermes JSON — <tool_call>{{"name": ...}}</tool_call>
+        var hermesMatch = response.match(/<tool_call>(.*?)<\\/tool_call>/s);
+        if (hermesMatch) {{
+            try {{
+                var parsed = JSON.parse(hermesMatch[1]);
+                return {{ name: parsed.name, arguments: parsed.arguments || {{}} }};
+            }} catch (e) {{}}
+        }}
+
+        // Format 3: Raw JSON
+        try {{
+            var parsed = JSON.parse(response);
+            if (parsed.name) return parsed;
+            if (parsed.function) return {{ name: parsed.function.name, arguments: parsed.function.arguments }};
+            if (parsed.tool_calls && parsed.tool_calls[0]) {{
+                var tc = parsed.tool_calls[0];
+                return {{ name: tc.function?.name || tc.name, arguments: tc.function?.arguments || tc.arguments }};
+            }}
+        }} catch (e) {{}}
+    }}
+
+    // Format 4: Object with tool_calls array
+    if (typeof response === "object") {{
+        if (response.tool_calls && response.tool_calls[0]) {{
+            var tc = response.tool_calls[0];
+            return {{ name: tc.function?.name || tc.name, arguments: tc.function?.arguments || tc.arguments }};
+        }}
+        if (response.name) return response;
+    }}
+
+    return null;
+}}
+"""
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Generate a grader draft from trace analysis hints"
@@ -254,6 +385,11 @@ def main() -> None:
         required=True,
         help="Output path for grader-draft.js",
     )
+    parser.add_argument(
+        "--tools-file",
+        help="Path to tool-schemas.json. When provided, generates a Jaccard-based "
+             "tool-call grader instead of the text-match checklist grader.",
+    )
     args = parser.parse_args()
 
     hints_path = Path(args.hints)
@@ -265,7 +401,20 @@ def main() -> None:
     print(f"Loaded hints: {hints.get('dimension_count', 0)} dimensions, "
           f"{hints.get('calibration_pair_count', 0)} calibration pairs")
 
-    grader_js = generate_grader_js(hints)
+    # Auto-detect: tool-calling agent → Jaccard grader, text agent → checklist grader
+    tool_schemas = None
+    if args.tools_file:
+        tools_path = Path(args.tools_file)
+        if tools_path.exists():
+            tools_data = json.loads(tools_path.read_text())
+            tool_schemas = tools_data.get("tools", tools_data) if isinstance(tools_data, dict) else tools_data
+
+    if tool_schemas:
+        print(f"Tool-calling agent detected ({len(tool_schemas)} tools) — generating Jaccard grader")
+        grader_js = generate_tool_call_grader_js(tool_schemas)
+    else:
+        print("Text-only agent — generating checklist grader")
+        grader_js = generate_grader_js(hints)
 
     output_path = Path(args.output)
     output_path.write_text(grader_js)

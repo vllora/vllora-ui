@@ -127,18 +127,273 @@ def extract_tool_calls_from_span(span: dict) -> list[str]:
     return tool_names
 
 
-def extract_trace_ground_truth(trace_spans: list[dict]) -> str | None:
-    """Derive a concise ground truth from a trace's tool calls and outcomes.
+def extract_tool_schemas_from_traces(traces: dict[str, list[dict]]) -> list[dict]:
+    """Extract tool function schemas from trace span attributes.
 
-    For GRPO, seed records need GT so the grader can score them. Without GT,
-    seeds become zero-variance prompts (arXiv:2509.21880 "No Prompt Left Behind").
+    Looks for tool definitions in:
+    1. gen_ai.request.tools (OpenTelemetry GenAI semconv)
+    2. llm.invocation_parameters (OpenInference — tools inside params)
+    3. Tool call arguments (infer schema from observed args)
 
-    GT format: "Action: <tool_name>. <key constraints from the trace>."
-    This is concise enough for grader scoring but specific to the trace.
+    Returns OpenAI-compatible tool schema list, or empty list if no tools found
+    (text-only agent — no tool-calling).
     """
-    action_tools: list[str] = []
-    tool_args: dict[str, dict] = {}
+    seen_tools: dict[str, dict] = {}  # name → schema
 
+    for spans in traces.values():
+        for span in spans:
+            if not is_llm_chat_span(span):
+                continue
+            attrs = _attrs(span)
+
+            # Source 1: gen_ai.request.tools (semconv standard)
+            request_tools = attrs.get("gen_ai.request.tools")
+            if isinstance(request_tools, list):
+                for tool in request_tools:
+                    if not isinstance(tool, dict):
+                        continue
+                    func = tool.get("function", tool)
+                    name = func.get("name", "")
+                    if name and name not in seen_tools:
+                        seen_tools[name] = {
+                            "type": "function",
+                            "function": {
+                                "name": name,
+                                **({"description": func["description"]} if func.get("description") else {}),
+                                **({"parameters": func["parameters"]} if func.get("parameters") else {}),
+                            },
+                        }
+
+            # Source 2: llm.invocation_parameters (OpenInference)
+            inv_params = attrs.get("llm.invocation_parameters")
+            if isinstance(inv_params, str):
+                try:
+                    inv_params = json.loads(inv_params)
+                except (json.JSONDecodeError, TypeError):
+                    inv_params = None
+            if isinstance(inv_params, dict):
+                for tool in inv_params.get("tools", []):
+                    if not isinstance(tool, dict):
+                        continue
+                    func = tool.get("function", tool)
+                    name = func.get("name", "")
+                    if name and name not in seen_tools:
+                        seen_tools[name] = {
+                            "type": "function",
+                            "function": {
+                                "name": name,
+                                **({"description": func["description"]} if func.get("description") else {}),
+                                **({"parameters": func["parameters"]} if func.get("parameters") else {}),
+                            },
+                        }
+
+            # Source 3: Infer from tool call arguments (fallback)
+            output_msgs = attrs.get("gen_ai.output.messages") or []
+            for msg in output_msgs:
+                if not isinstance(msg, dict):
+                    continue
+                for part in msg.get("parts") or []:
+                    if not isinstance(part, dict) or part.get("type") != "tool_call":
+                        continue
+                    name = part.get("name", "")
+                    if not name or name in seen_tools:
+                        continue
+                    # Infer basic schema from observed arguments
+                    args = part.get("arguments") or part.get("args")
+                    if isinstance(args, str):
+                        try:
+                            args = json.loads(args)
+                        except (json.JSONDecodeError, TypeError):
+                            args = {}
+                    if isinstance(args, dict) and args:
+                        properties = {}
+                        for k, v in args.items():
+                            if isinstance(v, str):
+                                properties[k] = {"type": "string"}
+                            elif isinstance(v, bool):
+                                properties[k] = {"type": "boolean"}
+                            elif isinstance(v, int):
+                                properties[k] = {"type": "integer"}
+                            elif isinstance(v, float):
+                                properties[k] = {"type": "number"}
+                            elif isinstance(v, list):
+                                properties[k] = {"type": "array", "items": {"type": "string"}}
+                            else:
+                                properties[k] = {"type": "string"}
+                        seen_tools[name] = {
+                            "type": "function",
+                            "function": {
+                                "name": name,
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": properties,
+                                },
+                            },
+                        }
+
+        # Early exit once we have schemas (they're the same across all traces)
+        if seen_tools:
+            break
+
+    return list(seen_tools.values())
+
+
+def extract_decision_points(
+    traces: dict[str, list[dict]],
+    tool_schemas: list[dict],
+    system_prompt: str = "",
+    max_per_topic: int = 50,
+) -> list[dict]:
+    """Extract per-decision-point training records from OTel traces.
+
+    Each decision point = one tool call the agent made. The record contains:
+    - messages: conversation context up to (not including) the tool call
+    - tools: the tool schema available in THIS trace (per-span, not global).
+      Falls back to the global tool_schemas if per-span schemas aren't available.
+      This handles production systems where different conversations may have
+      different tool sets available.
+    - ground_truth: the tool call (name + arguments)
+    - topic: derived from the tool name
+
+    This produces records in the format GRPO needs for tool-calling training
+    (ToolRL, arXiv:2504.13958). Each record is a single choice the model
+    must learn to make given the conversation context.
+
+    Returns empty list if no tool calls found (text-only agent).
+    """
+    if not tool_schemas:
+        return []
+
+    records: list[dict] = []
+    record_idx = 0
+
+    for trace_id, spans in traces.items():
+        # Build the full conversation from spans
+        conversation: list[dict] = []
+        if system_prompt:
+            conversation.append({"role": "system", "content": system_prompt})
+
+        for span in spans:
+            if not is_llm_chat_span(span):
+                continue
+            attrs = _attrs(span)
+
+            # Extract per-span tool set (may differ across conversations).
+            # Falls back to global tool_schemas if not available in this span.
+            span_tools = None
+            raw_tools = attrs.get("gen_ai.request.tools")
+            if isinstance(raw_tools, list) and raw_tools:
+                span_tools = [
+                    {"type": "function", "function": t.get("function", t)}
+                    for t in raw_tools if isinstance(t, dict)
+                ]
+            if not span_tools:
+                inv = attrs.get("llm.invocation_parameters")
+                if isinstance(inv, str):
+                    try:
+                        inv = json.loads(inv)
+                    except (json.JSONDecodeError, TypeError):
+                        inv = None
+                if isinstance(inv, dict) and inv.get("tools"):
+                    span_tools = [
+                        {"type": "function", "function": t.get("function", t)}
+                        for t in inv["tools"] if isinstance(t, dict)
+                    ]
+            # Use per-span tools if found, else global fallback
+            effective_tools = span_tools or tool_schemas
+
+            # Add user messages
+            input_msgs = attrs.get("gen_ai.input.messages") or []
+            for msg in input_msgs:
+                if not isinstance(msg, dict):
+                    continue
+                role = msg.get("role", "")
+                if role in ("user", "tool"):
+                    parts = msg.get("parts") or []
+                    text = _text_of_parts(parts) if parts else msg.get("content", "")
+                    if text:
+                        entry: dict = {"role": role, "content": text}
+                        if role == "tool" and msg.get("tool_call_id"):
+                            entry["tool_call_id"] = msg["tool_call_id"]
+                        conversation.append(entry)
+
+            # Check output for tool calls — each is a decision point
+            output_msgs = attrs.get("gen_ai.output.messages") or []
+            for msg in output_msgs:
+                if not isinstance(msg, dict):
+                    continue
+
+                # Check for text response (assistant message)
+                for part in msg.get("parts") or []:
+                    if not isinstance(part, dict):
+                        continue
+
+                    if part.get("type") == "tool_call":
+                        name = part.get("name", "")
+                        if not name:
+                            continue
+
+                        # Parse arguments
+                        args = part.get("arguments") or part.get("args")
+                        if isinstance(args, str):
+                            try:
+                                args = json.loads(args)
+                            except (json.JSONDecodeError, TypeError):
+                                args = {}
+
+                        # Create decision-point record
+                        # Context = conversation so far (BEFORE this tool call)
+                        context = [dict(m) for m in conversation]
+
+                        ground_truth = {
+                            "name": name,
+                            "arguments": args if isinstance(args, dict) else {},
+                        }
+
+                        topic = tool_name_to_topic(name)
+                        record_idx += 1
+
+                        records.append({
+                            "id": f"trace-{trace_id[:8]}-dp-{record_idx:04d}",
+                            "messages": context,
+                            "tools": effective_tools,
+                            "ground_truth": ground_truth,
+                            "topic": topic,
+                            "prompt_type": "trace_decision_point",
+                        })
+
+                        # Add this tool call to conversation context for next decision
+                        conversation.append({
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [{
+                                "type": "function",
+                                "function": {"name": name, "arguments": json.dumps(args) if isinstance(args, dict) else str(args)},
+                            }],
+                        })
+
+                    elif part.get("type") == "text" and part.get("content"):
+                        # Add assistant text response to context
+                        conversation.append({"role": "assistant", "content": part["content"]})
+
+    # NOTE: Do NOT cap per-topic. GRPO learns from natural distribution.
+    # Auth tools appear in every trace (high frequency) but that's real usage.
+    # Capping throws away learnable signal. Ensure rare action topics have
+    # at least ~25 synthetic records (generate_records.py handles this).
+    return records
+
+
+def extract_trace_ground_truth(trace_spans: list[dict]) -> dict | str | None:
+    """Derive ground truth from a trace's first action tool call.
+
+    Returns a model-neutral tool-call dict when the trace has tool calls:
+      {"name": "cancel_pending_order", "arguments": {"order_id": "W123", ...}}
+
+    This matches the format used by generate_records.py for synthetic records,
+    so seed records and synthetic records have consistent GT format.
+
+    Returns None if no action tool calls found (text-only trace).
+    """
     for span in trace_spans:
         if not is_llm_chat_span(span):
             continue
@@ -152,39 +407,19 @@ def extract_trace_ground_truth(trace_spans: list[dict]) -> str | None:
                 name = part.get("name", "")
                 if not name or _classify_tool(name) != "action":
                     continue
-                action_tools.append(name)
+                # Found first action tool call — return as dict
                 args = part.get("arguments") or part.get("args")
                 if isinstance(args, str):
                     try:
                         args = json.loads(args)
                     except (json.JSONDecodeError, TypeError):
                         args = {}
-                if isinstance(args, dict):
-                    tool_args[name] = args
+                return {
+                    "name": name,
+                    "arguments": args if isinstance(args, dict) else {},
+                }
 
-    if not action_tools:
-        return None
-
-    # Build GT from first action (matches topic assignment)
-    primary = action_tools[0]
-    gt_parts = [f"Action: {primary.replace('_', ' ')}"]
-
-    # Add key arguments as constraints (skip IDs, keep semantic params)
-    args = tool_args.get(primary, {})
-    semantic_keys = {"reason", "payment_method", "address", "item_ids", "new_item_ids"}
-    for key in sorted(args.keys()):
-        if key in semantic_keys and args[key]:
-            val = args[key]
-            if isinstance(val, list):
-                val = ", ".join(str(v) for v in val)
-            gt_parts.append(f"{key.replace('_', ' ')}: {val}")
-
-    # Add success/failure from trace
-    reward = get_trace_reward(trace_spans)
-    if reward is not None:
-        gt_parts.append("outcome: success" if reward >= 0.5 else "outcome: failed")
-
-    return ". ".join(gt_parts) + "."
+    return None
 
 
 # ─── Trace reward / success detection ────────────────────────────────────────
@@ -584,8 +819,13 @@ def build_trace_prompts(
             intent_filtered += 1
             continue
 
-        # Extract GT from trace (arXiv:2509.21880 — seeds without GT waste compute)
-        ground_truth = extract_trace_ground_truth(spans)
+        # NOTE: Do NOT attach tool-call GT to first-message seeds.
+        # The user's first message typically lacks the arguments needed for the
+        # tool call (order_id, email, etc. come from later turns). Attaching
+        # the trace's tool call as GT creates unverifiable reward — the model
+        # can't predict args it hasn't seen (ToolRL, arXiv:2504.18176).
+        # Tool-calling GT comes from decision-points.jsonl instead.
+        # Seeds serve as prompt diversity only.
 
         surface_intents = detect_surface_intent(query)
         is_multi_intent = len(surface_intents) > 1
@@ -593,7 +833,6 @@ def build_trace_prompts(
             "query": query,
             "surface_intents": surface_intents,
             "is_multi_intent": is_multi_intent,
-            "ground_truth": ground_truth,
         })
 
     if intent_filtered:
@@ -898,13 +1137,50 @@ def main() -> None:
     print(f"  {grader_hints['dimension_count']} grader dimensions ({sum(1 for d in grader_hints['dimensions'] if d['source'] == 'trace_failure')} from traces, {sum(1 for d in grader_hints['dimensions'] if d['source'] == 'prompt_rule')} from prompt rules)")
     print(f"  {grader_hints['calibration_pair_count']} calibration pairs")
 
+    # Artifact 5: tool-schemas.json (only if traces contain tool calls)
+    print("\nExtracting tool schemas...")
+    tool_schemas = extract_tool_schemas_from_traces(traces)
+    if tool_schemas:
+        schemas_path = output_dir / "tool-schemas.json"
+        with open(schemas_path, "w") as f:
+            json.dump({"tools": tool_schemas}, f, indent=2)
+        print(f"  {len(tool_schemas)} tool schemas extracted (tool-calling agent detected)")
+        print(f"  Tools: {', '.join(t['function']['name'] for t in tool_schemas)}")
+    else:
+        print(f"  No tool schemas found (text-only agent — no tool-calling training needed)")
+
+    # Artifact 6: decision-points.jsonl (only if tool-calling agent)
+    decision_point_count = 0
+    if tool_schemas:
+        print("\nExtracting decision points from traces...")
+        simplified = trace_prompts.get("simplified_prompt", "")
+        decision_points = extract_decision_points(traces, tool_schemas, simplified)
+        if decision_points:
+            dp_path = output_dir / "decision-points.jsonl"
+            with open(dp_path, "w") as f:
+                for dp in decision_points:
+                    f.write(json.dumps(dp, ensure_ascii=False) + "\n")
+            decision_point_count = len(decision_points)
+            # Per-topic distribution
+            from collections import Counter as _DPCounter
+            dp_topics = _DPCounter(dp["topic"] for dp in decision_points)
+            print(f"  {decision_point_count} decision points across {len(dp_topics)} topics")
+            for topic, count in dp_topics.most_common(5):
+                print(f"    {topic}: {count}")
+        else:
+            print("  No decision points extracted (traces may lack tool call output)")
+
     # Summary
     print(f"\n{'='*60}")
     print(f"Trace analysis complete. Artifacts written to {output_dir}/")
-    print(f"  trace_priority.json      — {len(priority)} topics with priority scores")
-    print(f"  trace_topics.json        — {trace_topics['coverage_gap_count']} coverage gaps detected")
-    print(f"  trace_prompts.json       — {trace_prompts['total_seed_queries']} seed queries")
-    print(f"  trace_grader_hints.json  — {grader_hints['dimension_count']} grader dimensions")
+    print(f"  priority.json          — {len(priority)} topics with priority scores")
+    print(f"  topics.json            — {trace_topics['coverage_gap_count']} coverage gaps detected")
+    print(f"  prompts.json           — {trace_prompts['total_seed_queries']} seed queries")
+    print(f"  grader-hints.json      — {grader_hints['dimension_count']} grader dimensions")
+    if tool_schemas:
+        print(f"  tool-schemas.json      — {len(tool_schemas)} tool function schemas")
+    if decision_point_count:
+        print(f"  decision-points.jsonl  — {decision_point_count} tool-call training records")
 
 
 if __name__ == "__main__":

@@ -145,7 +145,17 @@ function ScoreTooltipContent({ score, trend, reason }: {
 export function getRecordGroundTruth(record: DatasetRecord): string | null {
   const gt = (record.data as Record<string, unknown> | null | undefined)?.ground_truth;
   if (gt == null || gt === "") return null;
-  return typeof gt === "string" ? gt : JSON.stringify(gt);
+  if (typeof gt === "string") return gt;
+  // Tool-call GT: format as readable "Action: tool_name(arg1, arg2)"
+  if (typeof gt === "object" && gt !== null && "name" in gt) {
+    const toolGt = gt as { name: string; arguments?: Record<string, unknown> };
+    const args = toolGt.arguments ?? {};
+    const argStr = Object.entries(args)
+      .map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`)
+      .join(", ");
+    return `Action: ${toolGt.name}. ${argStr}`;
+  }
+  return JSON.stringify(gt);
 }
 
 /** Single-line ground-truth cell with hover tooltip and copy button. */

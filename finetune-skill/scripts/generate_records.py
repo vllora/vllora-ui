@@ -890,6 +890,7 @@ def _call_llm_for_type(
     ground_truth_format: str | None = None,
     input_format: str | None = None,
     seed_examples: list[str] | None = None,
+    tool_schemas: list[dict] | None = None,
 ) -> list[dict]:
     """Make one LLM call for a specific prompt type. Returns raw items.
 
@@ -944,12 +945,75 @@ REAL USER EXAMPLES (match this style — natural phrasing, specific details, var
 Your generated user_inputs should feel like these real examples — not generic or textbook.
 """
 
+    # Tool-calling prompt variant (ToolRL, arXiv:2504.13958)
+    # The model needs to learn BOTH when to call tools AND when to respond with text.
+    # Topic name determines if this topic maps to a tool action.
+    tool_calling_block = ""
+    tool_gt_instruction = ""
+    tool_return_format = ""
+    topic_is_tool_action = False
+    if tool_schemas:
+        tool_names = [t.get("function", {}).get("name", "?") for t in tool_schemas]
+        tool_summaries = []
+        for t in tool_schemas:
+            func = t.get("function", {})
+            name = func.get("name", "?")
+            desc = func.get("description", "")
+            params = func.get("parameters", {}).get("properties", {})
+            param_str = ", ".join(f"{k}: {v.get('type', '?')}" for k, v in params.items())
+            tool_summaries.append(f"  - {name}({param_str}): {desc}")
+
+        # Check if this topic maps to a tool action
+        topic_slug = topic.get("id", topic.get("name", "")).lower().replace(" ", "-")
+        topic_as_tool = topic_slug.replace("-", "_")
+        topic_is_tool_action = any(
+            topic_as_tool in t.get("function", {}).get("name", "").lower()
+            or topic_slug in t.get("function", {}).get("name", "").lower().replace("_", "-")
+            for t in tool_schemas
+        )
+
+        tool_calling_block = f"""
+AVAILABLE TOOLS (the agent can call these):
+{chr(10).join(tool_summaries)}
+"""
+        if topic_is_tool_action:
+            # This topic IS a tool action — GT should be a tool call
+            matching_tool = next(
+                (t.get("function", {}).get("name", "") for t in tool_schemas
+                 if topic_as_tool in t.get("function", {}).get("name", "").lower()
+                 or topic_slug in t.get("function", {}).get("name", "").lower().replace("_", "-")),
+                tool_names[0],
+            )
+            tool_calling_block += f"""
+This topic requires calling the tool: {matching_tool}
+Each scenario must show a situation where the correct action is to call this tool with the right parameters.
+"""
+            tool_gt_instruction = (
+                '- "ground_truth": a JSON object with the correct tool call: '
+                '{"name": "<tool_name>", "arguments": {"param1": "value1", ...}}. '
+                f'For this topic, the tool is typically: {matching_tool}. '
+                "Arguments must use realistic values from the scenario. "
+                "Prefer varied, realistic-looking IDs (e.g., #W7482910, gift_card_9182736) "
+                "and diverse names/emails. Each record should have different argument values."
+            )
+            tool_return_format = (
+                '{{"items": [{{"user_input": "...", '
+                '"ground_truth": {{"name": "tool_name", "arguments": {{"param": "value"}}}}, '
+                '"used_parts": ["1"]}}, ...]}}'
+            )
+        else:
+            # This topic is NOT a direct tool action — GT should be text
+            # (e.g., greeting, explaining policy, general inquiry)
+            tool_calling_block += """
+This topic involves text responses (not direct tool calls). The model should respond with helpful text.
+"""
+
     prompt = f"""{type_instruction}
 
 Topic: {topic['name']}
 Domain rules (from the topic's system prompt — these are critical constraints for the ground truth):
 {focus}
-{structured_constraint}{input_constraint}{style_block}
+{structured_constraint}{input_constraint}{tool_calling_block}{style_block}
 Source material (each section is numbered [1], [2], etc.):
 {chunk_text}
 
@@ -959,10 +1023,10 @@ The ground truth MUST be consistent with both the domain rules above AND the sou
 CRITICAL: Each ground_truth must be SPECIFIC to its user_input. Do NOT write generic policy statements as ground truth (e.g., "An order may only be modified if pending" is too generic). Instead, reference the specific details from the user's scenario (e.g., "Order #W123 is pending, so items can be modified. The new item must be the same product type.").
 
 For each item, also provide:
-- "ground_truth": {f'Answer in this exact format: {ground_truth_format}. CRITICAL RULES: (1) Every value (numbers, limits, thresholds, categories) MUST come directly from the source material — look them up, do NOT guess. If the source shows a special designation (like TT for treatment technique), use that exact designation. (2) COMPLETENESS: If the answer is a list, check EVERY input element independently. Do NOT stop after finding the first match. (3) Do NOT include explanations or source excerpts — only the structured answer.' if ground_truth_format else 'a concise excerpt from the source material that contains the information needed to answer. Keep it focused.'}
+{tool_gt_instruction if tool_schemas else f'- "ground_truth": {f"Answer in this exact format: {ground_truth_format}. CRITICAL RULES: (1) Every value (numbers, limits, thresholds, categories) MUST come directly from the source material — look them up, do NOT guess. If the source shows a special designation (like TT for treatment technique), use that exact designation. (2) COMPLETENESS: If the answer is a list, check EVERY input element independently. Do NOT stop after finding the first match. (3) Do NOT include explanations or source excerpts — only the structured answer." if ground_truth_format else "a concise excerpt from the source material that contains the information needed to answer. Keep it focused."}'}
 - "used_parts": an array of section numbers as strings (e.g., ["1", "3"]) — ONLY the specific sections from the source material above that this item is derived from. Most items should use 1-3 sections, not all of them.
 
-Return JSON: {{"items": [{{"user_input": "the literal user message content matching the required shape", "ground_truth": "{'structured answer' if ground_truth_format else 'relevant source excerpt'}", "used_parts": ["1"]}}, ...]}}"""
+Return JSON: {tool_return_format if tool_schemas else f'{{"items": [{{"user_input": "the literal user message content matching the required shape", "ground_truth": "{"structured answer" if ground_truth_format else "relevant source excerpt"}", "used_parts": ["1"]}}, ...]}}'}"""
 
     request_data = json.dumps({
         "messages": [{"role": "user", "content": prompt}],
@@ -1133,8 +1197,14 @@ def generate_for_topic(
     seed_queries: list[str] | None = None,
     seed_metadata: list[dict] | None = None,
     seed_query_ratio: float = 0.20,
+    tool_schemas: list[dict] | None = None,
 ) -> list[dict]:
     """Generate records for a single leaf topic via multiple parallel LLM calls.
+
+    If ``tool_schemas`` is provided, records include tool definitions and the
+    ground truth uses tool_calls format instead of text. This enables the model
+    to learn tool invocation during GRPO training (ToolRL, arXiv:2504.13958).
+    Without tool_schemas, records use text-only format (backward compatible).
 
     If ``seed_queries`` are provided (from trace_prompts.json), a fraction
     of records (controlled by ``seed_query_ratio``, default 20%) use real
@@ -1244,12 +1314,14 @@ def generate_for_topic(
                 "source_parts": list(all_source_parts_for_seeds),
                 "prompt_type": "seed_query",
             }
-            # Add ground truth from trace metadata if available
-            # (arXiv:2509.21880: seeds without GT become zero-variance prompts)
-            if seed_metadata and i < len(seed_metadata):
-                meta = seed_metadata[i]
-                if isinstance(meta, dict) and meta.get("ground_truth"):
-                    record["ground_truth"] = meta["ground_truth"]
+            if tool_schemas:
+                record["tools"] = tool_schemas
+            # NOTE: Seeds do NOT get tool-call GT. The user's first message
+            # lacks the arguments (order_id, email) that come from later turns.
+            # Tool-calling GT comes from decision-points.jsonl (per-turn records
+            # with full conversation context). Seeds serve as prompt diversity
+            # for GRPO — they still help by providing real user phrasing even
+            # without GT (ToolRL, arXiv:2504.18176).
             seed_records.append(record)
         if seed_records:
             print(f"    Injected {len(seed_records)} seed queries (from traces)")
@@ -1283,6 +1355,7 @@ def generate_for_topic(
                 ground_truth_format=ground_truth_format,
                 input_format=input_format,
                 seed_examples=seed_queries[:5] if seed_queries else None,
+                tool_schemas=tool_schemas,
             ): pt["name"]
             for pt, count in distribution
         }
@@ -1373,8 +1446,41 @@ def generate_for_topic(
                 "source_parts": record_source_parts,
                 "prompt_type": type_name,
             }
-            if include_ground_truth and ground_truth and ground_truth.strip():
-                record["ground_truth"] = ground_truth.strip()
+            # Include tool schemas as CONTEXT so the model knows tools exist.
+            # But GT format depends on whether THIS topic requires a tool call
+            # or a text response. The model must learn BOTH when to call tools
+            # and when to respond with text (ToolRL, arXiv:2504.13958).
+            if tool_schemas:
+                record["tools"] = tool_schemas
+            if include_ground_truth and ground_truth:
+                # GT can be a string (text mode) or dict (tool-call mode).
+                # LLMs often return tool calls as JSON strings — parse them.
+                if isinstance(ground_truth, dict):
+                    if ground_truth.get("name"):
+                        record["ground_truth"] = ground_truth
+                    # else: dict without "name" — skip (malformed tool call)
+                elif isinstance(ground_truth, str) and ground_truth.strip():
+                    gt_text = ground_truth.strip()
+                    # Reject obvious garbage: single chars, incomplete JSON fragments
+                    if len(gt_text) < 5 and not gt_text[0].isalpha():
+                        pass  # Skip garbage like "{", ":{", etc.
+                    elif tool_schemas and (gt_text.startswith("{") or gt_text.startswith(":")):
+                        # Try parsing as JSON tool call
+                        clean = gt_text.lstrip(":").strip()
+                        try:
+                            parsed = json.loads(clean)
+                            if isinstance(parsed, dict) and parsed.get("name"):
+                                record["ground_truth"] = parsed
+                            else:
+                                record["ground_truth"] = gt_text
+                        except (json.JSONDecodeError, TypeError):
+                            pass  # Malformed JSON — skip entirely
+                    else:
+                        record["ground_truth"] = gt_text
+
+            # NOTE: Do NOT reject tool-topic "mismatch" — fallback patterns are valid.
+            # E.g., find-user-id-by-email topic may have GT calling find_user_id_by_name_zip
+            # when the user can't provide email. GRPO rewards correct routing given context.
 
             # Inline validation: reject records that fail deterministic quality checks.
             # Catches format violations before they reach training.jsonl.
@@ -1504,6 +1610,13 @@ def main() -> None:
         default=0.20,
         help="Fraction of records per topic to use seed queries (default: 0.20). "
              "Only applies when --trace-prompts-file is set.",
+    )
+    parser.add_argument(
+        "--tools-file",
+        help="Path to tool-schemas.json (from trace_analyze.py). "
+             "When provided, records use tool-calling format: messages + tools + "
+             "ground_truth as tool_calls. Without this flag, records use text format. "
+             "This auto-detects whether the use case is tool-calling or text-only.",
     )
     parser.add_argument("--model", default="gpt-4o-mini", help="LLM model for generation (default: gpt-4o-mini)")
     parser.add_argument("--base-url", default="http://localhost:9090", help="Gateway base URL")
@@ -1674,6 +1787,22 @@ def main() -> None:
         else:
             print(f"Warning: Trace prompts file not found: {trace_prompts_path}", file=sys.stderr)
 
+    # Load tool schemas if provided (enables tool-calling record format)
+    tool_schemas: list[dict] | None = None
+    if getattr(args, 'tools_file', None):
+        tools_path = Path(args.tools_file)
+        if tools_path.exists():
+            tools_data = json.loads(tools_path.read_text())
+            tool_schemas = tools_data.get("tools", tools_data) if isinstance(tools_data, dict) else tools_data
+            if tool_schemas:
+                print(f"Loaded {len(tool_schemas)} tool schemas — using TOOL-CALLING record format")
+                print(f"  Tools: {', '.join(t.get('function', {}).get('name', '?') for t in tool_schemas[:5])}")
+            else:
+                print("  Tool schemas file empty — using text-only format")
+                tool_schemas = None
+        else:
+            print(f"Warning: Tools file not found: {tools_path}", file=sys.stderr)
+
     # Load trace priority scores if trace-weighted distribution requested
     trace_priority_scores: dict[str, float] | None = None
     if args.trace_priority_file:
@@ -1829,6 +1958,8 @@ def main() -> None:
         common_kwargs["workflow_id"] = args.workflow_id
     if args.enrich_sources:
         common_kwargs["enrich_sources"] = True
+    if tool_schemas:
+        common_kwargs["tool_schemas"] = tool_schemas
 
     # Priority 3: Per-topic difficulty targeting (adaptive mode)
     # Easy topics (base model >0.70) get hard-mode prompts;

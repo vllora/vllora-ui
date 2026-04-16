@@ -443,18 +443,30 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --records-per-topic 30 --parallel 4 \
   --workflow-id $WORKFLOW_ID --enrich-sources
 
-# Upload records SEPARATELY after generation
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
-  --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl --force
 ```
 
 **Combined mode — trace-informed generation:** Use the production system prompt and trace-weighted allocation. See [reference/trace-combined-mode.md](reference/trace-combined-mode.md) § Step 4 for the full command with all trace flags (`--weight-by-trace-priority`, `--trace-prompts-file`, `--seed-query-ratio`). The system prompt MUST come from `trace-analysis/prompts.json` — `generate_records.py` auto-overrides when `--trace-prompts-file` is provided.
 
-# Upload records SEPARATELY (more reliable than --upload-incremental)
+**Tool-calling agents:** If `trace-analysis/tool-schemas.json` exists (auto-detected from traces), add `--tools-file finetune-project/trace-analysis/tool-schemas.json`. This includes tool schemas in EVERY record (both tool-action and text-response topics). GT format auto-adapts per topic: tool-action topics get tool_call GT, text topics get text GT. The model learns both WHEN to call tools and WHEN to respond with text (without text examples, model becomes "tool-happy" — ToolRL, arXiv:2504.13958). Without `--tools-file`, records use text-only format (suitable for knowledge QA tasks).
+
+**After generation: merge decision points THEN upload (one upload only):**
+```bash
+# Merge trace decision points FIRST (tool-calling agents only)
+if [ -f finetune-project/trace-analysis/decision-points.jsonl ]; then
+  echo "Merging $(wc -l < finetune-project/trace-analysis/decision-points.jsonl) trace decision points..."
+  cat finetune-project/trace-analysis/decision-points.jsonl >> finetune-project/training.jsonl
+  echo "Total records: $(wc -l < finetune-project/training.jsonl)"
+fi
+
+# Upload ALL records (synthetic + decision points) in one upload
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records \
   --workflow-id $WORKFLOW_ID --file finetune-project/training.jsonl --force
+```
+**Do NOT upload before merging decision points.** The gateway should have ALL records.
 
-Generate **200+ total records**, minimum 25 per leaf topic.
+Generate **200+ synthetic records**, minimum 25 per leaf topic. With decision points merged, total may be 3000+.
+
+**CRITICAL: Do NOT rewrite training.jsonl with inline Python.** Never open training.jsonl with `open('training.jsonl', 'w')` and rewrite records. This strips fields (tools, ground_truth format) that `generate_records.py` carefully set. If you need to modify records, use the provided scripts (`deduplicate_records.py`, `harden-records`, `filter-records`). If no script exists for your modification, ask the user first.
 
 **Difficulty control** (reduces trivial records at generation time):
 - `--difficulty normal` (default): balanced prompt types for initial generation
@@ -574,10 +586,17 @@ Write a JavaScript grader to `quality-checker/grader.js`. Scores model responses
 
 **Before writing:** (1) Read knowledge parts + topics to understand the domain, (2) Design a checklist rubric of 7-20 binary criteria (arXiv:2507.17746), (3) **Read 10-15 sample records** from `training.jsonl` to calibrate.
 
-**Combined mode — trace-informed grader:** If `finetune-project/trace-analysis/grader-hints.json` exists (from Step 2C), generate a grader draft first:
+**Combined mode — trace-informed grader:** If `finetune-project/trace-analysis/grader-hints.json` exists (from Step 2C), generate a grader draft:
 ```bash
+# Auto-detect grader type: tool-calling → Jaccard, text → checklist
+TOOLS_FLAG=""
+if [ -f finetune-project/trace-analysis/tool-schemas.json ]; then
+  TOOLS_FLAG="--tools-file finetune-project/trace-analysis/tool-schemas.json"
+  echo "Tool-calling agent → generating Jaccard grader (name + param scoring)"
+fi
 uv run ${CLAUDE_SKILL_DIR}/scripts/grader_from_traces.py \
   --hints finetune-project/trace-analysis/grader-hints.json \
+  $TOOLS_FLAG \
   --output finetune-project/quality-checker/grader-draft.js
 ```
 This auto-generates grader dimensions from:
@@ -735,7 +754,18 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/data_quality_gate.py training.jsonl \
 
 #### 7b. Eval BOTH Models + Choose Best
 
-**Always eval both 4B and 0.8B.** Evals are cheap (~10 min each). Choosing the wrong model wastes hours of training. A model passing the headroom gate (avg < 0.75) doesn't mean it will improve much — what matters is **learnable fraction** (how many records produce GRPO gradient).
+**Tool-calling model filter:** If `trace-analysis/tool-schemas.json` exists (tool-calling use case):
+```bash
+# Check if tool-calling — only eval models that support it
+if [ -f finetune-project/trace-analysis/tool-schemas.json ]; then
+  echo "Tool-calling agent detected — eval 4B and 2B only (skip 0.8B)"
+  # Qwen3.5-0.8B cannot reliably generate structured tool calls
+  # Evaluating it wastes ~10 min compute and always scores ~0
+fi
+```
+Do NOT eval Qwen3.5-0.8B for tool-calling tasks. It cannot generate structured tool calls reliably.
+
+**Always eval both eligible models.** Evals are cheap (~10 min each). Choosing the wrong model wastes hours of training. A model passing the headroom gate (avg < 0.75) doesn't mean it will improve much — what matters is **learnable fraction** (how many records produce GRPO gradient).
 
 ```bash
 # Eval 4B + 0.8B (always eval both extremes)

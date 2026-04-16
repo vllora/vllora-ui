@@ -32,6 +32,32 @@ from pathlib import Path
 import requests
 
 DEFAULT_BASE_URL = "http://localhost:9090"
+
+
+def _update_sync_state(project_dir: Path, artifact: str, **metadata: object) -> None:
+    """Update .sync-state.json to track what's been uploaded to the gateway.
+
+    This is the local cache of gateway state — anyone reading the project
+    folder can see what's been synced without querying the gateway.
+    """
+    import hashlib
+    from datetime import datetime, timezone
+
+    sync_path = project_dir / ".sync-state.json"
+    state: dict = {}
+    if sync_path.exists():
+        try:
+            state = json.loads(sync_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            state = {}
+
+    state.setdefault("artifacts", {})[artifact] = {
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+        **{k: v for k, v in metadata.items() if v is not None},
+    }
+    state["last_sync"] = datetime.now(timezone.utc).isoformat()
+
+    sync_path.write_text(json.dumps(state, indent=2))
 _EPOCH_CANDIDATE_FIELDS = (
     "score",
     "reason",
@@ -344,16 +370,46 @@ def cmd_upload_knowledge(args: argparse.Namespace) -> None:
     # Always check for existing sources with same name to prevent duplicates.
     # The gateway's knowledge source endpoint does plain INSERT (no upsert),
     # so retrying without this check creates duplicate sources.
-    # Match by name with or without file extension (agents inconsistently use both).
+    # Match by: (1) exact name, (2) stem match (doc.pdf = doc), (3) same part count
+    # from a non-trace source (likely same document with different name).
     existing = _api("GET", f"{args.base_url}/finetune/workflows/{args.workflow_id}/knowledge")
     existing_sources = existing if isinstance(existing, list) else existing.get("knowledge_sources", existing.get("sources", []))
     source_stem = Path(source_name).stem  # "doc.pdf" → "doc"
+
+    # Count parts we're about to upload (for part-count matching)
+    upload_part_count = 0
+    if args.parts_file:
+        try:
+            pdata = json.loads(Path(args.parts_file).read_text())
+            plist = pdata.get("parts", pdata) if isinstance(pdata, dict) else pdata
+            upload_part_count = len(plist) if isinstance(plist, list) else 0
+        except Exception:
+            pass
+    elif not args.parts_file:
+        # Auto-detect sibling
+        sibling = doc_path.parent / "knowledge_parts.json"
+        if sibling.exists() and sibling != doc_path:
+            try:
+                pdata = json.loads(sibling.read_text())
+                plist = pdata.get("parts", pdata) if isinstance(pdata, dict) else pdata
+                upload_part_count = len(plist) if isinstance(plist, list) else 0
+            except Exception:
+                pass
+
     matching = [
         s for s in existing_sources
-        if s.get("name") == source_name
-        or s.get("name") == source_stem
-        or Path(s.get("name", "")).stem == source_stem
+        if not s.get("trace_bundle_id")  # skip trace sources
+        and (
+            s.get("name") == source_name
+            or s.get("name") == source_stem
+            or Path(s.get("name", "")).stem == source_stem
+            # Part-count match: same doc uploaded with different name
+            or (upload_part_count > 0
+                and len(s.get("part", s.get("parts", []))) == upload_part_count)
+        )
     ]
+    if matching and matching[0].get("name") != source_name:
+        print(f"  Found existing source '{matching[0].get('name')}' with same part count ({upload_part_count}) — likely duplicate")
 
     if matching and args.force:
         deleted = _delete_existing_knowledge_by_name(
@@ -396,9 +452,16 @@ def cmd_upload_knowledge(args: argparse.Namespace) -> None:
     ks_id = result.get("knowledge_source", {}).get("id", "unknown")
     print(f"Knowledge source uploaded: {ks_id}")
 
-    # Upload parts if provided
-    if args.parts_file:
-        _upload_knowledge_parts(args.base_url, args.workflow_id, ks_id, args.parts_file)
+    # Upload parts: explicit --parts-file, or auto-detect sibling knowledge_parts.json
+    parts_file = args.parts_file
+    if not parts_file:
+        # Auto-detect: look for knowledge_parts.json in the same directory as the document
+        sibling = doc_path.parent / "knowledge_parts.json"
+        if sibling.exists() and sibling != doc_path:
+            parts_file = str(sibling)
+            print(f"  Auto-detected parts file: {sibling}")
+    if parts_file:
+        _upload_knowledge_parts(args.base_url, args.workflow_id, ks_id, parts_file)
 
     print(f"  Knowledge source ID: {ks_id}")
 
@@ -564,6 +627,12 @@ def cmd_upload_topics(args: argparse.Namespace) -> None:
 
             topics_path.write_text(json.dumps(roots, indent=2, ensure_ascii=False))
             print(f"  Wrote back full hierarchy to {topics_path} ({len(gw_list)} topics, {len(roots)} root(s))")
+            _update_sync_state(
+                topics_path.resolve().parent,
+                "topics.json",
+                count=len(gw_list),
+                workflow_id=args.workflow_id,
+            )
     except Exception as e:
         print(f"  Warning: could not write back hierarchy: {e}", file=sys.stderr)
 
@@ -729,9 +798,23 @@ def cmd_upload_records(args: argparse.Namespace) -> None:
             print(f"Warning: Skipping invalid JSON on line {line_num}", file=sys.stderr)
             continue
 
-        data_obj = {"input": {"messages": r["messages"]}, "output": {}}
+        data_obj: dict = {"input": {"messages": r["messages"]}, "output": {}}
+        # Include tool schemas in record data so the UI can display them
+        # and the training pipeline can pass them to the tokenizer.
+        if r.get("tools"):
+            data_obj["tools"] = r["tools"]
         if r.get("ground_truth"):
-            data_obj["ground_truth"] = r["ground_truth"]
+            gt = r["ground_truth"]
+            # Normalize: if GT is a JSON string containing a tool call, parse to dict.
+            # This handles double-serialization from agent rewrites or dedup scripts.
+            if isinstance(gt, str) and gt.strip().startswith("{"):
+                try:
+                    parsed = json.loads(gt)
+                    if isinstance(parsed, dict) and parsed.get("name"):
+                        gt = parsed
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            data_obj["ground_truth"] = gt
         record = {
             "id": r["id"],
             "data": data_obj,
@@ -784,6 +867,14 @@ def cmd_upload_records(args: argparse.Namespace) -> None:
             print(f"  Batch {i // batch_size + 1}: {added} records")
 
     print(f"Records uploaded: {total_uploaded}")
+
+    # Track sync state so local folder reflects what's in the gateway
+    _update_sync_state(
+        records_path.resolve().parent,
+        "training.jsonl",
+        count=total_uploaded,
+        workflow_id=args.workflow_id,
+    )
 
     # Auto-journal: include topic breakdown so the UI sees which topics are uploading
     topic_counts: dict[str, int] = {}
