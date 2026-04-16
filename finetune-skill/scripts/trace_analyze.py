@@ -360,6 +360,30 @@ def extract_decision_points(
 
                 context.append(entry)
 
+            # Post-process: ensure every tool message's tool_call_id matches
+            # a preceding assistant's tool_call id. Fix mismatches by scanning
+            # backwards from each tool message to find its assistant.
+            all_assistant_ids: set[str] = set()
+            for m in context:
+                if m.get("role") == "assistant" and m.get("tool_calls"):
+                    for tc in m["tool_calls"]:
+                        if tc.get("id"):
+                            all_assistant_ids.add(tc["id"])
+
+            for ci, m in enumerate(context):
+                if m.get("role") == "tool" and m.get("tool_call_id"):
+                    if m["tool_call_id"] not in all_assistant_ids:
+                        # Find preceding assistant with tool_calls
+                        for prev_i in range(ci - 1, -1, -1):
+                            prev = context[prev_i]
+                            if prev.get("role") == "assistant" and prev.get("tool_calls"):
+                                # Use first unmatched tool_call id
+                                for tc in prev["tool_calls"]:
+                                    if tc.get("id"):
+                                        m["tool_call_id"] = tc["id"]
+                                        break
+                                break
+
             # Extract per-span tool set
             span_tools = None
             raw_tools = attrs.get("gen_ai.request.tools")
