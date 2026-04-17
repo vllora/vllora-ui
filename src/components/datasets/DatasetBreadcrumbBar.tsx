@@ -98,6 +98,13 @@ const TRACE_ANALYSIS_SEGMENT_LABEL: Record<string, string> = {
   "seed-queries": "Real Customer Questions",
 };
 
+const PATH_SEGMENT_LABEL: Record<string, string> = {
+  evaluations: "Test Runs",
+  overview: "Overview",
+  jobs: "Jobs",
+  finetune: "Training",
+};
+
 export function DatasetBreadcrumbBar() {
   const { activeTabPath } = WorkspaceTabsConsumer();
 
@@ -120,6 +127,10 @@ export function DatasetBreadcrumbBar() {
     // trace-analysis/<tab> → show "Production Traces > Priority & Coverage"
     if (segments[0] === "trace-analysis" && TRACE_ANALYSIS_SEGMENT_LABEL[segment]) {
       return TRACE_ANALYSIS_SEGMENT_LABEL[segment];
+    }
+    // evaluations/overview, evaluations/jobs, finetune → use friendly labels
+    if (PATH_SEGMENT_LABEL[segment]) {
+      return PATH_SEGMENT_LABEL[segment];
     }
     return segment;
   });

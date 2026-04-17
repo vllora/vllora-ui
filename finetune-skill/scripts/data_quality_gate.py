@@ -151,6 +151,14 @@ def gate_structural(records: list[dict], topics_data: list | None) -> dict:
     """
     issues: list[dict] = []
     n = len(records)
+    # Detect tool-calling dataset — a majority of records carry a `tools` field.
+    # Tool-calling records have different distribution expectations:
+    #   - per-topic counts reflect natural trace frequency (minority can be ~5)
+    #   - GT is a serialized dict, shorter than the text-mode 30-char threshold
+    #   - short first-user prompts are common in mid-trace decision points
+    # Switch the relevant thresholds off for tool-calling data.
+    tool_calling_frac = sum(1 for r in records if r.get("tools")) / n if n > 0 else 0
+    is_tool_calling = tool_calling_frac >= 0.5
 
     # 1. Record count
     if n < THRESHOLDS["min_records"]:
@@ -183,7 +191,10 @@ def gate_structural(records: list[dict], topics_data: list | None) -> dict:
         rid = r.get("id", f"record-{i}")
         if not prompt.strip():
             empty_prompts.append(rid)
-        elif len(prompt.strip()) < THRESHOLDS["min_user_prompt_chars"]:
+        elif not is_tool_calling and len(prompt.strip()) < THRESHOLDS["min_user_prompt_chars"]:
+            # Tool-calling decision points often have short follow-up user turns
+            # (e.g., a zip code, yes/no answer). The length threshold targets
+            # text-mode datasets where the first user turn is the full query.
             short_prompts.append(rid)
         elif len(prompt.strip()) > THRESHOLDS["max_user_prompt_chars"]:
             long_prompts.append(rid)
@@ -238,20 +249,23 @@ def gate_structural(records: list[dict], topics_data: list | None) -> dict:
             "records": garbage_gts[:10],
         })
 
-    short_gts = []
-    for i, r in enumerate(records):
-        gt = extract_ground_truth(r).strip()
-        rid = r.get("id", f"record-{i}")
-        if gt and len(gt) < THRESHOLDS["min_ground_truth_chars"]:
-            short_gts.append(rid)
-    if short_gts:
-        issues.append({
-            "severity": "soft",
-            "check": "short_ground_truths",
-            "message": f"{len(short_gts)} record(s) with ground_truth < {THRESHOLDS['min_ground_truth_chars']} chars",
-            "value": len(short_gts),
-            "records": short_gts[:10],
-        })
+    # Short GT check — only meaningful for text-mode GTs. Tool-call GTs are
+    # short JSON dicts (~40-80 chars typical) and the length threshold doesn't apply.
+    if not is_tool_calling:
+        short_gts = []
+        for i, r in enumerate(records):
+            gt = extract_ground_truth(r).strip()
+            rid = r.get("id", f"record-{i}")
+            if gt and len(gt) < THRESHOLDS["min_ground_truth_chars"]:
+                short_gts.append(rid)
+        if short_gts:
+            issues.append({
+                "severity": "soft",
+                "check": "short_ground_truths",
+                "message": f"{len(short_gts)} record(s) with ground_truth < {THRESHOLDS['min_ground_truth_chars']} chars",
+                "value": len(short_gts),
+                "records": short_gts[:10],
+            })
 
     # 5. Topic balance
     topic_counts = Counter(r.get("topic", "unknown") for r in records)
@@ -281,21 +295,27 @@ def gate_structural(records: list[dict], topics_data: list | None) -> dict:
 
     # Thin topics (absolute minimum) — HARD GATE per SKILL.md Step 4.5
     # Topics below 25 records have insufficient difficulty coverage for GRPO to learn from.
+    # For tool-calling datasets, per-topic counts reflect natural trace frequency;
+    # minority topics (e.g. rare tools like modify-payment) are legitimately small
+    # and should not fail the gate. Treat thin_topics as a soft warning instead.
     thin_topics = {t: c for t, c in topic_counts.items() if c < THRESHOLDS["min_records_per_topic"]}
     if thin_topics:
         issues.append({
-            "severity": "hard",
+            "severity": "soft" if is_tool_calling else "hard",
             "check": "thin_topics",
             "message": (
                 f"{len(thin_topics)} topic(s) below minimum {THRESHOLDS['min_records_per_topic']} records: "
                 f"{', '.join(f'{t}={c}' for t, c in sorted(thin_topics.items(), key=lambda x: x[1]))}. "
-                f"Regenerate records for these topics with `generate_records.py --append --records-per-topic N` "
-                f"(where N covers the gap). See SKILL.md Step 4.5."
+                + ("Tool-calling dataset — minority topics reflect natural trace frequency."
+                   if is_tool_calling
+                   else f"Regenerate records for these topics with `generate_records.py --append --records-per-topic N` "
+                        f"(where N covers the gap). See SKILL.md Step 4.5.")
             ),
             "value": len(thin_topics),
             "threshold": THRESHOLDS["min_records_per_topic"],
             "topics": dict(thin_topics),
-            "fix": "Run generate_records.py --append for affected topics until each reaches 25+ records",
+            "fix": (None if is_tool_calling
+                    else "Run generate_records.py --append for affected topics until each reaches 25+ records"),
         })
 
     # Topic balance check: any topic with < 50% of the median count is imbalanced.
@@ -462,28 +482,28 @@ def gate_structural(records: list[dict], topics_data: list | None) -> dict:
     # GT must be a tool call (dict with "name"), not text.
     records_with_tools = [r for r in records if r.get("tools")]
     if records_with_tools:
-        tool_format_ok = 0
         tool_format_bad = 0
         for r in records_with_tools:
             gt = r.get("ground_truth")
-            if isinstance(gt, dict) and gt.get("name"):
-                tool_format_ok += 1
-            elif isinstance(gt, str):
-                # Text GT on a tool-calling record — format mismatch
+            # Text GT on a tool-calling record — format mismatch.
+            # Properly formatted tool-call GT is a dict with `name` and `arguments`.
+            if isinstance(gt, str):
+                tool_format_bad += 1
+            elif isinstance(gt, dict) and not gt.get("name"):
                 tool_format_bad += 1
         total_tool = len(records_with_tools)
-        issues.append({
-            "severity": "soft" if tool_format_bad < total_tool * 0.3 else "hard",
-            "check": "tool_call_format",
-            "message": (
-                f"{tool_format_ok}/{total_tool} tool-calling records have correct GT format "
-                f"(dict with name+arguments). {tool_format_bad} have text GT instead — "
-                f"these won't produce reward signal for tool-calling GRPO."
-            ),
-            "value": tool_format_ok,
-            "total_tool_records": total_tool,
-            "text_gt_count": tool_format_bad,
-        })
+        if tool_format_bad > 0:
+            issues.append({
+                "severity": "soft" if tool_format_bad < total_tool * 0.3 else "hard",
+                "check": "tool_call_format",
+                "message": (
+                    f"{tool_format_bad}/{total_tool} tool-calling records have a malformed GT "
+                    f"(expected dict with name+arguments). These won't produce reward signal for tool-calling GRPO."
+                ),
+                "value": tool_format_bad,
+                "total_tool_records": total_tool,
+                "text_gt_count": tool_format_bad,
+            })
 
     hard_fails = [i for i in issues if i["severity"] == "hard"]
     soft_warns = [i for i in issues if i["severity"] == "soft"]

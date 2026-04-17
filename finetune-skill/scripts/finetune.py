@@ -798,8 +798,8 @@ def cmd_upload_records(args: argparse.Namespace) -> None:
             if len(sampled) >= 10:
                 break
         missing_tools = [i for i, r in enumerate(sampled, 1) if not r.get("tools")]
+        decision_points = d / "decision-points.jsonl"
         if sampled and missing_tools:
-            decision_points = d / "decision-points.jsonl"
             print(
                 f"Error: tool-calling agent detected ({tool_schemas} exists) but "
                 f"{len(missing_tools)}/{len(sampled)} sampled records in {records_path} "
@@ -815,6 +815,48 @@ def cmd_upload_records(args: argparse.Namespace) -> None:
                 file=sys.stderr,
             )
             sys.exit(2)
+        # Detect flatten_record anti-pattern: single user message with all turns
+        # concatenated as text prefixed with literal "USER:"/"ASSISTANT:"/"TOOL RESULT:".
+        # Also detect the "GT|" prefix that accompanies this pattern.
+        flatten_markers = ("USER:", "ASSISTANT:", "TOOL RESULT:", "ASSISTANT called tool:")
+        for r in sampled:
+            msgs = r.get("messages") or []
+            gt = r.get("ground_truth")
+            # Flatten signature: very few messages (1-3) but user content contains role markers.
+            user_msgs = [m for m in msgs if isinstance(m, dict) and m.get("role") == "user"]
+            for um in user_msgs:
+                content = um.get("content", "")
+                if isinstance(content, str):
+                    marker_hits = sum(1 for m in flatten_markers if m in content)
+                    if marker_hits >= 2:
+                        print(
+                            "Error: detected flatten_record anti-pattern in training.jsonl — "
+                            "user messages contain concatenated role prefixes ('USER:', "
+                            "'ASSISTANT:', 'TOOL RESULT:'). This destroys multi-turn structure "
+                            "and prevents the model from learning native tool_calls.\n"
+                            "\n"
+                            "Fix: replace with the raw decision-points file (no transformation):\n"
+                            f"  cp {decision_points} {records_path}\n"
+                            "\n"
+                            "See finetune-skill/SKILL.md Step 4 (CRITICAL — tool-calling "
+                            "records MUST stay multi-turn).",
+                            file=sys.stderr,
+                        )
+                        sys.exit(2)
+            if isinstance(gt, str) and gt.startswith("GT|"):
+                print(
+                    "Error: detected 'GT|' prefix on ground_truth. This is an anti-pattern "
+                    "added by custom flatten code to defeat upload-records' JSON auto-parse. "
+                    "For tool-calling GRPO, ground_truth MUST stay as a {name, arguments} "
+                    "dict so the gateway sees it as a tool_call.\n"
+                    "\n"
+                    "Fix: replace training.jsonl with the raw decision-points file:\n"
+                    f"  cp {decision_points} {records_path}\n"
+                    "\n"
+                    "See finetune-skill/SKILL.md Step 4.",
+                    file=sys.stderr,
+                )
+                sys.exit(2)
         break
 
     # If --force, delete existing records first

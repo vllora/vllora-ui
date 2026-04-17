@@ -1621,6 +1621,10 @@ def main() -> None:
     parser.add_argument("--model", default="gpt-4o-mini", help="LLM model for generation (default: gpt-4o-mini)")
     parser.add_argument("--base-url", default="http://localhost:9090", help="Gateway base URL")
     parser.add_argument("--append", action="store_true", help="Append to existing file instead of overwriting")
+    parser.add_argument("--top-up", action="store_true",
+                        help="Top up thin topics: count existing records per topic, generate only what's missing "
+                             "to reach --records-per-topic / --min-per-topic. Implies --append. Use to fix "
+                             "quality-gate failures caused by under-populated topics.")
     parser.add_argument("--no-ground-truth", action="store_true", help="Skip generating ground_truth excerpts")
     parser.add_argument(
         "--ground-truth-format", default=None,
@@ -1932,29 +1936,58 @@ def main() -> None:
             else:
                 upload_failures.append(topic_id)
 
+    # --top-up implies --append (we need to read the existing file to count)
+    if args.top_up:
+        args.append = True
+
     # Initialize output file (clear if not appending)
-    existing_topics: set[str] = set()
+    existing_counts: dict[str, int] = {}
     if not args.append:
         output_path.open("w").close()
     elif output_path.exists():
-        # In append mode, detect topics already present in the output file
-        # to avoid regenerating them (prevents duplicates after crash+retry).
+        # In append mode, tally existing records per topic so we can decide whether
+        # to skip (crash-recovery: already-full topic) or top up (thin topic).
         with output_path.open() as f:
             for line in f:
                 try:
                     rec = json.loads(line)
-                    existing_topics.add(rec.get("topic", ""))
+                    topic_id = rec.get("topic", "")
+                    if topic_id:
+                        existing_counts[topic_id] = existing_counts.get(topic_id, 0) + 1
                 except json.JSONDecodeError:
                     pass
-        if existing_topics:
+        if existing_counts:
             original_count = len(tasks)
-            tasks = [t for t in tasks if t[1]["id"] not in existing_topics]
-            skipped = original_count - len(tasks)
-            print(
-                f"Append mode: skipping {skipped} topic(s) already in {output_path.name}: "
-                f"{', '.join(sorted(existing_topics))}",
-                file=sys.stderr,
-            )
+            if args.top_up:
+                # Reduce each task's target by existing count; drop topics at/above target.
+                new_tasks = []
+                topped_up: list[tuple[str, int, int]] = []
+                fully_covered: list[str] = []
+                for i, topic, ancestors, target in tasks:
+                    existing = existing_counts.get(topic["id"], 0)
+                    remaining = max(0, target - existing)
+                    if remaining > 0:
+                        new_tasks.append((i, topic, ancestors, remaining))
+                        topped_up.append((topic["id"], existing, remaining))
+                    else:
+                        fully_covered.append(topic["id"])
+                tasks = new_tasks
+                print(
+                    f"Top-up mode: {len(topped_up)} topic(s) need more records, "
+                    f"{len(fully_covered)} already at target.",
+                    file=sys.stderr,
+                )
+                for tid, existing, remaining in topped_up:
+                    print(f"  {tid}: {existing} existing → +{remaining}", file=sys.stderr)
+            else:
+                # --append without --top-up: original crash-recovery semantics.
+                tasks = [t for t in tasks if t[1]["id"] not in existing_counts]
+                skipped = original_count - len(tasks)
+                print(
+                    f"Append mode: skipping {skipped} topic(s) already in {output_path.name} "
+                    f"(use --top-up to add records to thin topics instead).",
+                    file=sys.stderr,
+                )
 
     def _get_rag_parts(topic: dict, ancestors: list[dict]) -> list[dict] | None:
         """Retrieve RAG parts for a topic if --use-rag is enabled."""

@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { emitter } from "@/utils/eventEmitter";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { KnowledgeSourceCard } from "./KnowledgeSourceCard";
+import { IS_LUCY_ENABLED } from "@/lib/feature-flags";
 
 interface GenerationProgress {
   status: "started" | "progress" | "completed" | "failed";
@@ -181,21 +182,23 @@ export function EmptyRecordsState({
             <Button
               onClick={onDocsClick}
               size="sm"
-              variant="outline"
+              variant={IS_LUCY_ENABLED ? "outline" : "default"}
               className="gap-2"
             >
               <Upload className="w-3.5 h-3.5" />
               Upload Documents
             </Button>
           )}
-          <Button
-            onClick={handleAskLucy}
-            size="sm"
-            className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            Ask Lucy to Get Started
-          </Button>
+          {IS_LUCY_ENABLED && (
+            <Button
+              onClick={handleAskLucy}
+              size="sm"
+              className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Ask Lucy to Get Started
+            </Button>
+          )}
         </div>
 
         {/* Secondary link */}

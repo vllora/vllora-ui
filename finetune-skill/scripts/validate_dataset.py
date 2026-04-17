@@ -100,29 +100,53 @@ def validate_record(line_num: int, line: str) -> list[str]:
         messages = record["messages"]
         roles = [m.get("role") for m in messages if isinstance(m, dict)]
 
+        # Tool-calling (multi-turn decision-point) vs RFT (single-turn prompt):
+        # - RFT: [system, user] — no assistant messages, last role = user
+        # - Tool-calling: [system, user, assistant(tool_calls), tool, assistant, ...]
+        #   Assistant messages with content:null are valid (tool_calls-only turns).
+        is_tool_calling = bool(record.get("tools")) or "tool" in roles
+
         for i, msg in enumerate(messages):
             if not isinstance(msg, dict):
                 errors.append(f"Line {line_num}, message {i}: Must be an object")
                 continue
             if "role" not in msg:
                 errors.append(f"Line {line_num}, message {i}: Missing 'role'")
+            role = msg.get("role")
+            content = msg.get("content")
+            has_tool_calls = bool(msg.get("tool_calls"))
+            # In tool-calling mode two cases legitimately omit `content`:
+            #   - assistant turn carrying only tool_calls
+            #   - tool turn with empty response (e.g. acknowledgement-only success)
+            assistant_tool_call_turn = is_tool_calling and role == "assistant" and has_tool_calls
+            tool_response_turn = is_tool_calling and role == "tool"
+            missing_ok = assistant_tool_call_turn or tool_response_turn
             if "content" not in msg:
+                if missing_ok:
+                    continue
                 errors.append(f"Line {line_num}, message {i}: Missing 'content'")
-            elif not msg["content"] or not msg["content"].strip():
+                continue
+            if content is None:
+                if missing_ok:
+                    continue
+                errors.append(f"Line {line_num}, message {i}: Empty content")
+                continue
+            if isinstance(content, str) and not content.strip():
                 errors.append(f"Line {line_num}, message {i}: Empty content")
 
         if "system" not in roles:
             errors.append(f"Line {line_num}: No system message found")
         if "user" not in roles:
             errors.append(f"Line {line_num}: No user message found")
-        if "assistant" in roles:
+        if not is_tool_calling and "assistant" in roles:
+            # Only flag assistant messages in single-turn RFT records.
             errors.append(f"Line {line_num}: Contains assistant message (RFT uses prompts only, remove assistant messages)")
 
         # Check user message is not trivially short
         user_messages = [m for m in messages if isinstance(m, dict) and m.get("role") == "user"]
         for um in user_messages:
             content = um.get("content", "")
-            if content and len(content.strip()) < 10:
+            if isinstance(content, str) and content and len(content.strip()) < 10:
                 errors.append(f"Line {line_num}: User message too short ({len(content.strip())} chars) — likely not a useful prompt")
 
     if "id" not in record:
@@ -134,10 +158,20 @@ def validate_record(line_num: int, line: str) -> list[str]:
     # data_quality_gate.py which has task-aware thresholds.
     gt = record.get("ground_truth")
     if gt is not None:
-        if not isinstance(gt, str):
-            errors.append(f"Line {line_num}: 'ground_truth' must be a string")
-        elif len(gt.strip()) == 0:
-            errors.append(f"Line {line_num}: 'ground_truth' is empty")
+        if isinstance(gt, str):
+            if len(gt.strip()) == 0:
+                errors.append(f"Line {line_num}: 'ground_truth' is empty")
+        elif isinstance(gt, dict):
+            # Tool-calling GT shape: {"name": "...", "arguments": {...}}
+            if not gt.get("name"):
+                errors.append(f"Line {line_num}: 'ground_truth' dict missing 'name'")
+            if "arguments" not in gt:
+                errors.append(f"Line {line_num}: 'ground_truth' dict missing 'arguments'")
+        else:
+            errors.append(
+                f"Line {line_num}: 'ground_truth' must be a string (RFT) "
+                f"or {{name, arguments}} dict (tool-calling), got {type(gt).__name__}"
+            )
 
     return errors
 

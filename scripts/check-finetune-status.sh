@@ -50,11 +50,21 @@ if [ -f "$TRANSCRIPT" ]; then
   LAST_LINE=$(tail -5 "$TRANSCRIPT" 2>/dev/null | grep -v "^$" | tail -1 | head -c 200)
 fi
 
-# Check for errors in recent output
+# Check for errors in recent output.
+# Match only strong error signals — NOT any occurrence of the word "error":
+#   - ❌ Error result markers (formatter output for tool failures)
+#   - "Traceback" (Python exception)
+#   - lines starting with /SomeError:/ (e.g. "NameError:", "SyntaxError:")
+#   - "error:" at the start of a line (argparse, etc.)
+#   - HTTP failure codes 4xx/5xx returned from API calls
+# This avoids matching agent-written status text like "[pending] Write grader from failure patterns".
 HAS_ERROR=false
 ERROR_MSG=""
 if [ -f "$TRANSCRIPT" ]; then
-  ERROR_MSG=$(tail -50 "$TRANSCRIPT" 2>/dev/null | grep -i "error\|FATAL\|FAIL\|413\|404\|500" | tail -1 | head -c 200)
+  # `|| true` swallows grep's exit-1 on no matches so pipefail doesn't abort the script.
+  ERROR_MSG=$({ tail -50 "$TRANSCRIPT" 2>/dev/null \
+    | grep -E "❌|Traceback|^[A-Za-z]+Error:|^error:|^FATAL|HTTP 4[0-9][0-9]|HTTP 5[0-9][0-9]|\b(413|404|500|502|503)\b" \
+    | tail -1 | head -c 200; } || true)
   if [ -n "$ERROR_MSG" ]; then
     HAS_ERROR=true
   fi

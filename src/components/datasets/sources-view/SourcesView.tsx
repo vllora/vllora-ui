@@ -42,6 +42,12 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 function isOtelTraceSource(source: { name: string; metadata?: Record<string, unknown> }): boolean {
   return source.metadata?.kind === "otel-trace" || source.name.startsWith("otel-");
 }
+
+/** Strip the redundant "Source document:" prefix the gateway prepends on PDF sources. */
+function stripSourcePrefix(description: string | undefined | null): string {
+  if (!description) return "";
+  return description.replace(/^\s*Source document:\s*/i, "").trim();
+}
 // CoverageMatrix replaced by inline hierarchical matrix in AllSourcesView
 import type { KnowledgeSource, KnowledgeSourcePart } from "@/types/knowledge-types";
 import type { TopicHierarchyNode, DatasetRecord } from "@/types/dataset-types";
@@ -454,7 +460,7 @@ function AllSourcesView({
                         <div className="flex items-center gap-2">
                           <FileText className="w-3.5 h-3.5 text-muted-foreground/30 shrink-0" />
                           <div>
-                            <div className="font-medium text-foreground/80 hover:underline">{src.description || src.name}</div>
+                            <div className="font-medium text-foreground/80 hover:underline">{stripSourcePrefix(src.description) || src.name}</div>
                             <div className="text-[10px] text-muted-foreground/30 mt-0.5">
                               {[
                                 src.metadata?.pageCount && `${src.metadata.pageCount} pages`,

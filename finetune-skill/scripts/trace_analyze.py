@@ -262,8 +262,20 @@ def extract_decision_points(
 
     records: list[dict] = []
     record_idx = 0
+    skipped_failed = 0
+    span_tools_fallback_count = 0  # records that fell back to global tool_schemas
+    dropped_orphan_tool = 0        # records dropped due to unrecoverable tool_call_id
+    dropped_parse_failure = 0      # records dropped due to unparseable GT args
 
     for trace_id, spans in traces.items():
+        # Only extract GT from SUCCESSFUL traces. Failed traces contain wrong
+        # actions — using them as ground truth teaches the model to fail.
+        # Trace success comes from tau_bench.reward >= 0.5 when present, else
+        # falls back to absence of ERROR status. Unknown outcome (reward missing
+        # AND no ERROR) is treated as success (conservative pass-through).
+        if infer_trace_success(spans) is False:
+            skipped_failed += 1
+            continue
         for span in spans:
             if not is_llm_chat_span(span):
                 continue
@@ -284,12 +296,33 @@ def extract_decision_points(
                     name = part.get("name", "")
                     if not name:
                         continue
-                    args = part.get("arguments") or part.get("args")
-                    if isinstance(args, str):
-                        try:
-                            args = json.loads(args)
-                        except (json.JSONDecodeError, TypeError):
+                    raw_args = part.get("arguments") or part.get("args")
+                    args_parse_failed = False
+                    args: dict | None = None
+                    if isinstance(raw_args, str):
+                        stripped = raw_args.strip()
+                        if stripped:
+                            try:
+                                parsed = json.loads(stripped)
+                                args = parsed if isinstance(parsed, dict) else {}
+                            except (json.JSONDecodeError, TypeError):
+                                args_parse_failed = True
+                                args = None
+                        else:
                             args = {}
+                    elif isinstance(raw_args, dict):
+                        args = raw_args
+                    elif raw_args is None:
+                        args = {}
+                    else:
+                        args = {}
+                    # Filter records whose GT args were present but unparseable.
+                    # An empty-args GT from a parse failure is not legitimate {} —
+                    # it produces consistent 0-reward in GRPO (model can never match
+                    # the real call). Better to drop than train on noise.
+                    if args_parse_failed:
+                        dropped_parse_failure += 1
+                        continue
                     action_call = {"name": name, "arguments": args if isinstance(args, dict) else {}}
                     break
                 if action_call:
@@ -325,11 +358,16 @@ def extract_decision_points(
                 if text:
                     entry["content"] = text
 
-                # Assistant with tool_calls — generate IDs for matching
-                if role == "assistant" and not text:
+                # Assistant with tool_calls — generate IDs for matching.
+                # An assistant turn can carry BOTH text AND tool_calls; we must
+                # check `tc_parts` regardless of whether text is present, or the
+                # tool response that follows becomes orphaned ("tool_call_id not
+                # found in request" at eval time).
+                if role == "assistant":
                     tc_parts = [p for p in parts if isinstance(p, dict) and p.get("type") == "tool_call"]
                     if tc_parts:
-                        entry["content"] = None
+                        if not text:
+                            entry["content"] = None
                         pending_tool_call_ids = []
                         tool_calls_list = []
                         for p in tc_parts:
@@ -370,19 +408,44 @@ def extract_decision_points(
                         if tc.get("id"):
                             all_assistant_ids.add(tc["id"])
 
+            # Reject records where any tool message has no preceding assistant tool_call
+            # OR where two tool messages end up claiming the same tool_call_id. Cloud
+            # eval rejects both ("tool_call_id not found in request").
+            record_has_orphan_tool = False
+            # Track already-claimed tool_call_ids so we don't assign the same id
+            # to multiple tool messages (duplicates cause the same eval failure).
+            claimed_ids: set[str] = set()
             for ci, m in enumerate(context):
-                if m.get("role") == "tool" and m.get("tool_call_id"):
-                    if m["tool_call_id"] not in all_assistant_ids:
-                        # Find preceding assistant with tool_calls
-                        for prev_i in range(ci - 1, -1, -1):
-                            prev = context[prev_i]
-                            if prev.get("role") == "assistant" and prev.get("tool_calls"):
-                                # Use first unmatched tool_call id
-                                for tc in prev["tool_calls"]:
-                                    if tc.get("id"):
-                                        m["tool_call_id"] = tc["id"]
-                                        break
+                if m.get("role") != "tool":
+                    continue
+                tc_id = m.get("tool_call_id")
+                if tc_id and tc_id in all_assistant_ids and tc_id not in claimed_ids:
+                    claimed_ids.add(tc_id)
+                    continue
+                if tc_id and tc_id in claimed_ids:
+                    # Duplicate — need to find an unused id from preceding assistant.
+                    tc_id = None
+                # Try to repair by finding preceding assistant with an unused tool_call id.
+                patched_id: str | None = None
+                for prev_i in range(ci - 1, -1, -1):
+                    prev = context[prev_i]
+                    if prev.get("role") == "assistant" and prev.get("tool_calls"):
+                        for tc in prev["tool_calls"]:
+                            cand = tc.get("id")
+                            if cand and cand not in claimed_ids:
+                                patched_id = cand
                                 break
+                        if patched_id:
+                            break
+                if patched_id:
+                    m["tool_call_id"] = patched_id
+                    claimed_ids.add(patched_id)
+                else:
+                    record_has_orphan_tool = True
+                    break
+            if record_has_orphan_tool:
+                dropped_orphan_tool += 1
+                continue  # Drop the whole record — unusable for chat template
 
             # Extract per-span tool set
             span_tools = None
@@ -393,6 +456,8 @@ def extract_decision_points(
                     for t in raw_tools if isinstance(t, dict)
                 ]
             effective_tools = span_tools or tool_schemas
+            if span_tools is None:
+                span_tools_fallback_count += 1
 
             topic = tool_name_to_topic(action_call["name"])
             record_idx += 1
@@ -411,10 +476,35 @@ def extract_decision_points(
     # the reasoning chain (ToolRL trains on all tools but with rebalancing).
     if records:
         import random as _dp_random
+        from collections import Counter as _DPCounter
         _dp_random.seed(42)
 
         action_records = [r for r in records if _classify_tool(r["ground_truth"]["name"]) == "action"]
         other_records = [r for r in records if _classify_tool(r["ground_truth"]["name"]) != "action"]
+
+        # Rebalance across ACTION topics — natural trace distribution is skewed
+        # (e.g. exchange=160 vs payment=5 = 32:1). Cap each action topic at
+        # max(5 × minority, minority_floor=15) to prevent the model from
+        # defaulting to the majority class when uncertain.
+        by_topic: dict[str, list[dict]] = {}
+        for r in action_records:
+            by_topic.setdefault(r["topic"], []).append(r)
+        if by_topic:
+            minority = min(len(v) for v in by_topic.values())
+            cap_per_topic = max(minority * 5, 15)
+            rebalanced: list[dict] = []
+            caps_applied: list[tuple[str, int, int]] = []
+            for topic, recs in by_topic.items():
+                if len(recs) > cap_per_topic:
+                    _dp_random.shuffle(recs)
+                    caps_applied.append((topic, len(recs), cap_per_topic))
+                    recs = recs[:cap_per_topic]
+                rebalanced.extend(recs)
+            if caps_applied:
+                print(f"  Rebalanced action topics: cap={cap_per_topic} (5× minority={minority})")
+                for topic, before, after in caps_applied:
+                    print(f"    {topic}: {before} → {after}")
+            action_records = rebalanced
 
         max_other = max(len(action_records) * 2, 200)  # At least 200 or 2x actions
         if len(other_records) > max_other:
@@ -424,6 +514,23 @@ def extract_decision_points(
                   f"(capped at 2x action count={len(action_records)})")
 
         records = action_records + other_records
+
+    if skipped_failed:
+        print(f"  Decision points: skipped {skipped_failed} failed trace(s) "
+              f"(reward < 0.5). Their actions are unreliable as ground truth.")
+    if dropped_parse_failure:
+        print(f"  Decision points: dropped {dropped_parse_failure} record(s) "
+              f"with unparseable GT arguments (would produce 0-reward noise).")
+    if dropped_orphan_tool:
+        print(f"  Decision points: dropped {dropped_orphan_tool} record(s) "
+              f"with orphan tool messages (chat template would reject).")
+    if span_tools_fallback_count:
+        total_emitted = len(records) if not records else record_idx
+        pct = (span_tools_fallback_count / total_emitted * 100) if total_emitted else 0
+        print(f"  Decision points: {span_tools_fallback_count}/{total_emitted} "
+              f"records ({pct:.0f}%) fell back to global tool_schemas (no "
+              f"gen_ai.request.tools). If >20%%, check OI adapter (see "
+              f"feedback_oi_adapter_tool_schema.md).")
 
     return records
 

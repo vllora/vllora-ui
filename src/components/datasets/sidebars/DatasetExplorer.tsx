@@ -263,6 +263,10 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       tabLabel = "Quality Checks";
     } else if (nodeId === "trace-analysis/seed-queries") {
       tabLabel = "Real Customer Questions";
+    } else if (nodeId === "pipeline-analysis") {
+      tabLabel = "Pipeline Analysis";
+    } else if (nodeId === "logs.md") {
+      tabLabel = "Pipeline Journal";
     }
     openTab(nodeId, tabLabel);
     // "All Topics" (nodeId === "data") → switch to canvas view
@@ -456,8 +460,6 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       <SidebarDivider />
 
       {/* ── Evaluator (Grader Script) ── */}
-      <SidebarDivider />
-
       <SidebarSection title="Quality Checker" icon={<Code2 className="w-3 h-3" />}>
         {getSection("evaluator") && <SectionInsight analysis={getSection("evaluator")!} />}
         {dataset?.evalScript ? (
@@ -468,9 +470,9 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
             onClick={() => handleSelect("evaluations/grader-script.ts")}
           />
         ) : (
-          <div className="px-3 py-2 text-[10px] text-muted-foreground/70 italic">
+          <p className="px-6 py-2 text-[11px] text-muted-foreground/40 italic">
             Not yet generated
-          </div>
+          </p>
         )}
       </SidebarSection>
 
@@ -567,16 +569,16 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
 
       <SidebarDivider />
 
-      {/* ── Pipeline Journal ── */}
+      {/* ── Pipeline Analysis (agent's step-by-step reasoning) ── */}
       <SidebarSection
-        title="Activity Log"
+        title="Pipeline Analysis"
         icon={<ScrollText className="w-3 h-3" />}
         count={hasJournal ? journalEntries.length : undefined}
         onTitleClick={() => handleSelect("pipeline-analysis")}
         isTitleActive={selectedNodeId === "pipeline-analysis" || selectedNodeId === "logs.md"}
         action={{
           icon: <Upload className="w-3 h-3" />,
-          title: "Upload pipeline-journal.json",
+          title: "Import pipeline-journal.json from disk",
           onClick: () => {
             const input = document.createElement("input");
             input.type = "file";
@@ -623,7 +625,7 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
           </>
         ) : (
           <p className="px-6 py-2 text-[11px] text-muted-foreground/40 italic">
-            No journal yet — upload a file
+            Agent writes this as each pipeline step completes.
           </p>
         )}
       </SidebarSection>
