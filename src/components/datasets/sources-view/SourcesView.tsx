@@ -135,6 +135,14 @@ function AllSourcesView({
   const hierarchy = dataset?.topicHierarchy?.hierarchy;
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
+  // Trace-bundle sources don't carry PDF-style parts — they're visualized via the
+  // Production Traces panel. Including them in the coverage matrix shows a
+  // misleading "0 parts / —" column for every topic.
+  const coverageSources = useMemo(
+    () => sources.filter((s) => !isOtelTraceSource(s)),
+    [sources],
+  );
+
   const totalChars = useMemo(
     () => sources.reduce((sum, src) => sum + src.parts.reduce((s, p) => s + (p.content?.length ?? 0), 0), 0),
     [sources],
@@ -155,7 +163,7 @@ function AllSourcesView({
 
         // Count parts per source for this topic
         const refs = node.sourceChunkRefs ?? [];
-        for (const src of sources) {
+        for (const src of coverageSources) {
           const srcPartIds = new Set(src.parts.map(p => p.id));
           const srcPartIdsWithSource = new Set(src.parts.map(p => `${src.id}/${p.id}`));
           let count = 0;
@@ -174,7 +182,7 @@ function AllSourcesView({
           const aggregateChildren = (children: TopicHierarchyNode[]) => {
             for (const child of children) {
               const childRefs = child.sourceChunkRefs ?? [];
-              for (const src of sources) {
+              for (const src of coverageSources) {
                 const srcPartIds = new Set(src.parts.map(p => p.id));
                 const srcPartIdsWithSource = new Set(src.parts.map(p => `${src.id}/${p.id}`));
                 let count = 0;
@@ -285,9 +293,9 @@ function AllSourcesView({
                 <thead>
                   <tr className="bg-muted/30">
                     <th className="text-left px-3 py-2 font-medium text-muted-foreground/60" style={{ width: 200 }}>Topic</th>
-                    {sources.map(src => (
+                    {coverageSources.map(src => (
                       <th key={src.id} className="text-center px-2 py-2 font-medium text-muted-foreground/60" style={{ minWidth: 80 }}>
-                        <div className="truncate max-w-[100px] mx-auto">{src.description || src.name}</div>
+                        <div className="truncate max-w-[100px] mx-auto">{stripSourcePrefix(src.description) || src.name}</div>
                         <div className="text-[9px] text-muted-foreground/30 font-normal mt-0.5">{src.parts.length} parts</div>
                       </th>
                     ))}
@@ -338,9 +346,9 @@ function AllSourcesView({
                           </div>
                         </td>
                         {/* Per-source counts */}
-                        {sources.map(src => {
+                        {coverageSources.map(src => {
                           const count = topic.perSource.get(src.id) ?? 0;
-                          const srcName = src.description || src.name;
+                          const srcName = stripSourcePrefix(src.description) || src.name;
                           return (
                             <td key={src.id} className="text-center px-2 py-1.5">
                               <Tooltip>
@@ -397,7 +405,7 @@ function AllSourcesView({
                 <tfoot>
                   <tr className="border-t border-border/50 bg-muted/30">
                     <td className="px-3 py-1.5 font-semibold text-muted-foreground/50">Total</td>
-                    {sources.map(src => {
+                    {coverageSources.map(src => {
                       const total = flatTopics
                         .filter(t => !t.isParent)
                         .reduce((sum, t) => sum + (t.perSource.get(src.id) ?? 0), 0);

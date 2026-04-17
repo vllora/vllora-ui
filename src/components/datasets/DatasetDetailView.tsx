@@ -28,15 +28,18 @@ export function DatasetDetailView({ workflowId, onBack, onSelectDataset }: Datas
       onSelectDataset={onSelectDataset}
     >
       <PipelineAnalysisProvider workflowId={workflowId}>
-        <TraceAnalysisProvider workflowId={workflowId}>
-          <FinetuneJobsProvider>
-            <KnowledgeSourcesProvider workflowId={workflowId}>
+        <FinetuneJobsProvider>
+          <KnowledgeSourcesProvider workflowId={workflowId}>
+            {/* TraceAnalysisProvider mounts INSIDE KnowledgeSourcesProvider so it can
+                skip the /trace-analysis fetch until a trace source is uploaded.
+                Suppresses the 404 network-error log during PDF-only / empty pipelines. */}
+            <TraceAnalysisProvider workflowId={workflowId}>
               <PlanProvider workflowId={workflowId}>
                 <DatasetDetailContentV2 />
               </PlanProvider>
-            </KnowledgeSourcesProvider>
-          </FinetuneJobsProvider>
-        </TraceAnalysisProvider>
+            </TraceAnalysisProvider>
+          </KnowledgeSourcesProvider>
+        </FinetuneJobsProvider>
       </PipelineAnalysisProvider>
     </DatasetDetailProvider>
   );

@@ -3675,6 +3675,28 @@ def cmd_create_eval(args: argparse.Namespace) -> None:
 
     model = args.model or "gpt-4o-mini"
 
+    # Duplicate-guard: if a running/pending eval already exists for this
+    # workflow+model, refuse to create another. Prevents the accidental 3-eval
+    # spam that used to happen when SKILL.md suggested running multiple model
+    # evals unconditionally (pre-tool-calling-awareness).
+    try:
+        jobs_resp = _api("GET", f"{args.base_url}/finetune/workflows/{args.workflow_id}/evaluations")
+        jobs = jobs_resp.get("jobs", []) if isinstance(jobs_resp, dict) else jobs_resp
+        for job in jobs:
+            if job.get("status") in ("running", "pending") and job.get("rollout_model") == model:
+                print(
+                    f"Error: an eval is already {job.get('status')} for this workflow + model "
+                    f"({model}) — id={job.get('id')}. Cancel it first if you want to create a new one:\n"
+                    f"  finetune.py cancel-eval --workflow-id {args.workflow_id} --eval-id {job.get('id')}",
+                    file=sys.stderr,
+                )
+                if not getattr(args, "force", False):
+                    sys.exit(2)
+    except SystemExit:
+        raise
+    except Exception:
+        pass  # Gateway unreachable or missing endpoint — skip guard, let upstream handle.
+
     # Get total record count so we evaluate ALL records (cloud defaults to 1000)
     try:
         records_resp = _api("GET", f"{args.base_url}/finetune/workflows/{args.workflow_id}/records?limit=1")

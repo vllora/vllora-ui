@@ -408,6 +408,23 @@ function useDatasetDetail({ workflowId, onBack, onSelectDataset }: DatasetDetail
     };
   }, [debouncedRefresh]);
 
+  // Pipeline-active poll: while the finetune agent is actively uploading
+  // (topics, relations, records, grader), refresh the dataset every 15s so
+  // views like All Sources coverage pick up newly uploaded relations without
+  // requiring a manual browser refresh. The poll auto-stops when `updatedAt`
+  // ages past the active-processing window (2 min idle).
+  useEffect(() => {
+    const ACTIVE_WINDOW_MS = 2 * 60 * 1000;
+    const POLL_INTERVAL_MS = 15_000;
+    const tick = () => {
+      const updated = dataset?.updatedAt ?? 0;
+      if (!updated || Date.now() - updated > ACTIVE_WINDOW_MS) return;
+      refreshDataset();
+    };
+    const id = setInterval(tick, POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [dataset?.updatedAt, refreshDataset]);
+
   // Listen for data generation progress from Lucy agent tools (generate_initial_data)
   // This keeps isGeneratingTraces/generationProgress in sync so tab spinners work
   useEffect(() => {

@@ -23,6 +23,7 @@ import type {
   GraderDimension,
 } from "@/types/dataset-types";
 import { getTraceAnalysis } from "@/services/finetune-api";
+import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { toast } from "sonner";
 
 // ============================================================================
@@ -30,12 +31,22 @@ import { toast } from "sonner";
 // ============================================================================
 
 function useTraceAnalysis({ workflowId }: { workflowId: string }) {
+  const { sources } = KnowledgeSourcesConsumer();
+  const hasTraceSources = sources.some((s) => !!s.traceBundleId);
   const [traceAnalysis, setTraceAnalysis] = useState<TraceAnalysisResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [hasTraces, setHasTraces] = useState(false);
 
   const loadTraceAnalysis = useCallback(async () => {
     if (!workflowId) return;
+    // Skip the fetch entirely if no trace sources are uploaded yet — avoids
+    // a guaranteed-404 that would otherwise log as a network error in devtools.
+    if (!hasTraceSources) {
+      setTraceAnalysis(null);
+      setHasTraces(false);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
       const result = await getTraceAnalysis(workflowId);
@@ -48,7 +59,7 @@ function useTraceAnalysis({ workflowId }: { workflowId: string }) {
     } finally {
       setIsLoading(false);
     }
-  }, [workflowId]);
+  }, [workflowId, hasTraceSources]);
 
   useEffect(() => {
     loadTraceAnalysis();

@@ -113,6 +113,7 @@ import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { EvalJobsConsumer, EvalJobsProvider } from "@/contexts/EvalJobsContext";
 import { PlanPreview } from "./PlanPreview";
 import { DatasetTitleBar, DatasetBreadcrumbBar } from "./DatasetBreadcrumbBar";
+import { PipelinePhaseStrip } from "./PipelinePhaseStrip";
 import { useDatasetReadme } from "@/hooks/useDatasetReadme";
 import { DatasetOverviewPanel } from "./DatasetOverviewPanel";
 import { DatasetReadmeViewer } from "./readme-viewer";
@@ -887,6 +888,14 @@ export function DatasetDetailContentV2() {
 
           {/* Path breadcrumb — only shown for subfolder navigation */}
           <DatasetBreadcrumbBar />
+
+          {/* Persistent pipeline progress strip — hides when all phases complete */}
+          <PipelinePhaseStrip
+            hasKnowledgeSources={knowledgeSourcesCount > 0}
+            hasTopics={availableTopics.length > 0}
+            hasRecords={sortedRecords.length > 0}
+            hasEvalScript={!!dataset.evalScript}
+          />
 
           {/* Content panel — driven by the active workspace tab */}
           {contentSection === null && (

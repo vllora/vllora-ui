@@ -45,6 +45,11 @@ export function EmptyRecordsState({
   docsTotal = 0,
 }: EmptyRecordsStateProps) {
   const [generationProgress, setGenerationProgress] = useState<GenerationProgress | null>(null);
+  // If the agent has uploaded sources but records haven't landed yet, the pipeline
+  // is actively processing — suppress the "Upload Documents" CTA which would be
+  // confusing (docs already exist, agent is working on them).
+  const { sources } = KnowledgeSourcesConsumer();
+  const pipelineActive = sources.length > 0;
 
   // Listen for generation progress events
   useEffect(() => {
@@ -176,30 +181,37 @@ export function EmptyRecordsState({
           </div>
         </div>
 
-        {/* Primary CTAs */}
-        <div className="flex items-center gap-2">
-          {onDocsClick && (
-            <Button
-              onClick={onDocsClick}
-              size="sm"
-              variant={IS_LUCY_ENABLED ? "outline" : "default"}
-              className="gap-2"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              Upload Documents
-            </Button>
-          )}
-          {IS_LUCY_ENABLED && (
-            <Button
-              onClick={handleAskLucy}
-              size="sm"
-              className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              Ask Lucy to Get Started
-            </Button>
-          )}
-        </div>
+        {/* Primary CTAs — hide when pipeline is already active (sources exist). */}
+        {!pipelineActive && (
+          <div className="flex items-center gap-2">
+            {onDocsClick && (
+              <Button
+                onClick={onDocsClick}
+                size="sm"
+                variant={IS_LUCY_ENABLED ? "outline" : "default"}
+                className="gap-2"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                Upload Documents
+              </Button>
+            )}
+            {IS_LUCY_ENABLED && (
+              <Button
+                onClick={handleAskLucy}
+                size="sm"
+                className="gap-2 bg-[rgb(var(--theme-500))] hover:bg-[rgb(var(--theme-600))] text-white"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Ask Lucy to Get Started
+              </Button>
+            )}
+          </div>
+        )}
+        {pipelineActive && (
+          <p className="text-xs text-muted-foreground">
+            Pipeline is processing {sources.length} source{sources.length === 1 ? "" : "s"}. Records will appear as each step completes.
+          </p>
+        )}
 
         {/* Secondary link */}
         {onImportClick && (

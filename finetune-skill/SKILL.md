@@ -252,19 +252,27 @@ All counts > 0 and evaluator = YES. **Proceed to Step 7.**
 
 **Eval first, train later.** Max 5 eval-only iterations.
 
-#### 7a-b. Eval BOTH models + Choose Best
+#### 7a-b. Eval + Choose Best
 
-Tool-calling: skip 0.8B (can't generate tool calls). Always eval both eligible models.
+**Tool-calling mode (tool-schemas.json exists): eval 4B ONLY.** The 0.8B and 2B models cannot reliably emit native `tool_calls` — running them wastes cloud compute. Skip both entirely; the readiness gate applies to 4B.
 
+**Text-only mode: eval both 4B and 0.8B; fall back to 2B only if 0.8B avg < 0.05.**
+
+Tool-calling flow — ONE eval:
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval --workflow-id $WORKFLOW_ID --model "Qwen3.5-4B" --output-dir finetune-project/test-runs
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval --file finetune-project/test-runs/eval-001.json
+```
 
+Text-only flow — two evals, one readiness-check per model:
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval --workflow-id $WORKFLOW_ID --model "Qwen3.5-4B" --output-dir finetune-project/test-runs
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval --file finetune-project/test-runs/eval-001.json
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-eval --workflow-id $WORKFLOW_ID --model "Qwen3.5-0.8B" --output-dir finetune-project/test-runs
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-eval --file finetune-project/test-runs/eval-002.json
 ```
 
-Run `readiness-check` on BOTH with `--training-file` and `--objective-target-tokens` (classification: 50-100, QA: 80-150, **conversational: 200-400**, analysis: 200-500).
+Run `readiness-check` with `--training-file` and `--objective-target-tokens` (classification: 50-100, QA: 80-150, **conversational: 200-400**, analysis: 200-500).
 
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
@@ -272,7 +280,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py readiness-check \
   --training-file finetune-project/training.jsonl --objective-target-tokens <target>
 ```
 
-**Choose model with highest learnable%.** If 0.8B avg < 0.05, also eval 2B. GATES: chosen avg between 0.05 and 0.75.
+**Text-only only: choose model with highest learnable%.** GATES: chosen avg between 0.05 and 0.75. Do NOT create additional evals in tool-calling mode.
 
 > See [reference/readiness-gate.md](reference/readiness-gate.md) for model selection table, headroom gate, and diagnostic trees.
 

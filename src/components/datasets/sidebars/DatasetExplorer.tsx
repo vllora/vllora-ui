@@ -429,7 +429,10 @@ export function DatasetExplorer({ onNavigate }: DatasetExplorerProps) {
       <SidebarSection
         title="Teaching Examples"
         icon={<Database className="w-3 h-3" />}
-        count={totalRecords || records.length}
+        // Omit the count while records haven't started uploading yet —
+        // topics alone are shown in the tree and a "0" next to "Teaching
+        // Examples" misleadingly suggests the topics below are empty.
+        count={(totalRecords || records.length) || undefined}
         isLoading={isGeneratingTraces}
       >
         {getSection("training-data") && <SectionInsight analysis={getSection("training-data")!} />}
@@ -779,7 +782,15 @@ function SidebarDivider() {
 // ============================================================================
 
 function CountBadge({ count }: { readonly count: number }) {
-  if (count === 0) return null;
+  if (count === 0) {
+    // Show explicit 0 with muted style so users see the topic exists but is
+    // empty — hiding the badge made it look inconsistent with sibling topics.
+    return (
+      <span className="ml-auto text-[10px] text-muted-foreground/30 bg-muted/20 px-1.5 py-px rounded-full tabular-nums shrink-0">
+        0
+      </span>
+    );
+  }
   return (
     <span className="ml-auto text-[10px] text-muted-foreground/50 bg-muted/50 px-1.5 py-px rounded-full tabular-nums shrink-0">
       {count}

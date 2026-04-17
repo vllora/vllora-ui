@@ -393,12 +393,17 @@ export function getFilterGroupConfig(group: DatasetFilterGroup): DatasetFilterGr
   return DATASET_FILTER_CONFIG.find((c) => c.value === group) ?? DATASET_FILTER_CONFIG[0];
 }
 
+/** Workflow is considered actively processing if it was updated in the last N ms
+ *  AND is not in a terminal state. Picks up the extract/topics/records/grader
+ *  phases of the finetune pipeline where no eval or training job is active yet. */
+const ACTIVE_PROCESSING_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
+
 /**
  * Compute the filter group for a dataset from its workflow + dry run jobs.
  * Used for both badge display and tab filtering.
  */
 export function computeFilterGroup(
-  dataset: { state?: DatasetState; evalStats?: EvalStats },
+  dataset: { state?: DatasetState; evalStats?: EvalStats; updatedAt?: number },
   workflow: { currentStep: string; training?: { status: string } | null } | null,
   activeDryRunCount: number,
 ): DatasetFilterGroup {
@@ -421,6 +426,20 @@ export function computeFilterGroup(
 
   // Active evaluations — something is actually running right now
   if (activeDryRunCount > 0) return 'in_finetune';
+
+  // Actively processing the pipeline (extraction/topics/records/grader) —
+  // the gateway doesn't track currentStep during the agent-driven pipeline,
+  // so we rely on `updatedAt` freshness: every upload (records/topics/sources/
+  // grader/journal) touches `updatedAt`, so a fresh timestamp is a strong
+  // proxy for "agent is actively working".
+  // Tradeoffs:
+  //   - 2 min false-positive window if the user manually edits a field
+  //   - False-negative if a single LLM call takes > 2 min between uploads
+  // A true gateway-side "active pipelines" endpoint would be more precise;
+  // this heuristic covers the common case without backend changes.
+  if (dataset.updatedAt && Date.now() - dataset.updatedAt < ACTIVE_PROCESSING_WINDOW_MS) {
+    return 'in_finetune';
+  }
 
   // Everything else (has eval history, workflow in progress but idle, etc.) is draft
   return 'draft';

@@ -174,7 +174,7 @@ function JobsFooterSummary({
   // Build the two summary lines
   const evalLine = (() => {
     if (evalJobs.length === 0) return null;
-    if (!evalLatest) return { label: "No active eval", color: "text-zinc-600", pulse: false, model: undefined as string | undefined };
+    if (!evalLatest) return { label: "No test runs yet", color: "text-zinc-600", pulse: false, model: undefined as string | undefined };
     if (evalRunning) return { label: "Evaluating", color: "text-blue-400", pulse: true, model: evalRunning.model };
     if (evalDone) return { label: "Evaluated", color: "text-emerald-400", pulse: false, model: evalDone.model };
     return { label: "Eval failed", color: "text-red-400", pulse: false, model: evalFailed?.model };
@@ -249,13 +249,13 @@ function JobsFooterSummary({
           {hasEvalScript ? (
             <>
               <FlaskConical className="w-3.5 h-3.5" />
-              Eval fn configured
+              Quality checker ready
               <CircleCheck className="w-2.5 h-2.5 text-emerald-500" />
             </>
           ) : (
             <>
               <Ban className="w-3.5 h-3.5" />
-              No eval fn
+              No quality checker
             </>
           )}
         </span>
