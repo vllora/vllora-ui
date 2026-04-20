@@ -71,7 +71,7 @@ Embed prior turns as text inside the user message. Do **not** use `assistant` ro
 
 ### Tool-calling records (decision points with prior tool history)
 
-Use the full OpenAI structural format: `assistant.tool_calls` + `tool` role messages preserved as-is. This is the committed design in `finetune-skill-otel/scripts/otel_distill.py` and `tool-calling-training-design.md`. ToolRL and MT-GRPO both train on full trajectories — flattening teaches shortcuts (skip authentication, invent args).
+Use the full OpenAI structural format: `assistant.tool_calls` + `tool` role messages preserved as-is. This is the committed design documented in `docs/workflow-skill-first-approach/research-trace-pdf-combine/tool-calling-training-design.md`. ToolRL and MT-GRPO both train on full trajectories — flattening teaches shortcuts (skip authentication, invent args).
 
 ```json
 {"messages": [

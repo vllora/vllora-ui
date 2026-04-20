@@ -16,7 +16,7 @@ Unify the two finetune skills into one skill that auto-detects inputs (PDFs, tra
 
 **Purpose**: Read OTel traces → produce 4 artifacts in `finetune-project/`.
 
-**Reusable from `finetune-skill-otel/`** (copy + adapt, don't import):
+**Historical note**: These helpers originated in the now-consolidated `finetune-skill-otel/` codebase; they were copied into `finetune-skill/scripts/trace_analyze.py` during the consolidation. Paths below refer to the pre-consolidation source for provenance.
 
 | Existing code | What it does | Reuse for |
 |---|---|---|
@@ -321,17 +321,15 @@ This is sufficient for the demo but the extraction logic needs to be smart about
 | Grader hints too vague from traces | Low — user always reviews draft | Hybrid approach: trace failures + policy rules. Draft is a starting point, not final |
 | Large trace files slow down analysis | Low — one-time cost | Stream processing, cap at 1000 traces for analysis |
 | OTel format variations across producers | Medium — different tools emit different attributes | Validate required attributes upfront, degrade gracefully on missing optional fields |
-| Two-skill isolation rule conflict | None | Decision: only modify `finetune-skill/`, leave `finetune-skill-otel/` untouched |
+| Two-skill isolation rule conflict | None | Decision: only modify `finetune-skill/`. The separate OTel skill has since been consolidated away. |
 
 ---
 
-## Decisions (Resolved 2026-04-13)
+## Decisions (Resolved 2026-04-13, updated 2026-04-20)
 
 ### 1. Scope: Only modify `finetune-skill/`
 
-Add trace analysis capability to the existing PDF skill. Do NOT touch `finetune-skill-otel/` — it stays as-is for standalone trace-only finetuning. No isolation rule conflict since we only modify one skill.
-
-The OTel skill can be revised later to share code or be deprecated once the unified skill is proven.
+Add trace analysis capability to the existing PDF skill. The formerly separate `finetune-skill-otel/` was a short-lived parallel pipeline; on 2026-04-20 it was consolidated into `finetune-skill/` (which already covered combined PDF + OTel mode), eliminating the two-skill maintenance cost.
 
 ### 2. Gateway storage: Separate `trace_analyses` table
 

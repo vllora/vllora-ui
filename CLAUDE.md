@@ -7,8 +7,7 @@ Two products under active development:
 
 The skill drives the pipeline. The UI displays the results. The gateway is a side-effect persistence store, not the orchestrator.
 
-> Load `/finetune-context` for full pipeline architecture, cross-repo source map, and agent definitions.
-> Load `/otel-finetune-context` for the OTel trace pipeline (separate `finetune-skill-otel/`).
+> Load `/finetune-context` for full pipeline architecture, cross-repo source map, and agent definitions. `finetune-skill/` now handles PDF, OTel trace, and combined-mode inputs in a single pipeline.
 
 ## Tech Stack
 
@@ -88,7 +87,6 @@ Gateway runs at `localhost:9090`. Backend (Rust) repo: `../gateway/`. Cloud repo
 | Skill | When to use |
 |-------|------------|
 | `/finetune-context` | Full pipeline context — architecture, agents, cross-layer sync |
-| `/otel-finetune-context` | OTel trace pipeline context (separate `finetune-skill-otel/`) |
 | `/finetune-run <scenario>` | Run finetune skill against a test scenario |
 | `/finetune-analyze <scenario>` | Analyze results of a test run |
 | `/finetune-kill <scenario>` | Kill orphaned processes from a test run |

@@ -13,7 +13,7 @@ The PDF finetune skill (`finetune-skill/`) auto-detects whether the input folder
 | Traces only | Standard OTel pipeline (existing) |
 | PDFs + Traces | Trace-informed pipeline -- traces shape topics, prompts, records, and grader |
 
-Only `finetune-skill/` was modified. `finetune-skill-otel/` remains untouched per the two-skills isolation rule.
+All changes live in `finetune-skill/`. (The previously separate `finetune-skill-otel/` has since been consolidated into this single skill.)
 
 ## How Traces Contribute to Each Step
 
@@ -82,7 +82,7 @@ Only `finetune-skill/` was modified. `finetune-skill-otel/` remains untouched pe
 
 ## Key Decisions
 
-1. **Scope**: Only `finetune-skill/` modified -- `finetune-skill-otel/` untouched, no isolation rule conflict
+1. **Scope**: Only `finetune-skill/` modified. The formerly separate `finetune-skill-otel/` has since been consolidated into this skill.
 2. **Gateway**: `trace_analyses` table in SQLite -- single API endpoint, 4 JSON columns, backward compatible
 3. **Seed ratio**: 15-25% real queries, 75-85% synthetic -- variable per topic traffic level, real queries used as-is
 4. **Priority formula**: `frequency x failure_rate` -- higher priority topics get more records

@@ -1,8 +1,8 @@
 # Research: Trace-Informed Curriculum for GRPO Finetuning
 
 > **Date**: 2026-04-13
-> **Status**: Research complete, pending implementation decision
-> **Question**: Should the PDF finetune skill and OTel trace finetune skill be unified into one skill, or kept separate with a data bridge?
+> **Status**: Historical — decision implemented. The separate `finetune-skill-otel/` has been consolidated into `finetune-skill/`, which now handles PDF, OTel trace, and combined modes in a single pipeline. References below to `finetune-skill-otel/` describe pre-consolidation state; the trace-extraction logic now lives in `finetune-skill/scripts/trace_analyze.py`.
+> **Original question**: Should the PDF finetune skill and OTel trace finetune skill be unified into one skill, or kept separate with a data bridge? (Answered: unified.)
 
 ## Table of Contents
 

@@ -303,8 +303,14 @@ function evaluate(input) {{
     }}
     var valueScore = valueMatches / totalParams;
 
-    // Composite score (ToolRL decomposition)
-    var score = 0.4 * nameScore + 0.3 * keyJaccard + 0.3 * valueScore;
+    // Composite score — multiplicative (ToolRLA-style, arXiv:2603.01620).
+    // Name acts as a gate: a wrong tool name collapses the score regardless
+    // of how well keys/values happen to overlap. An exact name still gets
+    // meaningful credit (0.4 floor) even with zero arg match, so GRPO has
+    // gradient to reward tool-selection over arg-guessing.
+    // ToolRLA ablation shows +7pp over additive composition.
+    var argsScore = 0.5 * keyJaccard + 0.5 * valueScore;
+    var score = nameScore * (0.4 + 0.6 * argsScore);
     score = Math.max(FLOOR, score);
 
     return {{

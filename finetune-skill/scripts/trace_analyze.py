@@ -267,6 +267,7 @@ def extract_decision_points(
     dropped_orphan_tool = 0        # records dropped due to unrecoverable tool_call_id
     dropped_parse_failure = 0      # records dropped due to unparseable GT args
     dropped_errored_call = 0       # records dropped because the GT call returned an error
+    dropped_prior_error = 0        # records dropped because conversation history contains prior tool error
 
     # Index tool execution results per trace so we can skip decision points
     # whose ground-truth call errored in production (the agent later corrected
@@ -502,6 +503,23 @@ def extract_decision_points(
                 dropped_orphan_tool += 1
                 continue  # Drop the whole record — unusable for chat template
 
+            # Drop DPs whose conversation history contains a prior tool error.
+            # MT-GRPO (arXiv:2604.02869) shows naive inclusion of prior-error
+            # context without explicit recovery supervision can degrade
+            # training by up to 14pp. Until we implement Fission-GRPO-style
+            # error+recovery pairs, train only on clean-history decision
+            # points (matches ToolRL / Nemotron-Tool-N1 approach).
+            has_prior_error = False
+            for m in context[:-1]:  # exclude the very last turn's own tool result
+                if m.get("role") == "tool":
+                    c = str(m.get("content") or "").lower()
+                    if "error" in c and ("error:" in c or "error\"" in c or c.startswith("error")):
+                        has_prior_error = True
+                        break
+            if has_prior_error:
+                dropped_prior_error += 1
+                continue
+
             # Extract per-span tool set
             span_tools = None
             raw_tools = attrs.get("gen_ai.request.tools")
@@ -580,6 +598,10 @@ def extract_decision_points(
         print(f"  Decision points: dropped {dropped_errored_call} record(s) "
               f"whose GT call returned an error in the trace (training on "
               f"failed attempts teaches the model to reproduce them).")
+    if dropped_prior_error:
+        print(f"  Decision points: dropped {dropped_prior_error} record(s) "
+              f"with prior tool errors in conversation history (MT-GRPO "
+              f"arXiv:2604.02869: naive inclusion can degrade training).")
     if dropped_orphan_tool:
         print(f"  Decision points: dropped {dropped_orphan_tool} record(s) "
               f"with orphan tool messages (chat template would reject).")
