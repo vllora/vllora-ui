@@ -320,6 +320,10 @@ def gate_structural(records: list[dict], topics_data: list | None) -> dict:
 
     # Topic balance check: any topic with < 50% of the median count is imbalanced.
     # GRPO will under-learn thin topics and over-learn thick ones.
+    # For tool-calling datasets this is a soft warning — natural trace frequency
+    # legitimately makes some tools (e.g. modify-payment) rare, and synthesis to
+    # force balance is banned (teaches shortcuts). Keep as hard fail for text-only
+    # datasets where the fix is cheap (regenerate synthetic records).
     if topic_counts and len(topic_counts) > 1:
         counts = sorted(topic_counts.values())
         median_count = counts[len(counts) // 2]
@@ -327,12 +331,15 @@ def gate_structural(records: list[dict], topics_data: list | None) -> dict:
         imbalanced = {t: c for t, c in topic_counts.items() if c < balance_threshold}
         if imbalanced:
             issues.append({
-                "severity": "hard",
+                "severity": "soft" if is_tool_calling else "hard",
                 "check": "topic_balance",
                 "message": (
                     f"{len(imbalanced)} topic(s) have < 50% of median ({median_count}): "
                     f"{', '.join(f'{t}={c}' for t, c in sorted(imbalanced.items(), key=lambda x: x[1]))}. "
-                    f"Regenerate records for these topics before training."
+                    + ("Tool-calling dataset — minority topics reflect natural trace frequency. "
+                       "Synthesis is banned; accept or apply F-GRPO-style reward weighting at training time."
+                       if is_tool_calling
+                       else "Regenerate records for these topics before training.")
                 ),
                 "value": len(imbalanced),
                 "threshold": balance_threshold,

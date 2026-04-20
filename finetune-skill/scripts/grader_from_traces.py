@@ -289,18 +289,17 @@ function evaluate(input) {{
     var keyUnion = modelKeys.concat(expectedKeys.filter(function(k) {{ return modelKeys.indexOf(k) < 0; }}));
     var keyJaccard = keyUnion.length > 0 ? keyIntersection.length / keyUnion.length : 1.0;
 
-    // 3. Parameter value match (30%)
+    // 3. Parameter value match (30%) — IRC-normalized comparison
+    // (IRC paper, arXiv:2604.02869: naive string compare of tool-call args
+    // inflates false positives by ~23.5%. Normalize before comparing.)
     var valueMatches = 0;
     var totalParams = expectedKeys.length || 1;
     for (var i = 0; i < expectedKeys.length; i++) {{
         var key = expectedKeys[i];
-        var modelVal = String(modelCall.arguments?.[key] || "");
-        var expectedVal = String(expected.arguments?.[key] || "");
-        if (modelVal === expectedVal) {{
-            valueMatches++;
-        }} else if (modelVal.toLowerCase() === expectedVal.toLowerCase()) {{
-            valueMatches += 0.8;  // Case-insensitive partial credit
-        }}
+        valueMatches += compareValue(
+            (modelCall.arguments || {{}})[key],
+            (expected.arguments || {{}})[key]
+        );
     }}
     var valueScore = valueMatches / totalParams;
 
@@ -310,12 +309,60 @@ function evaluate(input) {{
 
     return {{
         score: score,
-        name_match: 1.0,
+        name_match: nameScore,
         key_jaccard: keyJaccard,
         value_match: valueScore,
         model_tool: modelCall.name,
         expected_tool: expected.name,
     }};
+}}
+
+// IRC-compliant value comparison: handles null/undefined, numeric coercion
+// ("1" === 1), list-order-insensitive Jaccard, recursive dict matching, and
+// whitespace/underscore/dash-tolerant string matching. Returns 0..1.
+function compareValue(mv, ev) {{
+    if (mv === undefined || mv === null) return (ev === undefined || ev === null) ? 1.0 : 0.0;
+    if (Array.isArray(ev)) {{
+        if (!Array.isArray(mv)) return 0.0;
+        if (mv.length === 0 && ev.length === 0) return 1.0;
+        var mSet = mv.map(canonicalize).sort();
+        var eSet = ev.map(canonicalize).sort();
+        var inter = 0;
+        var unionMap = {{}};
+        mSet.forEach(function (v) {{ unionMap[v] = 1; }});
+        eSet.forEach(function (v) {{ unionMap[v] = 1; }});
+        var unionCount = Object.keys(unionMap).length;
+        var eLookup = {{}};
+        eSet.forEach(function (v) {{ eLookup[v] = 1; }});
+        mSet.forEach(function (v) {{ if (eLookup[v]) inter++; }});
+        return unionCount > 0 ? inter / unionCount : 1.0;
+    }}
+    if (typeof ev === "object") {{
+        if (typeof mv !== "object" || mv === null) return 0.0;
+        var eKeys = Object.keys(ev);
+        if (eKeys.length === 0) return Object.keys(mv).length === 0 ? 1.0 : 0.8;
+        var sum = 0;
+        for (var k = 0; k < eKeys.length; k++) {{
+            sum += compareValue(mv[eKeys[k]], ev[eKeys[k]]);
+        }}
+        return sum / eKeys.length;
+    }}
+    var ms = canonicalize(mv);
+    var es = canonicalize(ev);
+    if (ms === es) return 1.0;
+    if (!isNaN(Number(ms)) && !isNaN(Number(es)) && Number(ms) === Number(es)) return 1.0;
+    if (typeof ms === "string" && typeof es === "string") {{
+        var msN = ms.replace(/[\\s_-]/g, "");
+        var esN = es.replace(/[\\s_-]/g, "");
+        if (msN === esN) return 0.9;
+    }}
+    return 0.0;
+}}
+
+function canonicalize(v) {{
+    if (v === null || v === undefined) return "";
+    if (typeof v === "string") return v.trim().toLowerCase();
+    return String(v).toLowerCase();
 }}
 
 function parseToolCall(response) {{

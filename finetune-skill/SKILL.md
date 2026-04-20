@@ -204,6 +204,13 @@ Check `config.json` for `use_nemo` flag. If `true`, spawn `nemo-data-generator` 
 
 `cp` is literally the whole operation for tool-calling. `upload-records` handles gateway serialization. If you think the data "needs transformation", STOP and re-read this section.
 
+**Balance rare topics via paraphrase (tool-calling only):** Real traces are unbalanced — rare tools (e.g. `modify_pending_order_payment`) may have only 4 records. Run the paraphrase generator to bring each topic to the minimum count. It rewrites ONLY the final user turn (user voice, same intent, same factual values) and preserves full prior context, tool list, and ground truth — the Trajectory2Task approach (arXiv:2601.20144). This is NOT the banned single-turn synthesis.
+
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/paraphrase_rare_topics.py \
+  --file finetune-project/training.jsonl --min-per-topic 25
+```
+
 Upload: `upload-records --workflow-id $WORKFLOW_ID --file training.jsonl --force`
 
 **ALWAYS deduplicate:** `deduplicate_records.py training.jsonl --threshold 0.85`

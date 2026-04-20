@@ -38,6 +38,74 @@ def fix_unicode_escapes(text: str) -> str:
     return text
 
 
+# OCR garble repair (runs on table headers before validation).
+# Some PDFs produce cells like "Error Message EEErrorrorror Mr Mr Meeessssssaaagggeee"
+# where the extractor duplicates the word with character repetitions. Pattern is
+# always: <clean word(s)> <garbled suffix with 3+ identical consecutive chars>.
+# Strip everything from the first run of 3+ identical chars onward.
+_OCR_GARBLE_RE = re.compile(r"([A-Za-z])\1{2,}")
+
+
+def _clean_ocr_garbled_cell(cell: str) -> str:
+    """If `cell` contains the 3+-identical-char OCR garble pattern, truncate to
+    the clean prefix. Returns the original cell if no garble detected."""
+    if not cell:
+        return cell
+    m = _OCR_GARBLE_RE.search(cell)
+    if not m:
+        return cell
+    # Walk backwards from match to the end of the last clean word
+    cut = m.start()
+    head = cell[:cut].rstrip(" \t")
+    # If head ended with a lowercased prefix of the garble word (e.g. "E" before
+    # "EEError"), drop it too — the extractor left the first letter un-doubled.
+    # Remove trailing single-letter-then-space patterns that match the garble
+    # letter case-insensitively.
+    tokens = head.rsplit(" ", 1)
+    if len(tokens) == 2 and len(tokens[1]) <= 2 and tokens[1].lower() == tokens[1][0].lower() * len(tokens[1]):
+        head = tokens[0]
+    return head
+
+
+def _fix_ocr_garbled_tables(parts: list[dict]) -> tuple[list[dict], int]:
+    """Scan pipe-table rows for OCR garble and rewrite cells in place.
+
+    Returns (parts, cleaned_row_count). Only touches header rows — body rows
+    with garbled values are passed through unchanged because heuristics there
+    risk destroying legitimate values like 'Error: 404' or product codes.
+    """
+    cleaned = 0
+    for p in parts:
+        content = p.get("content")
+        if not isinstance(content, str) or "|" not in content:
+            continue
+        lines = content.split("\n")
+        if not lines:
+            continue
+        # Only rewrite the first pipe line (header) and any line where the
+        # garble pattern is present — body rows with 3+ repeats could be valid
+        # (product codes). Be conservative.
+        new_lines = []
+        hit = False
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if not stripped.startswith("|") or not _OCR_GARBLE_RE.search(line):
+                new_lines.append(line)
+                continue
+            cells = line.split("|")
+            new_cells = [
+                _clean_ocr_garbled_cell(c) if _OCR_GARBLE_RE.search(c) else c
+                for c in cells
+            ]
+            new_lines.append("|".join(new_cells))
+            hit = True
+            cleaned += 1
+        if hit:
+            p["content"] = "\n".join(new_lines)
+            p.setdefault("extraction_metadata", {})["ocr_garble_repaired"] = True
+    return parts, cleaned
+
+
 def _looks_like_false_heading(title: str) -> bool:
     """Detect titles that are sentence fragments, not real section headings.
 
@@ -230,6 +298,13 @@ def consolidate_parts(
 
     # Phase 0: Fix false headings before merging
     parts = _fix_false_headings(parts)
+
+    # Phase 0.25: Repair OCR-garbled table headers (repeated-char pattern
+    # like "EEErrorrorror Mr Mr Meeessssssaaagggeee"). Left unchecked, these
+    # propagate into training records and confuse the grader's header-aware logic.
+    parts, ocr_cleaned = _fix_ocr_garbled_tables(parts)
+    if ocr_cleaned:
+        print(f"  Repaired OCR-garble in {ocr_cleaned} pipe-row(s)")
 
     # Phase 0.5: Merge repeated-title sequences (e.g., Recommendation/Rationale pairs)
     parts = _merge_repeated_title_sequences(parts)

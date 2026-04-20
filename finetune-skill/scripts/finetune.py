@@ -7311,6 +7311,12 @@ def cmd_update_analysis(args: argparse.Namespace) -> None:
     if args.status in ("completed", "complete", "done"):
         args.status = "ready"
 
+    # 'trace-influence' is a natural-language label the agent reaches for;
+    # it describes the same UI section as 'trace-analysis'. Normalize so we
+    # don't emit two parallel section keys.
+    if args.section == "trace-influence":
+        args.section = "trace-analysis"
+
     # Load or create
     if analysis_file.exists():
         analysis = json.loads(analysis_file.read_text())
@@ -7724,8 +7730,9 @@ def main() -> None:
     )
     p.add_argument("--project-dir", required=True, help="Path to finetune-project directory")
     p.add_argument("--section", required=True,
-                   choices=["sources", "trace-analysis", "training-data", "evaluator", "evaluation", "training"],
-                   help="Which pipeline section to update")
+                   choices=["sources", "trace-analysis", "training-data", "evaluator", "evaluation", "training",
+                            "trace-influence"],
+                   help="Which pipeline section to update ('trace-influence' is an alias for 'trace-analysis')")
     p.add_argument("--status", required=True,
                    choices=["not-started", "in-progress", "ready", "needs-work", "blocked",
                             "not_started", "in_progress", "needs_work",

@@ -31,8 +31,8 @@ Validates data format and distribution without any API calls.
 | Ground truth coverage | >= 70% of records | Soft | GTs enable grader calibration and quality assessment |
 | Topic count | >= 3 leaf topics | Soft | Diversity prevents distribution collapse (arXiv:2511.01490) |
 | Topic dominance | No topic > 40% | Soft | Balanced training data is standard ML practice |
-| Topic balance | No topic < 50% of median count | **Hard** | Severely underrepresented topics get zero GRPO signal |
-| Thin topics | >= 5 records per topic | Soft | GRPO needs enough examples per skill for stable batches |
+| Topic balance | No topic < 50% of median count | **Hard** for text-only, **Soft** for tool-calling | Text-only can regenerate synthetics; tool-calling minority tools reflect natural trace frequency (synthesis banned) |
+| Thin topics | >= 5 records per topic | **Hard** for text-only, **Soft** for tool-calling | Same rationale as topic balance |
 | Missing system prompts | 0 → warn | Soft | System prompts define the task context |
 | Orphan topics | 0 → warn | Soft | Records should reference valid topic IDs |
 
