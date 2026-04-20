@@ -7237,6 +7237,32 @@ def cmd_grader_sanity_check(args: argparse.Namespace) -> None:
     print("\n✅ PASS — all epochs clean")
 
 
+def cmd_grader_discriminate(args: argparse.Namespace) -> None:
+    """Run grader-discriminate subprocess against training.jsonl + grader.js.
+
+    Delegates to scripts/grader_discriminate.py to keep the corruption + scoring
+    logic in its own module. Exits with the subprocess's exit code.
+    """
+    import subprocess
+
+    script = Path(__file__).parent / "grader_discriminate.py"
+    cmd = [
+        sys.executable,
+        str(script),
+        "--workflow-id", args.workflow_id,
+        "--records", args.records,
+        "--grader", args.grader,
+        "--sample-size", str(args.sample_size),
+        "--min-score-gap", str(args.min_score_gap),
+        "--min-pairwise-winrate", str(args.min_pairwise_winrate),
+        "--output-report", args.output_report,
+        "--base-url", args.base_url,
+        "--seed", str(args.seed),
+    ]
+    result = subprocess.run(cmd)
+    sys.exit(result.returncode)
+
+
 def cmd_print_row_outputs(args: argparse.Namespace) -> None:
     """Print per-epoch rollout output + score + reason for one row."""
     result = _api(
@@ -7708,6 +7734,25 @@ def main() -> None:
     )
     p.add_argument("--eval-file", required=True, help="Path to eval-NNN.json")
 
+    # grader-discriminate — MANDATORY before upload-grader. Tests whether the
+    # grader separates correct tool calls from systematically corrupted ones
+    # (wrong name / missing required arg / mutated value / renamed key). Catches
+    # stub-name-check, naive String() compares, dropped-required-field bugs
+    # BEFORE training starts. Closest approximation of IRC calibration.
+    p = subparsers.add_parser(
+        "grader-discriminate",
+        help="MANDATORY before upload-grader — hard-fail if grader can't distinguish correct vs corrupted tool calls",
+    )
+    p.add_argument("--workflow-id", required=True)
+    p.add_argument("--records", required=True, help="Path to training.jsonl")
+    p.add_argument("--grader", required=True, help="Path to grader.js")
+    p.add_argument("--sample-size", type=int, default=30)
+    p.add_argument("--min-score-gap", type=float, default=0.30)
+    p.add_argument("--min-pairwise-winrate", type=float, default=0.80)
+    p.add_argument("--output-report", default="quality-checker/discrimination-report.json")
+    p.add_argument("--base-url", default="http://localhost:9090")
+    p.add_argument("--seed", type=int, default=42)
+
     p = subparsers.add_parser(
         "print-row-outputs",
         help="Print epoch table for one row: rollout output, score, reason",
@@ -7785,6 +7830,7 @@ def main() -> None:
         "harden-records": cmd_harden_records,
         "print-row-outputs": cmd_print_row_outputs,
         "grader-sanity-check": cmd_grader_sanity_check,
+        "grader-discriminate": cmd_grader_discriminate,
         "reconcile-topics": cmd_reconcile_topics,
         "update-analysis": cmd_update_analysis,
     }

@@ -1,24 +1,17 @@
 # OTel Trace Ingestion
 
-`otel_extract.py` is a parallel ingestion path to the document extraction flow
-(`extract_router.py`, `pdftotext_extract.py`, `build_knowledge_parts.py`).
-It turns OpenTelemetry GenAI traces into the same `knowledge_parts.json`
-format the rest of the pipeline already consumes — so once parts are
-written, **steps 3–7 (topics → records → grader → eval → train) are
-unchanged**.
-
-Use traces as a finetune input when you want to clone the behavior of an
-existing LLM app, not just teach the model new knowledge from documents.
+> **⚠ STATUS: DEPRECATED (2026-04-20).** The `otel_extract.py` flow described here is unused by the training pipeline — `consolidate_parts.py` does not consume `kind: "otel-trace"` parts. The real OTel trace path is:
+>
+> - **`trace_analyze.py`** reads `source_traces_semconv.json` directly (no extraction step) and emits `trace-analysis/*.json` + `decision-points.jsonl` for training.
+> - **`upload_trace_analysis.py`** registers the trace bundle as a `kind=otel-trace` knowledge source so the UI can render it.
+>
+> This document is retained as reference for the OTel GenAI semconv shape + attribute names the pipeline relies on. Do NOT run `otel_extract.py` as part of the pipeline — its output is discarded.
 
 ---
 
-## When to use this vs document extraction
+## OTel GenAI semantic conventions we consume (authoritative reference)
 
-| You have… | Use… |
-|-----------|------|
-| PDFs, manuals, runbooks | `extract_router.py` |
-| Production LLM call logs | `otel_extract.py` (this) |
-| Both | Run both — `consolidate_parts.py` merges them |
+The finetune pipeline (via `trace_analyze.py`) reads traces that follow the OpenTelemetry GenAI semantic conventions. This section documents which attributes we rely on and which are explicitly unsupported.
 
 ---
 

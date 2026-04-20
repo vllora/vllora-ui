@@ -4,10 +4,21 @@
 """
 otel_extract.py — turn OTel GenAI traces into knowledge_parts.json
 
-Sibling of `extract_router.py` / `build_knowledge_parts.py`. Reads a file of
-OpenTelemetry GenAI spans and emits the same `knowledge_parts.json` format the
-rest of the pipeline already understands. Once written, `consolidate_parts.py`
-picks the file up automatically — no other pipeline step changes.
+⚠ STATUS: DEPRECATED / UNUSED by the training pipeline (2026-04-20).
+
+This script emits a `knowledge_parts.json` with `kind: "otel-trace"` parts,
+but NOTHING consumes that output:
+  - `consolidate_parts.py` does not read `kind: "otel-trace"` parts
+  - `generate_records.py` does not read them
+  - `trace_analyze.py` reads the raw traces file directly, not this script's output
+
+The UI's `kind=otel-trace` knowledge sources are created by a different script:
+`upload_trace_analysis.py`, which registers the raw trace bundle as a
+knowledge source for UI visualization — independent of this file.
+
+Kept on disk for ad-hoc local exploration of OTel span shape. Do NOT wire it
+into the main pipeline without also updating `consolidate_parts.py` to read
+the emitted parts — otherwise its output is discarded.
 
 Input formats accepted:
   1. JSON array of spans: [{trace_id, span_id, ...}, ...]

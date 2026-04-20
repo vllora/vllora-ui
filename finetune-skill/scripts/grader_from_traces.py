@@ -289,19 +289,34 @@ function evaluate(input) {{
     var keyUnion = modelKeys.concat(expectedKeys.filter(function(k) {{ return modelKeys.indexOf(k) < 0; }}));
     var keyJaccard = keyUnion.length > 0 ? keyIntersection.length / keyUnion.length : 1.0;
 
-    // 3. Parameter value match (30%) — IRC-normalized comparison
+    // 3. Parameter value match (30%) — IRC-normalized comparison via
+    // GEOMETRIC MEAN over expected keys. Every key in the ground truth's
+    // arguments is treated as load-bearing (they're all GT-derived → all
+    // required for this specific call), so a single wrong or missing value
+    // collapses value_score toward 0.
+    //
+    // Why not arithmetic mean: with 5 keys and 1 wrong value, arithmetic
+    // gives 4/5 = 0.8 → the grader rewards wrong calls at ~0.94/1.0. During
+    // GRPO that ~0.06 signal is invisible and the model never learns to
+    // match IDs exactly. Verified via `finetune.py grader-discriminate`:
+    // arithmetic-mean gap = +0.17 (fails 0.30 threshold); geometric-mean
+    // gap ≥ 0.30. See `reference/grader-writing.md` § Discrimination check.
+    //
     // (IRC paper, arXiv:2604.02869: naive string compare of tool-call args
-    // inflates false positives by ~23.5%. Normalize before comparing.)
-    var valueMatches = 0;
-    var totalParams = expectedKeys.length || 1;
-    for (var i = 0; i < expectedKeys.length; i++) {{
+    // inflates false positives by ~23.5%. `compareValue` normalizes before
+    // comparing.)
+    var valueProduct = 1.0;
+    var nKeys = expectedKeys.length;
+    for (var i = 0; i < nKeys; i++) {{
         var key = expectedKeys[i];
-        valueMatches += compareValue(
+        var v = compareValue(
             (modelCall.arguments || {{}})[key],
             (expected.arguments || {{}})[key]
         );
+        valueProduct *= v;
+        if (valueProduct === 0) break;
     }}
-    var valueScore = valueMatches / totalParams;
+    var valueScore = nKeys > 0 ? Math.pow(valueProduct, 1.0 / nKeys) : 1.0;
 
     // Composite score — multiplicative (ToolRLA-style, arXiv:2603.01620).
     // Name acts as a gate: a wrong tool name collapses the score regardless
@@ -347,11 +362,15 @@ function compareValue(mv, ev) {{
         if (typeof mv !== "object" || mv === null) return 0.0;
         var eKeys = Object.keys(ev);
         if (eKeys.length === 0) return Object.keys(mv).length === 0 ? 1.0 : 0.8;
-        var sum = 0;
+        // Geometric mean matches the top-level value aggregation: every
+        // key the GT provides is load-bearing. One wrong nested field
+        // (e.g., address.city) should drop the nested value_score toward 0.
+        var prod = 1.0;
         for (var k = 0; k < eKeys.length; k++) {{
-            sum += compareValue(mv[eKeys[k]], ev[eKeys[k]]);
+            prod *= compareValue(mv[eKeys[k]], ev[eKeys[k]]);
+            if (prod === 0) break;
         }}
-        return sum / eKeys.length;
+        return Math.pow(prod, 1.0 / eKeys.length);
     }}
     var ms = canonicalize(mv);
     var es = canonicalize(ev);

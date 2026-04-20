@@ -1321,7 +1321,7 @@ def generate_for_topic(
             # Tool-calling GT comes from decision-points.jsonl (per-turn records
             # with full conversation context). Seeds serve as prompt diversity
             # for GRPO — they still help by providing real user phrasing even
-            # without GT (ToolRL, arXiv:2504.18176).
+            # without GT (ToolRL, arXiv:2504.13958).
             seed_records.append(record)
         if seed_records:
             print(f"    Injected {len(seed_records)} seed queries (from traces)")

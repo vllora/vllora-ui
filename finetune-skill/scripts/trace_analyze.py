@@ -127,13 +127,74 @@ def extract_tool_calls_from_span(span: dict) -> list[str]:
     return tool_names
 
 
-def extract_tool_schemas_from_traces(traces: dict[str, list[dict]]) -> list[dict]:
+# Sentences embedded in tool descriptions that instruct the AGENT how to behave
+# before calling the tool — e.g. "The agent needs to explain the [action] detail
+# and ask for explicit user confirmation (yes/no) to proceed."
+#
+# These clauses come from the production system's tool specs (often copied into
+# OTel trace attributes as-is). At training time they BIAS the model toward
+# emitting text narration instead of a tool_call on multi-turn records where
+# the user has already confirmed — the model reads "ask for confirmation" in
+# the tool's own description and obediently emits text.
+#
+# The policy belongs in the SYSTEM PROMPT, not in tool descriptions. Tool
+# descriptions should describe the tool's semantics + preconditions, nothing
+# about agent behavior. See `reference/trace-combined-mode.md` § Tool
+# description sanitization.
+_AGENT_POLICY_IN_DESC_RE = re.compile(
+    r"(?:^|(?<=\.\s))\s*The agent\s+(?:needs to|must|should)\b[^.]*?"
+    r"(?:confirmation|confirm\b)[^.]*?\bto proceed\.\s*",
+    re.IGNORECASE,
+)
+
+
+def _strip_agent_policy_from_description(desc: str) -> str:
+    """Remove 'The agent needs to ... confirm ... to proceed.' clauses.
+
+    Conservative: only matches sentences that (a) start with 'The agent
+    needs to/must/should', (b) contain 'confirm' or 'confirmation', and
+    (c) end with 'to proceed.'. Preconditions like 'Only transfer if the
+    user explicitly asks…' in transfer_to_human_agents are NOT matched
+    (different pattern; they're valid call-precondition semantics).
+
+    Returns the description with the policy sentence removed and any
+    resulting double-spaces normalized.
+    """
+    if not desc:
+        return desc
+    cleaned = _AGENT_POLICY_IN_DESC_RE.sub(" ", desc)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def _sanitize_tool_schema(tool: dict, preserve: bool = False) -> dict:
+    """Return a copy of `tool` with its description sanitized (unless preserve=True)."""
+    if preserve or not isinstance(tool, dict):
+        return tool
+    fn = tool.get("function")
+    if not isinstance(fn, dict) or not fn.get("description"):
+        return tool
+    cleaned = _strip_agent_policy_from_description(fn["description"])
+    if cleaned == fn["description"]:
+        return tool
+    # Return a shallow-copied tool with a shallow-copied function dict
+    new_fn = {**fn, "description": cleaned}
+    return {**tool, "function": new_fn}
+
+
+def extract_tool_schemas_from_traces(
+    traces: dict[str, list[dict]], preserve_descriptions: bool = False
+) -> list[dict]:
     """Extract tool function schemas from trace span attributes.
 
     Looks for tool definitions in:
     1. gen_ai.request.tools (OpenTelemetry GenAI semconv)
     2. llm.invocation_parameters (OpenInference — tools inside params)
     3. Tool call arguments (infer schema from observed args)
+
+    By default, tool descriptions are sanitized (agent-behavior policy clauses
+    like "ask for confirmation before proceeding" are stripped). Set
+    `preserve_descriptions=True` to keep originals verbatim — useful only for
+    debugging comparisons; not recommended for training.
 
     Returns OpenAI-compatible tool schema list, or empty list if no tools found
     (text-only agent — no tool-calling).
@@ -235,7 +296,8 @@ def extract_tool_schemas_from_traces(traces: dict[str, list[dict]]) -> list[dict
         if seen_tools:
             break
 
-    return list(seen_tools.values())
+    tools = list(seen_tools.values())
+    return [_sanitize_tool_schema(t, preserve=preserve_descriptions) for t in tools]
 
 
 def extract_decision_points(
@@ -243,6 +305,7 @@ def extract_decision_points(
     tool_schemas: list[dict],
     system_prompt: str = "",
     max_per_topic: int = 50,
+    preserve_descriptions: bool = False,
 ) -> list[dict]:
     """Extract per-decision-point training records from OTel traces.
 
@@ -525,7 +588,10 @@ def extract_decision_points(
             raw_tools = attrs.get("gen_ai.request.tools")
             if isinstance(raw_tools, list) and raw_tools:
                 span_tools = [
-                    {"type": "function", "function": t.get("function", t)}
+                    _sanitize_tool_schema(
+                        {"type": "function", "function": t.get("function", t)},
+                        preserve=preserve_descriptions,
+                    )
                     for t in raw_tools if isinstance(t, dict)
                 ]
             effective_tools = span_tools or tool_schemas
@@ -1056,7 +1122,7 @@ def build_trace_prompts(
         # The user's first message typically lacks the arguments needed for the
         # tool call (order_id, email, etc. come from later turns). Attaching
         # the trace's tool call as GT creates unverifiable reward — the model
-        # can't predict args it hasn't seen (ToolRL, arXiv:2504.18176).
+        # can't predict args it hasn't seen (ToolRL, arXiv:2504.13958).
         # Tool-calling GT comes from decision-points.jsonl instead.
         # Seeds serve as prompt diversity only.
 
@@ -1302,6 +1368,17 @@ def main() -> None:
         default=500,
         help="Max seed queries to extract per topic (default: 500)",
     )
+    parser.add_argument(
+        "--preserve-tool-descriptions",
+        action="store_true",
+        help=(
+            "Keep tool descriptions verbatim from traces. By default, agent-"
+            "behavior clauses (e.g. 'The agent needs to ask for explicit user "
+            "confirmation (yes/no) to proceed') are stripped. Those clauses "
+            "bias the base model toward text narration instead of tool_call "
+            "emission during training. Use only for debug comparisons."
+        ),
+    )
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir) / "trace-analysis"
@@ -1372,7 +1449,9 @@ def main() -> None:
 
     # Artifact 5: tool-schemas.json (only if traces contain tool calls)
     print("\nExtracting tool schemas...")
-    tool_schemas = extract_tool_schemas_from_traces(traces)
+    tool_schemas = extract_tool_schemas_from_traces(
+        traces, preserve_descriptions=args.preserve_tool_descriptions
+    )
     if tool_schemas:
         schemas_path = output_dir / "tool-schemas.json"
         with open(schemas_path, "w") as f:
@@ -1390,7 +1469,12 @@ def main() -> None:
         # will see at inference. simplified_prompt is for seed-query generation
         # only, and chops 91% of tau-bench's policy.
         production_prompt = trace_prompts.get("system_prompt", "")
-        decision_points = extract_decision_points(traces, tool_schemas, production_prompt)
+        decision_points = extract_decision_points(
+            traces,
+            tool_schemas,
+            production_prompt,
+            preserve_descriptions=args.preserve_tool_descriptions,
+        )
         if decision_points:
             dp_path = output_dir / "decision-points.jsonl"
             with open(dp_path, "w") as f:

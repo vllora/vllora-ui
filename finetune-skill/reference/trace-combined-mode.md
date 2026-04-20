@@ -131,6 +131,16 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
 
 **Tool-calling agents** (tool-schemas.json exists): Do NOT use `generate_records.py`. Use `decision-points.jsonl` directly as training data. These are multi-turn records with full conversation context — the correct format. Single-turn synthetics create distribution shift (model skips auth, predicts args from nowhere). See [tool-calling-training-design.md](../research-trace-pdf-combine/tool-calling-training-design.md).
 
+### Tool description sanitization (default on for tool-calling)
+
+`trace_analyze.py` strips agent-behavior clauses from tool descriptions by default. Specifically, sentences matching `"The agent needs to … (confirm|confirmation) … to proceed."` are removed from every tool's `function.description` before being written to `tool-schemas.json` and embedded in each `decision-points.jsonl` record.
+
+**Why**: these clauses encode *agent policy* ("ask for confirmation first"), not *tool semantics*. When the model reads its own tool description at generation time and sees "ask for confirmation", it emits text narration instead of a `tool_call` — even on records where the user has already confirmed three turns back. The policy belongs in the **system prompt** (where the full tau-bench–style policy already lives), not inside tool descriptions. Preconditions like *"Only transfer if the user explicitly asks for a human agent"* (in `transfer_to_human_agents`) are NOT stripped — they're valid semantic constraints on when the tool may be called.
+
+**Opt out**: `trace_analyze.py --preserve-tool-descriptions` keeps descriptions verbatim. Use only for debug comparisons; do not train with this flag.
+
+**Verification**: diff `trace-analysis/tool-schemas.json` against the raw trace attribute `gen_ai.request.tools` — sanitized descriptions should be shorter and contain no "The agent needs to … to proceed." sentences, while preconditions and factual descriptions are preserved.
+
 **Text-only agents** (no tool-schemas.json): Use `generate_records.py` with these flags:
 - `--weight-by-trace-priority`: High-failure topics get more records
 - `--trace-prompts-file`: Injects seed queries + overrides system prompt

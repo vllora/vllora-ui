@@ -914,3 +914,30 @@ return Math.max(0.02, baseScore * lengthPenalty);
 After adding this penalty: re-eval, then recreate training with the **same** `max_output_tokens` (do NOT raise it). See `training-metrics-guide.md` §100% Completion Clipping for the full recovery decision tree.
 
 **Research basis**: Dr. GRPO (arXiv:2503.20783) identifies the algorithmic root cause. DAPO (arXiv:2503.14476) adds overlong filtering. GR3 (arXiv:2603.10535) proves additive length penalties collapse. GRPO-LEAD (arXiv:2504.09696) couples length control to task correctness. DRPO (arXiv:2510.04474) proves uniform length penalties can invert GRPO advantage. OpenAI RFT cookbook recommends rubric refinement, not explicit penalty terms.
+
+## Discrimination check — mandatory before upload (tool-calling)
+
+`grader-sanity-check` catches ordinal collapse, dump-all gaming, LLM inference, default-mode collapse — but it runs on eval results, so it only reveals problems AFTER an expensive eval run. `grader-discriminate` catches a different failure class BEFORE upload by testing whether the grader actually distinguishes correct tool calls from systematically corrupted ones.
+
+Run:
+```bash
+finetune.py grader-discriminate \
+  --workflow-id <wf> \
+  --records finetune-project/training.jsonl \
+  --grader finetune-project/quality-checker/grader.js
+```
+
+It samples 30 records, generates four corruption classes per record, scores originals and corruptions via the dry-run endpoint, and asserts:
+
+| Corruption class | What it tests | Classic failure it catches |
+|---|---|---|
+| `wrong_name` | grader reads the tool name | stub name-check that returns `1.0` always |
+| `missing_required_arg` | grader sees required-arg list | grader ignores missing required fields |
+| `arg_value_mutation` | grader compares values, not just keys | `key in dict` check that ignores values |
+| `arg_key_rename` | grader normalizes key names | naive `String(gt) === String(pred)` that treats `orderId` ≡ `order_id` |
+
+Thresholds: per-class `mean(orig) - mean(corrupt) ≥ 0.30` AND `P(orig > corrupt) ≥ 0.80`. Both defaults are conservative — a well-designed grader should clear them comfortably.
+
+Report written to `quality-checker/discrimination-report.json` with per-class stats and the 5 least-discriminated examples per class. When a class fails, read the worst examples: a wrong-name record scoring 0.6 means the grader's name-check returned a non-zero value when it shouldn't have. A value-mutation scoring the same as the original means the grader didn't actually compare that field. Fix the grader, rerun.
+
+**Relationship to IRC**: this is the cheapest approximation of MT-GRPO's Iterative Reward Calibration — test grader discrimination against synthetic perturbations instead of iterating against trace outcomes during training. Catches the same failure-mode class (grader can't tell right from wrong) at a fraction of the cost.

@@ -166,7 +166,7 @@ Run whichever applies — or both in parallel:
 
 **2A. Documents** — Spawn `knowledge-extractor` subagent per PDF. Uses `extract_router.py` → `build_knowledge_parts.py`. Validate with `validate_extraction.py --fix`. See [reference/extraction-guide.md](reference/extraction-guide.md).
 
-**2B. OTel traces** — `otel_extract.py` reads OpenTelemetry GenAI spans → `knowledge_parts.json`. See [reference/otel-trace-ingestion.md](reference/otel-trace-ingestion.md).
+**2B. OTel traces** — skip directly to **2C**. The `source_traces_semconv.json` file itself is the pipeline input; there is no separate "extract" step for traces (the obsolete `otel_extract.py` is deprecated and its output is unused). `trace_analyze.py` in 2C reads the raw traces directly; `upload_trace_analysis.py` registers the trace bundle as a `kind=otel-trace` knowledge source for UI display.
 
 **2C. Trace Analysis (combined mode only)** — Run `trace_analyze.py`, upload results, write `trace-influence` to `analysis.json`. See [reference/trace-combined-mode.md](reference/trace-combined-mode.md) for full checklist.
 
@@ -230,6 +230,15 @@ Write `quality-checker/grader.js`. Combined mode: generate draft from `grader_fr
 **Hard rules:** NEVER return 0.0 for parsing failures (use LLM fallback). NEVER add HARD GATE=0.0. Wrong answers MUST get 0.02-0.10. NEVER remove partial credit.
 
 **Mandatory dry-run (4 tests):** hand-crafted row, live model response (5 samples), adversarial leniency test (`test-grader --samples 10`), validation protocol.
+
+**MANDATORY discrimination check (tool-calling mode):** before upload, verify the grader can distinguish correct tool calls from systematically corrupted ones:
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py grader-discriminate \
+  --workflow-id $WORKFLOW_ID \
+  --records finetune-project/training.jsonl \
+  --grader finetune-project/quality-checker/grader.js
+```
+Hard-fails (exit 1) if any corruption class (wrong_name / missing_required_arg / arg_value_mutation / arg_key_rename) fails mean-gap ≥ 0.30 OR pairwise-winrate ≥ 0.80. If it fails, the grader has a stub name-check, a naive `String()` compare, or a dropped-required-field silent-pass — fix the grader, rerun. Do NOT upload a grader that can't discriminate.
 
 Upload + verify + checkpoint:
 ```bash
