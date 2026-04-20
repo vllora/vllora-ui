@@ -56,7 +56,11 @@ A valid training record must:
 
 ## Example: Multi-turn Context
 
-For multi-turn scenarios, embed prior conversation turns directly in the user message as context. Do **not** use `assistant` role messages — `validate_dataset.py` will flag them as errors since RFT uses prompts only:
+Multi-turn handling depends on what the model is being trained to produce.
+
+### Text-grading records (no tool calls)
+
+Embed prior turns as text inside the user message. Do **not** use `assistant` role messages — `validate_dataset.py` flags them, and text-RFT grades a single generated completion:
 
 ```json
 {"messages": [
@@ -65,7 +69,21 @@ For multi-turn scenarios, embed prior conversation turns directly in the user me
 ], "id": "python-file-ops-001"}
 ```
 
-Multi-turn context is embedded in the user message itself, not as separate conversation turns. The model will generate a fresh response, and the grader will score it.
+### Tool-calling records (decision points with prior tool history)
+
+Use the full OpenAI structural format: `assistant.tool_calls` + `tool` role messages preserved as-is. This is the committed design in `finetune-skill-otel/scripts/otel_distill.py` and `tool-calling-training-design.md`. ToolRL and MT-GRPO both train on full trajectories — flattening teaches shortcuts (skip authentication, invent args).
+
+```json
+{"messages": [
+  {"role": "system", "content": "..."},
+  {"role": "user", "content": "Cancel my order"},
+  {"role": "assistant", "content": null, "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "get_order_details", "arguments": "{\"order_id\": \"W1\"}"}}]},
+  {"role": "tool", "tool_call_id": "call_1", "content": "{\"status\": \"pending\"}"},
+  {"role": "user", "content": "yes cancel it"}
+], "tools": [...], "ground_truth": {"name": "cancel_pending_order", "arguments": {"order_id": "W1"}}, "id": "dp-001"}
+```
+
+Every `tool_call.id` on an assistant message MUST be matched by a `tool_call_id` on the following `role: tool` message. `extract_decision_points` enforces this — records with orphan or duplicate ids are dropped (see `trace_analyze.py:412-446`).
 
 ---
 

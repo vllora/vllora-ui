@@ -498,6 +498,22 @@ def cmd_upload_topics(args: argparse.Namespace) -> None:
     else:
         raw_topics = [topics]
 
+    # Defensive: the LLM-generated tree sometimes includes a top-level node
+    # with `id=null` meant as the root category, placed as a sibling of the
+    # real category parents. If its children list is empty, it's an orphan
+    # that would just show "0 records" in the UI — drop it. If it has
+    # children, slot it as the grand-parent.
+    def _is_orphan_root(t: dict) -> bool:
+        return (
+            isinstance(t, dict)
+            and (t.get("id") is None or t.get("id") == "")
+            and not (t.get("children") or [])
+        )
+    dropped_orphan = sum(1 for t in raw_topics if _is_orphan_root(t))
+    if dropped_orphan:
+        raw_topics = [t for t in raw_topics if not _is_orphan_root(t)]
+        print(f"  Dropped {dropped_orphan} top-level topic(s) with no id and no children")
+
     # Auto-flatten: if topics use nested "children" structure, flatten to
     # a list with parent_id fields. The gateway requires flat topics.
     def _has_children(t_list: list) -> bool:
@@ -7290,6 +7306,11 @@ def cmd_update_analysis(args: argparse.Namespace) -> None:
     # Normalize underscore aliases → canonical hyphen form
     args.status = args.status.replace("_", "-")
 
+    # 'completed'/'complete'/'done' are common agent synonyms for 'ready'.
+    # Accept and normalize so the pipeline doesn't stall on trivial phrasing.
+    if args.status in ("completed", "complete", "done"):
+        args.status = "ready"
+
     # Load or create
     if analysis_file.exists():
         analysis = json.loads(analysis_file.read_text())
@@ -7707,8 +7728,10 @@ def main() -> None:
                    help="Which pipeline section to update")
     p.add_argument("--status", required=True,
                    choices=["not-started", "in-progress", "ready", "needs-work", "blocked",
-                            "not_started", "in_progress", "needs_work"],
-                   help="Current status of this section (underscores accepted as aliases)")
+                            "not_started", "in_progress", "needs_work",
+                            "completed", "complete", "done"],
+                   help="Current status of this section. 'completed'/'complete'/'done' "
+                        "are normalized to 'ready'; underscores also accepted as aliases.")
     p.add_argument("--summary", required=True,
                    help="One-line summary — the primary insight both agent and user see")
     p.add_argument("--metrics", default=None,

@@ -1809,16 +1809,18 @@ def main() -> None:
             # Enforce trace production prompt as system prompt.
             # Using a different prompt creates distribution shift between training
             # and inference — the model learns behaviors keyed to instructions it
-            # won't see in production.
-            trace_simplified = trace_prompts_data.get("simplified_prompt", "")
-            if trace_simplified:
-                if args.system_prompt != trace_simplified:
+            # won't see in production. Prefer the full production prompt;
+            # `simplified_prompt` is for seed-query LLM scaffolding only and
+            # strips 91% of the policy in tau-bench-style traces.
+            trace_production = trace_prompts_data.get("system_prompt") or trace_prompts_data.get("simplified_prompt") or ""
+            if trace_production:
+                if args.system_prompt != trace_production:
                     print(
                         f"  ⚠ OVERRIDING --system-prompt with trace production prompt "
-                        f"({len(trace_simplified)} chars). Training must use the same "
+                        f"({len(trace_production)} chars). Training must use the same "
                         f"prompt the model will see at inference time.",
                     )
-                    args.system_prompt = trace_simplified
+                    args.system_prompt = trace_production
         else:
             print(f"Warning: Trace prompts file not found: {trace_prompts_path}", file=sys.stderr)
 

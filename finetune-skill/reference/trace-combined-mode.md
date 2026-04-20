@@ -104,10 +104,10 @@ Per-topic system prompts MUST incorporate trace failure patterns. Read `trace-an
 
 ### System prompt MUST match production
 
-The `--system-prompt` MUST be the `simplified_prompt` from `trace-analysis/prompts.json` — this is the actual production prompt the model will see at inference time. Do NOT write your own prompt. Using a different prompt creates distribution shift.
+The `--system-prompt` MUST be the `system_prompt` from `trace-analysis/prompts.json` — this is the actual production prompt the model sees at inference time. Do NOT write your own prompt and do NOT use `simplified_prompt` (that field is for seed-query LLM scaffolding only and strips ~91% of the policy, causing training/inference distribution shift).
 
 ```bash
-SIMPLIFIED=$(python3 -c "import json; print(json.load(open('finetune-project/trace-analysis/prompts.json')).get('simplified_prompt','You are a customer service agent.'))")
+PRODUCTION_PROMPT=$(python3 -c "import json; print(json.load(open('finetune-project/trace-analysis/prompts.json')).get('system_prompt','You are a customer service agent.'))")
 ```
 
 ### Trace-informed generation flags

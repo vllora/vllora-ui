@@ -266,16 +266,56 @@ def extract_decision_points(
     span_tools_fallback_count = 0  # records that fell back to global tool_schemas
     dropped_orphan_tool = 0        # records dropped due to unrecoverable tool_call_id
     dropped_parse_failure = 0      # records dropped due to unparseable GT args
+    dropped_errored_call = 0       # records dropped because the GT call returned an error
+
+    # Index tool execution results per trace so we can skip decision points
+    # whose ground-truth call errored in production (the agent later corrected
+    # them). Training on errored calls teaches the model to reproduce failures.
+    # Key: (trace_id, tool_name, canonical_args_json) -> result_str
+    def _canon_args(args):
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except Exception:
+                return args
+        if isinstance(args, dict):
+            return json.dumps(args, sort_keys=True, ensure_ascii=False)
+        return str(args)
+
+    tool_result_index: dict[tuple[str, str, str], str] = {}
+    for trace_id, spans in traces.items():
+        for span in spans:
+            attrs = _attrs(span)
+            tool_name = attrs.get("gen_ai.tool.name")
+            if not tool_name:
+                continue
+            args = attrs.get("gen_ai.tool.call.arguments")
+            result = attrs.get("gen_ai.tool.call.result", "")
+            key = (trace_id, tool_name, _canon_args(args))
+            tool_result_index[key] = str(result)
+
+    def _call_errored(trace_id: str, tool_name: str, args) -> bool:
+        result = tool_result_index.get((trace_id, tool_name, _canon_args(args)))
+        if not result:
+            return False  # no execution result found — conservative pass-through
+        low = result.lower()
+        return "error:" in low or "error :" in low
 
     for trace_id, spans in traces.items():
-        # Only extract GT from SUCCESSFUL traces. Failed traces contain wrong
-        # actions — using them as ground truth teaches the model to fail.
+        # Only extract GT from SUCCESSFUL traces for ACTION/LOOKUP tools.
+        # Failed traces contain wrong actions — using them as ground truth
+        # teaches the model to fail.
         # Trace success comes from tau_bench.reward >= 0.5 when present, else
         # falls back to absence of ERROR status. Unknown outcome (reward missing
         # AND no ERROR) is treated as success (conservative pass-through).
-        if infer_trace_success(spans) is False:
-            skipped_failed += 1
-            continue
+        #
+        # EXCEPTION: utility tools (`think`, `calculate`) co-occur with hard
+        # conversations that fail for unrelated reasons. The utility call
+        # itself didn't cause the failure, so its DP is still a valid learning
+        # signal. The per-DP errored-GT filter below still catches bad utility
+        # calls. Relaxation follows the Hard Examples (arXiv:2508.14094) result
+        # that difficulty is prompt-specific, not trace-level.
+        trace_failed = infer_trace_success(spans) is False
         for span in spans:
             if not is_llm_chat_span(span):
                 continue
@@ -330,6 +370,21 @@ def extract_decision_points(
 
             if not action_call:
                 continue  # No action tool call in this span
+
+            # Trace-level filter applies to action/lookup DPs only. Utility-tool
+            # DPs (think/calculate) from failed traces are retained because the
+            # utility call itself didn't cause the trace failure (see comment
+            # at the trace loop).
+            if trace_failed and _classify_tool(action_call["name"]) != "utility":
+                skipped_failed += 1
+                continue
+
+            # Skip decision points whose GT call errored in the trace. The
+            # agent later corrected these in follow-up calls; using the failed
+            # attempt as GT would teach the model to reproduce failures.
+            if _call_errored(trace_id, action_call["name"], action_call["arguments"]):
+                dropped_errored_call += 1
+                continue
 
             # Build context from this span's input_msgs (already contains full history)
             context: list[dict] = []
@@ -521,6 +576,10 @@ def extract_decision_points(
     if dropped_parse_failure:
         print(f"  Decision points: dropped {dropped_parse_failure} record(s) "
               f"with unparseable GT arguments (would produce 0-reward noise).")
+    if dropped_errored_call:
+        print(f"  Decision points: dropped {dropped_errored_call} record(s) "
+              f"whose GT call returned an error in the trace (training on "
+              f"failed attempts teaches the model to reproduce them).")
     if dropped_orphan_tool:
         print(f"  Decision points: dropped {dropped_orphan_tool} record(s) "
               f"with orphan tool messages (chat template would reject).")
@@ -1305,8 +1364,11 @@ def main() -> None:
     decision_point_count = 0
     if tool_schemas:
         print("\nExtracting decision points from traces...")
-        simplified = trace_prompts.get("simplified_prompt", "")
-        decision_points = extract_decision_points(traces, tool_schemas, simplified)
+        # Use the full production prompt — training must match what the model
+        # will see at inference. simplified_prompt is for seed-query generation
+        # only, and chops 91% of tau-bench's policy.
+        production_prompt = trace_prompts.get("system_prompt", "")
+        decision_points = extract_decision_points(traces, tool_schemas, production_prompt)
         if decision_points:
             dp_path = output_dir / "decision-points.jsonl"
             with open(dp_path, "w") as f:

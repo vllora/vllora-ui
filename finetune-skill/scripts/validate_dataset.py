@@ -177,12 +177,59 @@ def validate_record(line_num: int, line: str) -> list[str]:
 
 
 def load_valid_topics(topics_path: Path) -> tuple[set[str], set[str]]:
-    """Load topic IDs from topics.json. Returns (all_ids, leaf_ids)."""
+    """Load topic IDs from topics.json. Returns (all_ids, leaf_ids).
+
+    Handles both flat list and nested `children` hierarchies. Leaves are any
+    topic that isn't referenced as a parent_id and has no `children`. Both
+    `id` and `reference_id` are collected so records that reference either
+    form still validate cleanly.
+    """
     data = json.loads(topics_path.read_text())
     topics = data if isinstance(data, list) else data.get("topics", [])
-    all_ids = {t["id"] for t in topics if isinstance(t, dict) and "id" in t}
-    parent_ids = {t.get("parent_id") for t in topics if isinstance(t, dict) and t.get("parent_id")}
-    leaf_ids = all_ids - parent_ids
+
+    # Flatten nested `children` into one list with inferred parent_id
+    flat: list[dict] = []
+    def _walk(nodes: list, parent_id: str | None) -> None:
+        for n in nodes:
+            if not isinstance(n, dict):
+                continue
+            entry = {k: v for k, v in n.items() if k != "children"}
+            if parent_id and not entry.get("parent_id"):
+                entry["parent_id"] = parent_id
+            flat.append(entry)
+            _walk(n.get("children") or [], entry.get("id"))
+    _walk(topics, None)
+
+    all_ids: set[str] = set()
+    parent_ids: set[str] = set()
+    id_to_has_children: dict[str, bool] = {}
+    for t in flat:
+        tid = t.get("id") or t.get("reference_id")
+        if not tid:
+            continue
+        all_ids.add(tid)
+        # Also accept reference_id as alias (records may use either)
+        ref = t.get("reference_id")
+        if ref:
+            all_ids.add(ref)
+        if t.get("parent_id"):
+            parent_ids.add(t["parent_id"])
+    # Derive leaves — a topic is a leaf if nothing names it as parent_id
+    leaf_ids: set[str] = set()
+    for t in flat:
+        tid = t.get("id") or t.get("reference_id")
+        if not tid:
+            continue
+        is_leaf = tid not in parent_ids
+        # Also check that the reference_id isn't a parent (happens when
+        # parent_id references the reference_id form)
+        ref = t.get("reference_id")
+        if ref and ref in parent_ids:
+            is_leaf = False
+        if is_leaf:
+            leaf_ids.add(tid)
+            if ref:
+                leaf_ids.add(ref)
     return all_ids, leaf_ids
 
 
@@ -208,6 +255,8 @@ def main() -> None:
     topics_path = None
     parts_path = None
     nemo_mode = False
+    repair_from: Path | None = None   # decision-points.jsonl for auto-restore
+    min_per_leaf = 1                   # enforce at least 1 record per leaf topic
     i = 2
     while i < len(sys.argv):
         if sys.argv[i] == "--topics" and i + 1 < len(sys.argv):
@@ -219,6 +268,12 @@ def main() -> None:
         elif sys.argv[i] == "--nemo":
             nemo_mode = True
             i += 1
+        elif sys.argv[i] == "--repair-from" and i + 1 < len(sys.argv):
+            repair_from = Path(sys.argv[i + 1])
+            i += 2
+        elif sys.argv[i] == "--min-per-leaf" and i + 1 < len(sys.argv):
+            min_per_leaf = int(sys.argv[i + 1])
+            i += 2
         else:
             i += 1
 
@@ -327,6 +382,70 @@ def main() -> None:
             print(f"  {w}")
         if len(warnings) > 20:
             print(f"  ... and {len(warnings) - 20} more")
+
+    # Empty-leaf detection. Agent-side dedup sometimes reduces rare tools
+    # (e.g. `think`) to 0 records, leaving the leaf unseen by training.
+    # Flag every leaf with fewer than --min-per-leaf records.
+    empty_leaves: list[str] = []
+    under_leaves: list[tuple[str, int]] = []
+    if leaf_topics is not None:
+        for leaf_id in leaf_topics:
+            cnt = topic_counts.get(leaf_id, 0)
+            if cnt == 0:
+                empty_leaves.append(leaf_id)
+            elif cnt < min_per_leaf:
+                under_leaves.append((leaf_id, cnt))
+
+    if empty_leaves or under_leaves:
+        print(
+            f"\n⚠️  Leaf coverage: {len(empty_leaves)} empty, "
+            f"{len(under_leaves)} under min={min_per_leaf}"
+        )
+        for lid in empty_leaves[:20]:
+            print(f"  EMPTY  {lid}")
+        for lid, cnt in under_leaves[:20]:
+            print(f"  UNDER  {lid}: {cnt}/{min_per_leaf}")
+
+        # Auto-repair from decision-points.jsonl if requested
+        if repair_from and repair_from.exists():
+            print(f"\n→ Repairing from {repair_from.name} (min per leaf={min_per_leaf})")
+            dp_by_topic: dict[str, list[dict]] = {}
+            with repair_from.open() as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        dp = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    topic = dp.get("topic", "")
+                    if topic:
+                        dp_by_topic.setdefault(topic, []).append(dp)
+
+            restored = 0
+            with file_path.open("a") as out:
+                for lid in empty_leaves + [x[0] for x in under_leaves]:
+                    need = min_per_leaf - topic_counts.get(lid, 0)
+                    pool = dp_by_topic.get(lid) or []
+                    for dp in pool[:need]:
+                        # Avoid re-appending records already in the file
+                        if dp.get("id") and dp["id"] in ids_seen:
+                            continue
+                        out.write(json.dumps(dp, ensure_ascii=False) + "\n")
+                        ids_seen.add(dp.get("id", ""))
+                        restored += 1
+                        topic_counts[lid] = topic_counts.get(lid, 0) + 1
+            print(f"  Restored {restored} record(s) from decision-points for empty/under leaves")
+        elif empty_leaves:
+            # No repair source — surface as warning, not a hard error, to
+            # avoid blocking runs where a leaf is genuinely rare. Agent is
+            # expected to acknowledge or re-upload.
+            warnings.append(
+                f"{len(empty_leaves)} leaf topic(s) have 0 records: "
+                f"{', '.join(empty_leaves[:5])}. "
+                f"Re-run with --repair-from <decision-points.jsonl> to auto-restore."
+            )
 
     from pipeline_journal import find_project_dir, log_milestone
     proj = find_project_dir(file_path)
