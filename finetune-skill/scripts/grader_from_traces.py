@@ -428,6 +428,31 @@ function parseToolCall(response) {{
             return {{ name: fnName, arguments: args }};
         }}
 
+        // Format 1b: Partial/unclosed XML — `<function=name>` without `</function>`.
+        // Base Qwen3.5-4B halts at the opening `<parameter=...>` tag for free-text
+        // parameters (e.g. transfer_to_human_agents.summary) — it can't generate a
+        // coherent multi-sentence summary from cold, so it stops after the param tag.
+        // Without this path, parseToolCall returns null → grader returns FLOOR for
+        // rows where the model DID correctly select the tool. FLOOR pins gradient
+        // to zero and hides the tool-selection signal GRPO needs to amplify.
+        // Recovering as {{name, arguments: any-closed-pairs}} yields a 0.4 score
+        // (name_match × (0.4 + 0.6 × 0) = 0.4) — partial credit that matches how
+        // native tool_calls with `arguments: {{}}` are already scored.
+        var partialXmlMatch = response.match(/<function=([A-Za-z0-9_]+)>/);
+        if (partialXmlMatch) {{
+            var partialName = partialXmlMatch[1];
+            var partialArgs = {{}};
+            // Still try to extract any closed <parameter=k>v</parameter> pairs
+            // that exist before the cutoff — e.g. if the model closed some simple
+            // params before halting on a long one.
+            var paramRegex2 = /<parameter=([^>]+)>([^<]*)<\\/parameter>/g;
+            var pm;
+            while ((pm = paramRegex2.exec(response)) !== null) {{
+                partialArgs[pm[1]] = pm[2];
+            }}
+            return {{ name: partialName, arguments: partialArgs }};
+        }}
+
         // Format 2: Hermes JSON — <tool_call>{{"name": ...}}</tool_call>
         var hermesMatch = response.match(/<tool_call>(.*?)<\\/tool_call>/s);
         if (hermesMatch) {{
