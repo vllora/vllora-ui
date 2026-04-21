@@ -382,7 +382,23 @@ def gate_structural(records: list[dict], topics_data: list | None) -> dict:
 
     # Cross-reference topics if topics.json provided
     if topics_data is not None:
-        valid_topic_ids = {t.get("id") for t in topics_data if isinstance(t, dict)}
+        # Walk nested hierarchy so children inside "children" arrays are included.
+        # Previously this only collected top-level IDs, falsely flagging every leaf
+        # in a nested topics.json as an orphan.
+        valid_topic_ids: set[str] = set()
+
+        def _collect_ids(node: dict) -> None:
+            tid = node.get("id")
+            if tid:
+                valid_topic_ids.add(tid)
+            for child in node.get("children") or []:
+                if isinstance(child, dict):
+                    _collect_ids(child)
+
+        for t in topics_data:
+            if isinstance(t, dict):
+                _collect_ids(t)
+
         orphan_topics = set(topic_counts.keys()) - valid_topic_ids - {"unknown"}
         if orphan_topics:
             issues.append({

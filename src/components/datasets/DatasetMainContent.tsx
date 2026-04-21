@@ -17,13 +17,14 @@ import { recordService } from "@/services/service-registry";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { resolveAndGroupBySource } from "@/lib/distri-finetune-tools/steps/shared/resolve-part-ref";
 import { RecordsSectionHeader } from "./dataset-detail-header/RecordsSectionHeader";
+import { RecordsLensSegment } from "./RecordsLensSegment";
 import { TopicHierarchyCanvas } from "./dataset-canvas/TopicHierarchyCanvas";
 import { RecordsTable } from "./records-table/RecordsTable";
 import { RecordDetailSidebar } from "./records-table/RecordDetailSidebar";
 import { SourcesView } from "./sources-view/SourcesView";
 import { EmptyRecordsState } from "./EmptyRecordsState";
 import { TopicDetailView, LinkedSourcesTabContent, collectAllRefs } from "./TopicDetailView";
-import { filterRecords, type StatFilter, type RecordRole } from "./record-filters";
+import { filterRecords, type StatFilter, type RecordRole, type QualityLens } from "./record-filters";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { useJobScoreColumns } from "@/hooks/useJobScoreColumns";
 import { TrainingMetricsSummary } from "./TrainingMetricsSummary";
@@ -255,6 +256,8 @@ export function DatasetMainContent({
   const [activeStatFilter, setActiveStatFilter] = useState<StatFilter>("all");
   // P0-9: Role filter state (currently always "all" — no UI to change it in tabbed layout)
   const [roleFilter] = useState<RecordRole>("all");
+  // Quality lens — surfaces records that need human attention
+  const [qualityLens, setQualityLens] = useState<QualityLens>("all");
   // Search query state
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -323,18 +326,20 @@ export function DatasetMainContent({
     return () => { cancelled = true; };
   }, [topicFilter, topicHierarchy, workflowId, topicPage]);
 
-  // Apply stat filter, role filter, and search to records
+  // Apply stat filter, role filter, search, and quality lens to records
   const filteredRecords = useMemo(() => {
     const hasStatFilter = activeStatFilter !== "all";
     const hasRoleFilter = roleFilter !== "all";
     const hasSearch = searchQuery.trim().length > 0;
-    if (!hasStatFilter && !hasRoleFilter && !hasSearch) return topicFilteredRecords;
+    const hasLens = qualityLens !== "all";
+    if (!hasStatFilter && !hasRoleFilter && !hasSearch && !hasLens) return topicFilteredRecords;
     return filterRecords(topicFilteredRecords, {
       statFilter: hasStatFilter ? activeStatFilter : undefined,
       role: hasRoleFilter ? roleFilter : undefined,
       search: hasSearch ? searchQuery : undefined,
+      qualityLens: hasLens ? qualityLens : undefined,
     });
-  }, [topicFilteredRecords, activeStatFilter, roleFilter, searchQuery]);
+  }, [topicFilteredRecords, activeStatFilter, roleFilter, searchQuery, qualityLens]);
 
   // When filtering by topic, narrow the hierarchy to just the matched subtree
   const displayHierarchy = useMemo(() => {
@@ -505,6 +510,11 @@ export function DatasetMainContent({
               onLoadMore={undefined}
             />
           </div>
+          <RecordsLensSegment
+            records={topicRecordsToShow}
+            value={qualityLens}
+            onChange={setQualityLens}
+          />
           <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
             <TopicDetailView
               topicNode={topicDetail.node}
@@ -564,6 +574,11 @@ export function DatasetMainContent({
           onLoadMore={onLoadMore}
         />
       </div>
+      <RecordsLensSegment
+        records={topicFilteredRecords}
+        value={qualityLens}
+        onChange={setQualityLens}
+      />
 
       {/* Tab bar: Canvas | Records | Linked Sources */}
       <div className="px-4 shrink-0 border-b border-border">

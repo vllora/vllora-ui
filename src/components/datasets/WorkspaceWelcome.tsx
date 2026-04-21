@@ -10,25 +10,25 @@
  *   cards matching explorer sidebar sections to reopen any tab
  */
 
-import { useMemo } from "react";
 import {
   Database,
   FolderOpen,
   ClipboardCheck,
   Brain,
   ChevronRight,
-  Target,
-  Layers,
-  TrendingUp,
   Terminal,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { EvalJobsConsumer } from "@/contexts/EvalJobsContext";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
-import { getJobAverageScore } from "@/types/eval-job";
+import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
+import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { WaitingOrb } from "@/components/onboarding/WaitingOrb";
 import { TerminalHint } from "@/components/onboarding/TerminalHint";
+import { PipelineStrip } from "./DatasetOverviewPanel/PipelineStrip";
+import { HealthRow } from "./DatasetOverviewPanel/HealthRow";
+import { HierarchyInspector } from "./DatasetOverviewPanel/HierarchyInspector";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -60,28 +60,6 @@ function formatNumber(n: number): string {
   return n.toString();
 }
 
-function getScoreColor(score: number): string {
-  if (score >= 0.8) return "text-emerald-400";
-  if (score >= 0.6) return "text-yellow-400";
-  return "text-red-400";
-}
-
-function getScoreBarColor(score: number): string {
-  if (score >= 0.8) return "bg-emerald-500";
-  if (score >= 0.6) return "bg-yellow-500";
-  return "bg-red-500";
-}
-
-function getFinetuneStatusLabel(status: string | null): { text: string; color: string } {
-  switch (status) {
-    case "succeeded": return { text: "Ready", color: "text-emerald-400" };
-    case "running": return { text: "Training", color: "text-[rgb(var(--theme-400))]" };
-    case "failed": return { text: "Failed", color: "text-red-400" };
-    case "pending": return { text: "Queued", color: "text-zinc-400" };
-    case "cancelled": return { text: "Cancelled", color: "text-zinc-500" };
-    default: return { text: "—", color: "text-zinc-600" };
-  }
-}
 
 
 // ---------------------------------------------------------------------------
@@ -205,26 +183,20 @@ function PopulatedWorkflowWelcome({
   datasetName,
   onOpenTab,
   recordCount,
-  generatedCount,
-  originalCount,
+  generatedCount: _generatedCount,
+  originalCount: _originalCount,
   leafTopicCount,
   knowledgeSourcesCount,
   hasEvalScript,
 }: WorkspaceWelcomeProps) {
-  const { lastCompletedJob } = EvalJobsConsumer();
+  const { jobs: evalJobs } = EvalJobsConsumer();
   const { filteredJobs, latestJob } = FinetuneJobsConsumer();
+  const { sources: knowledgeSources, count: sourcesCount, totalParts } = KnowledgeSourcesConsumer();
+  const { dataset, sortedRecords } = DatasetDetailConsumer();
+  const trainingActive = filteredJobs.some(j => ['pending', 'queued', 'running'].includes(j.status));
 
-  const evalScore = useMemo(() => {
-    if (lastCompletedJob && getJobAverageScore(lastCompletedJob) != null) {
-      return getJobAverageScore(lastCompletedJob);
-    }
-    return undefined;
-  }, [lastCompletedJob]);
-
-  const scorePercent = evalScore != null ? Math.round(evalScore * 100) : null;
   const finetuneJobCount = filteredJobs.length;
   const latestFinetuneStatus = latestJob?.status ?? null;
-  const ftStatus = getFinetuneStatusLabel(latestFinetuneStatus);
 
   const actions = [
     {
@@ -257,130 +229,121 @@ function PopulatedWorkflowWelcome({
     },
   ];
 
+  // Workflow IDs needed by PipelineStrip / Hero — derived from dataset, not props.
+  const workflowId = dataset?.id ?? "";
+
+  // Aggregate counts for the pipeline strip — prefer live context counts, fall
+  // back to the prop / dataset summary if context hasn't hydrated yet.
+  const sourcesAggregate = sourcesCount || knowledgeSourcesCount;
+  const partsAggregate = totalParts || knowledgeSources.reduce((sum, s) => sum + s.parts.length, 0);
+  const topicsAggregate = leafTopicCount || (dataset?.topicCount ?? 0);
+  const recordsAggregate = recordCount || (dataset?.recordsCount ?? 0);
+
+  const topicsWithPartsPercent = computeTopicsWithPartsPercent(dataset?.topicHierarchy?.hierarchy);
+
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-8 overflow-y-auto">
-      <div className="w-full max-w-xl space-y-6">
-        <div className="text-center space-y-1">
-          <h2 className="text-sm font-medium text-zinc-300 truncate">{datasetName}</h2>
-          <p className="text-xs text-zinc-500">Workflow overview</p>
+    <div className="flex-1 flex flex-col overflow-y-auto">
+      <div className="mx-auto w-full max-w-[1180px] px-6 pt-4 pb-10 space-y-4">
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <h2 className="text-[20px] font-semibold tracking-[-0.015em] text-foreground truncate">
+            {datasetName}
+          </h2>
+          <span className="text-[12px] text-muted-foreground">· Workflow overview</span>
         </div>
 
-        {/* Stats row */}
-        <div className="grid grid-cols-4 gap-2">
-          <StatsCard
-            label="Records" icon={Database}
-            value={formatNumber(recordCount)}
-            detail={(() => {
-              if (recordCount === 0) return "No data yet";
-              const loaded = originalCount + generatedCount;
-              if (loaded > 0 && loaded < recordCount) {
-                return `${formatNumber(loaded)} of ${formatNumber(recordCount)} loaded`;
-              }
-              return `${formatNumber(originalCount)} original · ${formatNumber(generatedCount)} gen`;
-            })()}
-            onClick={() => onOpenTab("data", "data", false)}
+        {/* Pipeline strip — 5 clickable stages */}
+        <div className="overflow-hidden rounded-lg border border-border/50">
+          <PipelineStrip
+            workflowId={workflowId}
+            sourcesCount={sourcesAggregate}
+            partsCount={partsAggregate}
+            topicsCount={topicsAggregate}
+            recordsCount={recordsAggregate}
+            trainingCount={filteredJobs.length}
+            docsCount={knowledgeSources.filter((s) => s.traceBundleId == null).length}
+            servicesCount={knowledgeSources.filter((s) => s.traceBundleId != null).length}
+            topicsWithPartsPercent={topicsWithPartsPercent}
+            qualityPercent={
+              dataset?.evalStats?.statistics.mean != null
+                ? dataset.evalStats.statistics.mean * 100
+                : undefined
+            }
+            trainingActive={trainingActive}
+            trainingStatus={latestFinetuneStatus ?? undefined}
+            onSwitchTab={(tab) => {
+              const map: Record<string, { path: string; label: string }> = {
+                knowledge: { path: "knowledge", label: "Knowledge" },
+                records: { path: "data", label: "data" },
+                jobs: { path: "finetune", label: "finetune" },
+              };
+              const entry = map[tab] ?? { path: tab, label: tab };
+              onOpenTab(entry.path, entry.label, false);
+            }}
           />
-          <StatsCard
-            label="Topics" icon={Layers}
-            value={String(leafTopicCount)}
-            detail={leafTopicCount > 0 ? "Leaf topics" : "No hierarchy"}
-            onClick={() => onOpenTab("data", "data", false)}
-          />
-          <button
-            onClick={() => onOpenTab("evaluations/jobs", "Evaluations", false)}
-            className="bg-zinc-900/50 border border-zinc-800/60 rounded-lg px-3 py-3 text-left hover:border-zinc-700/60 transition-colors"
-          >
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-500">Eval Score</span>
-              <Target className="w-3 h-3 text-zinc-600" />
-            </div>
-            {scorePercent != null ? (
-              <>
-                <div className={cn("text-xl font-bold leading-none mb-1.5", getScoreColor(evalScore!))}>
-                  {scorePercent}%
-                </div>
-                <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
-                  <div className={cn("h-full rounded-full transition-all", getScoreBarColor(evalScore!))} style={{ width: `${scorePercent}%` }} />
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="text-xl font-bold text-zinc-600 leading-none mb-1">—</div>
-                <div className="text-[10px] text-zinc-600">No evaluations</div>
-              </>
-            )}
-          </button>
-          <button
-            onClick={() => onOpenTab("finetune", "finetune", false)}
-            className="bg-zinc-900/50 border border-zinc-800/60 rounded-lg px-3 py-3 text-left hover:border-zinc-700/60 transition-colors"
-          >
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-500">Training</span>
-              <TrendingUp className="w-3 h-3 text-zinc-600" />
-            </div>
-            <div className="text-xl font-bold text-zinc-200 leading-none mb-1">{finetuneJobCount}</div>
-            <div className="flex items-center gap-1.5 text-[10px]">
-              {latestFinetuneStatus ? (
-                <>
-                  <span className={cn("w-1.5 h-1.5 rounded-full shrink-0",
-                    latestFinetuneStatus === "succeeded" ? "bg-emerald-500" :
-                    latestFinetuneStatus === "running" ? "bg-[rgb(var(--theme-500))] animate-pulse" :
-                    latestFinetuneStatus === "failed" ? "bg-red-500" : "bg-zinc-600"
-                  )} />
-                  <span className={ftStatus.color}>{ftStatus.text}</span>
-                </>
-              ) : (
-                <span className="text-zinc-600">No jobs</span>
-              )}
-            </div>
-          </button>
         </div>
+
+        {/* Dataset quality hero + ministat sidecars */}
+        <HealthRow
+          evalJobs={evalJobs}
+          evalStats={dataset?.evalStats}
+          topicHierarchy={dataset?.topicHierarchy?.hierarchy}
+          totalRecords={recordCount}
+          onOpenEvalDetails={() => onOpenTab("evaluations/jobs", "Evaluations", false)}
+        />
+
+        {/* Topic hierarchy + click-to-inspect */}
+        {dataset?.topicHierarchy?.hierarchy && dataset.topicHierarchy.hierarchy.length > 0 && (
+          <HierarchyInspector
+            hierarchy={dataset.topicHierarchy.hierarchy}
+            records={sortedRecords}
+            sources={knowledgeSources}
+            onOpenTopic={() => onOpenTab("data", "data", false)}
+            onOpenRecord={() => onOpenTab("data", "data", false)}
+          />
+        )}
 
         {/* Quick actions */}
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600 mb-2 px-0.5">Open</p>
-          <div className="grid grid-cols-2 gap-1.5">
+          <p className="mb-2 px-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/70">
+            Open
+          </p>
+          <div className="grid grid-cols-2 gap-1.5 md:grid-cols-4">
             {actions.map((action) => (
               <button
                 key={action.path}
                 onClick={() => onOpenTab(action.path, action.label, false)}
-                className="group flex items-center gap-2.5 px-3 py-2.5 rounded-md text-left transition-all hover:bg-zinc-800/50"
+                className="group flex items-center gap-2.5 rounded-md border border-border/40 bg-card/30 px-3 py-2 text-left transition-colors hover:bg-muted/30"
               >
                 <action.icon className={cn("h-3.5 w-3.5 shrink-0", action.iconColor)} />
-                <span className="text-[11px] font-medium text-zinc-400 group-hover:text-zinc-200 transition-colors flex-1 min-w-0">
+                <span className="flex-1 min-w-0 truncate text-[11px] font-medium text-muted-foreground group-hover:text-foreground transition-colors">
                   {action.label}
                 </span>
-                <ChevronRight className="h-3 w-3 text-zinc-700 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/40 opacity-0 transition-opacity group-hover:opacity-100" />
               </button>
             ))}
           </div>
         </div>
-
-        <p className="text-center text-[11px] text-zinc-600">Or click items in the explorer sidebar</p>
       </div>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Shared stat card
-// ---------------------------------------------------------------------------
-
-function StatsCard({ label, icon: Icon, value, detail, onClick }: {
-  readonly label: string;
-  readonly icon: typeof Database;
-  readonly value: string;
-  readonly detail: string;
-  readonly onClick: () => void;
-}) {
-  return (
-    <button onClick={onClick} className="bg-zinc-900/50 border border-zinc-800/60 rounded-lg px-3 py-3 text-left hover:border-zinc-700/60 transition-colors">
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-500">{label}</span>
-        <Icon className="w-3 h-3 text-zinc-600" />
-      </div>
-      <div className="text-xl font-bold text-zinc-200 leading-none mb-1">{value}</div>
-      <div className="text-[10px] text-zinc-500">{detail}</div>
-    </button>
-  );
+/** % of leaf topics that have at least one linked knowledge-source part. */
+function computeTopicsWithPartsPercent(
+  hierarchy: readonly import("@/types/dataset-types").TopicHierarchyNode[] | undefined,
+): number | undefined {
+  if (!hierarchy || hierarchy.length === 0) return undefined;
+  let total = 0;
+  let covered = 0;
+  const walk = (n: import("@/types/dataset-types").TopicHierarchyNode) => {
+    const isLeaf = !n.children || n.children.length === 0;
+    if (isLeaf) {
+      total += 1;
+      if ((n.sourceChunkRefs?.length ?? 0) > 0) covered += 1;
+    }
+    for (const child of n.children ?? []) walk(child);
+  };
+  hierarchy.forEach(walk);
+  return total === 0 ? 0 : (covered / total) * 100;
 }
+

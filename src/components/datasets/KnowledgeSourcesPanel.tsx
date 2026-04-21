@@ -10,7 +10,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { RefreshCw, Loader2, Search, X, Type, Table2, ImageIcon, FileText } from "lucide-react";
+import { RefreshCw, Loader2, Search, X, Type, Table2, ImageIcon, FileText, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useDebounceFn } from "ahooks";
@@ -37,6 +37,41 @@ function PartTypeIcon({ type, className }: { readonly type: string; readonly cla
   if (type === "table") return <Table2 className={cn("w-3 h-3 text-amber-400", className)} />;
   if (type === "image") return <ImageIcon className={cn("w-3 h-3 text-purple-400", className)} />;
   return <Type className={cn("w-3 h-3 text-green-400", className)} />;
+}
+
+// ─── Kind lens segment button ───
+
+function KindLensButton({
+  active,
+  onClick,
+  icon,
+  label,
+  count,
+  disabled,
+}: {
+  readonly active: boolean;
+  readonly onClick: () => void;
+  readonly icon?: React.ReactNode;
+  readonly label: string;
+  readonly count: number;
+  readonly disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "inline-flex items-center gap-1.5 px-2 py-1 text-[11px] font-medium rounded transition-colors",
+        active ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+        disabled && "opacity-40 pointer-events-none",
+      )}
+    >
+      {icon}
+      <span>{label}</span>
+      <span className="font-mono text-[10px] text-muted-foreground/60 tabular-nums">{count}</span>
+    </button>
+  );
 }
 
 // ─── Stats bar ───
@@ -158,12 +193,31 @@ interface KnowledgeSourcesPanelProps {
   className?: string;
 }
 
+type SourceKindLens = "all" | "documents" | "traces";
+
 export function KnowledgeSourcesPanel({ workflowId, className }: KnowledgeSourcesPanelProps) {
   const [sources, setSources] = useState<KnowledgeSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
   const [searchInput, setSearchInput] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [kindLens, setKindLens] = useState<SourceKindLens>("all");
+
+  const kindCounts = useMemo(() => {
+    let docs = 0;
+    let traces = 0;
+    for (const s of sources) {
+      if (s.traceBundleId) traces++;
+      else docs++;
+    }
+    return { docs, traces };
+  }, [sources]);
+
+  const visibleSources = useMemo(() => {
+    if (kindLens === "documents") return sources.filter((s) => !s.traceBundleId);
+    if (kindLens === "traces") return sources.filter((s) => !!s.traceBundleId);
+    return sources;
+  }, [sources, kindLens]);
 
   const { records, dataset } = DatasetDetailConsumer();
   const { openTab } = WorkspaceTabsConsumer();
@@ -308,11 +362,11 @@ export function KnowledgeSourcesPanel({ workflowId, className }: KnowledgeSource
         </div>
       </div>
 
-      {/* Search bar + stats (only when there are sources) */}
+      {/* Search bar + kind segment + stats (only when there are sources) */}
       {sources.length > 0 && (
         <>
-          <div className="px-4 py-2 border-b border-border/50">
-            <div className="relative">
+          <div className="px-4 py-2 border-b border-border/50 flex items-center gap-2">
+            <div className="relative flex-1">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/50" />
               <input
                 type="text"
@@ -331,8 +385,32 @@ export function KnowledgeSourcesPanel({ workflowId, className }: KnowledgeSource
                 </button>
               )}
             </div>
+            <div className="flex items-center gap-0.5 p-0.5 rounded-md bg-muted/30">
+              <KindLensButton
+                active={kindLens === "all"}
+                onClick={() => setKindLens("all")}
+                label="All"
+                count={sources.length}
+              />
+              <KindLensButton
+                active={kindLens === "documents"}
+                onClick={() => setKindLens("documents")}
+                icon={<FileText className="w-3 h-3 text-rose-400/80" />}
+                label="Documents"
+                count={kindCounts.docs}
+                disabled={kindCounts.docs === 0}
+              />
+              <KindLensButton
+                active={kindLens === "traces"}
+                onClick={() => setKindLens("traces")}
+                icon={<Activity className="w-3 h-3 text-purple-400" />}
+                label="Traces"
+                count={kindCounts.traces}
+                disabled={kindCounts.traces === 0}
+              />
+            </div>
           </div>
-          <StatsBar sources={sources} />
+          <StatsBar sources={visibleSources} />
         </>
       )}
 
@@ -378,23 +456,29 @@ export function KnowledgeSourcesPanel({ workflowId, className }: KnowledgeSource
         ) : (
           /* Default: source cards */
           <div className="space-y-3">
-            {sources.map((source) => {
-              const stats = sourceRecordStats.get(source.id);
-              return (
-                <KnowledgeSourceCard
-                  key={source.id}
-                  source={source}
-                  isExpanded={expandedSources.has(source.id)}
-                  onToggleExpand={() => toggleExpand(source.id)}
-                  onDelete={() => handleDelete(source.id)}
-                  recordCount={stats?.recordCount}
-                  coveragePercent={stats?.coveragePercent}
-                  onFilterBySource={() => {
-                    emitter.emit("vllora_filter_by_source", { workflowId, sourceId: source.id });
-                  }}
-                />
-              );
-            })}
+            {visibleSources.length === 0 ? (
+              <div className="text-center py-8 text-xs text-muted-foreground/60">
+                No {kindLens === "traces" ? "OTel traces" : kindLens === "documents" ? "documents" : "sources"} in this workflow yet.
+              </div>
+            ) : (
+              visibleSources.map((source) => {
+                const stats = sourceRecordStats.get(source.id);
+                return (
+                  <KnowledgeSourceCard
+                    key={source.id}
+                    source={source}
+                    isExpanded={expandedSources.has(source.id)}
+                    onToggleExpand={() => toggleExpand(source.id)}
+                    onDelete={() => handleDelete(source.id)}
+                    recordCount={stats?.recordCount}
+                    coveragePercent={stats?.coveragePercent}
+                    onFilterBySource={() => {
+                      emitter.emit("vllora_filter_by_source", { workflowId, sourceId: source.id });
+                    }}
+                  />
+                );
+              })
+            )}
           </div>
         )}
       </div>

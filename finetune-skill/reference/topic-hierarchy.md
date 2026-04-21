@@ -127,7 +127,7 @@ Measure difficulty *after* running the base model evaluation (eval-first approac
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `id` | Yes | Human-readable slug (e.g., `"cancel-pending-order"`). Must be unique within the workflow. Do NOT use UUIDs — the gateway assigns UUIDs at upload time. Use lowercase with hyphens, no `/` characters. |
+| `id` | Yes | Human-readable slug (e.g., `"cancel-pending-order"`). Must be unique within the workflow. Do NOT use UUIDs — the gateway assigns UUIDs at upload time. Use lowercase with hyphens, no `/` characters. **Required on every node, including category parents** — otherwise `upload-topics` cannot set `parent_id` on children and the hierarchy flattens. (As a safety net, `upload-topics` will now slug-derive missing IDs from `name`, but the original slug is always preferable since it becomes the stable `reference_id` the UI shows.) |
 | `name` | Yes | Display name — should describe the **skill**, not the source section. Often identical to `id` but can be more readable (e.g., id=`"cancel-pending-order"`, name=`"Cancel Pending Order"`). |
 | `parent_id` | No | Parent topic's slug ID (null for root topics) |
 | `system_prompt` | No | System prompt **segment** — a behavioral instruction that adds ONLY what's new beyond the parent. Describe what the model should DO (action verbs: assess, recommend, identify, compare), not a list of keywords. Start with a situational trigger ("When...", "For...", "Given..."). Do NOT repeat the root persona ("You are...") or list nouns without context. |

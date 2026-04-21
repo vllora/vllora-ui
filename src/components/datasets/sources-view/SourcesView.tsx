@@ -15,7 +15,7 @@
  */
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { FileText, Tags, ChevronRight, ChevronLeft, ArrowLeft, Search, Eye } from "lucide-react";
+import { FileText, Tags, ChevronRight, ChevronLeft, ArrowLeft, Search, Eye, Activity, Download } from "lucide-react";
 import { extractPageRange, formatExtractionPath, countByRelevance } from "@/utils/knowledge-utils";
 import { PdfHighlightViewer } from "./PdfHighlightViewer";
 import ReactMarkdown from "react-markdown";
@@ -49,6 +49,24 @@ function stripSourcePrefix(description: string | undefined | null): string {
   return description.replace(/^\s*Source document:\s*/i, "").trim();
 }
 // CoverageMatrix replaced by inline hierarchical matrix in AllSourcesView
+
+/** Relative timestamp formatter for hero metadata ("ingested 3d ago"). */
+function formatRelativeIso(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "recently";
+  const diff = Date.now() - t;
+  const minutes = Math.floor(diff / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "1 day ago";
+  if (days < 30) return `${days} days ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
+}
 import type { KnowledgeSource, KnowledgeSourcePart } from "@/types/knowledge-types";
 import type { TopicHierarchyNode, DatasetRecord } from "@/types/dataset-types";
 
@@ -751,38 +769,125 @@ function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSour
   const formatChars = (chars: number) =>
     chars >= 1000 ? `${(chars / 1000).toFixed(1)}K` : `${chars}`;
 
+  // ─── Header / footer aggregates derived from already-loaded data ───
+  const isTrace = isOtelTraceSource(source);
+  const HeroIcon = isTrace ? Activity : FileText;
+
+  const inferredPageCount = useMemo(() => {
+    let max = 0;
+    for (const p of source.parts) {
+      const meta = p.extractionMetadata as Record<string, unknown> | undefined;
+      if (!meta) continue;
+      // Extractors emit page info in several shapes — accept all of them.
+      const pe = meta.pageEnd;
+      if (typeof pe === "number" && pe > max) max = pe;
+      const ps = meta.pageStart;
+      if (typeof ps === "number" && ps > max) max = ps;
+      const pages = meta.pages;
+      if (Array.isArray(pages)) {
+        for (const v of pages) {
+          if (typeof v === "number" && v > max) max = v;
+        }
+      } else if (typeof pages === "number" && pages > max) {
+        max = pages;
+      } else if (typeof pages === "string") {
+        const n = Number(pages);
+        if (!Number.isNaN(n) && n > max) max = n;
+      }
+    }
+    return max;
+  }, [source.parts]);
+
+  const partTypeCounts = useMemo(() => {
+    let text = 0;
+    let table = 0;
+    let image = 0;
+    for (const p of source.parts) {
+      if (p.type === "table") table++;
+      else if (p.type === "image") image++;
+      else text++;
+    }
+    return { text, table, image, total: source.parts.length };
+  }, [source.parts]);
+
+  const ingestedAgo = useMemo(() => formatRelativeIso(source.createdAt), [source.createdAt]);
+
+  // Authoritative per-source coverage from the workflow's KnowledgeCoverageStats
+  // aggregate (server-computed, not bounded by the records page size).
+  const sourceCoverage = dataset?.knowledgeCoverageStats?.bySource?.[source.id];
+
   return (
+    <TooltipProvider delayDuration={200}>
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex-1 grid grid-cols-2 overflow-hidden">
-        {/* Left: Compact header + search + TOC with previews */}
-        <div className="border-r border-border/50 flex flex-col overflow-hidden">
-          {/* Header: doc name + stats */}
-          <div className="shrink-0 px-4 py-2.5 border-b border-border/50">
-            <div className="flex items-center gap-2">
-              <div className="flex-1 min-w-0">
-                <h3 className="text-[13px] font-semibold text-foreground truncate">
-                  {source.description || source.name}
-                </h3>
-                <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground/40">
-                  <span>{source.parts.length} parts</span>
-                  <span>{formatChars(totalChars)} chars</span>
-                  {topicCoverage.length > 0 && <span>{topicCoverage.length} topics linked</span>}
-                  {relevanceCounts.relevant > 0 && <span>{relevanceCounts.relevant} relevant</span>}
-                </div>
-              </div>
-              <a
-                href={knowledgeSourceService.getFileUrl(source.workflowId, source.id)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/30 transition-colors shrink-0"
-                title="View original PDF"
-              >
-                <Eye className="w-3 h-3" />
-                PDF
-              </a>
+      {/* ─── Hero (matches mockup) ─── */}
+      <div className="shrink-0 px-6 py-4 border-b border-border">
+        <div className="flex items-start gap-4">
+          <div className={cn(
+            "w-12 h-12 rounded-lg border flex items-center justify-center shrink-0",
+            isTrace ? "border-purple-500/30 bg-purple-500/[0.08]" : "border-rose-500/30 bg-rose-500/[0.08]",
+          )}>
+            <HeroIcon className={cn("w-6 h-6", isTrace ? "text-purple-400" : "text-rose-400/80")} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-semibold mb-1">
+              Source · {isTrace ? "OTel trace" : "PDF"}
+            </div>
+            <h1 className="text-xl font-semibold text-foreground truncate">{source.name}</h1>
+            <div className="mt-1.5 text-[11.5px] text-muted-foreground/70 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              {inferredPageCount > 0 && (
+                <>
+                  <span className="font-mono tabular-nums">{inferredPageCount} pages</span>
+                  <span className="text-muted-foreground/30">·</span>
+                </>
+              )}
+              <span className="font-mono tabular-nums">{formatChars(totalChars)} chars</span>
+              <span className="text-muted-foreground/30">·</span>
+              <span>ingested {ingestedAgo}</span>
+              <span className="text-muted-foreground/30">·</span>
+              <span className="font-mono tabular-nums">{source.parts.length} extracted parts</span>
+              {topicCoverage.length > 0 && (
+                <>
+                  <span className="text-muted-foreground/30">·</span>
+                  <span>feeds <span className="text-emerald-300 font-medium">{topicCoverage.length}</span> topic{topicCoverage.length === 1 ? "" : "s"}</span>
+                </>
+              )}
+              {sourceCoverage && sourceCoverage.totalChunks > 0 && (
+                <>
+                  <span className="text-muted-foreground/30">·</span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="cursor-help">
+                        <span className="font-mono tabular-nums">{sourceCoverage.coveredChunks}/{sourceCoverage.totalChunks}</span> chunks used
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-[260px]">
+                      <p className="text-[11px]">
+                        {sourceCoverage.coveredChunks} of {sourceCoverage.totalChunks} chunks in this source are referenced by at least one training record ({sourceCoverage.coveragePercent}% coverage).
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </>
+              )}
             </div>
           </div>
+          <div className="shrink-0 flex items-center gap-2">
+            <a
+              href={knowledgeSourceService.getFileUrl(source.workflowId, source.id)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground border border-border hover:bg-muted/30 transition-colors"
+              title="Open original file in a new tab"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Download
+            </a>
+          </div>
+        </div>
+      </div>
 
+      <div className="flex-1 grid grid-cols-2 overflow-hidden min-h-0">
+        {/* Left: Compact header + search + TOC with previews */}
+        <div className="border-r border-border/50 flex flex-col overflow-hidden">
           {/* Search + filter row */}
           <div className="shrink-0 px-3 py-1.5 border-b border-border/50 flex items-center gap-2">
             <div className="relative flex-1">
@@ -925,6 +1030,82 @@ function SingleDocView({ source, focusPartId }: { readonly source: KnowledgeSour
           )}
         </div>
       </div>
+
+      {/* ─── Footer: Ingest Stats + Topics That Use This Source ─── */}
+      <div className="shrink-0 border-t border-border/50 flex items-center gap-5 px-4 py-2 text-muted-foreground flex-wrap">
+        <div className="flex items-baseline gap-3">
+          <SourceStatInline label="Pages" value={inferredPageCount || "—"} />
+          <SourceStatInline label="Parts" value={partTypeCounts.total} />
+          <SourceStatInline label="Figures" value={partTypeCounts.image} />
+          <SourceStatInline label="Tables" value={partTypeCounts.table} />
+        </div>
+        <div className="h-3 w-px bg-border/60" />
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground/50 shrink-0">
+            Topics
+          </span>
+          {topicCoverage.length === 0 ? (
+            <span className="text-[11px] text-muted-foreground/60">
+              No topics reference this source yet.
+            </span>
+          ) : (
+            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 min-w-0">
+              {topicCoverage.slice(0, 3).map((tc) => (
+                <Tooltip key={tc.topicName}>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] text-muted-foreground bg-muted/40 border border-border/60 cursor-help hover:text-foreground transition-colors">
+                      {tc.topicName}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    <p className="text-[11px]">{tc.partCount}/{tc.totalParts} parts feed this topic</p>
+                  </TooltipContent>
+                </Tooltip>
+              ))}
+              {topicCoverage.length > 3 && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex items-center px-2 py-0.5 rounded text-[11px] text-muted-foreground/70 hover:text-foreground transition-colors"
+                    >
+                      +{topicCoverage.length - 3} more
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" align="end" className="max-w-[320px] p-2">
+                    <div className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground/70 mb-1.5">
+                      All linked topics ({topicCoverage.length})
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1 max-h-[240px] overflow-y-auto">
+                      {topicCoverage.map((tc) => (
+                        <span
+                          key={tc.topicName}
+                          className="inline-flex items-center px-1.5 py-0.5 rounded text-[10.5px] text-muted-foreground bg-muted/40 border border-border/60"
+                          title={`${tc.partCount}/${tc.totalParts} parts feed this topic`}
+                        >
+                          {tc.topicName}
+                        </span>
+                      ))}
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+    </TooltipProvider>
+  );
+}
+
+function SourceStatInline({ label, value }: { readonly label: string; readonly value: string | number }) {
+  return (
+    <div className="inline-flex items-baseline gap-1.5">
+      <span className="text-[10px] uppercase tracking-wider text-muted-foreground/50">
+        {label}
+      </span>
+      <span className="text-[11.5px] font-medium tabular-nums text-foreground/90">{value}</span>
     </div>
   );
 }

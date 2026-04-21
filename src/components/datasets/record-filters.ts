@@ -17,6 +17,12 @@ export type RecordRole = "all" | "training" | "evaluated";
 /** Stat filter type for clickable stats in RecordsSectionHeader (P0-19) */
 export type StatFilter = "all" | "from_spans" | "labeled" | "evaluated";
 
+/** Quality lens — surfaces records that need human attention. */
+export type QualityLens = "all" | "needs_review" | "low_quality";
+
+/** Threshold below which an evaluated record is considered "low quality". */
+export const LOW_QUALITY_THRESHOLD = 0.5;
+
 /** P0-9: Role configuration for visual display */
 export const ROLE_CONFIG = {
   training: { label: "Training", className: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
@@ -41,6 +47,8 @@ export interface RecordFilterOptions {
   statFilter?: StatFilter;
   /** Filter by source document ID (show only records generated from this knowledge source) */
   sourceDocumentId?: string;
+  /** Quality lens: surface records that need human attention. */
+  qualityLens?: QualityLens;
 }
 
 export interface RecordSortOptions {
@@ -87,6 +95,16 @@ export function filterRecords(
     filtered = filtered.filter(r => !!r.topic);
   } else if (options.statFilter === "evaluated") {
     filtered = filtered.filter(r => r.evaluation?.score !== undefined);
+  }
+
+  // Quality lens — filters by score state vs the LOW_QUALITY_THRESHOLD.
+  if (options.qualityLens === "needs_review") {
+    filtered = filtered.filter(r => r.evaluation?.score === undefined);
+  } else if (options.qualityLens === "low_quality") {
+    filtered = filtered.filter(r => {
+      const score = r.evaluation?.score;
+      return score !== undefined && score < LOW_QUALITY_THRESHOLD;
+    });
   }
 
   // Filter by source document

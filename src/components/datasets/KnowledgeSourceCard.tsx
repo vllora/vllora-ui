@@ -9,7 +9,7 @@
  */
 
 import { useState } from "react";
-import { FileText, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import { FileText, Activity, Trash2, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { KnowledgeSource } from "@/types/knowledge-types";
@@ -150,12 +150,23 @@ export function KnowledgeSourceCard({
           )
         )}
 
-        {/* File icon */}
-        <FileText className="w-5 h-5 shrink-0 text-muted-foreground" />
+        {/* Source-kind icon — purple for OTel traces, red-orange for PDFs */}
+        {source.traceBundleId ? (
+          <Activity className="w-5 h-5 shrink-0 text-purple-400" />
+        ) : (
+          <FileText className="w-5 h-5 shrink-0 text-rose-400/80" />
+        )}
 
         {/* Name and part count */}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">{source.name}</p>
+          <p className="text-sm font-medium truncate flex items-center gap-2">
+            {source.name}
+            {source.traceBundleId && (
+              <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 font-semibold">
+                OTel
+              </span>
+            )}
+          </p>
           <p className="text-xs text-muted-foreground">
             {source.parts.length} part{source.parts.length !== 1 ? 's' : ''}
             {textPartCount > 0 && (

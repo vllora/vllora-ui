@@ -564,6 +564,61 @@ def cmd_upload_topics(args: argparse.Namespace) -> None:
         return any(isinstance(t.get("children"), list) for t in t_list)
 
     if _has_children(raw_topics):
+        def _slugify(name: str) -> str:
+            """Agent-friendly fallback: turn 'Order Cancellations' into
+            'order-cancellations' so parents that ship without an explicit
+            `id` still get one and hierarchy survives the flatten."""
+            out = []
+            for ch in (name or "").lower():
+                if ch.isalnum():
+                    out.append(ch)
+                elif out and out[-1] != "-":
+                    out.append("-")
+            return "".join(out).strip("-") or "unnamed-topic"
+
+        # Pre-pass: assign slugs to any node that has children but no id.
+        # Without this, _flatten() would emit children with parent_id=None
+        # because `entry.get("id")` returns None, flattening the hierarchy.
+        auto_id_count = 0
+        used_ids: set[str] = set()
+
+        def _seed_ids(node: dict) -> None:
+            nonlocal auto_id_count
+            tid = node.get("id")
+            if tid:
+                used_ids.add(tid)
+            for child in node.get("children") or []:
+                if isinstance(child, dict):
+                    _seed_ids(child)
+
+        for t in raw_topics:
+            _seed_ids(t)
+
+        def _assign_missing_ids(node: dict) -> None:
+            nonlocal auto_id_count
+            if not node.get("id"):
+                base = _slugify(node.get("name") or "")
+                candidate = base
+                suffix = 2
+                while candidate in used_ids:
+                    candidate = f"{base}-{suffix}"
+                    suffix += 1
+                node["id"] = candidate
+                used_ids.add(candidate)
+                auto_id_count += 1
+            for child in node.get("children") or []:
+                if isinstance(child, dict):
+                    _assign_missing_ids(child)
+
+        for t in raw_topics:
+            _assign_missing_ids(t)
+
+        if auto_id_count:
+            print(
+                f"  Auto-assigned id slug to {auto_id_count} topic node(s) "
+                f"that were missing one (so parent_id links survive the flatten)."
+            )
+
         flat: list[dict] = []
 
         def _flatten(node: dict, parent_id: str | None = None) -> None:
@@ -576,7 +631,18 @@ def cmd_upload_topics(args: argparse.Namespace) -> None:
 
         for t in raw_topics:
             _flatten(t)
-        print(f"  Auto-flattened nested hierarchy: {len(raw_topics)} root(s) → {len(flat)} topics")
+
+        root_count = sum(1 for t in flat if not t.get("parent_id"))
+        print(
+            f"  Auto-flattened nested hierarchy: {len(raw_topics)} root(s) → "
+            f"{len(flat)} topics ({root_count} with no parent)"
+        )
+        if len(raw_topics) == 1 and root_count > 1:
+            print(
+                f"  ⚠ Expected 1 root but flatten produced {root_count}. "
+                f"Hierarchy likely lost — check that every node with children has an `id`.",
+                file=sys.stderr,
+            )
         raw_topics = flat
 
     # If --force, delete existing topics first

@@ -8,12 +8,15 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { XCircle, AlertTriangle, RefreshCw, RotateCw, ChevronRight, StopCircle, Loader2 } from "lucide-react";
 import { VerdictBadge } from "./VerdictBadge";
 import { ScoreStrip } from "./ScoreStrip";
 import { ResultsTable } from "./ResultsTable";
 import { RunningView } from "./RunningView";
 import { RunsSidebar } from "./RunsSidebar";
+import { EvalRunHero } from "./EvalRunHero";
+import { EvalPerTopicScores } from "./EvalPerTopicScores";
 import { flattenEvaluationResults } from "@/services/finetune-api";
 import { cn } from "@/lib/utils";
 import { emitter } from "@/utils/eventEmitter";
@@ -126,6 +129,7 @@ function EvalJobVersionBadge({ workflowId, jobCreatedAt }: { workflowId: string;
 function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: EvalJob; workflowId: string; onCancel?: () => void; onRunAgain?: () => void; onRefresh?: (jobId: string) => void }) {
   const { sortedRecords } = DatasetDetailConsumer();
   const result = job.result;
+  const [topicsDrawerOpen, setTopicsDrawerOpen] = useState(false);
 
   // Use ALL scores from evaluationResults (full dataset), fall back to sampled sampleResults
   const scores = useMemo(() => {
@@ -394,28 +398,25 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
           </div>
         ) : scores.length > 0 ? (
           /* Score distribution + stats — shown during running AND after completion */
+          <>
+            <EvalRunHero
+              job={job}
+              erroredCount={errorCount}
+              topics={
+                Object.keys(topicScores).length > 0
+                  ? {
+                      total: Object.keys(topicScores).length,
+                      problemCount: Object.values(topicScores).filter((s) => s.status === "problem").length,
+                      onView: () => setTopicsDrawerOpen(true),
+                    }
+                  : undefined
+              }
+            />
           <div className="shrink-0 px-3 pt-2 space-y-2">
-            {/* Score distribution card — matches finetune chart style */}
+            {/* Per-topic breakdown now lives in a drawer — triggered from
+                the `Topics` KPI cell above. */}
+            {/* Score distribution card — chart only; KPIs are now in EvalRunHero above */}
             <div className="rounded-lg bg-[#111] overflow-hidden">
-              {/* Card header with score */}
-              <div className="px-5 py-4 border-b border-white/5 flex items-start justify-between">
-                <div>
-                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-1">
-                    Avg Score{isRunning ? " (live)" : ""}
-                  </p>
-                  <div className="flex items-baseline gap-3">
-                    {stats && (
-                      <h2 className="text-3xl font-mono font-bold text-[#10b981]">
-                        {stats.mean.toFixed(2)}
-                      </h2>
-                    )}
-                    <span className="text-xs font-medium text-slate-400">
-                      {scores.length} scored · ±{stats?.std.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
               {/* Chart area */}
               <div className="p-4">
                 <ScoreStrip scores={scores} mean={stats?.mean} byTopic={Object.keys(topicScores).length > 0 ? topicScores : undefined} readinessGate={readinessGate} />
@@ -466,6 +467,7 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
 
             {/* Per-topic breakdown is now a tab in ScoreStrip ("By Topic") */}
           </div>
+          </>
         ) : null}
 
         {/* Running: progress view + results table (below chart if chart is shown) */}
@@ -537,6 +539,23 @@ function JobDetail({ job, workflowId, onCancel, onRunAgain, onRefresh }: { job: 
           </div>
         )}
       </div>
+      <Sheet open={topicsDrawerOpen} onOpenChange={setTopicsDrawerOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+          <SheetHeader className="mb-3">
+            <SheetTitle>Per-topic scores</SheetTitle>
+          </SheetHeader>
+          <EvalPerTopicScores
+            topicScores={topicScores}
+            datasetAvg={stats?.mean}
+            onTopicClick={(topic) => {
+              setTopicsDrawerOpen(false);
+              window.dispatchEvent(new CustomEvent("vllora_navigate_to_job", {
+                detail: { jobId: topic, type: "topic" },
+              }));
+            }}
+          />
+        </SheetContent>
+      </Sheet>
     </TooltipProvider>
   );
 }

@@ -16,7 +16,7 @@ import {
   DeleteConfirmationDialog,
   type DeleteConfirmation,
 } from "../DeleteConfirmationDialog";
-import { DatasetCard } from "./DatasetCard";
+import { WorkflowsTable } from "./WorkflowsTable";
 
 import { DatasetsEmptyState } from "./DatasetsEmptyState";
 import { DatasetsListHeader, type DatasetFilter, type DatasetSort } from "./DatasetsListHeader";
@@ -326,48 +326,36 @@ export function DatasetsGrid({ onSelectDataset }: DatasetsGridProps) {
               <DatasetsNoResultsState searchQuery={searchQuery} />
           )}
 
-            {/* Dataset grid */}
+            {/* Workflows table */}
             {!isLoading && !error && filteredDatasets.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {filteredDatasets.map((dataset) => {
-                  const isEditing = editingDatasetId === dataset.id;
+              <WorkflowsTable
+                rows={filteredDatasets.map((dataset) => {
                   const stats = topicStats[dataset.id];
-
-                  return (
-                    <DatasetCard
-                      key={dataset.id}
-                      name={dataset.name}
-                      filterGroup={getFilterGroup(dataset)}
-                      evalJobs={dataset.evalJobs}
-                      trainingJobs={dataset.trainingJobs}
-                      recordCount={recordCounts[dataset.id] ?? "..."}
-                      topicCount={stats?.topicCount ?? 0}
-                      docsCount={docsCounts[dataset.id] ?? 0}
-                      hasTopicHierarchy={!!dataset.topicHierarchy?.hierarchy}
-                      updatedAt={dataset.updatedAt}
-                      objective={dataset.datasetObjective}
-                      hasEvalScript={!!dataset.evalScript}
-                      isEditing={isEditing}
-                      editingName={editingDatasetName}
-                      onSelect={() => onSelectDataset(dataset.id)}
-                      onEditNameChange={setEditingDatasetName}
-                      onSaveRename={() => handleRenameDataset(dataset.id)}
-                      onCancelRename={() => setEditingDatasetId(null)}
-                      onStartRename={() => {
-                        setEditingDatasetId(dataset.id);
-                        setEditingDatasetName(dataset.name);
-                      }}
-                      onImport={() => {
-                        setImportTargetDatasetId(dataset.id);
-                        setShowImportDialog(true);
-                      }}
-                      onDownload={() => handleDownloadDataset(dataset.id)}
-                      onDelete={() => setDeleteConfirm({ type: "dataset", id: dataset.id })}
-                    />
-                  );
+                  return {
+                    dataset,
+                    filterGroup: getFilterGroup(dataset),
+                    recordCount: recordCounts[dataset.id] ?? "...",
+                    topicCount: stats?.topicCount ?? 0,
+                    docsCount: docsCounts[dataset.id] ?? 0,
+                    isEditing: editingDatasetId === dataset.id,
+                    editingName: editingDatasetName,
+                    onSelect: () => onSelectDataset(dataset.id),
+                    onEditNameChange: setEditingDatasetName,
+                    onSaveRename: () => handleRenameDataset(dataset.id),
+                    onCancelRename: () => setEditingDatasetId(null),
+                    onStartRename: () => {
+                      setEditingDatasetId(dataset.id);
+                      setEditingDatasetName(dataset.name);
+                    },
+                    onImport: () => {
+                      setImportTargetDatasetId(dataset.id);
+                      setShowImportDialog(true);
+                    },
+                    onDownload: () => handleDownloadDataset(dataset.id),
+                    onDelete: () => setDeleteConfirm({ type: "dataset", id: dataset.id }),
+                  };
                 })}
-
-              </div>
+              />
             )}
           </div>
         </div>

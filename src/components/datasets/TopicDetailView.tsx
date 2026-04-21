@@ -9,9 +9,9 @@
  */
 
 import { useState, useMemo, useCallback } from "react";
-import { FileText, Sparkles, ExternalLink } from "lucide-react";
-import { SimplePromptChain } from "./records-table/PromptChainCard";
+import { FileText, Sparkles, ExternalLink, Copy, Check } from "lucide-react";
 import type { PromptChainLink } from "./records-table/PromptChainCard";
+import { LayeredPromptChain } from "./records-table/LayeredPromptChain";
 import { cn } from "@/lib/utils";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { resolveAndGroupBySource } from "@/lib/distri-finetune-tools/steps/shared/resolve-part-ref";
@@ -139,6 +139,10 @@ export function TopicDetailView({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Topic hero — avg score + description only. Records/Sources live
+          in the top stat bar + tab labels; parts count is visible via the
+          Linked Sources tab drill-down; slug breadcrumb is above. */}
+      <TopicHero topicNode={topicNode} records={records} />
       {/* Tabs + prompt toggle */}
       <div className="px-4 shrink-0 border-b border-border">
         <div className="flex items-center gap-0">
@@ -482,16 +486,223 @@ export function LinkedSourcesTabContent({
   );
 }
 
+// ─── Topic Hero (hier-inspect panel from mock) ───
+
+/** Pick an evaluation score off a record (prefer running avg, fall back to latest). */
+function pickRecordScore(record: DatasetRecord): number | null {
+  const ev = record.evaluation;
+  if (!ev) return null;
+  const candidate = ev.dryRunAvg ?? ev.evalScore ?? ev.score;
+  return typeof candidate === "number" ? candidate : null;
+}
+
+function scoreTone(avg: number | null): string {
+  if (avg == null) return "text-muted-foreground";
+  if (avg >= 0.85) return "text-emerald-300";
+  if (avg >= 0.7) return "text-amber-300";
+  return "text-rose-300";
+}
+
+function TopicHero({
+  topicNode,
+  records,
+}: {
+  readonly topicNode: TopicHierarchyNode;
+  readonly records: readonly DatasetRecord[];
+}) {
+  const scores = records.map(pickRecordScore).filter((s): s is number => s != null);
+  const avgScore = scores.length > 0
+    ? scores.reduce((a, b) => a + b, 0) / scores.length
+    : null;
+
+  // Records/Sources counts live in the top stat bar + tab labels; the slug
+  // path duplicates the tab breadcrumb; parts count is already visible via
+  // the Linked Sources tab drill-down. We surface only avg score (unique
+  // signal) + the topic description here.
+  const showAvgScore = avgScore != null;
+
+  if (!showAvgScore && !topicNode.description) {
+    return null;
+  }
+
+  return (
+    <div className="border-b border-border shrink-0 bg-background px-4 py-2 space-y-1.5">
+      {showAvgScore && (
+        <div className="flex items-baseline flex-wrap gap-x-4 gap-y-1">
+          <HeroChip
+            label="Avg score"
+            value={avgScore.toFixed(2)}
+            valueClassName={scoreTone(avgScore)}
+          />
+        </div>
+      )}
+      {topicNode.description && (
+        <p className="max-w-3xl text-[12.5px] leading-[1.55] text-foreground/85">
+          {topicNode.description}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function HeroChip({
+  label,
+  value,
+  valueClassName,
+}: {
+  readonly label: string;
+  readonly value: string | number;
+  readonly valueClassName?: string;
+}) {
+  return (
+    <span className="inline-flex items-baseline gap-1.5">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/70">
+        {label}
+      </span>
+      <span className={cn("text-[12px] font-semibold tabular-nums", valueClassName ?? "text-foreground")}>
+        {value}
+      </span>
+    </span>
+  );
+}
+
 // ─── Prompt Chain Panel ───
 
+type PromptView = "full" | "chain";
+
+/**
+ * Always-visible prompt panel with two modes:
+ *   - "full"  (default) — layers concatenated into a single mono block,
+ *     mirroring what the model actually sees at generation time.
+ *   - "chain" — per-layer breakdown via `LayeredPromptChain` so users can
+ *     see *where* each part of the prompt comes from (root / ancestors /
+ *     leaf).
+ */
 function PromptChainPanel({
   chain,
 }: {
   readonly chain: readonly PromptChainLink[];
 }) {
+  const [view, setView] = useState<PromptView>("full");
+  if (chain.length === 0) return null;
+  const leaf = chain[chain.length - 1];
+  const fullPrompt = chain.map((l) => l.prompt).join("\n\n");
+
   return (
     <div className="border-b border-border bg-background/95 backdrop-blur-sm shrink-0">
-      <SimplePromptChain chain={chain} className="px-4 py-3" />
+      <div className="flex items-center gap-2 px-4 pt-2.5">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+          System prompt
+        </span>
+        <span className="text-[10px] text-muted-foreground/60">
+          · {chain.length} layer{chain.length === 1 ? "" : "s"} · active:{" "}
+          <span className="text-emerald-300">{leaf.label}</span>
+        </span>
+        <div className="ml-auto inline-flex rounded border border-border/60 bg-muted/30 p-0.5">
+          <PromptViewButton
+            active={view === "full"}
+            onClick={() => setView("full")}
+            label="Full prompt"
+          />
+          <PromptViewButton
+            active={view === "chain"}
+            onClick={() => setView("chain")}
+            label="Prompt chain"
+          />
+        </div>
+      </div>
+      <div className="px-4 pb-3 pt-2">
+        {view === "full" ? (
+          <FullPromptView text={fullPrompt} />
+        ) : (
+          <LayeredPromptChain chain={chain} hideHeader />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PromptViewButton({
+  active,
+  onClick,
+  label,
+}: {
+  readonly active: boolean;
+  readonly onClick: () => void;
+  readonly label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded px-2 py-0.5 text-[10px] font-semibold transition-colors",
+        active
+          ? "bg-emerald-500/15 text-emerald-300"
+          : "text-muted-foreground/70 hover:text-foreground",
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
+/** Collapsed preview of the merged prompt — expands on click. */
+function FullPromptView({ text }: { readonly text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const PREVIEW = 320;
+  // Collapse runs of 3+ blank lines to 1 so concatenated layers don't
+  // produce huge gaps when the source prompts already end with \n.
+  const compact = text.replace(/\n{3,}/g, "\n\n");
+  const truncated = compact.length > PREVIEW;
+  const display = expanded || !truncated ? compact : `${compact.slice(0, PREVIEW).trim()}…`;
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(compact);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard blocked (insecure context or user denied) — swallow.
+    }
+  };
+
+  return (
+    <div className="relative rounded-md border border-border/60 bg-zinc-900/30">
+      <button
+        type="button"
+        onClick={handleCopy}
+        title={copied ? "Copied" : "Copy prompt"}
+        className="absolute right-1.5 top-1.5 z-10 inline-flex h-6 items-center gap-1 rounded border border-border/60 bg-background/80 px-1.5 text-[10px] text-muted-foreground/80 transition-colors hover:border-emerald-500/40 hover:text-emerald-300"
+      >
+        {copied ? (
+          <>
+            <Check className="h-3 w-3" /> Copied
+          </>
+        ) : (
+          <>
+            <Copy className="h-3 w-3" /> Copy
+          </>
+        )}
+      </button>
+      <pre
+        className={cn(
+          "overflow-y-auto whitespace-pre-wrap break-words px-3 py-2 pr-16 font-mono text-[11px] leading-[1.45] text-foreground/90",
+          expanded ? "max-h-[320px]" : "max-h-[140px]",
+        )}
+      >
+        {display}
+      </pre>
+      {truncated && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="w-full border-t border-border/40 py-1 text-[10px] text-muted-foreground/70 transition-colors hover:text-foreground"
+        >
+          {expanded ? "Show less" : `Show all (${compact.length.toLocaleString()} chars)`}
+        </button>
+      )}
     </div>
   );
 }

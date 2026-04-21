@@ -43,7 +43,7 @@
 
 ### What already exists in our codebase
 
-`finetune-skill-otel/scripts/otel_distill.py` already produces the correct format:
+The trace-extraction path in `finetune-skill/scripts/trace_analyze.py` (`extract_decision_points`) produces the correct format:
 - Per-decision-point records from OTel traces
 - `messages`: context up to the decision point (includes prior tool calls + results)
 - `tools`: full tool schema extracted from traces
@@ -106,6 +106,28 @@ Each record = one **decision point** where the model must choose an action:
   "source_parts": ["p-003", "p-005"]
 }
 ```
+
+## Single-Turn vs Multi-Turn (Critical Finding)
+
+**Single-turn synthetic records are WRONG for multi-turn tool-calling agents.**
+
+Real tool-calling conversations are multi-turn (avg 59 messages): authenticate → lookup → action. Single-turn records (`user → tool_call`) teach shortcuts that fail in production:
+- Skip authentication (model jumps straight to action tool)
+- Args from nowhere (model must predict order_id it hasn't been told)
+- Distribution shift (training context ≠ inference context)
+
+**Research:** ToolRL (arXiv:2504.13958), IRC (arXiv:2604.02869), Bespoke Labs multi-turn RL — all train on full conversation trajectories with per-decision-point rewards.
+
+**Pipeline change for tool-calling agents:**
+
+| Data source | Role | Format |
+|-------------|------|--------|
+| **Decision points** (from traces) | **Primary training data** | Multi-turn (5-20+ msgs context → tool_call GT). ALL tool types (action + lookup + utility) but subsampled: lookups capped at 2x action count to prevent signal dilution while preserving reasoning chain. |
+| **Seeds** (first user messages) | Prompt diversity | Single-turn, no GT (OK for diversity) |
+| **Single-turn synthetic records** (`user → tool_call`, no prior context) | **DROPPED** | Teach shortcuts (skip auth, args-from-nowhere) for multi-turn inference |
+| **Trace-seeded paraphrase variants** (take a real DP, LLM paraphrases only the last user turn while preserving full prior context + GT) | **Conditionally allowed** for tools with <N real records | Trajectory2Task precedent (arXiv:2601.20144). Preserves real-trace context + GT → avoids the shortcuts above. NOT the same as single-turn synthesis. Verify paraphrase preserves conversation state at the decision point. |
+
+For **text-only agents** (no tools), synthetic single-turn records remain correct.
 
 ### Three types of training records
 

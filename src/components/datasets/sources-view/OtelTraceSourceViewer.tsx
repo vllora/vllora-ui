@@ -2,15 +2,19 @@
  * OtelTraceSourceViewer
  *
  * Renders a KnowledgeSource of type 'otel-trace' inside the dataset Sources
- * view. Reuses TraceMessageTimeline by reconstructing an OtelTrace from the
- * source's parts (each part = one OTel message, metadata = span attributes).
+ * view. The trace-bundle path uses agent-prism's primitives (`TraceList` +
+ * `TreeView`) composed with our own `MomentPane` via
+ * `AgentPrismMomentLayout` — that's agent-prism's README-sanctioned
+ * customization path ("mount the building blocks directly") so we keep all
+ * of agent-prism's span-tree rendering, search, and expand/collapse while
+ * replacing the right-hand details pane with the mock's Moment card.
  *
- * The skill's `otel_extract.py` is the producer side that lays out the parts
- * in this shape. See finetune-skill/reference/otel-trace-ingestion.md.
+ * The single-source path (parts reconstructed into one synthetic trace) still
+ * uses `OtelTraceMessageTimeline` for the message-by-message view.
  */
 
 import { OtelTraceMessageTimeline } from '@/components/OtelTraces/OtelTraceMessageTimeline';
-import { TraceViewer, type TraceViewerData } from '@/components/agent-prism/TraceViewer/TraceViewer';
+import { AgentPrismMomentLayout, type PrismTrace } from './otel-trace-timeline/AgentPrismMomentLayout';
 import '@/components/agent-prism/theme/theme.css';
 import './agent-prism-dark.css';
 import { Badge } from '@/components/ui/badge';
@@ -52,10 +56,9 @@ interface OtelTraceSourceViewerProps {
   readonly source?: KnowledgeSource;
   /**
    * Optional raw OTel semconv spans blob. When provided (e.g. from a
-   * committed fixture or the trace_bundles API), the viewer renders
-   * these via agent-prism's `<TraceViewer>` (OTLP envelope conversion
-   * happens in `toOtlpDocument` below) instead of reconstructing a
-   * `KnowledgeSource`-backed timeline from `source.parts`.
+   * committed fixture or the trace_bundles API), the viewer renders them
+   * via `AgentPrismMomentLayout` — agent-prism primitives + custom moment
+   * pane.
    */
   readonly semconvSpans?: readonly OtelSemconvSpan[];
 }
@@ -136,11 +139,7 @@ function sourceToTrace(source: KnowledgeSource): OtelTrace | null {
   };
 }
 
-// ─── Semconv → OTLP conversion ──────────────────────────────────────────
-//
-// agent-prism's adapter expects the full OTLP envelope shape and reads
-// `input.value` / `output.value` attributes (OpenInference convention)
-// for span content — NOT `gen_ai.input.messages`. We inject both.
+// ─── Semconv → agent-prism TraceSpan conversion ─────────────────────────
 
 function attrsToOtlp(attrs: Record<string, unknown>): TraceSpanAttribute[] {
   return Object.entries(attrs).map(([key, raw]) => {
@@ -158,7 +157,6 @@ function attrsToOtlp(attrs: Record<string, unknown>): TraceSpanAttribute[] {
   });
 }
 
-/** Stringify semconv messages into a human-readable block for agent-prism. */
 function messagesToText(messages: unknown): string {
   if (!Array.isArray(messages)) return '';
   const lines: string[] = [];
@@ -183,15 +181,12 @@ function messagesToText(messages: unknown): string {
   return lines.join('\n');
 }
 
-/** Parse a timestamp to epoch milliseconds. */
 function toEpochMs(ts: string | undefined): number | undefined {
   if (!ts) return undefined;
   if (/^\d{16,}$/.test(ts)) return Math.floor(Number(BigInt(ts) / 1_000_000n));
   const ms = Date.parse(ts);
   return Number.isNaN(ms) ? undefined : ms;
 }
-
-// ─── Semconv → agent-prism TraceSpan (direct, no OTLP envelope) ─────────
 
 function mapCategory(opName: string): TraceSpanCategory {
   switch (opName) {
@@ -217,7 +212,6 @@ function semconvToTraceSpan(
   const agentName = attrs['agent.name'];
   const model = attrs['gen_ai.request.model'];
 
-  // Title for the span tree
   let title = opName;
   if (opName === 'execute_tool' && typeof toolName === 'string') title = toolName;
   else if (opName === 'invoke_agent' && typeof agentName === 'string') title = agentName;
@@ -229,7 +223,6 @@ function semconvToTraceSpan(
   const start = new Date(startMs);
   const end = new Date(endMs);
 
-  // Build input/output strings for the DetailsView
   const inputText = opName === 'execute_tool'
     ? (attrs['gen_ai.tool.call.arguments'] != null
         ? (typeof attrs['gen_ai.tool.call.arguments'] === 'string'
@@ -246,10 +239,8 @@ function semconvToTraceSpan(
         : undefined)
     : messagesToText(attrs['gen_ai.output.messages']) || undefined;
 
-  // Build attributes for the Attributes tab
   const prismAttrs: TraceSpanAttribute[] = attrsToOtlp(attrs);
 
-  // Recurse children
   const children = (childrenByParent.get(span.span_id) ?? [])
     .map((c) => semconvToTraceSpan(c, childrenByParent));
 
@@ -269,20 +260,16 @@ function semconvToTraceSpan(
   };
 }
 
-/** Group semconv spans by trace_id, build trees, return per-trace data. */
 function buildTraceSpanTrees(spans: readonly OtelSemconvSpan[]): Map<string, TraceSpan[]> {
-  // Group by trace
   const byTrace = new Map<string, OtelSemconvSpan[]>();
   for (const s of spans) {
-    const tid = s.trace_id;
-    const arr = byTrace.get(tid);
+    const arr = byTrace.get(s.trace_id);
     if (arr) arr.push(s);
-    else byTrace.set(tid, [s]);
+    else byTrace.set(s.trace_id, [s]);
   }
 
   const result = new Map<string, TraceSpan[]>();
   for (const [traceId, traceSpans] of byTrace) {
-    // Group children by parent
     const childrenByParent = new Map<string, OtelSemconvSpan[]>();
     const allSpanIds = new Set(traceSpans.map((s) => s.span_id));
     for (const s of traceSpans) {
@@ -292,7 +279,6 @@ function buildTraceSpanTrees(spans: readonly OtelSemconvSpan[]): Map<string, Tra
         else childrenByParent.set(s.parent_span_id, [s]);
       }
     }
-    // Root spans = no parent or parent not in this trace
     const roots = traceSpans.filter(
       (s) => !s.parent_span_id || !allSpanIds.has(s.parent_span_id),
     );
@@ -305,53 +291,49 @@ function countSpans(s: TraceSpan): number {
   return 1 + (s.children ?? []).reduce((acc, c) => acc + countSpans(c), 0);
 }
 
-function AgentPrismTraceView({ spans }: { readonly spans: readonly OtelSemconvSpan[] }) {
-  const data: TraceViewerData[] = useMemo(() => {
-    const trees = buildTraceSpanTrees(spans);
+function buildPrismTraces(spans: readonly OtelSemconvSpan[]): PrismTrace[] {
+  const trees = buildTraceSpanTrees(spans);
+  return Array.from(trees.entries()).map(([traceId, traceSpans]) => {
+    const totalSpans = traceSpans.reduce((acc, s) => acc + countSpans(s), 0);
+    const firstStart = traceSpans[0]?.startTime?.getTime() ?? 0;
+    let maxEnd = firstStart;
+    const walkEnd = (s: TraceSpan) => {
+      const e = s.endTime?.getTime() ?? 0;
+      if (e > maxEnd) maxEnd = e;
+      (s.children ?? []).forEach(walkEnd);
+    };
+    traceSpans.forEach(walkEnd);
 
-    return Array.from(trees.entries()).map(([traceId, traceSpans]) => {
-      const totalSpans = traceSpans.reduce((acc, s) => acc + countSpans(s), 0);
-      const firstStart = traceSpans[0]?.startTime?.getTime() ?? 0;
-      let maxEnd = firstStart;
-      const walkEnd = (s: TraceSpan) => {
-        const e = s.endTime?.getTime() ?? 0;
-        if (e > maxEnd) maxEnd = e;
-        (s.children ?? []).forEach(walkEnd);
-      };
-      traceSpans.forEach(walkEnd);
+    const tools = new Set<string>();
+    const walkTools = (s: TraceSpan) => {
+      if (s.type === 'tool_execution') tools.add(s.title);
+      (s.children ?? []).forEach(walkTools);
+    };
+    traceSpans.forEach(walkTools);
 
-      const tools = new Set<string>();
-      const walkTools = (s: TraceSpan) => {
-        if (s.type === 'tool_execution') tools.add(s.title);
-        (s.children ?? []).forEach(walkTools);
-      };
-      traceSpans.forEach(walkTools);
+    const traceRecord: TraceRecord = {
+      id: traceId,
+      name: `Trace ${traceId.slice(0, 8)}`,
+      spansCount: totalSpans,
+      durationMs: Math.max(0, maxEnd - firstStart),
+      agentDescription: tools.size > 0
+        ? `Tools: ${Array.from(tools).join(', ')}`
+        : 'OTel trace',
+      startTime: firstStart || undefined,
+    };
 
-      const traceRecord: TraceRecord = {
-        id: traceId,
-        name: `Trace ${traceId.slice(0, 8)}`,
-        spansCount: totalSpans,
-        durationMs: Math.max(0, maxEnd - firstStart),
-        agentDescription: tools.size > 0
-          ? `Tools: ${Array.from(tools).join(', ')}`
-          : 'OTel trace',
-        startTime: firstStart || undefined,
-      };
-
-      return { traceRecord, spans: traceSpans };
-    });
-  }, [spans]);
-
-  return (
-    <div className="agent-prism-wrapper h-full">
-      <TraceViewer data={data} />
-    </div>
-  );
+    return { traceRecord, spans: traceSpans };
+  });
 }
 
 export function OtelTraceSourceViewer({ source, semconvSpans }: OtelTraceSourceViewerProps) {
   const trace = source ? sourceToTrace(source) : null;
   const hasSpans = semconvSpans && semconvSpans.length > 0;
+
+  const prismData = useMemo(
+    () => (hasSpans ? buildPrismTraces(semconvSpans!) : []),
+    [hasSpans, semconvSpans],
+  );
 
   const headerName = source?.name ?? (hasSpans ? `Trace ${semconvSpans[0]!.trace_id}` : 'OTel trace');
   const distinctTraceCount = hasSpans
@@ -391,11 +373,9 @@ export function OtelTraceSourceViewer({ source, semconvSpans }: OtelTraceSourceV
         </div>
       </header>
 
-      {/* Trace viewer only — Priority, Grader Hints, Seed Queries are now
-          separate sidebar items under OTel Traces (no nested tabs). */}
-      <div className={hasSpans ? "flex-1 min-h-0 overflow-hidden" : "flex-1 overflow-auto p-6"}>
+      <div className={hasSpans ? 'flex-1 min-h-0 overflow-hidden' : 'flex-1 overflow-auto p-6'}>
         {hasSpans ? (
-          <AgentPrismTraceView spans={semconvSpans} />
+          <AgentPrismMomentLayout data={prismData} rawSpans={semconvSpans!} />
         ) : trace ? (
           <OtelTraceMessageTimeline trace={trace} />
         ) : (

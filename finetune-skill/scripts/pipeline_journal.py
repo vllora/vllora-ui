@@ -128,6 +128,36 @@ def log_milestone(
     except OSError:
         pass
 
+    # Also append to execution-log.md so the human-readable narrative stays in
+    # sync with pipeline-journal.json. Parity with finetune.py's _auto_journal —
+    # previously this function only wrote the JSON and the Markdown log drifted
+    # behind whenever standalone scripts (validate_dataset.py, data_quality_gate.py)
+    # called log_milestone without an accompanying `log-step` invocation.
+    log_file = project_dir / "execution-log.md"
+    status_label = "IN PROGRESS" if status == "in_progress" else status
+    step_label = step.replace("_", " ").replace("step ", "Step ").title()
+    log_entry_lines = [
+        f"\n## {step_label} — {timestamp[:19].replace('T', ' ')}",
+        f"- **Status**: {status_label}",
+        f"- **Summary**: {summary}",
+    ]
+    if observation:
+        log_entry_lines.append(f"- **Observation**: {observation}")
+    if analysis:
+        log_entry_lines.append(f"- **Analysis**: {analysis}")
+    if decision:
+        log_entry_lines.append(f"- **Decision**: {decision}")
+    if evidence:
+        log_entry_lines.append(f"- **Evidence**: {json.dumps(evidence)}")
+    if details:
+        for k, v in details.items():
+            log_entry_lines.append(f"- **{k}**: {v}")
+    try:
+        with open(log_file, "a") as f:
+            f.write("\n".join(log_entry_lines) + "\n")
+    except OSError:
+        pass
+
     print(f"  [auto-journal #{next_id}] {action} ({status}): {summary}", file=sys.stderr)
 
     # Sync to gateway if workflow_id is available (best-effort, non-blocking)

@@ -16,8 +16,7 @@ import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
 import { getStoredPlan } from "@/lib/distri-finetune-tools/steps/proposed-plan-store";
 import { computeDatasetInsights, getLeafTopicsFromHierarchy } from "@/components/datasets/record-utils";
-import { DatasetOverviewCard } from "@/components/datasets/dataset-detail-header/overview-card/DatasetOverviewCard";
-import { getJobAverageScore, getJobCompletedRows, getJobTotalRows } from "@/types/eval-job";
+import { getJobCompletedRows, getJobTotalRows } from "@/types/eval-job";
 import { emitter, setPendingHighlight } from "@/utils/eventEmitter";
 import type { ExecutionProgress } from "@/lib/distri-finetune-tools/steps/execute-plan";
 import type { Dataset } from "@/types/dataset-types";
@@ -35,16 +34,18 @@ import {
   navigateToEvalJob,
   navigateToFinetuneJob,
 } from "./utils";
-import { EvalHealthCard } from "./EvalHealthCard";
-import { FinetuneStatusCard } from "./FinetuneStatusCard";
 import { ActivityTimeline } from "./ActivityTimeline";
+import { PipelineStrip } from "./PipelineStrip";
+import { HealthRow } from "./HealthRow";
+import { HierarchyInspector } from "./HierarchyInspector";
+import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 
 export function DatasetOverviewPanel({
   readme,
   readmeUpdatedAt,
   onExport,
   workflowId,
-  onOverviewClick,
+  onOverviewClick: _onOverviewClick,
 }: DatasetOverviewPanelProps) {
   // Dataset data for stats cards
   const { sortedRecords, dataset } = DatasetDetailConsumer();
@@ -235,45 +236,64 @@ export function DatasetOverviewPanel({
     [stepEntries, evalEntries, finetuneEntries]
   );
 
-  // Eval health card data
-  const completedJobsWithScore = useMemo(
-    () => dryRunJobs.filter((j) => j.status === "completed" && getJobAverageScore(j) != null),
-    [dryRunJobs]
-  );
-  const evalCurrentScore = completedJobsWithScore[0]
-    ? getJobAverageScore(completedJobsWithScore[0])
-    : undefined;
-  const evalPrevScore = completedJobsWithScore[1]
-    ? getJobAverageScore(completedJobsWithScore[1])
-    : undefined;
-  const criteriaCount = proposedPlan?.grader_config?.criteria?.length;
+  // Knowledge sources for the pipeline strip — already loaded by KnowledgeSourcesContext
+  const { sources: knowledgeSources, count: sourcesCount, totalParts } = KnowledgeSourcesConsumer();
+  const sourcesAggregate = sourcesCount || (dataset?.knowledgeSourceCount ?? 0);
+  const partsAggregate = totalParts || knowledgeSources.reduce((sum, s) => sum + s.parts.length, 0);
+  const trainingActive = filteredJobs.some(j => ['pending', 'queued', 'running'].includes(j.status));
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* 4-col stat grid: overview card spans 2, eval + finetune take 1 each */}
-      <div className="grid grid-cols-4 gap-3 px-4 py-3 shrink-0 border-b border-border">
-        <div className="col-span-2 h-full">
-          <DatasetOverviewCard
-            total={insights.totalRecords}
-            original={insights.originalRecords}
-            generated={insights.generatedRecords}
-            topicDistribution={insights.topicDistribution}
-            uncategorizedCount={insights.uncategorizedCount}
-            balanceRating={dataset?.coverageStats?.balanceRating}
-            balanceScore={dataset?.coverageStats?.balanceScore}
-            leafTopicCount={leafTopicCount}
-            onClick={onOverviewClick}
-            compact
+      <PipelineStrip
+        workflowId={workflowId}
+        sourcesCount={sourcesAggregate}
+        partsCount={partsAggregate}
+        topicsCount={leafTopicCount || (dataset?.topicCount ?? 0)}
+        recordsCount={dataset?.recordsCount ?? insights.totalRecords}
+        trainingCount={filteredJobs.length}
+        docsCount={knowledgeSources.filter((s) => s.traceBundleId == null).length}
+        servicesCount={knowledgeSources.filter((s) => s.traceBundleId != null).length}
+        topicsWithPartsPercent={topicsWithPartsPercent(dataset?.topicHierarchy?.hierarchy)}
+        reviewCount={insights.totalRecords - insights.generatedRecords}
+        qualityPercent={
+          dataset?.evalStats?.statistics.mean != null
+            ? dataset.evalStats.statistics.mean * 100
+            : undefined
+        }
+        trainingActive={trainingActive}
+        trainingStatus={latestJob?.status}
+        trainingModel={latestJob?.fine_tuned_model ?? latestJob?.base_model}
+        onSwitchTab={(tab) => emitter.emit("vllora_switch_tab", { workflowId, tab })}
+      />
+
+      {/* Quality hero + ministat sidecars */}
+      <HealthRow
+        evalJobs={dryRunJobs}
+        evalStats={dataset?.evalStats}
+        topicHierarchy={dataset?.topicHierarchy?.hierarchy}
+        totalRecords={insights.totalRecords}
+        onOpenEvalDetails={() => emitter.emit("vllora_switch_tab", { workflowId, tab: "evaluator" })}
+      />
+
+      {/* Topic hierarchy + click-to-inspect panel */}
+      {dataset?.topicHierarchy?.hierarchy && dataset.topicHierarchy.hierarchy.length > 0 && (
+        <div className="px-4 pb-3">
+          <HierarchyInspector
+            hierarchy={dataset.topicHierarchy.hierarchy}
+            records={sortedRecords}
+            sources={knowledgeSources}
+            onOpenTopic={(topic) => {
+              setPendingHighlight(topic);
+              emitter.emit("vllora_switch_tab", { workflowId, tab: "records" });
+            }}
+            onOpenRecord={(recordId) => {
+              setPendingHighlight(recordId);
+              emitter.emit("vllora_switch_tab", { workflowId, tab: "records" });
+              setTimeout(() => emitter.emit("vllora_highlight_record", { recordId }), 150);
+            }}
           />
         </div>
-        <EvalHealthCard
-          currentScore={evalCurrentScore}
-          prevScore={evalPrevScore}
-          criteriaCount={criteriaCount}
-          onClick={() => emitter.emit("vllora_switch_tab", { workflowId, tab: "evaluator" })}
-        />
-        <FinetuneStatusCard latestJob={latestJob} />
-      </div>
+      )}
 
       {/* Dual pane */}
       <div className="flex-1 flex overflow-hidden">
@@ -343,4 +363,23 @@ export function DatasetOverviewPanel({
       </div>
     </div>
   );
+}
+
+/** % of leaf topics that have at least one linked knowledge-source part. */
+function topicsWithPartsPercent(
+  hierarchy: readonly import("@/types/dataset-types").TopicHierarchyNode[] | undefined,
+): number | undefined {
+  if (!hierarchy || hierarchy.length === 0) return undefined;
+  let total = 0;
+  let covered = 0;
+  const walk = (n: import("@/types/dataset-types").TopicHierarchyNode) => {
+    const isLeaf = !n.children || n.children.length === 0;
+    if (isLeaf) {
+      total += 1;
+      if ((n.sourceChunkRefs?.length ?? 0) > 0) covered += 1;
+    }
+    for (const child of n.children ?? []) walk(child);
+  };
+  hierarchy.forEach(walk);
+  return total === 0 ? 0 : (covered / total) * 100;
 }
