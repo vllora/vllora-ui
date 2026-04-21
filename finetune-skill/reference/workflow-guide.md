@@ -168,6 +168,22 @@ Categorize all uncategorized records before running coverage analysis — uncate
 
 ## Step 4: Generate Training Data — In Depth
 
+### Backend Selection
+
+Step 4 now has three backends that all consume the same project artifacts and all emit the same final `training.jsonl` contract:
+
+| Backend | Trigger | What it does |
+|--------|---------|--------------|
+| `native` | default | `generate_records.py` builds records directly from `topics.json` + `relations.json` + `knowledge/` |
+| `distilabel` | `generation_backend: "distilabel"` | Runs Instruction Backtranslation over existing chunks, then DEITA-inspired scoring/selection; for tool-calling, augments canonical traces with APIGen only |
+| `nemo` | `generation_backend: "nemo"` or legacy `use_nemo: true` | Runs the NeMo Data Designer workflow and converts the results back to `training.jsonl` |
+
+Resolution order:
+
+1. `generation_backend`
+2. legacy `use_nemo`
+3. fallback to `native`
+
 ### The Generation Loop
 
 Training data is **prompts only** — the model generates its own responses during training and the grader scores them. For each leaf topic:
@@ -201,6 +217,40 @@ By default, `generate_records.py` gathers source material from pre-computed `rel
 - `--enrich-sources` — Recommended for all runs. Enriches per-record `source_parts` with question-specific matches. Independent of `--use-rag`, only requires `--workflow-id`
 
 **Embedding readiness**: Parts need embeddings before search works. The gateway's background job processes parts in batches of 32 every 30 seconds. After uploading knowledge, wait ~30s then verify: `finetune.py search-knowledge --workflow-id WF --phrase "test query"`
+
+### Distilabel Text Backend
+
+The distilabel text path still starts from the existing artifact contract:
+
+- `topics.json`
+- `relations.json`
+- `knowledge/*/knowledge_parts.json`
+- `knowledge/all-parts-index.json`
+- optional `trace-analysis/priority.json`
+- optional `trace-analysis/prompts.json`
+
+Flow:
+
+1. Build grounded source snippets per leaf topic from existing relations
+2. Generate candidate prompts with Instruction Backtranslation
+3. Write candidates to `finetune-project/distilabel/text-candidates.jsonl`
+4. Score and filter those candidates with `apply_deita_selection.py`
+5. Write the selected rows to `training.jsonl`
+
+In combined mode, `priority.json` upweights high-failure topics within a capped `3:1` ratio and `prompts.json.seed_queries` contributes real-user seed prompts.
+
+### Distilabel Tool-Calling Augmentation
+
+When `tool-schemas.json` exists and the backend resolves to `distilabel`, the canonical dataset remains `trace-analysis/decision-points.jsonl`.
+
+APIGen is used only to augment that base dataset:
+
+1. Load canonical decision points unchanged
+2. Detect underrepresented leaf tool topics
+3. Generate APIGen candidates using existing decision-point examples
+4. Run semantic checking always
+5. Run execution checking only if `distilabel.apigen_tool_module` is configured
+6. Merge new rows into `training.jsonl` without rewriting canonical trace rows
 
 ### Scenario Variation Techniques
 

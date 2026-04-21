@@ -9,8 +9,9 @@ Step 1: Define Objective          (~1 min)    → workflow created, input mode d
 Step 2A: Extract Documents        (~5-15 min) → per-document knowledge parts         ↑ uploaded
 Step 2C: Analyze Traces (combined)(~30 sec)   → trace-analysis/ (4 artifacts)        ↑ uploaded
 Step 3: Build Topic Hierarchy     (~3-5 min)  → filter parts, topics, relations      ↑ uploaded
-Step 4: Generate Training Data    (~5-20 min) → training.jsonl (trace-weighted)      ↑ uploaded
-  or 4B: NeMo Data Designer      (optional)  → NeMo server + convert                ↑ uploaded
+Step 4A: Native Generation        (~5-20 min) → training.jsonl (trace-weighted)      ↑ uploaded
+  or 4B: Distilabel Backend      (optional)  → backtranslation/DEITA or APIGen      ↑ uploaded
+  or 4C: NeMo Data Designer      (optional)  → NeMo server + convert                ↑ uploaded
 Step 5: Write Grader              (~2-3 min)  → quality-checker/grader.js            ↑ uploaded
 Step 5.5: Validate + Quality Gate (~1-3 min)  → pre-eval data validation             (local)
 Step 6: Verify & Hand Off         (~30 sec)   → confirm all data in gateway DB
@@ -38,8 +39,9 @@ Step 3: Build Topic Hierarchy (enriched with trace topics in combined mode)
     ↓ [Upload: topics + relations + relevance labels]
     │
     ↓ (SEQUENTIAL — Step 5 needs sample records from Step 4)
-    Step 4: Generate Records (default — generate_records.py)
-         or Step 4B: NeMo Data Designer (optional — requires NeMo server)
+    Step 4A: Generate Records (native — generate_records.py)
+         or Step 4B: Distilabel backend (optional — skill-local)
+         or Step 4C: NeMo Data Designer (optional — requires NeMo server)
     ↓
     Step 5: Write Grader
               ↓ [GATE: dry-run hand-crafted + live (needs records uploaded)]
@@ -67,12 +69,15 @@ Step 9: Iterate (If Needed)
 Step 2: Extract → parts-index.json (relevant: null)
 Step 3a: Filter → all-parts-index.json (relevant: true/false) → uploaded to gateway
 Step 3d: Relations → only relevant:true parts linked to topics
-Step 4: generate_records.py → only relevant parts (filtered in Step 3a)
-                            → curated context from relations (Step 3d) — NOT augmented with RAG
-                            → --enrich-sources: re-queries with generated question for per-record source_parts
-                            → each record gets per-record source_parts (1-3 parts)
-                            → alternative: --rag-only mode skips relations, uses gateway search
-Step 4B: NeMo → ⚠️ rag-retrieval does NOT filter by relevance (known limitation)
+Step 4A: native generate_records.py → only relevant parts (filtered in Step 3a)
+                                    → curated context from relations (Step 3d) — NOT augmented with RAG
+                                    → --enrich-sources: re-queries with generated question for per-record source_parts
+                                    → each record gets per-record source_parts (1-3 parts)
+                                    → alternative: --rag-only mode skips relations, uses gateway search
+Step 4B: distilabel → same topic/relations/knowledge artifacts
+                    → text mode writes distilabel/text-candidates.jsonl then DEITA-selected rows
+                    → tool mode augments canonical decision-points.jsonl via APIGen only
+Step 4C: NeMo → ⚠️ rag-retrieval does NOT filter by relevance (known limitation)
                 → convert_nemo_rows.py recovers source_parts via gateway search
 ```
 
@@ -84,7 +89,37 @@ Step 4B: NeMo → ⚠️ rag-retrieval does NOT filter by relevance (known limit
 
 **Steps 1-6** prepare the dataset (including the data quality gate at Step 5.5b). **Steps 7-9** evaluate and train the model. All steps run by default — do NOT stop at Step 6. If the user only asks for data preparation, you may stop at Step 6, but by default run the full pipeline including evaluation and training.
 
-### NeMo Data Designer Flow (Step 4B — Optional)
+### Distilabel Flow (Step 4B — Optional)
+
+When `generation_backend` resolves to `distilabel`:
+
+```
+topics.json + relations.json + knowledge/*
+         ↓
+run_distilabel_text_backend.py
+         ↓
+distilabel/text-candidates.jsonl
+         ↓
+apply_deita_selection.py
+         ↓
+distilabel/text-selected.jsonl + text-selection-report.json
+         ↓
+training.jsonl
+```
+
+Tool-calling mode swaps the middle of the flow:
+
+```
+decision-points.jsonl + tool-schemas.json
+         ↓
+run_distilabel_apigen_backend.py
+         ↓
+distilabel/apigen-selected.jsonl + apigen-merge-report.json
+         ↓
+training.jsonl
+```
+
+### NeMo Data Designer Flow (Step 4C — Optional)
 
 When NeMo server is running at `localhost:8000`:
 
@@ -200,8 +235,11 @@ Other helper scripts:
 | `camelot_extract_tables.py` | 2d | **Table fallback** — re-extracts tables using Camelot stream mode when Docling produces garbled tables (inconsistent columns, mixed content). Multi-page stitching. Run when `validate_extraction.py` warns about table quality. |
 | `consolidate_parts.py` | 2c | Merges adjacent text parts, drops short fragments, fixes Unicode, validates quality |
 | `validate_extraction.py` | 2e | Cross-document extraction quality gate (parts/page, title diversity, avg length). Also detects page break artifacts in pipe tables (non-table lines + repeated headers) — FAIL for large tables with artifacts. |
-| `generate_records.py` | 4 | Default: generates records per leaf topic via LLM (calls `chat_completion.py`). Supports `--ground-truth-format` for structured-output tasks (forces scenario-based prompts). `--append` auto-skips existing topics. NeMo Data Designer is an optional alternative — see Step 4B |
-| `convert_nemo_rows.py` | 4B | Converts NeMo DataDesigner output rows to `training.jsonl`; filters by judge scores; writes `nemo-metadata.jsonl` sidecar |
+| `generate_records.py` | 4A | Default: generates records per leaf topic via LLM (calls `chat_completion.py`). Supports `--ground-truth-format` for structured-output tasks (forces scenario-based prompts). `--append` auto-skips existing topics. Distilabel and NeMo are optional Step 4 alternatives. |
+| `run_distilabel_text_backend.py` | 4B | Distilabel text backend — consumes existing topics/relations/knowledge artifacts, generates Instruction Backtranslation candidates, and writes `distilabel/text-candidates.jsonl` |
+| `apply_deita_selection.py` | 4B | Distilabel selector — scores candidates, filters near-duplicates, and writes `distilabel/text-selected.jsonl` + `text-selection-report.json` |
+| `run_distilabel_apigen_backend.py` | 4B | Distilabel tool-calling augmenter — preserves canonical decision-point rows and appends APIGen augmentations only for underrepresented tool topics |
+| `convert_nemo_rows.py` | 4C | Converts NeMo DataDesigner output rows to `training.jsonl`; filters by judge scores; writes `nemo-metadata.jsonl` sidecar |
 | `chat_completion.py` | 4 | Calls LLM API — validates JSON when `response_format` is `json_object` |
 | `validate_dataset.py` | 5.5 | Validates JSONL format, fields, RFT compliance, cross-refs topics/parts |
 | `deduplicate_records.py` | 4 | Removes near-duplicate prompts across overlapping topics (threshold-based) |
@@ -225,7 +263,8 @@ The skill uses 4 subagents (in `agents/`) to handle context-heavy, long-running,
 |----------|-----------|-------------|-------|--------|
 | `knowledge-extractor` | Step 2b (parallel, 1 per PDF) | Extracts knowledge from ONE document: reads `extraction-result.json` (ODL or Docling), runs `build_knowledge_parts.py`, post-processes, uploads | SKILL_DIR, WORKFLOW_ID, DOC_PATH, DOC_SLUG, DOC_DIR | `knowledge_parts.json`, `parts-index.json`, gateway upload |
 | `relation-builder` | Step 3b | Matches knowledge parts to leaf topics (max 15 per topic) | `all-parts-index.json` + `topics.json` via PROJECT_DIR | `relations.json` |
-| `nemo-data-generator` | Step 4B (when `use_nemo=true`) | Generates training records via NeMo Data Designer server. Takes topics + system prompt, produces `training.jsonl` | topics, system prompt, workflow ID | `training.jsonl`, `nemo-metadata.jsonl` |
+| `distilabel-data-generator` | Step 4B (when `generation_backend=distilabel`) | Runs distilabel Step 4. Text mode executes Instruction Backtranslation → DEITA. Tool mode augments canonical decision-point traces with APIGen. | project dir, config, system prompt, trace artifacts | `training.jsonl`, `distilabel/*` |
+| `nemo-data-generator` | Step 4C (when backend resolves to `nemo`) | Generates training records via NeMo Data Designer server. Takes topics + system prompt, produces `training.jsonl` | topics, system prompt, workflow ID | `training.jsonl`, `nemo-metadata.jsonl` |
 | `training-monitor` | Step 7e (background) | Polls training metrics every 30s, detects anomalies (NaN loss, KL divergence, overfitting), saves metrics data for post-training analysis | Gateway URL, WORKFLOW_ID, JOB_ID, OUTPUT_DIR | `{JOB_ID}-metrics.json`, `{JOB_ID}-monitor-report.json` |
 
 The main agent delegates to subagents explicitly. Each subagent starts with a fresh context, reads only the files it needs, and returns a structured summary. The `knowledge-extractor` runs in parallel (1 per document) during Step 2. The `training-monitor` runs in the background during Step 7e — it writes a Python script, launches it via `nohup`, and returns immediately.
@@ -657,7 +696,7 @@ print(f'Total: {sum(topics.values())}')
 " 2>/dev/null
 ```
 
-## Step 4B: Generate Training Data via NeMo Data Designer (Optional Path)
+## Step 4C: Generate Training Data via NeMo Data Designer (Optional Path)
 
 **What happens**: NeMo Data Designer (repo: https://github.com/vllora/nemo) is an **optional** alternative when the server is running at `localhost:8000`. Instead of `generate_records.py`, you submit a recipe to the NeMo server. The `rag-retrieval` column plugin calls the gateway knowledge search per row at generation time — no need to pre-link relations. Main advantages over Step 4: judge columns for quality filtering and `reference_answer` generation.
 

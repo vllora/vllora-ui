@@ -3,7 +3,18 @@
 > **Purpose**: Fix the fundamental gap where training records lack tool-calling format, making the model unable to learn when/how to invoke tools.
 > **Problem**: Current `training.jsonl` has `{system, user, ground_truth_text}` but the retail agent must CALL TOOLS. Without tool schemas and `tool_calls` in records, the model generates text instead of tool invocations.
 > **Date**: 2026-04-15
-> **Status**: Design → Implementation
+> **Status**: Implemented for canonical trace decision points, with distilabel APIGen augmentation added as an optional Step 4 backend
+
+## Current Implementation Boundary
+
+The current skill does **not** generate a new canonical tool-calling dataset from scratch.
+
+Instead:
+
+- canonical tool-calling records come from `trace-analysis/decision-points.jsonl`
+- the final exported tool-calling `ground_truth` shape is `{name, arguments}`
+- when `generation_backend: "distilabel"`, APIGen is used only to add augmentation rows around underrepresented tool topics
+- canonical trace rows remain byte-for-byte unchanged in the merged `training.jsonl`
 
 ## The Gap
 
@@ -55,8 +66,8 @@
 
 | Source | What it produces | When to use |
 |--------|-----------------|-------------|
-| **OTel traces** (real) | Exact tool call sequences from production | When traces are available (combined mode) |
-| **Synthetic** (LLM-generated) | Generated tool call scenarios from PDF knowledge | When no traces, or to augment trace data |
+| **OTel traces** (real) | Exact tool call sequences from production | Canonical source whenever traces are available |
+| **APIGen augmentation** | Additional rare-topic and edge-case tool call scenarios | Optional distilabel augmentation around the canonical trace dataset |
 
 ### Tool routing: when to call vs when to respond with text
 
@@ -210,6 +221,27 @@ When `--tools-file` is provided:
 | `data_quality_gate.py` | New check: "records have tools when use case is tool-calling" |
 | `SKILL.md` | Auto-detect tool-calling use case, use tool-calling record format |
 | `grader_from_traces.py` | Generate Jaccard-based tool-call grader (not text-match grader) |
+
+## Distilabel APIGen Augmentation
+
+APIGen sits on top of the canonical trace export, not instead of it.
+
+Flow:
+
+1. read `trace-analysis/decision-points.jsonl`
+2. read `trace-analysis/tool-schemas.json`
+3. group canonical rows by existing leaf topic slug
+4. detect underrepresented topics below the minimum count
+5. generate APIGen candidates from existing examples
+6. run semantic checking always
+7. run execution checking only if the user provides `distilabel.apigen_tool_module`
+8. append selected rows after the raw canonical lines when writing `training.jsonl`
+
+Why this matters:
+
+- the strongest supervision signal already exists in the trace-derived rows
+- augmentation helps coverage without introducing unnecessary distribution shift
+- downstream validators and upload tooling continue to work because the merged dataset preserves the established record contract
 
 ### Grader for tool-calling GRPO
 

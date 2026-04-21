@@ -17,7 +17,9 @@ Training data uses JSONL format — one JSON object per line. Each line is a **p
 | `id` | Yes | Unique identifier for tracking in evaluation results |
 | `topic` | No | Leaf topic ID this record belongs to (e.g., `"billing/refunds"`) |
 | `source_parts` | No | Array of knowledge part IDs used as grounding material for this record. Enables traceability from record → source document sections. Part IDs reference entries in `knowledge/{doc-slug}/knowledge_parts.json` (per-document subdirectories, named by slugified filename). |
-| `ground_truth` | No | Optional evaluator-side reference string exposed as `input.ground_truth`. Often this is a concise source excerpt, but it can be any text you intentionally want the grader to use during evaluation. |
+| `ground_truth` | No | Optional evaluator-side reference. For text-only records this is usually a concise string or source excerpt. For tool-calling records it is a structured `{name, arguments}` object describing the expected call. |
+| `prompt_type` | No | Optional generation method label. Existing values still work; distilabel adds `backtranslation` and `apigen`. |
+| `metadata.distilabel` | No | Optional backend metadata. Safe-to-ignore fields: `method`, `candidate_score`, `selection_reason`, `source_record_id`. Downstream tools must not depend on them. |
 
 ### Message Roles
 
@@ -84,6 +86,29 @@ Use the full OpenAI structural format: `assistant.tool_calls` + `tool` role mess
 ```
 
 Every `tool_call.id` on an assistant message MUST be matched by a `tool_call_id` on the following `role: tool` message. `extract_decision_points` enforces this — records with orphan or duplicate ids are dropped (see `trace_analyze.py:412-446`).
+
+### Distilabel metadata example
+
+```json
+{
+  "messages": [
+    {"role": "system", "content": "You are a customer support agent."},
+    {"role": "user", "content": "How do I request a refund for a damaged package?"}
+  ],
+  "id": "refunds-bt-001",
+  "topic": "billing/refunds",
+  "source_parts": ["policy-012"],
+  "ground_truth": "Damaged-package refunds require evidence and confirmation of the order state.",
+  "prompt_type": "backtranslation",
+  "metadata": {
+    "distilabel": {
+      "method": "instruction_backtranslation",
+      "candidate_score": 0.84,
+      "selection_reason": "deita_selected"
+    }
+  }
+}
+```
 
 ---
 

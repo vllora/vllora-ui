@@ -1,21 +1,40 @@
 # How Record Generation Works — Deep Dive
 
-> **Note:** This document covers the default generation path via `generate_records.py`. NeMo Data Designer is an optional alternative — see SKILL.md Step 4B.
+> **Note:** This document primarily covers the native generation path via `generate_records.py`. Distilabel and NeMo are optional Step 4 alternatives that still reuse the same upstream artifacts and emit the same final `training.jsonl`.
 
 The data generation step (Step 4) produces the actual training records — the prompts the model will practice on during fine-tuning. This document explains the generation strategy, how records are grounded in source material, the LLM calls involved, and the validation process.
 
-## Two-Path Architecture
+## Three-Backend Architecture
 
-Step 4 has two paths:
+Step 4 has three backends:
 
-| Path | When to use | Script |
+| Backend | When to use | Script |
 |------|-------------|--------|
-| **`generate_records.py` (default, this doc)** | Default path — no additional infrastructure needed | `scripts/generate_records.py` |
-| **NeMo Data Designer (optional)** | When NeMo server is running and you need judge columns + reference answers | repo: https://github.com/vllora/nemo — see SKILL.md Step 4B |
+| **Native (default, this doc)** | Default path — no additional infrastructure needed | `scripts/generate_records.py` |
+| **Distilabel (optional)** | When you want Instruction Backtranslation + DEITA for text-only data or APIGen augmentation around canonical tool traces | `scripts/run_distilabel_text_backend.py`, `scripts/apply_deita_selection.py`, `scripts/run_distilabel_apigen_backend.py` |
+| **NeMo Data Designer (optional)** | When NeMo server is running and you need judge columns + reference answers | repo: https://github.com/vllora/nemo — see SKILL.md Step 4C |
 
 **NeMo's two-stage template** generates a `raw_question` without seeing retrieved text first (for diversity), then retrieves question-specific chunks, then refines into the final `user_message`. This is inspired by multi-stage retrieval pipelines (arXiv:2509.25736 describes a similar retrieve-generate-refine approach for telecom), but note the paper actually retrieves first — the "blind question first" design is a recipe choice, not a direct replication.
 
 **`generate_records.py` with `--enrich-sources`** provides a lighter version of the same idea: generates questions grounded in linked parts, then enriches `source_parts` metadata with question-specific retrieval. Unlike `--use-rag`, `--enrich-sources` is independent and only requires `--workflow-id`. It does not refine the question text itself — it only supplements traceability after generation.
+
+## Distilabel in Step 4
+
+Distilabel intentionally fits around the same artifact contract instead of replacing it.
+
+Text-only mode:
+
+- candidate generation uses existing topic-to-part relations
+- Instruction Backtranslation creates candidate prompts from grounded source chunks
+- DEITA-inspired scoring and diversity filtering select the final rows
+
+Tool-calling mode:
+
+- `trace-analysis/decision-points.jsonl` stays canonical
+- APIGen only adds new rows for underrepresented tool topics
+- canonical rows are copied through unchanged
+
+This keeps Steps 5-8 backend-agnostic: all they see is `training.jsonl`.
 
 ---
 

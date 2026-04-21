@@ -68,7 +68,8 @@ your-project/
     ├── agents/                        # Companion agents (4 files)
     │   ├── knowledge-extractor.md     # Document extraction (Step 2)
     │   ├── relation-builder.md        # Topic-part matching (Step 3)
-    │   ├── nemo-data-generator.md     # NeMo Data Designer generation (Step 4B, optional)
+    │   ├── distilabel-data-generator.md # Distilabel Step 4 execution (optional)
+    │   ├── nemo-data-generator.md     # NeMo Data Designer generation (Step 4C, optional)
     │   └── training-monitor.md        # Training anomaly detection (Step 7)
     └── skills/
         └── finetune-skill/            # The skill itself
@@ -101,7 +102,8 @@ cp agents/*.md "$DEST/.claude/agents/"
 - **uv** for running Python scripts (`curl -LsSf https://astral.sh/uv/install.sh | sh`) — all scripts use PEP 723 inline deps, no manual `pip install` needed
 - **Claude Code** with Bash permissions — the skill and agents run shell commands extensively
 - **`opendataloader-pdf[hybrid]`** — handles both digital and scanned PDFs. No Docker required; hybrid mode uses the local `opendataloader-pdf-hybrid` server. (`pip install -U "opendataloader-pdf[hybrid]"`)
-- **NeMo Data Designer** (optional — only if `use_nemo: true`, see Configuration below)
+- **distilabel** (optional — only if `generation_backend: "distilabel"`, see Configuration below)
+- **NeMo Data Designer** (optional — only if `generation_backend: "nemo"` or legacy `use_nemo: true`, see Configuration below)
 
 ### Verify installation
 
@@ -120,19 +122,65 @@ The skill reads project-level configuration from `finetune-project/config.json` 
 ```json
 // finetune-defaults.json (optional — place in project root)
 {
-  "use_nemo": true
+  "generation_backend": "distilabel",
+  "distilabel": {
+    "model": "gpt-4o-mini",
+    "base_url": "http://localhost:9090/v1",
+    "keep_intermediate": true,
+    "text_recipe": "instruction_backtranslation_deita",
+    "tool_recipe": "apigen",
+    "apigen_tool_module": null,
+    "min_records_per_topic": 25,
+    "target_records_per_topic": 30
+  }
 }
 ```
 
 The agent merges this into `config.json` when creating a new workflow. No skill modification needed.
 
-#### Available flags
+#### Backend selection
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `use_nemo` | `false` | `false` → Step 4A: generate records via `generate_records.py` (default, no extra infrastructure). `true` → Step 4B: retrieval-backed generation via NeMo Data Designer (requires NeMo server at `localhost:8000` + OpenAI API key). |
+| `generation_backend` | `"native"` | Explicit Step 4 backend. `"native"` → `generate_records.py`. `"distilabel"` → Instruction Backtranslation + DEITA for text, APIGen augmentation for tool-calling. `"nemo"` → NeMo Data Designer. |
+| `use_nemo` | `false` | Legacy compatibility only. If `generation_backend` is absent and `use_nemo: true`, the backend resolves to `"nemo"`. |
 
-#### NeMo Data Designer setup (when `use_nemo: true`)
+#### Distilabel backend settings
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `distilabel.model` | `"gpt-4o-mini"` | Model sent through the vLLora OpenAI-compatible gateway |
+| `distilabel.base_url` | `"http://localhost:9090/v1"` | Gateway base URL for chat completions |
+| `distilabel.keep_intermediate` | `true` | Keep `finetune-project/distilabel/*` intermediate artifacts |
+| `distilabel.text_recipe` | `"instruction_backtranslation_deita"` | Supported v1 text recipe |
+| `distilabel.tool_recipe` | `"apigen"` | Supported v1 tool-calling augmentation recipe |
+| `distilabel.apigen_tool_module` | `null` | Optional local Python module for APIGen execution checking |
+| `distilabel.min_records_per_topic` | `25` | Minimum acceptable per-topic count after selection/dedupe |
+| `distilabel.target_records_per_topic` | `30` | Default target per leaf topic before downstream validation |
+
+#### Distilabel setup (when `generation_backend: "distilabel"`)
+
+```bash
+# 1. Install distilabel locally
+pip install "distilabel>=1.5"
+
+# 2. Point the project at the distilabel backend
+cd /path/to/your-project
+cat > finetune-defaults.json <<'JSON'
+{
+  "generation_backend": "distilabel",
+  "distilabel": {
+    "model": "gpt-4o-mini",
+    "base_url": "http://localhost:9090/v1",
+    "keep_intermediate": true
+  }
+}
+JSON
+```
+
+Distilabel stays skill-local: it consumes the same `topics.json`, `relations.json`, `knowledge/*/knowledge_parts.json`, `knowledge/all-parts-index.json`, and optional trace-analysis artifacts the native path already uses. Text mode writes `finetune-project/distilabel/text-*.jsonl` intermediates, and tool-calling mode writes `apigen-*.jsonl` merge artifacts before emitting the final `training.jsonl`. See `reference/distilabel-guide.md` for the exact artifact contract.
+
+#### NeMo Data Designer setup (when `generation_backend: "nemo"`)
 
 ```bash
 # 1. Clone and set up NeMo
@@ -147,12 +195,12 @@ uv run uvicorn server:app --host 0.0.0.0 --port 8000
 
 # 4. Enable in your project
 cd /path/to/your-project
-echo '{"use_nemo": true}' > finetune-defaults.json
+echo '{"generation_backend": "nemo"}' > finetune-defaults.json
 ```
 
 NeMo adds judge columns (quality filtering at generation time) and `reference_answer` generation but requires additional infrastructure. See `reference/nemo-guide.md` for full details.
 
-**Switching between modes:** Change the flag and delete the `generate-data` checkpoint to re-run Step 4 with the other path. Steps 1-3 and 5+ are identical regardless of the flag.
+**Switching between modes:** Change `generation_backend` and delete the `generate-data` checkpoint to re-run Step 4 with the other path. Steps 1-3 and 5+ are identical regardless of the backend.
 
 ---
 
@@ -182,6 +230,7 @@ finetune-skill/
 │   ├── grader-writing.md       # ~620 lines — grader patterns + anti-patterns
 │   ├── topic-hierarchy.md      # ~290 lines — topic design + coverage analysis
 │   ├── workflow-guide.md       # ~470 lines — per-step deep dive
+│   ├── distilabel-guide.md     # ~new — distilabel backend contracts, recipes, failure modes
 │   ├── nemo-guide.md           # ~340 lines — NeMo Data Designer integration (curated seed, rag-retrieval, RAGAS scoring)
 │   ├── pipeline-journal-schema.md # Structured JSON schema for pipeline journal entries
 │   └── nemo-columns-reference.md  # All 11 built-in column types + 2 custom plugins, with full field schemas
@@ -189,6 +238,10 @@ finetune-skill/
 ├── scripts/                    # Helper scripts (run with `uv run`, PEP 723 inline deps)
 │   ├── finetune.py             # Gateway API wrapper (create workflow, upload, verify)
 │   ├── generate_records.py     # LLM-based training record generation (--parallel, --weight-by-trace-priority, few-shot seed examples)
+│   ├── distilabel_shared.py    # Shared Step 4 helpers: backend resolution, artifact loading, gateway LLM helpers
+│   ├── run_distilabel_text_backend.py # Instruction Backtranslation candidate generation from existing knowledge artifacts
+│   ├── apply_deita_selection.py # DEITA-inspired scoring, diversity filtering, and per-topic selection
+│   ├── run_distilabel_apigen_backend.py # APIGen augmentation around canonical decision-points.jsonl
 │   ├── convert_pdf_to_markdown.py  # PDF → Markdown via pymupdf4llm (utility, not primary extraction)
 │   ├── convert_nemo_rows.py    # Convert NeMo DataDesigner output to training.jsonl + metadata sidecar
 │   ├── chat_completion.py      # LLM chat completions (validates JSON output)
@@ -244,7 +297,7 @@ finetune-project/               # Agent creates this working directory
 ├── grader.js                   # Hybrid grader (programmatic + LLM-as-judge)
 ├── topics.json                 # 2-level hierarchy (Domain → Skill, expected_difficulty metadata)
 ├── relations.json              # Curated topic → part mappings for data generation
-├── config.json                 # Workflow config (workflow_id, gateway_url, use_nemo)
+├── config.json                 # Workflow config (workflow_id, gateway_url, generation_backend, legacy use_nemo)
 ├── knowledge/                  # Extracted domain knowledge
 │   ├── chess-tactics/           # Per-document subdirectory (slugified filename)
 │   │   ├── extraction-result.json # Raw ODL/ODL Hybrid response (reused with --skip-existing)
@@ -330,10 +383,23 @@ User: "finetune my tax deduction PDF"
 │           │                                             │
 │           ▼                                             │
 │  Step 4: Generate training data                         │
-│    Check config.json use_nemo flag:                     │
-│    ├─ false (default) → generate_records.py             │
+│    Resolve backend from config.json:                    │
+│    Resolve Step 4 backend:                              │
+│    ├─ native (default) → generate_records.py            │
 │    │   (--enrich-sources for per-record traceability)   │
-│    └─ true → spawn nemo-data-generator subagent:        │
+│    ├─ distilabel → spawn distilabel-data-generator      │
+│    │   (Instruction Backtranslation + DEITA or APIGen)  │
+│    └─ nemo → spawn nemo-data-generator subagent:        │
+│           │                                             │
+│    ┌──────────────────────────────────────┐             │
+│    │  SUBAGENT: distilabel-data-generator │             │
+│    │  Model: Sonnet | maxTurns: 40        │             │
+│    │                                      │             │
+│    │  Text: backtranslation → DEITA       │             │
+│    │  Tools: APIGen augmentation only     │             │
+│    │  Writes: training.jsonl +            │             │
+│    │          finetune-project/distilabel │             │
+│    └──────────────────────────────────────┘             │
 │           │                                             │
 │    ┌──────────────────────────────────────┐             │
 │    │  SUBAGENT: nemo-data-generator       │             │
@@ -424,7 +490,8 @@ User: "finetune my tax deduction PDF"
 |----------|------|-------|-----------|--------------|---------|
 | `knowledge-extractor` | 2 | Sonnet | 1 per PDF | Each PDF needs routing, ODL/ODL Hybrid extraction, `build_knowledge_parts.py`, and `consolidate_parts.py`. Supports `--skip-existing` to reuse prior extractions | N agents process N PDFs in parallel. Total time = slowest PDF, not sum of all |
 | `relation-builder` | 3d | Sonnet | 1 | Cross-document matching of relevant parts (from Step 3a) to skill-based topics. Requires OBJECTIVE context. Max 15 relations per leaf topic | Fresh context for index matching, main stays clean |
-| `nemo-data-generator` | 4B | Sonnet | 1 | NeMo recipe design + API orchestration (seed upload, preview, full job, convert). Only spawned when `use_nemo: true` in config | NeMo context (600+ lines of reference docs) stays out of main agent. Falls back to Step 4A if NeMo is down |
+| `distilabel-data-generator` | 4B | Sonnet | 1 | Distilabel Step 4 execution. Text mode runs Instruction Backtranslation → DEITA using the existing project artifacts. Tool-calling mode keeps canonical decision points untouched and adds APIGen augmentations only where topics are underrepresented. | Distilabel-specific context, artifacts, and failure handling stay out of the main orchestrator; downstream Steps 5-8 remain unchanged |
+| `nemo-data-generator` | 4C | Sonnet | 1 | NeMo recipe design + API orchestration (seed upload, preview, full job, convert). Only spawned when `generation_backend` resolves to `nemo` | NeMo context (600+ lines of reference docs) stays out of main agent. Falls back to Step 4A if NeMo is down |
 | `training-monitor` | 7e | Sonnet | 1 | Training runs 30-120 min — writes monitoring script with paper-backed thresholds from training-metrics-guide.md | Writes script, launches `nohup`, returns instantly. Distinguishes "no data yet" from actual NaN anomalies |
 
 **User review checkpoints (🗣️):**
@@ -539,6 +606,7 @@ The `reference/api-reference.md` documents all gateway endpoints. Each step uplo
 | `grader-writing.md` | ~620 | 3 grader patterns, smooth scoring, reward hacking prevention, LLM-as-judge API |
 | `topic-hierarchy.md` | ~290 | Topic structure, source tracing, coverage analysis, per-topic scores |
 | `workflow-guide.md` | ~470 | Deep dive on each pipeline step (including categorization, variants, grader testing, evaluator versioning, training metrics, continuation runs, eval-job tracking) |
+| `distilabel-guide.md` | new | Distilabel backend overview: artifact reuse, config, recipes, paper mapping, and troubleshooting |
 | `nemo-guide.md` | ~340 | NeMo Data Designer integration: curated seed (materialize_seed.py), rag-retrieval + rag-relevancy plugins, RAGAS-aligned scoring columns, preview/full job workflow, convert_nemo_rows.py usage. Repo: https://github.com/vllora/nemo |
 | `data-quality-gate.md` | ~190 | Pre-eval data quality gate: 4 structural/diversity/GT/alignment checks, thresholds, research citations |
 | `readiness-gate.md` | ~100 | Post-eval readiness gate: hard checks (sample count, score std, avg score), soft checks, difficulty probe |
@@ -552,6 +620,10 @@ All scripts use inline dependency declarations — run with `uv run script.py` (
 |--------|---------|
 | `scripts/finetune.py` | Gateway API wrapper — 35+ subcommands including create-workflow, upload-knowledge/topics/relations/records/grader, verify, status, readiness-check, diagnose-grader, create-eval, poll-eval, **estimate-training**, create-training, poll-training, cancel-eval, cancel-training, search-knowledge, delete-knowledge, sync-jobs, update-part-relevance, difficulty-probe, data-quality-gate, print-row-outputs, **log-step** (writes execution-log.md + pipeline-journal.json with decision card fields: `--observation`, `--analysis`, `--decision`, `--evidence`), **log-iteration**, **filter-records**, **update-analysis** (writes per-section shared analysis to `analysis.json` — used by both agent and UI), **auto-journal**. `upload-topics` auto-flattens nested `children` hierarchies. |
 | `scripts/generate_records.py` | Default record generation from topics + knowledge — calls LLM per leaf topic with 5 prompt types; supports `--enrich-sources` (recommended), `--weight-by-difficulty`, `--use-rag`, **`--ground-truth-format`** (structured output tasks), **`--weight-by-trace-priority`** + **`--trace-priority-file`** (trace-informed allocation), **`--trace-prompts-file`** + **`--seed-query-ratio`** (real user query injection, default 20%) |
+| `scripts/distilabel_shared.py` | Shared Step 4 helpers used by native and distilabel backends: config loading, backend resolution, topic/relations/knowledge loading, composed system prompt reuse, gateway chat completions, JSONL helpers |
+| `scripts/run_distilabel_text_backend.py` | Distilabel text backend — consumes existing topics/relations/knowledge artifacts, runs Instruction Backtranslation, and writes `finetune-project/distilabel/text-candidates.jsonl` + `pipeline-metadata.json` |
+| `scripts/apply_deita_selection.py` | Distilabel selector — scores text candidates, filters near-duplicates, enforces per-topic budgets, writes `text-selected.jsonl` + `text-selection-report.json`, and can materialize `training.jsonl` |
+| `scripts/run_distilabel_apigen_backend.py` | Distilabel tool-calling augmenter — keeps `trace-analysis/decision-points.jsonl` as the canonical base, generates APIGen candidates for underrepresented tool topics, deduplicates only new rows, and writes merge reports + final `training.jsonl` |
 | `scripts/convert_nemo_rows.py` | Convert NeMo DataDesigner output rows to vLLora training.jsonl; prefers exact `question_chunks_*` retrieval metadata for `source_parts`, can export `relations.json` from `retrieved_chunks_*`, and falls back to gateway re-query only for older NeMo datasets |
 | `scripts/analyze_training.py` | Post-training analysis: reward trend, KL health, clipping, loss stability, grad norm, per-topic learning. Uses `provider_job_id` for epoch eval fetch (matching UI behavior). Per-record analysis: top 5 regressions/improvements with input, model output, grader reason. Auto-detects 3 epoch patterns: `epoch_collapse` (score drops >8%), `over_prediction` (R=1.00 + low precision), `output_collapse` (identical outputs). Zero-std alerts conditional on reward being flat (30-99% normal per arXiv:2509.21880) |
 | `scripts/print_metrics_table.py` | Print training metrics table (per-epoch or per-step) — human-readable format |
@@ -602,7 +674,13 @@ These scripts solve the #1 testing issue (agents creating shell scripts instead 
 vLLora uses reinforcement fine-tuning (RFT). The model generates its own responses during training and the grader scores them. Training data only needs system + user messages. We don't call it "RFT" in the skill — just "fine-tuning" to keep it simple.
 
 ### LLM-assisted data generation
-The skill has two generation paths. `scripts/generate_records.py` is the non-NeMo path and starts from curated `relations.json`, then makes multiple LLM calls per topic with per-record `source_parts` traceability. The NeMo path (`use_nemo: true`) is retrieval-backed by default: `rag-retrieval` queries the gateway at generation time, preserves exact retrieved part IDs/metadata, and `convert_nemo_rows.py` can both recover exact `source_parts` and export `relations.json` from those retrieval hits. With `--enrich-sources`, the non-NeMo path can still re-query the gateway with each generated question to find additional matching parts.
+The skill now has three Step 4 backends that all consume the same `finetune-project/` artifacts and all emit the same downstream `training.jsonl` contract:
+
+- `native`: `scripts/generate_records.py` builds records directly from curated `relations.json` plus optional trace-priority weighting and seed queries.
+- `distilabel`: `run_distilabel_text_backend.py` + `apply_deita_selection.py` implement Instruction Backtranslation + DEITA for text-only workflows, while `run_distilabel_apigen_backend.py` augments canonical `decision-points.jsonl` for tool-calling workflows without rewriting those canonical rows.
+- `nemo`: retrieval-backed NeMo Data Designer recipes plus `convert_nemo_rows.py`.
+
+All three backends preserve Steps 5-8 unchanged. The only backend-specific workspace is `finetune-project/distilabel/`, which stores intermediate candidates, selection reports, and APIGen merge metadata for inspection.
 
 ### Only platform APIs documented
 The skill only covers endpoints the agent can't replicate locally: dataset upload, evaluation, training, model serving, and local workflow management. No Lucy chat completion endpoint, no IndexedDB, no browser-side tools.
@@ -987,6 +1065,7 @@ Both write through the same gateway API → same SQLite database. Workflows, rec
 - [x] Pre-submission validation before eval
 - [x] Persistent training failure escalation ladder
 - [x] Add NeMo Data Designer path — curated seed + rag-retrieval plugin + RAGAS quality scoring
+- [x] Add distilabel backend — Instruction Backtranslation + DEITA for text-only, APIGen augmentation for tool-calling, with skill-local docs and `ui/docs` architecture coverage
 - [x] Add `convert_nemo_rows.py` and `validate_dataset.py --nemo` for NeMo output handling
 - [x] Update api-reference.md with all gateway endpoints
 - [x] Relevance filtering — parts labeled relevant/irrelevant in Step 3a, persisted to `all-parts-index.json` and gateway
@@ -994,7 +1073,8 @@ Both write through the same gateway API → same SQLite database. Workflows, rec
 - [x] Behavioral system prompts — "When/For/Given + action verbs" pattern, composed as single flowing paragraph
 - [x] Per-record `source_parts` traceability — LLM tags `[1]`, `[2]` aliases, mapped back to real part IDs
 - [x] `--enrich-sources` flag — re-queries gateway with generated question for question-specific source_parts (decoupled from `--use-rag`)
-- [x] NeMo sub-agent (`nemo-data-generator.md`) — isolated NeMo workflow, spawned only when `use_nemo: true`
+- [x] Distilabel sub-agent (`distilabel-data-generator.md`) — isolated Step 4 workflow, spawned when `generation_backend: "distilabel"`
+- [x] NeMo sub-agent (`nemo-data-generator.md`) — isolated NeMo workflow, spawned only when backend resolution selects `nemo`
 - [x] `finetune-defaults.json` — project-level config without modifying the skill
 - [x] Table fragment consolidation in `consolidate_parts.py` — merges multi-page table fragments
 - [x] ODL/ODL Hybrid reuse (`--skip-existing`) and status tracking (`extraction-status.json`)

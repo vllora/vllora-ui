@@ -11,7 +11,7 @@ In combined mode, production OTel traces inform every pipeline step:
 | **Step 1: Objective** | Update objective with trace failure rates after Step 2C |
 | **Step 2C: Trace Analysis** | Analyze traces → 4 artifacts (priority, topics, prompts, grader-hints) |
 | **Step 3: Topics** | Enrich PDF-derived topics with trace-discovered topics + failure-informed prompts |
-| **Step 4: Records** | Weight allocation by trace priority, inject seed queries from real conversations |
+| **Step 4: Records** | Weight allocation by trace priority, inject seed queries from real conversations, or augment canonical tool traces via APIGen |
 | **Step 5: Grader** | Auto-generate grader criteria from trace failure dimensions |
 
 ---
@@ -117,7 +117,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
   --topics finetune-project/topics.json \
   --relations finetune-project/relations.json \
   --knowledge-dir finetune-project/knowledge \
-  --system-prompt "$SIMPLIFIED" \
+  --system-prompt "$PRODUCTION_PROMPT" \
   --output finetune-project/training.jsonl \
   --records-per-topic 30 --parallel 4 \
   --weight-by-trace-priority \
@@ -130,6 +130,12 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
 ### Tool-calling vs text-only (IMPORTANT)
 
 **Tool-calling agents** (tool-schemas.json exists): Do NOT use `generate_records.py`. Use `decision-points.jsonl` directly as training data. These are multi-turn records with full conversation context — the correct format. Single-turn synthetics create distribution shift (model skips auth, predicts args from nowhere). See [tool-calling-training-design.md](../research-trace-pdf-combine/tool-calling-training-design.md).
+
+**Tool-calling agents with `generation_backend: "distilabel"`**: keep `trace-analysis/decision-points.jsonl` as the canonical base dataset, then run `run_distilabel_apigen_backend.py` to add rare-topic and edge-case tool-calling rows. APIGen is augmentation-only here:
+
+- canonical decision-point rows remain byte-for-byte unchanged
+- `tools`, multi-turn `messages`, and structured tool `ground_truth` must be preserved
+- execution checking is optional and only runs when `distilabel.apigen_tool_module` is configured
 
 ### Tool description sanitization (default on for tool-calling)
 
@@ -145,6 +151,20 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/generate_records.py \
 - `--weight-by-trace-priority`: High-failure topics get more records
 - `--trace-prompts-file`: Injects seed queries + overrides system prompt
 - `--seed-query-ratio 0.20`: 20% seeds from real traces
+
+**Text-only agents with `generation_backend: "distilabel"`**: run the distilabel text backend instead of `generate_records.py`. The same trace artifacts still drive the allocation and seed-query influence:
+
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/run_distilabel_text_backend.py \
+  --project-dir finetune-project \
+  --system-prompt "$PRODUCTION_PROMPT"
+
+uv run ${CLAUDE_SKILL_DIR}/scripts/apply_deita_selection.py \
+  --project-dir finetune-project \
+  --final-output finetune-project/training.jsonl
+```
+
+This path writes intermediates under `finetune-project/distilabel/` and then returns to the normal dedupe/validate/quality-gate chain.
 
 ---
 

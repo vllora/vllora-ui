@@ -27,7 +27,6 @@ Exit codes:
   1 - error (some topics failed, partial output written)
 """
 
-import glob
 import json
 import math
 import requests
@@ -37,6 +36,24 @@ import tempfile
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from distilabel_shared import (  # noqa: E402
+    build_search_query as shared_build_search_query,
+    build_topic_index as shared_build_topic_index,
+    classify_difficulty as shared_classify_difficulty,
+    compose_system_prompt as shared_compose_system_prompt,
+    compute_topic_record_counts as shared_compute_topic_record_counts,
+    find_leaf_topics as shared_find_leaf_topics,
+    get_ancestor_chain as shared_get_ancestor_chain,
+    load_all_parts as shared_load_all_parts,
+    load_relations as shared_load_relations,
+    load_topics as shared_load_topics,
+    load_trace_priority as shared_load_trace_priority,
+)
 
 # ---------------------------------------------------------------------------
 # Prompt types: each type targets a different question style for diversity.
@@ -230,92 +247,15 @@ PROMPT_TYPES = PROMPT_TYPES_NORMAL
 
 
 def load_topics(topics_path: Path) -> list[dict]:
-    data = json.loads(topics_path.read_text())
-    return data if isinstance(data, list) else data.get("topics", [])
+    return shared_load_topics(topics_path)
 
 
 def load_relations(relations_path: Path, topics: list[dict] | None = None) -> list[dict]:
-    data = json.loads(relations_path.read_text())
-    relations = data if isinstance(data, list) else data.get("relations", [])
-    # Normalize key names: accept both topic_id/part_id and topic_identifier/part_identifier.
-    for r in relations:
-        if "topic_id" in r and "topic_identifier" not in r:
-            r["topic_identifier"] = r.pop("topic_id")
-        if "part_id" in r and "part_identifier" not in r:
-            r["part_identifier"] = r.pop("part_id")
-
-    # Topic IDs in local files are human-readable slugs (e.g., "cancel-pending-order").
-    # UUIDs only exist at the gateway layer. If an agent accidentally writes a UUID or
-    # variant format, try to remap to the slug from topics.json.
-    if topics:
-        valid_ids = {t["id"] for t in topics if "id" in t}
-        name_to_id = {t["name"]: t["id"] for t in topics if "name" in t and "id" in t}
-        orphaned = 0
-        for r in relations:
-            tid = r.get("topic_identifier", "")
-            if not tid or tid in valid_ids:
-                continue
-            if tid in name_to_id:
-                r["topic_identifier"] = name_to_id[tid]
-            else:
-                orphaned += 1
-        if orphaned:
-            print(
-                f"Warning: {orphaned} relations reference topic IDs not in topics.json "
-                f"(could not remap). These relations will be ignored.",
-                file=sys.stderr,
-            )
-
-    return relations
+    return shared_load_relations(relations_path, topics=topics)
 
 
 def load_all_parts(knowledge_dir: Path) -> dict[str, dict]:
-    """Load all parts from {doc-slug}/knowledge_parts.json files, keyed by part ID.
-
-    Also loads relevance labels from all-parts-index.json if available.
-    Parts marked as irrelevant (relevant=False) are excluded.
-    """
-    parts: dict[str, dict] = {}
-    pattern = str(knowledge_dir / "*" / "knowledge_parts.json")
-    for kp_file in sorted(glob.glob(pattern)):
-        try:
-            data = json.loads(Path(kp_file).read_text())
-            for p in data.get("parts", []):
-                parts[p["id"]] = p
-        except (json.JSONDecodeError, KeyError) as e:
-            print(f"Warning: Failed to load {kp_file}: {e}", file=sys.stderr)
-
-    # Load relevance labels from all-parts-index.json if it exists
-    index_path = knowledge_dir / "all-parts-index.json"
-    if index_path.exists():
-        try:
-            index_data = json.loads(index_path.read_text())
-            index_parts = index_data.get("parts", index_data) if isinstance(index_data, dict) else index_data
-            # Normalize relevance values: agents may write bool, int, float, or string.
-            # Treat as irrelevant: False, 0, "false", "no", scores < 0.5
-            def _is_relevant(val: object) -> bool:
-                if val is None:
-                    return True  # No label = assume relevant
-                if isinstance(val, bool):
-                    return val
-                if isinstance(val, (int, float)):
-                    return val >= 0.5
-                if isinstance(val, str):
-                    return val.lower() not in ("false", "no", "0", "irrelevant")
-                return True
-
-            relevance_map = {p["id"]: p.get("relevant") for p in index_parts if "id" in p}
-
-            # Filter out irrelevant parts
-            before_count = len(parts)
-            parts = {pid: p for pid, p in parts.items() if _is_relevant(relevance_map.get(pid))}
-            excluded = before_count - len(parts)
-            if excluded > 0:
-                print(f"  Filtered out {excluded} irrelevant parts (relevant=false in all-parts-index.json)")
-        except (json.JSONDecodeError, KeyError) as e:
-            print(f"Warning: Failed to load relevance labels from {index_path}: {e}", file=sys.stderr)
-
-    return parts
+    return shared_load_all_parts(knowledge_dir)
 
 
 def _fetch_latest_grader_script(base_url: str, workflow_id: str) -> str | None:
@@ -444,83 +384,23 @@ def _maybe_probe_trivial_records(
 
 
 def find_leaf_topics(topics: list[dict]) -> list[dict]:
-    """Find topics that are not parents of any other topic."""
-    parent_ids = {t["parent_id"] for t in topics if t.get("parent_id")}
-    return [t for t in topics if t["id"] not in parent_ids]
+    return shared_find_leaf_topics(topics)
 
 
 def build_topic_index(topics: list[dict]) -> dict[str, dict]:
-    """Build a lookup from topic ID to topic dict."""
-    return {t["id"]: t for t in topics}
+    return shared_build_topic_index(topics)
 
 
 def get_ancestor_chain(topic: dict, topic_index: dict[str, dict]) -> list[dict]:
-    """Walk up the hierarchy from a leaf topic to root. Returns [root, ..., parent] (excludes the leaf itself)."""
-    chain: list[dict] = []
-    current = topic
-    while current.get("parent_id") and current["parent_id"] in topic_index:
-        parent = topic_index[current["parent_id"]]
-        chain.append(parent)
-        current = parent
-    chain.reverse()  # root first, immediate parent last
-    return chain
+    return shared_get_ancestor_chain(topic, topic_index)
 
 
 def compose_system_prompt(root_prompt: str, ancestors: list[dict], leaf: dict) -> str:
-    """Compose a hierarchical system prompt: root persona + narrowing context from ancestors + leaf focus.
-
-    Structure:
-      - Root prompt: persona and general behavior ("You are a... You should...")
-      - Domain (ancestor): narrows the field — ONLY what's new beyond the root
-      - Skill (leaf): specific focus area — the exact capability being practiced
-
-    Each child level adds ONLY what the parent doesn't already say.
-    The result reads as one coherent instruction, not a list of fragments.
-    Target: 50-150 words total.
-    """
-    # Start with the root persona (this is the only "You are..." statement)
-    parts = [root_prompt.rstrip(".") + "."]
-
-    # Add ancestor context — each narrows the scope
-    for ancestor in ancestors:
-        segment = ancestor.get("system_prompt", "")
-        if segment:
-            parts.append(segment.rstrip(".") + ".")
-
-    # Add leaf focus — the specific skill being practiced
-    leaf_segment = leaf.get("system_prompt", "")
-    if leaf_segment:
-        parts.append(leaf_segment.rstrip(".") + ".")
-    else:
-        parts.append(f"Focus on: {leaf['name']}.")
-
-    # Join as a single flowing paragraph instead of separate blocks
-    composed = " ".join(parts)
-
-    # Warn if the composed prompt exceeds the 200-word guideline (target: 50-150 words).
-    # Overly long system prompts waste token budget during training.
-    word_count = len(composed.split())
-    if word_count > 200:
-        print(
-            f"  ⚠ System prompt for '{leaf.get('name', leaf.get('id', '?'))}' is {word_count} words "
-            f"(target: 50-150). Consider shortening topic system_prompt fields.",
-            file=sys.stderr,
-        )
-
-    return composed
+    return shared_compose_system_prompt(root_prompt, ancestors, leaf)
 
 
 def build_search_query(topic: dict, ancestors: list[dict]) -> str:
-    """Construct a search query from topic metadata for RAG retrieval.
-
-    Combines ancestor names, topic name, and system_prompt to give
-    hierarchical context to the semantic search.
-    """
-    parts = [a["name"] for a in ancestors]
-    parts.append(topic["name"])
-    if topic.get("system_prompt"):
-        parts.append(topic["system_prompt"])
-    return " ".join(parts)
+    return shared_build_search_query(topic, ancestors)
 
 
 def retrieve_rag_parts(
@@ -641,48 +521,11 @@ def load_eval_scores(eval_scores_path: Path) -> dict[str, float]:
 
 
 def classify_difficulty(avg_score: float) -> str:
-    """Classify a topic's difficulty based on base model eval score.
-
-    Hard = model gets 0-30% (most learning signal for GRPO).
-    Medium = model gets 30-70% (good variance).
-    Easy = model gets 70-100% (quickly becomes zero-variance).
-
-    Based on arXiv:2508.14094 ("Hard Examples Are All You Need"):
-    training on hardest 10% yields 47% gains vs 3-15% for easy.
-    """
-    if avg_score <= 0.3:
-        return "hard"
-    if avg_score <= 0.7:
-        return "medium"
-    return "easy"
-
-
-# Default difficulty weights (arXiv:2508.14094, arXiv:2509.21880)
-# Hard topics get the most records because GRPO learning signal is strongest there.
-# Easy topics get fewer because they quickly become zero-variance (zero gradient).
-DIFFICULTY_WEIGHTS = {
-    "hard": 0.45,    # 40-50% of total records
-    "medium": 0.35,  # 30-40% of total records
-    "easy": 0.20,    # 10-20% of total records
-}
+    return shared_classify_difficulty(avg_score)
 
 
 def load_trace_priority(trace_priority_path: Path) -> dict[str, float]:
-    """Load per-topic trace priority scores from trace_priority.json.
-
-    Expected format (from trace_analyze.py):
-        {"topic_name": {"priority_score": 0.08, "frequency": 0.2, ...}, ...}
-
-    Returns a flat dict: {"topic_name": priority_score, ...}.
-    """
-    data = json.loads(trace_priority_path.read_text())
-    result: dict[str, float] = {}
-    for topic, info in data.items():
-        if isinstance(info, dict):
-            result[topic] = info.get("priority_score", 0.0)
-        else:
-            result[topic] = float(info)
-    return result
+    return shared_load_trace_priority(trace_priority_path)
 
 
 def compute_topic_record_counts(
@@ -697,129 +540,18 @@ def compute_topic_record_counts(
     eval_scores: dict[str, float] | None = None,
     trace_priority_scores: dict[str, float] | None = None,
 ) -> dict[str, int]:
-    """Compute per-topic record counts.
-
-    Default: equal distribution — every leaf topic gets ``records_per_topic``.
-
-    With ``weight_by_difficulty=True`` + ``eval_scores``: distributes based on
-    base model performance. Hard topics (0-30% success) get 40-50% of records,
-    medium (30-70%) get 30-40%, easy (70-100%) get 10-20%. This maximizes GRPO
-    learning signal (arXiv:2508.14094: hard examples yield 47% gains;
-    arXiv:2509.21880: 30-99% of easy prompts become zero-variance).
-    Topics without eval scores default to "medium" difficulty.
-
-    With ``weight_by_trace_priority=True`` + ``trace_priority_scores``:
-    distributes based on trace-derived priority (frequency × failure rate).
-    Uses the same tier logic as difficulty weighting — high-priority topics
-    get 45% of records, medium 35%, low 20%. Topics not found in traces
-    default to "medium" priority. Based on trace-informed curriculum research
-    (GRPO-LEAD arXiv:2504.09696, Goldilocks arXiv:2602.14868).
-
-    With ``weight_by_source=True``: proportional to linked source parts
-    (legacy behaviour). Max imbalance ratio is clamped to 3:1.
-
-    Results are always clamped to [min_per_topic, max_per_topic].
-    """
-    if weight_by_trace_priority:
-        # Proportional allocation based on trace priority scores.
-        # Every topic gets at least min_per_topic (floor), then remaining
-        # budget is distributed proportional to priority_score.
-        #
-        # This is more precise than tier-based allocation for trace data
-        # because trace priorities are continuous scores, not categorical.
-        # GRPO-LEAD (arXiv:2504.09696) validates per-prompt priority weighting.
-        def _normalize(name: str) -> str:
-            return name.lower().replace("_", "-").strip()
-
-        normalized_scores = {
-            _normalize(k): v for k, v in (trace_priority_scores or {}).items()
-        }
-
-        # Look up priority score for each leaf (default 0.01 for unmapped)
-        DEFAULT_PRIORITY = 0.01
-        leaf_scores: dict[str, float] = {}
-        for leaf in leaves:
-            leaf_norm = _normalize(leaf["id"])
-            leaf_scores[leaf["id"]] = normalized_scores.get(leaf_norm, DEFAULT_PRIORITY)
-
-        # Total budget and floor allocation
-        total_budget = records_per_topic * len(leaves)
-        floor_total = min_per_topic * len(leaves)
-        remaining_budget = max(0, total_budget - floor_total)
-
-        # Distribute remaining budget proportional to priority score
-        total_score = sum(leaf_scores.values())
-        result: dict[str, int] = {}
-        for leaf in leaves:
-            score = leaf_scores[leaf["id"]]
-            proportional = round(remaining_budget * score / total_score) if total_score > 0 else 0
-            count = min_per_topic + proportional
-            result[leaf["id"]] = max(min_per_topic, min(count, max_per_topic))
-
-        return result
-
-    if weight_by_difficulty:
-        # Classify each topic by difficulty
-        topic_difficulty: dict[str, str] = {}
-        for leaf in leaves:
-            score = (eval_scores or {}).get(leaf["id"])
-            if score is not None:
-                topic_difficulty[leaf["id"]] = classify_difficulty(score)
-            else:
-                topic_difficulty[leaf["id"]] = "medium"  # default if no eval data
-
-        # Group topics by difficulty tier
-        tiers: dict[str, list[str]] = {"hard": [], "medium": [], "easy": []}
-        for leaf in leaves:
-            tiers[topic_difficulty[leaf["id"]]].append(leaf["id"])
-
-        # Calculate total records budget
-        total_budget = records_per_topic * len(leaves)
-
-        # Allocate budget per tier, then distribute within tier
-        result: dict[str, int] = {}
-        for tier, weight in DIFFICULTY_WEIGHTS.items():
-            tier_topics = tiers[tier]
-            if not tier_topics:
-                continue
-
-            tier_budget = round(total_budget * weight)
-            per_topic = max(1, round(tier_budget / len(tier_topics)))
-
-            for topic_id in tier_topics:
-                result[topic_id] = max(min_per_topic, min(per_topic, max_per_topic))
-
-        # Ensure all leaves have an entry (edge case: empty tier reassignment)
-        for leaf in leaves:
-            if leaf["id"] not in result:
-                result[leaf["id"]] = max(min_per_topic, min(records_per_topic, max_per_topic))
-
-        return result
-
-    if not weight_by_source:
-        clamped = max(min_per_topic, min(records_per_topic, max_per_topic))
-        return {leaf["id"]: clamped for leaf in leaves}
-
-    # Source-weighted: proportional to linked source parts
-    parts_per_topic: dict[str, int] = {}
-    for leaf in leaves:
-        count = sum(1 for r in relations if r["topic_identifier"] == leaf["id"])
-        parts_per_topic[leaf["id"]] = max(count, 1)  # min 1 to avoid div-by-zero
-
-    avg_parts = sum(parts_per_topic.values()) / len(parts_per_topic) if parts_per_topic else 1
-
-    # Clamp weight ratio to 3:1 max imbalance (OpenAI SFT best practices:
-    # severe imbalance at 10:1, keep tighter for small datasets)
-    MAX_WEIGHT_RATIO = 3.0
-
-    result = {}
-    for leaf in leaves:
-        raw_weight = parts_per_topic[leaf["id"]] / avg_parts
-        weight = min(raw_weight, MAX_WEIGHT_RATIO)
-        raw = round(records_per_topic * weight)
-        result[leaf["id"]] = max(min_per_topic, min(raw, max_per_topic))
-
-    return result
+    return shared_compute_topic_record_counts(
+        leaves=leaves,
+        relations=relations,
+        records_per_topic=records_per_topic,
+        min_per_topic=min_per_topic,
+        max_per_topic=max_per_topic,
+        weight_by_source=weight_by_source,
+        weight_by_difficulty=weight_by_difficulty,
+        weight_by_trace_priority=weight_by_trace_priority,
+        eval_scores=eval_scores,
+        trace_priority_scores=trace_priority_scores,
+    )
 
 
 # ---------------------------------------------------------------------------

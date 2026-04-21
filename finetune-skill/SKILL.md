@@ -73,6 +73,14 @@ Validate → Quality Gate → Verify → Eval BOTH (4B + 0.8B)                  
 finetune-project/
 ├── training.jsonl, topics.json, relations.json, config.json
 ├── execution-log.md, iterations.md, pipeline-journal.json, analysis.json
+├── distilabel/                # (distilabel backend only) Step 4 intermediates
+│   ├── text-candidates.jsonl
+│   ├── text-selected.jsonl
+│   ├── text-selection-report.json
+│   ├── apigen-candidates.jsonl
+│   ├── apigen-selected.jsonl
+│   ├── apigen-merge-report.json
+│   └── pipeline-metadata.json
 ├── knowledge/                  # Per-document subdirs
 │   ├── {doc-slug}/             # extraction-result.json, knowledge_parts.json, parts-index.json
 │   └── all-parts-index.json    # Merged index across ALL documents
@@ -113,7 +121,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-step \
 |------|-----------|
 | Step 2 | route_and_extract, build_parts, consolidate, upload_knowledge |
 | Step 3 | design_topics, upload_topics, build_relations, upload_relations |
-| Step 4 | generate_records (count per topic), derive_gt, dedup, upload_records |
+| Step 4 | generate_records/distilabel/apigen (count per topic), derive_gt, dedup, upload_records |
 | Step 5 | write_grader, test_grader (adversarial results), upload_grader |
 | Step 7 | create_eval, poll_eval, readiness_check, model_selection |
 | Step 8 | create_training, poll_training, post_training_eval |
@@ -190,11 +198,26 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-relations --workflow-id $W
 
 ### Step 4: Generate Training Data
 
-Check `config.json` for `use_nemo` flag. If `true`, spawn `nemo-data-generator` subagent (see [reference/nemo-guide.md](reference/nemo-guide.md)). Otherwise:
+Resolve the Step 4 backend from `config.json`:
+- If `generation_backend` is present, use it exactly: `native`, `distilabel`, or `nemo`
+- Else if `use_nemo: true`, resolve to `nemo`
+- Else resolve to `native`
+
+Backend routing:
+- **`generation_backend: "nemo"`**: spawn `nemo-data-generator` subagent (see [reference/nemo-guide.md](reference/nemo-guide.md))
+- **`generation_backend: "distilabel"`**: spawn `distilabel-data-generator` subagent (see [reference/distilabel-guide.md](reference/distilabel-guide.md))
+- **`generation_backend: "native"`** or unset: use the native flow below
 
 **Auto-detect agent type:**
-- **Tool-calling** (tool-schemas.json exists): `cp trace-analysis/decision-points.jsonl training.jsonl` — that is the ENTIRE step. Multi-turn decision points already have the correct `messages`/`tools`/`ground_truth` shape. Do NOT use single-turn synthetics.
+- **Tool-calling + native backend** (tool-schemas.json exists): `cp trace-analysis/decision-points.jsonl training.jsonl` — that is the ENTIRE step. Multi-turn decision points already have the correct `messages`/`tools`/`ground_truth` shape. Do NOT use single-turn synthetics.
 - **Text-only**: `generate_records.py --records-per-topic 30 --parallel 4 --enrich-sources`. Combined mode: add trace flags per [reference/trace-combined-mode.md](reference/trace-combined-mode.md) § Step 4.
+
+**Distilabel backend contract:**
+- **Text-only**: run `run_distilabel_text_backend.py` → `apply_deita_selection.py` → `training.jsonl`
+- **Combined text-only**: same as above, but consume `trace-analysis/priority.json` and `trace-analysis/prompts.json` for topic weighting and seed queries
+- **Tool-calling** (tool-schemas.json exists): keep `trace-analysis/decision-points.jsonl` as the canonical base, run `run_distilabel_apigen_backend.py` only to add rare-topic/edge-case augmentations, then merge into `training.jsonl`
+- **Never rewrite canonical decision-point rows.** APIGen is augmentation-only around the canonical dataset
+- **Never flatten tool-calling records into plain text** and never stringify structured tool `ground_truth`
 
 **CRITICAL — tool-calling records MUST stay multi-turn.** Do NOT rewrite `training.jsonl` with inline Python. Specifically banned anti-patterns (these break tool-calling GRPO):
 - `flatten_record(...)` / concatenating turns into one user message with `USER:`/`ASSISTANT:`/`TOOL RESULT:` prefixes
@@ -203,6 +226,24 @@ Check `config.json` for `use_nemo` flag. If `true`, spawn `nemo-data-generator` 
 - Stripping the `tools` field or the leading `system` message
 
 `cp` is literally the whole operation for tool-calling. `upload-records` handles gateway serialization. If you think the data "needs transformation", STOP and re-read this section.
+
+**Distilabel config shape** (merged from `finetune-defaults.json` into `config.json` the same way as other workflow settings):
+
+```json
+{
+  "generation_backend": "distilabel",
+  "distilabel": {
+    "model": "gpt-4o-mini",
+    "base_url": "http://localhost:9090/v1",
+    "keep_intermediate": true,
+    "text_recipe": "instruction_backtranslation_deita",
+    "tool_recipe": "apigen",
+    "apigen_tool_module": null,
+    "min_records_per_topic": 25,
+    "target_records_per_topic": 30
+  }
+}
+```
 
 **Balance rare topics via paraphrase (tool-calling only):** Real traces are unbalanced — rare tools (e.g. `modify_pending_order_payment`) may have only 4 records. Run the paraphrase generator to bring each topic to the minimum count. It rewrites ONLY the final user turn (user voice, same intent, same factual values) and preserves full prior context, tool list, and ground truth — the Trajectory2Task approach (arXiv:2601.20144). This is NOT the banned single-turn synthesis.
 
