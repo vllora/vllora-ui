@@ -51,7 +51,7 @@ def start_training(
             "importance_sampling_level": "sequence",  # GSPO stable training
         },
         "inference_parameters": {
-            "max_output_tokens": 512,  # Starting default — finetune.py auto-adjusts based on dataset content
+            "max_output_tokens": 2048,  # Starting default — finetune.py auto-adjusts based on dataset content. Bumped from 512 after tau-bench tool-call truncation (2026-04-21).
             "temperature": 1.0,
             "top_p": 1.0,
             "response_candidates_count": 8,  # GRPO minimum: all published work uses G>=8

@@ -240,7 +240,7 @@ function AttentionStrip({
 
 function WorkflowsHeader({ count }: { readonly count: number }) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex h-[37px] items-center gap-2 px-1">
       <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
         Workflows
       </span>

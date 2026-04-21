@@ -32,6 +32,8 @@ import type {
   ScoreDistribution,
   TopicHierarchyNode,
 } from "@/types/dataset-types";
+import { flattenEvaluationResults } from "@/services/finetune-api";
+import { ScoreStrip } from "@/components/datasets/eval-dialog/ScoreStrip";
 
 interface HealthRowProps {
   evalJobs: readonly EvalJob[];
@@ -83,6 +85,8 @@ export function HealthRow({
     () => buildQualityStats(evalStats?.distribution, totalRecords),
     [evalStats, totalRecords],
   );
+  const latestCompletedJob = useMemo(() => findLatestCompletedJob(evalJobs), [evalJobs]);
+  const latestScores = useMemo(() => extractScores(latestCompletedJob), [latestCompletedJob]);
 
   const latest = trend[trend.length - 1];
   const previous = trend.length >= 2 ? trend[trend.length - 2] : undefined;
@@ -106,6 +110,9 @@ export function HealthRow({
           running={running}
           samples={samples}
           isLive={completedScore == null && running != null}
+          latestScores={latestScores}
+          latestByTopic={evalStats?.byTopic}
+          latestReadinessGate={evalStats?.readinessGate}
           onOpenDetails={onOpenEvalDetails}
         />
         <div className="flex flex-col gap-3">
@@ -126,6 +133,9 @@ function QualityHero({
   running,
   samples,
   isLive,
+  latestScores,
+  latestByTopic,
+  latestReadinessGate,
   onOpenDetails,
 }: {
   readonly score: number | null;
@@ -134,6 +144,9 @@ function QualityHero({
   readonly running?: RunningSnapshot | null;
   readonly samples?: number;
   readonly isLive?: boolean;
+  readonly latestScores: readonly number[];
+  readonly latestByTopic?: EvalStats["byTopic"];
+  readonly latestReadinessGate?: EvalStats["readinessGate"];
   readonly onOpenDetails?: () => void;
 }) {
   const runningPct =
@@ -240,7 +253,16 @@ function QualityHero({
             </div>
           )}
 
-          {trend.length > 0 && <HistoryChart points={trend} />}
+          {trend.length >= 2 ? (
+            <HistoryChart points={trend} />
+          ) : latestScores.length > 0 ? (
+            <ScoreStrip
+              scores={[...latestScores]}
+              mean={score ?? undefined}
+              byTopic={latestByTopic}
+              readinessGate={latestReadinessGate}
+            />
+          ) : null}
         </div>
       )}
     </div>
@@ -508,6 +530,20 @@ interface RunningSnapshot {
   readonly completed: number;
   readonly total: number;
   readonly jobId: string;
+}
+
+function findLatestCompletedJob(jobs: readonly EvalJob[]): EvalJob | null {
+  const completed = jobs
+    .filter((j) => j.status === "completed")
+    .sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0));
+  return completed[0] ?? null;
+}
+
+function extractScores(job: EvalJob | null): readonly number[] {
+  if (!job?.pollingSnapshot?.results) return [];
+  return flattenEvaluationResults(job.pollingSnapshot.results)
+    .map((r) => r.score)
+    .filter((s): s is number => typeof s === "number");
 }
 
 function buildRunningSnapshot(jobs: readonly EvalJob[]): RunningSnapshot | null {

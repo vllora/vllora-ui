@@ -12,7 +12,7 @@ vLLora uses **GRPO (Group Relative Policy Optimization)** for reinforcement fine
 - **Training provider**: vLLora cloud (LangDB) running GRPO on the base model (e.g., Qwen3.5-4B).
 - **Training stack**: Unsloth + HuggingFace TRL `GRPOTrainer`. Unsloth is an optimization wrapper (90% VRAM reduction) around TRL — the core training loop, loss computation, and metric logging are all TRL's code. (Ref: [unsloth.ai/blog/grpo](https://unsloth.ai/blog/grpo))
 - **Data format**: RFT — system + user messages only (no assistant messages). The model generates its own completions during training.
-- **Defaults**: `learning_rate=1e-6`, `response_candidates_count=8` (G=8), `max_output_tokens=512` (auto-adjusted upward based on dataset content — see Step 7a-i in SKILL.md).
+- **Defaults**: `learning_rate=1e-6`, `response_candidates_count=8` (G=8), `max_output_tokens=2048` (auto-adjusted based on dataset content — see Step 7a-i in SKILL.md; bumped from 512 on 2026-04-21 after tau-bench tool-call parameters truncated mid-value).
 - **Metrics**: Reported per training step via the cloud API. The UI displays them in real-time charts with auto-generated insights.
 
 ### Metric Scale Warning

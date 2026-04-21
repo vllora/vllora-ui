@@ -602,7 +602,7 @@ curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
       "beta": 0.01
     },
     "inference_parameters": {
-      "max_output_tokens": 512,
+      "max_output_tokens": 2048,
       "temperature": 1.0,
       "top_p": 1.0,
       "response_candidates_count": 8,
@@ -666,13 +666,13 @@ curl -X POST http://localhost:9090/finetune/workflows/WORKFLOW_ID/jobs \
 | `mask_truncated_completions` | `true` | **`false`** | Unsloth: "we recommend to disable it." `true` causes kl=nan when all completions truncate (Unsloth #3006). |
 | `loss_type` | `"dr_grpo"` | `"dr_grpo"` | GRPO variant: `dr_grpo` (no length bias, arXiv:2503.20783), `dapo` (TRL default, also no length bias). Avoid `grpo` (length bias) and `bnpo` (TRL bug #3823 with sequence IS). |
 | `importance_sampling_level` | `"token"` | **`"sequence"`** | Unsloth: "GSPO shows sequence-level often gives more stable training." |
-| `scale_rewards` | `"group"` | **`false`** | Unsloth + Dr. GRPO: "recommends not scaling to avoid difficulty bias from std scaling." `false` = raw advantages, helps with bimodal distributions. |
+| `scale_rewards` | `"group"` | **`"none"`** (for 4B; `"group"` for 0.8B/2B — see training-metrics-guide.md) | Dr. GRPO: "recommends not scaling to avoid difficulty bias from std scaling." `"none"` = raw advantages, helps with bimodal distributions. Gateway expects the **string enum** `"none"` or `"group"`, NOT a boolean. |
 | `beta` | `0.0` | **`0.01`** | KL penalty prevents forgetting (arXiv:2509.07430: 15% forgetting without KL). Unsloth: 0.0 = "no reference model loaded (lower memory, faster)". We use 0.01 for stability. |
 
 **Inference Parameters (used during training rollouts):**
 | Parameter | Gateway Default | GRPO-Optimized (used by `finetune.py`) | Description |
 |-----------|----------------|----------------------------------------|-------------|
-| `max_output_tokens` | 1000 | **512** | Max tokens. Start low, increase only if >50% clipping |
+| `max_output_tokens` | 1000 | **2048** | Max tokens. Bumped from 512 on 2026-04-21 — tau-bench tool-call parameters (e.g., `transfer_to_human_agents.summary`, multi-arg `update_reservation_flights`) truncated mid-value at 512. `finetune.py create-training` auto-adjusts further upward based on dataset P95. |
 | `temperature` | 1.0 | 1.0 | Sampling temperature |
 | `top_p` | 1.0 | 1.0 | Top-p nucleus sampling |
 | `response_candidates_count` | 2 | **8** | Candidates per prompt. GRPO needs G≥8 for meaningful gradients |

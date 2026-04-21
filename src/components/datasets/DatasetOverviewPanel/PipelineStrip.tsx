@@ -127,7 +127,7 @@ function StageCard({ info, active, pulse, onClick }: StageCardProps) {
           {info.sub && (
             <div className="truncate text-[10px] text-muted-foreground/60">{info.sub}</div>
           )}
-          <div className="h-0.5 overflow-hidden rounded-full bg-muted/40">
+          <div className="mt-auto h-0.5 overflow-hidden rounded-full bg-muted/40">
             <div
               className={cn(
                 "h-full rounded-full transition-all",

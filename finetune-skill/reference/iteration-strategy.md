@@ -1033,7 +1033,7 @@ This outputs alerts (CRITICAL/HIGH/WARNING) and a summary. Use the alerts to gui
 | reward never rose above baseline + base score >0.75 | **Insufficient GRPO headroom** — base model already good, most groups have zero within-group variance, advantages ≈ 0 | **Should have been caught at Step 7d headroom gate.** Fix: (1) switch to smaller base model (4B→0.8B) — creates natural headroom, (2) regenerate harder records or add harder sub-topics, (3) make grader stricter (only if criteria reflect genuine quality differences — see SKILL.md caveats), (4) don't train. **Do NOT increase K** — at p=0.35, K=8 already produces informative groups 96.6% of the time; K=16 adds 3.3pp at 2x compute (EBPO arXiv:2602.05165 shows K=16 can be worse than K=8). See SKILL.md Step 9b case A. |
 | reward rose then declined + base score <0.75 | Entropy collapse, LLD (arXiv:2512.04220), or reward hacking | Reduce LR by 50%, optionally enable KL penalty (beta=0.001), inspect outputs for format gaming. See SKILL.md Step 9b case B. |
 | reward declining from start + base score <0.75 | Model getting worse — possible instability or misaligned grader | Reduce LR, check grader for exploitable patterns, inspect outputs manually |
-| completions/clipped_ratio > 0.5 | Most responses truncated at max_output_tokens | Increase max_output_tokens (512 → 1024). Watch cost: G × tokens |
+| completions/clipped_ratio > 0.5 | Most responses truncated at max_output_tokens | Increase max_output_tokens (e.g., 2048 → 4096). Default is 2048; bump in steps and watch cost: G × tokens. |
 | clip_ratio/region_mean = 0 + KL exploding | Trust region not constraining updates | Reduce LR. If using custom epsilon, check it's not too large |
 | reward up but KL >10 + outputs degenerate | Reward hacking | Add quality-focused grader criteria, enable KL penalty (beta=0.04), manual output review |
 | Per-record inspection shows FP > FN in degraded records (multi-label tasks) | **Over-prediction exploit** — GRPO learned that high recall + some FP outscores missing labels in group comparisons. The grader's precision-recall balance favors recall. | **Fix the grader**: use F0.5 instead of F1 for precision-critical tasks (1 FP costs as much as 2 FN). Add precision floor: `if precision < 0.75, cap score at 0.5`. Do NOT reduce K — the root cause is grader asymmetry. Ref: MO-GRPO (arXiv:2509.22047 Theorem 1), CoRPO (arXiv:2511.04439). |
@@ -1109,7 +1109,7 @@ Before committing to a full training run (which may take hours), run a **5-10 st
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
   --workflow-id "$WORKFLOW_ID" \
   --config '{"epochs": 1, "max_steps": 10}' \
-  --inference-params '{"max_output_tokens": 512}'
+  --inference-params '{"max_output_tokens": 2048}'
 
 # Poll for 5-10 steps, then check metrics
 python3 ${CLAUDE_SKILL_DIR}/scripts/finetune.py poll-training \

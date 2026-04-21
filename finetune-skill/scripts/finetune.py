@@ -2751,7 +2751,7 @@ def cmd_readiness_check(args: argparse.Namespace) -> None:
     # We apply a 1.5x multiplier to account for the base model being less
     # concise and GRPO encouraging longer chain-of-thought exploration.
     response_lengths = eval_data.get("response_token_lengths", [])
-    max_output_tokens = getattr(args, "max_output_tokens", 512)
+    max_output_tokens = getattr(args, "max_output_tokens", 2048)
 
     # ── Proactive length-drift check ──
     # Compares (a) GT P95 from training.jsonl, (b) eval response P95, and
@@ -4615,7 +4615,7 @@ def cmd_create_training(args: argparse.Namespace) -> None:
     # code gen ~2000+). A fixed default cannot work for all scenarios.
     # Headroom: 30% above P95 estimate (heuristic inspired by DAPO's overlong
     # soft-punishment zone, arXiv:2503.14476 — not a direct DAPO parameter).
-    current_max_tokens = payload["inference_parameters"].get("max_output_tokens", 512)
+    current_max_tokens = payload["inference_parameters"].get("max_output_tokens", 2048)
     try:
         records_resp = _api(
             "GET",
@@ -7706,9 +7706,13 @@ def main() -> None:
     p = subparsers.add_parser("readiness-check", help="Check if eval results pass pre-training readiness gate")
     p.add_argument("--file", required=True, help="Path to eval result JSON (from poll-eval)")
     p.add_argument("--thresholds", default=None, help="JSON string with custom thresholds (optional)")
-    p.add_argument("--max-output-tokens", type=int, default=512,
-                   help="Planned max_output_tokens for training (default: 512). "
-                        "Used to check if eval response lengths predict truncation risk.")
+    p.add_argument("--max-output-tokens", type=int, default=2048,
+                   help="Planned max_output_tokens for training (default: 2048). "
+                        "Must match what create-training will use — the 2048 default was chosen "
+                        "because 512 truncated tau-bench tool calls like transfer_to_human_agents "
+                        "mid-parameter. Pass a lower value explicitly only if you've confirmed "
+                        "your completions fit. Used to check if eval response lengths predict "
+                        "truncation risk.")
     p.add_argument("--training-file", default=None,
                    help="Path to training.jsonl. If provided, enables proactive length-drift checks "
                         "(spec_mismatch + length_drift_risk) that catch grader-rewards-verbosity and "
@@ -7850,7 +7854,7 @@ def main() -> None:
     p.add_argument("--llm-gates", action="store_true", help="Include LLM-scored gates")
     p.add_argument("--all-gates", action="store_true", help="Run all gates")
     p.add_argument("--sample", type=int, default=30, help="Records to sample for LLM gates")
-    p.add_argument("--max-output-tokens", type=int, default=512, help="Planned max_output_tokens for training (for completion_length gate)")
+    p.add_argument("--max-output-tokens", type=int, default=2048, help="Planned max_output_tokens for training (for completion_length gate). Matches the 2048 default in create-training.")
     p.add_argument("--gateway-url", default=DEFAULT_BASE_URL, help="Gateway URL for LLM calls")
     p.add_argument("--output-json", action="store_true", help="Output JSON only")
     p.add_argument("--save", help="Save full report to file")

@@ -10,6 +10,7 @@
  *   cards matching explorer sidebar sections to reopen any tab
  */
 
+import { useEffect } from "react";
 import {
   Database,
   FolderOpen,
@@ -21,6 +22,9 @@ import {
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { EvalJobsConsumer } from "@/contexts/EvalJobsContext";
+import { getJobAverageScore } from "@/types/eval-job";
+import type { EvalJob } from "@/types/eval-job";
+import type { EvalStats } from "@/types/dataset-types";
 import { FinetuneJobsConsumer } from "@/contexts/FinetuneJobsContext";
 import { KnowledgeSourcesConsumer } from "@/contexts/KnowledgeSourcesContext";
 import { DatasetDetailConsumer } from "@/contexts/DatasetDetailContext";
@@ -58,6 +62,26 @@ interface WorkspaceWelcomeProps {
 function formatNumber(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return n.toString();
+}
+
+/**
+ * Single source of truth for the dataset's latest average score.
+ *
+ * Prefers the most recent completed job's pollingSnapshot/result (what
+ * HealthRow's trend uses internally), falling back to the persisted
+ * `dataset.evalStats.statistics.mean`. This keeps PipelineStrip's
+ * `qualityPercent` and HealthRow's hero score in lockstep.
+ */
+function computeDatasetScore(
+  evalJobs: readonly EvalJob[],
+  evalStats: EvalStats | undefined,
+): number | null {
+  const latestCompleted = evalJobs
+    .filter((j) => j.status === "completed")
+    .sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))[0];
+  const fromJob = latestCompleted ? getJobAverageScore(latestCompleted) : undefined;
+  if (fromJob != null) return fromJob;
+  return evalStats?.statistics.mean ?? null;
 }
 
 
@@ -189,8 +213,20 @@ function PopulatedWorkflowWelcome({
   knowledgeSourcesCount,
   hasEvalScript,
 }: WorkspaceWelcomeProps) {
-  const { jobs: evalJobs } = EvalJobsConsumer();
+  const { jobs: evalJobs, ensureJobSnapshotLoaded } = EvalJobsConsumer();
   const { filteredJobs, latestJob } = FinetuneJobsConsumer();
+
+  // Eagerly hydrate the latest completed eval job's pollingSnapshot so the
+  // overview can show a score. Without this, dataset.evalStats is undefined
+  // on fresh page loads (api adapter's updateEvalStats is a no-op) and the
+  // completed job has no in-memory score → HealthRow shows "No evaluations yet".
+  const latestCompletedEvalJobId = evalJobs
+    .filter((j) => j.status === "completed")
+    .sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))[0]?.id;
+  useEffect(() => {
+    if (!latestCompletedEvalJobId) return;
+    ensureJobSnapshotLoaded(latestCompletedEvalJobId);
+  }, [latestCompletedEvalJobId, ensureJobSnapshotLoaded]);
   const { sources: knowledgeSources, count: sourcesCount, totalParts } = KnowledgeSourcesConsumer();
   const { dataset, sortedRecords } = DatasetDetailConsumer();
   const trainingActive = filteredJobs.some(j => ['pending', 'queued', 'running'].includes(j.status));
@@ -240,6 +276,7 @@ function PopulatedWorkflowWelcome({
   const recordsAggregate = recordCount || (dataset?.recordsCount ?? 0);
 
   const topicsWithPartsPercent = computeTopicsWithPartsPercent(dataset?.topicHierarchy?.hierarchy);
+  const datasetScore = computeDatasetScore(evalJobs, dataset?.evalStats);
 
   return (
     <div className="flex-1 flex flex-col overflow-y-auto">
@@ -263,11 +300,7 @@ function PopulatedWorkflowWelcome({
             docsCount={knowledgeSources.filter((s) => s.traceBundleId == null).length}
             servicesCount={knowledgeSources.filter((s) => s.traceBundleId != null).length}
             topicsWithPartsPercent={topicsWithPartsPercent}
-            qualityPercent={
-              dataset?.evalStats?.statistics.mean != null
-                ? dataset.evalStats.statistics.mean * 100
-                : undefined
-            }
+            qualityPercent={datasetScore != null ? datasetScore * 100 : undefined}
             trainingActive={trainingActive}
             trainingStatus={latestFinetuneStatus ?? undefined}
             onSwitchTab={(tab) => {

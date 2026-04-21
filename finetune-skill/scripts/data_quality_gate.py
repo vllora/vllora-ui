@@ -1591,7 +1591,7 @@ def run_gates(
     gates: list[str],
     gateway_url: str,
     sample_size: int,
-    max_output_tokens: int = 512,
+    max_output_tokens: int = 2048,
     knowledge_dir: str | None = None,
 ) -> dict:
     """Run selected quality gates and produce a combined verdict."""
@@ -1800,9 +1800,11 @@ def main() -> None:
         help=f"Gateway URL for LLM calls (default: {DEFAULT_GATEWAY_URL})",
     )
     parser.add_argument(
-        "--max-output-tokens", type=int, default=512,
-        help="Planned max_output_tokens for training (default: 512). "
-             "Used by completion_length gate to estimate truncation risk.",
+        "--max-output-tokens", type=int, default=2048,
+        help="Planned max_output_tokens for training (default: 2048). "
+             "Used by completion_length gate to estimate truncation risk. "
+             "Must match the value create-training will use — 512 truncated "
+             "long tool-call parameters in tau-bench scenarios.",
     )
     parser.add_argument("--json", action="store_true", help="Output JSON only")
     parser.add_argument("--save", help="Save full report to file")
