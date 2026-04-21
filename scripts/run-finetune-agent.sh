@@ -330,12 +330,36 @@ FORMATTER_PID=$!
 CLAUDE_PID=$!
 echo "$CLAUDE_PID" > "$PID_FILE"
 
+# Session-timeout watchdog: Claude Code headless mode appears to have an
+# undocumented ~30-minute ceiling. For a full pipeline run (eval + training
+# dispatch + polling) we need longer. Override via SESSION_TIMEOUT_SEC env
+# var; default = 7200 (2 hours). The watchdog SIGTERMs the claude process
+# when the limit is reached; Claude's own exit handlers flush the transcript
+# and the finalize() routine still runs.
+SESSION_TIMEOUT_SEC="${SESSION_TIMEOUT_SEC:-7200}"
+if [[ "$SESSION_TIMEOUT_SEC" -gt 0 ]] 2>/dev/null; then
+  (
+    sleep "$SESSION_TIMEOUT_SEC"
+    if kill -0 "$CLAUDE_PID" 2>/dev/null; then
+      echo "" >&2
+      echo "⏱  Session timeout ($SESSION_TIMEOUT_SEC s) — sending SIGTERM to claude PID $CLAUDE_PID" >&2
+      kill -TERM "$CLAUDE_PID" 2>/dev/null || true
+    fi
+  ) &
+  WATCHDOG_PID=$!
+fi
+
 # Wait for Claude to finish — its exit code is what matters
 set +e
 wait "$CLAUDE_PID"
 CLAUDE_EXIT=$?
 set -e
 CLAUDE_PID=""  # Claude has exited
+
+# Kill the watchdog if Claude finished before the timeout fired
+if [[ -n "${WATCHDOG_PID:-}" ]] && kill -0 "$WATCHDOG_PID" 2>/dev/null; then
+  kill "$WATCHDOG_PID" 2>/dev/null || true
+fi
 
 # Wait for formatter to drain remaining data from FIFO
 wait "$FORMATTER_PID" 2>/dev/null || true

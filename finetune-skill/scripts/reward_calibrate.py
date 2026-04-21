@@ -309,6 +309,7 @@ def print_report(stats: list[TierStats]) -> None:
                 "UNINFORMATIVE": "○ noise",
                 "ANTI_PREDICTOR": "✗ ANTI!",
                 "INSUFFICIENT_DATA": "? small",
+                "DEGENERATE_UNIVERSAL": "— all rows",
             }.get(s.verdict, "?")
             print(
                 f"  {s.value:32s}  n={s.n_in_tier:4d}  "
@@ -318,9 +319,12 @@ def print_report(stats: list[TierStats]) -> None:
             )
         print()
 
-    # Highlight actionable findings
+    # Highlight actionable findings (excluding degenerate cases)
     anti = [s for s in stats if s.verdict == "ANTI_PREDICTOR"]
-    noisy = [s for s in stats if s.verdict == "UNINFORMATIVE" and s.n_in_tier >= 20]
+    noisy = [
+        s for s in stats
+        if s.verdict == "UNINFORMATIVE" and s.n_in_tier >= 20
+    ]
     if anti:
         print("⚠ ANTI-PREDICTOR tiers (grader rewards properties that correlate with FAILURE):")
         for s in anti:
