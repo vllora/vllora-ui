@@ -7258,6 +7258,23 @@ def cmd_grader_discriminate(args: argparse.Namespace) -> None:
         "--output-report", args.output_report,
         "--base-url", args.base_url,
         "--seed", str(args.seed),
+        "--shape-samples", str(args.shape_samples),
+        "--shape-min-mean", str(args.shape_min_mean),
+    ]
+    result = subprocess.run(cmd)
+    sys.exit(result.returncode)
+
+
+def cmd_reward_calibrate(args: argparse.Namespace) -> None:
+    """Run reward_calibrate subprocess — IRC-style post-eval diagnostic."""
+    import subprocess
+    script = Path(__file__).parent / "reward_calibrate.py"
+    cmd = [
+        sys.executable, str(script),
+        "--eval-file", args.eval_file,
+        "--records", args.records,
+        "--pass-threshold", str(args.pass_threshold),
+        "--output-report", args.output_report,
     ]
     result = subprocess.run(cmd)
     sys.exit(result.returncode)
@@ -7752,6 +7769,34 @@ def main() -> None:
     p.add_argument("--output-report", default="quality-checker/discrimination-report.json")
     p.add_argument("--base-url", default="http://localhost:9090")
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument(
+        "--shape-samples",
+        type=int,
+        default=5,
+        help="Number of canonical cloud-shape responses to grade (default: 5). "
+             "Catches grader-parse bugs where grader reads `input.response` but "
+             "cloud delivers native tool_calls via `input.messages[last]`. "
+             "0 = skip.",
+    )
+    p.add_argument("--shape-min-mean", type=float, default=0.50,
+                   help="Min mean score on canonical responses to pass (default: 0.50). "
+                        "A working grader scores ~0.95; a broken grader hits FLOOR (0.02).")
+
+    # reward-calibrate — IRC-style diagnostic (MT-GRPO paper, arXiv:2604.02869).
+    # Computes per-tier point-biserial correlation between record
+    # characteristics (topic / origin / GT tool category / history length) and
+    # binary grader pass. Surfaces anti-predictors (tiers where grader rewards
+    # properties that correlate with failure) and uninformative tiers (noise).
+    p = subparsers.add_parser(
+        "reward-calibrate",
+        help="Post-eval diagnostic: are reward tiers aligned with outcome? (IRC-style, MT-GRPO)",
+    )
+    p.add_argument("--eval-file", required=True, help="Path to eval results JSON")
+    p.add_argument("--records", required=True, help="Path to training.jsonl")
+    p.add_argument("--pass-threshold", type=float, default=0.50,
+                   help="Binary outcome cutoff on the continuous grader score (default: 0.50)")
+    p.add_argument("--output-report",
+                   default="finetune-project/quality-checker/reward-calibration.json")
 
     p = subparsers.add_parser(
         "print-row-outputs",
@@ -7831,6 +7876,7 @@ def main() -> None:
         "print-row-outputs": cmd_print_row_outputs,
         "grader-sanity-check": cmd_grader_sanity_check,
         "grader-discriminate": cmd_grader_discriminate,
+        "reward-calibrate": cmd_reward_calibrate,
         "reconcile-topics": cmd_reconcile_topics,
         "update-analysis": cmd_update_analysis,
     }

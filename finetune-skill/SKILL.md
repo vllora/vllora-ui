@@ -213,7 +213,7 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/paraphrase_rare_topics.py \
 
 Upload: `upload-records --workflow-id $WORKFLOW_ID --file training.jsonl --force`
 
-**ALWAYS deduplicate:** `deduplicate_records.py training.jsonl --threshold 0.85`
+**ALWAYS deduplicate:** `deduplicate_records.py training.jsonl --threshold 0.85`. Safe to run before or after `paraphrase_rare_topics.py` — the dedup signature uses ALL user turns concatenated, so Trajectory2Task variants (which differ only in the last turn) are preserved. Prior versions keyed only on the first user turn and wiped paraphrases; that bug is fixed.
 
 **Quality check:** Read 3-5 records per topic. Check GT vocabulary, factual accuracy, format.
 
@@ -231,14 +231,18 @@ Write `quality-checker/grader.js`. Combined mode: generate draft from `grader_fr
 
 **Mandatory dry-run (4 tests):** hand-crafted row, live model response (5 samples), adversarial leniency test (`test-grader --samples 10`), validation protocol.
 
-**MANDATORY discrimination check (tool-calling mode):** before upload, verify the grader can distinguish correct tool calls from systematically corrupted ones:
+**MANDATORY discrimination check (tool-calling mode):** before upload, verify the grader both (a) can distinguish correct tool calls from corrupted ones, AND (b) can actually parse the response shape cloud delivers at eval time:
 ```bash
 uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py grader-discriminate \
   --workflow-id $WORKFLOW_ID \
   --records finetune-project/training.jsonl \
   --grader finetune-project/quality-checker/grader.js
 ```
-Hard-fails (exit 1) if any corruption class (wrong_name / missing_required_arg / arg_value_mutation / arg_key_rename) fails mean-gap ≥ 0.30 OR pairwise-winrate ≥ 0.80. If it fails, the grader has a stub name-check, a naive `String()` compare, or a dropped-required-field silent-pass — fix the grader, rerun. Do NOT upload a grader that can't discriminate.
+Runs two phases:
+1. **Corruption discrimination**: synthetic mutations (wrong_name / missing_required_arg / arg_value_mutation / arg_key_rename). Must pass mean-gap ≥ 0.30 AND pairwise-winrate ≥ 0.80 on all four classes.
+2. **Shape conformance** (5 canonical responses): synthesizes the exact shape cloud delivers at eval time — an assistant message appended to `input.messages[last]` with native `tool_calls[]` and empty content, matching the record's ground truth. A correct grader scores ≥ 0.95 on these; a broken grader hits FLOOR. Must reach mean ≥ 0.50. Catches the v1/v2 parse-format bug: grader reads `input.response` only and misses tool_calls delivered via the messages array.
+
+If either phase fails, do NOT upload. Fix the grader and rerun.
 
 Upload + verify + checkpoint:
 ```bash

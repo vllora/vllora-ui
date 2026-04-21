@@ -53,6 +53,32 @@ CORRUPTION_CLASSES = (
     "arg_key_rename",
 )
 
+# Shape-conformance phase: score synthesized "canonical" responses that match
+# the shape cloud actually delivers to the grader at eval time. Catches the
+# class of bug where the grader's response-parse logic doesn't match the
+# target model's output format. Example from the 2026-04-21 run: v1/v2
+# graders passed corruption tests but scored every Qwen-native tool_call at
+# FLOOR because they only checked `input.response`, not
+# `input.messages[last].tool_calls` (which is how cloud's
+# `create_eval_row_with_response` delivers Qwen's native emissions).
+#
+# The synthesized response mirrors a "perfect" model emission: appends an
+# assistant message with empty content + populated tool_calls[] matching
+# the record's ground_truth. If the grader scores this near-floor, it can't
+# parse the cloud-delivery shape — same bug as v1/v2.
+#
+# This is cloud-free (deterministic, fast, no network) and catches the
+# exact parse-format bug without needing an actual inference call. A real
+# live test against cloud would require either VLLORA_GCP_FINETUNE_URL
+# client access or a new gateway proxy endpoint — neither currently exists
+# for custom-routed models like Qwen3.5-4B/base.
+DEFAULT_SHAPE_SAMPLES = 5
+# Threshold from empirical observation: a working grader scores a canonical
+# (GT-matching) response at ≥ 0.95 (tool name matches, all args match).
+# A broken grader hits FLOOR (0.02). 0.5 is well above floor and well below
+# a working grader's natural output — flags parse bugs immediately.
+DEFAULT_SHAPE_MIN_MEAN = 0.50
+
 
 # ─── Corruption generators ───────────────────────────────────────────────────
 
@@ -337,11 +363,14 @@ def write_report(
     min_gap: float,
     min_winrate: float,
     all_pass: bool,
+    shape_results: dict | None = None,
+    shape_min_mean: float | None = None,
 ) -> None:
     report = {
         "thresholds": {
             "min_score_gap": min_gap,
             "min_pairwise_winrate": min_winrate,
+            "shape_min_mean": shape_min_mean,
         },
         "all_pass": all_pass,
         "classes": {
@@ -357,9 +386,95 @@ def write_report(
             for klass, st in stats.items()
         },
     }
+    if shape_results is not None:
+        report["shape_conformance"] = {
+            "mean": shape_results["mean"],
+            "n": len(shape_results["scores"]),
+            "passes": shape_min_mean is None or shape_results["mean"] >= shape_min_mean,
+            "samples": shape_results["samples"],
+        }
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(report, indent=2, default=str))
     print(f"  report written → {output_path}")
+
+
+def _build_canonical_cloud_row(record: dict) -> dict:
+    """Build an eval-style row matching how cloud delivers a 'perfect' response.
+
+    Mirrors `create_eval_row_with_response` in cloud's evaluation_processor.rs:
+    the model's output is appended as the last assistant message with native
+    `tool_calls` populated and `content` empty. A grader that can't parse
+    this shape (like v1/v2 did) will score FLOOR on it.
+
+    The appended tool_call matches the record's ground_truth exactly — so a
+    correctly-parsing grader should score ≥ 0.95 (near-perfect).
+    """
+    gt = record.get("ground_truth") or {}
+    gt_name = gt.get("name") or ""
+    gt_args = gt.get("arguments") or {}
+
+    canonical_message = {
+        "role": "assistant",
+        "content": "",  # cloud usually delivers empty content on native tool_calls
+        "tool_calls": [{
+            "id": f"call_canonical_{gt_name}",
+            "type": "function",
+            "function": {
+                "name": gt_name,
+                # Cloud delivers arguments as a JSON string (OpenAI spec)
+                "arguments": json.dumps(gt_args) if isinstance(gt_args, dict) else str(gt_args),
+            },
+        }],
+    }
+
+    row = {
+        "messages": list(record.get("messages") or []) + [canonical_message],
+        "tools": record.get("tools") or [],
+        "ground_truth": record.get("ground_truth"),
+    }
+    return row
+
+
+def run_shape_conformance(
+    records: list[dict],
+    workflow_id: str,
+    script_content: str,
+    base_url: str,
+    n_samples: int,
+    rng: random.Random,
+) -> dict:
+    """Phase 2: score canonical cloud-shape responses and verify non-floor.
+
+    For each of N sampled records, appends a "perfect" assistant message
+    (content="", tool_calls=[GT matching call]) to the record's messages
+    array — mirroring how cloud delivers native tool_calls to the grader.
+    Scores each via the dry-run endpoint.
+
+    If the grader scores these near-floor, it's failing to parse the
+    cloud-delivery shape — the exact v1/v2 bug class.
+
+    Returns {mean, scores, samples}. Main() decides pass/fail vs threshold.
+    """
+    sample = rng.sample(records, min(n_samples, len(records)))
+    results: list[dict] = []
+
+    for i, record in enumerate(sample):
+        gt_name = (record.get("ground_truth") or {}).get("name", "?")
+        print(f"[shape {i + 1}/{len(sample)}] {record.get('id', '?')[:40]} — {gt_name}")
+        row = _build_canonical_cloud_row(record)
+        score = score_row(workflow_id, script_content, row, base_url)
+        if score is None:
+            continue
+        results.append({
+            "record_id": record.get("id"),
+            "gt": gt_name,
+            "score": score,
+        })
+        print(f"  score={score:.3f}  (GT={gt_name})")
+
+    scores = [r["score"] for r in results]
+    mean = sum(scores) / len(scores) if scores else 0.0
+    return {"mean": mean, "scores": scores, "samples": results}
 
 
 def main() -> None:
@@ -377,6 +492,29 @@ def main() -> None:
     )
     ap.add_argument("--base-url", default=DEFAULT_BASE_URL)
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument(
+        "--shape-samples",
+        type=int,
+        default=DEFAULT_SHAPE_SAMPLES,
+        help=(
+            f"Number of canonical cloud-shape responses to grade (default: "
+            f"{DEFAULT_SHAPE_SAMPLES}). Catches grader bugs that corruption "
+            f"tests miss — specifically when the grader's response-parse "
+            f"logic doesn't match cloud's delivery shape "
+            f"(`input.messages[last].tool_calls` with empty content). "
+            f"Set 0 to skip shape phase."
+        ),
+    )
+    ap.add_argument(
+        "--shape-min-mean",
+        type=float,
+        default=DEFAULT_SHAPE_MIN_MEAN,
+        help=(
+            f"Minimum mean score on canonical responses to pass (default: "
+            f"{DEFAULT_SHAPE_MIN_MEAN}). A correctly-parsing grader scores "
+            f"~0.95 on GT-matching responses; a broken grader hits FLOOR."
+        ),
+    )
     args = ap.parse_args()
 
     if not args.records.exists():
@@ -392,6 +530,7 @@ def main() -> None:
     sample = select_records(records, args.sample_size, rng)
     script_content = args.grader.read_text()
 
+    # ---- Phase 1: synthetic corruption discrimination ----
     stats = run_discrimination(
         records=sample,
         workflow_id=args.workflow_id,
@@ -400,15 +539,58 @@ def main() -> None:
         min_gap=args.min_score_gap,
         min_winrate=args.min_pairwise_winrate,
     )
-    all_pass = print_summary(stats, args.min_score_gap, args.min_pairwise_winrate)
-    write_report(stats, args.output_report, args.min_score_gap, args.min_pairwise_winrate, all_pass)
+    corruption_pass = print_summary(stats, args.min_score_gap, args.min_pairwise_winrate)
+
+    # ---- Phase 2: shape-conformance against canonical cloud-shape responses ----
+    shape_results: dict | None = None
+    shape_pass = True
+    if args.shape_samples > 0:
+        print()
+        print(f"=== Shape-conformance phase ({args.shape_samples} canonical cloud-shape responses) ===")
+        shape_results = run_shape_conformance(
+            records=records,
+            workflow_id=args.workflow_id,
+            script_content=script_content,
+            base_url=args.base_url,
+            n_samples=args.shape_samples,
+            rng=random.Random(args.seed + 1),
+        )
+        mean = shape_results["mean"]
+        n = len(shape_results["scores"])
+        shape_pass = n > 0 and mean >= args.shape_min_mean
+        mark = "✓" if shape_pass else "✗ FAIL"
+        print(f"  shape mean: {mean:.3f} over {n} samples (threshold ≥ {args.shape_min_mean})  {mark}")
+        if not shape_pass and shape_results["samples"]:
+            print(f"  least-scored canonical examples (likely parse-format mismatch):")
+            worst = sorted(shape_results["samples"], key=lambda s: s["score"])[:3]
+            for ex in worst:
+                print(f"    {ex['record_id'][:40]} score={ex['score']:.3f}  (GT={ex['gt']})")
+
+    # ---- Write report + final verdict ----
+    all_pass = corruption_pass and shape_pass
+    write_report(
+        stats, args.output_report, args.min_score_gap, args.min_pairwise_winrate, all_pass,
+        shape_results=shape_results,
+        shape_min_mean=args.shape_min_mean if args.shape_samples > 0 else None,
+    )
 
     if not all_pass:
         print()
-        print("⚠ Grader discrimination FAILED. Review the report and fix the grader before upload.")
+        if not corruption_pass:
+            print("⚠ Corruption discrimination FAILED. Grader can't distinguish synthetic wrong answers from correct ones.")
+        if not shape_pass:
+            print(
+                f"⚠ Shape-conformance FAILED. Grader scored mean "
+                f"{shape_results['mean']:.3f} on canonical cloud-shape responses "
+                f"(GT-matching calls delivered as native tool_calls on "
+                f"`input.messages[last]`). This is the v1/v2 grader bug: grader "
+                f"reads `input.response` but cloud delivers the tool_call "
+                f"through the messages array. Fix the grader's response "
+                f"parsing — see `reference/grader-writing.md` § Discrimination check."
+            )
         sys.exit(1)
     print()
-    print("✓ Grader discriminates all corruption classes.")
+    print("✓ Grader passes both corruption discrimination and shape-conformance checks.")
 
 
 if __name__ == "__main__":

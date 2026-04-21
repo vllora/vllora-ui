@@ -40,12 +40,25 @@ def similarity(a: str, b: str) -> float:
 
 
 def extract_user_prompt(record: dict) -> str:
-    """Extract the user message from a record."""
+    """Build a dedup signature from ALL user turns, concatenated.
+
+    Why not just the first user turn: for multi-turn tool-calling records
+    produced by `paraphrase_rare_topics.py`, variants are identical except
+    for the LAST user turn (Trajectory2Task rewrites only the final turn
+    to preserve full prior context + ground-truth). A first-turn-only
+    signature would collapse those legitimate variants into one and erase
+    the paraphrase rebalancing.
+
+    For single-turn records this reduces to the first (and only) user
+    turn — backward-compatible with text-only datasets.
+    """
     messages = record.get("messages", [])
-    for msg in messages:
-        if msg.get("role") == "user":
-            return msg.get("content", "")
-    return ""
+    user_turns = [
+        msg.get("content", "") for msg in messages if msg.get("role") == "user"
+    ]
+    # Concatenate with a sentinel so two turns "hi"+"there" don't collide
+    # with one turn "hithere".
+    return "\n\0\n".join(t for t in user_turns if t)
 
 
 def deduplicate(

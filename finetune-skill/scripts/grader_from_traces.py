@@ -264,8 +264,28 @@ def generate_tool_call_grader_js(tool_schemas: list[dict]) -> str:
 function evaluate(input) {{
     var FLOOR = 0.02;  // Minimum score for any attempted answer
 
-    // Parse the model's response as a tool call
-    var modelCall = parseToolCall(input.response);
+    // Locate the model's response. The cloud evaluator delivers it in one of
+    // two shapes depending on how the generation was routed:
+    //   (a) `input.response` — string with parseable content (XML/JSON tool_call)
+    //   (b) appended as the last assistant message in `input.messages` with
+    //       native `tool_calls[]` and often empty `content` (Qwen's normal
+    //       emission on the custom inference endpoint)
+    // Miss (b) and every Qwen-native tool_call scores FLOOR. Checked in both
+    // shapes; either is parsed by `parseToolCall`.
+    var response = input.response;
+    if ((!response || (typeof response === "string" && response.length < 3)) &&
+        input.messages && Array.isArray(input.messages) && input.messages.length > 0) {{
+        var lastMsg = input.messages[input.messages.length - 1];
+        if (lastMsg && lastMsg.role === "assistant") {{
+            if (lastMsg.tool_calls && lastMsg.tool_calls[0]) {{
+                response = {{ tool_calls: lastMsg.tool_calls }};
+            }} else if (lastMsg.content) {{
+                response = lastMsg.content;
+            }}
+        }}
+    }}
+
+    var modelCall = parseToolCall(response);
     if (!modelCall || !modelCall.name) {{
         return {{ score: FLOOR, reason: "No valid tool call in response" }};
     }}
@@ -429,13 +449,31 @@ function parseToolCall(response) {{
         }} catch (e) {{}}
     }}
 
-    // Format 4: Object with tool_calls array
+    // Format 4: Object with tool_calls array. `arguments` follows OpenAI spec
+    // and is a JSON STRING — parse it back into an object so downstream
+    // `Object.keys(modelCall.arguments)` iterates real keys, not string
+    // character indices. Missing this makes keyJaccard and valueScore collapse
+    // to 0, pinning every row at `name_match × 0.4 = 0.4` even on exact-match
+    // canonical responses (the v1/v2 bug).
     if (typeof response === "object") {{
         if (response.tool_calls && response.tool_calls[0]) {{
             var tc = response.tool_calls[0];
-            return {{ name: tc.function?.name || tc.name, arguments: tc.function?.arguments || tc.arguments }};
+            var tcName = (tc.function && tc.function.name) || tc.name;
+            var tcArgs = (tc.function && tc.function.arguments) !== undefined
+                ? tc.function.arguments
+                : tc.arguments;
+            if (typeof tcArgs === "string") {{
+                try {{ tcArgs = JSON.parse(tcArgs); }} catch (e) {{ tcArgs = {{}}; }}
+            }}
+            return {{ name: tcName, arguments: tcArgs || {{}} }};
         }}
-        if (response.name) return response;
+        if (response.name) {{
+            var nArgs = response.arguments;
+            if (typeof nArgs === "string") {{
+                try {{ nArgs = JSON.parse(nArgs); }} catch (e) {{ nArgs = {{}}; }}
+            }}
+            return {{ name: response.name, arguments: nArgs || {{}} }};
+        }}
     }}
 
     return null;
