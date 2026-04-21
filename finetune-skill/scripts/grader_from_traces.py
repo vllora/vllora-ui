@@ -300,7 +300,28 @@ function evaluate(input) {{
     }}
 
     // 1. Tool name match (40%)
-    var nameScore = modelCall.name === expected.name ? 1.0 : 0.0;
+    // Name match with related-family partial credit.
+    // Exact match → 1.0. Sibling tool (same first-token prefix, i.e., same
+    // verb family) → 0.25. Otherwise → 0.
+    // Rationale: when GT is `search_onestop_flight` and model picks
+    // `search_direct_flight`, intent is right but tool choice drifted to the
+    // adjacent variant. FLOOR (score 0.02) loses the learnable signal —
+    // GRPO can't tell "wrong verb entirely" from "right verb, wrong variant".
+    // 0.25 family credit keeps the gradient informative; gap to perfect
+    // stays wide enough to train toward the exact match.
+    // Family detection is the first underscore-delimited token, which for
+    // tau-bench tools maps cleanly to verbs (search/get/find/modify/cancel/
+    // exchange/return/think/calculate/transfer).
+    var gtName = expected.name || "";
+    var mName = modelCall.name || "";
+    var nameScore;
+    if (mName === gtName) {{
+        nameScore = 1.0;
+    }} else {{
+        var gtFam = gtName.split("_")[0];
+        var mFam = mName.split("_")[0];
+        nameScore = (gtFam && mFam && gtFam === mFam) ? 0.25 : 0.0;
+    }}
 
     // 2. Parameter key Jaccard (30%)
     var modelKeys = Object.keys(modelCall.arguments || {{}});
@@ -344,7 +365,14 @@ function evaluate(input) {{
     // meaningful credit (0.4 floor) even with zero arg match, so GRPO has
     // gradient to reward tool-selection over arg-guessing.
     // ToolRLA ablation shows +7pp over additive composition.
-    var argsScore = 0.5 * keyJaccard + 0.5 * valueScore;
+    // 30/70 weighting: values (geometric mean, strict) dominate over keys.
+    // Rationale: arg_value_mutation corruption at 50/50 weighting produced
+    // discrimination gap of ~0.30 — right at the threshold, triggering agent
+    // hand-tuning runs (2026-04-21). 30/70 gives gap ≈ 0.42, stable margin
+    // above the 0.30 floor and no reason for the orchestrator to re-weight.
+    // Trade-off: partial-correct-args scores shift from 0.7 → 0.58 — that's
+    // the productive GRPO range (not floored).
+    var argsScore = 0.3 * keyJaccard + 0.7 * valueScore;
     var score = nameScore * (0.4 + 0.6 * argsScore);
     score = Math.max(FLOOR, score);
 

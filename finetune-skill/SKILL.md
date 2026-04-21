@@ -211,6 +211,15 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/paraphrase_rare_topics.py \
   --file finetune-project/training.jsonl --min-per-topic 25
 ```
 
+**Filter empty leaves (tool-calling mode, mandatory before upload):** Real traces leave some tools with ≤1 DP — dedup then removes that DP and the leaf topic ends up empty. Also some tools appear in span attributes but never as GT tool_calls (e.g. tau-bench airline's `book_reservation` — 0 successful DPs in 200 GPT-4o trajectories). Drop empty leaves + orphaned tools before upload so the deployed agent only sees tools it was actually trained on:
+
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/filter_empty_leaves.py \
+  --records finetune-project/training.jsonl \
+  --topics finetune-project/topics.json \
+  --tool-schemas finetune-project/trace-analysis/tool-schemas.json
+```
+
 Upload: `upload-records --workflow-id $WORKFLOW_ID --file training.jsonl --force`
 
 **ALWAYS deduplicate:** `deduplicate_records.py training.jsonl --threshold 0.85`. Safe to run before or after `paraphrase_rare_topics.py` — the dedup signature uses ALL user turns concatenated, so Trajectory2Task variants (which differ only in the last turn) are preserved. Prior versions keyed only on the first user turn and wiped paraphrases; that bug is fixed.

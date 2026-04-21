@@ -4459,8 +4459,20 @@ def cmd_create_training(args: argparse.Namespace) -> None:
     # Build defaults first, then merge user overrides. This ensures K and other
     # model-size-aware defaults aren't lost when user passes partial --inference-params
     # (e.g., just max_output_tokens).
+    #
+    # max_output_tokens default: 2048 (bumped from 512 on 2026-04-21).
+    # Rationale: the 512 default was truncating Qwen3.5-4B's long tool-call
+    # parameters — specifically `transfer_to_human_agents.summary` (multi-sentence
+    # issue descriptions) and `think.thought` (chain-of-thought scratchpad).
+    # Empirically saw the model halt at ~67 chars of XML tool-call, unable to
+    # complete the parameter value within the budget. MT-GRPO paper (arXiv:2604.02869)
+    # uses 45K for response; 2048 is a conservative floor.
+    # Caveat: for short-output tasks (classification, extraction with ≤10-token GT),
+    # this is too high and can trigger Unsloth kl=nan (#3006/#3260). The estimator
+    # below downgrades to an appropriate value in those cases — for tool-calling
+    # scenarios, the estimator floor is held at 2048.
     payload["inference_parameters"] = {
-        "max_output_tokens": 512,
+        "max_output_tokens": 2048,
         "temperature": 1.0,
         "top_p": 1.0,
         "response_candidates_count": k_default,
@@ -4630,10 +4642,29 @@ def _estimate_recommended_max_tokens(records: list[dict]) -> int:
        inspired by DAPO's overlong soft-punishment approach, not a
        direct DAPO parameter)
 
-    Returns the recommended minimum, or 512 if estimation is not possible
+    Returns the recommended minimum, or 2048 if estimation is not possible
     (e.g., no ground truth fields in the dataset).
+
+    Tool-calling mode floor: records with a `tools` field OR a dict-shaped
+    ground_truth (e.g. {"name": ..., "arguments": ...}) indicate tool-calling
+    scenarios. Those records need budget for multi-arg tool_call XML + long
+    free-text parameters (think.thought, transfer_to_human_agents.summary).
+    Empirical finding (2026-04-21): 512 halts the model mid-tool-call. Floor
+    of 2048 prevents that class of truncation while staying well under
+    MT-GRPO paper's 45K budget.
     """
     import statistics as _stats
+
+    # Detect tool-calling mode from record shape
+    tool_calling = False
+    for rec in records[:20]:
+        if isinstance(rec.get("tools"), list) and rec["tools"]:
+            tool_calling = True
+            break
+        gt = rec.get("ground_truth")
+        if isinstance(gt, dict) and "name" in gt and "arguments" in gt:
+            tool_calling = True
+            break
 
     gt_lengths: list[int] = []
     sys_lengths: list[int] = []
@@ -4651,7 +4682,9 @@ def _estimate_recommended_max_tokens(records: list[dict]) -> int:
                 break
 
     if not gt_lengths:
-        return 512  # No ground truth — can't estimate, keep default
+        # No ground truth — can't estimate. Use 2048 for tool-calling (matches
+        # default), 512 for unknown/text tasks (historical default).
+        return 2048 if tool_calling else 512
 
     # Adaptive multiplier based on task complexity (system prompt length).
     # Short prompts (<100 tokens): simple Q&A → 2x GT
@@ -4677,17 +4710,17 @@ def _estimate_recommended_max_tokens(records: list[dict]) -> int:
     # smaller-scale tasks).
     recommended = int(gt_p95 * multiplier * 1.3)
 
-    # Clamp to reasonable range: minimum 64, maximum 4096.
-    # Floor of 64 (not higher): short-output tasks like classification or
-    # allergen detection have GT of 1-10 tokens. Setting max_output_tokens
-    # too high (e.g., 512 for a 5-token task) gives GRPO room to pad —
-    # the base model fills the token budget, all completions get truncated
-    # at the limit, and mask_truncated_completions=True zeros out the
-    # completion mask → kl=nan crash (Unsloth issues #3006, #3260).
-    # 64 tokens is generous for any classification/extraction task while
-    # preventing the 500-token padding problem.
+    # Clamp to reasonable range. Floor depends on task type:
+    #   - Tool-calling mode: 2048 — prevents the XML-tool-call truncation
+    #     class we saw on 2026-04-21 (Qwen3.5-4B halts mid-`<parameter=>`
+    #     for long params like think.thought / transfer_to_human_agents.summary).
+    #   - Non-tool tasks: 64 — short-output (classification, extraction) with
+    #     ≤10-token GT. Setting too high (e.g., 512 for a 5-token task) triggers
+    #     Unsloth kl=nan (#3006, #3260) when mask_truncated_completions=True
+    #     zeros the completion mask due to all completions hitting the cap.
     # Ceiling of 4096: beyond this is very expensive with K=8 completions.
-    return max(64, min(4096, recommended))
+    floor = 2048 if tool_calling else 64
+    return max(floor, min(4096, recommended))
 
 
 class _JobNotFoundError(Exception):
