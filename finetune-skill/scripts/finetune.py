@@ -498,6 +498,50 @@ def cmd_upload_topics(args: argparse.Namespace) -> None:
     else:
         raw_topics = [topics]
 
+    prune_path = getattr(args, "prune_empty_from", None)
+    if prune_path:
+        prune_training = Path(prune_path)
+        if not prune_training.exists():
+            print(f"Error: --prune-empty-from file not found: {prune_training}", file=sys.stderr)
+            sys.exit(1)
+
+        populated_topics: set[str] = set()
+        for line in prune_training.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            rec = json.loads(line)
+            tid = rec.get("topic")
+            if tid:
+                populated_topics.add(tid)
+
+        removed_leaves: list[str] = []
+
+        def _prune(node: dict) -> dict | None:
+            kids = node.get("children") or []
+            if not kids:
+                tid = node.get("id") or node.get("name", "")
+                if tid in populated_topics:
+                    return node
+                removed_leaves.append(tid)
+                return None
+            kept = [k for k in (_prune(c) for c in kids) if k is not None]
+            if not kept:
+                return None
+            return {**node, "children": kept}
+
+        pruned = [p for p in (_prune(t) for t in raw_topics) if p is not None]
+
+        if removed_leaves:
+            print(f"  Pruned {len(removed_leaves)} empty leaf topic(s) (no records in {prune_training.name}):")
+            for tid in removed_leaves:
+                print(f"    - {tid}")
+            topics_path.write_text(json.dumps(pruned, indent=2))
+            print(f"  Wrote pruned tree back to {topics_path.name}")
+            raw_topics = pruned
+        else:
+            print(f"  No empty leaves — topic tree matches records.")
+
     # Defensive: the LLM-generated tree sometimes includes a top-level node
     # with `id=null` meant as the root category, placed as a sibling of the
     # real category parents. If its children list is empty, it's an orphan
@@ -7492,6 +7536,13 @@ def main() -> None:
     p.add_argument("--workflow-id", required=True, help="Workflow ID")
     p.add_argument("--file", required=True, help="Path to topics.json")
     p.add_argument("--force", action="store_true", help="Delete all existing topics before uploading")
+    p.add_argument(
+        "--prune-empty-from",
+        default=None,
+        help="Path to training.jsonl. Leaves with zero records are dropped (parents cascade). "
+             "Writes the pruned tree back to --file. Required for tool-calling mode where "
+             "Step 3 may declare more leaves than the final post-dedup record set covers.",
+    )
 
     # upload-relations
     p = subparsers.add_parser("upload-relations", help="Upload topic-source relations")

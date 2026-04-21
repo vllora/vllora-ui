@@ -112,8 +112,8 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py log-step \
 | Step | Milestones |
 |------|-----------|
 | Step 2 | route_and_extract, build_parts, consolidate, upload_knowledge |
-| Step 3 | design_topics, upload_topics, build_relations, upload_relations |
-| Step 4 | generate_records (count per topic), derive_gt, dedup, upload_records |
+| Step 3 | design_topics, build_relations |
+| Step 4 | generate_records (count per topic), derive_gt, dedup, upload_topics + upload_relations + upload_records |
 | Step 5 | write_grader, test_grader (adversarial results), upload_grader |
 | Step 7 | create_eval, poll_eval, readiness_check, model_selection |
 | Step 8 | create_training, poll_training, post_training_eval |
@@ -178,15 +178,9 @@ Run whichever applies — or both in parallel:
 
 Design by **skill** (what model learns to DO), not document structure. Use nested JSON with `"children"` arrays. Target 15-25 records per leaf, 5-40 leaves. IDs are human-readable slugs (not UUIDs). MANDATORY: `"category"` on every leaf.
 
-**Tool-calling mode (tool-schemas.json exists):** `trace-analysis/topics.json` already has the correct leaf topics (one per tool, slugs match decision-points.jsonl). Use those as leaves — DO NOT invent abstract category-only roots (e.g. "customer-service-actions") that have no leaves. Records must reference leaf slugs that exist in topics.json, otherwise cross-reference validation fails.
+**Tool-calling mode (tool-schemas.json exists):** One leaf per tool that ACTUALLY APPEARS as GT in `decision-points.jsonl` — NOT one leaf per declared `tool-schemas.json` entry. Tool schemas often include tools the upstream agent had in its menu but never invoked (e.g. tau-bench airline's `book_reservation` has 0 DPs in 200 GPT-4o trajectories). Build the leaf set from the unique `ground_truth.name` values in `decision-points.jsonl`. Records must reference leaf slugs that exist in topics.json, otherwise cross-reference validation fails. Also: DO NOT invent abstract category-only roots (e.g. "customer-service-actions") that have no leaves.
 
-Delegate `relation-builder` subagent for topic-part linking. Upload:
-```bash
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-topics --workflow-id $WORKFLOW_ID --file topics.json
-uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-relations --workflow-id $WORKFLOW_ID --file relations.json
-```
-
-> See [reference/topic-hierarchy.md](reference/topic-hierarchy.md) for guidelines, JSON format, and examples.
+Delegate `relation-builder` subagent for topic-part linking. **Do NOT upload yet** — topics and relations are uploaded at the end of Step 4, after dedup reveals the final leaf set (see [reference/topic-hierarchy.md](reference/topic-hierarchy.md) for rationale).
 
 ### Step 4: Generate Training Data
 
@@ -211,18 +205,21 @@ uv run ${CLAUDE_SKILL_DIR}/scripts/paraphrase_rare_topics.py \
   --file finetune-project/training.jsonl --min-per-topic 25
 ```
 
-**Filter empty leaves (tool-calling mode, mandatory before upload):** Real traces leave some tools with ≤1 DP — dedup then removes that DP and the leaf topic ends up empty. Also some tools appear in span attributes but never as GT tool_calls (e.g. tau-bench airline's `book_reservation` — 0 successful DPs in 200 GPT-4o trajectories). Drop empty leaves + orphaned tools before upload so the deployed agent only sees tools it was actually trained on:
+**ALWAYS deduplicate:** `deduplicate_records.py training.jsonl --threshold 0.85`. Safe to run before or after `paraphrase_rare_topics.py` — the dedup signature uses ALL user turns concatenated, so Trajectory2Task variants (which differ only in the last turn) are preserved. Prior versions keyed only on the first user turn and wiped paraphrases; that bug is fixed.
+
+**Upload topics + relations + records (topics last, so the gateway only sees leaves that survived dedup):**
 
 ```bash
-uv run ${CLAUDE_SKILL_DIR}/scripts/filter_empty_leaves.py \
-  --records finetune-project/training.jsonl \
-  --topics finetune-project/topics.json \
-  --tool-schemas finetune-project/trace-analysis/tool-schemas.json
+# --prune-empty-from rewrites topics.json to drop leaves absent from training.jsonl.
+# Belt-and-suspenders: Step 3 already built topics from the DP distribution, but
+# rare tools with 1 DP can be removed by dedup, leaving an empty leaf.
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-topics \
+  --workflow-id $WORKFLOW_ID --file topics.json \
+  --prune-empty-from finetune-project/training.jsonl --force
+
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-relations --workflow-id $WORKFLOW_ID --file relations.json
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py upload-records   --workflow-id $WORKFLOW_ID --file training.jsonl --force
 ```
-
-Upload: `upload-records --workflow-id $WORKFLOW_ID --file training.jsonl --force`
-
-**ALWAYS deduplicate:** `deduplicate_records.py training.jsonl --threshold 0.85`. Safe to run before or after `paraphrase_rare_topics.py` — the dedup signature uses ALL user turns concatenated, so Trajectory2Task variants (which differ only in the last turn) are preserved. Prior versions keyed only on the first user turn and wiped paraphrases; that bug is fixed.
 
 **Quality check:** Read 3-5 records per topic. Check GT vocabulary, factual accuracy, format.
 
