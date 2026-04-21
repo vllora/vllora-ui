@@ -315,6 +315,12 @@ For records, encode the topic in the ID (e.g., `fork-detection-basic-001`) so yo
 
 **Topic IDs are human-readable slugs** — the same slug is used as `"id"` in `topics.json`, `"topic_identifier"` in `relations.json`, `"topic"` in `training.jsonl`, and as keys in `priority.json` / `prompts.json`. This keeps all local files self-consistent and debuggable.
 
+This matters directly for the distilabel backend:
+
+- text generation budgets are assigned per leaf topic slug
+- Instruction Backtranslation candidates inherit that slug into `training.jsonl`
+- APIGen augmentation uses the same leaf slugs to detect underrepresented tool topics before merging with canonical `decision-points.jsonl`
+
 UUIDs only exist at the gateway DB layer. `finetune.py upload-topics` sends slugs to the gateway, which assigns UUIDs for cross-workflow uniqueness. `finetune.py upload-records` and `upload-relations` map slugs to gateway UUIDs at the upload boundary.
 
 Keep IDs lowercase with hyphens:

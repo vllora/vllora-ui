@@ -39,7 +39,7 @@ cp "$REPO_DIR/agents/"*.md .claude/agents/
 | Folder | Destination | Contents |
 |--------|-------------|----------|
 | `finetune-skill/` | `.claude/skills/finetune-skill/` | SKILL.md, reference/, scripts/, templates/ |
-| `agents/` | `.claude/agents/` | 3 sub-agents: execution-logger (logging), relation-builder (topic↔part matching), training-monitor (background metric watchdog) |
+| `agents/` | `.claude/agents/` | 4 sub-agents: execution-logger (logging), relation-builder (topic↔part matching), distilabel-data-generator (Step 4 backend), training-monitor (background metric watchdog) |
 
 Without the agents, the skill still runs but loses auto-logging, automated relation building, and training anomaly detection.
 
@@ -55,7 +55,8 @@ The **3-page UI redesign** (Canvas, Sources, Table) is the active workstream. An
 - React: Redesigned record detail sidebar (split eval/train scores, conversation layout, source context)
 - React: Canvas quality scores, source topic dots, data flow banner, prompt panel
 
-- Skill: NeMo Data Designer integration (Step 4B) — two-stage generation (arXiv 2509.25736), rag-retrieval plugin, RAGAS scoring, convert_nemo_rows.py
+- Skill: Distilabel integration (Step 4B) — Instruction Backtranslation + DEITA for text-only data, APIGen augmentation around canonical trace decision points
+- Skill: NeMo Data Designer integration (Step 4C) — two-stage generation (arXiv 2509.25736), rag-retrieval plugin, RAGAS scoring, convert_nemo_rows.py
 - Skill: Data quality gate (Step 5.5b), readiness gate (Step 7c), difficulty probe
 - Skill: Docling-first extraction with deterministic `build_knowledge_parts.py` (custom extract.py only for edge cases)
 
@@ -75,8 +76,10 @@ The **3-page UI redesign** (Canvas, Sources, Table) is the active workstream. An
 | [evaluator-versioning-ux.md](./evaluator-versioning-ux.md) | Grader version tracking: badges, snapshots, diff indicators |
 | [skill-e2e-test-notes.md](./skill-e2e-test-notes.md) | Skill E2E test results, API issues found, verification status |
 | [run-infrastructure.md](./run-infrastructure.md) | Run harness: `run-finetune-agent.sh`, `format-finetune-log.py`, transcript format, debugging logs |
+| [Distilabel Backend Architecture](./how-skill-work/distilabel-backend.md) | Where distilabel fits in Step 4, why it is skill-local, and how it reuses existing artifacts |
 | [RFT/GRPO Training Explained](./how-skill-work/rft-grpo-training-explained.md) | How GRPO works step-by-step: G vs epochs, advantage computation, grader as objective, failure modes, full numeric examples |
 | [NeMo Data Designer Guide](../../finetune-skill/reference/nemo-guide.md) | NeMo primary generation path: two-stage question generation (arXiv 2509.25736), rag-retrieval plugin, recipe design, preview/full job workflow. Repo: https://github.com/vllora/nemo |
+| [Distilabel Guide](../../finetune-skill/reference/distilabel-guide.md) | Skill-local distilabel backend setup, artifact contract, recipes, and troubleshooting |
 
 ## Mockups
 

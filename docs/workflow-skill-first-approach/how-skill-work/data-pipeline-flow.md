@@ -16,8 +16,9 @@ Step 3: Build Topic Hierarchy
 Step 3.5: Categorize Existing Records (optional — only if records pre-exist)
     ↓
     │ (SEQUENTIAL — Step 5 needs sample records from Step 4)
-    Step 4: Generate Records (default)
-         or Step 4B: NeMo (optional)
+    Step 4A: Generate Records (native default)
+         or Step 4B: Distilabel (optional)
+         or Step 4C: NeMo (optional)
          derive_ground_truth.py (MANDATORY for multi-label/set-output tasks;
            skip only for single-answer QA/MCQ/extraction tasks)
     ↓
@@ -137,7 +138,12 @@ relations.json (topic_identifier → part_identifier)
 ```
 topics.json + relations.json + knowledge_parts.json files
          ↓
-  generate_records.py
+  Backend resolution from config.json
+  ├── native      → generate_records.py
+  ├── distilabel  → run_distilabel_text_backend.py → apply_deita_selection.py
+  └── nemo        → NeMo Data Designer flow (see Layer 3B)
+         ↓
+  generate_records.py (native path)
   ├── Pre-flight: warn for leaf topics with zero relations (would be SKIPPED)
   ├── load_all_parts() ──→ only relevant parts (filtered in Step 3a)
   ├── compose_system_prompt(root, ancestors, leaf) ──→ single flowing paragraph (warn if >200 words)
@@ -192,6 +198,45 @@ training.jsonl (200+ records)
   upload-records (incremental or batch)
          ↓
   ✓ Records on gateway
+```
+
+### Layer 3A: Distilabel Alternative (Optional)
+
+```
+topics.json + relations.json + knowledge_parts.json files
+         ↓
+run_distilabel_text_backend.py
+  ├── reuses the same topic/relations/source-part linkage
+  ├── generates Instruction Backtranslation candidates
+  ├── consumes trace-analysis/priority.json when present
+  └── consumes trace-analysis/prompts.json seed queries when present
+         ↓
+distilabel/text-candidates.jsonl + distilabel/pipeline-metadata.json
+         ↓
+apply_deita_selection.py
+  ├── scores complexity + quality
+  ├── filters near-duplicates
+  └── enforces per-topic budgets
+         ↓
+distilabel/text-selected.jsonl + distilabel/text-selection-report.json
+         ↓
+training.jsonl
+         ↓
+deduplicate_records.py → validate_dataset.py → data_quality_gate.py
+```
+
+Tool-calling with `generation_backend: "distilabel"` uses a different branch:
+
+```
+trace-analysis/decision-points.jsonl + tool-schemas.json + topics.json
+         ↓
+run_distilabel_apigen_backend.py
+  ├── keeps decision-points.jsonl as the canonical base
+  ├── detects underrepresented tool topics
+  ├── generates APIGen augmentations only
+  └── writes merge reports under distilabel/
+         ↓
+training.jsonl
 ```
 
 ### Layer 3B: NeMo Alternative (Optional — requires NeMo server at localhost:8000)
@@ -531,7 +576,7 @@ Step 4 (Generate):
   Records only reference relevant knowledge
   (--rag-only mode: gateway search has safety-net filter for relevant:false)
 
-Step 4B (NeMo):
+Step 4C (NeMo):
   ⚠ rag-retrieval plugin does NOT filter by relevance (known limitation)
   convert_nemo_rows.py filters when recovering source_parts
 
