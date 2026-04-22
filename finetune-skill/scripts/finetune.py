@@ -4470,6 +4470,13 @@ def cmd_create_training(args: argparse.Namespace) -> None:
             print(f"Error: Invalid JSON for --config", file=sys.stderr)
             sys.exit(1)
 
+    # First-class flag wins over --config JSON. Users reach for the CLI flag when
+    # iterating on OOM and it'd be surprising if a stale load_precision buried in
+    # --config silently took precedence.
+    if getattr(args, "load_precision", None):
+        payload["training_config"]["load_precision"] = args.load_precision
+        print(f"  Config: load_precision={args.load_precision}")
+
     # Adaptive defaults based on dataset size and model choice.
     # Fetches the workflow once to get record_count, then adjusts epochs and
     # warns about model sizing.
@@ -7771,6 +7778,15 @@ def main() -> None:
     p.add_argument("--display-name", default=None, help="Human-readable training job name")
     p.add_argument("--config", default=None, help="Training config JSON string")
     p.add_argument("--inference-params", default=None, help="Inference parameters JSON string")
+    p.add_argument(
+        "--load-precision",
+        default=None,
+        choices=["bf16", "4bit", "8bit"],
+        help="Base model weight precision. bf16 (default) = full, 4bit / 8bit = QLoRA quantization. "
+             "Use 4bit/8bit when hitting OOM on 22GB GPUs — research (TRL #3125, Unsloth #1930) says "
+             "BnB 4bit + vLLM is broken in stock TRL, but the Vertex cloud backend may use a different "
+             "quantization path. Empirical test only. Takes precedence over load_precision in --config.",
+    )
     p.add_argument("--output-dir", default="training", help="Local directory for job metadata (default: training/)")
 
     # poll-training

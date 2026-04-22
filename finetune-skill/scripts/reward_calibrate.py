@@ -2,14 +2,22 @@
 # /// script
 # dependencies = ["requests>=2.31"]
 # ///
-"""reward_calibrate.py — IRC-style diagnostic: does each reward tier actually predict outcome?
+"""reward_calibrate.py — IRC-style data diagnostic: does each record-tier actually predict outcome?
 
 Adapts the Iterative Reward Calibration (IRC) methodology from MT-GRPO
-(arXiv:2604.02869, Apr 2026): for each reward tier, compute the point-biserial
-correlation between tier presence in a record and the binary outcome (grader
-pass/fail). Tiers with |ρ| below a threshold are uninformative — rewarding them
-adds noise without signal. Tiers with negative ρ are anti-predictors — the
-grader rewards the wrong thing.
+(arXiv:2604.02869): for each record tier, compute the point-biserial
+correlation between tier membership and the binary outcome (grader pass/fail).
+Tiers with |ρ| below a threshold are uninformative — those records add noise
+without signal. Tiers with negative ρ are anti-predictors — possible grader bug
+or tier-outcome misalignment.
+
+IMPORTANT scope limit (added 2026-04-22): MT-GRPO's IRC is designed for
+per-turn reward shaping in multi-turn trajectories, which requires online
+rollouts against a simulator. Our pipeline scores only the final action
+offline. We use IRC-style correlation analysis as a DATA DIAGNOSTIC
+(prioritize which records/tiers to keep, detect grader bugs), NOT as a reward
+shaping tool. The paper's reward-update rule r_c = α·ρ_c does not apply to
+our offline single-action grader.
 
 Distinct from `grader-discriminate`:
 - grader-discriminate tests synthetic corruption: does the grader distinguish
@@ -49,11 +57,18 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
-# Thresholds from the paper's Algorithm 1 (Section 4.2, δ = 0.15 cited in
-# Table 4 notes). A tier with |ρ| below this is considered uninformative.
+# Thresholds from Cohen (1992) + classical item-discrimination convention —
+# NOT from the MT-GRPO paper, which defines IRC as r_c = α·ρ_c iff |ρ_c| > δ
+# but does not specify numeric δ. Prior comments here incorrectly cited the
+# paper; fixed after research on 2026-04-22.
+# - |ρ| < 0.15 : negligible-to-small, treated as uninformative
+# - 0.15 ≤ |ρ| < 0.30 : small, weak predictor
+# - |ρ| ≥ 0.30 : Cohen "medium" effect — strong predictor
+# - ρ < -0.10 : anti-predictor (grader/tier misalignment)
+# Caveat: point-biserial is attenuated when base rate is far from 50/50. For
+# our evals with perfect≈30-42%, observed ρ ceiling is materially below the
+# theoretical maximum. Interpret modest positive ρ as still meaningful.
 DEFAULT_UNINFORMATIVE_THRESHOLD = 0.15
-# Strong-predictor threshold: tiers above this are load-bearing. No IRC
-# analog — ours, purely for reporting.
 STRONG_PREDICTOR_THRESHOLD = 0.30
 DEFAULT_PASS_THRESHOLD = 0.50  # binary outcome cutoff on continuous grader score
 

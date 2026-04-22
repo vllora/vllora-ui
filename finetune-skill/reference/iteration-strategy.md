@@ -44,12 +44,20 @@ During training steps, the agent must track budget consumption and report it:
 
 ### Load precision (Phase 2 training)
 
-Set `training_config.load_precision` when creating a provider finetune job (`bf16`, `4bit`, or `8bit`). The training container maps this to Unsloth / HF load flags.
+Set via the first-class `--load-precision` flag on `finetune.py create-training` (`bf16`, `4bit`, or `8bit`), or via `training_config.load_precision` in `--config`. The CLI flag wins when both are set. The training container maps this to Unsloth / HF load flags.
+
+```bash
+uv run ${CLAUDE_SKILL_DIR}/scripts/finetune.py create-training \
+  --workflow-id $WORKFLOW_ID --base-model Qwen3.5-4B \
+  --load-precision 4bit \
+  --config '{"learning_rate":2e-6,"batch_size":1,"gradient_accumulation_steps":4}' \
+  --inference-params '{"response_candidates_count":4,"max_output_tokens":512}'
+```
 
 | Value | When to use |
 |-------|-------------|
 | `bf16` | Default. Best numerical stability and usually fewer quantization edge cases; use when VRAM fits the model at full precision. |
-| `4bit` | Tight GPU memory or larger base models; classic QLoRA-style loading. |
+| `4bit` | Tight GPU memory or larger base models; classic QLoRA-style loading. **Known issue in stock TRL+vLLM** (TRL #3125, Unsloth #1930): BnB 4bit may load a separate full-precision copy during rollouts, defeating the memory savings. Our Vertex cloud backend may use a different quantization path — treat as an empirical test. |
 | `8bit` | Middle ground between memory and stability. |
 
 ### Infrastructure metrics (use when OOM or GPU pressure is suspected)

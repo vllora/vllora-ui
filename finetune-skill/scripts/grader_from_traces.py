@@ -262,7 +262,15 @@ def generate_tool_call_grader_js(tool_schemas: list[dict]) -> str:
  * Valid tools: {', '.join(tool_names)}
  */
 function evaluate(input) {{
-    var FLOOR = 0.02;  // Minimum score for any attempted answer
+    var FLOOR = 0.02;         // No tool_call format attempted (plain text response)
+    var FORMAT_FLOOR = 0.08;  // Tool_call format markers present but unparseable.
+                              // Creates within-group variance on topics where the base
+                              // model doesn't yet emit valid tool_call JSON (e.g. Qwen
+                              // pseudo-tools `think`/`calculate`). Without this tier,
+                              // K rollouts all score 0.02 → zero advantage → no gradient.
+                              // Ref: format-reward decomposition in tool-RL literature
+                              // (ResT arXiv:2509.21826 §3.2; RC-GRPO arXiv:2602.03025).
+                              // Gap to family-credit tier (0.10 from 0.25*0.4) intentional.
 
     // Locate the model's response. The cloud evaluator delivers it in one of
     // two shapes depending on how the generation was routed:
@@ -287,6 +295,19 @@ function evaluate(input) {{
 
     var modelCall = parseToolCall(response);
     if (!modelCall || !modelCall.name) {{
+        // Two-tier floor: differentiate "plain text, no format attempt" from
+        // "format markers present but unparseable". Lets GRPO learn format
+        // before task correctness on topics where base model doesn't yet emit
+        // structured tool_calls. Pattern requires angle brackets or JSON
+        // punctuation so that the word "tool_calls" appearing in natural text
+        // alone doesn't trigger the bonus.
+        var respStr = typeof response === "string"
+            ? response
+            : (response ? JSON.stringify(response) : "");
+        var attemptedFormat = /<tool_call[ >]|<function=|"tool_calls"\\s*:\\s*\\[|"function"\\s*:\\s*\\{{|"name"\\s*:\\s*"[^"]+"\\s*,\\s*"arguments"/.test(respStr);
+        if (attemptedFormat) {{
+            return {{ score: FORMAT_FLOOR, reason: "Tool_call format attempted but unparseable" }};
+        }}
         return {{ score: FLOOR, reason: "No valid tool call in response" }};
     }}
 
