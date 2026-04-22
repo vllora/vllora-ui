@@ -114,41 +114,77 @@ Two surfaces, one code path. **Same verb on both. Same result on both.**
   USER sees: progress narrated by plugin + final "Next: /finetune-generate"
 ```
 
-### 2.2 User-facing verbs (both surfaces)
+### 2.2 CLI contract commands (both surfaces)
 
-| Verb | Purpose | Duration |
+The command surface follows the job-based CLI contract. Plugin commands remain thin narrators that shell out to these exact CLI commands.
+
+#### Generic status command
+
+| Command | Purpose | Time needed | Required flags |
+|---|---|---|---|
+| `vllora finetune jobs status` | Retrieve current status for an existing job ID (read-only) | instant | `--job-id <id>` |
+
+`jobs status` output includes current `state`, timestamps, progress, and terminal outcome (when available), sourced from persisted DB records.
+
+#### Direct task command catalog
+
+Each command below is first-class and maps to one operation family.
+
+| Command | Purpose | Time needed |
 |---|---|---|
-| `quickstart` | Guided first-run wizard; chains init→sources with defaults | 2 min |
-| `init` | Scaffold `finetune-project/`, create gateway workflow | <10s |
-| `sources` | Ingest PDFs and/or OTel traces (from local paths or remote URIs); extract knowledge + trace-analysis | 1–30 min |
-| `import-dataset` | Alternative to `sources → plan → generate`: import a pre-built training dataset from local path or URI | 1–10 min |
-| `plan` | Build topic hierarchy + relations + grader draft; emit `plan.md` | 1–3 min |
-| `generate` | Generate training records, finalize grader, validate, quality-gate | 3–10 min |
-| `eval` | Dry-run on 4B + 0.8B; readiness gate; re-run to iterate | 5–15 min/iter |
-| `train` | GRPO training + monitor + analyze; re-run for next round | 30 min – 3 hr |
-| `status` | Print current step + suggest next command (pure, no-op read) | instant |
+| `vllora finetune knowledge add` | Ingest knowledge sources into the workflow | 1-30 min |
+| `vllora finetune dataset import` | Import pre-built dataset into workflow records | 1-10 min |
+| `vllora finetune dataset generate` | Generate training dataset from workflow knowledge/topics | 3-10 min |
+| `vllora finetune grader import` | Import grader implementation into workflow | <1 min |
+| `vllora finetune grader generate` | Generate or revise grader implementation | 1-5 min |
+| `vllora finetune grader dryrun` | Dry-run grader on sample records for validation | 1-5 min |
+| `vllora finetune eval run` | Run evaluation job for readiness and quality signals | 5-15 min/iter |
+| `vllora finetune eval stop` | Request cancellation of running evaluation job | instant |
+| `vllora finetune train run` | Run training job | 30 min-3 hr |
+| `vllora finetune train stop` | Request cancellation of running training job | instant |
 
-### 2.3 CLI-only utilities (not in plugin)
+### 2.3 Shared flags and outputs (task commands)
 
-Invoked internally by pipeline verbs; available to power users. `vllora finetune <util>`.
+Required flags:
+- None
 
-| Utility | Purpose |
-|---|---|
-| `auto [--scenario X] [--max-iter N]` | Autonomous loop: `status → next-command` until done/blocked |
-| `cancel-eval --id <ID>` | Cancel running eval |
-| `cancel-training --id <ID>` | Cancel running training job |
-| `log-step` | Append structured checkpoint to `pipeline-journal.json` |
-| `update-analysis --section X --status Y …` | Update `analysis.json` (user-facing summary) |
-| `validate` | Schema-validate `training.jsonl`, topics, relations, grader |
-| `reconcile-topics [--apply]` | Reconcile topic IDs vs. derived ground truth |
-| `grader-sanity-check` | Run grader against known-good/bad fixtures |
-| `probe-difficulty` | K=1 pre-training probe; estimate learnable fraction |
-| `diagnose-clipping` | Diagnose auto-cancelled training due to output clipping |
-| `dry-run-grader --records X` | Local grader eval without gateway |
-| `topics list/add/edit/remove` | Low-level topic mutations |
-| `export --adapter` | Export trained adapter for deployment |
+Optional flags:
+- `--idempotency-key <key>` (if omitted, server generates and returns one)
+- `--only-tracking` (create job only, skip immediate progress tracking)
+- `--input <json>` (accepted but not semantically processed in this iteration)
 
-### 2.4 Lifecycle commands (CLI only)
+Additional required flags for stop commands:
+- `--job-id <id>`
+
+Shared output contract:
+- Immediate `job_id` and `operation` echo
+- Response always includes `idempotency_key` (provided or generated)
+- Same key plus equivalent payload returns existing `job_id`
+- Run commands: by default (without `--only-tracking`), stream lifecycle updates until terminal state
+- Run commands with `--only-tracking`: return after create acknowledgment; later tracking uses `vllora finetune jobs status`
+- Stop commands: request backend cancellation and return resulting lifecycle state
+- Command-specific business outputs are placeholders in this iteration
+- Output must indicate that job state is persisted (database-backed)
+
+### 2.4 Error contract
+
+- Invalid input: `INVALID_REQUEST`
+- Unknown job: `NOT_FOUND`
+- Auth/authz failures: `UNAUTHORIZED` / `FORBIDDEN`
+- Stop request for terminal/non-cancellable job: `CONFLICT` with idempotent cancellation details
+
+### 2.5 Consistency requirements
+
+- CLI lifecycle semantics match API lifecycle semantics
+- CLI run/stop/status flows map to workflow-scoped API routes:
+  - `/v1/finetune/workflows/{workflowId}/jobs`
+  - `/v1/finetune/workflows/{workflowId}/jobs/{jobId}/status`
+  - `/v1/finetune/workflows/{workflowId}/jobs/{jobId}/cancel`
+- Status retrieval is polling-only in this iteration (no push-stream transport contract)
+- Command-to-operation mapping is deterministic and covered by contract tests
+- CLI status output is sourced from persisted DB records (not transient in-memory state)
+
+### 2.6 Lifecycle commands (CLI only)
 
 | Group | Verbs |
 |---|---|
@@ -156,11 +192,11 @@ Invoked internally by pipeline verbs; available to power users. `vllora finetune
 | Gateway | `vllora gateway start/stop/status/logs/reset` |
 | UI | `vllora ui start/stop/open` (optional pip extra) |
 
-### 2.5 CLI shortcut
+### 2.7 CLI shortcut
 
 `vft <verb>` is an alias for `vllora finetune <verb>`. Same Python code, different entrypoint in `pyproject.toml`. Canonical form in docs; short form for daily terminal use.
 
-### 2.6 Authentication
+### 2.8 Authentication
 
 One setup for all LLM-backed commands, inherited by every `claude -p` subprocess:
 
@@ -175,6 +211,8 @@ Precedence: `ANTHROPIC_API_KEY` > `apiKeyHelper` > `CLAUDE_CODE_OAUTH_TOKEN` > `
 For external source URIs (hf://, s3://, gs://, ...), use provider-standard env vars (`HF_TOKEN`, `AWS_ACCESS_KEY_ID`, `GOOGLE_APPLICATION_CREDENTIALS`, ...). See §4.6.
 
 `vllora doctor` reports what's configured.
+
+> Note: Section 3 and later still use legacy phase labels (`sources`, `plan`, `generate`, `eval`, `train`) as workflow-stage names. For command invocation and API compatibility, treat Section 2 as authoritative: execution must use the job-based command catalog and `jobs status` / stop semantics defined above.
 
 ---
 
