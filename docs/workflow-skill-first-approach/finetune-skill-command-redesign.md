@@ -276,18 +276,18 @@ Output: `state`, timestamps, progress, terminal outcome (when available). Source
 
 #### Task operations
 
-| Command | Purpose | Duration | Kind |
-|---|---|---|---|
-| `vllora finetune knowledge add` | Ingest knowledge sources into the workflow | 1–30 min | `LLM` |
-| `vllora finetune dataset import` | Import pre-built dataset into workflow records | 1–10 min | `DET` |
-| `vllora finetune dataset generate` | Generate training records from workflow knowledge + topics | 3–10 min | `LLM` |
-| `vllora finetune grader import` | Import an externally-authored grader.js | <1 min | `DET` |
-| `vllora finetune grader generate` | Generate or revise grader (init / finalize / refine mode) | 1–5 min | `LLM` |
-| `vllora finetune grader dryrun` | Dry-run grader on sample records for validation | 1–5 min | `DET` |
-| `vllora finetune eval run` | Run evaluation job for readiness + quality signals | 5–15 min | `DET+COMPUTE` |
-| `vllora finetune eval stop` | Cancel a running eval job | instant | `DET` |
-| `vllora finetune train run` | Submit GRPO training job | 30 min–3 hr | `DET+COMPUTE` |
-| `vllora finetune train stop` | Cancel a running training job | instant | `DET` |
+| Command | Purpose | Duration | Kind | Artifacts (persisted outputs) |
+|---|---|---|---|---|
+| `vllora finetune knowledge add` | Ingest knowledge sources into the workflow | 1–30 min | `LLM` | Document blobs in object storage + SQLite references to those documents |
+| `vllora finetune dataset import` | Import pre-built dataset into workflow records | 1–10 min | `DET` | Dataset rows in SQLite |
+| `vllora finetune dataset generate` | Generate training records from workflow knowledge + topics | 3–10 min | `LLM` | Task output + dataset rows in SQLite + topics in SQLite + relationships in SQLite |
+| `vllora finetune grader import` | Import an externally-authored grader.js | <1 min | `DET` | Grader version in SQLite |
+| `vllora finetune grader generate` | Generate or revise grader (init / finalize / refine mode) | 1–5 min | `LLM` | Task output + grader version in SQLite |
+| `vllora finetune grader dryrun` | Dry-run grader on sample records for validation | 1–5 min | `DET` | Task output + dry-run result in SQLite |
+| `vllora finetune eval run` | Run evaluation job for readiness + quality signals | 5–15 min | `DET+COMPUTE` | Task output + eval result in SQLite |
+| `vllora finetune eval stop` | Cancel a running eval job | instant | `DET` | Task output + eval result state update in SQLite |
+| `vllora finetune train run` | Submit GRPO training job | 30 min–3 hr | `DET+COMPUTE` | Task output + train metrics in SQLite + trained weights in object storage |
+| `vllora finetune train stop` | Cancel a running training job | instant | `DET` | Task output + train metrics/state update in SQLite + checkpoint weights in object storage |
 
 #### Shared flags (Layer B task commands)
 
@@ -334,6 +334,16 @@ Each Layer A pipeline verb composes one or more Layer B operations plus determin
 | `quickstart` | `init` + `sources` (chained) |
 
 Plugin slash commands map to Layer A verbs (name-for-name). Layer B remains terminal-only — not exposed in the plugin surface, since the plugin audience is step-by-step interactive users who benefit from pipeline-position awareness.
+
+#### 2.6.1 Artifact references inside pipeline flows
+
+When a flow step in Section 3 says "run `sources`/`generate`/`eval`/`train`", interpret the persisted side effects through the Layer B artifact contract above:
+
+- `sources` phase persists via `knowledge add` (object storage documents + SQLite references).
+- `import-dataset` persists via `dataset import` (SQLite rows).
+- `plan`/`generate` phases persist via `dataset generate` + `grader generate` (task output + SQLite topics/relationships/records/grader versions).
+- `eval` phase persists via `eval run` or `eval stop` (task output + SQLite eval results/state).
+- `train` phase persists via `train run` or `train stop` (task output + SQLite training metrics/state + object-storage weights/checkpoints).
 
 ### 2.7 Consistency requirements
 
@@ -919,6 +929,8 @@ Steps (1)–(3) and (5)–(7) are the orchestrator's loop. Step (4) — the actu
 
 #### PHASE 0 — Install (one-time, before pipeline)
 
+Artifacts: local machine/runtime setup only (`~/.vllora/bin/`, gateway process state, plugin symlink). No Layer B job artifact.
+
 Workflow:
 
 ```
@@ -957,6 +969,8 @@ Detailed steps:
 ---
 
 #### PHASE 1 — Init
+
+Artifacts: workflow metadata in SQLite (`workflows`) + local scaffold files (`config.json`, `pipeline-journal.json`, `analysis.json`, `execution-log.md`).
 
 Workflow:
 
@@ -1007,6 +1021,8 @@ Detailed steps:
 ---
 
 #### PHASE 2 — Sources (raw-materials path)
+
+Artifacts: command maps to Layer B `knowledge add` semantics: document payloads in object storage and document/knowledge references in SQLite; plus local extraction outputs.
 
 Workflow:
 
@@ -1091,6 +1107,8 @@ Detailed steps:
 
 #### PHASE 2' — Import-dataset (alternative to phases 2–4)
 
+Artifacts: command maps to Layer B `dataset import`: dataset rows in SQLite; plus local `training.jsonl` snapshot.
+
 Workflow:
 
 ```
@@ -1139,6 +1157,8 @@ Detailed steps:
 ---
 
 #### PHASE 3 — Plan
+
+Artifacts: command composes Layer B `dataset generate` (topics/relationships side) + `grader generate` (init mode): task output plus topics/relationships and grader version persisted in SQLite.
 
 Workflow:
 
@@ -1202,6 +1222,8 @@ Detailed steps:
 ---
 
 #### PHASE 4 — Generate
+
+Artifacts: command composes Layer B `dataset generate` + `grader generate` + `grader dryrun`: task output plus dataset rows/topics/relationships, grader version, and dry-run result persisted in SQLite.
 
 Workflow:
 
@@ -1296,6 +1318,8 @@ Detailed steps:
 ---
 
 #### PHASE 5 — Eval (iteration N of 5)
+
+Artifacts: command maps to Layer B `eval run` (and `eval stop` when cancelled): task output plus eval result/state persisted in SQLite.
 
 Workflow:
 
@@ -1417,6 +1441,8 @@ Detailed steps:
 ---
 
 #### PHASE 6 — Train (round N of 3)
+
+Artifacts: command maps to Layer B `train run` (and `train stop` when cancelled): task output plus train metrics/state in SQLite and model weights/checkpoints in object storage.
 
 Workflow:
 
